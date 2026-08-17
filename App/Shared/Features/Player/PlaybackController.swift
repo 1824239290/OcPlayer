@@ -1,0 +1,508 @@
+import CoreGraphics
+import ErikaKit
+import Foundation
+import ImageIO
+import Observation
+import UniformTypeIdentifiers
+import os
+
+/// App 层播放链路日志（OSLog）。与 ErikaKit 同 subsystem，Console.app 可统一过滤。
+let playerLog = Logger(subsystem: "dev.jumusu.OcPlayer", category: "Playback")
+
+/// 播放偏好（音量 / 倍速 / 静音 / 字幕字号）跨启动记忆。不想为这几个值引一个设置页。
+@MainActor
+enum PlaybackPreferences {
+    private static let rateKey = "dev.jumusu.ocplayer.playback.rate"
+    private static let volumeKey = "dev.jumusu.ocplayer.playback.volume"
+    private static let mutedKey = "dev.jumusu.ocplayer.playback.muted"
+    private static let subtitleScaleKey = "dev.jumusu.ocplayer.playback.subtitleScale"
+
+    static var rate: Double {
+        get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: rateKey) }
+    }
+    static var volume: Double {
+        get { storedDouble(forKey: volumeKey, range: 0...1, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: volumeKey) }
+    }
+    static var muted: Bool {
+        get { UserDefaults.standard.bool(forKey: mutedKey) }
+        set { UserDefaults.standard.set(newValue, forKey: mutedKey) }
+    }
+    static var subtitleScale: Double {
+        get { storedDouble(forKey: subtitleScaleKey, range: 0.5...3.0, default: 1.0) }
+        set { UserDefaults.standard.set(newValue, forKey: subtitleScaleKey) }
+    }
+
+    private static func storedDouble(
+        forKey key: String,
+        range: ClosedRange<Double>,
+        default fallback: Double
+    ) -> Double {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        return UserDefaults.standard.double(forKey: key).clamped(range)
+    }
+}
+
+private extension Double {
+    func clamped(_ range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+/// 一次播放请求：从浏览层（AppModel）带到播放页的纯值。
+/// `authHeader` 是 Jellyfin 的 `MediaBrowser …` 头 —— 只走请求头，绝不进 URL。
+struct PlaybackRequest: Hashable, Identifiable {
+    let title: String
+    let uri: String
+    let authHeader: String?
+    /// Security-scoped URL for a user-selected local file.
+    let securityScopedURL: URL?
+    /// 服务端记录的续播位置（秒）；小于 30 秒视作从头播。
+    let resumeSeconds: Double?
+
+    /// id = uri：同一个源重复点播放不会压两次栈。
+    var id: String { uri }
+
+    init(title: String, uri: String, authHeader: String? = nil, resumeSeconds: Double? = nil,
+         securityScopedURL: URL? = nil) {
+        self.title = title
+        self.uri = uri
+        self.authHeader = authHeader
+        self.resumeSeconds = resumeSeconds
+        self.securityScopedURL = securityScopedURL
+    }
+}
+
+/// PlaybackCoordinator：拿到源 → 喂内核 → 暴露状态给 UI。
+/// 进度上报（M2）、弹幕装载（M3）都挂在这一层（内核细节始终留在 ErikaKit 里）。
+@MainActor
+@Observable
+final class PlaybackController {
+    let state = PlayerState()
+
+    private(set) var engine: ErikaEngine?
+    private(set) var setupError: String?
+    private(set) var currentTitle: String?
+
+    var rate: Double = PlaybackPreferences.rate {
+        didSet { if rate != oldValue { PlaybackPreferences.rate = rate } }
+    }
+    var volume: Double = PlaybackPreferences.volume {
+        didSet {
+            if volume != oldValue {
+                PlaybackPreferences.volume = volume
+                if volume > 0, muted { muted = false }
+            }
+        }
+    }
+    /// 静音（保留原音量，解除时还原）。
+    var muted = PlaybackPreferences.muted {
+        didSet { if muted != oldValue { PlaybackPreferences.muted = muted } }
+    }
+    /// 字幕整体缩放（1.0 默认），跨启动记住。
+    var subtitleScale = PlaybackPreferences.subtitleScale {
+        didSet {
+            if subtitleScale != oldValue {
+                PlaybackPreferences.subtitleScale = subtitleScale
+            }
+        }
+    }
+
+    /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
+    private(set) var currentlyOpenURI: String?
+    /// 最近一次请求（出错重试用）。
+    private(set) var lastRequest: PlaybackRequest?
+
+    private var eventTask: Task<Void, Never>?
+
+    /// open 之后待执行的续播 seek。内核 `open` 同步返回但媒体是异步打开的
+    /// （Opening→Ready 走事件），立刻 seek 会打在未就绪的源上被吞掉；
+    /// 存下来等 duration 到达（打开完成）再跳，见 `seekPendingResumeIfNeeded`。
+    private var pendingResumeSeconds: Double?
+    /// 正在等续播 seek 的源（换片守卫：等待期间用户又点了别的，旧的 seek 要作废）。
+    private var pendingResumeURI: String?
+    private var activeSecurityScopedURL: URL?
+    private var activeSecurityScope = false
+    private var hasLoadedSource = false
+
+    /// 引擎懒创建：创建失败（缺内核 / 显卡不支持）时把原因留给 UI 显示。
+    @discardableResult
+    func prepareEngine() -> ErikaEngine? {
+        if let engine { return engine }
+        do {
+            let engine = try ErikaEngine()
+            eventTask = state.start(consuming: engine)
+            self.engine = engine
+            setupError = nil
+            PlaybackLog.append("PlaybackController prepareEngine 成功")
+            return engine
+        } catch {
+            setupError = "\(error)"
+            PlaybackLog.append("PlaybackController prepareEngine 失败 error=\(error)")
+            return nil
+        }
+    }
+
+    // MARK: - 打开源
+
+    /// 手动直连链接（设置页入口）：构造带认证头的播放请求。
+    static func request(uri: String, jellyfinToken: String?) -> PlaybackRequest {
+        var authHeader: String?
+        if let token = jellyfinToken, !token.isEmpty {
+            authHeader = #"MediaBrowser Client="OcPlayer", Device="Mac", DeviceId="ocplayer-m0", Version="0.1", Token="\#(token)""#
+        }
+        let title = URL(string: uri)?.lastPathComponent ?? uri
+        return PlaybackRequest(title: title, uri: uri, authHeader: authHeader)
+    }
+
+    func open(fileURL: URL) {
+        open(request: PlaybackRequest(
+            title: fileURL.lastPathComponent,
+            uri: fileURL.path,
+            securityScopedURL: fileURL
+        ))
+    }
+
+    /// `uri` 是本地文件路径（`URL.path`）时直接开；已打开同一个源则跳过。
+    func openIfNeeded(_ request: PlaybackRequest) {
+        guard currentlyOpenURI != request.uri else {
+            PlaybackLog.append("openIfNeeded 跳过（已打开同一个源） title=\(request.title)")
+            return
+        }
+        PlaybackLog.append("openIfNeeded title=\(request.title)")
+        open(request: request)
+    }
+
+    /// 浏览层发起的播放：Jellyfin 直连流 + 认证头 + 服务端续播位置。
+    func open(request: PlaybackRequest) {
+        currentTitle = request.title
+        lastRequest = request
+        PlaybackLog.append("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
+        var headers: [String: String] = [:]
+        if let authHeader = request.authHeader {
+            headers["Authorization"] = authHeader
+        }
+        let opened = open(
+            PlaybackSource(uri: request.uri, headers: headers),
+            securityScopedURL: request.securityScopedURL
+        )
+        // 续播位置不立刻 seek（源还没就绪），挂到 pending 等 duration 到达。
+        if opened, let resume = request.resumeSeconds, resume >= 30 {
+            pendingResumeSeconds = resume
+            pendingResumeURI = request.uri
+            Task { await seekPendingResumeIfNeeded() }
+        }
+    }
+
+    /// 轮询等个短暂的"打开完成"（duration > 0 且非 idle），把待续播的 seek 打下去。
+    /// 只对最近一次请求生效：期间换片则放弃旧的续播。
+    @MainActor
+    private func seekPendingResumeIfNeeded() async {
+        guard let resume = pendingResumeSeconds, let uri = pendingResumeURI, let engine else { return }
+        // 最多等 ~3 秒：够本地文件 / 局域网流就绪。
+        for _ in 0..<30 {
+            try? await Task.sleep(for: .milliseconds(100))
+            // 期间换了目标就放弃这次续播。
+            guard pendingResumeURI == uri, currentlyOpenURI == uri else { return }
+            // 打开失败别干等（open 失败走 .failed → state=.error，不会走 closed）。
+            if state.state == .error { return }
+            // 就绪了（duration 到了）才 seek，避免打在未就绪的源上。
+            guard state.duration > .zero, state.state != .idle, state.state != .opening else { continue }
+            pendingResumeURI = nil
+            pendingResumeSeconds = nil
+            try? engine.seek(to: .seconds(resume))
+            return
+        }
+        // 超时还没就绪：放弃续播（从头播总比卡住强），但清掉 pending 免得下次串。
+        pendingResumeURI = nil
+        pendingResumeSeconds = nil
+    }
+
+    @discardableResult
+    private func open(_ source: PlaybackSource, securityScopedURL: URL? = nil) -> Bool {
+        // 换片：先 stop 旧源，再整体丢弃重建引擎。内核 close() 是终态——同一 presenter
+        // close 后不能再 open（实测抛 ErikaError "player is closed"），所以换片不复用旧引擎，
+        // 对齐 stopPlayback 的做法 stop + resetEngine；prepareEngine() 在下面会重建新引擎。
+        if hasLoadedSource {
+            playerLog.info("open 前 stop 旧源并重建引擎（换片）")
+            PlaybackLog.append("open() 前 stop 旧源并重建引擎（换片）")
+            try? engine?.stop()
+            hasLoadedSource = false
+            currentlyOpenURI = nil
+            releaseSecurityScopedResource()
+            resetEngine()
+        }
+        guard let engine = prepareEngine() else { return false }
+        // 换源时作废上一次的待续播 seek（它只对发起它的那次 open 生效）。
+        pendingResumeSeconds = nil
+        pendingResumeURI = nil
+        let acquiredScope = securityScopedURL?.startAccessingSecurityScopedResource() == true
+        do {
+            state.reset()
+            PlaybackLog.append("open() 开始")
+            try engine.open(source)
+            hasLoadedSource = true
+            try engine.setVolume(muted ? 0 : volume)
+            try engine.setRate(rate)
+            if subtitleScale != 1.0 {
+                try? engine.setSubtitleScale(subtitleScale)
+            }
+            try engine.play()
+            // 成功打开 → 清掉上一次的报错，别让错误条残留。
+            setupError = nil
+            currentlyOpenURI = source.uri
+            activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
+            activeSecurityScope = acquiredScope
+            playerLog.info("open 成功")
+            PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
+            return true
+        } catch {
+            playerLog.error("open 失败 \(error, privacy: .public)")
+            PlaybackLog.append("open() 失败 error=\(error) title=\(currentTitle ?? "?")")
+            currentlyOpenURI = nil
+            if acquiredScope {
+                securityScopedURL?.stopAccessingSecurityScopedResource()
+            }
+            // 引擎可能停在半开状态，直接丢弃重建；close 是终态，留着复用到下次 open 必失败。
+            resetEngine()
+            setupError = "\(error)"
+            return false
+        }
+    }
+
+    func stopPlayback() {
+        playerLog.info("stopPlayback")
+        PlaybackLog.append("stopPlayback() hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        try? engine?.stop()
+        // 清空去重标记：否则下次打开同一视频时 openIfNeeded 会误判「已打开同一个源」
+        // 直接跳过（画面停在旧帧/黑屏，进度丢失）。
+        // 注意：这里只 stop 不 close。内核 close() 是终态——closed 后不能再 open，
+        // 所以 App 层一律不复用引擎：退出（这里）和换片（open() 里）都走 stop +
+        // resetEngine 重建，避免引擎进入不可 reopen 的 closed 状态。
+        // stop 之后旧源已经不算“已加载”，必须清掉标记，否则下一次 open 会误以为要换片，
+        // 白白把还没加载新源的引擎丢掉重建（无害但没必要）。
+        hasLoadedSource = false
+        currentlyOpenURI = nil
+        releaseSecurityScopedResource()
+        // 退出播放后把引擎整个丢掉，下次播放重新创建。
+        // 这样即使 Erika 的 stop/detach 组合在个别版本里会让旧 presenter 进入不可 reopen 的状态，
+        // 也不会影响下一次播放。
+        resetEngine()
+        PlaybackLog.append("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
+    }
+
+    private func resetEngine() {
+        eventTask?.cancel()
+        eventTask = nil
+        engine = nil
+        // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
+        // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
+        // 等下次 open 时自然会 reset。
+        setupError = nil
+        PlaybackLog.append("resetEngine 完成")
+    }
+
+    private func releaseSecurityScopedResource() {
+        guard activeSecurityScope, let url = activeSecurityScopedURL else { return }
+        url.stopAccessingSecurityScopedResource()
+        activeSecurityScopedURL = nil
+        activeSecurityScope = false
+    }
+
+    // MARK: - 轨道（音轨 / 字幕菜单用）
+
+    func selectAudio(_ track: TrackInfo) {
+        guard let engine else { return }
+        try? engine.selectAudioTrack(track.id)
+        state.refreshTracks(from: engine)
+    }
+
+    /// `nil` = 关闭字幕。
+    func setSubtitle(_ track: TrackInfo?) {
+        guard let engine else { return }
+        try? engine.selectSubtitleTrack(track?.id)
+        state.refreshTracks(from: engine)
+    }
+
+    /// 加外挂字幕轨道（用户手动选文件：加载并立即选中）。
+    func loadExternalSubtitle(fileURL: URL) {
+        guard let engine else { return }
+        guard let localURL = copyImportedSubtitle(fileURL) else { return }
+        do {
+            let id = try engine.addExternalSubtitle(localURL.path)
+            try engine.selectSubtitleTrack(id)
+            state.refreshTracks(from: engine)
+        } catch {
+            setupError = "字幕加载失败：\(error)"
+        }
+    }
+
+    /// 只加轨道不改变当前选择（Jellyfin 侧车字幕批量装载用）。
+    func addExternalSubtitle(fileURL: URL) {
+        guard let engine else { return }
+        do {
+            _ = try engine.addExternalSubtitle(fileURL.path)
+            state.refreshTracks(from: engine)
+        } catch {
+            setupError = "字幕加载失败：\(error)"
+        }
+    }
+
+    /// 当前没有任何字幕被选中时自动挑一条：中文优先，否则第一条。
+    /// （内核对内封字幕有自己的默认选择；这里只兜「全是外挂字幕」的场。）
+    func autoSelectSubtitleIfNone() {
+        guard let engine, !state.subtitleTracks.isEmpty else { return }
+        guard !state.subtitleTracks.contains(where: { $0.selected }) else { return }
+        let tracks = state.subtitleTracks
+        let picked = tracks.first {
+            let lang = $0.language?.lowercased() ?? ""
+            return lang.contains("zh") || lang.contains("chi")
+        } ?? tracks[0]
+        try? engine.selectSubtitleTrack(picked.id)
+        state.refreshTracks(from: engine)
+    }
+
+    // MARK: - 控制
+
+    func togglePlayPause() {
+        guard let engine else { return }
+        do {
+            if state.state == .playing { try engine.pause() } else { try engine.play() }
+        } catch {
+            setupError = "\(error)"
+        }
+    }
+
+    func seek(toFraction fraction: Double) {
+        guard let engine, state.duration > .zero else { return }
+        let micros = Double(state.duration.microseconds) * min(max(fraction, 0), 1)
+        try? engine.seek(to: .microseconds(Int64(micros)))
+    }
+
+    func skip(by seconds: Double) {
+        guard let engine else { return }
+        let target = Double(state.position.microseconds) + seconds * 1_000_000
+        try? engine.seek(to: .microseconds(Int64(max(0, target))))
+    }
+
+    func applyRate(_ newRate: Double) {
+        rate = newRate
+        try? engine?.setRate(newRate)
+    }
+
+    func applyVolume(_ newVolume: Double) {
+        volume = min(max(newVolume, 0), 1)
+        try? engine?.setVolume(muted ? 0 : volume)
+    }
+
+    func adjustVolume(by delta: Double) {
+        applyVolume(volume + delta)
+    }
+
+    func toggleMute() {
+        muted.toggle()
+        try? engine?.setVolume(muted ? 0 : volume)
+    }
+
+    /// 字幕字号 +/-（0.1 步进，0.5…3.0 夹紧）。
+    func adjustSubtitleScale(by delta: Double) {
+        subtitleScale = min(max(subtitleScale + delta, 0.5), 3.0)
+        try? engine?.setSubtitleScale(subtitleScale)
+    }
+
+    func resetSubtitleScale() {
+        subtitleScale = 1.0
+        try? engine?.setSubtitleScale(1.0)
+    }
+
+    private func copyImportedSubtitle(_ source: URL) -> URL? {
+        let scope = source.startAccessingSecurityScopedResource()
+        defer { if scope { source.stopAccessingSecurityScopedResource() } }
+        do {
+            let directory = URL.applicationSupportDirectory
+                .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = directory.appending(path: "\(UUID().uuidString)-\(source.lastPathComponent)")
+            try FileManager.default.copyItem(at: source, to: destination)
+            return destination
+        } catch {
+            setupError = "字幕文件读取失败：\(error)"
+            return nil
+        }
+    }
+
+    /// 出错后重试：用最近的请求重新打开。
+    func retryLast() {
+        guard let request = lastRequest else {
+            PlaybackLog.append("retryLast 没有 lastRequest")
+            return
+        }
+        PlaybackLog.append("retryLast title=\(request.title)")
+        open(request: request)
+    }
+
+    /// 截当前帧（视频 + 字幕合成）为 PNG，保存到「图片」，返回文件名（失败给错误文案）。
+    func captureScreenshot() -> String? {
+        guard let engine, let params = state.videoParams,
+              params.width > 0, params.height > 0
+        else {
+            setupError = "还没有可截的画面"
+            return nil
+        }
+        do {
+            let rgba = try engine.captureFrameRGBA(width: params.width, height: params.height)
+            guard let image = Self.pngImage(fromRGBA: rgba, width: params.width, height: params.height) else {
+                setupError = "截图编码失败"
+                return nil
+            }
+            let directory = URL.picturesDirectory
+                .appending(path: "OcPlayer", directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd-HHmmss"
+            let name = "截图-\(currentTitle?.prefix(40) ?? "frame")-\(formatter.string(from: Date())).png"
+                .replacingOccurrences(of: "/", with: "-")
+            let url = directory.appending(path: name)
+            try image.write(to: url)
+            return name
+        } catch {
+            setupError = "截图失败：\(error)"
+            return nil
+        }
+    }
+
+    /// RGBA8 缓冲 → PNG Data（截图用，双端同一套 CoreGraphics）。
+    private static func pngImage(fromRGBA pixels: [UInt8], width: Int, height: Int) -> Data? {
+        var data = pixels
+        let space = CGColorSpaceCreateDeviceRGB()
+        return data.withUnsafeMutableBytes { pointer -> Data? in
+            guard let base = pointer.baseAddress,
+                  let context = CGContext(data: base, width: width, height: height,
+                                          bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  let image = context.makeImage()
+            else { return nil }
+            let output = NSMutableData()
+            guard let destination = CGImageDestinationCreateWithData(
+                output, "public.png" as CFString, 1, nil
+            ) else { return nil }
+            CGImageDestinationAddImage(destination, image, nil)
+            guard CGImageDestinationFinalize(destination) else { return nil }
+            return output as Data
+        }
+    }
+
+    /// 硬解 / 丢帧等实时数字，播放页的调试行用。
+    func statsLine() -> String {
+        guard let engine else { return "—" }
+        let s = engine.latestStats
+        return """
+        解码 \(s.decoded_video_frames) · 渲染 \(s.rendered_video_frames) · \
+        硬解 \(s.hardware_video_frames) · 软解 \(s.software_video_frames) · \
+        零拷贝 \(s.zero_copy_video_frames) · 音频 \(s.pushed_audio_frames) · \
+        渲染失败 \(s.render_failures) · 音频失败 \(s.audio_failures)
+        """
+    }
+}

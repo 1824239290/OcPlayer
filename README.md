@@ -1,0 +1,68 @@
+# OcPlayer · 橘猫播放器
+
+自用的 Jellyfin 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。
+
+播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染 + 弹幕渲染）；媒体库走 Jellyfin 官方 Swift SDK；弹幕规划走弹弹play 开放平台（M3，暂缓）。
+
+## 特性
+
+- **Jellyfin 完整串联**：登录（账号密码 + Quick Connect）、媒体库分页浏览、电影/剧集详情、季/集选择、播放单集
+- **首页**：英雄轮播（多图自动切换，可在设置切换「最近添加 / 我的收藏」来源）、收藏轮播空态回落
+- **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报（Start → 心跳 → Stopped）/ 自动连播下一集
+- **画质**：macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝；本地文件与直连 HTTP 流均可播放
+- **安全**：Jellyfin AccessToken 只作为 HTTP 头（API / 图片管线 / 内核 `open_with_headers`），不拼进 URL；Release 存 Keychain，Debug 存 UserDefaults
+- **本地播放**：打开本地文件 / 直连链接，支持 iOS 文件选择器权限生命周期管理
+
+## 构建
+
+```bash
+Scripts/fetch-erika.sh v0.1.6   # 拉取 Erika 内核，生成 Erika.xcframework（不入库，约 753 MB）
+xcodebuild -scheme OcPlayer-macOS -configuration Debug build
+swift test --package-path Packages/ErikaKit     # 内核 + 渲染 + HTTP 全套（素材现造，不联网）
+swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映射与请求参数（全离线 mock）
+```
+
+> macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
+
+## 项目结构
+
+| 模块 | 位置 | 说明 |
+| --- | --- | --- |
+| App | `App/` | 双端 UI（macOS + iOS 同一套 SwiftUI 视图），观察式状态（Observation） |
+| CoreModel | `Packages/CoreModel/` | 纯数据模型，双端共享，无第三方依赖 |
+| ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态，含无头回归测试 |
+| JellyfinKit | `Packages/JellyfinKit/` | Jellyfin 薄封装：登录、媒体库、PlaybackInfo、进度上报，全离线测试 |
+| Scripts | `Scripts/` | 内核拉取、HTTP 测试桩、打包脚本 |
+
+## 开源组件与许可证
+
+| 组件 | 用途 | 许可证 |
+| --- | --- | --- |
+| [Erika](https://github.com/AimesSoft/Erika) | 播放内核（FFmpeg 解码 / libass 字幕 / 弹幕渲染） | Apache-2.0（本体）；内置 FFmpeg、libass、FreeType、HarfBuzz、dav1d、zlib、ArtCNN 等组件各带其许可证（LGPL / GPL / MIT / BSD / zlib 等），完整文本随 `Vendor/` 内 `licenses/` 目录分发 |
+| [jellyfin-sdk-swift](https://github.com/jellyfin/jellyfin-sdk-swift) | Jellyfin 官方 SDK（登录 / 浏览 / PlaybackInfo） | MPL-2.0 |
+| [Get](https://github.com/kean/Get) | HTTP 客户端（SDK 底层，经 SwiftPM 传递引入） | MIT |
+| 弹弹play 开放平台 | 弹幕数据源（规划中，未接入） | 公开 API，需在设置页配置 AppId / AppSecret（本地 `Secrets.xcconfig`，不入库） |
+
+其余 SwiftPM 传递依赖（swift-nio、swift-atomics、swift-collections、swift-system 等）为 Apple 系 Apache-2.0 库，随依赖图自动引入。
+
+**分发义务**：发布产物需随附上述组件的许可证文本，打包脚本会把 Erika 的 `LICENSE`、`THIRD_PARTY_NOTICES.md` 与 `licenses/` 目录复制进 app 的 `Contents/Resources/THIRD_PARTY_LICENSES/`；SDK 的 LICENSE 文件随 SwiftPM 依赖分发，需保留各自的版权声明；FFmpeg 按 LGPL 条款构建时需满足 relink 等对应要求。本项目本体以 GPL-3.0 发布（见 `LICENSE`，因 Erika 捆绑组件含 GPL-3.0）。
+
+## 发布与签名
+
+推送语义化版本标签（例如 `v0.1.0`），或在 GitHub Actions 的 **Release** 工作流中手动输入标签。工作流自动拉取 Erika、构建 macOS arm64 Release，发布：
+
+- `OcPlayer-<版本>-macOS-arm64.zip`
+- `OcPlayer-<版本>-macOS-arm64.dmg`
+- `SHA256SUMS.txt`
+
+本地可用 `Scripts/package-macos.sh v0.1.0` 生成同样的 `dist/` 产物。
+
+**需要的证书**：
+
+- 当前流程使用 ad-hoc 签名（`Sign to Run Locally`），产物未经 Apple 签名，下载版本可能显示 Gatekeeper 提示。
+- 对外分发建议配置 Apple 开发者账号：macOS 用 **Developer ID Application** 证书签名 + **notarization**（公证）；iOS 分发需要开发证书 / 描述文件（Debug 构建可仅本地运行，无需证书）。
+- Release 构建的 Jellyfin token 走 Keychain，需要稳定的 `DEVELOPMENT_TEAM` 签名才能避免每次启动弹钥匙串授权（见工程内 `ServerStore` 注释）。
+
+## 路线
+
+M1 媒体库（Jellyfin 浏览 + 播放串联）→ M2 播放体验（轨道、字幕、续播、进度上报）→ M3 弹幕 → M4 打磨与双端适配。
