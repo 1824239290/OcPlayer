@@ -10,19 +10,20 @@
 - **首页**：英雄轮播（多图自动切换，可在设置切换「最近添加 / 我的收藏」来源）、收藏轮播空态回落
 - **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报（Start → 心跳 → Stopped）/ 自动连播下一集
 - **画质**：macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝；本地文件与直连 HTTP 流均可播放
-- **安全**：Jellyfin AccessToken 只作为 HTTP 头（API / 图片管线 / 内核 `open_with_headers`），不拼进 URL；Release 存 Keychain，Debug 存 UserDefaults
+- **认证**：Jellyfin AccessToken 只作为 HTTP 头（API / 图片管线 / 内核 `open_with_headers`），不拼进 URL；会话凭据存于 App 本地 UserDefaults，不访问系统钥匙串
 - **本地播放**：打开本地文件 / 直连链接，支持 iOS 文件选择器权限生命周期管理
 
 ## 构建
 
 ```bash
 Scripts/fetch-erika.sh v0.1.6   # 拉取 Erika 内核，生成 Erika.xcframework（不入库，约 753 MB）
-xcodebuild -scheme OcPlayer-macOS -configuration Debug build
+Scripts/build-macos.sh           # 清理上次产物并构建 macOS Debug，只保留本次构建
+Scripts/build-macos.sh release   # 清理上次产物并构建 macOS Release
 swift test --package-path Packages/ErikaKit     # 内核 + 渲染 + HTTP 全套（素材现造，不联网）
 swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映射与请求参数（全离线 mock）
 ```
 
-> macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
+> 脚本固定使用 `.local-build/current`，每次构建前会完整删除该目录，避免累积多个本地产物。macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
 
 ## 项目结构
 
@@ -61,7 +62,7 @@ swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映
 
 - 当前流程使用 ad-hoc 签名（`Sign to Run Locally`），产物未经 Apple 签名，下载版本可能显示 Gatekeeper 提示。
 - 对外分发建议配置 Apple 开发者账号：macOS 用 **Developer ID Application** 证书签名 + **notarization**（公证）；iOS 分发需要开发证书 / 描述文件（Debug 构建可仅本地运行，无需证书）。
-- Release 构建的 Jellyfin token 走 Keychain，需要稳定的 `DEVELOPMENT_TEAM` 签名才能避免每次启动弹钥匙串授权（见工程内 `ServerStore` 注释）。
+- Jellyfin token 存在 App 本地 UserDefaults；卸载 App 或清除其数据会移除已保存的登录会话。
 
 ## 路线
 

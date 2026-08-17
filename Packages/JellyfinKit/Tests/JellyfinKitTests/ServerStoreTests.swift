@@ -1,7 +1,7 @@
 import XCTest
 @testable import JellyfinKit
 
-/// ServerStore 档案持久化（UserDefaults）+ token 仓库（内存版 Keychain）。
+/// ServerStore 档案持久化（UserDefaults）+ 可替换 token 仓库。
 final class ServerStoreTests: XCTestCase {
 
     private var defaults: UserDefaults!
@@ -62,5 +62,18 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(store.profiles.count, 1, "登出不删档案，下次一键重连")
         XCTAssertNil(store.token(for: store.profiles[0]))
         XCTAssertNil(JellyfinServer(restoringFrom: store), "没有 token 就无法静默恢复")
+    }
+
+    func testDefaultTokenStorePersistsLocallyAcrossInstances() {
+        let profile = profile(id: "srv1:u1")
+        let firstStore = ServerStore(defaults: defaults)
+        firstStore.activate(profile, token: "tok-local")
+
+        let restoredStore = ServerStore(defaults: defaults)
+        XCTAssertEqual(restoredStore.token(for: profile), "tok-local")
+        XCTAssertEqual(JellyfinServer(restoringFrom: restoredStore)?.accessToken, "tok-local")
+
+        restoredStore.signOut(id: profile.id)
+        XCTAssertNil(ServerStore(defaults: defaults).token(for: profile))
     }
 }

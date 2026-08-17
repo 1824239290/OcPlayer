@@ -111,7 +111,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(server.profile.userName, "jumusu")
             XCTAssertEqual(server.accessToken, "tok-123")
 
-            // 落盘：档案在 UserDefaults、token 在（内存版）Keychain
+            // 落盘：档案和 token 通过各自的存储抽象保存
             XCTAssertEqual(store.currentProfile?.id, "srv-1:user-9")
             XCTAssertEqual(store.token(for: server.profile), "tok-123")
         }

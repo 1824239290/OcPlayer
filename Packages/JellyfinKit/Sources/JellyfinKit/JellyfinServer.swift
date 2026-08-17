@@ -26,7 +26,7 @@ public struct JellyfinServer: Sendable {
         self.client = client
     }
 
-    /// 用已保存的档案 + Keychain token 恢复会话。
+    /// 用已保存的档案 + 本地 token 恢复会话。
     public init?(restoringFrom store: ServerStore) {
         guard let profile = store.currentProfile,
               let token = store.token(for: profile)

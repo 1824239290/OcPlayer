@@ -39,6 +39,10 @@ struct PlayerScreen: View {
     @State private var availableWidth: CGFloat = .infinity
 
     private let controlAutoHide: Duration = .seconds(3)
+    /// 所有 HUD 共用一个不受视频画面影响的深灰承载层。Liquid Glass 只负责
+    /// 高光、边缘和交互，避免顶部、中央、底部因各自取样不同而变色。
+    private var hudSurfaceBase: Color { Color(red: 0.105, green: 0.11, blue: 0.12) }
+    private var hudGlassTint: Color { .black.opacity(0.12) }
 
     private var isNarrow: Bool { availableWidth < 560 }
 
@@ -177,22 +181,21 @@ struct PlayerScreen: View {
     private var errorBadge: some View {
         VStack {
             Spacer()
-            HStack(spacing: 14) {
-                Label(controller.state.lastError ?? controller.setupError ?? "播放出错",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.callout)
-                Button {
-                    controller.retryLast()
-                } label: {
-                    Label("重试", systemImage: "arrow.clockwise")
-                        .font(.callout.weight(.semibold))
+            hudGlassSurface(in: RoundedRectangle(cornerRadius: 18), interactive: true) {
+                HStack(spacing: 14) {
+                    Label(controller.state.lastError ?? controller.setupError ?? "播放出错",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.white, .red)
+                    hudProminentButton(tint: .red, action: controller.retryLast) {
+                        Label("重试", systemImage: "arrow.clockwise")
+                            .font(.callout.weight(.semibold))
+                            .padding(.horizontal, 4)
+                    }
+                    .disabled(controller.lastRequest == nil)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .disabled(controller.lastRequest == nil)
+                .padding(12)
             }
-            .padding(12)
-            .background(.red.opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
             .padding(.bottom, 140)
         }
     }
@@ -226,94 +229,65 @@ struct PlayerScreen: View {
             bottomBlock
         }
         .animation(.easeInOut(duration: 0.2), value: controlsVisible)
+        // Liquid Glass 没有可选的 dark 材质；深色 scheme 统一原生控件外观，
+        // 前景则明确使用白色，避免 vibrancy 在黑色 Glass 上把图标反转成黑色。
+        .environment(\.colorScheme, .dark)
     }
 
-    /// 顶栏：左「×」+ 功能胶囊（全屏 / 截图 / 分享）；右音量胶囊。
+    /// 顶栏只保留窗口级操作：关闭在左，音量 / 全屏 / 更多在右。
+    /// 截图、分享和诊断信息属于低频动作，统一收进“更多”。
     private var topBar: some View {
         hudGlassContainer(spacing: 10) {
             HStack(spacing: 10) {
                 circleButton("xmark", tip: "关闭播放器") { closePlayer() }
-
+                Spacer(minLength: 8)
+                volumeCapsule
                 capsuleGroup {
                     #if os(macOS)
                     hudIconButton(isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                                   tip: "全屏（F / 双击）") { toggleFullscreen() }
-                    hudIconButton("camera.fill", tip: "截图") { captureNow() }
-                    if shareURL != nil {
-                        hudIconButton("square.and.arrow.up", tip: "分享") { shareNow() }
-                    }
-                    #else
-                    if let shareURL {
-                        ShareLink(item: shareURL) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(.white)
-                                .frame(width: 32, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
                     #endif
+                    auxiliaryMenu
                 }
-
-                Spacer(minLength: 8)
-
-                volumeCapsule
             }
         }
         .padding(.horizontal, isNarrow ? 14 : 24)
         .padding(.top, isNarrow ? 12 : 20)
     }
 
-    /// 右上音量胶囊：细音量条（无圆钮，同 Apple TV）+ 静音键。
+    /// 右上音量胶囊：原生 Slider 会随系统自动采用对应的 Liquid Glass 控件外观。
     private var volumeCapsule: some View {
         hudGlassSurface(in: Capsule(), interactive: true) {
-            HStack(spacing: 10) {
-                volumeBar
-                    .frame(width: isNarrow ? 84 : 120)
+            HStack(spacing: 8) {
+                Slider(value: volumeBinding, in: 0...1) {
+                    Text("音量")
+                }
+                .labelsHidden()
+                .tint(.white)
+                .controlSize(.small)
+                .frame(width: isNarrow ? 84 : 120)
                 Button { controller.toggleMute() } label: {
                     Image(systemName: volumeIconName)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(controller.muted ? .red : .white)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("静音（M）")
+                .accessibilityLabel(controller.muted ? "取消静音" : "静音")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.leading, 14)
+            .padding(.trailing, 10)
+            .padding(.vertical, 7)
         }
     }
 
-    private var volumeBar: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.32))
-                Capsule().fill(.white)
-                    .frame(width: max(proxy.size.width * controller.volume, 4))
-            }
-            .frame(height: 10)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        guard proxy.size.width > 0 else { return }
-                        controller.applyVolume(min(max(value.location.x / proxy.size.width, 0), 1))
-                    }
-            )
-        }
-        .frame(height: 10)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("音量")
-        .accessibilityValue(controller.muted ? "已静音" : "\(Int((controller.volume * 100).rounded()))%")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: controller.adjustVolume(by: 0.05)
-            case .decrement: controller.adjustVolume(by: -0.05)
-            @unknown default: break
-            }
-        }
+    private var volumeBinding: Binding<Double> {
+        Binding(
+            get: { controller.volume },
+            set: { controller.applyVolume($0) }
+        )
     }
 
     private var volumeIconName: String {
@@ -325,14 +299,18 @@ struct PlayerScreen: View {
     private var centerControls: some View {
         hudGlassContainer(spacing: isNarrow ? 26 : 44) {
             HStack(spacing: isNarrow ? 26 : 44) {
-                centerCircle("gobackward.10", size: isNarrow ? 48 : 58) { controller.skip(by: -10) }
+                centerCircle("gobackward.10", tip: "后退 10 秒", size: isNarrow ? 48 : 58) {
+                    controller.skip(by: -10)
+                }
                 playPauseButton
-                centerCircle("goforward.10", size: isNarrow ? 48 : 58) { controller.skip(by: 10) }
+                centerCircle("goforward.10", tip: "前进 10 秒", size: isNarrow ? 48 : 58) {
+                    controller.skip(by: 10)
+                }
             }
         }
     }
 
-    private func centerCircle(_ systemImage: String, size: CGFloat,
+    private func centerCircle(_ systemImage: String, tip: String, size: CGFloat,
                               action: @escaping () -> Void) -> some View {
         hudGlassCircleButton(action: action) {
             Image(systemName: systemImage)
@@ -341,6 +319,8 @@ struct PlayerScreen: View {
                 .frame(width: size, height: size)
         }
         .contentShape(Circle())
+        .help(tip)
+        .accessibilityLabel(tip)
     }
 
     private var playPauseButton: some View {
@@ -351,17 +331,20 @@ struct PlayerScreen: View {
                 .frame(width: isNarrow ? 64 : 76, height: isNarrow ? 64 : 76)
         }
         .contentShape(Circle())
+        .help(controller.state.state == .playing ? "暂停" : "播放")
+        .accessibilityLabel(controller.state.state == .playing ? "暂停" : "播放")
     }
 
-    /// 底部：标题 + 设置胶囊（字幕 / 音轨 / 倍速）→ 全宽进度条 → Info / InSight / Continue Watching。
+    /// 底部标题、进度和辅助操作共享一块玻璃。标题不直接压在视频上，
+    /// 避免亮色画面让剧集名和系列名失去对比度。
     private var bottomBlock: some View {
-        VStack(alignment: .leading, spacing: isNarrow ? 12 : 16) {
-            HStack(alignment: .bottom, spacing: 12) {
+        hudGlassSurface(in: RoundedRectangle(cornerRadius: isNarrow ? 16 : 20), interactive: true) {
+            VStack(alignment: .leading, spacing: isNarrow ? 9 : 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     if !titleKicker.isEmpty {
                         Text(titleKicker)
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.72))
+                            .foregroundStyle(.white.opacity(0.78))
                             .lineLimit(1)
                     }
                     Text(mainTitle)
@@ -371,30 +354,107 @@ struct PlayerScreen: View {
                 }
                 .layoutPriority(-1)
 
-                Spacer(minLength: 8)
+                VStack(spacing: isNarrow ? 6 : 8) {
+                    progressSlider
 
-                capsuleGroup {
-                    subtitleMenu
-                    audioMenu
-                    rateMenu
-                }
-            }
+                    HStack(spacing: isNarrow ? 2 : 6) {
+                        Text(timeLabel(displayedPosition))
+                        Text("/")
+                            .foregroundStyle(.white.opacity(0.4))
+                        Text(timeLabel(controller.state.duration))
 
-            progressBar
+                        Spacer(minLength: 8)
 
-            hudGlassContainer(spacing: 10) {
-                HStack(spacing: 10) {
-                    hudChip("Info", active: showInfoCard) { showInfoCard.toggle() }
-                    hudChip("InSight", active: showStats) { showStats.toggle() }
-                    if app.nextEpisode != nil {
-                        hudChip("Continue Watching", active: false) { app.playNextEpisode() }
+                        subtitleMenu
+                        audioMenu
+                        rateMenu
+                        if app.nextEpisode != nil {
+                            dockIconButton("forward.end.fill", tip: "播放下一集") {
+                                app.playNextEpisode()
+                            }
+                        }
                     }
-                    Spacer(minLength: 0)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.78))
                 }
             }
+            .padding(.horizontal, isNarrow ? 12 : 16)
+            .padding(.vertical, isNarrow ? 11 : 14)
         }
         .padding(.horizontal, isNarrow ? 14 : 24)
         .padding(.bottom, isNarrow ? 16 : 26)
+        .frame(maxWidth: 1040)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func dockIconButton(
+        _ systemImage: String,
+        tip: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.78))
+                .frame(width: 32, height: 28)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(tip)
+        .accessibilityLabel(tip)
+    }
+
+    private var progressSlider: some View {
+        Slider(value: progressBinding, in: 0...1) {
+            Text("播放进度")
+        } onEditingChanged: { editing in
+            if editing {
+                hideTask?.cancel()
+            } else if let target = scrubFraction {
+                controller.seek(toFraction: target)
+                scrubFraction = nil
+                scheduleAutoHide()
+            }
+        }
+        .labelsHidden()
+        .tint(.white)
+        .controlSize(isNarrow ? .small : .regular)
+        .disabled(controller.state.duration == .zero)
+        .accessibilityValue("\(timeLabel(displayedPosition)) / \(timeLabel(controller.state.duration))")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: controller.skip(by: 10)
+            case .decrement: controller.skip(by: -10)
+            @unknown default: break
+            }
+        }
+    }
+
+    private var progressBinding: Binding<Double> {
+        Binding(
+            get: { scrubFraction ?? controller.state.progress },
+            set: { value in
+                hideTask?.cancel()
+                scrubFraction = min(max(value, 0), 1)
+            }
+        )
+    }
+
+    private func hudProminentButton<Label: View>(
+        tint: Color,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        Group {
+            if #available(macOS 26.0, iOS 26.0, *) {
+                Button(action: action) { label() }
+                    .buttonStyle(.glassProminent)
+            } else {
+                Button(action: action) { label() }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .tint(tint)
     }
 
     /// 小字行：剧集名（大图配系列名，同 Apple TV 版式）；非剧集留空。
@@ -416,35 +476,72 @@ struct PlayerScreen: View {
 
     /// 一组图标共享一块原生玻璃，避免在玻璃上再叠一层玻璃。
     private func capsuleGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        hudGlassSurface(in: Capsule()) {
+        hudGlassSurface(in: Capsule(), interactive: true) {
             HStack(spacing: 2) { content() }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
         }
     }
 
-    private func hudIconButton(_ systemImage: String, tip: String, active: Bool = false,
+    private func hudIconButton(_ systemImage: String, tip: String,
                                action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(active ? .yellow : .white)
+                .foregroundStyle(.white)
                 .frame(width: 32, height: 28)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(tip)
+        .accessibilityLabel(tip)
     }
 
-    /// 底部文字胶囊（Info / InSight / Continue Watching）。
-    private func hudChip(_ label: String, active: Bool, action: @escaping () -> Void) -> some View {
-        hudGlassCapsuleButton(active: active, action: action) {
-            Text(label)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+    private var auxiliaryMenu: some View {
+        Menu {
+            Button {
+                showInfoCard.toggle()
+            } label: {
+                Label(showInfoCard ? "隐藏播放信息" : "显示播放信息",
+                      systemImage: showInfoCard ? "info.circle.fill" : "info.circle")
+            }
+            Button {
+                showStats.toggle()
+            } label: {
+                Label(showStats ? "隐藏播放统计" : "显示播放统计",
+                      systemImage: showStats ? "waveform.path.ecg.rectangle.fill" : "waveform.path.ecg.rectangle")
+            }
+
+            Divider()
+
+            #if os(macOS)
+            Button(action: captureNow) {
+                Label("截图", systemImage: "camera.fill")
+            }
+            if shareURL != nil {
+                Button(action: shareNow) {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
+            }
+            #else
+            if let shareURL {
+                ShareLink(item: shareURL) {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                }
+            }
+            #endif
+        } label: {
+            hudMenuIcon("ellipsis")
         }
+        .menuIndicator(.hidden)
+        #if os(macOS)
+        .menuStyle(.borderlessButton)
+        #endif
+        // macOS Menu 的 button style 会覆盖 label 内部的 foregroundStyle。
+        .tint(.white)
+        .foregroundStyle(.white)
+        .help("更多")
+        .accessibilityLabel("更多播放选项")
     }
 
     /// macOS / iOS 26 由系统合成相邻玻璃，旧系统只负责布局，不模拟融合动画。
@@ -462,92 +559,41 @@ struct PlayerScreen: View {
         }
     }
 
-    /// 自定义 HUD 容器使用系统 Liquid Glass；Material 仅作为旧系统兼容回退。
-    ///
-    /// 系统 `Glass.regular` 在亮场景底色是亮色磨砂玻璃（HUD 上覆在视频画面之上会把
-    /// 整片内容洗白，白字看不清）。强制加一层深色 tint，把玻璃底压回暗调，文字始终可读。
+    /// 自定义 HUD 容器使用统一深灰承载层 + 系统 Liquid Glass。
+    /// 承载层负责颜色和对比，Glass 不再直接以视频画面作为可读性来源。
     @ViewBuilder
     private func hudGlassSurface<ShapeType: Shape, Content: View>(
         in shape: ShapeType,
         interactive: Bool = false,
-        fallbackShade: Double = 0.55,
         @ViewBuilder content: () -> Content
     ) -> some View {
         if #available(macOS 26.0, iOS 26.0, *) {
             content()
-                .glassEffect(.regular.tint(.black.opacity(0.55)).interactive(interactive), in: shape)
+                .glassEffect(.regular.tint(hudGlassTint).interactive(interactive), in: shape)
+                .background(hudSurfaceBase, in: shape)
+                .environment(\.colorScheme, .dark)
         } else {
-            // 旧系统回退：`.ultraThinMaterial` 在黑视频上也是亮色雾，必须叠一层
-            // 够深的黑色把玻璃调暗；早先用 0.25 太浅，整片 HUD 会发白。
             content()
                 .background(.ultraThinMaterial, in: shape)
-                .background(.black.opacity(fallbackShade), in: shape)
+                .background(hudSurfaceBase, in: shape)
+                .environment(\.colorScheme, .dark)
         }
     }
 
-    /// 独立圆形按钮直接采用系统 glass button style，获得原生 hover / press 反馈。
-    ///
-    /// 同 hudGlassSurface：`.glass` 默认偏亮，覆在黑视频上会把按钮洗成白色圆片，必须
-    /// 再用 `.tint(.black.opacity(0.55))` 把底色压回暗调，确保中间图标保持白底深玻璃对比。
+    /// 圆形按钮也通过 hudGlassSurface 渲染，不再使用另一套 GlassButtonStyle
+    /// 调色逻辑。interactive Glass 仍然提供原生 hover / press 反馈。
     @ViewBuilder
     private func hudGlassCircleButton<Label: View>(
         action: @escaping () -> Void,
         @ViewBuilder label: () -> Label
     ) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            Button(action: action) {
+        Button(action: action) {
+            hudGlassSurface(in: Circle(), interactive: true) {
                 label()
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .tint(.black.opacity(0.55))
-        } else {
-            Button(action: action) {
-                label()
-                    .background(.ultraThinMaterial, in: Circle())
-                    .background(.black.opacity(0.55), in: Circle())
-            }
-            .buttonStyle(.plain)
         }
-    }
-
-    /// 选中态使用系统的 prominent glass，而不是再盖一层半透明白色形状。
-    ///
-    /// 关键：dark HUD 上选中态必须仍然是"暗玻璃更暗"，不是"亮玻璃"。
-    /// `.glassProminent` 默认 tint 偏亮，直接用会把 Info / Continue Watching
-    /// 选中时整块糊白；显式钉 `.black.opacity(0.78)` 让选中态在黑视频上呈现为
-    /// "略亮一点的暗胶囊"，与未选中态有清晰对比且仍保留 dark HUD 整体调性。
-    @ViewBuilder
-    private func hudGlassCapsuleButton<Label: View>(
-        active: Bool,
-        action: @escaping () -> Void,
-        @ViewBuilder label: () -> Label
-    ) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            if active {
-                Button(action: action) {
-                    label()
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.capsule)
-                .tint(.black.opacity(0.78))
-            } else {
-                Button(action: action) {
-                    label()
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .tint(.black.opacity(0.55))
-            }
-        } else {
-            Button(action: action) {
-                label()
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .background(.black.opacity(active ? 0.7 : 0.55), in: Capsule())
-                    .overlay(Capsule().fill(.white.opacity(active ? 0.12 : 0)))
-            }
-            .buttonStyle(.plain)
-        }
+        .buttonStyle(.plain)
+        .environment(\.colorScheme, .dark)
     }
 
     // MARK: - 轨道菜单（M2：音轨 / 字幕切换 + 外挂字幕）
@@ -646,65 +692,6 @@ struct PlayerScreen: View {
             .compactMap { UTType(filenameExtension: $0.0, conformingTo: .text) }
     }
 
-    /// 全宽进度条：细轨道 + 白色已播段（Apple TV 式无圆钮）；拖动时出小圆点 + 目标时间预览。
-    private var progressBar: some View {
-        GeometryReader { proxy in
-            let fraction = scrubFraction ?? controller.state.progress
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.32))
-                Capsule()
-                    .fill(.white)
-                    .frame(width: max(proxy.size.width * fraction, 5))
-                if scrubFraction != nil {
-                    Circle()
-                        .fill(.white)
-                        .frame(width: 12, height: 12)
-                        .offset(x: proxy.size.width * fraction - 6)
-                }
-            }
-            .frame(height: 12)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        guard proxy.size.width > 0 else { return }
-                        // 拖动期间不隐藏
-                        hideTask?.cancel()
-                        scrubFraction = min(max(value.location.x / proxy.size.width, 0), 1)
-                    }
-                    .onEnded { value in
-                        guard proxy.size.width > 0 else { return }
-                        let target = min(max(value.location.x / proxy.size.width, 0), 1)
-                        controller.seek(toFraction: target)
-                        scrubFraction = nil
-                        scheduleAutoHide()
-                    }
-            )
-            .overlay(alignment: .topLeading) {
-                if scrubFraction != nil {
-                    Text("\(timeLabel(displayedPosition)) / \(timeLabel(controller.state.duration))")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.85))
-                        .offset(x: min(max(proxy.size.width * fraction - 40, 0),
-                                       proxy.size.width - 90), y: -22)
-                }
-            }
-        }
-        .frame(height: 12)
-        .disabled(controller.state.duration == .zero)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("播放进度")
-        .accessibilityValue("\(timeLabel(displayedPosition)) / \(timeLabel(controller.state.duration))")
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: controller.skip(by: 10)
-            case .decrement: controller.skip(by: -10)
-            @unknown default: break
-            }
-        }
-    }
-
     private var rateMenu: some View {
         Menu {
             ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { value in
@@ -743,8 +730,6 @@ struct PlayerScreen: View {
 
     /// Info 卡：当前播放的基本信息（标题 / 状态 / 进度 / 分辨率）。
     private var infoCard: some View {
-        // 不显式传 fallbackShade，让 hudGlassSurface 默认值（0.55）生效，保持 HUD
-        // 暗玻璃一致；显式 0.35 会让 Info 卡比周围胶囊更亮，与"统一暗 HUD"调性冲突。
         hudGlassSurface(in: RoundedRectangle(cornerRadius: 14)) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(mainTitle)
@@ -777,7 +762,7 @@ struct PlayerScreen: View {
         let videoDescription = controller.state.videoParams.map {
             "\($0.width)×\($0.height)"
         } ?? "-"
-        return hudGlassSurface(in: RoundedRectangle(cornerRadius: 10), fallbackShade: 0.65) {
+        return hudGlassSurface(in: RoundedRectangle(cornerRadius: 14)) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(controller.statsLine())
                 Text(verbatim: "surface=\(controller.state.hasSurface) · \(videoDescription)")

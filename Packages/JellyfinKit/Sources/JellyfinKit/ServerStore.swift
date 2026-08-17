@@ -1,11 +1,10 @@
 import Foundation
-import Security
 import os
 
 /// ServerStore 专属日志：编码 / 解码失败在这里留痕，不打断登录流程。
 private let storeLog = Logger(subsystem: "dev.jumusu.OcPlayer", category: "ServerStore")
 
-/// 一台已登录服务器的持久化档案。token **不在这里**——进 Keychain（见 `TokenStore`）。
+/// 一台已登录服务器的持久化档案。token 单独存进本地 UserDefaults。
 public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     /// `serverID:userID`，同一服务器换账号 = 不同 profile。
     public var id: String
@@ -26,7 +25,7 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
-/// 多服务器 profile 的持久化（UserDefaults 放档案，token 进 `TokenStoring`）。
+/// 多服务器 profile 的持久化（档案和 token 均存本地 UserDefaults，使用不同 key）。
 ///
 /// 用 class + 显式 save 而不是属性观察：AppModel 持有并 @Observable 转发，
 /// 这里保持无 UI 依赖、可单测。存储引用都是 `let`，标 `@unchecked Sendable` 安全。
@@ -37,16 +36,9 @@ public final class ServerStore: @unchecked Sendable {
     private let profilesKey = "dev.jumusu.ocplayer.servers"
     private let currentKey = "dev.jumusu.ocplayer.currentServer"
 
-    /// - Debug：token 走 UserDefaults。Debug 包是 ad-hoc 签名、每次构建签名都变，
-    ///   Keychain 的 ACL 会把新构建当成另一个 App，每次启动都弹「允许访问钥匙串」要密码。
-    /// - Release：token 走 Keychain（`kSecAttrAccessibleAfterFirstUnlock`，不同步 iCloud）。
     public init(defaults: UserDefaults = .standard, tokens: TokenStoring? = nil) {
         self.defaults = defaults
-        #if DEBUG
-        self.tokens = tokens ?? UserDefaultsTokenStore(defaults: defaults)
-        #else
-        self.tokens = tokens ?? TokenStore()
-        #endif
+        self.tokens = tokens ?? LocalTokenStore(defaults: defaults)
     }
 
     // MARK: - 档案
@@ -92,7 +84,7 @@ public final class ServerStore: @unchecked Sendable {
         }
     }
 
-    // MARK: - token（Keychain）
+    // MARK: - token
 
     public func token(for profile: ServerProfile) -> String? {
         tokens.read(account: profile.id)
@@ -109,61 +101,11 @@ public final class ServerStore: @unchecked Sendable {
     }
 }
 
-// MARK: - Keychain
-
 /// token 存取抽象，测试可以换成内存版。
 public protocol TokenStoring: Sendable {
     func read(account: String) -> String?
     func save(_ token: String, account: String)
     func delete(account: String)
-}
-
-/// Keychain 通用密码实现：kSecAttrAccessibleAfterFirstUnlock、不进 iCloud 同步。
-public struct TokenStore: TokenStoring {
-    private let service: String
-
-    public init(service: String = "dev.jumusu.OcPlayer.accessToken") {
-        self.service = service
-    }
-
-    public func read(account: String) -> String? {
-        var query = baseQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    public func save(_ token: String, account: String) {
-        let data = Data(token.utf8)
-        var query = baseQuery(account: account)
-        query[kSecValueData as String] = data
-        var status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        }
-        guard status == errSecSuccess else {
-            // Keychain 在个别环境（无 entitlement 的测试进程等）会拒绝写入。
-            // 不让登录流程因此崩掉；读不到 token 时用户重新登录即可。
-            return
-        }
-    }
-
-    public func delete(account: String) {
-        SecItemDelete(baseQuery(account: account) as CFDictionary)
-    }
-
-    private func baseQuery(account: String) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-            kSecAttrSynchronizable as String: false,
-        ]
-    }
 }
 
 /// 测试 / 预览用的内存 token 仓库。
@@ -182,13 +124,12 @@ public final class InMemoryTokenStore: TokenStoring, @unchecked Sendable {
     }
 
     public func delete(account: String) {
-        lock.withLock { storage.removeValue(forKey: account) }
+        lock.withLock { _ = storage.removeValue(forKey: account) }
     }
 }
 
-/// 开发构建（Debug）用的 token 仓库：UserDefaults，避免 ad-hoc 签名变化
-/// 触发钥匙串 ACL 反复弹密码。Release 不用它（见 `ServerStore.init`）。
-public final class UserDefaultsTokenStore: TokenStoring, @unchecked Sendable {
+/// 本地 token 仓库。使用与服务器档案相同的 UserDefaults，不访问系统钥匙串。
+public final class LocalTokenStore: TokenStoring, @unchecked Sendable {
     private let lock = NSLock()
     private let defaults: UserDefaults
 
