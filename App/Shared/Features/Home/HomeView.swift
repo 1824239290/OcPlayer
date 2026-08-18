@@ -35,54 +35,65 @@ struct HomeView: View {
     }
 
     private var content: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if !app.home.heroes.isEmpty {
-                    HeroCarousel(
-                        items: app.home.heroes,
-                        eyebrowPrefix: app.home.heroLabel
-                    ) { item in
-                        app.play(item, resumeSeconds: item.playState?.positionSeconds)
-                    } onDetail: { item in
-                        app.openDetail(item)
-                    }
-                }
+        GeometryReader { viewport in
+            let contentWidth = max(viewport.size.width, 1)
 
-                if !app.home.resume.isEmpty {
-                    Rail("继续观看") {
-                        ForEach(app.home.resume) { item in
-                            StillCard(item: item, server: app.server) {
-                                app.play(item, resumeSeconds: item.playState?.positionSeconds)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if !app.home.heroes.isEmpty {
+                        HeroCarousel(
+                            items: app.home.heroes,
+                            eyebrowPrefix: app.home.heroLabel,
+                            width: contentWidth
+                        ) { item in
+                            app.play(item, resumeSeconds: item.playState?.positionSeconds)
+                        } onDetail: { item in
+                            app.openDetail(item)
+                        }
+                    }
+
+                    if !app.home.resume.isEmpty {
+                        Rail("继续观看") {
+                            ForEach(app.home.resume) { item in
+                                StillCard(item: item, server: app.server) {
+                                    app.play(item, resumeSeconds: item.playState?.positionSeconds)
+                                }
                             }
                         }
                     }
-                }
 
-                if !app.home.nextUp.isEmpty {
-                    Rail("接下来看") {
-                        ForEach(app.home.nextUp) { item in
-                            StillCard(item: item, server: app.server) {
-                                app.play(item, resumeSeconds: nil)
+                    if !app.home.nextUp.isEmpty {
+                        Rail("接下来看") {
+                            ForEach(app.home.nextUp) { item in
+                                StillCard(item: item, server: app.server) {
+                                    app.play(item, resumeSeconds: nil)
+                                }
                             }
                         }
                     }
-                }
 
-                if !app.home.latest.isEmpty {
-                    Rail("最近添加") {
-                        ForEach(app.home.latest) { item in
-                            PosterCard(item: item, server: app.server) {
-                                app.openDetail(item)
+                    if !app.home.latest.isEmpty {
+                        Rail("最近添加") {
+                            ForEach(app.home.latest) { item in
+                                PosterCard(item: item, server: app.server) {
+                                    app.openDetail(item)
+                                }
                             }
                         }
                     }
-                }
 
-                footer
+                    footer
+                }
+                // Vertical ScrollView 对内容的横向提议可能是 nil；仅使用
+                // `maxWidth: .infinity` 仍会让横向 Rail 的理想宽度泄漏到详情列外。
+                // 用外层 GeometryReader 的真实视口宽度硬约束内容列，侧栏开合时
+                // HeroCarousel 只能测到当前详情列的可视宽度。
+                .frame(width: contentWidth, alignment: .leading)
+                .padding(.bottom, 48)
             }
-            .padding(.bottom, 48)
+            .contentMargins(.horizontal, 0, for: .scrollContent)
+            .refreshable { await app.reloadBrowserData() }
         }
-        .refreshable { await app.reloadBrowserData() }
     }
 
     private var loadingState: some View {
@@ -123,39 +134,98 @@ struct HomeView: View {
 private struct HeroCarousel: View {
     let items: [MediaItem]
     var eyebrowPrefix: String
+    let width: CGFloat
     var onPlay: (MediaItem) -> Void
     var onDetail: (MediaItem) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
-    /// 当前轮播页（对应 HeroBanner 的 `.id(i)`）；手动滑动和程序跳转都会更新它。
-    @State private var scrollID: Int? = 0
+    /// 当前轮播页。使用媒体 ID 而不是数组下标，刷新数据后仍能保持稳定身份。
+    @State private var scrollID: MediaItem.ID?
+    /// AppKit 可能恢复横向 ScrollView 的旧像素偏移；首次布局后强制回到第一张。
+    @State private var hasAnchoredInitialPage = false
     /// 鼠标悬停时暂停自动轮播。
     @State private var isHovering = false
 
     private var count: Int { items.count }
-    private var currentIndex: Int { scrollID ?? 0 }
+    private var currentIndex: Int {
+        guard let scrollID,
+              let index = items.firstIndex(where: { $0.id == scrollID })
+        else { return 0 }
+        return index
+    }
     private var interval: Duration { .seconds(6) }
 
+    init(
+        items: [MediaItem],
+        eyebrowPrefix: String,
+        width: CGFloat,
+        onPlay: @escaping (MediaItem) -> Void,
+        onDetail: @escaping (MediaItem) -> Void
+    ) {
+        self.items = items
+        self.eyebrowPrefix = eyebrowPrefix
+        self.width = width
+        self.onPlay = onPlay
+        self.onDetail = onDetail
+        _scrollID = State(initialValue: items.first?.id)
+    }
+
     var body: some View {
-        ScrollView(.horizontal) {
-            LazyHStack(spacing: 0) {
-                ForEach(items.indices, id: \.self) { i in
-                    HeroBanner(item: items[i], eyebrowPrefix: eyebrowPrefix) {
-                        onPlay(items[i])
-                    } onDetail: {
-                        onDetail(items[i])
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(items) { item in
+                        HeroBanner(
+                            item: item,
+                            eyebrowPrefix: eyebrowPrefix,
+                            width: width,
+                            height: heroHeight
+                        ) {
+                            onPlay(item)
+                        } onDetail: {
+                            onDetail(item)
+                        }
+                        // 外层详情列是唯一宽度来源，避免启动时内外 GeometryReader
+                        // 在 NavigationSplitView 恢复侧栏的不同布局轮次里读到两套宽度。
+                        .id(item.id)
                     }
-                    .containerRelativeFrame(.horizontal)
-                    .id(i)
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            // 冷启动时绑定必须在第一次布局前已有值，并明确按页首对齐；否则
+            // macOS 会采用“最小滚动距离”，把第一页停在两个页面之间。
+            .scrollPosition(id: $scrollID, anchor: .leading)
+            .scrollIndicators(.hidden)
+            // live resize 会先更新视口再更新 target frame。等待宽度稳定后再无动画
+            // 重锚当前媒体；同步 scrollTo 会用新视口对齐旧 frame，留下错误偏移。
+            .task(id: layoutID) {
+                let isInitialAnchor = !hasAnchoredInitialPage
+                let targetID = isInitialAnchor ? items.first?.id : scrollID
+                do {
+                    try await Task.sleep(for: .milliseconds(80))
+                } catch {
+                    return
+                }
+                guard let targetID,
+                      (isInitialAnchor || scrollID == targetID),
+                      items.contains(where: { $0.id == targetID })
+                else { return }
+
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    if isInitialAnchor {
+                        hasAnchoredInitialPage = true
+                        scrollID = targetID
+                    }
+                    proxy.scrollTo(targetID, anchor: .leading)
                 }
             }
-            .scrollTargetLayout()
         }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition(id: $scrollID)
-        .scrollIndicators(.hidden)
+        .frame(width: width, height: heroHeight)
         .overlay(alignment: .bottom) {
             if count > 1 { dots }
         }
@@ -165,12 +235,16 @@ private struct HeroCarousel: View {
         .clipped()
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .onAppear { normalizeScrollID() }
+        .onChange(of: items.map(\.id)) {
+            normalizeScrollID()
+        }
         .task(id: advanceID) {
             guard count > 1, !reduceMotion, scenePhase == .active else { return }
             try? await Task.sleep(for: interval)
             guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.35)) {
-                scrollID = (currentIndex + 1) % count
+                scrollID = items[(currentIndex + 1) % count].id
             }
         }
     }
@@ -182,6 +256,14 @@ private struct HeroCarousel: View {
         hasher.combine(scenePhase)
         hasher.combine(count)
         hasher.combine(currentIndex)
+        return hasher.finalize()
+    }
+
+    /// 只跟页面几何和内容集合走，不包含当前页，避免自动轮播时重启校正任务。
+    private var layoutID: Int {
+        var hasher = Hasher()
+        hasher.combine(Int(width.rounded()))
+        for item in items { hasher.combine(item.id) }
         return hasher.finalize()
     }
 
@@ -205,8 +287,25 @@ private struct HeroCarousel: View {
     private func select(_ i: Int) {
         guard i != currentIndex else { return }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
-            scrollID = i
+            scrollID = items[i].id
         }
+    }
+
+    private func normalizeScrollID() {
+        guard !items.isEmpty else {
+            scrollID = nil
+            return
+        }
+        if let scrollID, items.contains(where: { $0.id == scrollID }) { return }
+        scrollID = items[0].id
+    }
+
+    private var heroHeight: CGFloat {
+        #if os(macOS)
+        500
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? 480 : 400
+        #endif
     }
 }
 
@@ -214,6 +313,8 @@ private struct HeroCarousel: View {
 private struct HeroBanner: View {
     let item: MediaItem
     var eyebrowPrefix: String
+    let width: CGFloat
+    let height: CGFloat
     var onPlay: () -> Void
     var onDetail: () -> Void
 
@@ -230,14 +331,13 @@ private struct HeroBanner: View {
                     Rectangle().fill(.quinary)
                 }
             }
-            .frame(height: heroHeight)
-            .frame(maxWidth: .infinity)
+            .frame(width: width, height: height)
 
             LinearGradient(
                 colors: [.black.opacity(0.92), .black.opacity(0.55), .clear],
                 startPoint: .bottom, endPoint: .center
             )
-            .frame(height: heroHeight)
+            .frame(width: width, height: height)
 
             VStack(alignment: .leading, spacing: 12) {
                 Text("\(eyebrowPrefix) · \(item.year.map(String.init) ?? "剧集")")
@@ -288,17 +388,14 @@ private struct HeroBanner: View {
                     .buttonStyle(.plain)
                 }
             }
+            // 长标题的理想宽度可能大于窄窗口。先加边距，再由外层 frame 收住
+            // 整个信息层；如果把 frame 放在 padding 前，padding 会把它重新撑宽
+            // 104pt，ZStack 居中后就会左右各裁掉约 52pt。
             .padding(.horizontal, Metrics.contentLeading)
             .padding(.bottom, 36)
+            .frame(width: width, alignment: .leading)
         }
-    }
-
-    private var heroHeight: CGFloat {
-        #if os(macOS)
-        500
-        #else
-        UIDevice.current.userInterfaceIdiom == .pad ? 480 : 400
-        #endif
+        .frame(width: width, height: height, alignment: .bottomLeading)
     }
 
     private var metaParts: [String] {

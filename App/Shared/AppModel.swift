@@ -254,6 +254,8 @@ final class AppModel {
     }
 
     func signOut() {
+        playbackOpenTask?.cancel()
+        playbackOpenTask = nil
         _ = finishReporting()
         playback?.stopPlayback()
         initialDataTask?.cancel()
@@ -392,8 +394,10 @@ final class AppModel {
     /// 同时启动进度上报（Start → 10s 心跳 → Stopped）和「下一集」解析。
     /// 先走 PlaybackInfo 拿 MediaSource；失败时回退到旧的直连 URL，保证老服务器也能播。
     func play(_ item: MediaItem, resumeSeconds: Double?) {
-        Task { @MainActor in
-            await openPlayback(item: item, resumeSeconds: resumeSeconds)
+        playbackOpenTask?.cancel()
+        playbackOpenTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.openPlayback(item: item, resumeSeconds: resumeSeconds)
         }
     }
 
@@ -402,24 +406,65 @@ final class AppModel {
         guard let server else { return }
         finishReporting()   // 上一条的 Stopped（换片场景）
 
-        let title = item.episodeLabel.map { "\(item.seriesName ?? item.name) \($0)" } ?? item.name
+        // 首页轮播和收藏可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
+        // 只接受可播放的叶子条目。沿用详情页的语义：优先「接下来看」，否则取
+        // 首个未看完的常规剧集；避免把 Series ID 直接送进 /Videos/{id}/stream。
+        let playableItem: MediaItem
         do {
-            let info = try await server.playbackInfo(itemID: item.id)
+            guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
+                home.error = "该剧没有可播放的剧集"
+                return
+            }
+            guard !Task.isCancelled else { return }
+            playableItem = resolved
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            home.error = "剧集加载失败：\(error)"
+            return
+        }
+
+        let effectiveResume = playableItem.id == item.id
+            ? resumeSeconds
+            : playableItem.playState?.positionSeconds
+        let title = playableItem.episodeLabel.map {
+            "\(playableItem.seriesName ?? playableItem.name) \($0)"
+        } ?? playableItem.name
+        do {
+            let info = try await server.playbackInfo(itemID: playableItem.id)
             let source = info.mediaSources.first { $0.supportsDirectPlay == true }
                 ?? info.mediaSources.first { $0.supportsDirectStream == true }
                 ?? info.mediaSources.first
-            let uri = try server.streamURL(itemID: item.id, mediaSourceID: source?.id)
+            let uri = try server.streamURL(itemID: playableItem.id, mediaSourceID: source?.id)
+            guard !Task.isCancelled else { return }
             presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                            resumeSeconds: resumeSeconds, item: item)
+                            resumeSeconds: effectiveResume, item: playableItem)
         } catch {
             // PlaybackInfo 不可用（老版本 / 端点被关）时退回原来的直连 URL。
-            if let uri = try? server.streamURL(itemID: item.id) {
+            if Task.isCancelled { return }
+            if let uri = try? server.streamURL(itemID: playableItem.id) {
                 presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                                resumeSeconds: resumeSeconds, item: item)
+                                resumeSeconds: effectiveResume, item: playableItem)
             } else {
                 home.error = "播放信息获取失败：\(error)"
             }
         }
+    }
+
+    /// 把浏览层条目归一化为可直接播放的叶子条目。
+    /// 电影 / 集数 / 音频等已经是叶子，剧集则优先复用首页 nextUp，避免额外请求。
+    private func resolvePlayableItem(for item: MediaItem, server: JellyfinServer) async throws -> MediaItem? {
+        guard item.kind == .series else { return item }
+
+        if let next = home.nextUp.first(where: { $0.seriesID == item.id }) {
+            return next
+        }
+
+        let episodes = try await server.episodes(seriesID: item.id, seasonID: nil)
+        let regularEpisodes = episodes.filter { $0.seasonNumber != 0 }
+        return regularEpisodes.first(where: { !($0.playState?.played ?? false) })
+            ?? regularEpisodes.first
     }
 
     private func presentPlayback(
@@ -451,6 +496,8 @@ final class AppModel {
     /// 本地播放不依赖服务器 —— 登录页挡着就直接越过。
     func presentLocalFile(_ url: URL) {
         if phase == .onboarding { phase = .ready }
+        playbackOpenTask?.cancel()
+        playbackOpenTask = nil
         finishReporting()
         presentedPlayer = PlaybackRequest(
             title: url.lastPathComponent,
@@ -462,11 +509,15 @@ final class AppModel {
     /// 直连链接（设置页入口）：请求由 `PlaybackController.request(uri:token:)` 构造好。
     func presentRequest(_ request: PlaybackRequest) {
         if phase == .onboarding { phase = .ready }
+        playbackOpenTask?.cancel()
+        playbackOpenTask = nil
         finishReporting()
         presentedPlayer = request
     }
 
     func dismissPlayer() {
+        playbackOpenTask?.cancel()
+        playbackOpenTask = nil
         let stopped = finishReporting()   // 退出播放器 → Stopped，服务器记下续播位置
         presentedPlayer = nil
         // 等 Stopped 上报落库后刷新首页，让「继续观看」立刻反映刚退出的进度。
@@ -479,6 +530,8 @@ final class AppModel {
     // MARK: - 进度上报 + 下一集连播（M2）
 
     private var reportingTask: Task<Void, Never>?
+    /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
+    private var playbackOpenTask: Task<Void, Never>?
     private var reportingItemID: String?
     /// 覆盖层正在播放的条目（HUD 标题 / 继续观看用）；退出 / 换片时随上报一起清。
     private(set) var nowPlayingItem: MediaItem?
