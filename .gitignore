@@ -34,7 +34,6 @@ dist/
 design/
 
 # 仅本地保留的文档，不入库
-CHANGELOG.md
 CLAUDE.md
 PLAN.md
 REVIEW_TODO.md
