@@ -19,17 +19,20 @@
 Scripts/fetch-erika.sh v0.1.6   # 拉取 Erika 内核，生成 Erika.xcframework（不入库，约 753 MB）
 Scripts/build-macos.sh           # 清理上次产物并构建 macOS Debug，只保留本次构建
 Scripts/build-macos.sh release   # 清理上次产物并构建 macOS Release
+swift Scripts/export-app-icon.swift <浅色源图> <深色源图> App/Shared/Assets.xcassets/AppIcon.appiconset
 swift test --package-path Packages/ErikaKit     # 内核 + 渲染 + HTTP 全套（素材现造，不联网）
 swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映射与请求参数（全离线 mock）
 ```
 
 > 脚本固定使用 `.local-build/current`，每次构建前会完整删除该目录，避免累积多个本地产物。macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
 
+应用图标位于 `App/Shared/Assets.xcassets/AppIcon.appiconset`。iOS 使用浅色默认图标与深色外观图标；macOS 的传统 AppIcon 不支持外观槽位，因此使用深色版本并提供完整多尺寸资源。
+
 ## 项目结构
 
 | 模块 | 位置 | 说明 |
 | --- | --- | --- |
-| App | `App/` | 双端 UI（macOS + iOS 同一套 SwiftUI 视图），观察式状态（Observation） |
+| App | `App/` | 双端 UI、观察式状态（Observation）与共享 AppIcon 资源 |
 | CoreModel | `Packages/CoreModel/` | 纯数据模型，双端共享，无第三方依赖 |
 | ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态，含无头回归测试 |
 | JellyfinKit | `Packages/JellyfinKit/` | Jellyfin 薄封装：登录、媒体库、PlaybackInfo、进度上报，全离线测试 |
@@ -56,7 +59,7 @@ swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映
 - `OcPlayer-<版本>-macOS-arm64.dmg`
 - `SHA256SUMS.txt`
 
-本地可用 `Scripts/package-macos.sh v0.1.0` 生成同样的 `dist/` 产物。
+本地可用 `Scripts/package-macos.sh v0.1.1` 生成同样的 `dist/` 产物。
 
 **需要的证书**：
 

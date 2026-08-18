@@ -6,6 +6,12 @@
 
 ## [0.1.1] · 2026-08-18 · 完善首页海报与播放器界面
 
+### 应用图标与版本
+
+- 新增共享 `AppIcon` 资源集：iOS 使用浅色默认图标和深色外观图标，macOS 使用深色图标并提供 16–1024 px 的完整尺寸。
+- macOS / iOS 的 Debug 与 Release 配置均显式使用 `AppIcon`，后续 Xcode 构建会自动编译并写入 App 包。
+- 工程版本与 Jellyfin 客户端版本统一更新为 0.1.1；本地打包脚本和 GitHub Release 工作流的默认标签同步为 `v0.1.1`。
+
 ### 首页海报与布局
 
 - 轮播横幅宽度改由外层视口真实宽度约束，修复侧栏开合时横向内容宽度泄漏、横幅超出详情列的问题。
@@ -27,7 +33,9 @@
 
 ### 验证
 
-- macOS Debug App 构建通过（xcodebuild Debug 全量编译成功）。
+- `swift test --package-path Packages/JellyfinKit`：32/32 通过；`swift test --package-path Packages/ErikaKit`：13/13 通过。
+- macOS Debug / Release App 构建通过；Release 产物已确认包含 `AppIcon.icns` 与完整 `Assets.car`，App 的 `CFBundleIconName` / `CFBundleIconFile` 均为 `AppIcon`，ad-hoc 签名校验通过。
+- iOS target 已解析 `AppIcon` 与浅色 / 深色槽位并进入资源编译阶段；当前机器未安装 iOS Simulator runtime，完整 iOS 构建仍受本机环境限制。
 
 ## [0.1.0] · 2026-08-17
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_TAG="${1:-v0.1.0}"
+RELEASE_TAG="${1:-v0.1.1}"
 ERIKA_VERSION="${ERIKA_VERSION:-v0.1.6}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"

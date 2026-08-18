@@ -4,7 +4,7 @@ import Foundation
 /// 所以首用即生成、存 UserDefaults；DeviceName 取一次机器名后同样缓存。
 public enum ClientIdentity {
     public static let clientName = "OcPlayer"
-    public static let version = "0.1.0"
+    public static let version = "0.1.1"
 
     private static let deviceIDKey = "dev.jumusu.ocplayer.deviceId"
     private static let deviceNameKey = "dev.jumusu.ocplayer.deviceName"
