@@ -257,7 +257,16 @@ private struct PlayerHUDTopBar: View {
             )
         }
         .padding(.horizontal, isNarrow ? 16 : 28)
-        .padding(.top, isNarrow ? 14 : 22)
+        .padding(.top, topPadding)
+    }
+
+    private var topPadding: CGFloat {
+        #if os(macOS)
+        // 窗口模式的标题栏是系统拖动区。HUD 覆盖 safe area 后若把 Slider 放进去，
+        // macOS 会优先移动窗口；顶栏整体下移到标题栏之外，全屏则保持原布局。
+        if !isFullscreen { return 58 }
+        #endif
+        return isNarrow ? 14 : 22
     }
 
     @ViewBuilder
@@ -609,7 +618,6 @@ private struct PlayerHUDTimeline: View {
 
 private struct PlayerHUDActionsCapsule: View {
     @Environment(PlaybackController.self) private var controller
-    @Environment(AppModel.self) private var app
 
     @Binding var isImportingSubtitle: Bool
     @Binding var showStats: Bool
@@ -638,15 +646,6 @@ private struct PlayerHUDActionsCapsule: View {
             HStack(spacing: 0) {
                 subtitleMenu
                 audioMenu
-                if app.nextEpisode != nil {
-                    actionButton(
-                        systemImage: "forward.end.fill",
-                        accessibilityLabel: "播放下一集"
-                    ) {
-                        app.playNextEpisode()
-                        onUserInteraction()
-                    }
-                }
                 moreMenu
             }
             .padding(4)
@@ -858,20 +857,6 @@ private struct PlayerHUDActionsCapsule: View {
 
     private var selectedAudioTitle: String {
         controller.state.audioTracks.first(where: { $0.selected })?.displayTitle ?? "未选择"
-    }
-
-    private func actionButton(
-        systemImage: String,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            PlayerHUDActionIcon(systemImage: systemImage, side: controlSide)
-        }
-        .buttonStyle(.plain)
-        .frame(width: controlSide, height: controlSide)
-        .help(accessibilityLabel)
-        .accessibilityLabel(accessibilityLabel)
     }
 }
 
