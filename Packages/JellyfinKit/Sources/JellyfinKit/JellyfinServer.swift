@@ -256,11 +256,19 @@ public struct JellyfinServer: Sendable {
 
     /// 直连播放地址（`/Videos/{id}/stream?Static=true`）。认证走请求头交给内核，
     /// 所以 URL 里只有条目 id，没有 token。多 MediaSource 条目可显式带 `mediaSourceId`。
-    public func streamURL(itemID: String, mediaSourceID: String? = nil) throws -> String {
+    public func streamURL(
+        itemID: String,
+        mediaSourceID: String? = nil,
+        playSessionID: String? = nil
+    ) throws -> String {
         var path = "/Videos/\(itemID)/stream?Static=true"
         if let mediaSourceID {
             let encoded = mediaSourceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? mediaSourceID
             path += "&mediaSourceId=\(encoded)"
+        }
+        if let playSessionID {
+            let encoded = playSessionID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? playSessionID
+            path += "&playSessionId=\(encoded)"
         }
         guard let url = client.url(path: path) else {
             throw JellyfinError(.other("播放地址拼接失败"))

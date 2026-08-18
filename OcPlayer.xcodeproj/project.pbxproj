@@ -18,6 +18,8 @@
 /* Begin PBXFileReference section */
 		1A0000000000000000000014 /* OcPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OcPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A0000000000000000000024 /* OcPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OcPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1A0000000000000000000060 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		1A0000000000000000000062 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -53,6 +55,7 @@
 		1A0000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
+				1A0000000000000000000061 /* Config */,
 				1A0000000000000000000030 /* Shared */,
 				1A0000000000000000000031 /* macOS */,
 				1A0000000000000000000032 /* iOS */,
@@ -67,6 +70,15 @@
 				1A0000000000000000000024 /* OcPlayer.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1A0000000000000000000061 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				1A0000000000000000000060 /* App.xcconfig */,
+				1A0000000000000000000062 /* Info.plist */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -195,6 +207,7 @@
 /* Begin XCBuildConfiguration section */
 		1A0000000000000000000005 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A0000000000000000000060 /* App.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
@@ -214,6 +227,7 @@
 		};
 		1A0000000000000000000006 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1A0000000000000000000060 /* App.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;

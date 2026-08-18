@@ -13,34 +13,89 @@ extension JellyfinServer {
     }
 
     /// 开始播放。
-    public func reportPlaybackStart(itemID: String, positionSeconds: Double) async {
+    public func reportPlaybackStart(
+        context: PlaybackSessionContext,
+        positionSeconds: Double
+    ) async {
         let body = PlaybackStateInfo(
             canSeek: true,
-            itemID: itemID,
-            playMethod: .directPlay,
+            itemID: context.itemID,
+            mediaSourceID: context.mediaSourceID,
+            playMethod: context.deliveryMethod.jellyfinValue,
+            playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        try? await client.send(Paths.reportPlaybackStart(body))
+        _ = try? await client.send(Paths.reportPlaybackStart(body))
+    }
+
+    /// Compatibility entry point for callers that did not obtain PlaybackInfo.
+    public func reportPlaybackStart(itemID: String, positionSeconds: Double) async {
+        await reportPlaybackStart(
+            context: PlaybackSessionContext(itemID: itemID),
+            positionSeconds: positionSeconds
+        )
     }
 
     /// 播放心跳（约 10 秒一次；暂停时也报，带 isPaused）。
-    public func reportPlaybackProgress(itemID: String, positionSeconds: Double, isPaused: Bool) async {
+    public func reportPlaybackProgress(
+        context: PlaybackSessionContext,
+        positionSeconds: Double,
+        isPaused: Bool
+    ) async {
         let body = PlaybackStateInfo(
             canSeek: true,
             isPaused: isPaused,
-            itemID: itemID,
-            playMethod: .directPlay,
+            itemID: context.itemID,
+            mediaSourceID: context.mediaSourceID,
+            playMethod: context.deliveryMethod.jellyfinValue,
+            playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        try? await client.send(Paths.reportPlaybackProgress(body))
+        _ = try? await client.send(Paths.reportPlaybackProgress(body))
+    }
+
+    /// Compatibility entry point for callers that did not obtain PlaybackInfo.
+    public func reportPlaybackProgress(
+        itemID: String,
+        positionSeconds: Double,
+        isPaused: Bool
+    ) async {
+        await reportPlaybackProgress(
+            context: PlaybackSessionContext(itemID: itemID),
+            positionSeconds: positionSeconds,
+            isPaused: isPaused
+        )
     }
 
     /// 停止播放（退出播放器 / 换片）。服务器把 positionTicks 记成续播位置。
-    public func reportPlaybackStopped(itemID: String, positionSeconds: Double) async {
+    public func reportPlaybackStopped(
+        context: PlaybackSessionContext,
+        positionSeconds: Double
+    ) async {
         let body = PlaybackStopInfo(
-            itemID: itemID,
+            itemID: context.itemID,
+            mediaSourceID: context.mediaSourceID,
+            playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        try? await client.send(Paths.reportPlaybackStopped(body))
+        _ = try? await client.send(Paths.reportPlaybackStopped(body))
+    }
+
+    /// Compatibility entry point for callers that did not obtain PlaybackInfo.
+    public func reportPlaybackStopped(itemID: String, positionSeconds: Double) async {
+        await reportPlaybackStopped(
+            context: PlaybackSessionContext(itemID: itemID),
+            positionSeconds: positionSeconds
+        )
+    }
+}
+
+private extension PlaybackDeliveryMethod {
+    var jellyfinValue: PlayMethod {
+        switch self {
+        case .directPlay: .directPlay
+        case .directStream: .directStream
+        case .transcode: .transcode
+        }
     }
 }

@@ -20,6 +20,11 @@ public final class PlayerState {
     /// 最近一条内核错误，UI 可以显示后自行清掉。
     public private(set) var lastError: String?
 
+    /// Every consumer receives a generation. A cancelled old task may already
+    /// have an event buffered on the main actor, so cancellation alone is not
+    /// enough to prevent it from mutating the state for a newer engine.
+    @ObservationIgnored private var consumptionGeneration = 0
+
     public var progress: Double {
         let total = duration.microseconds
         guard total > 0 else { return 0 }
@@ -31,9 +36,13 @@ public final class PlayerState {
     /// 开始消费某个引擎的事件流。调用方持有返回的 `Task` 决定生命周期。
     @discardableResult
     public func start(consuming engine: ErikaEngine) -> Task<Void, Never> {
-        Task { [weak self] in
+        consumptionGeneration &+= 1
+        let generation = consumptionGeneration
+        return Task { [weak self] in
             for await event in engine.events {
-                guard let self else { return }
+                guard !Task.isCancelled, let self,
+                      self.consumptionGeneration == generation
+                else { return }
                 self.apply(event)
                 switch event {
                 case .tracksChanged, .trackSelectionChanged:

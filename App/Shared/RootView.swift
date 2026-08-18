@@ -1,10 +1,15 @@
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 /// 根视图：有会话 → 主框架（侧栏 / Tab）；没有 → 登录流程。
 /// 播放器是盖在这一切之上的**全 App 覆盖层**（`presentedPlayer` 非 nil 时）。
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(PlaybackController.self) private var controller
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -49,5 +54,15 @@ struct RootView: View {
                 app.presentLocalFile(url)
             })
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                _ = app.playbackDidEnterBackground()
+            }
+        }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
+            _ = app.playbackWillTerminate()
+        }
+        #endif
     }
 }

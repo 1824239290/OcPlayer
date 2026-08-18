@@ -2,6 +2,7 @@ import CoreGraphics
 import ErikaKit
 import Foundation
 import ImageIO
+import JellyfinKit
 import Observation
 import UniformTypeIdentifiers
 import os
@@ -53,6 +54,7 @@ private extension Double {
 /// 一次播放请求：从浏览层（AppModel）带到播放页的纯值。
 /// `authHeader` 是 Jellyfin 的 `MediaBrowser …` 头 —— 只走请求头，绝不进 URL。
 struct PlaybackRequest: Hashable, Identifiable {
+    let id: UUID
     let title: String
     let uri: String
     let authHeader: String?
@@ -60,18 +62,33 @@ struct PlaybackRequest: Hashable, Identifiable {
     let securityScopedURL: URL?
     /// 服务端记录的续播位置（秒）；小于 30 秒视作从头播。
     let resumeSeconds: Double?
+    /// Jellyfin playback/source identity. Local files and manual URLs leave it nil.
+    let sessionContext: PlaybackSessionContext?
 
-    /// id = uri：同一个源重复点播放不会压两次栈。
-    var id: String { uri }
-
-    init(title: String, uri: String, authHeader: String? = nil, resumeSeconds: Double? = nil,
-         securityScopedURL: URL? = nil) {
+    init(
+        id: UUID = UUID(),
+        title: String,
+        uri: String,
+        authHeader: String? = nil,
+        resumeSeconds: Double? = nil,
+        securityScopedURL: URL? = nil,
+        sessionContext: PlaybackSessionContext? = nil
+    ) {
+        self.id = id
         self.title = title
         self.uri = uri
         self.authHeader = authHeader
         self.resumeSeconds = resumeSeconds
         self.securityScopedURL = securityScopedURL
+        self.sessionContext = sessionContext
     }
+}
+
+/// A capability token for injecting an asynchronously loaded resource into the
+/// exact engine generation it was requested for.
+struct PlaybackSourceGeneration: Hashable, Sendable {
+    let requestID: PlaybackRequest.ID
+    let value: UInt64
 }
 
 /// PlaybackCoordinator：拿到源 → 喂内核 → 暴露状态给 UI。
@@ -79,11 +96,16 @@ struct PlaybackRequest: Hashable, Identifiable {
 @MainActor
 @Observable
 final class PlaybackController {
-    let state = PlayerState()
+    /// Replaced for every engine generation so buffered events from an old
+    /// engine can never mutate the new source's timeline.
+    private(set) var state = PlayerState()
 
     private(set) var engine: ErikaEngine?
     private(set) var setupError: String?
     private(set) var currentTitle: String?
+    /// Request-scoped synchronous source-open failure. Kept separate from
+    /// setupError because subtitle/screenshot failures must not stop reporting.
+    private(set) var failedRequestID: PlaybackRequest.ID?
 
     var rate: Double = PlaybackPreferences.rate {
         didSet { if rate != oldValue { PlaybackPreferences.rate = rate } }
@@ -111,17 +133,15 @@ final class PlaybackController {
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
     private(set) var currentlyOpenURI: String?
+    /// Changes as soon as a new request is presented, before its engine opens.
+    private(set) var sourceGeneration: UInt64 = 0
     /// 最近一次请求（出错重试用）。
     private(set) var lastRequest: PlaybackRequest?
 
     private var eventTask: Task<Void, Never>?
-
-    /// open 之后待执行的续播 seek。内核 `open` 同步返回但媒体是异步打开的
-    /// （Opening→Ready 走事件），立刻 seek 会打在未就绪的源上被吞掉；
-    /// 存下来等 duration 到达（打开完成）再跳，见 `seekPendingResumeIfNeeded`。
-    private var pendingResumeSeconds: Double?
-    /// 正在等续播 seek 的源（换片守卫：等待期间用户又点了别的，旧的 seek 要作废）。
-    private var pendingResumeURI: String?
+    private var resumeTask: Task<Void, Never>?
+    private var expectedRequestID: PlaybackRequest.ID?
+    private var activeRequest: PlaybackRequest?
     private var activeSecurityScopedURL: URL?
     private var activeSecurityScope = false
     private var hasLoadedSource = false
@@ -164,20 +184,116 @@ final class PlaybackController {
         ))
     }
 
+    /// Register a request before SwiftUI presents `PlayerScreen`. Async resource
+    /// loaders use this boundary to invalidate work for the previous source even
+    /// if the new engine has not been created yet.
+    func prepareForPresentation(_ request: PlaybackRequest) {
+        guard expectedRequestID != request.id else { return }
+        sourceGeneration &+= 1
+        expectedRequestID = request.id
+        failedRequestID = nil
+        resumeTask?.cancel()
+        resumeTask = nil
+        PlaybackLog.append("source generation=\(sourceGeneration) request=\(request.id)")
+    }
+
+    /// Wait until the requested source has reached an engine state that accepts
+    /// subtitle/danmaku injection. The returned token must be checked again at
+    /// the actual injection point because the user can switch sources meanwhile.
+    func waitUntilSourceReady(
+        for requestID: PlaybackRequest.ID,
+        timeout: Duration? = nil
+    ) async -> PlaybackSourceGeneration? {
+        let clock = ContinuousClock()
+        let deadline = timeout.map { clock.now.advanced(by: $0) }
+
+        while !Task.isCancelled {
+            if let deadline, clock.now >= deadline { return nil }
+            guard expectedRequestID == requestID else { return nil }
+            if activeRequest?.id == requestID, isSourceReady {
+                return PlaybackSourceGeneration(requestID: requestID, value: sourceGeneration)
+            }
+            if activeRequest?.id == requestID, state.state == .error {
+                return nil
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return nil
+            }
+        }
+        return nil
+    }
+
+    /// Execute an engine mutation only if the ready token still identifies the
+    /// current source. Future danmaku loading should cross this same boundary.
+    @discardableResult
+    func withReadyEngine(
+        for source: PlaybackSourceGeneration,
+        _ operation: (ErikaEngine) throws -> Void
+    ) rethrows -> Bool {
+        guard source.value == sourceGeneration,
+              source.requestID == activeRequest?.id,
+              isSourceReady,
+              let engine
+        else { return false }
+        try operation(engine)
+        return true
+    }
+
+    private var isSourceReady: Bool {
+        switch state.state {
+        case .ready, .playing, .paused:
+            return engine != nil
+        case .idle, .opening, .stopped, .closed, .error:
+            return false
+        }
+    }
+
     /// `uri` 是本地文件路径（`URL.path`）时直接开；已打开同一个源则跳过。
     func openIfNeeded(_ request: PlaybackRequest) {
-        guard currentlyOpenURI != request.uri else {
+        guard !Task.isCancelled else {
+            PlaybackLog.append("openIfNeeded 忽略已取消任务 title=\(request.title)")
+            return
+        }
+        if expectedRequestID == nil {
+            // onOpenURL can present a local file before RootView's setup task
+            // has injected the controller into AppModel. This is the only case
+            // where the presentation task is allowed to register itself.
+            prepareForPresentation(request)
+        } else if expectedRequestID != request.id {
+            PlaybackLog.append("openIfNeeded 忽略过期请求 title=\(request.title)")
+            return
+        }
+        if let activeRequest, samePlaybackSource(activeRequest, request), engine != nil {
+            self.activeRequest = request
             PlaybackLog.append("openIfNeeded 跳过（已打开同一个源） title=\(request.title)")
             return
         }
         PlaybackLog.append("openIfNeeded title=\(request.title)")
-        open(request: request)
+        openPreparedRequest(request)
     }
 
     /// 浏览层发起的播放：Jellyfin 直连流 + 认证头 + 服务端续播位置。
     func open(request: PlaybackRequest) {
+        let isReopeningCurrentRequest = expectedRequestID == request.id
+        prepareForPresentation(request)
+        if isReopeningCurrentRequest {
+            // Retry/reopen gets a new engine identity even when the request UUID
+            // is reused by a lower-level caller. Old danmaku/subtitle tokens must
+            // never be accepted by the replacement engine.
+            sourceGeneration &+= 1
+            resumeTask?.cancel()
+            resumeTask = nil
+        }
+        openPreparedRequest(request)
+    }
+
+    private func openPreparedRequest(_ request: PlaybackRequest) {
         currentTitle = request.title
         lastRequest = request
+        activeRequest = nil
+        failedRequestID = nil
         PlaybackLog.append("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
         var headers: [String: String] = [:]
         if let authHeader = request.authHeader {
@@ -187,36 +303,74 @@ final class PlaybackController {
             PlaybackSource(uri: request.uri, headers: headers),
             securityScopedURL: request.securityScopedURL
         )
+        guard opened, let engine else {
+            // A failed open may leave the fresh PlayerState in idle without an
+            // error event. Invalidate the presentation boundary so async
+            // subtitle/danmaku waiters finish instead of polling forever.
+            if expectedRequestID == request.id {
+                expectedRequestID = nil
+                sourceGeneration &+= 1
+            }
+            failedRequestID = request.id
+            return
+        }
+        activeRequest = request
         // 续播位置不立刻 seek（源还没就绪），挂到 pending 等 duration 到达。
-        if opened, let resume = request.resumeSeconds, resume >= 30 {
-            pendingResumeSeconds = resume
-            pendingResumeURI = request.uri
-            Task { await seekPendingResumeIfNeeded() }
+        if let resume = request.resumeSeconds, resume >= 30 {
+            let generation = sourceGeneration
+            let engineID = ObjectIdentifier(engine)
+            resumeTask = Task { [weak self] in
+                await self?.seekPendingResumeIfNeeded(
+                    resumeSeconds: resume,
+                    requestID: request.id,
+                    generation: generation,
+                    engineID: engineID
+                )
+            }
         }
     }
 
-    /// 轮询等个短暂的"打开完成"（duration > 0 且非 idle），把待续播的 seek 打下去。
-    /// 只对最近一次请求生效：期间换片则放弃旧的续播。
-    @MainActor
-    private func seekPendingResumeIfNeeded() async {
-        guard let resume = pendingResumeSeconds, let uri = pendingResumeURI, let engine else { return }
-        // 最多等 ~3 秒：够本地文件 / 局域网流就绪。
-        for _ in 0..<30 {
-            try? await Task.sleep(for: .milliseconds(100))
-            // 期间换了目标就放弃这次续播。
-            guard pendingResumeURI == uri, currentlyOpenURI == uri else { return }
-            // 打开失败别干等（open 失败走 .failed → state=.error，不会走 closed）。
-            if state.state == .error { return }
-            // 就绪了（duration 到了）才 seek，避免打在未就绪的源上。
-            guard state.duration > .zero, state.state != .idle, state.state != .opening else { continue }
-            pendingResumeURI = nil
-            pendingResumeSeconds = nil
-            try? engine.seek(to: .seconds(resume))
+    /// Wait for this exact engine generation to become seekable. A same-URI
+    /// reopen cannot consume or clear the new generation's pending resume.
+    private func seekPendingResumeIfNeeded(
+        resumeSeconds: Double,
+        requestID: PlaybackRequest.ID,
+        generation: UInt64,
+        engineID: ObjectIdentifier
+    ) async {
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return
+            }
+            guard sourceGeneration == generation,
+                  expectedRequestID == requestID,
+                  activeRequest?.id == requestID,
+                  let engine,
+                  ObjectIdentifier(engine) == engineID
+            else { return }
+            if state.state == .error || state.state == .stopped || state.state == .closed {
+                return
+            }
+            guard isSourceReady, state.duration > .zero else { continue }
+
+            let duration = Double(state.duration.microseconds) / 1_000_000
+            let target = min(max(resumeSeconds, 0), max(duration - 0.5, 0))
+            do {
+                try engine.seek(to: .seconds(target))
+            } catch {
+                setupError = "续播定位失败：\(error)"
+            }
             return
         }
-        // 超时还没就绪：放弃续播（从头播总比卡住强），但清掉 pending 免得下次串。
-        pendingResumeURI = nil
-        pendingResumeSeconds = nil
+    }
+
+    private func samePlaybackSource(_ lhs: PlaybackRequest, _ rhs: PlaybackRequest) -> Bool {
+        lhs.uri == rhs.uri
+            && lhs.authHeader == rhs.authHeader
+            && lhs.securityScopedURL == rhs.securityScopedURL
+            && lhs.sessionContext == rhs.sessionContext
     }
 
     @discardableResult
@@ -233,13 +387,13 @@ final class PlaybackController {
             releaseSecurityScopedResource()
             resetEngine()
         }
+        // A fresh state object is the event-generation boundary. The cancelled
+        // old consumer only holds the old state weakly, so buffered events cannot
+        // overwrite this source's position or duration.
+        state = PlayerState()
         guard let engine = prepareEngine() else { return false }
-        // 换源时作废上一次的待续播 seek（它只对发起它的那次 open 生效）。
-        pendingResumeSeconds = nil
-        pendingResumeURI = nil
         let acquiredScope = securityScopedURL?.startAccessingSecurityScopedResource() == true
         do {
-            state.reset()
             PlaybackLog.append("open() 开始")
             try engine.open(source)
             hasLoadedSource = true
@@ -284,6 +438,9 @@ final class PlaybackController {
         // 白白把还没加载新源的引擎丢掉重建（无害但没必要）。
         hasLoadedSource = false
         currentlyOpenURI = nil
+        activeRequest = nil
+        expectedRequestID = nil
+        sourceGeneration &+= 1
         releaseSecurityScopedResource()
         // 退出播放后把引擎整个丢掉，下次播放重新创建。
         // 这样即使 Erika 的 stop/detach 组合在个别版本里会让旧 presenter 进入不可 reopen 的状态，
@@ -293,9 +450,12 @@ final class PlaybackController {
     }
 
     private func resetEngine() {
+        resumeTask?.cancel()
+        resumeTask = nil
         eventTask?.cancel()
         eventTask = nil
         engine = nil
+        failedRequestID = nil
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
         // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
         // 等下次 open 时自然会 reset。
@@ -349,6 +509,23 @@ final class PlaybackController {
         }
     }
 
+    /// Generation-safe variant for asynchronously downloaded resources.
+    @discardableResult
+    func addExternalSubtitle(
+        fileURL: URL,
+        for source: PlaybackSourceGeneration
+    ) -> Bool {
+        do {
+            return try withReadyEngine(for: source) { engine in
+                _ = try engine.addExternalSubtitle(fileURL.path)
+                state.refreshTracks(from: engine)
+            }
+        } catch {
+            setupError = "字幕加载失败：\(error)"
+            return false
+        }
+    }
+
     /// 当前没有任何字幕被选中时自动挑一条：中文优先，否则第一条。
     /// （内核对内封字幕有自己的默认选择；这里只兜「全是外挂字幕」的场。）
     func autoSelectSubtitleIfNone() {
@@ -361,6 +538,31 @@ final class PlaybackController {
         } ?? tracks[0]
         try? engine.selectSubtitleTrack(picked.id)
         state.refreshTracks(from: engine)
+    }
+
+    @discardableResult
+    func autoSelectSubtitleIfNone(for source: PlaybackSourceGeneration) -> Bool {
+        guard source.value == sourceGeneration,
+              source.requestID == activeRequest?.id,
+              isSourceReady,
+              let engine
+        else { return false }
+        guard !state.subtitleTracks.isEmpty,
+              !state.subtitleTracks.contains(where: { $0.selected })
+        else { return true }
+        let tracks = state.subtitleTracks
+        let picked = tracks.first {
+            let lang = $0.language?.lowercased() ?? ""
+            return lang.contains("zh") || lang.contains("chi")
+        } ?? tracks[0]
+        do {
+            try engine.selectSubtitleTrack(picked.id)
+            state.refreshTracks(from: engine)
+            return true
+        } catch {
+            setupError = "字幕选择失败：\(error)"
+            return false
+        }
     }
 
     // MARK: - 控制

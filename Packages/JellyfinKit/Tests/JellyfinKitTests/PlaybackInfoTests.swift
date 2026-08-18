@@ -25,6 +25,9 @@ final class PlaybackInfoTests: XCTestCase {
                   "MediaSources": [
                     {
                       "Id": "ms-1",
+                      "Name": "Episode 01",
+                      "Path": "/media/show/episode-01.mkv",
+                      "Size": 123456789,
                       "Container": "mkv",
                       "SupportsDirectPlay": true,
                       "Bitrate": 8000000,
@@ -43,16 +46,55 @@ final class PlaybackInfoTests: XCTestCase {
 
             let source = try XCTUnwrap(info.mediaSources.first)
             XCTAssertEqual(source.id, "ms-1")
+            XCTAssertEqual(source.name, "Episode 01")
+            XCTAssertEqual(source.path, "/media/show/episode-01.mkv")
+            XCTAssertEqual(source.size, 123456789)
             XCTAssertEqual(source.container, "mkv")
             XCTAssertEqual(source.supportsDirectPlay, true)
             XCTAssertEqual(try XCTUnwrap(source.runTimeSeconds), 120, accuracy: 0.001)
+
+            let context = info.sessionContext(itemID: "item-1", selectedSource: source)
+            XCTAssertEqual(context.itemID, "item-1")
+            XCTAssertEqual(context.playSessionID, "ps-1")
+            XCTAssertEqual(context.mediaSourceID, "ms-1")
+            XCTAssertEqual(context.mediaSourceName, "Episode 01")
+            XCTAssertEqual(context.mediaSourcePath, "/media/show/episode-01.mkv")
+            XCTAssertEqual(context.mediaSourceSize, 123456789)
+            XCTAssertEqual(try XCTUnwrap(context.durationSeconds), 120, accuracy: 0.001)
+            XCTAssertEqual(context.deliveryMethod, .directPlay)
         }
     }
 
-    func testStreamURLIncludesMediaSourceIDWithoutToken() throws {
-        let url = try Self.mockServer().streamURL(itemID: "item-1", mediaSourceID: "ms-1")
+    func testSessionContextUsesSelectedSourceDeliveryMethod() async throws {
+        try await TestSupport.withMock { request in
+            MockURLProtocol.ok(
+                #"{"MediaSources":[{"Id":"ms-2","SupportsDirectPlay":false,"SupportsDirectStream":true}]}"#,
+                for: request.url!
+            )
+        } with: {
+            let info = try await Self.mockServer().playbackInfo(itemID: "item-2")
+            let source = try XCTUnwrap(info.mediaSources.first)
+            XCTAssertEqual(
+                info.sessionContext(itemID: "item-2", selectedSource: source).deliveryMethod,
+                .directStream
+            )
+        }
+    }
+
+    func testStreamURLIncludesPlaybackSessionAndMediaSourceWithoutToken() throws {
+        let url = try Self.mockServer().streamURL(
+            itemID: "item-1",
+            mediaSourceID: "ms 1",
+            playSessionID: "ps 1"
+        )
         XCTAssertTrue(url.contains("/Videos/item-1/stream?Static=true"))
-        XCTAssertTrue(url.contains("mediaSourceId=ms-1"))
+        let components = try XCTUnwrap(URLComponents(string: url))
+        let query = Dictionary(
+            (components.queryItems ?? []).map { ($0.name, $0.value ?? "") },
+            uniquingKeysWith: { first, _ in first }
+        )
+        XCTAssertEqual(query["mediaSourceId"], "ms 1")
+        XCTAssertEqual(query["playSessionId"], "ps 1")
         XCTAssertFalse(url.contains("tok"), "token 绝不能进 URL")
     }
 

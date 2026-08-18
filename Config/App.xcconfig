@@ -1,0 +1,7 @@
+// Shared app configuration. Local credentials are optional so clean checkouts and CI can build.
+DANDANPLAY_APP_ID =
+DANDANPLAY_APP_SECRET =
+
+#include? "../Secrets.xcconfig"
+
+INFOPLIST_FILE = Config/Info.plist

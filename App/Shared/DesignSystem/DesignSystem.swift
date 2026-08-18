@@ -132,10 +132,26 @@ struct PosterCard: View {
 struct StillCard: View {
     let item: MediaItem
     let server: JellyfinServer?
+    let actionIcon: String
+    let actionAccessibilityLabel: String?
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
+
+    init(
+        item: MediaItem,
+        server: JellyfinServer?,
+        actionIcon: String = "play.fill",
+        actionAccessibilityLabel: String? = nil,
+        onTap: @escaping () -> Void
+    ) {
+        self.item = item
+        self.server = server
+        self.actionIcon = actionIcon
+        self.actionAccessibilityLabel = actionAccessibilityLabel
+        self.onTap = onTap
+    }
 
     private var subtitle: String {
         if let label = item.episodeLabel {
@@ -163,7 +179,7 @@ struct StillCard: View {
                         .aspectRatio(16 / 9, contentMode: .fill)
                     LinearGradient(colors: [.black.opacity(0.62), .clear],
                                    startPoint: .bottom, endPoint: .center)
-                    Image(systemName: "play.fill")
+                    Image(systemName: actionIcon)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
                         .padding(9)
@@ -189,6 +205,9 @@ struct StillCard: View {
             .frame(width: Metrics.stillWidth)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(actionAccessibilityLabel ?? "播放 \(item.name)")
+        .accessibilityValue("\(subtitle)，已播放 \(Int(progress * 100))%")
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
     }

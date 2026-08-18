@@ -40,7 +40,7 @@ struct HomeView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if !app.home.heroes.isEmpty {
+                    if app.isHeroCarouselEnabled, !app.home.heroes.isEmpty {
                         HeroCarousel(
                             items: app.home.heroes,
                             eyebrowPrefix: app.home.heroLabel,
@@ -55,8 +55,13 @@ struct HomeView: View {
                     if !app.home.resume.isEmpty {
                         Rail("继续观看") {
                             ForEach(app.home.resume) { item in
-                                StillCard(item: item, server: app.server) {
-                                    app.play(item, resumeSeconds: item.playState?.positionSeconds)
+                                StillCard(
+                                    item: item,
+                                    server: app.server,
+                                    actionIcon: "chevron.right",
+                                    actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                                ) {
+                                    app.openSeriesDetail(for: item)
                                 }
                             }
                         }
@@ -65,8 +70,13 @@ struct HomeView: View {
                     if !app.home.nextUp.isEmpty {
                         Rail("接下来看") {
                             ForEach(app.home.nextUp) { item in
-                                StillCard(item: item, server: app.server) {
-                                    app.play(item, resumeSeconds: nil)
+                                StillCard(
+                                    item: item,
+                                    server: app.server,
+                                    actionIcon: "chevron.right",
+                                    actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                                ) {
+                                    app.openSeriesDetail(for: item)
                                 }
                             }
                         }

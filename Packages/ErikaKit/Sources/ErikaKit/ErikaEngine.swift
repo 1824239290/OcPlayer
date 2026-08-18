@@ -179,6 +179,84 @@ public final class ErikaEngine: @unchecked Sendable {
         try withLock { try presenter.addExternalSubtitle(uri) }
     }
 
+    // MARK: - Danmaku
+
+    /// Replace all current danmaku with one anonymous Bilibili XML source.
+    public func loadDanmaku(fileURI: String) throws {
+        try withLock { try presenter.loadDanmaku(fileURI: fileURI) }
+    }
+
+    /// Replace all current danmaku with one anonymous inline JSON source.
+    public func loadDanmaku(json: String) throws {
+        try withLock { try presenter.loadDanmaku(json: json) }
+    }
+
+    @discardableResult
+    public func addDanmakuTrack(
+        fileURI: String,
+        name: String,
+        offset: Duration = .zero
+    ) throws -> UInt64 {
+        try withLock {
+            try presenter.addDanmakuTrack(fileURI: fileURI, name: name, offset: offset)
+        }
+    }
+
+    @discardableResult
+    public func addDanmakuTrack(
+        json: String,
+        name: String,
+        offset: Duration = .zero
+    ) throws -> UInt64 {
+        try withLock {
+            try presenter.addDanmakuTrack(json: json, name: name, offset: offset)
+        }
+    }
+
+    public func removeDanmakuTrack(_ id: UInt64) throws {
+        try withLock { try presenter.removeDanmakuTrack(id) }
+    }
+
+    public func setDanmakuTrack(_ id: UInt64, enabled: Bool) throws {
+        try withLock { try presenter.setDanmakuTrack(id, enabled: enabled) }
+    }
+
+    public func setDanmakuTrack(_ id: UInt64, offset: Duration) throws {
+        try withLock { try presenter.setDanmakuTrack(id, offset: offset) }
+    }
+
+    public func setDanmakuGlobalOffset(_ offset: Duration) throws {
+        try withLock { try presenter.setDanmakuGlobalOffset(offset) }
+    }
+
+    public func danmakuTracks() throws -> [DanmakuTrackInfo] {
+        try withLock { try presenter.danmakuTracks() }
+    }
+
+    public func clearDanmaku() throws {
+        try withLock { try presenter.clearDanmaku() }
+    }
+
+    public func setDanmakuEnabled(_ enabled: Bool) throws {
+        try withLock { try presenter.setDanmakuEnabled(enabled) }
+    }
+
+    public func danmakuConfig() throws -> DanmakuConfig {
+        try withLock { try presenter.danmakuConfig() }
+    }
+
+    public func setDanmakuConfig(_ config: DanmakuConfig) throws {
+        try withLock { try presenter.setDanmakuConfig(config) }
+    }
+
+    public func setDanmakuFont(family: String?, filePath: String?) throws {
+        try withLock { try presenter.setDanmakuFont(family: family, filePath: filePath) }
+    }
+
+    public func setDanmakuBlockWords(json: String) throws {
+        try withLock { try presenter.setDanmakuBlockWords(json: json) }
+    }
+
     /// 字幕整体缩放（1.0 = 默认字号；HUD 的「字号 +/-」用）。
     public func setSubtitleScale(_ scale: Double) throws {
         try withLock { try ErikaError.check(erika_presenter_set_subtitle_scale(presenter.handle, scale)) }

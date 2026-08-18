@@ -197,6 +197,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(items.count, 1)
             let item = items[0]
             XCTAssertEqual(item.kind, .episode)
+            XCTAssertEqual(item.seriesID, "s-1")
             XCTAssertEqual(item.episodeLabel, "S1E4")
             XCTAssertEqual(item.seriesName, "3 体")
             XCTAssertEqual(try XCTUnwrap(item.runtimeSeconds), 160, accuracy: 0.001)

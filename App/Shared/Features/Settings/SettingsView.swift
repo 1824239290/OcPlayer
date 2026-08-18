@@ -19,18 +19,25 @@ struct SettingsView: View {
             }
 
             Section("首页") {
-                Picker("轮播来源", selection: Binding(
-                    get: { app.heroSource },
-                    set: { app.setHeroSource($0) }
-                )) {
-                    ForEach(AppModel.HeroSource.allCases) { source in
-                        Text(source.label).tag(source)
+                Toggle("首页轮播图", isOn: Binding(
+                    get: { app.isHeroCarouselEnabled },
+                    set: { app.setHeroCarouselEnabled($0) }
+                ))
+
+                if app.isHeroCarouselEnabled {
+                    Picker("轮播来源", selection: Binding(
+                        get: { app.heroSource },
+                        set: { app.setHeroSource($0) }
+                    )) {
+                        ForEach(AppModel.HeroSource.allCases) { source in
+                            Text(source.label).tag(source)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    Text("「我的收藏」为空时会自动回落为最近添加。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
-                .pickerStyle(.segmented)
-                Text("「我的收藏」为空时会自动回落为最近添加。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
 
             Section("播放") {

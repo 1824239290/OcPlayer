@@ -16,6 +16,7 @@
 ## 构建
 
 ```bash
+Scripts/bootstrap.sh             # 可选：生成本地弹弹play密钥配置，不会覆盖已有文件
 Scripts/fetch-erika.sh v0.1.6   # 拉取 Erika 内核，生成 Erika.xcframework（不入库，约 753 MB）
 Scripts/build-macos.sh           # 清理上次产物并构建 macOS Debug，只保留本次构建
 Scripts/build-macos.sh release   # 清理上次产物并构建 macOS Release
@@ -25,6 +26,19 @@ swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映
 ```
 
 > 脚本固定使用 `.local-build/current`，每次构建前会完整删除该目录，避免累积多个本地产物。macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
+
+### 弹弹play 本地配置
+
+项目没有 `Secrets.xcconfig` 也能正常构建；此时弹弹play 功能应保持未配置状态。需要接入弹幕时，先运行 `Scripts/bootstrap.sh`，然后只在本地的 `Secrets.xcconfig` 中填写：
+
+```xcconfig
+DANDANPLAY_APP_ID = <你的 AppId>
+DANDANPLAY_APP_SECRET = <你的 AppSecret>
+```
+
+仓库只提交空值模板 `Secrets.xcconfig.example`，真实配置已被 `.gitignore` 排除。构建时两个值会写入 app 的 Info.plist，App 层通过 `AppConfiguration.dandanplayCredentials` 只读获取；未同时提供 AppId 和 AppSecret 时返回 `nil`。不要在日志、错误提示或界面中输出 AppSecret。
+
+> 客户端内置凭据无法像服务端密钥一样保密，发布后的 app 中仍可提取 AppSecret。本地配置的作用是防止误提交和减少日常泄露，不是安全边界；弹弹play 后台应限制权限，并预留凭据轮换方案。
 
 应用图标位于 `App/Shared/Assets.xcassets/AppIcon.appiconset`。iOS 使用浅色默认图标与深色外观图标；macOS 的传统 AppIcon 不支持外观槽位，因此使用深色版本并提供完整多尺寸资源。
 

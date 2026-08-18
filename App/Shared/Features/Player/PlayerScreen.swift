@@ -53,7 +53,7 @@ struct PlayerScreen: View {
 
             PlayerHUDOverlay(
                 isNarrow: isNarrow,
-                playbackID: request?.id ?? "",
+                playbackID: request?.id.uuidString ?? "",
                 title: mainTitle,
                 kicker: titleKicker,
                 isImportingSubtitle: $isImportingSubtitle,
@@ -125,9 +125,10 @@ struct PlayerScreen: View {
         }
         // task(id:)：覆盖层已开着时换片（onOpenURL / 播另一集）也能重新打开
         .task(id: request) {
-            guard let request else { return }
+            guard let request, !Task.isCancelled else { return }
             PlaybackLog.append("PlayerScreen task id=\(request.title)")
             controller.openIfNeeded(request)
+            guard !Task.isCancelled else { return }
             revealControls()
         }
         .onChange(of: controller.state.state) { _, newState in
@@ -214,14 +215,14 @@ struct PlayerScreen: View {
                           systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
                         .foregroundStyle(PlayerHUDPalette.primary, Color.red)
-                    Button(action: controller.retryLast) {
+                    Button(action: app.retryPlayback) {
                         Label("重试", systemImage: "arrow.clockwise")
                             .font(.callout.weight(.semibold))
                             .padding(.horizontal, 4)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
-                    .disabled(controller.lastRequest == nil)
+                    .disabled(controller.lastRequest == nil || app.isPlaybackOpening)
                 }
                 .padding(12)
             }

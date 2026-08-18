@@ -89,39 +89,51 @@ struct DetailView: View {
         // the ZStack can use its intrinsic height and fall below the banner, where
         // `.clipped()` cuts off the poster and controls.
         .overlay(alignment: .bottomLeading) {
-            HStack(alignment: .bottom, spacing: 24) {
-                if shown.primaryImageTag != nil {
-                    let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
-                    RemoteImage(url: poster.url, authHeader: poster.authHeader)
-                        .frame(width: 120, height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(shown.name)
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.5), radius: 4)
-                    metaRow
-                    Button {
-                        playCurrent()
-                    } label: {
-                        Label(playButtonLabel, systemImage: "play.fill")
-                            .padding(.horizontal, 24).padding(.vertical, 11)
-                            .background(playButtonColor, in: Capsule())
-                            .foregroundStyle(playButtonInk)
-                            .font(.body.weight(.semibold))
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom, spacing: 24) {
+                    bannerPoster(width: 120, height: 180)
+                    VStack(alignment: .leading, spacing: 8) {
+                        bannerTitle
+                        metaRow
+                        playButton
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!canPlayCurrent)
-                    .opacity(canPlayCurrent ? 1 : 0.55)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .bottom, spacing: 14) {
+                        bannerPoster(width: 80, height: 120)
+                        VStack(alignment: .leading, spacing: 8) {
+                            bannerTitle
+                            metaRow
+                                .lineLimit(1)
+                        }
+                    }
+                    playButton
                 }
             }
             .padding(.horizontal, Metrics.contentLeading)
             .padding(.bottom, 28)
         }
         .clipped()
+    }
+
+    @ViewBuilder
+    private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
+        if shown.primaryImageTag != nil {
+            let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
+            RemoteImage(url: poster.url, authHeader: poster.authHeader)
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+        }
+    }
+
+    private var bannerTitle: some View {
+        Text(shown.name)
+            .font(.system(size: 28, weight: .bold))
+            .foregroundStyle(.white)
+            .lineLimit(2)
+            .shadow(color: .black.opacity(0.5), radius: 4)
     }
 
     private var metaRow: some View {
@@ -157,34 +169,94 @@ struct DetailView: View {
         return parts
     }
 
+    private var playButton: some View {
+        Button(action: playCurrent) {
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(.white.opacity(resumeProgress == nil ? 0.78 : 0.34))
+                if let progress = resumeProgress {
+                    GeometryReader { proxy in
+                        Rectangle()
+                            .fill(.white.opacity(0.82))
+                            .frame(width: proxy.size.width * progress)
+                    }
+                }
+
+                Text(playButtonLabel)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.black.opacity(0.8))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .frame(width: 228, height: 40)
+            // Only the outer capsule is rounded. The progress rectangle keeps
+            // a full-height vertical boundary like the native resume control.
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .modifier(DetailPlayButtonStyle())
+        .disabled(!canPlayCurrent)
+        .opacity(canPlayCurrent ? 1 : 0.55)
+        .accessibilityLabel(resumePlayState == nil ? playButtonLabel : "继续播放")
+        .accessibilityValue(resumePlayState.map { "本集已播放 \(resumeClock($0.positionSeconds))" } ?? "")
+    }
+
     private var playButtonLabel: String {
-        if let playState = shown.playState, !playState.played,
-           playState.percentage > 0.02, playState.percentage < 0.95 {
-            return "从 \(RuntimeText.format(playState.positionSeconds).replacingOccurrences(of: " 分钟", with: "分")) 续播"
+        if let playState = resumePlayState {
+            return "继续 \(resumeClock(playState.positionSeconds))"
         }
         return shown.kind == .series ? "播放下一集" : "播放"
     }
 
+    private func resumeClock(_ seconds: Double) -> String {
+        let elapsed = max(Int(seconds), 0)
+        return String(
+            format: "%02d:%02d:%02d",
+            elapsed / 3_600,
+            (elapsed % 3_600) / 60,
+            elapsed % 60
+        )
+    }
+
+    /// The item whose stream will actually be opened by `playCurrent()`.
+    /// A series itself is not playable, so its next-up episode supplies the
+    /// resume position and progress shown in the button.
+    private var playableItem: MediaItem? {
+        switch shown.kind {
+        case .series:
+            return app.home.resume.first(where: {
+                $0.seriesID == shown.id
+                    && !($0.playState?.played ?? false)
+                    && ($0.playState?.positionSeconds ?? 0) >= 30
+            })
+                ?? app.home.nextUp.first(where: { $0.seriesID == shown.id })
+                ?? episodes.first(where: { !($0.playState?.played ?? false) })
+                ?? episodes.first
+        default:
+            return shown
+        }
+    }
+
+    private var resumePlayState: MediaItem.PlayState? {
+        guard let state = playableItem?.playState,
+              !state.played,
+              state.positionSeconds >= 30
+        else { return nil }
+        return state
+    }
+
+    private var resumeProgress: Double? {
+        guard let state = resumePlayState else { return nil }
+        if state.percentage > 0 {
+            return min(max(state.percentage, 0), 1)
+        }
+        guard let runtime = playableItem?.runtimeSeconds, runtime > 0 else { return nil }
+        return min(max(state.positionSeconds / runtime, 0), 1)
+    }
+
     private var canPlayCurrent: Bool {
-        shown.kind != .series
-            || app.home.nextUp.contains { $0.seriesID == shown.id }
-            || !episodes.isEmpty
-    }
-
-    private var playButtonColor: Color {
-        #if os(macOS)
-        .white
-        #else
-        .primary
-        #endif
-    }
-
-    private var playButtonInk: Color {
-        #if os(macOS)
-        .black
-        #else
-        Color(.systemBackground)
-        #endif
+        playableItem != nil
     }
 
     // MARK: - 简介与元信息
@@ -195,15 +267,6 @@ struct DetailView: View {
                 Text(overview)
                     .foregroundStyle(.secondary)
                     .lineSpacing(4)
-            }
-            if let playState = shown.playState, playState.percentage > 0.02, playState.percentage < 0.98 {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: playState.percentage)
-                        .frame(maxWidth: 360)
-                    Text("看过 \(Int(playState.percentage * 100))% · 上次到 \(RuntimeText.format(playState.positionSeconds))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
             }
         }
         .padding(.horizontal, Metrics.contentLeading)
@@ -311,16 +374,8 @@ struct DetailView: View {
 
     /// 电影直接播；剧集播「接下来看」（nextUp 优先，否则第一季第一集）。
     private func playCurrent() {
-        switch shown.kind {
-        case .series:
-            if let next = app.home.nextUp.first(where: { $0.seriesID == shown.id }) {
-                app.play(next, resumeSeconds: next.playState?.positionSeconds)
-            } else if let first = episodes.first {
-                app.play(first, resumeSeconds: first.playState?.positionSeconds)
-            }
-        default:
-            app.play(shown, resumeSeconds: shown.playState?.positionSeconds)
-        }
+        guard let playableItem else { return }
+        app.play(playableItem, resumeSeconds: playableItem.playState?.positionSeconds)
     }
 
     private func load() async {
@@ -404,6 +459,42 @@ struct DetailView: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, Metrics.contentLeading)
         .padding(.top, 14)
+    }
+}
+
+/// Use Apple's Liquid Glass effect where available and keep the same capsule
+/// geometry with a material fallback on iOS 17 / macOS 14.
+private struct DetailPlayButtonStyle: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        if #available(iOS 26, *) {
+            content
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            fallback(content)
+        }
+        #elseif os(macOS)
+        if #available(macOS 26, *) {
+            content
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        } else {
+            fallback(content)
+        }
+        #endif
+    }
+
+    private func fallback(_ content: Content) -> some View {
+        content
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(.white.opacity(0.35), lineWidth: 1)
+            }
     }
 }
 
