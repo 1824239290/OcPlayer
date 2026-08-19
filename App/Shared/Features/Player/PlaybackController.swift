@@ -25,6 +25,8 @@ enum PlaybackPreferences {
     private static let danmakuBlockTopKey = "dev.jumusu.ocplayer.danmaku.blockTop"
     private static let danmakuBlockBottomKey = "dev.jumusu.ocplayer.danmaku.blockBottom"
     private static let danmakuBlockScrollKey = "dev.jumusu.ocplayer.danmaku.blockScroll"
+    private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
+    private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -65,6 +67,17 @@ enum PlaybackPreferences {
     static var danmakuBlockScroll: Bool {
         get { storedBool(forKey: danmakuBlockScrollKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuBlockScrollKey) }
+    }
+    /// 重复弹幕合并显示，减少轨道竞争（窗口重排时旧弹幕更少被挤行）。
+    static var danmakuMergeDuplicates: Bool {
+        get { storedBool(forKey: danmakuMergeDuplicatesKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuMergeDuplicatesKey) }
+    }
+    /// 允许同轨道堆叠。DFM 里 stacking 打开后 preferred 轨道总是可复用，
+    /// 窗口重排时旧弹幕能留在原轨道，是抑制上下跳动的主要开关。
+    static var danmakuAllowStacking: Bool {
+        get { storedBool(forKey: danmakuAllowStackingKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
     }
 
     private static func storedDouble(
@@ -175,6 +188,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     private(set) var danmakuBlockTop = PlaybackPreferences.danmakuBlockTop
     private(set) var danmakuBlockBottom = PlaybackPreferences.danmakuBlockBottom
     private(set) var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
+    private(set) var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
+    private(set) var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
     private(set) var danmakuGlobalOffsetSeconds = 0.0
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
@@ -613,6 +628,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
+    func setDanmakuMergeDuplicates(_ enabled: Bool) {
+        danmakuMergeDuplicates = enabled
+        PlaybackPreferences.danmakuMergeDuplicates = enabled
+        updateDanmakuConfig { $0.mergeDuplicates = enabled }
+    }
+
+    func setDanmakuAllowStacking(_ enabled: Bool) {
+        danmakuAllowStacking = enabled
+        PlaybackPreferences.danmakuAllowStacking = enabled
+        updateDanmakuConfig { $0.allowStacking = enabled }
+    }
+
     func adjustDanmakuOffset(by seconds: Double) {
         setDanmakuOffset(danmakuGlobalOffsetSeconds + seconds)
     }
@@ -634,6 +661,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         config.blockTop = danmakuBlockTop
         config.blockBottom = danmakuBlockBottom
         config.blockScroll = danmakuBlockScroll
+        config.mergeDuplicates = danmakuMergeDuplicates
+        config.allowStacking = danmakuAllowStacking
         try engine.setDanmakuConfig(config)
         try engine.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
     }
