@@ -17,6 +17,10 @@ public enum DanmakuJSONConverter {
         // nil 时 fallback 又是窗口内下标（切片后变化）。重复 id 会让窗口重排时
         // 个别弹幕的轨道偏好互相顶掉 → 单独几条突然换位置。
         // 这里用整集序号保证唯一，cid 仅在「有效且未重复」时保留。
+        let reservedCIDs = Set(comments.compactMap { comment -> Int64? in
+            guard let cid = comment.cid, cid > 0 else { return nil }
+            return cid
+        })
         var usedIDs = Set<Int64>()
         var fallback: Int64 = 0
         let out = comments.compactMap { comment -> ErikaItem? in
@@ -25,6 +29,9 @@ public enum DanmakuJSONConverter {
             if let cid = comment.cid, cid > 0, usedIDs.insert(cid).inserted {
                 id = cid
             } else {
+                while reservedCIDs.contains(fallback) || !usedIDs.insert(fallback).inserted {
+                    fallback += 1
+                }
                 id = fallback
             }
             return ErikaItem(comment: comment, id: id)

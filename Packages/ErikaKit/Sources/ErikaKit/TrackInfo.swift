@@ -56,6 +56,10 @@ extension TrackInfo {
             sampleRate: raw.sample_rate > 0 ? Int(raw.sample_rate) : nil
         )
     }
+
+    static func populatedCount(_ filled: Int, capacity: Int) -> Int {
+        min(filled, capacity)
+    }
 }
 
 extension ErikaPresenter {
@@ -68,16 +72,15 @@ extension ErikaPresenter {
 
         var raw = [ErikaTrackInfo](repeating: ErikaTrackInfo(), count: needed)
         var filled = 0
-        try ErikaError.check(erika_presenter_tracks(handle, &raw, UInt(needed), &filled))
-
-        var result: [TrackInfo] = []
-        result.reserveCapacity(filled)
-        for i in 0..<filled {
-            let track = TrackInfo(raw[i])
-            erika_track_info_free(&raw[i])
-            result.append(track)
+        let status = erika_presenter_tracks(handle, &raw, UInt(needed), &filled)
+        let count = TrackInfo.populatedCount(filled, capacity: raw.count)
+        defer {
+            for index in 0..<count {
+                erika_track_info_free(&raw[index])
+            }
         }
-        return result
+        try ErikaError.check(status)
+        return raw.prefix(count).map(TrackInfo.init)
     }
 
     /// 选音轨。

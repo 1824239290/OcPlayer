@@ -118,4 +118,88 @@ final class FileHashTests: XCTestCase {
             }
         }
     }
+
+    func testRemoteRangeRejectsTruncatedResponse() async throws {
+        let url = URL(string: "https://media.example/video.mkv")!
+        let session = TestSupport.mockedSession()
+        try await TestSupport.withMock({ request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 206,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "bytes 0-2/3"]
+            )!
+            return (response, Data("ab".utf8))
+        }) {
+            do {
+                _ = try await FileHash.head16MiBMD5(from: url, session: session)
+                XCTFail("should reject a truncated range response")
+            } catch FileHash.FileHashError.readFailed {
+                // expected
+            }
+        }
+    }
+
+    func testRemoteRangeRejectsIncompleteDeclaredHead() async throws {
+        let url = URL(string: "https://media.example/video.mkv")!
+        let session = TestSupport.mockedSession()
+        try await TestSupport.withMock({ request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 206,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "bytes 0-2/4"]
+            )!
+            return (response, Data("abc".utf8))
+        }) {
+            do {
+                _ = try await FileHash.head16MiBMD5(from: url, session: session)
+                XCTFail("should reject a declared range that omits part of the requested head")
+            } catch FileHash.FileHashError.rangeUnsupported {
+                // expected
+            }
+        }
+    }
+
+    func testRemoteRangeRejectsMalformedContentRange() async throws {
+        let url = URL(string: "https://media.example/video.mkv")!
+        let session = TestSupport.mockedSession()
+        try await TestSupport.withMock({ request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 206,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "bytes 0-three/3"]
+            )!
+            return (response, Data("abc".utf8))
+        }) {
+            do {
+                _ = try await FileHash.head16MiBMD5(from: url, session: session)
+                XCTFail("should reject a malformed Content-Range")
+            } catch FileHash.FileHashError.rangeUnsupported {
+                // expected
+            }
+        }
+    }
+
+    func testRemoteRangeRejectsNonzeroStart() async throws {
+        let url = URL(string: "https://media.example/video.mkv")!
+        let session = TestSupport.mockedSession()
+        try await TestSupport.withMock({ request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 206,
+                httpVersion: nil,
+                headerFields: ["Content-Range": "bytes 1-3/4"]
+            )!
+            return (response, Data("abc".utf8))
+        }) {
+            do {
+                _ = try await FileHash.head16MiBMD5(from: url, session: session)
+                XCTFail("should reject a range that does not start at zero")
+            } catch FileHash.FileHashError.rangeUnsupported {
+                // expected
+            }
+        }
+    }
 }

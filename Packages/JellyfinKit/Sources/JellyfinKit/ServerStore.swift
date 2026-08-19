@@ -24,8 +24,9 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
 /// 多服务器 profile 的持久化（档案和 token 均存本地 UserDefaults，使用不同 key）。
 ///
 /// 用 class + 显式 save 而不是属性观察：AppModel 持有并 @Observable 转发，
-/// 这里保持无 UI 依赖、可单测。存储引用都是 `let`，标 `@unchecked Sendable` 安全。
+/// 这里保持无 UI 依赖、可单测。profile 列表及当前 ID 的复合操作由同一把锁保护。
 public final class ServerStore: @unchecked Sendable {
+    private let lock = NSLock()
     private let defaults: UserDefaults
     private let tokens: TokenStoring
 
@@ -40,6 +41,43 @@ public final class ServerStore: @unchecked Sendable {
     // MARK: - 档案
 
     public var profiles: [ServerProfile] {
+        lock.withLock { profilesUnlocked() }
+    }
+
+    public var currentProfile: ServerProfile? {
+        lock.withLock {
+            let profiles = profilesUnlocked()
+            guard let id = defaults.string(forKey: currentKey) else { return profiles.first }
+            return profiles.first { $0.id == id } ?? profiles.first
+        }
+    }
+
+    public func save(_ profile: ServerProfile, makeCurrent: Bool = true) {
+        lock.withLock {
+            var list = profilesUnlocked().filter { $0.id != profile.id }
+            list.append(profile)
+            persistUnlocked(list)
+            if makeCurrent { defaults.set(profile.id, forKey: currentKey) }
+        }
+    }
+
+    public func remove(id: String) {
+        lock.withLock {
+            let list = profilesUnlocked().filter { $0.id != id }
+            persistUnlocked(list)
+
+            if defaults.string(forKey: currentKey) == id {
+                if let first = list.first {
+                    defaults.set(first.id, forKey: currentKey)
+                } else {
+                    defaults.removeObject(forKey: currentKey)
+                }
+            }
+        }
+        tokens.delete(account: id)
+    }
+
+    private func profilesUnlocked() -> [ServerProfile] {
         guard let data = defaults.data(forKey: profilesKey) else { return [] }
         do {
             return try JSONDecoder().decode([ServerProfile].self, from: data)
@@ -50,29 +88,9 @@ public final class ServerStore: @unchecked Sendable {
         }
     }
 
-    public var currentProfile: ServerProfile? {
-        guard let id = defaults.string(forKey: currentKey) else { return profiles.first }
-        return profiles.first { $0.id == id } ?? profiles.first
-    }
-
-    public func save(_ profile: ServerProfile, makeCurrent: Bool = true) {
-        var list = profiles.filter { $0.id != profile.id }
-        list.append(profile)
-        persist(list)
-        if makeCurrent { defaults.set(profile.id, forKey: currentKey) }
-    }
-
-    public func remove(id: String) {
-        persist(profiles.filter { $0.id != id })
-        tokens.delete(account: id)
-        if defaults.string(forKey: currentKey) == id, let first = profiles.first {
-            defaults.set(first.id, forKey: currentKey)
-        }
-    }
-
     /// 编码失败**不**落盘：`defaults.set(nil, forKey:)` 会把该 key 整个删掉，
     /// 静默吞掉 `try?` 等于把已有服务器列表清空。失败只记日志，保留旧数据。
-    private func persist(_ list: [ServerProfile]) {
+    private func persistUnlocked(_ list: [ServerProfile]) {
         do {
             defaults.set(try JSONEncoder().encode(list), forKey: profilesKey)
         } catch {

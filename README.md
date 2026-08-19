@@ -18,16 +18,19 @@
 
 ```bash
 Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板，不会覆盖已有文件
-Scripts/fetch-erika.sh v0.1.6   # 拉取 Erika 内核，生成 Erika.xcframework（不入库，约 753 MB）
-Scripts/build-macos.sh           # 清理上次产物并构建 macOS Debug，只保留本次构建
-Scripts/build-macos.sh release   # 清理上次产物并构建 macOS Release
+Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 753 MB）
+Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
+Scripts/build-macos.sh release   # 检查最新内核，清理上次产物并构建 macOS Release
 swift Scripts/export-app-icon.swift <浅色源图> <深色源图> App/Shared/Assets.xcassets/AppIcon.appiconset
 swift test --package-path Packages/ErikaKit     # 内核 + 渲染 + HTTP 全套（素材现造，不联网）
 swift test --package-path Packages/JellyfinKit  # Jellyfin 登录、浏览、映射与请求参数（全离线 mock）
 swift test --package-path Packages/DanmakuKit  # 网关客户端、转换、缓存、哈希与设置（全离线 mock）
+swift test --package-path Packages/DiagnosticsKit # 统一日志、脱敏、节流与轮转
 ```
 
 > 脚本固定使用 `.local-build/current`，每次构建前会完整删除该目录，避免累积多个本地产物。macOS 构建必须用 `-scheme`（不能用 `-target`，详见工程内注释）；macOS 架构钉死 arm64。
+>
+> `fetch-erika.sh`、`build-macos.sh` 和 `package-macos.sh` 默认每次解析 GitHub 最新正式版；已有同版本完整产物会直接复用。需要可重复构建时，将 `ERIKA_VERSION` 设为 `fetch-erika.sh --resolve-version` 输出的具体 tag。
 
 ### 弹弹play 网关配置
 
@@ -51,20 +54,21 @@ App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定�
 | ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态，含无头回归测试 |
 | JellyfinKit | `Packages/JellyfinKit/` | Jellyfin 薄封装：登录、媒体库、PlaybackInfo、进度上报，全离线测试 |
 | DanmakuKit | `Packages/DanmakuKit/` | 弹弹play 网关客户端：match/search/comments、弹弹play→Erika JSON 转换、本地缓存、本地与远程前 16MiB 文件哈希、网关设置，全离线测试 |
+| DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一 JSONL / OSLog 日志、敏感字段脱敏、节流、导出与轮转 |
 | Scripts | `Scripts/` | 内核拉取、HTTP 测试桩、打包脚本 |
 
 ## 开源组件与许可证
 
 | 组件 | 用途 | 许可证 |
 | --- | --- | --- |
-| [Erika](https://github.com/AimesSoft/Erika) | 播放内核（FFmpeg 解码 / libass 字幕 / 弹幕渲染） | Apache-2.0（本体）；内置 FFmpeg、libass、FreeType、HarfBuzz、dav1d、zlib、ArtCNN 等组件各带其许可证（LGPL / GPL / MIT / BSD / zlib 等），完整文本随 `Vendor/` 内 `licenses/` 目录分发 |
+| [Erika](https://github.com/AimesSoft/Erika) | 播放内核（FFmpeg 解码 / libass 字幕 / 弹幕渲染） | MPL-2.0（本体）；当前预编译包使用 LGPL profile，FFmpeg、libass、FreeType、HarfBuzz、dav1d、zlib、SoundTouch、ArtCNN 等组件各带独立许可证，完整文本随 release 的 `licenses/` 目录分发 |
 | [jellyfin-sdk-swift](https://github.com/jellyfin/jellyfin-sdk-swift) | Jellyfin 官方 SDK（登录 / 浏览 / PlaybackInfo） | MPL-2.0 |
 | [Get](https://github.com/kean/Get) | HTTP 客户端（SDK 底层，经 SwiftPM 传递引入） | MIT |
 | 弹弹play 开放平台 | 弹幕数据源（经 OcPlay 网关接入） | 公开 API，客户端只持网关签发的 API Key（设置页配置），AppSecret 仅存于网关 |
 
 其余 SwiftPM 传递依赖（swift-nio、swift-atomics、swift-collections、swift-system 等）为 Apple 系 Apache-2.0 库，随依赖图自动引入。
 
-**分发义务**：发布产物需随附上述组件的许可证文本，打包脚本会把 Erika 的 `LICENSE`、`THIRD_PARTY_NOTICES.md` 与 `licenses/` 目录复制进 app 的 `Contents/Resources/THIRD_PARTY_LICENSES/`；SDK 的 LICENSE 文件随 SwiftPM 依赖分发，需保留各自的版权声明；FFmpeg 按 LGPL 条款构建时需满足 relink 等对应要求。本项目本体以 GPL-3.0 发布（见 `LICENSE`，因 Erika 捆绑组件含 GPL-3.0）。
+**分发义务**：发布产物需随附相关组件的许可证文本。当前打包脚本会把 Erika 的 `LICENSE`、`THIRD_PARTY_NOTICES.md` 与 `licenses/` 目录复制进 app 的 `Contents/Resources/THIRD_PARTY_LICENSES/`；对外分发前还需聚合 Jellyfin SDK 与 SwiftPM 依赖的许可证。FFmpeg、FriBidi、SoundTouch 等 LGPL 组件需满足 notices、源码与可重链要求。本项目本体选择 GPL-3.0 发布（见 `LICENSE`）。
 
 ## 发布与签名
 
@@ -84,4 +88,4 @@ App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定�
 
 ## 路线
 
-M1 媒体库（Jellyfin 浏览 + 播放串联）→ M2 播放体验（轨道、字幕、续播、进度上报）→ M3 弹幕（基础链路已接入）→ M4 打磨与双端适配。
+M1 媒体库、M2 播放体验和 M3 弹幕完整链路均已接入；当前进入 M4，继续处理维护性、搜索 / 收藏等产品能力和双端适配。未完成项见 `REVIEW_TODO.md`。

@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_TAG="${1:-v0.1.1}"
-ERIKA_VERSION="${ERIKA_VERSION:-v0.1.6}"
+ERIKA_VERSION="${ERIKA_VERSION:-latest}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 APP_NAME="OcPlayer"
@@ -23,9 +23,7 @@ else
     exit 2
 fi
 
-if [[ ! -d "$ROOT/Packages/ErikaKit/Vendor/Erika.xcframework" ]]; then
-    "$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
-fi
+"$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
 
 mkdir -p "$BUILD_ROOT" "$DIST_DIR"
 rm -f "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"

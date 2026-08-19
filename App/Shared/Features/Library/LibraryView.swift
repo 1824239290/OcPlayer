@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var items: [MediaItem] = []
     @State private var isLoading = false
     @State private var loadError: String?
+    @State private var activeLoadID: UUID?
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
@@ -65,16 +66,41 @@ struct LibraryView: View {
     }
 
     private func load() async {
-        guard let server = app.server, !isLoading else { return }
+        let loadID = UUID()
+        activeLoadID = loadID
+
+        guard let server = app.server else {
+            isLoading = false
+            return
+        }
+
+        let libraryID = library.id
+        let kinds = itemKinds
         isLoading = true
         loadError = nil
+        defer {
+            if activeLoadID == loadID {
+                isLoading = false
+            }
+        }
+
         do {
-            items = try await server.items(parentID: library.id, kinds: itemKinds, recursive: true, limit: 500)
+            let loadedItems = try await server.items(
+                parentID: libraryID,
+                kinds: kinds,
+                recursive: true,
+                limit: 500
+            )
+            guard !Task.isCancelled, activeLoadID == loadID else { return }
+            items = loadedItems
+        } catch is CancellationError {
+            return
         } catch let e as JellyfinKit.JellyfinError {
+            guard !Task.isCancelled, activeLoadID == loadID else { return }
             loadError = e.errorDescription
         } catch {
+            guard !Task.isCancelled, activeLoadID == loadID else { return }
             loadError = "\(error)"
         }
-        isLoading = false
     }
 }

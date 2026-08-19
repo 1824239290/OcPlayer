@@ -7,7 +7,7 @@ PROJECT="$ROOT/OcPlayer.xcodeproj"
 SCHEME="OcPlayer-macOS"
 BUILD_DIR="$ROOT/.local-build/current"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
-ERIKA_XCFRAMEWORK="$ROOT/Packages/ErikaKit/Vendor/Erika.xcframework"
+ERIKA_VERSION="${ERIKA_VERSION:-latest}"
 
 usage() {
     echo "Usage: Scripts/build-macos.sh [debug|release]" >&2
@@ -44,10 +44,8 @@ if ! xcodebuild -version >/dev/null 2>&1; then
     exit 1
 fi
 
-if [[ ! -d "$ERIKA_XCFRAMEWORK" ]]; then
-    echo "Erika.xcframework is missing; fetching it first."
-    "$ROOT/Scripts/fetch-erika.sh"
-fi
+echo "Checking Erika core ($ERIKA_VERSION)..."
+"$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
 
 # This path is intentionally fixed: every run replaces the previous local build.
 if [[ "$BUILD_DIR" != "$ROOT/.local-build/current" ]]; then

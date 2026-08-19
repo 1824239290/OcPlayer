@@ -4,6 +4,11 @@ import XCTest
 /// 轨道能力（真内核）：枚举、选音轨、关字幕、外挂 srt 字幕。
 final class ErikaTrackTests: XCTestCase {
 
+    func testPopulatedTrackCountIsBoundedByAllocatedCapacity() {
+        XCTAssertEqual(TrackInfo.populatedCount(5, capacity: 2), 2)
+        XCTAssertEqual(TrackInfo.populatedCount(2, capacity: 5), 2)
+    }
+
     /// 无窗口驱动：内核事件靠 tick 出来，这里用手动 `audioOnlyTick` 等轨道信息。
     func testEnumerateSelectAndExternalSubtitle() async throws {
         let media = try await TestMedia.makeMovieWithTwoTones(seconds: 2)

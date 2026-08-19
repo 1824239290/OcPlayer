@@ -52,13 +52,31 @@ public enum FileHash {
         guard let http = response as? HTTPURLResponse else {
             throw FileHashError.invalidResponse
         }
+        let declaredRangeLength: Int64?
         switch http.statusCode {
         case 206:
-            guard http.value(forHTTPHeaderField: "Content-Range")?
-                .lowercased().hasPrefix("bytes 0-") == true else {
+            guard let header = http.value(forHTTPHeaderField: "Content-Range"),
+                  let range = ContentRange(header),
+                  range.start == 0
+            else {
                 throw FileHashError.rangeUnsupported
             }
+            if let total = range.total {
+                guard expectedFileSize == nil || expectedFileSize == total else {
+                    throw FileHashError.rangeUnsupported
+                }
+                let expectedEnd = min(Int64(headByteCount), total) - 1
+                guard range.end == expectedEnd else {
+                    throw FileHashError.rangeUnsupported
+                }
+            } else {
+                guard range.end == Int64(headByteCount - 1) else {
+                    throw FileHashError.rangeUnsupported
+                }
+            }
+            declaredRangeLength = range.end - range.start + 1
         case 200 where expectedFileSize.map({ $0 <= Int64(headByteCount) }) == true:
+            declaredRangeLength = nil
             break
         case 200:
             throw FileHashError.rangeUnsupported
@@ -82,6 +100,9 @@ public enum FileHash {
         }
         if !buffer.isEmpty { hasher.update(data: buffer) }
 
+        if let declaredRangeLength {
+            guard Int64(received) == declaredRangeLength else { throw FileHashError.readFailed }
+        }
         if let expectedFileSize {
             let expected = min(Int64(headByteCount), max(expectedFileSize, 0))
             guard Int64(received) == expected else { throw FileHashError.readFailed }
@@ -96,5 +117,54 @@ public enum FileHash {
         case invalidResponse
         case rangeUnsupported
         case httpStatus(Int)
+    }
+
+    private struct ContentRange {
+        let start: Int64
+        let end: Int64
+        let total: Int64?
+
+        init?(_ value: String) {
+            let fields = value.split(whereSeparator: { $0.isWhitespace })
+            guard fields.count == 2, fields[0].lowercased() == "bytes" else { return nil }
+
+            let rangeAndTotal = fields[1].split(
+                separator: "/",
+                maxSplits: 1,
+                omittingEmptySubsequences: false
+            )
+            guard rangeAndTotal.count == 2 else { return nil }
+            let bounds = rangeAndTotal[0].split(
+                separator: "-",
+                maxSplits: 1,
+                omittingEmptySubsequences: false
+            )
+            guard bounds.count == 2,
+                  let start = Self.parseNonnegativeInteger(bounds[0]),
+                  let end = Self.parseNonnegativeInteger(bounds[1]),
+                  start <= end,
+                  end < Int64.max
+            else { return nil }
+
+            let total: Int64?
+            if rangeAndTotal[1] == "*" {
+                total = nil
+            } else {
+                guard let parsed = Self.parseNonnegativeInteger(rangeAndTotal[1]),
+                      parsed > 0,
+                      end < parsed
+                else { return nil }
+                total = parsed
+            }
+
+            self.start = start
+            self.end = end
+            self.total = total
+        }
+
+        private static func parseNonnegativeInteger(_ value: Substring) -> Int64? {
+            guard !value.isEmpty, value.allSatisfy(\.isNumber) else { return nil }
+            return Int64(value)
+        }
     }
 }

@@ -96,6 +96,38 @@ final class DanmakuJSONConverterTests: XCTestCase {
         XCTAssertEqual(ids[2], 3, "无 cid 用整集序号")
     }
 
+    func testFallbackIDDoesNotCollideWithRealCID() throws {
+        let comments = [
+            DanmakuComment(cid: 2, p: "0.5,1,16777215,u", m: "real"),
+            DanmakuComment(cid: nil, p: "1.0,1,16777215,u", m: "fallback"),
+        ]
+        let json = try XCTUnwrap(DanmakuJSONConverter.erikaJSON(from: comments))
+        let decoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        )
+        let items = try XCTUnwrap(decoded["comments"] as? [[String: Any]])
+        let ids = try XCTUnwrap(items.map { $0["id"] as? Int64 })
+
+        XCTAssertEqual(ids, [2, 3])
+        XCTAssertEqual(ids.count, Set(ids).count)
+    }
+
+    func testFallbackIDReservesCIDThatAppearsLater() throws {
+        let comments = [
+            DanmakuComment(cid: nil, p: "0.5,1,16777215,u", m: "fallback"),
+            DanmakuComment(cid: 1, p: "1.0,1,16777215,u", m: "real"),
+        ]
+        let json = try XCTUnwrap(DanmakuJSONConverter.erikaJSON(from: comments))
+        let decoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any]
+        )
+        let items = try XCTUnwrap(decoded["comments"] as? [[String: Any]])
+        let ids = try XCTUnwrap(items.map { $0["id"] as? Int64 })
+
+        XCTAssertEqual(ids, [2, 1])
+        XCTAssertEqual(ids.count, Set(ids).count)
+    }
+
     func testAllInvalidReturnsNil() {
         let comments = [DanmakuComment(p: "bad", m: ""), DanmakuComment(p: "0.5", m: "  ")]
         XCTAssertNil(DanmakuJSONConverter.erikaJSON(from: comments))

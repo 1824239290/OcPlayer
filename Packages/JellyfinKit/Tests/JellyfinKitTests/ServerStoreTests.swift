@@ -1,3 +1,4 @@
+import Dispatch
 import XCTest
 @testable import JellyfinKit
 
@@ -75,5 +76,17 @@ final class ServerStoreTests: XCTestCase {
 
         restoredStore.signOut(id: profile.id)
         XCTAssertNil(ServerStore(defaults: defaults).token(for: profile))
+    }
+
+    func testConcurrentSavesDoNotLoseProfiles() {
+        let testedStore = store!
+        let profiles = (0..<200).map { profile(id: "srv:\($0)") }
+
+        DispatchQueue.concurrentPerform(iterations: profiles.count) { index in
+            testedStore.save(profiles[index], makeCurrent: false)
+        }
+
+        XCTAssertEqual(Set(testedStore.profiles.map(\.id)), Set(profiles.map(\.id)))
+        XCTAssertEqual(testedStore.profiles.count, profiles.count)
     }
 }
