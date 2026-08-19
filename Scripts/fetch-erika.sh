@@ -44,7 +44,7 @@ mkdir -p "$CACHE" "$WORK"
 # 无对应文件时跳过校验（新 tag 首次拉取后可据 Vendor/erika-<tag>.sha256 固化）。
 PINNED="$ROOT/Scripts/erika-$TAG.sha256"
 if [[ ! -f "$PINNED" ]]; then
-  echo "⚠ 未找到 $PINNED，跳过哈希校验（建议固化该 tag 的期望哈希）" >&2
+  echo "⚠ 未找到 ${PINNED}，跳过哈希校验（建议固化该 tag 的期望哈希）" >&2
 fi
 
 fetch() { # $1 = 包名

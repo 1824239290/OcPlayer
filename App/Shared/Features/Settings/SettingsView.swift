@@ -82,7 +82,7 @@ struct SettingsView: View {
             }
 
             Section("关于") {
-                row("播放内核", "Erika v0.1.6（Rust · FFmpeg · libass）")
+                row("播放内核", "Erika v0.1.7（Rust · FFmpeg · libass）")
                 row("直连策略", "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
                 row("弹幕", "弹弹play 开放平台（通过 OcPlay 网关接入）")
             }
