@@ -539,14 +539,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         var tracks: [DanmakuTrackInfo] = []
         do {
             let accepted = try withReadyEngine(for: source) { engine in
-                try engine.clearDanmaku()
-                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
+                // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
+                // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
+                // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次
+                // 全量重排（NipaPlay 的做法：配置先于装载稳定，装载只触发一次）。
                 do {
                     try applyDanmakuPreferences(to: engine)
                 } catch {
-                    playerLog.warning("弹幕已装载，但偏好应用失败 error=\(error)")
-                    PlaybackLog.append("danmaku loaded without preferences error=\(error)")
+                    playerLog.warning("弹幕偏好应用失败，继续装载 error=\(error)")
+                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
                 }
+                try engine.clearDanmaku()
+                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
                 tracks = try engine.danmakuTracks()
             }
             if accepted { danmakuTracks = tracks }
