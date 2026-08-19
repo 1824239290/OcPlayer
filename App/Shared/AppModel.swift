@@ -553,6 +553,7 @@ final class AppModel {
     }
 
     private func cancelPlaybackOpen() {
+        AppDiagnostics.logInfo("cancelPlaybackOpen 取消播放准备")
         playbackOpenGeneration &+= 1
         playbackOpenTask?.cancel()
         playbackOpenTask = nil

@@ -26,9 +26,14 @@ struct PlayerLoadingLayer: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                     if let onCancel {
-                        Button("取消", action: onCancel)
-                            .buttonStyle(.bordered)
-                            .tint(.white.opacity(0.6))
+                        PlayerHUDGlassSurface(in: Capsule()) {
+                            Button("取消", action: onCancel)
+                                .buttonStyle(.plain)
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                        }
                     }
                 case .failed(let title, let error):
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -47,9 +52,14 @@ struct PlayerLoadingLayer: View {
                         .textSelection(.enabled)
                     HStack(spacing: 12) {
                         if let onCancel {
-                            Button("取消", action: onCancel)
-                                .buttonStyle(.bordered)
-                                .tint(.white.opacity(0.6))
+                            PlayerHUDGlassSurface(in: Capsule()) {
+                                Button("取消", action: onCancel)
+                                    .buttonStyle(.plain)
+                                    .font(.callout.weight(.medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 8)
+                            }
                         }
                         if let onRetry {
                             Button(action: onRetry) {

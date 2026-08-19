@@ -29,7 +29,7 @@ struct RootView: View {
         }
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
-        .toolbar(app.presentedPlayer == nil ? .visible : .hidden, for: .windowToolbar)
+        .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
         #endif
         .overlay {
             // 准备态覆盖层：点击播放后、URI 解析完成前。presentedPlayer 一旦设值，
