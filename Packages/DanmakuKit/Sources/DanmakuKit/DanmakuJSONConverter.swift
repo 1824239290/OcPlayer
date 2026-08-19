@@ -12,7 +12,23 @@ public enum DanmakuJSONConverter {
     /// 返回 nil 表示没有任何有效条目（调用方据此跳过装载）。
     public static func erikaJSON(from comments: [DanmakuComment]?) -> String? {
         guard let comments, !comments.isEmpty else { return nil }
-        let out = comments.compactMap(ErikaItem.init(comment:))
+        // id 必须稳定唯一：它是 Erika stable_tracks 的 key（合成 track_id<<48|item_id）。
+        // 直接透传 cid 不可靠——withRelated 合并的第三方来源 cid 会与官方重复，
+        // nil 时 fallback 又是窗口内下标（切片后变化）。重复 id 会让窗口重排时
+        // 个别弹幕的轨道偏好互相顶掉 → 单独几条突然换位置。
+        // 这里用整集序号保证唯一，cid 仅在「有效且未重复」时保留。
+        var usedIDs = Set<Int64>()
+        var fallback: Int64 = 0
+        let out = comments.compactMap { comment -> ErikaItem? in
+            fallback += 1
+            let id: Int64?
+            if let cid = comment.cid, cid > 0, usedIDs.insert(cid).inserted {
+                id = cid
+            } else {
+                id = fallback
+            }
+            return ErikaItem(comment: comment, id: id)
+        }
         guard !out.isEmpty else { return nil }
         let wrapper = ErikaPayload(comments: out)
         do {
@@ -27,7 +43,7 @@ public enum DanmakuJSONConverter {
         let comments: [ErikaItem]
     }
 
-    /// 与 Erika JSON schema 一一对应。`id` 可选，缺省不影响渲染。
+    /// 与 Erika JSON schema 一一对应。`id` 由转换器保证稳定唯一。
     private struct ErikaItem: Encodable {
         let time: Double
         let type: Int
@@ -35,7 +51,7 @@ public enum DanmakuJSONConverter {
         let content: String
         let id: Int64?
 
-        init?(comment: DanmakuComment) {
+        init?(comment: DanmakuComment, id: Int64?) {
             // `p` = "time,mode,color,userId,..."
             let parts = comment.p.split(separator: ",", omittingEmptySubsequences: false)
             guard parts.count >= 3 else { return nil }
@@ -49,7 +65,7 @@ public enum DanmakuJSONConverter {
             self.type = mode
             self.color = color
             self.content = comment.m
-            self.id = comment.cid
+            self.id = id
         }
     }
 }
