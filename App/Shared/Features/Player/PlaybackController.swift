@@ -156,6 +156,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// Request-scoped synchronous source-open failure. Kept separate from
     /// setupError because subtitle/screenshot failures must not stop reporting.
     private(set) var failedRequestID: PlaybackRequest.ID?
+    /// Identifies the request that owns the current position snapshot. Unlike
+    /// `activeRequest`, this survives `stopPlayback()` until AppModel reports
+    /// the final position.
+    private var reportableRequestID: PlaybackRequest.ID?
 
     var rate: Double = PlaybackPreferences.rate {
         didSet { if rate != oldValue { PlaybackPreferences.rate = rate } }
@@ -330,6 +334,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
         if let activeRequest, samePlaybackSource(activeRequest, request), engine != nil {
             self.activeRequest = request
+            reportableRequestID = request.id
             PlaybackLog.append("openIfNeeded 跳过（已打开同一个源） title=\(request.title)")
             return
         }
@@ -366,6 +371,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackSource(uri: request.uri, headers: headers),
             securityScopedURL: request.securityScopedURL
         )
+        reportableRequestID = request.id
         guard opened, let engine else {
             // A failed open may leave the fresh PlayerState in idle without an
             // error event. Invalidate the presentation boundary so async
@@ -516,6 +522,27 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // 也不会影响下一次播放。
         resetEngine()
         PlaybackLog.append("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
+    }
+
+    func playbackReportSnapshot(for requestID: PlaybackRequest.ID) -> PlaybackReportSnapshot? {
+        guard reportableRequestID == requestID else { return nil }
+        let reportState: PlaybackReportSnapshot.State
+        switch state.state {
+        case .paused:
+            reportState = .paused
+        case .stopped:
+            reportState = .stopped
+        case .error:
+            reportState = .error
+        case .idle, .opening, .ready, .playing, .closed:
+            reportState = .active
+        }
+        return PlaybackReportSnapshot(
+            state: reportState,
+            positionSeconds: Double(state.position.microseconds) / 1_000_000,
+            durationSeconds: Double(state.duration.microseconds) / 1_000_000,
+            sourceOpenFailed: failedRequestID == requestID
+        )
     }
 
     private func resetEngine() {

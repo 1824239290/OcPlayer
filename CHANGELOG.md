@@ -21,6 +21,7 @@
 - 为字幕副本、播放截图和诊断日志增加启动/每日维护与容量上限；日志同时增加 30 天保留、超大单条保护和旧文件尺寸校验。
 - 图片缓存保持 512 MiB 硬上限，设置页新增当前用量和手动清空入口。
 - `PlayerScreen`、`DetailView` 拆出独立组件；Jellyfin 客户端版本改为读取 App version/build，弹幕 User-Agent 保持纯 marketing version。
+- 从 `AppModel` 抽离 `PlaybackReportingCoordinator`，独立负责 Start / 10 秒心跳 / Stopped 的顺序化与去重；新增 macOS App 测试 target，覆盖后台快照、自然结束与显式退出竞态、重复停止、跨片等待和播放请求身份隔离。
 - 明确 Jellyfin 不提供收藏时间；收藏轮播按收藏过滤后使用媒体入库时间倒序，不再描述为“最近收藏”。
 
 ### 构建与内核
@@ -112,7 +113,7 @@
 
 - `swift test --package-path Packages/JellyfinKit`
 - `swift test --package-path Packages/ErikaKit`
-- JellyfinKit 31/31、ErikaKit 13/13 通过（新增「播放生命周期」回归 suite：同源/不同源 `stop` 后重开、`close` 终态锁定、连播换片重建，见 `REVIEW_TODO.md` 1.3）；macOS Debug App 构建通过。
+- JellyfinKit 31/31、ErikaKit 13/13 通过（新增「播放生命周期」回归 suite：同源/不同源 `stop` 后重开、`close` 终态锁定、连播换片重建）；macOS Debug App 构建通过。
 - macOS Debug App 真实环境人工验证：自动连播下一集（播完 S1E7 → 自动切 S1E8）成功——换片后新引擎重新 attach、状态正常推进到 playing（日志 `playback.log` 实证）；从详情页点另一集与 `onOpenURL` 换片走同一条 `openIfNeeded → open` 路径。
 - iOS 模拟器构建因当前机器未安装 iOS Simulator runtime 无法选择 destination；工程配置已写入双端 target。
 - macOS Debug App 真实详情页人工验证：系列海报完整显示，分集缩略图与集标题逐行对应。

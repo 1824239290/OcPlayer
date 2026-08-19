@@ -171,7 +171,25 @@ final class AppModel {
     private(set) var isCompact = false
 
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。
-    weak var playback: PlaybackController?
+    weak var playback: PlaybackController? {
+        didSet {
+            guard playback !== oldValue else { return }
+            let precedingStop = playbackReporting?.stop() ?? pendingPlaybackReportingHandoff
+            clearPlaybackSessionState()
+            pendingPlaybackReportingHandoff = precedingStop
+            if let playback {
+                playbackReporting = PlaybackReportingCoordinator(
+                    stateSource: playback,
+                    precedingStoppedReport: pendingPlaybackReportingHandoff
+                )
+                pendingPlaybackReportingHandoff = nil
+            } else {
+                playbackReporting = nil
+            }
+        }
+    }
+    private var playbackReporting: PlaybackReportingCoordinator?
+    private var pendingPlaybackReportingHandoff: Task<Void, Never>?
 
     /// 由外壳在布局定型时告知（iPhone → compact），详情导航方式随之切换。
     func setCompact(_ compact: Bool) {
@@ -734,28 +752,11 @@ final class AppModel {
     /// current position instead of waiting for the next ten-second heartbeat.
     @discardableResult
     func playbackDidEnterBackground() -> Task<Void, Never>? {
-        guard let context = reportingContext,
-              let requestID = reportingRequestID,
-              let server,
-              let playback
-        else { return nil }
-        let state = playback.state
-        if state.state == .stopped || state.state == .error
-            || playback.failedRequestID == requestID {
-            return finishReporting()
+        guard let report = playbackReporting?.reportBackgroundSnapshot() else { return nil }
+        if case .terminal = report {
+            clearPlaybackSessionState()
         }
-
-        let generation = sessionGeneration
-        let position = Double(state.position.microseconds) / 1_000_000
-        return enqueueProgressReport(
-            server: server,
-            context: context,
-            requestID: requestID,
-            generation: generation,
-            positionSeconds: position,
-            isPaused: state.state == .paused,
-            precedingStart: reportingStartTask
-        )
+        return report.task
     }
 
     /// Hook this to the platform's termination callback when available. The
@@ -780,26 +781,20 @@ final class AppModel {
         play(item, resumeSeconds: resumeSeconds)
     }
 
-    // MARK: - 进度上报 + 下一集连播（M2）
+    // MARK: - 播放会话附属任务（M2）
 
-    private var reportingTask: Task<Void, Never>?
     /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
     private var playbackOpenTask: Task<Void, Never>?
     private var playbackOpenGeneration: UInt64 = 0
     private(set) var isPlaybackOpening = false
     /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。
     private var retryPlaybackItem: MediaItem?
-    private var reportingItemID: String?
-    private var reportingRequestID: PlaybackRequest.ID?
-    private var reportingContext: PlaybackSessionContext?
-    private var reportingStartTask: Task<Void, Never>?
-    private var pendingLifecycleReport: Task<Void, Never>?
-    /// The latest explicit Stopped report. A new Start must await it.
-    private var pendingStoppedReport: Task<Void, Never>?
-    private var pendingStoppedRequestID: PlaybackRequest.ID?
-    private var lastCompletedStoppedRequestID: PlaybackRequest.ID?
-    /// Prevents an older completed stop from clearing a newer queued stop.
-    private var stoppedReportGeneration: UInt64 = 0
+    private struct ActivePlaybackIdentity: Equatable {
+        let sessionGeneration: Int
+        let itemID: MediaItem.ID
+        let requestID: PlaybackRequest.ID
+    }
+    private var activePlaybackIdentity: ActivePlaybackIdentity?
     /// 覆盖层正在播放的条目（HUD 标题 / 继续观看用）；退出 / 换片时随上报一起清。
     private(set) var nowPlayingItem: MediaItem?
     /// 连播解析出的「下一集」；HUD「Continue Watching」复用它，nil = 没有下一集。
@@ -812,188 +807,50 @@ final class AppModel {
         resumeSeconds: Double?,
         request: PlaybackRequest
     ) {
-        reportingTask?.cancel()
         nextEpisode = nil
-        guard let server, let context = request.sessionContext else { return }
-        let itemID = item.id
-        let generation = sessionGeneration
-        reportingItemID = itemID
-        reportingRequestID = request.id
-        reportingContext = context
-        resolveNextEpisode(after: item, generation: generation)
-        loadExternalSubtitles(for: item, generation: generation, request: request)
-
-        let precedingStop = pendingStoppedReport
-        let startTask = Task {
-            await precedingStop?.value
-            await server.reportPlaybackStart(
-                context: context,
-                positionSeconds: resumeSeconds ?? 0
-            )
-        }
-        reportingStartTask = startTask
-        reportingTask = Task { [weak self] in
-            await startTask.value
-            guard !Task.isCancelled else { return }
-            var ticks = 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(1000))
-                guard let self, !Task.isCancelled else { return }
-                guard self.sessionGeneration == generation,
-                      self.reportingItemID == itemID,
-                      self.reportingRequestID == request.id else { return }
-                ticks += 1
-                guard let state = self.playback?.state else { return }
-
-                let position = Double(state.position.microseconds) / 1_000_000
-                let duration = Double(state.duration.microseconds) / 1_000_000
-
-                // 播完 / 出错：补一条 Stopped；播完且有下一集 → 连播
-                let sourceOpenFailed = self.playback?.failedRequestID == request.id
-                if state.state == .stopped || state.state == .error || sourceOpenFailed {
-                    let stopTask = self.enqueueStoppedReport(
-                        server: server,
-                        context: context,
-                        requestID: request.id,
-                        positionSeconds: position,
-                        precedingStart: startTask,
-                        precedingLifecycle: self.pendingLifecycleReport
-                    )
-                    await stopTask.value
-                    guard self.sessionGeneration == generation,
-                          self.reportingItemID == itemID,
-                          self.reportingRequestID == request.id else { return }
-                    // 已上报 Stopped，清掉 id，避免下面 play(next)→finishReporting() 再补一条重复的。
-                    self.reportingItemID = nil
-                    self.reportingRequestID = nil
-                    self.reportingContext = nil
-                    self.reportingStartTask = nil
-                    if state.state == .stopped, duration > 0,
-                       position >= duration - 2, let next = self.nextEpisode {
-                        self.play(next, resumeSeconds: 0)
-                    }
-                    return
-                }
-
-                // 心跳：每 10 秒一条（暂停也报，带 isPaused）
-                if ticks % 10 == 0 {
-                    let progressTask = self.enqueueProgressReport(
-                        server: server,
-                        context: context,
-                        requestID: request.id,
-                        generation: generation,
-                        positionSeconds: position,
-                        isPaused: state.state == .paused,
-                        precedingStart: startTask
-                    )
-                    await progressTask.value
-                }
+        guard let server, let context = request.sessionContext,
+              let playbackReporting else { return }
+        let identity = ActivePlaybackIdentity(
+            sessionGeneration: sessionGeneration,
+            itemID: item.id,
+            requestID: request.id
+        )
+        activePlaybackIdentity = identity
+        resolveNextEpisode(after: item, identity: identity)
+        loadExternalSubtitles(for: item, identity: identity, request: request)
+        playbackReporting.start(
+            reporter: server,
+            context: context,
+            requestID: request.id,
+            resumeSeconds: resumeSeconds
+        ) { [weak self] event in
+            guard let self, self.activePlaybackIdentity == identity,
+                  event.requestID == identity.requestID else { return }
+            self.activePlaybackIdentity = nil
+            if event.reachedEnd, let next = self.nextEpisode {
+                self.play(next, resumeSeconds: 0)
             }
         }
-    }
-
-    /// All Progress requests share one chain. A subsequent Stopped request waits
-    /// for the latest link, so a slow heartbeat can never land after Stopped.
-    private func enqueueProgressReport(
-        server: JellyfinServer,
-        context: PlaybackSessionContext,
-        requestID: PlaybackRequest.ID,
-        generation: Int,
-        positionSeconds: Double,
-        isPaused: Bool,
-        precedingStart: Task<Void, Never>?
-    ) -> Task<Void, Never> {
-        let precedingLifecycle = pendingLifecycleReport
-        let task = Task { [weak self] in
-            await precedingStart?.value
-            await precedingLifecycle?.value
-            guard let self, !Task.isCancelled,
-                  self.sessionGeneration == generation,
-                  self.reportingRequestID == requestID,
-                  self.reportingContext == context
-            else { return }
-            await server.reportPlaybackProgress(
-                context: context,
-                positionSeconds: positionSeconds,
-                isPaused: isPaused
-            )
-        }
-        pendingLifecycleReport = task
-        return task
     }
 
     /// 换片 / 退出播放器：补 Stopped 后停表。返回 Stopped 上报任务（供调用方等待落库）。
     @discardableResult
     private func finishReporting() -> Task<Void, Never>? {
-        reportingTask?.cancel()
-        reportingTask = nil
-        let precedingStart = reportingStartTask
-        reportingStartTask = nil
-        let precedingLifecycle = pendingLifecycleReport
-        pendingLifecycleReport = nil
+        clearPlaybackSessionState()
+        return playbackReporting?.stop()
+    }
+
+    private func clearPlaybackSessionState() {
         nextEpisodeTask?.cancel()
         nextEpisodeTask = nil
         externalSubtitleTask?.cancel()
         externalSubtitleTask = nil
         nextEpisode = nil
         nowPlayingItem = nil
-        defer {
-            reportingItemID = nil
-            reportingRequestID = nil
-            reportingContext = nil
-        }
-        guard let context = reportingContext, let server else { return nil }
-        let position = playback.map { Double($0.state.position.microseconds) / 1_000_000 } ?? 0
-        playerLog.info("上报 Stopped item=\(context.itemID) position=\(position)")
-        return enqueueStoppedReport(
-            server: server,
-            context: context,
-            requestID: reportingRequestID,
-            positionSeconds: position,
-            precedingStart: precedingStart,
-            precedingLifecycle: precedingLifecycle
-        )
+        activePlaybackIdentity = nil
     }
 
-    /// Natural EOF and an explicit close can race for the same request. Every
-    /// Stopped report enters this queue so it is both deduplicated and ordered
-    /// before the next playback Start.
-    private func enqueueStoppedReport(
-        server: JellyfinServer,
-        context: PlaybackSessionContext,
-        requestID: PlaybackRequest.ID?,
-        positionSeconds: Double,
-        precedingStart: Task<Void, Never>? = nil,
-        precedingLifecycle: Task<Void, Never>? = nil
-    ) -> Task<Void, Never> {
-        if let requestID, lastCompletedStoppedRequestID == requestID {
-            return Task {}
-        }
-        if let requestID,
-           pendingStoppedRequestID == requestID,
-           let pendingStoppedReport {
-            return pendingStoppedReport
-        }
-
-        let precedingStop = pendingStoppedReport
-        stoppedReportGeneration &+= 1
-        let stopGeneration = stoppedReportGeneration
-        let task = Task { [weak self] in
-            await precedingStop?.value
-            await precedingStart?.value
-            await precedingLifecycle?.value
-            await server.reportPlaybackStopped(context: context, positionSeconds: positionSeconds)
-            guard let self, self.stoppedReportGeneration == stopGeneration else { return }
-            self.lastCompletedStoppedRequestID = requestID
-            self.pendingStoppedReport = nil
-            self.pendingStoppedRequestID = nil
-        }
-        pendingStoppedReport = task
-        pendingStoppedRequestID = requestID
-        return task
-    }
-
-    private func resolveNextEpisode(after item: MediaItem, generation: Int) {
+    private func resolveNextEpisode(after item: MediaItem, identity: ActivePlaybackIdentity) {
         guard item.kind == .episode, let seriesID = item.seriesID, let server else { return }
         nextEpisodeTask?.cancel()
         nextEpisodeTask = Task { [weak self] in
@@ -1001,8 +858,7 @@ final class AppModel {
                   let self
             else { return }
             guard !Task.isCancelled,
-                  self.sessionGeneration == generation,
-                  self.reportingItemID == item.id else { return }
+                  self.activePlaybackIdentity == identity else { return }
             // 第 0 季是特典/花絮，不当「下一集」自动连播；当前集本身是特典时
             // firstIndex 落空，同样不连播——看完特典就该停，让用户自己选。
             let regular = episodes.filter { $0.seasonNumber != 0 }
@@ -1017,7 +873,7 @@ final class AppModel {
     /// 装载完如果一条字幕都没选，自动挑中文优先的一条。
     private func loadExternalSubtitles(
         for item: MediaItem,
-        generation: Int,
+        identity: ActivePlaybackIdentity,
         request: PlaybackRequest
     ) {
         guard let server else { return }
@@ -1029,9 +885,7 @@ final class AppModel {
             else { return }
             // 解析期间用户已换片 → 丢弃，避免字幕串台
             guard !Task.isCancelled,
-                  self.sessionGeneration == generation,
-                  self.reportingItemID == itemID,
-                  self.reportingRequestID == request.id,
+                  self.activePlaybackIdentity == identity,
                   let playback = self.playback,
                   let source = await playback.waitUntilSourceReady(for: request.id)
             else { return }
@@ -1039,9 +893,7 @@ final class AppModel {
                 guard !Task.isCancelled else { return }
                 guard let file = try? await server.downloadSubtitle(subtitle) else { continue }
                 guard !Task.isCancelled,
-                      self.sessionGeneration == generation,
-                      self.reportingItemID == itemID,
-                      self.reportingRequestID == request.id else { return }
+                      self.activePlaybackIdentity == identity else { return }
                 guard playback.addExternalSubtitle(fileURL: file, for: source) else { return }
             }
             _ = playback.autoSelectSubtitleIfNone(for: source)

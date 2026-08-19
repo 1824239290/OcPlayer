@@ -49,7 +49,7 @@ App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定�
 
 | 模块 | 位置 | 说明 |
 | --- | --- | --- |
-| App | `App/` | 双端 UI、观察式状态（Observation）与共享 AppIcon 资源 |
+| App | `App/` | 双端 UI、观察式状态（Observation）、播放上报 coordinator 与共享 AppIcon 资源 |
 | CoreModel | `Packages/CoreModel/` | 纯数据模型，双端共享，无第三方依赖 |
 | ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态，含无头回归测试 |
 | JellyfinKit | `Packages/JellyfinKit/` | Jellyfin 薄封装：登录、媒体库、PlaybackInfo、进度上报，全离线测试 |
@@ -95,4 +95,4 @@ App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定�
 
 ## 路线
 
-M1 媒体库、M2 播放体验和 M3 弹幕完整链路均已接入；当前进入 M4，继续处理维护性、搜索 / 收藏等产品能力和双端适配。未完成项见 `REVIEW_TODO.md`。
+M1 媒体库、M2 播放体验和 M3 弹幕完整链路均已接入，当前代码 review TODO 已清零。M4 继续处理搜索 / 收藏等产品能力、特殊媒体人工验收和双端适配，范围见 `PLAN.md`。
