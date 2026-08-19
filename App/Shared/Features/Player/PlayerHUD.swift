@@ -1045,6 +1045,7 @@ private struct PlayerHUDActionIcon: View {
             .symbolRenderingMode(.monochrome)
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(isActive ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
+            .animation(.easeInOut(duration: 0.2), value: isActive)
             .frame(width: side, height: side)
             .contentShape(Rectangle())
     }

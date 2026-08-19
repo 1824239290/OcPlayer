@@ -26,14 +26,7 @@ struct PlayerLoadingLayer: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
                     if let onCancel {
-                        PlayerHUDGlassSurface(in: Capsule()) {
-                            Button("取消", action: onCancel)
-                                .buttonStyle(.plain)
-                                .font(.callout.weight(.medium))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 18)
-                                .padding(.vertical, 8)
-                        }
+                        PlayerGlassCancelButton(action: onCancel)
                     }
                 case .failed(let title, let error):
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -52,14 +45,7 @@ struct PlayerLoadingLayer: View {
                         .textSelection(.enabled)
                     HStack(spacing: 12) {
                         if let onCancel {
-                            PlayerHUDGlassSurface(in: Capsule()) {
-                                Button("取消", action: onCancel)
-                                    .buttonStyle(.plain)
-                                    .font(.callout.weight(.medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 18)
-                                    .padding(.vertical, 8)
-                            }
+                            PlayerGlassCancelButton(action: onCancel)
                         }
                         if let onRetry {
                             Button(action: onRetry) {
@@ -73,6 +59,21 @@ struct PlayerLoadingLayer: View {
                 }
             }
             .padding(30)
+        }
+    }
+}
+
+/// 液态玻璃取消按钮，loading 层 loading/failed 两态共用。
+private struct PlayerGlassCancelButton: View {
+    let action: () -> Void
+    var body: some View {
+        PlayerHUDGlassSurface(in: Capsule()) {
+            Button("取消", action: action)
+                .buttonStyle(.plain)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
         }
     }
 }
