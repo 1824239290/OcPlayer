@@ -111,6 +111,97 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertEqual(exported.split(separator: 0x0A).count, 30)
     }
 
+    func testMaintenanceRemovesExpiredFilesAndKeepsFreshFiles() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = TestClock()
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024, retainedArchives: 3,
+            maxFileAge: 60, maintenanceInterval: 3600,
+            now: { clock.now() }, emitToOSLog: false
+        )
+        let stale = log.fileURL.appendingPathExtension("1")
+        let fresh = log.fileURL.appendingPathExtension("2")
+        try Data("stale\n".utf8).write(to: stale)
+        try Data("fresh\n".utf8).write(to: fresh)
+        try FileManager.default.setAttributes(
+            [.modificationDate: clock.now().addingTimeInterval(-61)],
+            ofItemAtPath: stale.path
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: clock.now()],
+            ofItemAtPath: fresh.path
+        )
+
+        log.performMaintenance()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fresh.path))
+    }
+
+    func testOversizedEntryCannotExceedFileLimit() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024, retainedArchives: 0, emitToOSLog: false
+        )
+        log.error(String(repeating: "x", count: 8_192))
+        log.flush()
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: log.fileURL.path)
+        let size = try XCTUnwrap((attributes[.size] as? NSNumber)?.intValue)
+        XCTAssertLessThanOrEqual(size, 1024)
+        XCTAssertEqual(
+            try log.readRecords().first?.message,
+            "Diagnostic entry omitted because it exceeded the file size limit"
+        )
+    }
+
+    func testExistingLiveFileSizeParticipatesInRotation() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024, retainedArchives: 1, emitToOSLog: false
+        )
+        try Data(repeating: 0x78, count: 980).write(to: log.fileURL)
+
+        log.info("this record should rotate the existing file")
+        log.flush()
+
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: log.fileURL.appendingPathExtension("1").path
+        ))
+        XCTAssertEqual(try log.readRecords().count, 1)
+    }
+
+    func testOversizedExistingFileIsNotRetainedAsArchive() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024, retainedArchives: 1, emitToOSLog: false
+        )
+        try Data(repeating: 0x78, count: 2_048).write(to: log.fileURL)
+
+        log.info("fresh record")
+        log.flush()
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: log.fileURL.appendingPathExtension("1").path
+        ))
+        let attributes = try FileManager.default.attributesOfItem(atPath: log.fileURL.path)
+        let size = try XCTUnwrap((attributes[.size] as? NSNumber)?.intValue)
+        XCTAssertLessThanOrEqual(size, 1024)
+        XCTAssertEqual(try log.readRecords().map(\.message), ["fresh record"])
+    }
+
     func testClearRemovesEverything() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

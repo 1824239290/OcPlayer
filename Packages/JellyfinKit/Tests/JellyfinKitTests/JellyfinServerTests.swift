@@ -266,7 +266,7 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
-    func testFavoriteItemsAsksIsFavoriteFilter() async throws {
+    func testFavoriteItemsFiltersFavoritesAndSortsByMediaCreationDate() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items")
             let query = TestSupport.queryItems(of: request)

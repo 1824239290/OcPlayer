@@ -715,7 +715,7 @@ final class AppModel {
         #else
         let architecture = "unknown"
         #endif
-        return "OcPlay/\(ClientIdentity.version) (\(platform); \(architecture))"
+        return "OcPlay/\(ClientIdentity.marketingVersion) (\(platform); \(architecture))"
     }
 
     func dismissPlayer() {

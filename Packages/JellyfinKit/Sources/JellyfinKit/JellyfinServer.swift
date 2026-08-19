@@ -143,7 +143,9 @@ public struct JellyfinServer: Sendable {
         .map(\.domainItem)
     }
 
-    /// 首页轮播「我的收藏」：用户标过收藏的电影 / 剧集，按加入收藏时间倒序。
+    /// 首页轮播「我的收藏」：用户标过收藏的电影 / 剧集，按媒体入库时间倒序。
+    /// Jellyfin 的用户数据只有 `IsFavorite`，不记录收藏发生时间；`DateCreated`
+    /// 是媒体条目的入库 / 创建时间，不能对外表述为“最近收藏”。
     /// 返回单页（不递归展开），轮播取前几张即可；收藏为空时调用方负责回落。
     public func favoriteItems(limit: Int = 24) async throws -> [MediaItem] {
         try await send(

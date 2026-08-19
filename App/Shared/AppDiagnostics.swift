@@ -35,6 +35,7 @@ enum AppDiagnostics {
 
     /// 每次启动留一条会话记录：版本 + 平台 + 构建，排查「哪个版本出的问题」。
     static func recordLaunch() {
+        AppStorageMaintenance.shared.start()
         #if os(macOS)
         let platform = "macOS"
         #else
@@ -47,5 +48,9 @@ enum AppDiagnostics {
             "version": .string(version),
             "build": .string(build),
         ])
+    }
+
+    static func requestStorageMaintenance() {
+        AppStorageMaintenance.shared.requestMaintenance()
     }
 }

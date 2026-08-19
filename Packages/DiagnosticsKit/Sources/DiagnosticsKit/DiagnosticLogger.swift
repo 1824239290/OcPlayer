@@ -116,7 +116,9 @@ public final class DiagnosticLogger: @unchecked Sendable {
     private static let defaultBackend = DiagnosticBackend(
         directory: DiagnosticBackend.defaultDirectory,
         maxFileBytes: 2 * 1024 * 1024,
-        retainedArchives: 3
+        retainedArchives: 3,
+        maxFileAge: 30 * 24 * 60 * 60,
+        maintenanceInterval: 24 * 60 * 60
     )
 
     private let subsystem: String
@@ -144,12 +146,17 @@ public final class DiagnosticLogger: @unchecked Sendable {
          directory: URL,
          maxFileBytes: Int,
          retainedArchives: Int = 3,
+         maxFileAge: TimeInterval = 30 * 24 * 60 * 60,
+         maintenanceInterval: TimeInterval = 24 * 60 * 60,
          now: @escaping @Sendable () -> Date = Date.init,
          emitToOSLog: Bool = false) {
         self.init(subsystem: subsystem, category: category,
                   backend: DiagnosticBackend(directory: directory,
                                              maxFileBytes: maxFileBytes,
                                              retainedArchives: retainedArchives,
+                                             maxFileAge: maxFileAge,
+                                             maintenanceInterval: maintenanceInterval,
+                                             now: now,
                                              emitToOSLog: emitToOSLog),
                   now: now)
     }
@@ -245,6 +252,13 @@ public final class DiagnosticLogger: @unchecked Sendable {
         throttles.removeAll(keepingCapacity: true)
         throttleLock.unlock()
         try backend.clear()
+    }
+
+    /// Remove retained files older than the configured retention window.
+    /// The backend also performs this check automatically at most once per day
+    /// while writing; this explicit hook is useful for app-level maintenance timers.
+    public func performMaintenance() {
+        backend.performMaintenance()
     }
 
     private func submit(level: DiagnosticLevel,
@@ -374,20 +388,30 @@ private final class DiagnosticBackend: @unchecked Sendable {
     private let directory: URL
     private let maxFileBytes: Int
     private let retainedArchives: Int
+    private let maxFileAge: TimeInterval
+    private let maintenanceInterval: TimeInterval
+    private let now: @Sendable () -> Date
     private let queue = DispatchQueue(label: "dev.jumusu.DiagnosticsKit.file-sink")
     private let encoder: JSONEncoder
     private let sinkLogger: Logger
     private var handle: FileHandle?
     private var currentBytes = 0
+    private var lastMaintenanceDate: Date?
     private let emitToOSLog: Bool
 
     init(directory: URL,
          maxFileBytes: Int,
          retainedArchives: Int,
+         maxFileAge: TimeInterval = 30 * 24 * 60 * 60,
+         maintenanceInterval: TimeInterval = 24 * 60 * 60,
+         now: @escaping @Sendable () -> Date = Date.init,
          emitToOSLog: Bool = true) {
         self.directory = directory
         self.maxFileBytes = max(1, maxFileBytes)
         self.retainedArchives = max(0, retainedArchives)
+        self.maxFileAge = maxFileAge.isFinite ? max(0, maxFileAge) : 0
+        self.maintenanceInterval = maintenanceInterval.isFinite ? max(0, maintenanceInterval) : 0
+        self.now = now
         self.fileURL = directory.appendingPathComponent("diagnostics.jsonl")
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
@@ -399,7 +423,19 @@ private final class DiagnosticBackend: @unchecked Sendable {
     func append(_ record: DiagnosticEntry) {
         queue.async { [self] in
             do {
-                let data = try encoder.encode(record) + Data([0x0A])
+                var data = try encoder.encode(record) + Data([0x0A])
+                if data.count > maxFileBytes {
+                    let replacement = DiagnosticEntry(
+                        timestamp: record.timestamp,
+                        level: DiagnosticLevel.warning.rawValue,
+                        subsystem: record.subsystem,
+                        category: record.category,
+                        message: "Diagnostic entry omitted because it exceeded the file size limit",
+                        fields: ["encoded_bytes": .integer(Int64(data.count))]
+                    )
+                    data = try encoder.encode(replacement) + Data([0x0A])
+                    guard data.count <= maxFileBytes else { return }
+                }
                 try write(data)
             } catch {
                 report(error)
@@ -447,11 +483,18 @@ private final class DiagnosticBackend: @unchecked Sendable {
         }
     }
 
+    func performMaintenance() {
+        queue.sync {
+            do { try removeExpiredFiles(referenceDate: now(), force: true) }
+            catch { report(error) }
+        }
+    }
+
     func exportData() throws -> Data {
         try queue.sync {
             try handle?.synchronize()
             var output = Data()
-            let urls = (1...retainedArchives).reversed().map { archiveURL($0) } + [fileURL]
+            let urls = Array(retainedArchiveURLs.reversed()) + [fileURL]
             for url in urls where FileManager.default.fileExists(atPath: url.path) {
                 output.append(try Data(contentsOf: url))
             }
@@ -464,7 +507,7 @@ private final class DiagnosticBackend: @unchecked Sendable {
             try handle?.close()
             handle = nil
             currentBytes = 0
-            let urls = [fileURL] + (1...retainedArchives).map(archiveURL)
+            let urls = [fileURL] + retainedArchiveURLs
             for url in urls where FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
             }
@@ -473,6 +516,16 @@ private final class DiagnosticBackend: @unchecked Sendable {
 
     private func write(_ data: Data) throws {
         try ensureDirectory()
+        try removeExpiredFiles(referenceDate: now(), force: false)
+        if handle == nil {
+            currentBytes = fileSize(at: fileURL)
+        }
+        if currentBytes > maxFileBytes {
+            try handle?.close()
+            handle = nil
+            try? FileManager.default.removeItem(at: fileURL)
+            currentBytes = 0
+        }
         if currentBytes > 0, currentBytes + data.count > maxFileBytes {
             try rotate()
         }
@@ -482,7 +535,7 @@ private final class DiagnosticBackend: @unchecked Sendable {
             }
             handle = try FileHandle(forWritingTo: fileURL)
             try handle?.seekToEnd()
-            currentBytes = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            currentBytes = fileSize(at: fileURL)
         }
         try handle?.write(contentsOf: data)
         currentBytes += data.count
@@ -514,8 +567,42 @@ private final class DiagnosticBackend: @unchecked Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
+    private func removeExpiredFiles(referenceDate: Date, force: Bool) throws {
+        if !force, let lastMaintenanceDate,
+           referenceDate.timeIntervalSince(lastMaintenanceDate) < maintenanceInterval {
+            return
+        }
+        lastMaintenanceDate = referenceDate
+
+        let cutoff = referenceDate.addingTimeInterval(-maxFileAge)
+        let urls = [fileURL] + retainedArchiveURLs
+        for url in urls where FileManager.default.fileExists(atPath: url.path) {
+            let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
+            let isExpired = maxFileAge == 0
+                || values.contentModificationDate.map { $0 < cutoff } == true
+            let isOversized = fileSize(at: url) > maxFileBytes
+            guard isExpired || isOversized else { continue }
+            if url == fileURL {
+                try handle?.close()
+                handle = nil
+                currentBytes = 0
+            }
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
     private func archiveURL(_ index: Int) -> URL {
         fileURL.appendingPathExtension(String(index))
+    }
+
+    private func fileSize(at url: URL) -> Int {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.intValue ?? 0
+    }
+
+    private var retainedArchiveURLs: [URL] {
+        guard retainedArchives > 0 else { return [] }
+        return (1...retainedArchives).map(archiveURL)
     }
 
     private func report(_ error: Error) {

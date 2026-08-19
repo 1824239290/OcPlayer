@@ -831,11 +831,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let scope = source.startAccessingSecurityScopedResource()
         defer { if scope { source.stopAccessingSecurityScopedResource() } }
         do {
-            let directory = URL.applicationSupportDirectory
-                .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
+            let directory = AppStorageDirectories.importedSubtitles
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let destination = directory.appending(path: "\(UUID().uuidString)-\(source.lastPathComponent)")
             try FileManager.default.copyItem(at: source, to: destination)
+            AppDiagnostics.requestStorageMaintenance()
             return destination
         } catch {
             setupError = "字幕文件读取失败：\(error)"
@@ -867,8 +867,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 setupError = "截图编码失败"
                 return nil
             }
-            let directory = URL.picturesDirectory
-                .appending(path: "OcPlayer", directoryHint: .isDirectory)
+            let directory = AppStorageDirectories.screenshots
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyyMMdd-HHmmss"
@@ -876,6 +875,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 .replacingOccurrences(of: "/", with: "-")
             let url = directory.appending(path: name)
             try image.write(to: url)
+            AppDiagnostics.requestStorageMaintenance()
             return name
         } catch {
             setupError = "截图失败：\(error)"

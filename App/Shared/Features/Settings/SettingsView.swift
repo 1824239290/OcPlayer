@@ -85,6 +85,18 @@ struct SettingsView: View {
                 row("播放内核", "Erika（Rust · FFmpeg · libass）")
                 row("直连策略", "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
                 row("弹幕", "弹弹play 开放平台（通过 OcPlay 网关接入）")
+                NavigationLink {
+                    OpenSourceLicensesView()
+                } label: {
+                    LabeledContent(
+                        "开源许可证",
+                        value: "\(OpenSourceLicenseCatalog.componentCount) 个项目"
+                    )
+                }
+            }
+
+            Section("存储") {
+                ImageCacheSettingsRow()
             }
 
             Section {
@@ -145,6 +157,43 @@ struct SettingsView: View {
     private static var playableTypes: [UTType] {
         [.audiovisualContent, .movie, .video, .mpeg4Movie, .quickTimeMovie]
             + [UTType("org.matroska.mkv")].compactMap { $0 }
+    }
+}
+
+private struct ImageCacheSettingsRow: View {
+    @State private var usageText = "—"
+    @State private var isClearing = false
+
+    var body: some View {
+        LabeledContent("图片缓存", value: usageText)
+            .onAppear(perform: refresh)
+
+        Button(role: .destructive) {
+            clearCache()
+        } label: {
+            Label("清空图片缓存", systemImage: "trash")
+        }
+        .disabled(isClearing)
+    }
+
+    private func clearCache() {
+        isClearing = true
+        Task {
+            await Task.detached(priority: .utility) {
+                ImagePipeline.shared.clearCache()
+            }.value
+            refresh()
+            isClearing = false
+        }
+    }
+
+    private func refresh() {
+        let usage = ImagePipeline.shared.diskUsage
+        usageText = "\(Self.format(usage.usedBytes)) / \(Self.format(usage.capacityBytes))"
+    }
+
+    private static func format(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }
 

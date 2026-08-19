@@ -53,18 +53,87 @@ fi
 codesign --force --deep --sign - "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-# Third-party license compliance: ship Erika's bundled license texts with the app.
+# Third-party license compliance: ship Erika's bundled notices and every
+# resolved SwiftPM dependency license with the app.
 NOTICES_DIR="$APP_PATH/Contents/Resources/THIRD_PARTY_LICENSES"
 ERIKA_MAC_EXTRACTED="$ROOT/Vendor/extracted/erika-capi-macos-arm64"
+SWIFTPM_CHECKOUTS="$BUILD_ROOT/DerivedData/SourcePackages/checkouts"
 if [[ ! -d "$ERIKA_MAC_EXTRACTED/licenses" ]]; then
     echo "Missing Erika license texts under $ERIKA_MAC_EXTRACTED/licenses" >&2
     exit 1
 fi
+if [[ ! -d "$SWIFTPM_CHECKOUTS" ]]; then
+    echo "Missing SwiftPM checkouts under $SWIFTPM_CHECKOUTS" >&2
+    exit 1
+fi
+
+copy_license() {
+    local source_path="$1"
+    local destination_path="$2"
+    if [[ ! -f "$source_path" ]]; then
+        echo "Missing third-party license: $source_path" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$destination_path")"
+    cp "$source_path" "$destination_path"
+}
+
+verify_sha256() {
+    local file_path="$1"
+    local expected="$2"
+    local actual
+    actual="$(shasum -a 256 "$file_path" | awk '{print $1}')"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "SHA-256 mismatch for $file_path" >&2
+        echo "Expected: $expected" >&2
+        echo "Actual:   $actual" >&2
+        exit 1
+    fi
+}
+
+rm -rf "$NOTICES_DIR"
 mkdir -p "$NOTICES_DIR/erika"
-cp "$ERIKA_MAC_EXTRACTED/LICENSE" "$NOTICES_DIR/erika/"
-cp "$ERIKA_MAC_EXTRACTED/THIRD_PARTY_NOTICES.md" "$NOTICES_DIR/erika/"
+copy_license "$ERIKA_MAC_EXTRACTED/LICENSE" "$NOTICES_DIR/erika/LICENSE"
+copy_license "$ERIKA_MAC_EXTRACTED/MANIFEST.txt" "$NOTICES_DIR/erika/MANIFEST.txt"
+copy_license "$ERIKA_MAC_EXTRACTED/THIRD_PARTY_NOTICES.md" "$NOTICES_DIR/erika/THIRD_PARTY_NOTICES.md"
 cp -R "$ERIKA_MAC_EXTRACTED/licenses/." "$NOTICES_DIR/erika/licenses/"
+
+# jellyfin-sdk-swift identifies its sources as MPL-2.0 but does not ship a
+# top-level LICENSE file. Erika's LICENSE is the canonical, unmodified MPL-2.0
+# text. Verify that exact standard text before reusing it; no network fetch is
+# needed during packaging.
+verify_sha256 \
+    "$ERIKA_MAC_EXTRACTED/LICENSE" \
+    "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+copy_license \
+    "$ERIKA_MAC_EXTRACTED/LICENSE" \
+    "$NOTICES_DIR/swiftpm/jellyfin-sdk-swift/LICENSE-MPL-2.0"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/Get/LICENSE" \
+    "$NOTICES_DIR/swiftpm/Get/LICENSE"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio-transport-services/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio-transport-services/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio/NOTICE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio/NOTICE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-atomics/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-atomics/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-collections/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-collections/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-system/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-system/LICENSE.txt"
+copy_license \
+    "$ROOT/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+    "$NOTICES_DIR/swiftpm/Package.resolved"
 codesign --force --sign - "$APP_PATH"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
 

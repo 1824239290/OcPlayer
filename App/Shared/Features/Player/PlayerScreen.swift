@@ -39,7 +39,11 @@ struct PlayerScreen: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            surface
+            PlayerVideoSurface(
+                engine: controller.engine,
+                title: request?.title ?? "没有正在播放的内容",
+                setupError: controller.setupError
+            )
             playerGestureLayer
 
             if controller.state.isBuffering && controller.state.state == .playing {
@@ -49,7 +53,7 @@ struct PlayerScreen: View {
             }
 
             if controller.state.state == .error || controller.setupError != nil {
-                errorBadge
+                PlayerPlaybackErrorBadge()
             }
 
             PlayerHUDOverlay(
@@ -82,7 +86,7 @@ struct PlayerScreen: View {
             if showInfoCard {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
-            toast
+            PlayerScreenshotToast(message: screenshotToast)
         }
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
@@ -174,23 +178,6 @@ struct PlayerScreen: View {
         #endif
     }
 
-    // MARK: - 画面
-
-    @ViewBuilder
-    private var surface: some View {
-        if let engine = controller.engine {
-            // .id(engine)：引擎每次 open / 换片都重建，而 MetalHostView 用 let 固定持有引擎——
-            // SwiftUI 复用旧视图时新引擎不会 attach（没有渲染循环 → 收不到状态事件），
-            // UI 停在 idle、再点播放就报 "invalid state transition"。用 ObjectIdentifier
-            // 让承载视图跟随引擎身份重建（旧视图 dismantle 会 detach 旧引擎）。
-            VideoSurfaceView(engine: engine)
-                .id(ObjectIdentifier(engine))
-                .ignoresSafeArea()
-        } else {
-            placeholder
-        }
-    }
-
     /// 画面手势使用独立命中层，位于视频之上、HUD 之下。
     /// Button、Menu 和 Slider 因此不会再把点击冒泡成播放暂停或隐藏 HUD。
     private var playerGestureLayer: some View {
@@ -203,67 +190,6 @@ struct PlayerScreen: View {
             .onTapGesture(count: 2) { controller.togglePlayPause() }
             .onTapGesture { toggleControls() }
             #endif
-    }
-
-    private var placeholder: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "play.rectangle.on.rectangle")
-                .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.white.opacity(0.5))
-            Text(request?.title ?? "没有正在播放的内容")
-                .foregroundStyle(.white.opacity(0.7))
-            if let error = controller.setupError {
-                Text(error)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 40)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding(30)
-    }
-
-    private var errorBadge: some View {
-        VStack {
-            Spacer()
-            PlayerHUDPanel(in: RoundedRectangle(cornerRadius: 18)) {
-                HStack(spacing: 14) {
-                    Label(controller.state.lastError ?? controller.setupError ?? "播放出错",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(PlayerHUDPalette.primary, Color.red)
-                    Button(action: app.retryPlayback) {
-                        Label("重试", systemImage: "arrow.clockwise")
-                            .font(.callout.weight(.semibold))
-                            .padding(.horizontal, 4)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .disabled(controller.lastRequest == nil || app.isPlaybackOpening)
-                }
-                .padding(12)
-            }
-            .padding(.bottom, 140)
-        }
-    }
-
-    /// 截图成功的轻提示。
-    private var toast: some View {
-        VStack {
-            Spacer()
-            if let message = screenshotToast {
-                PlayerHUDPanel(in: Capsule()) {
-                    Text(message)
-                        .font(.callout)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .foregroundStyle(PlayerHUDPalette.primary)
-                }
-                .padding(.bottom, 120)
-            }
-        }
-        .allowsHitTesting(false)
     }
 
     // MARK: - 显隐控制

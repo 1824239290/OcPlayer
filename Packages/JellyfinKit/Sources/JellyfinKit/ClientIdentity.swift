@@ -4,10 +4,57 @@ import Foundation
 /// 所以首用即生成、存 UserDefaults；DeviceName 取一次机器名后同样缓存。
 public enum ClientIdentity {
     public static let clientName = "OcPlayer"
-    public static let version = "0.1.1"
+
+    /// Jellyfin client version derived from the host app's version metadata.
+    /// Release builds therefore report the same marketing version and build
+    /// number that users see in Finder / Settings instead of a duplicated
+    /// source constant that can drift during packaging.
+    public static var version: String {
+        version(in: .main)
+    }
+
+    /// Product-token-safe app version for User-Agent strings. Build metadata is
+    /// intentionally omitted so callers keep the `OcPlay/<semver> (...)` shape.
+    public static var marketingVersion: String {
+        marketingVersion(in: .main)
+    }
 
     private static let deviceIDKey = "dev.jumusu.ocplayer.deviceId"
     private static let deviceNameKey = "dev.jumusu.ocplayer.deviceName"
+
+    static func version(in bundle: Bundle) -> String {
+        let shortVersion = nonEmptyInfoValue(
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        )
+        let build = nonEmptyInfoValue(
+            bundle.object(forInfoDictionaryKey: "CFBundleVersion")
+        )
+
+        switch (shortVersion, build) {
+        case let (.some(shortVersion), .some(build)) where build != shortVersion:
+            return "\(shortVersion) (\(build))"
+        case let (.some(shortVersion), _):
+            return shortVersion
+        case let (_, .some(build)):
+            return build
+        default:
+            return "development"
+        }
+    }
+
+    static func marketingVersion(in bundle: Bundle) -> String {
+        nonEmptyInfoValue(
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        ) ?? nonEmptyInfoValue(
+            bundle.object(forInfoDictionaryKey: "CFBundleVersion")
+        ) ?? "development"
+    }
+
+    private static func nonEmptyInfoValue(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 
     /// 稳定设备 ID（UUID，首用生成）。
     public static var deviceID: String {

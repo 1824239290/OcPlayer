@@ -66,9 +66,16 @@ App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定�
 | [Get](https://github.com/kean/Get) | HTTP 客户端（SDK 底层，经 SwiftPM 传递引入） | MIT |
 | 弹弹play 开放平台 | 弹幕数据源（经 OcPlay 网关接入） | 公开 API，客户端只持网关签发的 API Key（设置页配置），AppSecret 仅存于网关 |
 
-其余 SwiftPM 传递依赖（swift-nio、swift-atomics、swift-collections、swift-system 等）为 Apple 系 Apache-2.0 库，随依赖图自动引入。
+其余 SwiftPM 解析依赖（swift-nio-transport-services、swift-nio、swift-atomics、swift-collections、swift-system）为 Apache-2.0。设置 → 关于 → 开源许可证中可查看实际使用的项目、用途和许可证。
 
-**分发义务**：发布产物需随附相关组件的许可证文本。当前打包脚本会把 Erika 的 `LICENSE`、`THIRD_PARTY_NOTICES.md` 与 `licenses/` 目录复制进 app 的 `Contents/Resources/THIRD_PARTY_LICENSES/`；对外分发前还需聚合 Jellyfin SDK 与 SwiftPM 依赖的许可证。FFmpeg、FriBidi、SoundTouch 等 LGPL 组件需满足 notices、源码与可重链要求。本项目本体选择 GPL-3.0 发布（见 `LICENSE`）。
+**分发义务**：发布产物需随附相关组件的许可证文本。打包脚本会把 Erika 的 `LICENSE`、`MANIFEST.txt`、`THIRD_PARTY_NOTICES.md`、原生依赖 `licenses/`，以及 Jellyfin SDK 和 SwiftPM 解析依赖许可证聚合到 app 的 `Contents/Resources/THIRD_PARTY_LICENSES/`；缺少任一文本会终止打包。FFmpeg、FriBidi、SoundTouch 等 LGPL 组件仍需满足 notices、源码与可重链要求。本项目本体选择 GPL-3.0 发布（见 `LICENSE`）。
+
+## 本地存储上限
+
+- 图片缓存由 `URLCache` 限制为 512 MiB，可在设置页手动清空。
+- 自动下载或导入的字幕副本最多保留 100 个 / 512 MiB，超限时优先清理最旧文件。
+- 播放截图只在 `Pictures/OcPlayer` 内超过 500 个 / 5 GiB 时清理最旧 PNG，不按日期主动删除。
+- 诊断日志单文件 2 MiB、保留 3 份归档并最多保留 30 天；启动及每 24 小时执行维护。
 
 ## 发布与签名
 
