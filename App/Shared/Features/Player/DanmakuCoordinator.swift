@@ -173,19 +173,21 @@ final class DanmakuCoordinator {
     private(set) var isAutoLoadingEnabled: Bool
 
     @ObservationIgnored private let service: DanmakuService
+    @ObservationIgnored private let session: URLSession
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadGeneration: UInt64 = 0
     @ObservationIgnored private var context: DanmakuPlaybackContext?
     @ObservationIgnored private var configuration: DandanplayConfiguration?
     @ObservationIgnored private weak var playback: PlaybackController?
 
-    init() {
+    init(session: URLSession = DanmakuNetworking.makeSession()) {
         let defaults = UserDefaults.standard
         isAutoLoadingEnabled = defaults.object(forKey: Self.autoLoadKey) == nil
             ? true : defaults.bool(forKey: Self.autoLoadKey)
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
         service = DanmakuService(cache: DanmakuCache(directory: directory))
+        self.session = session
     }
 
     func setAutoLoadingEnabled(_ enabled: Bool) {
@@ -273,7 +275,7 @@ final class DanmakuCoordinator {
             "anime": .string(anime),
             "episode": episode.isEmpty ? .null : .string(episode),
         ])
-        let client = DanmakuGatewayClient(configuration: configuration)
+        let client = DanmakuGatewayClient(configuration: configuration, session: session)
         do {
             let result = try await client.searchEpisodes(
                 anime: anime,
@@ -346,7 +348,7 @@ final class DanmakuCoordinator {
         forceRematch: Bool,
         generation: UInt64
     ) async {
-        let client = DanmakuGatewayClient(configuration: configuration)
+        let client = DanmakuGatewayClient(configuration: configuration, session: session)
         do {
             guard isCurrent(generation, requestID: context.requestID) else { return }
             status = .matching
@@ -498,7 +500,7 @@ final class DanmakuCoordinator {
             ])
             let payload = try await service.payload(
                 for: match,
-                client: DanmakuGatewayClient(configuration: configuration)
+                client: DanmakuGatewayClient(configuration: configuration, session: session)
             )
             try Task.checkCancellation()
             guard isCurrent(generation, requestID: context.requestID) else { return }
@@ -612,7 +614,8 @@ final class DanmakuCoordinator {
             return try await FileHash.head16MiBMD5(
                 from: url,
                 headers: context.remoteHeaders,
-                expectedFileSize: context.fileSize
+                expectedFileSize: context.fileSize,
+                session: session
             )
         }
         return nil

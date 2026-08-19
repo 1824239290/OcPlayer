@@ -306,4 +306,49 @@ final class GatewayClientTests: XCTestCase {
             }
         }
     }
+
+    // MARK: 超时与用户文案
+
+    func testTimedOutRequestMapsToNetworkUserMessage() async throws {
+        // 回归：慢网关必须尽快失败（会话超时注入），且落到稳定的用户文案。
+        let client = makeClient(session: TestSupport.mockedSession())
+        try await TestSupport.withMock({ _ in
+            throw URLError(.timedOut)
+        }) {
+            do {
+                _ = try await client.searchAnime(keyword: "x")
+                XCTFail("should throw")
+            } catch let error as DandanplayError {
+                guard case .network = error else {
+                    return XCTFail("expected network error, got \(error)")
+                }
+                XCTAssertEqual(error.userMessage, "弹幕网络请求失败")
+            }
+        }
+    }
+
+    func testBusinessErrorUserMessagePassesServerTextThrough() async throws {
+        let client = makeClient(session: TestSupport.mockedSession())
+        let body = """
+        {"success":false,"errorCode":1002,"errorMessage":"参数缺失"}
+        """
+        try await TestSupport.withMock({ request in
+            return TestSupport.response(body, url: request.url!)
+        }) {
+            do {
+                _ = try await client.match(MatchRequest(
+                    fileName: "x",
+                    fileHash: self.validHash,
+                    matchMode: .fileNameOnly
+                ))
+                XCTFail("should throw")
+            } catch let error as DandanplayError {
+                guard case .businessError(_, let message) = error else {
+                    return XCTFail("expected businessError, got \(error)")
+                }
+                XCTAssertEqual(message, "参数缺失")
+                XCTAssertEqual(error.userMessage, "参数缺失")
+            }
+        }
+    }
 }
