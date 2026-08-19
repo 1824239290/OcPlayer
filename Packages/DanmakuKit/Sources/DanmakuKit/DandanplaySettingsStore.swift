@@ -17,6 +17,11 @@ public struct DandanplaySettingsStore: @unchecked Sendable {
     /// 网关默认地址（自定义域名，可在设置页覆盖）。
     public static let defaultGatewayURL = URL(string: "https://dandanplay.3841625.xyz")!
 
+    /// 内置公共 API Key：由 OcPlay 网关管理端签发，随 App 分发，开箱即用。
+    /// 属公共额度（任何拿到 App 的人都能用它请求网关），不适合高安全场景；
+    /// 用户可在设置页用自有的 Key 覆盖，清空后回落此默认值。
+    public static let defaultAPIKey = "ocp_-zNBxWgtukt0JD7sjQQgzcNk99MUrERqGlg6rABKFQQ"
+
     public init(
         defaults: UserDefaults = .standard,
         credentialStore: DandanplayCredentialStoring? = nil
@@ -46,7 +51,8 @@ public struct DandanplaySettingsStore: @unchecked Sendable {
     }
 
     public var apiKey: String {
-        get { credentialStore.readAPIKey() ?? "" }
+        // 未显式设置（或用户清空）时回落内置公共 Key，保证开箱即用。
+        get { credentialStore.readAPIKey() ?? Self.defaultAPIKey }
         set {
             if newValue.isEmpty {
                 credentialStore.deleteAPIKey()
@@ -57,7 +63,7 @@ public struct DandanplaySettingsStore: @unchecked Sendable {
     }
 
     /// 配置是否就绪：未填写地址时使用默认网关；显式地址必须是 HTTPS origin，
-    /// 且 API Key 非空。
+    /// 且 API Key 非空（未设置时使用内置默认 Key）。
     public var isConfigured: Bool {
         let url: URL
         if let raw = gatewayURLString {

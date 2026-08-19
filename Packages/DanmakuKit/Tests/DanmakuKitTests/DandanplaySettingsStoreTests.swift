@@ -19,10 +19,16 @@ final class DandanplaySettingsStoreTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertNil(s.gatewayURLString)
         XCTAssertEqual(s.gatewayURL, DandanplaySettingsStore.defaultGatewayURL)
-        s.apiKey = "sk-default"
+        // 未设置时回落内置公共 Key，开箱即用。
+        XCTAssertEqual(s.apiKey, DandanplaySettingsStore.defaultAPIKey)
         XCTAssertTrue(s.isConfigured)
+        s.apiKey = "sk-default"
+        XCTAssertEqual(s.apiKey, "sk-default")
+        XCTAssertTrue(s.isConfigured)
+        // 清空 → 回落内置默认 Key（自定义失效）。
         s.apiKey = ""
-        XCTAssertFalse(s.isConfigured)
+        XCTAssertEqual(s.apiKey, DandanplaySettingsStore.defaultAPIKey)
+        XCTAssertTrue(s.isConfigured)
     }
 
     func testURLStringRoundTrip() {
@@ -78,8 +84,10 @@ final class DandanplaySettingsStoreTests: XCTestCase {
         s.gatewayURLString = "gw.example.com"
         XCTAssertTrue(s.isConfigured) // 无 scheme 自动补 https
 
+        // 清空自定义 Key 会回落内置默认 Key，所以 isConfigured 仍为 true；
+        // 网关地址无效才是未配置的主因。
         s.apiKey = ""
-        XCTAssertFalse(s.isConfigured) // 空 key
+        XCTAssertTrue(s.isConfigured) // 回落内置默认 Key
 
         s.apiKey = "k"
         s.gatewayURLString = "ftp://gw.example.com"
@@ -96,7 +104,8 @@ final class DandanplaySettingsStoreTests: XCTestCase {
         s.apiKey = "sk-abc"
         XCTAssertEqual(s.apiKey, "sk-abc")
         s.apiKey = ""
-        XCTAssertEqual(s.apiKey, "")
+        // 清空自定义 Key → 回落内置默认，而非变成空串。
+        XCTAssertEqual(s.apiKey, DandanplaySettingsStore.defaultAPIKey)
     }
 
     /// 规范化是纯函数：核心边界单测。

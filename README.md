@@ -33,10 +33,10 @@ swift test --package-path Packages/DanmakuKit  # 网关客户端、转换、缓�
 
 弹幕通过 **OcPlay 网关**接入（见 `OcPlay-Gateway` 仓库，Cloudflare Workers 部署）：网关持有弹弹play 官方 `AppSecret` 并生成签名，客户端不持有、不读取 `AppSecret`，只持有一把由网关管理员签发的 **API Key**。
 
-在 App 的 设置 → 弹幕 中填写：
+App 内置一把**公共 API Key**，开箱即用、无需配置。如需自定义：
 
-- **网关地址**：默认 `https://dandanplay.3841625.xyz`，缺 scheme 会自动补 `https://`
-- **API Key**：由网关管理端创建（`curl -X POST https://<网关>/admin/v1/keys ...`），明文只在创建时返回一次
+- **网关地址**：默认 `https://dandanplay.3841625.xyz`，缺 scheme 会自动补 `https://`；在 设置 → 弹幕 中可改
+- **API Key**：在 设置 → 弹幕 中填入自有 Key（网关管理端创建，明文只在创建时返回一次）；清空后回落内置公共 Key
 
 客户端请求网关时以 `X-API-Key` 头发送 Key、以 `OcPlay/<版本>` User-Agent 标识自己；API Key 和网关地址均存 UserDefaults。网关地址必须是 HTTPS origin。不要在日志、错误提示或界面中输出 API Key 或任何弹弹play 凭据。
 
