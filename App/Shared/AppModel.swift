@@ -5,6 +5,15 @@ import Foundation
 import JellyfinKit
 import Observation
 
+/// 播放准备态：点击播放后、引擎真正 open 之前的阶段。单一真相——
+/// loading 覆盖层、重试/取消入口都读它，替代散落的标志位。
+enum PlaybackPreparation: Equatable {
+    /// 正在解析播放地址（剧集叶子 / PlaybackInfo / streamURL）
+    case loading(title: String)
+    /// 解析失败，loading 层显示错误 + 重试
+    case failed(title: String, error: String)
+}
+
 /// 应用的中枢状态机：登录 → 浏览 → 播放串联。
 ///
 /// UI 只读这个类的属性、调它的方法；Jellyfin 细节被挡在 `JellyfinServer` 后面，
@@ -521,19 +530,25 @@ final class AppModel {
     /// 同时启动进度上报（Start → 10s 心跳 → Stopped）和「下一集」解析。
     /// 先走 PlaybackInfo 拿 MediaSource；失败时回退到旧的直连 URL，保证老服务器也能播。
     func play(_ item: MediaItem, resumeSeconds: Double?) {
+        // 同一剧目重复点击：复用在飞的解析任务，不要 cancel 重来——
+        // 否则每次点击都打断 PlaybackInfo 请求，越点越慢、永远跑不完。
+        if case .loading = playbackPreparation, retryPlaybackItem?.id == item.id {
+            return
+        }
         cancelPlaybackOpen()
         retryPlaybackItem = item
-        isPlaybackOpening = true
+        playbackPreparation = .loading(title: item.name)
+        AppDiagnostics.logInfo("play() 进入加载态", fields: ["title": .string(item.name)])
         let generation = playbackOpenGeneration
         playbackOpenTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
                 if self.playbackOpenGeneration == generation {
                     self.playbackOpenTask = nil
-                    self.isPlaybackOpening = false
                 }
             }
             await self.openPlayback(item: item, resumeSeconds: resumeSeconds)
+            AppDiagnostics.logInfo("play() 加载态结束", fields: ["preparation": .string(String(describing: self.playbackPreparation))])
         }
     }
 
@@ -541,8 +556,14 @@ final class AppModel {
         playbackOpenGeneration &+= 1
         playbackOpenTask?.cancel()
         playbackOpenTask = nil
-        isPlaybackOpening = false
+        playbackPreparation = nil
         danmaku.cancel()
+    }
+
+    /// 取消正在解析的播放准备（loading 层「取消」按钮入口）：
+    /// 中断 in-flight 请求并退出 loading 态回到列表。
+    func cancelPlaybackOpening() {
+        cancelPlaybackOpen()
     }
 
     @MainActor
@@ -557,6 +578,7 @@ final class AppModel {
         do {
             guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
                 home.error = "该剧没有可播放的剧集"
+                playbackPreparation = .failed(title: item.name, error: "该剧没有可播放的剧集")
                 return
             }
             guard !Task.isCancelled else { return }
@@ -566,6 +588,7 @@ final class AppModel {
         } catch {
             guard !Task.isCancelled else { return }
             home.error = "剧集加载失败：\(error)"
+            playbackPreparation = .failed(title: item.name, error: "剧集加载失败：\(error)")
             AppDiagnostics.logWarning("播放剧集解析失败", fields: [
                 "item": .string(item.name),
                 "error": .string("\(error)"),
@@ -579,6 +602,10 @@ final class AppModel {
         let title = playableItem.episodeLabel.map {
             "\(playableItem.seriesName ?? playableItem.name) \($0)"
         } ?? playableItem.name
+        // 解析出集标题后刷新 loading 文案（从剧名更新到「S1E7」之类）
+        if case .loading = playbackPreparation {
+            playbackPreparation = .loading(title: title)
+        }
         do {
             let info = try await server.playbackInfo(itemID: playableItem.id)
             let source = info.mediaSources.first { $0.supportsDirectPlay == true }
@@ -610,6 +637,11 @@ final class AppModel {
                                 ))
             } else {
                 home.error = "播放信息获取失败：\(error)"
+                playbackPreparation = .failed(title: title, error: "播放信息获取失败：\(error)")
+                AppDiagnostics.logError("PlaybackInfo 失败且回退直连也失败", fields: [
+                    "title": .string(title),
+                    "error": .string("\(error)"),
+                ])
             }
         }
     }
@@ -645,6 +677,8 @@ final class AppModel {
             sessionContext: sessionContext
         )
         playback?.prepareForPresentation(request)
+        // URI 已就绪：把 loading 态交还给 PlayerScreen（它按 controller.state 显示 opening loading）。
+        playbackPreparation = nil
         presentedPlayer = request
         retryPlaybackItem = item
         nowPlayingItem = item
@@ -769,7 +803,8 @@ final class AppModel {
     /// 重试当前 Jellyfin 条目时重新走完整的 PlaybackInfo / Start 会话，
     /// 不复用旧请求的 UUID，避免旧引擎的异步资源串到新引擎。
     func retryPlayback() {
-        guard !isPlaybackOpening else { return }
+        // 解析进行中（loading）不重入；失败态（failed）允许重试。
+        if case .loading = playbackPreparation { return }
         guard let item = nowPlayingItem ?? retryPlaybackItem else {
             playback?.retryLast()
             restartDanmakuForCurrentPlayback()
@@ -786,7 +821,8 @@ final class AppModel {
     /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
     private var playbackOpenTask: Task<Void, Never>?
     private var playbackOpenGeneration: UInt64 = 0
-    private(set) var isPlaybackOpening = false
+    /// 播放准备态：nil = 不在准备（空闲，或已呈现给 PlayerScreen）。
+    private(set) var playbackPreparation: PlaybackPreparation?
     /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。
     private var retryPlaybackItem: MediaItem?
     private struct ActivePlaybackIdentity: Equatable {

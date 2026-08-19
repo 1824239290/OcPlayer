@@ -32,6 +32,16 @@ struct RootView: View {
         .toolbar(app.presentedPlayer == nil ? .visible : .hidden, for: .windowToolbar)
         #endif
         .overlay {
+            // 准备态覆盖层：点击播放后、URI 解析完成前。presentedPlayer 一旦设值，
+            // preparation 即被清空，loading 层淡出、PlayerScreen 淡入，无缝衔接。
+            if app.presentedPlayer == nil, let prep = app.playbackPreparation {
+                PlayerLoadingLayer(preparation: prep,
+                                   onCancel: app.cancelPlaybackOpening,
+                                   onRetry: app.retryPlayback)
+                    .ignoresSafeArea()
+                    .persistentSystemOverlays(.hidden)
+                    .transition(.opacity)
+            }
             if let request = app.presentedPlayer {
                 PlayerScreen(request: request)
                     .ignoresSafeArea()
@@ -44,6 +54,7 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: app.presentedPlayer)
+        .animation(.easeInOut(duration: 0.18), value: app.playbackPreparation)
         .onOpenURL { url in
             app.presentLocalFile(url)
         }
