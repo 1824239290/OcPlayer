@@ -167,12 +167,10 @@ struct DanmakuSelectionSheet: View {
         } catch {
             guard !Task.isCancelled, searchRequest?.id == request.id else { return }
             switch error {
-            case DandanplayError.unauthorized:
-                errorMessage = "网关 API Key 无效"
-            case DandanplayError.rateLimited:
-                errorMessage = "弹幕请求额度已用完"
             case DandanplayError.notConfigured:
                 errorMessage = "请先在设置中配置弹幕网关"
+            case let danmakuError as DandanplayError:
+                errorMessage = danmakuError.userMessage
             default:
                 errorMessage = "无法完成搜索"
             }

@@ -73,6 +73,22 @@ public enum DandanplayError: Error, Equatable, Sendable {
     }
 }
 
+public extension DandanplayError {
+    /// 面向用户的稳定文案。需要上下文措辞的调用方（如搜索页）自行覆盖个别 case。
+    var userMessage: String {
+        switch self {
+        case .notConfigured: "弹幕网关未配置"
+        case .unauthorized: "网关 API Key 无效"
+        case .rateLimited: "弹幕请求额度已用完"
+        case .businessError(_, let message): message ?? "弹幕服务返回错误"
+        case .decodingFailed: "弹幕服务返回了无法解析的数据"
+        case .network: "弹幕网络请求失败"
+        case .httpStatus: "弹幕服务暂时不可用"
+        case .invalidRequest(let message): message
+        }
+    }
+}
+
 // MARK: - 网关结果
 
 /// 带缓存命中标记的响应包装。`cacheStatus` 读自 `X-Gateway-Cache` 头。

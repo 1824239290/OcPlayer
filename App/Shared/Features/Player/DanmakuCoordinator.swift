@@ -526,7 +526,17 @@ final class DanmakuCoordinator {
             } else {
                 accepted = try playback.clearDanmaku(for: source)
             }
-            guard accepted else { return }
+            guard accepted else {
+                // accepted == false 只可能是播放源代次已过期（同 requestID 下源被重开）。
+                // 此时不能静默卡在 loadingComments，落一个终止状态让 HUD 有反馈。
+                if isCurrent(generation, requestID: context.requestID) {
+                    status = .failed(message: "视频未就绪，弹幕未装载")
+                    AppDiagnostics.logWarning("弹幕装载被跳过：播放源代次已过期", fields: [
+                        "episodeID": .integer(match.episodeID),
+                    ])
+                }
+                return
+            }
             if payload.json == nil {
                 status = .empty(title: title)
             } else {
@@ -639,12 +649,10 @@ final class DanmakuCoordinator {
         switch error {
         case AutomaticMatchError.fingerprintUnavailable:
             "无法读取媒体指纹，请手动选择弹幕"
-        case DandanplayError.unauthorized: "网关 API Key 无效"
-        case DandanplayError.rateLimited: "弹幕请求额度已用完"
-        case DandanplayError.notConfigured: "弹幕网关未配置"
-        case DandanplayError.network: "弹幕网络请求失败"
-        case DandanplayError.businessError(_, let message): message ?? "弹幕服务返回错误"
-        default: "弹幕加载失败"
+        case let danmakuError as DandanplayError:
+            danmakuError.userMessage
+        default:
+            "弹幕加载失败"
         }
     }
 }
