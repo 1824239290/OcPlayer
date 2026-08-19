@@ -748,8 +748,9 @@ private struct PlayerHUDDanmakuMenu: View {
             ))
         } label: {
             PlayerHUDActionIcon(
-                systemImage: controller.danmakuEnabled ? "text.bubble.fill" : "text.bubble",
-                side: controlSide
+                systemImage: "text.alignleft",
+                side: controlSide,
+                isActive: controller.danmakuEnabled
             )
         }
         .menuIndicator(.hidden)
@@ -1036,12 +1037,14 @@ private struct PlayerHUDActionsCapsule: View {
 private struct PlayerHUDActionIcon: View {
     let systemImage: String
     let side: CGFloat
+    /// 关闭时图标变暗，用于无 fill 变体的符号（如弹幕 text.alignleft）。
+    var isActive: Bool = true
 
     var body: some View {
         Image(systemName: systemImage)
             .symbolRenderingMode(.monochrome)
             .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(PlayerHUDPalette.primary)
+            .foregroundStyle(isActive ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
             .frame(width: side, height: side)
             .contentShape(Rectangle())
     }
