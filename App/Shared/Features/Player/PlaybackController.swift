@@ -73,10 +73,10 @@ enum PlaybackPreferences {
         get { storedBool(forKey: danmakuMergeDuplicatesKey, default: true) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuMergeDuplicatesKey) }
     }
-    /// 允许同轨道堆叠。DFM 里 stacking 打开后 preferred 轨道总是可复用，
-    /// 窗口重排时旧弹幕能留在原轨道，是抑制上下跳动的主要开关。
+    /// 允许同轨道堆叠。实测在 Erika 的 DFM 布局里 stacking 打开会把弹幕
+    /// 大量塞进同一轨道导致重叠、轨道数骤减；默认关闭。需要时 HUD 可开。
     static var danmakuAllowStacking: Bool {
-        get { storedBool(forKey: danmakuAllowStackingKey, default: true) }
+        get { storedBool(forKey: danmakuAllowStackingKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
     }
 
