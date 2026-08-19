@@ -720,6 +720,22 @@ private struct PlayerHUDDanmakuMenu: View {
                     set: { controller.setDanmakuBlocked(bottom: !$0) }
                 ))
             }
+
+            Divider()
+            Toggle("合并重复弹幕", isOn: Binding(
+                get: { controller.danmakuMergeDuplicates },
+                set: {
+                    controller.setDanmakuMergeDuplicates($0)
+                    onUserInteraction()
+                }
+            ))
+            Toggle("允许堆叠", isOn: Binding(
+                get: { controller.danmakuAllowStacking },
+                set: {
+                    controller.setDanmakuAllowStacking($0)
+                    onUserInteraction()
+                }
+            ))
         } label: {
             PlayerHUDActionIcon(
                 systemImage: controller.danmakuEnabled ? "text.bubble.fill" : "text.bubble",

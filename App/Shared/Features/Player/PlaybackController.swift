@@ -25,6 +25,8 @@ enum PlaybackPreferences {
     private static let danmakuBlockTopKey = "dev.jumusu.ocplayer.danmaku.blockTop"
     private static let danmakuBlockBottomKey = "dev.jumusu.ocplayer.danmaku.blockBottom"
     private static let danmakuBlockScrollKey = "dev.jumusu.ocplayer.danmaku.blockScroll"
+    private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
+    private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -65,6 +67,17 @@ enum PlaybackPreferences {
     static var danmakuBlockScroll: Bool {
         get { storedBool(forKey: danmakuBlockScrollKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuBlockScrollKey) }
+    }
+    /// 重复弹幕合并显示，减少轨道竞争（窗口重排时旧弹幕更少被挤行）。
+    static var danmakuMergeDuplicates: Bool {
+        get { storedBool(forKey: danmakuMergeDuplicatesKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuMergeDuplicatesKey) }
+    }
+    /// 允许同轨道堆叠。实测在 Erika 的 DFM 布局里 stacking 打开会把弹幕
+    /// 大量塞进同一轨道导致重叠、轨道数骤减；默认关闭。需要时 HUD 可开。
+    static var danmakuAllowStacking: Bool {
+        get { storedBool(forKey: danmakuAllowStackingKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
     }
 
     private static func storedDouble(
@@ -175,6 +188,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     private(set) var danmakuBlockTop = PlaybackPreferences.danmakuBlockTop
     private(set) var danmakuBlockBottom = PlaybackPreferences.danmakuBlockBottom
     private(set) var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
+    private(set) var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
+    private(set) var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
     private(set) var danmakuGlobalOffsetSeconds = 0.0
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
@@ -539,14 +554,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         var tracks: [DanmakuTrackInfo] = []
         do {
             let accepted = try withReadyEngine(for: source) { engine in
-                try engine.clearDanmaku()
-                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
+                // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
+                // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
+                // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次
+                // 全量重排（NipaPlay 的做法：配置先于装载稳定，装载只触发一次）。
                 do {
                     try applyDanmakuPreferences(to: engine)
                 } catch {
-                    playerLog.warning("弹幕已装载，但偏好应用失败 error=\(error)")
-                    PlaybackLog.append("danmaku loaded without preferences error=\(error)")
+                    playerLog.warning("弹幕偏好应用失败，继续装载 error=\(error)")
+                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
                 }
+                try engine.clearDanmaku()
+                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
                 tracks = try engine.danmakuTracks()
             }
             if accepted { danmakuTracks = tracks }
@@ -609,6 +628,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
+    func setDanmakuMergeDuplicates(_ enabled: Bool) {
+        danmakuMergeDuplicates = enabled
+        PlaybackPreferences.danmakuMergeDuplicates = enabled
+        updateDanmakuConfig { $0.mergeDuplicates = enabled }
+    }
+
+    func setDanmakuAllowStacking(_ enabled: Bool) {
+        danmakuAllowStacking = enabled
+        PlaybackPreferences.danmakuAllowStacking = enabled
+        updateDanmakuConfig { $0.allowStacking = enabled }
+    }
+
     func adjustDanmakuOffset(by seconds: Double) {
         setDanmakuOffset(danmakuGlobalOffsetSeconds + seconds)
     }
@@ -630,6 +661,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         config.blockTop = danmakuBlockTop
         config.blockBottom = danmakuBlockBottom
         config.blockScroll = danmakuBlockScroll
+        config.mergeDuplicates = danmakuMergeDuplicates
+        config.allowStacking = danmakuAllowStacking
         try engine.setDanmakuConfig(config)
         try engine.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
     }

@@ -87,7 +87,13 @@ final class MetalHostView: NSView {
         let pixel = CGSize(width: (bounds.width * scale).rounded(),
                            height: (bounds.height * scale).rounded())
         guard pixel.width >= 1, pixel.height >= 1 else { return }
-        guard pixel != lastPixelSize || scale != lastScale else { return }
+        // 内核 viewport 重排阈值是 >=2px（danmaku_viewport_requires_relayout）。
+        // 视图 bounds 微抖动（HUD 出现/消失、拖拽、动画）会 1px 级变化，若精确比较
+        // 会把这种抖动传给内核触发全量重排、弹幕跳行。这里用同样的 >=2px 阈值去抖：
+        // 只有真实缩放才 resize，微抖动不打扰弹幕布局。
+        let deltaX = abs(pixel.width - lastPixelSize.width)
+        let deltaY = abs(pixel.height - lastPixelSize.height)
+        guard deltaX >= 2 || deltaY >= 2 || scale != lastScale else { return }
         lastPixelSize = pixel
         lastScale = scale
         metalLayer.contentsScale = scale
@@ -166,7 +172,10 @@ final class MetalHostView: UIView {
         let pixel = CGSize(width: (bounds.width * scale).rounded(),
                            height: (bounds.height * scale).rounded())
         guard pixel.width >= 1, pixel.height >= 1 else { return }
-        guard pixel != lastPixelSize || scale != lastScale else { return }
+        // 同 macOS：内核 viewport 重排阈值 >=2px，微抖动不去抖会触发全量重排。
+        let deltaX = abs(pixel.width - lastPixelSize.width)
+        let deltaY = abs(pixel.height - lastPixelSize.height)
+        guard deltaX >= 2 || deltaY >= 2 || scale != lastScale else { return }
         lastPixelSize = pixel
         lastScale = scale
         metalLayer.contentsScale = scale
