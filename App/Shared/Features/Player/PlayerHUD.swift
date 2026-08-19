@@ -39,6 +39,9 @@ final class PlayerHUDVisibilityCoordinator {
     func hide() {
         cancelScheduledHide()
         if isVisible { isVisible = false }
+        // 清掉上次鼠标位置：点击关闭后，下次鼠标移动（哪怕回到同一坐标）
+        // 也能立刻唤出，不会被 pointerMoved 的去重 guard 拦住。
+        lastPointerLocation = nil
     }
 
     func setInteraction(

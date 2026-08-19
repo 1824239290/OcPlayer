@@ -193,7 +193,7 @@ struct PlayerScreen: View {
             .contentShape(Rectangle())
             #if os(macOS)
             .onTapGesture(count: 2) { toggleFullscreen() }
-            .onTapGesture { controller.togglePlayPause() }
+            .onTapGesture { toggleControls() }
             #else
             .onTapGesture(count: 2) { controller.togglePlayPause() }
             .onTapGesture { toggleControls() }
@@ -206,7 +206,6 @@ struct PlayerScreen: View {
         hudVisibility.reveal(canAutoHide: canAutoHideControls)
     }
 
-    #if os(iOS)
     private func toggleControls() {
         if hudVisibility.isVisible {
             hudVisibility.hide()
@@ -214,7 +213,6 @@ struct PlayerScreen: View {
             revealControls()
         }
     }
-    #endif
 
     private func handleHUDInteraction(_ interaction: PlayerHUDInteraction, _ active: Bool) {
         hudVisibility.setInteraction(
