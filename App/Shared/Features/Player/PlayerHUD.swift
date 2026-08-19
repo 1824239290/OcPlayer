@@ -23,6 +23,9 @@ final class PlayerHUDVisibilityCoordinator {
     @ObservationIgnored private var scheduledWake: ContinuousClock.Instant?
     @ObservationIgnored private var hideScheduleID = 0
     @ObservationIgnored private var lastPointerLocation: CGPoint?
+    /// 用户主动点击关闭 HUD 后置 true：鼠标移动不再自动唤出，要再点一下才打开。
+    /// 自动隐藏（计时到点）不置位，所以自动隐藏后滑动仍能唤出。
+    @ObservationIgnored private var userHidden = false
 
     @ObservationIgnored private let clock = ContinuousClock()
     private let autoHideDelay: Duration
@@ -32,6 +35,8 @@ final class PlayerHUDVisibilityCoordinator {
     }
 
     func reveal(canAutoHide: Bool) {
+        // 任何主动显示都解除「用户关闭」锁定。
+        userHidden = false
         if !isVisible { isVisible = true }
         scheduleHide(after: autoHideDelay, canAutoHide: canAutoHide)
     }
@@ -39,9 +44,8 @@ final class PlayerHUDVisibilityCoordinator {
     func hide() {
         cancelScheduledHide()
         if isVisible { isVisible = false }
-        // 清掉上次鼠标位置：点击关闭后，下次鼠标移动（哪怕回到同一坐标）
-        // 也能立刻唤出，不会被 pointerMoved 的去重 guard 拦住。
-        lastPointerLocation = nil
+        // 用户主动关闭：标记锁定，鼠标移动不再自动唤出（要再点一下才打开）。
+        userHidden = true
     }
 
     func setInteraction(
@@ -64,6 +68,8 @@ final class PlayerHUDVisibilityCoordinator {
     }
 
     func pointerMoved(to location: CGPoint, canAutoHide: Bool) {
+        // 用户主动关闭期间，鼠标移动不唤出（要点击才重新打开）。
+        guard !userHidden else { return }
         guard location != lastPointerLocation else { return }
         lastPointerLocation = location
         reveal(canAutoHide: canAutoHide && activeInteractions.isEmpty)
@@ -94,6 +100,7 @@ final class PlayerHUDVisibilityCoordinator {
         activeInteractions.removeAll()
         trackedMenus.removeAll()
         lastPointerLocation = nil
+        userHidden = false
     }
 
     private func scheduleHide(after delay: Duration, canAutoHide: Bool) {
