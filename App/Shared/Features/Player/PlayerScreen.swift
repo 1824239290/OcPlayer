@@ -52,6 +52,7 @@ struct PlayerScreen: View {
                controller.state.state == .idle || controller.state.state == .opening {
                 PlayerLoadingLayer(preparation: .loading(title: request?.title ?? ""),
                                    onCancel: nil, onRetry: nil)
+                    .transition(.opacity)
             }
 
             if controller.state.isBuffering && controller.state.state == .playing {
@@ -96,6 +97,8 @@ struct PlayerScreen: View {
             }
             PlayerScreenshotToast(message: screenshotToast)
         }
+        // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
+        .animation(.easeInOut(duration: 0.2), value: controller.state.state)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)
