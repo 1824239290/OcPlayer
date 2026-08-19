@@ -1,8 +1,4 @@
 import Foundation
-import os
-
-/// ServerStore 专属日志：编码 / 解码失败在这里留痕，不打断登录流程。
-private let storeLog = Logger(subsystem: "dev.jumusu.OcPlayer", category: "ServerStore")
 
 /// 一台已登录服务器的持久化档案。token 单独存进本地 UserDefaults。
 public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
@@ -49,7 +45,7 @@ public final class ServerStore: @unchecked Sendable {
             return try JSONDecoder().decode([ServerProfile].self, from: data)
         } catch {
             // 坏数据就当没有（返回空列表是合理兜底），但留一条日志方便排查。
-            storeLog.error("读取服务器列表解码失败：\(error, privacy: .public)")
+            NetworkLog.logger.error("读取服务器列表解码失败 error=\(error)")
             return []
         }
     }
@@ -80,7 +76,7 @@ public final class ServerStore: @unchecked Sendable {
         do {
             defaults.set(try JSONEncoder().encode(list), forKey: profilesKey)
         } catch {
-            storeLog.error("保存服务器列表编码失败，保留旧数据：\(error, privacy: .public)")
+            NetworkLog.logger.error("保存服务器列表编码失败，保留旧数据 error=\(error)")
         }
     }
 

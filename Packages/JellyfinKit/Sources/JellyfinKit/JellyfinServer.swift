@@ -1,7 +1,39 @@
 import CoreModel
+import DiagnosticsKit
 import Foundation
 import Get
 import JellyfinAPI
+
+/// 网络层诊断日志（JSONL 落盘 + OSLog 镜像，见 DiagnosticsKit）。
+///
+/// 只记请求**路径**不记 query（userId / 图片 tag 这类不敏感，但路径足够定位问题）；
+/// 任何 token 都由红actor 兜底，绝不进日志。
+enum NetworkLog {
+    static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "Jellyfin")
+
+    static func requestStarted(_ path: String) {
+        logger.debug("请求开始 path=\(path)")
+    }
+
+    static func requestSucceeded(_ path: String, duration: TimeInterval) {
+        logger.debug("请求成功 path=\(path) duration_ms=\(Int(duration * 1000))")
+    }
+
+    static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
+        logger.error("请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))")
+    }
+
+    /// 进度上报这类「尽力而为」的失败：不打断播放，但值得留一条 warning。
+    static func reportFailed(_ what: String, error: Error) {
+        logger.warning("上报失败 what=\(what) error=\(error)")
+    }
+
+    /// `Request.url` 形如 `/Items?userId=…`，只取 path 部分入日志。
+    static func logPath(for url: URL?) -> String {
+        guard let url else { return "?" }
+        return url.path.isEmpty ? url.absoluteString : url.path
+    }
+}
 
 /// 条目图片类型（对 Jellyfin `ImageType` 的收口，避免 JellyfinAPI 类型漏出包外）。
 public enum ItemImageType: String, Sendable {
@@ -294,9 +326,14 @@ public struct JellyfinServer: Sendable {
 
     /// 包内共享的请求发送口（ExternalSubtitles 等扩展文件也用它）。
     func send<T: Decodable & Sendable>(_ request: Request<T>) async throws -> T {
+        let path = NetworkLog.logPath(for: request.url)
+        let start = Date()
         do {
-            return try await client.send(request).value
+            let value = try await client.send(request).value
+            NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start))
+            return value
         } catch {
+            NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))
             throw JellyfinError.wrap(error)
         }
     }

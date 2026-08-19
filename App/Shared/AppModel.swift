@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import Foundation
 import JellyfinKit
 import Observation
@@ -208,9 +209,15 @@ final class AppModel {
             loginSession = session
             await startQuickConnect()
         } catch let error as JellyfinError {
-            if loginAttemptGeneration == attempt { onboardingError = error.errorDescription }
+            if loginAttemptGeneration == attempt {
+                onboardingError = error.errorDescription
+                AppDiagnostics.logWarning("服务器探测失败 url=\(rawURL)", fields: ["error": .string(error.errorDescription ?? "\(error)")])
+            }
         } catch {
-            if loginAttemptGeneration == attempt { onboardingError = "\(error)" }
+            if loginAttemptGeneration == attempt {
+                onboardingError = "\(error)"
+                AppDiagnostics.logWarning("服务器探测异常 url=\(rawURL)", fields: ["error": .string("\(error)")])
+            }
         }
     }
 
@@ -418,11 +425,13 @@ final class AppModel {
                   homeLoadGeneration == loadGeneration
             else { return }
             home.error = error.errorDescription
+            AppDiagnostics.logWarning("首页加载失败", fields: ["error": .string(error.errorDescription ?? "\(error)")])
         } catch {
             guard sessionIsCurrent(generation, server: server),
                   homeLoadGeneration == loadGeneration
             else { return }
             home.error = "\(error)"
+            AppDiagnostics.logWarning("首页加载异常", fields: ["error": .string("\(error)")])
         }
     }
 
@@ -503,6 +512,10 @@ final class AppModel {
         } catch {
             guard !Task.isCancelled else { return }
             home.error = "剧集加载失败：\(error)"
+            AppDiagnostics.logWarning("播放剧集解析失败", fields: [
+                "item": .string(item.name),
+                "error": .string("\(error)"),
+            ])
             return
         }
 
@@ -530,6 +543,10 @@ final class AppModel {
         } catch {
             // PlaybackInfo 不可用（老版本 / 端点被关）时退回原来的直连 URL。
             if Task.isCancelled { return }
+            AppDiagnostics.logWarning("PlaybackInfo 失败，回退直连", fields: [
+                "item": .string(playableItem.name),
+                "error": .string("\(error)"),
+            ])
             if let uri = try? server.streamURL(itemID: playableItem.id) {
                 presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
                                 resumeSeconds: effectiveResume, item: playableItem,

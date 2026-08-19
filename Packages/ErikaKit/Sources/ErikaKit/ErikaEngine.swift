@@ -1,11 +1,7 @@
 import CErika
+import DiagnosticsKit
 import Foundation
 import QuartzCore
-import os
-
-/// ErikaKit 统一日志（OSLog）。subsystem 用 bundle id，`log show` / Console.app 都能按它过滤。
-/// 注意：绝不往日志里写 Authorization 头 / token；内核错误文本不含 token（token 只进请求头）。
-let erikaLog = Logger(subsystem: "dev.jumusu.OcPlayer", category: "ErikaKit")
 
 /// 唯一对外的播放引擎。
 ///
@@ -60,13 +56,11 @@ public final class ErikaEngine: @unchecked Sendable {
             }
         } catch {
             // attach 失败（显卡 / 缺内核）会一路黑屏，这里补一条错误事件让 UI 有落点。
-            erikaLog.error("attach 失败 \(error, privacy: .public) size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
-            PlaybackLog.append("attach 失败 size=\(pixelWidth)x\(pixelHeight) scale=\(scale) error=\(error)")
+            PlaybackLog.error("attach 失败 size=\(pixelWidth)x\(pixelHeight) scale=\(scale) error=\(error)")
             continuation.yield(.failed(status: (error as? ErikaError)?.status ?? ErikaStatus_PlayerError,
                                        message: "画面挂载失败：\(error)"))
             throw error
         }
-        erikaLog.info("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
         PlaybackLog.append("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
         renderLoop.start(on: view)
     }
@@ -80,28 +74,25 @@ public final class ErikaEngine: @unchecked Sendable {
 
     /// 先停帧驱动（等线程退出），再 detach —— 顺序反了就是随机崩。
     public func detach() {
-        erikaLog.info("detach surface")
         PlaybackLog.append("detach surface")
         renderLoop.stop()
         do {
             try withLock { try presenter.detachSurface() }
             PlaybackLog.append("detach surface 成功")
         } catch {
-            erikaLog.error("detach surface 失败 \(error, privacy: .public)")
-            PlaybackLog.append("detach surface 失败 error=\(error)")
+            PlaybackLog.error("detach surface 失败 error=\(error)")
         }
     }
 
     // MARK: - 播放控制
 
     public func open(_ source: PlaybackSource) throws {
-        erikaLog.info("open 源（uri 略，避免 token 入日志）")
         PlaybackLog.append("open() 开始")
         do {
             try withLock { try presenter.open(source) }
             PlaybackLog.append("open() 成功")
         } catch {
-            PlaybackLog.append("open() 失败 error=\(error)")
+            PlaybackLog.error("open() 失败 error=\(error)")
             throw error
         }
     }
@@ -275,6 +266,10 @@ public final class ErikaEngine: @unchecked Sendable {
         return try body()
     }
 
+    /// 渲染线程每帧一次。失败在故障期间会逐帧触发，日志走 1s 节流，
+    /// 只留下首条 + flush 时的一条汇总。
+    private static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
+
     /// 渲染线程每帧一次。
     private func step(presentationTime: Double) {
         var pending: [PlayerEvent] = []
@@ -283,12 +278,10 @@ public final class ErikaEngine: @unchecked Sendable {
         do {
             _latestStats = try presenter.renderTick(at: presentationTime)
         } catch let error as ErikaError {
-            erikaLog.error("render_tick 失败 \(error, privacy: .public)")
-            PlaybackLog.append("render_tick 失败 error=\(error)")
+            PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
             pending.append(.failed(status: error.status, message: error.message))
         } catch {
-            erikaLog.error("render_tick 失败（未知） \(error, privacy: .public)")
-            PlaybackLog.append("render_tick 失败（未知） error=\(error)")
+            PlaybackLog.error("render_tick 失败（未知） error=\(error)", throttle: Self.renderThrottle)
             pending.append(.failed(status: ErikaStatus_PlayerError, message: "\(error)"))
         }
         // 事件是轮询模型：每帧抽干，不然会积压。
@@ -297,13 +290,11 @@ public final class ErikaEngine: @unchecked Sendable {
                 guard let event = try presenter.pollEvent() else { break }
                 pending.append(event)
             } catch let error as ErikaError {
-                erikaLog.error("poll_event 失败 \(error, privacy: .public)")
-                PlaybackLog.append("poll_event 失败 error=\(error)")
+                PlaybackLog.error("poll_event 失败 error=\(error)")
                 pending.append(.failed(status: error.status, message: error.message))
                 break
             } catch {
-                erikaLog.error("poll_event 失败（未知） \(error, privacy: .public)")
-                PlaybackLog.append("poll_event 失败（未知） error=\(error)")
+                PlaybackLog.error("poll_event 失败（未知） error=\(error)")
                 break
             }
         }

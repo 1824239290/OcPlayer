@@ -80,6 +80,7 @@ extension JellyfinServer {
         do {
             data = try await client.send(request).value
         } catch {
+            NetworkLog.reportFailed("DownloadSubtitle \(subtitle.remotePath)", error: error)
             throw JellyfinError.wrap(error)
         }
         let directory = URL.applicationSupportDirectory

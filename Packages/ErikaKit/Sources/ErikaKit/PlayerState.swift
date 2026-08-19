@@ -1,7 +1,6 @@
 import CErika
 import Foundation
 import Observation
-import os
 
 /// UI 只读的播放快照。事件流在 `start()` 里被独占消费，逐条折叠成属性。
 @MainActor
@@ -99,8 +98,7 @@ public final class PlayerState {
         case .videoDecoderChanged, .audioOutputChanged, .trackSelectionChanged:
             break
         case .failed(let status, let message):
-            erikaLog.error("内核错误事件 status=\(status.rawValue) message=\(message ?? "nil", privacy: .public)")
-            PlaybackLog.append("内核错误事件 status=\(status.rawValue) message=\(message ?? "nil")")
+            PlaybackLog.error("内核错误事件 status=\(status.rawValue) message=\(message ?? "nil")")
             state = .error
             lastError = message ?? "内核错误 status=\(status.rawValue)"
         }

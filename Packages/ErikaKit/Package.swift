@@ -9,6 +9,9 @@ let package = Package(
     products: [
         .library(name: "ErikaKit", targets: ["ErikaKit"])
     ],
+    dependencies: [
+        .package(path: "../DiagnosticsKit"),
+    ],
     targets: [
         // 由 Scripts/fetch-erika.sh 生成（三 slice：macOS / iOS 设备 / iOS 模拟器）
         .binaryTarget(name: "erika_capi", path: "Vendor/Erika.xcframework"),
@@ -38,7 +41,7 @@ let package = Package(
             ]
         ),
 
-        .target(name: "ErikaKit", dependencies: ["CErika"]),
+        .target(name: "ErikaKit", dependencies: ["CErika", "DiagnosticsKit"]),
 
         .testTarget(name: "ErikaKitTests", dependencies: ["ErikaKit"]),
     ]

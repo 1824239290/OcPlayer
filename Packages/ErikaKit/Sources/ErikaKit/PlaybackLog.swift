@@ -1,45 +1,30 @@
+import DiagnosticsKit
 import Foundation
 
-/// 简单的文本日志落盘，方便在 Console.app 之外直接看播放链路。
-/// 所有播放相关模块（ErikaKit / App 层）都往同一个文件追加。
-/// 路径：~/Library/Logs/OcPlayer/playback.log
+/// ErikaKit 的播放链路日志入口。
+///
+/// 基于 `DiagnosticsKit`：JSONL 落盘（`~/Library/Logs/OcPlayer/diagnostics.jsonl`，
+/// 2 MB 轮转保留 3 份）+ OSLog 镜像。所有播放相关模块（ErikaKit / App 层）都往
+/// 同一个文件追加；token / Authorization 头等敏感字段由红actor 统一脱敏，不进任何 sink。
 public enum PlaybackLog {
-    private static let sink = LogFileSink()
+    private static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "ErikaKit")
 
-    public static var fileURL: URL { sink.fileURL }
+    public static var fileURL: URL { logger.fileURL }
 
+    /// 等所有排队的 JSONL 写盘完成（App 退出前调用，别让最后几条丢）。
+    public static func flush() {
+        logger.flush()
+    }
+
+    /// 追加一条 debug 级链路日志。
     public static func append(_ message: String) {
-        sink.append(message)
-    }
-}
-
-private final class LogFileSink: @unchecked Sendable {
-    private let lock = NSLock()
-    let fileURL: URL
-
-    init() {
-        let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("Logs/OcPlayer", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        fileURL = directory.appendingPathComponent("playback.log")
+        logger.debug(message)
     }
 
-    func append(_ message: String) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        let line = "\(formatter.string(from: Date())) \(message)\n"
-        guard let data = line.data(using: .utf8) else { return }
-
-        if let handle = try? FileHandle(forWritingTo: fileURL) {
-            defer { try? handle.close() }
-            _ = try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: fileURL)
-        }
+    /// 追加一条 error 级日志（渲染线程 / 内核错误事件这类真正要捞出来的）。
+    public static func error(_ message: String,
+                             fields: [String: DiagnosticValue] = [:],
+                             throttle: DiagnosticThrottle? = nil) {
+        logger.error(message, fields: fields, throttle: throttle)
     }
 }

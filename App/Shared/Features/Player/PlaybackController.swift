@@ -1,14 +1,15 @@
 import CoreGraphics
+import DiagnosticsKit
 import ErikaKit
 import Foundation
 import ImageIO
 import JellyfinKit
 import Observation
 import UniformTypeIdentifiers
-import os
 
-/// App 层播放链路日志（OSLog）。与 ErikaKit 同 subsystem，Console.app 可统一过滤。
-let playerLog = Logger(subsystem: "dev.jumusu.OcPlayer", category: "Playback")
+/// App 层播放链路日志。走统一诊断管线（JSONL + OSLog，敏感字段自动脱敏）。
+/// 与 ErikaKit 的 PlaybackLog 同一份文件，时间线上无缝。
+let playerLog = AppDiagnostics.logger
 
 /// 播放偏好（音量 / 倍速 / 静音 / 字幕字号）跨启动记忆。不想为这几个值引一个设置页。
 @MainActor
@@ -412,7 +413,7 @@ final class PlaybackController {
             PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
             return true
         } catch {
-            playerLog.error("open 失败 \(error, privacy: .public)")
+            playerLog.error("open 失败 \(error)")
             PlaybackLog.append("open() 失败 error=\(error) title=\(currentTitle ?? "?")")
             currentlyOpenURI = nil
             if acquiredScope {

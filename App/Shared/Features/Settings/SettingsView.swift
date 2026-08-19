@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -63,6 +64,14 @@ struct SettingsView: View {
             }
 
             Section {
+                DiagnosticsSection()
+            } header: {
+                Text("诊断")
+            } footer: {
+                Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
+            }
+
+            Section {
                 Button(role: .destructive) {
                     app.signOut()
                 } label: {
@@ -108,8 +117,7 @@ struct SettingsView: View {
 }
 
 /// 直连链接入口（M0 验证 `open_with_headers` 用，现在挂在设置页和播放页）。
-struct URLEntrySheet: View {
-    @Environment(\.dismiss) private var dismiss
+struct URLEntrySheet: View {    @Environment(\.dismiss) private var dismiss
     @State private var uri = ""
     @State private var token = ""
     let onSubmit: (String, String?) -> Void
@@ -138,5 +146,89 @@ struct URLEntrySheet: View {
         }
         .padding(20)
         .frame(width: 460)
+    }
+}
+
+// MARK: - 诊断
+
+/// 设置页的「诊断」区：日志路径 / 最近记录（可滚动）/ 清空。
+/// 不出「导出文件」按钮——直接在 Finder 里打开日志目录更直观。
+struct DiagnosticsSection: View {
+    @State private var records: [DiagnosticEntry] = []
+    @State private var summaryText = "—"
+    @State private var revealPath = false
+
+    var body: some View {
+        Button {
+            revealPath.toggle()
+        } label: {
+            HStack {
+                Text("日志文件")
+                Spacer()
+                Text(revealPath ? AppDiagnostics.fileURL.path : AppDiagnostics.fileURL.lastPathComponent)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .buttonStyle(.plain)
+
+        row("记录数 / 大小", summaryText)
+            .onAppear(perform: refresh)
+
+        DisclosureGroup("最近 \(records.count) 条记录") {
+            if records.isEmpty {
+                Text("暂无日志记录")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(records) { record in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(record.message)
+                            .font(.caption)
+                            .textSelection(.enabled)
+                        Text(Self.meta(record))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .font(.caption)
+
+        Button(role: .destructive) {
+            try? AppDiagnostics.logger.clear()
+            refresh()
+        } label: {
+            Label("清空日志", systemImage: "trash")
+        }
+    }
+
+    private func refresh() {
+        records = AppDiagnostics.recentRecords
+        if let summary = AppDiagnostics.logger.summary() {
+            summaryText = "\(summary.recordCount) 条 · \(summary.fileSizeBytes) 字节"
+        } else {
+            summaryText = "0 条"
+        }
+    }
+
+    private static func meta(_ record: DiagnosticEntry) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        var parts = ["\(record.level.uppercased())", formatter.string(from: record.timestamp)]
+        if let suppressed = record.suppressed, suppressed > 0 {
+            parts.append("(另抑制 \(suppressed) 条)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundStyle(.secondary)
+        }
     }
 }

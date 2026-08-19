@@ -46,6 +46,10 @@ struct OcPlayerApp: App {
     @NSApplicationDelegateAdaptor(MacApplicationDelegate.self) private var appDelegate
     #endif
 
+    init() {
+        AppDiagnostics.recordLaunch()
+    }
+
     var body: some Scene {
         // macOS 单窗口：播放引擎和覆盖层是 App 级单例，多窗口会争抢 surface
         // （WindowGroup 还会把上次会话的每个窗口都恢复出来）。媒体播放器就该一窗。
@@ -56,7 +60,11 @@ struct OcPlayerApp: App {
                 .environment(appModel)
                 .environment(controller)
                 .onAppear {
-                    appDelegate.terminationHandler = { appModel.playbackWillTerminate() }
+                    appDelegate.terminationHandler = {
+                        let task = appModel.playbackWillTerminate()
+                        AppDiagnostics.flush()
+                        return task
+                    }
                 }
                 // 首页英雄区需要保留标题两侧边距和操作按钮；低于这个宽度时，
                 // macOS 的 NavigationSplitView 会把详情列压到不可读，窗口不再继续缩窄。

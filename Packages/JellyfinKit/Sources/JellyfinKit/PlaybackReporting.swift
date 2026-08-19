@@ -25,7 +25,11 @@ extension JellyfinServer {
             playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        _ = try? await client.send(Paths.reportPlaybackStart(body))
+        do {
+            _ = try await client.send(Paths.reportPlaybackStart(body))
+        } catch {
+            NetworkLog.reportFailed("PlaybackStart item=\(context.itemID)", error: error)
+        }
     }
 
     /// Compatibility entry point for callers that did not obtain PlaybackInfo.
@@ -51,7 +55,11 @@ extension JellyfinServer {
             playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        _ = try? await client.send(Paths.reportPlaybackProgress(body))
+        do {
+            _ = try await client.send(Paths.reportPlaybackProgress(body))
+        } catch {
+            NetworkLog.reportFailed("PlaybackProgress item=\(context.itemID)", error: error)
+        }
     }
 
     /// Compatibility entry point for callers that did not obtain PlaybackInfo.
@@ -78,7 +86,11 @@ extension JellyfinServer {
             playSessionID: context.playSessionID,
             positionTicks: Self.ticks(positionSeconds)
         )
-        _ = try? await client.send(Paths.reportPlaybackStopped(body))
+        do {
+            _ = try await client.send(Paths.reportPlaybackStopped(body))
+        } catch {
+            NetworkLog.reportFailed("PlaybackStopped item=\(context.itemID)", error: error)
+        }
     }
 
     /// Compatibility entry point for callers that did not obtain PlaybackInfo.

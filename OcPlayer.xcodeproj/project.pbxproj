@@ -13,6 +13,8 @@
 		1A0000000000000000000055 /* CoreModel in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000052 /* CoreModel */; };
 		1A0000000000000000000056 /* JellyfinKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000053 /* JellyfinKit */; };
 		1A0000000000000000000057 /* JellyfinKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000053 /* JellyfinKit */; };
+		1A0000000000000000000066 /* DiagnosticsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000065 /* DiagnosticsKit */; };
+		1A0000000000000000000067 /* DiagnosticsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000065 /* DiagnosticsKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +38,7 @@
 				1A0000000000000000000042 /* ErikaKit in Frameworks */,
 				1A0000000000000000000054 /* CoreModel in Frameworks */,
 				1A0000000000000000000056 /* JellyfinKit in Frameworks */,
+				1A0000000000000000000066 /* DiagnosticsKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -46,6 +49,7 @@
 				1A0000000000000000000043 /* ErikaKit in Frameworks */,
 				1A0000000000000000000055 /* CoreModel in Frameworks */,
 				1A0000000000000000000057 /* JellyfinKit in Frameworks */,
+				1A0000000000000000000067 /* DiagnosticsKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -105,6 +109,7 @@
 				1A0000000000000000000041 /* ErikaKit */,
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
+				1A0000000000000000000065 /* DiagnosticsKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000014 /* OcPlayer.app */;
@@ -131,6 +136,7 @@
 				1A0000000000000000000041 /* ErikaKit */,
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
+				1A0000000000000000000065 /* DiagnosticsKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000024 /* OcPlayer.app */;
@@ -159,6 +165,7 @@
 				1A0000000000000000000040 /* XCLocalSwiftPackageReference "Packages/ErikaKit" */,
 				1A0000000000000000000050 /* XCLocalSwiftPackageReference "Packages/CoreModel" */,
 				1A0000000000000000000051 /* XCLocalSwiftPackageReference "Packages/JellyfinKit" */,
+				1A0000000000000000000064 /* XCLocalSwiftPackageReference "Packages/DiagnosticsKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -381,6 +388,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/JellyfinKit;
 		};
+		1A0000000000000000000064 /* XCLocalSwiftPackageReference "Packages/DiagnosticsKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DiagnosticsKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -395,6 +406,10 @@
 		1A0000000000000000000053 /* JellyfinKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = JellyfinKit;
+		};
+		1A0000000000000000000065 /* DiagnosticsKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DiagnosticsKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

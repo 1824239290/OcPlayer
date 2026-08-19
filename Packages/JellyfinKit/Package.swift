@@ -12,6 +12,7 @@ let package = Package(
         // 我们只做薄封装（多服务器 profile、本地会话、DTO → 域模型映射）。
         .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift", from: "3.0.0"),
         .package(path: "../CoreModel"),
+        .package(path: "../DiagnosticsKit"),
     ],
     targets: [
         .target(
@@ -19,6 +20,7 @@ let package = Package(
             dependencies: [
                 .product(name: "JellyfinAPI", package: "jellyfin-sdk-swift"),
                 "CoreModel",
+                "DiagnosticsKit",
             ]
         ),
         .testTarget(name: "JellyfinKitTests", dependencies: ["JellyfinKit"]),
