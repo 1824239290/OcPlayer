@@ -1,14 +1,16 @@
+import DanmakuKit
 import DiagnosticsKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 设置页：服务器与账号信息、首页轮播来源、本地播放入口、关于信息。
-/// 外观 / 播放细节设置 M4 再进；弹幕设置随 M3（使用者暂缓）。
+/// 设置页：服务器与账号信息、首页轮播来源、本地播放入口、弹幕网关、关于信息。
+/// 外观 / 播放细节设置 M4 再进。
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
 
     @State private var isImporting = false
     @State private var isEnteringURL = false
+    @State private var isEditingDanmakuGateway = false
 
     var body: some View {
         Form {
@@ -57,10 +59,32 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Section("弹幕") {
+                Toggle("自动加载弹幕", isOn: Binding(
+                    get: { app.danmaku.isAutoLoadingEnabled },
+                    set: { app.setDanmakuAutoLoadingEnabled($0) }
+                ))
+                HStack {
+                    Text("网关")
+                    Spacer()
+                    Text(app.dandanplayGatewayURLString)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Button("配置") {
+                        isEditingDanmakuGateway = true
+                    }
+                }
+                LabeledContent("API Key", value: app.dandanplayHasAPIKey ? "已设置" : "未设置")
+                LabeledContent("状态", value: app.dandanplayIsConfigured ? "已配置" : "未配置")
+                Text("网关地址或 Key 未配置有效时不会请求弹幕，也不会影响视频播放。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("关于") {
                 row("播放内核", "Erika v0.1.6（Rust · FFmpeg · libass）")
                 row("直连策略", "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
-                row("弹幕", "弹弹play 开放平台（暂缓接入）")
+                row("弹幕", "弹弹play 开放平台（通过 OcPlay 网关接入）")
             }
 
             Section {
@@ -90,6 +114,14 @@ struct SettingsView: View {
                 openDirect(uri, token: token)
             }
         }
+        .sheet(isPresented: $isEditingDanmakuGateway) {
+            DanmakuGatewayEntrySheet(
+                initialURL: app.dandanplayGatewayURLString,
+                initialKey: app.dandanplayAPIKey
+            ) { url, key in
+                app.updateDanmakuGateway(urlString: url, apiKey: key)
+            }
+        }
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -117,7 +149,8 @@ struct SettingsView: View {
 }
 
 /// 直连链接入口（M0 验证 `open_with_headers` 用，现在挂在设置页和播放页）。
-struct URLEntrySheet: View {    @Environment(\.dismiss) private var dismiss
+struct URLEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var uri = ""
     @State private var token = ""
     let onSubmit: (String, String?) -> Void
@@ -146,6 +179,70 @@ struct URLEntrySheet: View {    @Environment(\.dismiss) private var dismiss
         }
         .padding(20)
         .frame(width: 460)
+    }
+}
+
+/// 弹幕网关地址与 API Key 编辑弹窗。Key 留空表示停用网络弹幕。
+struct DanmakuGatewayEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var gatewayURL: String
+    @State private var key: String
+    let onSubmit: (String, String) -> Void
+
+    init(initialURL: String, initialKey: String, onSubmit: @escaping (String, String) -> Void) {
+        _gatewayURL = State(initialValue: initialURL)
+        _key = State(initialValue: initialKey)
+        self.onSubmit = onSubmit
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("网关地址") {
+                    TextField("https://gateway.example.com", text: $gatewayURL)
+                        .textContentType(.URL)
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                        .autocorrectionDisabled()
+                    Text("仅支持 HTTPS 根地址；留空恢复默认网关。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("API Key") {
+                    SecureField("由网关管理员签发", text: $key)
+                        .textContentType(.password)
+                    Text("Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("弹幕网关")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSubmit(
+                            gatewayURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                            key.trimmingCharacters(in: .whitespacesAndNewlines)
+                        )
+                        dismiss()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!gatewayURLIsValid)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(width: 480, height: 280)
+        #endif
+    }
+
+    private var gatewayURLIsValid: Bool {
+        let value = gatewayURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty || DandanplaySettingsStore.normalizedURL(from: value) != nil
     }
 }
 

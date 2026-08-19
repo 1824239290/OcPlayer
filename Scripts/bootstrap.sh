@@ -16,4 +16,3 @@ cp "$EXAMPLE" "$SECRETS"
 chmod 600 "$SECRETS"
 
 echo "Created local configuration: $SECRETS"
-echo "Add your DANDANPLAY_APP_ID and DANDANPLAY_APP_SECRET values before enabling danmaku."

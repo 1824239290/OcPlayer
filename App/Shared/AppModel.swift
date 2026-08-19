@@ -1,4 +1,5 @@
 import CoreModel
+import DanmakuKit
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
@@ -106,6 +107,40 @@ final class AppModel {
             home.heroes = []
         }
         Task { await loadHome() }
+    }
+
+    // MARK: - 弹幕设置（弹弹play 网关）
+
+    /// 弹幕网关设置：地址 + API Key。AppSecret 永远不进客户端，只留在网关。
+    /// API Key 存 UserDefaults（发行包统一 ad-hoc 签名，见 DanmakuKit）。
+    private var dandanplayStore = DandanplaySettingsStore()
+    let danmaku = DanmakuCoordinator()
+
+    var dandanplayGatewayURL: URL { dandanplayStore.gatewayURL }
+
+    var dandanplayGatewayURLString: String {
+        dandanplayStore.gatewayURLString ?? DandanplaySettingsStore.defaultGatewayURL.absoluteString
+    }
+
+    var dandanplayAPIKey: String {
+        dandanplayStore.apiKey
+    }
+
+    /// 是否已配置就绪（地址有效 + API Key 非空）。播放匹配前据此降级到无弹幕。
+    var dandanplayIsConfigured: Bool { dandanplayStore.isConfigured }
+    var dandanplayHasAPIKey: Bool { !dandanplayStore.apiKey.isEmpty }
+
+    func updateDanmakuGateway(urlString: String, apiKey: String) {
+        // Commit both values before restarting. This avoids ever pairing a new
+        // gateway host with the previously saved credential.
+        dandanplayStore.gatewayURLString = urlString
+        dandanplayStore.apiKey = apiKey
+        restartDanmakuForCurrentPlayback()
+    }
+
+    func setDanmakuAutoLoadingEnabled(_ enabled: Bool) {
+        danmaku.setAutoLoadingEnabled(enabled)
+        if enabled { restartDanmakuForCurrentPlayback() }
     }
 
     // MARK: - 导航
@@ -489,6 +524,7 @@ final class AppModel {
         playbackOpenTask?.cancel()
         playbackOpenTask = nil
         isPlaybackOpening = false
+        danmaku.cancel()
     }
 
     @MainActor
@@ -595,6 +631,7 @@ final class AppModel {
         retryPlaybackItem = item
         nowPlayingItem = item
         startReporting(item: item, resumeSeconds: resumeSeconds, request: request)
+        startDanmaku(for: request, item: item)
     }
 
     /// HUD「Continue Watching」：手动跳到连播解析出的下一集（走完整播放串联）。
@@ -619,6 +656,7 @@ final class AppModel {
         )
         playback?.prepareForPresentation(request)
         presentedPlayer = request
+        startDanmaku(for: request, item: nil)
     }
 
     /// 直连链接（设置页入口）：请求由 `PlaybackController.request(uri:token:)` 构造好。
@@ -629,6 +667,55 @@ final class AppModel {
         finishReporting()
         playback?.prepareForPresentation(request)
         presentedPlayer = request
+        startDanmaku(for: request, item: nil)
+    }
+
+    private func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
+        let context: DanmakuPlaybackContext
+        if let item, let server {
+            context = .jellyfin(
+                item: item,
+                request: request,
+                serverProfileID: server.profile.id
+            )
+        } else {
+            context = .standalone(request: request)
+        }
+        danmaku.start(
+            context: context,
+            configuration: dandanplayConfiguration,
+            playback: playback
+        )
+    }
+
+    private func restartDanmakuForCurrentPlayback() {
+        guard let request = presentedPlayer else { return }
+        startDanmaku(for: request, item: nowPlayingItem)
+    }
+
+    private var dandanplayConfiguration: DandanplayConfiguration? {
+        guard dandanplayStore.isConfigured else { return nil }
+        return DandanplayConfiguration(
+            baseURL: dandanplayStore.gatewayURL,
+            apiKey: dandanplayStore.apiKey,
+            userAgent: Self.dandanplayUserAgent
+        )
+    }
+
+    private static var dandanplayUserAgent: String {
+        #if os(macOS)
+        let platform = "macOS"
+        #else
+        let platform = "iOS"
+        #endif
+        #if arch(arm64)
+        let architecture = "arm64"
+        #elseif arch(x86_64)
+        let architecture = "x86_64"
+        #else
+        let architecture = "unknown"
+        #endif
+        return "OcPlay/\(ClientIdentity.version) (\(platform); \(architecture))"
     }
 
     func dismissPlayer() {
@@ -684,6 +771,7 @@ final class AppModel {
         guard !isPlaybackOpening else { return }
         guard let item = nowPlayingItem ?? retryPlaybackItem else {
             playback?.retryLast()
+            restartDanmakuForCurrentPlayback()
             return
         }
         let currentPosition = playback.map { Double($0.state.position.microseconds) / 1_000_000 }

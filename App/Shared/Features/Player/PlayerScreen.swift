@@ -25,6 +25,7 @@ struct PlayerScreen: View {
     @State private var showStats = false
     @State private var showInfoCard = false
     @State private var isImportingSubtitle = false
+    @State private var isSelectingDanmaku = false
     @State private var screenshotToast: String?
     /// 只存布局档位，不存逐像素宽度，窗口缩放时不会让整套 HUD 每像素重建。
     @State private var isNarrow = false
@@ -57,6 +58,7 @@ struct PlayerScreen: View {
                 title: mainTitle,
                 kicker: titleKicker,
                 isImportingSubtitle: $isImportingSubtitle,
+                isSelectingDanmaku: $isSelectingDanmaku,
                 showStats: $showStats,
                 showInfoCard: $showInfoCard,
                 shareURL: shareURL,
@@ -94,6 +96,19 @@ struct PlayerScreen: View {
                 controller.loadExternalSubtitle(fileURL: url)
             }
         }
+        .sheet(isPresented: $isSelectingDanmaku) {
+            let suggestion = app.danmaku.searchSuggestion(for: request?.id)
+            DanmakuSelectionSheet(
+                requestID: request?.id,
+                initialAnime: suggestion?.anime
+                    ?? app.nowPlayingItem?.seriesName
+                    ?? app.nowPlayingItem?.name
+                    ?? mainTitle,
+                initialEpisode: suggestion?.episode
+                    ?? app.nowPlayingItem?.episodeNumber.map(String.init)
+                    ?? ""
+            )
+        }
         #if os(macOS)
         .onContinuousHover(coordinateSpace: .global) { phase in
             switch phase {
@@ -130,6 +145,9 @@ struct PlayerScreen: View {
             controller.openIfNeeded(request)
             guard !Task.isCancelled else { return }
             revealControls()
+        }
+        .onChange(of: request?.id) {
+            isSelectingDanmaku = false
         }
         .onChange(of: controller.state.state) { _, newState in
             PlaybackLog.append("PlayerState -> \(newState)")
@@ -284,6 +302,7 @@ struct PlayerScreen: View {
             && !showStats
             && !showInfoCard
             && !isImportingSubtitle
+            && !isSelectingDanmaku
             && !isVoiceOverEnabled
     }
 

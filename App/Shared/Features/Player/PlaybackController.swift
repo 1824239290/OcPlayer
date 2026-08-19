@@ -11,13 +11,19 @@ import UniformTypeIdentifiers
 /// 与 ErikaKit 的 PlaybackLog 同一份文件，时间线上无缝。
 let playerLog = AppDiagnostics.logger
 
-/// 播放偏好（音量 / 倍速 / 静音 / 字幕字号）跨启动记忆。不想为这几个值引一个设置页。
+/// 播放偏好跨启动记忆。弹幕渲染偏好由 HUD 修改后也在此统一保存。
 @MainActor
 enum PlaybackPreferences {
     private static let rateKey = "dev.jumusu.ocplayer.playback.rate"
     private static let volumeKey = "dev.jumusu.ocplayer.playback.volume"
     private static let mutedKey = "dev.jumusu.ocplayer.playback.muted"
     private static let subtitleScaleKey = "dev.jumusu.ocplayer.playback.subtitleScale"
+    private static let danmakuEnabledKey = "dev.jumusu.ocplayer.danmaku.enabled"
+    private static let danmakuOpacityKey = "dev.jumusu.ocplayer.danmaku.opacity"
+    private static let danmakuDisplayAreaKey = "dev.jumusu.ocplayer.danmaku.displayArea"
+    private static let danmakuBlockTopKey = "dev.jumusu.ocplayer.danmaku.blockTop"
+    private static let danmakuBlockBottomKey = "dev.jumusu.ocplayer.danmaku.blockBottom"
+    private static let danmakuBlockScrollKey = "dev.jumusu.ocplayer.danmaku.blockScroll"
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -35,6 +41,30 @@ enum PlaybackPreferences {
         get { storedDouble(forKey: subtitleScaleKey, range: 0.5...3.0, default: 1.0) }
         set { UserDefaults.standard.set(newValue, forKey: subtitleScaleKey) }
     }
+    static var danmakuEnabled: Bool {
+        get { storedBool(forKey: danmakuEnabledKey, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuEnabledKey) }
+    }
+    static var danmakuOpacity: Double {
+        get { storedDouble(forKey: danmakuOpacityKey, range: 0.25...1, default: 0.85) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuOpacityKey) }
+    }
+    static var danmakuDisplayArea: Double {
+        get { storedDouble(forKey: danmakuDisplayAreaKey, range: 0.25...1, default: 0.75) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuDisplayAreaKey) }
+    }
+    static var danmakuBlockTop: Bool {
+        get { storedBool(forKey: danmakuBlockTopKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockTopKey) }
+    }
+    static var danmakuBlockBottom: Bool {
+        get { storedBool(forKey: danmakuBlockBottomKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockBottomKey) }
+    }
+    static var danmakuBlockScroll: Bool {
+        get { storedBool(forKey: danmakuBlockScrollKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockScrollKey) }
+    }
 
     private static func storedDouble(
         forKey key: String,
@@ -43,6 +73,11 @@ enum PlaybackPreferences {
     ) -> Double {
         guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
         return UserDefaults.standard.double(forKey: key).clamped(range)
+    }
+
+    private static func storedBool(forKey key: String, default fallback: Bool) -> Bool {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        return UserDefaults.standard.bool(forKey: key)
     }
 }
 
@@ -132,6 +167,15 @@ final class PlaybackController {
         }
     }
 
+    private(set) var danmakuTracks: [DanmakuTrackInfo] = []
+    private(set) var danmakuEnabled = PlaybackPreferences.danmakuEnabled
+    private(set) var danmakuOpacity = PlaybackPreferences.danmakuOpacity
+    private(set) var danmakuDisplayArea = PlaybackPreferences.danmakuDisplayArea
+    private(set) var danmakuBlockTop = PlaybackPreferences.danmakuBlockTop
+    private(set) var danmakuBlockBottom = PlaybackPreferences.danmakuBlockBottom
+    private(set) var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
+    private(set) var danmakuGlobalOffsetSeconds = 0.0
+
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
     private(set) var currentlyOpenURI: String?
     /// Changes as soon as a new request is presented, before its engine opens.
@@ -193,6 +237,8 @@ final class PlaybackController {
         sourceGeneration &+= 1
         expectedRequestID = request.id
         failedRequestID = nil
+        danmakuTracks = []
+        danmakuGlobalOffsetSeconds = 0
         resumeTask?.cancel()
         resumeTask = nil
         PlaybackLog.append("source generation=\(sourceGeneration) request=\(request.id)")
@@ -403,6 +449,12 @@ final class PlaybackController {
             if subtitleScale != 1.0 {
                 try? engine.setSubtitleScale(subtitleScale)
             }
+            do {
+                try applyDanmakuPreferences(to: engine)
+            } catch {
+                playerLog.warning("弹幕偏好应用失败，继续播放 error=\(error)")
+                PlaybackLog.append("danmaku preferences skipped error=\(error)")
+            }
             try engine.play()
             // 成功打开 → 清掉上一次的报错，别让错误条残留。
             setupError = nil
@@ -457,6 +509,8 @@ final class PlaybackController {
         eventTask = nil
         engine = nil
         failedRequestID = nil
+        danmakuTracks = []
+        danmakuGlobalOffsetSeconds = 0
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
         // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
         // 等下次 open 时自然会 reset。
@@ -472,6 +526,126 @@ final class PlaybackController {
     }
 
     // MARK: - 轨道（音轨 / 字幕菜单用）
+
+    /// Replace the current source's danmaku only while its generation token is valid.
+    @discardableResult
+    func replaceDanmaku(
+        json: String,
+        name: String,
+        offset: Duration,
+        for source: PlaybackSourceGeneration
+    ) throws -> Bool {
+        var tracks: [DanmakuTrackInfo] = []
+        do {
+            let accepted = try withReadyEngine(for: source) { engine in
+                try engine.clearDanmaku()
+                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
+                do {
+                    try applyDanmakuPreferences(to: engine)
+                } catch {
+                    playerLog.warning("弹幕已装载，但偏好应用失败 error=\(error)")
+                    PlaybackLog.append("danmaku loaded without preferences error=\(error)")
+                }
+                tracks = try engine.danmakuTracks()
+            }
+            if accepted { danmakuTracks = tracks }
+            return accepted
+        } catch {
+            refreshDanmakuTracks(for: source)
+            throw error
+        }
+    }
+
+    @discardableResult
+    func clearDanmaku(for source: PlaybackSourceGeneration) throws -> Bool {
+        do {
+            let accepted = try withReadyEngine(for: source) { engine in
+                try engine.clearDanmaku()
+            }
+            if accepted { danmakuTracks = [] }
+            return accepted
+        } catch {
+            refreshDanmakuTracks(for: source)
+            throw error
+        }
+    }
+
+    func setDanmakuEnabled(_ enabled: Bool) {
+        danmakuEnabled = enabled
+        PlaybackPreferences.danmakuEnabled = enabled
+        try? engine?.setDanmakuEnabled(enabled)
+    }
+
+    func setDanmakuOpacity(_ opacity: Double) {
+        danmakuOpacity = opacity.clamped(0.25...1)
+        PlaybackPreferences.danmakuOpacity = danmakuOpacity
+        updateDanmakuConfig { $0.opacity = Float(danmakuOpacity) }
+    }
+
+    func setDanmakuDisplayArea(_ area: Double) {
+        danmakuDisplayArea = area.clamped(0.25...1)
+        PlaybackPreferences.danmakuDisplayArea = danmakuDisplayArea
+        updateDanmakuConfig { $0.displayArea = Float(danmakuDisplayArea) }
+    }
+
+    func setDanmakuBlocked(top: Bool? = nil, bottom: Bool? = nil, scroll: Bool? = nil) {
+        if let top {
+            danmakuBlockTop = top
+            PlaybackPreferences.danmakuBlockTop = top
+        }
+        if let bottom {
+            danmakuBlockBottom = bottom
+            PlaybackPreferences.danmakuBlockBottom = bottom
+        }
+        if let scroll {
+            danmakuBlockScroll = scroll
+            PlaybackPreferences.danmakuBlockScroll = scroll
+        }
+        updateDanmakuConfig {
+            $0.blockTop = danmakuBlockTop
+            $0.blockBottom = danmakuBlockBottom
+            $0.blockScroll = danmakuBlockScroll
+        }
+    }
+
+    func adjustDanmakuOffset(by seconds: Double) {
+        setDanmakuOffset(danmakuGlobalOffsetSeconds + seconds)
+    }
+
+    func resetDanmakuOffset() {
+        setDanmakuOffset(0)
+    }
+
+    private func setDanmakuOffset(_ seconds: Double) {
+        danmakuGlobalOffsetSeconds = seconds.clamped(-30...30)
+        try? engine?.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
+    }
+
+    private func applyDanmakuPreferences(to engine: ErikaEngine) throws {
+        var config = try engine.danmakuConfig()
+        config.enabled = danmakuEnabled
+        config.opacity = Float(danmakuOpacity)
+        config.displayArea = Float(danmakuDisplayArea)
+        config.blockTop = danmakuBlockTop
+        config.blockBottom = danmakuBlockBottom
+        config.blockScroll = danmakuBlockScroll
+        try engine.setDanmakuConfig(config)
+        try engine.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
+    }
+
+    private func updateDanmakuConfig(_ update: (inout DanmakuConfig) -> Void) {
+        guard let engine, var config = try? engine.danmakuConfig() else { return }
+        update(&config)
+        try? engine.setDanmakuConfig(config)
+    }
+
+    private func refreshDanmakuTracks(for source: PlaybackSourceGeneration) {
+        var tracks: [DanmakuTrackInfo] = []
+        let accepted = (try? withReadyEngine(for: source) { engine in
+            tracks = try engine.danmakuTracks()
+        }) ?? false
+        if accepted { danmakuTracks = tracks }
+    }
 
     func selectAudio(_ track: TrackInfo) {
         guard let engine else { return }

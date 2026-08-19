@@ -15,6 +15,8 @@
 		1A0000000000000000000057 /* JellyfinKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000053 /* JellyfinKit */; };
 		1A0000000000000000000066 /* DiagnosticsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000065 /* DiagnosticsKit */; };
 		1A0000000000000000000067 /* DiagnosticsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000065 /* DiagnosticsKit */; };
+		1A0000000000000000000070 /* DanmakuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000069 /* DanmakuKit */; };
+		1A0000000000000000000071 /* DanmakuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000069 /* DanmakuKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +41,7 @@
 				1A0000000000000000000054 /* CoreModel in Frameworks */,
 				1A0000000000000000000056 /* JellyfinKit in Frameworks */,
 				1A0000000000000000000066 /* DiagnosticsKit in Frameworks */,
+				1A0000000000000000000070 /* DanmakuKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -50,6 +53,7 @@
 				1A0000000000000000000055 /* CoreModel in Frameworks */,
 				1A0000000000000000000057 /* JellyfinKit in Frameworks */,
 				1A0000000000000000000067 /* DiagnosticsKit in Frameworks */,
+				1A0000000000000000000071 /* DanmakuKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +114,7 @@
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
 				1A0000000000000000000065 /* DiagnosticsKit */,
+				1A0000000000000000000069 /* DanmakuKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000014 /* OcPlayer.app */;
@@ -137,6 +142,7 @@
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
 				1A0000000000000000000065 /* DiagnosticsKit */,
+				1A0000000000000000000069 /* DanmakuKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000024 /* OcPlayer.app */;
@@ -166,6 +172,7 @@
 				1A0000000000000000000050 /* XCLocalSwiftPackageReference "Packages/CoreModel" */,
 				1A0000000000000000000051 /* XCLocalSwiftPackageReference "Packages/JellyfinKit" */,
 				1A0000000000000000000064 /* XCLocalSwiftPackageReference "Packages/DiagnosticsKit" */,
+				1A0000000000000000000068 /* XCLocalSwiftPackageReference "Packages/DanmakuKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -392,6 +399,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DiagnosticsKit;
 		};
+		1A0000000000000000000068 /* XCLocalSwiftPackageReference "Packages/DanmakuKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DanmakuKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -410,6 +421,10 @@
 		1A0000000000000000000065 /* DiagnosticsKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DiagnosticsKit;
+		};
+		1A0000000000000000000069 /* DanmakuKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DanmakuKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
