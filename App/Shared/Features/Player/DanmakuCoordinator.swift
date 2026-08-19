@@ -172,7 +172,7 @@ final class DanmakuCoordinator {
     private(set) var currentMatch: DanmakuEpisodeMatch?
     private(set) var isAutoLoadingEnabled: Bool
 
-    @ObservationIgnored private let service: DanmakuService
+    @ObservationIgnored private let orchestrator: DanmakuLoadOrchestrator
     @ObservationIgnored private let session: URLSession
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadGeneration: UInt64 = 0
@@ -186,7 +186,8 @@ final class DanmakuCoordinator {
             ? true : defaults.bool(forKey: Self.autoLoadKey)
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
-        service = DanmakuService(cache: DanmakuCache(directory: directory))
+        let service = DanmakuService(cache: DanmakuCache(directory: directory))
+        orchestrator = DanmakuLoadOrchestrator(service: service, session: session)
         self.session = session
     }
 
@@ -318,25 +319,24 @@ final class DanmakuCoordinator {
         loadTask = Task { [weak self] in
             guard let self else { return }
             guard isCurrent(generation, requestID: requestID) else { return }
-            await clearExistingDanmaku(
-                context: context,
-                playback: playback,
-                generation: generation
-            )
-            guard isCurrent(generation, requestID: requestID) else { return }
-            let match = await service.remember(
-                episode: episode,
+            let match = DanmakuEpisodeMatch(
+                episodeID: episode.episodeId,
                 animeTitle: animeTitle,
+                episodeTitle: episode.episodeTitle
+            )
+            let startedAt = Date()
+            let outcome = await orchestrator.runManual(
+                match: match,
                 cacheKey: context.cacheKey,
+                configuration: configuration,
+                playback: playback,
                 revision: generation
             )
             guard isCurrent(generation, requestID: requestID) else { return }
-            await loadPayload(
-                match: match,
+            apply(
+                outcome: outcome,
                 context: context,
-                configuration: configuration,
-                playback: playback,
-                generation: generation
+                durationMs: Self.elapsedMilliseconds(since: startedAt)
             )
         }
     }
@@ -348,242 +348,79 @@ final class DanmakuCoordinator {
         forceRematch: Bool,
         generation: UInt64
     ) async {
-        let client = DanmakuGatewayClient(configuration: configuration, session: session)
-        do {
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            status = .matching
-            await service.claimMatchRevision(cacheKey: context.cacheKey, revision: generation)
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            if forceRematch {
-                await clearExistingDanmaku(
-                    context: context,
-                    playback: playback,
-                    generation: generation
-                )
-                guard isCurrent(generation, requestID: context.requestID) else { return }
-            }
+        guard isCurrent(generation, requestID: context.requestID) else { return }
+        status = .matching
+        let startedAt = Date()
+        AppDiagnostics.logInfo("弹幕自动匹配开始", fields: Self.matchLogFields(for: context))
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: matchContext(from: context),
+            configuration: configuration,
+            playback: playback,
+            revision: generation,
+            forceRematch: forceRematch
+        )
+        guard isCurrent(generation, requestID: context.requestID) else { return }
+        apply(
+            outcome: outcome,
+            context: context,
+            durationMs: Self.elapsedMilliseconds(since: startedAt)
+        )
+    }
 
-            if !forceRematch, context.allowsCachedMatchReuse,
-               let cachedMatch = await service.cachedMatch(for: context.cacheKey) {
-                guard isCurrent(generation, requestID: context.requestID) else { return }
-                AppDiagnostics.logInfo("弹幕匹配缓存命中", fields: [
-                    "source": .string(context.sourceKind.rawValue),
-                    "fileName": .string(context.fileName),
-                    "episodeID": .integer(cachedMatch.episodeID),
-                ])
-                await loadPayload(
-                    match: cachedMatch,
-                    context: context,
-                    configuration: configuration,
-                    playback: playback,
-                    generation: generation
-                )
-                return
-            }
-
-            let hashStartedAt = Date()
-            AppDiagnostics.logInfo("弹幕媒体指纹计算开始", fields: [
-                "source": .string(context.sourceKind.rawValue),
-                "fileName": .string(context.fileName),
-                "fileSize": context.fileSize.map(DiagnosticValue.integer) ?? .null,
-                "stage": .string("fingerprint"),
-            ])
-            let hash: String
-            do {
-                guard let value = try await mediaHash(for: context) else {
-                    throw AutomaticMatchError.fingerprintUnavailable
-                }
-                hash = value
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                AppDiagnostics.logWarning("弹幕媒体指纹计算失败", fields: [
-                    "source": .string(context.sourceKind.rawValue),
-                    "fileName": .string(context.fileName),
-                    "durationMs": .integer(Self.elapsedMilliseconds(since: hashStartedAt)),
-                    "error": .string("\(error)"),
-                ])
-                throw AutomaticMatchError.fingerprintUnavailable
-            }
-            try Task.checkCancellation()
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            AppDiagnostics.logInfo("弹幕媒体指纹计算完成", fields: [
-                "source": .string(context.sourceKind.rawValue),
-                "fileName": .string(context.fileName),
-                "durationMs": .integer(Self.elapsedMilliseconds(since: hashStartedAt)),
-                "hashPresent": .boolean(true),
-            ])
-            AppDiagnostics.logInfo("弹幕自动匹配请求", fields: Self.matchLogFields(
-                for: context,
-                hashPresent: true
+    private func apply(
+        outcome: DanmakuLoadOutcome,
+        context: DanmakuPlaybackContext,
+        durationMs: Int64
+    ) {
+        switch outcome {
+        case .loaded(let episodeID, let commentCount, let title):
+            currentMatch = DanmakuEpisodeMatch(episodeID: episodeID)
+            status = .loaded(DanmakuLoadedSummary(
+                episodeID: episodeID,
+                title: title,
+                commentCount: commentCount
             ))
-
-            let match = try await service.automaticMatch(
-                cacheKey: context.cacheKey,
-                request: MatchRequest(
-                    fileName: context.fileName,
-                    fileHash: hash,
-                    fileSize: context.fileSize,
-                    videoDuration: context.durationSeconds,
-                    matchMode: .hashAndFileName
-                ),
-                client: client,
-                ignoringCachedMatch: true,
-                persistingResult: false
-            )
-            try Task.checkCancellation()
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            guard let match else {
-                AppDiagnostics.logInfo("弹幕自动匹配完成", fields: [
-                    "source": .string(context.sourceKind.rawValue),
-                    "fileName": .string(context.fileName),
-                    "isMatched": .boolean(false),
-                ])
-                if forceRematch {
-                    await service.forgetMatch(
-                        cacheKey: context.cacheKey,
-                        revision: generation
-                    )
-                    guard isCurrent(generation, requestID: context.requestID) else { return }
-                }
-                status = .noMatch
-                return
-            }
-            AppDiagnostics.logInfo("弹幕自动匹配完成", fields: [
+            AppDiagnostics.logInfo("弹幕装载完成", fields: [
+                "source": .string(context.sourceKind.rawValue),
+                "episodeID": .integer(episodeID),
+                "commentCount": .integer(Int64(commentCount)),
+                "durationMs": .integer(durationMs),
+            ])
+        case .noMatch:
+            AppDiagnostics.logInfo("弹幕未匹配", fields: [
                 "source": .string(context.sourceKind.rawValue),
                 "fileName": .string(context.fileName),
-                "isMatched": .boolean(true),
-                "episodeID": .integer(match.episodeID),
             ])
-            await service.remember(
-                match: match,
-                cacheKey: context.cacheKey,
-                revision: generation
-            )
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            await loadPayload(
-                match: match,
-                context: context,
-                configuration: configuration,
-                playback: playback,
-                generation: generation
-            )
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled,
-                  isCurrent(generation, requestID: context.requestID)
-            else { return }
-            status = .failed(message: Self.userMessage(for: error))
-            AppDiagnostics.logWarning("弹幕自动加载失败", fields: [
-                "source": .string(context.sourceKind.rawValue),
-                "fileName": .string(context.fileName),
-                "error": .string("\(error)"),
+            status = .noMatch
+        case .empty(let episodeID, let title):
+            currentMatch = DanmakuEpisodeMatch(episodeID: episodeID)
+            status = .empty(title: title)
+            AppDiagnostics.logInfo("弹幕正文为空", fields: [
+                "episodeID": .integer(episodeID),
+                "durationMs": .integer(durationMs),
             ])
-        }
-    }
-
-    private func loadPayload(
-        match: DanmakuEpisodeMatch,
-        context: DanmakuPlaybackContext,
-        configuration: DandanplayConfiguration,
-        playback: PlaybackController,
-        generation: UInt64
-    ) async {
-        do {
-            try Task.checkCancellation()
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            currentMatch = match
-            status = .loadingComments
-            AppDiagnostics.logInfo("弹幕正文请求", fields: [
-                "episodeID": .integer(match.episodeID),
-            ])
-            let payload = try await service.payload(
-                for: match,
-                client: DanmakuGatewayClient(configuration: configuration, session: session)
-            )
-            try Task.checkCancellation()
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            let title = Self.matchTitle(match)
-            guard let source = await playback.waitUntilSourceReady(
-                for: context.requestID,
-                timeout: .seconds(30)
-            ) else {
-                if !Task.isCancelled,
-                   isCurrent(generation, requestID: context.requestID) {
-                    status = .failed(message: "视频未就绪，弹幕未装载")
-                }
-                return
-            }
-            try Task.checkCancellation()
-            guard isCurrent(generation, requestID: context.requestID) else { return }
-            let accepted: Bool
-            if let json = payload.json {
-                accepted = try playback.replaceDanmaku(
-                    json: json,
-                    name: title,
-                    offset: .seconds(Double(match.shiftSeconds)),
-                    for: source
-                )
-            } else {
-                accepted = try playback.clearDanmaku(for: source)
-            }
-            guard accepted else {
-                // accepted == false 只可能是播放源代次已过期（同 requestID 下源被重开）。
-                // 此时不能静默卡在 loadingComments，落一个终止状态让 HUD 有反馈。
-                if isCurrent(generation, requestID: context.requestID) {
-                    status = .failed(message: "视频未就绪，弹幕未装载")
-                    AppDiagnostics.logWarning("弹幕装载被跳过：播放源代次已过期", fields: [
-                        "episodeID": .integer(match.episodeID),
-                    ])
-                }
-                return
-            }
-            if payload.json == nil {
-                status = .empty(title: title)
-            } else {
-                status = .loaded(DanmakuLoadedSummary(
-                    episodeID: match.episodeID,
-                    title: title,
-                    commentCount: payload.commentCount
-                ))
-            }
-            AppDiagnostics.logInfo("弹幕正文装载完成", fields: [
-                "episodeID": .integer(match.episodeID),
-                "commentCount": .integer(Int64(payload.commentCount)),
-                "hasPayload": .boolean(payload.json != nil),
-            ])
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled,
-                  isCurrent(generation, requestID: context.requestID)
-            else { return }
-            status = .failed(message: Self.userMessage(for: error))
+        case .failed(let message):
+            status = .failed(message: message)
             AppDiagnostics.logWarning("弹幕装载失败", fields: [
-                "episodeID": .integer(match.episodeID),
-                "error": .string("\(error)"),
+                "source": .string(context.sourceKind.rawValue),
+                "fileName": .string(context.fileName),
+                "error": .string(message),
             ])
         }
     }
 
-    private func clearExistingDanmaku(
-        context: DanmakuPlaybackContext,
-        playback: PlaybackController,
-        generation: UInt64
-    ) async {
-        guard let source = await playback.waitUntilSourceReady(
-            for: context.requestID,
-            timeout: .seconds(1)
-        ), isCurrent(generation, requestID: context.requestID)
-        else { return }
-        do {
-            _ = try playback.clearDanmaku(for: source)
-        } catch {
-            AppDiagnostics.logWarning("清理旧弹幕失败", fields: [
-                "error": .string("\(error)"),
-            ])
-        }
+    private func matchContext(from context: DanmakuPlaybackContext) -> DanmakuMatchContext {
+        DanmakuMatchContext(
+            uuid: context.requestID,
+            cacheKey: context.cacheKey,
+            allowsCachedMatchReuse: context.allowsCachedMatchReuse,
+            fileName: context.fileName,
+            fileSize: context.fileSize,
+            durationSeconds: context.durationSeconds,
+            localFileURL: context.localFileURL,
+            remoteURL: context.remoteURL,
+            remoteHeaders: context.remoteHeaders
+        )
     }
 
     private func invalidateLoad() {
@@ -596,42 +433,8 @@ final class DanmakuCoordinator {
         generation == loadGeneration && context?.requestID == requestID
     }
 
-    private func mediaHash(for context: DanmakuPlaybackContext) async throws -> String? {
-        if let url = context.localFileURL {
-            let hashTask = Task.detached(priority: .utility) {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                return try FileHash.head16MiBMD5(at: url)
-            }
-            return try await withTaskCancellationHandler {
-                try await hashTask.value
-            } onCancel: {
-                hashTask.cancel()
-            }
-        }
-        if let url = context.remoteURL,
-           url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https" {
-            return try await FileHash.head16MiBMD5(
-                from: url,
-                headers: context.remoteHeaders,
-                expectedFileSize: context.fileSize,
-                session: session
-            )
-        }
-        return nil
-    }
-
-    private static func matchTitle(_ match: DanmakuEpisodeMatch) -> String {
-        [match.animeTitle, match.episodeTitle]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " · ")
-            .nilIfEmpty ?? "弹弹play"
-    }
-
     private static func matchLogFields(
-        for context: DanmakuPlaybackContext,
-        hashPresent: Bool
+        for context: DanmakuPlaybackContext
     ) -> [String: DiagnosticValue] {
         [
             "source": .string(context.sourceKind.rawValue),
@@ -640,30 +443,11 @@ final class DanmakuCoordinator {
             "videoDuration": context.durationSeconds
                 .map { DiagnosticValue.integer(Int64($0)) } ?? .null,
             "matchMode": .string(MatchRequest.MatchMode.hashAndFileName.rawValue),
-            "hashPresent": .boolean(hashPresent),
+            "hashPresent": .boolean(true),
         ]
     }
 
     private static func elapsedMilliseconds(since start: Date) -> Int64 {
         Int64(max(0, Date().timeIntervalSince(start) * 1_000).rounded())
     }
-
-    private static func userMessage(for error: Error) -> String {
-        switch error {
-        case AutomaticMatchError.fingerprintUnavailable:
-            "无法读取媒体指纹，请手动选择弹幕"
-        case let danmakuError as DandanplayError:
-            danmakuError.userMessage
-        default:
-            "弹幕加载失败"
-        }
-    }
-}
-
-private enum AutomaticMatchError: Error {
-    case fingerprintUnavailable
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

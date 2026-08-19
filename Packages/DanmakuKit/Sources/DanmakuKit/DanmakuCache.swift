@@ -38,6 +38,11 @@ public actor DanmakuCache {
         _ = acceptMappingMutation(for: mediaID, revision: revision)
     }
 
+    /// The highest revision that has claimed this media mapping (in-memory only).
+    public func claimedRevision(for mediaID: String) -> UInt64? {
+        latestMappingRevision[mediaID]
+    }
+
     public func setEpisodeMatch(
         _ match: DanmakuEpisodeMatch,
         for mediaID: String,

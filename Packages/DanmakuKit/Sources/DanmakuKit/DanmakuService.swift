@@ -28,10 +28,26 @@ public actor DanmakuService {
         await cache.episodeMatch(for: cacheKey)
     }
 
+    /// TTL-cached comments for an episode, or nil when absent/expired. Load-only.
+    public func cachedComments(for episodeID: Int64) async -> [DanmakuComment]? {
+        await cache.comments(for: episodeID)
+    }
+
+    /// Persist comments directly (test seeding; production goes through `payload`).
+    public func persistComments(_ comments: [DanmakuComment], for episodeID: Int64) async {
+        await cache.setComments(comments, for: episodeID)
+    }
+
     /// Claims the current playback generation before any cache/network awaits.
     /// Older cancelled work can no longer overwrite this media mapping.
     public func claimMatchRevision(cacheKey: String, revision: UInt64) async {
         await cache.claimEpisodeMatchRevision(for: cacheKey, revision: revision)
+    }
+
+    /// The highest revision that claimed this media mapping. Writers compare against
+    /// this before persisting so stale work cannot clobber newer matches.
+    public func claimedRevision(for cacheKey: String) async -> UInt64? {
+        await cache.claimedRevision(for: cacheKey)
     }
 
     public func automaticMatch(

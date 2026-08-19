@@ -1,4 +1,5 @@
 import CoreGraphics
+import DanmakuKit
 import DiagnosticsKit
 import ErikaKit
 import Foundation
@@ -131,7 +132,7 @@ struct PlaybackSourceGeneration: Hashable, Sendable {
 /// 进度上报（M2）、弹幕装载（M3）都挂在这一层（内核细节始终留在 ErikaKit 里）。
 @MainActor
 @Observable
-final class PlaybackController {
+final class PlaybackController: DanmakuPlaybackHosting {
     /// Replaced for every engine generation so buffered events from an old
     /// engine can never mutate the new source's timeline.
     private(set) var state = PlayerState()
@@ -881,5 +882,25 @@ final class PlaybackController {
         零拷贝 \(s.zero_copy_video_frames) · 音频 \(s.pushed_audio_frames) · \
         渲染失败 \(s.render_failures) · 音频失败 \(s.audio_failures)
         """
+    }
+
+    // MARK: - DanmakuPlaybackHosting（弹幕编排器注入入口）
+
+    func replaceDanmaku(uuid: UUID, json: String, name: String, offset: Duration) throws -> Bool {
+        guard let source = currentSourceToken(uuid: uuid) else { return false }
+        return try replaceDanmaku(json: json, name: name, offset: offset, for: source)
+    }
+
+    func clearDanmaku(uuid: UUID) throws -> Bool {
+        guard let source = currentSourceToken(uuid: uuid) else { return false }
+        return try clearDanmaku(for: source)
+    }
+
+    /// 当前播放源代次 token；弹幕编排器用 `uuid`（请求 id）跨 await 后重新绑定。
+    private func currentSourceToken(uuid: UUID) -> PlaybackSourceGeneration? {
+        guard expectedRequestID == uuid, let activeRequest, activeRequest.id == uuid, isSourceReady else {
+            return nil
+        }
+        return PlaybackSourceGeneration(requestID: uuid, value: sourceGeneration)
     }
 }
