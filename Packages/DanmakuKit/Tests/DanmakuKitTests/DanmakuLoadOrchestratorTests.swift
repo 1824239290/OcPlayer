@@ -265,6 +265,63 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
 
     // MARK: 竞态 / 取消
 
+    func testInjectionUsesPlaybackUUIDNotCacheKey() async throws {
+        // 回归：uuid 必须原样透传给播放器（真实 PlaybackRequest.id），
+        // 不能从 cacheKey 派生——那会造成注入永远不匹配当前源。
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        await service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 6006, shiftSeconds: 0, animeTitle: "透传", episodeTitle: "第6话"),
+            cacheKey: context.cacheKey,
+            revision: 0
+        )
+        let comments = [DanmakuComment(cid: 1, p: "1,1,16777215,1", m: "x")]
+        await service.persistComments(comments, for: 6006)
+        MockURLProtocol.handler = { _ in
+            throw URLError(.badServerResponse)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(episodeID: 6006, commentCount: 1, title: "透传 · 第6话"))
+        XCTAssertEqual(playback.waitedUUIDs.last, context.uuid, "就绪等待与注入必须使用请求的 uuid")
+    }
+
+    func testWaitUntilReadyTimeoutFailsWithoutInjection() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        await service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 7007),
+            cacheKey: context.cacheKey,
+            revision: 0
+        )
+        let comments = [DanmakuComment(cid: 1, p: "1,1,16777215,1", m: "x")]
+        await service.persistComments(comments, for: 7007)
+        MockURLProtocol.handler = { _ in
+            throw URLError(.badServerResponse)
+        }
+        defer { MockURLProtocol.handler = nil }
+        // 假播放器就绪等待永远被取消（等价于 30s 超时），编排器应失败且不注入。
+        playback.readyNeverResolves = true
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        guard case .failed(let message) = outcome else {
+            return XCTFail("就绪超时应失败，got \(outcome)")
+        }
+        XCTAssertEqual(message, "视频未就绪，弹幕未装载")
+        XCTAssertNil(playback.injectedJSON, "就绪超时不应注入")
+    }
+
     func testStaleRevisionCannotInjectAfterSwitch() async throws {
         let configuration = makeConfiguration()
         let context = makeContext()
@@ -337,6 +394,15 @@ private final class FakePlaybackHost: DanmakuPlaybackHosting {
     var injectedJSON: String?
     var injectedOffset: Duration?
     var didClear = false
+    /// 记录调用 waitUntilReady 时的 uuid，供断言（必须与请求 id 一致）。
+    var waitedUUIDs: [UUID] = []
+    /// 为 true 时就绪等待直接失败（等价于 30s 超时）。
+    var readyNeverResolves = false
+
+    func waitUntilReady(uuid: UUID, timeout: Duration) async -> Bool {
+        waitedUUIDs.append(uuid)
+        return !readyNeverResolves
+    }
 
     func replaceDanmaku(uuid: UUID, json: String, name: String, offset: Duration) throws -> Bool {
         injectedJSON = json

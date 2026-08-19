@@ -327,6 +327,7 @@ final class DanmakuCoordinator {
             let startedAt = Date()
             let outcome = await orchestrator.runManual(
                 match: match,
+                uuid: requestID,
                 cacheKey: context.cacheKey,
                 configuration: configuration,
                 playback: playback,

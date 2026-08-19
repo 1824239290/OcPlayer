@@ -886,6 +886,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     // MARK: - DanmakuPlaybackHosting（弹幕编排器注入入口）
 
+    func waitUntilReady(uuid: UUID, timeout: Duration) async -> Bool {
+        await waitUntilSourceReady(for: uuid, timeout: timeout) != nil
+    }
+
     func replaceDanmaku(uuid: UUID, json: String, name: String, offset: Duration) throws -> Bool {
         guard let source = currentSourceToken(uuid: uuid) else { return false }
         return try replaceDanmaku(json: json, name: name, offset: offset, for: source)

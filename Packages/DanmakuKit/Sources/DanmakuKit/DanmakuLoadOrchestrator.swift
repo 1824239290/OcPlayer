@@ -9,12 +9,14 @@ public enum DanmakuLoadOutcome: Equatable, Sendable {
     case failed(message: String)
 }
 
-/// 播放器侧为弹幕装载提供的两个同步动作。`uuid` 是 `PlaybackRequest.id`
-/// 的等价物，用于区分「同一次播放的不同源代次」与「不同的播放请求」。
+/// 播放器侧为弹幕装载提供的同步动作。`uuid` 是 `PlaybackRequest.id` 的等价物，
+/// 用于区分「同一次播放的不同源代次」与「不同的播放请求」。
 /// 标 `@MainActor` 以便 `PlaybackController`（主线程绑定）直接 conform；
 /// 编排器在 async 上下文调用时会隐式 hop 到主线程。
 @MainActor
 public protocol DanmakuPlaybackHosting {
+    /// 等待当前播放源就绪（可注入弹幕）。超时或源已切换返回 false。
+    func waitUntilReady(uuid: UUID, timeout: Duration) async -> Bool
     /// 装载弹幕 JSON；返回 false 表示播放源已不在当前代次（调用方应放弃并终止）。
     /// 返回值为真时，错误由实现方抛出。
     func replaceDanmaku(
@@ -69,6 +71,7 @@ public struct DanmakuLoadOrchestrator {
                await isCurrent(revision, cacheKey: cacheKey) {
                 return await loadPayload(
                     match: cached,
+                    uuid: matchContext.uuid,
                     cacheKey: cacheKey,
                     configuration: configuration,
                     playback: playback,
@@ -116,6 +119,7 @@ public struct DanmakuLoadOrchestrator {
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
             return await loadPayload(
                 match: match,
+                uuid: matchContext.uuid,
                 cacheKey: cacheKey,
                 configuration: configuration,
                 playback: playback,
@@ -133,6 +137,7 @@ public struct DanmakuLoadOrchestrator {
     /// 用户手动选择某一集后的装载。
     public func runManual(
         match: DanmakuEpisodeMatch,
+        uuid: UUID,
         cacheKey: String,
         configuration: DandanplayConfiguration,
         playback: DanmakuPlaybackHosting,
@@ -142,6 +147,7 @@ public struct DanmakuLoadOrchestrator {
         await service.remember(match: match, cacheKey: cacheKey, revision: revision)
         return await loadPayload(
             match: match,
+            uuid: uuid,
             cacheKey: cacheKey,
             configuration: configuration,
             playback: playback,
@@ -152,6 +158,7 @@ public struct DanmakuLoadOrchestrator {
 
     private func loadPayload(
         match: DanmakuEpisodeMatch,
+        uuid: UUID,
         cacheKey: String,
         configuration: DandanplayConfiguration,
         playback: DanmakuPlaybackHosting,
@@ -166,16 +173,23 @@ public struct DanmakuLoadOrchestrator {
             )
             try Task.checkCancellation()
             let name = Self.matchTitle(match)
+            // 等待播放器引擎就绪（原实现 30s 等待；缓存命中时注入往往先于引擎 ready）。
+            guard await playback.waitUntilReady(uuid: uuid, timeout: .seconds(30)) else {
+                if await isCurrent(revision, cacheKey: cacheKey) {
+                    return .failed(message: "视频未就绪，弹幕未装载")
+                }
+                return .failed(message: "播放已切换")
+            }
             let accepted: Bool
             if let json = payload.json {
                 accepted = try await playback.replaceDanmaku(
-                    uuid: cacheKeyUUID(cacheKey),
+                    uuid: uuid,
                     json: json,
                     name: name,
                     offset: .seconds(Double(match.shiftSeconds))
                 )
             } else {
-                accepted = try await playback.clearDanmaku(uuid: cacheKeyUUID(cacheKey))
+                accepted = try await playback.clearDanmaku(uuid: uuid)
             }
             guard accepted else {
                 if await isCurrent(revision, cacheKey: cacheKey) {
@@ -199,10 +213,6 @@ public struct DanmakuLoadOrchestrator {
         guard !Task.isCancelled else { return false }
         let claimed = await service.claimedRevision(for: cacheKey)
         return revision == claimed
-    }
-
-    private func cacheKeyUUID(_ cacheKey: String) -> UUID {
-        UUID(uuidString: String(cacheKey.suffix(36))) ?? UUID()
     }
 
     private func userMessage(for error: Error) -> String {
