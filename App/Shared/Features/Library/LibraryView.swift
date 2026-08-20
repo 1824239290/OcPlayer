@@ -80,6 +80,7 @@ struct LibraryView: View {
                     .padding(.bottom, 28)
             }
         }
+        .scrollBounceBehavior(.basedOnSize)
         .refreshable { await reload() }
     }
 

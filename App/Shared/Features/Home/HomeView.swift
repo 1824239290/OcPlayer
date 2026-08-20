@@ -1,7 +1,7 @@
 import CoreModel
 import SwiftUI
 
-/// 首页：英雄区（最近添加里挑有背景图的）+ 继续观看 + 接下来看 + 最近添加。
+/// 首页：继续观看 + 接下来看 + 最近添加。
 struct HomeView: View {
     @Environment(AppModel.self) private var app
 
@@ -35,61 +35,57 @@ struct HomeView: View {
     }
 
     private var content: some View {
-        GeometryReader { viewport in
-            let contentWidth = max(viewport.size.width, 1)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    if !app.home.resume.isEmpty {
-                        Rail("继续观看") {
-                            ForEach(app.home.resume) { item in
-                                StillCard(
-                                    item: item,
-                                    server: app.server,
-                                    actionIcon: "chevron.right",
-                                    actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
-                                ) {
-                                    app.openSeriesDetail(for: item)
-                                }
-                            }
-                        }
-                    }
-
-                    if !app.home.nextUp.isEmpty {
-                        Rail("接下来看") {
-                            ForEach(app.home.nextUp) { item in
-                                StillCard(
-                                    item: item,
-                                    server: app.server,
-                                    actionIcon: "chevron.right",
-                                    actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
-                                ) {
-                                    app.openSeriesDetail(for: item)
-                                }
-                            }
-                        }
-                    }
-
-                    if !app.home.latest.isEmpty {
-                        Rail("最近添加") {
-                            ForEach(app.home.latest) { item in
-                                PosterCard(item: item, server: app.server) {
-                                    app.openDetail(item)
-                                }
+        // 不再包一层 GeometryReader：它会在每次侧栏拖动/窗口变化时强迫整页重测，
+        // 滚轮滚动时也更容易和嵌套横向 Rail 抢布局，手感发沉。
+        // 宽度由 Rail 内 `.frame(maxWidth: .infinity)` + 卡片固定宽约束。
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if !app.home.resume.isEmpty {
+                    Rail("继续观看", kind: .still) {
+                        ForEach(app.home.resume) { item in
+                            StillCard(
+                                item: item,
+                                server: app.server,
+                                actionIcon: "chevron.right",
+                                actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                            ) {
+                                app.openSeriesDetail(for: item)
                             }
                         }
                     }
                 }
-                // Vertical ScrollView 对内容的横向提议可能是 nil；仅使用
-                // `maxWidth: .infinity` 仍会让横向 Rail 的理想宽度泄漏到详情列外。
-                // 用外层 GeometryReader 的真实视口宽度硬约束内容列，侧栏开合时
-                // HeroCarousel 只能测到当前详情列的可视宽度。
-                .frame(width: contentWidth, alignment: .leading)
-                .padding(.bottom, 12)
+
+                if !app.home.nextUp.isEmpty {
+                    Rail("接下来看", kind: .still) {
+                        ForEach(app.home.nextUp) { item in
+                            StillCard(
+                                item: item,
+                                server: app.server,
+                                actionIcon: "chevron.right",
+                                actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                            ) {
+                                app.openSeriesDetail(for: item)
+                            }
+                        }
+                    }
+                }
+
+                if !app.home.latest.isEmpty {
+                    Rail("最近添加", kind: .poster) {
+                        ForEach(app.home.latest) { item in
+                            PosterCard(item: item, server: app.server) {
+                                app.openDetail(item)
+                            }
+                        }
+                    }
+                }
             }
-            .contentMargins(.horizontal, 0, for: .scrollContent)
-            .refreshable { await app.reloadBrowserData() }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 12)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .contentMargins(.horizontal, 0, for: .scrollContent)
+        .refreshable { await app.reloadBrowserData() }
     }
 
     private var loadingState: some View {
@@ -110,4 +106,3 @@ struct HomeView: View {
         }
     }
 }
-

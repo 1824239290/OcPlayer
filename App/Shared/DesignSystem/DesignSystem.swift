@@ -14,6 +14,18 @@ enum Metrics {
     static let cardRadius: CGFloat = 10
     static let railSpacing: CGFloat = 22
     static let contentInset: CGFloat = 52
+    /// Rail 横向 ScrollView 上下为悬停放大预留的内边距（上下各一档）。
+    static let railHoverPadding: CGFloat = 28
+
+    /// 海报卡（图 2:3 + 标题行）在 Rail 里的可视高度，含 hover 留白。
+    static var posterRailHeight: CGFloat {
+        posterWidth * 1.5 + 9 + 22 + railHoverPadding * 2
+    }
+
+    /// 剧照卡（16:9 + 进度条 + 两行文案）在 Rail 里的可视高度，含 hover 留白。
+    static var stillRailHeight: CGFloat {
+        stillWidth * 9 / 16 + 6 + 3 + 10 + 40 + railHoverPadding * 2
+    }
 
     /// iPhone 把横向留白压小；Mac / iPad 用设计稿的 52。
     @MainActor static var contentLeading: CGFloat {
@@ -233,11 +245,30 @@ struct StillCard: View {
 
 /// Apple TV 式横向滚动行。
 struct Rail<Content: View>: View {
+    enum Kind {
+        /// 海报卡（媒体库 / 最近添加 / 类似推荐）
+        case poster
+        /// 剧照卡（继续观看 / 接下来看）
+        case still
+        /// 不锁高度（演员头像等矮行）
+        case flexible
+
+        var scrollHeight: CGFloat? {
+            switch self {
+            case .poster: Metrics.posterRailHeight
+            case .still: Metrics.stillRailHeight
+            case .flexible: nil
+            }
+        }
+    }
+
     let title: String
+    var kind: Kind = .flexible
     private let content: Content
 
-    init(_ title: String, @ViewBuilder content: () -> Content) {
+    init(_ title: String, kind: Kind = .flexible, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.kind = kind
         self.content = content()
     }
 
@@ -246,17 +277,33 @@ struct Rail<Content: View>: View {
             Text(title)
                 .font(.title3.weight(.bold))
                 .padding(.horizontal, Metrics.contentLeading)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: Metrics.railSpacing) {
-                    content
-                }
-                .padding(.horizontal, Metrics.contentLeading)
-                // 悬停放大（scale 1.055）+ 投影会溢出卡片原尺寸；给上下留呼吸空间，
-                // 否则横向 ScrollView 会按内容高度裁掉放大/阴影的超出部分。
-                .padding(.vertical, 28)
-            }
+            horizontalRail
         }
         .padding(.top, 24)
+    }
+
+    @ViewBuilder
+    private var horizontalRail: some View {
+        let rail = ScrollView(.horizontal, showsIndicators: false) {
+            // LazyHStack：只具现可视附近的卡片，滚轮/触控板滑动时不再整行解码布局。
+            LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
+                content
+            }
+            .padding(.horizontal, Metrics.contentLeading)
+            // 悬停放大 + 投影会溢出卡片原尺寸；给上下留呼吸空间，
+            // 否则横向 ScrollView 会按内容高度裁掉放大/阴影的超出部分。
+            .padding(.vertical, Metrics.railHoverPadding)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+
+        // 海报/剧照行定高：嵌套在竖向 ScrollView 里布局稳定，
+        // 避免 LazyHStack 首帧高度跳动把整页滚轮手感拖沉。
+        if let height = kind.scrollHeight {
+            rail.frame(height: height, alignment: .top)
+        } else {
+            rail
+        }
     }
 }
 

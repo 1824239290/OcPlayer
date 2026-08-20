@@ -320,7 +320,7 @@ struct DetailView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(alignment: .top, spacing: Metrics.railSpacing) {
+                        LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
                             ForEach(episodes) { episode in
                                 EpisodeSelectCard(
                                     episode: episode,
@@ -336,6 +336,8 @@ struct DetailView: View {
                         // 选中描边 / 轻微抬升会溢出卡片原高度，上下留白避免被裁。
                         .padding(.vertical, 10)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
                     .onChange(of: selectedEpisodeID) { _, newID in
                         guard let newID else { return }
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -375,7 +377,7 @@ struct DetailView: View {
     }
 
     private var similarRail: some View {
-        Rail("类似推荐") {
+        Rail("类似推荐", kind: .poster) {
             ForEach(similar) { item in
                 PosterCard(item: item, server: app.server) {
                     app.openDetail(item)
