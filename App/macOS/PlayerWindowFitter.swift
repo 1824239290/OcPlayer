@@ -73,7 +73,7 @@ enum PlayerWindowFitter {
         // 退出播放器时还原窗口。不能在 onDisappear 的 SwiftUI update cycle 里同步做
         // animate:true 的 setFrame——那个动画 helper（NSMoveHelper）会在窗口因
         // overlay 移除 / 工具栏恢复而处于不稳定状态时被驱动，实测空指针 SIGSEGV。
-        // 这里延后到下一个 runloop 再立即（无动画）还原。
+        // 这里延后到下一个 runloop 再还原，此时 overlay 和工具栏已恢复稳定，可以安全用动画。
         DispatchQueue.main.async {
             // 竞争保护：这个闭包是异步的，执行前用户可能已经退出一场播放、重新开始了
             // 一场新的（新会话 saveOriginalIfNeeded 会把 originalFrame 换成新窗口的 frame，
@@ -82,7 +82,7 @@ enum PlayerWindowFitter {
             guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow(),
                   PlayerWindowFitter.originalFrame == nil
             else { return }
-            window.setFrame(target, display: true, animate: false)
+            window.setFrame(target, display: true, animate: true)
         }
     }
 
