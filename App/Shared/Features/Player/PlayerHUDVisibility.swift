@@ -140,6 +140,14 @@ final class PlayerHUDVisibilityCoordinator {
         lastPointerLocation = nil
     }
 
+    /// 鼠标移出窗口：收起 HUD，但**不置 `userHidden` 锁定**——鼠标移回窗口时
+    /// 移动仍能唤出（区别于用户主动点关闭的 `hide()`，那个要再点一下才开）。
+    func hideOnPointerExit() {
+        guard !userHidden else { return }
+        cancelScheduledHide()
+        setVisible(false)
+    }
+
     /// SwiftUI Menu 没有公开 isPresented；macOS 用 NSMenu tracking 通知补齐真实生命周期。
     /// 用集合而不是 Bool，嵌套的倍速子菜单结束时不会提前释放父菜单的暂停状态。
     func menuTrackingDidBegin(_ menu: AnyObject, canAutoHide: Bool) {

@@ -57,6 +57,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     var danmakuTracks: [DanmakuTrackInfo] = []
+    /// 外挂字幕轨道 id → 显示名（Jellyfin 侧车字幕的标题）。内核不带名字，
+    /// App 层在下载时记录；换源 / 拆引擎时清空（见 resetEngine）。
+    var externalSubtitleNames: [Int64: String] = [:]
     var danmakuEnabled = PlaybackPreferences.danmakuEnabled
     var danmakuOpacity = PlaybackPreferences.danmakuOpacity
     var danmakuDisplayArea = PlaybackPreferences.danmakuDisplayArea
@@ -494,6 +497,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         failedRequestID = nil
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
+        externalSubtitleNames = [:]
         // engine 没了就一定不在播，息屏令牌和系统登记立刻还回去（stopPlayback 也经过这里）。
         syncSystemPlaybackState()
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是

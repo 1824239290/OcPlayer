@@ -96,7 +96,9 @@ struct PlayerHUDActionsCapsule: View {
             .disabled(controller.state.subtitleTracks.isEmpty && !isSubtitleOn)
 
             ForEach(controller.state.subtitleTracks) { track in
-                let label = track.source == .external ? "\(track.displayTitle)（外挂）" : track.displayTitle
+                let label = track.source == .external
+                    ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
+                    : track.displayTitle
                 Button {
                     controller.setSubtitle(track)
                     onUserInteraction()
@@ -250,7 +252,12 @@ struct PlayerHUDActionsCapsule: View {
     }
 
     private var selectedSubtitleTitle: String {
-        controller.state.subtitleTracks.first(where: { $0.selected })?.displayTitle ?? "已关闭"
+        guard let track = controller.state.subtitleTracks.first(where: { $0.selected }) else {
+            return "已关闭"
+        }
+        return track.source == .external
+            ? controller.externalSubtitleDisplayName(for: track)
+            : track.displayTitle
     }
 
     private var selectedAudioTitle: String {

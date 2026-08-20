@@ -452,6 +452,17 @@ extension AppModel {
         }
     }
 
+    /// 拼一条 Jellyfin 侧车字幕的菜单显示名：优先用标题，没有就语言兜底
+    /// （"zh" 这类代码转成可读语言名）。和 `ExternalSubtitle.title` 一起喂给
+    /// `addExternalSubtitle(fileURL:name:for:)`，内核不带这些元数据。
+    static func subtitleDisplayName(for subtitle: ExternalSubtitle) -> String {
+        if let title = subtitle.title, !title.isEmpty { return title }
+        if let language = subtitle.language, !language.isEmpty {
+            return language.lowercased()
+        }
+        return subtitle.codec.uppercased()
+    }
+
     /// Jellyfin 侧车字幕（`.zh.srt` 这类不在容器里的）：列出 → 逐条下载 → 喂给内核。
     /// 装载完如果一条字幕都没选，自动挑中文优先的一条。
     func loadExternalSubtitles(
@@ -477,7 +488,9 @@ extension AppModel {
                 guard let file = try? await server.downloadSubtitle(subtitle) else { continue }
                 guard !Task.isCancelled,
                       self.activePlaybackIdentity == identity else { return }
-                guard playback.addExternalSubtitle(fileURL: file, for: source) else { return }
+                // 名字和语言都喂过去：内核不带这些元数据，靠 App 层映射在菜单里显示。
+                let name = Self.subtitleDisplayName(for: subtitle)
+                guard playback.addExternalSubtitle(fileURL: file, name: name, for: source) else { return }
             }
             _ = playback.autoSelectSubtitleIfNone(for: source)
         }

@@ -130,7 +130,10 @@ struct PlayerScreen: View {
             case .active(let location):
                 hudVisibility.pointerMoved(to: location, canAutoHide: canAutoHideControls)
             case .ended:
+                // 播放器视图铺满窗口，移出视图 = 移出窗口：收起 HUD。
+                // 不置 userHidden，鼠标移回来仍能唤出。
                 hudVisibility.pointerExited()
+                hudVisibility.hideOnPointerExit()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) {

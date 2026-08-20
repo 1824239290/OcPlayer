@@ -6,6 +6,16 @@ import Foundation
 extension PlaybackController {
     // MARK: - 轨道（音轨 / 字幕菜单用）
 
+    /// 按轨道 id 取外挂字幕显示名；没有记录时回退到内核给的名字/语言。
+    /// 记录由 `addExternalSubtitle` 系列在拿到轨道 id 时写入
+    /// （`externalSubtitleNames`，主类存储属性）。
+    func externalSubtitleDisplayName(for track: TrackInfo) -> String {
+        if let name = externalSubtitleNames[track.id], !name.isEmpty {
+            return name
+        }
+        return track.displayTitle
+    }
+
     /// Replace the current source's danmaku only while its generation token is valid.
     @discardableResult
     func replaceDanmaku(
@@ -163,6 +173,9 @@ extension PlaybackController {
         guard let localURL = copyImportedSubtitle(fileURL) else { return }
         do {
             let id = try engine.addExternalSubtitle(localURL.path)
+            // 手动导入的轨道名用文件主名（去掉扩展名）。
+            let baseName = fileURL.deletingPathExtension().lastPathComponent
+            externalSubtitleNames[id] = baseName
             try engine.selectSubtitleTrack(id)
             state.refreshTracks(from: engine)
         } catch {
@@ -174,7 +187,8 @@ extension PlaybackController {
     func addExternalSubtitle(fileURL: URL) {
         guard let engine else { return }
         do {
-            _ = try engine.addExternalSubtitle(fileURL.path)
+            let id = try engine.addExternalSubtitle(fileURL.path)
+            externalSubtitleNames[id] = fileURL.deletingPathExtension().lastPathComponent
             state.refreshTracks(from: engine)
         } catch {
             setupError = "字幕加载失败：\(error)"
@@ -182,14 +196,19 @@ extension PlaybackController {
     }
 
     /// Generation-safe variant for asynchronously downloaded resources.
+    /// `name` 非 nil 时写入显示名映射（Jellyfin 侧车字幕用 `ExternalSubtitle.title`）。
     @discardableResult
     func addExternalSubtitle(
         fileURL: URL,
+        name: String? = nil,
         for source: PlaybackSourceGeneration
     ) -> Bool {
         do {
             return try withReadyEngine(for: source) { engine in
-                _ = try engine.addExternalSubtitle(fileURL.path)
+                let id = try engine.addExternalSubtitle(fileURL.path)
+                if let name, !name.isEmpty {
+                    externalSubtitleNames[id] = name
+                }
                 state.refreshTracks(from: engine)
             }
         } catch {
