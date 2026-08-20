@@ -182,6 +182,25 @@ public struct JellyfinServer: Sendable {
         .items?.map(\.domainItem) ?? []
     }
 
+    /// 标记条目已看完（Jellyfin `POST /UserPlayedItems/{id}`）。
+    /// 返回服务端最新的播放状态快照，便于 UI 就地更新。
+    @discardableResult
+    public func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
+        let data = try await send(
+            Paths.markPlayedItem(itemID: itemID, userID: profile.userID)
+        )
+        return data.domainPlayState
+    }
+
+    /// 取消已看标记（Jellyfin `DELETE /UserPlayedItems/{id}`）。
+    @discardableResult
+    public func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
+        let data = try await send(
+            Paths.markUnplayedItem(itemID: itemID, userID: profile.userID)
+        )
+        return data.domainPlayState
+    }
+
     /// 条目详情（含演员表 / 简介 / 流派）。
     /// 显式带 `fields`：部分服务器版本默认不返回 People 等扩展字段（SDK 自带的
     /// `Paths.getItem` 不带 fields），显式请求两边都稳。

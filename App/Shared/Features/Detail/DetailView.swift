@@ -33,6 +33,8 @@ struct DetailView: View {
     @State private var loadError: String?
     @State private var isLoadingEpisodes = false
     @State private var episodeLoadError: String?
+    @State private var isUpdatingPlayed = false
+    @State private var playedActionError: String?
 
     private var shown: MediaItem { detail ?? item }
 
@@ -48,6 +50,9 @@ struct DetailView: View {
                         metadata
                         if let loadError {
                             loadErrorNotice(loadError)
+                        }
+                        if let playedActionError {
+                            loadErrorNotice(playedActionError)
                         }
                         if shown.kind == .series {
                             seasonBar
@@ -98,7 +103,7 @@ struct DetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         bannerTitle
                         metaRow
-                        playButton
+                        playbackActions
                     }
                 }
 
@@ -111,7 +116,7 @@ struct DetailView: View {
                                 .lineLimit(1)
                         }
                     }
-                    playButton
+                    playbackActions
                 }
             }
             .padding(.horizontal, Metrics.contentLeading)
@@ -172,6 +177,16 @@ struct DetailView: View {
         return parts
     }
 
+    /// 主播放胶囊 + 次要「已看过」圆钮（同高 40）。
+    private var playbackActions: some View {
+        HStack(spacing: 12) {
+            playButton
+            if canTogglePlayed {
+                markPlayedButton
+            }
+        }
+    }
+
     private var playButton: some View {
         Button(action: playCurrent) {
             ZStack(alignment: .leading) {
@@ -203,6 +218,41 @@ struct DetailView: View {
         .opacity(canPlayCurrent ? 1 : 0.55)
         .accessibilityLabel(resumePlayState == nil ? playButtonLabel : "继续播放")
         .accessibilityValue(resumePlayState.map { "本集已播放 \(resumeClock($0.positionSeconds))" } ?? "")
+    }
+
+    private var markPlayedButton: some View {
+        let played = isPlayableMarkedPlayed
+        return Button {
+            Task { await togglePlayed() }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(played ? 0.92 : 0.18))
+                if isUpdatingPlayed {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(played ? .black.opacity(0.75) : .white)
+                } else {
+                    Image(systemName: played ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(played ? Color.black.opacity(0.78) : Color.white.opacity(0.95))
+                }
+            }
+            .frame(width: 40, height: 40)
+            .overlay {
+                Circle().strokeBorder(.white.opacity(played ? 0 : 0.35), lineWidth: 1)
+            }
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .modifier(DetailPlayButtonStyle())
+        .disabled(isUpdatingPlayed || playableItem == nil)
+        .opacity(isUpdatingPlayed ? 0.85 : 1)
+        .help(played ? "标为未看" : "已看过")
+        .accessibilityLabel(played ? "标为未看" : "已看过")
+        .accessibilityValue(played ? "当前为已看完" : "当前为未看完")
+        .accessibilityHint(played ? "轻点后恢复为未看" : "轻点后标记为已看完")
     }
 
     private var playButtonLabel: String {
@@ -256,6 +306,20 @@ struct DetailView: View {
 
     private var canPlayCurrent: Bool {
         playableItem != nil
+    }
+
+    private var canTogglePlayed: Bool {
+        guard let item = playableItem else { return false }
+        switch item.kind {
+        case .movie, .episode:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isPlayableMarkedPlayed: Bool {
+        playableItem?.playState?.played == true
     }
 
     // MARK: - 简介与元信息
@@ -398,6 +462,38 @@ struct DetailView: View {
             resume = nil
         }
         app.play(playableItem, resumeSeconds: resume)
+    }
+
+    /// 切换当前可播条目（电影 / 选中集）的已看状态，并写回本地详情与选集列表。
+    private func togglePlayed() async {
+        guard !isUpdatingPlayed,
+              let target = playableItem,
+              let server = app.server
+        else { return }
+        let markAsPlayed = !(target.playState?.played ?? false)
+        isUpdatingPlayed = true
+        playedActionError = nil
+        defer { isUpdatingPlayed = false }
+        do {
+            let state = markAsPlayed
+                ? try await server.markPlayed(itemID: target.id)
+                : try await server.markUnplayed(itemID: target.id)
+            applyPlayState(state, toItemID: target.id)
+        } catch let error as JellyfinError {
+            playedActionError = error.errorDescription
+        } catch {
+            playedActionError = "\(error)"
+        }
+    }
+
+    private func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) {
+        if var current = detail, current.id == id {
+            current.playState = state
+            detail = current
+        }
+        if let index = episodes.firstIndex(where: { $0.id == id }) {
+            episodes[index].playState = state
+        }
     }
 
     private func load() async {

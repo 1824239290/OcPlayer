@@ -266,6 +266,41 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    func testMarkPlayedPostsUserPlayedItemsAndMapsState() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/UserPlayedItems/ep-9")
+            XCTAssertEqual(request.httpMethod, "POST")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["userId"], "user-9")
+            return MockURLProtocol.ok(
+                #"{"Key":"ep-9","Played":true,"PlaybackPositionTicks":0,"PlayedPercentage":100}"#,
+                for: request.url!
+            )
+        } with: {
+            let state = try await makeServer().markPlayed(itemID: "ep-9")
+            XCTAssertTrue(state.played)
+            XCTAssertEqual(state.positionSeconds, 0, accuracy: 0.001)
+            XCTAssertEqual(state.percentage, 1, accuracy: 0.001)
+        }
+    }
+
+    func testMarkUnplayedDeletesUserPlayedItemsAndMapsState() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/UserPlayedItems/ep-9")
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["userId"], "user-9")
+            return MockURLProtocol.ok(
+                #"{"Key":"ep-9","Played":false,"PlaybackPositionTicks":0,"PlayedPercentage":0}"#,
+                for: request.url!
+            )
+        } with: {
+            let state = try await makeServer().markUnplayed(itemID: "ep-9")
+            XCTAssertFalse(state.played)
+            XCTAssertEqual(state.percentage, 0, accuracy: 0.001)
+        }
+    }
+
     func testFavoriteItemsFiltersFavoritesAndSortsByMediaCreationDate() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items")

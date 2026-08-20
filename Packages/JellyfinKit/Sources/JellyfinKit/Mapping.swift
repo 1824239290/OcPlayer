@@ -57,6 +57,18 @@ func seconds(fromTicks ticks: Int?) -> Double? {
     ticks.map { Double($0) / 10_000_000 }
 }
 
+extension UserItemDataDto {
+    /// 标记已看/取消已看等接口返回的用户数据 → 域模型播放状态。
+    var domainPlayState: MediaItem.PlayState {
+        MediaItem.PlayState(
+            played: isPlayed ?? false,
+            percentage: (playedPercentage ?? 0) / 100,
+            positionSeconds: seconds(fromTicks: playbackPositionTicks) ?? 0,
+            unplayedCount: unplayedItemCount
+        )
+    }
+}
+
 extension BaseItemDto {
     var domainItem: MediaItem {
         // 首图 / 背景图的 tag：进 URL 让「图片换了 → URL 变了 → 缓存自动失效」。
