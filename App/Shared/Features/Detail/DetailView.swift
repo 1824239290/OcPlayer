@@ -177,14 +177,16 @@ struct DetailView: View {
         return parts
     }
 
-    /// 主播放胶囊 + 同高「已看过」次要胶囊，视觉量级一致。
+    /// 主播放胶囊 + 同高仅图标的「已看过」钮，共用 bannerActionHeight。
     private var playbackActions: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
             playButton
             if canTogglePlayed {
                 markPlayedButton
             }
         }
+        // 固定行高，避免图标/字体 metrics 把一侧撑高。
+        .frame(height: Self.bannerActionHeight, alignment: .center)
     }
 
     private static let bannerActionHeight: CGFloat = 40
@@ -222,35 +224,29 @@ struct DetailView: View {
         .accessibilityValue(resumePlayState.map { "本集已播放 \(resumeClock($0.positionSeconds))" } ?? "")
     }
 
+    /// 与播放钮同高的圆形次要操作：只放勾选图标，无文案。
     private var markPlayedButton: some View {
         let played = isPlayableMarkedPlayed
-        let title = played ? "已看过" : "标为已看"
         return Button {
             Task { await togglePlayed() }
         } label: {
-            HStack(spacing: 7) {
+            ZStack {
+                // 与主按钮同一套白底体系：未看半透明、已看实心，高度严格 40×40。
+                Capsule()
+                    .fill(.white.opacity(played ? 0.78 : 0.34))
                 if isUpdatingPlayed {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(played ? .black.opacity(0.75) : .white)
+                        .tint(.black.opacity(0.75))
                 } else {
                     Image(systemName: played ? "checkmark.circle.fill" : "checkmark.circle")
-                        .font(.body.weight(.semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .symbolRenderingMode(.monochrome)
+                        .foregroundStyle(.black.opacity(0.8))
                 }
-                Text(title)
-                    .font(.callout.weight(.medium))
-                    .lineLimit(1)
             }
-            .foregroundStyle(played ? Color.black.opacity(0.8) : Color.white.opacity(0.95))
-            .padding(.horizontal, 16)
-            .frame(height: Self.bannerActionHeight)
-            .background(
-                Capsule().fill(.white.opacity(played ? 0.78 : 0.18))
-            )
-            .overlay {
-                Capsule().strokeBorder(.white.opacity(played ? 0 : 0.35), lineWidth: 1)
-            }
+            .frame(width: Self.bannerActionHeight, height: Self.bannerActionHeight)
+            .clipShape(Capsule())
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
