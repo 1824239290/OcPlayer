@@ -18,14 +18,27 @@ enum PlayerHUDInteraction: Hashable {
 @MainActor
 @Observable
 final class PlayerHUDVisibilityCoordinator {
+    /// 是否**可见**：控制 `.opacity`，驱动淡入淡出动画（macOS 上 `.opacity`
+    /// 属性动画两个方向都可靠，见 PlayerScreen 注释）。
     private(set) var isVisible = true
+    /// 是否**挂载**：控制 `if` 卸载。和 `isVisible` 错开一拍——隐藏时先淡出
+    /// （isVisible 变 false），动画跑完再把 isMounted 置 false 真正卸载；
+    /// 显示时先挂载再淡入。这样既拿到卸载的性能收益，淡出动画也完整。
+    private(set) var isMounted = true
 
-    /// 显隐动画。**必须**由改 `isVisible` 的这一侧带上：HUD 藏起来时是整棵子树被
-    /// 卸载，`.transition` 的 removal 只认改状态那个 transaction 里的动画。把
-    /// `.animation(_:value:)` 挂在容器上只能让「出现」渐变，「消失」会瞬间摘掉。
+    /// 显隐动画档位。**由容器**（PlayerScreen 的 `.animation(value: isVisible)`）
+    /// 驱动 `.opacity` 属性动画。这里同时用它决定卸载延时——动画多长就等多久。
     ///
     /// nil = 不动画（减弱动态效果）。协调器拿不到 Environment，由视图解析后灌进来。
     @ObservationIgnored var motionAnimation: Animation? = .easeInOut(duration: 0.2)
+
+    /// 卸载延时：和动画时长一致，动画跑完才真正卸载。reduceMotion（无动画）
+    /// 时为 0，直接卸载。由视图随 motionAnimation 一起注入。
+    @ObservationIgnored var unmountDelay: Duration = .milliseconds(200)
+
+    /// 显隐过渡任务：淡出后卸载、或挂载后淡入，都用这一个槽位互斥持有。
+    /// 任何新的显隐意图先取消它，避免竞态（例如淡入前又触发隐藏）。
+    @ObservationIgnored private var transitionTask: Task<Void, Never>?
 
     @ObservationIgnored private var activeInteractions: Set<PlayerHUDInteraction> = []
     @ObservationIgnored private var trackedMenus: Set<ObjectIdentifier> = []
@@ -59,10 +72,41 @@ final class PlayerHUDVisibilityCoordinator {
         userHidden = true
     }
 
-    /// 唯一改 `isVisible` 的入口：带上动画 transaction，显隐两个方向都渐变。
+    /// 唯一改可见/挂载的入口，两阶段：
+    /// - 显示：若已卸载（isMounted=false）先挂载再淡入；若还在淡出中途
+    ///   （isMounted=true, isVisible=false）直接反转为可见——动画平滑反向。
+    /// - 隐藏：先淡出（isVisible 变 false），动画跑完（unmountDelay）再卸载；
+    ///   无动画（unmountDelay 为 0）时直接卸载。
     private func setVisible(_ visible: Bool) {
         guard isVisible != visible else { return }
-        withAnimation(motionAnimation) { isVisible = visible }
+        if visible {
+            transitionTask?.cancel()
+            transitionTask = nil
+            if isMounted {
+                // 淡出中途唤出：直接反转，容器动画会把透明度平滑拉回。
+                isVisible = true
+            } else {
+                // 已卸载：先挂载（透明），下一帧再变亮出淡入——同帧挂载+变亮
+                // SwiftUI 看不到中间态。槽位互斥：若淡入前又触发隐藏，
+                // transitionTask 会被取消，不会误亮。
+                isMounted = true
+                transitionTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(16))
+                    guard let self, self.isVisible == false else { return }
+                    self.isVisible = true
+                    self.transitionTask = nil
+                }
+            }
+        } else {
+            isVisible = false
+            transitionTask?.cancel()
+            transitionTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: self?.unmountDelay ?? .zero)
+                guard let self, self.isVisible == false else { return }
+                self.isMounted = false
+                self.transitionTask = nil
+            }
+        }
     }
 
     func setInteraction(
@@ -114,6 +158,8 @@ final class PlayerHUDVisibilityCoordinator {
 
     func cancel() {
         cancelScheduledHide()
+        transitionTask?.cancel()
+        transitionTask = nil
         activeInteractions.removeAll()
         trackedMenus.removeAll()
         lastPointerLocation = nil

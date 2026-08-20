@@ -57,11 +57,11 @@ struct PlayerScreen: View {
                 PlayerPlaybackErrorBadge()
             }
 
-            // 藏起来时**卸载**而不是 `.opacity(0)`：HUD 底部的 PlayerHUDTimeline 观察
-            // 高频 position/duration，留在树上就会整部片子逐帧重排一个 Slider 和两个
-            // 时间标签。淡入淡出由 hudVisibility 改状态时的 withAnimation 驱动
-            // （见 setVisible）——容器上的 .animation(value:) 只能让"出现"渐变。
-            if hudVisibility.isVisible {
+            // 两阶段显隐：`isMounted` 控制 `if` 卸载（隐藏时动画跑完才真正卸载，
+            // 卸载期间 HUD 不再随播放 tick 重排）；`isVisible` 控制 `.opacity`
+            // 驱动淡入淡出——macOS 上 `.transition` 的 removal 不被动画化，
+            // 所以淡出必须用 `.opacity` 属性动画（协调器 setVisible 里两拍错开）。
+            if hudVisibility.isMounted {
                 PlayerHUDOverlay(
                     isNarrow: isNarrow,
                     playbackID: request?.id.uuidString ?? "",
@@ -81,7 +81,9 @@ struct PlayerScreen: View {
                     onUserInteraction: revealControls,
                     onMenuPresented: holdControlsForMenu
                 )
-                .transition(.opacity)
+                .opacity(hudVisibility.isVisible ? 1 : 0)
+                .allowsHitTesting(hudVisibility.isVisible)
+                .accessibilityHidden(!hudVisibility.isVisible)
             }
 
             if showStats {
@@ -92,8 +94,9 @@ struct PlayerScreen: View {
             }
             PlayerScreenshotToast(message: screenshotToast)
         }
-        // HUD 显隐不在这里挂 .animation(value:)：卸载子树的 removal transition 拿不到
-        // 它，动画由 PlayerHUDVisibilityCoordinator.setVisible 的 withAnimation 提供。
+        // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
+        // 两个方向都渐变（macOS 上 transition removal 不生效，见上方注释）。
+        .motionAnimation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible, reduceMotion: reduceMotion)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
         .motionAnimation(.easeInOut(duration: 0.2), value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
@@ -178,6 +181,8 @@ struct PlayerScreen: View {
         // 协调器没有 Environment，减弱动态效果由这里解析后灌给它。
         .onChange(of: reduceMotion, initial: true) {
             hudVisibility.motionAnimation = reduceMotion ? nil : .easeInOut(duration: 0.2)
+            // 卸载延时跟随动画：无动画（reduceMotion）时立即卸载。
+            hudVisibility.unmountDelay = reduceMotion ? .zero : .milliseconds(200)
         }
         .onChange(of: controller.state.state, initial: true) { _, newState in
             PlaybackLog.append("PlayerState -> \(newState)")
