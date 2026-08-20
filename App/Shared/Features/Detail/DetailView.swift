@@ -355,18 +355,18 @@ struct DetailView: View {
                     HStack {
                         episodeRailArrow(
                             systemImage: "chevron.left",
-                            enabled: canScrollEpisodes(by: -1),
-                            accessibilityLabel: "上一集预览"
+                            enabled: canScrollEpisodes(by: -Self.episodeRailScrollStep),
+                            accessibilityLabel: "向前滚动选集"
                         ) {
-                            scrollEpisodes(by: -1, proxy: proxy)
+                            scrollEpisodes(by: -Self.episodeRailScrollStep, proxy: proxy)
                         }
                         Spacer(minLength: 0)
                         episodeRailArrow(
                             systemImage: "chevron.right",
-                            enabled: canScrollEpisodes(by: 1),
-                            accessibilityLabel: "下一集预览"
+                            enabled: canScrollEpisodes(by: Self.episodeRailScrollStep),
+                            accessibilityLabel: "向后滚动选集"
                         ) {
-                            scrollEpisodes(by: 1, proxy: proxy)
+                            scrollEpisodes(by: Self.episodeRailScrollStep, proxy: proxy)
                         }
                     }
                     .padding(.horizontal, max(Metrics.contentLeading - 8, 12))
@@ -419,6 +419,9 @@ struct DetailView: View {
         .help(accessibilityLabel)
     }
 
+    /// 箭头一次滚动的集数（约一屏可见量），比单集步进更省点击。
+    private static let episodeRailScrollStep = 4
+
     private var episodeScrollAnchorID: MediaItem.ID? {
         if let focus = episodeScrollFocusID,
            episodes.contains(where: { $0.id == focus }) {
@@ -432,19 +435,22 @@ struct DetailView: View {
     }
 
     private func canScrollEpisodes(by delta: Int) -> Bool {
-        guard let anchor = episodeScrollAnchorID,
+        guard !episodes.isEmpty,
+              let anchor = episodeScrollAnchorID,
               let index = episodes.firstIndex(where: { $0.id == anchor })
         else { return false }
-        let target = index + delta
-        return episodes.indices.contains(target)
+        if delta < 0 { return index > 0 }
+        if delta > 0 { return index < episodes.count - 1 }
+        return false
     }
 
     private func scrollEpisodes(by delta: Int, proxy: ScrollViewProxy) {
-        guard let anchor = episodeScrollAnchorID,
+        guard !episodes.isEmpty,
+              let anchor = episodeScrollAnchorID,
               let index = episodes.firstIndex(where: { $0.id == anchor })
         else { return }
-        let target = index + delta
-        guard episodes.indices.contains(target) else { return }
+        let target = min(max(index + delta, 0), episodes.count - 1)
+        guard target != index else { return }
         let id = episodes[target].id
         episodeScrollFocusID = id
         withAnimation(.easeInOut(duration: 0.22)) {
