@@ -104,6 +104,10 @@ struct EpisodeRow: View {
                 hovering ? AnyShapeStyle(.quaternary.opacity(0.5)) : AnyShapeStyle(.clear),
                 in: .rect(cornerRadius: 10)
             )
+            .animation(
+                .spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12),
+                value: hovering
+            )
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }

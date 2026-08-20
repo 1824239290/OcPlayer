@@ -266,12 +266,25 @@ private struct HoverLift: ViewModifier {
     let active: Bool
     let reduceMotion: Bool
 
+    /// 比短 bounce spring 更顺：稍长 response + 高阻尼，进出都像被托起来而不是弹一下。
+    /// 不用 body 里的 `withAnimation { content… }`——每次 body 重算都会重开事务，悬停进出容易发硬。
+    private var motion: Animation? {
+        reduceMotion
+            ? nil
+            : .spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12)
+    }
+
+    private var lifted: Bool { active && !reduceMotion }
+
     func body(content: Content) -> some View {
-        withAnimation(reduceMotion ? nil : .spring(duration: 0.22, bounce: 0.1)) {
-            content
-                .scaleEffect(active && !reduceMotion ? 1.055 : 1)
-                .shadow(color: .black.opacity(active ? 0.35 : 0), radius: active ? 10 : 0, y: 6)
-        }
+        content
+            .scaleEffect(lifted ? 1.055 : 1)
+            .shadow(
+                color: .black.opacity(lifted ? 0.28 : 0),
+                radius: lifted ? 14 : 0,
+                y: lifted ? 8 : 0
+            )
+            .animation(motion, value: active)
     }
 }
 
