@@ -1,0 +1,5 @@
+// Shared app configuration. Local credentials are optional so clean checkouts and CI can build.
+
+#include? "../Secrets.xcconfig"
+
+INFOPLIST_FILE = Config/Info.plist
