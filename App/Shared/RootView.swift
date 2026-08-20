@@ -56,7 +56,9 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: app.presentedPlayer)
-        .animation(.easeInOut(duration: 0.18), value: app.playbackPreparation)
+        // loading 淡出（首帧已上屏后）稍长一点：黑屏 loading 与画面交叉融化，
+        // 出画面是"浮现"而不是"闪现"。
+        .animation(.easeInOut(duration: 0.3), value: app.playbackPreparation)
         .onOpenURL { url in
             app.presentLocalFile(url)
         }

@@ -696,11 +696,15 @@ final class AppModel {
         startDanmaku(for: request, item: item)
     }
 
-    /// 等 playback 内核真正就绪（ready/playing）再撤 loading 层。
+    /// 等 playback 内核真正渲染出首帧再撤 loading 层：state 到 ready/playing 只代表
+    /// 文件加载完、播放启动，首帧像素可能还在渲染管线上——那时撤 loading 会让
+    /// 还没上屏的（空）视频层露出来，出现白闪。
     /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
     private func schedulePreparationDismiss(for request: PlaybackRequest) {
         preparationDismissTask?.cancel()
         preparationDismissTask = Task { @MainActor [weak self, weak playback] in
+            let clock = ContinuousClock()
+            var playingSince: ContinuousClock.Instant?
             while let self, !Task.isCancelled {
                 guard self.presentedPlayer?.id == request.id else { return }
                 // 控制器引用没了（极端情况）：宁可退回两段式也别让 loading 永转。
@@ -708,21 +712,27 @@ final class AppModel {
                     self.playbackPreparation = nil
                     return
                 }
-                switch playback.state.state {
-                case .ready, .playing:
-                    if self.presentedPlayer?.id == request.id {
-                        self.playbackPreparation = nil
-                    }
-                    return
-                case .error:
-                    // 内核打开失败：撤 loading，让 PlayerScreen 的错误徽章接管。
+                // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
+                if playback.engine?.latestStats.rendered_video_frames ?? 0 >= 1 {
                     self.playbackPreparation = nil
                     return
-                case .idle, .opening, .paused, .stopped, .closed:
-                    if playback.setupError != nil {
+                }
+                // 内核打开失败 / App 层 setupError：撤 loading，让错误徽章接管。
+                if playback.state.state == .error || playback.setupError != nil {
+                    self.playbackPreparation = nil
+                    return
+                }
+                // 纯音频 / 首帧迟迟不来的兜底：playing 持续 2.5s 仍无帧就放行，
+                // 交给 PlayerScreen 的缓冲转圈（surface 已垫黑，不会白闪）。
+                if playback.state.state == .playing {
+                    let since = playingSince ?? clock.now
+                    playingSince = since
+                    if clock.now - since > .seconds(2.5) {
                         self.playbackPreparation = nil
                         return
                     }
+                } else {
+                    playingSince = nil
                 }
                 do {
                     try await Task.sleep(for: .milliseconds(100))

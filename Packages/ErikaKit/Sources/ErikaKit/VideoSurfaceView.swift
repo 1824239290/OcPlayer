@@ -54,6 +54,9 @@ final class MetalHostView: NSView {
     override func makeBackingLayer() -> CALayer {
         let layer = CAMetalLayer()
         layer.isOpaque = true
+        // 首帧到达前 CAMetalLayer 的内容是未初始化的 framebuffer（macOS 上呈现为白色）。
+        // 垫一层黑：首帧前的窗口期露出来的是黑，和 loading/画面连续，不白闪。
+        layer.backgroundColor = NSColor.black.cgColor
         layer.needsDisplayOnBoundsChange = true
         return layer
     }
@@ -150,7 +153,9 @@ final class MetalHostView: UIView {
         self.engine = engine
         super.init(frame: .zero)
         isOpaque = true
+        // 同 macOS：首帧前垫黑，避免未初始化内容白闪。
         (layer as? CAMetalLayer)?.isOpaque = true
+        (layer as? CAMetalLayer)?.backgroundColor = UIColor.black.cgColor
     }
 
     @available(*, unavailable)
