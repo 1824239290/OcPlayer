@@ -43,6 +43,9 @@ enum PlayerWindowFitter {
         saveOriginalIfNeeded()
         let screen = window.screen?.visibleFrame ?? window.frame
         let target = fittedSize(aspect: aspect, current: window.frame.size, within: screen)
+        // 计算在当前 runloop 完成（和 onChange 同步），
+        // setFrame 推迟到下一轮，避开 SwiftUI update cycle 中 NSMoveHelper 的冲突。
+        // 用 animate:true 让窗口贴合带有系统默认弹性动画（~0.18s），避免「一闪而大」。
         var newFrame = NSRect(
             x: window.frame.midX - target.width / 2,
             y: window.frame.maxY - target.height,   // 顶边对齐（Cocoa 的 y 是底边）
@@ -51,9 +54,10 @@ enum PlayerWindowFitter {
         )
         newFrame.origin.x = min(max(newFrame.origin.x, screen.minX), screen.maxX - newFrame.width)
         newFrame.origin.y = min(max(newFrame.origin.y, screen.minY), screen.maxY - newFrame.height)
-        // 无动画贴合：fit 在 onChange（SwiftUI update cycle）里被调，animate setFrame 会和
-        // 同一时刻的窗口布局抢动画 helper；比例贴合本来就该瞬时完成，动画反而显得抖。
-        window.setFrame(newFrame, display: true, animate: false)
+        DispatchQueue.main.async {
+            guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow() else { return }
+            window.setFrame(newFrame, display: true, animate: true)
+        }
     }
 
     static func restore() {
