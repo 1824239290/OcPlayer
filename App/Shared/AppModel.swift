@@ -699,11 +699,14 @@ final class AppModel {
     /// 等 playback 内核真正渲染出首帧再撤 loading 层：state 到 ready/playing 只代表
     /// 文件加载完、播放启动，首帧像素可能还在渲染管线上——那时撤 loading 会让
     /// 还没上屏的（空）视频层露出来，出现白闪。
+    /// 同时保底 400ms 显示时间：加载太快时 loading 闪现一下就消失会晃眼，
+    /// 保底让 loading 有完整的「出现→稳定→淡出」节奏。
     /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
     private func schedulePreparationDismiss(for request: PlaybackRequest) {
         preparationDismissTask?.cancel()
         preparationDismissTask = Task { @MainActor [weak self, weak playback] in
             let clock = ContinuousClock()
+            let startTime = clock.now
             var playingSince: ContinuousClock.Instant?
             while let self, !Task.isCancelled {
                 guard self.presentedPlayer?.id == request.id else { return }
@@ -714,6 +717,10 @@ final class AppModel {
                 }
                 // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
                 if playback.engine?.latestStats.rendered_video_frames ?? 0 >= 1 {
+                    // 保底 400ms：加载太快时 loading 闪现即消失会晃眼。
+                    if clock.now - startTime < .milliseconds(400) {
+                        try? await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
+                    }
                     self.playbackPreparation = nil
                     return
                 }
