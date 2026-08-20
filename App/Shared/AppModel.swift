@@ -557,14 +557,21 @@ final class AppModel {
         playbackOpenGeneration &+= 1
         playbackOpenTask?.cancel()
         playbackOpenTask = nil
+        preparationDismissTask?.cancel()
+        preparationDismissTask = nil
         playbackPreparation = nil
         danmaku.cancel()
     }
 
     /// 取消正在解析的播放准备（loading 层「取消」按钮入口）：
-    /// 中断 in-flight 请求并退出 loading 态回到列表。
+    /// 准备阶段（URI 未就绪）→ 只撤 loading 回列表；
+    /// 内核阶段（PlayerScreen 已 present）→ 连播放器一起退出。
     func cancelPlaybackOpening() {
-        cancelPlaybackOpen()
+        if presentedPlayer != nil {
+            dismissPlayer()
+        } else {
+            cancelPlaybackOpen()
+        }
     }
 
     @MainActor
@@ -678,13 +685,52 @@ final class AppModel {
             sessionContext: sessionContext
         )
         playback?.prepareForPresentation(request)
-        // URI 已就绪：把 loading 态交还给 PlayerScreen（它按 controller.state 显示 opening loading）。
-        playbackPreparation = nil
+        // URI 已就绪但内核未出帧：loading 层继续盖住 PlayerScreen，
+        // 等 state 到 ready/playing 再清 preparation，消除
+        // 「loading 退出后还要再等内核 open」的两段式等待。
         presentedPlayer = request
+        schedulePreparationDismiss(for: request)
         retryPlaybackItem = item
         nowPlayingItem = item
         startReporting(item: item, resumeSeconds: resumeSeconds, request: request)
         startDanmaku(for: request, item: item)
+    }
+
+    /// 等 playback 内核真正就绪（ready/playing）再撤 loading 层。
+    /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
+    private func schedulePreparationDismiss(for request: PlaybackRequest) {
+        preparationDismissTask?.cancel()
+        preparationDismissTask = Task { @MainActor [weak self, weak playback] in
+            while let self, !Task.isCancelled {
+                guard self.presentedPlayer?.id == request.id else { return }
+                // 控制器引用没了（极端情况）：宁可退回两段式也别让 loading 永转。
+                guard let playback else {
+                    self.playbackPreparation = nil
+                    return
+                }
+                switch playback.state.state {
+                case .ready, .playing:
+                    if self.presentedPlayer?.id == request.id {
+                        self.playbackPreparation = nil
+                    }
+                    return
+                case .error:
+                    // 内核打开失败：撤 loading，让 PlayerScreen 的错误徽章接管。
+                    self.playbackPreparation = nil
+                    return
+                case .idle, .opening, .paused, .stopped, .closed:
+                    if playback.setupError != nil {
+                        self.playbackPreparation = nil
+                        return
+                    }
+                }
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+            }
+        }
     }
 
     /// HUD「Continue Watching」：手动跳到连播解析出的下一集（走完整播放串联）。
@@ -822,6 +868,8 @@ final class AppModel {
     /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
     private var playbackOpenTask: Task<Void, Never>?
     private var playbackOpenGeneration: UInt64 = 0
+    /// loading 层延后撤除的观察任务（等内核出帧）。
+    private var preparationDismissTask: Task<Void, Never>?
     /// 播放准备态：nil = 不在准备（空闲，或已呈现给 PlayerScreen）。
     private(set) var playbackPreparation: PlaybackPreparation?
     /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。

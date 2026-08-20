@@ -32,16 +32,6 @@ struct RootView: View {
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
         #endif
         .overlay {
-            // 准备态覆盖层：点击播放后、URI 解析完成前。presentedPlayer 一旦设值，
-            // preparation 即被清空，loading 层淡出、PlayerScreen 淡入，无缝衔接。
-            if app.presentedPlayer == nil, let prep = app.playbackPreparation {
-                PlayerLoadingLayer(preparation: prep,
-                                   onCancel: app.cancelPlaybackOpening,
-                                   onRetry: app.retryPlayback)
-                    .ignoresSafeArea()
-                    .persistentSystemOverlays(.hidden)
-                    .transition(.opacity)
-            }
             if let request = app.presentedPlayer {
                 PlayerScreen(request: request)
                     .ignoresSafeArea()
@@ -51,6 +41,18 @@ struct RootView: View {
                     .statusBarHidden(true)
                     #endif
                     .transition(.opacity)
+            }
+            // 准备态 loading 盖在 PlayerScreen 之上，一直盖到内核真正出帧
+            // （ready/playing）才由 AppModel 撤除——全程一段 loading，不再
+            // 「loading 退出后还要再等内核 open」。
+            if let prep = app.playbackPreparation {
+                PlayerLoadingLayer(preparation: prep,
+                                   onCancel: app.cancelPlaybackOpening,
+                                   onRetry: app.retryPlayback)
+                    .ignoresSafeArea()
+                    .persistentSystemOverlays(.hidden)
+                    .transition(.opacity)
+                    .zIndex(1)
             }
         }
         .animation(.easeInOut(duration: 0.18), value: app.presentedPlayer)

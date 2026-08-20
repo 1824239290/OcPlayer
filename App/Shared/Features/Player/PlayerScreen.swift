@@ -46,15 +46,6 @@ struct PlayerScreen: View {
             )
             playerGestureLayer
 
-            // 引擎 open 阶段（idle/opening）：URI 已就绪、内核尚未出帧的等待。
-            // 复用准备态同一组件，无取消/重试——这段由 PlaybackController 管，HUD「×」可退出。
-            if controller.setupError == nil,
-               controller.state.state == .idle || controller.state.state == .opening {
-                PlayerLoadingLayer(preparation: .loading(title: request?.title ?? ""),
-                                   onCancel: nil, onRetry: nil)
-                    .transition(.opacity)
-            }
-
             if controller.state.isBuffering && controller.state.state == .playing {
                 ProgressView()
                     .controlSize(.large)
