@@ -41,41 +41,35 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if !app.home.resume.isEmpty {
-                    Rail("继续观看", kind: .still) {
-                        ForEach(app.home.resume) { item in
-                            StillCard(
-                                item: item,
-                                server: app.server,
-                                actionIcon: "chevron.right",
-                                actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
-                            ) {
-                                app.openSeriesDetail(for: item)
-                            }
+                    Rail("继续观看", kind: .still, items: app.home.resume) { item in
+                        StillCard(
+                            item: item,
+                            server: app.server,
+                            actionIcon: "chevron.right",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                        ) {
+                            app.openSeriesDetail(for: item)
                         }
                     }
                 }
 
                 if !app.home.nextUp.isEmpty {
-                    Rail("接下来看", kind: .still) {
-                        ForEach(app.home.nextUp) { item in
-                            StillCard(
-                                item: item,
-                                server: app.server,
-                                actionIcon: "chevron.right",
-                                actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
-                            ) {
-                                app.openSeriesDetail(for: item)
-                            }
+                    Rail("接下来看", kind: .still, items: app.home.nextUp) { item in
+                        StillCard(
+                            item: item,
+                            server: app.server,
+                            actionIcon: "chevron.right",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                        ) {
+                            app.openSeriesDetail(for: item)
                         }
                     }
                 }
 
                 if !app.home.latest.isEmpty {
-                    Rail("最近添加", kind: .poster) {
-                        ForEach(app.home.latest) { item in
-                            PosterCard(item: item, server: app.server) {
-                                app.openDetail(item)
-                            }
+                    Rail("最近添加", kind: .poster, items: app.home.latest) { item in
+                        PosterCard(item: item, server: app.server) {
+                            app.openDetail(item)
                         }
                     }
                 }

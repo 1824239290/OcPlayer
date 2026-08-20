@@ -325,167 +325,54 @@ struct DetailView: View {
         }
     }
 
-    /// 横向选集 + 两侧悬浮箭头（无键盘时也可逐张滚动）。
+    /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
     private var episodePickerRail: some View {
-        ScrollViewReader { proxy in
-            ZStack {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
-                        ForEach(episodes) { episode in
-                            EpisodeSelectCard(
-                                episode: episode,
-                                server: app.server,
-                                isSelected: episode.id == selectedEpisodeID
-                            ) {
-                                selectedEpisodeID = episode.id
-                                episodeScrollFocusID = episode.id
-                            }
-                            .id(episode.id)
-                        }
-                    }
-                    // 两侧给悬浮箭头留点击空隙，避免第一/最后一张被按钮挡住。
-                    .padding(.horizontal, Metrics.contentLeading + 28)
-                    // 选中描边 / 轻微抬升会溢出卡片原高度，上下留白避免被裁。
-                    .padding(.vertical, 10)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-
-                if episodes.count > 1 {
-                    HStack {
-                        episodeRailArrow(
-                            systemImage: "chevron.left",
-                            enabled: canScrollEpisodes(by: -Self.episodeRailScrollStep),
-                            accessibilityLabel: "向前滚动选集"
-                        ) {
-                            scrollEpisodes(by: -Self.episodeRailScrollStep, proxy: proxy)
-                        }
-                        Spacer(minLength: 0)
-                        episodeRailArrow(
-                            systemImage: "chevron.right",
-                            enabled: canScrollEpisodes(by: Self.episodeRailScrollStep),
-                            accessibilityLabel: "向后滚动选集"
-                        ) {
-                            scrollEpisodes(by: Self.episodeRailScrollStep, proxy: proxy)
-                        }
-                    }
-                    .padding(.horizontal, max(Metrics.contentLeading - 8, 12))
-                    // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
-                    .padding(.bottom, 36)
-                }
+        HoverArrowHScroll(
+            items: episodes,
+            scrollStep: 4,
+            contentLeading: Metrics.contentLeading,
+            edgeReserve: 28,
+            verticalPadding: 10,
+            // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
+            arrowYOffset: -18,
+            scrollToID: selectedEpisodeID
+        ) { episode in
+            EpisodeSelectCard(
+                episode: episode,
+                server: app.server,
+                isSelected: episode.id == selectedEpisodeID
+            ) {
+                selectedEpisodeID = episode.id
+                episodeScrollFocusID = episode.id
             }
-            .onChange(of: selectedEpisodeID) { _, newID in
-                guard let newID else { return }
-                episodeScrollFocusID = newID
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    proxy.scrollTo(newID, anchor: .center)
-                }
-            }
-            .onChange(of: episodes.map(\.id)) { _, ids in
-                if let focus = episodeScrollFocusID, ids.contains(focus) { return }
-                episodeScrollFocusID = selectedEpisodeID ?? ids.first
-            }
-            .onAppear {
-                let target = episodeScrollFocusID ?? selectedEpisodeID ?? episodes.first?.id
-                episodeScrollFocusID = target
-                if let target {
-                    proxy.scrollTo(target, anchor: .center)
-                }
-            }
-        }
-    }
-
-    private func episodeRailArrow(
-        systemImage: String,
-        enabled: Bool,
-        accessibilityLabel: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.35)
-        .accessibilityLabel(accessibilityLabel)
-        .help(accessibilityLabel)
-    }
-
-    /// 箭头一次滚动的集数（约一屏可见量），比单集步进更省点击。
-    private static let episodeRailScrollStep = 4
-
-    private var episodeScrollAnchorID: MediaItem.ID? {
-        if let focus = episodeScrollFocusID,
-           episodes.contains(where: { $0.id == focus }) {
-            return focus
-        }
-        if let selected = selectedEpisodeID,
-           episodes.contains(where: { $0.id == selected }) {
-            return selected
-        }
-        return episodes.first?.id
-    }
-
-    private func canScrollEpisodes(by delta: Int) -> Bool {
-        guard !episodes.isEmpty,
-              let anchor = episodeScrollAnchorID,
-              let index = episodes.firstIndex(where: { $0.id == anchor })
-        else { return false }
-        if delta < 0 { return index > 0 }
-        if delta > 0 { return index < episodes.count - 1 }
-        return false
-    }
-
-    private func scrollEpisodes(by delta: Int, proxy: ScrollViewProxy) {
-        guard !episodes.isEmpty,
-              let anchor = episodeScrollAnchorID,
-              let index = episodes.firstIndex(where: { $0.id == anchor })
-        else { return }
-        let target = min(max(index + delta, 0), episodes.count - 1)
-        guard target != index else { return }
-        let id = episodes[target].id
-        episodeScrollFocusID = id
-        withAnimation(.easeInOut(duration: 0.22)) {
-            proxy.scrollTo(id, anchor: .center)
         }
     }
 
     // MARK: - 演员 / 类似
 
     private var castRail: some View {
-        Rail("演员") {
-            ForEach(shown.cast.filter { $0.kind == "Actor" }.prefix(20)) { person in
-                VStack(spacing: 8) {
-                    let target = personImageTarget(person)
-                    RemoteImage(url: target.url, authHeader: target.authHeader)
-                        .aspectRatio(1, contentMode: .fill)
-                        // 宽高都要定死：RemoteImage 内部占位 Rectangle 会竖向贪婪撑开，
-                        // 只给宽度时头像被裁进一条很高的空白里，名字/角色被挤出可视区。
-                        .frame(width: 108, height: 108)
-                        .clipShape(Circle())
-                    Text(person.name).font(.footnote).lineLimit(1).frame(width: 108)
-                    if let role = person.role, !role.isEmpty {
-                        Text(role).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).frame(width: 108)
-                    }
+        let actors = Array(shown.cast.filter { $0.kind == "Actor" }.prefix(20))
+        return Rail("演员", kind: .flexible, items: actors) { person in
+            VStack(spacing: 8) {
+                let target = personImageTarget(person)
+                RemoteImage(url: target.url, authHeader: target.authHeader)
+                    .aspectRatio(1, contentMode: .fill)
+                    // 宽高都要定死：RemoteImage 内部占位 Rectangle 会竖向贪婪撑开，
+                    // 只给宽度时头像被裁进一条很高的空白里，名字/角色被挤出可视区。
+                    .frame(width: 108, height: 108)
+                    .clipShape(Circle())
+                Text(person.name).font(.footnote).lineLimit(1).frame(width: 108)
+                if let role = person.role, !role.isEmpty {
+                    Text(role).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).frame(width: 108)
                 }
             }
         }
     }
 
     private var similarRail: some View {
-        Rail("类似推荐", kind: .poster) {
-            ForEach(similar) { item in
-                PosterCard(item: item, server: app.server) {
-                    app.openDetail(item)
-                }
+        Rail("类似推荐", kind: .poster, items: similar) { item in
+            PosterCard(item: item, server: app.server) {
+                app.openDetail(item)
             }
         }
     }

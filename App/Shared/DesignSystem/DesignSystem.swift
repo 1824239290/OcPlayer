@@ -241,10 +241,184 @@ struct StillCard: View {
     }
 }
 
+// MARK: - 横向滚动（悬停箭头）
+
+/// 横向懒加载列表 + 两侧悬浮箭头。
+/// 箭头仅在鼠标进入轨道时淡入（VoiceOver 开启时始终可操作），
+/// 状态只有一个 `Bool`，不跟滚动 offset，几乎不吃性能。
+struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
+    let items: [Item]
+    var scrollStep: Int = 3
+    var contentLeading: CGFloat = Metrics.contentLeading
+    /// 列表左右额外内边距，给悬浮箭头留点击空隙。
+    var edgeReserve: CGFloat = 28
+    var verticalPadding: CGFloat = Metrics.railHoverPadding
+    /// 箭头相对垂直居中的偏移（负值上移，正值下移）。
+    var arrowYOffset: CGFloat = 0
+    var fixedHeight: CGFloat? = nil
+    /// 选中/外部驱动时滚到该 id（如详情选集）。
+    var scrollToID: Item.ID? = nil
+    var onScrollFocusChange: ((Item.ID) -> Void)? = nil
+    @ViewBuilder var itemContent: (Item) -> ItemContent
+
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovering = false
+    @State private var focusID: Item.ID?
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ZStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
+                        ForEach(items) { item in
+                            itemContent(item)
+                                .id(item.id)
+                        }
+                    }
+                    .padding(.horizontal, contentLeading + (showsArrowChrome ? edgeReserve : 0))
+                    .padding(.vertical, verticalPadding)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+
+                if showsArrowChrome {
+                    HStack {
+                        railArrow(
+                            systemImage: "chevron.left",
+                            enabled: canScroll(by: -scrollStep),
+                            label: "向前滚动"
+                        ) {
+                            scroll(by: -scrollStep, proxy: proxy)
+                        }
+                        Spacer(minLength: 0)
+                        railArrow(
+                            systemImage: "chevron.right",
+                            enabled: canScroll(by: scrollStep),
+                            label: "向后滚动"
+                        ) {
+                            scroll(by: scrollStep, proxy: proxy)
+                        }
+                    }
+                    .padding(.horizontal, max(contentLeading - 8, 12))
+                    .offset(y: arrowYOffset)
+                    .opacity(arrowsVisible ? 1 : 0)
+                    .allowsHitTesting(arrowsVisible)
+                    .animation(arrowAnimation, value: arrowsVisible)
+                    // 不跟 enabled 做隐式动画，避免点到尽头时整组闪一下。
+                    .accessibilityElement(children: .contain)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(OptionalHeight(fixedHeight))
+            .onHover { isHovering = $0 }
+            .onAppear {
+                reconcileFocus()
+                if let target = focusID {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+            }
+            .onChange(of: items.map(\.id)) { _, _ in
+                reconcileFocus()
+            }
+            .onChange(of: scrollToID) { _, newID in
+                guard let newID, items.contains(where: { $0.id == newID }) else { return }
+                focusID = newID
+                withAnimation(scrollAnimation) {
+                    proxy.scrollTo(newID, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private var showsArrowChrome: Bool { items.count > 1 }
+
+    /// 鼠标在轨道上，或 VoiceOver 需要始终可点到箭头。
+    private var arrowsVisible: Bool {
+        showsArrowChrome && (isHovering || voiceOverEnabled)
+    }
+
+    private var arrowAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.16)
+    }
+
+    private var scrollAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.22)
+    }
+
+    private func railArrow(
+        systemImage: String,
+        enabled: Bool,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(label)
+        .help(label)
+    }
+
+    private var anchorID: Item.ID? {
+        if let focusID, items.contains(where: { $0.id == focusID }) {
+            return focusID
+        }
+        if let scrollToID, items.contains(where: { $0.id == scrollToID }) {
+            return scrollToID
+        }
+        return items.first?.id
+    }
+
+    private func reconcileFocus() {
+        if let focusID, items.contains(where: { $0.id == focusID }) { return }
+        if let scrollToID, items.contains(where: { $0.id == scrollToID }) {
+            focusID = scrollToID
+            return
+        }
+        focusID = items.first?.id
+    }
+
+    private func canScroll(by delta: Int) -> Bool {
+        guard !items.isEmpty,
+              let anchor = anchorID,
+              let index = items.firstIndex(where: { $0.id == anchor })
+        else { return false }
+        if delta < 0 { return index > 0 }
+        if delta > 0 { return index < items.count - 1 }
+        return false
+    }
+
+    private func scroll(by delta: Int, proxy: ScrollViewProxy) {
+        guard !items.isEmpty,
+              let anchor = anchorID,
+              let index = items.firstIndex(where: { $0.id == anchor })
+        else { return }
+        let target = min(max(index + delta, 0), items.count - 1)
+        guard target != index else { return }
+        let id = items[target].id
+        focusID = id
+        onScrollFocusChange?(id)
+        withAnimation(scrollAnimation) {
+            proxy.scrollTo(id, anchor: .center)
+        }
+    }
+}
+
 // MARK: - 走马灯行
 
-/// Apple TV 式横向滚动行。
-struct Rail<Content: View>: View {
+/// Apple TV 式横向滚动行（首页 / 详情推荐等）。
+struct Rail<Item: Identifiable, ItemContent: View>: View {
     enum Kind {
         /// 海报卡（媒体库 / 最近添加 / 类似推荐）
         case poster
@@ -260,16 +434,43 @@ struct Rail<Content: View>: View {
             case .flexible: nil
             }
         }
+
+        /// 箭头对准卡片图区中部：海报/剧照标题在下方，略上移。
+        var arrowYOffset: CGFloat {
+            switch self {
+            case .poster: -18
+            case .still: -22
+            case .flexible: 0
+            }
+        }
+
+        var scrollStep: Int {
+            switch self {
+            case .poster: 4
+            case .still: 3
+            case .flexible: 4
+            }
+        }
     }
 
     let title: String
     var kind: Kind = .flexible
-    private let content: Content
+    var showsScrollArrows: Bool = true
+    let items: [Item]
+    private let itemContent: (Item) -> ItemContent
 
-    init(_ title: String, kind: Kind = .flexible, @ViewBuilder content: () -> Content) {
+    init(
+        _ title: String,
+        kind: Kind = .flexible,
+        showsScrollArrows: Bool = true,
+        items: [Item],
+        @ViewBuilder itemContent: @escaping (Item) -> ItemContent
+    ) {
         self.title = title
         self.kind = kind
-        self.content = content()
+        self.showsScrollArrows = showsScrollArrows
+        self.items = items
+        self.itemContent = itemContent
     }
 
     var body: some View {
@@ -277,32 +478,59 @@ struct Rail<Content: View>: View {
             Text(title)
                 .font(.title3.weight(.bold))
                 .padding(.horizontal, Metrics.contentLeading)
-            horizontalRail
+
+            if showsScrollArrows, items.count > 1 {
+                HoverArrowHScroll(
+                    items: items,
+                    scrollStep: kind.scrollStep,
+                    contentLeading: Metrics.contentLeading,
+                    edgeReserve: 28,
+                    verticalPadding: Metrics.railHoverPadding,
+                    arrowYOffset: kind.arrowYOffset,
+                    fixedHeight: kind.scrollHeight,
+                    itemContent: itemContent
+                )
+            } else {
+                plainHorizontalRail
+            }
         }
         .padding(.top, 24)
     }
 
     @ViewBuilder
-    private var horizontalRail: some View {
+    private var plainHorizontalRail: some View {
         let rail = ScrollView(.horizontal, showsIndicators: false) {
-            // LazyHStack：只具现可视附近的卡片，滚轮/触控板滑动时不再整行解码布局。
             LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
-                content
+                ForEach(items) { item in
+                    itemContent(item)
+                }
             }
             .padding(.horizontal, Metrics.contentLeading)
-            // 悬停放大 + 投影会溢出卡片原尺寸；给上下留呼吸空间，
-            // 否则横向 ScrollView 会按内容高度裁掉放大/阴影的超出部分。
             .padding(.vertical, Metrics.railHoverPadding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
 
-        // 海报/剧照行定高：嵌套在竖向 ScrollView 里布局稳定，
-        // 避免 LazyHStack 首帧高度跳动把整页滚轮手感拖沉。
         if let height = kind.scrollHeight {
             rail.frame(height: height, alignment: .top)
         } else {
             rail
+        }
+    }
+}
+
+private struct OptionalHeight: ViewModifier {
+    let height: CGFloat?
+
+    init(_ height: CGFloat?) {
+        self.height = height
+    }
+
+    func body(content: Content) -> some View {
+        if let height {
+            content.frame(height: height, alignment: .top)
+        } else {
+            content
         }
     }
 }
