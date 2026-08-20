@@ -6,6 +6,21 @@ import SwiftUI
 import UIKit
 #endif
 
+// MARK: - 动画帮手
+
+extension View {
+    /// 与 `.animation(_:value:)` 同义，但把 `accessibilityReduceMotion` 收进来：
+    /// 减弱动态效果时传 nil（SwiftUI 视作无动画、立即切换）。
+    /// 用法：`.motionAnimation(.easeInOut(duration: 0.2), value: foo, reduceMotion: reduceMotion)`
+    func motionAnimation<V: Equatable>(
+        _ animation: Animation,
+        value: V,
+        reduceMotion: Bool
+    ) -> some View {
+        self.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
 // MARK: - 尺寸 token（design/apple-native.html）
 
 enum Metrics {

@@ -17,6 +17,7 @@ struct PlayerScreen: View {
     @Environment(PlaybackController.self) private var controller
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityVoiceOverEnabled) private var isVoiceOverEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 覆盖层出现时要打开的源；nil = 空画面（引擎失败等极端情况）。
     let request: PlaybackRequest?
@@ -78,7 +79,7 @@ struct PlayerScreen: View {
             .opacity(hudVisibility.isVisible ? 1 : 0)
             .allowsHitTesting(hudVisibility.isVisible)
             .accessibilityHidden(!hudVisibility.isVisible)
-            .animation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible)
+            .motionAnimation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible, reduceMotion: reduceMotion)
 
             if showStats {
                 PlayerHUDStatsPanel()
@@ -89,7 +90,7 @@ struct PlayerScreen: View {
             PlayerScreenshotToast(message: screenshotToast)
         }
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
-        .animation(.easeInOut(duration: 0.2), value: controller.state.state)
+        .motionAnimation(.easeInOut(duration: 0.2), value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)

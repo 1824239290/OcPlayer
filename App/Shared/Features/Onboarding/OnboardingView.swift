@@ -5,6 +5,7 @@ import SwiftUI
 /// Quick Connect 在服务器确认后自动开始轮询；它没开 / 超时也不挡密码登录。
 struct OnboardingView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var serverAddress = ""
     @State private var username = ""
@@ -36,8 +37,10 @@ struct OnboardingView: View {
 
             if app.loginSession == nil {
                 serverForm
+                    .transition(.opacity)
             } else {
                 loginForms
+                    .transition(.opacity)
             }
 
             if let error = app.onboardingError {
@@ -45,6 +48,7 @@ struct OnboardingView: View {
                     .foregroundStyle(.red)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(28)
@@ -52,6 +56,8 @@ struct OnboardingView: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.18), radius: 30, y: 12)
+        .motionAnimation(.easeInOut(duration: 0.2), value: app.loginSession != nil, reduceMotion: reduceMotion)
+        .motionAnimation(.easeInOut(duration: 0.2), value: app.onboardingError, reduceMotion: reduceMotion)
     }
 
     // MARK: 第一步：服务器地址
@@ -163,6 +169,7 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity)
                 .padding(16)
                 .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity)
             } else {
                 HStack {
                     Text("正在向服务器申请配对码…")
@@ -173,8 +180,10 @@ struct OnboardingView: View {
                 }
                 .padding(16)
                 .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity)
             }
         }
+        .motionAnimation(.easeInOut(duration: 0.2), value: app.quickConnectCode, reduceMotion: reduceMotion)
     }
 
     private var divider: some View {

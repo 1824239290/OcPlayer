@@ -1,4 +1,6 @@
+import CoreGraphics
 import Foundation
+import ImageIO
 import SwiftUI
 
 #if canImport(UIKit)
@@ -49,6 +51,10 @@ final class ImagePipeline: @unchecked Sendable {
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         configuration.httpAdditionalHeaders = [:]
         session = URLSession(configuration: configuration)
+        // 解码位图缓存有硬上限：长会话反复刷库也不会无限累积内存。
+        // cost 按像素字节数计（见 memoryCost），超限时 NSCache 自动淘汰最旧。
+        memoryCache.totalCostLimit = 128 * 1024 * 1024
+        memoryCache.countLimit = 500
     }
 
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is
@@ -118,7 +124,7 @@ final class ImagePipeline: @unchecked Sendable {
         defer { lock.unlock() }
         guard cacheGeneration == generation else { return false }
         if let image {
-            memoryCache.setObject(image, forKey: key as NSString)
+            memoryCache.setObject(image, forKey: key as NSString, cost: Self.memoryCost(of: image))
         }
         return true
     }
@@ -169,7 +175,35 @@ final class ImagePipeline: @unchecked Sendable {
         // 取消（视图消失 / 换 URL）会从这里抛 CancellationError，由调用方区分处理。
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-        return PlatformImage(data: data)
+        // 在 URLSession 的协程线程池上立即解码：`PlatformImage(data:)` 是懒解码，
+        // 真正的位图解码会拖到主线程首次绘制时才发生——海报墙快速滚动时每张新图
+        // 都在主线程解码、掉帧。这里用 ImageIO 强制解码成位图，主线程首绘不再解码。
+        return Self.decode(data)
+    }
+
+    /// ImageIO 立即解码（`kCGImageSourceShouldCacheImmediately` 把位图留在内存）。
+    private static func decode(_ data: Data) -> PlatformImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, [
+                  kCGImageSourceShouldCacheImmediately: true,
+              ] as CFDictionary)
+        else { return nil }
+        #if canImport(UIKit)
+        return UIImage(cgImage: cgImage)
+        #else
+        return NSImage(cgImage: cgImage, size: .zero)
+        #endif
+    }
+
+    /// 位图近似内存占用（字节）。NSCache 用 cost 做总上限淘汰。
+    private static func memoryCost(of image: PlatformImage) -> Int {
+        #if canImport(UIKit)
+        let cg = image.cgImage
+        #else
+        let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        #endif
+        guard let cg else { return 0 }
+        return cg.bytesPerRow * cg.height
     }
 }
 
@@ -182,6 +216,8 @@ struct RemoteImage: View {
     let url: URL?
     var authHeader: String?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             Rectangle().fill(.quaternary.opacity(0.6))
@@ -189,6 +225,8 @@ struct RemoteImage: View {
                 Image(platform: image)
                     .resizable()
                     .scaledToFill()
+                    // 加载完成在占位层上淡入，不再硬弹出；换 URL 清空旧图时沿同一过渡淡出。
+                    .transition(.opacity)
             } else if failed || url == nil {
                 // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
                 // 显示静态占位图标。否则 url 为 nil 时会永远转圈（task 里被 guard 挡掉）。
@@ -201,6 +239,7 @@ struct RemoteImage: View {
             }
         }
         .clipped()
+        .animation(imageFade, value: image != nil)
         .task(id: url?.absoluteString) {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Clear the previous bitmap before
@@ -234,5 +273,10 @@ struct RemoteImage: View {
                 failed = true
             }
         }
+    }
+
+    /// 图片出现/消失的淡入淡出；减弱动态效果时直接切换，不播动画。
+    private var imageFade: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.2)
     }
 }

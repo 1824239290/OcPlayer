@@ -3,9 +3,10 @@ import JellyfinKit
 import SwiftUI
 
 /// 媒体库网格页：海报墙。电影库直接铺电影，剧集库铺剧集。
-/// 分页加载：首屏一页，底部「加载更多」继续，避免大库一次进内存。
+/// 分页加载：首屏一页，翻页时新卡片带入场动画淡入。
 struct LibraryView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let library: MediaLibrary
 
@@ -70,6 +71,7 @@ struct LibraryView: View {
                     PosterCard(item: item, server: app.server) {
                         app.openDetail(item)
                     }
+                    .transition(reduceMotion ? .identity : .opacity)
                 }
             }
             .padding(.horizontal, Metrics.contentLeading)
@@ -82,6 +84,12 @@ struct LibraryView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .refreshable { await reload() }
+        .animation(loadedMoreMotion, value: items.count)
+    }
+
+    /// 翻页新卡片入场过渡；减弱动态效果时直接显示。
+    private var loadedMoreMotion: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.25)
     }
 
     private var loadMoreFooter: some View {
@@ -103,6 +111,11 @@ struct LibraryView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        // footer 进入可视区即预取下一页，不用手动点。
+        .onAppear {
+            guard hasMore, !isLoading, !isLoadingMore else { return }
+            Task { await loadMore() }
+        }
     }
 
     /// 库类型 → 展示维度。剧集库要按「电视剧」列（而不是递归铺到每一集），

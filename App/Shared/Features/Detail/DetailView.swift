@@ -17,6 +17,7 @@ extension Color {
 /// 剧集额外有季选择器和横向选集（点选中，顶部主按钮开播）。
 struct DetailView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
@@ -243,6 +244,7 @@ struct DetailView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .symbolRenderingMode(.monochrome)
                         .foregroundStyle(.black.opacity(0.8))
+                        .symbolEffect(.bounce, value: played)
                 }
             }
             .frame(width: Self.bannerActionHeight, height: Self.bannerActionHeight)
@@ -371,6 +373,7 @@ struct DetailView: View {
                 }
                 .padding(.vertical, 20)
                 .padding(.horizontal, Metrics.contentLeading)
+                .transition(.opacity)
             } else if let episodeLoadError {
                 ContentUnavailableView {
                     Label("集列表加载失败", systemImage: "wifi.exclamationmark")
@@ -382,15 +385,27 @@ struct DetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, Metrics.contentLeading)
+                .transition(.opacity)
             } else if episodes.isEmpty {
                 ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .padding(.horizontal, Metrics.contentLeading)
+                    .transition(.opacity)
             } else {
                 episodePickerRail
+                    .transition(.opacity)
             }
         }
+        // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
+        // 两个 value 都绑：loading 翻转和集列表整体替换（count 变化）各自开一次事务。
+        .animation(episodeListMotion, value: isLoadingEpisodes)
+        .animation(episodeListMotion, value: episodes.count)
+    }
+
+    /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
+    private var episodeListMotion: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.2)
     }
 
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。

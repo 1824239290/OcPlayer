@@ -4,6 +4,7 @@ import SwiftUI
 /// 首页：继续观看 + 接下来看 + 最近添加。
 struct HomeView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -51,6 +52,7 @@ struct HomeView: View {
                             app.openSeriesDetail(for: item)
                         }
                     }
+                    .transition(.opacity)
                 }
 
                 if !app.home.nextUp.isEmpty {
@@ -64,6 +66,7 @@ struct HomeView: View {
                             app.openSeriesDetail(for: item)
                         }
                     }
+                    .transition(.opacity)
                 }
 
                 if !app.home.latest.isEmpty {
@@ -72,6 +75,7 @@ struct HomeView: View {
                             app.openDetail(item)
                         }
                     }
+                    .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,6 +84,10 @@ struct HomeView: View {
         .scrollBounceBehavior(.basedOnSize)
         .contentMargins(.horizontal, 0, for: .scrollContent)
         .refreshable { await app.reloadBrowserData() }
+        // 下拉刷新会先清空再填充三条 Rail 的数组，count 变化触发整体 crossfade。
+        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.resume.count, reduceMotion: reduceMotion)
+        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.nextUp.count, reduceMotion: reduceMotion)
+        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.latest.count, reduceMotion: reduceMotion)
     }
 
     private var loadingState: some View {

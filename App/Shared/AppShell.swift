@@ -6,6 +6,7 @@ import SwiftUI
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         #if os(macOS)
@@ -120,22 +121,27 @@ struct AppShellView: View {
                     HomeView()
                         .appRoutes()
                 }
+                .transition(.opacity)
             case .library(let id):
                 if let library = app.libraries.first(where: { $0.id == id }) {
                     NavigationStack(path: $app.path) {
                         LibraryView(library: library)
                             .appRoutes()
                     }
+                    .transition(.opacity)
                 } else {
                     ContentUnavailableView("媒体库不存在", systemImage: "tray")
+                        .transition(.opacity)
                 }
             case .settings:
                 NavigationStack(path: $app.path) {
                     SettingsView()
                         .appRoutes()
                 }
+                .transition(.opacity)
             }
         }
+        .motionAnimation(.easeInOut(duration: 0.2), value: app.selectedSection, reduceMotion: reduceMotion)
     }
 
     private var settingsFooter: some View {

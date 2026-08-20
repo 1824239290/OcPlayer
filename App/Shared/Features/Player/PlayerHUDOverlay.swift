@@ -196,6 +196,7 @@ struct PlayerHUDVolumeControl: View {
                         .foregroundStyle(PlayerHUDPalette.primary)
                         .frame(width: controlDiameter, height: controlDiameter)
                         .contentShape(Rectangle())
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
                 .help(controller.muted ? "取消静音（M）" : "静音（M）")
@@ -244,6 +245,7 @@ struct PlayerHUDTransportControls: View {
                 controller.state.state == .playing ? "pause.fill" : "play.fill",
                 label: controller.state.state == .playing ? "暂停" : "播放",
                 primary: true,
+                symbolTransition: true,
                 action: controller.togglePlayPause
             )
             transportButton("goforward.10", label: "前进 10 秒", primary: false) {
@@ -258,6 +260,7 @@ struct PlayerHUDTransportControls: View {
         _ systemImage: String,
         label: String,
         primary: Bool,
+        symbolTransition: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         let hitSize: CGFloat = primary ? (isNarrow ? 70 : 82) : (isNarrow ? 58 : 66)
@@ -271,6 +274,7 @@ struct PlayerHUDTransportControls: View {
                 .frame(width: hitSize, height: hitSize)
                 .contentShape(Circle())
                 .shadow(color: .black.opacity(0.7), radius: 3, y: 1)
+                .contentTransition(symbolTransition ? .symbolEffect(.replace) : .identity)
         }
         .buttonStyle(PlayerHUDTransportButtonStyle())
         .help(label)

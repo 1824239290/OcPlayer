@@ -163,14 +163,18 @@ struct PlayerHUDStatsPanel: View {
     @Environment(PlaybackController.self) private var controller
 
     var body: some View {
-        PlayerHUDPanel(in: RoundedRectangle(cornerRadius: 14)) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(controller.statsLine())
-                Text(verbatim: "surface=\(controller.state.hasSurface) · \(videoDescription)")
+        // engine.latestStats 不是 observable 属性，整棵面板只会跟着 state/其他属性
+        // 变化才偶发刷新，数字常停在旧值。用 TimelineView 每秒强制重读一次。
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            PlayerHUDPanel(in: RoundedRectangle(cornerRadius: 14)) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(controller.statsLine())
+                    Text(verbatim: "surface=\(controller.state.hasSurface) · \(videoDescription)")
+                }
+                .font(.caption2.monospaced())
+                .foregroundStyle(PlayerHUDPalette.primary)
+                .padding(12)
             }
-            .font(.caption2.monospaced())
-            .foregroundStyle(PlayerHUDPalette.primary)
-            .padding(12)
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
         .padding(.horizontal, 28)

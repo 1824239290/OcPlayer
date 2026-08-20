@@ -10,6 +10,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(PlaybackController.self) private var controller
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -21,12 +22,16 @@ struct RootView: View {
                     ProgressView().controlSize(.small)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
             case .onboarding:
                 OnboardingView()
+                    .transition(.opacity)
             case .ready:
                 AppShellView()
+                    .transition(.opacity)
             }
         }
+        .motionAnimation(.easeInOut(duration: 0.25), value: app.phase, reduceMotion: reduceMotion)
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
@@ -55,10 +60,10 @@ struct RootView: View {
                     .zIndex(1)
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: app.presentedPlayer)
+        .motionAnimation(.easeInOut(duration: 0.18), value: app.presentedPlayer, reduceMotion: reduceMotion)
         // loading 淡出（首帧已上屏后）稍长一点：黑屏 loading 与画面交叉融化，
         // 出画面是"浮现"而不是"闪现"。
-        .animation(.easeInOut(duration: 0.3), value: app.playbackPreparation)
+        .motionAnimation(.easeInOut(duration: 0.3), value: app.playbackPreparation, reduceMotion: reduceMotion)
         .onOpenURL { url in
             app.presentLocalFile(url)
         }
