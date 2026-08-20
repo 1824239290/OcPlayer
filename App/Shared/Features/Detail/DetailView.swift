@@ -177,7 +177,7 @@ struct DetailView: View {
         return parts
     }
 
-    /// 主播放胶囊 + 次要「已看过」圆钮（同高 40）。
+    /// 主播放胶囊 + 同高「已看过」次要胶囊，视觉量级一致。
     private var playbackActions: some View {
         HStack(spacing: 12) {
             playButton
@@ -186,6 +186,8 @@ struct DetailView: View {
             }
         }
     }
+
+    private static let bannerActionHeight: CGFloat = 40
 
     private var playButton: some View {
         Button(action: playCurrent) {
@@ -207,7 +209,7 @@ struct DetailView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }
-            .frame(width: 228, height: 40)
+            .frame(width: 228, height: Self.bannerActionHeight)
             // Only the outer capsule is rounded. The progress rectangle keeps
             // a full-height vertical boundary like the native resume control.
             .clipShape(Capsule())
@@ -222,28 +224,34 @@ struct DetailView: View {
 
     private var markPlayedButton: some View {
         let played = isPlayableMarkedPlayed
+        let title = played ? "已看过" : "标为已看"
         return Button {
             Task { await togglePlayed() }
         } label: {
-            ZStack {
-                Circle()
-                    .fill(.white.opacity(played ? 0.92 : 0.18))
+            HStack(spacing: 7) {
                 if isUpdatingPlayed {
                     ProgressView()
                         .controlSize(.small)
                         .tint(played ? .black.opacity(0.75) : .white)
                 } else {
                     Image(systemName: played ? "checkmark.circle.fill" : "checkmark.circle")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .symbolRenderingMode(.monochrome)
-                        .foregroundStyle(played ? Color.black.opacity(0.78) : Color.white.opacity(0.95))
                 }
+                Text(title)
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
             }
-            .frame(width: 40, height: 40)
+            .foregroundStyle(played ? Color.black.opacity(0.8) : Color.white.opacity(0.95))
+            .padding(.horizontal, 16)
+            .frame(height: Self.bannerActionHeight)
+            .background(
+                Capsule().fill(.white.opacity(played ? 0.78 : 0.18))
+            )
             .overlay {
-                Circle().strokeBorder(.white.opacity(played ? 0 : 0.35), lineWidth: 1)
+                Capsule().strokeBorder(.white.opacity(played ? 0 : 0.35), lineWidth: 1)
             }
-            .contentShape(Circle())
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .modifier(DetailPlayButtonStyle())
