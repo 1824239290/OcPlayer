@@ -27,6 +27,8 @@ struct DetailView: View {
     @State private var similar: [MediaItem] = []
     @State private var selectedSeasonID: String?
     @State private var selectedEpisodeID: MediaItem.ID?
+    /// 横向选集箭头滚动的锚点（可与选中集不同：只滚列表不改选中）。
+    @State private var episodeScrollFocusID: MediaItem.ID?
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var isLoadingEpisodes = false
@@ -318,39 +320,135 @@ struct DetailView: View {
                     .padding(.vertical, 12)
                     .padding(.horizontal, Metrics.contentLeading)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
-                            ForEach(episodes) { episode in
-                                EpisodeSelectCard(
-                                    episode: episode,
-                                    server: app.server,
-                                    isSelected: episode.id == selectedEpisodeID
-                                ) {
-                                    selectedEpisodeID = episode.id
-                                }
-                                .id(episode.id)
+                episodePickerRail
+            }
+        }
+    }
+
+    /// 横向选集 + 两侧悬浮箭头（无键盘时也可逐张滚动）。
+    private var episodePickerRail: some View {
+        ScrollViewReader { proxy in
+            ZStack {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: Metrics.railSpacing) {
+                        ForEach(episodes) { episode in
+                            EpisodeSelectCard(
+                                episode: episode,
+                                server: app.server,
+                                isSelected: episode.id == selectedEpisodeID
+                            ) {
+                                selectedEpisodeID = episode.id
+                                episodeScrollFocusID = episode.id
                             }
-                        }
-                        .padding(.horizontal, Metrics.contentLeading)
-                        // 选中描边 / 轻微抬升会溢出卡片原高度，上下留白避免被裁。
-                        .padding(.vertical, 10)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-                    .onChange(of: selectedEpisodeID) { _, newID in
-                        guard let newID else { return }
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            proxy.scrollTo(newID, anchor: .center)
+                            .id(episode.id)
                         }
                     }
-                    .onAppear {
-                        if let selectedEpisodeID {
-                            proxy.scrollTo(selectedEpisodeID, anchor: .center)
+                    // 两侧给悬浮箭头留点击空隙，避免第一/最后一张被按钮挡住。
+                    .padding(.horizontal, Metrics.contentLeading + 28)
+                    // 选中描边 / 轻微抬升会溢出卡片原高度，上下留白避免被裁。
+                    .padding(.vertical, 10)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+
+                if episodes.count > 1 {
+                    HStack {
+                        episodeRailArrow(
+                            systemImage: "chevron.left",
+                            enabled: canScrollEpisodes(by: -1),
+                            accessibilityLabel: "上一集预览"
+                        ) {
+                            scrollEpisodes(by: -1, proxy: proxy)
+                        }
+                        Spacer(minLength: 0)
+                        episodeRailArrow(
+                            systemImage: "chevron.right",
+                            enabled: canScrollEpisodes(by: 1),
+                            accessibilityLabel: "下一集预览"
+                        ) {
+                            scrollEpisodes(by: 1, proxy: proxy)
                         }
                     }
+                    .padding(.horizontal, max(Metrics.contentLeading - 8, 12))
+                    // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
+                    .padding(.bottom, 36)
                 }
             }
+            .onChange(of: selectedEpisodeID) { _, newID in
+                guard let newID else { return }
+                episodeScrollFocusID = newID
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    proxy.scrollTo(newID, anchor: .center)
+                }
+            }
+            .onChange(of: episodes.map(\.id)) { _, ids in
+                if let focus = episodeScrollFocusID, ids.contains(focus) { return }
+                episodeScrollFocusID = selectedEpisodeID ?? ids.first
+            }
+            .onAppear {
+                let target = episodeScrollFocusID ?? selectedEpisodeID ?? episodes.first?.id
+                episodeScrollFocusID = target
+                if let target {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func episodeRailArrow(
+        systemImage: String,
+        enabled: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle().strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .accessibilityLabel(accessibilityLabel)
+        .help(accessibilityLabel)
+    }
+
+    private var episodeScrollAnchorID: MediaItem.ID? {
+        if let focus = episodeScrollFocusID,
+           episodes.contains(where: { $0.id == focus }) {
+            return focus
+        }
+        if let selected = selectedEpisodeID,
+           episodes.contains(where: { $0.id == selected }) {
+            return selected
+        }
+        return episodes.first?.id
+    }
+
+    private func canScrollEpisodes(by delta: Int) -> Bool {
+        guard let anchor = episodeScrollAnchorID,
+              let index = episodes.firstIndex(where: { $0.id == anchor })
+        else { return false }
+        let target = index + delta
+        return episodes.indices.contains(target)
+    }
+
+    private func scrollEpisodes(by delta: Int, proxy: ScrollViewProxy) {
+        guard let anchor = episodeScrollAnchorID,
+              let index = episodes.firstIndex(where: { $0.id == anchor })
+        else { return }
+        let target = index + delta
+        guard episodes.indices.contains(target) else { return }
+        let id = episodes[target].id
+        episodeScrollFocusID = id
+        withAnimation(.easeInOut(duration: 0.22)) {
+            proxy.scrollTo(id, anchor: .center)
         }
     }
 
@@ -418,6 +516,7 @@ struct DetailView: View {
         episodes = []
         selectedSeasonID = nil
         selectedEpisodeID = nil
+        episodeScrollFocusID = nil
         episodeLoadError = nil
 
         // Similar recommendations are optional and may be unavailable on
@@ -454,12 +553,14 @@ struct DetailView: View {
         guard let server = app.server, shown.kind == .series, let seasonID = selectedSeasonID else {
             episodes = []
             selectedEpisodeID = nil
+            episodeScrollFocusID = nil
             isLoadingEpisodes = false
             episodeLoadError = nil
             return
         }
         episodes = []
         selectedEpisodeID = nil
+        episodeScrollFocusID = nil
         isLoadingEpisodes = true
         episodeLoadError = nil
         defer {
@@ -471,7 +572,9 @@ struct DetailView: View {
             let loaded = try await server.episodes(seriesID: shown.id, seasonID: seasonID)
             guard !Task.isCancelled, selectedSeasonID == seasonID else { return }
             episodes = loaded
-            selectedEpisodeID = preferredEpisodeID(in: loaded, seriesID: shown.id)
+            let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
+            selectedEpisodeID = preferred
+            episodeScrollFocusID = preferred
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription
