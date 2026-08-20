@@ -12,135 +12,6 @@ import UniformTypeIdentifiers
 /// 与 ErikaKit 的 PlaybackLog 同一份文件，时间线上无缝。
 let playerLog = AppDiagnostics.logger
 
-/// 播放偏好跨启动记忆。弹幕渲染偏好由 HUD 修改后也在此统一保存。
-@MainActor
-enum PlaybackPreferences {
-    private static let rateKey = "dev.jumusu.ocplayer.playback.rate"
-    private static let volumeKey = "dev.jumusu.ocplayer.playback.volume"
-    private static let mutedKey = "dev.jumusu.ocplayer.playback.muted"
-    private static let subtitleScaleKey = "dev.jumusu.ocplayer.playback.subtitleScale"
-    private static let danmakuEnabledKey = "dev.jumusu.ocplayer.danmaku.enabled"
-    private static let danmakuOpacityKey = "dev.jumusu.ocplayer.danmaku.opacity"
-    private static let danmakuDisplayAreaKey = "dev.jumusu.ocplayer.danmaku.displayArea"
-    private static let danmakuBlockTopKey = "dev.jumusu.ocplayer.danmaku.blockTop"
-    private static let danmakuBlockBottomKey = "dev.jumusu.ocplayer.danmaku.blockBottom"
-    private static let danmakuBlockScrollKey = "dev.jumusu.ocplayer.danmaku.blockScroll"
-    private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
-    private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
-
-    static var rate: Double {
-        get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
-        set { UserDefaults.standard.set(newValue, forKey: rateKey) }
-    }
-    static var volume: Double {
-        get { storedDouble(forKey: volumeKey, range: 0...1, default: 1.0) }
-        set { UserDefaults.standard.set(newValue, forKey: volumeKey) }
-    }
-    static var muted: Bool {
-        get { UserDefaults.standard.bool(forKey: mutedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: mutedKey) }
-    }
-    static var subtitleScale: Double {
-        get { storedDouble(forKey: subtitleScaleKey, range: 0.5...3.0, default: 1.0) }
-        set { UserDefaults.standard.set(newValue, forKey: subtitleScaleKey) }
-    }
-    static var danmakuEnabled: Bool {
-        get { storedBool(forKey: danmakuEnabledKey, default: true) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuEnabledKey) }
-    }
-    static var danmakuOpacity: Double {
-        get { storedDouble(forKey: danmakuOpacityKey, range: 0.25...1, default: 0.85) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuOpacityKey) }
-    }
-    static var danmakuDisplayArea: Double {
-        get { storedDouble(forKey: danmakuDisplayAreaKey, range: 0.25...1, default: 0.75) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuDisplayAreaKey) }
-    }
-    static var danmakuBlockTop: Bool {
-        get { storedBool(forKey: danmakuBlockTopKey, default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockTopKey) }
-    }
-    static var danmakuBlockBottom: Bool {
-        get { storedBool(forKey: danmakuBlockBottomKey, default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockBottomKey) }
-    }
-    static var danmakuBlockScroll: Bool {
-        get { storedBool(forKey: danmakuBlockScrollKey, default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuBlockScrollKey) }
-    }
-    /// 重复弹幕合并显示，减少轨道竞争（窗口重排时旧弹幕更少被挤行）。
-    static var danmakuMergeDuplicates: Bool {
-        get { storedBool(forKey: danmakuMergeDuplicatesKey, default: true) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuMergeDuplicatesKey) }
-    }
-    /// 允许同轨道堆叠。实测在 Erika 的 DFM 布局里 stacking 打开会把弹幕
-    /// 大量塞进同一轨道导致重叠、轨道数骤减；默认关闭。需要时 HUD 可开。
-    static var danmakuAllowStacking: Bool {
-        get { storedBool(forKey: danmakuAllowStackingKey, default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
-    }
-
-    private static func storedDouble(
-        forKey key: String,
-        range: ClosedRange<Double>,
-        default fallback: Double
-    ) -> Double {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
-        return UserDefaults.standard.double(forKey: key).clamped(range)
-    }
-
-    private static func storedBool(forKey key: String, default fallback: Bool) -> Bool {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
-        return UserDefaults.standard.bool(forKey: key)
-    }
-}
-
-private extension Double {
-    func clamped(_ range: ClosedRange<Double>) -> Double {
-        min(max(self, range.lowerBound), range.upperBound)
-    }
-}
-
-/// 一次播放请求：从浏览层（AppModel）带到播放页的纯值。
-/// `authHeader` 是 Jellyfin 的 `MediaBrowser …` 头 —— 只走请求头，绝不进 URL。
-struct PlaybackRequest: Hashable, Identifiable {
-    let id: UUID
-    let title: String
-    let uri: String
-    let authHeader: String?
-    /// Security-scoped URL for a user-selected local file.
-    let securityScopedURL: URL?
-    /// 服务端记录的续播位置（秒）；小于 30 秒视作从头播。
-    let resumeSeconds: Double?
-    /// Jellyfin playback/source identity. Local files and manual URLs leave it nil.
-    let sessionContext: PlaybackSessionContext?
-
-    init(
-        id: UUID = UUID(),
-        title: String,
-        uri: String,
-        authHeader: String? = nil,
-        resumeSeconds: Double? = nil,
-        securityScopedURL: URL? = nil,
-        sessionContext: PlaybackSessionContext? = nil
-    ) {
-        self.id = id
-        self.title = title
-        self.uri = uri
-        self.authHeader = authHeader
-        self.resumeSeconds = resumeSeconds
-        self.securityScopedURL = securityScopedURL
-        self.sessionContext = sessionContext
-    }
-}
-
-/// A capability token for injecting an asynchronously loaded resource into the
-/// exact engine generation it was requested for.
-struct PlaybackSourceGeneration: Hashable, Sendable {
-    let requestID: PlaybackRequest.ID
-    let value: UInt64
-}
-
 /// PlaybackCoordinator：拿到源 → 喂内核 → 暴露状态给 UI。
 /// 进度上报（M2）、弹幕装载（M3）都挂在这一层（内核细节始终留在 ErikaKit 里）。
 @MainActor
@@ -148,18 +19,18 @@ struct PlaybackSourceGeneration: Hashable, Sendable {
 final class PlaybackController: DanmakuPlaybackHosting {
     /// Replaced for every engine generation so buffered events from an old
     /// engine can never mutate the new source's timeline.
-    private(set) var state = PlayerState()
+    var state = PlayerState()
 
-    private(set) var engine: ErikaEngine?
-    private(set) var setupError: String?
-    private(set) var currentTitle: String?
+    var engine: ErikaEngine?
+    var setupError: String?
+    var currentTitle: String?
     /// Request-scoped synchronous source-open failure. Kept separate from
     /// setupError because subtitle/screenshot failures must not stop reporting.
-    private(set) var failedRequestID: PlaybackRequest.ID?
+    var failedRequestID: PlaybackRequest.ID?
     /// Identifies the request that owns the current position snapshot. Unlike
     /// `activeRequest`, this survives `stopPlayback()` until AppModel reports
     /// the final position.
-    private var reportableRequestID: PlaybackRequest.ID?
+    var reportableRequestID: PlaybackRequest.ID?
 
     var rate: Double = PlaybackPreferences.rate {
         didSet { if rate != oldValue { PlaybackPreferences.rate = rate } }
@@ -185,31 +56,31 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
-    private(set) var danmakuTracks: [DanmakuTrackInfo] = []
-    private(set) var danmakuEnabled = PlaybackPreferences.danmakuEnabled
-    private(set) var danmakuOpacity = PlaybackPreferences.danmakuOpacity
-    private(set) var danmakuDisplayArea = PlaybackPreferences.danmakuDisplayArea
-    private(set) var danmakuBlockTop = PlaybackPreferences.danmakuBlockTop
-    private(set) var danmakuBlockBottom = PlaybackPreferences.danmakuBlockBottom
-    private(set) var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
-    private(set) var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
-    private(set) var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
-    private(set) var danmakuGlobalOffsetSeconds = 0.0
+    var danmakuTracks: [DanmakuTrackInfo] = []
+    var danmakuEnabled = PlaybackPreferences.danmakuEnabled
+    var danmakuOpacity = PlaybackPreferences.danmakuOpacity
+    var danmakuDisplayArea = PlaybackPreferences.danmakuDisplayArea
+    var danmakuBlockTop = PlaybackPreferences.danmakuBlockTop
+    var danmakuBlockBottom = PlaybackPreferences.danmakuBlockBottom
+    var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
+    var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
+    var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
+    var danmakuGlobalOffsetSeconds = 0.0
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
-    private(set) var currentlyOpenURI: String?
+    var currentlyOpenURI: String?
     /// Changes as soon as a new request is presented, before its engine opens.
-    private(set) var sourceGeneration: UInt64 = 0
+    var sourceGeneration: UInt64 = 0
     /// 最近一次请求（出错重试用）。
-    private(set) var lastRequest: PlaybackRequest?
+    var lastRequest: PlaybackRequest?
 
-    private var eventTask: Task<Void, Never>?
-    private var resumeTask: Task<Void, Never>?
-    private var expectedRequestID: PlaybackRequest.ID?
-    private var activeRequest: PlaybackRequest?
-    private var activeSecurityScopedURL: URL?
-    private var activeSecurityScope = false
-    private var hasLoadedSource = false
+    var eventTask: Task<Void, Never>?
+    var resumeTask: Task<Void, Never>?
+    var expectedRequestID: PlaybackRequest.ID?
+    var activeRequest: PlaybackRequest?
+    var activeSecurityScopedURL: URL?
+    var activeSecurityScope = false
+    var hasLoadedSource = false
 
     /// 引擎懒创建：创建失败（缺内核 / 显卡不支持）时把原因留给 UI 显示。
     @discardableResult
@@ -310,7 +181,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         return true
     }
 
-    private var isSourceReady: Bool {
+    var isSourceReady: Bool {
         switch state.state {
         case .ready, .playing, .paused:
             return engine != nil
@@ -359,7 +230,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         openPreparedRequest(request)
     }
 
-    private func openPreparedRequest(_ request: PlaybackRequest) {
+    func openPreparedRequest(_ request: PlaybackRequest) {
         currentTitle = request.title
         lastRequest = request
         activeRequest = nil
@@ -403,7 +274,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     /// Wait for this exact engine generation to become seekable. A same-URI
     /// reopen cannot consume or clear the new generation's pending resume.
-    private func seekPendingResumeIfNeeded(
+    func seekPendingResumeIfNeeded(
         resumeSeconds: Double,
         requestID: PlaybackRequest.ID,
         generation: UInt64,
@@ -437,7 +308,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
-    private func samePlaybackSource(_ lhs: PlaybackRequest, _ rhs: PlaybackRequest) -> Bool {
+    func samePlaybackSource(_ lhs: PlaybackRequest, _ rhs: PlaybackRequest) -> Bool {
         lhs.uri == rhs.uri
             && lhs.authHeader == rhs.authHeader
             && lhs.securityScopedURL == rhs.securityScopedURL
@@ -445,7 +316,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     @discardableResult
-    private func open(_ source: PlaybackSource, securityScopedURL: URL? = nil) -> Bool {
+    func open(_ source: PlaybackSource, securityScopedURL: URL? = nil) -> Bool {
         // 换片：先 stop 旧源，再整体丢弃重建引擎。内核 close() 是终态——同一 presenter
         // close 后不能再 open（实测抛 ErikaError "player is closed"），所以换片不复用旧引擎，
         // 对齐 stopPlayback 的做法 stop + resetEngine；prepareEngine() 在下面会重建新引擎。
@@ -547,7 +418,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         )
     }
 
-    private func resetEngine() {
+    func resetEngine() {
         resumeTask?.cancel()
         resumeTask = nil
         eventTask?.cancel()
@@ -563,244 +434,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
         PlaybackLog.append("resetEngine 完成")
     }
 
-    private func releaseSecurityScopedResource() {
+    func releaseSecurityScopedResource() {
         guard activeSecurityScope, let url = activeSecurityScopedURL else { return }
         url.stopAccessingSecurityScopedResource()
         activeSecurityScopedURL = nil
         activeSecurityScope = false
-    }
-
-    // MARK: - 轨道（音轨 / 字幕菜单用）
-
-    /// Replace the current source's danmaku only while its generation token is valid.
-    @discardableResult
-    func replaceDanmaku(
-        json: String,
-        name: String,
-        offset: Duration,
-        for source: PlaybackSourceGeneration
-    ) throws -> Bool {
-        var tracks: [DanmakuTrackInfo] = []
-        do {
-            let accepted = try withReadyEngine(for: source) { engine in
-                // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
-                // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
-                // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次
-                // 全量重排（NipaPlay 的做法：配置先于装载稳定，装载只触发一次）。
-                do {
-                    try applyDanmakuPreferences(to: engine)
-                } catch {
-                    playerLog.warning("弹幕偏好应用失败，继续装载 error=\(error)")
-                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
-                }
-                try engine.clearDanmaku()
-                _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)
-                tracks = try engine.danmakuTracks()
-            }
-            if accepted { danmakuTracks = tracks }
-            return accepted
-        } catch {
-            refreshDanmakuTracks(for: source)
-            throw error
-        }
-    }
-
-    @discardableResult
-    func clearDanmaku(for source: PlaybackSourceGeneration) throws -> Bool {
-        do {
-            let accepted = try withReadyEngine(for: source) { engine in
-                try engine.clearDanmaku()
-            }
-            if accepted { danmakuTracks = [] }
-            return accepted
-        } catch {
-            refreshDanmakuTracks(for: source)
-            throw error
-        }
-    }
-
-    func setDanmakuEnabled(_ enabled: Bool) {
-        danmakuEnabled = enabled
-        PlaybackPreferences.danmakuEnabled = enabled
-        try? engine?.setDanmakuEnabled(enabled)
-    }
-
-    func setDanmakuOpacity(_ opacity: Double) {
-        danmakuOpacity = opacity.clamped(0.25...1)
-        PlaybackPreferences.danmakuOpacity = danmakuOpacity
-        updateDanmakuConfig { $0.opacity = Float(danmakuOpacity) }
-    }
-
-    func setDanmakuDisplayArea(_ area: Double) {
-        danmakuDisplayArea = area.clamped(0.25...1)
-        PlaybackPreferences.danmakuDisplayArea = danmakuDisplayArea
-        updateDanmakuConfig { $0.displayArea = Float(danmakuDisplayArea) }
-    }
-
-    func setDanmakuBlocked(top: Bool? = nil, bottom: Bool? = nil, scroll: Bool? = nil) {
-        if let top {
-            danmakuBlockTop = top
-            PlaybackPreferences.danmakuBlockTop = top
-        }
-        if let bottom {
-            danmakuBlockBottom = bottom
-            PlaybackPreferences.danmakuBlockBottom = bottom
-        }
-        if let scroll {
-            danmakuBlockScroll = scroll
-            PlaybackPreferences.danmakuBlockScroll = scroll
-        }
-        updateDanmakuConfig {
-            $0.blockTop = danmakuBlockTop
-            $0.blockBottom = danmakuBlockBottom
-            $0.blockScroll = danmakuBlockScroll
-        }
-    }
-
-    func setDanmakuMergeDuplicates(_ enabled: Bool) {
-        danmakuMergeDuplicates = enabled
-        PlaybackPreferences.danmakuMergeDuplicates = enabled
-        updateDanmakuConfig { $0.mergeDuplicates = enabled }
-    }
-
-    func setDanmakuAllowStacking(_ enabled: Bool) {
-        danmakuAllowStacking = enabled
-        PlaybackPreferences.danmakuAllowStacking = enabled
-        updateDanmakuConfig { $0.allowStacking = enabled }
-    }
-
-    func adjustDanmakuOffset(by seconds: Double) {
-        setDanmakuOffset(danmakuGlobalOffsetSeconds + seconds)
-    }
-
-    func resetDanmakuOffset() {
-        setDanmakuOffset(0)
-    }
-
-    private func setDanmakuOffset(_ seconds: Double) {
-        danmakuGlobalOffsetSeconds = seconds.clamped(-30...30)
-        try? engine?.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
-    }
-
-    private func applyDanmakuPreferences(to engine: ErikaEngine) throws {
-        var config = try engine.danmakuConfig()
-        config.enabled = danmakuEnabled
-        config.opacity = Float(danmakuOpacity)
-        config.displayArea = Float(danmakuDisplayArea)
-        config.blockTop = danmakuBlockTop
-        config.blockBottom = danmakuBlockBottom
-        config.blockScroll = danmakuBlockScroll
-        config.mergeDuplicates = danmakuMergeDuplicates
-        config.allowStacking = danmakuAllowStacking
-        try engine.setDanmakuConfig(config)
-        try engine.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
-    }
-
-    private func updateDanmakuConfig(_ update: (inout DanmakuConfig) -> Void) {
-        guard let engine, var config = try? engine.danmakuConfig() else { return }
-        update(&config)
-        try? engine.setDanmakuConfig(config)
-    }
-
-    private func refreshDanmakuTracks(for source: PlaybackSourceGeneration) {
-        var tracks: [DanmakuTrackInfo] = []
-        let accepted = (try? withReadyEngine(for: source) { engine in
-            tracks = try engine.danmakuTracks()
-        }) ?? false
-        if accepted { danmakuTracks = tracks }
-    }
-
-    func selectAudio(_ track: TrackInfo) {
-        guard let engine else { return }
-        try? engine.selectAudioTrack(track.id)
-        state.refreshTracks(from: engine)
-    }
-
-    /// `nil` = 关闭字幕。
-    func setSubtitle(_ track: TrackInfo?) {
-        guard let engine else { return }
-        try? engine.selectSubtitleTrack(track?.id)
-        state.refreshTracks(from: engine)
-    }
-
-    /// 加外挂字幕轨道（用户手动选文件：加载并立即选中）。
-    func loadExternalSubtitle(fileURL: URL) {
-        guard let engine else { return }
-        guard let localURL = copyImportedSubtitle(fileURL) else { return }
-        do {
-            let id = try engine.addExternalSubtitle(localURL.path)
-            try engine.selectSubtitleTrack(id)
-            state.refreshTracks(from: engine)
-        } catch {
-            setupError = "字幕加载失败：\(error)"
-        }
-    }
-
-    /// 只加轨道不改变当前选择（Jellyfin 侧车字幕批量装载用）。
-    func addExternalSubtitle(fileURL: URL) {
-        guard let engine else { return }
-        do {
-            _ = try engine.addExternalSubtitle(fileURL.path)
-            state.refreshTracks(from: engine)
-        } catch {
-            setupError = "字幕加载失败：\(error)"
-        }
-    }
-
-    /// Generation-safe variant for asynchronously downloaded resources.
-    @discardableResult
-    func addExternalSubtitle(
-        fileURL: URL,
-        for source: PlaybackSourceGeneration
-    ) -> Bool {
-        do {
-            return try withReadyEngine(for: source) { engine in
-                _ = try engine.addExternalSubtitle(fileURL.path)
-                state.refreshTracks(from: engine)
-            }
-        } catch {
-            setupError = "字幕加载失败：\(error)"
-            return false
-        }
-    }
-
-    /// 当前没有任何字幕被选中时自动挑一条：中文优先，否则第一条。
-    /// （内核对内封字幕有自己的默认选择；这里只兜「全是外挂字幕」的场。）
-    func autoSelectSubtitleIfNone() {
-        guard let engine, !state.subtitleTracks.isEmpty else { return }
-        guard !state.subtitleTracks.contains(where: { $0.selected }) else { return }
-        let tracks = state.subtitleTracks
-        let picked = tracks.first {
-            let lang = $0.language?.lowercased() ?? ""
-            return lang.contains("zh") || lang.contains("chi")
-        } ?? tracks[0]
-        try? engine.selectSubtitleTrack(picked.id)
-        state.refreshTracks(from: engine)
-    }
-
-    @discardableResult
-    func autoSelectSubtitleIfNone(for source: PlaybackSourceGeneration) -> Bool {
-        guard source.value == sourceGeneration,
-              source.requestID == activeRequest?.id,
-              isSourceReady,
-              let engine
-        else { return false }
-        guard !state.subtitleTracks.isEmpty,
-              !state.subtitleTracks.contains(where: { $0.selected })
-        else { return true }
-        let tracks = state.subtitleTracks
-        let picked = tracks.first {
-            let lang = $0.language?.lowercased() ?? ""
-            return lang.contains("zh") || lang.contains("chi")
-        } ?? tracks[0]
-        do {
-            try engine.selectSubtitleTrack(picked.id)
-            state.refreshTracks(from: engine)
-            return true
-        } catch {
-            setupError = "字幕选择失败：\(error)"
-            return false
-        }
     }
 
     // MARK: - 控制
@@ -856,7 +494,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine?.setSubtitleScale(1.0)
     }
 
-    private func copyImportedSubtitle(_ source: URL) -> URL? {
+    func copyImportedSubtitle(_ source: URL) -> URL? {
         let scope = source.startAccessingSecurityScopedResource()
         defer { if scope { source.stopAccessingSecurityScopedResource() } }
         do {
@@ -882,57 +520,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         open(request: request)
     }
 
-    /// 截当前帧（视频 + 字幕合成）为 PNG，保存到「图片」，返回文件名（失败给错误文案）。
-    func captureScreenshot() -> String? {
-        guard let engine, let params = state.videoParams,
-              params.width > 0, params.height > 0
-        else {
-            setupError = "还没有可截的画面"
-            return nil
-        }
-        do {
-            let rgba = try engine.captureFrameRGBA(width: params.width, height: params.height)
-            guard let image = Self.pngImage(fromRGBA: rgba, width: params.width, height: params.height) else {
-                setupError = "截图编码失败"
-                return nil
-            }
-            let directory = AppStorageDirectories.screenshots
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyyMMdd-HHmmss"
-            let name = "截图-\(currentTitle?.prefix(40) ?? "frame")-\(formatter.string(from: Date())).png"
-                .replacingOccurrences(of: "/", with: "-")
-            let url = directory.appending(path: name)
-            try image.write(to: url)
-            AppDiagnostics.requestStorageMaintenance()
-            return name
-        } catch {
-            setupError = "截图失败：\(error)"
-            return nil
-        }
-    }
-
-    /// RGBA8 缓冲 → PNG Data（截图用，双端同一套 CoreGraphics）。
-    private static func pngImage(fromRGBA pixels: [UInt8], width: Int, height: Int) -> Data? {
-        var data = pixels
-        let space = CGColorSpaceCreateDeviceRGB()
-        return data.withUnsafeMutableBytes { pointer -> Data? in
-            guard let base = pointer.baseAddress,
-                  let context = CGContext(data: base, width: width, height: height,
-                                          bitsPerComponent: 8, bytesPerRow: width * 4,
-                                          space: space,
-                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-                  let image = context.makeImage()
-            else { return nil }
-            let output = NSMutableData()
-            guard let destination = CGImageDestinationCreateWithData(
-                output, "public.png" as CFString, 1, nil
-            ) else { return nil }
-            CGImageDestinationAddImage(destination, image, nil)
-            guard CGImageDestinationFinalize(destination) else { return nil }
-            return output as Data
-        }
-    }
 
     /// 硬解 / 丢帧等实时数字，播放页的调试行用。
     func statsLine() -> String {
@@ -963,7 +550,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     /// 当前播放源代次 token；弹幕编排器用 `uuid`（请求 id）跨 await 后重新绑定。
-    private func currentSourceToken(uuid: UUID) -> PlaybackSourceGeneration? {
+    func currentSourceToken(uuid: UUID) -> PlaybackSourceGeneration? {
         guard expectedRequestID == uuid, let activeRequest, activeRequest.id == uuid, isSourceReady else {
             return nil
         }

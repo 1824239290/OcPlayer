@@ -260,7 +260,10 @@ struct PlayerScreen: View {
             // 窗口弹性动画约 0.18-0.2s，等一下让它跑完再 dismiss。
             try? await Task.sleep(for: .seconds(0.25))
             guard !Task.isCancelled else { return }
-            guard let closingID, app.presentedPlayer?.id == closingID else { return }
+            guard PlayerClosePolicy.shouldDismiss(
+                presentedID: app.presentedPlayer?.id,
+                closingID: closingID
+            ) else { return }
             app.dismissPlayer()
         }
     }

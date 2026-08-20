@@ -18,6 +18,9 @@ enum PlaybackPreparation: Equatable {
 ///
 /// UI 只读这个类的属性、调它的方法；Jellyfin 细节被挡在 `JellyfinServer` 后面，
 /// 内核细节被挡在 `PlaybackController` 后面。
+///
+/// 实现按职责拆到 `AppModel+Session` / `+Browser` / `+Playback`；
+/// 存储属性集中在本文件，跨文件 extension 以模块内可见访问。
 @MainActor
 @Observable
 final class AppModel {
@@ -32,34 +35,34 @@ final class AppModel {
         case ready
     }
 
-    private(set) var phase: Phase = .boot
+    var phase: Phase = .boot
 
-    private let store: ServerStore
-    private(set) var server: JellyfinServer?
+    let store: ServerStore
+    var server: JellyfinServer?
 
     /// Every authenticated session gets a new generation. Async responses keep
     /// their generation and may only mutate state while it is still current.
-    private var sessionGeneration = 0
-    private var initialDataTask: Task<Void, Never>?
+    var sessionGeneration = 0
+    var initialDataTask: Task<Void, Never>?
 
     // MARK: - Onboarding 中间态
 
     /// `startLogin` 成功后非 nil（已探明这是台 Jellyfin，等用户选登录方式）。
-    private(set) var loginSession: LoginSession?
-    private(set) var isProbingServer = false
-    private(set) var isAuthenticating = false
+    var loginSession: LoginSession?
+    var isProbingServer = false
+    var isAuthenticating = false
     /// Quick Connect 轮询期间展示的配对码。
-    private(set) var quickConnectCode: String?
-    private(set) var onboardingError: String?
+    var quickConnectCode: String?
+    var onboardingError: String?
 
-    private var quickConnectTask: Task<Void, Never>?
-    private var loginAttemptGeneration = 0
+    var quickConnectTask: Task<Void, Never>?
+    var loginAttemptGeneration = 0
 
     // MARK: - 浏览
 
-    private(set) var libraries: [MediaLibrary] = []
+    var libraries: [MediaLibrary] = []
     /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
-    private(set) var librariesError: String?
+    var librariesError: String?
 
     struct HomeData {
         var resume: [MediaItem] = []
@@ -69,15 +72,15 @@ final class AppModel {
         var error: String?
     }
 
-    private(set) var home = HomeData()
+    var home = HomeData()
     /// 同一会话内可能同时发生下拉刷新和设置切换；只有最新一次首页请求可以写回。
-    private var homeLoadGeneration: UInt64 = 0
+    var homeLoadGeneration: UInt64 = 0
 
     // MARK: - 弹幕设置（弹弹play 网关）
 
     /// 弹幕网关设置：地址 + API Key。AppSecret 永远不进客户端，只留在网关。
     /// API Key 存 UserDefaults（发行包统一 ad-hoc 签名，见 DanmakuKit）。
-    private var dandanplayStore = DandanplaySettingsStore()
+    var dandanplayStore = DandanplaySettingsStore()
     let danmaku = DanmakuCoordinator()
 
     var dandanplayGatewayURL: URL { dandanplayStore.gatewayURL }
@@ -93,19 +96,6 @@ final class AppModel {
     /// 是否已配置就绪（地址有效 + API Key 非空）。播放匹配前据此降级到无弹幕。
     var dandanplayIsConfigured: Bool { dandanplayStore.isConfigured }
     var dandanplayHasAPIKey: Bool { !dandanplayStore.apiKey.isEmpty }
-
-    func updateDanmakuGateway(urlString: String, apiKey: String) {
-        // Commit both values before restarting. This avoids ever pairing a new
-        // gateway host with the previously saved credential.
-        dandanplayStore.gatewayURLString = urlString
-        dandanplayStore.apiKey = apiKey
-        restartDanmakuForCurrentPlayback()
-    }
-
-    func setDanmakuAutoLoadingEnabled(_ enabled: Bool) {
-        danmaku.setAutoLoadingEnabled(enabled)
-        if enabled { restartDanmakuForCurrentPlayback() }
-    }
 
     // MARK: - 导航
 
@@ -132,7 +122,7 @@ final class AppModel {
     /// 播放覆盖层：非 nil 时播放器盖住整个 App（双端同一套，见 RootView）。
     var presentedPlayer: PlaybackRequest?
 
-    private(set) var isCompact = false
+    var isCompact = false
 
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。
     weak var playback: PlaybackController? {
@@ -152,8 +142,38 @@ final class AppModel {
             }
         }
     }
-    private var playbackReporting: PlaybackReportingCoordinator?
-    private var pendingPlaybackReportingHandoff: Task<Void, Never>?
+    var playbackReporting: PlaybackReportingCoordinator?
+    var pendingPlaybackReportingHandoff: Task<Void, Never>?
+
+    // MARK: - 播放会话附属状态
+
+    /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
+    var playbackOpenTask: Task<Void, Never>?
+    var playbackOpenGeneration: UInt64 = 0
+    /// loading 层延后撤除的观察任务（等内核出帧）。
+    var preparationDismissTask: Task<Void, Never>?
+    /// 播放准备态：nil = 不在准备（空闲，或已呈现给 PlayerScreen）。
+    var playbackPreparation: PlaybackPreparation?
+    /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。
+    var retryPlaybackItem: MediaItem?
+    struct ActivePlaybackIdentity: Equatable {
+        let sessionGeneration: Int
+        let itemID: MediaItem.ID
+        let requestID: PlaybackRequest.ID
+    }
+    var activePlaybackIdentity: ActivePlaybackIdentity?
+    /// 覆盖层正在播放的条目（HUD 标题 / 继续观看用）；退出 / 换片时随上报一起清。
+    var nowPlayingItem: MediaItem?
+    /// 连播解析出的「下一集」；HUD「Continue Watching」复用它，nil = 没有下一集。
+    var nextEpisode: MediaItem?
+    var nextEpisodeTask: Task<Void, Never>?
+    var externalSubtitleTask: Task<Void, Never>?
+
+    // MARK: - 初始化
+
+    init(store: ServerStore = ServerStore()) {
+        self.store = store
+    }
 
     /// 由外壳在布局定型时告知（iPhone → compact），详情导航方式随之切换。
     func setCompact(_ compact: Bool) {
@@ -197,754 +217,6 @@ final class AppModel {
             backdropImageTag: related?.backdropImageTag ?? item.backdropImageTag
         )
         openDetail(series)
-    }
-
-    // MARK: - 初始化
-
-    init(store: ServerStore = ServerStore()) {
-        self.store = store
-    }
-
-    /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
-    func bootstrap() {
-        guard phase == .boot else { return }
-        if let restored = JellyfinServer(restoringFrom: store) {
-            activate(server: restored)
-        } else {
-            phase = .onboarding
-        }
-    }
-
-    // MARK: - 登录流程
-
-    /// Onboarding 第一步：验证服务器地址。
-    func connectServer(_ rawURL: String) async {
-        loginAttemptGeneration &+= 1
-        let attempt = loginAttemptGeneration
-        isProbingServer = true
-        onboardingError = nil
-        defer {
-            if loginAttemptGeneration == attempt {
-                isProbingServer = false
-            }
-        }
-        do {
-            let session = try await JellyfinServer.startLogin(urlString: rawURL)
-            guard loginAttemptGeneration == attempt, phase == .onboarding else { return }
-            loginSession = session
-            await startQuickConnect()
-        } catch let error as JellyfinError {
-            if loginAttemptGeneration == attempt {
-                onboardingError = error.errorDescription
-                AppDiagnostics.logWarning("服务器探测失败 url=\(rawURL)", fields: ["error": .string(error.errorDescription ?? "\(error)")])
-            }
-        } catch {
-            if loginAttemptGeneration == attempt {
-                onboardingError = "\(error)"
-                AppDiagnostics.logWarning("服务器探测异常 url=\(rawURL)", fields: ["error": .string("\(error)")])
-            }
-        }
-    }
-
-    /// 服务器确认后自动开始 Quick Connect 轮询（失败了也不阻塞密码登录）。
-    func startQuickConnect() async {
-        guard let session = loginSession else { return }
-        quickConnectTask?.cancel()
-        quickConnectCode = nil
-        quickConnectTask = Task { [weak self] in
-            do {
-                for try await event in session.quickConnectEvents {
-                    guard let self, !Task.isCancelled else { return }
-                    switch event {
-                    case let .polling(code):
-                        self.quickConnectCode = code
-                    case let .authenticated(secret):
-                        await self.completeLogin { try await session.signIn(quickConnectSecret: secret) }
-                    }
-                }
-            } catch is CancellationError {
-            } catch let error as JellyfinError {
-                // Quick Connect 没开 / 超时：提示一句，账号密码仍然可用。
-                // 别覆盖正在进行的密码登录 / 已成功的状态（用户在输密码时 QC 后台超时也算正常）。
-                if let self, self.loginSession === session,
-                   !self.isAuthenticating, self.phase == .onboarding {
-                    self.onboardingError = error.errorDescription
-                }
-            } catch {
-                if let self, self.loginSession === session,
-                   !self.isAuthenticating, self.phase == .onboarding {
-                    self.onboardingError = "\(error)"
-                }
-            }
-        }
-    }
-
-    /// 账号密码登录（Quick Connect 之外的兜底）。
-    func signIn(username: String, password: String) async {
-        guard let session = loginSession else { return }
-        await completeLogin { try await session.signIn(username: username, password: password) }
-    }
-
-    private func completeLogin(_ authenticate: () async throws -> LoginResult) async {
-        guard let session = loginSession, !isAuthenticating else { return }
-        isAuthenticating = true
-        onboardingError = nil
-        defer {
-            if self.loginSession == nil || self.loginSession === session {
-                self.isAuthenticating = false
-            }
-        }
-        do {
-            let result = try await authenticate()
-            guard loginSession === session, phase == .onboarding else { return }
-            let server = try session.finish(result, store: self.store)
-            quickConnectTask?.cancel()
-            quickConnectTask = nil
-            quickConnectCode = nil
-            loginSession = nil
-            // phase 已切到 ready，首屏数据靠 initialDataTask 异步驱动 home.isLoading
-            // 的 loading 态——不阻塞登录 Task，让 Quick Connect 的轮询流尽快结束。
-            activate(server: server)
-        } catch let error as JellyfinError {
-            if loginSession === session { onboardingError = error.errorDescription }
-        } catch {
-            if loginSession === session { onboardingError = "\(error)" }
-        }
-    }
-
-    func resetOnboarding() {
-        loginAttemptGeneration &+= 1
-        quickConnectTask?.cancel()
-        quickConnectTask = nil
-        isAuthenticating = false
-        quickConnectCode = nil
-        loginSession = nil
-        onboardingError = nil
-    }
-
-    func signOut() {
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        _ = finishReporting()
-        playback?.stopPlayback()
-        initialDataTask?.cancel()
-        initialDataTask = nil
-        quickConnectTask?.cancel()
-        quickConnectTask = nil
-        loginAttemptGeneration &+= 1
-        nextEpisodeTask?.cancel()
-        nextEpisodeTask = nil
-        externalSubtitleTask?.cancel()
-        externalSubtitleTask = nil
-        sessionGeneration &+= 1
-        if let server {
-            store.signOut(id: server.profile.id)
-        }
-        loginSession = nil
-        quickConnectCode = nil
-        isProbingServer = false
-        isAuthenticating = false
-        onboardingError = nil
-        server = nil
-        libraries = []
-        librariesError = nil
-        home = HomeData()
-        path = []
-        presentedDetail = nil
-        presentedPlayer = nil
-        selectedSection = .home
-        phase = .onboarding
-    }
-
-    // MARK: - 数据加载
-
-    private func activate(server: JellyfinServer) {
-        initialDataTask?.cancel()
-        sessionGeneration &+= 1
-        self.server = server
-        phase = .ready
-        let generation = sessionGeneration
-        initialDataTask = Task { [weak self] in
-            await self?.loadInitialData(server: server, generation: generation)
-        }
-    }
-
-    private func sessionIsCurrent(_ generation: Int, server: JellyfinServer) -> Bool {
-        sessionGeneration == generation && self.server?.profile.id == server.profile.id
-    }
-
-    private func loadInitialData(server: JellyfinServer, generation: Int) async {
-        await reloadBrowserData(server: server, generation: generation)
-    }
-
-    /// 重载首页和侧栏依赖的媒体库。断网后的重试必须同时恢复两部分数据。
-    func reloadBrowserData() async {
-        guard let server else { return }
-        await reloadBrowserData(server: server, generation: sessionGeneration)
-    }
-
-    private func reloadBrowserData(server: JellyfinServer, generation: Int) async {
-        async let libs: Void = loadLibraries(server: server, generation: generation)
-        async let home: Void = loadHome(server: server, generation: generation)
-        _ = await (libs, home)
-    }
-
-    private func loadLibraries(server: JellyfinServer, generation: Int) async {
-        do {
-            let loaded = try await server.userViews()
-            guard sessionIsCurrent(generation, server: server) else { return }
-            libraries = loaded
-            librariesError = nil
-        } catch let error as JellyfinError {
-            guard sessionIsCurrent(generation, server: server) else { return }
-            // 保留旧列表（若有），只暴露错误文案供侧栏/重试使用。
-            librariesError = error.errorDescription
-            AppDiagnostics.logWarning("媒体库列表加载失败", fields: [
-                "error": .string(error.errorDescription ?? "\(error)"),
-            ])
-        } catch {
-            guard sessionIsCurrent(generation, server: server) else { return }
-            librariesError = "\(error)"
-            AppDiagnostics.logWarning("媒体库列表加载异常", fields: ["error": .string("\(error)")])
-        }
-    }
-
-    func loadHome() async {
-        guard let server else { return }
-        await loadHome(server: server, generation: sessionGeneration)
-    }
-
-    private func loadHome(server: JellyfinServer, generation: Int) async {
-        guard sessionIsCurrent(generation, server: server) else { return }
-        homeLoadGeneration &+= 1
-        let loadGeneration = homeLoadGeneration
-        home.isLoading = true
-        home.error = nil
-        defer {
-            if sessionIsCurrent(generation, server: server),
-               homeLoadGeneration == loadGeneration {
-                home.isLoading = false
-            }
-        }
-        do {
-            async let resume = server.resumeItems()
-            async let nextUp = server.nextUp()
-            async let latest = server.latestItems()
-            let (resumeItems, nextUpItems, latestItems) = try await (resume, nextUp, latest)
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            home.resume = resumeItems
-            home.nextUp = nextUpItems
-            home.latest = latestItems
-        } catch let error as JellyfinError {
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            home.error = error.errorDescription
-            AppDiagnostics.logWarning("首页加载失败", fields: ["error": .string(error.errorDescription ?? "\(error)")])
-        } catch {
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            home.error = "\(error)"
-            AppDiagnostics.logWarning("首页加载异常", fields: ["error": .string("\(error)")])
-        }
-    }
-
-    // MARK: - 播放串联（UI 只调这里，不自己拼 URL）
-
-    /// 由详情页 / 首页卡片发起的播放。`resumeSeconds` 来自服务端 UserData。
-    /// 播放器以覆盖层盖住整个 App（不占侧栏、不压导航栈）。
-    /// 同时启动进度上报（Start → 10s 心跳 → Stopped）和「下一集」解析。
-    /// 先走 PlaybackInfo 拿 MediaSource；失败时回退到旧的直连 URL，保证老服务器也能播。
-    func play(_ item: MediaItem, resumeSeconds: Double?) {
-        // 同一剧目重复点击：复用在飞的解析任务，不要 cancel 重来——
-        // 否则每次点击都打断 PlaybackInfo 请求，越点越慢、永远跑不完。
-        if case .loading = playbackPreparation, retryPlaybackItem?.id == item.id {
-            return
-        }
-        cancelPlaybackOpen()
-        retryPlaybackItem = item
-        playbackPreparation = .loading(title: item.name)
-        AppDiagnostics.logInfo("play() 进入加载态", fields: ["title": .string(item.name)])
-        let generation = playbackOpenGeneration
-        playbackOpenTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer {
-                if self.playbackOpenGeneration == generation {
-                    self.playbackOpenTask = nil
-                }
-            }
-            await self.openPlayback(item: item, resumeSeconds: resumeSeconds)
-            AppDiagnostics.logInfo("play() 加载态结束", fields: ["preparation": .string(String(describing: self.playbackPreparation))])
-        }
-    }
-
-    private func cancelPlaybackOpen() {
-        AppDiagnostics.logInfo("cancelPlaybackOpen 取消播放准备")
-        playbackOpenGeneration &+= 1
-        playbackOpenTask?.cancel()
-        playbackOpenTask = nil
-        preparationDismissTask?.cancel()
-        preparationDismissTask = nil
-        playbackPreparation = nil
-        danmaku.cancel()
-    }
-
-    /// 取消正在解析的播放准备（loading 层「取消」按钮入口）：
-    /// 准备阶段（URI 未就绪）→ 只撤 loading 回列表；
-    /// 内核阶段（PlayerScreen 已 present）→ 连播放器一起退出。
-    func cancelPlaybackOpening() {
-        if presentedPlayer != nil {
-            dismissPlayer()
-        } else {
-            cancelPlaybackOpen()
-        }
-    }
-
-    @MainActor
-    private func openPlayback(item: MediaItem, resumeSeconds: Double?) async {
-        guard let server else { return }
-        finishReporting()   // 上一条的 Stopped（换片场景）
-
-        // 首页「最近添加」等入口可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
-        // 只接受可播放的叶子条目。沿用详情页的语义：优先「接下来看」，否则取
-        // 首个未看完的常规剧集；避免把 Series ID 直接送进 /Videos/{id}/stream。
-        let playableItem: MediaItem
-        do {
-            guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
-                playbackPreparation = .failed(title: item.name, error: "该剧没有可播放的剧集")
-                return
-            }
-            guard !Task.isCancelled else { return }
-            playableItem = resolved
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-            playbackPreparation = .failed(title: item.name, error: "剧集加载失败：\(error)")
-            AppDiagnostics.logWarning("播放剧集解析失败", fields: [
-                "item": .string(item.name),
-                "error": .string("\(error)"),
-            ])
-            return
-        }
-
-        let effectiveResume = playableItem.id == item.id
-            ? resumeSeconds
-            : playableItem.playState?.positionSeconds
-        let title = playableItem.episodeLabel.map {
-            "\(playableItem.seriesName ?? playableItem.name) \($0)"
-        } ?? playableItem.name
-        // 解析出集标题后刷新 loading 文案（从剧名更新到「S1E7」之类）
-        if case .loading = playbackPreparation {
-            playbackPreparation = .loading(title: title)
-        }
-        do {
-            let info = try await server.playbackInfo(itemID: playableItem.id)
-            let source = info.mediaSources.first { $0.supportsDirectPlay == true }
-                ?? info.mediaSources.first { $0.supportsDirectStream == true }
-                ?? info.mediaSources.first
-            let context = info.sessionContext(itemID: playableItem.id, selectedSource: source)
-            let uri = try server.streamURL(
-                itemID: playableItem.id,
-                mediaSourceID: source?.id,
-                playSessionID: info.playSessionID
-            )
-            guard !Task.isCancelled else { return }
-            presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                            resumeSeconds: effectiveResume, item: playableItem,
-                            sessionContext: context)
-        } catch {
-            // PlaybackInfo 不可用（老版本 / 端点被关）时退回原来的直连 URL。
-            if Task.isCancelled { return }
-            AppDiagnostics.logWarning("PlaybackInfo 失败，回退直连", fields: [
-                "item": .string(playableItem.name),
-                "error": .string("\(error)"),
-            ])
-            if let uri = try? server.streamURL(itemID: playableItem.id) {
-                presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                                resumeSeconds: effectiveResume, item: playableItem,
-                                sessionContext: PlaybackSessionContext(
-                                    itemID: playableItem.id,
-                                    durationSeconds: playableItem.runtimeSeconds
-                                ))
-            } else {
-                playbackPreparation = .failed(title: title, error: "播放信息获取失败：\(error)")
-                AppDiagnostics.logError("PlaybackInfo 失败且回退直连也失败", fields: [
-                    "title": .string(title),
-                    "error": .string("\(error)"),
-                ])
-            }
-        }
-    }
-
-    /// 把浏览层条目归一化为可直接播放的叶子条目。
-    /// 电影 / 集数 / 音频等已经是叶子，剧集则优先复用首页 nextUp，避免额外请求。
-    private func resolvePlayableItem(for item: MediaItem, server: JellyfinServer) async throws -> MediaItem? {
-        guard item.kind == .series else { return item }
-
-        if let next = home.nextUp.first(where: { $0.seriesID == item.id }) {
-            return next
-        }
-
-        let episodes = try await server.episodes(seriesID: item.id, seasonID: nil)
-        let regularEpisodes = episodes.filter { $0.seasonNumber != 0 }
-        return regularEpisodes.first(where: { !($0.playState?.played ?? false) })
-            ?? regularEpisodes.first
-    }
-
-    private func presentPlayback(
-        title: String,
-        uri: String,
-        authHeader: String?,
-        resumeSeconds: Double?,
-        item: MediaItem,
-        sessionContext: PlaybackSessionContext
-    ) {
-        let request = PlaybackRequest(
-            title: title,
-            uri: uri,
-            authHeader: authHeader,
-            resumeSeconds: resumeSeconds,
-            sessionContext: sessionContext
-        )
-        playback?.prepareForPresentation(request)
-        // URI 已就绪但内核未出帧：loading 层继续盖住 PlayerScreen，
-        // 等 state 到 ready/playing 再清 preparation，消除
-        // 「loading 退出后还要再等内核 open」的两段式等待。
-        presentedPlayer = request
-        schedulePreparationDismiss(for: request)
-        retryPlaybackItem = item
-        nowPlayingItem = item
-        startReporting(item: item, resumeSeconds: resumeSeconds, request: request)
-        startDanmaku(for: request, item: item)
-    }
-
-    /// 等 playback 内核真正渲染出首帧再撤 loading 层：state 到 ready/playing 只代表
-    /// 文件加载完、播放启动，首帧像素可能还在渲染管线上——那时撤 loading 会让
-    /// 还没上屏的（空）视频层露出来，出现白闪。
-    /// 同时保底 400ms 显示时间：加载太快时 loading 闪现一下就消失会晃眼，
-    /// 保底让 loading 有完整的「出现→稳定→淡出」节奏。
-    /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
-    private func schedulePreparationDismiss(for request: PlaybackRequest) {
-        preparationDismissTask?.cancel()
-        preparationDismissTask = Task { @MainActor [weak self, weak playback] in
-            let clock = ContinuousClock()
-            let startTime = clock.now
-            var playingSince: ContinuousClock.Instant?
-            while let self, !Task.isCancelled {
-                guard self.presentedPlayer?.id == request.id else { return }
-                // 控制器引用没了（极端情况）：宁可退回两段式也别让 loading 永转。
-                guard let playback else {
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
-                if playback.engine?.latestStats.rendered_video_frames ?? 0 >= 1 {
-                    // 保底 400ms：加载太快时 loading 闪现即消失会晃眼。
-                    if clock.now - startTime < .milliseconds(400) {
-                        try? await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
-                    }
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 内核打开失败 / App 层 setupError：撤 loading，让错误徽章接管。
-                if playback.state.state == .error || playback.setupError != nil {
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 纯音频 / 首帧迟迟不来的兜底：playing 持续 2.5s 仍无帧就放行，
-                // 交给 PlayerScreen 的缓冲转圈（surface 已垫黑，不会白闪）。
-                if playback.state.state == .playing {
-                    let since = playingSince ?? clock.now
-                    playingSince = since
-                    if clock.now - since > .seconds(2.5) {
-                        self.playbackPreparation = nil
-                        return
-                    }
-                } else {
-                    playingSince = nil
-                }
-                do {
-                    try await Task.sleep(for: .milliseconds(100))
-                } catch {
-                    return
-                }
-            }
-        }
-    }
-
-    /// HUD「Continue Watching」：手动跳到连播解析出的下一集（走完整播放串联）。
-    func playNextEpisode() {
-        guard let next = nextEpisode else { return }
-        // 立即消费，避免 PlaybackInfo 请求返回前连续点击触发多次换片。
-        nextEpisode = nil
-        play(next, resumeSeconds: 0)
-    }
-
-    /// 本地文件（onOpenURL / 设置页 / 自检）：不走 Jellyfin，直接上覆盖层。
-    /// 本地播放不依赖服务器 —— 登录页挡着就直接越过。
-    /// loading 层与 Jellyfin 路径共用：等首帧/保底时长后再撤，避免黑一下再出画。
-    func presentLocalFile(_ url: URL) {
-        if phase == .onboarding { phase = .ready }
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        finishReporting()
-        let request = PlaybackRequest(
-            title: url.lastPathComponent,
-            uri: url.path,
-            securityScopedURL: url
-        )
-        playbackPreparation = .loading(title: request.title)
-        playback?.prepareForPresentation(request)
-        presentedPlayer = request
-        schedulePreparationDismiss(for: request)
-        startDanmaku(for: request, item: nil)
-    }
-
-    /// 直连链接（设置页入口）：请求由 `PlaybackController.request(uri:token:)` 构造好。
-    func presentRequest(_ request: PlaybackRequest) {
-        if phase == .onboarding { phase = .ready }
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        finishReporting()
-        playbackPreparation = .loading(title: request.title)
-        playback?.prepareForPresentation(request)
-        presentedPlayer = request
-        schedulePreparationDismiss(for: request)
-        startDanmaku(for: request, item: nil)
-    }
-
-    private func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
-        let context: DanmakuPlaybackContext
-        if let item, let server {
-            context = .jellyfin(
-                item: item,
-                request: request,
-                serverProfileID: server.profile.id
-            )
-        } else {
-            context = .standalone(request: request)
-        }
-        danmaku.start(
-            context: context,
-            configuration: dandanplayConfiguration,
-            playback: playback
-        )
-    }
-
-    private func restartDanmakuForCurrentPlayback() {
-        guard let request = presentedPlayer else { return }
-        startDanmaku(for: request, item: nowPlayingItem)
-    }
-
-    private var dandanplayConfiguration: DandanplayConfiguration? {
-        guard dandanplayStore.isConfigured else { return nil }
-        return DandanplayConfiguration(
-            baseURL: dandanplayStore.gatewayURL,
-            apiKey: dandanplayStore.apiKey,
-            userAgent: Self.dandanplayUserAgent
-        )
-    }
-
-    private static var dandanplayUserAgent: String {
-        #if os(macOS)
-        let platform = "macOS"
-        #else
-        let platform = "iOS"
-        #endif
-        #if arch(arm64)
-        let architecture = "arm64"
-        #elseif arch(x86_64)
-        let architecture = "x86_64"
-        #else
-        let architecture = "unknown"
-        #endif
-        return "OcPlay/\(ClientIdentity.marketingVersion) (\(platform); \(architecture))"
-    }
-
-    func dismissPlayer() {
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        let stopped = finishReporting()   // 退出播放器 → Stopped，服务器记下续播位置
-        presentedPlayer = nil
-        // 等 Stopped 上报落库后刷新首页，让「继续观看」立刻反映刚退出的进度。
-        Task {
-            await stopped?.value
-            await loadHome()
-        }
-    }
-
-    /// Hook this to `scenePhase == .background`. It immediately snapshots the
-    /// current position instead of waiting for the next ten-second heartbeat.
-    @discardableResult
-    func playbackDidEnterBackground() -> Task<Void, Never>? {
-        guard let report = playbackReporting?.reportBackgroundSnapshot() else { return nil }
-        if case .terminal = report {
-            clearPlaybackSessionState()
-        }
-        return report.task
-    }
-
-    /// Hook this to the platform's termination callback when available. The
-    /// returned task lets a host with a termination grace period await Stopped.
-    @discardableResult
-    func playbackWillTerminate() -> Task<Void, Never>? {
-        finishReporting()
-    }
-
-    /// 重试当前 Jellyfin 条目时重新走完整的 PlaybackInfo / Start 会话，
-    /// 不复用旧请求的 UUID，避免旧引擎的异步资源串到新引擎。
-    func retryPlayback() {
-        // 解析进行中（loading）不重入；失败态（failed）允许重试。
-        if case .loading = playbackPreparation { return }
-        guard let item = nowPlayingItem ?? retryPlaybackItem else {
-            playback?.retryLast()
-            restartDanmakuForCurrentPlayback()
-            return
-        }
-        let currentPosition = playback.map { Double($0.state.position.microseconds) / 1_000_000 }
-        let fallbackPosition = presentedPlayer?.resumeSeconds
-        let resumeSeconds = currentPosition.flatMap { $0 >= 30 ? $0 : nil } ?? fallbackPosition
-        play(item, resumeSeconds: resumeSeconds)
-    }
-
-    // MARK: - 播放会话附属任务（M2）
-
-    /// 当前正在解析播放地址的请求。旧请求不能在新请求之后返回并覆盖播放器。
-    private var playbackOpenTask: Task<Void, Never>?
-    private var playbackOpenGeneration: UInt64 = 0
-    /// loading 层延后撤除的观察任务（等内核出帧）。
-    private var preparationDismissTask: Task<Void, Never>?
-    /// 播放准备态：nil = 不在准备（空闲，或已呈现给 PlayerScreen）。
-    private(set) var playbackPreparation: PlaybackPreparation?
-    /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。
-    private var retryPlaybackItem: MediaItem?
-    private struct ActivePlaybackIdentity: Equatable {
-        let sessionGeneration: Int
-        let itemID: MediaItem.ID
-        let requestID: PlaybackRequest.ID
-    }
-    private var activePlaybackIdentity: ActivePlaybackIdentity?
-    /// 覆盖层正在播放的条目（HUD 标题 / 继续观看用）；退出 / 换片时随上报一起清。
-    private(set) var nowPlayingItem: MediaItem?
-    /// 连播解析出的「下一集」；HUD「Continue Watching」复用它，nil = 没有下一集。
-    private(set) var nextEpisode: MediaItem?
-    private var nextEpisodeTask: Task<Void, Never>?
-    private var externalSubtitleTask: Task<Void, Never>?
-
-    private func startReporting(
-        item: MediaItem,
-        resumeSeconds: Double?,
-        request: PlaybackRequest
-    ) {
-        nextEpisode = nil
-        guard let server, let context = request.sessionContext,
-              let playbackReporting else { return }
-        let identity = ActivePlaybackIdentity(
-            sessionGeneration: sessionGeneration,
-            itemID: item.id,
-            requestID: request.id
-        )
-        activePlaybackIdentity = identity
-        resolveNextEpisode(after: item, identity: identity)
-        loadExternalSubtitles(for: item, identity: identity, request: request)
-        playbackReporting.start(
-            reporter: server,
-            context: context,
-            requestID: request.id,
-            resumeSeconds: resumeSeconds
-        ) { [weak self] event in
-            guard let self, self.activePlaybackIdentity == identity,
-                  event.requestID == identity.requestID else { return }
-            self.activePlaybackIdentity = nil
-            if event.reachedEnd, let next = self.nextEpisode {
-                self.play(next, resumeSeconds: 0)
-            }
-        }
-    }
-
-    /// 换片 / 退出播放器：补 Stopped 后停表。返回 Stopped 上报任务（供调用方等待落库）。
-    @discardableResult
-    private func finishReporting() -> Task<Void, Never>? {
-        clearPlaybackSessionState()
-        return playbackReporting?.stop()
-    }
-
-    private func clearPlaybackSessionState() {
-        nextEpisodeTask?.cancel()
-        nextEpisodeTask = nil
-        externalSubtitleTask?.cancel()
-        externalSubtitleTask = nil
-        nextEpisode = nil
-        nowPlayingItem = nil
-        activePlaybackIdentity = nil
-    }
-
-    private func resolveNextEpisode(after item: MediaItem, identity: ActivePlaybackIdentity) {
-        guard item.kind == .episode, let seriesID = item.seriesID, let server else { return }
-        nextEpisodeTask?.cancel()
-        nextEpisodeTask = Task { [weak self] in
-            guard let episodes = try? await server.episodes(seriesID: seriesID, seasonID: nil),
-                  let self
-            else { return }
-            guard !Task.isCancelled,
-                  self.activePlaybackIdentity == identity else { return }
-            // 第 0 季是特典/花絮，不当「下一集」自动连播；当前集本身是特典时
-            // firstIndex 落空，同样不连播——看完特典就该停，让用户自己选。
-            let regular = episodes.filter { $0.seasonNumber != 0 }
-            guard let index = regular.firstIndex(where: { $0.id == item.id }),
-                  regular.indices.contains(index + 1)
-            else { return }
-            self.nextEpisode = regular[index + 1]
-        }
-    }
-
-    /// Jellyfin 侧车字幕（`.zh.srt` 这类不在容器里的）：列出 → 逐条下载 → 喂给内核。
-    /// 装载完如果一条字幕都没选，自动挑中文优先的一条。
-    private func loadExternalSubtitles(
-        for item: MediaItem,
-        identity: ActivePlaybackIdentity,
-        request: PlaybackRequest
-    ) {
-        guard let server else { return }
-        let itemID = item.id
-        externalSubtitleTask?.cancel()
-        externalSubtitleTask = Task { [weak self] in
-            guard let subtitles = try? await server.externalSubtitles(itemID: itemID),
-                  !subtitles.isEmpty, let self
-            else { return }
-            // 解析期间用户已换片 → 丢弃，避免字幕串台
-            guard !Task.isCancelled,
-                  self.activePlaybackIdentity == identity,
-                  let playback = self.playback,
-                  let source = await playback.waitUntilSourceReady(for: request.id)
-            else { return }
-            for subtitle in subtitles {
-                guard !Task.isCancelled else { return }
-                guard let file = try? await server.downloadSubtitle(subtitle) else { continue }
-                guard !Task.isCancelled,
-                      self.activePlaybackIdentity == identity else { return }
-                guard playback.addExternalSubtitle(fileURL: file, for: source) else { return }
-            }
-            _ = playback.autoSelectSubtitleIfNone(for: source)
-        }
-    }
-
-    /// Onboarding 上的「先不登录」：进主框架（本地播放可用），服务器稍后在设置里连。
-    func skipLogin() {
-        phase = .ready
-    }
-
-    /// 未连接状态下首页的「去连接」：回登录流程。
-    func reconnectFlow() {
-        path = []
-        presentedDetail = nil
-        selectedSection = .home
-        resetOnboarding()
-        phase = .onboarding
     }
 
     // MARK: - 派生
