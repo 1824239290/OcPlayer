@@ -41,18 +41,28 @@ struct AppShellView: View {
             }
 
             Section("媒体库") {
-                ForEach(app.libraries) { library in
-                    Label(library.name, systemImage: Self.icon(for: library.collectionType))
-                        .tag(AppModel.Section.library(library.id))
+                if app.libraries.isEmpty, let librariesError = app.librariesError {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(librariesError)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("重试") {
+                            Task { await app.reloadBrowserData() }
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding(.vertical, 4)
+                } else {
+                    ForEach(app.libraries) { library in
+                        Label(library.name, systemImage: Self.icon(for: library.collectionType))
+                            .tag(AppModel.Section.library(library.id))
+                    }
                 }
-            }
-
-            Section {
-                Label("设置", systemImage: "gearshape").tag(AppModel.Section.settings)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            serverFooter
+            settingsFooter
         }
         .listStyle(.sidebar)
     }
@@ -128,20 +138,25 @@ struct AppShellView: View {
         }
     }
 
-    private var serverFooter: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Circle().fill(.green).frame(width: 7, height: 7)
-                Text("\(app.currentUserLabel) · 在线").font(.caption.weight(.medium))
-            }
-            Text(app.serverLabel)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+    private var settingsFooter: some View {
+        Button {
+            app.selectedSection = .settings
+        } label: {
+            Label("设置", systemImage: "gearshape")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(.rect)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    app.selectedSection == .settings
+                        ? Color.accentColor.opacity(0.18)
+                        : .clear,
+                    in: .rect(cornerRadius: 6)
+                )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(app.selectedSection == .settings ? .isSelected : [])
+        .padding(8)
         .background(.ultraThinMaterial)
     }
 

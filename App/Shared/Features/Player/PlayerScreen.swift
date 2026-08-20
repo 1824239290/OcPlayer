@@ -134,7 +134,20 @@ struct PlayerScreen: View {
             guard let menu = notification.object as? NSMenu else { return }
             hudVisibility.menuTrackingDidEnd(menu, canAutoHide: canAutoHideControls)
         }
-        .onAppear { isFullscreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) ?? false }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) {
+            notification in
+            guard let window = notification.object as? NSWindow,
+                  window.isKeyWindow || window.isMainWindow
+            else { return }
+            isFullscreen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) {
+            notification in
+            guard let window = notification.object as? NSWindow,
+                  window.isKeyWindow || window.isMainWindow || isFullscreen
+            else { return }
+            isFullscreen = false
+        }
         #endif
         .onAppear {
             PlaybackLog.append("PlayerScreen onAppear request=\(request?.title ?? "nil")")
@@ -142,6 +155,7 @@ struct PlayerScreen: View {
             playerLog.info("PlayerScreen onAppear")
             PlayerWindowFitter.saveOriginalIfNeeded()
             installKeyMonitor()
+            isFullscreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) ?? false
             #endif
         }
         // task(id:)：覆盖层已开着时换片（onOpenURL / 播另一集）也能重新打开
@@ -268,8 +282,9 @@ struct PlayerScreen: View {
     #if os(macOS)
     private func toggleFullscreen() {
         guard let window = NSApp.keyWindow else { return }
+        // 不在这里翻转 isFullscreen：等 didEnter/didExit 通知与系统状态对齐，
+        // 避免与绿键/菜单全屏抢状态。
         window.toggleFullScreen(nil)
-        isFullscreen.toggle()
         revealControls()
     }
     #endif

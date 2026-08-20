@@ -314,7 +314,8 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
-    func testLibraryBrowseLoadsEveryPage() async throws {        try await TestSupport.withMock { request in
+    func testLibraryBrowseLoadsEveryPage() async throws {
+        try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items")
             let query = TestSupport.queryItems(of: request)
             XCTAssertEqual(query["limit"], "2")
@@ -341,6 +342,32 @@ final class JellyfinServerTests: XCTestCase {
         } with: {
             let items = try await makeServer().items(parentID: "lib-1", kinds: [.movie], limit: 2)
             XCTAssertEqual(items.map(\.id), ["m-1", "m-2", "m-3", "m-4", "m-5"])
+        }
+    }
+
+    func testItemsPageReturnsSinglePageWithoutAutoFetch() async throws {
+        var requestCount = 0
+        try await TestSupport.withMock { request in
+            requestCount += 1
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["limit"], "2")
+            XCTAssertEqual(query["startIndex"], "2")
+            return MockURLProtocol.ok(
+                #"{"Items":[{"Id":"m-3","Name":"3","Type":"Movie"},{"Id":"m-4","Name":"4","Type":"Movie"}],"TotalRecordCount":5}"#,
+                for: request.url!
+            )
+        } with: {
+            let page = try await makeServer().itemsPage(
+                parentID: "lib-1",
+                kinds: [.movie],
+                startIndex: 2,
+                limit: 2
+            )
+            XCTAssertEqual(page.items.map(\.id), ["m-3", "m-4"])
+            XCTAssertEqual(page.startIndex, 2)
+            XCTAssertEqual(page.totalRecordCount, 5)
+            XCTAssertTrue(page.hasMore)
+            XCTAssertEqual(requestCount, 1, "itemsPage must not auto-paginate")
         }
     }
 

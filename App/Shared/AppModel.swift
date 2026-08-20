@@ -58,6 +58,8 @@ final class AppModel {
     // MARK: - 浏览
 
     private(set) var libraries: [MediaLibrary] = []
+    /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
+    private(set) var librariesError: String?
 
     struct HomeData {
         var resume: [MediaItem] = []
@@ -167,21 +169,32 @@ final class AppModel {
     }
 
     /// 首页的续播条目通常是 Episode；详情入口应落到所属电视剧，而不是单集。
-    /// 先复用首页已有的 Series 数据，没有缓存时用父级 ID 构造轻量占位，
-    /// DetailView 随后会按该 ID 拉取完整详情、季和分集。
+    /// 先复用首页已有的 Series 数据（最近添加 → 继续观看/接下来看里能带上的图），
+    /// 没有缓存时用父级 ID 构造轻量占位，DetailView 随后会按该 ID 拉取完整详情、季和分集。
     func openSeriesDetail(for item: MediaItem) {
         guard let seriesID = item.seriesID else {
             openDetail(item)
             return
         }
 
-        let cachedSeries = (home.latest).first {
+        let cachedSeries = home.latest.first {
             $0.id == seriesID && $0.kind == .series
         }
-        let series = cachedSeries ?? MediaItem(
+        if let cachedSeries {
+            openDetail(cachedSeries)
+            return
+        }
+
+        // resume / nextUp 多半是 Episode：用条目上的 series 名 + 尽量带上已有图 tag，
+        // 减少详情页首帧海报空窗（完整字段仍由 DetailView 再拉）。
+        let related = (home.resume + home.nextUp).first { $0.seriesID == seriesID }
+        let series = MediaItem(
             id: seriesID,
-            name: item.seriesName ?? item.name,
-            kind: .series
+            name: related?.seriesName ?? item.seriesName ?? item.name,
+            kind: .series,
+            primaryImageTag: related?.primaryImageTag ?? item.primaryImageTag,
+            thumbImageTag: related?.thumbImageTag ?? item.thumbImageTag,
+            backdropImageTag: related?.backdropImageTag ?? item.backdropImageTag
         )
         openDetail(series)
     }
@@ -334,6 +347,7 @@ final class AppModel {
         onboardingError = nil
         server = nil
         libraries = []
+        librariesError = nil
         home = HomeData()
         path = []
         presentedDetail = nil
@@ -380,8 +394,18 @@ final class AppModel {
             let loaded = try await server.userViews()
             guard sessionIsCurrent(generation, server: server) else { return }
             libraries = loaded
+            librariesError = nil
+        } catch let error as JellyfinError {
+            guard sessionIsCurrent(generation, server: server) else { return }
+            // 保留旧列表（若有），只暴露错误文案供侧栏/重试使用。
+            librariesError = error.errorDescription
+            AppDiagnostics.logWarning("媒体库列表加载失败", fields: [
+                "error": .string(error.errorDescription ?? "\(error)"),
+            ])
         } catch {
-            // 首页错误里会带重试；媒体库会随首页重试和下拉刷新再次加载。
+            guard sessionIsCurrent(generation, server: server) else { return }
+            librariesError = "\(error)"
+            AppDiagnostics.logWarning("媒体库列表加载异常", fields: ["error": .string("\(error)")])
         }
     }
 
@@ -662,6 +686,7 @@ final class AppModel {
 
     /// 本地文件（onOpenURL / 设置页 / 自检）：不走 Jellyfin，直接上覆盖层。
     /// 本地播放不依赖服务器 —— 登录页挡着就直接越过。
+    /// loading 层与 Jellyfin 路径共用：等首帧/保底时长后再撤，避免黑一下再出画。
     func presentLocalFile(_ url: URL) {
         if phase == .onboarding { phase = .ready }
         cancelPlaybackOpen()
@@ -672,8 +697,10 @@ final class AppModel {
             uri: url.path,
             securityScopedURL: url
         )
+        playbackPreparation = .loading(title: request.title)
         playback?.prepareForPresentation(request)
         presentedPlayer = request
+        schedulePreparationDismiss(for: request)
         startDanmaku(for: request, item: nil)
     }
 
@@ -683,8 +710,10 @@ final class AppModel {
         cancelPlaybackOpen()
         retryPlaybackItem = nil
         finishReporting()
+        playbackPreparation = .loading(title: request.title)
         playback?.prepareForPresentation(request)
         presentedPlayer = request
+        schedulePreparationDismiss(for: request)
         startDanmaku(for: request, item: nil)
     }
 

@@ -196,7 +196,63 @@ public struct JellyfinServer: Sendable {
         return try await send(request).domainItem
     }
 
-    /// 媒体库网格浏览。`recursive` = true 时直接铺到叶子（电影库 → 所有电影）。
+    /// 媒体库单页结果。`totalRecordCount` 来自服务端；未知时为 nil。
+    public struct MediaItemsPage: Sendable, Equatable {
+        public var items: [MediaItem]
+        public var startIndex: Int
+        public var totalRecordCount: Int?
+
+        public init(items: [MediaItem], startIndex: Int, totalRecordCount: Int?) {
+            self.items = items
+            self.startIndex = startIndex
+            self.totalRecordCount = totalRecordCount
+        }
+
+        /// 是否还能向后翻页（总数未知时以本页是否满页为准）。
+        public var hasMore: Bool {
+            if let totalRecordCount {
+                return startIndex + items.count < totalRecordCount
+            }
+            return !items.isEmpty
+        }
+    }
+
+    /// 媒体库单页浏览。`limit` 只表示本页大小，不会自动翻到 TotalRecordCount。
+    public func itemsPage(
+        parentID: String?,
+        kinds: [MediaItem.Kind]? = nil,
+        recursive: Bool = true,
+        startIndex: Int = 0,
+        limit: Int = 100
+    ) async throws -> MediaItemsPage {
+        let pageSize = max(limit, 1)
+        let pageStart = max(startIndex, 0)
+        let result = try await send(
+            Paths.getItems(parameters: .init(
+                userID: profile.userID,
+                startIndex: pageStart,
+                limit: pageSize,
+                isRecursive: recursive,
+                parentID: parentID,
+                includeItemTypes: kinds.map { kinds in
+                    kinds.compactMap { kind in BaseItemKind(kind) }
+                },
+                sortBy: [.sortName],
+                enableImageTypes: [.primary, .backdrop],
+                enableTotalRecordCount: true
+            ))
+        )
+        let page = result.items?.map(\.domainItem) ?? []
+        return MediaItemsPage(
+            items: page,
+            startIndex: pageStart,
+            totalRecordCount: result.totalRecordCount
+        )
+    }
+
+    /// 媒体库网格浏览（拉全部分页）。`recursive` = true 时直接铺到叶子（电影库 → 所有电影）。
+    /// `limit` 是单页大小；会按 `TotalRecordCount` 继续请求直到取完。
+    /// UI 大库场景请优先用 `itemsPage`，避免一次进内存。
     public func items(
         parentID: String?,
         kinds: [MediaItem.Kind]? = nil,
@@ -208,30 +264,21 @@ public struct JellyfinServer: Sendable {
         var loaded: [MediaItem] = []
 
         while true {
-            let result = try await send(
-                Paths.getItems(parameters: .init(
-                    userID: profile.userID,
-                    startIndex: startIndex,
-                    limit: pageSize,
-                    isRecursive: recursive,
-                    parentID: parentID,
-                    includeItemTypes: kinds.map { kinds in
-                        kinds.compactMap { kind in BaseItemKind(kind) }
-                    },
-                    sortBy: [.sortName],
-                    enableImageTypes: [.primary, .backdrop],
-                    enableTotalRecordCount: true
-                ))
+            let page = try await itemsPage(
+                parentID: parentID,
+                kinds: kinds,
+                recursive: recursive,
+                startIndex: startIndex,
+                limit: pageSize
             )
-            let page = result.items?.map(\.domainItem) ?? []
-            loaded.append(contentsOf: page)
+            loaded.append(contentsOf: page.items)
 
-            if page.isEmpty
-                || result.totalRecordCount.map({ loaded.count >= $0 }) == true
-                || (result.totalRecordCount == nil && page.count < pageSize) {
+            if page.items.isEmpty
+                || page.totalRecordCount.map({ loaded.count >= $0 }) == true
+                || (page.totalRecordCount == nil && page.items.count < pageSize) {
                 return loaded
             }
-            startIndex += page.count
+            startIndex += page.items.count
         }
     }
 
