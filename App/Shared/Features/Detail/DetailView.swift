@@ -14,7 +14,7 @@ extension Color {
 }
 
 /// 详情页：背景横幅 + 元数据 + 播放键 + 简介 + 演员 + 类似推荐；
-/// 剧集额外有季选择器和集列表（每集可单独播放、显示进度）。
+/// 剧集额外有季选择器和横向选集（点选中，顶部主按钮开播）。
 struct DetailView: View {
     @Environment(AppModel.self) private var app
 
@@ -26,6 +26,7 @@ struct DetailView: View {
     @State private var episodes: [MediaItem] = []
     @State private var similar: [MediaItem] = []
     @State private var selectedSeasonID: String?
+    @State private var selectedEpisodeID: MediaItem.ID?
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var isLoadingEpisodes = false
@@ -206,7 +207,7 @@ struct DetailView: View {
         if let playState = resumePlayState {
             return "继续 \(resumeClock(playState.positionSeconds))"
         }
-        return shown.kind == .series ? "播放下一集" : "播放"
+        return "播放"
     }
 
     private func resumeClock(_ seconds: Double) -> String {
@@ -219,23 +220,19 @@ struct DetailView: View {
         )
     }
 
-    /// The item whose stream will actually be opened by `playCurrent()`.
-    /// A series itself is not playable, so its next-up episode supplies the
-    /// resume position and progress shown in the button.
+    /// 电影直接播自身；剧集只播当前横向选集中的选中集。
     private var playableItem: MediaItem? {
         switch shown.kind {
         case .series:
-            return app.home.resume.first(where: {
-                $0.seriesID == shown.id
-                    && !($0.playState?.played ?? false)
-                    && ($0.playState?.positionSeconds ?? 0) >= 30
-            })
-                ?? app.home.nextUp.first(where: { $0.seriesID == shown.id })
-                ?? episodes.first(where: { !($0.playState?.played ?? false) })
-                ?? episodes.first
+            return selectedEpisode
         default:
             return shown
         }
+    }
+
+    private var selectedEpisode: MediaItem? {
+        guard let selectedEpisodeID else { return nil }
+        return episodes.first { $0.id == selectedEpisodeID }
     }
 
     private var resumePlayState: MediaItem.PlayState? {
@@ -273,7 +270,7 @@ struct DetailView: View {
         .padding(.top, 20)
     }
 
-    // MARK: - 剧集：季 + 集
+    // MARK: - 剧集：季 + 横向选集
 
     private var seasonBar: some View {
         HStack(spacing: 14) {
@@ -295,7 +292,7 @@ struct DetailView: View {
     }
 
     private var episodeList: some View {
-        VStack(spacing: 14) {
+        Group {
             if isLoadingEpisodes {
                 HStack {
                     Spacer()
@@ -303,6 +300,7 @@ struct DetailView: View {
                     Spacer()
                 }
                 .padding(.vertical, 20)
+                .padding(.horizontal, Metrics.contentLeading)
             } else if let episodeLoadError {
                 ContentUnavailableView {
                     Label("集列表加载失败", systemImage: "wifi.exclamationmark")
@@ -313,22 +311,45 @@ struct DetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
+                .padding(.horizontal, Metrics.contentLeading)
             } else if episodes.isEmpty {
                 ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-            }
-            ForEach(episodes) { episode in
-                EpisodeRow(episode: episode, server: app.server) {
-                    app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
+                    .padding(.horizontal, Metrics.contentLeading)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: Metrics.railSpacing) {
+                            ForEach(episodes) { episode in
+                                EpisodeSelectCard(
+                                    episode: episode,
+                                    server: app.server,
+                                    isSelected: episode.id == selectedEpisodeID
+                                ) {
+                                    selectedEpisodeID = episode.id
+                                }
+                                .id(episode.id)
+                            }
+                        }
+                        .padding(.horizontal, Metrics.contentLeading)
+                        // 选中描边 / 轻微抬升会溢出卡片原高度，上下留白避免被裁。
+                        .padding(.vertical, 10)
+                    }
+                    .onChange(of: selectedEpisodeID) { _, newID in
+                        guard let newID else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(newID, anchor: .center)
+                        }
+                    }
+                    .onAppear {
+                        if let selectedEpisodeID {
+                            proxy.scrollTo(selectedEpisodeID, anchor: .center)
+                        }
+                    }
                 }
-                // Make the row identity explicit. If the server refreshes a
-                // season while a previous row is still on screen, its image
-                // state must not be carried to a different episode.
-                .id(episode.id)
             }
         }
-        .padding(.horizontal, Metrics.contentLeading)
     }
 
     // MARK: - 演员 / 类似
@@ -372,10 +393,18 @@ struct DetailView: View {
 
     // MARK: - 动作
 
-    /// 电影直接播；剧集播「接下来看」（nextUp 优先，否则第一季第一集）。
+    /// 电影直接播；剧集只播横向选集中的当前选中集。
     private func playCurrent() {
         guard let playableItem else { return }
-        app.play(playableItem, resumeSeconds: playableItem.playState?.positionSeconds)
+        let resume: Double?
+        if let state = playableItem.playState,
+           !state.played,
+           state.positionSeconds >= 30 {
+            resume = state.positionSeconds
+        } else {
+            resume = nil
+        }
+        app.play(playableItem, resumeSeconds: resume)
     }
 
     private func load() async {
@@ -386,6 +415,7 @@ struct DetailView: View {
         seasons = []
         episodes = []
         selectedSeasonID = nil
+        selectedEpisodeID = nil
         episodeLoadError = nil
 
         // Similar recommendations are optional and may be unavailable on
@@ -402,11 +432,7 @@ struct DetailView: View {
                     let loadedSeasons = try await server.seasons(seriesID: item.id)
                     guard !Task.isCancelled else { return }
                     seasons = loadedSeasons
-                    // 默认挑第一个没看完的季，都看完了就用最后一季
-                    let firstUnwatched = loadedSeasons.first {
-                        ($0.playState?.unplayedCount ?? 0) > 0
-                    }
-                    selectedSeasonID = (firstUnwatched ?? loadedSeasons.last)?.id
+                    selectedSeasonID = preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
                 } catch let e as JellyfinError {
                     loadError = e.errorDescription
                 } catch {
@@ -425,11 +451,13 @@ struct DetailView: View {
     private func loadEpisodes() async {
         guard let server = app.server, shown.kind == .series, let seasonID = selectedSeasonID else {
             episodes = []
+            selectedEpisodeID = nil
             isLoadingEpisodes = false
             episodeLoadError = nil
             return
         }
         episodes = []
+        selectedEpisodeID = nil
         isLoadingEpisodes = true
         episodeLoadError = nil
         defer {
@@ -441,6 +469,7 @@ struct DetailView: View {
             let loaded = try await server.episodes(seriesID: shown.id, seasonID: seasonID)
             guard !Task.isCancelled, selectedSeasonID == seasonID else { return }
             episodes = loaded
+            selectedEpisodeID = preferredEpisodeID(in: loaded, seriesID: shown.id)
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription
@@ -448,6 +477,65 @@ struct DetailView: View {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = "\(error)"
         }
+    }
+
+    // MARK: - 智能默认季 / 集
+
+    /// 首页续播 / 下一集线索：用于默认季与默认选中集。
+    private func preferredEpisodeHint(seriesID: MediaItem.ID) -> MediaItem? {
+        if let resume = app.home.resume.first(where: {
+            $0.seriesID == seriesID
+                && !($0.playState?.played ?? false)
+                && ($0.playState?.positionSeconds ?? 0) >= 30
+        }) {
+            return resume
+        }
+        return app.home.nextUp.first(where: { $0.seriesID == seriesID })
+    }
+
+    /// 默认季：有续播/下一集进度的季优先；否则第一部有未看完的常规季（跳过 SP/特典）；
+    /// 再否则第一部常规季；最后才落到任意季（含仅有 SP 的片）。
+    private func preferredSeasonID(in seasons: [MediaItem], seriesID: MediaItem.ID) -> String? {
+        guard !seasons.isEmpty else { return nil }
+
+        if let hint = preferredEpisodeHint(seriesID: seriesID) {
+            if let sn = hint.seasonNumber,
+               let byNumber = seasons.first(where: { $0.seasonNumber == sn }) {
+                return byNumber.id
+            }
+        }
+
+        let regular = seasons.filter { !isSpecialsSeason($0) }
+        let pool = regular.isEmpty ? seasons : regular
+
+        if let unwatched = pool.first(where: { ($0.playState?.unplayedCount ?? 0) > 0 }) {
+            return unwatched.id
+        }
+        return pool.first?.id ?? seasons.first?.id
+    }
+
+    /// 特典/SP 季：季号 0，或名称像 Specials / 特别篇 / SP（避免默认一进详情就停在 SP）。
+    private func isSpecialsSeason(_ season: MediaItem) -> Bool {
+        if let number = season.seasonNumber, number == 0 { return true }
+        let name = season.name.lowercased()
+        if name.contains("special") { return true }
+        if name.contains("特别") || name.contains("特典") || name.contains("番外") { return true }
+        let compact = name.filter { !$0.isWhitespace }
+        if compact == "sp" || compact.hasPrefix("sp") && compact.count <= 4 { return true }
+        return false
+    }
+
+    /// 当前季列表内的默认选中集：续播 → nextUp → 第一集未看完 → 第一集。
+    private func preferredEpisodeID(in episodes: [MediaItem], seriesID: MediaItem.ID) -> MediaItem.ID? {
+        guard !episodes.isEmpty else { return nil }
+
+        if let hint = preferredEpisodeHint(seriesID: seriesID),
+           episodes.contains(where: { $0.id == hint.id }) {
+            return hint.id
+        }
+
+        return episodes.first(where: { !($0.playState?.played ?? false) })?.id
+            ?? episodes.first?.id
     }
 
     private func loadErrorNotice(_ message: String) -> some View {

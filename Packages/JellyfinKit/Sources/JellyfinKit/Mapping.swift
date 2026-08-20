@@ -71,6 +71,22 @@ extension BaseItemDto {
         let thumbTag = imageTags?["Thumb"]
         let backdropTag = backdropImageTags?.first
 
+        // Episode：parentIndexNumber = 季号，indexNumber = 集号。
+        // Season：indexNumber = 季号（0 多为特典/SP），parentIndexNumber 一般是剧 id 侧字段，不能当季号。
+        let mappedSeasonNumber: Int?
+        let mappedEpisodeNumber: Int?
+        switch type {
+        case .season:
+            mappedSeasonNumber = indexNumber
+            mappedEpisodeNumber = nil
+        case .episode:
+            mappedSeasonNumber = parentIndexNumber
+            mappedEpisodeNumber = indexNumber
+        default:
+            mappedSeasonNumber = parentIndexNumber
+            mappedEpisodeNumber = indexNumber
+        }
+
         return MediaItem(
             id: id ?? UUID().uuidString,
             name: name ?? "未命名",
@@ -83,8 +99,8 @@ extension BaseItemDto {
             officialRating: officialRating,
             seriesID: seriesID,
             seriesName: seriesName,
-            seasonNumber: parentIndexNumber,
-            episodeNumber: indexNumber,
+            seasonNumber: mappedSeasonNumber,
+            episodeNumber: mappedEpisodeNumber,
             playState: userData.map {
                 MediaItem.PlayState(
                     played: $0.isPlayed ?? false,
