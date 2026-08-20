@@ -329,6 +329,32 @@ public struct JellyfinServer: Sendable {
         }
     }
 
+    /// 连播用：从 `startItemID` 这一集起，按服务端的剧集顺序最多取 `limit` 条
+    /// （**含它自己**）。跨季自然衔接，不用把整部剧的集列表拉回来——长番几百集，
+    /// 每次开播都拉全量纯属浪费。
+    ///
+    /// 返回值保持**服务端顺序**，不再本地重排：`startItemId` 的语义就是
+    /// 「在服务端那份顺序里跳到这一条」，本地按 (季号, 集号) 重排会把夹在
+    /// 窗口里的第 0 季特典挪到当前集前面，"往后取一条"就取错了。
+    public func episodes(
+        seriesID: String,
+        startingAt startItemID: String,
+        limit: Int
+    ) async throws -> [MediaItem] {
+        try await send(
+            Paths.getEpisodes(seriesID: seriesID, parameters: .init(
+                userID: profile.userID,
+                startItemID: startItemID,
+                limit: limit,
+                enableImages: true,
+                enableImageTypes: [.primary, .thumb],
+                enableUserData: true,
+                sortBy: .indexNumber
+            ))
+        )
+        .items?.map(\.domainItem) ?? []
+    }
+
     /// 「类似推荐」。
     public func similar(itemID: String, limit: Int = 12) async throws -> [MediaItem] {
         try await send(

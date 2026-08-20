@@ -69,6 +69,8 @@ struct RootView: View {
         }
         .task {
             app.playback = controller
+            // 媒体键 / 控制中心的回调装一次就够（命令中心是全局单例）。
+            controller.installRemoteCommandHandlers()
             app.bootstrap()
             await LaunchOptions.run(with: controller, presentPlayer: { url in
                 app.presentLocalFile(url)

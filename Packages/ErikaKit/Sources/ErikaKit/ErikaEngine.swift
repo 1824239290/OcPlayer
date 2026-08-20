@@ -300,6 +300,13 @@ public final class ErikaEngine: @unchecked Sendable {
         }
         lock.unlock()
 
-        for event in pending { continuation.yield(event) }
+        for event in pending {
+            // 暂停时降帧：在这里改是因为 step() 就跑在渲染线程上，而 CADisplayLink
+            // 只能在自己的 runloop 线程上安全改动。
+            if case .stateChanged(let value) = event {
+                renderLoop.setPaused(value == .paused)
+            }
+            continuation.yield(event)
+        }
     }
 }

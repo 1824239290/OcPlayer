@@ -322,7 +322,7 @@ struct DiagnosticsSection: View {
         .buttonStyle(.plain)
 
         row("记录数 / 大小", summaryText)
-            .onAppear(perform: refresh)
+            .task { await refresh() }
 
         DisclosureGroup("最近 \(records.count) 条记录") {
             if records.isEmpty {
@@ -347,25 +347,43 @@ struct DiagnosticsSection: View {
 
         Button(role: .destructive) {
             try? AppDiagnostics.logger.clear()
-            refresh()
+            Task { await refresh() }
         } label: {
             Label("清空日志", systemImage: "trash")
         }
     }
 
-    private func refresh() {
-        records = AppDiagnostics.recentRecords
-        if let summary = AppDiagnostics.logger.summary() {
-            summaryText = "\(summary.recordCount) 条 · \(summary.fileSizeBytes) 字节"
+    /// 读日志要碰磁盘（尾部解码 + 换行统计），挪出主线程再回来赋值，
+    /// 打开设置页不会因为日志攒大了而卡一下。
+    private func refresh() async {
+        let snapshot = await Task.detached {
+            let records = AppDiagnostics.recentRecords
+            let summary = AppDiagnostics.logger.summary()
+            return (records, summary)
+        }.value
+        records = snapshot.0
+        if let summary = snapshot.1 {
+            let size = ByteCountFormatter.string(
+                fromByteCount: summary.fileSizeBytes,
+                countStyle: .file
+            )
+            summaryText = "\(summary.recordCount) 条 · \(size)"
         } else {
             summaryText = "0 条"
         }
     }
 
-    private static func meta(_ record: DiagnosticEntry) -> String {
+    /// 每条记录现场造一个 DateFormatter 会创建几十个对象；样式固定，直接共享一个。
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
+        // 固定格式串必须配固定 locale，否则某些区域会用本地数字符号渲染时间。
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm:ss.SSS"
-        var parts = ["\(record.level.uppercased())", formatter.string(from: record.timestamp)]
+        return formatter
+    }()
+
+    private static func meta(_ record: DiagnosticEntry) -> String {
+        var parts = ["\(record.level.uppercased())", timeFormatter.string(from: record.timestamp)]
         if let suppressed = record.suppressed, suppressed > 0 {
             parts.append("(另抑制 \(suppressed) 条)")
         }

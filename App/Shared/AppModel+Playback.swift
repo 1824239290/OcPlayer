@@ -425,22 +425,30 @@ extension AppModel {
         activePlaybackIdentity = nil
     }
 
+    /// 连播窗口大小：当前集 + 往后几条。留出余量是为了跳过夹在正片之间的特典，
+    /// 又远小于整部剧的集数。
+    static let nextEpisodeWindow = 6
+
     func resolveNextEpisode(after item: MediaItem, identity: ActivePlaybackIdentity) {
         guard item.kind == .episode, let seriesID = item.seriesID, let server else { return }
+        // 第 0 季是特典/花絮：看完特典就该停，让用户自己选下一步，不自动连播。
+        guard item.seasonNumber != 0 else { return }
         nextEpisodeTask?.cancel()
         nextEpisodeTask = Task { [weak self] in
-            guard let episodes = try? await server.episodes(seriesID: seriesID, seasonID: nil),
-                  let self
+            // 只取当前集往后的一小窗，不再拉整部剧的集列表。
+            guard let window = try? await server.episodes(
+                seriesID: seriesID,
+                startingAt: item.id,
+                limit: Self.nextEpisodeWindow
+            ), let self
             else { return }
             guard !Task.isCancelled,
                   self.activePlaybackIdentity == identity else { return }
-            // 第 0 季是特典/花絮，不当「下一集」自动连播；当前集本身是特典时
-            // firstIndex 落空，同样不连播——看完特典就该停，让用户自己选。
-            let regular = episodes.filter { $0.seasonNumber != 0 }
-            guard let index = regular.firstIndex(where: { $0.id == item.id }),
-                  regular.indices.contains(index + 1)
-            else { return }
-            self.nextEpisode = regular[index + 1]
+            // 窗口是服务端顺序，当前集应该在第一条；找不到就不猜。
+            guard let index = window.firstIndex(where: { $0.id == item.id }) else { return }
+            // 往后第一条正片（跳过第 0 季特典）。
+            self.nextEpisode = window[window.index(after: index)...]
+                .first { $0.seasonNumber != 0 }
         }
     }
 

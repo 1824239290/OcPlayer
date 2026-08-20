@@ -57,29 +57,32 @@ struct PlayerScreen: View {
                 PlayerPlaybackErrorBadge()
             }
 
-            PlayerHUDOverlay(
-                isNarrow: isNarrow,
-                playbackID: request?.id.uuidString ?? "",
-                title: mainTitle,
-                kicker: titleKicker,
-                isImportingSubtitle: $isImportingSubtitle,
-                isSelectingDanmaku: $isSelectingDanmaku,
-                showStats: $showStats,
-                showInfoCard: $showInfoCard,
-                shareURL: shareURL,
-                isFullscreen: hudIsFullscreen,
-                onClose: closePlayer,
-                onToggleFullscreen: toggleFullscreenFromHUD,
-                onCapture: captureNow,
-                onShare: shareNow,
-                onInteractionChanged: handleHUDInteraction,
-                onUserInteraction: revealControls,
-                onMenuPresented: holdControlsForMenu
-            )
-            .opacity(hudVisibility.isVisible ? 1 : 0)
-            .allowsHitTesting(hudVisibility.isVisible)
-            .accessibilityHidden(!hudVisibility.isVisible)
-            .motionAnimation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible, reduceMotion: reduceMotion)
+            // 藏起来时**卸载**而不是 `.opacity(0)`：HUD 底部的 PlayerHUDTimeline 观察
+            // 高频 position/duration，留在树上就会整部片子逐帧重排一个 Slider 和两个
+            // 时间标签。淡入淡出由 hudVisibility 改状态时的 withAnimation 驱动
+            // （见 setVisible）——容器上的 .animation(value:) 只能让"出现"渐变。
+            if hudVisibility.isVisible {
+                PlayerHUDOverlay(
+                    isNarrow: isNarrow,
+                    playbackID: request?.id.uuidString ?? "",
+                    title: mainTitle,
+                    kicker: titleKicker,
+                    isImportingSubtitle: $isImportingSubtitle,
+                    isSelectingDanmaku: $isSelectingDanmaku,
+                    showStats: $showStats,
+                    showInfoCard: $showInfoCard,
+                    shareURL: shareURL,
+                    isFullscreen: hudIsFullscreen,
+                    onClose: closePlayer,
+                    onToggleFullscreen: toggleFullscreenFromHUD,
+                    onCapture: captureNow,
+                    onShare: shareNow,
+                    onInteractionChanged: handleHUDInteraction,
+                    onUserInteraction: revealControls,
+                    onMenuPresented: holdControlsForMenu
+                )
+                .transition(.opacity)
+            }
 
             if showStats {
                 PlayerHUDStatsPanel()
@@ -89,6 +92,8 @@ struct PlayerScreen: View {
             }
             PlayerScreenshotToast(message: screenshotToast)
         }
+        // HUD 显隐不在这里挂 .animation(value:)：卸载子树的 removal transition 拿不到
+        // 它，动画由 PlayerHUDVisibilityCoordinator.setVisible 的 withAnimation 提供。
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
         .motionAnimation(.easeInOut(duration: 0.2), value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
@@ -170,15 +175,38 @@ struct PlayerScreen: View {
         .onChange(of: request?.id) {
             isSelectingDanmaku = false
         }
-        .onChange(of: controller.state.state) { _, newState in
+        // 协调器没有 Environment，减弱动态效果由这里解析后灌给它。
+        .onChange(of: reduceMotion, initial: true) {
+            hudVisibility.motionAnimation = reduceMotion ? nil : .easeInOut(duration: 0.2)
+        }
+        .onChange(of: controller.state.state, initial: true) { _, newState in
             PlaybackLog.append("PlayerState -> \(newState)")
+            // 只有真在出画面时才压着不让息屏；暂停 / 出错立刻放手。
+            // 同一处顺带把系统「正在播放」的播放/暂停状态对齐。
+            controller.syncSystemPlaybackState()
+        }
+        // 系统「正在播放」的进度：跟着**整秒**才变的 displayPosition 走，约 1 Hz，
+        // 顺带覆盖 seek / 变速这些不改 state 的路径。
+        .onChange(of: controller.state.displayPosition) {
+            controller.syncSystemPlaybackState()
+        }
+        // 标题要等 AppModel 的 nowPlayingItem 到位才拼得出来，所以单独跟一次。
+        .onChange(of: NowPlayingTitle(title: mainTitle, kicker: titleKicker), initial: true) {
+            _, titles in
+            controller.updateNowPlayingMetadata(title: titles.title, subtitle: titles.kicker)
         }
         // 暂停、缓冲、错误、菜单面板和辅助功能统一走同一条显隐资格规则，
         // 避免新增一个阻止自动隐藏的状态时漏掉对应监听。
         .onChange(of: canAutoHideControls, initial: true) {
             revealControls()
         }
-        .onDisappear { hudVisibility.cancel() }
+        .onDisappear {
+            hudVisibility.cancel()
+            // 覆盖层没了就一定看不见画面：无条件还掉息屏令牌和系统登记。
+            // （取消准备 / 注销这两条路只清 presentedPlayer，不停引擎，
+            // 所以这里不能"按当前状态推导"，见 releaseSystemPlaybackState 注释。）
+            controller.releaseSystemPlaybackState()
+        }
         #if os(macOS)
         .onChange(of: controller.state.videoParams) { _, params in
             // 视频参数到达 / 换片 → 窗口贴合视频比例（重复同规格不抖动，见 Fitter）
@@ -255,7 +283,10 @@ struct PlayerScreen: View {
         let closingID = request?.id
         // 先触发窗口还原动画（画面还在，窗口缩小时播放内容跟着一起缩小），
         // 再停引擎，等窗口缩完再退出播放器——不会出现「播放器没了，窗口自己在动」的不连贯。
+        // PlayerWindowFitter 只有 App/macOS 一份，iOS 没有窗口可还原。
+        #if os(macOS)
         PlayerWindowFitter.restore()
+        #endif
         controller.stopPlayback()
         Task { @MainActor in
             // 窗口弹性动画约 0.18-0.2s，等一下让它跑完再 dismiss。
@@ -406,4 +437,10 @@ struct PlayerScreen: View {
         ["srt", "ass", "ssa", "vtt"]
             .compactMap { UTType(filenameExtension: $0, conformingTo: .text) }
     }
+}
+
+/// `onChange` 只接一个 Equatable，标题和小字要一起比就得包一层。
+private struct NowPlayingTitle: Equatable {
+    var title: String
+    var kicker: String
 }

@@ -159,7 +159,7 @@ struct PlayerHUDTimeline: View {
 
     private var displayedPosition: Duration {
         guard let draftFraction, controller.state.duration > .zero else {
-            return controller.state.position
+            return controller.state.displayPosition
         }
         return .microseconds(Int64(Double(controller.state.duration.microseconds) * draftFraction))
     }

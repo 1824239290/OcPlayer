@@ -444,21 +444,45 @@ private final class DiagnosticBackend: @unchecked Sendable {
     }
 
     /// Snapshot the live file: newest entries first, capped at `limit`.
+    ///
+    /// 只解码文件**尾部**的 `limit` 行：日志单文件上限 2 MB，为了留下最后 40 条
+    /// 而把几千行全解一遍纯属白烧——设置页打开时调用方还在等这个结果。
     func readEntries(limit: Int) throws -> [DiagnosticEntry] {
-        try queue.sync {
+        let limit = max(0, limit)
+        guard limit > 0 else { return [] }
+        return try queue.sync {
             try handle?.synchronize()
             guard FileManager.default.fileExists(atPath: fileURL.path),
-                  let data = try? Data(contentsOf: fileURL)
+                  let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
             else { return [] }
 
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return data.split(separator: 0x0A).compactMap { line in
+            return Self.lastLines(in: data, count: limit).compactMap { line in
                 try? decoder.decode(DiagnosticEntry.self, from: line)
             }
-            .suffix(max(0, limit))
             .reversed()
         }
+    }
+
+    /// 从尾部倒着找换行，最多取回 `count` 行；返回顺序仍是文件顺序。
+    /// 每行都拷成独立 `Data`，不把 mmap 切片传给解码器。
+    private static func lastLines(in data: Data, count: Int) -> [Data] {
+        var lines: [Data] = []
+        lines.reserveCapacity(count)
+        var end = data.endIndex
+        while end > data.startIndex, lines.count < count {
+            var start = end
+            while start > data.startIndex, data[data.index(before: start)] != 0x0A {
+                start = data.index(before: start)
+            }
+            if start < end {
+                lines.append(Data(data[start..<end]))
+            }
+            // 越过这一行前面的那个换行符。
+            end = start > data.startIndex ? data.index(before: start) : data.startIndex
+        }
+        return lines.reversed()
     }
 
     func summary() -> DiagnosticSummary? {
@@ -467,12 +491,14 @@ private final class DiagnosticBackend: @unchecked Sendable {
             guard FileManager.default.fileExists(atPath: fileURL.path),
                   let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
                   let size = (attributes[.size] as? NSNumber)?.int64Value,
-                  let data = try? Data(contentsOf: fileURL)
+                  let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
             else { return nil }
-            return DiagnosticSummary(
-                fileSizeBytes: size,
-                recordCount: data.filter { $0 == 0x0A }.count
-            )
+            // 逐字节数换行：`filter{}.count` 会先物化出一个几万元素的字节数组。
+            var recordCount = 0
+            data.withUnsafeBytes { buffer in
+                for byte in buffer where byte == 0x0A { recordCount += 1 }
+            }
+            return DiagnosticSummary(fileSizeBytes: size, recordCount: recordCount)
         }
     }
 

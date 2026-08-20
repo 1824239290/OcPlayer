@@ -20,22 +20,38 @@ final class RenderLoop {
     /// 每帧回调，参数是该帧的绝对呈现时间（秒）。由 `ErikaEngine` 在 init 末尾装上。
     var onTick: (@Sendable (Double) -> Void)?
     private var thread: RenderThread?
+    /// `let` + 内部加锁：暂停档位的开关可以从任意线程写，渲染线程每帧读。
+    /// 不挂在 `thread` 上——那个引用会被 `stop()` 从主线程清掉，读写就撞上了。
+    private let frameRate = FrameRatePolicy()
 
     /// 必须在主线程调用（要摸视图；`NSView.displayLink` 本身就是 main actor 隔离的）。
     @MainActor
     func start(on view: PlatformView) {
         guard thread == nil, let onTick else { return }
-        let proxy = TickProxy(tick: onTick)
+        let proxy = TickProxy(tick: onTick, frameRate: frameRate)
         #if os(macOS)
         let link = view.displayLink(target: proxy, selector: #selector(TickProxy.step(_:)))
         #else
         let link = CADisplayLink(target: proxy, selector: #selector(TickProxy.step(_:)))
         #endif
+        // 记下 link 自己的初始档位，恢复播放时写回去：比依赖 `CAFrameRateRangeDefault`
+        // 的 Swift 拼写更稳，也自然跟随所在显示器的原生刷新率。
+        // 此刻 link 还没进 runloop、渲染线程也还没启动，读它没有竞争。
+        frameRate.prime(defaultRange: link.preferredFrameRateRange)
+
         let thread = RenderThread(link: link, proxy: proxy)
         thread.name = "dev.jumusu.OcPlayer.render"
         thread.qualityOfService = .userInteractive
         self.thread = thread
         thread.start()
+    }
+
+    /// 暂停时把帧率降下来（可从任意线程调用，实际生效在渲染线程的下一帧）。
+    ///
+    /// **不能直接停掉 link**：seek 后的重绘、resize 后的首帧、字幕/弹幕配置变更都靠
+    /// 同一条 tick 出画面，事件轮询也挂在上面，停了就再也不动了。
+    func setPaused(_ paused: Bool) {
+        frameRate.setPaused(paused)
     }
 
     /// 停到线程真正退出为止 —— 保证 `detach_surface` 之后不会再来一次 tick。
@@ -47,16 +63,56 @@ final class RenderLoop {
     }
 }
 
+/// 帧率档位的共享开关：写在任意线程，读和真正落到 `CADisplayLink` 都在渲染线程。
+/// `CADisplayLink` 不是线程安全的，所以只在 `TickProxy.step` 里改它。
+private final class FrameRatePolicy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var paused = false
+    private var applied: Bool?
+    private var defaultRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+
+    /// 渲染线程启动前在主线程调用一次。
+    func prime(defaultRange: CAFrameRateRange) {
+        lock.lock()
+        self.defaultRange = defaultRange
+        lock.unlock()
+    }
+
+    func setPaused(_ value: Bool) {
+        lock.lock()
+        paused = value
+        lock.unlock()
+    }
+
+    /// 渲染线程每帧调用；档位没变就什么都不做。
+    func applyIfNeeded(to link: CADisplayLink) {
+        lock.lock()
+        let desired = paused
+        let needsApply = applied != desired
+        if needsApply { applied = desired }
+        let restore = defaultRange
+        lock.unlock()
+        guard needsApply else { return }
+        // 暂停档位故意不压到个位数：暂停时拖窗口 / resize 仍要跟手。
+        link.preferredFrameRateRange = desired
+            ? CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
+            : restore
+    }
+}
+
 /// `CADisplayLink` 的 target。单独一层是为了不让 `RenderLoop` 被 runloop 强引用。
 private final class TickProxy: NSObject {
     private let tick: @Sendable (Double) -> Void
+    private let frameRate: FrameRatePolicy
 
-    init(tick: @escaping @Sendable (Double) -> Void) {
+    init(tick: @escaping @Sendable (Double) -> Void, frameRate: FrameRatePolicy) {
         self.tick = tick
+        self.frameRate = frameRate
         super.init()
     }
 
     @objc func step(_ link: CADisplayLink) {
+        frameRate.applyIfNeeded(to: link)
         tick(link.targetTimestamp)
     }
 }

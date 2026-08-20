@@ -20,6 +20,13 @@ enum PlayerHUDInteraction: Hashable {
 final class PlayerHUDVisibilityCoordinator {
     private(set) var isVisible = true
 
+    /// 显隐动画。**必须**由改 `isVisible` 的这一侧带上：HUD 藏起来时是整棵子树被
+    /// 卸载，`.transition` 的 removal 只认改状态那个 transaction 里的动画。把
+    /// `.animation(_:value:)` 挂在容器上只能让「出现」渐变，「消失」会瞬间摘掉。
+    ///
+    /// nil = 不动画（减弱动态效果）。协调器拿不到 Environment，由视图解析后灌进来。
+    @ObservationIgnored var motionAnimation: Animation? = .easeInOut(duration: 0.2)
+
     @ObservationIgnored private var activeInteractions: Set<PlayerHUDInteraction> = []
     @ObservationIgnored private var trackedMenus: Set<ObjectIdentifier> = []
     @ObservationIgnored private var hideTask: Task<Void, Never>?
@@ -41,15 +48,21 @@ final class PlayerHUDVisibilityCoordinator {
     func reveal(canAutoHide: Bool) {
         // 任何主动显示都解除「用户关闭」锁定。
         userHidden = false
-        if !isVisible { isVisible = true }
+        setVisible(true)
         scheduleHide(after: autoHideDelay, canAutoHide: canAutoHide)
     }
 
     func hide() {
         cancelScheduledHide()
-        if isVisible { isVisible = false }
+        setVisible(false)
         // 用户主动关闭：标记锁定，鼠标移动不再自动唤出（要再点一下才打开）。
         userHidden = true
+    }
+
+    /// 唯一改 `isVisible` 的入口：带上动画 transaction，显隐两个方向都渐变。
+    private func setVisible(_ visible: Bool) {
+        guard isVisible != visible else { return }
+        withAnimation(motionAnimation) { isVisible = visible }
     }
 
     func setInteraction(
@@ -67,7 +80,7 @@ final class PlayerHUDVisibilityCoordinator {
 
     /// 原生 Menu 没有公开 isPresented；打开菜单时给足停留时间，选中动作后会恢复正常计时。
     func holdForMenu(canAutoHide: Bool) {
-        if !isVisible { isVisible = true }
+        setVisible(true)
         scheduleHide(after: .seconds(30), canAutoHide: canAutoHide)
     }
 
@@ -152,7 +165,7 @@ final class PlayerHUDVisibilityCoordinator {
                     continue
                 }
 
-                self.isVisible = false
+                self.setVisible(false)
                 self.hideDeadline = nil
                 self.scheduledWake = nil
                 self.hideTask = nil

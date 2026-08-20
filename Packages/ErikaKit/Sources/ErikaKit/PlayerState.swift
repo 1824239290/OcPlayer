@@ -7,7 +7,15 @@ import Observation
 @Observable
 public final class PlayerState {
     public private(set) var state: PlaybackState = .idle
-    public private(set) var position: Duration = .zero
+    /// 原始播放位置：内核**每帧**推一次，所以故意不参与 Observation。
+    /// 上报、续播、skip 这类命令式读取用它；**视图 body 里不要读**——它不发通知
+    /// （读了不会刷新），高频写入也不该把子树拖成逐帧重算。UI 读
+    /// `displayPosition` / `progress`。
+    @ObservationIgnored public private(set) var position: Duration = .zero
+    /// 时间标签用的位置：只在**整秒**变化时发布（标签精度就是秒）。
+    public private(set) var displayPosition: Duration = .zero
+    /// 进度条用的比例（0…1）：媒体时间每过 `progressPublishInterval` 发布一次。
+    public private(set) var progress: Double = 0
     public private(set) var duration: Duration = .zero
     public private(set) var isBuffering = false
     public private(set) var videoParams: VideoParams?
@@ -24,11 +32,10 @@ public final class PlayerState {
     /// enough to prevent it from mutating the state for a newer engine.
     @ObservationIgnored private var consumptionGeneration = 0
 
-    public var progress: Double {
-        let total = duration.microseconds
-        guard total > 0 else { return 0 }
-        return min(max(Double(position.microseconds) / Double(total), 0), 1)
-    }
+    /// 进度条的发布节流：媒体时间每 100 ms 一档（1× 速率下约 10 Hz）。
+    /// 滑块本身的视觉精度远低于此，再密只是白烧 MainActor 和布局。
+    private static let progressPublishInterval = Duration.milliseconds(100)
+    @ObservationIgnored private var lastProgressPublishPosition: Duration = .zero
 
     public init() {}
 
@@ -68,6 +75,9 @@ public final class PlayerState {
     public func reset() {
         state = .idle
         position = .zero
+        displayPosition = .zero
+        progress = 0
+        lastProgressPublishPosition = .zero
         duration = .zero
         isBuffering = false
         videoParams = nil
@@ -83,8 +93,11 @@ public final class PlayerState {
             state = value
         case .positionChanged(let value):
             position = value
+            publishDerivedPosition()
         case .durationChanged(let value):
             duration = value
+            // duration 是 progress 的分母，晚到 / 换源时必须立刻重算一次。
+            publishDerivedPosition(force: true)
         case .bufferingChanged(let value):
             isBuffering = value
         case .videoParamsChanged(let value):
@@ -102,5 +115,26 @@ public final class PlayerState {
             state = .error
             lastError = message ?? "内核错误 status=\(status.rawValue)"
         }
+    }
+
+    /// 把逐帧的 `position` 折叠成 UI 真正需要的两个观察值：
+    /// 标签只在整秒变化时发布，进度条按媒体时间限流。
+    /// `force` 用于 duration 到达 / 复位这类必须立刻对齐的时刻。
+    private func publishDerivedPosition(force: Bool = false) {
+        if force || position.components.seconds != displayPosition.components.seconds {
+            displayPosition = position
+        }
+        let total = duration.microseconds
+        guard total > 0 else {
+            if progress != 0 { progress = 0 }
+            lastProgressPublishPosition = position
+            return
+        }
+        // seek 会让位置倒退，所以比的是绝对差值。
+        let elapsed = abs(position.microseconds - lastProgressPublishPosition.microseconds)
+        guard force || elapsed >= Self.progressPublishInterval.microseconds else { return }
+        lastProgressPublishPosition = position
+        let fraction = min(max(Double(position.microseconds) / Double(total), 0), 1)
+        if fraction != progress { progress = fraction }
     }
 }

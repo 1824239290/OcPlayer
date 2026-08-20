@@ -268,14 +268,15 @@ struct StillCard: View {
             .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
     }
 
+    /// 轨道宽度是定死的 `Metrics.stillWidth`，所以直接乘比例，不用 `GeometryReader`——
+    /// 每张卡塞一个 GeometryReader 会在横向 LazyHStack 里多出一轮布局往返，
+    /// 而它测出来的就是我们已经知道的那个常量。
     private var progressTrack: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Rectangle().fill(Color.primary.opacity(0.12))
-                Rectangle()
-                    .fill(Color.primary.opacity(0.6))
-                    .frame(width: proxy.size.width * progress)
-            }
+        ZStack(alignment: .leading) {
+            Rectangle().fill(Color.primary.opacity(0.12))
+            Rectangle()
+                .fill(Color.primary.opacity(0.6))
+                .frame(width: Metrics.stillWidth * progress)
         }
         .clipShape(Capsule())
     }
@@ -362,7 +363,7 @@ struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
                     proxy.scrollTo(target, anchor: .center)
                 }
             }
-            .onChange(of: items.map(\.id)) { _, _ in
+            .onChange(of: itemsIdentity) { _, _ in
                 reconcileFocus()
             }
             .onChange(of: scrollToID) { _, newID in
@@ -376,6 +377,17 @@ struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
     }
 
     private var showsArrowChrome: Bool { items.count > 1 }
+
+    /// 集合身份摘要，给 `onChange` 当比较值用。
+    /// 原来写的是 `items.map(\.id)`：每次 body 重算（悬停进出就会重算）都新分配一个
+    /// id 数组。摘要只遍历不分配，灵敏度一样——换季时哪怕集数相同，id 也不同。
+    /// 万一撞哈希最坏结果只是少一次滚动锚点校准，不影响正确性。
+    private var itemsIdentity: Int {
+        var hasher = Hasher()
+        hasher.combine(items.count)
+        for item in items { hasher.combine(item.id) }
+        return hasher.finalize()
+    }
 
     /// 鼠标在轨道上，或 VoiceOver 需要始终可点到箭头。
     private var arrowsVisible: Bool {

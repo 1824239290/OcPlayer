@@ -82,6 +82,70 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var activeSecurityScope = false
     var hasLoadedSource = false
 
+    /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
+    @ObservationIgnored private let wakeLock = PlaybackWakeLock()
+    /// 系统「正在播放」与媒体键 / 控制中心命令。同样没有 UI 表示。
+    @ObservationIgnored private let nowPlaying = PlaybackNowPlayingCenter()
+
+    /// 按当前状态对齐息屏抑制与系统「正在播放」。
+    ///
+    /// 由 `PlayerScreen` 在 state / 进度 / 标题变化时调用；拆引擎的路径
+    /// （stopPlayback → resetEngine）也兜一次。覆盖层被移除走的是下面的
+    /// `releaseSystemPlaybackState()`，不是这里。
+    func syncSystemPlaybackState() {
+        let isActive = engine != nil && hasLoadedSource
+        let isPlaying = isActive && state.state == .playing
+        wakeLock.setActive(isPlaying)
+        nowPlaying.publish(
+            durationSeconds: Double(state.duration.microseconds) / 1_000_000,
+            positionSeconds: Double(state.position.microseconds) / 1_000_000,
+            rate: rate,
+            isPlaying: isPlaying,
+            isActive: isActive
+        )
+    }
+
+    /// 播放器覆盖层被移除时调用：无条件交还息屏令牌与系统「正在播放」登记。
+    ///
+    /// 不能只重新推导一遍状态——`cancelPlaybackOpening()` 和注销
+    /// （`AppModel+Session`）都会直接把 `presentedPlayer` 置空而**不**停引擎，
+    /// 那时 state 还是 .playing，推导出来的结论会是「继续压着不让息屏」，
+    /// 于是播放器已经不在了，屏幕还一直亮着。
+    func releaseSystemPlaybackState() {
+        wakeLock.setActive(false)
+        nowPlaying.clear()
+    }
+
+    /// 系统「正在播放」显示的标题。剧名 + 集号住在 AppModel 侧，所以从外面传进来。
+    func updateNowPlayingMetadata(title: String, subtitle: String) {
+        nowPlaying.setMetadata(
+            title: title.isEmpty ? (currentTitle ?? "") : title,
+            subtitle: subtitle
+        )
+        syncSystemPlaybackState()
+    }
+
+    /// 装远程命令回调。`RootView` 注入控制器后调一次即可。
+    /// 闭包捕获 `self` 用 weak：命令中心是全局单例，强引用会把控制器永久钉住。
+    func installRemoteCommandHandlers() {
+        nowPlaying.install(handlers: .init(
+            play: { [weak self] in
+                guard let self, self.state.state != .playing else { return }
+                self.togglePlayPause()
+            },
+            pause: { [weak self] in
+                guard let self, self.state.state == .playing else { return }
+                self.togglePlayPause()
+            },
+            toggle: { [weak self] in self?.togglePlayPause() },
+            skip: { [weak self] seconds in self?.skip(by: seconds) },
+            seek: { [weak self] position in
+                guard let self, let engine else { return }
+                try? engine.seek(to: .microseconds(Int64(max(0, position) * 1_000_000)))
+            }
+        ))
+    }
+
     /// 引擎懒创建：创建失败（缺内核 / 显卡不支持）时把原因留给 UI 显示。
     @discardableResult
     func prepareEngine() -> ErikaEngine? {
@@ -274,6 +338,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     /// Wait for this exact engine generation to become seekable. A same-URI
     /// reopen cannot consume or clear the new generation's pending resume.
+    ///
+    /// 先判断再睡：反过来的话，即使源一开始就绪也要白等 100 ms，
+    /// 片头那一百多毫秒会先放出画面和声音再跳走（观感上"闪一下"）。
     func seekPendingResumeIfNeeded(
         resumeSeconds: Double,
         requestID: PlaybackRequest.ID,
@@ -281,11 +348,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         engineID: ObjectIdentifier
     ) async {
         while !Task.isCancelled {
-            do {
-                try await Task.sleep(for: .milliseconds(100))
-            } catch {
-                return
-            }
             guard sourceGeneration == generation,
                   expectedRequestID == requestID,
                   activeRequest?.id == requestID,
@@ -295,16 +357,21 @@ final class PlaybackController: DanmakuPlaybackHosting {
             if state.state == .error || state.state == .stopped || state.state == .closed {
                 return
             }
-            guard isSourceReady, state.duration > .zero else { continue }
-
-            let duration = Double(state.duration.microseconds) / 1_000_000
-            let target = min(max(resumeSeconds, 0), max(duration - 0.5, 0))
-            do {
-                try engine.seek(to: .seconds(target))
-            } catch {
-                setupError = "续播定位失败：\(error)"
+            if isSourceReady, state.duration > .zero {
+                let duration = Double(state.duration.microseconds) / 1_000_000
+                let target = min(max(resumeSeconds, 0), max(duration - 0.5, 0))
+                do {
+                    try engine.seek(to: .seconds(target))
+                } catch {
+                    setupError = "续播定位失败：\(error)"
+                }
+                return
             }
-            return
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                return
+            }
         }
     }
 
@@ -427,6 +494,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         failedRequestID = nil
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
+        // engine 没了就一定不在播，息屏令牌和系统登记立刻还回去（stopPlayback 也经过这里）。
+        syncSystemPlaybackState()
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
         // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
         // 等下次 open 时自然会 reset。

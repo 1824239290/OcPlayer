@@ -125,7 +125,7 @@ struct PlayerHUDInfoPanel: View {
                         .foregroundStyle(PlayerHUDPalette.secondary)
                 }
                 Text(
-                    "\(stateLabel) · \(playerHUDTimeLabel(controller.state.position)) / "
+                    "\(stateLabel) · \(playerHUDTimeLabel(controller.state.displayPosition)) / "
                         + playerHUDTimeLabel(controller.state.duration)
                 )
                 .font(.caption2.monospacedDigit())

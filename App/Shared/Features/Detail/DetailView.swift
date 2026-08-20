@@ -25,6 +25,11 @@ struct DetailView: View {
     @State private var detail: MediaItem?
     @State private var seasons: [MediaItem] = []
     @State private var episodes: [MediaItem] = []
+    /// 本次停留在这一页期间已经拉过的季 → 集列表。来回切季不再重新请求、
+    /// 也不再闪一下 loading。`load()`（换条目）时整体清空。
+    @State private var episodesBySeason: [String: [MediaItem]] = [:]
+    /// 每季各自记住用户选中的那一集：切走再切回来选中项还在。
+    @State private var selectedEpisodeBySeason: [String: MediaItem.ID] = [:]
     @State private var similar: [MediaItem] = []
     @State private var selectedSeasonID: String?
     @State private var selectedEpisodeID: MediaItem.ID?
@@ -427,6 +432,9 @@ struct DetailView: View {
             ) {
                 selectedEpisodeID = episode.id
                 episodeScrollFocusID = episode.id
+                if let seasonID = selectedSeasonID {
+                    selectedEpisodeBySeason[seasonID] = episode.id
+                }
             }
         }
     }
@@ -513,6 +521,11 @@ struct DetailView: View {
         if let index = episodes.firstIndex(where: { $0.id == id }) {
             episodes[index].playState = state
         }
+        // 缓存也要跟着改，否则切走再切回来「已看过」的勾又变回去了。
+        for (seasonID, cached) in episodesBySeason {
+            guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
+            episodesBySeason[seasonID]?[index].playState = state
+        }
     }
 
     private func load() async {
@@ -522,6 +535,8 @@ struct DetailView: View {
         detail = nil
         seasons = []
         episodes = []
+        episodesBySeason = [:]
+        selectedEpisodeBySeason = [:]
         selectedSeasonID = nil
         selectedEpisodeID = nil
         episodeScrollFocusID = nil
@@ -566,6 +581,18 @@ struct DetailView: View {
             episodeLoadError = nil
             return
         }
+        // 这一季已经拉过：同步换上，不清空、不转圈、不发请求。
+        if let cached = episodesBySeason[seasonID] {
+            episodes = cached
+            let restored = selectedEpisodeBySeason[seasonID]
+                .flatMap { id in cached.contains { $0.id == id } ? id : nil }
+                ?? preferredEpisodeID(in: cached, seriesID: shown.id)
+            selectedEpisodeID = restored
+            episodeScrollFocusID = restored
+            isLoadingEpisodes = false
+            episodeLoadError = nil
+            return
+        }
         episodes = []
         selectedEpisodeID = nil
         episodeScrollFocusID = nil
@@ -579,6 +606,7 @@ struct DetailView: View {
         do {
             let loaded = try await server.episodes(seriesID: shown.id, seasonID: seasonID)
             guard !Task.isCancelled, selectedSeasonID == seasonID else { return }
+            episodesBySeason[seasonID] = loaded
             episodes = loaded
             let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
             selectedEpisodeID = preferred
