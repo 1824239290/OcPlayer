@@ -236,8 +236,16 @@ struct PlayerScreen: View {
         playerLog.info("closePlayer（ESC / ×）")
         PlaybackLog.append("closePlayer（ESC / ×）")
         hudVisibility.cancel()
+        // 先触发窗口还原动画（画面还在，窗口缩小时播放内容跟着一起缩小），
+        // 再停引擎，等窗口缩完再退出播放器——不会出现「播放器没了，窗口自己在动」的不连贯。
+        PlayerWindowFitter.restore()
         controller.stopPlayback()
-        app.dismissPlayer()
+        Task { @MainActor in
+            // 窗口弹性动画约 0.18-0.2s，等一下让它跑完再 dismiss。
+            try? await Task.sleep(for: .seconds(0.25))
+            guard !Task.isCancelled, app.presentedPlayer != nil else { return }
+            app.dismissPlayer()
+        }
     }
 
     private var hudIsFullscreen: Bool {
