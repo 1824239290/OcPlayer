@@ -182,6 +182,8 @@ struct StillCard: View {
         item.runtimeSeconds.map { max($0 - (item.playState?.positionSeconds ?? 0), 0) }
     }
 
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
@@ -189,15 +191,19 @@ struct StillCard: View {
                     let target = item.episodeThumbTarget(server, width: 720)
                     RemoteImage(url: target.url, authHeader: target.authHeader)
                         .aspectRatio(16 / 9, contentMode: .fill)
-                    LinearGradient(colors: [.black.opacity(0.62), .clear],
-                                   startPoint: .bottom, endPoint: .center)
-                    Image(systemName: actionIcon)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(9)
-                        .background(.black.opacity(0.55), in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
+                    // 底部只做很轻的可读性压暗；不再为常驻按钮铺厚渐变。
+                    LinearGradient(
+                        colors: [.black.opacity(hovering || voiceOverEnabled ? 0.45 : 0.22), .clear],
+                        startPoint: .bottom,
+                        endPoint: .center
+                    )
+                    // 整卡可点时，角标只是 affordance：悬停/VoiceOver 才出现，避免压住剧照。
+                    actionBadge
                         .padding(12)
+                        .opacity(actionBadgeVisible ? 1 : 0)
+                        .scaleEffect(actionBadgeVisible ? 1 : 0.92)
+                        .animation(badgeMotion, value: actionBadgeVisible)
+                        .accessibilityHidden(true)
                 }
                 .frame(width: Metrics.stillWidth)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
@@ -222,6 +228,28 @@ struct StillCard: View {
         .accessibilityValue("\(subtitle)，已播放 \(Int(progress * 100))%")
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
+    }
+
+    /// 悬停或读屏时显示；减弱动态效果时仍显示，避免只靠动画提示可点。
+    private var actionBadgeVisible: Bool {
+        hovering || voiceOverEnabled || reduceMotion
+    }
+
+    private var badgeMotion: Animation? {
+        reduceMotion ? nil : .easeOut(duration: 0.16)
+    }
+
+    private var actionBadge: some View {
+        Image(systemName: actionIcon)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 32, height: 32)
+            .background(.ultraThinMaterial.opacity(0.92), in: Circle())
+            .background(Circle().fill(.black.opacity(0.28)))
+            .overlay {
+                Circle().strokeBorder(.white.opacity(0.55), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
     }
 
     private var progressTrack: some View {
