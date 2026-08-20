@@ -14,7 +14,7 @@ final class DanmakuServiceTests: XCTestCase {
             configuration: DandanplayConfiguration(
                 baseURL: URL(string: "https://gateway.example.com")!,
                 apiKey: "key",
-                userAgent: "OcPlay/0.1.1 (macOS; arm64)"
+                userAgent: "OcPlay/0.1.3 (macOS; arm64)"
             ),
             session: session
         )
@@ -67,7 +67,7 @@ final class DanmakuServiceTests: XCTestCase {
             configuration: DandanplayConfiguration(
                 baseURL: URL(string: "https://gateway.example.com")!,
                 apiKey: "key",
-                userAgent: "OcPlay/0.1.1 (macOS; arm64)"
+                userAgent: "OcPlay/0.1.3 (macOS; arm64)"
             ),
             session: TestSupport.mockedSession()
         )

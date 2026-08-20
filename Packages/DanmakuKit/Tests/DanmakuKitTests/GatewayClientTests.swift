@@ -5,7 +5,7 @@ final class GatewayClientTests: XCTestCase {
 
     private let baseURL = URL(string: "https://gateway.example.com")!
     private let apiKey = "test-key-123"
-    private let userAgent = "OcPlay/0.1.1 (macOS; arm64)"
+    private let userAgent = "OcPlay/0.1.3 (macOS; arm64)"
     private let validHash = "900150983cd24fb0d6963f7d28e17f72"
 
     private func makeClient(
