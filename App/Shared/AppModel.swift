@@ -60,10 +60,6 @@ final class AppModel {
     private(set) var libraries: [MediaLibrary] = []
 
     struct HomeData {
-        /// 轮播素材（最多 5 张，都带背景图）。
-        var heroes: [MediaItem] = []
-        /// 轮播眉题前缀，与 `heroes` 的实际来源一致（收藏为空回落时会显示「最近添加」）。
-        var heroLabel = "最近添加"
         var resume: [MediaItem] = []
         var nextUp: [MediaItem] = []
         var latest: [MediaItem] = []
@@ -74,49 +70,6 @@ final class AppModel {
     private(set) var home = HomeData()
     /// 同一会话内可能同时发生下拉刷新和设置切换；只有最新一次首页请求可以写回。
     private var homeLoadGeneration: UInt64 = 0
-
-    // MARK: - 首页轮播（设置里可选）
-
-    enum HeroSource: String, CaseIterable, Identifiable, Sendable {
-        case latest
-        case favorites
-
-        var id: String { rawValue }
-
-        var label: String {
-            switch self {
-            case .latest: "最近添加"
-            case .favorites: "我的收藏"
-            }
-        }
-    }
-
-    private static let heroCarouselEnabledKey = "dev.jumusu.ocplayer.heroCarouselEnabled"
-    private static let heroSourceKey = "dev.jumusu.ocplayer.heroSource"
-
-    /// 未写入偏好时 `bool(forKey:)` 返回 false，因此轮播默认关闭。
-    private(set) var isHeroCarouselEnabled: Bool
-    private(set) var heroSource: HeroSource
-
-    func setHeroSource(_ source: HeroSource) {
-        guard source != heroSource else { return }
-        heroSource = source
-        UserDefaults.standard.set(source.rawValue, forKey: Self.heroSourceKey)
-        if isHeroCarouselEnabled {
-            Task { await loadHome() }
-        }
-    }
-
-    func setHeroCarouselEnabled(_ enabled: Bool) {
-        guard enabled != isHeroCarouselEnabled else { return }
-        isHeroCarouselEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: Self.heroCarouselEnabledKey)
-
-        if !enabled {
-            home.heroes = []
-        }
-        Task { await loadHome() }
-    }
 
     // MARK: - 弹幕设置（弹弹play 网关）
 
@@ -222,7 +175,7 @@ final class AppModel {
             return
         }
 
-        let cachedSeries = (home.heroes + home.latest).first {
+        let cachedSeries = (home.latest).first {
             $0.id == seriesID && $0.kind == .series
         }
         let series = cachedSeries ?? MediaItem(
@@ -237,9 +190,6 @@ final class AppModel {
 
     init(store: ServerStore = ServerStore()) {
         self.store = store
-        isHeroCarouselEnabled = UserDefaults.standard.bool(forKey: Self.heroCarouselEnabledKey)
-        heroSource = UserDefaults.standard.string(forKey: Self.heroSourceKey)
-            .flatMap { HeroSource(rawValue: $0) } ?? .latest
     }
 
     /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
@@ -452,36 +402,16 @@ final class AppModel {
             }
         }
         do {
-            let carouselEnabled = isHeroCarouselEnabled
-            let carouselSource = heroSource
             async let resume = server.resumeItems()
             async let nextUp = server.nextUp()
             async let latest = server.latestItems()
-            async let favorites = Self.favoriteHeroItems(
-                server: server,
-                enabled: carouselEnabled,
-                source: carouselSource
-            )
             let (resumeItems, nextUpItems, latestItems) = try await (resume, nextUp, latest)
-            let favoriteItems = await favorites
             guard sessionIsCurrent(generation, server: server),
                   homeLoadGeneration == loadGeneration
             else { return }
             home.resume = resumeItems
             home.nextUp = nextUpItems
             home.latest = latestItems
-            if carouselEnabled {
-                // 轮播：按设置取来源，只留有背景图的；收藏为空/全无背景图时回落最近添加。
-                let (heroes, label) = Self.heroes(
-                    for: carouselSource,
-                    latest: latestItems,
-                    favorites: favoriteItems
-                )
-                home.heroes = heroes
-                home.heroLabel = label
-            } else {
-                home.heroes = []
-            }
         } catch let error as JellyfinError {
             guard sessionIsCurrent(generation, server: server),
                   homeLoadGeneration == loadGeneration
@@ -495,32 +425,6 @@ final class AppModel {
             home.error = "\(error)"
             AppDiagnostics.logWarning("首页加载异常", fields: ["error": .string("\(error)")])
         }
-    }
-
-    /// 仅在轮播开启且来源为收藏时请求收藏；失败时仍回落最近添加。
-    private static func favoriteHeroItems(
-        server: JellyfinServer,
-        enabled: Bool,
-        source: HeroSource
-    ) async -> [MediaItem] {
-        guard enabled, source == .favorites else { return [] }
-        return (try? await server.favoriteItems()) ?? []
-    }
-
-    /// 轮播素材选取：按来源整池取前 5 张有背景图的；
-    /// 收藏模式收藏为空（或全都没有背景图）时整池回落最近添加。
-    private static func heroes(
-        for source: HeroSource,
-        latest: [MediaItem],
-        favorites: [MediaItem]
-    ) -> (items: [MediaItem], label: String) {
-        if source == .favorites {
-            let favoritesWithBackdrop = favorites.filter { $0.backdropImageTag != nil }
-            if !favoritesWithBackdrop.isEmpty {
-                return (favoritesWithBackdrop.prefix(5).map { $0 }, HeroSource.favorites.label)
-            }
-        }
-        return (latest.filter { $0.backdropImageTag != nil }.prefix(5).map { $0 }, HeroSource.latest.label)
     }
 
     // MARK: - 播放串联（UI 只调这里，不自己拼 URL）

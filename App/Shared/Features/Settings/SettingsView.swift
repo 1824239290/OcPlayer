@@ -21,28 +21,6 @@ struct SettingsView: View {
                 row("用户", app.currentUserLabel)
             }
 
-            Section("首页") {
-                Toggle("首页轮播图", isOn: Binding(
-                    get: { app.isHeroCarouselEnabled },
-                    set: { app.setHeroCarouselEnabled($0) }
-                ))
-
-                if app.isHeroCarouselEnabled {
-                    Picker("轮播来源", selection: Binding(
-                        get: { app.heroSource },
-                        set: { app.setHeroSource($0) }
-                    )) {
-                        ForEach(AppModel.HeroSource.allCases) { source in
-                            Text(source.label).tag(source)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    Text("「我的收藏」为空时会自动回落为最近添加。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
             Section("播放") {
                 Button {
                     isImporting = true
@@ -246,25 +224,49 @@ struct DanmakuGatewayEntrySheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("网关地址") {
-                    TextField("https://gateway.example.com", text: $gatewayURL)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("网关地址")
+                            .font(.subheadline.weight(.semibold))
+                        TextField(
+                            "",
+                            text: $gatewayURL,
+                            prompt: Text("https://gateway.example.com")
+                        )
                         .textContentType(.URL)
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
                         .autocorrectionDisabled()
-                    Text("仅支持 HTTPS 根地址；留空恢复默认网关。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("API Key") {
-                    SecureField("由网关管理员签发", text: $key)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        Text("仅支持 HTTPS 根地址；留空恢复默认网关。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("API Key")
+                            .font(.subheadline.weight(.semibold))
+                        SecureField(
+                            "",
+                            text: $key,
+                            prompt: Text("由网关管理员签发")
+                        )
                         .textContentType(.password)
-                    Text("Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        Text("Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
             }
             .navigationTitle("弹幕网关")
             .toolbar {
@@ -285,7 +287,7 @@ struct DanmakuGatewayEntrySheet: View {
             }
         }
         #if os(macOS)
-        .frame(width: 480, height: 280)
+        .frame(width: 520, height: 340)
         #endif
     }
 
