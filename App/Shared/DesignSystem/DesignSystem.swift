@@ -199,7 +199,8 @@ struct StillCard: View {
                     )
                     // 整卡可点时，角标只是 affordance：悬停/VoiceOver 才出现，避免压住剧照。
                     actionBadge
-                        .padding(12)
+                        // 略离开海报圆角与底边，避免贴边。
+                        .padding(18)
                         .opacity(actionBadgeVisible ? 1 : 0)
                         .scaleEffect(actionBadgeVisible ? 1 : 0.92)
                         .animation(badgeMotion, value: actionBadgeVisible)
