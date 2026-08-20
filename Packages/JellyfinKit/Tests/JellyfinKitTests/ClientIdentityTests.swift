@@ -26,6 +26,23 @@ final class ClientIdentityTests: XCTestCase {
         XCTAssertEqual(ClientIdentity.marketingVersion(in: empty), "development")
     }
 
+    func testMediaBrowserAuthorizationHeaderIncludesStableIdentity() {
+        let withToken = ClientIdentity.mediaBrowserAuthorizationHeader(token: "tok-abc")
+        XCTAssertTrue(withToken.hasPrefix("MediaBrowser "))
+        XCTAssertTrue(withToken.contains("Client=\"OcPlayer\""))
+        XCTAssertTrue(withToken.contains("Device=\"\(ClientIdentity.deviceName)\""))
+        XCTAssertTrue(withToken.contains("DeviceId=\"\(ClientIdentity.deviceID)\""))
+        XCTAssertTrue(withToken.contains("Version=\"\(ClientIdentity.version)\""))
+        XCTAssertTrue(withToken.contains(#"Token="tok-abc""#))
+
+        let withoutToken = ClientIdentity.mediaBrowserAuthorizationHeader(token: nil)
+        XCTAssertFalse(withoutToken.contains("Token="))
+        XCTAssertTrue(withoutToken.contains("DeviceId=\"\(ClientIdentity.deviceID)\""))
+
+        let emptyToken = ClientIdentity.mediaBrowserAuthorizationHeader(token: "")
+        XCTAssertFalse(emptyToken.contains("Token="))
+    }
+
     private func makeBundle(shortVersion: String?, build: String?) throws -> Bundle {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "ClientIdentityTests-\(UUID().uuidString).bundle", directoryHint: .isDirectory)

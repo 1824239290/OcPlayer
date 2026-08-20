@@ -143,10 +143,10 @@ public struct JellyfinServer: Sendable {
         .map(\.domainItem)
     }
 
-    /// 首页轮播「我的收藏」：用户标过收藏的电影 / 剧集，按媒体入库时间倒序。
+    /// 用户收藏的电影 / 剧集（M4 独立收藏页预留）。
     /// Jellyfin 的用户数据只有 `IsFavorite`，不记录收藏发生时间；`DateCreated`
     /// 是媒体条目的入库 / 创建时间，不能对外表述为“最近收藏”。
-    /// 返回单页（不递归展开），轮播取前几张即可；收藏为空时调用方负责回落。
+    /// 返回单页（不递归展开）；收藏为空时调用方负责空态。
     public func favoriteItems(limit: Int = 24) async throws -> [MediaItem] {
         try await send(
             Paths.getItems(parameters: .init(
@@ -312,16 +312,7 @@ public struct JellyfinServer: Sendable {
 
     /// 给内核（`open_with_headers`）和图片加载共用的认证头。
     public var authorizationHeader: String {
-        var fields = [
-            "Client": ClientIdentity.clientName,
-            "Device": ClientIdentity.deviceName,
-            "DeviceId": ClientIdentity.deviceID,
-            "Version": ClientIdentity.version,
-        ]
-        if let accessToken {
-            fields["Token"] = accessToken
-        }
-        return "MediaBrowser " + fields.map { "\($0.key)=\"\($0.value)\"" }.joined(separator: ", ")
+        ClientIdentity.mediaBrowserAuthorizationHeader(token: accessToken)
     }
 
     // MARK: - 出错统一包装

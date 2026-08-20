@@ -336,6 +336,7 @@ final class AppModel {
         libraries = []
         home = HomeData()
         path = []
+        presentedDetail = nil
         presentedPlayer = nil
         selectedSection = .home
         phase = .onboarding
@@ -483,13 +484,12 @@ final class AppModel {
         guard let server else { return }
         finishReporting()   // 上一条的 Stopped（换片场景）
 
-        // 首页轮播和收藏可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
+        // 首页「最近添加」等入口可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
         // 只接受可播放的叶子条目。沿用详情页的语义：优先「接下来看」，否则取
         // 首个未看完的常规剧集；避免把 Series ID 直接送进 /Videos/{id}/stream。
         let playableItem: MediaItem
         do {
             guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
-                home.error = "该剧没有可播放的剧集"
                 playbackPreparation = .failed(title: item.name, error: "该剧没有可播放的剧集")
                 return
             }
@@ -499,7 +499,6 @@ final class AppModel {
             return
         } catch {
             guard !Task.isCancelled else { return }
-            home.error = "剧集加载失败：\(error)"
             playbackPreparation = .failed(title: item.name, error: "剧集加载失败：\(error)")
             AppDiagnostics.logWarning("播放剧集解析失败", fields: [
                 "item": .string(item.name),
@@ -548,7 +547,6 @@ final class AppModel {
                                     durationSeconds: playableItem.runtimeSeconds
                                 ))
             } else {
-                home.error = "播放信息获取失败：\(error)"
                 playbackPreparation = .failed(title: title, error: "播放信息获取失败：\(error)")
                 AppDiagnostics.logError("PlaybackInfo 失败且回退直连也失败", fields: [
                     "title": .string(title),
@@ -914,6 +912,7 @@ final class AppModel {
     /// 未连接状态下首页的「去连接」：回登录流程。
     func reconnectFlow() {
         path = []
+        presentedDetail = nil
         selectedSection = .home
         resetOnboarding()
         phase = .onboarding

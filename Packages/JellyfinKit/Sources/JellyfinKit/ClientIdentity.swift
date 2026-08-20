@@ -78,4 +78,20 @@ public enum ClientIdentity {
         defaults.set(name, forKey: deviceNameKey)
         return name
     }
+
+    /// Jellyfin `Authorization: MediaBrowser …` 头。API 客户端、图片管线和
+    /// 内核 `open_with_headers`（含设置页直连）共用同一套身份字段，避免出现
+    /// 硬编码 DeviceId / 版本漂移的第二套客户端。
+    public static func mediaBrowserAuthorizationHeader(token: String? = nil) -> String {
+        var fields = [
+            "Client": clientName,
+            "Device": deviceName,
+            "DeviceId": deviceID,
+            "Version": version,
+        ]
+        if let token, !token.isEmpty {
+            fields["Token"] = token
+        }
+        return "MediaBrowser " + fields.map { "\($0.key)=\"\($0.value)\"" }.joined(separator: ", ")
+    }
 }

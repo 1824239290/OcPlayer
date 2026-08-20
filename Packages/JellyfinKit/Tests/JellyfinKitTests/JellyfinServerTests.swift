@@ -365,8 +365,11 @@ final class JellyfinServerTests: XCTestCase {
 
     func testAuthorizationHeaderFormat() {
         let header = makeServer().authorizationHeader
+        let expected = ClientIdentity.mediaBrowserAuthorizationHeader(token: "tok-123")
+        XCTAssertEqual(header, expected)
         XCTAssertTrue(header.hasPrefix("MediaBrowser "))
         XCTAssertTrue(header.contains(#"Token="tok-123""#))
         XCTAssertTrue(header.contains("Client=\"OcPlayer\""))
+        XCTAssertTrue(header.contains("DeviceId=\"\(ClientIdentity.deviceID)\""))
     }
 }

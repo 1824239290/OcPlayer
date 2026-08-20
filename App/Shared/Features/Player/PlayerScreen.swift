@@ -236,6 +236,8 @@ struct PlayerScreen: View {
         playerLog.info("closePlayer（ESC / ×）")
         PlaybackLog.append("closePlayer（ESC / ×）")
         hudVisibility.cancel()
+        // 绑定本次关闭的 request：延迟 dismiss 期间若用户已开新片，不能误清新 presentedPlayer。
+        let closingID = request?.id
         // 先触发窗口还原动画（画面还在，窗口缩小时播放内容跟着一起缩小），
         // 再停引擎，等窗口缩完再退出播放器——不会出现「播放器没了，窗口自己在动」的不连贯。
         PlayerWindowFitter.restore()
@@ -243,7 +245,8 @@ struct PlayerScreen: View {
         Task { @MainActor in
             // 窗口弹性动画约 0.18-0.2s，等一下让它跑完再 dismiss。
             try? await Task.sleep(for: .seconds(0.25))
-            guard !Task.isCancelled, app.presentedPlayer != nil else { return }
+            guard !Task.isCancelled else { return }
+            guard let closingID, app.presentedPlayer?.id == closingID else { return }
             app.dismissPlayer()
         }
     }

@@ -233,9 +233,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     /// 手动直连链接（设置页入口）：构造带认证头的播放请求。
     static func request(uri: String, jellyfinToken: String?) -> PlaybackRequest {
-        var authHeader: String?
+        let authHeader: String?
         if let token = jellyfinToken, !token.isEmpty {
-            authHeader = #"MediaBrowser Client="OcPlayer", Device="Mac", DeviceId="ocplayer-m0", Version="0.1", Token="\#(token)""#
+            authHeader = ClientIdentity.mediaBrowserAuthorizationHeader(token: token)
+        } else {
+            authHeader = nil
         }
         let title = URL(string: uri)?.lastPathComponent ?? uri
         return PlaybackRequest(title: title, uri: uri, authHeader: authHeader)

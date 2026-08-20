@@ -3,7 +3,7 @@ import DiagnosticsKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 设置页：服务器与账号信息、首页轮播来源、本地播放入口、弹幕网关、关于信息。
+/// 设置页：服务器与账号信息、本地播放入口、弹幕网关、关于信息。
 /// 外观 / 播放细节设置 M4 再进。
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
