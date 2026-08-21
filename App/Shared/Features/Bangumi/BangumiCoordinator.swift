@@ -34,9 +34,10 @@ final class BangumiCoordinator {
 
     /// 处理 OAuth 回调 URL（提取 code 并换 token）。返回错误文案（nil = 成功）。
     func handleOAuthCallback(url: URL) async -> String? {
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              components.scheme == "ocplayer",
-              components.path == "/oauth/callback" || url.path == "/oauth/callback",
+        // 回调形如 ocplayer://oauth/callback?code=xxx：
+        // host 是 "oauth"，path 是 "/callback"，code 在 query 里。
+        guard url.scheme == "ocplayer", url.host == "oauth",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value
         else { return "回调地址无效" }
         do {

@@ -34,9 +34,7 @@ public enum BangumiAuthService {
 
     public static func logout() async {
         let revision = beginOperation()
-        let store = BangumiStore()
-        store.setAuthenticated(false)
-        store.setProfile(nil)
+        BangumiContext.shared.clearAuthState()
         _ = await BangumiAPIClient.shared.clearCredentials()
         guard revision == operationRevision else { return }
         let db = BangumiContext.shared.database
@@ -45,7 +43,7 @@ public enum BangumiAuthService {
 
     /// 401 时被动失效会话（只清当前代次的凭证）。
     public static func invalidateSession(expectedCredentialGeneration: UInt64) async {
-        guard BangumiStore().isAuthenticated else { return }
+        guard BangumiContext.shared.isAuthenticated else { return }
         let observedRevision = operationRevision
         guard
             let clearedGeneration = await BangumiAPIClient.shared.clearCredentials(
@@ -57,17 +55,14 @@ public enum BangumiAuthService {
         }
         guard observedRevision == operationRevision else { return }
         _ = beginOperation()
-        let store = BangumiStore()
-        store.setAuthenticated(false)
-        store.setProfile(nil)
+        BangumiContext.shared.clearAuthState()
     }
 
     private static func refreshProfile(revision: UInt64) async throws -> BangumiProfile {
         let profile = try await fetchProfile()
         try ensureCurrentOperation(revision)
-        let store = BangumiStore()
-        store.setProfile(profile)
-        store.setAuthenticated(true)
+        // 通过 context 写入：store 持久化 + 内存存储属性同步（触发 UI 刷新）。
+        BangumiContext.shared.setAuthenticated(profile)
         return profile
     }
 

@@ -104,6 +104,8 @@ public final class BangumiContext {
     /// 启动时调用一次，异步建库（不阻塞主线程）。
     public func setupIfNeeded(directory: URL? = nil) {
         guard setupTask == nil else { return }
+        // 先从 store 恢复登录态到内存（启动时如果已登录，UI 立刻显示正确状态）。
+        syncAuthState()
         setupTask = Task { @MainActor in
             let base = directory
                 ?? FileManager.default.urls(
@@ -122,12 +124,29 @@ public final class BangumiContext {
 
     // MARK: - 登录态
 
-    public var isAuthenticated: Bool {
-        store.isAuthenticated
+    /// 存储属性（非计算属性）：@Observable 只有存储属性变更才触发 UI 更新。
+    /// AuthService 写完 store（UserDefaults）后必须调 syncAuthState() 刷新这两个值。
+    public private(set) var isAuthenticated = false
+    public private(set) var profile: BangumiProfile?
+
+    /// 从 store（UserDefaults）同步登录态到内存存储属性（触发 UI 刷新）。
+    public func syncAuthState() {
+        isAuthenticated = store.isAuthenticated
+        profile = store.profile
     }
 
-    public var profile: BangumiProfile? {
-        store.profile
+    /// 登录成功后调：写 store + 同步内存属性。
+    public func setAuthenticated(_ profile: BangumiProfile) {
+        store.setProfile(profile)
+        store.setAuthenticated(true)
+        syncAuthState()
+    }
+
+    /// 登出后调：清 store + 同步内存属性。
+    public func clearAuthState() {
+        store.setAuthenticated(false)
+        store.setProfile(nil)
+        syncAuthState()
     }
 
     // MARK: - 进度

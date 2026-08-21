@@ -165,16 +165,22 @@ struct BangumiChapterSection: View {
         }
         isLoading = true
         defer { isLoading = false }
-        // 先读本地缓存立即渲染，再拉远程补全。
+        // 先读本地缓存立即渲染。
         if let cached = try? await bangumi.context.subject(id: subjectID) {
             subject = cached
         }
         if let cachedEpisodes = try? await bangumi.context.fetchEpisodes(subjectId: subjectID) {
             episodes = cachedEpisodes
         }
-        if let fresh = try? await bangumi.context.fetchProgressSubject(subjectId: subjectID, episodeWindowSize: 50) {
+        // 远程拉全量章节落库（关联后第一次会拉，缓存过则跳过请求）。
+        if let fresh = try? await bangumi.context.fetchProgressSubject(subjectId: subjectID, episodeWindowSize: 100) {
             subject = fresh.subject
             episodes = fresh.episodes
+        }
+        // 确保全量章节已落库（fetchProgressSubject 只是窗口，远程全量靠 loadEpisodes）。
+        if episodes.isEmpty {
+            try? await bangumi.context.loadEpisodes(subjectID)
+            episodes = (try? await bangumi.context.fetchEpisodes(subjectId: subjectID)) ?? []
         }
     }
 

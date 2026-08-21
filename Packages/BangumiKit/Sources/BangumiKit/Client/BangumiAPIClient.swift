@@ -90,7 +90,7 @@ public actor BangumiAPIClient {
         store: BangumiStore = BangumiStore(),
         appInfo: BangumiAppInfo? = nil,
         userAgent: String = "OcPlayer/0.1 (BangumiKit)",
-        authDomain: BangumiURL.AuthDomain = .next
+        authDomain: BangumiURL.AuthDomain = .origin
     ) {
         self.store = store
         self.appInfo = appInfo ?? Self.readAppInfoFromBundle()
