@@ -19,6 +19,16 @@ struct SettingsView: View {
                 row("地址", app.server?.profile.baseURL.absoluteString ?? "—")
                 row("版本", app.server?.profile.serverVersion ?? "—")
                 row("用户", app.currentUserLabel)
+                // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
+                // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
+                Button {
+                    app.reconnectFlow()
+                } label: {
+                    Label(
+                        app.server == nil ? "连接服务器…" : "连接其它服务器…",
+                        systemImage: "arrow.left.arrow.right"
+                    )
+                }
             }
 
             Section("播放") {

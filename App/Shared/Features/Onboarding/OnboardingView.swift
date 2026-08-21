@@ -152,38 +152,66 @@ struct OnboardingView: View {
     private var quickConnectPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Quick Connect").font(.headline)
-            if let code = app.quickConnectCode {
-                VStack(spacing: 8) {
-                    Text(code)
-                        .font(.system(size: 34, weight: .bold, design: .monospaced))
-                        .kerning(6)
-                    Text("在手机 / 网页端 Jellyfin 的「Quick Connect」里输入这串代码确认")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("等待确认…").font(.caption).foregroundStyle(.tertiary)
+            // 三个终态各有落点。原来只有「有码 / 没码」两种，服务器把 QC 关掉时
+            // 这块会永远转着「正在申请配对码…」，同时卡片底部又冒一条红色报错——
+            // 两句说的是同一件事，而转圈那句还是错的。
+            if let reason = app.quickConnectError {
+                quickConnectPanelBox {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundStyle(.secondary)
+                        Text(reason)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("重试") { Task { await app.startQuickConnect() } }
+                            .font(.callout)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(16)
-                .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
-                .transition(.opacity)
-            } else {
-                HStack {
-                    Text("正在向服务器申请配对码…")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    ProgressView().controlSize(.small)
+            } else if let code = app.quickConnectCode {
+                quickConnectPanelBox {
+                    VStack(spacing: 8) {
+                        Text(code)
+                            .font(.system(size: 34, weight: .bold, design: .monospaced))
+                            .kerning(6)
+                            .textSelection(.enabled)
+                        Text("在手机 / 网页端 Jellyfin 的「Quick Connect」里输入这串代码确认")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("等待确认…").font(.caption).foregroundStyle(.tertiary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(16)
-                .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
-                .transition(.opacity)
+            } else {
+                quickConnectPanelBox {
+                    HStack {
+                        Text("正在向服务器申请配对码…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
             }
         }
         .motionAnimation(.easeInOut(duration: 0.2), value: app.quickConnectCode, reduceMotion: reduceMotion)
+        .motionAnimation(.easeInOut(duration: 0.2), value: app.quickConnectError, reduceMotion: reduceMotion)
+    }
+
+    /// 三种状态共用同一个盒子，切换时框体不跳。
+    private func quickConnectPanelBox<Content: View>(
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+            .transition(.opacity)
     }
 
     private var divider: some View {

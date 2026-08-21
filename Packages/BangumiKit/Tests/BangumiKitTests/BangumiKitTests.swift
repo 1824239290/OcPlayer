@@ -150,6 +150,84 @@ struct BangumiDatabaseTests {
         #expect(stored?.interest?.epStatus == 0)
     }
 
+    /// 整页的章节窗口现在是一条 `IN (...)` 批量取回、在内存里按 subject 分组切的，
+    /// 所以要盯住「每个条目各拿到自己的窗口」——分组串了的话单条目查询是看不出来的。
+    @Test func pagedProgressWindowsStayPerSubject() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        // 三部进度各不相同的番，collectedAt 递减以固定分页顺序。
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 600, eps: 12, epStatus: 5, collectedAt: 300))
+        try await db.saveEpisodes(
+            subjectId: 600,
+            items: (1...12).map {
+                BangumiFixture.episode(
+                    id: 6_000 + $0, subjectID: 600, sort: Float($0),
+                    status: $0 <= 5 ? .collect : BangumiEpisodeCollectionType.none)
+            })
+        // 全看完 → 退回末尾
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 601, eps: 4, epStatus: 4, collectedAt: 200))
+        try await db.saveEpisodes(
+            subjectId: 601,
+            items: (1...4).map {
+                BangumiFixture.episode(
+                    id: 6_100 + $0, subjectID: 601, sort: Float($0), status: .collect)
+            })
+        // 一集没看 → 窗口贴头
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 602, eps: 8, epStatus: 0, collectedAt: 100))
+        try await db.saveEpisodes(
+            subjectId: 602,
+            items: (1...8).map {
+                BangumiFixture.episode(id: 6_200 + $0, subjectID: 602, sort: Float($0))
+            })
+
+        let page = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 20, offset: 0)
+
+        #expect(page.total == 3)
+        #expect(page.data.map(\.subject.id) == [600, 601, 602])
+        #expect(page.data[0].episodes.map(\.sort) == [4, 5, 6, 7, 8])
+        #expect(page.data[1].episodes.map(\.sort) == [1, 2, 3, 4])
+        #expect(page.data[2].episodes.map(\.sort) == [1, 2, 3, 4, 5])
+        // 批量路径不能和单条目路径分叉，章节也必须都属于自己。
+        for item in page.data {
+            let single = try await db.fetchProgressSubject(
+                subjectId: item.subject.id, episodeWindowSize: 5)
+            #expect(single?.episodes.map(\.sort) == item.episodes.map(\.sort))
+            #expect(item.episodes.allSatisfy { $0.subjectID == item.subject.id })
+        }
+    }
+
+    /// 分页的 offset / limit 要真的切页，且 total 报全量
+    /// （进度页原来只取第一页就把 total 丢了，攒到 100 条以上是静默截断）。
+    @Test func pagedProgressRespectsOffsetAndLimit() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        for index in 0..<5 {
+            try await db.saveSubject(
+                BangumiFixture.subject(
+                    id: 700 + index, eps: 12, epStatus: 0, collectedAt: 500 - index))
+        }
+
+        let first = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 2, offset: 0)
+        #expect(first.total == 5)
+        #expect(first.data.map(\.subject.id) == [700, 701])
+
+        let second = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 2, offset: 2)
+        #expect(second.total == 5)
+        #expect(second.data.map(\.subject.id) == [702, 703])
+
+        let tail = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 2, offset: 4)
+        #expect(tail.data.map(\.subject.id) == [704])
+    }
+
     /// 本地搜索要能搜中文名（原来只搜 name 和恒空的 alias）。
     @Test func progressSearchMatchesChineseName() async throws {
         let db = try BangumiFixture.makeDatabase()

@@ -27,11 +27,13 @@ public actor BangumiDatabaseOperator {
         offset: Int
     ) throws -> BangumiPagedDTO<BangumiProgressSubject> {
         try database.read { db in
+            let subjects: [BangumiSubject]
+            let total: Int
             if sortMode == .collectedAt {
                 let filter = progressSubjectFilter(progressTab: progressTab, search: search)
-                let total = try countSubjects(
+                total = try countSubjects(
                     in: db, whereSQL: filter.sql, arguments: filter.arguments)
-                let subjects = try fetchSubjects(
+                subjects = try fetchSubjects(
                     in: db,
                     whereSQL: filter.sql,
                     arguments: filter.arguments,
@@ -39,22 +41,18 @@ public actor BangumiDatabaseOperator {
                     limit: limit,
                     offset: offset
                 )
-                let items = try subjects.map {
-                    try makeProgressSubject(in: db, $0, episodeWindowSize: episodeWindowSize)
-                }
-                return BangumiPagedDTO(data: items, total: total)
+            } else {
+                // airTime 排序：全量取 id 再按页切，保持分页稳定。
+                let subjectIds = try fetchProgressSubjectIds(
+                    in: db, progressTab: progressTab, search: search, sortMode: sortMode)
+                let pageIds = Array(subjectIds.dropFirst(offset).prefix(limit))
+                let byId = try fetchSubjectsById(in: db, pageIds)
+                subjects = pageIds.compactMap { byId[$0] }
+                total = subjectIds.count
             }
-
-            // airTime 排序：全量取 id 再按页切，保持分页稳定。
-            let subjectIds = try fetchProgressSubjectIds(
-                in: db, progressTab: progressTab, search: search, sortMode: sortMode)
-            let pageIds = Array(subjectIds.dropFirst(offset).prefix(limit))
-            let byId = try fetchSubjectsById(in: db, pageIds)
-            let subjects = pageIds.compactMap { byId[$0] }
-            let items = try subjects.map {
-                try makeProgressSubject(in: db, $0, episodeWindowSize: episodeWindowSize)
-            }
-            return BangumiPagedDTO(data: items, total: subjectIds.count)
+            let items = try makeProgressSubjects(
+                in: db, subjects, episodeWindowSize: episodeWindowSize)
+            return BangumiPagedDTO(data: items, total: total)
         }
     }
 
@@ -64,7 +62,9 @@ public actor BangumiDatabaseOperator {
     ) throws -> BangumiProgressSubject? {
         try database.read { db in
             guard let subject = try fetchSubject(in: db, id: subjectId) else { return nil }
-            return try makeProgressSubject(in: db, subject, episodeWindowSize: episodeWindowSize)
+            return try makeProgressSubjects(
+                in: db, [subject], episodeWindowSize: episodeWindowSize
+            ).first
         }
     }
 
@@ -301,75 +301,78 @@ public actor BangumiDatabaseOperator {
 
     // MARK: - 私有查询
 
-    private func makeProgressSubject(
-        in db: Database, _ subject: BangumiSubject, episodeWindowSize: Int
-    ) throws -> BangumiProgressSubject {
-        let episodes: [BangumiEpisodeDTO]
-        switch subject.typeEnum {
-        case .anime, .real:
-            episodes = try fetchProgressEpisodes(
-                in: db, subjectId: subject.subjectId, windowSize: episodeWindowSize)
-        default:
-            episodes = []
+    /// 一整页条目 → 进度条目（含章节窗口）。
+    ///
+    /// 章节**整页一条查询**取回来，窗口在内存里切。原来是每个条目 3 条 SQL
+    /// （下一条未看 / 之前 N 条 / 之后 N 条），一页 100 条就是 300 条查询；
+    /// 本篇集数量级是几十，取回来在内存切的成本可以忽略，而且取回的行数比原来更少
+    /// （原来 windowSize 给 50 时三条查询各自 LIMIT 49，等于整季拉了两遍）。
+    private func makeProgressSubjects(
+        in db: Database, _ subjects: [BangumiSubject], episodeWindowSize: Int
+    ) throws -> [BangumiProgressSubject] {
+        // 只有动画 / 三次元要章节窗口，书籍等不铺章节格子。
+        let needsEpisodes = subjects.filter {
+            switch $0.typeEnum {
+            case .anime, .real: return true
+            default: return false
+            }
         }
-        return BangumiProgressSubject(subject: subject.dto, episodes: episodes)
+        let mainEpisodes = try fetchMainEpisodes(
+            in: db, subjectIds: needsEpisodes.map(\.subjectId))
+        return subjects.map { subject in
+            let episodes = mainEpisodes[subject.subjectId].map {
+                Self.progressWindow(in: $0, windowSize: episodeWindowSize).map(\.dto)
+            } ?? []
+            return BangumiProgressSubject(subject: subject.dto, episodes: episodes)
+        }
     }
 
-    /// 以下一条未看本篇为中心的滑动窗口。
-    private func fetchProgressEpisodes(
-        in db: Database, subjectId: Int, windowSize: Int
-    ) throws -> [BangumiEpisodeDTO] {
+    /// 按 subjectId 批量取本篇章节，一条查询覆盖整页。返回值按 sort 升序。
+    private func fetchMainEpisodes(
+        in db: Database, subjectIds: [Int]
+    ) throws -> [Int: [BangumiEpisode]] {
+        guard !subjectIds.isEmpty else { return [:] }
+        var arguments = StatementArguments(subjectIds)
+        arguments += [BangumiEpisodeType.main.rawValue]
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT * FROM episodes
+                WHERE subject_id IN (\(placeholders(subjectIds.count))) AND type = ?
+                ORDER BY subject_id ASC, sort ASC
+                """,
+            arguments: arguments
+        )
+        var grouped: [Int: [BangumiEpisode]] = [:]
+        for row in rows {
+            let episode = BangumiEpisode(row: row)
+            grouped[episode.subjectId, default: []].append(episode)
+        }
+        return grouped
+    }
+
+    /// 以「下一条未看本篇」为中心的滑动窗口。`sorted` 必须按 `sort` 升序。
+    ///
+    /// 纯函数，不碰数据库——单条目和整页走同一份实现，行为不会分叉。
+    /// 前后两侧按 `sort` 值切（而不是按下标），保持和原来 SQL
+    /// `sort < ?` / `sort > ?` 完全一致：同 sort 的兄弟集两边都不算。
+    static func progressWindow(
+        in sorted: [BangumiEpisode], windowSize: Int
+    ) -> [BangumiEpisode] {
         let windowSize = max(1, windowSize)
-        let mainType = BangumiEpisodeType.main.rawValue
-        guard
-            let nextRow = try Row.fetchOne(
-                db,
-                sql: """
-                    SELECT * FROM episodes
-                    WHERE subject_id = ? AND type = ? AND status = 0
-                    ORDER BY sort ASC
-                    LIMIT 1
-                    """,
-                arguments: [subjectId, mainType]
-            )
-        else {
-            return try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT * FROM episodes
-                    WHERE subject_id = ? AND type = ?
-                    ORDER BY sort DESC
-                    LIMIT ?
-                    """,
-                arguments: [subjectId, mainType, windowSize]
-            ).reversed().map { BangumiEpisode(row: $0).dto }
+        guard !sorted.isEmpty else { return [] }
+        guard let next = sorted.first(where: {
+            $0.status == BangumiEpisodeCollectionType.none.rawValue
+        }) else {
+            // 一集未看的都没有 = 全看完：退回末尾若干集。
+            return Array(sorted.suffix(windowSize))
         }
 
-        let nextEpisode = BangumiEpisode(row: nextRow)
         let halfBefore = (windowSize - 1) / 2
         let halfAfter = windowSize - halfBefore - 1
-
-        let before = try Row.fetchAll(
-            db,
-            sql: """
-                SELECT * FROM episodes
-                WHERE subject_id = ? AND type = ? AND sort < ?
-                ORDER BY sort DESC
-                LIMIT ?
-                """,
-            arguments: [subjectId, mainType, nextEpisode.sort, max(windowSize - 1, 0)]
-        ).reversed().map { BangumiEpisode(row: $0) }
-
-        let after = try Row.fetchAll(
-            db,
-            sql: """
-                SELECT * FROM episodes
-                WHERE subject_id = ? AND type = ? AND sort > ?
-                ORDER BY sort ASC
-                LIMIT ?
-                """,
-            arguments: [subjectId, mainType, nextEpisode.sort, max(windowSize - 1, 0)]
-        ).map { BangumiEpisode(row: $0) }
+        let pool = max(windowSize - 1, 0)
+        let before = Array(sorted.filter { $0.sort < next.sort }.suffix(pool))
+        let after = Array(sorted.filter { $0.sort > next.sort }.prefix(pool))
 
         let beforeCount: Int
         let afterCount: Int
@@ -384,8 +387,7 @@ public actor BangumiDatabaseOperator {
             afterCount = halfAfter
         }
 
-        return (before.suffix(beforeCount) + [nextEpisode] + after.prefix(afterCount))
-            .map(\.dto)
+        return before.suffix(beforeCount) + [next] + after.prefix(afterCount)
     }
 
     private func fetchProgressSubjectIds(

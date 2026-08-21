@@ -9,6 +9,20 @@ struct AppShellView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        layout
+            // 横向留白跟**窗口宽度**走，不跟设备型号走：iPad 拖到 1/3 宽时
+            // hSizeClass 已经是 compact，而 UIDevice 的 idiom 仍是 .pad
+            // （见 `EnvironmentValues.contentLeading` 的注释）。
+            .environment(\.contentLeading, contentLeading)
+    }
+
+    /// nil 视作 regular：macOS 上 `horizontalSizeClass` 常为 nil，窗口再窄也不走紧凑版式。
+    private var contentLeading: CGFloat {
+        sizeClass == .compact ? Metrics.compactContentInset : Metrics.contentInset
+    }
+
+    @ViewBuilder
+    private var layout: some View {
         #if os(macOS)
         splitLayout
         #else
@@ -44,6 +58,17 @@ struct AppShellView: View {
             Section("Bangumi") {
                 Label("进度管理", systemImage: "arrow.triangle.branch")
                     .tag(AppModel.Section.bangumi)
+                // 个人主页原来只藏在进度页工具栏的图标里；提到侧栏来，
+                // 顺便让这个分区不再是「一个 header 配一行」的空架子。
+                Button {
+                    app.selectedSection = .bangumi
+                    app.path = [.bangumiProfile]
+                } label: {
+                    Label("个人主页", systemImage: "person.crop.circle")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
             }
 
             Section("媒体库") {

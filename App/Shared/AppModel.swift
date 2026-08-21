@@ -54,6 +54,12 @@ final class AppModel {
     var isAuthenticating = false
     /// Quick Connect 轮询期间展示的配对码。
     var quickConnectCode: String?
+    /// Quick Connect 不可用的原因（服务器没开、超时、请求失败）。
+    ///
+    /// 和 `onboardingError` 分开：QC 不可用**不是**登录失败，账号密码那条路还好好的。
+    /// 混在一起的话，服务器关掉 QC 时用户会同时看到「正在申请配对码…」在转圈
+    /// 和一条红色报错，而两句说的其实是同一件事。
+    var quickConnectError: String?
     var onboardingError: String?
 
     var quickConnectTask: Task<Void, Never>?
@@ -65,12 +71,29 @@ final class AppModel {
     /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
     var librariesError: String?
 
+    /// 媒体库网格的分页缓存，按 libraryID 存。
+    ///
+    /// 原来 items / totalCount 是 `LibraryView` 的 `@State`：侧栏切走再切回来，
+    /// `.task(id:)` 重跑一次就从 startIndex 0 重新拉——深翻过十几页的大库回来时
+    /// 整份都丢了。详情页的 `episodesBySeason` 早就解决了同一个问题，这里补上。
+    /// 换会话（`activate` / `signOut`）时清空。
+    struct LibraryPage {
+        var items: [MediaItem] = []
+        var totalCount: Int?
+    }
+
+    var libraryPages: [MediaLibrary.ID: LibraryPage] = [:]
+
     struct HomeData {
         var resume: [MediaItem] = []
         var nextUp: [MediaItem] = []
         var latest: [MediaItem] = []
         var isLoading = false
         var error: String?
+        /// 上一次成功加载时哪几条 Rail 有内容（跨启动保留，见 `HomeRailPresence`）。
+        /// 骨架屏据此决定铺几条：写死三条的话，没有「继续观看」的服务器上
+        /// 骨架撤掉的瞬间会塌掉几百 pt——那正好是骨架屏本该消掉的跳动。
+        var railPresence = HomeRailPresence.restored()
     }
 
     var home = HomeData()

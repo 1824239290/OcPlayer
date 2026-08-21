@@ -14,6 +14,7 @@ struct BangumiChapterSection: View {
     let item: MediaItem
 
     @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(\.contentLeading) private var contentLeading
 
     @State private var linkedSubjectID: Int?
     @State private var subject: BangumiSubjectDTO?
@@ -24,6 +25,11 @@ struct BangumiChapterSection: View {
     @State private var loadError: String?
     @State private var updatingEpisodeID: Int?
     @State private var loadToken = 0
+    /// 本次读取的代次。actor 调用（`bangumi.context.…`）**不会**因为 task 被取消而抛，
+    /// 所以光靠 `.task(id:)` 的取消挡不住旧任务继续往下写：重新关联条目
+    /// （`loadToken += 1`）时若上一次 load 还在飞，旧条目的数据会压在新条目上面。
+    /// 每个写回点都对一次代次——和 DetailView / LibraryView / BangumiHomeView 的做法一致。
+    @State private var loadGeneration: UInt64 = 0
 
     /// 剧集关联挂在 series 上；电影挂自己。
     private var linkItemID: MediaItem.ID {
@@ -45,7 +51,7 @@ struct BangumiChapterSection: View {
                     .padding(.bottom, 12)
                 sectionBody
             }
-            .padding(.horizontal, Metrics.contentLeading)
+            .padding(.horizontal, contentLeading)
             .task(id: "\(item.id)-\(loadToken)-\(bangumi.isDatabaseReady)") { await load() }
             .sheet(isPresented: $showLinkPicker) {
                 BangumiLinkPicker(item: item) { subjectID in
@@ -182,6 +188,8 @@ struct BangumiChapterSection: View {
     // MARK: - 数据
 
     private func load() async {
+        loadGeneration &+= 1
+        let generation = loadGeneration
         guard bangumi.isAuthenticated, bangumi.isDatabaseReady else {
             linkedSubjectID = nil
             subject = nil
@@ -197,19 +205,22 @@ struct BangumiChapterSection: View {
         }
         isLoading = true
         loadError = nil
-        defer { isLoading = false }
+        defer { if loadGeneration == generation { isLoading = false } }
 
         // 先渲染本地缓存，再补远端。
-        await readLocal(subjectID)
+        await readLocal(subjectID, generation: generation)
         do {
             // 条目可能压根没被收藏过（关联是可以指向任意条目的），章节也可能还没拉过，
             // 这一步把两样都补齐；已经齐的不会发请求。
             try await bangumi.context.ensureSubjectLoaded(subjectID)
-            await readLocal(subjectID)
+            guard loadGeneration == generation else { return }
+            await readLocal(subjectID, generation: generation)
         } catch let e as BangumiError {
+            guard loadGeneration == generation else { return }
             loadError = e.userMessage
             BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(e)")
         } catch {
+            guard loadGeneration == generation else { return }
             loadError = "\(error)"
             BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(error)")
         }
@@ -218,13 +229,12 @@ struct BangumiChapterSection: View {
     /// 从本地库读条目与**全量**章节。
     /// 不能用进度窗口（`fetchProgressSubject`）：那个只返回本篇的一个滑动窗口，
     /// 会把 SP 和窗口外的集吃掉。
-    private func readLocal(_ subjectID: Int) async {
-        if let cached = try? await bangumi.context.subject(id: subjectID) {
-            subject = cached
-        }
-        if let cachedEpisodes = try? await bangumi.context.fetchEpisodes(subjectId: subjectID) {
-            episodes = cachedEpisodes
-        }
+    private func readLocal(_ subjectID: Int, generation: UInt64) async {
+        let cached = try? await bangumi.context.subject(id: subjectID)
+        let cachedEpisodes = try? await bangumi.context.fetchEpisodes(subjectId: subjectID)
+        guard loadGeneration == generation else { return }
+        if let cached { subject = cached }
+        if let cachedEpisodes { episodes = cachedEpisodes }
     }
 
     private func autoMatch() async {
@@ -250,6 +260,7 @@ struct BangumiChapterSection: View {
 
     private func perform(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
         guard let subjectID = linkedSubjectID, updatingEpisodeID == nil else { return }
+        let generation = loadGeneration
         updatingEpisodeID = episode.id
         defer { updatingEpisodeID = nil }
         do {
@@ -261,12 +272,15 @@ struct BangumiChapterSection: View {
                 try await bangumi.context.updateEpisodeCollection(
                     episodeId: episode.id, type: .collect, batch: true)
             }
+            guard loadGeneration == generation else { return }
             loadError = nil
-            await readLocal(subjectID)
+            await readLocal(subjectID, generation: generation)
         } catch let e as BangumiError {
+            guard loadGeneration == generation else { return }
             loadError = e.userMessage
             BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
         } catch {
+            guard loadGeneration == generation else { return }
             loadError = "\(error)"
             BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
         }

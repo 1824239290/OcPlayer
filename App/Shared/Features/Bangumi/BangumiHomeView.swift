@@ -12,9 +12,14 @@ import SwiftUI
 struct BangumiHomeView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
+    @Environment(\.contentLeading) private var contentLeading
 
     @State private var subjects: [BangumiProgressSubject] = []
+    /// 服务端/本地库里「在看」的总条数。分页要靠它判断还有没有下一页——
+    /// 原来只取第一页 100 条、`total` 拿到手就丢了，攒到 100 条以上就是静默截断。
+    @State private var totalCount = 0
     @State private var isLoading = false
+    @State private var isLoadingMore = false
     @State private var isRefreshing = false
     @State private var loadError: String?
     /// 标记章节等写操作的失败文案（以前这些错误是全静默的）。
@@ -22,6 +27,14 @@ struct BangumiHomeView: View {
     @State private var loadGeneration: UInt64 = 0
     /// 已经自动触发过首次同步，避免反复重试。
     @State private var didAutoSync = false
+
+    /// 一页的条数。首屏不再一次拉 100 条：每条要额外查一遍章节窗口，
+    /// 100 条就是几千行章节 + 上千次 JSON 解码，全在一次 await 里做完。
+    private static let pageSize = 30
+    /// 章节窗口大小。进度卡要把整季的格子铺出来，所以给得比「窗口」这个词大。
+    private static let episodeWindowSize = 50
+
+    private var hasMore: Bool { subjects.count < totalCount }
 
     /// 排序偏好跨启动保留。
     @AppStorage("dev.jumusu.ocplayer.bangumi.progressSort") private var sortRaw = SortOption.collected.rawValue
@@ -130,8 +143,11 @@ struct BangumiHomeView: View {
                                 reportError: { actionError = $0 }
                             )
                         }
+                        if hasMore || isLoadingMore {
+                            loadMoreFooter
+                        }
                     }
-                    .padding(.horizontal, Metrics.contentLeading)
+                    .padding(.horizontal, contentLeading)
                     .padding(.top, 16)
                     .padding(.bottom, 48)
                 }
@@ -140,6 +156,9 @@ struct BangumiHomeView: View {
         }
         .searchable(text: $searchKeyword, prompt: "搜索 Bangumi 条目")
         .navigationTitle("Bangumi")
+        #if os(macOS)
+        .navigationSubtitle(progressSubtitle)
+        #endif
         .toolbar { toolbar }
         .onChange(of: searchKeyword) { _, newValue in
             searchTask?.cancel()
@@ -155,6 +174,33 @@ struct BangumiHomeView: View {
                 guard !Task.isCancelled else { return }
                 await performSearch(trimmed)
             }
+        }
+    }
+
+    /// macOS 副标题里报一下总数：分页之后「屏幕上这些不等于全部」，得说出来。
+    private var progressSubtitle: String {
+        guard totalCount > 0 else { return "" }
+        if subjects.count < totalCount {
+            return "在看 \(subjects.count) / \(totalCount)"
+        }
+        return "在看 \(totalCount)"
+    }
+
+    /// 分页尾部：进入可视区自动预取下一页（同 LibraryView）。
+    private var loadMoreFooter: some View {
+        VStack(spacing: 10) {
+            if isLoadingMore {
+                ProgressView().controlSize(.regular)
+            } else {
+                Button("加载更多") { Task { await loadMore() } }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .onAppear {
+            guard hasMore, !isLoading, !isLoadingMore else { return }
+            Task { await loadMore() }
         }
     }
 
@@ -182,7 +228,7 @@ struct BangumiHomeView: View {
                             SearchResultRow(subject: subject)
                         }
                     }
-                    .padding(.horizontal, Metrics.contentLeading)
+                    .padding(.horizontal, contentLeading)
                     .padding(.top, 16)
                     .padding(.bottom, 48)
                 }
@@ -217,7 +263,7 @@ struct BangumiHomeView: View {
                     .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 }
             }
-            .padding(.horizontal, Metrics.contentLeading)
+            .padding(.horizontal, contentLeading)
             .padding(.top, 16)
         }
         .skeletonShimmer()
@@ -296,9 +342,11 @@ struct BangumiHomeView: View {
         do {
             let page = try await bangumi.context.fetchProgressSubjects(
                 tab: .anime, sortMode: sortOption.mode, search: "",
-                episodeWindowSize: 50, limit: 100, offset: 0)
+                episodeWindowSize: Self.episodeWindowSize,
+                limit: Self.pageSize, offset: 0)
             guard loadGeneration == gen else { return }
             subjects = page.data
+            totalCount = page.total
         } catch let e as BangumiError {
             guard loadGeneration == gen else { return }
             loadError = e.userMessage
@@ -307,6 +355,35 @@ struct BangumiHomeView: View {
             guard loadGeneration == gen else { return }
             loadError = "\(error)"
             BangumiDiagnostics.log("进度页加载失败 error=\(error)")
+        }
+    }
+
+    /// 追加下一页。`loadGeneration` 不动——它是「整份重取」的代次，
+    /// 翻页只往后接，用它做守卫就够了（中途发生重取会让代次变化，这一页被丢掉）。
+    private func loadMore() async {
+        guard hasMore, !isLoading, !isLoadingMore else { return }
+        let gen = loadGeneration
+        let offset = subjects.count
+        isLoadingMore = true
+        defer { if loadGeneration == gen { isLoadingMore = false } }
+        do {
+            let page = try await bangumi.context.fetchProgressSubjects(
+                tab: .anime, sortMode: sortOption.mode, search: "",
+                episodeWindowSize: Self.episodeWindowSize,
+                limit: Self.pageSize, offset: offset)
+            guard loadGeneration == gen else { return }
+            // 去重追加：本地库在两次分页之间可能被同步改过，同一条目可能重复出现。
+            let existing = Set(subjects.map(\.subject.id))
+            subjects.append(contentsOf: page.data.filter { !existing.contains($0.subject.id) })
+            totalCount = page.total
+        } catch let e as BangumiError {
+            guard loadGeneration == gen else { return }
+            actionError = e.userMessage
+            BangumiDiagnostics.log("进度页翻页失败 offset=\(offset) error=\(e)")
+        } catch {
+            guard loadGeneration == gen else { return }
+            actionError = "\(error)"
+            BangumiDiagnostics.log("进度页翻页失败 offset=\(offset) error=\(error)")
         }
     }
 
@@ -331,7 +408,7 @@ struct BangumiHomeView: View {
 
     private func reloadSubject(_ subjectID: Int) async {
         guard let updated = try? await bangumi.context.fetchProgressSubject(
-            subjectId: subjectID, episodeWindowSize: 50)
+            subjectId: subjectID, episodeWindowSize: Self.episodeWindowSize)
         else { return }
         guard let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) else { return }
         subjects[idx] = updated
@@ -374,20 +451,35 @@ private struct ProgressCard: View {
     @State private var updatingEpisodeID: Int?
 
     private var subject: BangumiSubjectDTO { item.subject }
-    private var mainEpisodes: [BangumiEpisodeDTO] { item.episodes.filter { $0.type == .main } }
-    private var spEpisodes: [BangumiEpisodeDTO] { item.episodes.filter { $0.type == .sp } }
+
+    /// 本篇 / SP 分组只算一次。`body` 会因为 `updatingEpisodeID` 变化重算，
+    /// 而窗口最多 50 集——原来 `mainEpisodes` / `spEpisodes` 是 computed property，
+    /// 一次 body 里各被读两遍（判空 + 传给网格），等于每次重算扫四遍数组。
+    private var partitioned: (main: [BangumiEpisodeDTO], sp: [BangumiEpisodeDTO]) {
+        var main: [BangumiEpisodeDTO] = []
+        var sp: [BangumiEpisodeDTO] = []
+        for episode in item.episodes {
+            switch episode.type {
+            case .main: main.append(episode)
+            case .sp: sp.append(episode)
+            default: break
+            }
+        }
+        return (main, sp)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let episodes = partitioned
+        return VStack(alignment: .leading, spacing: 10) {
             header
-            if !mainEpisodes.isEmpty {
-                episodeGrid(mainEpisodes)
+            if !episodes.main.isEmpty {
+                episodeGrid(episodes.main)
             }
-            if !spEpisodes.isEmpty {
+            if !episodes.sp.isEmpty {
                 Text("SP")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                episodeGrid(spEpisodes)
+                episodeGrid(episodes.sp)
             }
             if !item.hasEpisodeData {
                 // 章节还没同步下来：明确说出来，别让空网格看着像「没有剧集」。
@@ -443,6 +535,10 @@ private struct ProgressCard: View {
     }
 
     /// 中性细轨，与 StillCard 的进度条同一套（`primary` 透明度，不用色相）。
+    ///
+    /// 这里的 GeometryReader 是**留着的**：宽度是真动态的（卡片剩余宽度取决于
+    /// 封面宽 + 两处 spacing + 卡片 padding + 窗口宽），从那堆常量倒推比测一下更脆。
+    /// 相比之下 `EpisodeSelectCard` / 详情页播放钮的宽度是写死的常量，那两处已改成直接乘。
     private func progressTrack(_ fraction: Double) -> some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {

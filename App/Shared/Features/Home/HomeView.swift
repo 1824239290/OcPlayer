@@ -91,11 +91,31 @@ struct HomeView: View {
     }
 
     private var loadingState: some View {
-        VStack(spacing: 14) {
-            ProgressView().controlSize(.large)
-            Text("正在连接 \(app.serverLabel)…").foregroundStyle(.secondary)
+        // 骨架屏：铺和真实布局同尺寸的 Rail（继续观看 / 接下来看 = 剧照卡，
+        // 最近添加 = 海报卡），数据加载完原位替换。
+        //
+        // 铺几条按上一次成功加载的结论走（`home.railPresence`，跨启动保留）——
+        // 写死三条的话，没有「继续观看」的服务器上骨架撤掉时会塌掉几百 pt。
+        let presence = app.home.railPresence
+        // 上一次三条全空（空库 / 全新服务器）：还是铺一条，全空的加载页看着像卡死。
+        let showsLatest = presence.latest || presence.railCount == 0
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if presence.resume {
+                    SkeletonRail(title: "继续观看", kind: .still)
+                }
+                if presence.nextUp {
+                    SkeletonRail(title: "接下来看", kind: .still)
+                }
+                if showsLatest {
+                    SkeletonRail(title: "最近添加", kind: .poster)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 12)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scrollDisabled(true)
+        .skeletonShimmer()
     }
 
     private func errorState(_ message: String) -> some View {

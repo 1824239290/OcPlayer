@@ -18,6 +18,7 @@ extension Color {
 struct DetailView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.contentLeading) private var contentLeading
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
@@ -47,8 +48,7 @@ struct DetailView: View {
     var body: some View {
         Group {
             if isLoading && detail == nil {
-                ProgressView().controlSize(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                skeleton
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -80,6 +80,76 @@ struct DetailView: View {
         .task(id: item.id) { await load() }
     }
 
+    /// 详情页骨架：**和真实内容同结构**——banner（含左下海报 + 标题/元数据/播放钮）
+    /// → metadata 区 →（仅剧集）季选择行 + 选集占位。数据加载完原位替换。
+    ///
+    /// 季选择行和选集条只在剧集下铺：`shown` 在加载期就是列表页带来的 `item`，
+    /// `kind` 是已知的。写死铺出来的话，打开一部**电影**时骨架会比真实内容高出两百多 pt，
+    /// 撤掉的瞬间整页往上跳。
+    private var skeleton: some View {
+        VStack(spacing: 0) {
+            skeletonBanner
+            skeletonMetadata
+            if shown.kind == .series {
+                skeletonSeasonBar
+                SkeletonEpisodeStrip()
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .skeletonShimmer()
+    }
+
+    /// 横幅：和 `banner` 同高，左下是海报位 + 标题/元数据/按钮条。
+    private var skeletonBanner: some View {
+        ZStack(alignment: .bottomLeading) {
+            SkeletonBlock(cornerRadius: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(alignment: .bottom, spacing: 24) {
+                SkeletonBlock()
+                    .frame(width: 120, height: 180)
+                VStack(alignment: .leading, spacing: 8) {
+                    SkeletonBlock(cornerRadius: 4)
+                        .frame(width: 220, height: 26)
+                    SkeletonBlock(cornerRadius: 4)
+                        .frame(width: 140, height: 14)
+                    SkeletonBlock(cornerRadius: 4)
+                        .frame(width: 90, height: 14)
+                    SkeletonBlock(cornerRadius: Metrics.bannerActionHeight / 2)
+                        .frame(width: Self.playButtonWidth, height: Metrics.bannerActionHeight)
+                }
+            }
+            .padding(.horizontal, contentLeading)
+            .padding(.bottom, 28)
+        }
+        .frame(height: Metrics.bannerHeight)
+        .clipped()
+    }
+
+    /// 简介区：和真实 `metadata` 同 padding（top 20）。
+    private var skeletonMetadata: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SkeletonBlock(cornerRadius: 4).frame(width: 420, height: 14)
+            SkeletonBlock(cornerRadius: 4).frame(width: 340, height: 14)
+            SkeletonBlock(cornerRadius: 4).frame(width: 380, height: 14)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, contentLeading)
+        .padding(.top, 20)
+    }
+
+    /// 「剧集 + 季选择器」行：和真实 `seasonBar` 同 padding（top 26 + bottom 12）。
+    private var skeletonSeasonBar: some View {
+        HStack {
+            SkeletonBlock(cornerRadius: 4).frame(width: 60, height: 20)
+            Spacer()
+            SkeletonBlock(cornerRadius: 6).frame(width: 110, height: 26)
+        }
+        .padding(.horizontal, contentLeading)
+        .padding(.top, 26)
+        .padding(.bottom, 12)
+    }
+
     // MARK: - 顶部横幅
 
     private var banner: some View {
@@ -99,7 +169,7 @@ struct DetailView: View {
             LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.3), .clear],
                            startPoint: .bottom, endPoint: .top)
         }
-        .frame(height: 320)
+        .frame(height: Metrics.bannerHeight)
         // Overlay against the already-sized banner. A bottom-aligned HStack inside
         // the ZStack can use its intrinsic height and fall below the banner, where
         // `.clipped()` cuts off the poster and controls.
@@ -126,7 +196,7 @@ struct DetailView: View {
                     playbackActions
                 }
             }
-            .padding(.horizontal, Metrics.contentLeading)
+            .padding(.horizontal, contentLeading)
             .padding(.bottom, 28)
         }
         .clipped()
@@ -193,10 +263,11 @@ struct DetailView: View {
             }
         }
         // 固定行高，避免图标/字体 metrics 把一侧撑高。
-        .frame(height: Self.bannerActionHeight, alignment: .center)
+        .frame(height: Metrics.bannerActionHeight, alignment: .center)
     }
 
-    private static let bannerActionHeight: CGFloat = 40
+    /// 播放胶囊宽度。骨架也用它，两边不会错开。
+    static let playButtonWidth: CGFloat = 228
 
     private var playButton: some View {
         Button(action: playCurrent) {
@@ -204,11 +275,12 @@ struct DetailView: View {
                 Rectangle()
                     .fill(.white.opacity(resumeProgress == nil ? 0.78 : 0.34))
                 if let progress = resumeProgress {
-                    GeometryReader { proxy in
-                        Rectangle()
-                            .fill(.white.opacity(0.82))
-                            .frame(width: proxy.size.width * progress)
-                    }
+                    // 宽度是定死的 `playButtonWidth`，直接乘比例就行，不用 GeometryReader——
+                    // 它测出来的就是我们已经知道的那个常量，而 `resumeProgress` 一变
+                    // （选中集切换、标记已看）就要多跑一轮布局，横幅上尤其不划算。
+                    Rectangle()
+                        .fill(.white.opacity(0.82))
+                        .frame(width: Self.playButtonWidth * progress)
                 }
 
                 Text(playButtonLabel)
@@ -218,7 +290,7 @@ struct DetailView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }
-            .frame(width: 228, height: Self.bannerActionHeight)
+            .frame(width: Self.playButtonWidth, height: Metrics.bannerActionHeight)
             // Only the outer capsule is rounded. The progress rectangle keeps
             // a full-height vertical boundary like the native resume control.
             .clipShape(Capsule())
@@ -253,7 +325,7 @@ struct DetailView: View {
                         .symbolEffect(.bounce, value: played)
                 }
             }
-            .frame(width: Self.bannerActionHeight, height: Self.bannerActionHeight)
+            .frame(width: Metrics.bannerActionHeight, height: Metrics.bannerActionHeight)
             .clipShape(Capsule())
             .contentShape(Capsule())
         }
@@ -344,7 +416,7 @@ struct DetailView: View {
                     .lineSpacing(4)
             }
         }
-        .padding(.horizontal, Metrics.contentLeading)
+        .padding(.horizontal, contentLeading)
         .padding(.top, 20)
     }
 
@@ -363,7 +435,7 @@ struct DetailView: View {
                 .pickerStyle(.menu)
             }
         }
-        .padding(.horizontal, Metrics.contentLeading)
+        .padding(.horizontal, contentLeading)
         .padding(.top, 26)
         .padding(.bottom, 12)
         .task(id: selectedSeasonID) { await loadEpisodes() }
@@ -372,14 +444,7 @@ struct DetailView: View {
     private var episodeList: some View {
         Group {
             if isLoadingEpisodes {
-                HStack {
-                    Spacer()
-                    ProgressView().controlSize(.small)
-                    Spacer()
-                }
-                .padding(.vertical, 20)
-                .padding(.horizontal, Metrics.contentLeading)
-                .transition(.opacity)
+                skeletonEpisodes
             } else if let episodeLoadError {
                 ContentUnavailableView {
                     Label("集列表加载失败", systemImage: "wifi.exclamationmark")
@@ -390,13 +455,13 @@ struct DetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .padding(.horizontal, Metrics.contentLeading)
+                .padding(.horizontal, contentLeading)
                 .transition(.opacity)
             } else if episodes.isEmpty {
                 ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .padding(.horizontal, Metrics.contentLeading)
+                    .padding(.horizontal, contentLeading)
                     .transition(.opacity)
             } else {
                 episodePickerRail
@@ -414,12 +479,20 @@ struct DetailView: View {
         reduceMotion ? nil : .easeInOut(duration: 0.2)
     }
 
+    /// 选集加载骨架：一排和 `EpisodeSelectCard` 同尺寸的占位卡，切季时不闪不跳。
+    /// 和首屏骨架共用 `SkeletonEpisodeStrip`（原来是复制粘贴的两份）。
+    private var skeletonEpisodes: some View {
+        SkeletonEpisodeStrip()
+            .skeletonShimmer()
+            .transition(.opacity)
+    }
+
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
     private var episodePickerRail: some View {
         HoverArrowHScroll(
             items: episodes,
             scrollStep: 4,
-            contentLeading: Metrics.contentLeading,
+            contentLeading: contentLeading,
             edgeReserve: 28,
             verticalPadding: 10,
             // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
@@ -687,7 +760,7 @@ struct DetailView: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(.secondary)
-        .padding(.horizontal, Metrics.contentLeading)
+        .padding(.horizontal, contentLeading)
         .padding(.top, 14)
     }
 }

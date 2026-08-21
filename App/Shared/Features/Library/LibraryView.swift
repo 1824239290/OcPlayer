@@ -7,17 +7,21 @@ import SwiftUI
 struct LibraryView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.contentLeading) private var contentLeading
 
     let library: MediaLibrary
 
     private static let pageSize = 100
 
-    @State private var items: [MediaItem] = []
-    @State private var totalCount: Int?
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var loadError: String?
     @State private var activeLoadID: UUID?
+
+    /// 分页数据住在 `AppModel.libraryPages`，不在视图 `@State` 里：
+    /// 侧栏切走再切回来时不用从第一页重拉（见 `AppModel.LibraryPage`）。
+    private var items: [MediaItem] { app.libraryPages[library.id]?.items ?? [] }
+    private var totalCount: Int? { app.libraryPages[library.id]?.totalCount }
 
     private var columns: [GridItem] {
         [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
@@ -34,8 +38,7 @@ struct LibraryView: View {
     var body: some View {
         Group {
             if isLoading && items.isEmpty {
-                ProgressView().controlSize(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                skeletonGrid
             } else if let loadError, items.isEmpty {
                 ContentUnavailableView {
                     Label("加载失败", systemImage: "wifi.exclamationmark")
@@ -54,8 +57,27 @@ struct LibraryView: View {
         #if os(macOS)
         .navigationSubtitle(subtitleText)
         #endif
-        .task(id: library.id) { await reload() }
+        .task(id: library.id) { await loadIfNeeded() }
     }
+
+    /// 首屏骨架：一墙和真实网格同列宽/同卡片尺寸的灰色海报卡，加载完原位替换。
+    private var skeletonGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: Metrics.railSpacing + 8) {
+                ForEach(0..<Self.skeletonCount, id: \.self) { _ in
+                    SkeletonPosterCard()
+                }
+            }
+            .padding(.horizontal, contentLeading)
+            .padding(.vertical, 28)
+        }
+        // 骨架不该比真实内容更能滚（滚动条会闪一下），也不用真去测窗口高度：
+        // `LazyVGrid` 只实例化可视行，卡数给足够铺满最高常见窗口即可，多给不吃成本。
+        .scrollDisabled(true)
+        .skeletonShimmer()
+    }
+
+    private static let skeletonCount = 36
 
     private var subtitleText: String {
         if let totalCount {
@@ -74,7 +96,7 @@ struct LibraryView: View {
                     .transition(reduceMotion ? .identity : .opacity)
                 }
             }
-            .padding(.horizontal, Metrics.contentLeading)
+            .padding(.horizontal, contentLeading)
             .padding(.vertical, 28)
 
             if hasMore || isLoadingMore {
@@ -128,6 +150,19 @@ struct LibraryView: View {
         }
     }
 
+    /// 切到这个库时：缓存里已经有内容就直接用，不重新请求。
+    /// 视图实例在两个库之间是复用的（同一个 `case .library` 分支），
+    /// 所以这里要顺手把上一个库残留的加载/错误态清掉。
+    private func loadIfNeeded() async {
+        loadError = nil
+        guard items.isEmpty else {
+            isLoading = false
+            isLoadingMore = false
+            return
+        }
+        await load(reset: true)
+    }
+
     private func reload() async {
         await load(reset: true)
     }
@@ -138,14 +173,14 @@ struct LibraryView: View {
     }
 
     private func load(reset: Bool) async {
-        let loadID = UUID()
-        activeLoadID = loadID
-
         guard let server = app.server else {
             isLoading = false
             isLoadingMore = false
             return
         }
+
+        let loadID = UUID()
+        activeLoadID = loadID
 
         let libraryID = library.id
         let kinds = itemKinds
@@ -174,14 +209,16 @@ struct LibraryView: View {
                 limit: Self.pageSize
             )
             guard !Task.isCancelled, activeLoadID == loadID else { return }
+            var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())
             if reset {
-                items = page.items
+                cached.items = page.items
             } else {
                 // 防御服务端重复页：按 id 去重追加。
-                let existing = Set(items.map(\.id))
-                items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
+                let existing = Set(cached.items.map(\.id))
+                cached.items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
             }
-            totalCount = page.totalRecordCount
+            cached.totalCount = page.totalRecordCount
+            app.libraryPages[libraryID] = cached
             loadError = nil
         } catch is CancellationError {
             return

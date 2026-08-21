@@ -22,16 +22,43 @@ private struct DetailPlayChromeButtonStyle: ButtonStyle {
             .brightness(configuration.isPressed ? -0.06 : 0)
             .opacity(configuration.isPressed ? 0.92 : 1)
             #if os(macOS)
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
+            .modifier(PointingHandCursor())
             #endif
     }
 }
+
+#if os(macOS)
+/// 悬停时把光标换成小手。
+///
+/// `NSCursor.push()` / `pop()` 是一个栈，**必须配平**：视图在悬停中被移除时
+/// （返回上一页、`canTogglePlayed` 翻转把「已看过」钮摘掉、切季重建列表）
+/// `onHover(false)` 不会再来，`pop()` 就永远不执行——小手光标会一直留在屏幕上，
+/// 直到别处的 push/pop 偶然把栈撞回来。所以 `onDisappear` 也要兜一次，
+/// 并用 `pushed` 标志保证只 pop 自己压进去的那一层。
+private struct PointingHandCursor: ViewModifier {
+    @State private var pushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                if hovering {
+                    guard !pushed else { return }
+                    pushed = true
+                    NSCursor.pointingHand.push()
+                } else {
+                    pop()
+                }
+            }
+            .onDisappear(perform: pop)
+    }
+
+    private func pop() {
+        guard pushed else { return }
+        pushed = false
+        NSCursor.pop()
+    }
+}
+#endif
 
 // MARK: - 横向选集卡（点选中，不直接播放）
 
@@ -45,8 +72,8 @@ struct EpisodeSelectCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
-    private let cardWidth: CGFloat = 200
-    private let thumbHeight: CGFloat = 112
+    private var cardWidth: CGFloat { Metrics.episodeCardWidth }
+    private var thumbHeight: CGFloat { Metrics.episodeThumbHeight }
 
     var body: some View {
         Button(action: onSelect) {
@@ -65,9 +92,12 @@ struct EpisodeSelectCard: View {
                     )
 
                     if episode.playState?.played == true {
+                        // 用 accentColor 而不是硬编码的绿：设计系统只用「中性 primary +
+                        // accent 表示已生效」两色（同 BangumiEpisodeCell / 下面那条进度轨），
+                        // 绿勾配蓝轨会让同一张卡上出现两个色相。
                         Image(systemName: "checkmark.circle.fill")
                             .font(.footnote)
-                            .foregroundStyle(.white, .green)
+                            .foregroundStyle(.white, Color.accentColor)
                             .padding(8)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     }
@@ -133,15 +163,16 @@ struct EpisodeSelectCard: View {
     private var progressTrack: some View {
         let progress = episodeProgress
         if progress > 0.02, episode.playState?.played != true {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Rectangle().fill(Color.white.opacity(0.22))
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(width: proxy.size.width * progress)
-                }
+            // 轨道宽度就是定死的 `cardWidth`，直接乘比例，不用 GeometryReader——
+            // 横向 LazyHStack 里每张卡塞一个测量器会多出一轮布局往返，
+            // 而它测出来的就是我们已经知道的那个常量（同 `StillCard.progressTrack`）。
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.white.opacity(0.22))
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: cardWidth * progress)
             }
-            .frame(height: 3)
+            .frame(width: cardWidth, height: 3)
         }
     }
 

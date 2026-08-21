@@ -29,8 +29,19 @@ enum Metrics {
     static let cardRadius: CGFloat = 10
     static let railSpacing: CGFloat = 22
     static let contentInset: CGFloat = 52
+    /// 紧凑宽度（iPhone、iPad 分屏窄窗）的横向留白。
+    static let compactContentInset: CGFloat = 22
     /// Rail 横向 ScrollView 上下为悬停放大预留的内边距（上下各一档）。
     static let railHoverPadding: CGFloat = 28
+
+    /// 详情页横幅高度与横幅内主操作行高。真实内容和骨架共用同一组常量，
+    /// 免得改了一边忘了另一边、骨架撤掉时横幅高度跳一下。
+    static let bannerHeight: CGFloat = 320
+    static let bannerActionHeight: CGFloat = 40
+
+    /// 详情页横向选集卡尺寸（`EpisodeSelectCard` 与它的骨架共用）。
+    static let episodeCardWidth: CGFloat = 200
+    static let episodeThumbHeight: CGFloat = 112
 
     /// 海报卡（图 2:3 + 标题行）在 Rail 里的可视高度，含 hover 留白。
     static var posterRailHeight: CGFloat {
@@ -42,17 +53,266 @@ enum Metrics {
         stillWidth * 9 / 16 + 6 + 3 + 10 + 40 + railHoverPadding * 2
     }
 
-    /// iPhone 把横向留白压小；Mac / iPad 用设计稿的 52。
-    @MainActor static var contentLeading: CGFloat {
-        #if os(macOS)
-        contentInset
-        #else
-        UIDevice.current.userInterfaceIdiom == .pad ? contentInset : 22
-        #endif
+    /// 加载占位的统一灰。骨架块和 `RemoteImage` 的图片占位都用它——
+    /// 两边取值不同的话，骨架撤掉换成真实卡片、而图还在下载的那一瞬间，
+    /// 整墙灰块会明显「变深一档」。
+    static let placeholderTint: Double = 0.08
+    static var placeholderFill: Color { Color.primary.opacity(placeholderTint) }
+}
+
+// MARK: - 横向留白（跟窗口宽度走，不跟设备型号走）
+
+private struct ContentLeadingKey: EnvironmentKey {
+    static let defaultValue: CGFloat = Metrics.contentInset
+}
+
+extension EnvironmentValues {
+    /// 页面横向留白，由 `AppShellView` 按 `horizontalSizeClass` 注入。
+    ///
+    /// **不能用 `UIDevice.current.userInterfaceIdiom` 判断**：那是设备属性而不是窗口属性。
+    /// iPad 拖到 1/3 宽时 `horizontalSizeClass` 已经是 `.compact`，但 idiom 仍然是 `.pad`，
+    /// 于是窄窗里左右各留 52pt——内容区只剩 216pt，一张 178pt 的海报都排不出第二列。
+    var contentLeading: CGFloat {
+        get { self[ContentLeadingKey.self] }
+        set { self[ContentLeadingKey.self] = newValue }
     }
 }
 
 // MARK: - 通用小组件
+
+/// 骨架屏的单一灰色圆角块。数据加载中用它占位，和真实内容同尺寸，
+/// 加载完原位替换 → 不闪、不跳。微光相位从环境读（`skeletonShimmer()` 注入），
+/// 整页骨架共享同一条扫过亮带。
+///
+/// 亮带的实现有两处刻意的选择：
+/// - **裁剪走外层 `clipShape`**：`.overlay` 贴的是 view 的 *frame*，不是圆角路径，
+///   不裁的话亮带会从圆角外那块透明区域漏出来。
+/// - **位移走 `visualEffect` 而不是 `GeometryReader`**：一墙骨架有几十个块
+///   （macOS 媒体库首屏 24 张卡 × 2 块），每块塞一个测量器就是几十轮布局往返；
+///   `visualEffect` 在渲染期拿几何，不进布局。
+struct SkeletonBlock: View {
+    var cornerRadius: CGFloat = Metrics.cardRadius
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.skeletonPhase) private var phase
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+        shape
+            .fill(Metrics.placeholderFill)
+            .overlay {
+                if let phase, !reduceMotion {
+                    shimmerBand(phase: phase)
+                }
+            }
+            .clipShape(shape)
+    }
+
+    /// 一条横向渐隐的亮带，从块的左外侧扫到右外侧。
+    ///
+    /// 渐变必须沿 `.leading → .trailing`：原来写的是 `.top → .bottom`，
+    /// 亮带就变成竖向渐隐 + 横向两条硬切边，扫过时看到的是硬边矩形在滑。
+    private func shimmerBand(phase: CGFloat) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, highlight, .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .visualEffect { content, proxy in
+                content.offset(x: proxy.size.width * (2 * phase - 1))
+            }
+            .allowsHitTesting(false)
+    }
+
+    /// 亮带强度按主题分开给，不能两边共用一个值。
+    ///
+    /// 底色是 `primary.opacity(0.08)`：浅色下它是「白底上的浅灰」（≈#EBEBEB），
+    /// 离白只有 20 级，亮带给多了也提不上去；深色下它是「黑底上的深灰」（≈#141414），
+    /// 同样一档白透明度在这里的色差要大得多。
+    /// 原来两边共用 `white.opacity(0.18)`，浅色下只有 5 级色差、深色下有 40 级——
+    /// 同一段代码在两个主题下一个「看不出在动」、一个「明显在动」。
+    private var highlight: Color {
+        colorScheme == .dark ? .white.opacity(0.10) : .white.opacity(0.55)
+    }
+}
+
+/// 骨架屏动画驱动器：包住骨架布局，让子块共享一个循环扫过的 phase。
+/// 减弱动态效果时不播。
+///
+/// 顺带把整块骨架对读屏收成一句「正在加载」——骨架里全是 `Shape`，
+/// 而 Shape 不是无障碍元素，不加这一层的话 VoiceOver 在加载态下**什么都读不到**
+/// （改成骨架之前这里是 `ProgressView` + 文案，是能读出来的）。
+struct SkeletonShimmer: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.skeletonPhase, reduceMotion ? nil : phase)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("正在加载…")
+            .accessibilityAddTraits(.updatesFrequently)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+private struct SkeletonPhaseKey: EnvironmentKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+extension EnvironmentValues {
+    var skeletonPhase: CGFloat? {
+        get { self[SkeletonPhaseKey.self] }
+        set { self[SkeletonPhaseKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// 骨架屏外层容器：子 `SkeletonBlock` 自动共享同一 shimmer 相位。
+    func skeletonShimmer() -> some View {
+        modifier(SkeletonShimmer())
+    }
+}
+
+/// 骨架海报卡：2:3 图块 + 标题条，和 `PosterCard` 同尺寸。
+struct SkeletonPosterCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            SkeletonBlock()
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .frame(width: Metrics.posterWidth)
+            SkeletonBlock(cornerRadius: 4)
+                .frame(width: Metrics.posterWidth * 0.7, height: 12)
+        }
+        .frame(width: Metrics.posterWidth, alignment: .leading)
+    }
+}
+
+/// 骨架剧照卡：16:9 图块 + 两行文案条，和 `StillCard` 同尺寸。
+struct SkeletonStillCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SkeletonBlock()
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .frame(width: Metrics.stillWidth)
+            SkeletonBlock(cornerRadius: 4)
+                .frame(width: Metrics.stillWidth * 0.55, height: 12)
+            SkeletonBlock(cornerRadius: 4)
+                .frame(width: Metrics.stillWidth * 0.35, height: 10)
+        }
+        .frame(width: Metrics.stillWidth, alignment: .leading)
+    }
+}
+
+/// 骨架横向 Rail：标题 + 一排同尺寸骨架卡，和真实 `Rail` 布局一致。
+///
+/// 间距 / 上边距必须跟 `Rail` 完全对齐（`spacing: 14`、`.padding(.top, 24)`），
+/// 否则骨架撤掉的瞬间每条 Rail 都会错开几 pt——那正好是骨架屏要消掉的东西。
+struct SkeletonRail: View {
+    let title: String
+    let kind: RailKind
+
+    @Environment(\.contentLeading) private var contentLeading
+
+    enum RailKind {
+        case poster   // 2:3 海报卡
+        case still    // 16:9 剧照卡
+    }
+
+    private var cardCount: Int {
+        #if os(iOS)
+        return 3
+        #else
+        return 5
+        #endif
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 标题位用真实文案垫宽（`.hidden()` 只占位不绘制），灰条盖在它上面：
+            // 比写死一个宽度更贴合真实标题的行宽与基线。
+            Text(title)
+                .font(.title3.weight(.bold))
+                .hidden()
+                .overlay {
+                    SkeletonBlock(cornerRadius: 4)
+                        .padding(.vertical, 3)
+                }
+                .padding(.horizontal, contentLeading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Metrics.railSpacing) {
+                    ForEach(0..<cardCount, id: \.self) { _ in
+                        switch kind {
+                        case .poster: SkeletonPosterCard()
+                        case .still: SkeletonStillCard()
+                        }
+                    }
+                }
+                .padding(.horizontal, contentLeading)
+                .padding(.vertical, Metrics.railHoverPadding)
+            }
+            .frame(height: skeletonHeight)
+            // 骨架不该比真实内容更能滚：真实 Rail 卡片铺不满时也是不滚的。
+            .scrollDisabled(true)
+        }
+        .padding(.top, 24)
+    }
+
+    /// 卡片区可视高度：和真实 Rail 的 scrollHeight 对齐，避免骨架与内容间跳动。
+    private var skeletonHeight: CGFloat {
+        switch kind {
+        case .poster: Metrics.posterRailHeight
+        case .still: Metrics.stillRailHeight
+        }
+    }
+}
+
+/// 选集横向条的骨架：一排和 `EpisodeSelectCard` 同尺寸的占位卡。
+/// 详情页首屏骨架和「切季重新拉集」共用这一份（原来是复制粘贴的两份，
+/// 各自还带着同一个凑出来的高度魔法数）。
+///
+/// 不锁总高度：真实选集条（`HoverArrowHScroll`，`fixedHeight` 为 nil）也是自适应的，
+/// 这里按同样的结构堆出来让它自己算，就不会有「骨架 164、内容 187」这种对不上的常数。
+struct SkeletonEpisodeStrip: View {
+    var cardCount: Int = 6
+
+    @Environment(\.contentLeading) private var contentLeading
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(0..<cardCount, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: 8) {
+                        SkeletonBlock(cornerRadius: 8)
+                            .frame(
+                                width: Metrics.episodeCardWidth,
+                                height: Metrics.episodeThumbHeight
+                            )
+                        // 与 EpisodeSelectCard 的「集号 + 标题」两行同结构（spacing 2）
+                        VStack(alignment: .leading, spacing: 2) {
+                            SkeletonBlock(cornerRadius: 3)
+                                .frame(width: 54, height: 11)
+                            SkeletonBlock(cornerRadius: 3)
+                                .frame(width: 150, height: 13)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, contentLeading)
+            .padding(.vertical, 10)
+        }
+        .scrollDisabled(true)
+    }
+}
 
 /// 时长格式：87 分钟 →「1 小时 27 分」；剧集分钟数 →「44 分钟」。
 struct RuntimeText: View {
@@ -294,7 +554,8 @@ struct StillCard: View {
 struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
     let items: [Item]
     var scrollStep: Int = 3
-    var contentLeading: CGFloat = Metrics.contentLeading
+    /// 页面横向留白。调用方从 `\.contentLeading` 环境值取，随窗口宽度变化。
+    var contentLeading: CGFloat = Metrics.contentInset
     /// 列表左右额外内边距，给悬浮箭头留点击空隙。
     var edgeReserve: CGFloat = 28
     var verticalPadding: CGFloat = Metrics.railHoverPadding
@@ -515,6 +776,8 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
     let items: [Item]
     private let itemContent: (Item) -> ItemContent
 
+    @Environment(\.contentLeading) private var contentLeading
+
     init(
         _ title: String,
         kind: Kind = .flexible,
@@ -533,13 +796,13 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             Text(title)
                 .font(.title3.weight(.bold))
-                .padding(.horizontal, Metrics.contentLeading)
+                .padding(.horizontal, contentLeading)
 
             if showsScrollArrows, items.count > 1 {
                 HoverArrowHScroll(
                     items: items,
                     scrollStep: kind.scrollStep,
-                    contentLeading: Metrics.contentLeading,
+                    contentLeading: contentLeading,
                     edgeReserve: 28,
                     verticalPadding: Metrics.railHoverPadding,
                     arrowYOffset: kind.arrowYOffset,
@@ -561,7 +824,7 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
                     itemContent(item)
                 }
             }
-            .padding(.horizontal, Metrics.contentLeading)
+            .padding(.horizontal, contentLeading)
             .padding(.vertical, Metrics.railHoverPadding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

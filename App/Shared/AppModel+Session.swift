@@ -51,6 +51,7 @@ extension AppModel {
         guard let session = loginSession else { return }
         quickConnectTask?.cancel()
         quickConnectCode = nil
+        quickConnectError = nil
         quickConnectTask = Task { [weak self] in
             do {
                 for try await event in session.quickConnectEvents {
@@ -60,20 +61,28 @@ extension AppModel {
                         self.quickConnectCode = code
                     case let .authenticated(secret):
                         await self.completeLogin { try await session.signIn(quickConnectSecret: secret) }
+                        return
                     }
                 }
+                // 流正常结束但没走到 authenticated：服务器停止发码 / 配对超时。
+                // 不报到这里的话，面板会一直转「正在申请配对码…」，看不出已经没戏了。
+                guard let self, self.loginSession === session, !self.isAuthenticating,
+                      self.phase == .onboarding
+                else { return }
+                self.quickConnectError = "Quick Connect 配对已超时，请用下方账号密码登录。"
             } catch is CancellationError {
             } catch let error as JellyfinError {
-                // Quick Connect 没开 / 超时：提示一句，账号密码仍然可用。
-                // 别覆盖正在进行的密码登录 / 已成功的状态（用户在输密码时 QC 后台超时也算正常）。
+                // Quick Connect 没开 / 超时：只写到 quickConnectError，让面板自己说明；
+                // 不覆盖正在进行的密码登录 / 已成功的状态（用户在输密码时 QC 后台超时也算正常）。
                 if let self, self.loginSession === session,
                    !self.isAuthenticating, self.phase == .onboarding {
-                    self.onboardingError = error.errorDescription
+                    self.quickConnectError = error.errorDescription
+                        ?? "此服务器未启用 Quick Connect，请用下方账号密码登录。"
                 }
             } catch {
                 if let self, self.loginSession === session,
                    !self.isAuthenticating, self.phase == .onboarding {
-                    self.onboardingError = "\(error)"
+                    self.quickConnectError = "\(error)"
                 }
             }
         }
@@ -118,6 +127,7 @@ extension AppModel {
         quickConnectTask = nil
         isAuthenticating = false
         quickConnectCode = nil
+        quickConnectError = nil
         loginSession = nil
         onboardingError = nil
     }
@@ -142,12 +152,14 @@ extension AppModel {
         }
         loginSession = nil
         quickConnectCode = nil
+        quickConnectError = nil
         isProbingServer = false
         isAuthenticating = false
         onboardingError = nil
         server = nil
         libraries = []
         librariesError = nil
+        libraryPages = [:]
         home = HomeData()
         path = []
         presentedDetail = nil

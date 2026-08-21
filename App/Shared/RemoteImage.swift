@@ -220,7 +220,10 @@ struct RemoteImage: View {
 
     var body: some View {
         ZStack {
-            Rectangle().fill(.quaternary.opacity(0.6))
+            // 常驻底层：加载中就是它在当占位，图片到位后从它上面淡入。
+            // 灰度取 `Metrics.placeholderFill`，和骨架块同一个值——否则骨架撤掉、
+            // 真实卡片上位而图还没下载完的那一瞬间，整墙灰会「变深一档」。
+            Rectangle().fill(Metrics.placeholderFill)
             if let image {
                 Image(platform: image)
                     .resizable()
@@ -233,10 +236,9 @@ struct RemoteImage: View {
                 Image(systemName: "photo")
                     .font(.title3)
                     .foregroundStyle(.tertiary)
-            } else {
-                ProgressView()
-                    .controlSize(.small)
             }
+            // 加载中不需要额外分支：底层那块灰就是占位（原来这里又画了一块
+            // 一模一样的 Rectangle，视觉上是 no-op，只多一层合成）。
         }
         .clipped()
         .animation(imageFade, value: image != nil)
