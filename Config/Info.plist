@@ -2,5 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Bangumi OAuth：凭证从 Secrets.xcconfig 注入（BANGUMI_APP_ID / BANGUMI_APP_SECRET）。
+	     回调 scheme 固定为 ocplayer，App 处理 bangumi OAuth 回调。 -->
+	<key>BANGUMI_APP_ID</key>
+	<string>$(BANGUMI_APP_ID)</string>
+	<key>BANGUMI_APP_SECRET</key>
+	<string>$(BANGUMI_APP_SECRET)</string>
+	<key>BANGUMI_OAUTH_CALLBACK</key>
+	<string>ocplayer://oauth/callback</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.jumusu.OcPlayer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ocplayer</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

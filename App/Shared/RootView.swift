@@ -65,7 +65,11 @@ struct RootView: View {
         // 出画面是"浮现"而不是"闪现"。
         .motionAnimation(.easeInOut(duration: 0.3), value: app.playbackPreparation, reduceMotion: reduceMotion)
         .onOpenURL { url in
-            app.presentLocalFile(url)
+            if url.scheme == "ocplayer", url.path == "/oauth/callback" {
+                Task { await app.handleBangumiOAuthURL(url) }
+            } else {
+                app.presentLocalFile(url)
+            }
         }
         .task {
             app.playback = controller

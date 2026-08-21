@@ -41,6 +41,11 @@ struct AppShellView: View {
                 Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
             }
 
+            Section("Bangumi") {
+                Label("进度管理", systemImage: "arrow.triangle.branch")
+                    .tag(AppModel.Section.bangumi)
+            }
+
             Section("媒体库") {
                 if app.libraries.isEmpty, let librariesError = app.librariesError {
                     VStack(alignment: .leading, spacing: 8) {
@@ -85,6 +90,9 @@ struct AppShellView: View {
                     .tabItem { Label(library.name, systemImage: Self.icon(for: library.collectionType)) }
                     .tag(AppModel.Section.library(library.id))
             }
+            BangumiHomeView()
+                .tabItem { Label("Bangumi", systemImage: "arrow.triangle.branch") }
+                .tag(AppModel.Section.bangumi)
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(AppModel.Section.settings)
@@ -136,6 +144,12 @@ struct AppShellView: View {
             case .settings:
                 NavigationStack(path: $app.path) {
                     SettingsView()
+                        .appRoutes()
+                }
+                .transition(.opacity)
+            case .bangumi:
+                NavigationStack(path: $app.path) {
+                    BangumiHomeView()
                         .appRoutes()
                 }
                 .transition(.opacity)

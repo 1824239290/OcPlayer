@@ -1,3 +1,4 @@
+import BangumiKit
 import CoreModel
 import DanmakuKit
 import DiagnosticsKit
@@ -97,11 +98,16 @@ final class AppModel {
     var dandanplayIsConfigured: Bool { dandanplayStore.isConfigured }
     var dandanplayHasAPIKey: Bool { !dandanplayStore.apiKey.isEmpty }
 
+    // MARK: - Bangumi（登录 / 进度 / 收藏）
+
+    let bangumi = BangumiCoordinator()
+
     // MARK: - 导航
 
     enum Section: Hashable {
         case home
         case settings
+        case bangumi
         case library(MediaLibrary.ID)
     }
 
@@ -173,6 +179,15 @@ final class AppModel {
 
     init(store: ServerStore = ServerStore()) {
         self.store = store
+        // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
+        bangumi.setup()
+    }
+
+    /// 处理 Bangumi OAuth 回调（macOS 浏览器 / iOS ASWebAuthenticationSession 都汇到这里）。
+    /// 返回错误文案（nil = 成功）。
+    @discardableResult
+    func handleBangumiOAuthURL(_ url: URL) async -> String? {
+        await bangumi.handleOAuthCallback(url: url)
     }
 
     /// 由外壳在布局定型时告知（iPhone → compact），详情导航方式随之切换。

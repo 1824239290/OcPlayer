@@ -320,9 +320,11 @@ public struct BangumiEpisodeDTO: Codable, Identifiable, Hashable, Sendable {
 }
 
 /// 进度页面用的条目 + 近期剧集窗口组合。
-public struct BangumiProgressSubject: Codable, Hashable, Sendable {
+public struct BangumiProgressSubject: Codable, Hashable, Identifiable, Sendable {
     public var subject: BangumiSubjectDTO
     public var episodes: [BangumiEpisodeDTO]
+
+    public var id: Int { subject.id }
 
     public init(subject: BangumiSubjectDTO, episodes: [BangumiEpisodeDTO]) {
         self.subject = subject
