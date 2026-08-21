@@ -136,6 +136,7 @@
 				1A0000000000000000000053 /* JellyfinKit */,
 				1A0000000000000000000065 /* DiagnosticsKit */,
 				1A0000000000000000000069 /* DanmakuKit */,
+				1A000000000000000000006A /* BangumiKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000014 /* OcPlayer.app */;
@@ -164,6 +165,7 @@
 				1A0000000000000000000053 /* JellyfinKit */,
 				1A0000000000000000000065 /* DiagnosticsKit */,
 				1A0000000000000000000069 /* DanmakuKit */,
+				1A000000000000000000006A /* BangumiKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000024 /* OcPlayer.app */;
@@ -223,6 +225,7 @@
 				1A0000000000000000000051 /* XCLocalSwiftPackageReference "Packages/JellyfinKit" */,
 				1A0000000000000000000064 /* XCLocalSwiftPackageReference "Packages/DiagnosticsKit" */,
 				1A0000000000000000000068 /* XCLocalSwiftPackageReference "Packages/DanmakuKit" */,
+				1A0000000000000000000063 /* XCLocalSwiftPackageReference "Packages/BangumiKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -533,6 +536,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DanmakuKit;
 		};
+1A0000000000000000000063 /* XCLocalSwiftPackageReference "Packages/BangumiKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/BangumiKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -555,6 +562,10 @@
 		1A0000000000000000000069 /* DanmakuKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DanmakuKit;
+		};
+1A000000000000000000006A /* BangumiKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BangumiKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
