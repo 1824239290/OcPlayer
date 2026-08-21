@@ -66,10 +66,18 @@ struct RootView: View {
         .motionAnimation(.easeInOut(duration: 0.3), value: app.playbackPreparation, reduceMotion: reduceMotion)
         .onOpenURL { url in
             if url.scheme == "ocplayer", url.host == "oauth" {
+                // 错误由 BangumiCoordinator.authError 承接，登录页会显示出来。
                 Task { await app.handleBangumiOAuthURL(url) }
             } else {
                 app.presentLocalFile(url)
             }
+        }
+        // Bangumi 凭证失效：监听放在根视图，因为 401 也可能来自详情页标记章节、
+        // 或者播放结束自动标记——那时 Bangumi 分区的视图未必存在。
+        .onReceive(NotificationCenter.default.publisher(
+            for: BangumiCoordinator.authenticationRequiredNotification)) { note in
+            guard let generation = BangumiCoordinator.authenticationGeneration(from: note) else { return }
+            Task { await app.bangumi.handleAuthenticationRequired(generation: generation) }
         }
         .task {
             app.playback = controller

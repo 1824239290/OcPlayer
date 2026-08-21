@@ -27,6 +27,7 @@ struct BangumiProfileView: View {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                         }
                         .help("退出 Bangumi 登录")
+                        .accessibilityLabel("退出 Bangumi 登录")
                     }
                 }
             } else {

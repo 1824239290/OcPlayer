@@ -12,11 +12,11 @@ enum BangumiMatcher {
 
     /// 取某个 Jellyfin 条目关联的 Bangumi subject（nil = 未关联）。
     static func linkedSubjectID(forJellyfinItemID itemID: MediaItem.ID) -> Int? {
-        BangumiStore().bangumiSubjectID(forJellyfinItemID: itemID)
+        BangumiStore.shared.bangumiSubjectID(forJellyfinItemID: itemID)
     }
 
     static func setLinkedSubjectID(_ subjectID: Int?, forJellyfinItemID itemID: MediaItem.ID) {
-        BangumiStore().setBangumiSubjectID(subjectID, forJellyfinItemID: itemID)
+        BangumiStore.shared.setBangumiSubjectID(subjectID, forJellyfinItemID: itemID)
     }
 
     /// 自动匹配：返回命中的 subject（未命中 nil）。命中即持久化关联。

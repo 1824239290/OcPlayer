@@ -333,11 +333,32 @@ public struct BangumiProgressSubject: Codable, Hashable, Identifiable, Sendable 
 
     /// 已看集数 / 总集数。
     public var progressText: String {
-        "\(subject.interest?.epStatus ?? 0) / \(subject.eps)"
+        "\(watchedCount) / \(subject.eps)"
+    }
+
+    public var watchedCount: Int {
+        subject.interest?.epStatus ?? 0
     }
 
     public var progressFraction: Double? {
         guard subject.eps > 0 else { return nil }
-        return min(Double(subject.interest?.epStatus ?? 0) / Double(subject.eps), 1)
+        return min(Double(watchedCount) / Double(subject.eps), 1)
+    }
+
+    /// 本地章节是否已补齐（进度页据此区分「还没同步到」和「真的没有章节」）。
+    public var hasEpisodeData: Bool { !episodes.isEmpty }
+
+    /// 下一集待看的本篇（nil = 没有可标记的下一集）。
+    public var nextEpisode: BangumiEpisodeDTO? {
+        episodes.first { $0.type == .main && $0.collectionTypeEnum == .none }
+    }
+
+    /// 是否确实看完了。
+    ///
+    /// **不能用「找不到下一集」来判断**：章节还没同步下来时列表本来就是空的，
+    /// 那种情况要显示成「等待同步」而不是「已看完」。
+    public var isFinished: Bool {
+        guard subject.eps > 0 else { return hasEpisodeData && nextEpisode == nil }
+        return watchedCount >= subject.eps
     }
 }

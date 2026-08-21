@@ -19,6 +19,12 @@ enum BangumiDatabaseFactory {
             try createSubjects(in: db)
             try createEpisodes(in: db)
         }
+        // 记录每个条目最后一次拉章节的时间。没有它的话，「本篇数 < 总集数」这个补齐判据
+        // 会让「eps 元数据比实际登记集数多」的条目每次刷新都白拉一遍，永远补不齐。
+        migrator.registerMigration("addEpisodesSyncedAt") { db in
+            try db.execute(
+                sql: "ALTER TABLE subjects ADD COLUMN episodes_synced_at INTEGER NOT NULL DEFAULT 0")
+        }
         try migrator.migrate(dbQueue)
         return dbQueue
     }

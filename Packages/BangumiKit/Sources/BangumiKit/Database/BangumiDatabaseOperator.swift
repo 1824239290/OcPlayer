@@ -47,7 +47,7 @@ public actor BangumiDatabaseOperator {
 
             // airTime 排序：全量取 id 再按页切，保持分页稳定。
             let subjectIds = try fetchProgressSubjectIds(
-                in: db, progressTab: progressTab, search: search)
+                in: db, progressTab: progressTab, search: search, sortMode: sortMode)
             let pageIds = Array(subjectIds.dropFirst(offset).prefix(limit))
             let byId = try fetchSubjectsById(in: db, pageIds)
             let subjects = pageIds.compactMap { byId[$0] }
@@ -196,21 +196,18 @@ public actor BangumiDatabaseOperator {
                     item.collectedAt = now
                     try upsertEpisode(item, in: db)
                 }
-                subject.interest?.epStatus = rows.count
+                // 已看数要数「全部标为看过的本篇」，不能用 rows.count：
+                // 那只是 ≤ 本集的集数，会把用户先前标过的后面几集抹掉。
+                subject.interest?.epStatus = try countCollectedMainEpisodes(in: db, subjectId: subjectId)
             } else {
-                let previousType = episode.collectionTypeEnum
                 episode.status = type.rawValue
                 episode.collectedAt = now
                 try upsertEpisode(episode, in: db)
                 if episode.typeEnum == .main {
-                    let epStatus = subject.interest?.epStatus ?? 0
-                    let delta =
-                        switch (previousType == .collect, type == .collect) {
-                        case (false, true): 1
-                        case (true, false): -1
-                        default: 0
-                        }
-                    subject.interest?.epStatus = max(0, epStatus + delta)
+                    // 同样重新数一遍，而不是在旧值上加减：本地章节要么整份齐（loadEpisodes
+                    // 是全量替换）要么没有，数出来的值就是准的，也不会因为漏掉一次事件而漂。
+                    subject.interest?.epStatus = try countCollectedMainEpisodes(
+                        in: db, subjectId: subjectId)
                 }
             }
             subject.interest?.updatedAt = now
@@ -223,7 +220,6 @@ public actor BangumiDatabaseOperator {
     // MARK: - 保存
 
     public func saveEpisodes(subjectId: Int, items: [BangumiEpisodeDTO]) throws {
-        guard !items.isEmpty else { return }
         try database.write { db in
             var subjectRef = try fetchSubject(in: db, id: subjectId)
             if subjectRef == nil, let slim = items.first?.subject {
@@ -233,6 +229,10 @@ public actor BangumiDatabaseOperator {
                 let episode = try makeEpisodeForSaving(item, in: db, fallbackSubject: subjectRef)
                 try upsertEpisode(episode, in: db)
             }
+            // 空结果也要盖时间戳：远端确实没登记章节的条目，否则每次刷新都白拉一遍。
+            try db.execute(
+                sql: "UPDATE subjects SET episodes_synced_at = ? WHERE subject_id = ?",
+                arguments: [Int(Date().timeIntervalSince1970), subjectId])
         }
     }
 
@@ -261,6 +261,17 @@ public actor BangumiDatabaseOperator {
             let (subject, created) = try ensureSubject(item, in: db)
             try upsertSubject(subject, in: db)
             return created
+        }
+    }
+
+    /// 批量落库（收藏同步用）：一个事务写完整页，别一条一个事务。
+    public func saveSubjects(_ items: [BangumiSubjectDTO]) throws {
+        guard !items.isEmpty else { return }
+        try database.write { db in
+            for item in items {
+                let (subject, _) = try ensureSubject(item, in: db)
+                try upsertSubject(subject, in: db)
+            }
         }
     }
 
@@ -378,15 +389,77 @@ public actor BangumiDatabaseOperator {
     }
 
     private func fetchProgressSubjectIds(
-        in db: Database, progressTab: BangumiSubjectType, search: String
+        in db: Database, progressTab: BangumiSubjectType, search: String,
+        sortMode: BangumiProgressSortMode
     ) throws -> [Int] {
         let filter = progressSubjectFilter(progressTab: progressTab, search: search)
-        // 按收藏时间倒序的 id 序列（airTime 排序时全量取出再切页）。
-        return try Int.fetchAll(
+        guard sortMode == .airTime else {
+            return try Int.fetchAll(
+                db,
+                sql: "SELECT subject_id FROM subjects WHERE \(filter.sql) ORDER BY collected_at DESC",
+                arguments: filter.arguments
+            )
+        }
+        // 放送时间排序：日期在 JSON BLOB 里，SQL 排不了，取出来在内存排。
+        // 「在看」列表规模就是几十到几百条，代价可以忽略。
+        // 日期是 yyyy-MM-dd，字符串逆序即时间逆序；无日期的条目排到最后，
+        // 同日期按收藏时间（SQL 已排好）保持稳定。
+        let rows = try Row.fetchAll(
             db,
-            sql: "SELECT subject_id FROM subjects WHERE \(filter.sql) ORDER BY collected_at DESC",
+            sql: """
+                SELECT subject_id, airtime_data FROM subjects
+                WHERE \(filter.sql)
+                ORDER BY collected_at DESC
+                """,
             arguments: filter.arguments
         )
+        let keyed = rows.enumerated().map { index, row -> (id: Int, date: String, order: Int) in
+            let subjectID: Int = row["subject_id"]
+            let airtime: BangumiSubjectAirtime? = row.jsonOptional("airtime_data")
+            return (subjectID, airtime?.date ?? "", index)
+        }
+        return keyed.sorted { lhs, rhs in
+            if lhs.date.isEmpty != rhs.date.isEmpty { return rhs.date.isEmpty }
+            if lhs.date != rhs.date { return lhs.date > rhs.date }
+            return lhs.order < rhs.order
+        }.map(\.id)
+    }
+
+    /// 「在看」里本地章节还没补齐的条目（章节表里的本篇数少于条目声明的总集数）。
+    /// 收藏同步只落条目，章节要另外拉；用它把要补的条目框出来，避免每次全量重拉。
+    ///
+    /// 从没拉过的（`episodes_synced_at = 0`）一定入选；拉过但仍然「不满」的，
+    /// 隔 `retryInterval` 才再试一次——有些条目的 `eps` 元数据本来就比实际登记的集数大，
+    /// 不设这道闸它们会每次刷新都白拉。
+    public func fetchSubjectIDsMissingEpisodes(
+        limit: Int = 200, retryInterval: TimeInterval = 6 * 3600
+    ) throws -> [Int] {
+        let staleBefore = Int(Date().timeIntervalSince1970 - retryInterval)
+        return try database.read { db in
+            try Int.fetchAll(
+                db,
+                sql: """
+                    SELECT s.subject_id FROM subjects AS s
+                    WHERE s.ctype = ?
+                      AND s.type IN (?, ?)
+                      AND (
+                        SELECT COUNT(*) FROM episodes AS e
+                        WHERE e.subject_id = s.subject_id AND e.type = ?
+                      ) < MAX(COALESCE(s.eps, 0), 1)
+                      AND (s.episodes_synced_at = 0 OR s.episodes_synced_at <= ?)
+                    ORDER BY s.collected_at DESC
+                    LIMIT ?
+                    """,
+                arguments: [
+                    BangumiCollectionType.doing.rawValue,
+                    BangumiSubjectType.anime.rawValue,
+                    BangumiSubjectType.real.rawValue,
+                    BangumiEpisodeType.main.rawValue,
+                    staleBefore,
+                    limit,
+                ]
+            )
+        }
     }
 
     private func fetchSubjectsById(in db: Database, _ subjectIds: [Int]) throws -> [Int: BangumiSubject] {
@@ -436,6 +509,22 @@ public actor BangumiDatabaseOperator {
     private func fetchEpisode(in db: Database, id: Int) throws -> BangumiEpisode? {
         try Row.fetchOne(db, sql: "SELECT * FROM episodes WHERE episode_id = ?", arguments: [id])
             .map { BangumiEpisode(row: $0) }
+    }
+
+    /// 该条目已标「看过」的本篇集数（`interest.epStatus` 的本地事实源）。
+    private func countCollectedMainEpisodes(in db: Database, subjectId: Int) throws -> Int {
+        try Int.fetchOne(
+            db,
+            sql: """
+                SELECT COUNT(*) FROM episodes
+                WHERE subject_id = ? AND type = ? AND status = ?
+                """,
+            arguments: [
+                subjectId,
+                BangumiEpisodeType.main.rawValue,
+                BangumiEpisodeCollectionType.collect.rawValue,
+            ]
+        ) ?? 0
     }
 
     private func countSubjects(
@@ -597,7 +686,8 @@ public actor BangumiDatabaseOperator {
         ]
         var sql = "(? = 0 OR type = ?) AND ctype = ?"
         if !search.isEmpty {
-            sql += " AND (name LIKE ? COLLATE NOCASE OR alias LIKE ? COLLATE NOCASE)"
+            // 原名和中文名都要搜；`alias` 列没有写入来源，恒为空串，不参与匹配。
+            sql += " AND (name LIKE ? COLLATE NOCASE OR name_cn LIKE ? COLLATE NOCASE)"
             let pattern = likePattern(search)
             arguments += [pattern, pattern]
         }

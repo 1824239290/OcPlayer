@@ -77,11 +77,13 @@ final class BangumiSubject {
         type = item.type.rawValue
         volumes = 0
         interest = item.interest.map {
+            // slim 收藏信息里没有 epStatus / volStatus / private，缺的按「未知」补 0/false，
+            // 别拿别的字段推断（曾经把 private 写成 `type == .doing`，是两回事）。
             BangumiSubjectInterest(
                 comment: $0.comment,
                 epStatus: 0,
                 volStatus: 0,
-                private: $0.type == .doing,
+                private: false,
                 rate: $0.rate,
                 tags: $0.tags,
                 type: $0.type,

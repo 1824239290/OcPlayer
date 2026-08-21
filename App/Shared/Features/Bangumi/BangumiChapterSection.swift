@@ -4,14 +4,16 @@ import SwiftUI
 
 /// 详情页内嵌的 Bangumi 章节区块。
 ///
-/// - 未关联：显示「关联 Bangumi 条目」按钮（自动匹配 + 手动搜索）。
-/// - 已关联：显示章节网格（本篇 + SP 分区），点击标记已看。
+/// - 未关联：显示「关联 Bangumi 条目」按钮（自动匹配 + 手动搜索）
+/// - 已关联：显示章节网格（本篇 + SP 分区），单击标记，右键切其它状态
+///
+/// 标题与「剧集」等 section 同级（`.title3.weight(.bold)` + 同一组 padding），
+/// 章节格子与进度页共用 `BangumiEpisodeCell`。
 struct BangumiChapterSection: View {
     /// 当前详情页的 Jellyfin 条目。
     let item: MediaItem
 
     @Environment(BangumiCoordinator.self) private var bangumi
-    @Environment(AppModel.self) private var app
 
     @State private var linkedSubjectID: Int?
     @State private var subject: BangumiSubjectDTO?
@@ -19,6 +21,8 @@ struct BangumiChapterSection: View {
     @State private var isLoading = false
     @State private var isMatching = false
     @State private var showLinkPicker = false
+    @State private var loadError: String?
+    @State private var updatingEpisodeID: Int?
     @State private var loadToken = 0
 
     /// 剧集关联挂在 series 上；电影挂自己。
@@ -26,54 +30,77 @@ struct BangumiChapterSection: View {
         item.seriesID ?? item.id
     }
 
+    private var mainEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .main } }
+    private var spEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .sp } }
+    private var otherEpisodes: [BangumiEpisodeDTO] {
+        episodes.filter { $0.type != .main && $0.type != .sp }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            header
-            if let subject {
-                content(for: subject)
-            } else if isLoading {
-                ProgressView("正在加载 Bangumi 数据…")
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 12)
-            } else if bangumi.isAuthenticated {
-                linkPrompt
+        // 没登录就整块不出现，别留一个空标题。
+        if bangumi.isAuthenticated {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.top, 26)
+                    .padding(.bottom, 12)
+                sectionBody
+            }
+            .padding(.horizontal, Metrics.contentLeading)
+            .task(id: "\(item.id)-\(loadToken)-\(bangumi.isDatabaseReady)") { await load() }
+            .sheet(isPresented: $showLinkPicker) {
+                BangumiLinkPicker(item: item) { subjectID in
+                    BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
+                    linkedSubjectID = subjectID
+                    subject = nil
+                    episodes = []
+                    loadToken += 1
+                }
             }
         }
-        .padding(.horizontal, Metrics.contentLeading)
-        .padding(.vertical, 20)
-        .task(id: "\(item.id)-\(loadToken)") { await load() }
-        .sheet(isPresented: $showLinkPicker) {
-            BangumiLinkPicker(item: item) { subjectID in
-                BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
-                linkedSubjectID = subjectID
-                subject = nil
-                loadToken += 1
-            }
+    }
+
+    @ViewBuilder
+    private var sectionBody: some View {
+        if subject != nil {
+            episodeContent
+        } else if isLoading {
+            ProgressView("正在加载 Bangumi 数据…")
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 12)
+        } else if let loadError {
+            BangumiNotice(message: loadError) { loadToken += 1 }
+                .padding(.bottom, 4)
+        } else {
+            linkPrompt
         }
     }
 
     // MARK: - 区块头
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             Text("Bangumi")
-                .font(.headline)
+                .font(.title3.weight(.bold))
             if let subject {
                 Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer()
             if subject != nil {
+                if isLoading {
+                    ProgressView().controlSize(.small)
+                }
                 Button {
                     showLinkPicker = true
                 } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
                 .help("重新关联 Bangumi 条目")
+                .accessibilityLabel("重新关联 Bangumi 条目")
             }
         }
     }
@@ -89,7 +116,7 @@ struct BangumiChapterSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: 12)
             Button {
                 Task { await autoMatch() }
             } label: {
@@ -99,50 +126,54 @@ struct BangumiChapterSection: View {
                     Text("自动匹配")
                 }
             }
-            .disabled(isMatching || !bangumi.isAuthenticated)
+            .disabled(isMatching)
             Button("手动选择") { showLinkPicker = true }
-                .disabled(!bangumi.isAuthenticated)
+                .disabled(isMatching)
         }
         .padding(12)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
     }
 
     // MARK: - 已关联内容
 
     @ViewBuilder
-    private func content(for subject: BangumiSubjectDTO) -> some View {
-        let mainEpisodes = episodes.filter { $0.type == .main }
-        let spEpisodes = episodes.filter { $0.type == .sp }
-        let others = episodes.filter { $0.type != .main && $0.type != .sp }
-
-        VStack(alignment: .leading, spacing: 8) {
+    private var episodeContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let loadError {
+                BangumiNotice(message: loadError) { loadToken += 1 }
+            }
             if !mainEpisodes.isEmpty {
                 episodeGrid(mainEpisodes)
-            } else if !others.isEmpty {
-                episodeGrid(others)
-            } else if episodes.isEmpty {
+            }
+            if !spEpisodes.isEmpty {
+                Text("SP")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                episodeGrid(spEpisodes)
+            }
+            if !otherEpisodes.isEmpty {
+                Text("其他")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                episodeGrid(otherEpisodes)
+            }
+            if episodes.isEmpty, !isLoading {
                 Text("该条目暂无章节")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .padding(.vertical, 6)
             }
-            if !spEpisodes.isEmpty {
-                Label("SP", systemImage: "star")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                episodeGrid(spEpisodes)
-            }
         }
     }
 
     private func episodeGrid(_ list: [BangumiEpisodeDTO]) -> some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 34), spacing: 6)],
-            alignment: .leading, spacing: 6
-        ) {
+        LazyVGrid(columns: BangumiEpisodeCell.columns, alignment: .leading, spacing: 6) {
             ForEach(list) { episode in
-                ChapterBadge(episode: episode) {
-                    Task { await markWatched(episode) }
+                BangumiEpisodeCell(
+                    episode: episode,
+                    isBusy: updatingEpisodeID == episode.id
+                ) { action in
+                    await perform(action, on: episode)
                 }
             }
         }
@@ -151,7 +182,7 @@ struct BangumiChapterSection: View {
     // MARK: - 数据
 
     private func load() async {
-        guard bangumi.isAuthenticated else {
+        guard bangumi.isAuthenticated, bangumi.isDatabaseReady else {
             linkedSubjectID = nil
             subject = nil
             episodes = []
@@ -161,91 +192,83 @@ struct BangumiChapterSection: View {
         guard let subjectID = linkedSubjectID else {
             subject = nil
             episodes = []
+            loadError = nil
             return
         }
         isLoading = true
+        loadError = nil
         defer { isLoading = false }
-        // 先读本地缓存立即渲染。
+
+        // 先渲染本地缓存，再补远端。
+        await readLocal(subjectID)
+        do {
+            // 条目可能压根没被收藏过（关联是可以指向任意条目的），章节也可能还没拉过，
+            // 这一步把两样都补齐；已经齐的不会发请求。
+            try await bangumi.context.ensureSubjectLoaded(subjectID)
+            await readLocal(subjectID)
+        } catch let e as BangumiError {
+            loadError = e.userMessage
+            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(e)")
+        } catch {
+            loadError = "\(error)"
+            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(error)")
+        }
+    }
+
+    /// 从本地库读条目与**全量**章节。
+    /// 不能用进度窗口（`fetchProgressSubject`）：那个只返回本篇的一个滑动窗口，
+    /// 会把 SP 和窗口外的集吃掉。
+    private func readLocal(_ subjectID: Int) async {
         if let cached = try? await bangumi.context.subject(id: subjectID) {
             subject = cached
         }
         if let cachedEpisodes = try? await bangumi.context.fetchEpisodes(subjectId: subjectID) {
             episodes = cachedEpisodes
         }
-        // 远程拉全量章节落库（关联后第一次会拉，缓存过则跳过请求）。
-        if let fresh = try? await bangumi.context.fetchProgressSubject(subjectId: subjectID, episodeWindowSize: 100) {
-            subject = fresh.subject
-            episodes = fresh.episodes
-        }
-        // 确保全量章节已落库（fetchProgressSubject 只是窗口，远程全量靠 loadEpisodes）。
-        if episodes.isEmpty {
-            try? await bangumi.context.loadEpisodes(subjectID)
-            episodes = (try? await bangumi.context.fetchEpisodes(subjectId: subjectID)) ?? []
-        }
     }
 
     private func autoMatch() async {
         guard !isMatching else { return }
         isMatching = true
+        loadError = nil
         defer { isMatching = false }
-        if let matched = try? await BangumiMatcher.autoMatch(for: item) {
+        do {
+            guard let matched = try await BangumiMatcher.autoMatch(for: item) else {
+                loadError = "没找到匹配的 Bangumi 条目，试试手动选择"
+                return
+            }
             linkedSubjectID = matched.id
             loadToken += 1
-        }
-    }
-
-    private func markWatched(_ episode: BangumiEpisodeDTO) async {
-        guard episode.collectionTypeEnum != .collect else { return }
-        do {
-            try await bangumi.context.updateEpisodeCollection(
-                episodeId: episode.id, type: .collect)
-            loadToken += 1
+        } catch let e as BangumiError {
+            loadError = e.userMessage
+            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(e)")
         } catch {
-            // 失败静默，诊断日志留痕。
-        }
-    }
-}
-
-/// 章节网格的单格。
-private struct ChapterBadge: View {
-    let episode: BangumiEpisodeDTO
-    var onTap: () async -> Void
-
-    var body: some View {
-        Button(action: { Task { await onTap() } }) {
-            Text(episode.sortDisplay)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(foreground)
-                .frame(width: 30, height: 30)
-                .background(background, in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(border))
-        }
-        .buttonStyle(.plain)
-        .disabled(!episode.aired || episode.collectionTypeEnum == .collect)
-        .help("EP.\(episode.sortDisplay) \(episode.nameCN.isEmpty ? episode.name : episode.nameCN)")
-    }
-
-    private var foreground: Color {
-        if !episode.aired { return .secondary.opacity(0.5) }
-        switch episode.collectionTypeEnum {
-        case .collect: return .green
-        case .dropped: return .secondary
-        case .wish: return .pink
-        case .none: return .primary
+            loadError = "\(error)"
+            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(error)")
         }
     }
 
-    private var background: Color {
-        if !episode.aired { return .secondary.opacity(0.15) }
-        switch episode.collectionTypeEnum {
-        case .collect: return .green.opacity(0.15)
-        case .dropped: return .secondary.opacity(0.15)
-        case .wish: return .pink.opacity(0.12)
-        case .none: return .secondary.opacity(0.2)
+    private func perform(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
+        guard let subjectID = linkedSubjectID, updatingEpisodeID == nil else { return }
+        updatingEpisodeID = episode.id
+        defer { updatingEpisodeID = nil }
+        do {
+            switch action {
+            case .set(let type):
+                try await bangumi.context.updateEpisodeCollection(
+                    episodeId: episode.id, type: type)
+            case .markUpTo:
+                try await bangumi.context.updateEpisodeCollection(
+                    episodeId: episode.id, type: .collect, batch: true)
+            }
+            loadError = nil
+            await readLocal(subjectID)
+        } catch let e as BangumiError {
+            loadError = e.userMessage
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
+        } catch {
+            loadError = "\(error)"
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
         }
-    }
-
-    private var border: Color {
-        episode.collectionTypeEnum == .collect ? .green.opacity(0.5) : .secondary.opacity(0.25)
     }
 }

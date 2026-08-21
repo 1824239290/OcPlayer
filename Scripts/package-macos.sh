@@ -130,8 +130,24 @@ copy_license \
     "$SWIFTPM_CHECKOUTS/swift-system/LICENSE.txt" \
     "$NOTICES_DIR/swiftpm/swift-system/LICENSE.txt"
 copy_license \
+    "$SWIFTPM_CHECKOUTS/GRDB.swift/LICENSE" \
+    "$NOTICES_DIR/swiftpm/GRDB.swift/LICENSE"
+copy_license \
     "$ROOT/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
     "$NOTICES_DIR/swiftpm/Package.resolved"
+
+# The license list above is hand-written, so a new SwiftPM dependency would
+# otherwise ship without its notice. Fail the build when a resolved checkout has
+# no corresponding entry under THIRD_PARTY_LICENSES.
+for checkout in "$SWIFTPM_CHECKOUTS"/*; do
+    [[ -d "$checkout" ]] || continue
+    name="$(basename "$checkout")"
+    if [[ ! -d "$NOTICES_DIR/swiftpm/$name" ]]; then
+        echo "SwiftPM dependency '$name' has no license bundled under $NOTICES_DIR/swiftpm" >&2
+        echo "Add a copy_license entry for it in Scripts/package-macos.sh" >&2
+        exit 1
+    fi
+done
 codesign --force --sign - "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 

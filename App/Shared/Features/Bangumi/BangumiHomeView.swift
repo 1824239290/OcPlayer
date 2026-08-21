@@ -5,26 +5,62 @@ import SwiftUI
 ///
 /// 与 OcPlayer 设计系统对齐：
 /// - 卡片用 `.background.secondary` + `cardRadius` 圆角（同 PosterCard/StillCard）
-/// - 间距用 `railSpacing` / `contentInset`（同 HomeView）
-/// - 章节格子展开显示（不再折叠成 30pt 小方块），长按弹菜单切状态
+/// - 间距用 `railSpacing` / `contentLeading`（同 HomeView）
+/// - 进度条沿用 StillCard 那条中性细轨，不引入新色相
+/// - 章节格子是共用组件 `BangumiEpisodeCell`（单击标记，右键切其它状态）
 /// - 搜索走 Bangumi 远程（不再本地筛选闪烁）
 struct BangumiHomeView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var subjects: [BangumiProgressSubject] = []
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var loadError: String?
+    /// 标记章节等写操作的失败文案（以前这些错误是全静默的）。
+    @State private var actionError: String?
     @State private var loadGeneration: UInt64 = 0
+    /// 已经自动触发过首次同步，避免反复重试。
+    @State private var didAutoSync = false
+
+    /// 排序偏好跨启动保留。
+    @AppStorage("dev.jumusu.ocplayer.bangumi.progressSort") private var sortRaw = SortOption.collected.rawValue
 
     // 搜索：远程搜 Bangumi，不在本地筛选。
     @State private var searchKeyword = ""
     @State private var searchResults: [BangumiSlimSubjectDTO] = []
     @State private var isSearching = false
+    @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>?
     @State private var searchGeneration: UInt64 = 0
+
+    private enum SortOption: String, CaseIterable, Identifiable {
+        case collected
+        case air
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .collected: "按收藏时间"
+            case .air: "按放送时间"
+            }
+        }
+
+        var mode: BangumiProgressSortMode {
+            switch self {
+            case .collected: .collectedAt
+            case .air: .airTime
+            }
+        }
+    }
+
+    private var sortOption: SortOption { SortOption(rawValue: sortRaw) ?? .collected }
+
+    /// 数据加载的触发键：登录态、建库完成、排序变化都要重新取。
+    private var loadKey: String {
+        "\(bangumi.isAuthenticated)-\(bangumi.isDatabaseReady)-\(sortRaw)"
+    }
 
     var body: some View {
         Group {
@@ -35,25 +71,7 @@ struct BangumiHomeView: View {
                     .navigationTitle("Bangumi")
             }
         }
-        .onAppear {
-            if bangumi.isAuthenticated, subjects.isEmpty {
-                Task { await load() }
-            }
-        }
-        .onChange(of: bangumi.isAuthenticated) { _, loggedIn in
-            if loggedIn {
-                Task { await load() }
-            } else {
-                subjects = []
-                searchResults = []
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: BangumiAPIClient.authenticationRequiredNotification)) { note in
-            guard let generation = (note.object as? NSNumber)?.uint64Value else { return }
-            Task { @MainActor in
-                await BangumiAuthService.invalidateSession(expectedCredentialGeneration: generation)
-            }
-        }
+        .task(id: loadKey) { await loadIfReady() }
         .onReceive(NotificationCenter.default.publisher(for: BangumiProgressInvalidation.notificationName)) { note in
             guard bangumi.isAuthenticated else { return }
             let mayChangeMembership = (note.userInfo?["mayChangeProgressMembership"] as? Bool) ?? false
@@ -96,12 +114,21 @@ struct BangumiHomeView: View {
                     Text("在 Bangumi 上标记「在看」的动画会出现在这里。\n点右上角刷新同步你的收藏。")
                 } actions: {
                     Button("刷新") { Task { await refresh(force: true) } }
+                        .disabled(isRefreshing)
                 }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: Metrics.railSpacing) {
+                        if let actionError {
+                            BangumiNotice(message: actionError)
+                                .padding(.bottom, 2)
+                        }
                         ForEach(subjects) { item in
-                            ProgressCard(item: item, reload: { await reloadSubject(item.subject.id) })
+                            ProgressCard(
+                                item: item,
+                                reload: { await reloadSubject(item.subject.id) },
+                                reportError: { actionError = $0 }
+                            )
                         }
                     }
                     .padding(.horizontal, Metrics.contentLeading)
@@ -120,6 +147,7 @@ struct BangumiHomeView: View {
             guard !trimmed.isEmpty else {
                 searchResults = []
                 isSearching = false
+                searchError = nil
                 return
             }
             searchTask = Task {
@@ -135,6 +163,16 @@ struct BangumiHomeView: View {
             if isSearching && searchResults.isEmpty {
                 ProgressView("正在搜索…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let searchError, searchResults.isEmpty {
+                ContentUnavailableView {
+                    Label("搜索失败", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(searchError)
+                } actions: {
+                    Button("重试") {
+                        Task { await performSearch(searchKeyword.trimmingCharacters(in: .whitespaces)) }
+                    }
+                }
             } else if searchResults.isEmpty {
                 ContentUnavailableView.search(text: searchKeyword)
             } else {
@@ -169,9 +207,9 @@ struct BangumiHomeView: View {
                             }
                             Spacer()
                         }
-                        LazyVGrid(columns: Self.episodeColumns, alignment: .leading, spacing: 6) {
+                        LazyVGrid(columns: BangumiEpisodeCell.columns, alignment: .leading, spacing: 6) {
                             ForEach(0..<8, id: \.self) { _ in
-                                SkeletonBlock(cornerRadius: 6).frame(height: 28)
+                                SkeletonBlock(cornerRadius: 6).frame(height: 32)
                             }
                         }
                     }
@@ -193,14 +231,28 @@ struct BangumiHomeView: View {
             if !bangumi.isDatabaseReady {
                 ProgressView().controlSize(.small)
             }
-            if bangumi.isAuthenticated {
-                Button {
-                    app.path.append(.bangumiProfile)
-                } label: {
-                    Image(systemName: "person.crop.circle")
+            Menu {
+                Picker("排序", selection: $sortRaw) {
+                    ForEach(SortOption.allCases) { option in
+                        Text(option.title).tag(option.rawValue)
+                    }
                 }
-                .help("个人主页")
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
             }
+            .help("排序方式：\(sortOption.title)")
+            .accessibilityLabel("排序方式")
+            .accessibilityValue(sortOption.title)
+
+            Button {
+                app.path.append(.bangumiProfile)
+            } label: {
+                Image(systemName: "person.crop.circle")
+            }
+            .help("个人主页")
+            .accessibilityLabel("个人主页")
+
             Button {
                 Task { await refresh(force: true) }
             } label: {
@@ -211,13 +263,29 @@ struct BangumiHomeView: View {
                 }
             }
             .help("刷新所有收藏")
+            .accessibilityLabel("刷新所有收藏")
             .disabled(isRefreshing || !bangumi.isDatabaseReady)
         }
     }
 
     // MARK: - 数据
 
-    static let episodeColumns: [GridItem] = [GridItem(.adaptive(minimum: 40), spacing: 6)]
+    /// 登录 + 建库都就绪才读；首次（从未同步过）自动拉一次，省得让用户先点刷新。
+    private func loadIfReady() async {
+        guard bangumi.isAuthenticated, bangumi.isDatabaseReady else {
+            subjects = []
+            searchResults = []
+            return
+        }
+        // 打开这一页才校验登录态（App 启动时不发请求）。
+        bangumi.revalidateSessionIfNeeded()
+        await load()
+        guard !didAutoSync, subjects.isEmpty,
+              bangumi.context.store.collectionsUpdatedAt == 0
+        else { return }
+        didAutoSync = true
+        await refresh(force: false)
+    }
 
     private func load() async {
         loadGeneration &+= 1
@@ -227,16 +295,18 @@ struct BangumiHomeView: View {
         defer { if loadGeneration == gen { isLoading = false } }
         do {
             let page = try await bangumi.context.fetchProgressSubjects(
-                tab: .anime, sortMode: .collectedAt, search: "",
+                tab: .anime, sortMode: sortOption.mode, search: "",
                 episodeWindowSize: 50, limit: 100, offset: 0)
             guard loadGeneration == gen else { return }
             subjects = page.data
         } catch let e as BangumiError {
             guard loadGeneration == gen else { return }
             loadError = e.userMessage
+            BangumiDiagnostics.log("进度页加载失败 error=\(e)")
         } catch {
             guard loadGeneration == gen else { return }
             loadError = "\(error)"
+            BangumiDiagnostics.log("进度页加载失败 error=\(error)")
         }
     }
 
@@ -245,92 +315,111 @@ struct BangumiHomeView: View {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            _ = try await bangumi.context.refreshAllCollections(force: force)
+            _ = try await bangumi.refreshCollections(force: force)
+            actionError = nil
             await load()
         } catch let e as BangumiError {
             loadError = e.userMessage
+            actionError = e.userMessage
+            BangumiDiagnostics.log("同步收藏失败 error=\(e)")
         } catch {
             loadError = "\(error)"
+            actionError = "\(error)"
+            BangumiDiagnostics.log("同步收藏失败 error=\(error)")
         }
     }
 
     private func reloadSubject(_ subjectID: Int) async {
-        if let updated = try? await bangumi.context.fetchProgressSubject(subjectId: subjectID, episodeWindowSize: 50),
-           let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) {
-            subjects[idx] = updated
-        }
+        guard let updated = try? await bangumi.context.fetchProgressSubject(
+            subjectId: subjectID, episodeWindowSize: 50)
+        else { return }
+        guard let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) else { return }
+        subjects[idx] = updated
     }
 
     private func performSearch(_ keyword: String) async {
+        guard !keyword.isEmpty else { return }
         searchGeneration &+= 1
         let gen = searchGeneration
         isSearching = true
+        searchError = nil
         defer { if searchGeneration == gen { isSearching = false } }
         do {
             let page = try await BangumiSubjectService.search(
                 keyword: keyword, filter: .anime, limit: 30, offset: 0)
             guard searchGeneration == gen else { return }
             searchResults = page.data
+        } catch let e as BangumiError {
+            guard searchGeneration == gen else { return }
+            if case .ignore = e { return }   // 请求被新输入取消，不是错误
+            searchError = e.userMessage
+            BangumiDiagnostics.log("搜索条目失败 error=\(e)")
         } catch {
-            // 搜索失败静默，用户改词会重试。
+            guard searchGeneration == gen else { return }
+            searchError = "\(error)"
+            BangumiDiagnostics.log("搜索条目失败 error=\(error)")
         }
     }
 }
 
 // MARK: - 进度卡片
 
-/// 单条「在看」动画：封面 + 标题 + 展开的章节网格 + 进度条。
+/// 单条「在看」动画：封面 + 标题 + 进度条 + 展开的章节网格。
 private struct ProgressCard: View {
     let item: BangumiProgressSubject
     var reload: () async -> Void
+    var reportError: (String?) -> Void
 
     @Environment(BangumiCoordinator.self) private var bangumi
     @State private var updatingEpisodeID: Int?
 
     private var subject: BangumiSubjectDTO { item.subject }
-    private var episodes: [BangumiEpisodeDTO] { item.episodes }
-    private var mainEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .main } }
-    private var spEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .sp } }
-    private var nextEpisode: BangumiEpisodeDTO? { mainEpisodes.first { $0.collectionTypeEnum == .none } }
+    private var mainEpisodes: [BangumiEpisodeDTO] { item.episodes.filter { $0.type == .main } }
+    private var spEpisodes: [BangumiEpisodeDTO] { item.episodes.filter { $0.type == .sp } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // 头部：封面 + 标题 + 进度条
-            HStack(alignment: .top, spacing: 12) {
-                RemoteImage(url: coverURL, authHeader: nil)
-                    .aspectRatio(2 / 3, contentMode: .fill)
-                    .frame(width: 56, height: 84)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                        .font(.headline)
-                        .lineLimit(1)
-                    if subject.nameCN != subject.name, !subject.nameCN.isEmpty {
-                        Text(subject.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                    progressBar
-                }
-            }
-
-            // 展开的章节网格
+            header
             if !mainEpisodes.isEmpty {
                 episodeGrid(mainEpisodes)
             }
             if !spEpisodes.isEmpty {
-                HStack(spacing: 6) {
-                    Text("SP")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    episodeGrid(spEpisodes)
-                }
+                Text("SP")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                episodeGrid(spEpisodes)
+            }
+            if !item.hasEpisodeData {
+                // 章节还没同步下来：明确说出来，别让空网格看着像「没有剧集」。
+                Text("章节尚未同步，下拉或点右上角刷新")
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(12)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RemoteImage(url: coverURL, authHeader: nil)
+                .aspectRatio(2 / 3, contentMode: .fill)
+                .frame(width: 56, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
+                    .font(.headline)
+                    .lineLimit(1)
+                if !subject.nameCN.isEmpty, subject.nameCN != subject.name {
+                    Text(subject.name)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                progressRow
+            }
+        }
     }
 
     private var coverURL: URL? {
@@ -338,124 +427,93 @@ private struct ProgressCard: View {
         return URL(string: BangumiURL.imageURLString(from: image))
     }
 
-    private var progressBar: some View {
-        HStack(spacing: 6) {
-            Text(item.progressText)
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(.secondary)
-            if let next = nextEpisode {
-                Button {
-                    Task { await updateEpisode(next, type: .collect) }
-                } label: {
-                    Label("EP.\(next.sortDisplay)", systemImage: "checkmark.circle.fill")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.tint)
-                }
-                .buttonStyle(.plain)
-                .disabled(!next.aired || updatingEpisodeID != nil)
-            } else {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.footnote)
-                    .foregroundStyle(.green)
+    private var progressRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(item.progressText)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                nextAction
             }
+            if let fraction = item.progressFraction {
+                progressTrack(fraction)
+            }
+        }
+    }
+
+    /// 中性细轨，与 StillCard 的进度条同一套（`primary` 透明度，不用色相）。
+    private func progressTrack(_ fraction: Double) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.12))
+                Capsule()
+                    .fill(Color.primary.opacity(0.6))
+                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .frame(height: 3)
+    }
+
+    @ViewBuilder
+    private var nextAction: some View {
+        if let next = item.nextEpisode {
+            Button {
+                Task { await perform(.set(.collect), on: next) }
+            } label: {
+                Label("看完 \(next.sortDisplay)", systemImage: "checkmark.circle")
+                    .font(.footnote.weight(.medium))
+            }
+            .buttonStyle(.borderless)
+            .disabled(!next.aired || updatingEpisodeID != nil)
+            .help(next.aired ? "把 EP.\(next.sortDisplay) 标记为看过" : "EP.\(next.sortDisplay) 还没开播")
+        } else if item.isFinished {
+            Label("已看完", systemImage: "checkmark.circle.fill")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else if item.hasEpisodeData {
+            // 有章节但没有「下一集」：剩下的都还没开播。
+            Text("等待更新")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
         }
     }
 
     private func episodeGrid(_ list: [BangumiEpisodeDTO]) -> some View {
-        LazyVGrid(columns: BangumiHomeView.episodeColumns, alignment: .leading, spacing: 6) {
+        LazyVGrid(columns: BangumiEpisodeCell.columns, alignment: .leading, spacing: 6) {
             ForEach(list) { episode in
-                EpisodeCell(episode: episode) { type in
-                    await updateEpisode(episode, type: type)
+                BangumiEpisodeCell(
+                    episode: episode,
+                    isBusy: updatingEpisodeID == episode.id
+                ) { action in
+                    await perform(action, on: episode)
                 }
             }
         }
     }
 
-    private func updateEpisode(_ episode: BangumiEpisodeDTO, type: BangumiEpisodeCollectionType) async {
+    private func perform(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
         guard updatingEpisodeID == nil else { return }
         updatingEpisodeID = episode.id
         defer { updatingEpisodeID = nil }
         do {
-            try await bangumi.context.updateEpisodeCollection(episodeId: episode.id, type: type)
+            switch action {
+            case .set(let type):
+                try await bangumi.context.updateEpisodeCollection(
+                    episodeId: episode.id, type: type)
+            case .markUpTo:
+                try await bangumi.context.updateEpisodeCollection(
+                    episodeId: episode.id, type: .collect, batch: true)
+            }
+            reportError(nil)
             await reload()
-        } catch {}
-    }
-}
-
-// MARK: - 章节格子
-
-/// 展开的章节格子：集号 + 状态色，长按弹菜单切状态。
-private struct EpisodeCell: View {
-    let episode: BangumiEpisodeDTO
-    var onStatusChange: (BangumiEpisodeCollectionType) async -> Void
-
-    var body: some View {
-        Menu {
-            ForEach(episode.collectionTypeEnum.otherTypes()) { type in
-                Button {
-                    Task { await onStatusChange(type) }
-                } label: {
-                    Label(type.action, systemImage: type.icon)
-                }
-            }
-            if episode.type == .main {
-                Divider()
-                Button {
-                    Task { await onStatusChange(.collect) }
-                } label: {
-                    Label("看到此集", systemImage: "text.insert")
-                }
-            }
-        } label: {
-            VStack(spacing: 2) {
-                Text(episode.sortDisplay)
-                    .font(.caption.monospacedDigit().weight(.medium))
-                    .foregroundStyle(foreground)
-                Text(episode.collectionTypeEnum == .none ? "未看" : episode.collectionTypeEnum.description)
-                    .font(.system(size: 8))
-                    .foregroundStyle(foreground.opacity(0.7))
-            }
-            .frame(maxWidth: .infinity, minHeight: 32)
-            .background(background, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(border, lineWidth: 1))
+        } catch let e as BangumiError {
+            reportError(e.userMessage)
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
+        } catch {
+            reportError("\(error)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
         }
-        .disabled(!episode.aired)
-        .help(helpText)
-    }
-
-    private var foreground: Color {
-        if !episode.aired { return Color.secondary.opacity(0.4) }
-        switch episode.collectionTypeEnum {
-        case .collect: return .green
-        case .dropped: return .secondary
-        case .wish: return .pink
-        case .none: return .primary
-        }
-    }
-
-    private var background: Color {
-        if !episode.aired { return Color.secondary.opacity(0.08) }
-        switch episode.collectionTypeEnum {
-        case .collect: return Color.green.opacity(0.12)
-        case .dropped: return Color.secondary.opacity(0.12)
-        case .wish: return Color.pink.opacity(0.10)
-        case .none: return Color.clear
-        }
-    }
-
-    private var border: Color {
-        switch episode.collectionTypeEnum {
-        case .collect: return Color.green.opacity(0.4)
-        case .dropped: return Color.secondary.opacity(0.2)
-        case .wish: return Color.pink.opacity(0.3)
-        case .none: return Color.secondary.opacity(0.15)
-        }
-    }
-
-    private var helpText: String {
-        let name = episode.nameCN.isEmpty ? episode.name : episode.nameCN
-        if !episode.aired { return "EP.\(episode.sortDisplay) 未开播" }
-        return "EP.\(episode.sortDisplay) \(name)（\(episode.collectionTypeEnum.description)）"
     }
 }
 
@@ -482,11 +540,10 @@ private struct SearchResultRow: View {
                 }
                 if let rating = subject.rating, rating.score > 0 {
                     HStack(spacing: 4) {
-                        Image(systemName: "star.fill").font(.caption2).foregroundStyle(.orange)
-                        Text(String(format: "%.1f", rating.score))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Image(systemName: "star.fill").font(.caption2)
+                        Text(String(format: "%.1f", rating.score)).font(.caption)
                     }
+                    .foregroundStyle(.secondary)
                 }
             }
             Spacer()

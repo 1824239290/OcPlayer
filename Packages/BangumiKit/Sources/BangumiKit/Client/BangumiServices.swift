@@ -44,15 +44,16 @@ public enum BangumiEpisodeService {
     }
 
     /// 更新单集收藏状态。batch=true 表示「看到此集」批量标记。
+    ///
+    /// `type` 始终带上：batch 只是「连带之前各集」的开关，目标状态本身仍由 type 决定，
+    /// 少传会让服务端行为取决于默认值。
     public static func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) async throws {
         let url = BangumiURL.next(path: "p1/collections/episodes/\(episodeId)")
-        var body: [String: Any] = [:]
+        var body: [String: Any] = ["type": type.rawValue]
         if batch {
             body["batch"] = true
-        } else {
-            body["type"] = type.rawValue
         }
         _ = try await BangumiAPIClient.shared.request(
             url: url, method: "PATCH", body: body, auth: .required)

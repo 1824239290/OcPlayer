@@ -426,14 +426,19 @@ extension AppModel {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
+                // 关联过但从没打开过详情页时本地是空的，先补齐再匹配。
+                try await self.bangumi.context.ensureSubjectLoaded(subjectID)
                 let episodes = try await self.bangumi.context.fetchEpisodes(subjectId: subjectID)
-                // 精确匹配主篇集号；特典（0.5 等）不匹配就不标。
+                // 精确匹配主篇集号。sort 是 Float（特典可能是 12.5），只认整数集号相等的，
+                // 匹配不上就不动——宁可不标，也不要标错集。
                 guard let episode = episodes.first(where: {
-                    $0.type == .main && Int($0.sort) == episodeNumber
+                    $0.type == .main && $0.sort == Float(episodeNumber)
                 }) else { return }
                 guard episode.collectionTypeEnum != .collect else { return }
                 try await self.bangumi.context.updateEpisodeCollection(
                     episodeId: episode.id, type: .collect)
+                BangumiDiagnostics.log(
+                    "播放结束已标记 Bangumi subject=\(subjectID) episode=\(episode.id)")
             } catch {
                 BangumiDiagnostics.log("播放结束标记 Bangumi 已看失败 error=\(error)")
             }

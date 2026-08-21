@@ -87,7 +87,7 @@ public actor BangumiAPIClient {
     }()
 
     public init(
-        store: BangumiStore = BangumiStore(),
+        store: BangumiStore = .shared,
         appInfo: BangumiAppInfo? = nil,
         userAgent: String = "OcPlayer/0.1 (BangumiKit)",
         authDomain: BangumiURL.AuthDomain = .origin
@@ -489,8 +489,12 @@ public actor BangumiAPIClient {
         return authGeneration
     }
 
+    /// 通知 UI「这一代凭证需要重新登录」。
+    ///
+    /// 只比对代际，**不看 `isAuthenticated`**：凭证已经被清掉、只剩标记位残留时，
+    /// 恰恰最需要这条通知把 UI 拉回未登录态。
     private func notifyAuthenticationRequired(ifCurrent generation: UInt64) async {
-        guard generation == authGeneration, isAuthenticated() else { return }
+        guard generation == authGeneration else { return }
         await MainActor.run {
             NotificationCenter.default.post(
                 name: Self.authenticationRequiredNotification,

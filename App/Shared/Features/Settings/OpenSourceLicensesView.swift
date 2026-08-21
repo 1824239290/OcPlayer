@@ -65,6 +65,18 @@ enum OpenSourceLicenseCatalog {
                         "THIRD_PARTY_LICENSES/swiftpm/Get/LICENSE",
                     ]
                 ),
+                component(
+                    id: "grdb",
+                    name: "GRDB.swift",
+                    version: "7.11.1",
+                    license: "MIT",
+                    purpose: "BangumiKit 的本地 SQLite 层，缓存 Bangumi 收藏与章节进度。",
+                    homepage: "https://github.com/groue/GRDB.swift",
+                    licenseURL: "https://opensource.org/license/mit",
+                    bundledLicensePaths: [
+                        "THIRD_PARTY_LICENSES/swiftpm/GRDB.swift/LICENSE",
+                    ]
+                ),
             ]
         ),
         OpenSourceComponentGroup(

@@ -5,6 +5,10 @@ import Foundation
 /// 与 JellyfinKit 的 `ServerStore` 同风格：class + 锁 + 显式 save。
 /// token 存 UserDefaults 而不是 Keychain（发行包统一 ad-hoc 签名，与现有 Jellyfin token 一致）。
 public final class BangumiStore: @unchecked Sendable {
+    /// 全局共用实例。同一份 UserDefaults 被多个 store 实例读写时，每个实例各有一把锁
+    /// 等于没锁，所以除测试注入自定义 defaults 外都用这一个。
+    public static let shared = BangumiStore()
+
     private let lock = NSLock()
     private let defaults: UserDefaults
 
@@ -19,8 +23,13 @@ public final class BangumiStore: @unchecked Sendable {
     }
 
     /// 是否已登录（UI 的唯一门控信号）。
+    ///
+    /// **必须同时有标记位和凭证**：401 被动失效只清 token，如果这里只看标记位，
+    /// UI 会永远停在「已登录」而每次操作静默失败。
     public var isAuthenticated: Bool {
-        lock.withLock { defaults.bool(forKey: isAuthenticatedKey) }
+        lock.withLock {
+            defaults.bool(forKey: isAuthenticatedKey) && defaults.data(forKey: authKey) != nil
+        }
     }
 
     public func setAuthenticated(_ value: Bool) {
