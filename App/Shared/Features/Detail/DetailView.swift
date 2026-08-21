@@ -64,6 +64,7 @@ struct DetailView: View {
                             seasonBar
                             episodeList
                         }
+                        BangumiChapterSection(item: shown)
                         if !shown.cast.isEmpty { castRail }
                         if !similar.isEmpty { similarRail }
                     }

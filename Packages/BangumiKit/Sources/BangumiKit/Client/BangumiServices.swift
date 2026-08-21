@@ -61,21 +61,24 @@ public enum BangumiEpisodeService {
 
 /// 条目查询（搜索/详情），用于播放器联动时的条目匹配。
 public enum BangumiSubjectService {
-    /// 搜索条目。
+    /// 搜索条目（POST，按匹配度排序）。
     public static func search(
         keyword: String, filter: BangumiSubjectType? = nil, limit: Int = 30, offset: Int = 0
     ) async throws -> BangumiPagedDTO<BangumiSlimSubjectDTO> {
         let url = BangumiURL.next(path: "p1/search/subjects")
-        var queryItems = [
-            URLQueryItem(name: "keyword", value: keyword),
+        let pageURL = url.appending(queryItems: [
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
+        ])
+        var body: [String: Any] = [
+            "keyword": keyword,
+            "sort": "match",
         ]
         if let filter, filter != .none {
-            queryItems.append(URLQueryItem(name: "filter", value: String(filter.rawValue)))
+            body["filter"] = ["type": [filter.rawValue]]
         }
         let data = try await BangumiAPIClient.shared.request(
-            url: url.appending(queryItems: queryItems), method: "GET")
+            url: pageURL, method: "POST", body: body)
         return try await BangumiAPIClient.shared.decodeResponse(data)
     }
 

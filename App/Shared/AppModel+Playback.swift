@@ -405,6 +405,38 @@ extension AppModel {
             if event.reachedEnd, let next = self.nextEpisode {
                 self.play(next, resumeSeconds: 0)
             }
+            // 自然看完：向 Bangumi 标记本集已看（尽力而为，失败不打断连播）。
+            if event.reachedEnd {
+                self.markWatchedOnBangumi(for: item)
+            }
+        }
+    }
+
+    /// 播放到尾后，把这一集对应的 Bangumi 章节标记为「看过」。
+    ///
+    /// 只在「有关联 + 已登录」时生效：按 Jellyfin 集号（episodeNumber）匹配
+    /// Bangumi 章节 sort，找不到精确匹配就不动。失败静默，错误进诊断日志。
+    private func markWatchedOnBangumi(for item: MediaItem) {
+        guard item.kind == .episode, let episodeNumber = item.episodeNumber else { return }
+        guard bangumi.isAuthenticated else { return }
+        let linkItemID = item.seriesID ?? item.id
+        guard let subjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: linkItemID) else {
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let episodes = try await self.bangumi.context.fetchEpisodes(subjectId: subjectID)
+                // 精确匹配主篇集号；特典（0.5 等）不匹配就不标。
+                guard let episode = episodes.first(where: {
+                    $0.type == .main && Int($0.sort) == episodeNumber
+                }) else { return }
+                guard episode.collectionTypeEnum != .collect else { return }
+                try await self.bangumi.context.updateEpisodeCollection(
+                    episodeId: episode.id, type: .collect)
+            } catch {
+                BangumiDiagnostics.log("播放结束标记 Bangumi 已看失败 error=\(error)")
+            }
         }
     }
 

@@ -2,8 +2,8 @@ import DiagnosticsKit
 import Foundation
 
 /// 网络层诊断日志。只记请求路径，任何 token 都由红actor 兜底，绝不进日志。
-enum BangumiNetworkLog {
-    static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "Bangumi")
+public enum BangumiNetworkLog {
+    public static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "Bangumi")
 
     static func requestStarted(_ path: String) {
         logger.debug("请求开始 path=\(path)")
