@@ -80,6 +80,14 @@ struct BangumiHomeView: View {
                 if !bangumi.isDatabaseReady {
                     ProgressView().controlSize(.small)
                 }
+                if bangumi.isAuthenticated {
+                    Button {
+                        app.path.append(.bangumiProfile)
+                    } label: {
+                        Image(systemName: "person.crop.circle")
+                    }
+                    .help("个人主页")
+                }
                 Button {
                     Task { await refresh(force: true) }
                 } label: {

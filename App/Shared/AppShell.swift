@@ -208,6 +208,10 @@ extension View {
             case .detail(let item):
                 DetailView(item: item)
                     .id(item.id)
+            case .bangumiProfile:
+                BangumiProfileView()
+            case .bangumiCollectionList(let type):
+                BangumiCollectionListView(subjectType: type)
             }
         }
     }

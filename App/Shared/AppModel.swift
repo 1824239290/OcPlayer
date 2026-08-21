@@ -113,6 +113,8 @@ final class AppModel {
 
     enum Route: Hashable {
         case detail(MediaItem)
+        case bangumiProfile
+        case bangumiCollectionList(BangumiSubjectType)
     }
 
     var selectedSection: Section = .home {
