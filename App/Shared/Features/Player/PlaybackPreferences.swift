@@ -56,9 +56,11 @@ enum PlaybackPreferences {
         get { storedBool(forKey: danmakuBlockScrollKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuBlockScrollKey) }
     }
-    /// 重复弹幕合并显示，减少轨道竞争（窗口重排时旧弹幕更少被挤行）。
+    /// 重复弹幕合并显示。Erika 内核的合并代表项会随计划窗口滑动翻转
+    /// （×N 后缀改变文本宽度→碰撞几何变化），是稳态播放中弹幕跳轨的诱因之一，
+    /// 默认关闭；后续弹幕渲染方案替换后可改为装载期一次性去重。
     static var danmakuMergeDuplicates: Bool {
-        get { storedBool(forKey: danmakuMergeDuplicatesKey, default: true) }
+        get { storedBool(forKey: danmakuMergeDuplicatesKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuMergeDuplicatesKey) }
     }
     /// 允许同轨道堆叠。实测在 Erika 的 DFM 布局里 stacking 打开会把弹幕
