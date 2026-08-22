@@ -19,6 +19,7 @@ struct MoviePilotResourceView: View {
 
     @State private var torrents: [MPTorrent] = []
     @State private var isSearching = false
+    @State private var progressText: String?
     @State private var hasSearched = false
     @State private var searchError: String?
     @State private var searchGeneration = 0
@@ -46,9 +47,16 @@ struct MoviePilotResourceView: View {
                 if isSearching {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
-                        Text("正在搜索各站点资源，可能需要几十秒…")
-                            .foregroundStyle(.secondary)
-                            .font(.callout)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(progressText ?? "正在搜索各站点资源…")
+                                .foregroundStyle(.secondary)
+                                .font(.callout)
+                            if !torrents.isEmpty {
+                                Text("已收到 \(torrents.count) 条，边搜边出——可以直接挑")
+                                    .foregroundStyle(.tertiary)
+                                    .font(.caption)
+                            }
+                        }
                     }
                 } else if let searchError {
                     Text(searchError)
@@ -168,12 +176,21 @@ struct MoviePilotResourceView: View {
                 Text(torrent.title ?? "未命名资源")
                     .font(.callout)
                     .lineLimit(2)
+                if let description = torrent.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 HStack(spacing: 6) {
                     if let site = torrent.siteName {
                         badge(site, tint: .blue)
                     }
                     if torrent.isFree {
                         badge("免费", tint: .green)
+                    }
+                    ForEach(torrent.labels.prefix(2), id: \.self) { label in
+                        badge(label, tint: .orange)
                     }
                     Text(torrent.sizeText)
                     if let seeders = torrent.seeders {
@@ -234,21 +251,31 @@ struct MoviePilotResourceView: View {
         hasSearched = true
         searchError = nil
         notice = nil
+        torrents = []
+        progressText = nil
         Task {
             do {
-                let found = try await MoviePilotAPIClient.shared.searchTorrentsByTitle(
+                try await MoviePilotAPIClient.shared.searchTorrentsByTitleStream(
                     keyword: trimmed,
                     sites: selectedSiteIDs.isEmpty ? [] : selectedSiteIDs.sorted()
-                )
+                ) { current, progress in
+                    // 回调在后台线程，回主线程并对一次代际（连搜时旧流不能覆盖新流）。
+                    Task { @MainActor in
+                        guard generation == searchGeneration else { return }
+                        torrents = current
+                        progressText = progress.text
+                    }
+                }
                 guard generation == searchGeneration else { return }
-                torrents = found.sorted { ($0.seeders ?? 0) > ($1.seeders ?? 0) }
+                // 终态按做种数排一次（流式期间按到达顺序展示）。
+                torrents.sort { ($0.seeders ?? 0) > ($1.seeders ?? 0) }
             } catch {
                 guard generation == searchGeneration else { return }
-                torrents = []
                 searchError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
             }
             if generation == searchGeneration {
                 isSearching = false
+                progressText = nil
             }
         }
     }

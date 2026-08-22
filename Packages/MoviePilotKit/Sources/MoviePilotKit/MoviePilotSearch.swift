@@ -93,6 +93,8 @@ public struct MPTorrent: Sendable, Equatable, Identifiable {
     /// 下载体积因子：0 = 免费（FREE）。
     public var downloadVolumeFactor: Double? { raw["downloadvolumefactor"]?.doubleValue }
     public var uploadVolumeFactor: Double? { raw["uploadvolumefactor"]?.doubleValue }
+    /// 服务端给的促销文案（"免费" / "普通" / "FREE"…）。
+    public var volumeFactor: String? { raw["volume_factor"]?.stringValue }
     public var labels: [String] {
         if case .array(let values) = raw["labels"] ?? .null {
             return values.compactMap(\.stringValue)
@@ -101,8 +103,11 @@ public struct MPTorrent: Sendable, Equatable, Identifiable {
     }
 
     public var isFree: Bool {
-        guard let factor = downloadVolumeFactor else { return false }
-        return factor == 0
+        if let factor = downloadVolumeFactor, factor == 0 { return true }
+        if let text = volumeFactor?.lowercased() {
+            return text.contains("免费") || text.contains("free")
+        }
+        return false
     }
 
     public var sizeText: String {

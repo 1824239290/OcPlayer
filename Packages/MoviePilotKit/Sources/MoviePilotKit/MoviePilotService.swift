@@ -36,30 +36,8 @@ extension MoviePilotAPIClient {
         return items.map(MPSite.init(raw:))
     }
 
-    /// 按标题搜站点资源（资源搜索主路径，与 MP 网页端一致）：
-    /// `GET /search/title?keyword=&sites=`。sites 为空 = 全部站点。
-    /// 同步聚合各站，可能要等几十秒。
-    public func searchTorrentsByTitle(keyword: String, sites: [Int] = []) async throws -> [MPTorrent] {
-        var query = [
-            URLQueryItem(name: "keyword", value: keyword),
-        ]
-        // 服务端格式：逗号分隔的站点 id（_parse_site_list）。
-        if !sites.isEmpty {
-            query.append(URLQueryItem(
-                name: "sites", value: sites.map(String.init).joined(separator: ",")))
-        }
-        let request = MPRequest(
-            path: "/api/v1/search/title",
-            query: query,
-            timeout: 120
-        )
-        let data = try await requestData(request)
-        let wrapped = try Self.plainDecoder.decode(MPTorrentListResponse.self, from: data)
-        guard wrapped.success ?? true else {
-            throw MoviePilotError.generic(wrapped.message ?? "站点搜索失败")
-        }
-        return (wrapped.data ?? []).map(MPTorrent.init(raw:))
-    }
+    /// 按标题搜站点资源（SSE 流式，见 `searchTorrentsByTitleStream`）。
+    /// 同步版 `/search/title` 在 v3 服务端返回全空壳字段，不可用。
 
     /// 添加下载：media / torrent 必须是搜索结果的原始对象回传。
     public func addDownload(media: MPMediaInfo, torrent: MPTorrent) async throws {

@@ -56,6 +56,9 @@ public actor MoviePilotAPIClient {
 
     private let store: MoviePilotStore
     private let session: URLSession
+    /// SSE 流式搜索专用：`timeoutIntervalForResource` 不能按请求覆盖，而站点
+    /// 聚合搜索整场可以跑几分钟，普通会话 30s 就会把流掐断。
+    private let streamSession: URLSession
 
     private var authGeneration: UInt64 = 0
     /// 单飞的静默重登：并发请求同时撞 401 时只登一次，其余等同一个 Task。
@@ -74,6 +77,14 @@ public actor MoviePilotAPIClient {
             "User-Agent": "OcPlayer/0.1 (MoviePilotKit)",
         ]
         self.session = URLSession(configuration: configuration)
+
+        // 流式会话：请求间空闲 30s 超时（心跳 15s 兜着），整场 5 分钟上限。
+        // cookie 存储跟随原配置（默认共享，登录种的 resource cookie 全局可见）。
+        let streamConfiguration =
+            (sessionConfiguration.copy() as? URLSessionConfiguration) ?? configuration
+        streamConfiguration.timeoutIntervalForRequest = 30
+        streamConfiguration.timeoutIntervalForResource = 300
+        self.streamSession = URLSession(configuration: streamConfiguration)
     }
 
     // MARK: - 登录态
@@ -240,37 +251,8 @@ public actor MoviePilotAPIClient {
 
     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。
     private func sendOnce(_ request: MPRequest, token: String?) async throws -> Data {
-        guard let baseURL = store.baseURL else {
-            throw MoviePilotError.notConfigured
-        }
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
-            ?? URLComponents()
-        let prefix = components.path == "/" ? "" : components.path
-        components.path = prefix + request.path
-        if !request.query.isEmpty {
-            components.queryItems = request.query
-        }
-        guard let url = components.url else {
-            throw MoviePilotError.generic("请求地址拼装失败：\(request.path)")
-        }
-
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = request.method
-        if let timeout = request.timeout {
-            urlRequest.timeoutInterval = timeout
-        }
-        if let token {
-            urlRequest.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        if let formBody = request.formBody {
-            var bodyComponents = URLComponents()
-            bodyComponents.queryItems = formBody.map { URLQueryItem(name: $0.key, value: $0.value) }
-            urlRequest.httpBody = bodyComponents.percentEncodedQuery?.data(using: .utf8)
-            urlRequest.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        } else if let jsonBody = request.jsonBody {
-            urlRequest.httpBody = try JSONEncoder().encode(jsonBody)
-            urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
+        let urlRequest = try makeURLRequest(request, token: token)
+        let url = urlRequest.url
 
         let path = MoviePilotNetworkLog.logPath(for: url)
         MoviePilotNetworkLog.requestStarted(path)
@@ -307,6 +289,42 @@ public actor MoviePilotAPIClient {
         )
         MoviePilotNetworkLog.requestFailed(path, error: error, duration: duration)
         throw error
+    }
+
+    /// URL + URLRequest 组装（普通请求与 SSE 流共用）。
+    private func makeURLRequest(_ request: MPRequest, token: String?) throws -> URLRequest {
+        guard let baseURL = store.baseURL else {
+            throw MoviePilotError.notConfigured
+        }
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+            ?? URLComponents()
+        let prefix = components.path == "/" ? "" : components.path
+        components.path = prefix + request.path
+        if !request.query.isEmpty {
+            components.queryItems = request.query
+        }
+        guard let url = components.url else {
+            throw MoviePilotError.generic("请求地址拼装失败：\(request.path)")
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = request.method
+        if let timeout = request.timeout {
+            urlRequest.timeoutInterval = timeout
+        }
+        if let token {
+            urlRequest.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let formBody = request.formBody {
+            var bodyComponents = URLComponents()
+            bodyComponents.queryItems = formBody.map { URLQueryItem(name: $0.key, value: $0.value) }
+            urlRequest.httpBody = bodyComponents.percentEncodedQuery?.data(using: .utf8)
+            urlRequest.addValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        } else if let jsonBody = request.jsonBody {
+            urlRequest.httpBody = try JSONEncoder().encode(jsonBody)
+            urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return urlRequest
     }
 
     // MARK: - 静默重登
@@ -374,6 +392,134 @@ public actor MoviePilotAPIClient {
             )
         }
     }
+
+    // MARK: - SSE 流式搜索
+
+    /// 按标题流式搜站点资源（MP 网页端同款路径）。每个事件回调一次
+    /// 「当前累计结果 + 进度」，结束时返回最终列表；边搜边出，不用等全场跑完。
+    ///
+    /// 鉴权靠登录时种的 `MoviePilot` resource cookie（默认 cookie 存储自动携带），
+    /// cookie 过期（30 分钟无 JWT 请求）时 401 → 静默重登刷新 cookie → 重试一次。
+    @discardableResult
+    public func searchTorrentsByTitleStream(
+        keyword: String,
+        sites: [Int] = [],
+        onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)? = nil
+    ) async throws -> [MPTorrent] {
+        do {
+            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
+        } catch MoviePilotError.requireLogin {
+            // cookie 过期：静默重登会顺带种新 cookie，重放一次。
+            _ = try await silentRelogin()
+            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
+        }
+    }
+
+    private func runStreamSearch(
+        keyword: String,
+        sites: [Int],
+        onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)?
+    ) async throws -> [MPTorrent] {
+        var query = [
+            URLQueryItem(name: "keyword", value: keyword),
+        ]
+        // 服务端格式：逗号分隔的站点 id（_parse_site_list）；不传 = 全部站点。
+        if !sites.isEmpty {
+            query.append(URLQueryItem(
+                name: "sites", value: sites.map(String.init).joined(separator: ",")))
+        }
+        let request = MPRequest(
+            path: "/api/v1/search/title/stream",
+            query: query,
+            authorized: false
+        )
+        let urlRequest = try makeURLRequest(request, token: nil)
+        MoviePilotNetworkLog.requestStarted(MoviePilotNetworkLog.logPath(for: urlRequest.url))
+
+        let (bytes, response): (URLSession.AsyncBytes, URLResponse)
+        do {
+            (bytes, response) = try await streamSession.bytes(for: urlRequest)
+        } catch let error as NSError where error.domain == NSURLErrorDomain {
+            throw MoviePilotError(networkError: error)
+        }
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MoviePilotError.generic("服务器响应异常")
+        }
+        guard httpResponse.statusCode < 400 else {
+            // 流式接口的 401 是 resource cookie 过期，统一按 requireLogin 抛，
+            // 由上层走静默重登重试。
+            throw MoviePilotError(code: httpResponse.statusCode, response: "SSE 搜索鉴权失败")
+        }
+
+        // SSE：一行一个 `data: {json}`（MP 的事件 JSON 不换行），空行分隔事件。
+        var torrents: [MPTorrent] = []
+        var seen: Set<String> = []
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard !payload.isEmpty,
+                  let data = payload.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+
+            let progress = MPSearchProgress(
+                text: object["text"] as? String,
+                finished: object["finished"] as? Int ?? 0,
+                total: object["total"] as? Int ?? 0,
+                totalItems: object["total_items"] as? Int ?? 0
+            )
+            // 事件里的每条资源装在 context.torrent_info 下（meta_info 是识别结果）。
+            let items = (object["items"] as? [[String: Any]] ?? [])
+                .compactMap { $0["torrent_info"] as? [String: Any] }
+
+            // 任何携带 items 的事件（append / replace / done）都要入列：
+            // done 也可能捎带最后一批资源。
+            func collect(reset: Bool) {
+                if reset {
+                    torrents = []
+                    seen = []
+                }
+                for raw in items {
+                    let torrent = MPTorrent(raw: raw.mapValues(JSONValue.init(any:)))
+                    if seen.insert(torrent.id).inserted {
+                        torrents.append(torrent)
+                    }
+                }
+            }
+
+            switch object["type"] as? String {
+            case "append":
+                collect(reset: false)
+            case "replace":
+                collect(reset: true)
+            case "error":
+                throw MoviePilotError.generic(progress.text ?? "站点搜索失败")
+            case "done", "finish", "finished":
+                collect(reset: false)
+                onUpdate?(torrents, progress)
+                MoviePilotNetworkLog.requestSucceeded(
+                    "/api/v1/search/title/stream",
+                    duration: 0
+                )
+                return torrents
+            default:
+                // heartbeat / 纯进度事件。
+                break
+            }
+            onUpdate?(torrents, progress)
+        }
+        // 服务端关流没发 done（超时截断等）：按已收到的返回。
+        return torrents
+    }
+}
+
+/// 流式搜索的进度快照（服务端事件的进度字段）。
+public struct MPSearchProgress: Sendable, Equatable {
+    /// 人类可读进度文案，如「正在搜索xxx，已完成 3 / 31 个请求 …」。
+    public let text: String?
+    public let finished: Int
+    public let total: Int
+    public let totalItems: Int
 }
 
 private extension Duration {

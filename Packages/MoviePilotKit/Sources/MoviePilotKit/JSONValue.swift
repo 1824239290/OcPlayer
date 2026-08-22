@@ -52,6 +52,29 @@ extension JSONValue: Codable {
 }
 
 extension JSONValue {
+    /// 从 `JSONSerialization` 的 Any 构造（SSE 事件现场解析用）。
+    /// 注意 Bool 分支要在 NSNumber 前判断（Bool 桥接成 NSNumber）。
+    init(any: Any) {
+        switch any {
+        case is NSNull:
+            self = .null
+        case let value as Bool:
+            self = .bool(value)
+        case let value as NSNumber:
+            self = .number(value.doubleValue)
+        case let value as String:
+            self = .string(value)
+        case let value as [Any]:
+            self = .array(value.map(JSONValue.init(any:)))
+        case let value as [String: Any]:
+            self = .object(value.mapValues(JSONValue.init(any:)))
+        default:
+            self = .null
+        }
+    }
+}
+
+extension JSONValue {
     /// 对象字段访问。
     public subscript(key: String) -> JSONValue? {
         if case .object(let dict) = self { return dict[key] }

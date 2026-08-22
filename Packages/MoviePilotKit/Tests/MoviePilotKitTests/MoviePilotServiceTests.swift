@@ -9,6 +9,7 @@ final class MoviePilotServiceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        Self.streamAttempts = 0
         store = MoviePilotStore(defaults: TestSupport.isolatedDefaults())
         client = MoviePilotAPIClient(
             store: store,
@@ -25,6 +26,22 @@ final class MoviePilotServiceTests: XCTestCase {
     override func tearDown() {
         MockURLProtocol.handler = nil
         super.tearDown()
+    }
+
+    /// @Sendable 回调里收集文案用的锁盒子（Swift 6 不许捕获可变局部变量）。
+    private final class TextCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var items: [String] = []
+        func append(_ text: String) {
+            lock.lock()
+            items.append(text)
+            lock.unlock()
+        }
+        var all: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return items
+        }
     }
 
     func testSearchMediaDecodesTypedFields() async throws {
@@ -56,42 +73,102 @@ final class MoviePilotServiceTests: XCTestCase {
         XCTAssertEqual(media.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
     }
 
-    func testSearchTorrentsByTitleSendsCommaSites() async throws {
-        MockURLProtocol.handler = { request in
-            guard let url = request.url else { throw URLError(.badURL) }
-            XCTAssertEqual(url.path, "/api/v1/search/title")
-            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            // sites 必须是逗号分隔（服务端 _parse_siteList 只认逗号）。
-            XCTAssertTrue(query.contains(URLQueryItem(name: "keyword", value: "葬送的芙莉莲")))
-            XCTAssertTrue(query.contains(URLQueryItem(name: "sites", value: "1,3")))
-            return MockURLProtocol.response(
-                #"""
-                {"success":true,"message":"","data":[
-                  {"site_name":"站点A","title":"Show.1080p","enclosure":"https://t/1.torrent",
-                   "size":8589934592,"seeders":42,"downloadvolumefactor":0},
-                  {"site_name":"站点B","title":"Show.720p","enclosure":"https://t/2.torrent",
-                   "size":2147483648,"seeders":7,"downloadvolumefactor":1}
-                ]}
-                """#,
-                status: 200, for: url)
-        }
-
-        let torrents = try await client.searchTorrentsByTitle(
-            keyword: "葬送的芙莉莲", sites: [1, 3])
-        XCTAssertEqual(torrents.count, 2)
-        XCTAssertTrue(torrents[0].isFree, "downloadvolumefactor=0 应识别为免费")
-        XCTAssertFalse(torrents[1].isFree)
+    /// SSE 帧体：一行一个事件（与真实服务端一致，事件 JSON 不换行）。
+    private static func sseBody(_ events: [String]) -> Data {
+        Data(events.map { "data: \($0)\n\n" }.joined().utf8)
     }
 
-    func testSearchTorrentsByTitleOmitsSitesParamWhenAll() async throws {
+    private static func streamResponse(_ body: Data, for url: URL) -> (HTTPURLResponse, Data) {
+        let response = HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "text/event-stream"]
+        )!
+        return (response, body)
+    }
+
+    func testStreamSearchParsesAppendAndDone() async throws {
+        let torrentA: [String: Any] = [
+            "site_name": "萝莉", "title": "Frieren.S01.1080p",
+            "enclosure": "https://t/a.torrent", "size": 8_589_934_592,
+            "seeders": 42, "downloadvolumefactor": 0, "volume_factor": "免费",
+            "labels": ["精选", "中字"],
+        ]
+        let torrentB: [String: Any] = [
+            "site_name": "馒头", "title": "Frieren.S01.720p",
+            "enclosure": "https://t/b.torrent", "size": 2_147_483_648,
+            "seeders": 7, "downloadvolumefactor": 1, "volume_factor": "普通",
+        ]
         MockURLProtocol.handler = { request in
             guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.path, "/api/v1/search/title/stream")
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            XCTAssertFalse(query.contains { $0.name == "sites" }, "全部站点时不该带 sites 参数")
-            return MockURLProtocol.response(
-                #"{"success":true,"message":"","data":[]}"#, status: 200, for: url)
+            // sites 必须逗号分隔（服务端 _parse_site_list 只认逗号）。
+            XCTAssertTrue(query.contains(URLQueryItem(name: "sites", value: "1,3")))
+            let body = Self.sseBody([
+                #"{"type":"append","stage":"searching","text":"开始搜索，共 31 个站点","finished":0,"total":31,"items":[]}"#,
+                #"{"type":"append","text":"已完成 3 / 31","finished":3,"total":31,"total_items":1,"items":[{"torrent_info":\#(Self.json(torrentA))}],"meta_info":{}}"#,
+                #"{"type":"done","text":"搜索完成","finished":31,"total":31,"total_items":2,"items":[{"torrent_info":\#(Self.json(torrentB))}]}"#,
+            ])
+            return Self.streamResponse(body, for: url)
         }
-        _ = try await client.searchTorrentsByTitle(keyword: "关键词")
+
+        let progressTexts = TextCollector()
+        let torrents = try await client.searchTorrentsByTitleStream(
+            keyword: "frieren",
+            sites: [1, 3]
+        ) { _, progress in
+            progressTexts.append(progress.text ?? "")
+        }
+
+        XCTAssertEqual(torrents.count, 2, "append×1 + done 补 1 条")
+        XCTAssertEqual(torrents[0].siteName, "萝莉")
+        XCTAssertEqual(torrents[0].labels, ["精选", "中字"])
+        XCTAssertTrue(torrents[0].isFree, "downloadvolumefactor=0 / volume_factor=免费 双信号")
+        XCTAssertFalse(torrents[1].isFree)
+        XCTAssertTrue(progressTexts.all.contains { $0.contains("3 / 31") }, "进度回调要有服务端文案")
+    }
+
+    func testStreamSearchReloginsOn401AndRetries() async throws {
+        store.accessToken = "expired-jwt"
+        let torrent: [String: Any] = [
+            "site_name": "站点A", "title": "T",
+            "enclosure": "https://t/1.torrent", "seeders": 1,
+        ]
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            switch url.path {
+            case "/api/v1/search/title/stream":
+                // 第一次 cookie 过期，重登后重放成功。
+                if request.value(forHTTPHeaderField: "Authorization") == nil && Self.streamAttempts == 0 {
+                    Self.streamAttempts += 1
+                    return MockURLProtocol.response(
+                        #"{"detail":"Not authenticated"}"#, status: 401, for: url)
+                }
+                let body = Self.sseBody([
+                    #"{"type":"done","text":"完成","items":[{"torrent_info":\#(Self.json(torrent))}]}"#,
+                ])
+                return Self.streamResponse(body, for: url)
+            case "/api/v1/login/access-token":
+                return MockURLProtocol.response(
+                    #"{"access_token":"jwt-2","token_type":"bearer"}"#, status: 200, for: url)
+            default:
+                XCTFail("意外请求：\(url.path)")
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let torrents = try await client.searchTorrentsByTitleStream(keyword: "k")
+        XCTAssertEqual(torrents.count, 1)
+        XCTAssertEqual(Self.streamAttempts, 1, "401 后必须重登并重试一次")
+    }
+
+    private nonisolated(unsafe) static var streamAttempts = 0
+
+    private static func json(_ object: [String: Any]) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let text = String(data: data, encoding: .utf8)
+        else { return "{}" }
+        return text
     }
 
     func testSitesListDecodesThroughEnvelope() async throws {
