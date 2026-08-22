@@ -48,8 +48,9 @@ final class MoviePilotClientTests: XCTestCase {
                     #"{"access_token":"jwt-1","token_type":"bearer"}"#, status: 200, for: url)
             case "/api/v1/user/current":
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer jwt-1")
+                // v3 的 ResponseAPIRouter 自动信封：用户对象在 data 里。
                 return MockURLProtocol.response(
-                    #"{"id":1,"name":"admin","is_superuser":true,"is_active":true}"#,
+                    #"{"success":true,"message":"","data":{"id":1,"name":"admin","is_superuser":true,"is_active":true}}"#,
                     status: 200, for: url)
             default:
                 XCTFail("意外请求：\(url.path)")

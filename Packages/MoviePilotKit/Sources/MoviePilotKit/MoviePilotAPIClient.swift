@@ -1,6 +1,21 @@
 import DiagnosticsKit
 import Foundation
 
+/// v3 的 `ResponseAPIRouter` 会把大多数路由的返回**自动包进** `{success, message, data}`
+/// 信封（用户信息、媒体搜索、下载列表都中招）；少数端点又是裸返回（显式声明
+/// Response 的、raw 标记的、OAuth2 token）。与其逐端点猜，运行时探测统一剥壳：
+/// 顶层是对象且**同时带 `success` 和 `data`** 才剥一层，其余原样返回——裸数组、
+/// 裸对象都不满足条件，天然不受影响。
+enum MPEnvelope {
+    static func unwrap(_ data: Data) -> Data {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object.keys.contains("success"),
+              let inner = object["data"]
+        else { return data }
+        return (try? JSONSerialization.data(withJSONObject: inner)) ?? data
+    }
+}
+
 /// MoviePilot 网络层诊断日志。只记请求路径与错误摘要，token / 密码绝不进日志。
 public enum MoviePilotNetworkLog {
     public static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "MoviePilot")
@@ -89,18 +104,21 @@ public actor MoviePilotAPIClient {
         bumpGeneration()
         // 拿新 token 直接取用户信息（不经重登路径——token 就是刚换的）。
         let request = MPRequest(path: "/api/v1/user/current")
-        let data = try await sendOnce(request, token: token)
+        let data = MPEnvelope.unwrap(try await sendOnce(request, token: token))
         do {
             return try Self.decoder.decode(MPUser.self, from: data)
         } catch {
-            throw MoviePilotError.badRequest("登录成功但用户信息解析失败：\(error)")
+            // 别映射成 badRequest——那是「请求参数有误」，会把解析问题误导成参数问题。
+            throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)")
         }
     }
 
     /// 当前用户（带鉴权；token 过期走静默重登）。
     @discardableResult
     public func currentUser() async throws -> MPUser {
-        try await request(MPRequest(path: "/api/v1/user/current"))
+        let data = MPEnvelope.unwrap(
+            try await requestData(MPRequest(path: "/api/v1/user/current")))
+        return try Self.decoder.decode(MPUser.self, from: data)
     }
 
     /// 退出登录：清 token 与密码，作废在途请求。

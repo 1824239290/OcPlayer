@@ -162,6 +162,25 @@ final class MoviePilotServiceTests: XCTestCase {
         }
     }
 
+    func testSearchMediaHandlesAutoEnvelope() async throws {
+        // v3 ResponseAPIRouter 把列表也包进 {success, data}；剥壳后照常解析。
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            return MockURLProtocol.response(
+                #"""
+                {"success":true,"message":"","data":[
+                  {"media_source":"tmdb","type":"电影","title":"测试电影",
+                   "year":"2024","media_id":"tmdb:42","tmdb_id":42}
+                ]}
+                """#,
+                status: 200, for: url)
+        }
+        let results = try await client.searchMedia(title: "测试")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].title, "测试电影")
+        XCTAssertEqual(results[0].mediaId, "tmdb:42")
+    }
+
     func testDownloadingTasksDecode() async throws {
         MockURLProtocol.handler = { request in
             guard let url = request.url else { throw URLError(.badURL) }

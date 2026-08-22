@@ -21,7 +21,9 @@ extension MoviePilotAPIClient {
             timeout: 30
         )
         let data = try await requestData(request)
-        let items = try Self.plainDecoder.decode([[String: JSONValue]].self, from: data)
+        // v3 的 ResponseAPIRouter 自动信封 + 裸返回两种都要兼容。
+        let items = try Self.plainDecoder.decode(
+            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
         return items.map(MPMediaInfo.init(raw:))
     }
 
@@ -78,7 +80,8 @@ extension MoviePilotAPIClient {
     public func downloadingTasks() async throws -> [MPDownloadTask] {
         let request = MPRequest(path: "/api/v1/download/")
         let data = try await requestData(request)
-        let items = try Self.plainDecoder.decode([[String: JSONValue]].self, from: data)
+        let items = try Self.plainDecoder.decode(
+            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
         return items.map(MPDownloadTask.init(raw:))
     }
 
