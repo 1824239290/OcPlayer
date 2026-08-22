@@ -71,9 +71,10 @@ enum PlaybackPreferences {
     }
 
     /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。
-    /// 影子模式默认关：打开后弹幕由 overlay 渲染、内核弹幕不装载。
+    /// 实测稳定后已默认开；内核 DFM+ 路径保留为回退（置 false 切回），
+    /// 待上游修复滑窗重排问题（AimesSoft/Erika#118）后再评估去留。
     static var danmakuUseOverlayRenderer: Bool {
-        get { storedBool(forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer", default: false) }
+        get { storedBool(forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer", default: true) }
         set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer") }
     }
 
