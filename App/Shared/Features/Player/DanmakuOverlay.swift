@@ -54,6 +54,9 @@ final class DanmakuOverlayController {
 
     private(set) lazy var view: DanmakuView = {
         let view = DanmakuView(frame: .zero)
+        // 复用池：默认 false 时每条弹幕都新建 NSView，密集段落的 alloc/addSubview
+        // 抖动会顶到主线程帧预算（上游 Mac 示例同样打开）。
+        view.enableCellReusable = true
         applyPreferences(to: view)
         return view
     }()
@@ -157,8 +160,12 @@ final class DanmakuOverlayController {
 
     func startTimer() {
         guard timer == nil else { return }
+        // Timer 本来就在主线程 runloop 上跑，直接 assumeIsolated 进 tick，
+        // 不再每拍包一个 Task（30Hz 的分配 + 调度延迟都是白付的）。
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            MainActor.assumeIsolated {
+                self?.tick()
+            }
         }
     }
 

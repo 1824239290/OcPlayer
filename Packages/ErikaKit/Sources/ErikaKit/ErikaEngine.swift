@@ -27,8 +27,17 @@ public final class ErikaEngine: @unchecked Sendable {
     /// 最近一次内核 position 事件的媒体时间（渲染线程写、任意线程读）。
     /// 弹幕 overlay 用自己的采样时钟读它决定「谁该出场」：暂停/缓冲时内核
     /// 媒体时间冻结，采样值跟着冻结——语义与内核内嵌弹幕的时间契约一致。
-    public var latestMediaTime: Duration { withLock { _latestMediaTime } }
-    private var _latestMediaTime: Duration = .zero
+    ///
+    /// ⚠️ 用独立小锁而不是引擎主锁：主锁每帧被渲染线程的 renderTick 长持，
+    /// UI 若按主锁读（overlay 30Hz 采样），会与渲染帧抢锁——读一次可能阻塞
+    /// 到一整个 renderTick，渲染线程也可能被 UI 侧拖延，表现为视频掉帧。
+    public var latestMediaTime: Duration {
+        mediaTimeLock.lock()
+        defer { mediaTimeLock.unlock() }
+        return .microseconds(_latestMediaTimeMicros)
+    }
+    private let mediaTimeLock = NSLock()
+    private var _latestMediaTimeMicros: Int64 = 0
 
     public init(outputMode: ErikaPresenterOutputMode = ErikaPresenterOutputMode_Auto,
                 edrHeadroom: Float = 0,
@@ -294,7 +303,11 @@ public final class ErikaEngine: @unchecked Sendable {
         while true {
             do {
                 guard let event = try presenter.pollEvent() else { break }
-                if case .positionChanged(let value) = event { _latestMediaTime = value }
+                if case .positionChanged(let value) = event {
+                    mediaTimeLock.lock()
+                    _latestMediaTimeMicros = value.microseconds
+                    mediaTimeLock.unlock()
+                }
                 pending.append(event)
             } catch let error as ErikaError {
                 PlaybackLog.error("poll_event 失败 error=\(error)")
