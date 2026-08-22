@@ -594,6 +594,27 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if usesOverlayDanmakuRenderer { danmakuOverlay.setRate(newRate) }
     }
 
+    // MARK: - 按住快进（右箭头长按 2x，松手恢复）
+
+    /// 长按期间暂存的原速；nil = 不在长按态。
+    @ObservationIgnored private(set) var holdFastForwardRate: Double?
+
+    var isHoldFastForwarding: Bool { holdFastForwardRate != nil }
+
+    /// 进入临时 2 倍速。重复调用无副作用（autorepeat 每帧都会来）。
+    func beginHoldFastForward() {
+        guard holdFastForwardRate == nil else { return }
+        holdFastForwardRate = rate
+        applyRate(2.0)
+    }
+
+    /// 松手恢复原速。keyUp 丢失（切走 App 等）时由兜底路径调用，幂等。
+    func endHoldFastForward() {
+        guard let previous = holdFastForwardRate else { return }
+        holdFastForwardRate = nil
+        applyRate(previous)
+    }
+
     func applyVolume(_ newVolume: Double) {
         volume = min(max(newVolume, 0), 1)
         try? engine?.setVolume(muted ? 0 : volume)

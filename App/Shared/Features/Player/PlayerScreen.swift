@@ -164,6 +164,11 @@ struct PlayerScreen: View {
             else { return }
             isFullscreen = false
         }
+        // 长按 2x 期间切走 App：keyUp 会丢，主动收尾恢复原速（幂等）。
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didResignActiveNotification)) { _ in
+            controller.endHoldFastForward()
+        }
         #endif
         .onAppear {
             PlaybackLog.append("PlayerScreen onAppear request=\(request?.title ?? "nil")")
@@ -230,6 +235,7 @@ struct PlayerScreen: View {
             playerLog.info("PlayerScreen onDisappear")
             PlaybackLog.append("PlayerScreen onDisappear")
             PlayerWindowFitter.restore()
+            controller.endHoldFastForward()
             uninstallKeyMonitor()
         }
         #endif
@@ -341,9 +347,10 @@ struct PlayerScreen: View {
     #if os(macOS)
     /// 安装全局本地键盘监听。`NSEvent.addLocalMonitorForEvents` 在主线程拦截 App 的按键，
     /// 不依赖视图焦点——播放器是覆盖层，`.onKeyPress` 抢不到焦点所以不响。
+    /// 同时监听 keyUp：右箭头的「长按 2x / 轻点快进」要靠 keyUp 与 autorepeat 分辨。
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
             handleKey(event) ? nil : event
         }
     }
@@ -369,6 +376,30 @@ struct PlayerScreen: View {
             return false
         }
 
+        // 右箭头特殊：长按 = 临时 2 倍速（松手恢复原速），轻点 = 快进 10 秒。
+        // 首按不动作——是轻点还是长按，要等 autorepeat（长按）或 keyUp（轻点）才能分辨。
+        if event.keyCode == 124 {
+            switch event.type {
+            case .keyDown:
+                if event.isARepeat {
+                    controller.beginHoldFastForward()
+                    revealControls()
+                }
+                return true
+            case .keyUp:
+                if controller.isHoldFastForwarding {
+                    controller.endHoldFastForward()
+                } else {
+                    controller.skip(by: 10)
+                }
+                revealControls()
+                return true
+            default:
+                return false
+            }
+        }
+
+        guard event.type == .keyDown else { return false }
         switch PlayerKeyAction.action(keyCode: event.keyCode) {
         case .togglePlayPause:
             controller.togglePlayPause(); revealControls(); return true
