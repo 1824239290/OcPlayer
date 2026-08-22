@@ -152,15 +152,37 @@ public enum BangumiEpisodeRepository {
     /// 后的「在看 → 看过」）不该由本地猜——回读一次并带上 membership 失效，
     /// 让进度页的章节状态、计数和列表成员资格立刻对齐。回读失败不回滚，
     /// 本地乐观值仍然可用，下次全量同步纠正。
+    ///
+    /// 看完整季的主动推进也在这里：全部本篇集都已看过、且条目当前是「在看」
+    /// 时，把条目状态推成「看过」（远端 PATCH + 本地对齐）。只从「在看」推进，
+    /// 不碰想看/搁置/抛弃——那是用户自己的选择。
     public static func refreshSubjectAfterProgressChange(_ subjectId: Int) async {
         do {
             try await reconcileSubject(subjectId)
-            BangumiProgressInvalidation.post(
-                subjectId: subjectId, mayChangeProgressMembership: true)
         } catch {
             BangumiNetworkLog.logger.warning(
                 "进度变更后回读条目失败 subject=\(subjectId) error=\(error)")
         }
+        guard let db = BangumiContext.shared.database else { return }
+        do {
+            let mains = try await db.fetchEpisodes(subjectId: subjectId, main: true)
+            let allWatched = !mains.isEmpty
+                && mains.allSatisfy { $0.collectionTypeEnum == .collect }
+            if allWatched,
+               let collection = try? await BangumiCollectionService.getSubjectCollection(subjectId),
+               collection.interest?.type == .doing {
+                try await BangumiCollectionService.updateSubjectCollection(
+                    subjectId: subjectId, type: .collect)
+                try await db.updateSubjectCollectionType(subjectId: subjectId, type: .collect)
+                BangumiNetworkLog.logger.info(
+                    "全部本篇已看，条目在看 → 看过 subject=\(subjectId)")
+            }
+        } catch {
+            BangumiNetworkLog.logger.warning(
+                "整季完成推进条目状态失败 subject=\(subjectId) error=\(error)")
+        }
+        BangumiProgressInvalidation.post(
+            subjectId: subjectId, mayChangeProgressMembership: true)
     }
 
     /// 更新单集状态：先远程成功后改本地，再发失效通知。

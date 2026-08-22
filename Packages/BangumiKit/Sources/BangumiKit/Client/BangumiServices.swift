@@ -23,8 +23,24 @@ public enum BangumiCollectionService {
             queryItems.append(URLQueryItem(name: "subjectType", value: String(subjectType.rawValue)))
         }
         let data = try await BangumiAPIClient.shared.request(
-            url: url.appending(queryItems: queryItems), method: "GET", auth: .required)
+            url: url, method: "GET", auth: .required)
         return try await BangumiAPIClient.shared.decodeResponse(data)
+    }
+
+    /// 回读单个条目的用户收藏状态（含在看/看过 type 与进度）。
+    public static func getSubjectCollection(_ subjectId: Int) async throws -> BangumiSubjectDTO {
+        let url = BangumiURL.next(path: "p1/collections/subjects/\(subjectId)")
+        let data = try await BangumiAPIClient.shared.request(url: url, method: "GET", auth: .required)
+        return try await BangumiAPIClient.shared.decodeResponse(data)
+    }
+
+    /// 更新条目收藏状态（想看/在看/看过…）。
+    public static func updateSubjectCollection(
+        subjectId: Int, type: BangumiCollectionType
+    ) async throws {
+        let url = BangumiURL.next(path: "p1/collections/subjects/\(subjectId)")
+        _ = try await BangumiAPIClient.shared.request(
+            url: url, method: "PATCH", body: ["type": type.rawValue], auth: .required)
     }
 }
 

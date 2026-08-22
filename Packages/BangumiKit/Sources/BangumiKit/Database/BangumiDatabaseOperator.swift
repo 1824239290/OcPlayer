@@ -219,6 +219,21 @@ public actor BangumiDatabaseOperator {
 
     // MARK: - 保存
 
+    /// 只改条目级收藏状态（想看/在看/看过…），不动章节。
+    public func updateSubjectCollectionType(
+        subjectId: Int, type: BangumiCollectionType
+    ) throws {
+        try database.write { db in
+            guard var subject = try fetchSubject(in: db, id: subjectId) else { return }
+            let now = Int(Date().timeIntervalSince1970) - 1
+            // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
+            subject.interest?.type = type
+            subject.interest?.updatedAt = now
+            subject.collectedAt = now
+            try upsertSubject(subject, in: db)
+        }
+    }
+
     public func saveEpisodes(subjectId: Int, items: [BangumiEpisodeDTO]) throws {
         try database.write { db in
             var subjectRef = try fetchSubject(in: db, id: subjectId)
