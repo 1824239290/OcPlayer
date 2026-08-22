@@ -247,12 +247,12 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     init(comment: DanmakuOverlayController.Comment, fontSize: CGFloat) {
         self.comment = comment
         #if os(macOS)
-        font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+        font = NSFont.systemFont(ofSize: fontSize)
         color = NSColor(calibratedRed: CGFloat((comment.color >> 16) & 0xFF) / 255,
                         green: CGFloat((comment.color >> 8) & 0xFF) / 255,
                         blue: CGFloat(comment.color & 0xFF) / 255, alpha: 1)
         #else
-        font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        font = UIFont.systemFont(ofSize: fontSize)
         color = UIColor(red: CGFloat((comment.color >> 16) & 0xFF) / 255,
                         green: CGFloat((comment.color >> 8) & 0xFF) / 255,
                         blue: CGFloat(comment.color & 0xFF) / 255, alpha: 1)
@@ -265,7 +265,10 @@ final class OverlayDanmakuModel: DanmakuCellModel {
         case .bottom: type = .bottom
         }
         let attributed = NSAttributedString(string: comment.text, attributes: [.font: font])
-        size = attributed.size()
+        var measured = attributed.size()
+        // 描边在字形外扩，测量宽度不够会在 cell 边缘截字。
+        measured.width += 6
+        size = measured
     }
 
     var cellClass: DanmakuCell.Type { OverlayDanmakuCell.self }
@@ -276,9 +279,12 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     }
 }
 
-/// 单条弹幕的绘制。macOS 关键：DanmakuAsyncLayer 给的是裸 CGContext，
-/// `NSAttributedString.draw` 需要 NSGraphicsContext.current——必须先包一层，
-/// 否则画进空气（cell 在跑但什么都看不见）。上游 Mac 示例同款写法。
+/// 单条弹幕的绘制。macOS 关键点有二：
+/// 1. DanmakuAsyncLayer 给的是裸 CGContext，`NSAttributedString.draw` 需要
+///    先包 NSGraphicsContext.current，否则画进空气（上游 Mac 示例同款）。
+/// 2. 描边用**两遍绘制**：正 strokeWidth 纯描边一遍 + 填充一遍。macOS 对
+///    负 strokeWidth（描边+填充一次画）的渲染有重影/毛刺类毛病，上游因此
+///    也是两遍。
 final class OverlayDanmakuCell: DanmakuCell {
     override func displaying(_ context: CGContext, _ size: CGSize, _ isCancelled: Bool) {
         guard !isCancelled, let model = model as? OverlayDanmakuModel else { return }
@@ -287,14 +293,17 @@ final class OverlayDanmakuCell: DanmakuCell {
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         defer { NSGraphicsContext.restoreGraphicsState() }
         #endif
-        // 负 strokeWidth = 描边外扩、随填充一次画完（双端同语义）。
-        let attributes: [NSAttributedString.Key: Any] = [
+        let text = NSString(string: model.comment.text)
+        let fill: [NSAttributedString.Key: Any] = [
             .font: model.font,
             .foregroundColor: model.color,
-            .strokeColor: PlatformColor.black.withAlphaComponent(0.8),
-            .strokeWidth: -3,
         ]
-        NSString(string: model.comment.text).draw(at: .zero, withAttributes: attributes)
+        var stroke = fill
+        stroke[.strokeColor] = PlatformColor.black.withAlphaComponent(0.9)
+        // 正值 = 只画描边不填充（负值在 macOS 上单次混合绘制有渲染毛病）。
+        stroke[.strokeWidth] = 3
+        text.draw(at: .zero, withAttributes: stroke)
+        text.draw(at: .zero, withAttributes: fill)
     }
 }
 
