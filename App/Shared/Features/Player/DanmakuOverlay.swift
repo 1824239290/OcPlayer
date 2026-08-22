@@ -74,6 +74,7 @@ final class DanmakuOverlayController {
     func replace(json: String, trackOffsetSeconds: Double) {
         comments = Self.parse(json).sorted { $0.time < $1.time }
         self.trackOffsetSeconds = trackOffsetSeconds
+        PlaybackLog.append("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
         resync()
     }
 
@@ -264,21 +265,25 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     }
 }
 
-/// 单条弹幕的绘制：CoreText 描边 + 填充（与系统弹幕观感一致）。
+/// 单条弹幕的绘制。macOS 关键：DanmakuAsyncLayer 给的是裸 CGContext，
+/// `NSAttributedString.draw` 需要 NSGraphicsContext.current——必须先包一层，
+/// 否则画进空气（cell 在跑但什么都看不见）。上游 Mac 示例同款写法。
 final class OverlayDanmakuCell: DanmakuCell {
     override func displaying(_ context: CGContext, _ size: CGSize, _ isCancelled: Bool) {
-        guard let model = model as? OverlayDanmakuModel, !isCancelled else { return }
-        let attributed = NSAttributedString(
-            string: model.comment.text,
-            attributes: [
-                .font: model.font,
-                .foregroundColor: model.color,
-                .strokeWidth: -3,
-                .strokeColor: PlatformColor.black,
-            ]
-        )
-        // 描边+填充一次完成（负 strokeWidth = 描边随填充同绘）。
-        attributed.draw(at: .zero)
+        guard !isCancelled, let model = model as? OverlayDanmakuModel else { return }
+        #if os(macOS)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        #endif
+        // 负 strokeWidth = 描边外扩、随填充一次画完（双端同语义）。
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: model.font,
+            .foregroundColor: model.color,
+            .strokeColor: PlatformColor.black.withAlphaComponent(0.8),
+            .strokeWidth: -3,
+        ]
+        NSString(string: model.comment.text).draw(at: .zero, withAttributes: attributes)
     }
 }
 
