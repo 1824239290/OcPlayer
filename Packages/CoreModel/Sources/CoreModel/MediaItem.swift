@@ -72,6 +72,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public var thumbImageTag: String?
     public var backdropImageTag: String?
 
+    /// Jellyfin ProviderIds 里的 Tmdb id（外部服务对接用，如 MoviePilot 资源搜索）。
+    public var tmdbID: String?
+
     public init(
         id: String,
         name: String,
@@ -91,7 +94,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         childCount: Int? = nil,
         primaryImageTag: String? = nil,
         thumbImageTag: String? = nil,
-        backdropImageTag: String? = nil
+        backdropImageTag: String? = nil,
+        tmdbID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -112,6 +116,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.primaryImageTag = primaryImageTag
         self.thumbImageTag = thumbImageTag
         self.backdropImageTag = backdropImageTag
+        self.tmdbID = tmdbID
     }
 
     /// 「S1E4」这样的集标，非剧集条目返回 nil。

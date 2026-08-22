@@ -134,7 +134,8 @@ extension BaseItemDto {
             childCount: childCount,
             primaryImageTag: primaryTag,
             thumbImageTag: thumbTag,
-            backdropImageTag: backdropTag
+            backdropImageTag: backdropTag,
+            tmdbID: providerIDs?["Tmdb"] ?? providerIDs?["tmdb"]
         )
     }
 }
