@@ -151,6 +151,21 @@ public struct MPDownloadTask: Sendable, Equatable, Identifiable {
     }
 }
 
+/// 站点（`GET /api/v1/site/` 的元素，资源搜索的站点筛选用）。
+public struct MPSite: Sendable, Equatable, Identifiable {
+    public let raw: [String: JSONValue]
+
+    public init(raw: [String: JSONValue]) {
+        self.raw = raw
+    }
+
+    public var id: Int { raw["id"]?.intValue ?? 0 }
+    public var name: String? { raw["name"]?.stringValue }
+    public var domain: String? { raw["domain"]?.stringValue }
+    /// 关闭的站点搜不出资源，筛选列表里降权展示。
+    public var isActive: Bool { raw["is_active"]?.boolValue ?? true }
+}
+
 /// `schemas.Response` 包裹：{success, message, data}。
 struct MPStatusResponse: Decodable {
     let success: Bool?

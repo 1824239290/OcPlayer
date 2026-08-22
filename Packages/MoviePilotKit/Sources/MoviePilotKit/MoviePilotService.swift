@@ -27,26 +27,29 @@ extension MoviePilotAPIClient {
         return items.map(MPMediaInfo.init(raw:))
     }
 
-    /// 站点资源搜索（同步版，可能要等几十秒——各站搜索是串/并行聚合的）。
-    public func searchTorrents(for media: MPMediaInfo, season: Int? = nil) async throws -> [MPTorrent] {
-        guard let mediaKey = media.mediaId ?? media.syntheticMediaKey else {
-            throw MoviePilotError.generic("该条目缺少媒体 ID，无法搜索站点资源")
-        }
+    /// 站点列表（资源搜索的站点筛选用；ResponseAPIRouter 自动信封）。
+    public func sites() async throws -> [MPSite] {
+        let request = MPRequest(path: "/api/v1/site/")
+        let data = try await requestData(request)
+        let items = try Self.plainDecoder.decode(
+            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        return items.map(MPSite.init(raw:))
+    }
+
+    /// 按标题搜站点资源（资源搜索主路径，与 MP 网页端一致）：
+    /// `GET /search/title?keyword=&sites=`。sites 为空 = 全部站点。
+    /// 同步聚合各站，可能要等几十秒。
+    public func searchTorrentsByTitle(keyword: String, sites: [Int] = []) async throws -> [MPTorrent] {
         var query = [
-            URLQueryItem(name: "media_id", value: mediaKey),
-            URLQueryItem(
-                name: "media_source",
-                value: media.mediaSource ?? media.syntheticMediaKey?.split(separator: ":").first.map(String.init) ?? "tmdb"
-            ),
+            URLQueryItem(name: "keyword", value: keyword),
         ]
-        if let type = media.type, !type.isEmpty {
-            query.append(URLQueryItem(name: "mtype", value: type))
-        }
-        if let season {
-            query.append(URLQueryItem(name: "season", value: String(season)))
+        // 服务端格式：逗号分隔的站点 id（_parse_site_list）。
+        if !sites.isEmpty {
+            query.append(URLQueryItem(
+                name: "sites", value: sites.map(String.init).joined(separator: ",")))
         }
         let request = MPRequest(
-            path: "/api/v1/search/media/\(Self.encodePathSegment(mediaKey))",
+            path: "/api/v1/search/title",
             query: query,
             timeout: 120
         )

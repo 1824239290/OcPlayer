@@ -1,19 +1,36 @@
 import MoviePilotKit
 import SwiftUI
 
-/// 某个媒体的站点资源列表：种子按做种数排序，一键添加下载。
-/// 下载完成后由 MoviePilot 服务端自动整理入库——这里不做任何入库追踪。
+/// 站点资源搜索页（复刻 MP 网页端「资源搜索」逻辑）：
+/// 剧集只用来预填标题和回传 media_in——真正的搜索是**按标题**走
+/// `/search/title`，可选站点；聚合结果自己挑。下载完成后由 MoviePilot
+/// 服务端自动整理入库，这里不做任何入库追踪。
 struct MoviePilotResourceView: View {
     @Environment(AppModel.self) private var app
 
+    /// 媒体上下文：标题预填 + 下载时 media_in 回传。
     let media: MPMediaInfo
 
+    @State private var keyword: String
+    @State private var sites: [MPSite] = []
+    @State private var sitesError: String?
+    @State private var selectedSiteIDs: Set<Int> = []
+    @State private var showSitePicker = false
+
     @State private var torrents: [MPTorrent] = []
-    @State private var isLoading = false
-    @State private var loadError: String?
+    @State private var isSearching = false
+    @State private var hasSearched = false
+    @State private var searchError: String?
+    @State private var searchGeneration = 0
+
     @State private var notice: String?
     @State private var isNoticeError = false
     @State private var addingDownloadID: String?
+
+    init(media: MPMediaInfo) {
+        self.media = media
+        _keyword = State(initialValue: media.title ?? "")
+    }
 
     var body: some View {
         List {
@@ -21,31 +38,37 @@ struct MoviePilotResourceView: View {
                 header
                     .listRowBackground(Color.clear)
                     .padding(.vertical, 4)
+                searchControls
+                    .listRowBackground(Color.clear)
             }
 
-            Section("站点资源") {
-                if isLoading {
+            Section {
+                if isSearching {
                     HStack(spacing: 10) {
                         ProgressView().controlSize(.small)
                         Text("正在搜索各站点资源，可能需要几十秒…")
                             .foregroundStyle(.secondary)
                             .font(.callout)
                     }
-                } else if let loadError {
-                    Text(loadError)
+                } else if let searchError {
+                    Text(searchError)
                         .foregroundStyle(.red)
                         .font(.callout)
-                    Button("重试") {
-                        Task { await load() }
-                    }
+                    Button("重试") { search() }
                 } else if torrents.isEmpty {
-                    Text("没有搜到资源。换个关键词、或稍后再试（部分站点需要 Cookie）。")
+                    Text(hasSearched
+                         ? "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。"
+                         : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(torrents) { torrent in
                         torrentRow(torrent)
                     }
+                }
+            } header: {
+                if !torrents.isEmpty || isSearching || searchError != nil {
+                    Text("资源 \(torrents.count)")
                 }
             }
 
@@ -57,12 +80,15 @@ struct MoviePilotResourceView: View {
                 }
             }
         }
-        .navigationTitle(media.title ?? "站点资源")
+        .navigationTitle(media.title ?? "资源搜索")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .task { await load() }
-        .refreshable { await load() }
+        .task { await loadSites() }
+        .refreshable { search() }
+        .sheet(isPresented: $showSitePicker) {
+            MoviePilotSitePickerSheet(sites: sites, selection: $selectedSiteIDs)
+        }
     }
 
     // MARK: - 头部
@@ -86,6 +112,52 @@ struct MoviePilotResourceView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 搜索控件
+
+    private var searchControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("搜索关键词", text: $keyword)
+                    .textFieldStyle(.roundedBorder)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.search)
+                    #endif
+                    .onSubmit(search)
+                Button("搜索", action: search)
+                    .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
+            }
+            Button {
+                showSitePicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    Label(siteFilterText, systemImage: "antenna.radiowaves.left.and.right")
+                        .font(.callout)
+                    Spacer()
+                    if !sites.isEmpty {
+                        Text("共 \(sites.count) 站")
+                            .foregroundStyle(.tertiary)
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.primary)
+            if let sitesError {
+                Text(sitesError)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var siteFilterText: String {
+        selectedSiteIDs.isEmpty ? "全部站点" : "已选 \(selectedSiteIDs.count) 个站点"
     }
 
     // MARK: - 种子行
@@ -142,17 +214,43 @@ struct MoviePilotResourceView: View {
 
     // MARK: - 动作
 
-    private func load() async {
-        isLoading = true
-        loadError = nil
-        notice = nil
+    private func loadSites() async {
+        guard sites.isEmpty else { return }
         do {
-            let found = try await MoviePilotAPIClient.shared.searchTorrents(for: media, season: media.season)
-            torrents = found.sorted { ($0.seeders ?? 0) > ($1.seeders ?? 0) }
+            sites = try await MoviePilotAPIClient.shared.sites()
+            sitesError = nil
         } catch {
-            loadError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            // 站点列表拉不到不挡搜索（默认全部站点），给个提示就行。
+            sitesError = "站点列表加载失败（不影响按全部站点搜索）：\((error as? MoviePilotError)?.userMessage ?? "\(error)")"
         }
-        isLoading = false
+    }
+
+    private func search() {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isSearching else { return }
+        searchGeneration += 1
+        let generation = searchGeneration
+        isSearching = true
+        hasSearched = true
+        searchError = nil
+        notice = nil
+        Task {
+            do {
+                let found = try await MoviePilotAPIClient.shared.searchTorrentsByTitle(
+                    keyword: trimmed,
+                    sites: selectedSiteIDs.isEmpty ? [] : selectedSiteIDs.sorted()
+                )
+                guard generation == searchGeneration else { return }
+                torrents = found.sorted { ($0.seeders ?? 0) > ($1.seeders ?? 0) }
+            } catch {
+                guard generation == searchGeneration else { return }
+                torrents = []
+                searchError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            }
+            if generation == searchGeneration {
+                isSearching = false
+            }
+        }
     }
 
     private func addDownload(_ torrent: MPTorrent) {
@@ -169,5 +267,77 @@ struct MoviePilotResourceView: View {
             }
             addingDownloadID = nil
         }
+    }
+}
+
+/// 站点多选弹窗：空选 = 全部站点（与 MP 网页端一致的语义）。
+private struct MoviePilotSitePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let sites: [MPSite]
+    @Binding var selection: Set<Int>
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Button("搜索全部站点") {
+                        selection = []
+                        dismiss()
+                    }
+                } footer: {
+                    Text("不选任何具体站点时，MoviePilot 会在所有启用的站点里搜。")
+                }
+
+                Section("按站点筛选") {
+                    if sites.isEmpty {
+                        Text("站点列表为空或加载失败。")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(sites) { site in
+                            Button {
+                                if selection.contains(site.id) {
+                                    selection.remove(site.id)
+                                } else {
+                                    selection.insert(site.id)
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(site.name ?? "站点 \(site.id)")
+                                        if let domain = site.domain {
+                                            Text(domain)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    if !site.isActive {
+                                        Text("已停用")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                    if selection.contains(site.id) {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Color.accentColor)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择站点")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(width: 420, height: 520)
+        #endif
     }
 }

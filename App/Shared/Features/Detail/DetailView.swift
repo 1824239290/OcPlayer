@@ -45,11 +45,6 @@ struct DetailView: View {
 
     private var shown: MediaItem { detail ?? item }
 
-    /// 当前选中季的季号（MoviePilot 资源搜索按季过滤用）。
-    private var selectedSeasonNumber: Int? {
-        seasons.first { $0.id == selectedSeasonID }?.seasonNumber
-    }
-
     var body: some View {
         Group {
             if isLoading && detail == nil {
@@ -70,10 +65,7 @@ struct DetailView: View {
                             episodeList
                         }
                         BangumiChapterSection(item: shown)
-                        MoviePilotResourceSection(
-                            item: shown,
-                            seasonNumber: selectedSeasonNumber
-                        )
+                        MoviePilotResourceSection(item: shown)
                         if !shown.cast.isEmpty { castRail }
                         if !similar.isEmpty { similarRail }
                     }

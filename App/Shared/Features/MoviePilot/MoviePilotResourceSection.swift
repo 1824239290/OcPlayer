@@ -14,8 +14,6 @@ struct MoviePilotResourceSection: View {
     @Environment(\.contentLeading) private var contentLeading
 
     let item: MediaItem
-    /// 当前选中的季号（电影为 nil）；资源搜索按季过滤。
-    let seasonNumber: Int?
 
     @State private var fallbackMedia: MPMediaInfo?
     @State private var isMatching = false
@@ -72,9 +70,6 @@ struct MoviePilotResourceSection: View {
             raw["year"] = .string(String(year))
             raw["title_year"] = .string(String(year))
         }
-        if let seasonNumber {
-            raw["season"] = .number(Double(seasonNumber))
-        }
         return MPMediaInfo(raw: raw)
     }
 
@@ -89,9 +84,7 @@ struct MoviePilotResourceSection: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("搜索站点资源并下载")
                             .font(.callout.weight(.medium))
-                        Text(seasonNumber == nil
-                             ? "下载完成后 MoviePilot 自动整理入库，稍后出现在媒体库"
-                             : "按第 \(seasonNumber!) 季搜索；下载完成后 MoviePilot 自动整理入库")
+                        Text("按标题搜、可选站点；下载完成后 MoviePilot 自动整理入库，稍后出现在媒体库")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

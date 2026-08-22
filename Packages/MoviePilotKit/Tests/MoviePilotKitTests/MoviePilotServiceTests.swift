@@ -56,46 +56,62 @@ final class MoviePilotServiceTests: XCTestCase {
         XCTAssertEqual(media.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
     }
 
-    func testSearchTorrentsEncodesMediaKeyInPathAndUnwrapsResponse() async throws {
-        let media = MPMediaInfo(raw: [
-            "media_id": .string("tmdb:12345"),
-            "media_source": .string("tmdb"),
-            "type": .string("电视剧"),
-        ])
+    func testSearchTorrentsByTitleSendsCommaSites() async throws {
         MockURLProtocol.handler = { request in
             guard let url = request.url else { throw URLError(.badURL) }
-            // 冒号必须留在 path 里（合法字符），不能丢。
-            XCTAssertTrue(url.path.contains("tmdb"), "媒体键丢了源前缀：\(url.path)")
+            XCTAssertEqual(url.path, "/api/v1/search/title")
             let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            XCTAssertTrue(query.contains(URLQueryItem(name: "season", value: "2")))
+            // sites 必须是逗号分隔（服务端 _parse_siteList 只认逗号）。
+            XCTAssertTrue(query.contains(URLQueryItem(name: "keyword", value: "葬送的芙莉莲")))
+            XCTAssertTrue(query.contains(URLQueryItem(name: "sites", value: "1,3")))
             return MockURLProtocol.response(
                 #"""
                 {"success":true,"message":"","data":[
-                  {"site_name":"站点A","title":"Show.S02.1080p","enclosure":"https://t/1.torrent",
+                  {"site_name":"站点A","title":"Show.1080p","enclosure":"https://t/1.torrent",
                    "size":8589934592,"seeders":42,"downloadvolumefactor":0},
-                  {"site_name":"站点B","title":"Show.S02.720p","enclosure":"https://t/2.torrent",
+                  {"site_name":"站点B","title":"Show.720p","enclosure":"https://t/2.torrent",
                    "size":2147483648,"seeders":7,"downloadvolumefactor":1}
                 ]}
                 """#,
                 status: 200, for: url)
         }
 
-        let torrents = try await client.searchTorrents(for: media, season: 2)
+        let torrents = try await client.searchTorrentsByTitle(
+            keyword: "葬送的芙莉莲", sites: [1, 3])
         XCTAssertEqual(torrents.count, 2)
-        XCTAssertEqual(torrents[0].siteName, "站点A")
-        XCTAssertEqual(torrents[0].seeders, 42)
         XCTAssertTrue(torrents[0].isFree, "downloadvolumefactor=0 应识别为免费")
         XCTAssertFalse(torrents[1].isFree)
     }
 
-    func testSearchTorrentsWithoutMediaKeyFails() async throws {
-        let media = MPMediaInfo(raw: ["title": .string("无 ID 条目")])
-        do {
-            _ = try await client.searchTorrents(for: media)
-            XCTFail("应该抛错")
-        } catch let error as MoviePilotError {
-            XCTAssertTrue("\(error)".contains("缺少媒体 ID"))
+    func testSearchTorrentsByTitleOmitsSitesParamWhenAll() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertFalse(query.contains { $0.name == "sites" }, "全部站点时不该带 sites 参数")
+            return MockURLProtocol.response(
+                #"{"success":true,"message":"","data":[]}"#, status: 200, for: url)
         }
+        _ = try await client.searchTorrentsByTitle(keyword: "关键词")
+    }
+
+    func testSitesListDecodesThroughEnvelope() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertTrue(url.absoluteString.hasSuffix("/api/v1/site/"))
+            return MockURLProtocol.response(
+                #"""
+                {"success":true,"message":"","data":[
+                  {"id":1,"name":"站点A","domain":"a.example.com","is_active":true},
+                  {"id":2,"name":"站点B","domain":"b.example.com","is_active":false}
+                ]}
+                """#,
+                status: 200, for: url)
+        }
+        let sites = try await client.sites()
+        XCTAssertEqual(sites.count, 2)
+        XCTAssertEqual(sites[0].name, "站点A")
+        XCTAssertTrue(sites[0].isActive)
+        XCTAssertFalse(sites[1].isActive)
     }
 
     func testAddDownloadEchoesRawObjectsVerbatim() async throws {
