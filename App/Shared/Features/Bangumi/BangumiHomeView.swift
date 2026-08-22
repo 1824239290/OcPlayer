@@ -512,6 +512,8 @@ private struct ProgressCard: View {
                 Spacer(minLength: 0)
                 progressRow
             }
+            // 条目（整季）状态放标题区右上角——放集级进度旁边会被误读成集操作。
+            statusMenu
         }
     }
 
@@ -523,7 +525,9 @@ private struct ProgressCard: View {
     private var progressRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                statusMenu
+                Text(item.progressText)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 nextAction
             }
@@ -533,15 +537,17 @@ private struct ProgressCard: View {
         }
     }
 
-    /// 条目收藏状态手动改：进度数字做成菜单（想看/在看/看过/搁置/抛弃），
-    /// 当前状态打勾。切走「在看」后条目会离开进度列表（membership 失效）。
+    /// 条目（整季）收藏状态手动改：卡片右上角徽章式菜单，
+    /// 想看/在看/看过/搁置/抛弃，当前状态打勾。切走「在看」后条目
+    /// 离开进度列表（membership 失效）。
     private var statusMenu: some View {
-        Menu {
+        let current = subject.interest?.type ?? .none
+        return Menu {
             ForEach(BangumiCollectionType.allTypes()) { type in
                 Button {
                     Task { await setSubjectStatus(type) }
                 } label: {
-                    if type == subject.interest?.type {
+                    if type == current {
                         Label(Self.statusLabel(type), systemImage: "checkmark")
                     } else {
                         Text(Self.statusLabel(type))
@@ -550,16 +556,18 @@ private struct ProgressCard: View {
             }
         } label: {
             HStack(spacing: 3) {
-                Text(item.progressText)
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                Text(Self.statusLabel(current))
+                    .font(.caption.weight(.medium))
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 7, weight: .semibold))
             }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.fill.tertiary, in: Capsule())
+            .foregroundStyle(.secondary)
+            .fixedSize()
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
         .disabled(updatingStatus)
         .help("更改这部作品的收藏状态")
     }
