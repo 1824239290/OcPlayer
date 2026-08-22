@@ -58,17 +58,6 @@ struct AppShellView: View {
             Section("Bangumi") {
                 Label("进度管理", systemImage: "arrow.triangle.branch")
                     .tag(AppModel.Section.bangumi)
-                // 个人主页原来只藏在进度页工具栏的图标里；提到侧栏来，
-                // 顺便让这个分区不再是「一个 header 配一行」的空架子。
-                Button {
-                    app.selectedSection = .bangumi
-                    app.path = [.bangumiProfile]
-                } label: {
-                    Label("个人主页", systemImage: "person.crop.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
             }
 
             Section("媒体库") {
