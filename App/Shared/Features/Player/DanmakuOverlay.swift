@@ -45,6 +45,11 @@ final class DanmakuOverlayController {
     }
 
     var engineProvider: () -> ErikaEngine?
+    /// 真实播放状态（playing/buffering 由内核事件驱动，不靠媒体时间猜——
+    /// 24fps 视频配 30Hz 采样会每隔一次看到 delta=0，时间猜测会以 ~15Hz
+    /// 抖动 pause/play，而库的 pause 会移除全部动画、play 重加，抖起来
+    /// 就是满屏「一抽一抽」）。
+    var playbackStateProvider: () -> (playing: Bool, buffering: Bool)?
     private(set) var preferences = Preferences()
 
     private(set) lazy var view: DanmakuView = {
@@ -63,8 +68,10 @@ final class DanmakuOverlayController {
     private var viewPausedBySync = false
     private var fontSize: CGFloat = 25
 
-    init(engineProvider: @escaping () -> ErikaEngine?) {
+    init(engineProvider: @escaping () -> ErikaEngine?,
+         playbackStateProvider: @escaping () -> (playing: Bool, buffering: Bool)? = { nil }) {
         self.engineProvider = engineProvider
+        self.playbackStateProvider = playbackStateProvider
     }
 
     // MARK: - 数据
@@ -163,26 +170,30 @@ final class DanmakuOverlayController {
     private func tick() {
         guard let engine = engineProvider(), preferences.enabled, !comments.isEmpty else { return }
         let now = mediaSeconds(engine)
-        defer { lastMediaSample = now }
-        guard let last = lastMediaSample else { return }
+
+        // 暂停/缓冲跟随真实播放状态：暂停时停视图动画，恢复时续播
+        //（pause 会把 cell 模型帧钉在呈现位置，play 从那里续，不瞬移）。
+        if let playback = playbackStateProvider() {
+            let shouldPause = !playback.playing || playback.buffering
+            if shouldPause != viewPausedBySync {
+                if shouldPause { view.pause() } else { view.play() }
+                viewPausedBySync = shouldPause
+            }
+        }
+
+        guard let last = lastMediaSample else {
+            lastMediaSample = now
+            return
+        }
+        lastMediaSample = now
 
         let delta = now - last
         if delta < -0.5 || delta > 2.0 {
+            // seek：媒体时间跳变，清屏重同步。
             resync()
             return
         }
-        if abs(delta) < 0.002 {
-            // 媒体时间冻结：暂停或缓冲。视图动画是墙钟的，必须一起停，恢复时再放。
-            if !viewPausedBySync {
-                view.pause()
-                viewPausedBySync = true
-            }
-            return
-        }
-        if viewPausedBySync {
-            view.play()
-            viewPausedBySync = false
-        }
+        if viewPausedBySync { return }
         spawnUpTo(now)
     }
 

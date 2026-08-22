@@ -79,6 +79,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
         danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
         danmakuOverlay.engineProvider = { [weak self] in self?.engine }
+        danmakuOverlay.playbackStateProvider = { [weak self] in
+            guard let self else { return nil }
+            return (self.state.state == .playing, self.state.isBuffering)
+        }
     }
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
