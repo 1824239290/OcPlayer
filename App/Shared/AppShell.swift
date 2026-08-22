@@ -53,7 +53,7 @@ struct AppShellView: View {
         )) {
             Section {
                 Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
-                Label("Bangumi", systemImage: "arrow.triangle.branch")
+                Label("Bangumi", systemImage: "tv.fill")
                     .tag(AppModel.Section.bangumi)
             }
 
@@ -102,7 +102,7 @@ struct AppShellView: View {
                     .tag(AppModel.Section.library(library.id))
             }
             BangumiHomeView()
-                .tabItem { Label("Bangumi", systemImage: "arrow.triangle.branch") }
+                .tabItem { Label("Bangumi", systemImage: "tv.fill") }
                 .tag(AppModel.Section.bangumi)
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
