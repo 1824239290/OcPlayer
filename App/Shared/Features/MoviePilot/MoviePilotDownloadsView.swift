@@ -84,6 +84,12 @@ struct MoviePilotDownloadsView: View {
                     Text(task.name ?? task.title ?? "未命名任务")
                         .font(.callout.weight(.medium))
                         .lineLimit(1)
+                    if let mediaTitle = task.mediaTitle, mediaTitle != (task.name ?? task.title) {
+                        Text(mediaTitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     HStack(spacing: 6) {
                         if let site = task.siteName { Text(site) }
                         Text(task.sizeText)

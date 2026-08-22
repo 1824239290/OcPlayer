@@ -282,16 +282,19 @@ final class MoviePilotServiceTests: XCTestCase {
             return MockURLProtocol.response(
                 #"""
                 [{"hash":"abc123","name":"Show.S01","site_name":"站点A","size":10737418240,
-                  "progress":0.42,"state":"downloading","dlspeed":"12.3 MB/s","left_time":"8分钟"}]
+                  "progress":42.0,"state":"downloading","dlspeed":"12.3 MB/s","left_time":"8分钟",
+                  "media":{"title":"败犬女主太多了！","type":"电视剧"}}]
                 """#,
                 status: 200, for: url)
         }
         let tasks = try await client.downloadingTasks()
         XCTAssertEqual(tasks.count, 1)
         XCTAssertEqual(tasks[0].hash, "abc123")
+        // progress 是 0–100 百分数：42 → 0.42。
         XCTAssertEqual(tasks[0].progressFraction, 0.42, accuracy: 0.001)
         XCTAssertEqual(tasks[0].dlspeed, "12.3 MB/s")
         XCTAssertEqual(tasks[0].leftTime, "8分钟")
+        XCTAssertEqual(tasks[0].mediaTitle, "败犬女主太多了！")
         XCTAssertFalse(tasks[0].isPaused)
     }
 

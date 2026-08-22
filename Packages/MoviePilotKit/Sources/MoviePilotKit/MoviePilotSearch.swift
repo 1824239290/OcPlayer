@@ -152,7 +152,7 @@ public struct MPDownloadTask: Sendable, Equatable, Identifiable {
     public var siteName: String? { raw["site_name"]?.stringValue }
     /// 字节。
     public var size: Double? { raw["size"]?.doubleValue }
-    /// 0…1。
+    /// 服务端给的是 0–100 的百分数（实测 17.12 = 17%）。
     public var progress: Double? { raw["progress"]?.doubleValue }
     public var state: String? { raw["state"]?.stringValue }
     /// 服务端已格式化好的速度文本（如 "12.3 MB/s"）。
@@ -162,8 +162,11 @@ public struct MPDownloadTask: Sendable, Equatable, Identifiable {
     public var username: String? { raw["username"]?.stringValue }
 
     public var progressFraction: Double {
-        min(max(progress ?? 0, 0), 1)
+        min(max(progress ?? 0, 0), 100) / 100
     }
+
+    /// 服务端识别出的中文媒体名（如「败犬女主太多了！」），没有则 nil。
+    public var mediaTitle: String? { raw["media"]?["title"]?.stringValue }
 
     public var sizeText: String {
         guard let size else { return "—" }
