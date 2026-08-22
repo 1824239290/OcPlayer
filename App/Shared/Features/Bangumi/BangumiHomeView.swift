@@ -449,6 +449,7 @@ private struct ProgressCard: View {
 
     @Environment(BangumiCoordinator.self) private var bangumi
     @State private var updatingEpisodeID: Int?
+    @State private var updatingStatus = false
 
     private var subject: BangumiSubjectDTO { item.subject }
 
@@ -522,15 +523,70 @@ private struct ProgressCard: View {
     private var progressRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                Text(item.progressText)
-                    .font(.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                statusMenu
                 Spacer(minLength: 0)
                 nextAction
             }
             if let fraction = item.progressFraction {
                 progressTrack(fraction)
             }
+        }
+    }
+
+    /// 条目收藏状态手动改：进度数字做成菜单（想看/在看/看过/搁置/抛弃），
+    /// 当前状态打勾。切走「在看」后条目会离开进度列表（membership 失效）。
+    private var statusMenu: some View {
+        Menu {
+            ForEach(BangumiCollectionType.allTypes()) { type in
+                Button {
+                    Task { await setSubjectStatus(type) }
+                } label: {
+                    if type == subject.interest?.type {
+                        Label(Self.statusLabel(type), systemImage: "checkmark")
+                    } else {
+                        Text(Self.statusLabel(type))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(item.progressText)
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .disabled(updatingStatus)
+        .help("更改这部作品的收藏状态")
+    }
+
+    private static func statusLabel(_ type: BangumiCollectionType) -> String {
+        switch type {
+        case .wish: return "想看"
+        case .collect: return "看过"
+        case .doing: return "在看"
+        case .onHold: return "搁置"
+        case .dropped: return "抛弃"
+        case .none: return "未收藏"
+        }
+    }
+
+    private func setSubjectStatus(_ type: BangumiCollectionType) async {
+        updatingStatus = true
+        defer { updatingStatus = false }
+        do {
+            try await bangumi.context.updateSubjectCollection(
+                subjectId: subject.id, type: type)
+        } catch let e as BangumiError {
+            reportError(e.userMessage)
+            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(e)")
+        } catch {
+            reportError("状态更新失败：\(error)")
+            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(error)")
         }
     }
 

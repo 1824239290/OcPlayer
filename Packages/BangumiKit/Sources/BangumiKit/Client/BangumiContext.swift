@@ -363,6 +363,18 @@ public final class BangumiContext {
         await BangumiEpisodeRepository.refreshSubjectAfterProgressChange(subjectId)
     }
 
+    /// 手动更改条目收藏状态（进度页状态菜单）：远端 PATCH → 本地对齐 →
+    /// membership 失效（切到非在看类型时条目要离开进度列表）。
+    public func updateSubjectCollection(
+        subjectId: Int, type: BangumiCollectionType
+    ) async throws {
+        try await BangumiCollectionService.updateSubjectCollection(
+            subjectId: subjectId, type: type)
+        try await database?.updateSubjectCollectionType(subjectId: subjectId, type: type)
+        BangumiProgressInvalidation.post(
+            subjectId: subjectId, mayChangeProgressMembership: true)
+    }
+
     /// 收藏同步 + 章节补齐（进度页全量刷新）。返回同步到的条目数。
     @discardableResult
     public func refreshAllCollections(force: Bool = false) async throws -> Int {
