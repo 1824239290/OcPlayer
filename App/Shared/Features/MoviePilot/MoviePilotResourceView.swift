@@ -24,6 +24,12 @@ struct MoviePilotResourceView: View {
     @State private var searchError: String?
     @State private var searchGeneration = 0
 
+    // 筛选与排序（对齐 MP 网页端：本地过滤，选项从结果聚合；排序偏好记忆）。
+    @State private var filters = TorrentFilters()
+    @State private var showTorrentFilter = false
+    @AppStorage("moviepilot.torrentSortField") private var sortFieldRaw = TorrentSortField.defaultOrder.rawValue
+    @AppStorage("moviepilot.torrentSortAscending") private var sortAscending = false
+
     @State private var notice: String?
     @State private var isNoticeError = false
     @State private var addingDownloadID: String?
@@ -40,6 +46,11 @@ struct MoviePilotResourceView: View {
                     .listRowBackground(Color.clear)
                     .padding(.vertical, 4)
                 searchControls
+                    .listRowBackground(Color.clear)
+            }
+
+            if !torrents.isEmpty || filters.isActive {
+                filterBar
                     .listRowBackground(Color.clear)
             }
 
@@ -63,20 +74,26 @@ struct MoviePilotResourceView: View {
                         .foregroundStyle(.red)
                         .font(.callout)
                     Button("重试") { search() }
-                } else if torrents.isEmpty {
+                } else if displayedTorrents.isEmpty {
                     Text(hasSearched
-                         ? "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。"
+                         ? (filters.isActive
+                            ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
+                            : "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。")
                          : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(torrents) { torrent in
+                    ForEach(displayedTorrents) { torrent in
                         torrentRow(torrent)
                     }
                 }
             } header: {
                 if !torrents.isEmpty || isSearching || searchError != nil {
-                    Text("资源 \(torrents.count)")
+                    if filters.isActive, displayedTorrents.count != torrents.count {
+                        Text("资源 \(displayedTorrents.count) / \(torrents.count)")
+                    } else {
+                        Text("资源 \(torrents.count)")
+                    }
                 }
             }
 
@@ -97,6 +114,81 @@ struct MoviePilotResourceView: View {
         .sheet(isPresented: $showSitePicker) {
             MoviePilotSitePickerSheet(sites: sites, selection: $selectedSiteIDs)
         }
+        .sheet(isPresented: $showTorrentFilter) {
+            MoviePilotTorrentFilterSheet(
+                options: TorrentFilterEngine.options(torrents),
+                filters: $filters
+            )
+        }
+    }
+
+    // MARK: - 筛选与排序
+
+    private var sortField: TorrentSortField {
+        TorrentSortField(rawValue: sortFieldRaw) ?? .defaultOrder
+    }
+
+    /// 筛选 + 排序后的展示列表（流式期间也持续应用）。
+    private var displayedTorrents: [MPTorrent] {
+        TorrentFilterEngine.sorted(
+            TorrentFilterEngine.filtered(torrents, filters: filters),
+            field: sortField,
+            ascending: sortAscending
+        )
+    }
+
+    private var filterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Button {
+                    showTorrentFilter = true
+                } label: {
+                    Label(
+                        filters.isActive ? "筛选 · \(filters.activeCount)" : "筛选",
+                        systemImage: "line.3.horizontal.decrease.circle"
+                    )
+                    .font(.callout)
+                }
+                Spacer()
+                Menu {
+                    Picker("排序", selection: Binding(
+                        get: { sortField },
+                        set: { sortFieldRaw = $0.rawValue }
+                    )) {
+                        ForEach(TorrentSortField.allCases, id: \.self) { field in
+                            Text(field.label).tag(field)
+                        }
+                    }
+                } label: {
+                    Label("排序 · \(sortField.label)", systemImage: "arrow.up.arrow.down")
+                        .font(.callout)
+                }
+                .fixedSize()
+                Button {
+                    sortAscending.toggle()
+                } label: {
+                    Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        .font(.callout)
+                }
+                .buttonStyle(.borderless)
+                .help(sortAscending ? "当前升序，点击切换降序" : "当前降序，点击切换升序")
+            }
+            if filters.isActive {
+                HStack(spacing: 8) {
+                    Text(filters.activeSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer()
+                    Button("清除") {
+                        filters = TorrentFilters()
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     // MARK: - 头部
@@ -253,6 +345,8 @@ struct MoviePilotResourceView: View {
         notice = nil
         torrents = []
         progressText = nil
+        // 新搜索换一批数据源，旧筛选多半失效，整组重置。
+        filters = TorrentFilters()
         Task {
             do {
                 try await MoviePilotAPIClient.shared.searchTorrentsByTitleStream(
@@ -267,8 +361,7 @@ struct MoviePilotResourceView: View {
                     }
                 }
                 guard generation == searchGeneration else { return }
-                // 终态按做种数排一次（流式期间按到达顺序展示）。
-                torrents.sort { ($0.seeders ?? 0) > ($1.seeders ?? 0) }
+                // 排序交给筛选栏的设置（displayedTorrents 持续应用），这里不再终态重排。
             } catch {
                 guard generation == searchGeneration else { return }
                 searchError = (error as? MoviePilotError)?.userMessage ?? "\(error)"

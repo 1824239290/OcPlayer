@@ -468,9 +468,9 @@ public actor MoviePilotAPIClient {
                 total: object["total"] as? Int ?? 0,
                 totalItems: object["total_items"] as? Int ?? 0
             )
-            // 事件里的每条资源装在 context.torrent_info 下（meta_info 是识别结果）。
-            let items = (object["items"] as? [[String: Any]] ?? [])
-                .compactMap { $0["torrent_info"] as? [String: Any] }
+            // 事件里的每条资源装在 context 下：torrent_info 是数据本体，
+            // meta_info 是识别结果（筛选要用），一并收进 MPTorrent。
+            let contexts = (object["items"] as? [[String: Any]] ?? [])
 
             // 任何携带 items 的事件（append / replace / done）都要入列：
             // done 也可能捎带最后一批资源。
@@ -479,8 +479,14 @@ public actor MoviePilotAPIClient {
                     torrents = []
                     seen = []
                 }
-                for raw in items {
-                    let torrent = MPTorrent(raw: raw.mapValues(JSONValue.init(any:)))
+                for context in contexts {
+                    guard let torrentRaw = context["torrent_info"] as? [String: Any] else { continue }
+                    let meta = (context["meta_info"] as? [String: Any])?
+                        .mapValues(JSONValue.init(any:))
+                    let torrent = MPTorrent(
+                        raw: torrentRaw.mapValues(JSONValue.init(any:)),
+                        meta: meta
+                    )
                     if seen.insert(torrent.id).inserted {
                         torrents.append(torrent)
                     }

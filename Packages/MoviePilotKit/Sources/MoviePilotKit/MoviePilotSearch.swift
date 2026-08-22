@@ -65,17 +65,37 @@ public struct MPMediaInfo: Sendable, Equatable, Identifiable {
     }
 }
 
-/// 站点资源（`/api/v1/search/media/{id}` 的元素）。
+/// 站点资源（SSE 搜索事件的元素）。
+///
+/// `raw` 是 `torrent_info`（下载时原样回传服务端）；`meta` 是同事件的
+/// `meta_info` 识别结果（季集/制作组/编码/分辨率/版本，筛选用），不参与回传。
 public struct MPTorrent: Sendable, Equatable, Identifiable {
     public let raw: [String: JSONValue]
+    public let meta: [String: JSONValue]?
 
-    public init(raw: [String: JSONValue]) {
+    public init(raw: [String: JSONValue], meta: [String: JSONValue]? = nil) {
         self.raw = raw
+        self.meta = meta
     }
 
     public var id: String {
         raw["enclosure"]?.stringValue ?? raw["title"]?.stringValue ?? UUID().uuidString
     }
+
+    // MARK: - 识别结果（meta_info，筛选与展示用）
+
+    /// 季集，如 "S01"、"S01E02"。
+    public var seasonEpisode: String? { meta?["season_episode"]?.stringValue }
+    /// 制作组 / 字幕组。
+    public var resourceTeam: String? { meta?["resource_team"]?.stringValue }
+    /// 视频编码（x265 / AV1 / H265…）。
+    public var videoEncode: String? { meta?["video_encode"]?.stringValue }
+    /// 分辨率（1080p / 2160p…）。
+    public var resourcePix: String? { meta?["resource_pix"]?.stringValue }
+    /// 版本（BluRay / WEB-DL…）。
+    public var edition: String? { meta?["edition"]?.stringValue }
+    /// 站点优先级（MP 排序 default 用）。
+    public var priOrder: Int { raw["pri_order"]?.intValue ?? 0 }
 
     public var siteName: String? { raw["site_name"]?.stringValue }
     /// 种子标题（识别名）。
