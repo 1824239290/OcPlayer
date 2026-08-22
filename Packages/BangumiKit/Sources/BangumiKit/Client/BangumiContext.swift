@@ -146,6 +146,23 @@ public enum BangumiEpisodeRepository {
         try await syncEpisodes(subjectId, db: db)
     }
 
+    /// 单集标记后的服务端对齐（播放结束自动标记用）。
+    ///
+    /// 单集 PATCH 不带 batch，服务端对条目收藏状态的连带推进（如看到最后一集
+    /// 后的「在看 → 看过」）不该由本地猜——回读一次并带上 membership 失效，
+    /// 让进度页的章节状态、计数和列表成员资格立刻对齐。回读失败不回滚，
+    /// 本地乐观值仍然可用，下次全量同步纠正。
+    public static func refreshSubjectAfterProgressChange(_ subjectId: Int) async {
+        do {
+            try await reconcileSubject(subjectId)
+            BangumiProgressInvalidation.post(
+                subjectId: subjectId, mayChangeProgressMembership: true)
+        } catch {
+            BangumiNetworkLog.logger.warning(
+                "进度变更后回读条目失败 subject=\(subjectId) error=\(error)")
+        }
+    }
+
     /// 更新单集状态：先远程成功后改本地，再发失效通知。
     public static func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
@@ -317,6 +334,11 @@ public final class BangumiContext {
     ) async throws {
         try await BangumiEpisodeRepository.updateEpisodeCollection(
             episodeId: episodeId, type: type, batch: batch)
+    }
+
+    /// 单集标记后的服务端对齐（播放结束自动标记用），实例侧入口。
+    public func refreshSubjectAfterProgressChange(_ subjectId: Int) async {
+        await BangumiEpisodeRepository.refreshSubjectAfterProgressChange(subjectId)
     }
 
     /// 收藏同步 + 章节补齐（进度页全量刷新）。返回同步到的条目数。

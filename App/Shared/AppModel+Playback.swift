@@ -416,11 +416,21 @@ extension AppModel {
     ///
     /// 只在「有关联 + 已登录」时生效：按 Jellyfin 集号（episodeNumber）匹配
     /// Bangumi 章节 sort，找不到精确匹配就不动。失败静默，错误进诊断日志。
+    /// ⚠️ 每个提前返回都要留日志：这条链路全是静默 return，出问题时没有
+    /// 任何线索（此前整份日志里成功/失败记录都是 0 条）。
     private func markWatchedOnBangumi(for item: MediaItem) {
-        guard item.kind == .episode, let episodeNumber = item.episodeNumber else { return }
-        guard bangumi.isAuthenticated else { return }
+        guard item.kind == .episode, let episodeNumber = item.episodeNumber else {
+            let itemID = item.id
+            BangumiDiagnostics.log("播放结束未标记：不是单集 item=\(itemID)")
+            return
+        }
+        guard bangumi.isAuthenticated else {
+            BangumiDiagnostics.log("播放结束未标记：Bangumi 未登录")
+            return
+        }
         let linkItemID = item.seriesID ?? item.id
         guard let subjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: linkItemID) else {
+            BangumiDiagnostics.log("播放结束未标记：条目未关联 jellyfin=\(linkItemID)")
             return
         }
         Task { @MainActor [weak self] in
@@ -431,14 +441,29 @@ extension AppModel {
                 let episodes = try await self.bangumi.context.fetchEpisodes(subjectId: subjectID)
                 // 精确匹配主篇集号。sort 是 Float（特典可能是 12.5），只认整数集号相等的，
                 // 匹配不上就不动——宁可不标，也不要标错集。
-                guard let episode = episodes.first(where: {
+                let matched = episodes.first(where: {
                     $0.type == .main && $0.sort == Float(episodeNumber)
-                }) else { return }
-                guard episode.collectionTypeEnum != .collect else { return }
+                })
+                guard let episode = matched else {
+                    BangumiDiagnostics.log(
+                        "播放结束未标记：集号匹配不上 subject=\(subjectID) ep=\(episodeNumber)")
+                    return
+                }
+                let alreadyWatched = episode.collectionTypeEnum == .collect
+                guard !alreadyWatched else {
+                    let episodeID = episode.id
+                    BangumiDiagnostics.log(
+                        "播放结束未标记：本集已是看过 subject=\(subjectID) ep=\(episodeID)")
+                    return
+                }
                 try await self.bangumi.context.updateEpisodeCollection(
                     episodeId: episode.id, type: .collect)
+                let episodeID = episode.id
                 BangumiDiagnostics.log(
-                    "播放结束已标记 Bangumi subject=\(subjectID) episode=\(episode.id)")
+                    "播放结束已标记 Bangumi subject=\(subjectID) episode=\(episodeID)")
+                // 服务端对条目状态的连带推进（看完最后一集 → 在看变看过）本地猜不了，
+                // 回读对齐并让进度页列表/计数立刻刷新。
+                await self.bangumi.context.refreshSubjectAfterProgressChange(subjectID)
             } catch {
                 BangumiDiagnostics.log("播放结束标记 Bangumi 已看失败 error=\(error)")
             }
