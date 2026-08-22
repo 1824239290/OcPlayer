@@ -53,10 +53,7 @@ struct AppShellView: View {
         )) {
             Section {
                 Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
-            }
-
-            Section("Bangumi") {
-                Label("进度管理", systemImage: "arrow.triangle.branch")
+                Label("Bangumi", systemImage: "arrow.triangle.branch")
                     .tag(AppModel.Section.bangumi)
             }
 
