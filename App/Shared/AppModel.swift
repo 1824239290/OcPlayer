@@ -4,6 +4,7 @@ import DanmakuKit
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
+import MoviePilotKit
 import Observation
 
 /// 播放准备态：点击播放后、引擎真正 open 之前的阶段。单一真相——
@@ -124,6 +125,10 @@ final class AppModel {
     // MARK: - Bangumi（登录 / 进度 / 收藏）
 
     let bangumi = BangumiCoordinator()
+
+    // MARK: - MoviePilot（搜索 / 下载）
+
+    let moviepilot = MoviePilotCoordinator()
 
     // MARK: - 导航
 

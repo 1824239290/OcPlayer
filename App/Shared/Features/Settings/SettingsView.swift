@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var isImporting = false
     @State private var isEnteringURL = false
     @State private var isEditingDanmakuGateway = false
+    @State private var isEditingMoviePilot = false
 
     var body: some View {
         Form {
@@ -71,6 +72,26 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("MoviePilot") {
+                row("地址", app.moviepilot.store.serverURLString ?? "—")
+                row("用户", app.moviepilot.profile?.name
+                    ?? (app.moviepilot.store.username.isEmpty ? "—" : app.moviepilot.store.username))
+                row("状态", moviePilotStatusText)
+                Button(moviePilotActionButtonTitle) {
+                    isEditingMoviePilot = true
+                }
+                if app.moviepilot.isAuthenticated {
+                    Button(role: .destructive) {
+                        Task { await app.moviepilot.signOut() }
+                    } label: {
+                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                }
+                Text("配置后可在 OcPlayer 里搜索站点资源并添加下载，MoviePilot 自动整理入库到 Jellyfin；下载观看打卡一条龙。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("关于") {
                 row("直连策略", "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
                 row("弹幕", "弹弹play 开放平台（通过 OcPlay 网关接入）")
@@ -123,6 +144,25 @@ struct SettingsView: View {
                 app.updateDanmakuGateway(urlString: url, apiKey: key)
             }
         }
+        .sheet(isPresented: $isEditingMoviePilot) {
+            MoviePilotServerSheet(
+                initialURL: app.moviepilot.store.serverURLString ?? "",
+                initialUsername: app.moviepilot.store.username
+            )
+        }
+        .task { app.moviepilot.refreshProfileIfNeeded() }
+    }
+
+    /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。
+    private var moviePilotStatusText: String {
+        let mp = app.moviepilot
+        if mp.store.serverURLString == nil { return "未配置" }
+        if mp.isAuthenticated { return "已登录" }
+        return mp.store.isConfigured ? "未登录" : "凭据不全"
+    }
+
+    private var moviePilotActionButtonTitle: String {
+        app.moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
     }
 
     private func row(_ label: String, _ value: String) -> some View {

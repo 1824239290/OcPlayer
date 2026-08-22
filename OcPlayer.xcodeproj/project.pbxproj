@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		1A0000000000000000000092 /* PlaybackKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000091 /* PlaybackKit */; };
 		1A0000000000000000000093 /* PlaybackKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000091 /* PlaybackKit */; };
+		1A0000000000000000000096 /* MoviePilotKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000095 /* MoviePilotKit */; };
+		1A0000000000000000000097 /* MoviePilotKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000095 /* MoviePilotKit */; };
 		1A0000000000000000000042 /* ErikaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000041 /* ErikaKit */; };
 		1A0000000000000000000043 /* ErikaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000041 /* ErikaKit */; };
 		1A0000000000000000000054 /* CoreModel in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000052 /* CoreModel */; };
@@ -54,6 +56,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A0000000000000000000092 /* PlaybackKit in Frameworks */,
+				1A0000000000000000000096 /* MoviePilotKit in Frameworks */,
 				1A0000000000000000000042 /* ErikaKit in Frameworks */,
 				1A0000000000000000000054 /* CoreModel in Frameworks */,
 				1A0000000000000000000056 /* JellyfinKit in Frameworks */,
@@ -68,6 +71,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A0000000000000000000093 /* PlaybackKit in Frameworks */,
+				1A0000000000000000000097 /* MoviePilotKit in Frameworks */,
 				1A0000000000000000000043 /* ErikaKit in Frameworks */,
 				1A0000000000000000000055 /* CoreModel in Frameworks */,
 				1A0000000000000000000057 /* JellyfinKit in Frameworks */,
@@ -140,6 +144,7 @@
 			name = "OcPlayer-macOS";
 			packageProductDependencies = (
 				1A0000000000000000000091 /* PlaybackKit */,
+				1A0000000000000000000095 /* MoviePilotKit */,
 				1A0000000000000000000041 /* ErikaKit */,
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
@@ -171,6 +176,7 @@
 			name = "OcPlayer-iOS";
 			packageProductDependencies = (
 				1A0000000000000000000091 /* PlaybackKit */,
+				1A0000000000000000000095 /* MoviePilotKit */,
 				1A0000000000000000000041 /* ErikaKit */,
 				1A0000000000000000000052 /* CoreModel */,
 				1A0000000000000000000053 /* JellyfinKit */,
@@ -233,6 +239,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				1A0000000000000000000090 /* XCLocalSwiftPackageReference "Packages/PlaybackKit" */,
+				1A0000000000000000000094 /* XCLocalSwiftPackageReference "Packages/MoviePilotKit" */,
 				1A0000000000000000000040 /* XCLocalSwiftPackageReference "Packages/ErikaKit" */,
 				1A0000000000000000000050 /* XCLocalSwiftPackageReference "Packages/CoreModel" */,
 				1A0000000000000000000051 /* XCLocalSwiftPackageReference "Packages/JellyfinKit" */,
@@ -534,6 +541,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/PlaybackKit;
 		};
+		1A0000000000000000000094 /* XCLocalSwiftPackageReference "Packages/MoviePilotKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/MoviePilotKit;
+		};
 		1A0000000000000000000040 /* XCLocalSwiftPackageReference "Packages/ErikaKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ErikaKit;
@@ -568,6 +579,10 @@
 		1A0000000000000000000091 /* PlaybackKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = PlaybackKit;
+		};
+		1A0000000000000000000095 /* MoviePilotKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MoviePilotKit;
 		};
 		1A0000000000000000000041 /* ErikaKit */ = {
 			isa = XCSwiftPackageProductDependency;

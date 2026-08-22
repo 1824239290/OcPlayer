@@ -79,6 +79,12 @@ struct RootView: View {
             guard let generation = BangumiCoordinator.authenticationGeneration(from: note) else { return }
             Task { await app.bangumi.handleAuthenticationRequired(generation: generation) }
         }
+        // MoviePilot 同理：401 且静默重登失败（密码改了）时把设置页拉回未登录态。
+        .onReceive(NotificationCenter.default.publisher(
+            for: MoviePilotCoordinator.authenticationRequiredNotification)) { note in
+            guard let generation = MoviePilotCoordinator.authenticationGeneration(from: note) else { return }
+            Task { await app.moviepilot.handleAuthenticationRequired(generation: generation) }
+        }
         .task {
             app.playback = controller
             // 媒体键 / 控制中心的回调装一次就够（命令中心是全局单例）。
