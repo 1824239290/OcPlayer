@@ -360,36 +360,33 @@ struct PlayerScreen: View {
         // 只吃无修饰键的按键，Cmd/Ctrl/Option 组合留给系统（Cmd+Q 等）。
         let cmd = event.modifierFlags.intersection([.command, .control, .option])
         guard cmd.isEmpty else { return false }
-        // Slider、Menu 或其他原生控件拿到键盘焦点时，方向键和空格应交还给控件。
+        // 只让位给**文本输入**环境（如系统保存面板的文件名框）：那里空格 / 方向键是编辑键。
+        // 不再让给 NSSlider 等控件——HUD 的进度 / 音量滑杆被点过之后会一直占着
+        // firstResponder，空格和方向键会被它吃掉，表现就是「按键绑定偶尔失效」
+        // （点一下别处才恢复）。视频播放器里这些键永远属于播放控制（IINA/QuickTime 行为）。
         if let responder = NSApp.keyWindow?.firstResponder,
-           responder is NSControl || responder is NSTextView {
+           responder is NSTextView {
             return false
         }
 
-        switch event.keyCode {
-        case 49:  // space
+        switch PlayerKeyAction.action(keyCode: event.keyCode) {
+        case .togglePlayPause:
             controller.togglePlayPause(); revealControls(); return true
-        case 36:  // return
-            controller.togglePlayPause(); revealControls(); return true
-        case 53:  // escape
+        case .closePlayer:
             closePlayer(); return true
-        case 123: // left arrow
+        case .seekBackward:
             controller.skip(by: -10); revealControls(); return true
-        case 124: // right arrow
+        case .seekForward:
             controller.skip(by: 10); revealControls(); return true
-        case 125: // down arrow
+        case .volumeDown:
             controller.adjustVolume(by: -0.1); revealControls(); return true
-        case 126: // up arrow
+        case .volumeUp:
             controller.adjustVolume(by: 0.1); revealControls(); return true
-        case 38:  // j
-            controller.skip(by: -10); revealControls(); return true
-        case 37:  // l
-            controller.skip(by: 10); revealControls(); return true
-        case 46:  // m
+        case .toggleMute:
             controller.toggleMute(); revealControls(); return true
-        case 3:   // f
+        case .toggleFullscreen:
             toggleFullscreen(); return true
-        default:
+        case nil:
             return false
         }
     }
