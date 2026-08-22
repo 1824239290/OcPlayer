@@ -555,17 +555,13 @@ private struct ProgressCard: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
-                Text(Self.statusLabel(current))
-                    .font(.caption.weight(.medium))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 7, weight: .semibold))
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(.fill.tertiary, in: Capsule())
-            .foregroundStyle(.secondary)
-            .fixedSize()
+            Text(Self.statusLabel(current))
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.fill.tertiary, in: Capsule())
+                .foregroundStyle(.secondary)
+                .fixedSize()
         }
         .menuStyle(.borderlessButton)
         .disabled(updatingStatus)
