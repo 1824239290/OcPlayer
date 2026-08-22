@@ -53,6 +53,8 @@ struct AppShellView: View {
         )) {
             Section {
                 Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
+                Label("找片", systemImage: "magnifyingglass")
+                    .tag(AppModel.Section.moviepilot)
                 Label("Bangumi", systemImage: "tv.fill")
                     .tag(AppModel.Section.bangumi)
             }
@@ -104,6 +106,9 @@ struct AppShellView: View {
             BangumiHomeView()
                 .tabItem { Label("Bangumi", systemImage: "tv.fill") }
                 .tag(AppModel.Section.bangumi)
+            MoviePilotHomeView()
+                .tabItem { Label("找片", systemImage: "magnifyingglass") }
+                .tag(AppModel.Section.moviepilot)
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(AppModel.Section.settings)
@@ -161,6 +166,12 @@ struct AppShellView: View {
             case .bangumi:
                 NavigationStack(path: $app.path) {
                     BangumiHomeView()
+                        .appRoutes()
+                }
+                .transition(.opacity)
+            case .moviepilot:
+                NavigationStack(path: $app.path) {
+                    MoviePilotHomeView()
                         .appRoutes()
                 }
                 .transition(.opacity)

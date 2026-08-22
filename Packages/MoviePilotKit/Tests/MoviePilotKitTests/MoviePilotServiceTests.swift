@@ -1,0 +1,208 @@
+import XCTest
+@testable import MoviePilotKit
+
+/// 搜索 / 下载 API 的离线测试：重点盯「原始 JSON 无损回传」。
+final class MoviePilotServiceTests: XCTestCase {
+
+    private var store: MoviePilotStore!
+    private var client: MoviePilotAPIClient!
+
+    override func setUp() {
+        super.setUp()
+        store = MoviePilotStore(defaults: TestSupport.isolatedDefaults())
+        client = MoviePilotAPIClient(
+            store: store,
+            sessionConfiguration: TestSupport.mockedSessionConfiguration()
+        )
+        store.updateCredentials(
+            serverURLString: "http://192.168.1.10:3000",
+            username: "admin",
+            password: "secret"
+        )
+        store.accessToken = "jwt-1"
+    }
+
+    override func tearDown() {
+        MockURLProtocol.handler = nil
+        super.tearDown()
+    }
+
+    func testSearchMediaDecodesTypedFields() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertEqual(url.path, "/api/v1/media/search")
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertTrue(query.contains(URLQueryItem(name: "title", value: "葬送的芙莉莲")))
+            return MockURLProtocol.response(
+                #"""
+                [
+                  {"media_source":"bangumi","type":"电视剧","title":"葬送的芙莉莲",
+                   "year":"2023","media_id":"bangumi:400602","bangumi_id":400602,
+                   "vote_average":8.8,"poster_path":"/xk.jpg","overview":"魔法…"}
+                ]
+                """#,
+                status: 200, for: url)
+        }
+
+        let results = try await client.searchMedia(title: "葬送的芙莉莲")
+        XCTAssertEqual(results.count, 1)
+        let media = results[0]
+        XCTAssertEqual(media.title, "葬送的芙莉莲")
+        XCTAssertEqual(media.mediaId, "bangumi:400602")
+        XCTAssertEqual(media.bangumiId, 400602)
+        XCTAssertEqual(media.voteAverage, 8.8)
+        XCTAssertEqual(media.mediaSource, "bangumi")
+        // 相对海报路径按 TMDB 规则补齐。
+        XCTAssertEqual(media.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
+    }
+
+    func testSearchTorrentsEncodesMediaKeyInPathAndUnwrapsResponse() async throws {
+        let media = MPMediaInfo(raw: [
+            "media_id": .string("tmdb:12345"),
+            "media_source": .string("tmdb"),
+            "type": .string("电视剧"),
+        ])
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            // 冒号必须留在 path 里（合法字符），不能丢。
+            XCTAssertTrue(url.path.contains("tmdb"), "媒体键丢了源前缀：\(url.path)")
+            let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            XCTAssertTrue(query.contains(URLQueryItem(name: "season", value: "2")))
+            return MockURLProtocol.response(
+                #"""
+                {"success":true,"message":"","data":[
+                  {"site_name":"站点A","title":"Show.S02.1080p","enclosure":"https://t/1.torrent",
+                   "size":8589934592,"seeders":42,"downloadvolumefactor":0},
+                  {"site_name":"站点B","title":"Show.S02.720p","enclosure":"https://t/2.torrent",
+                   "size":2147483648,"seeders":7,"downloadvolumefactor":1}
+                ]}
+                """#,
+                status: 200, for: url)
+        }
+
+        let torrents = try await client.searchTorrents(for: media, season: 2)
+        XCTAssertEqual(torrents.count, 2)
+        XCTAssertEqual(torrents[0].siteName, "站点A")
+        XCTAssertEqual(torrents[0].seeders, 42)
+        XCTAssertTrue(torrents[0].isFree, "downloadvolumefactor=0 应识别为免费")
+        XCTAssertFalse(torrents[1].isFree)
+    }
+
+    func testSearchTorrentsWithoutMediaKeyFails() async throws {
+        let media = MPMediaInfo(raw: ["title": .string("无 ID 条目")])
+        do {
+            _ = try await client.searchTorrents(for: media)
+            XCTFail("应该抛错")
+        } catch let error as MoviePilotError {
+            XCTAssertTrue("\(error)".contains("缺少媒体 ID"))
+        }
+    }
+
+    func testAddDownloadEchoesRawObjectsVerbatim() async throws {
+        // 带服务端才认识的字段（downloadvolumefactor / pri_order），验证原样回传。
+        let mediaRaw: [String: JSONValue] = [
+            "media_id": .string("tmdb:12345"),
+            "media_source": .string("tmdb"),
+            "type": .string("电影"),
+            "title": .string("测试电影"),
+            "tmdb_info": .object(["id": .number(12345), "original_title": .string("Test")]),
+        ]
+        let torrentRaw: [String: JSONValue] = [
+            "site": .number(1),
+            "site_name": .string("站点A"),
+            "title": .string("Movie.2024.2160p"),
+            "enclosure": .string("https://t/1.torrent"),
+            "size": .number(42_000_000_000),
+            "downloadvolumefactor": .number(0),
+            "pri_order": .number(1),
+        ]
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            // 注意：新版 Foundation 的 URL.path 会剥掉末尾斜杠，断言用 absoluteString
+            // （FastAPI 的 /download/ 路由靠 307 重定向也能兜，但首发就该对）。
+            XCTAssertEqual(url.absoluteString, "http://192.168.1.10:3000/api/v1/download/")
+            XCTAssertEqual(request.httpMethod, "POST")
+            guard let bodyData = TestSupport.body(of: request),
+                  let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any],
+                  let mediaIn = body["media_in"] as? [String: Any],
+                  let torrentIn = body["torrent_in"] as? [String: Any]
+            else {
+                XCTFail("下载请求体不完整")
+                throw URLError(.badURL)
+            }
+            // snake_case key 原样保留（没被 convertFromSnakeCase 污染）。
+            XCTAssertEqual(mediaIn["media_id"] as? String, "tmdb:12345")
+            XCTAssertEqual((torrentIn["downloadvolumefactor"] as? Double), 0)
+            XCTAssertEqual((torrentIn["pri_order"] as? Double), 1)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer jwt-1")
+            return MockURLProtocol.response(
+                #"{"success":true,"message":"添加成功","data":{"download_id":"abc"}}"#,
+                status: 200, for: url)
+        }
+
+        try await client.addDownload(
+            media: MPMediaInfo(raw: mediaRaw),
+            torrent: MPTorrent(raw: torrentRaw)
+        )
+    }
+
+    func testAddDownloadServerRefusalThrowsWithMessage() async throws {
+        let media = MPMediaInfo(raw: ["media_id": .string("tmdb:1")])
+        let torrent = MPTorrent(raw: ["enclosure": .string("https://t/1.torrent")])
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            return MockURLProtocol.response(
+                #"{"success":false,"message":"下载器未就绪"}"#, status: 200, for: url)
+        }
+        do {
+            try await client.addDownload(media: media, torrent: torrent)
+            XCTFail("应该抛错")
+        } catch let error as MoviePilotError {
+            XCTAssertTrue("\(error)".contains("下载器未就绪"), "服务端 message 要透出：\(error)")
+        }
+    }
+
+    func testDownloadingTasksDecode() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertTrue(url.absoluteString.hasSuffix("/api/v1/download/"),
+                          "末尾斜杠不能丢：\(url.absoluteString)")
+            return MockURLProtocol.response(
+                #"""
+                [{"hash":"abc123","name":"Show.S01","site_name":"站点A","size":10737418240,
+                  "progress":0.42,"state":"downloading","dlspeed":"12.3 MB/s","left_time":"8分钟"}]
+                """#,
+                status: 200, for: url)
+        }
+        let tasks = try await client.downloadingTasks()
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks[0].hash, "abc123")
+        XCTAssertEqual(tasks[0].progressFraction, 0.42, accuracy: 0.001)
+        XCTAssertEqual(tasks[0].dlspeed, "12.3 MB/s")
+        XCTAssertEqual(tasks[0].leftTime, "8分钟")
+        XCTAssertFalse(tasks[0].isPaused)
+    }
+
+    func testDownloadControlHitsRightPaths() async throws {
+        let expectations: [(String, String)] = [
+            ("start", "/api/v1/download/start/abc123"),
+            ("stop", "/api/v1/download/stop/abc123"),
+            ("delete", "/api/v1/download/abc123"),
+        ]
+        for (action, expectedPath) in expectations {
+            MockURLProtocol.handler = { request in
+                guard let url = request.url else { throw URLError(.badURL) }
+                XCTAssertEqual(url.path, expectedPath)
+                XCTAssertEqual(
+                    request.httpMethod ?? "GET", action == "delete" ? "DELETE" : "GET")
+                return MockURLProtocol.response(
+                    #"{"success":true,"message":""}"#, status: 200, for: url)
+            }
+            switch action {
+            case "start": try await client.startDownload(hash: "abc123")
+            case "stop": try await client.stopDownload(hash: "abc123")
+            default: try await client.removeDownload(hash: "abc123")
+            }
+        }
+    }
+}

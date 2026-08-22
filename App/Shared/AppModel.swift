@@ -136,6 +136,7 @@ final class AppModel {
         case home
         case settings
         case bangumi
+        case moviepilot
         case library(MediaLibrary.ID)
     }
 
