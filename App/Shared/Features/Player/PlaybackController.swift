@@ -1,19 +1,22 @@
 import CoreGraphics
 import DanmakuKit
 import DiagnosticsKit
-import ErikaKit
 import Foundation
 import ImageIO
 import JellyfinKit
 import Observation
+import PlaybackKit
 import UniformTypeIdentifiers
 
 /// App 层播放链路日志。走统一诊断管线（JSONL + OSLog，敏感字段自动脱敏）。
-/// 与 ErikaKit 的 PlaybackLog 同一份文件，时间线上无缝。
+/// 与 PlaybackKit 的 PlaybackLog 同一份文件，时间线上无缝。
 let playerLog = AppDiagnostics.logger
 
 /// PlaybackCoordinator：拿到源 → 喂内核 → 暴露状态给 UI。
-/// 进度上报（M2）、弹幕装载（M3）都挂在这一层（内核细节始终留在 ErikaKit 里）。
+/// 进度上报（M2）、弹幕装载（M3）都挂在这一层。
+///
+/// **不认识任何具体内核**：只用 `PlaybackKit` 的 `any PlaybackEngine`。
+/// 用哪个内核由 `PlaybackEngineRegistry` 决定，在 `prepareEngine()` 里现取。
 @MainActor
 @Observable
 final class PlaybackController: DanmakuPlaybackHosting {
@@ -21,7 +24,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// engine can never mutate the new source's timeline.
     var state = PlayerState()
 
-    var engine: ErikaEngine?
+    var engine: (any PlaybackEngine)?
     var setupError: String?
     var currentTitle: String?
     /// Request-scoped synchronous source-open failure. Kept separate from
@@ -70,12 +73,30 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
     var danmakuGlobalOffsetSeconds = 0.0
 
-    /// 弹幕渲染路线（影子模式开关）：true = App 层 DanmakuRenderKit overlay
-    /// （内核弹幕不装载），false = Erika 内核 DFM+（现状）。详见 DanmakuOverlay.swift 头注释。
-    let usesOverlayDanmakuRenderer = PlaybackPreferences.danmakuUseOverlayRenderer
+    /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay（内核弹幕不装载），
+    /// false = 内核内置弹幕渲染器。详见 DanmakuOverlay.swift 头注释。
+    ///
+    /// **在 `prepareEngine()` 里跟内核一起锁定**，播放期间不变：中途翻转会让
+    /// 同一条弹幕数据同时进内核和 overlay（双份弹幕）。设置页改动因此在
+    /// 下一次播放生效，和换内核的语义一致。
+    ///
+    /// 所选内核不支持内核弹幕时**强制 overlay**，不看用户偏好。
+    private(set) var usesOverlayDanmakuRenderer: Bool
     let danmakuOverlay: DanmakuOverlayController
 
+    /// 当前生效的内核描述（设置页 / 诊断显示用）。引擎还没创建时给注册表的当前选择。
+    var activeEngineDescriptor: PlaybackEngineDescriptor? {
+        engine?.descriptor ?? PlaybackEngineRegistry.selected
+    }
+
+    private static func resolveOverlayDanmakuRoute() -> Bool {
+        let kernelCanRenderDanmaku = PlaybackEngineRegistry.selected?.supportsKernelDanmaku ?? false
+        guard kernelCanRenderDanmaku else { return true }
+        return PlaybackPreferences.danmakuUseOverlayRenderer
+    }
+
     init() {
+        usesOverlayDanmakuRenderer = PlaybackController.resolveOverlayDanmakuRoute()
         // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
         danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
         danmakuOverlay.engineProvider = { [weak self] in self?.engine }
@@ -165,15 +186,24 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     /// 引擎懒创建：创建失败（缺内核 / 显卡不支持）时把原因留给 UI 显示。
+    ///
+    /// **用哪个内核在这里定**（`PlaybackEngineRegistry` 读 UserDefaults 里的选择），
+    /// 所以设置页换内核在下一次播放生效，不用重启。弹幕渲染路线同时锁定，
+    /// 保证一次播放里两者一致。
     @discardableResult
-    func prepareEngine() -> ErikaEngine? {
+    func prepareEngine() -> (any PlaybackEngine)? {
         if let engine { return engine }
+        // 内核和弹幕路线必须一起锁：所选内核不支持内核弹幕时要强制走 overlay。
+        usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         do {
-            let engine = try ErikaEngine()
+            let engine = try PlaybackEngineRegistry.makeSelected()
             eventTask = state.start(consuming: engine)
             self.engine = engine
             setupError = nil
-            PlaybackLog.append("PlaybackController prepareEngine 成功")
+            PlaybackLog.append(
+                "PlaybackController prepareEngine 成功 kernel=\(engine.descriptor.id) "
+                    + "danmaku=\(usesOverlayDanmakuRenderer ? "overlay" : "kernel")"
+            )
             return engine
         } catch {
             setupError = "\(error)"
@@ -252,7 +282,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     @discardableResult
     func withReadyEngine(
         for source: PlaybackSourceGeneration,
-        _ operation: (ErikaEngine) throws -> Void
+        _ operation: (any PlaybackEngine) throws -> Void
     ) rethrows -> Bool {
         guard source.value == sourceGeneration,
               source.requestID == activeRequest?.id,
@@ -402,9 +432,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     @discardableResult
     func open(_ source: PlaybackSource, securityScopedURL: URL? = nil) -> Bool {
-        // 换片：先 stop 旧源，再整体丢弃重建引擎。内核 close() 是终态——同一 presenter
-        // close 后不能再 open（实测抛 ErikaError "player is closed"），所以换片不复用旧引擎，
-        // 对齐 stopPlayback 的做法 stop + resetEngine；prepareEngine() 在下面会重建新引擎。
+        // 换片：先 stop 旧源，再整体丢弃重建引擎。
+        //
+        // 两个理由：
+        // 1. Erika 的 `close()` 是终态——同一 presenter close 后不能再 open（实测抛
+        //    `ErikaError "player is closed"`），所以一律不复用旧引擎；
+        // 2. 重建是「换内核」的落地时机——`prepareEngine()` 会重新读注册表的选择。
+        //
+        // `prepareEngine()` 在下面会重建新引擎。
         if hasLoadedSource {
             playerLog.info("open 前 stop 旧源并重建引擎（换片）")
             PlaybackLog.append("open() 前 stop 旧源并重建引擎（换片）")
@@ -464,9 +499,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine?.stop()
         // 清空去重标记：否则下次打开同一视频时 openIfNeeded 会误判「已打开同一个源」
         // 直接跳过（画面停在旧帧/黑屏，进度丢失）。
-        // 注意：这里只 stop 不 close。内核 close() 是终态——closed 后不能再 open，
+        // 注意：这里只 stop 不 close。Erika 的 close() 是终态——closed 后不能再 open，
         // 所以 App 层一律不复用引擎：退出（这里）和换片（open() 里）都走 stop +
-        // resetEngine 重建，避免引擎进入不可 reopen 的 closed 状态。
+        // resetEngine 重建。顺带也让设置页换内核在下一次播放自然生效。
         // stop 之后旧源已经不算“已加载”，必须清掉标记，否则下一次 open 会误以为要换片，
         // 白白把还没加载新源的引擎丢掉重建（无害但没必要）。
         hasLoadedSource = false
@@ -476,8 +511,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         sourceGeneration &+= 1
         releaseSecurityScopedResource()
         // 退出播放后把引擎整个丢掉，下次播放重新创建。
-        // 这样即使 Erika 的 stop/detach 组合在个别版本里会让旧 presenter 进入不可 reopen 的状态，
-        // 也不会影响下一次播放。
+        // 这样即使某个内核的 stop/detach 组合在个别版本里会让旧实例进入不可 reopen 的状态，
+        // 也不会影响下一次播放；换内核也在下一次播放自然落地。
         resetEngine()
         PlaybackLog.append("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
     }
@@ -612,15 +647,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
 
     /// 硬解 / 丢帧等实时数字，播放页的调试行用。
+    /// 具体列由 `PlaybackEngine.debugStatsLine()` 决定（拿不到的内核填 0）。
     func statsLine() -> String {
-        guard let engine else { return "—" }
-        let s = engine.latestStats
-        return """
-        解码 \(s.decoded_video_frames) · 渲染 \(s.rendered_video_frames) · \
-        硬解 \(s.hardware_video_frames) · 软解 \(s.software_video_frames) · \
-        零拷贝 \(s.zero_copy_video_frames) · 音频 \(s.pushed_audio_frames) · \
-        渲染失败 \(s.render_failures) · 音频失败 \(s.audio_failures)
-        """
+        engine?.debugStatsLine() ?? "—"
     }
 
     // MARK: - DanmakuPlaybackHosting（弹幕编排器注入入口）

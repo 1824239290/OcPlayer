@@ -1,9 +1,11 @@
 import CErika
 import DiagnosticsKit
 import Foundation
+import PlaybackKit
 import QuartzCore
+import SwiftUI
 
-/// 唯一对外的播放引擎。
+/// Erika 内核适配器：`PlaybackEngine` 的第一个实现。
 ///
 /// **锁契约**（改这个文件前先读）：
 /// - 内核句柄没有内部同步，所以**每一次** C 调用都必须握着 `lock`。
@@ -11,7 +13,25 @@ import QuartzCore
 ///   事件**出锁之后**才投递给 `events`，避免在锁内回调用户代码造成死锁。
 /// - UI 侧的 open / play / seek / 改配置都是短暂加同一把锁后直接调，因此和 tick 天然串行。
 /// - 不用 `actor`：actor 的执行器无法保证落在显示线程上，反而多跳一次。
-public final class ErikaEngine: @unchecked Sendable {
+///
+/// 这套串行化是 **Erika 特有的**，不是 `PlaybackEngine` 的要求：换成 libmpv 这类
+/// 本身线程安全的内核时，适配器不需要任何锁。
+public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
+
+    // MARK: - PlaybackEngine 身份
+
+    public static let descriptor = PlaybackEngineDescriptor(
+        id: "erika",
+        displayName: "Erika",
+        summary: "Rust · FFmpeg · libass · Metal",
+        supportsKernelDanmaku: true,
+        // 别在这里重复弹幕开关自己的说明——设置页两行紧挨着，会读成同一句话说两遍。
+        notes: "宿主驱动渲染：CAMetalLayer + CADisplayLink，画面由 App 逐帧驱动。"
+            + "MPL-2.0，静态链接 LGPL 的 FFmpeg / libass。"
+    )
+
+    public static let supportsKernelDanmaku = true
+
     private let lock = NSLock()
     private let presenter: ErikaPresenter
     private let renderLoop: RenderLoop
@@ -20,8 +40,12 @@ public final class ErikaEngine: @unchecked Sendable {
     /// 内核事件流。多处消费请各自 `for await`，此流为单播 —— 由 `PlayerState` 独占更省心。
     public let events: AsyncStream<PlayerEvent>
 
-    /// 最近一次 tick 的统计快照，UI 侧可随时读。
-    public var latestStats: ErikaPresenterStats { withLock { _latestStats } }
+    /// 中立统计快照（`PlaybackEngine` 要求），UI 侧可随时读。
+    public var latestStats: PlaybackStats { withLock { PlaybackStats(_latestStats) } }
+
+    /// Erika 原始统计（HDR / 音频恢复 / 升采样等中立结构体不带的细项）。
+    /// 需要这些字段时 downcast 到 `ErikaEngine` 再读。
+    public var latestErikaStats: ErikaPresenterStats { withLock { _latestStats } }
     private var _latestStats = ErikaPresenterStats()
 
     /// 最近一次内核 position 事件的媒体时间（渲染线程写、任意线程读）。
@@ -59,11 +83,18 @@ public final class ErikaEngine: @unchecked Sendable {
 
     // MARK: - 画面承载
 
+    /// `PlaybackEngine` 的画面边界：交出整个视图，attach / resize / detach / 帧驱动
+    /// 全部藏在 `VideoSurfaceView` 内部。调用方按引擎身份给它 `.id(...)`。
+    @MainActor
+    public func makeSurfaceView() -> AnyView {
+        AnyView(VideoSurfaceView(engine: self))
+    }
+
     /// 挂上 `CAMetalLayer` 并启动帧驱动。主线程调用。
     /// 尺寸传**物理像素**，`scale` 传 backingScaleFactor / contentsScale。
     @MainActor
-    public func attach(to view: PlatformView, layer: CAMetalLayer,
-                       pixelWidth: Int, pixelHeight: Int, scale: Double) throws {
+    func attach(to view: PlatformView, layer: CAMetalLayer,
+                pixelWidth: Int, pixelHeight: Int, scale: Double) throws {
         let raw = UInt64(UInt(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
         do {
             try withLock {
@@ -72,7 +103,7 @@ public final class ErikaEngine: @unchecked Sendable {
         } catch {
             // attach 失败（显卡 / 缺内核）会一路黑屏，这里补一条错误事件让 UI 有落点。
             PlaybackLog.error("attach 失败 size=\(pixelWidth)x\(pixelHeight) scale=\(scale) error=\(error)")
-            continuation.yield(.failed(status: (error as? ErikaError)?.status ?? ErikaStatus_PlayerError,
+            continuation.yield(.failed(code: (error as? ErikaError).map { Int32(bitPattern: $0.status.rawValue) } ?? 0,
                                        message: "画面挂载失败：\(error)"))
             throw error
         }
@@ -81,14 +112,14 @@ public final class ErikaEngine: @unchecked Sendable {
     }
 
     /// 尺寸 / DPI 变化。内部保证在下一次 tick 之前生效（同一把锁）。
-    public func resize(pixelWidth: Int, pixelHeight: Int, scale: Double) {
+    func resize(pixelWidth: Int, pixelHeight: Int, scale: Double) {
         try? withLock {
             try presenter.resizeSurface(pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
         }
     }
 
     /// 先停帧驱动（等线程退出），再 detach —— 顺序反了就是随机崩。
-    public func detach() {
+    func detach() {
         PlaybackLog.append("detach surface")
         renderLoop.stop()
         do {
@@ -143,6 +174,10 @@ public final class ErikaEngine: @unchecked Sendable {
         }
     }
 
+    /// ⚠️ **Erika 独有，且是终态**：同一 presenter `close()` 之后再 `open()` 抛
+    /// `ErikaError "player is closed"`。故意**不在** `PlaybackEngine` 协议里——
+    /// 把一个内核的地雷抽象出来只会让所有内核都带上它。
+    /// App 层换片 / 退出一律走 `stop()` + 丢弃引擎重建。
     public func close() throws {
         PlaybackLog.append("close() 开始")
         do {
@@ -153,6 +188,7 @@ public final class ErikaEngine: @unchecked Sendable {
             throw error
         }
     }
+
     public func seek(to position: Duration) throws { try withLock { try presenter.seek(to: position) } }
     public func setRate(_ rate: Double) throws { try withLock { try presenter.setRate(rate) } }
     public func setVolume(_ volume: Double) throws { try withLock { try presenter.setVolume(volume) } }
@@ -161,11 +197,14 @@ public final class ErikaEngine: @unchecked Sendable {
         try withLock { try presenter.stats() }
     }
 
-    /// 没有画面（窗口隐藏 / 纯音频推进）时的帧驱动。
+    /// 没有画面（窗口隐藏 / 纯音频推进）时的帧驱动。Erika 独有：
+    /// 宿主驱动帧的内核才需要这个，App 层目前没有用到。
     @discardableResult
     public func audioOnlyTick() throws -> ErikaPresenterStats {
         try withLock { try presenter.audioOnlyTick() }
     }
+
+    // MARK: - 轨道与字幕
 
     public func tracks() throws -> [TrackInfo] {
         try withLock { try presenter.tracks() }
@@ -185,7 +224,19 @@ public final class ErikaEngine: @unchecked Sendable {
         try withLock { try presenter.addExternalSubtitle(uri) }
     }
 
-    // MARK: - Danmaku
+    /// 字幕整体缩放（1.0 = 默认字号；HUD 的「字号 +/-」用）。
+    public func setSubtitleScale(_ scale: Double) throws {
+        try withLock { try ErikaError.check(erika_presenter_set_subtitle_scale(presenter.handle, scale)) }
+    }
+
+    // MARK: - 截图
+
+    /// 离屏截当前合成帧（视频 + 字幕），RGBA8，尺寸传视频物理分辨率。
+    public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
+        try withLock { try presenter.captureFrameRGBA(width: width, height: height) }
+    }
+
+    // MARK: - 内核内置弹幕（DFM+）
 
     /// Replace all current danmaku with one anonymous Bilibili XML source.
     public func loadDanmaku(fileURI: String) throws {
@@ -263,16 +314,6 @@ public final class ErikaEngine: @unchecked Sendable {
         try withLock { try presenter.setDanmakuBlockWords(json: json) }
     }
 
-    /// 字幕整体缩放（1.0 = 默认字号；HUD 的「字号 +/-」用）。
-    public func setSubtitleScale(_ scale: Double) throws {
-        try withLock { try ErikaError.check(erika_presenter_set_subtitle_scale(presenter.handle, scale)) }
-    }
-
-    /// 离屏截当前合成帧（视频 + 字幕），RGBA8，尺寸传视频物理分辨率。
-    public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
-        try withLock { try presenter.captureFrameRGBA(width: width, height: height) }
-    }
-
     // MARK: - 内部
 
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {
@@ -294,10 +335,10 @@ public final class ErikaEngine: @unchecked Sendable {
             _latestStats = try presenter.renderTick(at: presentationTime)
         } catch let error as ErikaError {
             PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
-            pending.append(.failed(status: error.status, message: error.message))
+            pending.append(.failed(code: Int32(bitPattern: error.status.rawValue), message: error.message))
         } catch {
             PlaybackLog.error("render_tick 失败（未知） error=\(error)", throttle: Self.renderThrottle)
-            pending.append(.failed(status: ErikaStatus_PlayerError, message: "\(error)"))
+            pending.append(.failed(code: 0, message: "\(error)"))
         }
         // 事件是轮询模型：每帧抽干，不然会积压。
         while true {
@@ -311,7 +352,7 @@ public final class ErikaEngine: @unchecked Sendable {
                 pending.append(event)
             } catch let error as ErikaError {
                 PlaybackLog.error("poll_event 失败 error=\(error)")
-                pending.append(.failed(status: error.status, message: error.message))
+                pending.append(.failed(code: Int32(bitPattern: error.status.rawValue), message: error.message))
                 break
             } catch {
                 PlaybackLog.error("poll_event 失败（未知） error=\(error)")

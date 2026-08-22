@@ -47,6 +47,9 @@ struct OcPlayerApp: App {
     #endif
 
     init() {
+        // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
+        // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
+        PlaybackEngineAssembly.registerAll()
         AppDiagnostics.recordLaunch()
     }
 

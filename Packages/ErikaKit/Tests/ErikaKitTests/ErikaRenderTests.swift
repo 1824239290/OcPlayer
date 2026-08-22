@@ -4,6 +4,7 @@ import Foundation
 import Metal
 import QuartzCore
 import Testing
+import PlaybackKit
 @testable import ErikaKit
 
 /// M0 第 5 步的无头验收：挂一个**离屏** CAMetalLayer，自己手动打 render_tick，

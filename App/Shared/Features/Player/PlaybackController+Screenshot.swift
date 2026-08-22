@@ -1,6 +1,6 @@
 import CoreGraphics
 import DiagnosticsKit
-import ErikaKit
+import PlaybackKit
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers

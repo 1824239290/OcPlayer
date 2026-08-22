@@ -1,4 +1,5 @@
 import Testing
+import PlaybackKit
 @testable import ErikaKit
 
 /// M0 第 4 步的验收：C ABI 真的通了 —— 能创建 presenter、能查状态、能正常销毁。

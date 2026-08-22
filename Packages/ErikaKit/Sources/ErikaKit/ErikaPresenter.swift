@@ -1,5 +1,6 @@
 import CErika
 import Foundation
+import PlaybackKit
 
 /// Erika 内核的错误。`ErikaStatus` 非 Ok/NoEvent 时，内核把可读信息写在**线程局部**槽位里，
 /// 必须在发生错误的那条线程上立即读取。
@@ -161,13 +162,5 @@ public final class ErikaPresenter {
         if raw.kind == ErikaEventKind_None { return nil }
         // 错误信息必须在当前线程取，所以在这里就地读掉。
         return PlayerEvent(raw, errorMessage: ErikaError.takeLastMessage())
-    }
-}
-
-extension Duration {
-    /// 截断到微秒 —— 内核的时间单位一律是 `*_micros`。
-    public var microseconds: Int64 {
-        let (seconds, attoseconds) = components
-        return seconds * 1_000_000 + attoseconds / 1_000_000_000_000
     }
 }

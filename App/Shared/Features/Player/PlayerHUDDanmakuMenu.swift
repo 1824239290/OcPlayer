@@ -1,4 +1,4 @@
-import ErikaKit
+import PlaybackKit
 import Foundation
 import Observation
 import SwiftUI

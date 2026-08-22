@@ -1,5 +1,5 @@
 import DanmakuRenderKit
-import ErikaKit
+import PlaybackKit
 import SwiftUI
 
 #if os(macOS)
@@ -10,16 +10,20 @@ import UIKit
 typealias PlatformFont = UIFont
 #endif
 
-/// App 层弹幕 overlay（Phase 1 影子模式，见 Packages/DanmakuRenderKit/PROVENANCE.md）。
+/// App 层弹幕 overlay（见 Packages/DanmakuRenderKit/PROVENANCE.md）。
 ///
 /// 为什么不用内核弹幕：Erika DFM+ 的滑窗重放是非单调的——窗口前移让"过去"的
 /// 轨道占用变少，之前被丢弃的弹幕会追认回轨道，挤掉在屏弹幕的轨道偏好，
 /// 表现为窗口完全不动也跳轨。DanmakuRenderKit 的轨道模型是入轨时「追击判定」、
-/// 入轨后不换轨，结构上杜绝这类问题。
+/// 入轨后不换轨，结构上杜绝这类问题。**不支持内核弹幕的内核（如 libmpv）
+/// 只能走这条路**，`PlaybackController` 会强制它。
 ///
-/// 时间桥：内核每帧发 positionChanged（`ErikaEngine.latestMediaTime`），本控制器
+/// 时间桥：内核每帧发 positionChanged（`PlaybackEngine.latestMediaTime`），本控制器
 /// 30Hz 采样它决定谁出场。暂停/缓冲＝媒体时间冻结 → 冻结检测暂停视图动画；
 /// seek＝时间跳变 → 清屏重同步。速率变化透传 `playingSpeed`。
+///
+/// ⚠️ 对内核的要求只有两条：`latestMediaTime` 读取要**便宜**（30Hz 采样不能被
+/// 一整帧渲染阻塞），以及 playing/buffering 状态由真实事件驱动。换内核时先验这两条。
 @MainActor
 final class DanmakuOverlayController {
     struct Comment: Equatable {
@@ -44,7 +48,7 @@ final class DanmakuOverlayController {
         var offsetSeconds: Double = 0
     }
 
-    var engineProvider: () -> ErikaEngine?
+    var engineProvider: () -> (any PlaybackEngine)?
     /// 真实播放状态（playing/buffering 由内核事件驱动，不靠媒体时间猜——
     /// 24fps 视频配 30Hz 采样会每隔一次看到 delta=0，时间猜测会以 ~15Hz
     /// 抖动 pause/play，而库的 pause 会移除全部动画、play 重加，抖起来
@@ -71,7 +75,7 @@ final class DanmakuOverlayController {
     private var viewPausedBySync = false
     private var fontSize: CGFloat = 25
 
-    init(engineProvider: @escaping () -> ErikaEngine?,
+    init(engineProvider: @escaping () -> (any PlaybackEngine)?,
          playbackStateProvider: @escaping () -> (playing: Bool, buffering: Bool)? = { nil }) {
         self.engineProvider = engineProvider
         self.playbackStateProvider = playbackStateProvider
@@ -204,7 +208,7 @@ final class DanmakuOverlayController {
         spawnUpTo(now)
     }
 
-    private func mediaSeconds(_ engine: ErikaEngine) -> Double {
+    private func mediaSeconds(_ engine: any PlaybackEngine) -> Double {
         Double(engine.latestMediaTime.microseconds) / 1_000_000
     }
 

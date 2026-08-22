@@ -1,6 +1,7 @@
 import CErika
 import Foundation
 import Testing
+import PlaybackKit
 @testable import ErikaKit
 
 /// 播放生命周期回归（REVIEW_TODO 1.3）。

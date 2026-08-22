@@ -1,4 +1,4 @@
-import ErikaKit
+import PlaybackKit
 import SwiftUI
 
 /// 播放准备态的全屏 loading 层：解析地址中（转圈 + 标题 + 取消）/ 解析失败（错误 + 重试）。
@@ -79,16 +79,17 @@ private struct PlayerGlassCancelButton: View {
 }
 
 struct PlayerVideoSurface: View {
-    let engine: ErikaEngine?
+    let engine: (any PlaybackEngine)?
     let title: String
     let setupError: String?
 
     @ViewBuilder
     var body: some View {
         if let engine {
-            // MetalHostView holds an engine by identity. Rebuild the host whenever
-            // playback creates a new engine so the new surface is attached.
-            VideoSurfaceView(engine: engine)
+            // 画面视图由内核适配器自己造（attach / resize / 帧驱动都在它内部）。
+            // 换片会换引擎实例，视图必须跟着引擎身份重建——SwiftUI 复用旧视图时
+            // 新引擎不会 attach（无渲染循环 → 无状态事件 → UI 卡在 idle）。
+            engine.makeSurfaceView()
                 .id(ObjectIdentifier(engine))
                 .ignoresSafeArea()
         } else {

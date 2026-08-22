@@ -1,39 +1,8 @@
 import CErika
 import Foundation
+import PlaybackKit
 
-/// 内核视角的一条轨道（视频 / 音频 / 字幕）。
-/// 外挂字幕通过 `addExternalSubtitle` 加入后也会出现在列表里（`source == .external`）。
-public struct TrackInfo: Identifiable, Hashable, Sendable {
-    public enum Kind: String, Hashable, Sendable {
-        case video, audio, subtitle
-    }
-
-    public enum Source: String, Hashable, Sendable {
-        case embedded, external
-    }
-
-    public let id: Int64
-    public let kind: Kind
-    public let source: Source
-    public let selected: Bool
-    public let title: String?
-    public let language: String?
-    public let codec: String?
-    /// 声道数（音轨）。
-    public let channels: Int?
-    /// 采样率 Hz（音轨）。
-    public let sampleRate: Int?
-
-    /// 菜单里显示的一行：标题优先，没有就语言 + 编码。
-    public var displayTitle: String {
-        if let title, !title.isEmpty { return title }
-        var parts: [String] = []
-        if let language, !language.isEmpty { parts.append(language) }
-        if let codec, !codec.isEmpty { parts.append(codec) }
-        if kind == .audio, let channels { parts.append("\(channels)ch") }
-        return parts.joined(separator: " · ")
-    }
-}
+// Erika 的 C 轨道结构 → PlaybackKit 的 `TrackInfo`，以及 presenter 侧的轨道调用。
 
 extension TrackInfo {
     init(_ raw: ErikaTrackInfo) {

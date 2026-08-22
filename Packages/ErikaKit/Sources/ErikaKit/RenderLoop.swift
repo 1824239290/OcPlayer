@@ -1,12 +1,11 @@
 import Foundation
+import PlaybackKit
 import QuartzCore
 
 #if os(macOS)
 import AppKit
-public typealias PlatformView = NSView
 #else
 import UIKit
-public typealias PlatformView = UIView
 #endif
 
 /// 帧驱动：`CADisplayLink` 跑在**专用渲染线程**的 runloop 上，不占主线程。

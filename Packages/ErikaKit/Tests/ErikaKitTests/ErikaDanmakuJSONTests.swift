@@ -1,4 +1,5 @@
 import XCTest
+import PlaybackKit
 @testable import ErikaKit
 
 /// 锁定 Erika 内核 inline JSON 弹幕的确切 schema。

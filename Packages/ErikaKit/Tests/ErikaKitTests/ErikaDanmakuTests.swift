@@ -1,4 +1,5 @@
 import XCTest
+import PlaybackKit
 @testable import ErikaKit
 
 final class ErikaDanmakuTests: XCTestCase {

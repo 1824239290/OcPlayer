@@ -11,6 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../DiagnosticsKit"),
+        .package(path: "../PlaybackKit"),
     ],
     targets: [
         // 由 Scripts/fetch-erika.sh 生成（三 slice：macOS / iOS 设备 / iOS 模拟器）
@@ -41,7 +42,7 @@ let package = Package(
             ]
         ),
 
-        .target(name: "ErikaKit", dependencies: ["CErika", "DiagnosticsKit"]),
+        .target(name: "ErikaKit", dependencies: ["CErika", "DiagnosticsKit", "PlaybackKit"]),
 
         .testTarget(name: "ErikaKitTests", dependencies: ["ErikaKit"]),
     ]

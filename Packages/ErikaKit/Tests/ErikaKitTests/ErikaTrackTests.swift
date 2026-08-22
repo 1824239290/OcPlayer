@@ -1,4 +1,5 @@
 import XCTest
+import PlaybackKit
 @testable import ErikaKit
 
 /// 轨道能力（真内核）：枚举、选音轨、关字幕、外挂 srt 字幕。

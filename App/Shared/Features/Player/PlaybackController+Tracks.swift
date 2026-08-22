@@ -1,6 +1,6 @@
 import DanmakuKit
 import DiagnosticsKit
-import ErikaKit
+import PlaybackKit
 import Foundation
 
 extension PlaybackController {
@@ -159,7 +159,7 @@ extension PlaybackController {
         try? engine?.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
     }
 
-    func applyDanmakuPreferences(to engine: ErikaEngine) throws {
+    func applyDanmakuPreferences(to engine: any PlaybackEngine) throws {
         var config = try engine.danmakuConfig()
         config.enabled = danmakuEnabled
         config.opacity = Float(danmakuOpacity)

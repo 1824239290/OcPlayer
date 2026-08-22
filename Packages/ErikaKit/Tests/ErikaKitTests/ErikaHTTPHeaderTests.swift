@@ -1,6 +1,7 @@
 import CErika
 import Foundation
 import Testing
+import PlaybackKit
 @testable import ErikaKit
 
 /// M0 第 6 步：验证 Jellyfin 直连路径 —— token 只走 HTTP 头（`open_with_headers`），不进 URL。

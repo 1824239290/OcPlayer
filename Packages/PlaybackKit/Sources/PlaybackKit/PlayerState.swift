@@ -1,4 +1,3 @@
-import CErika
 import Foundation
 import Observation
 
@@ -41,7 +40,7 @@ public final class PlayerState {
 
     /// 开始消费某个引擎的事件流。调用方持有返回的 `Task` 决定生命周期。
     @discardableResult
-    public func start(consuming engine: ErikaEngine) -> Task<Void, Never> {
+    public func start(consuming engine: any PlaybackEngine) -> Task<Void, Never> {
         consumptionGeneration &+= 1
         let generation = consumptionGeneration
         return Task { [weak self] in
@@ -52,7 +51,7 @@ public final class PlayerState {
                 self.apply(event)
                 switch event {
                 case .tracksChanged, .trackSelectionChanged:
-                    // 轨道 / 选择变了：重拉列表（锁化 C 调用，很快）
+                    // 轨道 / 选择变了：重拉列表（很快，适配器内部自己串行化）
                     self.refreshTracks(from: engine)
                 default:
                     break
@@ -62,7 +61,7 @@ public final class PlayerState {
     }
 
     /// 换源 / 手动选轨后由 `PlaybackController` 显式调用。
-    public func refreshTracks(from engine: ErikaEngine) {
+    public func refreshTracks(from engine: any PlaybackEngine) {
         guard let all = try? engine.tracks() else { return }
         audioTracks = all.filter { $0.kind == .audio }
         subtitleTracks = all.filter { $0.kind == .subtitle }
@@ -110,10 +109,10 @@ public final class PlayerState {
             hasSurface = false
         case .videoDecoderChanged, .audioOutputChanged, .trackSelectionChanged:
             break
-        case .failed(let status, let message):
-            PlaybackLog.error("内核错误事件 status=\(status.rawValue) message=\(message ?? "nil")")
+        case .failed(let code, let message):
+            PlaybackLog.error("内核错误事件 code=\(code) message=\(message ?? "nil")")
             state = .error
-            lastError = message ?? "内核错误 status=\(status.rawValue)"
+            lastError = message ?? "内核错误 code=\(code)"
         }
     }
 

@@ -206,7 +206,7 @@ extension AppModel {
                     return
                 }
                 // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
-                if playback.engine?.latestStats.rendered_video_frames ?? 0 >= 1 {
+                if playback.engine?.hasRenderedFirstFrame == true {
                     // 保底 400ms：加载太快时 loading 闪现即消失会晃眼。
                     if clock.now - startTime < .milliseconds(400) {
                         try? await Task.sleep(until: startTime + .milliseconds(400), clock: clock)

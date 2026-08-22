@@ -1,6 +1,7 @@
 import CErika
 import Foundation
 import Testing
+import PlaybackKit
 @testable import ErikaKit
 
 /// M0 第 5 步的无头验收：不开窗口也能证明内核真的把文件 demux 开了 ——
