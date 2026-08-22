@@ -27,6 +27,26 @@ extension PlaybackController {
         var tracks: [DanmakuTrackInfo] = []
         do {
             let accepted = try withReadyEngine(for: source) { engine in
+                // overlay 路线（影子模式）：数据喂 App 层渲染器，内核轨道保持为空，
+                // 避免 kernel/overlay 双份弹幕。时间桥语义见 DanmakuOverlay。
+                if usesOverlayDanmakuRenderer {
+                    try engine.clearDanmaku()
+                    danmakuOverlay.update {
+                        $0.enabled = danmakuEnabled
+                        $0.opacity = danmakuOpacity
+                        $0.displayArea = danmakuDisplayArea
+                        $0.blockTop = danmakuBlockTop
+                        $0.blockBottom = danmakuBlockBottom
+                        $0.blockScroll = danmakuBlockScroll
+                        $0.allowStacking = danmakuAllowStacking
+                        $0.offsetSeconds = danmakuGlobalOffsetSeconds
+                    }
+                    danmakuOverlay.replace(
+                        json: json,
+                        trackOffsetSeconds: Double(offset.microseconds) / 1_000_000
+                    )
+                    return
+                }
                 // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
                 // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
                 // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次
@@ -51,6 +71,7 @@ extension PlaybackController {
 
     @discardableResult
     func clearDanmaku(for source: PlaybackSourceGeneration) throws -> Bool {
+        danmakuOverlay.clear()
         do {
             let accepted = try withReadyEngine(for: source) { engine in
                 try engine.clearDanmaku()
@@ -67,17 +88,20 @@ extension PlaybackController {
         danmakuEnabled = enabled
         PlaybackPreferences.danmakuEnabled = enabled
         try? engine?.setDanmakuEnabled(enabled)
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.enabled = enabled } }
     }
 
     func setDanmakuOpacity(_ opacity: Double) {
         danmakuOpacity = opacity.clamped(0.25...1)
         PlaybackPreferences.danmakuOpacity = danmakuOpacity
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.opacity = danmakuOpacity } }
         updateDanmakuConfig { $0.opacity = Float(danmakuOpacity) }
     }
 
     func setDanmakuDisplayArea(_ area: Double) {
         danmakuDisplayArea = area.clamped(0.25...1)
         PlaybackPreferences.danmakuDisplayArea = danmakuDisplayArea
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.displayArea = danmakuDisplayArea } }
         updateDanmakuConfig { $0.displayArea = Float(danmakuDisplayArea) }
     }
 
@@ -93,6 +117,13 @@ extension PlaybackController {
         if let scroll {
             danmakuBlockScroll = scroll
             PlaybackPreferences.danmakuBlockScroll = scroll
+        }
+        if usesOverlayDanmakuRenderer {
+            danmakuOverlay.update {
+                $0.blockTop = danmakuBlockTop
+                $0.blockBottom = danmakuBlockBottom
+                $0.blockScroll = danmakuBlockScroll
+            }
         }
         updateDanmakuConfig {
             $0.blockTop = danmakuBlockTop
@@ -110,6 +141,7 @@ extension PlaybackController {
     func setDanmakuAllowStacking(_ enabled: Bool) {
         danmakuAllowStacking = enabled
         PlaybackPreferences.danmakuAllowStacking = enabled
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.allowStacking = enabled } }
         updateDanmakuConfig { $0.allowStacking = enabled }
     }
 
@@ -123,6 +155,7 @@ extension PlaybackController {
 
     func setDanmakuOffset(_ seconds: Double) {
         danmakuGlobalOffsetSeconds = seconds.clamped(-30...30)
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.offsetSeconds = danmakuGlobalOffsetSeconds } }
         try? engine?.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
     }
 

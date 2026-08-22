@@ -24,6 +24,12 @@ public final class ErikaEngine: @unchecked Sendable {
     public var latestStats: ErikaPresenterStats { withLock { _latestStats } }
     private var _latestStats = ErikaPresenterStats()
 
+    /// 最近一次内核 position 事件的媒体时间（渲染线程写、任意线程读）。
+    /// 弹幕 overlay 用自己的采样时钟读它决定「谁该出场」：暂停/缓冲时内核
+    /// 媒体时间冻结，采样值跟着冻结——语义与内核内嵌弹幕的时间契约一致。
+    public var latestMediaTime: Duration { withLock { _latestMediaTime } }
+    private var _latestMediaTime: Duration = .zero
+
     public init(outputMode: ErikaPresenterOutputMode = ErikaPresenterOutputMode_Auto,
                 edrHeadroom: Float = 0,
                 upscaler: ErikaLumaUpscalerMode = ErikaLumaUpscalerMode_Off) throws {
@@ -288,6 +294,7 @@ public final class ErikaEngine: @unchecked Sendable {
         while true {
             do {
                 guard let event = try presenter.pollEvent() else { break }
+                if case .positionChanged(let value) = event { _latestMediaTime = value }
                 pending.append(event)
             } catch let error as ErikaError {
                 PlaybackLog.error("poll_event 失败 error=\(error)")

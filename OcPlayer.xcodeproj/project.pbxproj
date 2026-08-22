@@ -17,6 +17,8 @@
 		1A0000000000000000000067 /* DiagnosticsKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000065 /* DiagnosticsKit */; };
 		1A0000000000000000000070 /* DanmakuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000069 /* DanmakuKit */; };
 		1A0000000000000000000071 /* DanmakuKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000069 /* DanmakuKit */; };
+		1A0000000000000000000074 /* DanmakuRenderKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000073 /* DanmakuRenderKit */; };
+		1A0000000000000000000075 /* DanmakuRenderKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000073 /* DanmakuRenderKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +56,7 @@
 				1A0000000000000000000056 /* JellyfinKit in Frameworks */,
 				1A0000000000000000000066 /* DiagnosticsKit in Frameworks */,
 				1A0000000000000000000070 /* DanmakuKit in Frameworks */,
+				1A0000000000000000000074 /* DanmakuRenderKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -66,6 +69,7 @@
 				1A0000000000000000000057 /* JellyfinKit in Frameworks */,
 				1A0000000000000000000067 /* DiagnosticsKit in Frameworks */,
 				1A0000000000000000000071 /* DanmakuKit in Frameworks */,
+				1A0000000000000000000075 /* DanmakuRenderKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -137,6 +141,7 @@
 				1A0000000000000000000065 /* DiagnosticsKit */,
 				1A0000000000000000000069 /* DanmakuKit */,
 				1A000000000000000000006A /* BangumiKit */,
+				1A0000000000000000000073 /* DanmakuRenderKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000014 /* OcPlayer.app */;
@@ -166,6 +171,7 @@
 				1A0000000000000000000065 /* DiagnosticsKit */,
 				1A0000000000000000000069 /* DanmakuKit */,
 				1A000000000000000000006A /* BangumiKit */,
+				1A0000000000000000000073 /* DanmakuRenderKit */,
 			);
 			productName = OcPlayer;
 			productReference = 1A0000000000000000000024 /* OcPlayer.app */;
@@ -226,6 +232,7 @@
 				1A0000000000000000000064 /* XCLocalSwiftPackageReference "Packages/DiagnosticsKit" */,
 				1A0000000000000000000068 /* XCLocalSwiftPackageReference "Packages/DanmakuKit" */,
 				1A0000000000000000000063 /* XCLocalSwiftPackageReference "Packages/BangumiKit" */,
+				1A0000000000000000000072 /* XCLocalSwiftPackageReference "Packages/DanmakuRenderKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1A0000000000000000000003 /* Products */;
@@ -536,6 +543,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/DanmakuKit;
 		};
+		1A0000000000000000000072 /* XCLocalSwiftPackageReference "Packages/DanmakuRenderKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/DanmakuRenderKit;
+		};
 1A0000000000000000000063 /* XCLocalSwiftPackageReference "Packages/BangumiKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/BangumiKit;
@@ -562,6 +573,10 @@
 		1A0000000000000000000069 /* DanmakuKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DanmakuKit;
+		};
+		1A0000000000000000000073 /* DanmakuRenderKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DanmakuRenderKit;
 		};
 1A000000000000000000006A /* BangumiKit */ = {
 			isa = XCSwiftPackageProductDependency;

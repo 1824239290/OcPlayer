@@ -70,6 +70,13 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
     }
 
+    /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。
+    /// 影子模式默认关：打开后弹幕由 overlay 渲染、内核弹幕不装载。
+    static var danmakuUseOverlayRenderer: Bool {
+        get { storedBool(forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer", default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer") }
+    }
+
     private static func storedDouble(
         forKey key: String,
         range: ClosedRange<Double>,

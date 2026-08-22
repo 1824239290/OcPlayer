@@ -70,6 +70,17 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
     var danmakuGlobalOffsetSeconds = 0.0
 
+    /// 弹幕渲染路线（影子模式开关）：true = App 层 DanmakuRenderKit overlay
+    /// （内核弹幕不装载），false = Erika 内核 DFM+（现状）。详见 DanmakuOverlay.swift 头注释。
+    let usesOverlayDanmakuRenderer = PlaybackPreferences.danmakuUseOverlayRenderer
+    let danmakuOverlay: DanmakuOverlayController
+
+    init() {
+        // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
+        danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
+        danmakuOverlay.engineProvider = { [weak self] in self?.engine }
+    }
+
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
     var currentlyOpenURI: String?
     /// Changes as soon as a new request is presented, before its engine opens.
@@ -493,6 +504,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         resumeTask = nil
         eventTask?.cancel()
         eventTask = nil
+        danmakuOverlay.reset()
         engine = nil
         failedRequestID = nil
         danmakuTracks = []
@@ -540,6 +552,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func applyRate(_ newRate: Double) {
         rate = newRate
         try? engine?.setRate(newRate)
+        if usesOverlayDanmakuRenderer { danmakuOverlay.setRate(newRate) }
     }
 
     func applyVolume(_ newVolume: Double) {

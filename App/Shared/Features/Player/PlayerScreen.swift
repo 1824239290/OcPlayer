@@ -45,6 +45,10 @@ struct PlayerScreen: View {
                 title: request?.title ?? "没有正在播放的内容",
                 setupError: controller.setupError
             )
+            // 影子模式开关（默认关，开着时内核弹幕不装载）。垫在视频之上、手势层之下。
+            if controller.usesOverlayDanmakuRenderer {
+                DanmakuOverlayHost(controller: controller.danmakuOverlay)
+            }
             playerGestureLayer
 
             if controller.state.isBuffering && controller.state.state == .playing {
