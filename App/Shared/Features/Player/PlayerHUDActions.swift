@@ -75,6 +75,15 @@ struct PlayerHUDActionsCapsule: View {
     private var contentView: some View {
         ZStack(alignment: .bottomTrailing) {
             if let tab = expandedTab {
+                // 背景透明点击层：点击卡片外部区域时自动平滑收起
+                Color.black.opacity(0.001)
+                    .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onTapGesture {
+                        closeExpanded()
+                    }
+                    .ignoresSafeArea()
+
                 expandedCard(for: tab)
             } else {
                 compactButtonBar
@@ -91,7 +100,7 @@ struct PlayerHUDActionsCapsule: View {
                     namespace: morphAnimation,
                     action: { selectTab(tab) }
                 )
-                .transition(.scale(scale: 0.7).combined(with: .opacity))
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
     }
@@ -187,6 +196,7 @@ struct PlayerHUDActionsCapsule: View {
                 .padding(16)
             }
             .frame(maxHeight: 320)
+            .transition(.opacity)
         }
         .frame(width: 320)
         .playerHUDGlassCard(
@@ -194,7 +204,6 @@ struct PlayerHUDActionsCapsule: View {
             id: tab.id,
             namespace: morphAnimation
         )
-        .transition(.identity)
     }
 
     private func selectTab(_ tab: PlayerHUDActionTab) {

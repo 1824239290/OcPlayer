@@ -45,6 +45,14 @@ struct PlayerScreen: View {
                 title: request?.title ?? "没有正在播放的内容",
                 setupError: controller.setupError
             )
+            #if os(macOS)
+            PlayerMouseTrackingView { location in
+                hudVisibility.pointerMoved(to: location, canAutoHide: canAutoHideControls)
+            } onExited: {
+                hudVisibility.pointerExited()
+                hudVisibility.hideOnPointerExit()
+            }
+            #endif
             // 影子模式开关（默认关，开着时内核弹幕不装载）。垫在视频之上、手势层之下。
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
@@ -479,3 +487,66 @@ private struct NowPlayingTitle: Equatable {
     var title: String
     var kicker: String
 }
+
+#if os(macOS)
+/// 使用 AppKit 原生 NSTrackingArea 跟踪窗口鼠标移动与移出。
+/// 彻底解决 macOS 上 SwiftUI `.onContinuousHover` 鼠标移出窗口不触发 `.ended` 的问题。
+private struct PlayerMouseTrackingView: NSViewRepresentable {
+    let onMoved: (CGPoint) -> Void
+    let onExited: () -> Void
+
+    func makeNSView(context: Context) -> TrackingNSView {
+        let view = TrackingNSView()
+        view.onMoved = onMoved
+        view.onExited = onExited
+        return view
+    }
+
+    func updateNSView(_ nsView: TrackingNSView, context: Context) {
+        nsView.onMoved = onMoved
+        nsView.onExited = onExited
+    }
+
+    final class TrackingNSView: NSView {
+        var onMoved: ((CGPoint) -> Void)?
+        var onExited: (() -> Void)?
+        private var trackingArea: NSTrackingArea?
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            if let trackingArea {
+                removeTrackingArea(trackingArea)
+            }
+            let options: NSTrackingArea.Options = [
+                .mouseEnteredAndExited,
+                .mouseMoved,
+                .activeAlways,
+                .inVisibleRect
+            ]
+            let area = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
+            addTrackingArea(area)
+            trackingArea = area
+        }
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            // 不拦截任何点击事件，完全透明传递给底层手势与上层控件
+            return nil
+        }
+
+        override func mouseMoved(with event: NSEvent) {
+            let location = convert(event.locationInWindow, from: nil)
+            onMoved?(location)
+        }
+
+        override func mouseEntered(with event: NSEvent) {
+            let location = convert(event.locationInWindow, from: nil)
+            onMoved?(location)
+        }
+
+        override func mouseExited(with event: NSEvent) {
+            onExited?()
+        }
+    }
+}
+#endif
+
