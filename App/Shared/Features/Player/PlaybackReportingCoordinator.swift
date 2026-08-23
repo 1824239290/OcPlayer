@@ -107,6 +107,14 @@ final class PlaybackReportingCoordinator {
             && snapshot.positionSeconds >= snapshot.durationSeconds - 2
     }
 
+    /// `stop()` 收口时是否该按「自然播完」触发终态事件。
+    /// 与心跳分支共用判定:只有引擎已发出 `.stopped`(播放器主动停也会经过这里,
+    /// 但那时不满足「位置在末尾」)才认为是自然到尾,避免片尾手动关闭被误判成连播。
+    private static func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
+        guard let snapshot else { return false }
+        return snapshot.state == .stopped && isReachedEnd(snapshot: snapshot)
+    }
+
     private func triggerTerminalIfNeeded(session: Session, reachedEnd: Bool) {
         guard !triggeredTerminalRequestIDs.contains(session.requestID) else { return }
         triggeredTerminalRequestIDs.insert(session.requestID)
@@ -234,7 +242,7 @@ final class PlaybackReportingCoordinator {
         pendingLifecycleReport = nil
         session = nil
 
-        let reachedEnd = Self.isReachedEnd(snapshot: snapshot)
+        let reachedEnd = Self.isNaturalEnd(snapshot: snapshot)
         if reachedEnd {
             triggerTerminalIfNeeded(session: activeSession, reachedEnd: true)
         }

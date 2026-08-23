@@ -131,6 +131,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var activeSecurityScopedURL: URL?
     var activeSecurityScope = false
     var hasLoadedSource = false
+    /// 引擎是否还在运行(open 成功置 true,stopPlayback/open 失败置 false)。
+    /// 供关闭播放器的多条收口路径共用:引擎已被停掉的不再重复 stop。
+    var engineIsActive = false
 
     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
     @ObservationIgnored private let wakeLock = PlaybackWakeLock()
@@ -481,12 +484,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 playerLog.warning("弹幕偏好应用失败，继续播放 error=\(error)")
                 PlaybackLog.append("danmaku preferences skipped error=\(error)")
             }
-            try engine.play()
-            // 成功打开 → 清掉上一次的报错，别让错误条残留。
+try engine.play()
+            // 成功打开 → 清掉上一次的报错,别让错误条残留。
             setupError = nil
             currentlyOpenURI = source.uri
             activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
             activeSecurityScope = acquiredScope
+            engineIsActive = true
             playerLog.info("open 成功")
             PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
             return true
@@ -520,6 +524,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         activeRequest = nil
         expectedRequestID = nil
         sourceGeneration &+= 1
+        // 先记 false:stopPlayback 执行到后半段时引擎已被 stop + resetEngine,
+        // 关闭播放器的另一条收口路径若在这期间查 engineIsActive 不会再误停。
+        engineIsActive = false
         releaseSecurityScopedResource()
         // 退出播放后把引擎整个丢掉，下次播放重新创建。
         // 这样即使某个内核的 stop/detach 组合在个别版本里会让旧实例进入不可 reopen 的状态，
@@ -556,6 +563,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         eventTask = nil
         danmakuOverlay.reset()
         engine = nil
+        engineIsActive = false
         failedRequestID = nil
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0

@@ -105,6 +105,13 @@ final class DanmakuOverlayController {
         stopTimer()
     }
 
+    /// 视图从窗口移除时调用:只停采样 timer,不动弹幕数据。
+    /// overlay 随播放器状态会经历 disappear → reappear(如窗口还原动画期间),
+    /// 数据在 controller 生命周期里跨这些阶段保留,重新 appear 后 startTimer 继续播。
+    func pauseSampling() {
+        stopTimer()
+    }
+
     private static func parse(_ json: String) -> [Comment] {
         struct Item: Decodable {
             let time: Double
@@ -375,7 +382,10 @@ struct DanmakuOverlayHost: View {
             .allowsHitTesting(false)
             .ignoresSafeArea()
             .onDisappear {
-                controller.reset()
+                // 只停 60Hz 采样 timer,保留已装载的弹幕数据:
+                // overlay 在窗口还原动画等场景会先 disappear 再 reappear,
+                // 丢数据会导致重开后进度指针错位或弹幕整体丢失。
+                controller.pauseSampling()
             }
     }
 }

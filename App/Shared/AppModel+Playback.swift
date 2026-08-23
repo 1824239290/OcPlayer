@@ -329,13 +329,18 @@ extension AppModel {
         return "OcPlay/\(ClientIdentity.marketingVersion) (\(platform); \(architecture))"
     }
 
-    func dismissPlayer() {
-        playback?.stopPlayback()
+func dismissPlayer() {
         cancelPlaybackOpen()
         retryPlaybackItem = nil
-        let stopped = finishReporting()   // 退出播放器 → Stopped，服务器记下续播位置
+        let stopped = finishReporting()   // 退出播放器 → Stopped,服务器记下续播位置
+        // 引擎可能还在跑(loading 取消、自然播完自动关闭这两条路没停过引擎):
+        // 兜底停掉,避免音频残留。正常关闭路径(closePlayer)已先 stopPlayback,
+        // engineIsActive 为 false,这里不会重复停,也不干扰它的窗口还原动画时序。
+        if playback?.engineIsActive == true {
+            playback?.stopPlayback()
+        }
         presentedPlayer = nil
-        // 等 Stopped 上报落库后刷新首页与详情页，让「继续观看」和打开中的详情页立刻反映刚退出的进度。
+        // 等 Stopped 上报落库后刷新首页与详情页,让「继续观看」和打开中的详情页立刻反映刚退出的进度。
         Task {
             await stopped?.value
             await loadHome()
