@@ -68,6 +68,7 @@ struct PlayerHUDBottomDock: View {
             onToggleFullscreen: onToggleFullscreen,
             onCapture: onCapture,
             onShare: onShare,
+            onInteractionChanged: onInteractionChanged,
             onUserInteraction: onUserInteraction
         )
         .fixedSize(horizontal: true, vertical: true)

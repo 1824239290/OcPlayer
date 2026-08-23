@@ -7,6 +7,24 @@ import SwiftUI
 import AppKit
 #endif
 
+enum PlayerHUDActionTab: String, CaseIterable, Identifiable {
+    case danmaku = "弹幕"
+    case subtitle = "字幕"
+    case audio = "音轨"
+    case more = "更多"
+
+    var id: String { rawValue }
+
+    var iconName: String {
+        switch self {
+        case .danmaku: "text.alignleft"
+        case .subtitle: "captions.bubble"
+        case .audio: "speaker.wave.2.fill"
+        case .more: "gearshape.fill"
+        }
+    }
+}
+
 struct PlayerHUDActionsCapsule: View {
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
@@ -18,7 +36,11 @@ struct PlayerHUDActionsCapsule: View {
     let onToggleFullscreen: () -> Void
     let onCapture: () -> Void
     let onShare: () -> Void
+    let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
+
+    @Namespace private var morphAnimation
+    @State private var expandedTab: PlayerHUDActionTab?
 
     private var controlSide: CGFloat {
         #if os(iOS)
@@ -29,174 +51,582 @@ struct PlayerHUDActionsCapsule: View {
     }
 
     var body: some View {
+        Group {
+            if #available(macOS 26.0, iOS 26.0, *) {
+                GlassEffectContainer {
+                    morphingSurface
+                }
+            } else {
+                morphingSurface
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("播放选项")
+    }
+
+    @ViewBuilder
+    private var morphingSurface: some View {
+        if let selectedTab = expandedTab {
+            expandedCard(for: selectedTab)
+        } else {
+            compactCapsule
+        }
+    }
+
+    private var compactCapsule: some View {
         PlayerHUDGlassSurface(in: Capsule()) {
             HStack(spacing: 0) {
-                PlayerHUDDanmakuMenu(
-                    isSelectingDanmaku: $isSelectingDanmaku,
+                PlayerHUDCompactActionButton(
+                    tab: .danmaku,
                     controlSide: controlSide,
-                    onUserInteraction: onUserInteraction
+                    action: { selectTab(.danmaku) }
                 )
-                PlayerHUDSubtitleMenu(
-                    isImportingSubtitle: $isImportingSubtitle,
+                PlayerHUDCompactActionButton(
+                    tab: .subtitle,
                     controlSide: controlSide,
-                    onUserInteraction: onUserInteraction
+                    action: { selectTab(.subtitle) }
                 )
-                PlayerHUDAudioMenu(
+                PlayerHUDCompactActionButton(
+                    tab: .audio,
                     controlSide: controlSide,
-                    onUserInteraction: onUserInteraction
+                    action: { selectTab(.audio) }
                 )
-                PlayerHUDMoreMenu(
-                    showStats: $showStats,
-                    showInfoCard: $showInfoCard,
-                    shareURL: shareURL,
-                    isFullscreen: isFullscreen,
+                PlayerHUDCompactActionButton(
+                    tab: .more,
                     controlSide: controlSide,
-                    onToggleFullscreen: onToggleFullscreen,
-                    onCapture: onCapture,
-                    onShare: onShare,
-                    onUserInteraction: onUserInteraction
+                    action: { selectTab(.more) }
                 )
             }
             .padding(4)
             .fixedSize(horizontal: true, vertical: true)
         }
+        .matchedGeometryEffect(id: "hudActionSurface", in: morphAnimation)
+        .playerHUDGlassEffectID("hudActionSurface", in: morphAnimation)
         .fixedSize(horizontal: true, vertical: true)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("播放选项")
+    }
+
+    private func expandedCard(for tab: PlayerHUDActionTab) -> some View {
+        PlayerHUDGlassSurface(in: RoundedRectangle(cornerRadius: 22, style: .continuous)) {
+            VStack(spacing: 0) {
+                // 顶部标题、Tab 快捷切换与关闭按钮
+                HStack(spacing: 10) {
+                    Image(systemName: tab.iconName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(PlayerHUDPalette.primary)
+                    Text(tab.rawValue)
+                        .font(.headline)
+                        .foregroundStyle(PlayerHUDPalette.primary)
+
+                    Spacer(minLength: 8)
+
+                    // 快速切换其它 Tab
+                    HStack(spacing: 4) {
+                        ForEach(PlayerHUDActionTab.allCases) { item in
+                            Button {
+                                withAnimation(.smooth(duration: 0.25)) {
+                                    expandedTab = item
+                                }
+                                onUserInteraction()
+                            } label: {
+                                Image(systemName: item.iconName)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(item == tab ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
+                                    .frame(width: 26, height: 26)
+                                    .background(
+                                        item == tab ? Color.white.opacity(0.18) : Color.clear,
+                                        in: Circle()
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .help(item.rawValue)
+                        }
+                    }
+
+                    // 关闭形变卡片
+                    Button {
+                        closeExpanded()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(PlayerHUDPalette.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("收起")
+                    .accessibilityLabel("收起控制面板")
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+
+                Divider()
+                    .overlay(PlayerHUDPalette.outline)
+
+                // 各功能模块内容
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        switch tab {
+                        case .danmaku:
+                            PlayerHUDDanmakuPanelContent(
+                                isSelectingDanmaku: $isSelectingDanmaku,
+                                onUserInteraction: onUserInteraction
+                            )
+                        case .subtitle:
+                            PlayerHUDSubtitlePanelContent(
+                                isImportingSubtitle: $isImportingSubtitle,
+                                onUserInteraction: onUserInteraction
+                            )
+                        case .audio:
+                            PlayerHUDAudioPanelContent(
+                                onUserInteraction: onUserInteraction
+                            )
+                        case .more:
+                            PlayerHUDMorePanelContent(
+                                showStats: $showStats,
+                                showInfoCard: $showInfoCard,
+                                shareURL: shareURL,
+                                isFullscreen: isFullscreen,
+                                onToggleFullscreen: onToggleFullscreen,
+                                onCapture: onCapture,
+                                onShare: onShare,
+                                onUserInteraction: onUserInteraction
+                            )
+                        }
+                    }
+                    .padding(16)
+                }
+                .frame(maxHeight: 320)
+            }
+            .frame(width: 320)
+        }
+        .matchedGeometryEffect(id: "hudActionSurface", in: morphAnimation)
+        .playerHUDGlassEffectID("hudActionSurface", in: morphAnimation)
+    }
+
+    private func selectTab(_ tab: PlayerHUDActionTab) {
+        withAnimation(.smooth(duration: 0.35)) {
+            expandedTab = tab
+        }
+        onInteractionChanged(.menuTracking, true)
+        onUserInteraction()
+    }
+
+    private func closeExpanded() {
+        withAnimation(.smooth(duration: 0.3)) {
+            expandedTab = nil
+        }
+        onInteractionChanged(.menuTracking, false)
+        onUserInteraction()
     }
 }
 
-struct PlayerHUDAudioMenu: View {
-    @Environment(PlaybackController.self) private var controller
+// MARK: - Compact Buttons
 
+struct PlayerHUDCompactActionButton: View {
+    @Environment(PlaybackController.self) private var controller
+    let tab: PlayerHUDActionTab
     let controlSide: CGFloat
-    let onUserInteraction: () -> Void
+    let action: () -> Void
 
     var body: some View {
-        Menu {
-            Picker("音轨", selection: Binding(
-                get: { controller.state.audioTracks.first(where: { $0.selected })?.id ?? -1 },
-                set: { id in
-                    if let track = controller.state.audioTracks.first(where: { $0.id == id }) {
-                        controller.selectAudio(track)
-                        onUserInteraction()
-                    }
-                }
-            )) {
-                ForEach(controller.state.audioTracks) { track in
-                    Text(track.displayTitle).tag(track.id)
-                }
-            }
-            .pickerStyle(.inline)
-        } label: {
-            PlayerHUDActionIcon(systemImage: "speaker.wave.2.fill", side: controlSide)
+        Button(action: action) {
+            Image(systemName: iconName)
+                .symbolRenderingMode(.monochrome)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(PlayerHUDPalette.primary)
+                .opacity(isActive ? 1 : 0.45)
+                .animation(.easeInOut(duration: 0.2), value: isActive)
+                .frame(width: controlSide, height: controlSide)
+                .contentShape(Rectangle())
         }
-        .menuIndicator(.hidden)
-        .modifier(PlayerHUDMenuStyle())
-        .frame(width: controlSide, height: controlSide)
-        .disabled(controller.state.audioTracks.isEmpty)
-        .help("音轨")
-        .accessibilityLabel("音轨")
-        .accessibilityValue(selectedAudioTitle)
+        .buttonStyle(PlayerHUDCompactButtonStyle())
+        .help(tab.rawValue)
+        .accessibilityLabel(tab.rawValue)
     }
 
-    private var selectedAudioTitle: String {
-        controller.state.audioTracks.first(where: { $0.selected })?.displayTitle ?? "未选择"
+    private var iconName: String {
+        switch tab {
+        case .danmaku:
+            "text.alignleft"
+        case .subtitle:
+            controller.state.subtitleTracks.contains { $0.selected } ? "captions.bubble.fill" : "captions.bubble"
+        case .audio:
+            "speaker.wave.2.fill"
+        case .more:
+            "gearshape.fill"
+        }
+    }
+
+    private var isActive: Bool {
+        switch tab {
+        case .danmaku:
+            controller.danmakuEnabled
+        case .subtitle, .more:
+            true
+        case .audio:
+            !controller.state.audioTracks.isEmpty
+        }
     }
 }
 
-struct PlayerHUDSubtitleMenu: View {
+struct PlayerHUDCompactButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .opacity(configuration.isPressed ? 0.75 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Danmaku Panel
+
+struct PlayerHUDDanmakuPanelContent: View {
+    @Environment(AppModel.self) private var app
+    @Environment(PlaybackController.self) private var controller
+
+    @Binding var isSelectingDanmaku: Bool
+    let onUserInteraction: () -> Void
+
+    private let opacities = [0.25, 0.5, 0.75, 1.0]
+    private let displayAreas = [0.25, 0.5, 0.75, 1.0]
+    private let fontSizes: [(String, Double)] = [
+        ("小", 18),
+        ("标准", 22),
+        ("大", 26),
+        ("特大", 30),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 开关与状态
+            HStack {
+                Toggle("启用弹幕", isOn: Binding(
+                    get: { controller.danmakuEnabled },
+                    set: {
+                        controller.setDanmakuEnabled($0)
+                        onUserInteraction()
+                    }
+                ))
+                .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                .font(.subheadline.weight(.medium))
+
+                Spacer()
+
+                DanmakuStatusBadge()
+            }
+
+            // 快捷操作
+            HStack(spacing: 8) {
+                Button {
+                    isSelectingDanmaku = true
+                    onUserInteraction()
+                } label: {
+                    Label("选择弹幕…", systemImage: "magnifyingglass")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    app.danmaku.retryAutomaticMatch()
+                    onUserInteraction()
+                } label: {
+                    Label("重新匹配", systemImage: "arrow.clockwise")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if !controller.danmakuTracks.isEmpty {
+                // 时间偏移
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("时间偏移")
+                            .font(.caption)
+                            .foregroundStyle(PlayerHUDPalette.secondary)
+                        Spacer()
+                        Text(offsetLabel)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(PlayerHUDPalette.primary)
+                    }
+                    HStack(spacing: 6) {
+                        Button("提前 0.5s") {
+                            controller.adjustDanmakuOffset(by: -0.5)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDMiniButtonStyle())
+
+                        Button("重置") {
+                            controller.resetDanmakuOffset()
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDMiniButtonStyle())
+
+                        Button("延后 0.5s") {
+                            controller.adjustDanmakuOffset(by: 0.5)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDMiniButtonStyle())
+                    }
+                }
+            }
+
+            // 不透明度
+            VStack(alignment: .leading, spacing: 6) {
+                Text("不透明度")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+                HStack(spacing: 6) {
+                    ForEach(opacities, id: \.self) { val in
+                        let isSelected = abs(controller.danmakuOpacity - val) < 0.01
+                        Button("\(Int(val * 100))%") {
+                            controller.setDanmakuOpacity(val)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDOptionButtonStyle(isSelected: isSelected))
+                    }
+                }
+            }
+
+            // 显示区域
+            VStack(alignment: .leading, spacing: 6) {
+                Text("显示区域")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+                HStack(spacing: 6) {
+                    ForEach(displayAreas, id: \.self) { val in
+                        let isSelected = abs(controller.danmakuDisplayArea - val) < 0.01
+                        Button("顶部 \(Int(val * 100))%") {
+                            controller.setDanmakuDisplayArea(val)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDOptionButtonStyle(isSelected: isSelected))
+                    }
+                }
+            }
+
+            // 字号大小
+            VStack(alignment: .leading, spacing: 6) {
+                Text("字号大小")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+                HStack(spacing: 6) {
+                    ForEach(fontSizes, id: \.1) { name, size in
+                        let isSelected = abs(controller.danmakuFontSize - size) < 0.01
+                        Button(name) {
+                            controller.setDanmakuFontSize(size)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDOptionButtonStyle(isSelected: isSelected))
+                    }
+                }
+            }
+
+            // 类型与高级过滤
+            VStack(alignment: .leading, spacing: 8) {
+                Text("过滤与显示规则")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+
+                HStack(spacing: 6) {
+                    PlayerHUDToggleChip(
+                        title: "滚动",
+                        isOn: Binding(
+                            get: { !controller.danmakuBlockScroll },
+                            set: { controller.setDanmakuBlocked(scroll: !$0); onUserInteraction() }
+                        )
+                    )
+                    PlayerHUDToggleChip(
+                        title: "顶部",
+                        isOn: Binding(
+                            get: { !controller.danmakuBlockTop },
+                            set: { controller.setDanmakuBlocked(top: !$0); onUserInteraction() }
+                        )
+                    )
+                    PlayerHUDToggleChip(
+                        title: "底部",
+                        isOn: Binding(
+                            get: { !controller.danmakuBlockBottom },
+                            set: { controller.setDanmakuBlocked(bottom: !$0); onUserInteraction() }
+                        )
+                    )
+                }
+
+                HStack(spacing: 6) {
+                    PlayerHUDToggleChip(
+                        title: "合并重复",
+                        isOn: Binding(
+                            get: { controller.danmakuMergeDuplicates },
+                            set: { controller.setDanmakuMergeDuplicates($0); onUserInteraction() }
+                        )
+                    )
+                    PlayerHUDToggleChip(
+                        title: "允许堆叠",
+                        isOn: Binding(
+                            get: { controller.danmakuAllowStacking },
+                            set: { controller.setDanmakuAllowStacking($0); onUserInteraction() }
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private var offsetLabel: String {
+        let value = controller.danmakuGlobalOffsetSeconds
+        if abs(value) < 0.001 { return "0 秒" }
+        return String(format: "%+.1f 秒", value)
+    }
+}
+
+// MARK: - Subtitle Panel
+
+struct PlayerHUDSubtitlePanelContent: View {
     @Environment(PlaybackController.self) private var controller
 
     @Binding var isImportingSubtitle: Bool
-    let controlSide: CGFloat
     let onUserInteraction: () -> Void
 
     var body: some View {
-        Menu {
-            Picker("字幕", selection: Binding(
-                get: { controller.state.subtitleTracks.first(where: { $0.selected })?.id ?? -1 },
-                set: { id in
-                    if id == -1 {
-                        controller.setSubtitle(nil)
-                    } else if let track = controller.state.subtitleTracks.first(where: { $0.id == id }) {
-                        controller.setSubtitle(track)
+        VStack(alignment: .leading, spacing: 14) {
+            // 字幕轨道选择
+            VStack(alignment: .leading, spacing: 6) {
+                Text("字幕轨道")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+
+                VStack(spacing: 4) {
+                    let isOffSelected = !controller.state.subtitleTracks.contains { $0.selected }
+                    PlayerHUDTrackSelectionRow(
+                        title: "关闭字幕",
+                        isSelected: isOffSelected,
+                        action: {
+                            controller.setSubtitle(nil)
+                            onUserInteraction()
+                        }
+                    )
+
+                    ForEach(controller.state.subtitleTracks) { track in
+                        let isSelected = track.selected
+                        let label = track.source == .external
+                            ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
+                            : track.displayTitle
+                        PlayerHUDTrackSelectionRow(
+                            title: label,
+                            isSelected: isSelected,
+                            action: {
+                                controller.setSubtitle(track)
+                                onUserInteraction()
+                            }
+                        )
                     }
-                    onUserInteraction()
-                }
-            )) {
-                Text("关闭").tag(Int64(-1))
-                ForEach(controller.state.subtitleTracks) { track in
-                    let label = track.source == .external
-                        ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
-                        : track.displayTitle
-                    Text(label).tag(track.id)
                 }
             }
-            .pickerStyle(.inline)
 
-            Divider()
+            // 外挂字幕导入
             Button {
                 isImportingSubtitle = true
                 onUserInteraction()
             } label: {
                 Label("打开外挂字幕…", systemImage: "doc.badge.plus")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
+            .buttonStyle(.plain)
 
-            Divider()
-            Section {
-                Button {
-                    controller.adjustSubtitleScale(by: 0.1)
-                    onUserInteraction()
-                } label: {
-                    Label("字幕加大", systemImage: "textformat.size.larger")
+            // 字号调节
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("字体大小")
+                        .font(.caption)
+                        .foregroundStyle(PlayerHUDPalette.secondary)
+                    Spacer()
+                    Text("\(Int((controller.subtitleScale * 100).rounded()))%")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(PlayerHUDPalette.primary)
                 }
-                Button {
-                    controller.adjustSubtitleScale(by: -0.1)
-                    onUserInteraction()
-                } label: {
-                    Label("字幕减小", systemImage: "textformat.size.smaller")
-                }
-                if abs(controller.subtitleScale - 1.0) > 0.01 {
+
+                HStack(spacing: 6) {
                     Button {
-                        controller.resetSubtitleScale()
+                        controller.adjustSubtitleScale(by: -0.1)
                         onUserInteraction()
                     } label: {
-                        Label("重置为默认大小", systemImage: "arrow.counterclockwise")
+                        Label("减小", systemImage: "textformat.size.smaller")
                     }
+                    .buttonStyle(PlayerHUDMiniButtonStyle())
+
+                    if abs(controller.subtitleScale - 1.0) > 0.01 {
+                        Button("重置") {
+                            controller.resetSubtitleScale()
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDMiniButtonStyle())
+                    }
+
+                    Button {
+                        controller.adjustSubtitleScale(by: 0.1)
+                        onUserInteraction()
+                    } label: {
+                        Label("加大", systemImage: "textformat.size.larger")
+                    }
+                    .buttonStyle(PlayerHUDMiniButtonStyle())
                 }
-            } header: {
-                Text("字体大小（当前 \(Int((controller.subtitleScale * 100).rounded()))%）")
             }
-        } label: {
-            PlayerHUDActionIcon(
-                systemImage: isSubtitleOn ? "captions.bubble.fill" : "captions.bubble",
-                side: controlSide
-            )
         }
-        .menuIndicator(.hidden)
-        .modifier(PlayerHUDMenuStyle())
-        .frame(width: controlSide, height: controlSide)
-        .help("字幕")
-        .accessibilityLabel("字幕")
-        .accessibilityValue(selectedSubtitleTitle)
-    }
-
-    private var isSubtitleOn: Bool {
-        controller.state.subtitleTracks.contains { $0.selected }
-    }
-
-    private var selectedSubtitleTitle: String {
-        guard let track = controller.state.subtitleTracks.first(where: { $0.selected }) else {
-            return "已关闭"
-        }
-        return track.source == .external
-            ? controller.externalSubtitleDisplayName(for: track)
-            : track.displayTitle
     }
 }
 
-struct PlayerHUDMoreMenu: View {
+// MARK: - Audio Panel
+
+struct PlayerHUDAudioPanelContent: View {
+    @Environment(PlaybackController.self) private var controller
+
+    let onUserInteraction: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("音轨选择")
+                .font(.caption)
+                .foregroundStyle(PlayerHUDPalette.secondary)
+
+            if controller.state.audioTracks.isEmpty {
+                Text("当前媒体无独立多音轨")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.tertiary)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(controller.state.audioTracks) { track in
+                        PlayerHUDTrackSelectionRow(
+                            title: track.displayTitle,
+                            isSelected: track.selected,
+                            leadingIcon: "speaker.wave.2.fill",
+                            action: {
+                                controller.selectAudio(track)
+                                onUserInteraction()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - More Panel
+
+struct PlayerHUDMorePanelContent: View {
     @Environment(PlaybackController.self) private var controller
 
     @Binding var showStats: Bool
@@ -204,7 +634,6 @@ struct PlayerHUDMoreMenu: View {
 
     let shareURL: URL?
     let isFullscreen: Bool
-    let controlSide: CGFloat
     let onToggleFullscreen: () -> Void
     let onCapture: () -> Void
     let onShare: () -> Void
@@ -213,122 +642,241 @@ struct PlayerHUDMoreMenu: View {
     private let rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
     var body: some View {
-        Menu {
-            playbackRateMenu
+        VStack(alignment: .leading, spacing: 14) {
+            // 播放速度
+            VStack(alignment: .leading, spacing: 6) {
+                Text("播放速度")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
 
-            #if os(macOS)
-            Divider()
-            Button {
-                onToggleFullscreen()
-                onUserInteraction()
-            } label: {
-                Label(
-                    isFullscreen ? "退出全屏" : "进入全屏",
-                    systemImage: isFullscreen
-                        ? "arrow.down.right.and.arrow.up.left"
-                        : "arrow.up.left.and.arrow.down.right"
-                )
-            }
-            #endif
-
-            Divider()
-            Button {
-                showInfoCard.toggle()
-                onUserInteraction()
-            } label: {
-                Label(
-                    showInfoCard ? "隐藏播放信息" : "显示播放信息",
-                    systemImage: showInfoCard ? "info.circle.fill" : "info.circle"
-                )
-            }
-            Button {
-                showStats.toggle()
-                onUserInteraction()
-            } label: {
-                Label(
-                    showStats ? "隐藏播放统计" : "显示播放统计",
-                    systemImage: showStats
-                        ? "waveform.path.ecg.rectangle.fill"
-                        : "waveform.path.ecg.rectangle"
-                )
-            }
-
-            Divider()
-            #if os(macOS)
-            Button {
-                onCapture()
-                onUserInteraction()
-            } label: {
-                Label("截图", systemImage: "camera.fill")
-            }
-            if shareURL != nil {
-                Button {
-                    onShare()
-                    onUserInteraction()
-                } label: {
-                    Label("分享", systemImage: "square.and.arrow.up")
+                HStack(spacing: 6) {
+                    ForEach(rates, id: \.self) { rate in
+                        let isSelected = abs(controller.rate - rate) < 0.01
+                        Button(playerHUDRateLabel(rate)) {
+                            controller.applyRate(rate)
+                            onUserInteraction()
+                        }
+                        .buttonStyle(PlayerHUDOptionButtonStyle(isSelected: isSelected))
+                    }
                 }
             }
-            #else
-            if let shareURL {
-                ShareLink(item: shareURL) {
-                    Label("分享", systemImage: "square.and.arrow.up")
+
+            // HUD 面板开关
+            VStack(alignment: .leading, spacing: 8) {
+                Text("辅助面板")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+
+                HStack(spacing: 8) {
+                    PlayerHUDToggleChip(
+                        title: "播放信息",
+                        icon: "info.circle",
+                        isOn: $showInfoCard
+                    )
+                    PlayerHUDToggleChip(
+                        title: "播放统计",
+                        icon: "waveform.path.ecg.rectangle",
+                        isOn: $showStats
+                    )
                 }
             }
-            #endif
-        } label: {
-            PlayerHUDActionIcon(systemImage: "gearshape.fill", side: controlSide)
-        }
-        .menuIndicator(.hidden)
-        .modifier(PlayerHUDMenuStyle())
-        .frame(width: controlSide, height: controlSide)
-        .help("更多")
-        .accessibilityLabel("更多播放选项")
-    }
 
-    private var playbackRateMenu: some View {
-        Picker("播放速度", selection: Binding(
-            get: { controller.rate },
-            set: {
-                controller.applyRate($0)
-                onUserInteraction()
-            }
-        )) {
-            ForEach(rates, id: \.self) { value in
-                Text(playerHUDRateLabel(value)).tag(value)
+            // 快捷动作
+            VStack(alignment: .leading, spacing: 8) {
+                Text("快捷操作")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+
+                VStack(spacing: 6) {
+                    #if os(macOS)
+                    Button {
+                        onToggleFullscreen()
+                        onUserInteraction()
+                    } label: {
+                        Label(
+                            isFullscreen ? "退出全屏" : "进入全屏",
+                            systemImage: isFullscreen
+                                ? "arrow.down.right.and.arrow.up.left"
+                                : "arrow.up.left.and.arrow.down.right"
+                        )
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onCapture()
+                        onUserInteraction()
+                    } label: {
+                        Label("画面截图", systemImage: "camera.fill")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .buttonStyle(.plain)
+
+                    if shareURL != nil {
+                        Button {
+                            onShare()
+                            onUserInteraction()
+                        } label: {
+                            Label("分享媒体", systemImage: "square.and.arrow.up")
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    #else
+                    if let shareURL {
+                        ShareLink(item: shareURL) {
+                            Label("分享媒体", systemImage: "square.and.arrow.up")
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    #endif
+                }
             }
         }
     }
 }
 
-struct PlayerHUDActionIcon: View {
-    let systemImage: String
-    let side: CGFloat
-    /// 关闭时图标变暗，用于无 fill 变体的符号（如弹幕 text.alignleft）。
-    var isActive: Bool = true
+// MARK: - Reusable UI Components
+
+struct PlayerHUDOptionButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption2.weight(isSelected ? .semibold : .regular))
+            .foregroundStyle(isSelected ? Color.black : PlayerHUDPalette.primary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                isSelected ? Color.white : Color.white.opacity(0.1),
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(.easeInOut(duration: 0.15), value: isSelected)
+    }
+}
+
+struct PlayerHUDMiniButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(PlayerHUDPalette.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+struct PlayerHUDToggleChip: View {
+    let title: String
+    var icon: String? = nil
+    @Binding var isOn: Bool
 
     var body: some View {
-        Image(systemName: systemImage)
-            .symbolRenderingMode(.monochrome)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(PlayerHUDPalette.primary)
-            .opacity(isActive ? 1 : 0.45)
-            .animation(.easeInOut(duration: 0.2), value: isActive)
-            .frame(width: side, height: side)
-            .contentShape(Rectangle())
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                if let icon {
+                    Image(systemName: icon)
+                }
+                Text(title)
+            }
+            .font(.caption.weight(isOn ? .semibold : .regular))
+            .foregroundStyle(isOn ? Color.black : PlayerHUDPalette.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(
+                isOn ? Color.white : Color.white.opacity(0.1),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.15), value: isOn)
     }
 }
 
-struct PlayerHUDMenuStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        #if os(macOS)
-        content
-            .menuStyle(.button)
-            .buttonStyle(.borderless)
-        #else
-        content
-            .buttonStyle(.plain)
-        #endif
+struct PlayerHUDTrackSelectionRow: View {
+    let title: String
+    let isSelected: Bool
+    var leadingIcon: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if let leadingIcon {
+                    Image(systemName: leadingIcon)
+                        .font(.system(size: 13))
+                        .foregroundStyle(isSelected ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
+                }
+                Text(title)
+                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(PlayerHUDPalette.primary)
+                    .lineLimit(1)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(PlayerHUDPalette.primary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.06),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
+
+struct DanmakuStatusBadge: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Text(app.danmaku.status.label)
+            .font(.caption2)
+            .foregroundStyle(PlayerHUDPalette.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.white.opacity(0.12), in: Capsule())
+    }
+}
+
+// MARK: - Glass Effect ID Helper
+
+extension View {
+    @ViewBuilder
+    func playerHUDGlassEffectID(_ id: some Hashable & Sendable, in namespace: Namespace.ID) -> some View {
+        if #available(macOS 26.0, iOS 26.0, *) {
+            self.glassEffectID(id, in: namespace)
+        } else {
+            self
+        }
+    }
+}
+
 
