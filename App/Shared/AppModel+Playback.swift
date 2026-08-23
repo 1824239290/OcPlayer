@@ -404,11 +404,13 @@ extension AppModel {
             guard let self, self.activePlaybackIdentity == identity,
                   event.requestID == identity.requestID else { return }
             self.activePlaybackIdentity = nil
-            if event.reachedEnd, let next = self.nextEpisode {
-                self.play(next, resumeSeconds: 0)
-            }
-            // 自然看完：向 Bangumi 标记本集已看（尽力而为，失败不打断连播）。
             if event.reachedEnd {
+                if let next = self.nextEpisode {
+                    self.play(next, resumeSeconds: 0)
+                } else {
+                    self.dismissPlayer()
+                }
+                // 自然看完：向 Bangumi 标记本集已看（尽力而为，失败不打断连播）。
                 self.markWatchedOnBangumi(for: item)
             }
         }

@@ -62,4 +62,21 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertFalse(PlayerClosePolicy.shouldDismiss(presentedID: nil, closingID: oldID))
         XCTAssertFalse(PlayerClosePolicy.shouldDismiss(presentedID: oldID, closingID: nil))
     }
+
+    func testDismissPlayerClearsPresentedPlayerAndNowPlayingItem() {
+        let app = AppModel()
+        app.phase = .ready
+        let request = PlaybackRequest(title: "ep-1", uri: "/tmp/ep1.mkv")
+        app.presentedPlayer = request
+        app.nowPlayingItem = MediaItem(id: "ep-1", name: "第1集", kind: .episode)
+        app.retryPlaybackItem = app.nowPlayingItem
+        app.nextEpisode = nil
+
+        app.dismissPlayer()
+
+        XCTAssertNil(app.presentedPlayer)
+        XCTAssertNil(app.nowPlayingItem)
+        XCTAssertNil(app.retryPlaybackItem)
+        XCTAssertNil(app.nextEpisode)
+    }
 }
