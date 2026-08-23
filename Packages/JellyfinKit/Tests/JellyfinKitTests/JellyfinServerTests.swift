@@ -327,7 +327,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/Items/abc")
             let query = TestSupport.queryItems(of: request)
             XCTAssertEqual(query["userId"], "user-9")
-            XCTAssertEqual(query["fields"], "People,Genres,Overview")
+            XCTAssertEqual(query["fields"], "People,Genres,Overview,Chapters")
             return MockURLProtocol.ok(
                 """
                 {"Id":"abc","Name":"沙丘 2","Type":"Movie",
@@ -433,5 +433,65 @@ final class JellyfinServerTests: XCTestCase {
         XCTAssertTrue(header.contains(#"Token="tok-123""#))
         XCTAssertTrue(header.contains("Client=\"OcPlayer\""))
         XCTAssertTrue(header.contains("DeviceId=\"\(ClientIdentity.deviceID)\""))
+    }
+
+    // MARK: - 章节
+
+    func testChaptersMapsTicksToSecondsAndSequentialNames() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items/mv-1")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["fields"], "Chapters")
+            return MockURLProtocol.ok(
+                """
+                {"Id":"mv-1","Chapters":[
+                  {"Name":"开场","StartPositionTicks":0},
+                  {"Name":"正片","StartPositionTicks":9000000000},
+                  {"Name":"片尾","StartPositionTicks":108000000000}
+                ]}
+                """,
+                for: request.url!
+            )
+        } with: {
+            let chapters = try await makeServer().chapters(itemID: "mv-1")
+            XCTAssertEqual(chapters.count, 3)
+            XCTAssertEqual(chapters[0].name, "开场")
+            XCTAssertEqual(chapters[0].startSeconds, 0)
+            XCTAssertEqual(chapters[1].startSeconds, 900)
+            XCTAssertEqual(chapters[2].startSeconds, 10800)
+        }
+    }
+
+    func testChaptersEmptyWhenNone() async throws {
+        try await TestSupport.withMock { request in
+            MockURLProtocol.ok(#"{"Id":"mv-1"}"#, for: request.url!)
+        } with: {
+            let chapters = try await makeServer().chapters(itemID: "mv-1")
+            XCTAssertTrue(chapters.isEmpty)
+        }
+    }
+
+    func testMediaSegmentsFiltersIntroAndOutro() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/MediaSegments/mv-1")
+            return MockURLProtocol.ok(
+                """
+                {"Items":[
+                  {"Id":"s-1","ItemId":"mv-1","StartTicks":0,"EndTicks":9000000000,"Type":"Intro"},
+                  {"Id":"s-2","ItemId":"mv-1","StartTicks":108000000000,"EndTicks":112500000000,"Type":"Outro"},
+                  {"Id":"s-3","ItemId":"mv-1","StartTicks":1000000000,"EndTicks":2000000000,"Type":"Commercial"}
+                ]}
+                """,
+                for: request.url!
+            )
+        } with: {
+            let segments = try await makeServer().mediaSegments(itemID: "mv-1")
+            XCTAssertEqual(segments.count, 2, "Commercial 应被过滤掉")
+            XCTAssertEqual(segments[0].kind, .intro)
+            XCTAssertEqual(segments[0].startSeconds, 0)
+            XCTAssertEqual(segments[0].endSeconds, 900)
+            XCTAssertEqual(segments[1].kind, .outro)
+            XCTAssertEqual(segments[1].endSeconds, 11250)
+        }
     }
 }

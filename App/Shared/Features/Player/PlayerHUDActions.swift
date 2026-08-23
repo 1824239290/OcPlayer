@@ -11,6 +11,7 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
     case danmaku = "弹幕"
     case subtitle = "字幕"
     case audio = "音轨"
+    case chapters = "章节"
     case more = "更多"
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
         case .danmaku: "text.alignleft"
         case .subtitle: "captions.bubble"
         case .audio: "speaker.wave.2.fill"
+        case .chapters: "list.bullet.rectangle.portrait"
         case .more: "gearshape.fill"
         }
     }
@@ -96,6 +98,8 @@ struct PlayerHUDActionIconContent: View {
             controller.state.subtitleTracks.contains { $0.selected } ? "captions.bubble.fill" : "captions.bubble"
         case .audio:
             "speaker.wave.2.fill"
+        case .chapters:
+            "list.bullet.rectangle.portrait"
         case .more:
             "gearshape.fill"
         }
@@ -105,7 +109,7 @@ struct PlayerHUDActionIconContent: View {
         switch tab {
         case .danmaku:
             controller.danmakuEnabled
-        case .subtitle, .more:
+        case .subtitle, .chapters, .more:
             true
         case .audio:
             !controller.state.audioTracks.isEmpty
@@ -208,6 +212,8 @@ struct PlayerHUDExpandedActionCard: View {
                         PlayerHUDAudioPanelContent(
                             onUserInteraction: onUserInteraction
                         )
+                    case .chapters:
+                        PlayerHUDChaptersPanelContent(onUserInteraction: onUserInteraction)
                     case .more:
                         PlayerHUDMorePanelContent(
                             showStats: $showStats,
@@ -827,6 +833,134 @@ struct DanmakuStatusBadge: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(Color.white.opacity(0.12), in: Capsule())
+    }
+}
+
+// MARK: - Chapters Panel
+
+/// 章节面板:列出当前源的章节,点击跳转。
+struct PlayerHUDChaptersPanelContent: View {
+    @Environment(PlaybackController.self) private var controller
+
+    let onUserInteraction: () -> Void
+
+    var body: some View {
+        let chapters = controller.chapters
+        if chapters.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 30, weight: .light))
+                    .foregroundStyle(PlayerHUDPalette.tertiary)
+                Text("当前片源没有章节信息")
+                    .font(.caption)
+                    .foregroundStyle(PlayerHUDPalette.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(chapters) { chapter in
+                    let isCurrent = isCurrentChapter(chapter)
+                    Button {
+                        controller.seek(toChapter: chapter)
+                        onUserInteraction()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text(timeString(chapter.startSeconds))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(PlayerHUDPalette.tertiary)
+                                .frame(width: 52, alignment: .leading)
+                            Text(chapter.name)
+                                .font(.callout.weight(isCurrent ? .semibold : .regular))
+                                .foregroundStyle(PlayerHUDPalette.primary)
+                                .lineLimit(1)
+                            Spacer(minLength: 4)
+                            if isCurrent {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(PlayerHUDPalette.primary)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            isCurrent ? Color.white.opacity(0.14) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(chapter.name)
+                }
+            }
+        }
+    }
+
+    private func isCurrentChapter(_ chapter: PlaybackChapter) -> Bool {
+        let position = Double(controller.state.position.microseconds) / 1_000_000
+        return position >= chapter.startSeconds
+            && (chapter.endSeconds.map { position < $0 } ?? true)
+    }
+
+    private func timeString(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded())
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
+// MARK: - 浮动「跳过」按钮
+
+/// 播放到片头 / 片尾(识别命中或末 90s 保底)时,浮在视频上、独立于 HUD 显隐的「跳过」按钮。
+///
+/// 自己观察 position 派生出的 observable(`progress` 每 100ms 发布一次),不参与 HUD 的
+/// 自动隐藏手势,也不随每个播放帧重建。出现 / 消失都走动画。
+struct PlayerSkipPromptView: View {
+    @Environment(PlaybackController.self) private var controller
+
+    @State private var prompt: SkipPrompt?
+    @Namespace private var skipNamespace
+
+    var body: some View {
+        Group {
+            if let prompt {
+                Button {
+                    controller.performSkip()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: prompt.kind == .opening ? "forward.end.fill" : "forward.end.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(prompt.kind.buttonTitle)
+                            .font(.callout.weight(.semibold))
+                    }
+                    .foregroundStyle(PlayerHUDPalette.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(PlayerSkipButtonStyle())
+                .playerHUDGlassButton(in: Capsule(), id: "skip-prompt", namespace: skipNamespace)
+                .shadow(color: .black.opacity(0.45), radius: 6, y: 3)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth(duration: 0.25), value: prompt)
+        // 播放走帧时 top-level 的 position 不发布观察;用 100ms 发布的 progress 派生 prompt。
+        .onChange(of: controller.state.timeline.progress, initial: true) {
+            prompt = controller.currentSkipPrompt
+        }
+    }
+}
+
+struct PlayerSkipButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

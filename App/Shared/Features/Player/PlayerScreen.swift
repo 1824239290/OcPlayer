@@ -53,6 +53,17 @@ struct PlayerScreen: View {
                 hudVisibility.hideOnPointerExit()
             }
             #endif
+            VStack {
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer(minLength: 0)
+                    PlayerSkipPromptView()
+                        .padding(.trailing, isNarrow ? 16 : 28)
+                        .padding(.bottom, 96)
+                }
+            }
+            .allowsHitTesting(true)
+
             // 影子模式开关（默认关，开着时内核弹幕不装载）。垫在视频之上、手势层之下。
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
