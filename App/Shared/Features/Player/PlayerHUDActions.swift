@@ -25,8 +25,99 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct PlayerHUDActionsCapsule: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+// MARK: - Action Buttons Bar (In Bottom Dock)
+
+struct PlayerHUDActionButtonsBar: View {
+    @Binding var expandedTab: PlayerHUDActionTab?
+    let morphAnimation: Namespace.ID
+    let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
+    let onUserInteraction: () -> Void
+
+    private var controlSide: CGFloat {
+        #if os(iOS)
+        44
+        #else
+        40
+        #endif
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(PlayerHUDActionTab.allCases) { tab in
+                let isCurrentExpanded = expandedTab == tab
+                Button {
+                    withAnimation(.smooth(duration: 0.35)) {
+                        expandedTab = tab
+                    }
+                    onInteractionChanged(.menuTracking, true)
+                    onUserInteraction()
+                } label: {
+                    PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
+                }
+                .buttonStyle(PlayerHUDInteractiveButtonStyle())
+                .playerHUDGlassButton(
+                    in: Circle(),
+                    id: tab.id,
+                    namespace: morphAnimation
+                )
+                .opacity(expandedTab == nil ? 1 : (isCurrentExpanded ? 0 : 0.35))
+                .scaleEffect(expandedTab == nil ? 1 : 0.85)
+                .allowsHitTesting(expandedTab == nil)
+                .help(tab.rawValue)
+                .accessibilityLabel(tab.rawValue)
+            }
+        }
+        .frame(height: controlSide)
+    }
+}
+
+struct PlayerHUDActionIconContent: View {
+    @Environment(PlaybackController.self) private var controller
+
+    let tab: PlayerHUDActionTab
+    let controlSide: CGFloat
+
+    var body: some View {
+        Image(systemName: iconName)
+            .symbolRenderingMode(.monochrome)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(PlayerHUDPalette.primary)
+            .opacity(isActive ? 1 : 0.45)
+            .animation(.easeInOut(duration: 0.2), value: isActive)
+            .frame(width: controlSide, height: controlSide)
+            .contentShape(Circle())
+    }
+
+    private var iconName: String {
+        switch tab {
+        case .danmaku:
+            "text.alignleft"
+        case .subtitle:
+            controller.state.subtitleTracks.contains { $0.selected } ? "captions.bubble.fill" : "captions.bubble"
+        case .audio:
+            "speaker.wave.2.fill"
+        case .more:
+            "gearshape.fill"
+        }
+    }
+
+    private var isActive: Bool {
+        switch tab {
+        case .danmaku:
+            controller.danmakuEnabled
+        case .subtitle, .more:
+            true
+        case .audio:
+            !controller.state.audioTracks.isEmpty
+        }
+    }
+}
+
+// MARK: - Expanded Action Card (In HUD Overlay)
+
+struct PlayerHUDExpandedActionCard: View {
+    let tab: PlayerHUDActionTab
+    @Binding var expandedTab: PlayerHUDActionTab?
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
@@ -38,77 +129,11 @@ struct PlayerHUDActionsCapsule: View {
     let onToggleFullscreen: () -> Void
     let onCapture: () -> Void
     let onShare: () -> Void
-    let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
+    let onClose: () -> Void
     let onUserInteraction: () -> Void
-
-    @Namespace private var morphAnimation
-    @State private var expandedTab: PlayerHUDActionTab?
-
-    private var controlSide: CGFloat {
-        #if os(iOS)
-        44
-        #else
-        40
-        #endif
-    }
-
-    private var animation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.35)
-    }
+    let morphAnimation: Namespace.ID
 
     var body: some View {
-        Group {
-            if #available(macOS 26.0, iOS 26.0, *) {
-                GlassEffectContainer(spacing: 8) {
-                    contentView
-                }
-            } else {
-                contentView
-            }
-        }
-        .animation(animation, value: expandedTab)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("播放选项")
-    }
-
-    @ViewBuilder
-    private var contentView: some View {
-        ZStack(alignment: .bottomTrailing) {
-            // 紧凑按钮栏始终保持在视图层级中，确保 4 个按钮拥有稳定精确的几何坐标锚点
-            compactButtonBar
-                .opacity(expandedTab == nil ? 1 : 0)
-                .scaleEffect(expandedTab == nil ? 1 : 0.85)
-                .allowsHitTesting(expandedTab == nil)
-
-            if let tab = expandedTab {
-                // 背景透明点击层：点击卡片外部区域时自动平滑收起
-                Color.black.opacity(0.001)
-                    .contentShape(Rectangle())
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onTapGesture {
-                        closeExpanded()
-                    }
-                    .ignoresSafeArea()
-
-                expandedCard(for: tab)
-            }
-        }
-    }
-
-    private var compactButtonBar: some View {
-        HStack(spacing: 8) {
-            ForEach(PlayerHUDActionTab.allCases) { tab in
-                PlayerHUDInteractiveGlassButton(
-                    tab: tab,
-                    controlSide: controlSide,
-                    namespace: morphAnimation,
-                    action: { selectTab(tab) }
-                )
-            }
-        }
-    }
-
-    private func expandedCard(for tab: PlayerHUDActionTab) -> some View {
         VStack(spacing: 0) {
             // 顶栏：图标、标题、快速切换与关闭按钮
             HStack(spacing: 10) {
@@ -146,7 +171,7 @@ struct PlayerHUDActionsCapsule: View {
 
                 // 关闭形变卡片
                 Button {
-                    closeExpanded()
+                    onClose()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
@@ -199,7 +224,6 @@ struct PlayerHUDActionsCapsule: View {
                 .padding(16)
             }
             .frame(maxHeight: 320)
-            .transition(.opacity)
         }
         .frame(width: 320)
         .playerHUDGlassCard(
@@ -207,78 +231,6 @@ struct PlayerHUDActionsCapsule: View {
             id: tab.id,
             namespace: morphAnimation
         )
-    }
-
-    private func selectTab(_ tab: PlayerHUDActionTab) {
-        withAnimation(animation) {
-            expandedTab = tab
-        }
-        onInteractionChanged(.menuTracking, true)
-        onUserInteraction()
-    }
-
-    private func closeExpanded() {
-        withAnimation(animation) {
-            expandedTab = nil
-        }
-        onInteractionChanged(.menuTracking, false)
-        onUserInteraction()
-    }
-}
-
-// MARK: - Interactive Glass Action Button
-
-struct PlayerHUDInteractiveGlassButton: View {
-    @Environment(PlaybackController.self) private var controller
-
-    let tab: PlayerHUDActionTab
-    let controlSide: CGFloat
-    let namespace: Namespace.ID
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: iconName)
-                .symbolRenderingMode(.monochrome)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(PlayerHUDPalette.primary)
-                .opacity(isActive ? 1 : 0.45)
-                .animation(.easeInOut(duration: 0.2), value: isActive)
-                .frame(width: controlSide, height: controlSide)
-                .contentShape(Circle())
-        }
-        .buttonStyle(PlayerHUDInteractiveButtonStyle())
-        .playerHUDGlassButton(
-            in: Circle(),
-            id: tab.id,
-            namespace: namespace
-        )
-        .help(tab.rawValue)
-        .accessibilityLabel(tab.rawValue)
-    }
-
-    private var iconName: String {
-        switch tab {
-        case .danmaku:
-            "text.alignleft"
-        case .subtitle:
-            controller.state.subtitleTracks.contains { $0.selected } ? "captions.bubble.fill" : "captions.bubble"
-        case .audio:
-            "speaker.wave.2.fill"
-        case .more:
-            "gearshape.fill"
-        }
-    }
-
-    private var isActive: Bool {
-        switch tab {
-        case .danmaku:
-            controller.danmakuEnabled
-        case .subtitle, .more:
-            true
-        case .audio:
-            !controller.state.audioTracks.isEmpty
-        }
     }
 }
 

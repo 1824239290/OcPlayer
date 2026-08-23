@@ -8,6 +8,8 @@ import AppKit
 #endif
 
 struct PlayerHUDOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let isNarrow: Bool
     let playbackID: String
     let title: String
@@ -26,6 +28,13 @@ struct PlayerHUDOverlay: View {
     let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
+
+    @Namespace private var morphAnimation
+    @State private var expandedTab: PlayerHUDActionTab?
+
+    private var animation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.35)
+    }
 
     var body: some View {
         ZStack {
@@ -62,12 +71,59 @@ struct PlayerHUDOverlay: View {
                     onCapture: onCapture,
                     onShare: onShare,
                     onInteractionChanged: onInteractionChanged,
-                    onUserInteraction: onUserInteraction
+                    onUserInteraction: onUserInteraction,
+                    expandedTab: $expandedTab,
+                    morphAnimation: morphAnimation
                 )
+            }
+
+            // 浮动详情面板层：以全局坐标锚定在右下角，完全不推挤底部标题和进度条
+            if let tab = expandedTab {
+                // 全屏空白区域点击捕获层：点击面板外部自动平滑收起
+                Color.black.opacity(0.0001)
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        closeExpanded()
+                    }
+
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    HStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        PlayerHUDExpandedActionCard(
+                            tab: tab,
+                            expandedTab: $expandedTab,
+                            isImportingSubtitle: $isImportingSubtitle,
+                            isSelectingDanmaku: $isSelectingDanmaku,
+                            showStats: $showStats,
+                            showInfoCard: $showInfoCard,
+                            shareURL: shareURL,
+                            isFullscreen: isFullscreen,
+                            onToggleFullscreen: onToggleFullscreen,
+                            onCapture: onCapture,
+                            onShare: onShare,
+                            onClose: closeExpanded,
+                            onUserInteraction: onUserInteraction,
+                            morphAnimation: morphAnimation
+                        )
+                    }
+                    .padding(.trailing, isNarrow ? 16 : 28)
+                    .padding(.bottom, isNarrow ? 70 : 88)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(PlayerHUDPalette.primary)
+        .animation(animation, value: expandedTab)
+    }
+
+    private func closeExpanded() {
+        withAnimation(animation) {
+            expandedTab = nil
+        }
+        onInteractionChanged(.menuTracking, false)
+        onUserInteraction()
     }
 }
 

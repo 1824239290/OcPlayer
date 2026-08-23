@@ -26,6 +26,9 @@ struct PlayerHUDBottomDock: View {
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
 
+    @Binding var expandedTab: PlayerHUDActionTab?
+    let morphAnimation: Namespace.ID
+
     var body: some View {
         VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
             header
@@ -58,16 +61,9 @@ struct PlayerHUDBottomDock: View {
     }
 
     private var actions: some View {
-        PlayerHUDActionsCapsule(
-            isImportingSubtitle: $isImportingSubtitle,
-            isSelectingDanmaku: $isSelectingDanmaku,
-            showStats: $showStats,
-            showInfoCard: $showInfoCard,
-            shareURL: shareURL,
-            isFullscreen: isFullscreen,
-            onToggleFullscreen: onToggleFullscreen,
-            onCapture: onCapture,
-            onShare: onShare,
+        PlayerHUDActionButtonsBar(
+            expandedTab: $expandedTab,
+            morphAnimation: morphAnimation,
             onInteractionChanged: onInteractionChanged,
             onUserInteraction: onUserInteraction
         )
