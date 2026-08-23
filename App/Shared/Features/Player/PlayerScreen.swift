@@ -53,17 +53,6 @@ struct PlayerScreen: View {
                 hudVisibility.hideOnPointerExit()
             }
             #endif
-            VStack {
-                Spacer(minLength: 0)
-                HStack {
-                    Spacer(minLength: 0)
-                    PlayerSkipPromptView()
-                        .padding(.trailing, isNarrow ? 16 : 28)
-                        .padding(.bottom, 96)
-                }
-            }
-            .allowsHitTesting(true)
-
             // 影子模式开关（默认关，开着时内核弹幕不装载）。垫在视频之上、手势层之下。
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
@@ -114,6 +103,18 @@ struct PlayerScreen: View {
             if showInfoCard {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
+            // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
+            VStack {
+                Spacer(minLength: 0)
+                HStack {
+                    Spacer(minLength: 0)
+                    PlayerSkipPromptView()
+                        .padding(.trailing, isNarrow ? 16 : 28)
+                        .padding(.bottom, isNarrow ? 150 : 168)
+                }
+            }
+            .allowsHitTesting(true)
+
             PlayerScreenshotToast(message: screenshotToast)
         }
         // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
