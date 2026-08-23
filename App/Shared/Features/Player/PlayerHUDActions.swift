@@ -74,6 +74,12 @@ struct PlayerHUDActionsCapsule: View {
     @ViewBuilder
     private var contentView: some View {
         ZStack(alignment: .bottomTrailing) {
+            // 紧凑按钮栏始终保持在视图层级中，确保 4 个按钮拥有稳定精确的几何坐标锚点
+            compactButtonBar
+                .opacity(expandedTab == nil ? 1 : 0)
+                .scaleEffect(expandedTab == nil ? 1 : 0.85)
+                .allowsHitTesting(expandedTab == nil)
+
             if let tab = expandedTab {
                 // 背景透明点击层：点击卡片外部区域时自动平滑收起
                 Color.black.opacity(0.001)
@@ -85,8 +91,6 @@ struct PlayerHUDActionsCapsule: View {
                     .ignoresSafeArea()
 
                 expandedCard(for: tab)
-            } else {
-                compactButtonBar
             }
         }
     }
@@ -100,7 +104,6 @@ struct PlayerHUDActionsCapsule: View {
                     namespace: morphAnimation,
                     action: { selectTab(tab) }
                 )
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
         }
     }
