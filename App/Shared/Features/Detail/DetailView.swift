@@ -19,6 +19,7 @@ struct DetailView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
@@ -76,6 +77,8 @@ struct DetailView: View {
         .navigationTitle(shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
+        .sensoryFeedback(.selection, trigger: selectedEpisodeID)
         #endif
         .background(Color.pageBackground.ignoresSafeArea())
         .task(id: item.id) { await load() }
@@ -503,14 +506,23 @@ struct DetailView: View {
             EpisodeSelectCard(
                 episode: episode,
                 server: app.server,
-                isSelected: episode.id == selectedEpisodeID
-            ) {
-                selectedEpisodeID = episode.id
-                episodeScrollFocusID = episode.id
-                if let seasonID = selectedSeasonID {
-                    selectedEpisodeBySeason[seasonID] = episode.id
+                isSelected: episode.id == selectedEpisodeID,
+                onSelect: {
+                    selectedEpisodeID = episode.id
+                    episodeScrollFocusID = episode.id
+                    if let seasonID = selectedSeasonID {
+                        selectedEpisodeBySeason[seasonID] = episode.id
+                    }
+                },
+                onPlay: {
+                    selectedEpisodeID = episode.id
+                    episodeScrollFocusID = episode.id
+                    if let seasonID = selectedSeasonID {
+                        selectedEpisodeBySeason[seasonID] = episode.id
+                    }
+                    app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
                 }
-            }
+            )
         }
     }
 
@@ -518,6 +530,7 @@ struct DetailView: View {
 
     private var castRail: some View {
         let actors = Array(shown.cast.filter { $0.kind == "Actor" }.prefix(20))
+        let avatarSize: CGFloat = horizontalSizeClass == .compact ? 80 : 108
         return Rail("演员", kind: .flexible, items: actors) { person in
             VStack(spacing: 8) {
                 let target = personImageTarget(person)
@@ -525,11 +538,11 @@ struct DetailView: View {
                     .aspectRatio(1, contentMode: .fill)
                     // 宽高都要定死：RemoteImage 内部占位 Rectangle 会竖向贪婪撑开，
                     // 只给宽度时头像被裁进一条很高的空白里，名字/角色被挤出可视区。
-                    .frame(width: 108, height: 108)
+                    .frame(width: avatarSize, height: avatarSize)
                     .clipShape(Circle())
-                Text(person.name).font(.footnote).lineLimit(1).frame(width: 108)
+                Text(person.name).font(.footnote).lineLimit(1).frame(width: avatarSize)
                 if let role = person.role, !role.isEmpty {
-                    Text(role).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).frame(width: 108)
+                    Text(role).font(.caption2).foregroundStyle(.tertiary).lineLimit(1).frame(width: avatarSize)
                 }
             }
         }

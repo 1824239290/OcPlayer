@@ -120,23 +120,29 @@ struct PlayerHUDActionsCapsule: View {
             }
 
             Divider()
-            Button {
-                controller.adjustSubtitleScale(by: 0.1)
-                onUserInteraction()
-            } label: {
-                Label("字幕加大", systemImage: "textformat.size.larger")
-            }
-            Button {
-                controller.adjustSubtitleScale(by: -0.1)
-                onUserInteraction()
-            } label: {
-                Label("字幕减小", systemImage: "textformat.size.smaller")
-            }
-            Button {
-                controller.resetSubtitleScale()
-                onUserInteraction()
-            } label: {
-                Label("字幕默认大小", systemImage: "arrow.counterclockwise")
+            Section {
+                Button {
+                    controller.adjustSubtitleScale(by: 0.1)
+                    onUserInteraction()
+                } label: {
+                    Label("字幕加大", systemImage: "textformat.size.larger")
+                }
+                Button {
+                    controller.adjustSubtitleScale(by: -0.1)
+                    onUserInteraction()
+                } label: {
+                    Label("字幕减小", systemImage: "textformat.size.smaller")
+                }
+                if abs(controller.subtitleScale - 1.0) > 0.01 {
+                    Button {
+                        controller.resetSubtitleScale()
+                        onUserInteraction()
+                    } label: {
+                        Label("重置为默认大小", systemImage: "arrow.counterclockwise")
+                    }
+                }
+            } header: {
+                Text("字体大小（当前 \(Int((controller.subtitleScale * 100).rounded()))%）")
             }
         } label: {
             PlayerHUDActionIcon(

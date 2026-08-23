@@ -60,7 +60,7 @@ struct MoviePilotTorrentFilterSheet: View {
                             Spacer()
                             if selection.wrappedValue.contains(value) {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(.tint)
                             }
                         }
                     }

@@ -185,15 +185,17 @@ extension View {
 
 /// 骨架海报卡：2:3 图块 + 标题条，和 `PosterCard` 同尺寸。
 struct SkeletonPosterCard: View {
+    var width: CGFloat? = Metrics.posterWidth
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             SkeletonBlock()
                 .aspectRatio(2 / 3, contentMode: .fit)
-                .frame(width: Metrics.posterWidth)
+                .frame(width: width)
             SkeletonBlock(cornerRadius: 4)
-                .frame(width: Metrics.posterWidth * 0.7, height: 12)
+                .frame(width: width.map { $0 * 0.7 } ?? 110, height: 12)
         }
-        .frame(width: Metrics.posterWidth, alignment: .leading)
+        .frame(width: width, alignment: .leading)
     }
 }
 
@@ -381,6 +383,7 @@ extension MediaItem {
 struct PosterCard: View {
     let item: MediaItem
     let server: JellyfinServer?
+    var width: CGFloat? = Metrics.posterWidth
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -392,7 +395,7 @@ struct PosterCard: View {
                 let target = item.imageTarget(server, kind: .primary, width: 400)
                 RemoteImage(url: target.url, authHeader: target.authHeader)
                     .aspectRatio(2 / 3, contentMode: .fill)
-                    .frame(width: Metrics.posterWidth)
+                    .frame(width: width)
                     .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 HStack {
                     Text(item.name)
@@ -407,7 +410,7 @@ struct PosterCard: View {
                 }
                 .font(.footnote)
             }
-            .frame(width: Metrics.posterWidth)
+            .frame(width: width)
         }
         .buttonStyle(.plain)
         .hoverLift(active: hovering, reduceMotion: reduceMotion)

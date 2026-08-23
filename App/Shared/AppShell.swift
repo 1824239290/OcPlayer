@@ -191,8 +191,8 @@ struct AppShellView: View {
                 .padding(.vertical, 7)
                 .background(
                     app.selectedSection == .settings
-                        ? Color.accentColor.opacity(0.18)
-                        : .clear,
+                        ? AnyShapeStyle(.tint.opacity(0.18))
+                        : AnyShapeStyle(.clear),
                     in: .rect(cornerRadius: 6)
                 )
         }

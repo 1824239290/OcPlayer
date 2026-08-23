@@ -42,55 +42,63 @@ struct MoviePilotHomeView: View {
     // MARK: - 搜索
 
     private var searchContent: some View {
-        List {
-            Section {
-                HStack(spacing: 8) {
-                    TextField("片名 / 关键词", text: $keyword)
-                        .textFieldStyle(.roundedBorder)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                        #endif
-                        .onSubmit(search)
-                    Button("搜索", action: search)
-                        .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
-                }
-                .listRowBackground(Color.clear)
-                .padding(.vertical, 2)
-            }
-
-            Section {
-                if isSearching {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text("正在搜索…")
-                            .foregroundStyle(.secondary)
-                    }
-                } else if let searchError {
+        Group {
+            if isSearching && results.isEmpty {
+                ProgressView("正在搜索…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let searchError, results.isEmpty {
+                ContentUnavailableView {
+                    Label("搜索失败", systemImage: "exclamationmark.triangle")
+                } description: {
                     Text(searchError)
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                } else if results.isEmpty {
-                    Text("输入片名开始搜索，来源聚合 TMDB / 豆瓣 / Bangumi。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(results) { media in
-                        NavigationLink {
-                            MoviePilotResourceView(media: media)
-                                .id(media.id)
-                        } label: {
-                            resultRow(media)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                } actions: {
+                    Button("重试", action: search)
                 }
-            } header: {
-                if !results.isEmpty || isSearching || searchError != nil {
-                    Text("媒体结果")
+            } else if results.isEmpty {
+                if keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ContentUnavailableView(
+                        "搜索媒体资源",
+                        systemImage: "magnifyingglass",
+                        description: Text("输入片名搜索，来源聚合 TMDB / 豆瓣 / Bangumi，搜索后可一键挑站点下载。")
+                    )
+                } else {
+                    ContentUnavailableView.search(text: keyword)
+                }
+            } else {
+                List {
+                    if isSearching {
+                        Section {
+                            HStack(spacing: 10) {
+                                ProgressView().controlSize(.small)
+                                Text("正在更新搜索结果…")
+                                    .foregroundStyle(.secondary)
+                                    .font(.callout)
+                            }
+                        }
+                    } else if let searchError {
+                        Section {
+                            Text(searchError)
+                                .foregroundStyle(.red)
+                                .font(.callout)
+                        }
+                    }
+
+                    Section("媒体结果 (\(results.count))") {
+                        ForEach(results) { media in
+                            NavigationLink {
+                                MoviePilotResourceView(media: media)
+                                    .id(media.id)
+                            } label: {
+                                resultRow(media)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
         }
+        .searchable(text: $keyword, prompt: Text("片名 / 关键词"))
+        .onSubmit(of: .search, search)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 NavigationLink {

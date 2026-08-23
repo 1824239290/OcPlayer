@@ -73,6 +73,9 @@ struct BangumiEpisodeCell: View {
                 }
             }
         }
+        #if os(iOS)
+        .sensoryFeedback(.impact, trigger: status)
+        #endif
         .help(helpText)
         .accessibilityLabel("\(episode.type.description) \(episode.sortDisplay)")
         .accessibilityValue(statusLabel)
@@ -88,22 +91,22 @@ struct BangumiEpisodeCell: View {
         return status == .dropped ? .secondary : .primary
     }
 
-    private var fill: Color {
-        guard episode.aired else { return Color.primary.opacity(0.04) }
+    private var fill: AnyShapeStyle {
+        guard episode.aired else { return AnyShapeStyle(Color.primary.opacity(0.04)) }
         switch status {
-        case .collect: return Color.accentColor.opacity(0.18)
-        case .dropped: return Color.primary.opacity(0.06)
-        case .wish, .none: return .clear
+        case .collect: return AnyShapeStyle(.tint.opacity(0.18))
+        case .dropped: return AnyShapeStyle(Color.primary.opacity(0.06))
+        case .wish, .none: return AnyShapeStyle(.clear)
         }
     }
 
-    private var border: Color {
-        guard episode.aired else { return Color.primary.opacity(0.06) }
+    private var border: AnyShapeStyle {
+        guard episode.aired else { return AnyShapeStyle(Color.primary.opacity(0.06)) }
         switch status {
-        case .collect: return Color.accentColor.opacity(0.35)
-        case .wish: return Color.accentColor.opacity(0.45)
-        case .dropped: return Color.primary.opacity(0.08)
-        case .none: return Color.primary.opacity(0.12)
+        case .collect: return AnyShapeStyle(.tint.opacity(0.35))
+        case .wish: return AnyShapeStyle(.tint.opacity(0.45))
+        case .dropped: return AnyShapeStyle(Color.primary.opacity(0.08))
+        case .none: return AnyShapeStyle(Color.primary.opacity(0.12))
         }
     }
 

@@ -8,6 +8,7 @@ struct LibraryView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     let library: MediaLibrary
 
@@ -23,8 +24,26 @@ struct LibraryView: View {
     private var items: [MediaItem] { app.libraryPages[library.id]?.items ?? [] }
     private var totalCount: Int? { app.libraryPages[library.id]?.totalCount }
 
+    private var isCompact: Bool {
+        horizontalSizeClass == .compact
+    }
+
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+        if isCompact {
+            return [
+                GridItem(.flexible(), spacing: 14),
+                GridItem(.flexible(), spacing: 14),
+            ]
+        }
+        return [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+    }
+
+    private var gridSpacing: CGFloat {
+        isCompact ? 14 : Metrics.railSpacing + 8
+    }
+
+    private var cardWidth: CGFloat? {
+        isCompact ? nil : Metrics.posterWidth
     }
 
     private var hasMore: Bool {
@@ -63,9 +82,9 @@ struct LibraryView: View {
     /// 首屏骨架：一墙和真实网格同列宽/同卡片尺寸的灰色海报卡，加载完原位替换。
     private var skeletonGrid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: Metrics.railSpacing + 8) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                 ForEach(0..<Self.skeletonCount, id: \.self) { _ in
-                    SkeletonPosterCard()
+                    SkeletonPosterCard(width: cardWidth)
                 }
             }
             .padding(.horizontal, contentLeading)
@@ -88,9 +107,9 @@ struct LibraryView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: Metrics.railSpacing + 8) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                 ForEach(items) { item in
-                    PosterCard(item: item, server: app.server) {
+                    PosterCard(item: item, server: app.server, width: cardWidth) {
                         app.openDetail(item)
                     }
                     .transition(reduceMotion ? .identity : .opacity)

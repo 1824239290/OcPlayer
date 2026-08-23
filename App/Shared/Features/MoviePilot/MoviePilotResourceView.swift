@@ -458,7 +458,7 @@ private struct MoviePilotSitePickerSheet: View {
                                     }
                                     if selection.contains(site.id) {
                                         Image(systemName: "checkmark")
-                                            .foregroundStyle(Color.accentColor)
+                                            .foregroundStyle(.tint)
                                     }
                                 }
                             }

@@ -137,7 +137,7 @@ private struct CollectionSection: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
-                            selected == type ? Color.accentColor.opacity(0.2) : .clear,
+                            selected == type ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear),
                             in: Capsule())
                         .overlay(Capsule().strokeBorder(.separator))
                 }
@@ -166,7 +166,7 @@ private struct CollectionTile: View {
         VStack(alignment: .leading, spacing: 4) {
             RemoteImage(url: coverURL, authHeader: nil)
                 .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 84)
+                .frame(width: 84, height: 126)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                 .font(.caption)

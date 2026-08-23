@@ -78,14 +78,14 @@ final class AppModel {
     /// `.task(id:)` 重跑一次就从 startIndex 0 重新拉——深翻过十几页的大库回来时
     /// 整份都丢了。详情页的 `episodesBySeason` 早就解决了同一个问题，这里补上。
     /// 换会话（`activate` / `signOut`）时清空。
-    struct LibraryPage {
+    struct LibraryPage: Equatable {
         var items: [MediaItem] = []
         var totalCount: Int?
     }
 
     var libraryPages: [MediaLibrary.ID: LibraryPage] = [:]
 
-    struct HomeData {
+    struct HomeData: Equatable {
         var resume: [MediaItem] = []
         var nextUp: [MediaItem] = []
         var latest: [MediaItem] = []

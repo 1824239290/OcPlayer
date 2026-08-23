@@ -77,6 +77,17 @@ struct HomeView: View {
                     }
                     .transition(.opacity)
                 }
+
+                if app.home.resume.isEmpty && app.home.nextUp.isEmpty && app.home.latest.isEmpty {
+                    ContentUnavailableView {
+                        Label("媒体库暂无可展示内容", systemImage: "sparkles")
+                    } description: {
+                        Text("媒体库可能正在建立索引或没有未看项目。可在侧栏或下方切换媒体库浏览。")
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .padding(.top, 40)
+                    .transition(.opacity)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 12)

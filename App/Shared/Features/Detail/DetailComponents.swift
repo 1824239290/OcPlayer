@@ -62,12 +62,13 @@ private struct PointingHandCursor: ViewModifier {
 
 // MARK: - 横向选集卡（点选中，不直接播放）
 
-/// 详情页剧集横向选集：剧照 + 集号/标题 + 进度；点击只更新选中态。
+/// 详情页剧集横向选集：剧照 + 集号/标题 + 进度；点击更新选中态，双击直接播放。
 struct EpisodeSelectCard: View {
     let episode: MediaItem
     let server: JellyfinServer?
     let isSelected: Bool
     var onSelect: () -> Void
+    var onPlay: (() -> Void)? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -92,12 +93,12 @@ struct EpisodeSelectCard: View {
                     )
 
                     if episode.playState?.played == true {
-                        // 用 accentColor 而不是硬编码的绿：设计系统只用「中性 primary +
-                        // accent 表示已生效」两色（同 BangumiEpisodeCell / 下面那条进度轨），
+                        // 用 tint 而不是硬编码的绿：设计系统只用「中性 primary +
+                        // tint 表示已生效」两色（同 BangumiEpisodeCell / 下面那条进度轨），
                         // 绿勾配蓝轨会让同一张卡上出现两个色相。
                         Image(systemName: "checkmark.circle.fill")
                             .font(.footnote)
-                            .foregroundStyle(.white, Color.accentColor)
+                            .foregroundStyle(.white, .tint)
                             .padding(8)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     }
@@ -111,7 +112,7 @@ struct EpisodeSelectCard: View {
                 .overlay {
                     RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(
-                            isSelected ? Color.accentColor : Color.primary.opacity(hovering ? 0.22 : 0),
+                            isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary.opacity(hovering ? 0.22 : 0)),
                             lineWidth: isSelected ? 2.5 : 1
                         )
                 }
@@ -126,7 +127,7 @@ struct EpisodeSelectCard: View {
                         Text(label)
                             .font(.caption.weight(.semibold))
                             .monospacedDigit()
-                            .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                            .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     }
                     Text(episode.name)
                         .font(.footnote.weight(isSelected ? .semibold : .regular))
@@ -142,10 +143,15 @@ struct EpisodeSelectCard: View {
             .animation(motion, value: hovering)
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                onPlay?()
+            }
+        )
         .onHover { hovering = $0 }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabelText)
-        .accessibilityHint("轻点以选中，使用页面上的播放按钮开始播放")
+        .accessibilityHint("轻点以选中，双击直接播放")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
@@ -169,7 +175,7 @@ struct EpisodeSelectCard: View {
             ZStack(alignment: .leading) {
                 Rectangle().fill(Color.white.opacity(0.22))
                 Rectangle()
-                    .fill(Color.accentColor)
+                    .fill(.tint)
                     .frame(width: cardWidth * progress)
             }
             .frame(width: cardWidth, height: 3)
