@@ -33,12 +33,15 @@ struct BangumiCollectionListView: View {
             } else {
                 List {
                     ForEach(subjects) { subject in
-                        CollectionRow(subject: subject)
-                            .onAppear {
-                                if subject.id == subjects.last?.id {
-                                    Task { await loadMore() }
-                                }
+                        NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                            CollectionRow(subject: subject)
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear {
+                            if subject.id == subjects.last?.id {
+                                Task { await loadMore() }
                             }
+                        }
                     }
                 }
                 .listStyle(.inset)

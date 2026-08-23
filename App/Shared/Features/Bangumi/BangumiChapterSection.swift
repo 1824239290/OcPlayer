@@ -92,10 +92,18 @@ struct BangumiChapterSection: View {
             Text("Bangumi")
                 .font(.title3.weight(.bold))
             if let subject {
-                Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                    HStack(spacing: 4) {
+                        Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             Spacer()
             if subject != nil {

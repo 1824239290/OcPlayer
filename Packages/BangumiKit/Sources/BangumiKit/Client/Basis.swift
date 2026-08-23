@@ -282,12 +282,40 @@ public struct BangumiSubjectImages: Codable, Hashable, Sendable {
     public var small: String
     public var grid: String
 
-    public init(large: String, common: String, medium: String, small: String, grid: String) {
+    public init(large: String = "", common: String = "", medium: String = "", small: String = "", grid: String = "") {
         self.large = large
         self.common = common
         self.medium = medium
         self.small = small
         self.grid = grid
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case large, common, medium, small, grid
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let large = (try? container.decode(String.self, forKey: .large)) ?? ""
+        let common = (try? container.decode(String.self, forKey: .common)) ?? ""
+        let medium = (try? container.decode(String.self, forKey: .medium)) ?? ""
+        let small = (try? container.decode(String.self, forKey: .small)) ?? ""
+        let grid = (try? container.decode(String.self, forKey: .grid)) ?? ""
+
+        self.large = large.isEmpty ? (medium.isEmpty ? small : medium) : large
+        self.common = common.isEmpty ? self.large : common
+        self.medium = medium.isEmpty ? self.large : medium
+        self.small = small.isEmpty ? self.large : small
+        self.grid = grid.isEmpty ? self.small : grid
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(large, forKey: .large)
+        try container.encode(common, forKey: .common)
+        try container.encode(medium, forKey: .medium)
+        try container.encode(small, forKey: .small)
+        try container.encode(grid, forKey: .grid)
     }
 }
 
@@ -297,10 +325,31 @@ public struct BangumiAvatar: Codable, Hashable, Sendable {
     public var medium: String
     public var small: String
 
-    public init(large: String, medium: String, small: String) {
+    public init(large: String = "", medium: String = "", small: String = "") {
         self.large = large
         self.medium = medium
         self.small = small
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case large, medium, small
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let large = (try? container.decode(String.self, forKey: .large)) ?? ""
+        let medium = (try? container.decode(String.self, forKey: .medium)) ?? ""
+        let small = (try? container.decode(String.self, forKey: .small)) ?? ""
+        self.large = large
+        self.medium = medium.isEmpty ? large : medium
+        self.small = small.isEmpty ? (self.medium) : small
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(large, forKey: .large)
+        try container.encode(medium, forKey: .medium)
+        try container.encode(small, forKey: .small)
     }
 }
 
@@ -309,9 +358,32 @@ public struct BangumiTag: Codable, Hashable, Sendable {
     public var name: String
     public var count: Int
 
-    public init(name: String, count: Int) {
+    public init(name: String, count: Int = 0) {
         self.name = name
         self.count = count
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, count
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self) {
+            self.name = (try? container.decode(String.self, forKey: .name)) ?? ""
+            self.count = (try? container.decode(Int.self, forKey: .count)) ?? 0
+        } else if let single = try? decoder.singleValueContainer(), let str = try? single.decode(String.self) {
+            self.name = str
+            self.count = 0
+        } else {
+            self.name = ""
+            self.count = 0
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(count, forKey: .count)
     }
 }
 
@@ -328,6 +400,26 @@ public struct BangumiSubjectAirtime: Codable, Hashable, Sendable {
         self.weekday = 0
         self.year = 0
     }
+
+    enum CodingKeys: String, CodingKey {
+        case date, month, weekday, year
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.date = (try? container.decode(String.self, forKey: .date)) ?? ""
+        self.month = (try? container.decode(Int.self, forKey: .month)) ?? 0
+        self.weekday = (try? container.decode(Int.self, forKey: .weekday)) ?? 0
+        self.year = (try? container.decode(Int.self, forKey: .year)) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(date, forKey: .date)
+        try container.encode(month, forKey: .month)
+        try container.encode(weekday, forKey: .weekday)
+        try container.encode(year, forKey: .year)
+    }
 }
 
 /// 条目评分信息。
@@ -342,6 +434,44 @@ public struct BangumiSubjectRating: Codable, Hashable, Sendable {
         self.total = 0
         self.score = 0
         self.rank = 0
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case count, total, score, rank
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let countArray = try? container.decode([Int].self, forKey: .count) {
+            self.count = countArray
+        } else if let countDict = try? container.decode([String: Int].self, forKey: .count) {
+            var arr = Array(repeating: 0, count: 10)
+            for (k, v) in countDict {
+                if let idx = Int(k), idx >= 1, idx <= 10 {
+                    arr[idx - 1] = v
+                }
+            }
+            self.count = arr
+        } else {
+            self.count = []
+        }
+        self.total = (try? container.decode(Int.self, forKey: .total)) ?? 0
+        if let s = try? container.decode(Float.self, forKey: .score) {
+            self.score = s
+        } else if let d = try? container.decode(Double.self, forKey: .score) {
+            self.score = Float(d)
+        } else {
+            self.score = 0
+        }
+        self.rank = (try? container.decode(Int.self, forKey: .rank)) ?? 0
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(count, forKey: .count)
+        try container.encode(total, forKey: .total)
+        try container.encode(score, forKey: .score)
+        try container.encode(rank, forKey: .rank)
     }
 }
 

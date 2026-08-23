@@ -227,8 +227,52 @@ public actor BangumiDatabaseOperator {
             guard var subject = try fetchSubject(in: db, id: subjectId) else { return }
             let now = Int(Date().timeIntervalSince1970) - 1
             // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
-            subject.interest?.type = type
-            subject.interest?.updatedAt = now
+            if var interest = subject.interest {
+                interest.type = type
+                interest.updatedAt = now
+                subject.interest = interest
+            } else {
+                subject.interest = BangumiSubjectInterest(
+                    comment: "",
+                    epStatus: 0,
+                    volStatus: 0,
+                    private: false,
+                    rate: 0,
+                    tags: [],
+                    type: type,
+                    updatedAt: now
+                )
+            }
+            subject.ctype = type.rawValue
+            subject.collectedAt = now
+            try upsertSubject(subject, in: db)
+        }
+    }
+
+    /// 只改用户对条目的评分（1-10，0 表示撤销评分）。
+    public func updateSubjectRating(
+        subjectId: Int, rate: Int
+    ) throws {
+        try database.write { db in
+            guard var subject = try fetchSubject(in: db, id: subjectId) else { return }
+            let now = Int(Date().timeIntervalSince1970)
+            if var interest = subject.interest {
+                interest.rate = rate
+                interest.updatedAt = now
+                subject.interest = interest
+            } else {
+                subject.interest = BangumiSubjectInterest(
+                    comment: "",
+                    epStatus: 0,
+                    volStatus: 0,
+                    private: false,
+                    rate: rate,
+                    tags: [],
+                    type: .collect,
+                    updatedAt: now
+                )
+                subject.ctype = BangumiCollectionType.collect.rawValue
+            }
             subject.collectedAt = now
             try upsertSubject(subject, in: db)
         }

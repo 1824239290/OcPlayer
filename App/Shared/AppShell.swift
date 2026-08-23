@@ -103,15 +103,24 @@ struct AppShellView: View {
                     .tabItem { Label(library.name, systemImage: Self.icon(for: library.collectionType)) }
                     .tag(AppModel.Section.library(library.id))
             }
-            BangumiHomeView()
-                .tabItem { Label("Bangumi", systemImage: "tv.fill") }
-                .tag(AppModel.Section.bangumi)
-            MoviePilotHomeView()
-                .tabItem { Label("找片", systemImage: "magnifyingglass") }
-                .tag(AppModel.Section.moviepilot)
-            SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape") }
-                .tag(AppModel.Section.settings)
+            NavigationStack {
+                BangumiHomeView()
+                    .appRoutes()
+            }
+            .tabItem { Label("Bangumi", systemImage: "tv.fill") }
+            .tag(AppModel.Section.bangumi)
+            NavigationStack {
+                MoviePilotHomeView()
+                    .appRoutes()
+            }
+            .tabItem { Label("找片", systemImage: "magnifyingglass") }
+            .tag(AppModel.Section.moviepilot)
+            NavigationStack {
+                SettingsView()
+                    .appRoutes()
+            }
+            .tabItem { Label("设置", systemImage: "gearshape") }
+            .tag(AppModel.Section.settings)
         }
         .sheet(item: Binding(
             get: { app.presentedDetail },
@@ -234,6 +243,9 @@ extension View {
                 BangumiProfileView()
             case .bangumiCollectionList(let type):
                 BangumiCollectionListView(subjectType: type)
+            case .bangumiSubject(let subjectID, let initialSubject):
+                BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
+                    .id(subjectID)
             }
         }
     }

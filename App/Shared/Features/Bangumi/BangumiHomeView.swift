@@ -39,13 +39,19 @@ struct BangumiHomeView: View {
     /// 排序偏好跨启动保留。
     @AppStorage("dev.jumusu.ocplayer.bangumi.progressSort") private var sortRaw = SortOption.collected.rawValue
 
-    // 搜索：远程搜 Bangumi，不在本地筛选。
+    // 搜索：远程搜 Bangumi，支持分类筛选与分页
     @State private var searchKeyword = ""
+    @State private var submittedSearchKeyword = ""
+    @State private var searchTypeFilter: BangumiSubjectType = .none
     @State private var searchResults: [BangumiSlimSubjectDTO] = []
+    @State private var searchTotalCount = 0
     @State private var isSearching = false
+    @State private var isSearchingMore = false
     @State private var searchError: String?
     @State private var searchTask: Task<Void, Never>?
     @State private var searchGeneration: UInt64 = 0
+
+    private var hasMoreSearchResults: Bool { searchResults.count < searchTotalCount }
 
     private enum SortOption: String, CaseIterable, Identifiable {
         case collected
@@ -101,11 +107,47 @@ struct BangumiHomeView: View {
 
     @ViewBuilder
     private var content: some View {
-        if !searchKeyword.isEmpty {
-            searchView
-        } else {
-            progressView
+        Group {
+            if !submittedSearchKeyword.isEmpty {
+                searchView
+            } else {
+                progressView
+            }
         }
+        .searchable(text: $searchKeyword, prompt: "搜索 Bangumi 条目")
+        .onSubmit(of: .search) {
+            let trimmed = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                submittedSearchKeyword = ""
+                searchResults = []
+                isSearching = false
+                searchError = nil
+                return
+            }
+            submittedSearchKeyword = trimmed
+            searchTask?.cancel()
+            searchTask = Task { await performSearch(trimmed) }
+        }
+        .onChange(of: searchKeyword) { _, newValue in
+            if newValue.isEmpty {
+                submittedSearchKeyword = ""
+                searchResults = []
+                isSearching = false
+                searchError = nil
+                searchTask?.cancel()
+            }
+        }
+        .onChange(of: searchTypeFilter) { _, _ in
+            let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            searchTask?.cancel()
+            searchTask = Task { await performSearch(trimmed) }
+        }
+        .navigationTitle("Bangumi")
+        #if os(macOS)
+        .navigationSubtitle(progressSubtitle)
+        #endif
+        .toolbar { toolbar }
     }
 
     private var progressView: some View {
@@ -154,31 +196,18 @@ struct BangumiHomeView: View {
                 .refreshable { await refresh(force: false) }
             }
         }
-        .searchable(text: $searchKeyword, prompt: "搜索 Bangumi 条目")
-        .navigationTitle("Bangumi")
-        #if os(macOS)
-        .navigationSubtitle(progressSubtitle)
-        #endif
-        .toolbar { toolbar }
-        .onChange(of: searchKeyword) { _, newValue in
-            searchTask?.cancel()
-            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else {
-                searchResults = []
-                isSearching = false
-                searchError = nil
-                return
-            }
-            searchTask = Task {
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                guard !Task.isCancelled else { return }
-                await performSearch(trimmed)
-            }
-        }
     }
 
-    /// macOS 副标题里报一下总数：分页之后「屏幕上这些不等于全部」，得说出来。
+    /// macOS 副标题：在看数或搜索结果数。
     private var progressSubtitle: String {
+        if !submittedSearchKeyword.isEmpty {
+            if isSearching {
+                return "正在搜索…"
+            } else if searchTotalCount > 0 {
+                return "找到 \(searchTotalCount) 个条目"
+            }
+            return ""
+        }
         guard totalCount > 0 else { return "" }
         if subjects.count < totalCount {
             return "在看 \(subjects.count) / \(totalCount)"
@@ -205,38 +234,182 @@ struct BangumiHomeView: View {
     }
 
     private var searchView: some View {
-        Group {
-            if isSearching && searchResults.isEmpty {
-                ProgressView("正在搜索…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let searchError, searchResults.isEmpty {
-                ContentUnavailableView {
-                    Label("搜索失败", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(searchError)
-                } actions: {
-                    Button("重试") {
-                        Task { await performSearch(searchKeyword.trimmingCharacters(in: .whitespaces)) }
-                    }
-                }
-            } else if searchResults.isEmpty {
-                ContentUnavailableView.search(text: searchKeyword)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(searchResults) { subject in
-                            SearchResultRow(subject: subject)
+        VStack(spacing: 0) {
+            searchHeader
+
+            Group {
+                if isSearching && searchResults.isEmpty {
+                    searchSkeletonView
+                } else if let searchError, searchResults.isEmpty {
+                    ContentUnavailableView {
+                        Label("搜索失败", systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(searchError)
+                    } actions: {
+                        HStack(spacing: 12) {
+                            Button("重试") {
+                                Task { await performSearch(submittedSearchKeyword.trimmingCharacters(in: .whitespaces)) }
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("返回在看") {
+                                searchKeyword = ""
+                                submittedSearchKeyword = ""
+                                searchResults = []
+                            }
+                            .buttonStyle(.bordered)
                         }
                     }
-                    .padding(.horizontal, contentLeading)
-                    .padding(.top, 16)
-                    .padding(.bottom, 48)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if searchResults.isEmpty {
+                    ContentUnavailableView {
+                        Label("未找到相关条目", systemImage: "magnifyingglass")
+                    } description: {
+                        Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
+                    } actions: {
+                        Button("返回在看") {
+                            searchKeyword = ""
+                            submittedSearchKeyword = ""
+                            searchResults = []
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(searchResults) { subject in
+                                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id, initialSubject: subject)) {
+                                    SearchResultRow(subject: subject)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if hasMoreSearchResults || isSearchingMore {
+                                searchLoadMoreFooter
+                            }
+                        }
+                        .padding(.horizontal, contentLeading)
+                        .padding(.top, 4)
+                        .padding(.bottom, 48)
+                    }
                 }
             }
         }
-        .searchable(text: $searchKeyword, prompt: "搜索 Bangumi 条目")
-        .navigationTitle("搜索")
-        .toolbar { toolbar }
+    }
+
+    private var searchHeader: some View {
+        HStack(spacing: 10) {
+            Button {
+                searchTask?.cancel()
+                searchKeyword = ""
+                submittedSearchKeyword = ""
+                searchResults = []
+                isSearching = false
+                searchError = nil
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.caption.weight(.semibold))
+                    Text("返回在看")
+                        .font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.fill.tertiary, in: Capsule())
+                .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .help("退出搜索并返回在看条目列表")
+
+            Divider()
+                .frame(height: 16)
+
+            searchTypePicker
+        }
+        .padding(.horizontal, contentLeading)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+    }
+
+    private var searchTypePicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                let types: [BangumiSubjectType] = [.none, .anime, .book, .game, .music, .real]
+                ForEach(types) { type in
+                    searchFilterChip(type: type)
+                }
+            }
+        }
+    }
+
+    private func searchFilterChip(type: BangumiSubjectType) -> some View {
+        let isSelected = searchTypeFilter == type
+        return Button {
+            guard searchTypeFilter != type else { return }
+            searchTypeFilter = type
+            let trimmed = searchKeyword.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                Task { await performSearch(trimmed) }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                if type != .none {
+                    Image(systemName: type.icon)
+                        .font(.system(size: 10))
+                }
+                Text(type.description)
+                    .font(.caption.weight(isSelected ? .semibold : .medium))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.fill.tertiary),
+                in: Capsule()
+            )
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var searchSkeletonView: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(0..<5, id: \.self) { _ in
+                    HStack(spacing: 14) {
+                        SkeletonBlock(cornerRadius: 8)
+                            .frame(width: 58, height: 84)
+                        VStack(alignment: .leading, spacing: 8) {
+                            SkeletonBlock(cornerRadius: 4).frame(width: 180, height: 16)
+                            SkeletonBlock(cornerRadius: 4).frame(width: 120, height: 12)
+                            SkeletonBlock(cornerRadius: 4).frame(width: 90, height: 12)
+                        }
+                        Spacer()
+                    }
+                    .padding(12)
+                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                }
+            }
+            .padding(.horizontal, contentLeading)
+            .padding(.top, 4)
+        }
+        .skeletonShimmer()
+    }
+
+    private var searchLoadMoreFooter: some View {
+        VStack(spacing: 10) {
+            if isSearchingMore {
+                ProgressView().controlSize(.regular)
+            } else {
+                Button("加载更多") { Task { await searchMore() } }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .onAppear {
+            guard hasMoreSearchResults, !isSearching, !isSearchingMore else { return }
+            Task { await searchMore() }
+        }
     }
 
     @ViewBuilder
@@ -407,34 +580,72 @@ struct BangumiHomeView: View {
     }
 
     private func reloadSubject(_ subjectID: Int) async {
-        guard let updated = try? await bangumi.context.fetchProgressSubject(
-            subjectId: subjectID, episodeWindowSize: Self.episodeWindowSize)
-        else { return }
-        guard let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) else { return }
-        subjects[idx] = updated
+        if let updated = try? await bangumi.context.fetchProgressSubject(
+            subjectId: subjectID, episodeWindowSize: Self.episodeWindowSize) {
+            if let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) {
+                subjects[idx] = updated
+            }
+        } else {
+            // 条目已离开「在看」状态，直接从列表移除
+            subjects.removeAll { $0.subject.id == subjectID }
+        }
     }
 
     private func performSearch(_ keyword: String) async {
-        guard !keyword.isEmpty else { return }
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         searchGeneration &+= 1
         let gen = searchGeneration
         isSearching = true
         searchError = nil
         defer { if searchGeneration == gen { isSearching = false } }
         do {
+            let filter = searchTypeFilter == .none ? nil : searchTypeFilter
             let page = try await BangumiSubjectService.search(
-                keyword: keyword, filter: .anime, limit: 30, offset: 0)
+                keyword: trimmed,
+                filter: filter,
+                limit: 30,
+                offset: 0
+            )
             guard searchGeneration == gen else { return }
             searchResults = page.data
+            searchTotalCount = page.total
         } catch let e as BangumiError {
             guard searchGeneration == gen else { return }
             if case .ignore = e { return }   // 请求被新输入取消，不是错误
             searchError = e.userMessage
             BangumiDiagnostics.log("搜索条目失败 error=\(e)")
+        } catch is CancellationError {
+            // Task 取消时忽略
         } catch {
             guard searchGeneration == gen else { return }
-            searchError = "\(error)"
+            if (error as NSError).code == NSURLErrorCancelled { return }
+            searchError = "搜索失败：\(error.localizedDescription)"
             BangumiDiagnostics.log("搜索条目失败 error=\(error)")
+        }
+    }
+
+    private func searchMore() async {
+        guard hasMoreSearchResults, !isSearching, !isSearchingMore else { return }
+        let gen = searchGeneration
+        let offset = searchResults.count
+        isSearchingMore = true
+        defer { if searchGeneration == gen { isSearchingMore = false } }
+        let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            let page = try await BangumiSubjectService.search(
+                keyword: trimmed,
+                filter: searchTypeFilter == .none ? nil : searchTypeFilter,
+                limit: 30,
+                offset: offset
+            )
+            guard searchGeneration == gen else { return }
+            let existing = Set(searchResults.map(\.id))
+            searchResults.append(contentsOf: page.data.filter { !existing.contains($0.id) })
+            searchTotalCount = page.total
+        } catch {
+            BangumiDiagnostics.log("搜索翻页失败 offset=\(offset) error=\(error)")
         }
     }
 }
@@ -495,20 +706,31 @@ private struct ProgressCard: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 56, height: 84)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
+                    .aspectRatio(2 / 3, contentMode: .fill)
+                    .frame(width: 56, height: 84)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+
             VStack(alignment: .leading, spacing: 4) {
-                Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                    .font(.headline)
-                    .lineLimit(1)
-                if !subject.nameCN.isEmpty, subject.nameCN != subject.name {
-                    Text(subject.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
+                            .font(.headline)
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                        if !subject.nameCN.isEmpty, subject.nameCN != subject.name {
+                            Text(subject.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
+
                 Spacer(minLength: 0)
                 progressRow
             }
@@ -677,38 +899,110 @@ private struct ProgressCard: View {
 
 private struct SearchResultRow: View {
     let subject: BangumiSlimSubjectDTO
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 200)
+        HStack(alignment: .top, spacing: 14) {
+            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
                 .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 44, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                if !subject.nameCN.isEmpty, subject.name != subject.nameCN {
-                    Text(subject.name)
-                        .font(.caption)
+                .frame(width: 58, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 1)
+
+            VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+
+                    if !subject.nameCN.isEmpty, subject.name != subject.nameCN {
+                        Text(subject.name)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    typeBadge(subject.type)
+
+                    if let rating = subject.rating, rating.score > 0 {
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                            Text(String(format: "%.1f", rating.score))
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.orange)
+                        }
+                        if let rank = subject.rating?.rank, rank > 0 {
+                            Text("#\(rank)")
+                                .font(.system(size: 10).weight(.semibold).monospacedDigit())
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
+                                .foregroundStyle(.orange)
+                        }
+                    }
+
+                    if let interest = subject.interest, interest.type != .none {
+                        Text(interest.type.description(subject.type))
+                            .font(.system(size: 10).weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.tint.opacity(0.18), in: Capsule())
+                            .foregroundStyle(.tint)
+                    }
+                }
+
+                if let info = subject.info, !info.isEmpty {
+                    Text(info)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                if let rating = subject.rating, rating.score > 0 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "star.fill").font(.caption2)
-                        Text(String(format: "%.1f", rating.score)).font(.caption)
-                    }
-                    .foregroundStyle(.secondary)
-                }
             }
-            Spacer()
-            Text(subject.type.description)
-                .font(.caption)
+
+            Spacer(minLength: 4)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
-        .padding(10)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .padding(12)
+        .background(
+            isHovered ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.background.secondary),
+            in: RoundedRectangle(cornerRadius: Metrics.cardRadius)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                .strokeBorder(isHovered ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+        .onHover { isHovered = $0 }
+    }
+
+    private func typeBadge(_ type: BangumiSubjectType) -> some View {
+        let color: Color
+        switch type {
+        case .anime: color = .blue
+        case .book: color = .green
+        case .game: color = .purple
+        case .music: color = .pink
+        case .real: color = .orange
+        case .none: color = .gray
+        }
+        return Text(type.description)
+            .font(.system(size: 10).weight(.medium))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+            .foregroundStyle(color)
     }
 
     private var coverURL: URL? {

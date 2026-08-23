@@ -366,6 +366,45 @@ struct BangumiDatabaseTests {
         #expect(stored?.interest?.type == .doing)
         #expect(stored?.interest?.`private` == false)
     }
+
+    @Test func searchDecoding() async throws {
+        let json = """
+        {
+          "data": [
+            {
+              "id": 343241,
+              "name": "負けヒロインが多すぎる！",
+              "nameCN": "败犬女主太多了！",
+              "type": 1,
+              "info": "2021-07-21 / 雨森たきび / いみぎむる / 小学館",
+              "metaTags": [
+                "日本",
+                "小说"
+              ],
+              "rating": {
+                "rank": 749,
+                "count": [20, 3, 3, 7, 29, 123, 491, 1146, 410, 228],
+                "score": 7.94,
+                "total": 2460
+              },
+              "locked": false,
+              "nsfw": false,
+              "images": {
+                "large": "https://lain.bgm.tv/pic/cover/l/1c/ba/343241_TWFSN.jpg"
+              }
+            }
+          ],
+          "total": 112
+        }
+        """.data(using: .utf8)!
+        let paged: BangumiPagedDTO<BangumiSlimSubjectDTO> = try await BangumiAPIClient.shared.decodeResponse(json)
+        #expect(paged.total == 112)
+        #expect(paged.data.first?.nameCN == "败犬女主太多了！")
+
+        let liveResults = try await BangumiSubjectService.search(keyword: "败犬女主太多了", limit: 10, offset: 0)
+        #expect(liveResults.total > 0)
+        #expect(!liveResults.data.isEmpty)
+    }
 }
 
 // MARK: - 登录态

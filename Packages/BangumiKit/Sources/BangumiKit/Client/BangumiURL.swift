@@ -5,15 +5,18 @@ public struct BangumiDomains: Hashable, Sendable {
     public static let official = BangumiDomains()
 
     public let main: String
+    public let api: String
     public let image: String
     public let next: String
 
     public init(
         main: String = "bgm.tv",
+        api: String = "api.bgm.tv",
         image: String = "lain.bgm.tv",
         next: String = "next.bgm.tv"
     ) {
         self.main = Self.normalizedDomain(main) ?? "bgm.tv"
+        self.api = Self.normalizedDomain(api) ?? "api.bgm.tv"
         self.image = Self.normalizedDomain(image) ?? "lain.bgm.tv"
         self.next = Self.normalizedDomain(next) ?? "next.bgm.tv"
     }
@@ -24,12 +27,13 @@ public struct BangumiDomains: Hashable, Sendable {
             return
         }
         self.main = root
+        self.api = "api.\(root)"
         self.image = "lain.\(root)"
         self.next = "next.\(root)"
     }
 
     public var cacheKey: String {
-        "\(main)|\(image)|\(next)"
+        "\(main)|\(api)|\(image)|\(next)"
     }
 
     public static func normalizedRootDomain(_ rawValue: String?) -> String? {
@@ -54,6 +58,10 @@ public struct BangumiDomains: Hashable, Sendable {
 
     public func mainURL(path: String = "") -> URL {
         url(domain: main, path: path)
+    }
+
+    public func apiURL(path: String = "") -> URL {
+        url(domain: api, path: path)
     }
 
     public func imageURL(path: String = "") -> URL {
@@ -98,6 +106,10 @@ public enum BangumiURL {
 
     public static nonisolated func main(path: String = "") -> URL {
         domains.mainURL(path: path)
+    }
+
+    public static nonisolated func api(path: String = "") -> URL {
+        domains.apiURL(path: path)
     }
 
     public static nonisolated func image(path: String = "") -> URL {

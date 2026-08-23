@@ -210,16 +210,104 @@ public struct BangumiInfoboxItem: Codable, Hashable, Sendable {
         self.key = key
         self.values = values
     }
+
+    /// 提取出非空展示文本
+    public var displayValuesText: String {
+        let texts = values.compactMap { val -> String? in
+            let trimmed = val.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        return texts.joined(separator: "、")
+    }
+
+    public var hasValue: Bool {
+        !displayValuesText.isEmpty
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case values
+        case value
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.key = try container.decode(String.self, forKey: .key)
+
+        if let valuesArray = try? container.decode([BangumiInfoboxValue].self, forKey: .values) {
+            self.values = valuesArray
+        } else if let valuesArray = try? container.decode([BangumiInfoboxValue].self, forKey: .value) {
+            self.values = valuesArray
+        } else if let singleString = try? container.decode(String.self, forKey: .value) {
+            self.values = [BangumiInfoboxValue(text: singleString)]
+        } else {
+            self.values = []
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(key, forKey: .key)
+        try container.encode(values, forKey: .values)
+    }
 }
 
 /// 条目信息框值（可能带链接）。
 public struct BangumiInfoboxValue: Codable, Hashable, Sendable {
     public var text: String?
     public var link: String?
+    public var key: String?
 
-    public init(text: String? = nil, link: String? = nil) {
+    public init(text: String? = nil, link: String? = nil, key: String? = nil) {
         self.text = text
         self.link = link
+        self.key = key
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case v
+        case value
+        case link
+        case l
+        case k
+        case key
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let v = try? container.decode(String.self, forKey: .v) {
+            self.text = v
+        } else if let text = try? container.decode(String.self, forKey: .text) {
+            self.text = text
+        } else if let val = try? container.decode(String.self, forKey: .value) {
+            self.text = val
+        } else {
+            self.text = nil
+        }
+
+        if let l = try? container.decode(String.self, forKey: .l) {
+            self.link = l
+        } else if let link = try? container.decode(String.self, forKey: .link) {
+            self.link = link
+        } else {
+            self.link = nil
+        }
+
+        if let k = try? container.decode(String.self, forKey: .k) {
+            self.key = k
+        } else if let key = try? container.decode(String.self, forKey: .key) {
+            self.key = key
+        } else {
+            self.key = nil
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(text, forKey: .v)
+        try container.encodeIfPresent(link, forKey: .l)
+        try container.encodeIfPresent(key, forKey: .k)
     }
 }
 

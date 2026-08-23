@@ -113,7 +113,10 @@ private struct CollectionSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(subjects) { subject in
-                            CollectionTile(subject: subject)
+                            NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                                CollectionTile(subject: subject)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.vertical, 2)

@@ -141,7 +141,10 @@ public enum BangumiEpisodeRepository {
     /// 从远端整份回读条目 + 章节，覆盖本地。
     static func reconcileSubject(_ subjectId: Int) async throws {
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
-        let remote = try await BangumiSubjectService.getSubject(subjectId)
+        var remote = try await BangumiSubjectService.getSubject(subjectId)
+        if let interest = try? await BangumiCollectionService.getSubjectCollection(subjectId) {
+            remote.interest = interest
+        }
         try await db.saveSubject(remote)
         try await syncEpisodes(subjectId, db: db)
     }
@@ -169,8 +172,8 @@ public enum BangumiEpisodeRepository {
             let allWatched = !mains.isEmpty
                 && mains.allSatisfy { $0.collectionTypeEnum == .collect }
             if allWatched,
-               let collection = try? await BangumiCollectionService.getSubjectCollection(subjectId),
-               collection.interest?.type == .doing {
+               let interest = try? await BangumiCollectionService.getSubjectCollection(subjectId),
+               interest.type == .doing {
                 try await BangumiCollectionService.updateSubjectCollection(
                     subjectId: subjectId, type: .collect)
                 try await db.updateSubjectCollectionType(subjectId: subjectId, type: .collect)
@@ -363,7 +366,7 @@ public final class BangumiContext {
         await BangumiEpisodeRepository.refreshSubjectAfterProgressChange(subjectId)
     }
 
-    /// 手动更改条目收藏状态（进度页状态菜单）：远端 PATCH → 本地对齐 →
+    /// 手动更改条目收藏状态（进度页状态菜单）：远端 POST → 本地对齐 →
     /// membership 失效（切到非在看类型时条目要离开进度列表）。
     public func updateSubjectCollection(
         subjectId: Int, type: BangumiCollectionType
@@ -373,6 +376,17 @@ public final class BangumiContext {
         try await database?.updateSubjectCollectionType(subjectId: subjectId, type: type)
         BangumiProgressInvalidation.post(
             subjectId: subjectId, mayChangeProgressMembership: true)
+    }
+
+    /// 用户评分（1-10，0 表示撤销评分）：远端 POST → 本地对齐 → 发出失效通知。
+    public func updateSubjectRating(
+        subjectId: Int, rate: Int
+    ) async throws {
+        try await BangumiCollectionService.updateSubjectCollection(
+            subjectId: subjectId, rate: rate)
+        try await database?.updateSubjectRating(subjectId: subjectId, rate: rate)
+        BangumiProgressInvalidation.post(
+            subjectId: subjectId, mayChangeProgressMembership: false)
     }
 
     /// 收藏同步 + 章节补齐（进度页全量刷新）。返回同步到的条目数。

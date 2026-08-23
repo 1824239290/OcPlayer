@@ -144,6 +144,7 @@ final class AppModel {
         case detail(MediaItem)
         case bangumiProfile
         case bangumiCollectionList(BangumiSubjectType)
+        case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil)
     }
 
     var selectedSection: Section = .home {
@@ -235,6 +236,10 @@ final class AppModel {
         } else {
             path.append(.detail(item))
         }
+    }
+
+    func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil) {
+        path.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
     }
 
     /// 首页的续播条目通常是 Episode；详情入口应落到所属电视剧，而不是单集。
