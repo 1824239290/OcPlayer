@@ -187,6 +187,8 @@ public actor MoviePilotAPIClient {
         return try Self.decoder.decode(T.self, from: data)
     }
 
+    private let maxRetries = 2
+
     /// 发请求返回原始 data（非 JSON 响应用）。
     public func requestData(_ request: MPRequest) async throws -> Data {
         if request.authorized {
@@ -195,7 +197,7 @@ public actor MoviePilotAPIClient {
             }
             return try await send(request, token: token)
         } else {
-            return try await sendOnce(request, token: nil)
+            return try await send(request, token: nil)
         }
     }
 
@@ -225,7 +227,7 @@ public actor MoviePilotAPIClient {
             formBody: ["username": username, "password": password],
             authorized: false
         )
-        let data = try await sendOnce(request, token: nil)
+        let data = try await send(request, token: nil)
         do {
             let response = try JSONDecoder().decode(MPTokenResponse.self, from: data)
             guard !response.accessToken.isEmpty else {
@@ -239,14 +241,42 @@ public actor MoviePilotAPIClient {
         }
     }
 
-    /// 带鉴权请求的发送：401（requireLogin）→ 静默重登 → 重放一次。
-    private func send(_ request: MPRequest, token: String) async throws -> Data {
-        do {
-            return try await sendOnce(request, token: token)
-        } catch MoviePilotError.requireLogin {
-            let newToken = try await silentRelogin()
-            return try await sendOnce(request, token: newToken)
+    /// 发送请求（支持 401 静默重登与 502/503/504/超时等 isRetryable 错误指数退避重试）。
+    private func send(_ request: MPRequest, token: String?) async throws -> Data {
+        var currentToken = token
+        var lastError: Error?
+
+        for attempt in 0...maxRetries {
+            if attempt > 0 {
+                let delay = UInt64(pow(2.0, Double(attempt - 1))) * 1_000_000_000
+                try await Task.sleep(nanoseconds: delay)
+                MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(self.maxRetries + 1))")
+            }
+
+            do {
+                return try await sendOnce(request, token: currentToken)
+            } catch MoviePilotError.requireLogin where request.authorized {
+                do {
+                    currentToken = try await silentRelogin()
+                    return try await sendOnce(request, token: currentToken)
+                } catch let error as MoviePilotError where error.isRetryable && attempt < maxRetries {
+                    lastError = error
+                    continue
+                } catch {
+                    throw error
+                }
+            } catch let error as MoviePilotError where error.isRetryable && attempt < maxRetries {
+                lastError = error
+                continue
+            } catch {
+                throw error
+            }
         }
+
+        if let lastError {
+            throw lastError
+        }
+        throw MoviePilotError.generic("请求失败")
     }
 
     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。

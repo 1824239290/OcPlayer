@@ -20,14 +20,7 @@ class Sentinel {
     }
     
     public func increase() {
-        #if os(macOS)
         _ = OSAtomicIncrement32(&value)
-        #else
-        let p = UnsafeMutablePointer<Int32>.allocate(capacity: 1)
-        p.pointee = value
-        OSAtomicIncrement32(p)
-        p.deallocate()
-        #endif
     }
     
 }

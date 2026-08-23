@@ -461,7 +461,30 @@ public final class LoginSession: Sendable {
 
     /// Quick Connect 事件流（内置轮询，取消流即取消轮询）。
     public var quickConnectEvents: AsyncThrowingStream<QuickConnect.Event, Error> {
-        client.quickConnect.connect(poll: 3, max: 60)
+        AsyncThrowingStream { continuation in
+            let upstream = client.quickConnect.connect(poll: 3, max: 60)
+            let task = Task {
+                do {
+                    for try await event in upstream {
+                        continuation.yield(event)
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch {
+                    if case let APIError.unacceptableStatusCode(status) = error, status == 404 {
+                        continuation.finish(throwing: JellyfinError(.quickConnectDisabled, underlying: error))
+                    } else if let jellyfinError = error as? JellyfinError, case .http(404) = jellyfinError.kind {
+                        continuation.finish(throwing: JellyfinError(.quickConnectDisabled, underlying: jellyfinError.underlying ?? error))
+                    } else {
+                        continuation.finish(throwing: JellyfinError.wrap(error))
+                    }
+                }
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 
     /// 账号密码登录；Quick Connect 则消费 `quickConnectEvents` 的

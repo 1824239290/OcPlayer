@@ -2,7 +2,7 @@ import Foundation
 import JellyfinKit
 
 @MainActor
-protocol PlaybackReporting {
+protocol PlaybackReporting: Sendable {
     func reportPlaybackStart(
         context: PlaybackSessionContext,
         positionSeconds: Double
@@ -50,7 +50,7 @@ extension PlaybackController: PlaybackReportingStateSource {}
 /// a slow request from moving Jellyfin's resume position backwards.
 @MainActor
 final class PlaybackReportingCoordinator {
-    struct TerminalEvent: Equatable {
+    struct TerminalEvent: Equatable, Sendable {
         let requestID: PlaybackRequest.ID
         let reachedEnd: Bool
     }
@@ -66,12 +66,13 @@ final class PlaybackReportingCoordinator {
         }
     }
 
-    private struct Session {
+    private struct Session: Sendable {
         let generation: UInt64
         let reporter: any PlaybackReporting
         let context: PlaybackSessionContext
         let requestID: PlaybackRequest.ID
         let startTask: Task<Void, Never>
+        let onTerminal: @MainActor @Sendable (TerminalEvent) -> Void
     }
 
     private weak var stateSource: (any PlaybackReportingStateSource)?
@@ -86,6 +87,7 @@ final class PlaybackReportingCoordinator {
     private var pendingStoppedRequestID: PlaybackRequest.ID?
     private var lastCompletedStoppedRequestID: PlaybackRequest.ID?
     private var stoppedReportGeneration: UInt64 = 0
+    private var triggeredTerminalRequestIDs: Set<PlaybackRequest.ID> = []
 
     init(
         stateSource: any PlaybackReportingStateSource,
@@ -99,12 +101,42 @@ final class PlaybackReportingCoordinator {
         pendingStoppedReport = precedingStoppedReport
     }
 
+    private static func isReachedEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
+        guard let snapshot else { return false }
+        return snapshot.durationSeconds > 0
+            && snapshot.positionSeconds >= snapshot.durationSeconds - 2
+    }
+
+    private func triggerTerminalIfNeeded(session: Session, reachedEnd: Bool) {
+        guard !triggeredTerminalRequestIDs.contains(session.requestID) else { return }
+        triggeredTerminalRequestIDs.insert(session.requestID)
+        session.onTerminal(TerminalEvent(
+            requestID: session.requestID,
+            reachedEnd: reachedEnd
+        ))
+    }
+
+    private static func performWithTimeout(
+        duration: Duration = .seconds(5),
+        operation: @escaping @MainActor @Sendable () async -> Void
+    ) async {
+        let task = Task { @MainActor in
+            await operation()
+        }
+        let timeoutTask = Task {
+            try? await Task.sleep(for: duration)
+            task.cancel()
+        }
+        await task.value
+        timeoutTask.cancel()
+    }
+
     func start(
         reporter: any PlaybackReporting,
         context: PlaybackSessionContext,
         requestID: PlaybackRequest.ID,
         resumeSeconds: Double?,
-        onTerminal: @escaping @MainActor (TerminalEvent) -> Void
+        onTerminal: @escaping @MainActor @Sendable (TerminalEvent) -> Void
     ) {
         // Keep the coordinator correct even when a caller starts a new request
         // without first calling stop (AppModel normally does that explicitly).
@@ -113,17 +145,20 @@ final class PlaybackReportingCoordinator {
         let sessionGeneration = generation
         let startTask = Task {
             await precedingStop?.value
-            await reporter.reportPlaybackStart(
-                context: context,
-                positionSeconds: resumeSeconds ?? 0
-            )
+            await Self.performWithTimeout {
+                await reporter.reportPlaybackStart(
+                    context: context,
+                    positionSeconds: resumeSeconds ?? 0
+                )
+            }
         }
         let activeSession = Session(
             generation: sessionGeneration,
             reporter: reporter,
             context: context,
             requestID: requestID,
-            startTask: startTask
+            startTask: startTask,
+            onTerminal: onTerminal
         )
         session = activeSession
 
@@ -157,21 +192,16 @@ final class PlaybackReportingCoordinator {
                     guard self.isCurrent(activeSession) else { return }
                     self.session = nil
                     self.heartbeatTask = nil
-                    onTerminal(TerminalEvent(
-                        requestID: requestID,
-                        reachedEnd: snapshot.state == .stopped
-                            && snapshot.durationSeconds > 0
-                            && snapshot.positionSeconds >= snapshot.durationSeconds - 2
-                    ))
+                    let reachedEnd = snapshot.state == .stopped && Self.isReachedEnd(snapshot: snapshot)
+                    self.triggerTerminalIfNeeded(session: activeSession, reachedEnd: reachedEnd)
                     return
                 }
 
                 if ticks % self.progressEveryTicks == 0 {
-                    let progressTask = self.enqueueProgressReport(
+                    _ = self.enqueueProgressReport(
                         session: activeSession,
                         snapshot: snapshot
                     )
-                    await progressTask.value
                 }
             }
         }
@@ -203,6 +233,12 @@ final class PlaybackReportingCoordinator {
         let precedingLifecycle = pendingLifecycleReport
         pendingLifecycleReport = nil
         session = nil
+
+        let reachedEnd = Self.isReachedEnd(snapshot: snapshot)
+        if reachedEnd {
+            triggerTerminalIfNeeded(session: activeSession, reachedEnd: true)
+        }
+
         return enqueueStoppedReport(
             session: activeSession,
             positionSeconds: snapshot?.positionSeconds ?? 0,
@@ -224,11 +260,13 @@ final class PlaybackReportingCoordinator {
             await session.startTask.value
             await precedingLifecycle?.value
             guard let self, !Task.isCancelled, self.isCurrent(session) else { return }
-            await session.reporter.reportPlaybackProgress(
-                context: session.context,
-                positionSeconds: snapshot.positionSeconds,
-                isPaused: snapshot.state == .paused
-            )
+            await Self.performWithTimeout {
+                await session.reporter.reportPlaybackProgress(
+                    context: session.context,
+                    positionSeconds: snapshot.positionSeconds,
+                    isPaused: snapshot.state == .paused
+                )
+            }
         }
         pendingLifecycleReport = task
         return task
@@ -254,10 +292,12 @@ final class PlaybackReportingCoordinator {
             await precedingStop?.value
             await session.startTask.value
             await precedingLifecycle?.value
-            await session.reporter.reportPlaybackStopped(
-                context: session.context,
-                positionSeconds: positionSeconds
-            )
+            await Self.performWithTimeout {
+                await session.reporter.reportPlaybackStopped(
+                    context: session.context,
+                    positionSeconds: positionSeconds
+                )
+            }
             guard let self, self.stoppedReportGeneration == stopGeneration else { return }
             self.lastCompletedStoppedRequestID = session.requestID
             self.pendingStoppedReport = nil

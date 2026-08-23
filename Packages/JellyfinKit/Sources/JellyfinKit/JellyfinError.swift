@@ -68,7 +68,6 @@ public struct JellyfinError: Error, LocalizedError {
         case let .unacceptableStatusCode(status):
             switch status {
             case 401: JellyfinError(.unauthorized, underlying: error)
-            case 404: JellyfinError(.quickConnectDisabled, underlying: error)
             default: JellyfinError(.http(status: status), underlying: error)
             }
         }

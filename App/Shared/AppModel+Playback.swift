@@ -330,6 +330,7 @@ extension AppModel {
     }
 
     func dismissPlayer() {
+        playback?.stopPlayback()
         cancelPlaybackOpen()
         retryPlaybackItem = nil
         let stopped = finishReporting()   // 退出播放器 → Stopped，服务器记下续播位置

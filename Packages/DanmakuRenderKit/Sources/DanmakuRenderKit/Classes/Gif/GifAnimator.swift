@@ -124,7 +124,6 @@ public class GifAnimator {
             duration += min(frameDuration, maxFrameDuration)
             if i > preloadCount {
                 frames.append(GifFrame(image: nil, duration: frameDuration))
-                break
             } else {
                 //获取需要预加载的每一帧图片
                 frames.append(GifFrame(image: frame(at: i), duration: frameDuration))

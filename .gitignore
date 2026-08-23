@@ -18,6 +18,7 @@ xcuserdata/
 .swiftpm/
 
 # 本地验证产生的临时构建目录，不入库
+.derivedData/
 .local-build/
 .xcode-build/
 .xcode-package-cache/

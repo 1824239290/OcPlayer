@@ -374,6 +374,9 @@ struct DanmakuOverlayHost: View {
         DanmakuOverlayRepresentable(controller: controller)
             .allowsHitTesting(false)
             .ignoresSafeArea()
+            .onDisappear {
+                controller.reset()
+            }
     }
 }
 
@@ -387,6 +390,10 @@ private struct DanmakuOverlayRepresentable: PlatformViewRepresentable {
     }
 
     func updateNSView(_ nsView: DanmakuView, context: Context) {}
+
+    static func dismantleNSView(_ nsView: DanmakuView, coordinator: ()) {
+        nsView.clean()
+    }
     #else
     func makeUIView(context: Context) -> DanmakuView {
         controller.startTimer()
@@ -394,5 +401,9 @@ private struct DanmakuOverlayRepresentable: PlatformViewRepresentable {
     }
 
     func updateUIView(_ uiView: DanmakuView, context: Context) {}
+
+    static func dismantleUIView(_ uiView: DanmakuView, coordinator: ()) {
+        uiView.clean()
+    }
     #endif
 }

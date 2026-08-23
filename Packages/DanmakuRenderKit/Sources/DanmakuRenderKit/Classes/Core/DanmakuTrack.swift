@@ -350,6 +350,7 @@ class DanmakuVerticalTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
         danmaku.model?.track = index
         prepare(danmaku: danmaku)
         addAnimation(to: danmaku)
+        danmaku.enterTrack()
     }
     
     func canShoot(danmaku: DanmakuCellModel) -> Bool {

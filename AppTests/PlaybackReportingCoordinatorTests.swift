@@ -89,12 +89,13 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
             stateSource: source,
             heartbeatInterval: .milliseconds(1)
         )
+        let requestID = UUID()
         var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
 
         coordinator.start(
             reporter: reporter,
             context: PlaybackSessionContext(itemID: "episode-race"),
-            requestID: UUID(),
+            requestID: requestID,
             resumeSeconds: nil,
             onTerminal: { terminalEvents.append($0) }
         )
@@ -106,6 +107,26 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(5))
 
         XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
+        XCTAssertEqual(terminalEvents, [.init(requestID: requestID, reachedEnd: true)])
+    }
+
+    @MainActor
+    func testMidPlaybackExplicitStopDoesNotSignalTerminal() async {
+        let source = TestPlaybackStateSource(snapshot: .active(position: 10))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(stateSource: source)
+        var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-mid"),
+            requestID: UUID(),
+            resumeSeconds: nil as Double?,
+            onTerminal: { terminalEvents.append($0) }
+        )
+        await waitUntil { reporter.events.count == 1 }
+
+        _ = coordinator.stop()
         XCTAssertTrue(terminalEvents.isEmpty)
     }
 

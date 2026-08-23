@@ -203,6 +203,25 @@ final class MoviePilotClientTests: XCTestCase {
         _ = try await client.currentUser()
     }
 
+    func testRetryable502RetriesAndSucceeds() async throws {
+        store.accessToken = "jwt-valid"
+        var attempts = 0
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            attempts += 1
+            if attempts == 1 {
+                return MockURLProtocol.response(
+                    #"{"detail":"Bad Gateway"}"#, status: 502, for: url)
+            } else {
+                return MockURLProtocol.response(
+                    #"{"id":1,"name":"admin","is_superuser":true,"is_active":true}"#, status: 200, for: url)
+            }
+        }
+        let user = try await client.currentUser()
+        XCTAssertEqual(user.name, "admin")
+        XCTAssertEqual(attempts, 2)
+    }
+
     func testSignOutClearsSession() async throws {
         store.accessToken = "jwt-1"
         _ = await client.signOut()
