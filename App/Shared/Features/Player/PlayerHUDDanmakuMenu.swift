@@ -34,7 +34,7 @@ struct PlayerHUDDanmakuMenu: View {
                 }
             ))
 
-            Text(app.danmaku.status.label)
+            DanmakuStatusText()
 
             Divider()
             Button {
@@ -109,7 +109,7 @@ struct PlayerHUDDanmakuMenu: View {
             }
             .pickerStyle(.inline)
 
-            Section {
+            Menu("弹幕类型") {
                 Toggle("滚动", isOn: Binding(
                     get: { !controller.danmakuBlockScroll },
                     set: {
@@ -131,8 +131,6 @@ struct PlayerHUDDanmakuMenu: View {
                         onUserInteraction()
                     }
                 ))
-            } header: {
-                Text("弹幕类型")
             }
 
             Divider()
@@ -172,8 +170,19 @@ struct PlayerHUDDanmakuMenu: View {
     }
 
     private var accessibilityValue: String {
-        let enabled = controller.danmakuEnabled ? "已开启" : "已关闭"
-        return "\(enabled)，\(app.danmaku.status.label)"
+        controller.danmakuEnabled ? "已开启" : "已关闭"
+    }
+}
+
+/// 弹幕装载状态文案。拆成独立子视图，隔离 `DanmakuCoordinator.status` 的观察：
+/// 播放开始后 status 会经历 idle→matching→loadingComments→loaded 一路变化，
+/// 若在 Menu content 里直接读，会让整个菜单随 status 重算，嵌套子菜单（弹幕类型等）
+/// 展开时被重建而闪烁。独立成叶子视图后，只有这一行文本随 status 刷新。
+private struct DanmakuStatusText: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Text(app.danmaku.status.label)
     }
 }
 
