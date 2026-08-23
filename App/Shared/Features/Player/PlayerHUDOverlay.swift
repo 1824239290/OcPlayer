@@ -26,7 +26,6 @@ struct PlayerHUDOverlay: View {
     let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
-    let onMenuPresented: () -> Void
 
     var body: some View {
         ZStack {
@@ -63,8 +62,7 @@ struct PlayerHUDOverlay: View {
                     onCapture: onCapture,
                     onShare: onShare,
                     onInteractionChanged: onInteractionChanged,
-                    onUserInteraction: onUserInteraction,
-                    onMenuPresented: onMenuPresented
+                    onUserInteraction: onUserInteraction
                 )
             }
         }

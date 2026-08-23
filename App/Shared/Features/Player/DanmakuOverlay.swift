@@ -46,11 +46,13 @@ final class DanmakuOverlayController {
         var allowStacking = false
         /// 全局时间偏移（秒），正数让弹幕更晚出现。
         var offsetSeconds: Double = 0
+        /// 基础字号
+        var fontSize: Double = 22.0
     }
 
     var engineProvider: () -> (any PlaybackEngine)?
     /// 真实播放状态（playing/buffering 由内核事件驱动，不靠媒体时间猜——
-    /// 24fps 视频配 30Hz 采样会每隔一次看到 delta=0，时间猜测会以 ~15Hz
+    /// 24fps 视频配 60Hz 采样会每隔一次看到 delta=0，时间猜测会以 ~15Hz
     /// 抖动 pause/play，而库的 pause 会移除全部动画、play 重加，抖起来
     /// 就是满屏「一抽一抽」）。
     var playbackStateProvider: () -> (playing: Bool, buffering: Bool)?
@@ -73,7 +75,6 @@ final class DanmakuOverlayController {
     private var timer: Timer?
     private var lastMediaSample: Double?
     private var viewPausedBySync = false
-    private var fontSize: CGFloat = 25
 
     init(engineProvider: @escaping () -> (any PlaybackEngine)?,
          playbackStateProvider: @escaping () -> (playing: Bool, buffering: Bool)? = { nil }) {
@@ -134,9 +135,10 @@ final class DanmakuOverlayController {
         var next = preferences
         transform(&next)
         let offsetChanged = next.offsetSeconds != preferences.offsetSeconds
+        let fontSizeChanged = next.fontSize != preferences.fontSize
         preferences = next
         applyPreferences(to: view)
-        if offsetChanged { resync() }
+        if offsetChanged || fontSizeChanged { resync() }
     }
 
     private func applyPreferences(to view: DanmakuView) {
@@ -146,7 +148,9 @@ final class DanmakuOverlayController {
         view.enableTopDanmaku = !p.blockTop
         view.enableBottomDanmaku = !p.blockBottom
         view.isOverlap = p.allowStacking
-        view.trackHeight = fontSize * 1.4
+        view.paddingTop = 10
+        view.paddingBottom = 16
+        view.trackHeight = CGFloat(p.fontSize) * 1.35
         #if os(macOS)
         view.alphaValue = CGFloat(max(0.05, min(1, p.opacity)))
         #else
@@ -164,9 +168,8 @@ final class DanmakuOverlayController {
 
     func startTimer() {
         guard timer == nil else { return }
-        // Timer 本来就在主线程 runloop 上跑，直接 assumeIsolated 进 tick，
-        // 不再每拍包一个 Task（30Hz 的分配 + 调度延迟都是白付的）。
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        // 60Hz 平滑采样发射：消除 30Hz 定时器带来的成团发射突发感。
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.tick()
             }
@@ -238,7 +241,7 @@ final class DanmakuOverlayController {
     }
 
     private func makeModel(for comment: Comment) -> DanmakuCellModel {
-        OverlayDanmakuModel(comment: comment, fontSize: fontSize)
+        OverlayDanmakuModel(comment: comment, fontSize: CGFloat(preferences.fontSize))
     }
 }
 
@@ -258,18 +261,19 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     init(comment: DanmakuOverlayController.Comment, fontSize: CGFloat) {
         self.comment = comment
         #if os(macOS)
-        font = NSFont.systemFont(ofSize: fontSize)
+        font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
         color = NSColor(calibratedRed: CGFloat((comment.color >> 16) & 0xFF) / 255,
                         green: CGFloat((comment.color >> 8) & 0xFF) / 255,
                         blue: CGFloat(comment.color & 0xFF) / 255, alpha: 1)
         #else
-        font = UIFont.systemFont(ofSize: fontSize)
+        font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
         color = UIColor(red: CGFloat((comment.color >> 16) & 0xFF) / 255,
                         green: CGFloat((comment.color >> 8) & 0xFF) / 255,
                         blue: CGFloat(comment.color & 0xFF) / 255, alpha: 1)
         #endif
         identifier = "\(comment.time)#\(comment.text)"
-        displayTime = comment.mode == .scroll ? 10 : 5
+        // 自然飞行节奏：滚动弹幕 7 秒（更灵动不拥堵），固定弹幕 4 秒。
+        displayTime = comment.mode == .scroll ? 7.0 : 4.0
         switch comment.mode {
         case .scroll: type = .floating
         case .top: type = .top
@@ -277,8 +281,11 @@ final class OverlayDanmakuModel: DanmakuCellModel {
         }
         let attributed = NSAttributedString(string: comment.text, attributes: [.font: font])
         var measured = attributed.size()
-        // 描边在字形外扩，测量宽度不够会在 cell 边缘截字。
-        measured.width += 6
+        // 描边与阴影在字形外扩，测量宽度与高度预留边距，避免边缘裁切。
+        let marginX = max(8.0, fontSize * 0.35)
+        let marginY = max(4.0, fontSize * 0.15)
+        measured.width += marginX
+        measured.height += marginY
         size = measured
     }
 
@@ -290,31 +297,70 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     }
 }
 
-/// 单条弹幕的绘制。macOS 关键点有二：
-/// 1. DanmakuAsyncLayer 给的是裸 CGContext，`NSAttributedString.draw` 需要
-///    先包 NSGraphicsContext.current，否则画进空气（上游 Mac 示例同款）。
-/// 2. 描边用**两遍绘制**：正 strokeWidth 纯描边一遍 + 填充一遍。macOS 对
-///    负 strokeWidth（描边+填充一次画）的渲染有重影/毛刺类毛病，上游因此
-///    也是两遍。
+/// 单条弹幕的高清绘制：
+/// 1. 开启抗锯齿、亚像素字形定位与圆润转角；
+/// 2. 亮度自适应描边（亮字深描边，极深字亮描边）；
+/// 3. 轻微投影增强立体感与高亮背景穿透力。
 final class OverlayDanmakuCell: DanmakuCell {
     override func displaying(_ context: CGContext, _ size: CGSize, _ isCancelled: Bool) {
         guard !isCancelled, let model = model as? OverlayDanmakuModel else { return }
+
+        context.setAllowsAntialiasing(true)
+        context.setShouldAntialias(true)
+        context.setAllowsFontSubpixelPositioning(true)
+        context.setShouldSubpixelPositionFonts(true)
+        context.setAllowsFontSubpixelQuantization(true)
+        context.setShouldSubpixelQuantizeFonts(true)
+        context.setLineJoin(.round)
+        context.setLineCap(.round)
+
         #if os(macOS)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         defer { NSGraphicsContext.restoreGraphicsState() }
         #endif
+
         let text = NSString(string: model.comment.text)
-        let fill: [NSAttributedString.Key: Any] = [
+        let strokeWidth = max(2.5, model.font.pointSize * 0.11)
+
+        // 计算文字亮度：浅色/亮色文字用深色描边，深色/黑字用半透明白描边，避免黑成一团
+        let r = CGFloat((model.comment.color >> 16) & 0xFF) / 255
+        let g = CGFloat((model.comment.color >> 8) & 0xFF) / 255
+        let b = CGFloat(model.comment.color & 0xFF) / 255
+        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        let strokeColor: PlatformColor = luminance < 0.28
+            ? PlatformColor.white.withAlphaComponent(0.85)
+            : PlatformColor.black.withAlphaComponent(0.92)
+
+        var stroke: [NSAttributedString.Key: Any] = [
+            .font: model.font,
+            .foregroundColor: model.color,
+            .strokeColor: strokeColor,
+            .strokeWidth: strokeWidth,
+        ]
+
+        var fill: [NSAttributedString.Key: Any] = [
             .font: model.font,
             .foregroundColor: model.color,
         ]
-        var stroke = fill
-        stroke[.strokeColor] = PlatformColor.black.withAlphaComponent(0.9)
-        // 正值 = 只画描边不填充（负值在 macOS 上单次混合绘制有渲染毛病）。
-        stroke[.strokeWidth] = 3
-        text.draw(at: .zero, withAttributes: stroke)
-        text.draw(at: .zero, withAttributes: fill)
+
+        #if os(macOS)
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 1.5
+        shadow.shadowOffset = NSSize(width: 0, height: -1.0)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        stroke[.shadow] = shadow
+        #else
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 1.5
+        shadow.shadowOffset = CGSize(width: 0, height: 1.0)
+        shadow.shadowColor = UIColor.black.withAlphaComponent(0.35)
+        stroke[.shadow] = shadow
+        #endif
+
+        let origin = CGPoint(x: strokeWidth / 2, y: 0)
+        text.draw(at: origin, withAttributes: stroke)
+        text.draw(at: origin, withAttributes: fill)
     }
 }
 

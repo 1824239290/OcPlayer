@@ -25,7 +25,6 @@ struct PlayerHUDBottomDock: View {
     let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
-    let onMenuPresented: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
@@ -69,8 +68,7 @@ struct PlayerHUDBottomDock: View {
             onToggleFullscreen: onToggleFullscreen,
             onCapture: onCapture,
             onShare: onShare,
-            onUserInteraction: onUserInteraction,
-            onMenuPresented: onMenuPresented
+            onUserInteraction: onUserInteraction
         )
         .fixedSize(horizontal: true, vertical: true)
         .layoutPriority(2)
@@ -110,6 +108,10 @@ struct PlayerHUDTimeline: View {
 
     @State private var draftFraction: Double?
 
+    private var timeline: PlayerTimeline {
+        controller.state.timeline
+    }
+
     var body: some View {
         VStack(spacing: 4) {
             Slider(value: progressBinding, in: 0...1) {
@@ -125,9 +127,9 @@ struct PlayerHUDTimeline: View {
             .tint(PlayerHUDPalette.primary)
             .controlSize(.regular)
             .frame(minHeight: 44)
-            .disabled(controller.state.duration == .zero)
+            .disabled(timeline.duration == .zero)
             .accessibilityValue(
-                "\(playerHUDTimeLabel(displayedPosition)) / \(playerHUDTimeLabel(controller.state.duration))"
+                "\(playerHUDTimeLabel(displayedPosition)) / \(playerHUDTimeLabel(timeline.duration))"
             )
             .accessibilityAdjustableAction { direction in
                 switch direction {
@@ -140,7 +142,7 @@ struct PlayerHUDTimeline: View {
             HStack {
                 Text(playerHUDTimeLabel(displayedPosition))
                 Spacer(minLength: 16)
-                Text(playerHUDTimeLabel(controller.state.duration))
+                Text(playerHUDTimeLabel(timeline.duration))
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(PlayerHUDPalette.secondary)
@@ -152,20 +154,20 @@ struct PlayerHUDTimeline: View {
 
     private var progressBinding: Binding<Double> {
         Binding(
-            get: { draftFraction ?? controller.state.progress },
+            get: { draftFraction ?? timeline.progress },
             set: { draftFraction = min(max($0, 0), 1) }
         )
     }
 
     private var displayedPosition: Duration {
-        guard let draftFraction, controller.state.duration > .zero else {
-            return controller.state.displayPosition
+        guard let draftFraction, timeline.duration > .zero else {
+            return timeline.displayPosition
         }
-        return .microseconds(Int64(Double(controller.state.duration.microseconds) * draftFraction))
+        return .microseconds(Int64(Double(timeline.duration.microseconds) * draftFraction))
     }
 
     private func beginScrubbing() {
-        if draftFraction == nil { draftFraction = controller.state.progress }
+        if draftFraction == nil { draftFraction = timeline.progress }
         onInteractionChanged(.timelineDrag, true)
     }
 

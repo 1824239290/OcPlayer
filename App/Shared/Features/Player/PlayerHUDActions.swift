@@ -8,8 +8,6 @@ import AppKit
 #endif
 
 struct PlayerHUDActionsCapsule: View {
-    @Environment(PlaybackController.self) private var controller
-
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showStats: Bool
@@ -21,9 +19,6 @@ struct PlayerHUDActionsCapsule: View {
     let onCapture: () -> Void
     let onShare: () -> Void
     let onUserInteraction: () -> Void
-    let onMenuPresented: () -> Void
-
-    private let rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
     private var controlSide: CGFloat {
         #if os(iOS)
@@ -39,12 +34,28 @@ struct PlayerHUDActionsCapsule: View {
                 PlayerHUDDanmakuMenu(
                     isSelectingDanmaku: $isSelectingDanmaku,
                     controlSide: controlSide,
-                    onUserInteraction: onUserInteraction,
-                    onMenuPresented: onMenuPresented
+                    onUserInteraction: onUserInteraction
                 )
-                subtitleMenu
-                audioMenu
-                moreMenu
+                PlayerHUDSubtitleMenu(
+                    isImportingSubtitle: $isImportingSubtitle,
+                    controlSide: controlSide,
+                    onUserInteraction: onUserInteraction
+                )
+                PlayerHUDAudioMenu(
+                    controlSide: controlSide,
+                    onUserInteraction: onUserInteraction
+                )
+                PlayerHUDMoreMenu(
+                    showStats: $showStats,
+                    showInfoCard: $showInfoCard,
+                    shareURL: shareURL,
+                    isFullscreen: isFullscreen,
+                    controlSide: controlSide,
+                    onToggleFullscreen: onToggleFullscreen,
+                    onCapture: onCapture,
+                    onShare: onShare,
+                    onUserInteraction: onUserInteraction
+                )
             }
             .padding(4)
             .fixedSize(horizontal: true, vertical: true)
@@ -53,21 +64,30 @@ struct PlayerHUDActionsCapsule: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("播放选项")
     }
+}
 
-    private var audioMenu: some View {
+struct PlayerHUDAudioMenu: View {
+    @Environment(PlaybackController.self) private var controller
+
+    let controlSide: CGFloat
+    let onUserInteraction: () -> Void
+
+    var body: some View {
         Menu {
-            ForEach(controller.state.audioTracks) { track in
-                Button {
-                    controller.selectAudio(track)
-                    onUserInteraction()
-                } label: {
-                    if track.selected {
-                        Label(track.displayTitle, systemImage: "checkmark")
-                    } else {
-                        Text(track.displayTitle)
+            Picker("音轨", selection: Binding(
+                get: { controller.state.audioTracks.first(where: { $0.selected })?.id ?? -1 },
+                set: { id in
+                    if let track = controller.state.audioTracks.first(where: { $0.id == id }) {
+                        controller.selectAudio(track)
+                        onUserInteraction()
                     }
                 }
+            )) {
+                ForEach(controller.state.audioTracks) { track in
+                    Text(track.displayTitle).tag(track.id)
+                }
             }
+            .pickerStyle(.inline)
         } label: {
             PlayerHUDActionIcon(systemImage: "speaker.wave.2.fill", side: controlSide)
         }
@@ -78,38 +98,42 @@ struct PlayerHUDActionsCapsule: View {
         .help("音轨")
         .accessibilityLabel("音轨")
         .accessibilityValue(selectedAudioTitle)
-        .simultaneousGesture(TapGesture().onEnded { onMenuPresented() })
     }
 
-    private var subtitleMenu: some View {
-        Menu {
-            Button {
-                controller.setSubtitle(nil)
-                onUserInteraction()
-            } label: {
-                if !isSubtitleOn {
-                    Label("关闭", systemImage: "checkmark")
-                } else {
-                    Text("关闭")
-                }
-            }
-            .disabled(controller.state.subtitleTracks.isEmpty && !isSubtitleOn)
+    private var selectedAudioTitle: String {
+        controller.state.audioTracks.first(where: { $0.selected })?.displayTitle ?? "未选择"
+    }
+}
 
-            ForEach(controller.state.subtitleTracks) { track in
-                let label = track.source == .external
-                    ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
-                    : track.displayTitle
-                Button {
-                    controller.setSubtitle(track)
-                    onUserInteraction()
-                } label: {
-                    if track.selected {
-                        Label(label, systemImage: "checkmark")
-                    } else {
-                        Text(label)
+struct PlayerHUDSubtitleMenu: View {
+    @Environment(PlaybackController.self) private var controller
+
+    @Binding var isImportingSubtitle: Bool
+    let controlSide: CGFloat
+    let onUserInteraction: () -> Void
+
+    var body: some View {
+        Menu {
+            Picker("字幕", selection: Binding(
+                get: { controller.state.subtitleTracks.first(where: { $0.selected })?.id ?? -1 },
+                set: { id in
+                    if id == -1 {
+                        controller.setSubtitle(nil)
+                    } else if let track = controller.state.subtitleTracks.first(where: { $0.id == id }) {
+                        controller.setSubtitle(track)
                     }
+                    onUserInteraction()
+                }
+            )) {
+                Text("关闭").tag(Int64(-1))
+                ForEach(controller.state.subtitleTracks) { track in
+                    let label = track.source == .external
+                        ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
+                        : track.displayTitle
+                    Text(label).tag(track.id)
                 }
             }
+            .pickerStyle(.inline)
 
             Divider()
             Button {
@@ -156,10 +180,39 @@ struct PlayerHUDActionsCapsule: View {
         .help("字幕")
         .accessibilityLabel("字幕")
         .accessibilityValue(selectedSubtitleTitle)
-        .simultaneousGesture(TapGesture().onEnded { onMenuPresented() })
     }
 
-    private var moreMenu: some View {
+    private var isSubtitleOn: Bool {
+        controller.state.subtitleTracks.contains { $0.selected }
+    }
+
+    private var selectedSubtitleTitle: String {
+        guard let track = controller.state.subtitleTracks.first(where: { $0.selected }) else {
+            return "已关闭"
+        }
+        return track.source == .external
+            ? controller.externalSubtitleDisplayName(for: track)
+            : track.displayTitle
+    }
+}
+
+struct PlayerHUDMoreMenu: View {
+    @Environment(PlaybackController.self) private var controller
+
+    @Binding var showStats: Bool
+    @Binding var showInfoCard: Bool
+
+    let shareURL: URL?
+    let isFullscreen: Bool
+    let controlSide: CGFloat
+    let onToggleFullscreen: () -> Void
+    let onCapture: () -> Void
+    let onShare: () -> Void
+    let onUserInteraction: () -> Void
+
+    private let rates = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    var body: some View {
         Menu {
             playbackRateMenu
 
@@ -231,43 +284,20 @@ struct PlayerHUDActionsCapsule: View {
         .frame(width: controlSide, height: controlSide)
         .help("更多")
         .accessibilityLabel("更多播放选项")
-        .simultaneousGesture(TapGesture().onEnded { onMenuPresented() })
     }
 
     private var playbackRateMenu: some View {
-        Menu {
-            ForEach(rates, id: \.self) { value in
-                Button {
-                    controller.applyRate(value)
-                    onUserInteraction()
-                } label: {
-                    if controller.rate == value {
-                        Label(playerHUDRateLabel(value), systemImage: "checkmark")
-                    } else {
-                        Text(playerHUDRateLabel(value))
-                    }
-                }
+        Picker("播放速度", selection: Binding(
+            get: { controller.rate },
+            set: {
+                controller.applyRate($0)
+                onUserInteraction()
             }
-        } label: {
-            Label("播放速度：\(playerHUDRateLabel(controller.rate))", systemImage: "gauge.with.dots.needle.67percent")
+        )) {
+            ForEach(rates, id: \.self) { value in
+                Text(playerHUDRateLabel(value)).tag(value)
+            }
         }
-    }
-
-    private var isSubtitleOn: Bool {
-        controller.state.subtitleTracks.contains { $0.selected }
-    }
-
-    private var selectedSubtitleTitle: String {
-        guard let track = controller.state.subtitleTracks.first(where: { $0.selected }) else {
-            return "已关闭"
-        }
-        return track.source == .external
-            ? controller.externalSubtitleDisplayName(for: track)
-            : track.displayTitle
-    }
-
-    private var selectedAudioTitle: String {
-        controller.state.audioTracks.first(where: { $0.selected })?.displayTitle ?? "未选择"
     }
 }
 

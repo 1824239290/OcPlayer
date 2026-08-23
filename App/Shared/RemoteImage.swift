@@ -55,6 +55,16 @@ final class ImagePipeline: @unchecked Sendable {
         // cost 按像素字节数计（见 memoryCost），超限时 NSCache 自动淘汰最旧。
         memoryCache.totalCostLimit = 128 * 1024 * 1024
         memoryCache.countLimit = 500
+
+        #if os(iOS) || os(tvOS)
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.clearMemoryCache()
+        }
+        #endif
     }
 
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is
@@ -62,6 +72,13 @@ final class ImagePipeline: @unchecked Sendable {
     /// bounded even before a user requests an explicit clear.
     var diskUsage: (usedBytes: Int, capacityBytes: Int) {
         (cache.currentDiskUsage, cache.diskCapacity)
+    }
+
+    /// Clears decoded bitmaps from memory.
+    func clearMemoryCache() {
+        lock.lock()
+        memoryCache.removeAllObjects()
+        lock.unlock()
     }
 
     /// Clears both encoded response data and decoded bitmaps. URLCache and
@@ -81,8 +98,8 @@ final class ImagePipeline: @unchecked Sendable {
     /// 加载一张图。返回 `nil` = 真正失败（下次可重试）；任务被取消会抛 `CancellationError`
     /// （视图消失 / 换 URL 时 `.task(id:)` 自动取消），调用方不要把取消当成失败。
     /// 同一 URL 的并发调用共享同一个网络任务，取消一个订阅者不影响其它订阅者。
-    func load(_ url: URL, authHeader: String?) async throws -> PlatformImage? {
-        let key = url.absoluteString + "\u{0}" + (authHeader ?? "")
+    func load(_ url: URL, authHeader: String?, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
+        let key = url.absoluteString + "\u{0}" + (authHeader ?? "") + "\u{0}" + "\(maxPixelSize ?? 0)"
         if let cached = cachedImage(forKey: key) {
             return cached
         }
@@ -93,7 +110,7 @@ final class ImagePipeline: @unchecked Sendable {
                 guard let self else { return nil }
                 let request = self.makeRequest(url, authHeader: authHeader)
                 do {
-                    let image = try await self.fetch(request)
+                    let image = try await self.fetch(request, maxPixelSize: maxPixelSize)
                     try Task.checkCancellation()
                     guard self.accept(image, forKey: key, generation: generation) else {
                         self.cache.removeCachedResponse(for: request)
@@ -171,23 +188,35 @@ final class ImagePipeline: @unchecked Sendable {
         return request
     }
 
-    private func fetch(_ request: URLRequest) async throws -> PlatformImage? {
+    private func fetch(_ request: URLRequest, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
         // 取消（视图消失 / 换 URL）会从这里抛 CancellationError，由调用方区分处理。
         let (data, response) = try await session.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         // 在 URLSession 的协程线程池上立即解码：`PlatformImage(data:)` 是懒解码，
         // 真正的位图解码会拖到主线程首次绘制时才发生——海报墙快速滚动时每张新图
         // 都在主线程解码、掉帧。这里用 ImageIO 强制解码成位图，主线程首绘不再解码。
-        return Self.decode(data)
+        return Self.decode(data, maxPixelSize: maxPixelSize)
     }
 
     /// ImageIO 立即解码（`kCGImageSourceShouldCacheImmediately` 把位图留在内存）。
-    private static func decode(_ data: Data) -> PlatformImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, [
-                  kCGImageSourceShouldCacheImmediately: true,
-              ] as CFDictionary)
-        else { return nil }
+    /// 指定 `maxPixelSize` 时通过缩略图模式下采样，大幅降低外部高清图内存占用。
+    private static func decode(_ data: Data, maxPixelSize: Int? = nil) -> PlatformImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let cgImage: CGImage?
+        if let maxPixelSize, maxPixelSize > 0 {
+            let options: [CFString: Any] = [
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceShouldCacheImmediately: true,
+            ]
+            cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        } else {
+            let options: [CFString: Any] = [
+                kCGImageSourceShouldCacheImmediately: true,
+            ]
+            cgImage = CGImageSourceCreateImageAtIndex(source, 0, options as CFDictionary)
+        }
+        guard let cgImage else { return nil }
         #if canImport(UIKit)
         return UIImage(cgImage: cgImage)
         #else
@@ -215,6 +244,8 @@ struct RemoteImage: View {
 
     let url: URL?
     var authHeader: String?
+    /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
+    var maxPixelSize: Int? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -242,7 +273,7 @@ struct RemoteImage: View {
         }
         .clipped()
         .animation(imageFade, value: image != nil)
-        .task(id: url?.absoluteString) {
+        .task(id: "\(url?.absoluteString ?? "")#\(maxPixelSize ?? 0)") {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Clear the previous bitmap before
             // loading the new URL, otherwise the old poster can sit beside the
@@ -260,7 +291,7 @@ struct RemoteImage: View {
             loadedURL = nil
             failed = false
             do {
-                let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader)
+                let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
                 guard !Task.isCancelled else { return }   // 换 URL / 消失：新任务会接手，别写旧图
                 if let loaded {
                     image = loaded

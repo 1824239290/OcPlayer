@@ -159,6 +159,9 @@ final class AppModel {
     /// 播放覆盖层：非 nil 时播放器盖住整个 App（双端同一套，见 RootView）。
     var presentedPlayer: PlaybackRequest?
 
+    /// 播放结束/退出后自增，驱动打开中的详情页拉取最新 playState。
+    var detailRefreshGeneration: UInt64 = 0
+
     var isCompact = false
 
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。

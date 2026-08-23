@@ -119,7 +119,11 @@ final class PlayerHUDVisibilityCoordinator {
         } else {
             activeInteractions.remove(interaction)
         }
-        reveal(canAutoHide: canAutoHide && activeInteractions.isEmpty)
+        if activeInteractions.isEmpty && lastPointerLocation == nil {
+            hideOnPointerExit()
+        } else {
+            reveal(canAutoHide: canAutoHide && activeInteractions.isEmpty)
+        }
     }
 
     /// 原生 Menu 没有公开 isPresented；打开菜单时给足停留时间，选中动作后会恢复正常计时。
@@ -140,10 +144,13 @@ final class PlayerHUDVisibilityCoordinator {
         lastPointerLocation = nil
     }
 
-    /// 鼠标移出窗口：收起 HUD，但**不置 `userHidden` 锁定**——鼠标移回窗口时
+    /// 鼠标移出窗口：立即收起 HUD，但**不置 `userHidden` 锁定**——鼠标移回窗口时
     /// 移动仍能唤出（区别于用户主动点关闭的 `hide()`，那个要再点一下才开）。
+    /// 当菜单正在展开跟踪（NSMenu / trackedMenus）或正在拖拽交互时，不收起 HUD，
+    /// 避免鼠标移入系统菜单独立弹出窗口时引起 HUD 反复显隐和子菜单闪烁。
     func hideOnPointerExit() {
         guard !userHidden else { return }
+        guard activeInteractions.isEmpty, trackedMenus.isEmpty else { return }
         cancelScheduledHide()
         setVisible(false)
     }
@@ -162,6 +169,9 @@ final class PlayerHUDVisibilityCoordinator {
             return
         }
         setInteraction(.menuTracking, active: false, canAutoHide: canAutoHide)
+        if lastPointerLocation == nil {
+            hideOnPointerExit()
+        }
     }
 
     func cancel() {

@@ -44,7 +44,7 @@ private struct ProfileHeader: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            RemoteImage(url: avatarURL, authHeader: nil)
+            RemoteImage(url: avatarURL, authHeader: nil, maxPixelSize: 240)
                 .frame(width: 72, height: 72)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             VStack(alignment: .leading, spacing: 4) {
@@ -164,7 +164,7 @@ private struct CollectionTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            RemoteImage(url: coverURL, authHeader: nil)
+            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: 84, height: 126)
                 .clipShape(RoundedRectangle(cornerRadius: 8))

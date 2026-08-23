@@ -82,8 +82,7 @@ struct PlayerScreen: View {
                     onCapture: captureNow,
                     onShare: shareNow,
                     onInteractionChanged: handleHUDInteraction,
-                    onUserInteraction: revealControls,
-                    onMenuPresented: holdControlsForMenu
+                    onUserInteraction: revealControls
                 )
                 .opacity(hudVisibility.isVisible ? 1 : 0)
                 .allowsHitTesting(hudVisibility.isVisible)
@@ -204,7 +203,7 @@ struct PlayerScreen: View {
         }
         // 系统「正在播放」的进度：跟着**整秒**才变的 displayPosition 走，约 1 Hz，
         // 顺带覆盖 seek / 变速这些不改 state 的路径。
-        .onChange(of: controller.state.displayPosition) {
+        .onChange(of: controller.state.timeline.displayPosition) {
             controller.syncSystemPlaybackState()
         }
         // 标题要等 AppModel 的 nowPlayingItem 到位才拼得出来，所以单独跟一次。
@@ -275,10 +274,6 @@ struct PlayerScreen: View {
             active: active,
             canAutoHide: canAutoHideControls
         )
-    }
-
-    private func holdControlsForMenu() {
-        hudVisibility.holdForMenu(canAutoHide: canAutoHideControls)
     }
 
     /// 播放、拖动、缓冲和辅助面板都由同一条规则决定 HUD 是否可以自动收起。

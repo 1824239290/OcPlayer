@@ -334,10 +334,11 @@ extension AppModel {
         retryPlaybackItem = nil
         let stopped = finishReporting()   // 退出播放器 → Stopped，服务器记下续播位置
         presentedPlayer = nil
-        // 等 Stopped 上报落库后刷新首页，让「继续观看」立刻反映刚退出的进度。
+        // 等 Stopped 上报落库后刷新首页与详情页，让「继续观看」和打开中的详情页立刻反映刚退出的进度。
         Task {
             await stopped?.value
             await loadHome()
+            self.detailRefreshGeneration &+= 1
         }
     }
 

@@ -495,7 +495,7 @@ private struct ProgressCard: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil)
+            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: 56, height: 84)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -680,7 +680,7 @@ private struct SearchResultRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil)
+            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 200)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: 44, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 6))

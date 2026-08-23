@@ -100,7 +100,7 @@ private struct CollectionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil)
+            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 240)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: 48, height: 68)
                 .clipShape(RoundedRectangle(cornerRadius: 6))

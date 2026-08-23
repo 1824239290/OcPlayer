@@ -82,6 +82,9 @@ struct DetailView: View {
         #endif
         .background(Color.pageBackground.ignoresSafeArea())
         .task(id: item.id) { await load() }
+        .onChange(of: app.detailRefreshGeneration) { _, _ in
+            Task { await reloadAfterPlayback() }
+        }
     }
 
     /// 详情页骨架：**和真实内容同结构**——banner（含左下海报 + 标题/元数据/播放钮）
@@ -658,6 +661,31 @@ struct DetailView: View {
         }
         isLoading = false
         similar = (try? await similarItems) ?? []
+    }
+
+    /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
+    private func reloadAfterPlayback() async {
+        guard let server = app.server else { return }
+        if let loaded = try? await server.item(item.id) {
+            detail = loaded
+        }
+        if shown.kind == .series {
+            // 清理旧缓存，拉取当前季最新的播放进度
+            episodesBySeason.removeAll()
+            if let seasonID = selectedSeasonID {
+                if let loaded = try? await server.episodes(seriesID: shown.id, seasonID: seasonID) {
+                    episodesBySeason[seasonID] = loaded
+                    episodes = loaded
+                    if let currentID = selectedEpisodeID, loaded.contains(where: { $0.id == currentID }) {
+                        // 保持选中集，其 playState 已经更新为最新的
+                    } else {
+                        let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
+                        selectedEpisodeID = preferred
+                        episodeScrollFocusID = preferred
+                    }
+                }
+            }
+        }
     }
 
     private func loadEpisodes() async {

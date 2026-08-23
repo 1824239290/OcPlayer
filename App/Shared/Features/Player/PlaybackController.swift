@@ -71,6 +71,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var danmakuBlockScroll = PlaybackPreferences.danmakuBlockScroll
     var danmakuMergeDuplicates = PlaybackPreferences.danmakuMergeDuplicates
     var danmakuAllowStacking = PlaybackPreferences.danmakuAllowStacking
+    var danmakuFontSize = PlaybackPreferences.danmakuFontSize
     var danmakuGlobalOffsetSeconds = 0.0
 
     /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay（内核弹幕不装载），
@@ -103,6 +104,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
         danmakuOverlay.playbackStateProvider = { [weak self] in
             guard let self else { return nil }
             return (self.state.state == .playing, self.state.isBuffering)
+        }
+        danmakuOverlay.update {
+            $0.enabled = danmakuEnabled
+            $0.opacity = danmakuOpacity
+            $0.displayArea = danmakuDisplayArea
+            $0.blockTop = danmakuBlockTop
+            $0.blockBottom = danmakuBlockBottom
+            $0.blockScroll = danmakuBlockScroll
+            $0.allowStacking = danmakuAllowStacking
+            $0.fontSize = danmakuFontSize
         }
     }
 

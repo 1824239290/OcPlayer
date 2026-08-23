@@ -14,10 +14,15 @@ struct PlayerHUDDanmakuMenu: View {
     @Binding var isSelectingDanmaku: Bool
     let controlSide: CGFloat
     let onUserInteraction: () -> Void
-    let onMenuPresented: () -> Void
 
     private let opacities = [0.25, 0.5, 0.75, 1.0]
     private let displayAreas = [0.25, 0.5, 0.75, 1.0]
+    private let fontSizes: [(String, Double)] = [
+        ("小", 18),
+        ("标准", 22),
+        ("大", 26),
+        ("特大", 30),
+    ]
 
     var body: some View {
         Menu {
@@ -65,47 +70,69 @@ struct PlayerHUDDanmakuMenu: View {
                 }
             }
 
-            Menu("不透明度") {
+            Picker("不透明度", selection: Binding(
+                get: { controller.danmakuOpacity },
+                set: {
+                    controller.setDanmakuOpacity($0)
+                    onUserInteraction()
+                }
+            )) {
                 ForEach(opacities, id: \.self) { value in
-                    Button {
-                        controller.setDanmakuOpacity(value)
-                        onUserInteraction()
-                    } label: {
-                        optionLabel(
-                            "\(Int(value * 100))%",
-                            selected: abs(controller.danmakuOpacity - value) < 0.001
-                        )
-                    }
+                    Text("\(Int(value * 100))%").tag(value)
                 }
             }
+            .pickerStyle(.inline)
 
-            Menu("显示区域") {
+            Picker("显示区域", selection: Binding(
+                get: { controller.danmakuDisplayArea },
+                set: {
+                    controller.setDanmakuDisplayArea($0)
+                    onUserInteraction()
+                }
+            )) {
                 ForEach(displayAreas, id: \.self) { value in
-                    Button {
-                        controller.setDanmakuDisplayArea(value)
-                        onUserInteraction()
-                    } label: {
-                        optionLabel(
-                            "顶部 \(Int(value * 100))%",
-                            selected: abs(controller.danmakuDisplayArea - value) < 0.001
-                        )
-                    }
+                    Text("顶部 \(Int(value * 100))%").tag(value)
                 }
             }
+            .pickerStyle(.inline)
 
-            Menu("弹幕类型") {
+            Picker("字号大小", selection: Binding(
+                get: { controller.danmakuFontSize },
+                set: {
+                    controller.setDanmakuFontSize($0)
+                    onUserInteraction()
+                }
+            )) {
+                ForEach(fontSizes, id: \.1) { item in
+                    Text(item.0).tag(item.1)
+                }
+            }
+            .pickerStyle(.inline)
+
+            Section {
                 Toggle("滚动", isOn: Binding(
                     get: { !controller.danmakuBlockScroll },
-                    set: { controller.setDanmakuBlocked(scroll: !$0) }
+                    set: {
+                        controller.setDanmakuBlocked(scroll: !$0)
+                        onUserInteraction()
+                    }
                 ))
                 Toggle("顶部", isOn: Binding(
                     get: { !controller.danmakuBlockTop },
-                    set: { controller.setDanmakuBlocked(top: !$0) }
+                    set: {
+                        controller.setDanmakuBlocked(top: !$0)
+                        onUserInteraction()
+                    }
                 ))
                 Toggle("底部", isOn: Binding(
                     get: { !controller.danmakuBlockBottom },
-                    set: { controller.setDanmakuBlocked(bottom: !$0) }
+                    set: {
+                        controller.setDanmakuBlocked(bottom: !$0)
+                        onUserInteraction()
+                    }
                 ))
+            } header: {
+                Text("弹幕类型")
             }
 
             Divider()
@@ -136,16 +163,6 @@ struct PlayerHUDDanmakuMenu: View {
         .help("弹幕")
         .accessibilityLabel("弹幕")
         .accessibilityValue(accessibilityValue)
-        .simultaneousGesture(TapGesture().onEnded { onMenuPresented() })
-    }
-
-    @ViewBuilder
-    private func optionLabel(_ title: String, selected: Bool) -> some View {
-        if selected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
     }
 
     private var offsetLabel: String {

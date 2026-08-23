@@ -104,7 +104,7 @@ struct MoviePilotHomeView: View {
                 NavigationLink {
                     MoviePilotDownloadsView()
                 } label: {
-                    Label("下载中", systemImage: "arrow.down.circle")
+                    Label("下载管理", systemImage: "arrow.down.circle")
                 }
             }
         }
@@ -112,7 +112,7 @@ struct MoviePilotHomeView: View {
 
     private func resultRow(_ media: MPMediaInfo) -> some View {
         HStack(spacing: 12) {
-            RemoteImage(url: media.posterURL, authHeader: nil)
+            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 300)
                 .frame(width: 46, height: 69)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             VStack(alignment: .leading, spacing: 4) {

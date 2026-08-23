@@ -40,6 +40,7 @@ extension PlaybackController {
                         $0.blockScroll = danmakuBlockScroll
                         $0.allowStacking = danmakuAllowStacking
                         $0.offsetSeconds = danmakuGlobalOffsetSeconds
+                        $0.fontSize = danmakuFontSize
                     }
                     danmakuOverlay.replace(
                         json: json,
@@ -143,6 +144,12 @@ extension PlaybackController {
         PlaybackPreferences.danmakuAllowStacking = enabled
         if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.allowStacking = enabled } }
         updateDanmakuConfig { $0.allowStacking = enabled }
+    }
+
+    func setDanmakuFontSize(_ size: Double) {
+        danmakuFontSize = size.clamped(14...36)
+        PlaybackPreferences.danmakuFontSize = danmakuFontSize
+        if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.fontSize = danmakuFontSize } }
     }
 
     func adjustDanmakuOffset(by seconds: Double) {

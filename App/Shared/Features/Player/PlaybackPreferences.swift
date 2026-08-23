@@ -15,6 +15,7 @@ enum PlaybackPreferences {
     private static let danmakuBlockScrollKey = "dev.jumusu.ocplayer.danmaku.blockScroll"
     private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
     private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
+    private static let danmakuFontSizeKey = "dev.jumusu.ocplayer.danmaku.fontSize"
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -68,6 +69,10 @@ enum PlaybackPreferences {
     static var danmakuAllowStacking: Bool {
         get { storedBool(forKey: danmakuAllowStackingKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
+    }
+    static var danmakuFontSize: Double {
+        get { storedDouble(forKey: danmakuFontSizeKey, range: 14...36, default: 22.0) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuFontSizeKey) }
     }
 
     /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。

@@ -13,6 +13,7 @@ struct BangumiChapterSection: View {
     /// 当前详情页的 Jellyfin 条目。
     let item: MediaItem
 
+    @Environment(AppModel.self) private var app
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(\.contentLeading) private var contentLeading
 
@@ -53,6 +54,9 @@ struct BangumiChapterSection: View {
             }
             .padding(.horizontal, contentLeading)
             .task(id: "\(item.id)-\(loadToken)-\(bangumi.isDatabaseReady)") { await load() }
+            .onChange(of: app.detailRefreshGeneration) { _, _ in
+                loadToken += 1
+            }
             .sheet(isPresented: $showLinkPicker) {
                 BangumiLinkPicker(item: item) { subjectID in
                     BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)

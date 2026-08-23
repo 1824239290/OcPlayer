@@ -33,8 +33,8 @@ struct MoviePilotResourceView: View {
     @State private var notice: String?
     @State private var isNoticeError = false
     @State private var addingDownloadID: String?
-    /// 添加下载成功后弹出下载进度页。
-    @State private var showDownloadsAfterAdd = false
+    /// 添加下载成功后直接推入下载管理页。
+    @State private var navigateToDownloads = false
 
     init(media: MPMediaInfo) {
         self.media = media
@@ -122,20 +122,8 @@ struct MoviePilotResourceView: View {
                 filters: $filters
             )
         }
-        // 添加成功跳转：用 sheet 而不是 push——本页既出现在找片分区栈里，
-        // 也出现在详情页栈里（还有 iPhone 的 sheet 栈），sheet 三处通用。
-        .sheet(isPresented: $showDownloadsAfterAdd) {
-            NavigationStack {
-                MoviePilotDownloadsView()
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("关闭") { showDownloadsAfterAdd = false }
-                        }
-                    }
-            }
-            #if os(macOS)
-            .frame(width: 580, height: 540)
-            #endif
+        .navigationDestination(isPresented: $navigateToDownloads) {
+            MoviePilotDownloadsView()
         }
     }
 
@@ -398,7 +386,7 @@ struct MoviePilotResourceView: View {
                 try await MoviePilotAPIClient.shared.addDownload(media: media, torrent: torrent)
                 notice = "已添加下载；完成后 MoviePilot 会自动整理入库到 Jellyfin"
                 isNoticeError = false
-                showDownloadsAfterAdd = true
+                navigateToDownloads = true
             } catch {
                 notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
                 isNoticeError = true

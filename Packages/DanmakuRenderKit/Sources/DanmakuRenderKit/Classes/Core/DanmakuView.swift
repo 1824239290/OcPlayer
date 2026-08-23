@@ -284,7 +284,7 @@ public class DanmakuView: PlatformView {
     
 #if os(macOS)
     public override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden, alphaValue > 0 else { return nil }
+        guard enableHoverTracking, !isHidden, alphaValue > 0 else { return nil }
         guard self.bounds.contains(point) else { return nil }
         for sub in subviews.reversed() {
             var local = self.convert(point, to: sub)
@@ -293,25 +293,38 @@ public class DanmakuView: PlatformView {
             }
             if let found = sub.hitTest(local) { return found }
         }
-        return self
+        return nil
     }
     
+    public var enableHoverTracking: Bool = false {
+        didSet {
+            setupHoverTracking()
+        }
+    }
+
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.acceptsMouseMovedEvents = true
-        setupHoverTracking()
+        if enableHoverTracking {
+            window?.acceptsMouseMovedEvents = true
+            setupHoverTracking()
+        }
     }
     
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        setupHoverTracking()
+        if enableHoverTracking {
+            setupHoverTracking()
+        } else {
+            trackingAreas.forEach { removeTrackingArea($0) }
+        }
     }
     
     private func setupHoverTracking() {
         trackingAreas.forEach { removeTrackingArea($0) }
+        guard enableHoverTracking else { return }
         let area = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
