@@ -60,6 +60,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     var danmakuTracks: [DanmakuTrackInfo] = []
+    /// 章节与跳过判定(当前源)。
+    var chapterSession = ChapterSession()
     /// 外挂字幕轨道 id → 显示名（Jellyfin 侧车字幕的标题）。内核不带名字，
     /// App 层在下载时记录；换源 / 拆引擎时清空（见 resetEngine）。
     var externalSubtitleNames: [Int64: String] = [:]
@@ -568,6 +570,7 @@ try engine.play()
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
         externalSubtitleNames = [:]
+        chapterSession.reset()
         // engine 没了就一定不在播，息屏令牌和系统登记立刻还回去（stopPlayback 也经过这里）。
         syncSystemPlaybackState()
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
@@ -605,6 +608,127 @@ try engine.play()
         guard let engine else { return }
         let target = Double(state.position.microseconds) + seconds * 1_000_000
         try? engine.seek(to: .microseconds(Int64(max(0, target))))
+    }
+
+    // MARK: - 章节 / 跳过片头片尾
+
+    /// 当前应展示的「跳过」提示(由 UI 在 position 变化时读取)。
+    var currentSkipPrompt: SkipPrompt? {
+        chapterSession.prompt(
+            at: Double(state.position.microseconds) / 1_000_000,
+            duration: Double(state.duration.microseconds) / 1_000_000,
+            isPlaying: state.state == .playing
+        )
+    }
+
+    /// 跳到某个章节起点。
+    func seek(toChapter chapter: PlaybackChapter) {
+        guard let engine else { return }
+        try? engine.seek(to: .seconds(max(0, chapter.startSeconds)))
+    }
+
+    /// 处理当前「跳过」提示并跳到段末 / 接近结尾。
+    func performSkip() {
+        guard let prompt = currentSkipPrompt else { return }
+        let target: Double
+        switch prompt {
+        case .mark(let mark):
+            target = mark.endSeconds
+            chapterSession.noteSkipped(mark)
+            PlaybackLog.append("跳过 \(mark.kind) → \(target)s")
+        case .endCredits(let position):
+            let duration = Double(state.duration.microseconds) / 1_000_000
+            // 跳到片尾结束前 20 秒,保留一点尾声画面。
+            target = max(duration - 20, position)
+            PlaybackLog.append("保底跳过片尾 → \(target)s")
+        }
+        try? engine?.seek(to: .seconds(max(0, target)))
+    }
+
+    /// 章节列表(供 UI 的章节面板用)。
+    var chapters: [PlaybackChapter] { chapterSession.chapters }
+
+    /// 加载当前源的章节与可跳过片段。
+    ///
+    /// - 优先拉 MediaSegments(智能片头 / 片尾识别);失败(老版本 / 禁用)静默回退。
+    /// - 章节列表走 `Chapters` field;从 MediaSegments 拿到的 Intro / Outro 优先作为
+    ///   `skipMarks`(比名字启发式准),否则用章节列表跑 `ChapterNameHeuristicEvaluator`。
+    /// - 用 `source` 做代次守卫:换片 / 重开自动失效,不会把上一集的章节串进来。
+    ///
+    /// 在 `@MainActor` 上调用(控制器本身就是 @MainActor)。
+    func loadChapters(server: JellyfinKit.JellyfinServer, for request: PlaybackRequest) async {
+        guard let itemID = request.sessionContext?.itemID else {
+            // 本地文件 / 无 item 时没有服务端章节,仅保留 90s 保底条,静默。
+            return
+        }
+        let source = PlaybackSourceGeneration(requestID: request.id, value: sourceGeneration)
+
+        // 章节列表。
+        let fetchedChapters: [PlaybackChapter]
+        do {
+            let raw = try await server.chapters(itemID: itemID)
+            fetchedChapters = buildChapters(from: raw)  // tick→秒,补 end
+        } catch {
+            PlaybackLog.append("章节拉取失败,仅保底:\(error)")
+            fetchedChapters = []
+        }
+        guard !Task.isCancelled, currentSourceMatches(source) else { return }
+
+        // 可跳过片段:优先 MediaSegments,回退章节启发式。
+        let segmentMarks: [SkipMark]
+        do {
+            let segments = try await server.mediaSegments(itemID: itemID)
+            segmentMarks = segments.map { segment in
+                let skipKind: SkipKind = segment.kind == .intro ? .opening : .credits
+                return SkipMark(
+                    id: "\(segment.kind.rawValue)-\(segment.id)",
+                    kind: skipKind,
+                    startSeconds: segment.startSeconds,
+                    endSeconds: segment.endSeconds
+                )
+            }
+        } catch {
+            segmentMarks = []
+        }
+        guard !Task.isCancelled, currentSourceMatches(source) else { return }
+
+        let total = Double(state.duration.microseconds) / 1_000_000
+        let skipMarks: [SkipMark]
+        if !segmentMarks.isEmpty {
+            skipMarks = segmentMarks
+        } else {
+            skipMarks = ChapterNameHeuristicEvaluator()
+                .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0))
+        }
+        guard currentSourceMatches(source) else { return }
+
+        chapterSession.chapters = fetchedChapters
+        chapterSession.skipMarks = skipMarks
+        PlaybackLog.append("章节加载 chapters=\(fetchedChapters.count) skips=\(skipMarks.count)")
+    }
+
+    @discardableResult
+    private func currentSourceMatches(_ source: PlaybackSourceGeneration) -> Bool {
+        source.value == sourceGeneration
+            && source.requestID == activeRequest?.id
+            && expectedRequestID == source.requestID
+    }
+
+    /// 把 Jellyfin 章节(tick→秒)补上结束边界变成 UI 章节列表。
+    private func buildChapters(from raw: [JellyfinKit.JellyfinChapter]) -> [PlaybackChapter] {
+        raw.enumerated().map { index, jchapter in
+            var nextStart: Double?
+            let nextIndex = raw.index(raw.startIndex, offsetBy: index + 1)
+            if index + 1 < raw.count {
+                nextStart = raw[nextIndex].startSeconds
+            }
+            return PlaybackChapter(
+                id: index,
+                name: jchapter.name,
+                startSeconds: jchapter.startSeconds,
+                endSeconds: nextStart
+            )
+        }
     }
 
     func applyRate(_ newRate: Double) {

@@ -184,6 +184,7 @@ extension AppModel {
         nowPlayingItem = item
         startReporting(item: item, resumeSeconds: resumeSeconds, request: request)
         startDanmaku(for: request, item: item)
+        loadChapterMetadata(for: request, item: item)
     }
 
     /// 等 playback 内核真正渲染出首帧再撤 loading 层：state 到 ready/playing 只代表
@@ -281,7 +282,29 @@ extension AppModel {
         startDanmaku(for: request, item: nil)
     }
 
-    func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
+    /// 异步加载当前源的章节与可跳过片段(耗时网络请求,不阻塞呈现)。
+    /// 只对 Jellyfin 源生效(有 sessionContext.itemID);本地文件静默跳过。
+    /// 用 activePlaybackIdentity 做守卫,换片 / 退出自动失效。
+    func loadChapterMetadata(for request: PlaybackRequest, item: MediaItem) {
+        guard item.kind != .series, item.kind != .season,
+              let server,
+              let itemID = request.sessionContext?.itemID else { return }
+        let identity = ActivePlaybackIdentity(
+            sessionGeneration: sessionGeneration,
+            itemID: item.id,
+            requestID: request.id
+        )
+        Task { @MainActor [weak self, weak playback] in
+            guard let self, let playback,
+                  self.activePlaybackIdentity == identity,
+                  self.presentedPlayer?.id == request.id,
+                  !Task.isCancelled
+            else { return }
+            await playback.loadChapters(server: server, for: request)
+        }
+    }
+
+func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
         let context: DanmakuPlaybackContext
         if let item, let server {
             context = .jellyfin(

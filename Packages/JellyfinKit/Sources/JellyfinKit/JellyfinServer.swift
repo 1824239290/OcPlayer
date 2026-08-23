@@ -209,10 +209,26 @@ public struct JellyfinServer: Sendable {
             path: "/Items/\(id)",
             query: [
                 ("userId", profile.userID),
-                ("fields", "People,Genres,Overview"),
+                ("fields", "People,Genres,Overview,Chapters"),
             ]
         )
         return try await send(request).domainItem
+    }
+
+    /// 拉取条目的章节列表(`BaseItemDto.chapters`)。
+    /// 与 `item(id:)` 走同一个 `Chapters` field,但省掉 People / 演员等无关数据。
+    public func chapters(itemID: String) async throws -> [JellyfinChapter] {
+        let request = Request<BaseItemDto>(
+            path: "/Items/\(itemID)",
+            query: [
+                ("userId", profile.userID),
+                ("fields", "Chapters"),
+            ]
+        )
+        let dto = try await send(request)
+        return (dto.chapters ?? []).enumerated().map { index, info in
+            JellyfinChapter(info, index: index)
+        }
     }
 
     /// 媒体库单页结果。`totalRecordCount` 来自服务端；未知时为 nil。
