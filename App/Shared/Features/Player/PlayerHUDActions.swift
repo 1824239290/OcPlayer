@@ -7,7 +7,7 @@ import SwiftUI
 import AppKit
 #endif
 
-enum PlayerHUDActionTab: String, CaseIterable, Identifiable {
+enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
     case danmaku = "弹幕"
     case subtitle = "字幕"
     case audio = "音轨"
@@ -26,6 +26,8 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable {
 }
 
 struct PlayerHUDActionsCapsule: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showStats: Bool
@@ -50,162 +52,153 @@ struct PlayerHUDActionsCapsule: View {
         #endif
     }
 
+    private var animation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.35)
+    }
+
     var body: some View {
         Group {
             if #available(macOS 26.0, iOS 26.0, *) {
-                GlassEffectContainer {
-                    morphingSurface
+                GlassEffectContainer(spacing: 8) {
+                    contentView
                 }
             } else {
-                morphingSurface
+                contentView
             }
         }
+        .animation(animation, value: expandedTab)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("播放选项")
     }
 
     @ViewBuilder
-    private var morphingSurface: some View {
-        if let selectedTab = expandedTab {
-            expandedCard(for: selectedTab)
-        } else {
-            compactCapsule
+    private var contentView: some View {
+        ZStack(alignment: .bottomTrailing) {
+            if let tab = expandedTab {
+                expandedCard(for: tab)
+            } else {
+                compactButtonBar
+            }
         }
     }
 
-    private var compactCapsule: some View {
-        PlayerHUDGlassSurface(in: Capsule()) {
-            HStack(spacing: 0) {
-                PlayerHUDCompactActionButton(
-                    tab: .danmaku,
+    private var compactButtonBar: some View {
+        HStack(spacing: 8) {
+            ForEach(PlayerHUDActionTab.allCases) { tab in
+                PlayerHUDInteractiveGlassButton(
+                    tab: tab,
                     controlSide: controlSide,
-                    action: { selectTab(.danmaku) }
+                    namespace: morphAnimation,
+                    action: { selectTab(tab) }
                 )
-                PlayerHUDCompactActionButton(
-                    tab: .subtitle,
-                    controlSide: controlSide,
-                    action: { selectTab(.subtitle) }
-                )
-                PlayerHUDCompactActionButton(
-                    tab: .audio,
-                    controlSide: controlSide,
-                    action: { selectTab(.audio) }
-                )
-                PlayerHUDCompactActionButton(
-                    tab: .more,
-                    controlSide: controlSide,
-                    action: { selectTab(.more) }
-                )
+                .transition(.scale(scale: 0.7).combined(with: .opacity))
             }
-            .padding(4)
-            .fixedSize(horizontal: true, vertical: true)
         }
-        .matchedGeometryEffect(id: "hudActionSurface", in: morphAnimation)
-        .playerHUDGlassEffectID("hudActionSurface", in: morphAnimation)
-        .fixedSize(horizontal: true, vertical: true)
     }
 
     private func expandedCard(for tab: PlayerHUDActionTab) -> some View {
-        PlayerHUDGlassSurface(in: RoundedRectangle(cornerRadius: 22, style: .continuous)) {
-            VStack(spacing: 0) {
-                // 顶部标题、Tab 快捷切换与关闭按钮
-                HStack(spacing: 10) {
-                    Image(systemName: tab.iconName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(PlayerHUDPalette.primary)
-                    Text(tab.rawValue)
-                        .font(.headline)
-                        .foregroundStyle(PlayerHUDPalette.primary)
+        VStack(spacing: 0) {
+            // 顶栏：图标、标题、快速切换与关闭按钮
+            HStack(spacing: 10) {
+                Image(systemName: tab.iconName)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(PlayerHUDPalette.primary)
+                Text(tab.rawValue)
+                    .font(.headline)
+                    .foregroundStyle(PlayerHUDPalette.primary)
 
-                    Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-                    // 快速切换其它 Tab
-                    HStack(spacing: 4) {
-                        ForEach(PlayerHUDActionTab.allCases) { item in
-                            Button {
-                                withAnimation(.smooth(duration: 0.25)) {
-                                    expandedTab = item
-                                }
-                                onUserInteraction()
-                            } label: {
-                                Image(systemName: item.iconName)
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(item == tab ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
-                                    .frame(width: 26, height: 26)
-                                    .background(
-                                        item == tab ? Color.white.opacity(0.18) : Color.clear,
-                                        in: Circle()
-                                    )
+                // 快速切换其它 Tab
+                HStack(spacing: 4) {
+                    ForEach(PlayerHUDActionTab.allCases) { item in
+                        Button {
+                            withAnimation(.smooth(duration: 0.25)) {
+                                expandedTab = item
                             }
-                            .buttonStyle(.plain)
-                            .help(item.rawValue)
+                            onUserInteraction()
+                        } label: {
+                            Image(systemName: item.iconName)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(item == tab ? PlayerHUDPalette.primary : PlayerHUDPalette.tertiary)
+                                .frame(width: 26, height: 26)
+                                .background(
+                                    item == tab ? Color.white.opacity(0.18) : Color.clear,
+                                    in: Circle()
+                                )
                         }
+                        .buttonStyle(.plain)
+                        .help(item.rawValue)
                     }
-
-                    // 关闭形变卡片
-                    Button {
-                        closeExpanded()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 18))
-                            .foregroundStyle(PlayerHUDPalette.secondary)
-                            .frame(width: 28, height: 28)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("收起")
-                    .accessibilityLabel("收起控制面板")
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
 
-                Divider()
-                    .overlay(PlayerHUDPalette.outline)
-
-                // 各功能模块内容
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        switch tab {
-                        case .danmaku:
-                            PlayerHUDDanmakuPanelContent(
-                                isSelectingDanmaku: $isSelectingDanmaku,
-                                onUserInteraction: onUserInteraction
-                            )
-                        case .subtitle:
-                            PlayerHUDSubtitlePanelContent(
-                                isImportingSubtitle: $isImportingSubtitle,
-                                onUserInteraction: onUserInteraction
-                            )
-                        case .audio:
-                            PlayerHUDAudioPanelContent(
-                                onUserInteraction: onUserInteraction
-                            )
-                        case .more:
-                            PlayerHUDMorePanelContent(
-                                showStats: $showStats,
-                                showInfoCard: $showInfoCard,
-                                shareURL: shareURL,
-                                isFullscreen: isFullscreen,
-                                onToggleFullscreen: onToggleFullscreen,
-                                onCapture: onCapture,
-                                onShare: onShare,
-                                onUserInteraction: onUserInteraction
-                            )
-                        }
-                    }
-                    .padding(16)
+                // 关闭形变卡片
+                Button {
+                    closeExpanded()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(PlayerHUDPalette.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
                 }
-                .frame(maxHeight: 320)
+                .buttonStyle(.plain)
+                .help("收起")
+                .accessibilityLabel("收起控制面板")
             }
-            .frame(width: 320)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+
+            Divider()
+                .overlay(PlayerHUDPalette.outline)
+
+            // 各功能模块内容
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    switch tab {
+                    case .danmaku:
+                        PlayerHUDDanmakuPanelContent(
+                            isSelectingDanmaku: $isSelectingDanmaku,
+                            onUserInteraction: onUserInteraction
+                        )
+                    case .subtitle:
+                        PlayerHUDSubtitlePanelContent(
+                            isImportingSubtitle: $isImportingSubtitle,
+                            onUserInteraction: onUserInteraction
+                        )
+                    case .audio:
+                        PlayerHUDAudioPanelContent(
+                            onUserInteraction: onUserInteraction
+                        )
+                    case .more:
+                        PlayerHUDMorePanelContent(
+                            showStats: $showStats,
+                            showInfoCard: $showInfoCard,
+                            shareURL: shareURL,
+                            isFullscreen: isFullscreen,
+                            onToggleFullscreen: onToggleFullscreen,
+                            onCapture: onCapture,
+                            onShare: onShare,
+                            onUserInteraction: onUserInteraction
+                        )
+                    }
+                }
+                .padding(16)
+            }
+            .frame(maxHeight: 320)
         }
-        .matchedGeometryEffect(id: "hudActionSurface", in: morphAnimation)
-        .playerHUDGlassEffectID("hudActionSurface", in: morphAnimation)
+        .frame(width: 320)
+        .playerHUDGlassCard(
+            cornerRadius: 22,
+            id: tab.id,
+            namespace: morphAnimation
+        )
+        .transition(.identity)
     }
 
     private func selectTab(_ tab: PlayerHUDActionTab) {
-        withAnimation(.smooth(duration: 0.35)) {
+        withAnimation(animation) {
             expandedTab = tab
         }
         onInteractionChanged(.menuTracking, true)
@@ -213,7 +206,7 @@ struct PlayerHUDActionsCapsule: View {
     }
 
     private func closeExpanded() {
-        withAnimation(.smooth(duration: 0.3)) {
+        withAnimation(animation) {
             expandedTab = nil
         }
         onInteractionChanged(.menuTracking, false)
@@ -221,12 +214,14 @@ struct PlayerHUDActionsCapsule: View {
     }
 }
 
-// MARK: - Compact Buttons
+// MARK: - Interactive Glass Action Button
 
-struct PlayerHUDCompactActionButton: View {
+struct PlayerHUDInteractiveGlassButton: View {
     @Environment(PlaybackController.self) private var controller
+
     let tab: PlayerHUDActionTab
     let controlSide: CGFloat
+    let namespace: Namespace.ID
     let action: () -> Void
 
     var body: some View {
@@ -238,9 +233,14 @@ struct PlayerHUDCompactActionButton: View {
                 .opacity(isActive ? 1 : 0.45)
                 .animation(.easeInOut(duration: 0.2), value: isActive)
                 .frame(width: controlSide, height: controlSide)
-                .contentShape(Rectangle())
+                .contentShape(Circle())
         }
-        .buttonStyle(PlayerHUDCompactButtonStyle())
+        .buttonStyle(PlayerHUDInteractiveButtonStyle())
+        .playerHUDGlassButton(
+            in: Circle(),
+            id: tab.id,
+            namespace: namespace
+        )
         .help(tab.rawValue)
         .accessibilityLabel(tab.rawValue)
     }
@@ -270,11 +270,11 @@ struct PlayerHUDCompactActionButton: View {
     }
 }
 
-struct PlayerHUDCompactButtonStyle: ButtonStyle {
+struct PlayerHUDInteractiveButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .opacity(configuration.isPressed ? 0.75 : 1)
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
@@ -327,7 +327,7 @@ struct PlayerHUDDanmakuPanelContent: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
-                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
 
@@ -340,7 +340,7 @@ struct PlayerHUDDanmakuPanelContent: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
-                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -541,7 +541,7 @@ struct PlayerHUDSubtitlePanelContent: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .buttonStyle(.plain)
 
@@ -703,7 +703,7 @@ struct PlayerHUDMorePanelContent: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -716,7 +716,7 @@ struct PlayerHUDMorePanelContent: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -730,7 +730,7 @@ struct PlayerHUDMorePanelContent: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -742,7 +742,7 @@ struct PlayerHUDMorePanelContent: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -767,7 +767,7 @@ struct PlayerHUDOptionButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .background(
                 isSelected ? Color.white : Color.white.opacity(0.1),
-                in: RoundedRectangle(cornerRadius: 7)
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .opacity(configuration.isPressed ? 0.7 : 1)
             .animation(.easeInOut(duration: 0.15), value: isSelected)
@@ -782,7 +782,7 @@ struct PlayerHUDMiniButtonStyle: ButtonStyle {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
+            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
@@ -809,7 +809,7 @@ struct PlayerHUDToggleChip: View {
             .frame(maxWidth: .infinity)
             .background(
                 isOn ? Color.white : Color.white.opacity(0.1),
-                in: RoundedRectangle(cornerRadius: 8)
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -846,7 +846,7 @@ struct PlayerHUDTrackSelectionRow: View {
             .padding(.vertical, 7)
             .background(
                 isSelected ? Color.white.opacity(0.16) : Color.white.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 8)
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
         }
         .buttonStyle(.plain)
@@ -866,17 +866,85 @@ struct DanmakuStatusBadge: View {
     }
 }
 
-// MARK: - Glass Effect ID Helper
+// MARK: - Liquid Glass View Modifiers
 
 extension View {
     @ViewBuilder
-    func playerHUDGlassEffectID(_ id: some Hashable & Sendable, in namespace: Namespace.ID) -> some View {
+    func playerHUDGlassCard(
+        cornerRadius: CGFloat = 22,
+        id: (some Hashable & Sendable)? = nil,
+        namespace: Namespace.ID? = nil
+    ) -> some View {
         if #available(macOS 26.0, iOS 26.0, *) {
-            self.glassEffectID(id, in: namespace)
+            if let id, let namespace {
+                self
+                    .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
+                    .glassEffectID(id, in: namespace)
+                    .matchedGeometryEffect(id: id, in: namespace)
+            } else {
+                self
+                    .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
+            }
         } else {
-            self
+            if let id, let namespace {
+                self
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
+                    }
+                    .matchedGeometryEffect(id: id, in: namespace)
+            } else {
+                self
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
+                    }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func playerHUDGlassButton(
+        in shape: some Shape = Circle(),
+        id: (some Hashable & Sendable)? = nil,
+        namespace: Namespace.ID? = nil
+    ) -> some View {
+        if #available(macOS 26.0, iOS 26.0, *) {
+            if let id, let namespace {
+                self
+                    .glassEffect(.regular.interactive(), in: shape)
+                    .glassEffectID(id, in: namespace)
+                    .matchedGeometryEffect(id: id, in: namespace)
+            } else {
+                self
+                    .glassEffect(.regular.interactive(), in: shape)
+            }
+        } else {
+            if let id, let namespace {
+                self
+                    .background(.ultraThinMaterial, in: shape)
+                    .overlay {
+                        shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
+                    }
+                    .matchedGeometryEffect(id: id, in: namespace)
+            } else {
+                self
+                    .background(.ultraThinMaterial, in: shape)
+                    .overlay {
+                        shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
+                    }
+            }
         }
     }
 }
+
 
 
