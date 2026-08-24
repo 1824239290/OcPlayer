@@ -127,17 +127,25 @@ public enum BangumiURL {
         }
     }
 
-    /// 把 lain.bgm.tv 的图床地址重写到当前镜像的图片域名（仅当 host 匹配 CDN 时）。
+    /// 把 lain.bgm.tv 的图床地址重写到当前镜像的图片域名（仅当 host 匹配 CDN 时），并强制使用 HTTPS。
     public static nonisolated func imageURLString(from rawValue: String) -> String {
-        guard var components = URLComponents(string: rawValue),
-              components.host == CDN_DOMAIN
-        else { return rawValue }
-        guard let imageHost = BangumiDomains.hostAndPort(from: domains.image) else {
-            return rawValue
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return rawValue }
+        let candidate = trimmed.hasPrefix("//") ? "https:\(trimmed)" : trimmed
+        guard var components = URLComponents(string: candidate) else { return rawValue }
+
+        // 统一强制为 HTTPS，避免 HTTP 明文被 Apple ATS 拦截
+        if components.scheme == "http" || components.scheme == nil {
+            components.scheme = HTTPS
         }
-        components.host = imageHost.host
-        components.port = imageHost.port
-        return components.url?.absoluteString ?? rawValue
+
+        if components.host == CDN_DOMAIN {
+            if let imageHost = BangumiDomains.hostAndPort(from: domains.image) {
+                components.host = imageHost.host
+                components.port = imageHost.port
+            }
+        }
+        return components.url?.absoluteString ?? candidate
     }
 
     private static nonisolated var mirrorRootDomain: String? {
@@ -154,6 +162,8 @@ public extension BangumiSubjectImages {
     func resized(_ size: Int) -> String {
         guard let url = URL(string: large) else { return "" }
         let host = url.host == CDN_DOMAIN ? BangumiURL.domains.image : (url.host ?? CDN_DOMAIN)
-        return "\(url.scheme ?? HTTPS)://\(host)/r/\(size)\(url.path)"
+        let scheme = (url.scheme == "http" || url.scheme == nil) ? HTTPS : (url.scheme ?? HTTPS)
+        return "\(scheme)://\(host)/r/\(size)\(url.path)"
     }
 }
+

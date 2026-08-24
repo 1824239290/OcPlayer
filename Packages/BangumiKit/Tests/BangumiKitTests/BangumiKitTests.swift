@@ -405,6 +405,64 @@ struct BangumiDatabaseTests {
         #expect(liveResults.total > 0)
         #expect(!liveResults.data.isEmpty)
     }
+
+    @Test func calendarDecoding() async throws {
+        let json = """
+        [
+          {
+            "weekday": {
+              "en": "Mon",
+              "cn": "星期一",
+              "ja": "月耀日",
+              "id": 1
+            },
+            "items": [
+              {
+                "id": 456080,
+                "url": "http://bgm.tv/subject/456080",
+                "type": 2,
+                "name": "転校先",
+                "name_cn": "转学后",
+                "summary": "测试简介",
+                "air_date": "2026-07-06",
+                "air_weekday": 1,
+                "rating": {
+                  "total": 504,
+                  "count": { "10": 10, "9": 2 },
+                  "score": 5.0
+                },
+                "rank": 9739,
+                "images": {
+                  "large": "https://lain.bgm.tv/pic/cover/l/ce/e2/456080_C4q4C.jpg"
+                },
+                "collection": {
+                  "doing": 1991
+                }
+              }
+            ]
+          }
+        ]
+        """.data(using: .utf8)!
+        let calendar: [BangumiCalendarDayDTO] = try await BangumiAPIClient.shared.decodeResponse(json)
+        #expect(calendar.count == 1)
+        let day = try #require(calendar.first)
+        #expect(day.weekday.id == 1)
+        #expect(day.weekday.shortCN == "周一")
+        #expect(day.items.count == 1)
+        let item = try #require(day.items.first)
+        #expect(item.id == 456080)
+        #expect(item.nameCN == "转学后")
+        #expect(item.displayName == "转学后")
+        #expect(item.originalName == "転校先")
+        #expect(item.doingCount == 1991)
+        #expect(item.rank == 9739)
+        #expect(item.rating?.score == 5.0)
+        #expect(item.coverURL != nil)
+
+        let slim = item.toSlimSubject()
+        #expect(slim.id == 456080)
+        #expect(slim.nameCN == "转学后")
+    }
 }
 
 // MARK: - 登录态

@@ -450,6 +450,14 @@ struct BangumiHomeView: View {
             if !bangumi.isDatabaseReady {
                 ProgressView().controlSize(.small)
             }
+            Button {
+                app.path.append(.bangumiCalendar)
+            } label: {
+                Image(systemName: "calendar")
+            }
+            .help("每日放送：查看本季度番剧时间表")
+            .accessibilityLabel("每日放送")
+
             Menu {
                 Picker("排序", selection: $sortRaw) {
                     ForEach(SortOption.allCases) { option in

@@ -524,15 +524,15 @@ public struct BangumiSlimSubjectInterest: Codable, Hashable, Sendable {
     }
 }
 
-/// 全站收藏统计（SubjectDTO.collection），key 是 CollectionType.rawValue 的字符串。
+/// 全站收藏统计（SubjectDTO.collection），key 支持数字字符串（如 "3"）与语义名（如 "doing"）。
 public typealias BangumiSubjectCollection = [String: Int]
 
 public extension BangumiSubjectCollection {
-    var wish: Int { self[String(BangumiCollectionType.wish.rawValue)] ?? 0 }
-    var collect: Int { self[String(BangumiCollectionType.collect.rawValue)] ?? 0 }
-    var doing: Int { self[String(BangumiCollectionType.doing.rawValue)] ?? 0 }
-    var onHold: Int { self[String(BangumiCollectionType.onHold.rawValue)] ?? 0 }
-    var dropped: Int { self[String(BangumiCollectionType.dropped.rawValue)] ?? 0 }
+    var wish: Int { self["wish"] ?? self[String(BangumiCollectionType.wish.rawValue)] ?? 0 }
+    var collect: Int { self["collect"] ?? self[String(BangumiCollectionType.collect.rawValue)] ?? 0 }
+    var doing: Int { self["doing"] ?? self[String(BangumiCollectionType.doing.rawValue)] ?? 0 }
+    var onHold: Int { self["on_hold"] ?? self["onHold"] ?? self[String(BangumiCollectionType.onHold.rawValue)] ?? 0 }
+    var dropped: Int { self["dropped"] ?? self[String(BangumiCollectionType.dropped.rawValue)] ?? 0 }
 }
 
 /// 当前用户的单集收藏状态（挂在 EpisodeDTO.collection 上）。

@@ -145,6 +145,7 @@ final class AppModel {
         case bangumiProfile
         case bangumiCollectionList(BangumiSubjectType)
         case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil)
+        case bangumiCalendar
     }
 
     var selectedSection: Section = .home {

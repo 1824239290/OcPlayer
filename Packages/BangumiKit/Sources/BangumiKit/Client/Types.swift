@@ -450,3 +450,183 @@ public struct BangumiProgressSubject: Codable, Hashable, Identifiable, Sendable 
         return watchedCount >= subject.eps
     }
 }
+
+// MARK: - 每日放送（番剧时间表）
+
+
+
+/// 每日放送按星期分组的 DTO。
+public struct BangumiCalendarDayDTO: Codable, Identifiable, Hashable, Sendable {
+    public var weekday: BangumiCalendarWeekdayDTO
+    public var items: [BangumiCalendarItemDTO]
+
+    public var id: Int { weekday.id }
+
+    public init(weekday: BangumiCalendarWeekdayDTO, items: [BangumiCalendarItemDTO] = []) {
+        self.weekday = weekday
+        self.items = items
+    }
+}
+
+/// 每日放送星期信息。
+public struct BangumiCalendarWeekdayDTO: Codable, Identifiable, Hashable, Sendable {
+    public var en: String
+    public var cn: String
+    public var ja: String
+    public var id: Int
+
+    public init(en: String, cn: String, ja: String, id: Int) {
+        self.en = en
+        self.cn = cn
+        self.ja = ja
+        self.id = id
+    }
+
+    /// 短中文名称（如：周一、周二）。
+    public var shortCN: String {
+        switch id {
+        case 1: return "周一"
+        case 2: return "周二"
+        case 3: return "周三"
+        case 4: return "周四"
+        case 5: return "周五"
+        case 6: return "周六"
+        case 7: return "周日"
+        default: return cn
+        }
+    }
+}
+
+/// 每日放送单条番剧条目。
+public struct BangumiCalendarItemDTO: Codable, Identifiable, Hashable, Sendable {
+    public var id: Int
+    public var url: String
+    public var type: BangumiSubjectType
+    public var name: String
+    public var nameCN: String
+    public var summary: String?
+    public var airDate: String?
+    public var airWeekday: Int?
+    public var rating: BangumiSubjectRating?
+    public var rank: Int?
+    public var images: BangumiSubjectImages?
+    public var collection: BangumiSubjectCollection?
+
+    public init(
+        id: Int,
+        url: String = "",
+        type: BangumiSubjectType = .anime,
+        name: String = "",
+        nameCN: String = "",
+        summary: String? = nil,
+        airDate: String? = nil,
+        airWeekday: Int? = nil,
+        rating: BangumiSubjectRating? = nil,
+        rank: Int? = nil,
+        images: BangumiSubjectImages? = nil,
+        collection: BangumiSubjectCollection? = nil
+    ) {
+        self.id = id
+        self.url = url
+        self.type = type
+        self.name = name
+        self.nameCN = nameCN
+        self.summary = summary
+        self.airDate = airDate
+        self.airWeekday = airWeekday
+        self.rating = rating
+        self.rank = rank
+        self.images = images
+        self.collection = collection
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case url
+        case type
+        case name
+        case nameCn
+        case nameCN
+        case summary
+        case airDate
+        case airWeekday
+        case rating
+        case rank
+        case images
+        case collection
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(Int.self, forKey: .id)
+        self.url = (try? container.decodeIfPresent(String.self, forKey: .url)) ?? ""
+        if let typeInt = try? container.decode(Int.self, forKey: .type) {
+            self.type = BangumiSubjectType(typeInt)
+        } else if let typeEnum = try? container.decode(BangumiSubjectType.self, forKey: .type) {
+            self.type = typeEnum
+        } else {
+            self.type = .anime
+        }
+        self.name = (try? container.decode(String.self, forKey: .name)) ?? ""
+        self.nameCN = (try? container.decode(String.self, forKey: .nameCn))
+            ?? (try? container.decode(String.self, forKey: .nameCN))
+            ?? ""
+        self.summary = try? container.decodeIfPresent(String.self, forKey: .summary)
+        self.airDate = try? container.decodeIfPresent(String.self, forKey: .airDate)
+        self.airWeekday = try? container.decodeIfPresent(Int.self, forKey: .airWeekday)
+        self.rating = try? container.decodeIfPresent(BangumiSubjectRating.self, forKey: .rating)
+        self.rank = try? container.decodeIfPresent(Int.self, forKey: .rank)
+        self.images = try? container.decodeIfPresent(BangumiSubjectImages.self, forKey: .images)
+        self.collection = try? container.decodeIfPresent(BangumiSubjectCollection.self, forKey: .collection)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(url, forKey: .url)
+        try container.encode(type.rawValue, forKey: .type)
+        try container.encode(name, forKey: .name)
+        try container.encode(nameCN, forKey: .nameCn)
+        try container.encodeIfPresent(summary, forKey: .summary)
+        try container.encodeIfPresent(airDate, forKey: .airDate)
+        try container.encodeIfPresent(airWeekday, forKey: .airWeekday)
+        try container.encodeIfPresent(rating, forKey: .rating)
+        try container.encodeIfPresent(rank, forKey: .rank)
+        try container.encodeIfPresent(images, forKey: .images)
+        try container.encodeIfPresent(collection, forKey: .collection)
+    }
+
+    /// 显示标题（中文名优先）。
+    public var displayName: String {
+        nameCN.isEmpty ? name : nameCN
+    }
+
+    /// 原版日文名（若与中文名不同）。
+    public var originalName: String? {
+        nameCN.isEmpty || nameCN == name ? nil : name
+    }
+
+    /// 封面大图 URL。
+    public var coverURL: URL? {
+        guard let large = images?.large, !large.isEmpty else { return nil }
+        return URL(string: BangumiURL.imageURLString(from: large))
+    }
+
+    /// 在看人数。
+    public var doingCount: Int {
+        collection?.doing ?? 0
+    }
+
+    /// 转为精简 DTO，便于导航传递。
+    public func toSlimSubject() -> BangumiSlimSubjectDTO {
+        var slim = BangumiSlimSubjectDTO()
+        slim.id = id
+        slim.images = images
+        slim.rating = rating
+        slim.name = name
+        slim.nameCN = nameCN
+        slim.type = type
+        return slim
+    }
+}
+

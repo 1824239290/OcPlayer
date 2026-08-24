@@ -145,3 +145,14 @@ public enum BangumiSubjectService {
         return try await BangumiAPIClient.shared.decodeResponse(data)
     }
 }
+
+/// 每日放送（番剧时间表）远程 API。
+public enum BangumiCalendarService {
+    /// 拉取每日放送列表（按周一至周日 7 天分组）。
+    public static func getCalendar() async throws -> [BangumiCalendarDayDTO] {
+        let url = BangumiURL.api(path: "calendar")
+        let data = try await BangumiAPIClient.shared.request(url: url, method: "GET", auth: .disabled)
+        return try await BangumiAPIClient.shared.decodeResponse(data)
+    }
+}
+
