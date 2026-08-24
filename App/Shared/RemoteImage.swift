@@ -1,4 +1,5 @@
 import CoreGraphics
+import DiagnosticsKit
 import Foundation
 import ImageIO
 import SwiftUI
@@ -117,7 +118,13 @@ final class ImagePipeline: @unchecked Sendable {
                         throw CancellationError()
                     }
                     return image
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
+                    AppDiagnostics.logWarning("图片加载失败", fields: [
+                        "url": .string(url.absoluteString),
+                        "error": .string("\(error)"),
+                    ])
                     if !self.isCurrentGeneration(generation) {
                         self.cache.removeCachedResponse(for: request)
                     }
@@ -180,8 +187,18 @@ final class ImagePipeline: @unchecked Sendable {
     }
 
     private func makeRequest(_ url: URL, authHeader: String?) -> URLRequest {
-        var request = URLRequest(url: url)
+        // 协议由连接时选择的 HTTP/HTTPS 决定(url 来自服务器 baseURL),这里不去 inline 改 url 的 scheme,
+        // 避免「画面走 http、图片被强转 https」的不一致。
+        let targetURL = url
+        var request = URLRequest(url: targetURL)
         request.cachePolicy = .returnCacheDataElseLoad
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+            forHTTPHeaderField: "User-Agent"
+        )
+        if let host = targetURL.host, host.contains("bgm.tv") {
+            request.setValue("https://bgm.tv/", forHTTPHeaderField: "Referer")
+        }
         if let authHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
@@ -191,11 +208,30 @@ final class ImagePipeline: @unchecked Sendable {
     private func fetch(_ request: URLRequest, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
         // 取消（视图消失 / 换 URL）会从这里抛 CancellationError，由调用方区分处理。
         let (data, response) = try await session.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+        guard let httpResponse = response as? HTTPURLResponse else {
+            AppDiagnostics.logWarning("图片请求失败：无 HTTP 响应", fields: [
+                "url": .string(request.url?.absoluteString ?? "")
+            ])
+            return nil
+        }
+        guard httpResponse.statusCode == 200 else {
+            AppDiagnostics.logWarning("图片请求返回非 200", fields: [
+                "url": .string(request.url?.absoluteString ?? ""),
+                "status": .integer(Int64(httpResponse.statusCode)),
+            ])
+            return nil
+        }
         // 在 URLSession 的协程线程池上立即解码：`PlatformImage(data:)` 是懒解码，
         // 真正的位图解码会拖到主线程首次绘制时才发生——海报墙快速滚动时每张新图
         // 都在主线程解码、掉帧。这里用 ImageIO 强制解码成位图，主线程首绘不再解码。
-        return Self.decode(data, maxPixelSize: maxPixelSize)
+        guard let image = Self.decode(data, maxPixelSize: maxPixelSize) else {
+            AppDiagnostics.logWarning("图片解码失败", fields: [
+                "url": .string(request.url?.absoluteString ?? ""),
+                "data_len": .integer(Int64(data.count)),
+            ])
+            return nil
+        }
+        return image
     }
 
     /// ImageIO 立即解码（`kCGImageSourceShouldCacheImmediately` 把位图留在内存）。
@@ -273,7 +309,7 @@ struct RemoteImage: View {
         }
         .clipped()
         .animation(imageFade, value: image != nil)
-        .task(id: "\(url?.absoluteString ?? "")#\(maxPixelSize ?? 0)") {
+        .task(id: "\(url?.absoluteString ?? "")#\(authHeader ?? "")#\(maxPixelSize ?? 0)") {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Clear the previous bitmap before
             // loading the new URL, otherwise the old poster can sit beside the

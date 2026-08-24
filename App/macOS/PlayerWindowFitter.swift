@@ -54,7 +54,7 @@ enum PlayerWindowFitter {
         )
         newFrame.origin.x = min(max(newFrame.origin.x, screen.minX), screen.maxX - newFrame.width)
         newFrame.origin.y = min(max(newFrame.origin.y, screen.minY), screen.maxY - newFrame.height)
-        DispatchQueue.main.async {
+        Task { @MainActor in
             guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow() else { return }
             window.setFrame(newFrame, display: true, animate: true)
         }
@@ -74,7 +74,7 @@ enum PlayerWindowFitter {
         // animate:true 的 setFrame——那个动画 helper（NSMoveHelper）会在窗口因
         // overlay 移除 / 工具栏恢复而处于不稳定状态时被驱动，实测空指针 SIGSEGV。
         // 这里延后到下一个 runloop 再还原，此时 overlay 和工具栏已恢复稳定，可以安全用动画。
-        DispatchQueue.main.async {
+        Task { @MainActor in
             // 竞争保护：这个闭包是异步的，执行前用户可能已经退出一场播放、重新开始了
             // 一场新的（新会话 saveOriginalIfNeeded 会把 originalFrame 换成新窗口的 frame，
             // 也可能已经被 fit() 调过比例）。只对「还是同一场」的窗口做还原：

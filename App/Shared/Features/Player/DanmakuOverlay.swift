@@ -403,7 +403,7 @@ private struct DanmakuOverlayRepresentable: PlatformViewRepresentable {
     func updateNSView(_ nsView: DanmakuView, context: Context) {}
 
     static func dismantleNSView(_ nsView: DanmakuView, coordinator: ()) {
-        nsView.clean()
+        nsView.pause()
     }
     #else
     func makeUIView(context: Context) -> DanmakuView {
@@ -414,7 +414,7 @@ private struct DanmakuOverlayRepresentable: PlatformViewRepresentable {
     func updateUIView(_ uiView: DanmakuView, context: Context) {}
 
     static func dismantleUIView(_ uiView: DanmakuView, coordinator: ()) {
-        uiView.clean()
+        uiView.pause()
     }
     #endif
 }

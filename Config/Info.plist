@@ -2,10 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- 自建服务（Jellyfin / MoviePilot）常见局域网 http 部署：
-	     只放行本地网络明文（RFC1918 / .local），不对公网 http 开任意加载。 -->
+	<!-- 自建服务(Jellyfin / MoviePilot)常见局域网 http 部署。
+	     用户在连接表单显式选择 HTTP / HTTPS;选 HTTP 时应能真正连上(包括公网域名/http),故开 NSAllowsArbitraryLoads 一切允许明文。
+	     自用应谨慎行事:放弃了 ATS 对明文的默认保护;本地敏感数据尽可能走 https。 -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>

@@ -27,6 +27,27 @@ final class JellyfinServerTests: XCTestCase {
                        "http://localhost")
     }
 
+    func testNormalizeServerURLRespectsPreferredScheme() throws {
+        // 没手写前缀:用 preferredScheme 补。
+        XCTAssertEqual(
+            try JellyfinServer.normalizeServerURL("nas.local:8096", preferredScheme: .https).absoluteString,
+            "https://nas.local:8096")
+        XCTAssertEqual(
+            try JellyfinServer.normalizeServerURL("192.168.1.10:8096", preferredScheme: .http).absoluteString,
+            "http://192.168.1.10:8096")
+        // 手写前缀始终优先,preferredScheme 不能覆盖。
+        XCTAssertEqual(
+            try JellyfinServer.normalizeServerURL("http://nas.local", preferredScheme: .https).absoluteString,
+            "http://nas.local")
+        XCTAssertEqual(
+            try JellyfinServer.normalizeServerURL("https://nas.local", preferredScheme: .http).absoluteString,
+            "https://nas.local")
+        // nil 回退原本的 http 默认,保证旧行为不变。
+        XCTAssertEqual(
+            try JellyfinServer.normalizeServerURL("192.168.1.10:8096", preferredScheme: nil).absoluteString,
+            "http://192.168.1.10:8096")
+    }
+
     func testNormalizeServerURLRejectsGarbage() {
         XCTAssertThrowsError(try JellyfinServer.normalizeServerURL("not a url"))
         XCTAssertThrowsError(try JellyfinServer.normalizeServerURL("ftp://x/"))

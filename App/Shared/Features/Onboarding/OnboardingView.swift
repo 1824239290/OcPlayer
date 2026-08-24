@@ -1,3 +1,4 @@
+import JellyfinKit
 import SwiftUI
 
 /// 登录流程：① 服务器地址 → ② Quick Connect（主）+ 账号密码（兜底）。
@@ -8,6 +9,8 @@ struct OnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var serverAddress = ""
+    /// 协议选择:HTTP / HTTPS。控制服务器 baseURL 的 scheme。
+    @State private var serverScheme: JellyfinServerScheme = .http
     @State private var username = ""
     @State private var password = ""
 
@@ -69,9 +72,17 @@ struct OnboardingView: View {
             TextField("例如 192.168.1.10:8096", text: $serverAddress)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await connect() } }
-            Text("局域网地址不带 http:// 也行；https 前缀会保留。")
+            Text("可以不打前缀;选择器决定协议,手动打了 http:// 或 https:// 则以手动为准。")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+
+            // 协议选择:选哪个,服务器所有请求(API / 图片 / 播放流)统一走哪个。
+            // 手动输入 http:// 或 https:// 前缀会覆盖这里的选择。
+            Picker("协议", selection: $serverScheme) {
+                Text("HTTP").tag(JellyfinServerScheme.http)
+                Text("HTTPS").tag(JellyfinServerScheme.https)
+            }
+            .pickerStyle(.segmented)
             HStack {
                 Spacer()
                 Button {
@@ -225,7 +236,7 @@ struct OnboardingView: View {
     // MARK: - 动作
 
     private func connect() async {
-        await app.connectServer(serverAddress)
+        await app.connectServer(serverAddress, scheme: serverScheme)
     }
 
     private func submitPassword() async {

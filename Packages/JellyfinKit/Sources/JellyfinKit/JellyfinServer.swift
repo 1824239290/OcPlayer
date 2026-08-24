@@ -4,6 +4,20 @@ import Foundation
 import Get
 import JellyfinAPI
 
+/// 连接服务器时用户显式选择的网络协议。
+/// 存到 `baseURL` 里作为唯一事实源:Jellyfin API、图片、播放流全部从这里派生。
+public enum JellyfinServerScheme: String, Sendable {
+    case http
+    case https
+
+    /// 落进绝对 URL 的 scheme 文本。
+    public var schemeString: String { rawValue }
+
+    public init?(schemeString value: String) {
+        self.init(rawValue: value.lowercased())
+    }
+}
+
 /// 网络层诊断日志（JSONL 落盘 + OSLog 镜像，见 DiagnosticsKit）。
 ///
 /// 只记请求**路径**不记 query（userId / 图片 tag 这类不敏感，但路径足够定位问题）；
@@ -90,9 +104,10 @@ public struct JellyfinServer: Sendable {
     /// `sessionConfiguration` 是测试注入口（塞 URLProtocol mock），业务代码不用传。
     public static func startLogin(
         urlString rawURL: String,
+        preferredScheme: JellyfinServerScheme? = nil,
         sessionConfiguration: URLSessionConfiguration = .default
     ) async throws -> LoginSession {
-        let url = try normalizeServerURL(rawURL)
+        let url = try normalizeServerURL(rawURL, preferredScheme: preferredScheme)
 
         // 先用匿名客户端探一下：不是 Jellyfin / 连不上都在这一步报错
         let probeClient = makeClient(baseURL: url, token: nil, sessionConfiguration: sessionConfiguration)
@@ -105,13 +120,16 @@ public struct JellyfinServer: Sendable {
         return LoginSession(baseURL: url, info: info, client: probeClient)
     }
 
-    /// 「host:port」→「http://host:port/」；已有 scheme 的原样保留（去尾斜杠）。
-    public static func normalizeServerURL(_ raw: String) throws -> URL {
+    /// 「host:port」→「scheme://host:port/」(去尾斜杠),统一成一个确定性 scheme。
+    public static func normalizeServerURL(
+        _ raw: String,
+        preferredScheme: JellyfinServerScheme? = nil
+    ) throws -> URL {
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw JellyfinError(.badServerURL) }
         if text.range(of: "://") == nil {
-            // 局域网默认 http；用户写 https:// 的保留
-            text = "http://" + text
+            // 没手写前缀才用 preferredScheme;都没有回退 http(局域网部署为主)。
+            text = (preferredScheme?.schemeString ?? "http") + "://" + text
         }
         while text.hasSuffix("/") { text.removeLast() }
         guard let url = URL(string: text), let host = url.host(percentEncoded: false), !host.isEmpty,
@@ -403,16 +421,21 @@ public struct JellyfinServer: Sendable {
         mediaSourceID: String? = nil,
         playSessionID: String? = nil
     ) throws -> String {
-        var path = "/Videos/\(itemID)/stream?Static=true"
+        guard var components = URLComponents(url: profile.baseURL, resolvingAgainstBaseURL: false) else {
+            throw JellyfinError(.other("播放地址拼接失败"))
+        }
+        var basePath = components.path
+        while basePath.hasSuffix("/") { basePath.removeLast() }
+        components.path = "\(basePath)/Videos/\(itemID)/stream"
+        var queryItems = [URLQueryItem(name: "Static", value: "true")]
         if let mediaSourceID {
-            let encoded = mediaSourceID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? mediaSourceID
-            path += "&mediaSourceId=\(encoded)"
+            queryItems.append(URLQueryItem(name: "mediaSourceId", value: mediaSourceID))
         }
         if let playSessionID {
-            let encoded = playSessionID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? playSessionID
-            path += "&playSessionId=\(encoded)"
+            queryItems.append(URLQueryItem(name: "playSessionId", value: playSessionID))
         }
-        guard let url = client.url(path: path) else {
+        components.queryItems = queryItems
+        guard let url = components.url else {
             throw JellyfinError(.other("播放地址拼接失败"))
         }
         return url.absoluteString

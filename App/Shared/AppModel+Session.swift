@@ -18,7 +18,7 @@ extension AppModel {
     // MARK: - 登录流程
 
     /// Onboarding 第一步：验证服务器地址。
-    func connectServer(_ rawURL: String) async {
+    func connectServer(_ rawURL: String, scheme: JellyfinServerScheme? = nil) async {
         loginAttemptGeneration &+= 1
         let attempt = loginAttemptGeneration
         isProbingServer = true
@@ -29,7 +29,7 @@ extension AppModel {
             }
         }
         do {
-            let session = try await JellyfinServer.startLogin(urlString: rawURL)
+            let session = try await JellyfinServer.startLogin(urlString: rawURL, preferredScheme: scheme)
             guard loginAttemptGeneration == attempt, phase == .onboarding else { return }
             loginSession = session
             await startQuickConnect()

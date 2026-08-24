@@ -931,7 +931,7 @@ struct PlayerSkipPromptView: View {
                     controller.performSkip()
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: prompt.kind == .opening ? "forward.end.fill" : "forward.end.fill")
+                        Image(systemName: prompt.kind == .opening ? "forward.fill" : "forward.end.fill")
                             .font(.system(size: 13, weight: .semibold))
                         Text(prompt.kind.buttonTitle)
                             .font(.callout.weight(.semibold))
