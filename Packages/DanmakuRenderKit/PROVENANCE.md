@@ -20,6 +20,12 @@
   recalculateTracks / play(_:)/pause(_:)/sync` 十个控制方法 upstream 为 internal
   （其 SwiftUI 适配器同模块调用所以没暴露），App 侧调用需要，已加 `public`。
   行为零改动，纯访问级别。
+- `DanmakuView.swift`：`private extension` → `extension`（轨道选择
+  `findSuitableTrack / findLeastNumberDanmakuTrack / findSuitableSyncTrack` 与复用池
+  `cellFromPool / appendCellToPool` 从 private 放宽到 internal），供包内测试 target
+  以 `@testable` 覆盖这些纯逻辑。行为零改动，纯访问级别。
+- `Package.swift`：新增 `DanmakuRenderKitTests` test target（纯 macOS 离屏，
+  不碰 GPU / 网络 / UIKit；GIF 侧因 `#if canImport(UIKit)` 不在 macOS 上测试）。
 
 选型背景：替换 Erika 内核 DFM+ 弹幕子系统（滑窗重放非单调导致在屏弹幕跳轨）。
 该库的轨道模型是「入轨时追击判定、入轨后不换轨」，结构上杜绝跳轨。

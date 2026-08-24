@@ -169,13 +169,20 @@ struct ChapterNameHeuristicEvaluator: ChapterSkippingEvaluator {
         return normalizedMatches(normalized, containsAny: keywords)
     }
 
+    /// 关键词匹配。纯 CJK 关键词（片头/片尾/尾声…）没有词边界概念，维持子串匹配——
+    /// 「片头曲」就该命中「片头」。多英文词（end credits）也按子串，无歧义。
+    /// 单一英文词（op/ed/opening…）只在「整词」时命中，避免 "op" 撞中
+    /// operations/options、"ed" 撞中 media/episode。
     private func normalizedMatches(_ name: String, containsAny keywords: [String]) -> Bool {
-        keywords.contains { keyword in
-            name == keyword
-                || name.hasPrefix(keyword + " ")
-                || name.hasPrefix(keyword + "-")
-                || name.hasSuffix(" " + keyword)
-                || name.contains(keyword)
+        let tokens = name.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        return keywords.contains { keyword in
+            guard keyword.range(of: #"[a-zA-Z]"#, options: .regularExpression) != nil else {
+                return name.contains(keyword)
+            }
+            if keyword.contains(" ") {
+                return name.contains(keyword)
+            }
+            return tokens.contains(keyword)
         }
     }
 }

@@ -14,5 +14,10 @@ let package = Package(
             name: "DanmakuRenderKit",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .testTarget(
+            name: "DanmakuRenderKitTests",
+            dependencies: ["DanmakuRenderKit"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )

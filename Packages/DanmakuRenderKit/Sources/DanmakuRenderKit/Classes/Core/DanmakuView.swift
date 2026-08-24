@@ -607,7 +607,9 @@ public extension DanmakuView {
     
 }
 
-private extension DanmakuView {
+// 本地修补：原为 `private extension`，放宽到 internal 以便包内测试 target 覆盖
+// 轨道选择/复用池等纯逻辑（行为零改动，见 PROVENANCE.md）。
+extension DanmakuView {
     
     func recalculateFloatingTracks() {
         let trackCount = max(0, Int(floorf(Float((viewHeight - paddingTop - paddingBottom) / trackHeight))))

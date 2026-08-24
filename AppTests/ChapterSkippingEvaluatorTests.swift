@@ -43,6 +43,48 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         XCTAssertEqual(marks.first?.kind, .opening)
     }
 
+    // MARK: - 词边界（op/ed 不能命中单词中段）
+
+    func testTwoLetterKeywordRequiresWordBoundary() {
+        // "Operations & Bonus" 含 "op"，但不能判成片头；"Media" 含 "ed"，不能判成片尾。
+        let chapters = [
+            chapter(0, "Operations & Bonus", start: 0, length: 300, total: 1200),
+            chapter(1, "Media", start: 300, length: 900, total: 1200),
+        ]
+        let marks = evaluator.skipMarks(chapters: chapters, totalSeconds: 1200)
+        XCTAssertTrue(marks.isEmpty, "options/media 是单词中段出现 op/ed，不该命中")
+    }
+
+    func testTwoLetterKeywordStillMatchesWholeWord() {
+        let marks = evaluator.skipMarks(chapters: [
+            chapter(0, "OP", start: 0, length: 90, total: 1200),
+        ], totalSeconds: 1200)
+        XCTAssertEqual(marks.first?.kind, .opening)
+
+        // 「ED 1」在片头位置会命中位置兜底，把长度抬过片头 240s 上限，只验证词边界命中。
+        let ed = evaluator.skipMarks(chapters: [
+            chapter(0, "ED 1", start: 0, length: 300, total: 1200),
+        ], totalSeconds: 1200)
+        XCTAssertEqual(ed.first?.kind, .credits)
+    }
+
+    func testCJKKeywordKeepsSubstringMatching() {
+        // 无词边界概念：片头曲/片尾曲这种组合名也要命中「片头」/「片尾」。
+        let marks = evaluator.skipMarks(chapters: [
+            chapter(0, "片头曲", start: 0, length: 90, total: 1200),
+            chapter(1, "片尾曲", start: 1110, length: 90, total: 1200),
+        ], totalSeconds: 1200)
+        XCTAssertEqual(marks.map(\.kind), [.opening, .credits])
+    }
+
+    func testMultiWordKeywordStillMatchesSubstring() {
+        let marks = evaluator.skipMarks(chapters: [
+            chapter(0, "正片", start: 0, length: 1000, total: 1200),
+            chapter(1, "Ending Credits", start: 1000, length: 200, total: 1200),
+        ], totalSeconds: 1200)
+        XCTAssertEqual(marks.map(\.kind), [.credits])
+    }
+
     // MARK: - 位置兜底
 
     func testOpeningPositionFallbackWhenNameUnknown() {
