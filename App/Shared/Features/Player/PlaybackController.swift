@@ -83,7 +83,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 同一条弹幕数据同时进内核和 overlay（双份弹幕）。设置页改动因此在
     /// 下一次播放生效，和换内核的语义一致。
     ///
-    /// 所选内核不支持内核弹幕时**强制 overlay**，不看用户偏好。
+    /// **当前版本一律 true**：内核弹幕因跳轨问题被禁用，详见
+    /// `resolveOverlayDanmakuRoute()`。恢复内核渲染后，此处语义回到
+    /// 「所选内核不支持内核弹幕时强制 overlay，否则听用户偏好」。
     private(set) var usesOverlayDanmakuRenderer: Bool
     let danmakuOverlay: DanmakuOverlayController
 
@@ -92,10 +94,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
         engine?.descriptor ?? PlaybackEngineRegistry.selected
     }
 
+    /// 当前版本统一强制 overlay：内核 DFM+ 的滑窗重排仍会让在屏弹幕跳轨，
+    /// 内核弹幕渲染暂时禁用（设置页「用内核渲染弹幕」开关同步置灰并附说明）。
+    /// 内核修复后恢复旧判定：内核不支持弹幕时强制 overlay，否则走
+    /// `PlaybackPreferences.danmakuUseOverlayRenderer`（key 保留着，用户旧选择还在）。
     private static func resolveOverlayDanmakuRoute() -> Bool {
-        let kernelCanRenderDanmaku = PlaybackEngineRegistry.selected?.supportsKernelDanmaku ?? false
-        guard kernelCanRenderDanmaku else { return true }
-        return PlaybackPreferences.danmakuUseOverlayRenderer
+        true
     }
 
     init() {
@@ -209,7 +213,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     @discardableResult
     func prepareEngine() -> (any PlaybackEngine)? {
         if let engine { return engine }
-        // 内核和弹幕路线必须一起锁：所选内核不支持内核弹幕时要强制走 overlay。
+        // 内核和弹幕路线必须一起锁。当前版本内核弹幕被禁用，恒为 overlay；
+        // 恢复内核渲染后回到「所选内核不支持内核弹幕时强制 overlay」的旧判定。
         usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         do {
             let engine = try PlaybackEngineRegistry.makeSelected()

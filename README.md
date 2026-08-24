@@ -2,7 +2,7 @@
 
 自用的 Jellyfin 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。
 
-播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染）；媒体库走 Jellyfin 官方 Swift SDK；弹幕通过 OcPlay 网关接入弹弹play、由 App 层 overlay 渲染（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit）；另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
+播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染）；媒体库走 Jellyfin 官方 Swift SDK；弹幕通过 OcPlay 网关接入弹弹play、**统一由 App 层 overlay 渲染**（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit——内核内置弹幕渲染器当前版本因跳轨问题被禁用，见下文「弹幕渲染路线」）；另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
 
 ## 特性
 
@@ -10,7 +10,7 @@
 - **首页**：继续观看、接下来看、最近添加
 - **播放**：pause / seek / 倍速（长按右箭头临时 2x）/ 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报（Start → 心跳 → Stopped）/ 自动连播下一集 / macOS 键盘快捷键（空格、方向键、J/L、M 静音、F 全屏）
 - **章节与跳过**：章节列表点击跳转；片头 / 片尾自动识别（Jellyfin MediaSegments 优先，章节名启发式兜底）+ 末 90 秒保底，悬浮「跳过」按钮
-- **弹幕**：已有剧集映射直接复用；首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；支持手动搜索选集、匹配与正文缓存、开关、时间偏移、不透明度、显示区域和类型过滤
+- **弹幕**：已有剧集映射直接复用；首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；支持手动搜索选集、匹配与正文缓存、开关、时间偏移、不透明度、显示区域和类型过滤。弹幕由 App 层 overlay 渲染（`DanmakuRenderKit`），与视频解码解耦，不依赖内核的弹幕子系统
 - **Bangumi（番剧追踪）**：OAuth 登录、收藏与在看进度（本地 GRDB 缓存只读）、每日放送日历、条目详情与章节标记、播放结束自动标记本集看过
 - **MoviePilot（找片 + 下载 + 订阅）**：密码登录换 JWT、按标题搜站点资源（站点筛选）、下载任务列表、订阅管理（列表 / 添加 / 编辑 / 删除 / 刷新）
 - **画质**：macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝；本地文件与直连 HTTP 流均可播放
@@ -42,6 +42,12 @@ swift test --package-path Packages/MoviePilotKit       # MoviePilot 登录/订�
 ### CI
 
 `.github/workflows/test.yml` 在 main push 与 PR 上跑全量测试门禁：拉取 Erika 后执行 `xcodebuild test`（AppTests 纯逻辑）+ 各 SPM 包 `swift test`（`ErikaKit` 跳过依赖 Metal 的渲染集成测试）。`.github/workflows/release.yml` 在语义化版本标签或手动触发时构建并发布 macOS 产物。
+
+### 弹幕渲染路线
+
+弹幕渲染统一走 **App 层 overlay**（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit）：弹幕由 App 在视频画面上方独立绘制，与内核解码 / 合成解耦，截图不会带弹幕，对内核也没有额外要求。
+
+**内核内置弹幕渲染器（Erika DFM+）当前版本被禁用**：内核的滑窗重排会让在屏弹幕跳轨（viewport 变化时部分弹幕突然换轨道）。虽然此前通过移除弹幕稳定 ID 缓解过一次，但问题仍会复现，因此本版本起运行时强制走 overlay——`PlaybackController` 的渲染路线判定固定为 App 层渲染，设置 → 播放内核 中的「用内核渲染弹幕」开关也同步置灰并附原因说明。等内核修复跳轨后，恢复该开关与偏好读取即可切回内核渲染。
 
 ### 弹弹play 网关配置
 

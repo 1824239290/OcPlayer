@@ -27,7 +27,7 @@ extension PlaybackController {
         var tracks: [DanmakuTrackInfo] = []
         do {
             let accepted = try withReadyEngine(for: source) { engine in
-                // overlay 路线（影子模式）：数据喂 App 层渲染器，内核轨道保持为空，
+                // overlay 路线：数据喂 App 层渲染器，内核轨道保持为空，
                 // 避免 kernel/overlay 双份弹幕。时间桥语义见 DanmakuOverlay。
                 if usesOverlayDanmakuRenderer {
                     try engine.clearDanmaku()

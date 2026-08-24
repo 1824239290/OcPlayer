@@ -10,13 +10,13 @@ import SwiftUI
 /// - 换内核和换弹幕渲染路线都在**下一次播放**生效——两者在
 ///   `PlaybackController.prepareEngine()` 里一起锁定，中途翻转会出双份弹幕 / 半挂的画面。
 /// - 播放中改设置时，会显示「当前播放仍在用 X」，避免用户以为没生效。
-/// - 所选内核不支持内核弹幕时，弹幕开关直接不出现（overlay 是唯一选择）。
+/// - 内核弹幕渲染当前版本被禁用（跳轨问题，见下方开关的说明），「用内核渲染弹幕」
+///   开关置灰锁在关位，弹幕一律走 App 层 overlay。
 struct PlaybackKernelSection: View {
     @Environment(PlaybackController.self) private var controller
 
     /// nil = 还没从注册表读过（`onAppear` 里补）。
     @State private var selectedKernelID: String?
-    @State private var usesOverlayDanmaku = true
 
     private var available: [PlaybackEngineDescriptor] { PlaybackEngineRegistry.available }
     private var selected: PlaybackEngineDescriptor? {
@@ -74,10 +74,10 @@ struct PlaybackKernelSection: View {
             // 内核自己没有弹幕渲染器时不给这个开关：那种情况下 overlay 是唯一选择，
             // 摆一个假开关比没有更糟。
             if selected?.supportsKernelDanmaku == true {
-                Toggle("用内核渲染弹幕", isOn: overlayDanmakuBinding)
-                Text(usesOverlayDanmaku
-                     ? "当前用 App 层渲染（DanmakuRenderKit）。内核渲染的滑窗重排会让在屏弹幕跳轨，所以默认关。"
-                     : "当前用内核内置渲染器。弹幕与视频、字幕在内核里合成，截图会带上弹幕。")
+                Toggle("用内核渲染弹幕", isOn: .constant(false))
+                    .disabled(true)
+                Text("当前版本已禁用内核弹幕：内核的滑窗重排会让在屏弹幕跳轨，"
+                     + "暂时统一用 App 层渲染（DanmakuRenderKit）。内核修复后恢复。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -94,7 +94,6 @@ struct PlaybackKernelSection: View {
         }
         .onAppear {
             selectedKernelID = PlaybackEngineRegistry.selected?.id
-            usesOverlayDanmaku = PlaybackPreferences.danmakuUseOverlayRenderer
         }
     }
 
@@ -105,18 +104,6 @@ struct PlaybackKernelSection: View {
                 guard !newValue.isEmpty else { return }
                 PlaybackEngineRegistry.select(newValue)
                 selectedKernelID = newValue
-            }
-        )
-    }
-
-    /// UI 上是「用内核渲染弹幕」，存的是「用 overlay」——两者相反，这里翻一次。
-    /// 正着存是历史原因（overlay 曾是影子模式的实验开关），改 key 会丢用户设置。
-    private var overlayDanmakuBinding: Binding<Bool> {
-        Binding(
-            get: { !usesOverlayDanmaku },
-            set: { useKernel in
-                usesOverlayDanmaku = !useKernel
-                PlaybackPreferences.danmakuUseOverlayRenderer = !useKernel
             }
         )
     }

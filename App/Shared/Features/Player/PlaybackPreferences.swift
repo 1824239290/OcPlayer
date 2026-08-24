@@ -76,8 +76,9 @@ enum PlaybackPreferences {
     }
 
     /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。
-    /// 默认 false = 走内核弹幕(改造后不再带 id,跳轨问题已解决,成为默认)。
-    /// overlay 保留为备用:遇到内核弹幕不便/缺陷时在设置切回(置 true)。
+    /// 当前版本内核弹幕因滑窗重排跳轨问题被禁用（`PlaybackController` 强制 overlay），
+    /// 本 key 已不被读取；保留是为了将来内核修复后恢复「默认内核弹幕、可切 overlay」，
+    /// 用户旧选择仍在。恢复时记得同步设置页开关与相关测试。
     static var danmakuUseOverlayRenderer: Bool {
         get { storedBool(forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer", default: false) }
         set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer") }

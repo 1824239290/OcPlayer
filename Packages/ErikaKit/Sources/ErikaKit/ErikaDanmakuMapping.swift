@@ -4,8 +4,10 @@ import PlaybackKit
 
 // Erika 内置弹幕渲染器（DFM+）的 C 映射与 presenter 侧调用。
 //
-// ⚠️ 当前 App 默认走 **App 层 overlay**（`DanmakuRenderKit`），这条内核路径是回退。
-// 设置页的「内核弹幕渲染」开关控制走哪条；见 `PlaybackPreferences.danmakuUseOverlayRenderer`。
+// ⚠️ 当前版本内核弹幕渲染因滑窗重排跳轨问题被禁用：App 一律走 **App 层 overlay**
+// （`DanmakuRenderKit`），这条内核路径只是保留实现。恢复内核渲染时把
+// `PlaybackController.resolveOverlayDanmakuRoute()` 与设置页开关改回
+// `PlaybackPreferences.danmakuUseOverlayRenderer` 即可。
 
 extension DanmakuTrackInfo {
     init(_ raw: ErikaDanmakuTrackInfo) {

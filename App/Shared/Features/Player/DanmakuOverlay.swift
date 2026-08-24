@@ -14,10 +14,11 @@ typealias PlatformFont = UIFont
 ///
 /// 为什么不用内核弹幕的旧因已定位:转换器给每条弹幕合成稳定唯一 `id`,内核拿它当
 /// shell stable_tracks 的 key,viewport 重排时个别弹幕的轨道偏好互相顶掉 → 单独几条
-/// 突然换位置(跳轨)。去掉 `id`(内核把每条当匿名,整片重排)后跳轨消失,内核弹幕
-/// 重新成为默认。overlay 保留为**备用路线**:DanmakuRenderKit 的轨道模型是入轨时
-/// 「追击判定」、入轨后不换轨,结构上不会有重排换轨,留给不便用内核弹幕的场景。
-/// **不支持内核弹幕的内核(如 libmpv)只能走这条路**,PlaybackController 会强制它。
+/// 突然换位置(跳轨)。去掉 `id` 后跳轨曾消失过一次,但内核 DFM+ 的滑窗重排问题
+/// 再次出现,当前版本**禁用内核弹幕渲染,一律走本 overlay**:DanmakuRenderKit 的
+/// 轨道模型是入轨时「追击判定」、入轨后不换轨,结构上不会有重排换轨。
+/// `PlaybackController.resolveOverlayDanmakuRoute()` 当前恒 true,内核修复后恢复
+/// 旧判定（内核支持则听偏好,不支持则强制 overlay——如 libmpv 只能走这条路）。
 ///
 /// 时间桥：内核每帧发 positionChanged（`PlaybackEngine.latestMediaTime`），本控制器
 /// 30Hz 采样它决定谁出场。暂停/缓冲＝媒体时间冻结 → 冻结检测暂停视图动画；
