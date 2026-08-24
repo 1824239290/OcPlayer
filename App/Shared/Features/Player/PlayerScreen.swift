@@ -414,6 +414,10 @@ struct PlayerScreen: View {
             }
         }
 
+        // 通用键只响应首按：按住会触发 autorepeat keyDown，空格/回车/静音/全屏这些
+        // 开关类动作会被重复触发造成快速闪断（右箭头在上一段已单独处理长按 2x）。
+        if event.isARepeat { return true }
+
         guard event.type == .keyDown else { return false }
         switch PlayerKeyAction.action(keyCode: event.keyCode) {
         case .togglePlayPause:

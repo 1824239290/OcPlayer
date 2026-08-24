@@ -70,7 +70,7 @@ final class MoviePilotServiceTests: XCTestCase {
         XCTAssertEqual(media.voteAverage, 8.8)
         XCTAssertEqual(media.mediaSource, "bangumi")
         // 相对海报路径按 TMDB 规则补齐。
-        XCTAssertEqual(media.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
+        XCTAssertEqual(media.posterURL?.absoluteString, "https://image.tmdb.org/t/p/w500/xk.jpg")
     }
 
     /// SSE 帧体：一行一个事件（与真实服务端一致，事件 JSON 不换行）。
@@ -336,7 +336,7 @@ final class MoviePilotServiceTests: XCTestCase {
                     "season": 1,
                     "total_episode": 28,
                     "lack_episode": 0,
-                    "poster": "https://image.tmdb.org/t-p/w500/xk.jpg",
+                    "poster": "https://image.tmdb.org/t/p/w500/xk.jpg",
                     "vote_average": 8.9,
                     "state": "R"
                   },
@@ -368,7 +368,7 @@ final class MoviePilotServiceTests: XCTestCase {
         XCTAssertEqual(tv.totalEpisode, 28)
         XCTAssertEqual(tv.lackEpisode, 0)
         XCTAssertEqual(tv.stateText, "追更中")
-        XCTAssertEqual(tv.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
+        XCTAssertEqual(tv.posterURL?.absoluteString, "https://image.tmdb.org/t/p/w500/xk.jpg")
 
         let movie = subscribes[1]
         XCTAssertEqual(movie.subscribeId, 102)
@@ -376,7 +376,7 @@ final class MoviePilotServiceTests: XCTestCase {
         XCTAssertTrue(movie.isMovie)
         XCTAssertFalse(movie.isTV)
         XCTAssertEqual(movie.stateText, "已完成")
-        XCTAssertEqual(movie.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/oppenheimer.jpg")
+        XCTAssertEqual(movie.posterURL?.absoluteString, "https://image.tmdb.org/t/p/w500/oppenheimer.jpg")
     }
 
     func testAddSubscribeSendsValidBody() async throws {
@@ -403,7 +403,7 @@ final class MoviePilotServiceTests: XCTestCase {
             XCTAssertEqual(body["name"] as? String, "间谍过家家")
             XCTAssertEqual(body["type"] as? String, "电视剧")
             XCTAssertEqual((body["tmdbid"] as? Double), 120089)
-            XCTAssertEqual(body["poster"] as? String, "https://image.tmdb.org/t-p/w500/spy.jpg")
+            XCTAssertEqual(body["poster"] as? String, "https://image.tmdb.org/t/p/w500/spy.jpg")
             return MockURLProtocol.response(
                 #"{"success":true,"message":"订阅成功"}"#,
                 status: 200, for: url)

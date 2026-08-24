@@ -858,9 +858,14 @@ struct PlayerHUDChaptersPanelContent: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
         } else {
+            // 当前位置用 1Hz 发布的 displayPosition：position 是 @ObservationIgnored，
+            // 读它的话高亮永远不会随播放刷新——面板打开就成了死数据。
+            let currentIndex = PlaybackChapter.currentIndex(
+                in: chapters,
+                at: Double(controller.state.timeline.displayPosition.microseconds) / 1_000_000)
             VStack(alignment: .leading, spacing: 2) {
-                ForEach(chapters) { chapter in
-                    let isCurrent = isCurrentChapter(chapter)
+                ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                    let isCurrent = index == currentIndex
                     Button {
                         controller.seek(toChapter: chapter)
                         onUserInteraction()
@@ -894,12 +899,6 @@ struct PlayerHUDChaptersPanelContent: View {
                 }
             }
         }
-    }
-
-    private func isCurrentChapter(_ chapter: PlaybackChapter) -> Bool {
-        let position = Double(controller.state.position.microseconds) / 1_000_000
-        return position >= chapter.startSeconds
-            && (chapter.endSeconds.map { position < $0 } ?? true)
     }
 
     private func timeString(_ seconds: Double) -> String {

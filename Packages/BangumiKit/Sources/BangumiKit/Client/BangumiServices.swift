@@ -2,14 +2,15 @@ import Foundation
 
 /// 当前用户收藏相关的远程 API。
 public enum BangumiCollectionService {
-    /// 分页拉取当前用户的条目收藏（since 用于增量）。
-    public static func getSubjectCollections(
+    /// 收藏分页/增量查询的 URL（since/limit/offset/type 都拼进 query）。
+    /// 单独抽出便于测试：查询参数此前漏挂在 URL 上,导致增量同步失效、翻页重复拉取。
+    static func collectionsURL(
         type: BangumiCollectionType = .none,
         subjectType: BangumiSubjectType = .none,
         since: Int = 0,
         limit: Int = 100,
         offset: Int = 0
-    ) async throws -> BangumiPagedDTO<BangumiSubjectDTO> {
+    ) -> URL {
         let url = BangumiURL.next(path: "p1/collections/subjects")
         var queryItems = [
             URLQueryItem(name: "since", value: String(since)),
@@ -22,8 +23,21 @@ public enum BangumiCollectionService {
         if subjectType != .none {
             queryItems.append(URLQueryItem(name: "subjectType", value: String(subjectType.rawValue)))
         }
+        return url.appending(queryItems: queryItems)
+    }
+
+    /// 分页拉取当前用户的条目收藏（since 用于增量）。
+    public static func getSubjectCollections(
+        type: BangumiCollectionType = .none,
+        subjectType: BangumiSubjectType = .none,
+        since: Int = 0,
+        limit: Int = 100,
+        offset: Int = 0
+    ) async throws -> BangumiPagedDTO<BangumiSubjectDTO> {
         let data = try await BangumiAPIClient.shared.request(
-            url: url, method: "GET", auth: .required)
+            url: collectionsURL(type: type, subjectType: subjectType, since: since, limit: limit, offset: offset),
+            method: "GET",
+            auth: .required)
         return try await BangumiAPIClient.shared.decodeResponse(data)
     }
 

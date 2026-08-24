@@ -14,6 +14,16 @@ struct PlaybackChapter: Identifiable, Hashable, Sendable {
         guard let endSeconds else { return 0 }
         return max(endSeconds - startSeconds, 0)
     }
+
+    /// 给定播放位置(秒)落在哪个章节。章节按起点排序时返回最后一条「起点 ≤ 位置」的章节;
+    /// 位置落在章节间隙(end 到下一节起点之间)返回 nil。
+    /// 「当前章节」高亮用它判定——注意传入的 position 必须是可观察的发布值
+    /// （如 1Hz 的 `displayPosition`），否则面板打开后高亮永远是死数据。
+    static func currentIndex(in chapters: [PlaybackChapter], at position: Double) -> Int? {
+        chapters.lastIndex {
+            position >= $0.startSeconds && ($0.endSeconds.map { position < $0 } ?? true)
+        }
+    }
 }
 
 /// 可跳过的段落类型。

@@ -128,11 +128,14 @@ public enum BangumiURL {
     }
 
     /// 把 lain.bgm.tv 的图床地址重写到当前镜像的图片域名（仅当 host 匹配 CDN 时），并强制使用 HTTPS。
+    /// 纯相对路径（无 host）原样返回——强行加 scheme 会拼出「https:/pic/x.jpg」这种坏 URL。
     public static nonisolated func imageURLString(from rawValue: String) -> String {
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return rawValue }
         let candidate = trimmed.hasPrefix("//") ? "https:\(trimmed)" : trimmed
-        guard var components = URLComponents(string: candidate) else { return rawValue }
+        guard var components = URLComponents(string: candidate), components.host != nil else {
+            return trimmed
+        }
 
         // 统一强制为 HTTPS，避免 HTTP 明文被 Apple ATS 拦截
         if components.scheme == "http" || components.scheme == nil {

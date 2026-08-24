@@ -49,7 +49,8 @@ public struct MPMediaInfo: Sendable, Equatable, Identifiable {
         if poster.hasPrefix("http") {
             return URL(string: poster)
         }
-        return URL(string: "https://image.tmdb.org/t-p/w500\(poster)")
+        // TMDB 标准图床路径是 /t/p/w500/...（此前误写成 /t-p/，相对路径补齐时海报全 404）。
+        return URL(string: "https://image.tmdb.org/t/p/w500\(poster)")
     }
 
     /// 一行式副标题：类型 · 年份 · 评分。
@@ -79,7 +80,7 @@ public struct MPTorrent: Sendable, Equatable, Identifiable {
     }
 
     public var id: String {
-        raw["enclosure"]?.stringValue ?? raw["title"]?.stringValue ?? UUID().uuidString
+        raw["enclosure"]?.stringValue ?? raw["title"]?.stringValue ?? "mp-torrent-\(raw.stableContentHash)"
     }
 
     // MARK: - 识别结果（meta_info，筛选与展示用）
@@ -144,7 +145,7 @@ public struct MPDownloadTask: Sendable, Equatable, Identifiable {
         self.raw = raw
     }
 
-    public var id: String { raw["hash"]?.stringValue ?? UUID().uuidString }
+    public var id: String { raw["hash"]?.stringValue ?? "mp-dl-\(raw.stableContentHash)" }
 
     public var hash: String? { raw["hash"]?.stringValue }
     public var name: String? { raw["name"]?.stringValue }

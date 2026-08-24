@@ -87,6 +87,36 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         XCTAssertEqual(mark.label, "跳过片头")
     }
 
+    // MARK: - 当前章节(currentIndex)
+
+    private func segment(_ index: Int, start: Double, end: Double?) -> PlaybackChapter {
+        PlaybackChapter(id: index, name: "C\(index)", startSeconds: start, endSeconds: end)
+    }
+
+    func testCurrentIndexTracksPositionWithinChapter() {
+        let chapters = [
+            segment(0, start: 0, end: 90),
+            segment(1, start: 90, end: 600),
+            segment(2, start: 600, end: 1200),
+        ]
+        XCTAssertEqual(PlaybackChapter.currentIndex(in: chapters, at: 0), 0)
+        XCTAssertEqual(PlaybackChapter.currentIndex(in: chapters, at: 89), 0)
+        XCTAssertEqual(PlaybackChapter.currentIndex(in: chapters, at: 90), 1)
+        XCTAssertEqual(PlaybackChapter.currentIndex(in: chapters, at: 1199), 2)
+        XCTAssertNil(PlaybackChapter.currentIndex(in: chapters, at: 1200), "end 是开区间，恰好等于片长不归属任何章节")
+    }
+
+    func testCurrentIndexHandlesChapterWithUnknownEnd() {
+        let chapters = [segment(0, start: 0, end: 90), segment(1, start: 90, end: nil)]
+        XCTAssertEqual(PlaybackChapter.currentIndex(in: chapters, at: 5000), 1, "end 未知时按起点归属")
+    }
+
+    func testCurrentIndexReturnsNilInGapOrEmpty() {
+        let chapters = [segment(0, start: 0, end: 90), segment(1, start: 120, end: 600)]
+        XCTAssertNil(PlaybackChapter.currentIndex(in: chapters, at: 100), "章节间隙不归属任何章节")
+        XCTAssertNil(PlaybackChapter.currentIndex(in: [], at: 0))
+    }
+
     func testMultipleOpeningMarksCollapseToOneEarliest() {
         let marks = evaluator.skipMarks(chapters: [
             chapter(0, "OP", start: 0, length: 90, total: 2400),

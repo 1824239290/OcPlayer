@@ -109,3 +109,62 @@ extension JSONValue {
         return nil
     }
 }
+
+extension JSONValue {
+    /// 稳定的内容哈希（FNV-1a，十六进制）。对象键排序、值带类型前缀，
+    /// 同一个 JSON 每次算出同一个值——给缺主键的条目做 ForEach 身份兜底，
+    /// 替代「每次读取都返回新 UUID()」导致的列表行重建/闪烁。
+    var stableContentHash: String {
+        var hasher = FNV1a()
+        writeCanonical(into: &hasher)
+        return hasher.finishHex()
+    }
+
+    private func writeCanonical(into hasher: inout FNV1a) {
+        switch self {
+        case .null:
+            hasher.feed("z")
+        case .bool(let value):
+            hasher.feed(value ? "b:1" : "b:0")
+        case .number(let value):
+            hasher.feed("n:\(value)")
+        case .string(let value):
+            hasher.feed("s:\(value)")
+        case .array(let items):
+            hasher.feed("[")
+            for item in items { item.writeCanonical(into: &hasher); hasher.feed(",") }
+            hasher.feed("]")
+        case .object(let dict):
+            hasher.feed("{")
+            for key in dict.keys.sorted() {
+                hasher.feed("k:\(key):")
+                dict[key]?.writeCanonical(into: &hasher)
+                hasher.feed(";")
+            }
+            hasher.feed("}")
+        }
+    }
+}
+
+extension Dictionary where Key == String, Value == JSONValue {
+    /// 参见 `JSONValue.stableContentHash`。
+    var stableContentHash: String {
+        JSONValue.object(self).stableContentHash
+    }
+}
+
+/// FNV-1a 64 位哈希。纯手写、与进程无关，保证跨渲染/跨启动稳定。
+private struct FNV1a {
+    private var hash: UInt64 = 0xcbf29ce484222325
+
+    mutating func feed(_ string: String) {
+        for byte in string.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x100000001b3
+        }
+    }
+
+    func finishHex() -> String {
+        String(format: "%016llx", hash)
+    }
+}

@@ -72,6 +72,16 @@ struct OnboardingView: View {
             TextField("例如 192.168.1.10:8096", text: $serverAddress)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await connect() } }
+                // 手写 http(s):// 前缀时连接以手动为准（见下方提示），
+                // 让 segmented Picker 同步到实际生效的协议，避免 UI 显示与行为脱节。
+                .onChange(of: serverAddress) { _, newValue in
+                    let lower = newValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    if lower.hasPrefix("https://") {
+                        serverScheme = .https
+                    } else if lower.hasPrefix("http://") {
+                        serverScheme = .http
+                    }
+                }
             Text("可以不打前缀;选择器决定协议,手动打了 http:// 或 https:// 则以手动为准。")
                 .font(.caption)
                 .foregroundStyle(.tertiary)

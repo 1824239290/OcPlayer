@@ -11,6 +11,39 @@ struct BangumiKitTests {
         #expect(BangumiCollectionType.allTypes().count == 5)
     }
 
+    /// 收藏分页查询参数必须真正拼进 URL——此前只组了 queryItems 没挂上去，
+    /// 导致 since 增量同步失效、offset 恒 0（收藏超过默认页大小的部分永远拉不到）。
+    @Test func collectionsURLCarriesPagingQuery() {
+        let url = BangumiCollectionService.collectionsURL(
+            type: .doing, subjectType: .anime, since: 12345, limit: 50, offset: 200)
+        #expect(url.path().hasSuffix("p1/collections/subjects"))
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func value(_ name: String) -> String? {
+            query.first { $0.name == name }?.value
+        }
+        #expect(value("since") == "12345")
+        #expect(value("limit") == "50")
+        #expect(value("offset") == "200")
+        #expect(value("type") == String(BangumiCollectionType.doing.rawValue))
+        #expect(value("subjectType") == String(BangumiSubjectType.anime.rawValue))
+    }
+
+    /// 图床地址重写：相对路径原样放行（此前会被强加 scheme 成坏 URL），
+    /// http → https，`//` 协议相对地址补 https。
+    @Test func imageURLStringRewritesAndPreserves() {
+        #expect(BangumiURL.imageURLString(from: "/pic/x.jpg") == "/pic/x.jpg")
+        #expect(BangumiURL.imageURLString(from: "pic/x.jpg") == "pic/x.jpg")
+        #expect(
+            BangumiURL.imageURLString(from: "//lain.bgm.tv/pic/cover/l/xx.jpg")
+                == "https://lain.bgm.tv/pic/cover/l/xx.jpg")
+        #expect(
+            BangumiURL.imageURLString(from: "http://lain.bgm.tv/pic/cover/l/xx.jpg")
+                == "https://lain.bgm.tv/pic/cover/l/xx.jpg")
+        #expect(
+            BangumiURL.imageURLString(from: "https://lain.bgm.tv/pic/cover/l/xx.jpg")
+                == "https://lain.bgm.tv/pic/cover/l/xx.jpg")
+    }
+
     @Test func episodeSortDisplay() {
         let episode = BangumiFixture.episode(id: 1, subjectID: 1, sort: 12.5)
         #expect(episode.sortDisplay == "12.5")

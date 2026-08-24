@@ -18,7 +18,9 @@ public struct MPSubscribe: Sendable, Equatable, Identifiable {
         if let name, let year {
             return "\(name):\(year):\(season ?? 0)"
         }
-        return UUID().uuidString
+        // 主键/名称都缺失时的兜底：用内容稳定哈希，替代每次读取都换一个的 UUID()
+        // （计算属性当 ForEach id 时，UUID 会让每行每次重绘都被当成新元素重建）。
+        return "mp-sub-\(raw.stableContentHash)"
     }
 
     /// 订阅 ID（后端主键，删除/更新接口使用）。
@@ -117,7 +119,8 @@ public struct MPSubscribe: Sendable, Equatable, Identifiable {
         if poster.hasPrefix("http") {
             return URL(string: poster)
         }
-        return URL(string: "https://image.tmdb.org/t-p/w500\(poster)")
+        // TMDB 标准图床路径是 /t/p/w500/...（此前误写成 /t-p/，相对路径补齐时海报全 404）。
+        return URL(string: "https://image.tmdb.org/t/p/w500\(poster)")
     }
 
     /// 背景海报。
