@@ -156,11 +156,11 @@ struct BangumiHomeView: View {
                 skeletonView
             } else if let loadError, subjects.isEmpty {
                 ContentUnavailableView {
-                    Label("加载失败", systemImage: "exclamationmark.triangle")
+                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(loadError)
                 } actions: {
-                    Button("重试") { Task { await load() } }
+                    Button(UIStrings.retry) { Task { await load() } }
                 }
             } else if subjects.isEmpty {
                 ContentUnavailableView {
@@ -247,7 +247,7 @@ struct BangumiHomeView: View {
                         Text(searchError)
                     } actions: {
                         HStack(spacing: 12) {
-                            Button("重试") {
+                            Button(UIStrings.retry) {
                                 Task { await performSearch(submittedSearchKeyword.trimmingCharacters(in: .whitespaces)) }
                             }
                             .buttonStyle(.borderedProminent)

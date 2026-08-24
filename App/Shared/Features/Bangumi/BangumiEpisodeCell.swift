@@ -136,7 +136,7 @@ struct BangumiNotice: View {
             Text(message).font(.callout)
             Spacer(minLength: 0)
             if let onRetry {
-                Button("重试", action: onRetry)
+                Button(UIStrings.retry, action: onRetry)
                     .buttonStyle(.borderless)
                     .font(.callout)
             }

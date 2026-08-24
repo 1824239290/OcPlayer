@@ -60,11 +60,11 @@ struct LibraryView: View {
                 skeletonGrid
             } else if let loadError, items.isEmpty {
                 ContentUnavailableView {
-                    Label("加载失败", systemImage: "wifi.exclamationmark")
+                    Label(UIStrings.loadFailed, systemImage: "wifi.exclamationmark")
                 } description: {
                     Text(loadError)
                 } actions: {
-                    Button("重试") { Task { await reload() } }
+                    Button(UIStrings.retry) { Task { await reload() } }
                 }
             } else if items.isEmpty {
                 ContentUnavailableView("这里还没有内容", systemImage: "tray")

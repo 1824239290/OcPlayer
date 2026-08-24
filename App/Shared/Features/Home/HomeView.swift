@@ -135,7 +135,7 @@ struct HomeView: View {
         } description: {
             Text(message)
         } actions: {
-            Button("重试") { Task { await app.reloadBrowserData() } }
+            Button(UIStrings.retry) { Task { await app.reloadBrowserData() } }
         }
     }
 }

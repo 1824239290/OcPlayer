@@ -85,11 +85,11 @@ struct BangumiCalendarView: View {
                 skeletonView
             } else if let loadError, days.isEmpty {
                 ContentUnavailableView {
-                    Label("加载失败", systemImage: "exclamationmark.triangle")
+                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(loadError)
                 } actions: {
-                    Button("重试") { Task { await loadCalendar() } }
+                    Button(UIStrings.retry) { Task { await loadCalendar() } }
                         .buttonStyle(.borderedProminent)
                 }
             } else if days.isEmpty {

@@ -22,11 +22,11 @@ struct BangumiCollectionListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let loadError, subjects.isEmpty {
                 ContentUnavailableView {
-                    Label("加载失败", systemImage: "exclamationmark.triangle")
+                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(loadError)
                 } actions: {
-                    Button("重试") {
+                    Button(UIStrings.retry) {
                         reloader.toggle()
                     }
                 }

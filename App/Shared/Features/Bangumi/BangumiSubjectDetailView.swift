@@ -96,11 +96,11 @@ struct BangumiSubjectDetailView: View {
                         .padding(.vertical, 32)
                 } else if let loadError, subject == nil {
                     ContentUnavailableView {
-                        Label("加载失败", systemImage: "exclamationmark.triangle")
+                        Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
                     } description: {
                         Text(loadError)
                     } actions: {
-                        Button("重试") { Task { await load() } }
+                        Button(UIStrings.retry) { Task { await load() } }
                     }
                     .padding(.horizontal, contentLeading)
                 } else {

@@ -186,7 +186,7 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
-                        Button("重试") { Task { await app.startQuickConnect() } }
+                        Button(UIStrings.retry) { Task { await app.startQuickConnect() } }
                             .font(.callout)
                     }
                 }

@@ -75,7 +75,7 @@ struct MoviePilotResourceView: View {
                     Text(searchError)
                         .foregroundStyle(.red)
                         .font(.callout)
-                    Button("重试") { search() }
+                    Button(UIStrings.retry) { search() }
                 } else if displayedTorrents.isEmpty {
                     Text(hasSearched
                          ? (filters.isActive

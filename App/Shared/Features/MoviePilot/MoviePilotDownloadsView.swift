@@ -32,7 +32,7 @@ struct MoviePilotDownloadsView: View {
                     }
                 } else if let loadError {
                     Text(loadError).foregroundStyle(.red).font(.callout)
-                    Button("重试") { isFirstLoad = true }
+                    Button(UIStrings.retry) { isFirstLoad = true }
                 } else if tasks.isEmpty {
                     Text("当前没有下载中的任务。下载完成的项目由 MoviePilot 整理后进入 Jellyfin 媒体库。")
                         .font(.callout)

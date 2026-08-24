@@ -458,7 +458,7 @@ struct DetailView: View {
                 } description: {
                     Text(episodeLoadError)
                 } actions: {
-                    Button("重试") { Task { await loadEpisodes() } }
+                    Button(UIStrings.retry) { Task { await loadEpisodes() } }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)

@@ -66,7 +66,7 @@ struct AppShellView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Button("重试") {
+                        Button(UIStrings.retry) {
                             Task { await app.reloadBrowserData() }
                         }
                         .buttonStyle(.borderless)

@@ -223,7 +223,7 @@ struct MoviePilotHomeView: View {
                     } description: {
                         Text(subscribesError)
                     } actions: {
-                        Button("重试") { Task { await loadSubscribes() } }
+                        Button(UIStrings.retry) { Task { await loadSubscribes() } }
                             .buttonStyle(.bordered)
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
@@ -351,7 +351,7 @@ struct MoviePilotHomeView: View {
                 } description: {
                     Text(searchError)
                 } actions: {
-                    Button("重试", action: search)
+                    Button(UIStrings.retry, action: search)
                         .buttonStyle(.borderedProminent)
                 }
             } else if results.isEmpty {
