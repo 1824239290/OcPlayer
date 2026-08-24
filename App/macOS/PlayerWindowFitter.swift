@@ -54,9 +54,15 @@ enum PlayerWindowFitter {
         )
         newFrame.origin.x = min(max(newFrame.origin.x, screen.minX), screen.maxX - newFrame.width)
         newFrame.origin.y = min(max(newFrame.origin.y, screen.minY), screen.maxY - newFrame.height)
-        Task { @MainActor in
-            guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow() else { return }
-            window.setFrame(newFrame, display: true, animate: true)
+        // setFrame 推迟到 main-queue 下一块执行（SwiftUI update cycle 里同步做会撞
+        // NSMoveHelper，实测空指针 SIGSEGV）。用 DispatchQueue.main.async 与其它
+        // main-queue 工作保持 FIFO；Task { @MainActor } 只保证主 actor 隔离，不保证
+        // 相对 AppKit 的入队顺序，等于白白丢掉这层保证。
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow() else { return }
+                window.setFrame(newFrame, display: true, animate: true)
+            }
         }
     }
 
@@ -73,16 +79,19 @@ enum PlayerWindowFitter {
         // 退出播放器时还原窗口。不能在 onDisappear 的 SwiftUI update cycle 里同步做
         // animate:true 的 setFrame——那个动画 helper（NSMoveHelper）会在窗口因
         // overlay 移除 / 工具栏恢复而处于不稳定状态时被驱动，实测空指针 SIGSEGV。
-        // 这里延后到下一个 runloop 再还原，此时 overlay 和工具栏已恢复稳定，可以安全用动画。
-        Task { @MainActor in
-            // 竞争保护：这个闭包是异步的，执行前用户可能已经退出一场播放、重新开始了
-            // 一场新的（新会话 saveOriginalIfNeeded 会把 originalFrame 换成新窗口的 frame，
-            // 也可能已经被 fit() 调过比例）。只对「还是同一场」的窗口做还原：
-            // 比对窗口身份，防止把新窗口误拉回旧帧。
-            guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow(),
-                  PlayerWindowFitter.originalFrame == nil
-            else { return }
-            window.setFrame(target, display: true, animate: true)
+        // 延后到 main-queue 下一块再还原（与 fit 同用 DispatchQueue.main.async 保证
+        // FIFO），此时 overlay 和工具栏已恢复稳定，可以安全用动画。
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                // 竞争保护：这个闭包是异步的，执行前用户可能已经退出一场播放、重新开始了
+                // 一场新的（新会话 saveOriginalIfNeeded 会把 originalFrame 换成新窗口的 frame，
+                // 也可能已经被 fit() 调过比例）。只对「还是同一场」的窗口做还原：
+                // 比对窗口身份，防止把新窗口误拉回旧帧。
+                guard !window.isReleasedWhenClosed, window === PlayerWindowFitter.playerWindow(),
+                      PlayerWindowFitter.originalFrame == nil
+                else { return }
+                window.setFrame(target, display: true, animate: true)
+            }
         }
     }
 

@@ -350,6 +350,15 @@ public actor BangumiDatabaseOperator {
         }
     }
 
+    /// 批量读取（按 id）。日历页「本地收藏标记」一屏几十个条目，逐条 `subject(id:)`
+    /// 是几十次 DB 往返；这里一条 `IN (...)` 查询取回来。
+    public func subjects(ids: [Int]) throws -> [Int: BangumiSubjectDTO] {
+        guard !ids.isEmpty else { return [:] }
+        return try database.read { db in
+            try fetchSubjectsById(in: db, ids).mapValues { $0.dto }
+        }
+    }
+
     /// 清空账户相关数据（登出/换号时调用）。
     public func clearAccountLocalState() throws {
         try database.write { db in

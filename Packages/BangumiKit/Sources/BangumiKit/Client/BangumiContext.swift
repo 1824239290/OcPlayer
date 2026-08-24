@@ -408,6 +408,12 @@ public final class BangumiContext {
         return try await db.subject(id: id)
     }
 
+    /// 批量读取（按 id），单次 actor 往返。
+    public func subjects(ids: [Int]) async throws -> [Int: BangumiSubjectDTO] {
+        guard let db = database else { throw BangumiError.uninitializedDB }
+        return try await db.subjects(ids: ids)
+    }
+
     // MARK: - 登出
 
     public func signOutBangumi() async {

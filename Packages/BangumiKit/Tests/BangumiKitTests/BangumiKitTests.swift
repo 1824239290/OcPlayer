@@ -400,6 +400,23 @@ struct BangumiDatabaseTests {
         #expect(stored?.interest?.`private` == false)
     }
 
+    /// 批量读取一条 IN 查询拿回全部（日历页逐条 await 上百次的替代路径）。
+    @Test func subjectsBatchFetchesAllRequested() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 900, eps: 5, epStatus: 2))
+        try await db.saveSubject(BangumiFixture.subject(id: 901, eps: 12, epStatus: 0))
+        try await db.saveSubject(BangumiFixture.subject(id: 902, eps: 3, epStatus: 3))
+
+        let fetched = try await db.subjects(ids: [900, 901, 902, 999])
+        #expect(fetched.count == 3)
+        #expect(fetched[900]?.id == 900)
+        #expect(fetched[901]?.id == 901)
+        #expect(fetched[999] == nil)
+        // 与单条目路径一致：interest 字段都在。
+        #expect(fetched[900]?.interest?.type == .doing)
+        #expect(try await db.subjects(ids: []).isEmpty)
+    }
+
     @Test func searchDecoding() async throws {
         let json = """
         {

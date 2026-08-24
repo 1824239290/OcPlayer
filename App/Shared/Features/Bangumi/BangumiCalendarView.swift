@@ -405,13 +405,17 @@ struct BangumiCalendarView: View {
 
     private func reloadLocalInterests() async {
         guard bangumi.isAuthenticated, bangumi.isDatabaseReady else { return }
+        let ids = Array(Set(days.flatMap { $0.items.map(\.id) }))
+        guard !ids.isEmpty else {
+            localInterests = [:]
+            return
+        }
+        // 一条 IN 查询取回全部（原来逐条 await 上百次 DB 往返，刷新/翻页卡顿）。
+        let stored = (try? await bangumi.context.subjects(ids: ids)) ?? [:]
         var interests: [Int: BangumiCollectionType] = [:]
-        for day in days {
-            for item in day.items {
-                if let stored = try? await bangumi.context.subject(id: item.id),
-                   let interest = stored.interest, interest.type != .none {
-                    interests[item.id] = interest.type
-                }
+        for (id, subject) in stored {
+            if let interest = subject.interest, interest.type != .none {
+                interests[id] = interest.type
             }
         }
         localInterests = interests
