@@ -17,16 +17,19 @@ enum AppDiagnostics {
         (try? logger.readRecords(limit: 40)) ?? []
     }
 
-    static func logInfo(_ message: String, fields: [String: DiagnosticValue] = [:]) {
-        logger.info(message, fields: fields)
+    static func logInfo(_ message: String, fields: [String: DiagnosticValue] = [:],
+                        throttle: DiagnosticThrottle? = nil) {
+        logger.info(message, fields: fields, throttle: throttle)
     }
 
-    static func logWarning(_ message: String, fields: [String: DiagnosticValue] = [:]) {
-        logger.warning(message, fields: fields)
+    static func logWarning(_ message: String, fields: [String: DiagnosticValue] = [:],
+                           throttle: DiagnosticThrottle? = nil) {
+        logger.warning(message, fields: fields, throttle: throttle)
     }
 
-    static func logError(_ message: String, fields: [String: DiagnosticValue] = [:]) {
-        logger.error(message, fields: fields)
+    static func logError(_ message: String, fields: [String: DiagnosticValue] = [:],
+                         throttle: DiagnosticThrottle? = nil) {
+        logger.error(message, fields: fields, throttle: throttle)
     }
 
     static func flush() {

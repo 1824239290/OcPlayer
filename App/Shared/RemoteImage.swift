@@ -29,6 +29,14 @@ extension Image {
 final class ImagePipeline: @unchecked Sendable {
     static let shared = ImagePipeline()
     static let diskCapacityBytes = 512 * 1024 * 1024
+    /// 图片失败日志节流：服务器掉线时一墙海报会瞬间刷出几百条 warning，
+    /// 别把 2MB×3 轮转的诊断历史全挤掉。
+    private static let failureThrottle = DiagnosticThrottle(key: "image-load-failure", interval: 5)
+    /// 项目统一 UA（对齐 MoviePilot / Jellyfin 客户端的 OcPlay/版本 写法）。
+    private static let userAgent: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        return "OcPlay/\(version) (ImagePipeline)"
+    }()
 
     private let session: URLSession
     private let cache: URLCache
@@ -96,17 +104,20 @@ final class ImagePipeline: @unchecked Sendable {
         tasks.forEach { $0.cancel() }
     }
 
-    /// 加载一张图。返回 `nil` = 真正失败（下次可重试）；任务被取消会抛 `CancellationError`
-    /// （视图消失 / 换 URL 时 `.task(id:)` 自动取消），调用方不要把取消当成失败。
-    /// 同一 URL 的并发调用共享同一个网络任务，取消一个订阅者不影响其它订阅者。
+    /// 加载一张图。返回 `nil` = 真正失败（下次可重试）。
+    ///
+    /// 同一 URL 的并发调用共享同一个网络任务（列表滚动反复出现同一张图时不重复拉）；
+    /// 共享任务在**最后一个订阅者离开**时被取消（视图消失 / 换 URL / clearCache），
+    /// 调用方被取消会抛 `CancellationError`——不要把取消当成失败。
     func load(_ url: URL, authHeader: String?, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
-        let key = url.absoluteString + "\u{0}" + (authHeader ?? "") + "\u{0}" + "\(maxPixelSize ?? 0)"
+        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
         if let cached = cachedImage(forKey: key) {
             return cached
         }
-        let task = startOrJoin(key: key) { requestID, generation in
+        let subscriptionID = UUID()
+        let task = startOrJoin(key: key, subscriptionID: subscriptionID) { requestID, generation in
             Task<PlatformImage?, Error> { [weak self] in
-                // 不管成败都要从 inFlight 摘掉，否则失败 URL 会永远卡在「进行中」。
+                // 不管成败都要从 inFlight 摘掉，否则失败的 URL 会永远卡在「进行中」。
                 defer { self?.finishInFlight(key: key, requestID: requestID) }
                 guard let self else { return nil }
                 let request = self.makeRequest(url, authHeader: authHeader)
@@ -124,7 +135,7 @@ final class ImagePipeline: @unchecked Sendable {
                     AppDiagnostics.logWarning("图片加载失败", fields: [
                         "url": .string(url.absoluteString),
                         "error": .string("\(error)"),
-                    ])
+                    ], throttle: Self.failureThrottle)
                     if !self.isCurrentGeneration(generation) {
                         self.cache.removeCachedResponse(for: request)
                     }
@@ -132,10 +143,24 @@ final class ImagePipeline: @unchecked Sendable {
                 }
             }
         }
-        return try await task.value
+        // 正常路径也要注销订阅；取消路径靠 onCancel 注销（leave 幂等）。
+        defer { leave(key: key, subscriptionID: subscriptionID) }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            leave(key: key, subscriptionID: subscriptionID)
+        }
     }
 
     // MARK: - 锁保护（NSLock 不能在 async 上下文直接调，临界区收进同步方法）
+
+    /// 请求去重 / 内存缓存的 key。认证头不直接进 key——它可能出现在 SwiftUI 的
+    /// view identity 与诊断输出里——只保留进程内稳定的哈希（同 token 同哈希，
+    /// 换 token 自然换 key，与直接拼完整头的失效语义一致）。
+    private func requestKey(url: URL, authHeader: String?, maxPixelSize: Int?) -> String {
+        let authIdentity = authHeader.map { String($0.hashValue) } ?? "none"
+        return url.absoluteString + "\u{0}" + authIdentity + "\u{0}" + "\(maxPixelSize ?? 0)"
+    }
 
     private func cachedImage(forKey key: String) -> PlatformImage? {
         lock.lock()
@@ -161,16 +186,40 @@ final class ImagePipeline: @unchecked Sendable {
 
     private func startOrJoin(
         key: String,
+        subscriptionID: UUID,
         make: (UUID, UInt64) -> Task<PlatformImage?, Error>
     )
         -> Task<PlatformImage?, Error> {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = inFlight[key] { return existing.task }
+        if var existing = inFlight[key] {
+            existing.subscribers.insert(subscriptionID)
+            inFlight[key] = existing
+            return existing.task
+        }
         let requestID = UUID()
         let task = make(requestID, cacheGeneration)
-        inFlight[key] = InFlightRequest(id: requestID, task: task)
+        inFlight[key] = InFlightRequest(id: requestID, task: task, subscribers: [subscriptionID])
         return task
+    }
+
+    /// 注销一个订阅者；最后一个订阅者离开时取消底层任务（否则滚动经过的
+    /// 海报也会把整张图下载完并解码完，白烧带宽和 CPU）。
+    /// 幂等：同一个 subscriptionID 只注销一次（正常路径的 defer 与取消路径的 onCancel 都会调）。
+    private func leave(key: String, subscriptionID: UUID) {
+        var taskToCancel: Task<PlatformImage?, Error>?
+        lock.lock()
+        if var entry = inFlight[key] {
+            entry.subscribers.remove(subscriptionID)
+            if entry.subscribers.isEmpty {
+                inFlight[key] = nil
+                taskToCancel = entry.task
+            } else {
+                inFlight[key] = entry
+            }
+        }
+        lock.unlock()
+        taskToCancel?.cancel()
     }
 
     private func finishInFlight(key: String, requestID: UUID) {
@@ -184,6 +233,8 @@ final class ImagePipeline: @unchecked Sendable {
     private struct InFlightRequest {
         let id: UUID
         let task: Task<PlatformImage?, Error>
+        /// 当前等待这个请求的订阅者（并发调用同一 URL 的视图）。
+        var subscribers: Set<UUID>
     }
 
     private func makeRequest(_ url: URL, authHeader: String?) -> URLRequest {
@@ -192,12 +243,16 @@ final class ImagePipeline: @unchecked Sendable {
         let targetURL = url
         var request = URLRequest(url: targetURL)
         request.cachePolicy = .returnCacheDataElseLoad
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
-            forHTTPHeaderField: "User-Agent"
-        )
         if let host = targetURL.host, host.contains("bgm.tv") {
+            // bgm 图床按浏览器 UA + Referer 防盗链；其它图源（含自家 Jellyfin）用项目统一 UA，
+            // 别把假 UA 无条件下发给所有图片请求（与服务端指纹约定不一致，也容易被当爬虫）。
+            request.setValue(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+                forHTTPHeaderField: "User-Agent"
+            )
             request.setValue("https://bgm.tv/", forHTTPHeaderField: "Referer")
+        } else {
+            request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         }
         if let authHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
@@ -206,19 +261,20 @@ final class ImagePipeline: @unchecked Sendable {
     }
 
     private func fetch(_ request: URLRequest, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
-        // 取消（视图消失 / 换 URL）会从这里抛 CancellationError，由调用方区分处理。
+        // 最后一个订阅者离开（视图消失 / 换 URL）或 clearCache 会取消底层任务，
+        // 从这里抛 CancellationError，由调用方区分处理，别当成真正的失败。
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             AppDiagnostics.logWarning("图片请求失败：无 HTTP 响应", fields: [
                 "url": .string(request.url?.absoluteString ?? "")
-            ])
+            ], throttle: Self.failureThrottle)
             return nil
         }
         guard httpResponse.statusCode == 200 else {
             AppDiagnostics.logWarning("图片请求返回非 200", fields: [
                 "url": .string(request.url?.absoluteString ?? ""),
                 "status": .integer(Int64(httpResponse.statusCode)),
-            ])
+            ], throttle: Self.failureThrottle)
             return nil
         }
         // 在 URLSession 的协程线程池上立即解码：`PlatformImage(data:)` 是懒解码，
@@ -228,7 +284,7 @@ final class ImagePipeline: @unchecked Sendable {
             AppDiagnostics.logWarning("图片解码失败", fields: [
                 "url": .string(request.url?.absoluteString ?? ""),
                 "data_len": .integer(Int64(data.count)),
-            ])
+            ], throttle: Self.failureThrottle)
             return nil
         }
         return image
@@ -309,7 +365,7 @@ struct RemoteImage: View {
         }
         .clipped()
         .animation(imageFade, value: image != nil)
-        .task(id: "\(url?.absoluteString ?? "")#\(authHeader ?? "")#\(maxPixelSize ?? 0)") {
+        .task(id: "\(url?.absoluteString ?? "")#\(authHeader.map { String($0.hashValue) } ?? "none")#\(maxPixelSize ?? 0)") {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Clear the previous bitmap before
             // loading the new URL, otherwise the old poster can sit beside the
