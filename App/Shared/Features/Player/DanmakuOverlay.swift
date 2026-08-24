@@ -12,11 +12,12 @@ typealias PlatformFont = UIFont
 
 /// App 层弹幕 overlay（见 Packages/DanmakuRenderKit/PROVENANCE.md）。
 ///
-/// 为什么不用内核弹幕：Erika DFM+ 的滑窗重放是非单调的——窗口前移让"过去"的
-/// 轨道占用变少，之前被丢弃的弹幕会追认回轨道，挤掉在屏弹幕的轨道偏好，
-/// 表现为窗口完全不动也跳轨。DanmakuRenderKit 的轨道模型是入轨时「追击判定」、
-/// 入轨后不换轨，结构上杜绝这类问题。**不支持内核弹幕的内核（如 libmpv）
-/// 只能走这条路**，`PlaybackController` 会强制它。
+/// 为什么不用内核弹幕的旧因已定位:转换器给每条弹幕合成稳定唯一 `id`,内核拿它当
+/// shell stable_tracks 的 key,viewport 重排时个别弹幕的轨道偏好互相顶掉 → 单独几条
+/// 突然换位置(跳轨)。去掉 `id`(内核把每条当匿名,整片重排)后跳轨消失,内核弹幕
+/// 重新成为默认。overlay 保留为**备用路线**:DanmakuRenderKit 的轨道模型是入轨时
+/// 「追击判定」、入轨后不换轨,结构上不会有重排换轨,留给不便用内核弹幕的场景。
+/// **不支持内核弹幕的内核(如 libmpv)只能走这条路**,PlaybackController 会强制它。
 ///
 /// 时间桥：内核每帧发 positionChanged（`PlaybackEngine.latestMediaTime`），本控制器
 /// 30Hz 采样它决定谁出场。暂停/缓冲＝媒体时间冻结 → 冻结检测暂停视图动画；

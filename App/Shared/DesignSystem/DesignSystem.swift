@@ -188,12 +188,12 @@ struct SkeletonPosterCard: View {
     var width: CGFloat? = Metrics.posterWidth
 
     var body: some View {
+        let cardWidth = width ?? Metrics.posterWidth
         VStack(alignment: .leading, spacing: 9) {
             SkeletonBlock()
-                .aspectRatio(2 / 3, contentMode: .fit)
-                .frame(width: width)
+                .frame(width: cardWidth, height: cardWidth * 1.5)
             SkeletonBlock(cornerRadius: 4)
-                .frame(width: width.map { $0 * 0.7 } ?? 110, height: 12)
+                .frame(width: cardWidth * 0.7, height: 12)
         }
         .frame(width: width, alignment: .leading)
     }
@@ -204,8 +204,7 @@ struct SkeletonStillCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SkeletonBlock()
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .frame(width: Metrics.stillWidth)
+                .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
             SkeletonBlock(cornerRadius: 4)
                 .frame(width: Metrics.stillWidth * 0.55, height: 12)
             SkeletonBlock(cornerRadius: 4)
@@ -393,9 +392,10 @@ struct PosterCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 9) {
                 let target = item.imageTarget(server, kind: .primary, width: 400)
+                let cardWidth = width ?? Metrics.posterWidth
                 RemoteImage(url: target.url, authHeader: target.authHeader)
                     .aspectRatio(2 / 3, contentMode: .fill)
-                    .frame(width: width)
+                    .frame(width: cardWidth, height: cardWidth * 1.5)
                     .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 HStack {
                     Text(item.name)
@@ -443,6 +443,16 @@ struct StillCard: View {
         self.onTap = onTap
     }
 
+    private var title: String {
+        if let seriesName = item.seriesName, !seriesName.isEmpty {
+            if item.name.isEmpty || item.name == seriesName || item.name.contains(seriesName) {
+                return item.name.isEmpty ? seriesName : item.name
+            }
+            return "\(seriesName) · \(item.name)"
+        }
+        return item.name
+    }
+
     private var subtitle: String {
         if let label = item.episodeLabel {
             if let remaining = remaining, remaining > 0 {
@@ -469,6 +479,8 @@ struct StillCard: View {
                     let target = item.episodeThumbTarget(server, width: 720)
                     RemoteImage(url: target.url, authHeader: target.authHeader)
                         .aspectRatio(16 / 9, contentMode: .fill)
+                        .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
+                        .clipped()
                     // 底部只做很轻的可读性压暗；不再为常驻按钮铺厚渐变。
                     LinearGradient(
                         colors: [.black.opacity(hovering || voiceOverEnabled ? 0.45 : 0.22), .clear],
@@ -484,7 +496,7 @@ struct StillCard: View {
                         .animation(badgeMotion, value: actionBadgeVisible)
                         .accessibilityHidden(true)
                 }
-                .frame(width: Metrics.stillWidth)
+                .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
 
                 // 进度条是海报框的一部分：紧贴框底、与框同宽，作为一条收边，不叠在图片上。
@@ -494,7 +506,7 @@ struct StillCard: View {
                     .padding(.top, 6)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(item.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
                     Text(subtitle).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
                 }
                 .padding(.top, 10)
@@ -503,7 +515,7 @@ struct StillCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(actionAccessibilityLabel ?? "播放 \(item.name)")
+        .accessibilityLabel(actionAccessibilityLabel ?? "播放 \(title)")
         .accessibilityValue("\(subtitle)，已播放 \(Int(progress * 100))%")
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
