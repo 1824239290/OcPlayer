@@ -10,13 +10,12 @@ extension AppModel {
     func updateDanmakuGateway(urlString: String, apiKey: String) {
         // Commit both values before restarting. This avoids ever pairing a new
         // gateway host with the previously saved credential.
-        dandanplayStore.gatewayURLString = urlString
-        dandanplayStore.apiKey = apiKey
+        danmakuModel.updateGateway(urlString: urlString, apiKey: apiKey)
         restartDanmakuForCurrentPlayback()
     }
 
     func setDanmakuAutoLoadingEnabled(_ enabled: Bool) {
-        danmaku.setAutoLoadingEnabled(enabled)
+        danmakuModel.danmaku.setAutoLoadingEnabled(enabled)
         if enabled { restartDanmakuForCurrentPlayback() }
     }
 
@@ -53,7 +52,7 @@ extension AppModel {
         preparationDismissTask?.cancel()
         preparationDismissTask = nil
         playbackPreparation = nil
-        danmaku.cancel()
+        danmakuModel.danmaku.cancel()
     }
 
     /// 取消正在解析的播放准备（loading 层「取消」按钮入口）：
@@ -315,7 +314,7 @@ func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
         } else {
             context = .standalone(request: request)
         }
-        danmaku.start(
+        danmakuModel.danmaku.start(
             context: context,
             configuration: dandanplayConfiguration,
             playback: playback
@@ -328,10 +327,10 @@ func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
     }
 
     var dandanplayConfiguration: DandanplayConfiguration? {
-        guard dandanplayStore.isConfigured else { return nil }
+        guard danmakuModel.dandanplayStore.isConfigured else { return nil }
         return DandanplayConfiguration(
-            baseURL: dandanplayStore.gatewayURL,
-            apiKey: dandanplayStore.apiKey,
+            baseURL: danmakuModel.dandanplayStore.gatewayURL,
+            apiKey: danmakuModel.dandanplayStore.apiKey,
             userAgent: Self.dandanplayUserAgent
         )
     }

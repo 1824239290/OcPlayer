@@ -6,7 +6,7 @@ import SwiftUI
 /// MoviePilot 的凭据对不对只有登录了才知道）。
 /// 密码不回显：退出登录后本地已清空，登录中也无需带回。
 struct MoviePilotServerSheet: View {
-    @Environment(AppModel.self) private var app
+    @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.dismiss) private var dismiss
 
     @State private var serverURL: String
@@ -19,7 +19,7 @@ struct MoviePilotServerSheet: View {
     }
 
     var body: some View {
-        @Bindable var mp = app.moviepilot
+        @Bindable var mp = moviepilot
         return NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {

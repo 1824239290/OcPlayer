@@ -2,7 +2,7 @@ import DanmakuKit
 import SwiftUI
 
 struct DanmakuSelectionSheet: View {
-    @Environment(AppModel.self) private var app
+    @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(\.dismiss) private var dismiss
 
     @State private var animeQuery: String
@@ -46,8 +46,8 @@ struct DanmakuSelectionSheet: View {
                 }
 
                 Section("当前状态") {
-                    LabeledContent("弹幕", value: app.danmaku.status.label)
-                    if let match = app.danmaku.currentMatch {
+                    LabeledContent("弹幕", value: danmakuModel.danmaku.status.label)
+                    if let match = danmakuModel.danmaku.currentMatch {
                         LabeledContent("Episode ID", value: String(match.episodeID))
                     }
                 }
@@ -71,7 +71,7 @@ struct DanmakuSelectionSheet: View {
                             ForEach(anime.episodes) { episode in
                                 Button {
                                     if let requestID {
-                                        app.danmaku.selectEpisode(
+                                        danmakuModel.danmaku.selectEpisode(
                                             episode,
                                             animeTitle: anime.animeTitle,
                                             for: requestID
@@ -88,7 +88,7 @@ struct DanmakuSelectionSheet: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                         Spacer(minLength: 12)
-                                        if app.danmaku.currentMatch?.episodeID == episode.episodeId {
+                                        if danmakuModel.danmaku.currentMatch?.episodeID == episode.episodeId {
                                             Image(systemName: "checkmark")
                                                 .foregroundStyle(.tint)
                                                 .accessibilityHidden(true)
@@ -99,7 +99,7 @@ struct DanmakuSelectionSheet: View {
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(episode.episodeTitle ?? "Episode \(episode.episodeId)")
                                 .accessibilityValue(
-                                    app.danmaku.currentMatch?.episodeID == episode.episodeId
+                                    danmakuModel.danmaku.currentMatch?.episodeID == episode.episodeId
                                         ? "当前选择" : ""
                                 )
                             }
@@ -155,7 +155,7 @@ struct DanmakuSelectionSheet: View {
             }
         }
         do {
-            let found = try await app.danmaku.searchEpisodes(
+            let found = try await danmakuModel.danmaku.searchEpisodes(
                 anime: request.anime,
                 episode: request.episode
             )

@@ -16,6 +16,7 @@ import Combine
 struct PlayerScreen: View {
     @Environment(PlaybackController.self) private var controller
     @Environment(AppModel.self) private var app
+    @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(\.accessibilityVoiceOverEnabled) private var isVoiceOverEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -135,7 +136,7 @@ struct PlayerScreen: View {
             }
         }
         .sheet(isPresented: $isSelectingDanmaku) {
-            let suggestion = app.danmaku.searchSuggestion(for: request?.id)
+            let suggestion = danmakuModel.danmaku.searchSuggestion(for: request?.id)
             DanmakuSelectionSheet(
                 requestID: request?.id,
                 initialAnime: suggestion?.anime

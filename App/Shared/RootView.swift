@@ -9,6 +9,7 @@ import UIKit
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(PlaybackController.self) private var controller
+    @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -83,7 +84,7 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(
             for: MoviePilotCoordinator.authenticationRequiredNotification)) { note in
             guard let generation = MoviePilotCoordinator.authenticationGeneration(from: note) else { return }
-            Task { await app.moviepilot.handleAuthenticationRequired(generation: generation) }
+            Task { await moviepilot.handleAuthenticationRequired(generation: generation) }
         }
         .task {
             app.playback = controller

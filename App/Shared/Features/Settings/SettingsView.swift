@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 /// 外观 / 播放细节设置 M4 再进。
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
+    @Environment(MoviePilotCoordinator.self) private var moviepilot
+    @Environment(DanmakuModel.self) private var danmakuModel
 
     @State private var isImporting = false
     @State private var isEnteringURL = false
@@ -52,37 +54,37 @@ struct SettingsView: View {
 
             Section("弹幕") {
                 Toggle("自动加载弹幕", isOn: Binding(
-                    get: { app.danmaku.isAutoLoadingEnabled },
+                    get: { danmakuModel.danmaku.isAutoLoadingEnabled },
                     set: { app.setDanmakuAutoLoadingEnabled($0) }
                 ))
                 HStack {
                     Text("网关")
                     Spacer()
-                    Text(app.dandanplayGatewayURLString)
+                    Text(danmakuModel.dandanplayGatewayURLString)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     Button("配置") {
                         isEditingDanmakuGateway = true
                     }
                 }
-                LabeledContent("API Key", value: app.dandanplayHasAPIKey ? "已设置" : "未设置")
-                LabeledContent("状态", value: app.dandanplayIsConfigured ? "已配置" : "未配置")
+                LabeledContent("API Key", value: danmakuModel.dandanplayHasAPIKey ? "已设置" : "未设置")
+                LabeledContent("状态", value: danmakuModel.dandanplayIsConfigured ? "已配置" : "未配置")
                 Text("网关地址或 Key 未配置有效时不会请求弹幕，也不会影响视频播放。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section("MoviePilot") {
-                row("地址", app.moviepilot.store.serverURLString ?? "—")
-                row("用户", app.moviepilot.profile?.name
-                    ?? (app.moviepilot.store.username.isEmpty ? "—" : app.moviepilot.store.username))
+                row("地址", moviepilot.store.serverURLString ?? "—")
+                row("用户", moviepilot.profile?.name
+                    ?? (moviepilot.store.username.isEmpty ? "—" : moviepilot.store.username))
                 row("状态", moviePilotStatusText)
                 Button(moviePilotActionButtonTitle) {
                     isEditingMoviePilot = true
                 }
-                if app.moviepilot.isAuthenticated {
+                if moviepilot.isAuthenticated {
                     Button(role: .destructive) {
-                        Task { await app.moviepilot.signOut() }
+                        Task { await moviepilot.signOut() }
                     } label: {
                         Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
                     }
@@ -138,31 +140,31 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isEditingDanmakuGateway) {
             DanmakuGatewayEntrySheet(
-                initialURL: app.dandanplayGatewayURLString,
-                initialKey: app.dandanplayAPIKey
+                initialURL: danmakuModel.dandanplayGatewayURLString,
+                initialKey: danmakuModel.dandanplayAPIKey
             ) { url, key in
                 app.updateDanmakuGateway(urlString: url, apiKey: key)
             }
         }
         .sheet(isPresented: $isEditingMoviePilot) {
             MoviePilotServerSheet(
-                initialURL: app.moviepilot.store.serverURLString ?? "",
-                initialUsername: app.moviepilot.store.username
+                initialURL: moviepilot.store.serverURLString ?? "",
+                initialUsername: moviepilot.store.username
             )
         }
-        .task { app.moviepilot.refreshProfileIfNeeded() }
+        .task { moviepilot.refreshProfileIfNeeded() }
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。
     private var moviePilotStatusText: String {
-        let mp = app.moviepilot
+        let mp = moviepilot
         if mp.store.serverURLString == nil { return "未配置" }
         if mp.isAuthenticated { return "已登录" }
         return mp.store.isConfigured ? "未登录" : "凭据不全"
     }
 
     private var moviePilotActionButtonTitle: String {
-        app.moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
+        moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
     }
 
     private func row(_ label: String, _ value: String) -> some View {

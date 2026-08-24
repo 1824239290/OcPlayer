@@ -10,7 +10,7 @@ import SwiftUI
 ///
 /// 未登录 MoviePilot 时整块不出现，详情页不弹引导。
 struct MoviePilotResourceSection: View {
-    @Environment(AppModel.self) private var app
+    @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.contentLeading) private var contentLeading
 
     let item: MediaItem
@@ -21,7 +21,7 @@ struct MoviePilotResourceSection: View {
     @State private var matchGeneration: UInt64 = 0
 
     var body: some View {
-        if app.moviepilot.isAuthenticated {
+        if moviepilot.isAuthenticated {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.top, 26)

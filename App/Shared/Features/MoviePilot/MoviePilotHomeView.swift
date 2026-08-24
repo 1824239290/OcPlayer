@@ -10,6 +10,7 @@ import SwiftUI
 /// - 右上角常驻下载管理、添加订阅与全站刷新追更菜单
 struct MoviePilotHomeView: View {
     @Environment(AppModel.self) private var app
+    @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -70,13 +71,13 @@ struct MoviePilotHomeView: View {
 
     var body: some View {
         Group {
-            if !app.moviepilot.store.isConfigured {
+            if !moviepilot.store.isConfigured {
                 gate(
                     "未配置 MoviePilot",
                     icon: "arrow.down.circle",
                     hint: "在 设置 → MoviePilot 填写服务器地址与账号"
                 )
-            } else if !app.moviepilot.isAuthenticated {
+            } else if !moviepilot.isAuthenticated {
                 gate(
                     "未登录",
                     icon: "person.crop.circle.badge.exclamationmark",

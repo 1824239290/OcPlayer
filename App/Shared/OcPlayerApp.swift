@@ -64,6 +64,7 @@ struct OcPlayerApp: App {
                 .environment(controller)
                 .environment(appModel.bangumi)
                 .environment(appModel.moviepilot)
+                .environment(appModel.danmakuModel)
                 .onAppear {
                     appDelegate.terminationHandler = {
                         let task = appModel.playbackWillTerminate()
@@ -83,6 +84,7 @@ struct OcPlayerApp: App {
                 .environment(controller)
                 .environment(appModel.bangumi)
                 .environment(appModel.moviepilot)
+                .environment(appModel.danmakuModel)
         }
         #endif
     }

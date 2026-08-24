@@ -252,7 +252,7 @@ struct PlayerHUDInteractiveButtonStyle: ButtonStyle {
 // MARK: - Danmaku Panel
 
 struct PlayerHUDDanmakuPanelContent: View {
-    @Environment(AppModel.self) private var app
+    @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(PlaybackController.self) private var controller
 
     @Binding var isSelectingDanmaku: Bool
@@ -302,7 +302,7 @@ struct PlayerHUDDanmakuPanelContent: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    app.danmaku.retryAutomaticMatch()
+                    danmakuModel.danmaku.retryAutomaticMatch()
                     onUserInteraction()
                 } label: {
                     Label("重新匹配", systemImage: "arrow.clockwise")
@@ -824,10 +824,10 @@ struct PlayerHUDTrackSelectionRow: View {
 }
 
 struct DanmakuStatusBadge: View {
-    @Environment(AppModel.self) private var app
+    @Environment(DanmakuModel.self) private var danmakuModel
 
     var body: some View {
-        Text(app.danmaku.status.label)
+        Text(danmakuModel.danmaku.status.label)
             .font(.caption2)
             .foregroundStyle(PlayerHUDPalette.secondary)
             .padding(.horizontal, 6)

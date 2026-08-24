@@ -103,24 +103,9 @@ final class AppModel {
 
     // MARK: - 弹幕设置（弹弹play 网关）
 
-    /// 弹幕网关设置：地址 + API Key。AppSecret 永远不进客户端，只留在网关。
-    /// API Key 存 UserDefaults（发行包统一 ad-hoc 签名，见 DanmakuKit）。
-    var dandanplayStore = DandanplaySettingsStore()
-    let danmaku = DanmakuCoordinator()
-
-    var dandanplayGatewayURL: URL { dandanplayStore.gatewayURL }
-
-    var dandanplayGatewayURLString: String {
-        dandanplayStore.gatewayURLString ?? DandanplaySettingsStore.defaultGatewayURL.absoluteString
-    }
-
-    var dandanplayAPIKey: String {
-        dandanplayStore.apiKey
-    }
-
-    /// 是否已配置就绪（地址有效 + API Key 非空）。播放匹配前据此降级到无弹幕。
-    var dandanplayIsConfigured: Bool { dandanplayStore.isConfigured }
-    var dandanplayHasAPIKey: Bool { !dandanplayStore.apiKey.isEmpty }
+    /// 弹幕域模型（协调器 + 网关设置），独立环境注入：播放器 / 设置页里只看弹幕的视图
+    /// 不再被 AppModel 的全量观察拖着重绘。AppSecret 永远不进客户端，只留在网关。
+    var danmakuModel = DanmakuModel()
 
     // MARK: - Bangumi（登录 / 进度 / 收藏）
 
