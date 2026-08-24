@@ -136,6 +136,14 @@ copy_license \
     "$ROOT/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
     "$NOTICES_DIR/swiftpm/Package.resolved"
 
+# Vendored 本地包（Packages/ 下带 PROVENANCE.md 的第三方代码）也在随包分发之列。
+copy_license \
+    "$ROOT/Packages/DanmakuRenderKit/LICENSE" \
+    "$NOTICES_DIR/DanmakuRenderKit/LICENSE"
+copy_license \
+    "$ROOT/Packages/DanmakuRenderKit/PROVENANCE.md" \
+    "$NOTICES_DIR/DanmakuRenderKit/PROVENANCE.md"
+
 # The license list above is hand-written, so a new SwiftPM dependency would
 # otherwise ship without its notice. Fail the build when a resolved checkout has
 # no corresponding entry under THIRD_PARTY_LICENSES.
@@ -144,6 +152,19 @@ for checkout in "$SWIFTPM_CHECKOUTS"/*; do
     name="$(basename "$checkout")"
     if [[ ! -d "$NOTICES_DIR/swiftpm/$name" ]]; then
         echo "SwiftPM dependency '$name' has no license bundled under $NOTICES_DIR/swiftpm" >&2
+        echo "Add a copy_license entry for it in Scripts/package-macos.sh" >&2
+        exit 1
+    fi
+done
+
+# 本地 vendored 包（有 PROVENANCE.md）不在 SWIFTPM_CHECKOUTS 里，上面那个循环
+# 看不到它们——单独校验：漏登记 / 漏拷贝直接让打包失败。
+for pkg in "$ROOT"/Packages/*; do
+    [[ -d "$pkg" ]] || continue
+    name="$(basename "$pkg")"
+    [[ -f "$pkg/PROVENANCE.md" ]] || continue
+    if [[ ! -d "$NOTICES_DIR/$name" ]]; then
+        echo "Vendored package '$name' has no license bundled under $NOTICES_DIR/$name" >&2
         echo "Add a copy_license entry for it in Scripts/package-macos.sh" >&2
         exit 1
     fi

@@ -120,7 +120,8 @@ public struct JellyfinServer: Sendable {
         return LoginSession(baseURL: url, info: info, client: probeClient)
     }
 
-    /// 「host:port」→「scheme://host:port/」(去尾斜杠),统一成一个确定性 scheme。
+    /// 「host:port」→「scheme://host:port/」(去尾斜杠),统一成确定性的 scheme。
+    /// 优先级：**用户手写的 `http(s)://` 前缀 > `preferredScheme` > 默认 http**。
     public static func normalizeServerURL(
         _ raw: String,
         preferredScheme: JellyfinServerScheme? = nil

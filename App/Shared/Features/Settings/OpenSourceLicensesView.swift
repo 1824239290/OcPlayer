@@ -77,6 +77,19 @@ enum OpenSourceLicenseCatalog {
                         "THIRD_PARTY_LICENSES/swiftpm/GRDB.swift/LICENSE",
                     ]
                 ),
+                component(
+                    id: "danmaku-renderkit",
+                    name: "DanmakuKit（DanmakuRenderKit）",
+                    version: "1.6.0",
+                    license: "MIT",
+                    purpose: "vendored 的弹幕渲染层（qyz777/DanmakuKit）：轨道模型「入轨时追击判定、入轨后不换轨」，取代 Erika 内核 DFM+ 弹幕子系统。",
+                    homepage: "https://github.com/qyz777/DanmakuKit",
+                    licenseURL: "https://opensource.org/license/mit",
+                    bundledLicensePaths: [
+                        "THIRD_PARTY_LICENSES/DanmakuRenderKit/LICENSE",
+                        "THIRD_PARTY_LICENSES/DanmakuRenderKit/PROVENANCE.md",
+                    ]
+                ),
             ]
         ),
         OpenSourceComponentGroup(
