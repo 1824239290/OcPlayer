@@ -42,7 +42,7 @@ struct BangumiLinkPicker: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError {
                 ContentUnavailableView {
-                    Label("搜索失败", systemImage: "exclamationmark.triangle")
+                    Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(searchError)
                 }

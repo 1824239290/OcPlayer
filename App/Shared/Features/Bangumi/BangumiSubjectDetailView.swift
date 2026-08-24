@@ -81,7 +81,7 @@ struct BangumiSubjectDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: Metrics.railSpacing) {
                 if let actionError {
                     BangumiNotice(message: actionError)
                         .padding(.horizontal, contentLeading)
@@ -366,13 +366,13 @@ struct BangumiSubjectDetailView: View {
                     ProgressView().controlSize(.small)
                 } else {
                     Image(systemName: currentRating > 0 ? "star.fill" : "star")
-                        .foregroundStyle(currentRating > 0 ? Color.orange : Color.secondary)
+                        .foregroundStyle(currentRating > 0 ? BangumiStatusColor.rating : Color.secondary)
                 }
 
                 if currentRating > 0 {
                     Text("\(currentRating)分")
                         .font(.callout.weight(.medium).monospacedDigit())
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(BangumiStatusColor.rating)
                 } else {
                     Text("评分")
                         .font(.callout.weight(.medium))
@@ -386,12 +386,12 @@ struct BangumiSubjectDetailView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
-                currentRating > 0 ? AnyShapeStyle(Color.orange.opacity(0.12)) : AnyShapeStyle(.fill.tertiary),
+                currentRating > 0 ? AnyShapeStyle(BangumiStatusColor.rating.opacity(0.12)) : AnyShapeStyle(.fill.tertiary),
                 in: Capsule()
             )
             .overlay(
                 Capsule().strokeBorder(
-                    currentRating > 0 ? AnyShapeStyle(Color.orange.opacity(0.35)) : AnyShapeStyle(Color.clear)
+                    currentRating > 0 ? AnyShapeStyle(BangumiStatusColor.rating.opacity(0.35)) : AnyShapeStyle(Color.clear)
                 )
             )
         }
@@ -572,11 +572,11 @@ struct BangumiSubjectDetailView: View {
                 .font(.headline)
 
             HStack(spacing: 12) {
-                statCard(title: "想看", count: collection.wish, color: .purple)
-                statCard(title: "在看", count: collection.doing, color: .blue)
-                statCard(title: "看过", count: collection.collect, color: .green)
-                statCard(title: "搁置", count: collection.onHold, color: .orange)
-                statCard(title: "抛弃", count: collection.dropped, color: .gray)
+                statCard(title: "想看", count: collection.wish, color: BangumiStatusColor.collection(.wish))
+                statCard(title: "在看", count: collection.doing, color: BangumiStatusColor.collection(.doing))
+                statCard(title: "看过", count: collection.collect, color: BangumiStatusColor.collection(.collect))
+                statCard(title: "搁置", count: collection.onHold, color: BangumiStatusColor.collection(.onHold))
+                statCard(title: "抛弃", count: collection.dropped, color: BangumiStatusColor.collection(.dropped))
             }
         }
     }

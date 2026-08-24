@@ -307,15 +307,11 @@ struct MoviePilotHomeView: View {
         LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gridRowSpacing) {
             ForEach(0..<10, id: \.self) { _ in
                 VStack(alignment: .leading, spacing: 8) {
-                    Color.clear
+                    SkeletonBlock()
                         .aspectRatio(2 / 3, contentMode: .fit)
-                        .background(Metrics.placeholderFill)
-                        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Metrics.placeholderFill)
+                    SkeletonBlock(cornerRadius: 4)
                         .frame(height: 14)
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Metrics.placeholderFill)
+                    SkeletonBlock(cornerRadius: 4)
                         .frame(width: 80, height: 12)
                 }
             }
@@ -347,7 +343,7 @@ struct MoviePilotHomeView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError, results.isEmpty {
                 ContentUnavailableView {
-                    Label("搜索失败", systemImage: "exclamationmark.triangle")
+                    Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(searchError)
                 } actions: {
@@ -748,7 +744,7 @@ private struct MoviePilotSubscribeCard: View {
                             HStack(spacing: 2) {
                                 Image(systemName: "star.fill")
                                     .font(.system(size: 8))
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(BangumiStatusColor.rating)
                                 Text(String(format: "%.1f", vote))
                                     .font(.system(size: 10, weight: .bold))
                                     .foregroundStyle(.white)

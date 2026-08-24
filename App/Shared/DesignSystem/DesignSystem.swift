@@ -1,3 +1,4 @@
+import BangumiKit
 import CoreModel
 import JellyfinKit
 import SwiftUI
@@ -8,6 +9,12 @@ import UIKit
 
 // MARK: - 动画帮手
 
+/// 本文件定义内容页的设计系统：间距 token、横向留白、卡片组件、骨架屏、文案常量。
+///
+/// 播放器 HUD 是一套**独立的视觉语言**（`PlayerHUDPalette` + 玻璃面板组件），
+/// 刻意不使用这里的 `Metrics` / `contentLeading` / `cardRadius`：HUD 是浮在视频
+/// 上的半透明层，有自己的圆角体系（7/8/14/18/22）和调色板。两套系统各管各的，
+/// 不要在播放器 HUD 里套 `Metrics.cardRadius`。
 extension View {
     /// 与 `.animation(_:value:)` 同义，但把 `accessibilityReduceMotion` 收进来：
     /// 减弱动态效果时传 nil（SwiftUI 视作无动画、立即切换）。
@@ -27,6 +34,9 @@ enum Metrics {
     static let posterWidth: CGFloat = 178      // 海报 2:3
     static let stillWidth: CGFloat = 328       // 剧照 16:9
     static let cardRadius: CGFloat = 10
+    /// 选集卡圆角。比 `cardRadius` 略小，选集卡在详情页里尺寸更小、更密集，
+    /// 和海报/剧照卡用同一个圆角会显得偏圆。`EpisodeSelectCard` 与 `SkeletonEpisodeStrip` 共用。
+    static let episodeCardRadius: CGFloat = 8
     static let railSpacing: CGFloat = 22
     static let contentInset: CGFloat = 52
     /// 紧凑宽度（iPhone、iPad 分屏窄窗）的横向留白。
@@ -293,7 +303,7 @@ struct SkeletonEpisodeStrip: View {
             HStack(spacing: 14) {
                 ForEach(0..<cardCount, id: \.self) { _ in
                     VStack(alignment: .leading, spacing: 8) {
-                        SkeletonBlock(cornerRadius: 8)
+                        SkeletonBlock(cornerRadius: Metrics.episodeCardRadius)
                             .frame(
                                 width: Metrics.episodeCardWidth,
                                 height: Metrics.episodeThumbHeight
@@ -344,6 +354,46 @@ enum UIStrings {
     static let loadFailed = "加载失败"
     /// 通用「重试」按钮。
     static let retry = "重试"
+    /// 通用「搜索失败」标题（搜索结果为空但出错时）。
+    static let searchFailed = "搜索失败"
+    /// 通用「加载更多」按钮（分页列表底部）。
+    static let loadMore = "加载更多"
+}
+
+// MARK: - Bangumi 状态色（跨页面共享）
+
+/// Bangumi 收藏状态 / 条目类型的颜色映射。
+///
+/// 之前散落在三个文件里各写一份 switch，改一处忘另外两处是迟早的事。
+/// 集中到设计系统里，所有 Bangumi 页面共用同一组色值。
+enum BangumiStatusColor {
+    /// 收藏状态色：想看 / 在看 / 看过 / 搁置 / 抛弃。
+    static func collection(_ type: BangumiCollectionType) -> Color {
+        switch type {
+        case .none: return .secondary
+        case .wish: return .purple
+        case .collect: return .green
+        case .doing: return .blue
+        case .onHold: return .orange
+        case .dropped: return .gray
+        }
+    }
+
+    /// 条目类型色：动画 / 书籍 / 音乐 / 游戏 / 三次元。
+    static func subject(_ type: BangumiSubjectType) -> Color {
+        switch type {
+        case .none: return .gray
+        case .anime: return .blue
+        case .book: return .green
+        case .music: return .pink
+        case .game: return .purple
+        case .real: return .orange
+        }
+    }
+
+    /// 评分色。全站统一用橙色——之前详情页用 `.yellow`、Bangumi 用 `.orange`，
+    /// 现在统一成橙色，和 Bangumi 官方评分色一致。
+    static let rating: Color = .orange
 }
 
 // MARK: - MediaItem → 图片 URL（要服务器会话，所以放 App 层）
@@ -912,5 +962,59 @@ private struct HoverLift: ViewModifier {
 extension View {
     func hoverLift(active: Bool, reduceMotion: Bool) -> some View {
         modifier(HoverLift(active: active, reduceMotion: reduceMotion))
+    }
+}
+
+// MARK: - 悬停行高亮（列表式卡片用）
+
+/// 列表式卡片（横向排列：小封面 + 信息列）的悬停反馈。
+///
+/// 和 `hoverLift`（放大 + 投影，给海报/剧照网格卡用）区分开：
+/// 行式卡片放大 1.055 会撑出列表边界、和邻居重叠，不适合。
+/// 这里只做背景填充提亮 + accentColor 描边，轻量但明确。
+private struct HoverRowHighlight: ViewModifier {
+    let active: Bool
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                active ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.background.secondary),
+                in: RoundedRectangle(cornerRadius: Metrics.cardRadius)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                    .strokeBorder(
+                        active ? Color.accentColor.opacity(0.3) : Color.clear,
+                        lineWidth: 1
+                    )
+            )
+    }
+}
+
+extension View {
+    /// 列表式卡片的悬停高亮：背景提亮 + accent 描边。给行式卡片用，
+    /// 不放大（放大会让行撑出列表边界）。海报/剧照网格卡用 `hoverLift`。
+    func hoverRowHighlight(active: Bool) -> some View {
+        modifier(HoverRowHighlight(active: active, reduceMotion: false))
+    }
+}
+
+// MARK: - 键值行
+
+/// 简单的 `Label : Value` 键值行——设置页等 Form 内重复使用的布局。
+/// 之前 `SettingsView` 和 `PlaybackKernelSection` 各写了一份私有副本。
+struct KeyValueRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+        }
     }
 }

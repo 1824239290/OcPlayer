@@ -95,7 +95,7 @@ struct MoviePilotResourceSection: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
             }
             .buttonStyle(.plain)
 

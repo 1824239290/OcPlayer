@@ -517,14 +517,7 @@ private struct CalendarItemCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            .background.secondary,
-            in: RoundedRectangle(cornerRadius: Metrics.cardRadius)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Metrics.cardRadius)
-                .strokeBorder(isHovered ? Color.accentColor.opacity(0.4) : Color.clear, lineWidth: 1)
-        )
+        .hoverRowHighlight(active: isHovered)
         #if os(macOS)
         .onHover { hovering in
             isHovered = hovering
@@ -533,22 +526,12 @@ private struct CalendarItemCard: View {
     }
 
     private func interestBadge(_ interest: BangumiCollectionType) -> some View {
-        Text(interest.description(.anime))
+        let color = BangumiStatusColor.collection(interest)
+        return Text(interest.description(.anime))
             .font(.system(size: 10, weight: .semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(badgeColor(for: interest).opacity(0.16), in: Capsule())
-            .foregroundStyle(badgeColor(for: interest))
-    }
-
-    private func badgeColor(for interest: BangumiCollectionType) -> Color {
-        switch interest {
-        case .doing: return .blue
-        case .wish: return .purple
-        case .collect: return .green
-        case .onHold: return .orange
-        case .dropped: return .gray
-        case .none: return .secondary
-        }
+            .background(color.opacity(0.16), in: Capsule())
+            .foregroundStyle(color)
     }
 }

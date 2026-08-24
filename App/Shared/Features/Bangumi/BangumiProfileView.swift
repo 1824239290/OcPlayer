@@ -5,6 +5,7 @@ import SwiftUI
 struct BangumiProfileView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
+    @Environment(\.contentLeading) private var contentLeading
 
     var body: some View {
         Group {
@@ -16,7 +17,8 @@ struct BangumiProfileView: View {
                             CollectionSection(subjectType: type)
                         }
                     }
-                    .padding(20)
+                    .padding(.horizontal, contentLeading)
+                    .padding(.vertical, 20)
                 }
                 .navigationTitle("我的")
                 .toolbar {

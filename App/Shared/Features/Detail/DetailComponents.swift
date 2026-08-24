@@ -108,9 +108,9 @@ struct EpisodeSelectCard: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 }
                 .frame(width: cardWidth, height: thumbHeight)
-                .clipShape(.rect(cornerRadius: 8))
+                .clipShape(.rect(cornerRadius: Metrics.episodeCardRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: Metrics.episodeCardRadius)
                         .strokeBorder(
                             isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.primary.opacity(hovering ? 0.22 : 0)),
                             lineWidth: isSelected ? 2.5 : 1

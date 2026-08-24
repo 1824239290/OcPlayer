@@ -221,7 +221,7 @@ struct BangumiHomeView: View {
             if isLoadingMore {
                 ProgressView().controlSize(.regular)
             } else {
-                Button("加载更多") { Task { await loadMore() } }
+                Button(UIStrings.loadMore) { Task { await loadMore() } }
                     .buttonStyle(.bordered)
             }
         }
@@ -242,7 +242,7 @@ struct BangumiHomeView: View {
                     searchSkeletonView
                 } else if let searchError, searchResults.isEmpty {
                     ContentUnavailableView {
-                        Label("搜索失败", systemImage: "exclamationmark.triangle")
+                        Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
                     } description: {
                         Text(searchError)
                     } actions: {
@@ -400,7 +400,7 @@ struct BangumiHomeView: View {
             if isSearchingMore {
                 ProgressView().controlSize(.regular)
             } else {
-                Button("加载更多") { Task { await searchMore() } }
+                Button(UIStrings.loadMore) { Task { await searchMore() } }
                     .buttonStyle(.bordered)
             }
         }
@@ -943,18 +943,18 @@ private struct SearchResultRow: View {
                         HStack(spacing: 3) {
                             Image(systemName: "star.fill")
                                 .font(.caption2)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(BangumiStatusColor.rating)
                             Text(String(format: "%.1f", rating.score))
                                 .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(BangumiStatusColor.rating)
                         }
                         if let rank = subject.rating?.rank, rank > 0 {
                             Text("#\(rank)")
                                 .font(.system(size: 10).weight(.semibold).monospacedDigit())
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
-                                .foregroundStyle(.orange)
+                                .background(BangumiStatusColor.rating.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
+                                .foregroundStyle(BangumiStatusColor.rating)
                         }
                     }
 
@@ -984,27 +984,12 @@ private struct SearchResultRow: View {
                 .padding(.top, 4)
         }
         .padding(12)
-        .background(
-            isHovered ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.background.secondary),
-            in: RoundedRectangle(cornerRadius: Metrics.cardRadius)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Metrics.cardRadius)
-                .strokeBorder(isHovered ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1)
-        )
+        .hoverRowHighlight(active: isHovered)
         .onHover { isHovered = $0 }
     }
 
     private func typeBadge(_ type: BangumiSubjectType) -> some View {
-        let color: Color
-        switch type {
-        case .anime: color = .blue
-        case .book: color = .green
-        case .game: color = .purple
-        case .music: color = .pink
-        case .real: color = .orange
-        case .none: color = .gray
-        }
+        let color = BangumiStatusColor.subject(type)
         return Text(type.description)
             .font(.system(size: 10).weight(.medium))
             .padding(.horizontal, 6)

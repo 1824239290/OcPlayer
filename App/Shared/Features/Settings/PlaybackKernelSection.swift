@@ -41,7 +41,7 @@ struct PlaybackKernelSection: View {
                     }
                 }
             } else if let selected {
-                row("内核", selected.displayName)
+                KeyValueRow(label: "内核", value: selected.displayName)
             } else {
                 // 装配点漏了才会走到这里；不静默，直接说出来。
                 Label("没有可用的播放内核", systemImage: "exclamationmark.triangle.fill")
@@ -49,7 +49,7 @@ struct PlaybackKernelSection: View {
             }
 
             if let selected {
-                row("构成", selected.summary)
+                KeyValueRow(label: "构成", value: selected.summary)
             }
 
             if PlaybackEngineRegistry.selectionIsStale,
@@ -119,16 +119,6 @@ struct PlaybackKernelSection: View {
                 PlaybackPreferences.danmakuUseOverlayRenderer = !useKernel
             }
         )
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-        }
     }
 
     private func notice(_ message: String, icon: String, tint: Color) -> some View {

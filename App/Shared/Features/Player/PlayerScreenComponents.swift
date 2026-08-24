@@ -49,7 +49,7 @@ struct PlayerLoadingLayer: View {
                         }
                         if let onRetry {
                             Button(action: onRetry) {
-                                Label("重试", systemImage: "arrow.clockwise")
+                                Label(UIStrings.retry, systemImage: "arrow.clockwise")
                                     .font(.callout.weight(.semibold))
                             }
                             .buttonStyle(.borderedProminent)
@@ -127,7 +127,7 @@ struct PlayerPlaybackErrorBadge: View {
                         .font(.callout)
                         .foregroundStyle(PlayerHUDPalette.primary, Color.red)
                     Button(action: app.retryPlayback) {
-                        Label("重试", systemImage: "arrow.clockwise")
+                        Label(UIStrings.retry, systemImage: "arrow.clockwise")
                             .font(.callout.weight(.semibold))
                             .padding(.horizontal, 4)
                     }

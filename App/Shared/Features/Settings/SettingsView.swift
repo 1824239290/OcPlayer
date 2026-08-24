@@ -18,10 +18,10 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("服务器") {
-                row("名称", app.server?.profile.serverName ?? "—")
-                row("地址", app.server?.profile.baseURL.absoluteString ?? "—")
-                row("版本", app.server?.profile.serverVersion ?? "—")
-                row("用户", app.currentUserLabel)
+                KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
+                KeyValueRow(label: "地址", value: app.server?.profile.baseURL.absoluteString ?? "—")
+                KeyValueRow(label: "版本", value: app.server?.profile.serverVersion ?? "—")
+                KeyValueRow(label: "用户", value: app.currentUserLabel)
                 // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
                 // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
                 Button {
@@ -75,10 +75,10 @@ struct SettingsView: View {
             }
 
             Section("MoviePilot") {
-                row("地址", moviepilot.store.serverURLString ?? "—")
-                row("用户", moviepilot.profile?.name
+                KeyValueRow(label: "地址", value: moviepilot.store.serverURLString ?? "—")
+                KeyValueRow(label: "用户", value: moviepilot.profile?.name
                     ?? (moviepilot.store.username.isEmpty ? "—" : moviepilot.store.username))
-                row("状态", moviePilotStatusText)
+                KeyValueRow(label: "状态", value: moviePilotStatusText)
                 Button(moviePilotActionButtonTitle) {
                     isEditingMoviePilot = true
                 }
@@ -95,8 +95,8 @@ struct SettingsView: View {
             }
 
             Section("关于") {
-                row("直连策略", "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
-                row("弹幕", "弹弹play 开放平台（通过 OcPlay 网关接入）")
+                KeyValueRow(label: "直连策略", value: "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
+                KeyValueRow(label: "弹幕", value: "弹弹play 开放平台（通过 OcPlay 网关接入）")
                 NavigationLink {
                     OpenSourceLicensesView()
                 } label: {
@@ -165,16 +165,6 @@ struct SettingsView: View {
 
     private var moviePilotActionButtonTitle: String {
         moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-        }
     }
 
     private func openLocal(_ url: URL) {
@@ -374,7 +364,7 @@ struct DiagnosticsSection: View {
         }
         .buttonStyle(.plain)
 
-        row("记录数 / 大小", summaryText)
+        KeyValueRow(label: "记录数 / 大小", value: summaryText)
             .task { await refresh() }
 
         DisclosureGroup("最近 \(records.count) 条记录") {
@@ -441,13 +431,5 @@ struct DiagnosticsSection: View {
             parts.append("(另抑制 \(suppressed) 条)")
         }
         return parts.joined(separator: " · ")
-    }
-
-    private func row(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value).foregroundStyle(.secondary)
-        }
     }
 }

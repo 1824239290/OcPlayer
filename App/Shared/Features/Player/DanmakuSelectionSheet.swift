@@ -59,7 +59,7 @@ struct DanmakuSelectionSheet: View {
                     }
                 } else if let errorMessage {
                     ContentUnavailableView(
-                        "搜索失败",
+                        UIStrings.searchFailed,
                         systemImage: "exclamationmark.triangle",
                         description: Text(errorMessage)
                     )

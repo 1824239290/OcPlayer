@@ -145,7 +145,7 @@ struct LibraryView: View {
                 ProgressView()
                     .controlSize(.regular)
             } else {
-                Button("加载更多") {
+                Button(UIStrings.loadMore) {
                     Task { await loadMore() }
                 }
                 .buttonStyle(.bordered)

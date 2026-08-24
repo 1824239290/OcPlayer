@@ -238,7 +238,7 @@ struct DetailView: View {
             }
             if let rating = shown.communityRating {
                 Label(String(format: "%.1f", rating), systemImage: "star.fill")
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(BangumiStatusColor.rating)
             }
             if let official = shown.officialRating {
                 Text(official)
