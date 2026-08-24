@@ -81,6 +81,7 @@ private struct CollectionSection: View {
     @State private var selected: BangumiCollectionType = .collect
     @State private var subjects: [BangumiSubjectDTO] = []
     @State private var loaded = false
+    @State private var hasInitializedSelection = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -133,6 +134,7 @@ private struct CollectionSection: View {
             ForEach(BangumiCollectionType.allTypes()) { type in
                 let count = counts[type, default: 0]
                 Button {
+                    guard selected != type else { return }
                     selected = type
                 } label: {
                     Text("\(type.description(subjectType))(\(count))")
@@ -151,9 +153,12 @@ private struct CollectionSection: View {
 
     private func load() async {
         counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
-        // 默认选中「在看」，其次「看过」（有数据的类型优先）。
-        if let preferred = BangumiCollectionType.preferredAvailableType(in: counts) {
-            selected = preferred
+        // 首次加载时默认选中「在看」，其次「看过」（有数据的类型优先）。用户手动切换后不再覆盖。
+        if !hasInitializedSelection {
+            hasInitializedSelection = true
+            if let preferred = BangumiCollectionType.preferredAvailableType(in: counts) {
+                selected = preferred
+            }
         }
         subjects = (try? await bangumi.context.fetchCollectionSubjects(
             subjectType: subjectType, collectionType: selected, limit: 12, offset: 0)) ?? []
