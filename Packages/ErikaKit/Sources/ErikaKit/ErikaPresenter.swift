@@ -140,6 +140,13 @@ public final class ErikaPresenter {
         return stats
     }
 
+    /// 内核渲染内存分项（视频帧 / 弹幕图集 / 顶点缓冲 / device 等）。诊断用。
+    public func resourceStatus() throws -> ErikaPresenterResourceStatus {
+        var status = ErikaPresenterResourceStatus()
+        try ErikaError.check(erika_presenter_get_resource_status(handle, &status))
+        return status
+    }
+
     /// 离屏截当前合成帧（视频 + 字幕 + 弹幕），RGBA8。没有可用帧时内核会报错。
     /// 后续「截图」功能直接用它；测试里也用它证明画面真的解出来了。
     public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {

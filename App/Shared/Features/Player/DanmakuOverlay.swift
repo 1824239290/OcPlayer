@@ -77,6 +77,10 @@ final class DanmakuOverlayController {
     private var lastMediaSample: Double?
     private var viewPausedBySync = false
 
+    /// 每 5s 打一条 overlay 状态日志（诊断内存爬升用）：已发射条数 / 子视图数 / 复用池大小。
+    /// 子视图数在播放途中持续增长 = cell 没有被正确回收复用。
+    private var lastStateLogAt: TimeInterval = 0
+
     init(engineProvider: @escaping () -> (any PlaybackEngine)?,
          playbackStateProvider: @escaping () -> (playing: Bool, buffering: Bool)? = { nil }) {
         self.engineProvider = engineProvider
@@ -216,6 +220,15 @@ final class DanmakuOverlayController {
             return
         }
         if viewPausedBySync { return }
+        // 5s 状态采样（诊断内存爬升）：cell 回收/复用是否失衡。
+        let wall = Date().timeIntervalSinceReferenceDate
+        if wall - lastStateLogAt >= 5 {
+            lastStateLogAt = wall
+            PlaybackLog.info(
+                "弹幕 overlay 状态 已发射=\(pointer) 子视图=\(view.subviews.count) "
+                    + "池=\(view.pooledCellCount) 总数=\(comments.count)"
+            )
+        }
         spawnUpTo(now)
     }
 
