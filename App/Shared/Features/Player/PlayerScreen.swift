@@ -54,7 +54,7 @@ struct PlayerScreen: View {
                 hudVisibility.hideOnPointerExit()
             }
             #endif
-            // 影子模式开关（默认关，开着时内核弹幕不装载）。垫在视频之上、手势层之下。
+            // 弹幕一律走 App 层 overlay（内核弹幕当前版本被禁用）。垫在视频之上、手势层之下。
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
             }
