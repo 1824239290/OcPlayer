@@ -75,10 +75,14 @@ jobs:
             echo "==> $pkg"
             swift test --package-path "$pkg"
           done
-          # ErikaKit 的渲染集成测试依赖 Metal（无 GPU 的 runner 会挂），只跑非渲染部分；
-          # 内核二进制已在上面 fetch。
-          echo "==> Packages/ErikaKit (excluding ErikaRenderTests)"
-          swift test --package-path Packages/ErikaKit --skip ErikaRenderTests
+          # ErikaKit 里实例化 ErikaPresenter 的 Swift Testing suite 依赖 Metal / 真内核，
+          # 无 GPU 的 GitHub runner 上会直接 hang（不是报错），只能全 skip：
+          # 离屏渲染 / C ABI 冒烟 / 打开真文件 / HTTP 直连 / 播放生命周期 / 内存快照。
+          # 留下的 XCTest（弹幕 JSON/配置/轨道/状态）是纯逻辑，不碰内核。
+          echo "==> Packages/ErikaKit (excluding presenter-dependent suites)"
+          swift test --package-path Packages/ErikaKit \
+            --skip ErikaRenderTests --skip ErikaSmokeTests --skip ErikaOpenFileTests \
+            --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests
 
       - name: Upload test logs on failure
         if: failure()
