@@ -21,31 +21,34 @@ public enum JellyfinServerScheme: String, Sendable {
 /// 网络层诊断日志（JSONL 落盘 + OSLog 镜像，见 DiagnosticsKit）。
 ///
 /// 只记请求**路径**不记 query（userId / 图片 tag 这类不敏感，但路径足够定位问题）；
-/// 任何 token 都由红actor 兜底，绝不进日志。
+/// 任何 token 都由红actor 兜底，绝不进日志。实现委托 DiagnosticsKit.NetworkLog
+/// （本文件 enum 与共享类型同名，需限定前缀）。
 enum NetworkLog {
-    static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "Jellyfin")
+    private static let category = "Jellyfin"
+
+    /// ServerStore 等直接写日志用（共享分类 logger，与请求日志同一实例同一文件）。
+    static let logger = DiagnosticsKit.NetworkLog.logger(category: "Jellyfin")
 
     static func requestStarted(_ path: String) {
-        logger.debug("请求开始 path=\(path)")
+        DiagnosticsKit.NetworkLog.requestStarted(category: category, path: path)
     }
 
     static func requestSucceeded(_ path: String, duration: TimeInterval) {
-        logger.debug("请求成功 path=\(path) duration_ms=\(Int(duration * 1000))")
+        DiagnosticsKit.NetworkLog.requestSucceeded(category: category, path: path, duration: duration)
     }
 
     static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
-        logger.error("请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))")
+        DiagnosticsKit.NetworkLog.requestFailed(category: category, path: path, error: error, duration: duration)
     }
 
     /// 进度上报这类「尽力而为」的失败：不打断播放，但值得留一条 warning。
     static func reportFailed(_ what: String, error: Error) {
-        logger.warning("上报失败 what=\(what) error=\(error)")
+        DiagnosticsKit.NetworkLog.report(category: category, level: .warning, "上报失败 what=\(what) error=\(error)")
     }
 
     /// `Request.url` 形如 `/Items?userId=…`，只取 path 部分入日志。
     static func logPath(for url: URL?) -> String {
-        guard let url else { return "?" }
-        return url.path.isEmpty ? url.absoluteString : url.path
+        DiagnosticsKit.NetworkLog.logPath(for: url)
     }
 }
 

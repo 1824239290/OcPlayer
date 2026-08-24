@@ -17,24 +17,24 @@ enum MPEnvelope {
 }
 
 /// MoviePilot 网络层诊断日志。只记请求路径与错误摘要，token / 密码绝不进日志。
+/// 实现委托 DiagnosticsKit.NetworkLog（按 category 共享 logger），保留公开 API 形状。
 public enum MoviePilotNetworkLog {
-    public static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "MoviePilot")
+    public static let logger = NetworkLog.logger(category: "MoviePilot")
 
     static func requestStarted(_ path: String) {
-        logger.debug("请求开始 path=\(path)")
+        NetworkLog.requestStarted(category: "MoviePilot", path: path)
     }
 
     static func requestSucceeded(_ path: String, duration: TimeInterval) {
-        logger.debug("请求成功 path=\(path) duration_ms=\(Int(duration * 1000))")
+        NetworkLog.requestSucceeded(category: "MoviePilot", path: path, duration: duration)
     }
 
     static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
-        logger.error("请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))")
+        NetworkLog.requestFailed(category: "MoviePilot", path: path, error: error, duration: duration)
     }
 
     static func logPath(for url: URL?) -> String {
-        guard let url else { return "?" }
-        return url.path.isEmpty ? url.absoluteString : url.path
+        NetworkLog.logPath(for: url)
     }
 }
 
@@ -556,11 +556,4 @@ public struct MPSearchProgress: Sendable, Equatable {
     public let finished: Int
     public let total: Int
     public let totalItems: Int
-}
-
-private extension Duration {
-    var timeInterval: TimeInterval {
-        let (seconds, attoseconds) = components
-        return Double(seconds) + Double(attoseconds) * 1e-18
-    }
 }

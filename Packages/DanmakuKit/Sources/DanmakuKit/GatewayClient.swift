@@ -3,13 +3,12 @@ import Foundation
 
 /// 网关诊断日志。常规请求只记 path；匹配参数只记形态元数据，绝不记录
 /// hash、文件名、URL/query 或凭据（脱敏器对 `api_key` 类 key 另有兜底）。
+/// 实现委托 DiagnosticsKit.NetworkLog，成功/失败级别与 cache 字段保留本网关的原有口径。
 enum DanmakuNetworkLog {
-    static let logger = DiagnosticLogger(subsystem: "dev.jumusu.OcPlayer", category: "Danmaku")
-
     static func matchRequested(_ request: MatchRequest) {
         let hashPresent = request.fileHash?
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        logger.debug("匹配参数", fields: [
+        NetworkLog.report(category: "Danmaku", level: .debug, "匹配参数", fields: [
             "hashPresent": .boolean(hashPresent),
             "mode": .string(request.matchMode?.rawValue ?? "unspecified"),
             "size": request.fileSize.map { .integer($0) } ?? .null,
@@ -18,15 +17,23 @@ enum DanmakuNetworkLog {
     }
 
     static func requestStarted(_ path: String) {
-        logger.debug("请求开始 path=\(path)")
+        NetworkLog.requestStarted(category: "Danmaku", path: path)
     }
 
     static func requestSucceeded(_ path: String, cache: String?, duration: TimeInterval) {
-        logger.info("请求成功 path=\(path) cache=\(cache ?? "nil") duration_ms=\(Int(duration * 1000))")
+        NetworkLog.report(
+            category: "Danmaku",
+            level: .info,
+            "请求成功 path=\(path) cache=\(cache ?? "nil") duration_ms=\(Int(duration * 1000))"
+        )
     }
 
     static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
-        logger.warning("请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))")
+        NetworkLog.report(
+            category: "Danmaku",
+            level: .warning,
+            "请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))"
+        )
     }
 }
 

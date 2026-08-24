@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 
 /// MoviePilot API 统一错误。
@@ -19,24 +20,23 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
         self = .request(request)
     }
 
+    /// URL 错误码 → 语义类别的映射在 DiagnosticsKit.NetworkErrorClassifier 共享，
+    /// 这里只保留本服务精确的面向用户文案。
     public init(networkError error: NSError) {
-        switch error.code {
-        case NSURLErrorNotConnectedToInternet:
+        switch NetworkErrorClassifier.kind(for: error.code) {
+        case .some(.noConnection):
             self = .network("没有网络连接，请检查网络设置或权限后重试")
-        case NSURLErrorTimedOut:
+        case .some(.timedOut):
             self = .network("请求超时，请稍后再试")
-        case NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed:
+        case .some(.cannotResolveHost):
             self = .network("无法解析 MoviePilot 服务器地址，请检查地址后重试")
-        case NSURLErrorCannotConnectToHost, NSURLErrorNetworkConnectionLost:
+        case .some(.cannotConnect):
             self = .network("无法连接到 MoviePilot 服务器，请检查网络后重试")
-        case NSURLErrorSecureConnectionFailed, NSURLErrorServerCertificateHasBadDate,
-             NSURLErrorServerCertificateUntrusted, NSURLErrorServerCertificateHasUnknownRoot,
-             NSURLErrorServerCertificateNotYetValid, NSURLErrorClientCertificateRejected,
-             NSURLErrorClientCertificateRequired, NSURLErrorCannotLoadFromNetwork:
+        case .some(.secureConnectionFailed):
             self = .network("无法建立安全连接，请检查 MoviePilot 证书或网络环境")
-        case NSURLErrorCancelled:
+        case .some(.cancelled):
             self = .ignore("请求已取消")
-        default:
+        case .none:
             self = .network("网络请求失败，请稍后再试")
         }
     }
