@@ -1,0 +1,46 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# 本地验证产生的临时构建目录，不入库
+.derivedData/
+.local-build/
+.xcode-build/
+.xcode-package-cache/
+.xcode-swift-cache/
+
+# 内核二进制：由 Scripts/fetch-erika.sh 拉取，不入库
+Vendor/
+Packages/ErikaKit/Vendor/
+
+# 密钥：弹弹play AppId / AppSecret 等，本地生成，不入库
+Secrets.xcconfig
+*.local.xcconfig
+dist/
+design/
+
+# 仅本地保留的文档，不入库
+CLAUDE.md
+PLAN.md
+REVIEW_TODO.md
+
+# ZCode 本地会话数据，不入库
+.zcode/
+
+# 会话工具产物,不入库
+.reasonix/

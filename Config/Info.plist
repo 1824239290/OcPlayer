@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 自建服务(Jellyfin / MoviePilot)常见局域网 http 部署,公网域名也可能 http。
+	     用户在连接表单显式选择 HTTP / HTTPS;选 HTTP 时应能真正连上,故全局放行明文。
+	     已知取舍:这放弃了对明文流量的 ATS 默认保护;本地敏感数据尽可能走 https。
+	     注意:不要同时设置 NSAllowsLocalNetworking——按 Apple 规则它存在时
+	     NSAllowsArbitraryLoads 会被忽略(macOS 10.12+),公网 http 又被拦回。 -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<!-- Bangumi OAuth：凭证从 Secrets.xcconfig 注入（BANGUMI_APP_ID / BANGUMI_APP_SECRET）。
+	     回调 scheme 固定为 ocplayer，App 处理 bangumi OAuth 回调。 -->
+	<key>BANGUMI_APP_ID</key>
+	<string>$(BANGUMI_APP_ID)</string>
+	<key>BANGUMI_APP_SECRET</key>
+	<string>$(BANGUMI_APP_SECRET)</string>
+	<key>BANGUMI_OAUTH_CALLBACK</key>
+	<string>ocplayer://oauth/callback</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.jumusu.OcPlayer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ocplayer</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
