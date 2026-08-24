@@ -83,6 +83,129 @@ extension MoviePilotAPIClient {
         try Self.checkStatus(data)
     }
 
+    // MARK: - 订阅 API
+
+    /// 查询全部订阅（`GET /api/v1/subscribe/`）。
+    public func subscribes() async throws -> [MPSubscribe] {
+        let request = MPRequest(path: "/api/v1/subscribe/")
+        let data = try await requestData(request)
+        let items = try Self.plainDecoder.decode(
+            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        return items.map(MPSubscribe.init(raw:))
+    }
+
+    /// 从媒体搜索结果添加订阅（`POST /api/v1/subscribe/`）。
+    public func addSubscribe(media: MPMediaInfo, season: Int? = nil) async throws {
+        var body = media.raw
+        if let title = media.title {
+            body["name"] = .string(title)
+        }
+        if let type = media.type {
+            body["type"] = .string(type)
+        }
+        if let year = media.year {
+            body["year"] = .string(year)
+        }
+        if let tmdbId = media.tmdbId {
+            body["tmdbid"] = .number(Double(tmdbId))
+        }
+        if let doubanId = media.doubanId {
+            body["doubanid"] = .string(doubanId)
+        }
+        if let bangumiId = media.bangumiId {
+            body["bangumiid"] = .number(Double(bangumiId))
+        }
+        if let s = season ?? media.season {
+            body["season"] = .number(Double(s))
+        }
+        if let poster = media.posterURL?.absoluteString ?? media.raw["poster_path"]?.stringValue {
+            body["poster"] = .string(poster)
+        }
+        if let overview = media.overview {
+            body["overview"] = .string(overview)
+            body["description"] = .string(overview)
+        }
+
+        let request = MPRequest(
+            path: "/api/v1/subscribe/",
+            method: "POST",
+            jsonBody: JSONValue.object(body),
+            timeout: 30
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 直接以 MPSubscribe 对象添加订阅（`POST /api/v1/subscribe/`）。
+    public func addSubscribe(subscribe: MPSubscribe) async throws {
+        let request = MPRequest(
+            path: "/api/v1/subscribe/",
+            method: "POST",
+            jsonBody: JSONValue.object(subscribe.raw),
+            timeout: 30
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 更新订阅配置（`PUT /api/v1/subscribe/`）。
+    public func updateSubscribe(subscribe: MPSubscribe) async throws {
+        let request = MPRequest(
+            path: "/api/v1/subscribe/",
+            method: "PUT",
+            jsonBody: JSONValue.object(subscribe.raw),
+            timeout: 30
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 直接以字典更新订阅配置（`PUT /api/v1/subscribe/`）。
+    public func updateSubscribe(raw: [String: JSONValue]) async throws {
+        let request = MPRequest(
+            path: "/api/v1/subscribe/",
+            method: "PUT",
+            jsonBody: JSONValue.object(raw),
+            timeout: 30
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 按订阅 ID 删除订阅（`DELETE /api/v1/subscribe/{id}`）。
+    public func deleteSubscribe(id: Int) async throws {
+        let request = MPRequest(
+            path: "/api/v1/subscribe/\(id)",
+            method: "DELETE"
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 按媒体键删除订阅（`DELETE /api/v1/subscribe/media/{mediaid}`）。
+    public func deleteSubscribeByMedia(mediaId: String) async throws {
+        let request = MPRequest(
+            path: "/api/v1/subscribe/media/\(Self.encodePathSegment(mediaId))",
+            method: "DELETE"
+        )
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 刷新全部订阅（`GET /api/v1/subscribe/refresh`）。
+    public func refreshSubscribes() async throws {
+        let request = MPRequest(path: "/api/v1/subscribe/refresh")
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
+    /// 触发全站追更检索（`GET /api/v1/subscribe/search`）。
+    public func searchSubscribes() async throws {
+        let request = MPRequest(path: "/api/v1/subscribe/search")
+        let data = try await requestData(request)
+        try Self.checkStatus(data)
+    }
+
     // MARK: - 内部
 
     private static let plainDecoder = JSONDecoder()

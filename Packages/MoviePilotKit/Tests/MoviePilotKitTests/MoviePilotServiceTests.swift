@@ -320,4 +320,160 @@ final class MoviePilotServiceTests: XCTestCase {
             }
         }
     }
+
+    func testSubscribesDecodesTypedFields() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertTrue(url.absoluteString.hasSuffix("/api/v1/subscribe/"))
+            return MockURLProtocol.response(
+                #"""
+                {"success":true,"message":"","data":[
+                  {
+                    "id": 101,
+                    "name": "葬送的芙莉莲",
+                    "type": "电视剧",
+                    "year": "2023",
+                    "season": 1,
+                    "total_episode": 28,
+                    "lack_episode": 0,
+                    "poster": "https://image.tmdb.org/t-p/w500/xk.jpg",
+                    "vote_average": 8.9,
+                    "state": "R"
+                  },
+                  {
+                    "id": 102,
+                    "name": "奥本海默",
+                    "type": "电影",
+                    "year": "2023",
+                    "total_episode": 0,
+                    "lack_episode": 0,
+                    "poster_path": "/oppenheimer.jpg",
+                    "vote_average": 8.1,
+                    "state": "O"
+                  }
+                ]}
+                """#,
+                status: 200, for: url)
+        }
+
+        let subscribes = try await client.subscribes()
+        XCTAssertEqual(subscribes.count, 2)
+
+        let tv = subscribes[0]
+        XCTAssertEqual(tv.subscribeId, 101)
+        XCTAssertEqual(tv.name, "葬送的芙莉莲")
+        XCTAssertTrue(tv.isTV)
+        XCTAssertFalse(tv.isMovie)
+        XCTAssertEqual(tv.season, 1)
+        XCTAssertEqual(tv.totalEpisode, 28)
+        XCTAssertEqual(tv.lackEpisode, 0)
+        XCTAssertEqual(tv.stateText, "追更中")
+        XCTAssertEqual(tv.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/xk.jpg")
+
+        let movie = subscribes[1]
+        XCTAssertEqual(movie.subscribeId, 102)
+        XCTAssertEqual(movie.name, "奥本海默")
+        XCTAssertTrue(movie.isMovie)
+        XCTAssertFalse(movie.isTV)
+        XCTAssertEqual(movie.stateText, "已完成")
+        XCTAssertEqual(movie.posterURL?.absoluteString, "https://image.tmdb.org/t-p/w500/oppenheimer.jpg")
+    }
+
+    func testAddSubscribeSendsValidBody() async throws {
+        let mediaRaw: [String: JSONValue] = [
+            "title": .string("间谍过家家"),
+            "type": .string("电视剧"),
+            "year": .string("2022"),
+            "tmdb_id": .number(120089),
+            "poster_path": .string("/spy.jpg"),
+            "overview": .string("间谍日常…"),
+        ]
+        let media = MPMediaInfo(raw: mediaRaw)
+
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertTrue(url.absoluteString.hasSuffix("/api/v1/subscribe/"))
+            XCTAssertEqual(request.httpMethod, "POST")
+            guard let bodyData = TestSupport.body(of: request),
+                  let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            else {
+                XCTFail("请求体解析失败")
+                throw URLError(.badURL)
+            }
+            XCTAssertEqual(body["name"] as? String, "间谍过家家")
+            XCTAssertEqual(body["type"] as? String, "电视剧")
+            XCTAssertEqual((body["tmdbid"] as? Double), 120089)
+            XCTAssertEqual(body["poster"] as? String, "https://image.tmdb.org/t-p/w500/spy.jpg")
+            return MockURLProtocol.response(
+                #"{"success":true,"message":"订阅成功"}"#,
+                status: 200, for: url)
+        }
+
+        try await client.addSubscribe(media: media, season: 1)
+    }
+
+    func testDeleteAndRefreshSubscribes() async throws {
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url.path == "/api/v1/subscribe/101" {
+                XCTAssertEqual(request.httpMethod, "DELETE")
+                return MockURLProtocol.response(
+                    #"{"success":true,"message":"删除成功"}"#,
+                    status: 200, for: url)
+            } else if url.path == "/api/v1/subscribe/refresh" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                return MockURLProtocol.response(
+                    #"{"success":true,"message":"已触发刷新"}"#,
+                    status: 200, for: url)
+            } else if url.path == "/api/v1/subscribe/search" {
+                XCTAssertEqual(request.httpMethod, "GET")
+                return MockURLProtocol.response(
+                    #"{"success":true,"message":"已触发搜索"}"#,
+                    status: 200, for: url)
+            }
+            XCTFail("未知路径：\(url.path)")
+            throw URLError(.badURL)
+        }
+
+        try await client.deleteSubscribe(id: 101)
+        try await client.refreshSubscribes()
+        try await client.searchSubscribes()
+    }
+
+    func testUpdateSubscribeSendsValidBody() async throws {
+        let subRaw: [String: JSONValue] = [
+            "id": .number(101),
+            "name": .string("葬送的芙莉莲"),
+            "type": .string("电视剧"),
+            "season": .number(1),
+            "total_episode": .number(28),
+            "lack_episode": .number(2),
+            "keyword": .string("Frieren"),
+            "include": .string("1080p, HEVC"),
+            "exclude": .string("CAM"),
+            "state": .string("R"),
+        ]
+        let subscribe = MPSubscribe(raw: subRaw)
+
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            XCTAssertTrue(url.absoluteString.hasSuffix("/api/v1/subscribe/"))
+            XCTAssertEqual(request.httpMethod, "PUT")
+            guard let bodyData = TestSupport.body(of: request),
+                  let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+            else {
+                XCTFail("请求体解析失败")
+                throw URLError(.badURL)
+            }
+            XCTAssertEqual(body["name"] as? String, "葬送的芙莉莲")
+            XCTAssertEqual(body["keyword"] as? String, "Frieren")
+            XCTAssertEqual(body["include"] as? String, "1080p, HEVC")
+            XCTAssertEqual((body["id"] as? Double), 101)
+            return MockURLProtocol.response(
+                #"{"success":true,"message":"更新成功"}"#,
+                status: 200, for: url)
+        }
+
+        try await client.updateSubscribe(subscribe: subscribe)
+    }
 }

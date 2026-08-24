@@ -150,7 +150,7 @@ struct MoviePilotResourceSection: View {
             let results = try await MoviePilotAPIClient.shared.searchMedia(title: item.name)
             guard generation == matchGeneration else { return }
             guard !results.isEmpty else {
-                errorText = "没有按「\(item.name)」搜到条目，去「找片」页换个关键词试试。"
+                errorText = "没有按「\(item.name)」搜到条目，去「MoviePilot」页换个关键词试试。"
                 return
             }
             // 优先年份吻合；都没有就取第一个（多源聚合的第一名通常是最佳猜测）。

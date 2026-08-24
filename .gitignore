@@ -41,3 +41,6 @@ REVIEW_TODO.md
 
 # ZCode 本地会话数据，不入库
 .zcode/
+
+# 会话工具产物,不入库
+.reasonix/
