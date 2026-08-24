@@ -22,6 +22,11 @@ public enum PlaybackLog {
         logger.debug(message)
     }
 
+    /// 追加一条 info 级日志（定时采样这类有意义但非链路的记录）。
+    public static func info(_ message: String, fields: [String: DiagnosticValue] = [:]) {
+        logger.info(message, fields: fields)
+    }
+
     /// 追加一条 error 级日志（渲染线程 / 内核错误事件这类真正要捞出来的）。
     public static func error(_ message: String,
                              fields: [String: DiagnosticValue] = [:],

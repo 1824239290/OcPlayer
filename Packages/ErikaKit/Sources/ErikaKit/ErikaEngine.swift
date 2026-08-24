@@ -48,6 +48,16 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     public var latestErikaStats: ErikaPresenterStats { withLock { _latestStats } }
     private var _latestStats = ErikaPresenterStats()
 
+    /// 最近一次内核内存分项快照（渲染线程每 10s 采样，任意线程可读）。
+    /// 两条弹幕路线共用：2G 峰值和 overlay 缓慢爬升分别落在哪些分项，看它的趋势。
+    public var latestMemory: ErikaMemorySnapshot { withLock { _latestMemory } }
+    private var _latestMemory = ErikaMemorySnapshot()
+    private static let memorySampleIntervalSeconds: Double = 5
+    /// 只被渲染线程写；初始 `-.infinity` 让第一帧 tick 先采一条当基线。
+    private var lastMemorySampleAt = -Double.infinity
+    /// 采样失败只报一次，避免逐帧刷屏。
+    private var memorySampleFailed = false
+
     /// 最近一次内核 position 事件的媒体时间（渲染线程写、任意线程读）。
     /// 弹幕 overlay 用自己的采样时钟读它决定「谁该出场」：暂停/缓冲时内核
     /// 媒体时间冻结，采样值跟着冻结——语义与内核内嵌弹幕的时间契约一致。
@@ -135,7 +145,11 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     public func open(_ source: PlaybackSource) throws {
         PlaybackLog.append("open() 开始")
         do {
-            try withLock { try presenter.open(source) }
+            try withLock {
+                try presenter.open(source)
+                // 基线快照：open 一结束先采一条，尖峰若发生在打开瞬间也能留下第一现场。
+                sampleMemoryAt(reason: "open")
+            }
             PlaybackLog.append("open() 成功")
         } catch {
             PlaybackLog.error("open() 失败 error=\(error)")
@@ -166,11 +180,24 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     public func stop() throws {
         PlaybackLog.append("stop() 开始")
         do {
-            try withLock { try presenter.stop() }
+            try withLock {
+                try presenter.stop()
+                // 收尾快照：对比 open/停止前各分项，看释放路径该清的是否清干净。
+                sampleMemoryAt(reason: "stop")
+            }
             PlaybackLog.append("stop() 成功")
         } catch {
             PlaybackLog.append("stop() 失败 error=\(error)")
             throw error
+        }
+        // stop 后 5s 的进程基线采样：量化「播放结束内存有没有完全归还系统」。
+        // 跨集连播时若基线逐次抬高，就是媒体读取缓冲跨播放残留。独立 Task 只读
+        // 进程内存，不持锁、不摸内核句柄，stop 后照常跑。
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard let self else { return }
+            let fp = ProcessFootprint.current()
+            PlaybackLog.info("停止后基线 \(fp.summaryLine)", fields: fp.logFields)
         }
     }
 
@@ -322,6 +349,43 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         return try body()
     }
 
+    /// 采样内核内存分项 + 进程 footprint 并打一条 info 日志。**调用方必须已持有 `lock`**（要摸 presenter）。
+    /// 采样失败只报一次——通常意味着该能力在某版本不可用，不该逐帧刷屏。
+    private func sampleMemoryAt(reason: String) {
+        do {
+            let snapshot = ErikaMemorySnapshot(try presenter.resourceStatus())
+            let process = ProcessFootprint.current()
+            _latestMemory = snapshot
+            memorySampleFailed = false
+            var fields = snapshot.logFields
+            for (key, value) in process.logFields { fields[key] = value }
+            PlaybackLog.info(
+                "内核内存 reason=\(reason) \(snapshot.summaryLine) · \(process.summaryLine)",
+                fields: fields
+            )
+        } catch {
+            if !memorySampleFailed {
+                memorySampleFailed = true
+                PlaybackLog.error("内核内存采样失败 error=\(error)")
+            }
+        }
+    }
+
+    /// 播放页调试行：默认帧计数行下追加一行内核内存分项（HUD TimelineView 每秒重读）。
+    public func debugStatsLine() -> String {
+        let s = latestStats
+        let m = latestMemory
+        let p = ProcessFootprint.current()
+        return """
+        解码 \(s.decodedVideoFrames) · 渲染 \(s.renderedVideoFrames) · \
+        硬解 \(s.hardwareVideoFrames) · 软解 \(s.softwareVideoFrames) · \
+        零拷贝 \(s.zeroCopyVideoFrames) · 音频 \(s.pushedAudioFrames) · \
+        渲染失败 \(s.renderFailures) · 音频失败 \(s.audioFailures)\n\
+        内核内存 \(m.summaryLine)\n\
+        \(p.summaryLine)
+        """
+    }
+
     /// 渲染线程每帧一次。失败在故障期间会逐帧触发，日志走 1s 节流，
     /// 只留下首条 + flush 时的一条汇总。
     private static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
@@ -333,6 +397,11 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         lock.lock()
         do {
             _latestStats = try presenter.renderTick(at: presentationTime)
+            // 每 10s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
+            if presentationTime - lastMemorySampleAt >= Self.memorySampleIntervalSeconds {
+                lastMemorySampleAt = presentationTime
+                sampleMemoryAt(reason: "tick")
+            }
         } catch let error as ErikaError {
             PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
             pending.append(.failed(code: Int32(bitPattern: error.status.rawValue), message: error.message))

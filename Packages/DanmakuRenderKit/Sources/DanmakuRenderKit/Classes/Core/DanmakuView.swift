@@ -227,6 +227,12 @@ public class DanmakuView: PlatformView {
     }
     
     private var danmakuPool: [String: [DanmakuCell]] = [:]
+
+    /// 诊断用：当前复用池里的 cell 总数。播放途中若持续增长，说明 cell 回收后
+    /// 没被复用（或回收本身就漏了），是内存爬升的直接证据。
+    public var pooledCellCount: Int {
+        danmakuPool.reduce(0) { $0 + $1.value.count }
+    }
     
     private var floatingTracks: [DanmakuTrack] = []
     
