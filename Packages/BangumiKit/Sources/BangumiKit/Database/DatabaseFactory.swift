@@ -25,6 +25,10 @@ enum BangumiDatabaseFactory {
             try db.execute(
                 sql: "ALTER TABLE subjects ADD COLUMN episodes_synced_at INTEGER NOT NULL DEFAULT 0")
         }
+        migrator.registerMigration("addProgressAllIndex") { db in
+            try db.execute(
+                sql: "CREATE INDEX IF NOT EXISTS subjects_ctype_collected_idx ON subjects(ctype, collected_at DESC)")
+        }
         try migrator.migrate(dbQueue)
         return dbQueue
     }
@@ -61,6 +65,8 @@ enum BangumiDatabaseFactory {
         try db.execute(
             sql: "CREATE INDEX subjects_collection_idx ON subjects(type, ctype, collected_at DESC)")
         try db.execute(sql: "CREATE INDEX subjects_ctype_idx ON subjects(ctype)")
+        try db.execute(
+            sql: "CREATE INDEX subjects_ctype_collected_idx ON subjects(ctype, collected_at DESC)")
     }
 
     private static func createEpisodes(in db: Database) throws {

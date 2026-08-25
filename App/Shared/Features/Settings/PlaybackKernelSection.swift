@@ -76,7 +76,7 @@ struct PlaybackKernelSection: View {
             if selected?.supportsKernelDanmaku == true {
                 Toggle("用内核渲染弹幕", isOn: .constant(false))
                     .disabled(true)
-                Text("当前版本已禁用内核弹幕：内核的滑窗重排会让在屏弹幕跳轨，"
+                Text("当前版本已禁用内核弹幕：内核在弹幕定位时会导致将完整视频加载进内存引发内存问题，"
                      + "暂时统一用 App 层渲染（DanmakuRenderKit）。内核修复后恢复。")
                     .font(.caption)
                     .foregroundStyle(.secondary)

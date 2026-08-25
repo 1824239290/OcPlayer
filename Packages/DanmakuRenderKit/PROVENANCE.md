@@ -29,6 +29,10 @@
   播放器关闭后整棵 cell 树会留在被 App 单例持有的 DanmakuView 上。App 层
   `DanmakuOverlay.clear()` 在关闭路径调用它清池并移出 subview。纯新增方法，
   不改任何上游既有行为。
+- `DanmakuAsyncLayer.swift`：在 `lazy var queue` 访问前显式调用 `DanmakuAsyncLayer.createPoolIfNeed()`，
+  避免静态池为 nil 时为每个图层单独 new 一个 `DispatchQueue` 造成的队列泄露。
+- `DanmakuView.swift`：`cellPlayingStop(_:)` 中无论是否开启复用均调用 `cell.removeFromSuperview()`，
+  使回收到复用池的 Cell 不再滞留在父视图与 CALayer 树中。
 - `Package.swift`：新增 `DanmakuRenderKitTests` test target（纯 macOS 离屏，
   不碰 GPU / 网络 / UIKit；GIF 侧因 `#if canImport(UIKit)` 不在 macOS 上测试）。
 

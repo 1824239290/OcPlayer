@@ -879,10 +879,9 @@ extension DanmakuView {
         // Match DanmuKitMac behavior: always remove from superview when a danmaku ends,
         // then optionally append to pool for reuse to avoid lingering views.
         delegate?.danmakuView(self, didEndDisplaying: cell)
+        cell.removeFromSuperview()
         if enableCellReusable {
             self.appendCellToPool(cell)
-        } else {
-            cell.removeFromSuperview()
         }
     }
     

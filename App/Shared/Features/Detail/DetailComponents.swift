@@ -81,7 +81,7 @@ struct EpisodeSelectCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .bottomLeading) {
                     let target = episode.episodeThumbTarget(server, width: 400)
-                    RemoteImage(url: target.url, authHeader: target.authHeader)
+                    RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 400)
                         .aspectRatio(16 / 9, contentMode: .fill)
                         .frame(width: cardWidth, height: thumbHeight)
                         .clipped()

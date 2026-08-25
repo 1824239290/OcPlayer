@@ -11,6 +11,8 @@ public struct JellyfinError: Error, LocalizedError {
         case serverUnreachable
         /// 401：账号密码错 / token 过期。
         case unauthorized
+        /// 403：权限不足 / 账号被禁用。
+        case forbidden
         /// Quick Connect：服务器没开（管理员可在控制台关闭）。
         case quickConnectDisabled
         /// Quick Connect：轮询到上限还没授权。
@@ -68,6 +70,7 @@ public struct JellyfinError: Error, LocalizedError {
         case let .unacceptableStatusCode(status):
             switch status {
             case 401: JellyfinError(.unauthorized, underlying: error)
+            case 403: JellyfinError(.forbidden, underlying: error)
             default: JellyfinError(.http(status: status), underlying: error)
             }
         }
@@ -81,6 +84,8 @@ public struct JellyfinError: Error, LocalizedError {
             "连不上服务器：确认地址没打错、这台机器能访问到它。"
         case .unauthorized:
             "认证失败：密码不对，或登录已过期需要重新登录。"
+        case .forbidden:
+            "访问被拒绝：账号权限不足或已被管理员禁用。"
         case .quickConnectDisabled:
             "这台服务器没有开启 Quick Connect（管理员可在 控制台 → 登录 里打开），请用账号密码登录。"
         case .quickConnectTimeout:

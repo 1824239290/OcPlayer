@@ -185,17 +185,20 @@ public actor BangumiDatabaseOperator {
             guard let subject = try fetchSubject(in: db, id: subjectId) else { return nil }
 
             if batch {
-                let rows = try Row.fetchAll(
-                    db,
-                    sql: "SELECT * FROM episodes WHERE subject_id = ? AND sort <= ? AND type = ?",
-                    arguments: [subjectId, episode.sort, BangumiEpisodeType.main.rawValue]
+                try db.execute(
+                    sql: """
+                        UPDATE episodes
+                        SET status = ?, collected_at = ?
+                        WHERE subject_id = ? AND sort <= ? AND type = ?
+                        """,
+                    arguments: [
+                        BangumiEpisodeCollectionType.collect.rawValue,
+                        now,
+                        subjectId,
+                        episode.sort,
+                        BangumiEpisodeType.main.rawValue,
+                    ]
                 )
-                for row in rows {
-                    let item = BangumiEpisode(row: row)
-                    item.status = BangumiEpisodeCollectionType.collect.rawValue
-                    item.collectedAt = now
-                    try upsertEpisode(item, in: db)
-                }
                 // 已看数要数「全部标为看过的本篇」，不能用 rows.count：
                 // 那只是 ≤ 本集的集数，会把用户先前标过的后面几集抹掉。
                 subject.interest?.epStatus = try countCollectedMainEpisodes(in: db, subjectId: subjectId)
@@ -224,7 +227,7 @@ public actor BangumiDatabaseOperator {
         subjectId: Int, type: BangumiCollectionType
     ) throws {
         try database.write { db in
-            guard var subject = try fetchSubject(in: db, id: subjectId) else { return }
+            guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
             let now = Int(Date().timeIntervalSince1970) - 1
             // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
             if var interest = subject.interest {
@@ -254,7 +257,7 @@ public actor BangumiDatabaseOperator {
         subjectId: Int, rate: Int
     ) throws {
         try database.write { db in
-            guard var subject = try fetchSubject(in: db, id: subjectId) else { return }
+            guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
             let now = Int(Date().timeIntervalSince1970)
             if var interest = subject.interest {
                 interest.rate = rate
@@ -282,10 +285,25 @@ public actor BangumiDatabaseOperator {
         try database.write { db in
             var subjectRef = try fetchSubject(in: db, id: subjectId)
             if subjectRef == nil, let slim = items.first?.subject {
-                subjectRef = try ensureSubject(slim, in: db).0
+                let (ensured, _) = try ensureSubject(slim, in: db)
+                try upsertSubject(ensured, in: db)
+                subjectRef = ensured
+            } else if let subjectRef, let slim = items.first?.subject {
+                subjectRef.update(slim)
+                try upsertSubject(subjectRef, in: db)
             }
+
+            let existingEpisodes = try fetchEpisodes(in: db, subjectId: subjectId)
+            let existingMap = Dictionary(uniqueKeysWithValues: existingEpisodes.map { ($0.episodeId, $0) })
+
             for item in items {
-                let episode = try makeEpisodeForSaving(item, in: db, fallbackSubject: subjectRef)
+                let episode: BangumiEpisode
+                if let existing = existingMap[item.id] {
+                    existing.update(item)
+                    episode = existing
+                } else {
+                    episode = BangumiEpisode(item)
+                }
                 try upsertEpisode(episode, in: db)
             }
             // 空结果也要盖时间戳：远端确实没登记章节的条目，否则每次刷新都白拉一遍。
@@ -581,6 +599,11 @@ public actor BangumiDatabaseOperator {
             .map { BangumiEpisode(row: $0) }
     }
 
+    private func fetchEpisodes(in db: Database, subjectId: Int) throws -> [BangumiEpisode] {
+        try Row.fetchAll(db, sql: "SELECT * FROM episodes WHERE subject_id = ?", arguments: [subjectId])
+            .map { BangumiEpisode(row: $0) }
+    }
+
     /// 该条目已标「看过」的本篇集数（`interest.epStatus` 的本地事实源）。
     private func countCollectedMainEpisodes(in db: Database, subjectId: Int) throws -> Int {
         try Int.fetchOne(
@@ -625,21 +648,6 @@ public actor BangumiDatabaseOperator {
             return (subject, false)
         }
         return (BangumiSubject(item), true)
-    }
-
-    private func makeEpisodeForSaving(
-        _ item: BangumiEpisodeDTO, in db: Database, fallbackSubject: BangumiSubject? = nil
-    ) throws -> BangumiEpisode {
-        let episode = try fetchEpisode(in: db, id: item.id) ?? BangumiEpisode(item)
-        episode.update(item)
-        if let slim = item.subject {
-            let (subject, _) = try ensureSubject(slim, in: db)
-            try upsertSubject(subject, in: db)
-        } else if let fallbackSubject, try fetchSubject(in: db, id: fallbackSubject.subjectId) == nil {
-            // 兜底条目不在本地时补上，保证章节的 subject 关联存在。
-            try upsertSubject(fallbackSubject, in: db)
-        }
-        return episode
     }
 
     // MARK: - upsert

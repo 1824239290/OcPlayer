@@ -29,7 +29,11 @@ public final class MoviePilotStore: @unchecked Sendable {
 
     /// 设置页直接绑定的原始地址字符串。nil = 从未填写；空串清空。
     public var serverURLString: String? {
-        get { defaults.string(forKey: Self.serverKey) }
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return defaults.string(forKey: Self.serverKey)
+        }
         set {
             let value = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             lock.lock()
@@ -43,7 +47,11 @@ public final class MoviePilotStore: @unchecked Sendable {
     }
 
     public var username: String {
-        get { defaults.string(forKey: Self.usernameKey) ?? "" }
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return defaults.string(forKey: Self.usernameKey) ?? ""
+        }
         set {
             lock.lock()
             defer { lock.unlock() }
@@ -58,7 +66,11 @@ public final class MoviePilotStore: @unchecked Sendable {
 
     /// 明文密码，仅用于 401 后静默重登。退出登录时清除。
     public var password: String {
-        get { defaults.string(forKey: Self.passwordKey) ?? "" }
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return defaults.string(forKey: Self.passwordKey) ?? ""
+        }
         set {
             lock.lock()
             defer { lock.unlock() }
@@ -72,7 +84,11 @@ public final class MoviePilotStore: @unchecked Sendable {
     }
 
     public var accessToken: String? {
-        get { defaults.string(forKey: Self.tokenKey) }
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return defaults.string(forKey: Self.tokenKey)
+        }
         set {
             lock.lock()
             defer { lock.unlock() }

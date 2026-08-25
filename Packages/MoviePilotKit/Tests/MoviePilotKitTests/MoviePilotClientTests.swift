@@ -76,7 +76,7 @@ final class MoviePilotClientTests: XCTestCase {
             _ = try await client.login()
             XCTFail("应该抛错")
         } catch let error as MoviePilotError {
-            XCTAssertEqual(error.userMessage, "请求参数有误，请检查后重试")
+            XCTAssertEqual(error.userMessage, "用户名或密码不正确")
         }
         XCTAssertNil(store.accessToken, "登录失败不该留下 token")
     }

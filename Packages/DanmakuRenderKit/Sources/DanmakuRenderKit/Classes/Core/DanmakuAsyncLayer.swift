@@ -239,6 +239,7 @@ public class DanmakuAsyncLayer: CALayer {
     }
     
     private lazy var queue: DispatchQueue = {
+        DanmakuAsyncLayer.createPoolIfNeed()
         return DanmakuAsyncLayer.pool?.queue ?? DispatchQueue(label: "com.DanmakuKit.DanmakuAsynclayer")
     }()
     

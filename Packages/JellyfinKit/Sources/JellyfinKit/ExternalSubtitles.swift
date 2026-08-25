@@ -86,7 +86,15 @@ extension JellyfinServer {
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appending(path: "\(subtitle.id.replacingOccurrences(of: "#", with: "-")).\(subtitle.fileExtension)")
+        let safeID = subtitle.id
+            .replacingOccurrences(of: "#", with: "-")
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+        let safeExt = subtitle.fileExtension
+            .replacingOccurrences(of: "/", with: "")
+            .replacingOccurrences(of: "..", with: "")
+        let url = directory.appending(path: "\(safeID).\(safeExt)")
         try data.write(to: url, options: .atomic)
         return url
     }

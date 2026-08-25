@@ -50,6 +50,7 @@ struct LibraryView: View {
     }
 
     private var hasMore: Bool {
+        guard items.count < Self.maxCachedItems else { return false }
         if let totalCount {
             return items.count < totalCount
         }
@@ -238,12 +239,6 @@ struct LibraryView: View {
                 // 防御服务端重复页：按 id 去重追加。
                 let existing = Set(cached.items.map(\.id))
                 cached.items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
-            }
-            // 缓存只保证「切走再切回来不重拉」，不保证无限滚动全量常驻：
-            // 深翻大库后每条（带 cast/overview/genres 全量元数据）都挂在全局
-            // AppModel 上，超上限的旧条目直接丢弃，下次滚到再翻页拉取。
-            if cached.items.count > Self.maxCachedItems {
-                cached.items.removeFirst(cached.items.count - Self.maxCachedItems)
             }
             cached.totalCount = page.totalRecordCount
             app.libraryPages[libraryID] = cached

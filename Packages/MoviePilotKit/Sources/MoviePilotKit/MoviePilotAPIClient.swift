@@ -111,17 +111,21 @@ public actor MoviePilotAPIClient {
         cancelRelogin()
         bumpGeneration()
         let token = try await postLogin(username: store.username, password: store.password)
-        store.accessToken = token
-        bumpGeneration()
         // 拿新 token 直接取用户信息（不经重登路径——token 就是刚换的）。
         let request = MPRequest(path: "/api/v1/user/current")
-        let data = MPEnvelope.unwrap(try await sendOnce(request, token: token))
+        let user: MPUser
         do {
-            return try Self.decoder.decode(MPUser.self, from: data)
+            let data = MPEnvelope.unwrap(try await sendOnce(request, token: token))
+            user = try Self.decoder.decode(MPUser.self, from: data)
         } catch {
+            store.accessToken = nil
+            bumpGeneration()
             // 别映射成 badRequest——那是「请求参数有误」，会把解析问题误导成参数问题。
             throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)")
         }
+        store.accessToken = token
+        bumpGeneration()
+        return user
     }
 
     /// 当前用户（带鉴权；token 过期走静默重登）。

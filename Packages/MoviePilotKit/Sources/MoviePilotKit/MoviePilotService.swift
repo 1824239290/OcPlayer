@@ -219,6 +219,7 @@ extension MoviePilotAPIClient {
     }
 
     private static func checkStatus(_ data: Data) throws {
+        guard !data.isEmpty else { return }
         let wrapped = try plainDecoder.decode(MPStatusResponse.self, from: data)
         guard wrapped.success ?? true else {
             throw MoviePilotError.generic(wrapped.message ?? "操作失败")

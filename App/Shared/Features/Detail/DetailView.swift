@@ -215,7 +215,7 @@ struct DetailView: View {
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
         if shown.primaryImageTag != nil {
             let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
-            RemoteImage(url: poster.url, authHeader: poster.authHeader)
+            RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
                 .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
@@ -539,7 +539,7 @@ struct DetailView: View {
         return Rail("演员", kind: .flexible, items: actors) { person in
             VStack(spacing: 8) {
                 let target = personImageTarget(person)
-                RemoteImage(url: target.url, authHeader: target.authHeader)
+                RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 240)
                     .aspectRatio(1, contentMode: .fill)
                     // 宽高都要定死：RemoteImage 内部占位 Rectangle 会竖向贪婪撑开，
                     // 只给宽度时头像被裁进一条很高的空白里，名字/角色被挤出可视区。

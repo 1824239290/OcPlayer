@@ -78,14 +78,18 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
             return message
         case .request:
             return "请求处理失败，请稍后再试"
-        case .badRequest:
-            return "请求参数有误，请检查后重试"
-        case .forbidden:
-            return "请求被拒绝，请检查权限"
-        case .notFound:
-            return "请求的内容不存在"
-        case .http(let statusCode, _):
-            return "请求失败（\(statusCode)），请稍后再试"
+        case .badRequest(let response):
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "请求参数有误，请检查后重试" : trimmed
+        case .forbidden(let response):
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "请求被拒绝，请检查权限" : trimmed
+        case .notFound(let response):
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "请求的内容不存在" : trimmed
+        case .http(let statusCode, let response):
+            let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "请求失败（\(statusCode)），请稍后再试" : trimmed
         case .ignore(let message):
             return message
         }

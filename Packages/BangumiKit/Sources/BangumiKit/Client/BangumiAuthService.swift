@@ -19,10 +19,11 @@ public enum BangumiAuthService {
         try ensureCurrentOperation(revision)
         do {
             _ = try await refreshProfile(revision: revision)
-        } catch BangumiError.requireLogin {
-            try ensureCurrentOperation(revision)
-            _ = await BangumiAPIClient.shared.clearCredentials(ifCurrent: credentialGeneration)
-            throw BangumiError.requireLogin
+        } catch {
+            if (try? ensureCurrentOperation(revision)) != nil {
+                _ = await BangumiAPIClient.shared.clearCredentials(ifCurrent: credentialGeneration)
+            }
+            throw error
         }
     }
 

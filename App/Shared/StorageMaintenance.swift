@@ -7,6 +7,8 @@ enum AppStorageDirectories {
         .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
     static let screenshots = URL.picturesDirectory
         .appending(path: "OcPlayer", directoryHint: .isDirectory)
+    static let danmaku = URL.applicationSupportDirectory
+        .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
 }
 
 /// Keeps app-managed copies bounded without blocking the main actor.
@@ -59,15 +61,22 @@ final class AppStorageMaintenance: @unchecked Sendable {
             maxFileCount: 500,
             maxTotalBytes: 5 * 1024 * 1024 * 1024
         )
+        let danmakuResult = ManagedDirectoryPruner.prune(
+            directory: AppStorageDirectories.danmaku,
+            allowedExtensions: ["json"],
+            maxFileCount: 300,
+            maxTotalBytes: 256 * 1024 * 1024
+        )
 
-        let removedCount = subtitleResult.removedCount + screenshotResult.removedCount
-        let failedCount = subtitleResult.failedRemovalCount + screenshotResult.failedRemovalCount
-        let skippedUnsafeRoot = subtitleResult.skippedUnsafeRoot || screenshotResult.skippedUnsafeRoot
+        let removedCount = subtitleResult.removedCount + screenshotResult.removedCount + danmakuResult.removedCount
+        let failedCount = subtitleResult.failedRemovalCount + screenshotResult.failedRemovalCount + danmakuResult.failedRemovalCount
+        let skippedUnsafeRoot = subtitleResult.skippedUnsafeRoot || screenshotResult.skippedUnsafeRoot || danmakuResult.skippedUnsafeRoot
         guard removedCount > 0 || failedCount > 0 || skippedUnsafeRoot else { return }
         let fields: [String: DiagnosticValue] = [
             "subtitle_files": .integer(Int64(subtitleResult.removedCount)),
             "screenshot_files": .integer(Int64(screenshotResult.removedCount)),
-            "freed_bytes": .integer(subtitleResult.removedBytes + screenshotResult.removedBytes),
+            "danmaku_files": .integer(Int64(danmakuResult.removedCount)),
+            "freed_bytes": .integer(subtitleResult.removedBytes + screenshotResult.removedBytes + danmakuResult.removedBytes),
             "failed_files": .integer(Int64(failedCount)),
             "unsafe_root": .boolean(skippedUnsafeRoot),
         ]

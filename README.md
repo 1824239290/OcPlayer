@@ -2,7 +2,7 @@
 
 自用的 Jellyfin 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。
 
-播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染）；媒体库走 Jellyfin 官方 Swift SDK；弹幕通过 OcPlay 网关接入弹弹play、**统一由 App 层 overlay 渲染**（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit——内核内置弹幕渲染器当前版本因跳轨问题被禁用，见下文「弹幕渲染路线」）；另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
+播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染）；媒体库走 Jellyfin 官方 Swift SDK；弹幕通过 OcPlay 网关接入弹弹play、**统一由 App 层 overlay 渲染**（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit——内核内置弹幕渲染器当前版本因弹幕定位导致内核将完整视频加载进内存的问题被禁用，见下文「弹幕渲染路线」）；另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
 
 ## 特性
 
@@ -47,7 +47,7 @@ swift test --package-path Packages/MoviePilotKit       # MoviePilot 登录/订�
 
 弹幕渲染统一走 **App 层 overlay**（`DanmakuRenderKit`，vendored 自 qyz777/DanmakuKit）：弹幕由 App 在视频画面上方独立绘制，与内核解码 / 合成解耦，截图不会带弹幕，对内核也没有额外要求。
 
-**内核内置弹幕渲染器（Erika DFM+）当前版本被禁用**：内核的滑窗重排会让在屏弹幕跳轨（viewport 变化时部分弹幕突然换轨道）。虽然此前通过移除弹幕稳定 ID 缓解过一次，但问题仍会复现，因此本版本起运行时强制走 overlay——`PlaybackController` 的渲染路线判定固定为 App 层渲染，设置 → 播放内核 中的「用内核渲染弹幕」开关也同步置灰并附原因说明。等内核修复跳轨后，恢复该开关与偏好读取即可切回内核渲染。
+**内核内置弹幕渲染器（Erika DFM+）当前版本被禁用**：内核在进行弹幕时间定位与同步时会导致内核将完整视频加载进内存，引发内存暴涨问题。因此本版本起运行时强制走 overlay——`PlaybackController` 的渲染路线判定固定为 App 层渲染，设置 → 播放内核 中的「用内核渲染弹幕」开关也同步置灰并附原因说明。等内核修复该内存加载问题后，恢复该开关与偏好读取即可切回内核渲染。
 
 ### 弹弹play 网关配置
 

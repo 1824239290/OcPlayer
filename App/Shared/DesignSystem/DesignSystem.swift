@@ -455,7 +455,7 @@ struct PosterCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 let target = item.imageTarget(server, kind: .primary, width: 400)
                 let cardWidth = width ?? Metrics.posterWidth
-                RemoteImage(url: target.url, authHeader: target.authHeader)
+                RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 400)
                     .aspectRatio(2 / 3, contentMode: .fill)
                     .frame(width: cardWidth, height: cardWidth * 1.5)
                     .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
@@ -539,7 +539,7 @@ struct StillCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
                     let target = item.episodeThumbTarget(server, width: 720)
-                    RemoteImage(url: target.url, authHeader: target.authHeader)
+                    RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 720)
                         .aspectRatio(16 / 9, contentMode: .fill)
                         .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
                         .clipped()

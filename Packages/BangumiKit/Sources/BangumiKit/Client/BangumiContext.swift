@@ -252,6 +252,17 @@ public final class BangumiContext {
         }
     }
 
+    /// 确保数据库建库与迁移完成，未就绪时等待后台 Task 结束。
+    public func waitUntilReady() async {
+        if isDatabaseReady { return }
+        if let setupTask {
+            _ = await setupTask.value
+        } else {
+            setupIfNeeded()
+            _ = await setupTask?.value
+        }
+    }
+
     // MARK: - 登录态
 
     /// 存储属性（非计算属性）：@Observable 只有存储属性变更才触发 UI 更新。
