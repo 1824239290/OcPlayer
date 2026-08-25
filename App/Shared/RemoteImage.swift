@@ -318,7 +318,7 @@ final class ImagePipeline: @unchecked Sendable {
         #if canImport(UIKit)
         return UIImage(cgImage: cgImage)
         #else
-        return NSImage(cgImage: cgImage, size: .zero)
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         #endif
     }
 

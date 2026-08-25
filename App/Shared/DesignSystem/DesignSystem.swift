@@ -449,8 +449,8 @@ extension MediaItem {
 struct ItemTitleLogoView: View {
     let item: MediaItem
     let server: JellyfinServer?
-    var maxHeight: CGFloat = 64
-    var maxWidth: CGFloat = 380
+    var maxHeight: CGFloat = 80
+    var maxWidth: CGFloat = 420
     var fontSize: CGFloat = 28
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -461,8 +461,8 @@ struct ItemTitleLogoView: View {
     init(
         item: MediaItem,
         server: JellyfinServer?,
-        maxHeight: CGFloat = 64,
-        maxWidth: CGFloat = 380,
+        maxHeight: CGFloat = 80,
+        maxWidth: CGFloat = 420,
         fontSize: CGFloat = 28
     ) {
         self.item = item

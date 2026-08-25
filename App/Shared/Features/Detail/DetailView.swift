@@ -200,7 +200,7 @@ struct DetailView: View {
                     HStack(alignment: .bottom, spacing: 14) {
                         bannerPoster(width: 80, height: 120)
                         VStack(alignment: .leading, spacing: 8) {
-                            bannerTitle
+                            compactBannerTitle
                             metaRow
                                 .lineLimit(1)
                         }
@@ -226,7 +226,11 @@ struct DetailView: View {
     }
 
     private var bannerTitle: some View {
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 60, maxWidth: 380, fontSize: 28)
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28)
+    }
+
+    private var compactBannerTitle: some View {
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 52, maxWidth: 260, fontSize: 22)
     }
 
     private var metaRow: some View {
