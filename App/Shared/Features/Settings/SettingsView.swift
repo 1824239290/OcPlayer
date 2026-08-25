@@ -465,7 +465,7 @@ private struct UpdateCheckRow: View {
             switch checker.state {
             case .idle:
                 Button("检查") {
-                    Task { await checker.checkForUpdates() }
+                    Task { await checker.checkForUpdates(isUserInitiated: true) }
                 }
 
             case .checking:
@@ -483,24 +483,26 @@ private struct UpdateCheckRow: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     Button("重新检查") {
-                        Task { await checker.checkForUpdates() }
+                        Task { await checker.checkForUpdates(isUserInitiated: true) }
                     }
                     .font(.callout)
                 }
 
             case .updateAvailable(let release):
-                Button {
-                    onShowRelease(release)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .foregroundStyle(.tint)
-                        Text("发现新版本 \(release.tagName)")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(.tint)
+                HStack(spacing: 6) {
+                    Button {
+                        onShowRelease(release)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .foregroundStyle(.tint)
+                            Text(checker.ignoredVersion == release.tagName ? "发现新版本 \(release.tagName) (已忽略)" : "发现新版本 \(release.tagName)")
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.tint)
+                        }
                     }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
 
             case .failed(let message):
                 HStack(spacing: 8) {
@@ -509,7 +511,7 @@ private struct UpdateCheckRow: View {
                         .foregroundStyle(.red)
                         .lineLimit(1)
                     Button("重试") {
-                        Task { await checker.checkForUpdates() }
+                        Task { await checker.checkForUpdates(isUserInitiated: true) }
                     }
                     .font(.callout)
                 }

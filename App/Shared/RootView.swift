@@ -12,6 +12,7 @@ struct RootView: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var updateChecker = AppUpdateChecker.shared
 
     var body: some View {
         Group {
@@ -105,5 +106,8 @@ struct RootView: View {
             _ = app.playbackWillTerminate()
         }
         #endif
+        .sheet(item: $updateChecker.promptRelease) { release in
+            UpdateReleaseSheet(release: release)
+        }
     }
 }

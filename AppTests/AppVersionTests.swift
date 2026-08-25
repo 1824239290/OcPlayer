@@ -61,4 +61,17 @@ final class AppVersionTests: XCTestCase {
         XCTAssertEqual(release.isPrerelease, false)
         XCTAssertNotNil(release.publishedAt)
     }
+
+    @MainActor
+    func testIgnoreVersion() {
+        let checker = AppUpdateChecker(repoOwner: "test", repoName: "test")
+        checker.clearIgnoredVersion()
+        XCTAssertNil(checker.ignoredVersion)
+
+        checker.ignoreVersion("v1.5.0")
+        XCTAssertEqual(checker.ignoredVersion, "v1.5.0")
+
+        checker.clearIgnoredVersion()
+        XCTAssertNil(checker.ignoredVersion)
+    }
 }

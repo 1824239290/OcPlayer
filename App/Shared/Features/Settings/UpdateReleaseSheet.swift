@@ -6,6 +6,7 @@ struct UpdateReleaseSheet: View {
     @Environment(\.openURL) private var openURL
 
     let release: GitHubRelease
+    var onIgnore: (() -> Void)? = nil
 
     var body: some View {
         NavigationStack {
@@ -67,8 +68,17 @@ struct UpdateReleaseSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("稍后再说") {
-                        dismiss()
+                    HStack(spacing: 12) {
+                        Button("忽略此版本") {
+                            AppUpdateChecker.shared.ignoreVersion(release.tagName)
+                            onIgnore?()
+                            dismiss()
+                        }
+                        .foregroundStyle(.secondary)
+
+                        Button("稍后再说") {
+                            dismiss()
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -83,7 +93,7 @@ struct UpdateReleaseSheet: View {
             }
         }
         #if os(macOS)
-        .frame(width: 520, height: 420)
+        .frame(width: 540, height: 430)
         #endif
     }
 }

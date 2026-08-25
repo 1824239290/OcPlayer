@@ -119,10 +119,26 @@ public final class AppUpdateChecker {
         }
     }
 
+    private static let ignoredVersionKey = "dev.jumusu.OcPlayer.ignoredVersion"
+
     public static let shared = AppUpdateChecker()
 
     public private(set) var state: State = .idle
     public private(set) var lastCheckedDate: Date?
+    /// 触发弹窗展示的 Release 对象（置空则关闭弹窗）
+    public var promptRelease: GitHubRelease?
+
+    /// 用户选择忽略提醒的版本号
+    public var ignoredVersion: String? {
+        get { UserDefaults.standard.string(forKey: Self.ignoredVersionKey) }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue, forKey: Self.ignoredVersionKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.ignoredVersionKey)
+            }
+        }
+    }
 
     public let repoOwner: String
     public let repoName: String
@@ -138,7 +154,22 @@ public final class AppUpdateChecker {
         self.session = session
     }
 
-    public func checkForUpdates() async {
+    /// 忽略指定版本的自动弹窗提醒
+    public func ignoreVersion(_ version: String) {
+        ignoredVersion = version
+        if promptRelease?.tagName == version {
+            promptRelease = nil
+        }
+    }
+
+    /// 清除已忽略的版本记录
+    public func clearIgnoredVersion() {
+        ignoredVersion = nil
+    }
+
+    /// 检查更新
+    /// - Parameter isUserInitiated: 是否为用户主动点击（若是且有新版，无论是否曾被忽略均弹出弹窗）
+    public func checkForUpdates(isUserInitiated: Bool = false) async {
         state = .checking
         do {
             guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
@@ -182,6 +213,13 @@ public final class AppUpdateChecker {
 
             if AppVersion.isNewer(remote: release.tagName) {
                 state = .updateAvailable(release)
+
+                if isUserInitiated {
+                    promptRelease = release
+                } else if ignoredVersion != release.tagName {
+                    // 启动自动检查时，未被忽略的新版本自动弹出弹窗
+                    promptRelease = release
+                }
             } else {
                 state = .upToDate(version: release.tagName)
             }
