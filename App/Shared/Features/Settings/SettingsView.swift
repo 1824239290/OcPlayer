@@ -14,6 +14,8 @@ struct SettingsView: View {
     @State private var isEnteringURL = false
     @State private var isEditingDanmakuGateway = false
     @State private var isEditingMoviePilot = false
+    @State private var updateChecker = AppUpdateChecker.shared
+    @State private var presentedRelease: GitHubRelease?
 
     var body: some View {
         Form {
@@ -95,6 +97,13 @@ struct SettingsView: View {
             }
 
             Section("关于") {
+                KeyValueRow(label: "版本", value: AppVersion.displayString)
+                UpdateCheckRow(
+                    checker: updateChecker,
+                    onShowRelease: { release in
+                        presentedRelease = release
+                    }
+                )
                 KeyValueRow(label: "直连策略", value: "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
                 KeyValueRow(label: "弹幕", value: "弹弹play 开放平台（通过 OcPlay 网关接入）")
                 NavigationLink {
@@ -151,6 +160,9 @@ struct SettingsView: View {
                 initialURL: moviepilot.store.serverURLString ?? "",
                 initialUsername: moviepilot.store.username
             )
+        }
+        .sheet(item: $presentedRelease) { release in
+            UpdateReleaseSheet(release: release)
         }
         .task { moviepilot.refreshProfileIfNeeded() }
     }
@@ -433,3 +445,71 @@ struct DiagnosticsSection: View {
         return parts.joined(separator: " · ")
     }
 }
+
+// MARK: - 检查更新行
+
+private struct UpdateCheckRow: View {
+    let checker: AppUpdateChecker
+    let onShowRelease: (GitHubRelease) -> Void
+
+    var body: some View {
+        HStack {
+            Text("检查更新")
+            Spacer()
+
+            switch checker.state {
+            case .idle:
+                Button("检查") {
+                    Task { await checker.checkForUpdates() }
+                }
+
+            case .checking:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在检查…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+            case .upToDate:
+                HStack(spacing: 8) {
+                    Text("已是最新")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button("重新检查") {
+                        Task { await checker.checkForUpdates() }
+                    }
+                    .font(.callout)
+                }
+
+            case .updateAvailable(let release):
+                Button {
+                    onShowRelease(release)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .foregroundStyle(.tint)
+                        Text("发现新版本 \(release.tagName)")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(.tint)
+                    }
+                }
+                .buttonStyle(.borderless)
+
+            case .failed(let message):
+                HStack(spacing: 8) {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                    Button("重试") {
+                        Task { await checker.checkForUpdates() }
+                    }
+                    .font(.callout)
+                }
+            }
+        }
+    }
+}
+
