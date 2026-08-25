@@ -191,7 +191,8 @@ public struct JellyfinServer: Sendable {
             Paths.getResumeItems(parameters: .init(
                 userID: profile.userID,
                 limit: 24,
-                mediaTypes: [.video]
+                mediaTypes: [.video],
+                enableImageTypes: [.primary, .backdrop, .thumb, .logo]
             ))
         )
         .items?.map(\.domainItem) ?? []
@@ -200,7 +201,11 @@ public struct JellyfinServer: Sendable {
     /// 「接下来看」：追剧下一集。
     public func nextUp() async throws -> [MediaItem] {
         try await send(
-            Paths.getNextUp(parameters: .init(userID: profile.userID, limit: 24))
+            Paths.getNextUp(parameters: .init(
+                userID: profile.userID,
+                limit: 24,
+                enableImageTypes: [.primary, .backdrop, .thumb, .logo]
+            ))
         )
         .items?.map(\.domainItem) ?? []
     }

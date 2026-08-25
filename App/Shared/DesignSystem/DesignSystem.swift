@@ -455,6 +455,37 @@ struct ItemTitleLogoView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoImage: PlatformImage?
+    @State private var loadFailed = false
+    @State private var loadedKey: String?
+
+    init(
+        item: MediaItem,
+        server: JellyfinServer?,
+        maxHeight: CGFloat = 64,
+        maxWidth: CGFloat = 380,
+        fontSize: CGFloat = 28
+    ) {
+        self.item = item
+        self.server = server
+        self.maxHeight = maxHeight
+        self.maxWidth = maxWidth
+        self.fontSize = fontSize
+
+        // 同步从内存缓存中探测：若已有位图缓存，首帧直接上图，0 毫秒闪烁
+        if item.logoImageTag != nil, let server {
+            let maxPixel = Int(max(maxWidth, maxHeight) * 2)
+            let target = item.imageTarget(server, kind: .logo, width: maxPixel)
+            if let url = target.url,
+               let cached = ImagePipeline.shared.memoryCachedImage(
+                   url: url,
+                   authHeader: target.authHeader,
+                   maxPixelSize: maxPixel
+               ) {
+                _logoImage = State(initialValue: cached)
+                _loadedKey = State(initialValue: "\(item.id)#\(item.logoImageTag ?? "")")
+            }
+        }
+    }
 
     private var imageFade: Animation? {
         reduceMotion ? nil : .easeInOut(duration: 0.2)
@@ -470,7 +501,14 @@ struct ItemTitleLogoView: View {
                     .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
                     .accessibilityLabel(item.name)
                     .transition(.opacity)
+            } else if item.logoImageTag != nil && !loadFailed {
+                // 已知有 Logo 且正在加载中（来自磁盘或网络）：展示骨架占位，避免先闪出文字标题
+                SkeletonBlock(cornerRadius: 4)
+                    .frame(width: min(maxWidth * 0.55, 180), height: min(maxHeight * 0.55, 28))
+                    .skeletonShimmer()
+                    .transition(.opacity)
             } else {
+                // 未配置 Logo 或加载失败：展示标准文本标题
                 Text(item.name)
                     .font(.system(size: fontSize, weight: .bold))
                     .foregroundStyle(.white)
@@ -481,23 +519,44 @@ struct ItemTitleLogoView: View {
         }
         .animation(imageFade, value: logoImage != nil)
         .task(id: "\(item.id)#\(item.logoImageTag ?? "")") {
+            let key = "\(item.id)#\(item.logoImageTag ?? "")"
             guard item.logoImageTag != nil else {
                 logoImage = nil
+                loadFailed = false
+                loadedKey = key
                 return
             }
-            let target = item.imageTarget(server, kind: .logo, width: Int(maxWidth * 2))
+            if loadedKey == key, logoImage != nil {
+                return
+            }
+            let maxPixel = Int(max(maxWidth, maxHeight) * 2)
+            let target = item.imageTarget(server, kind: .logo, width: maxPixel)
             guard let url = target.url else {
                 logoImage = nil
+                loadFailed = true
+                loadedKey = key
+                return
+            }
+            if let cached = ImagePipeline.shared.memoryCachedImage(url: url, authHeader: target.authHeader, maxPixelSize: maxPixel) {
+                logoImage = cached
+                loadFailed = false
+                loadedKey = key
                 return
             }
             do {
-                if let loaded = try await ImagePipeline.shared.load(url, authHeader: target.authHeader, maxPixelSize: Int(max(maxWidth, maxHeight) * 2)) {
+                if let loaded = try await ImagePipeline.shared.load(url, authHeader: target.authHeader, maxPixelSize: maxPixel) {
                     guard !Task.isCancelled else { return }
                     logoImage = loaded
+                    loadFailed = false
+                    loadedKey = key
+                } else {
+                    loadFailed = true
+                    loadedKey = key
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                logoImage = nil
+                loadFailed = true
+                loadedKey = key
             }
         }
     }

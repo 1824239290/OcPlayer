@@ -104,6 +104,12 @@ final class ImagePipeline: @unchecked Sendable {
         tasks.forEach { $0.cancel() }
     }
 
+    /// 同步获取内存缓存中的位图（若存在）；未命中或未解码返回 nil。
+    func memoryCachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) -> PlatformImage? {
+        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+        return cachedImage(forKey: key)
+    }
+
     /// 加载一张图。返回 `nil` = 真正失败（下次可重试）。
     ///
     /// 同一 URL 的并发调用共享同一个网络任务（列表滚动反复出现同一张图时不重复拉）；
