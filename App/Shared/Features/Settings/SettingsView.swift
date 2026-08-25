@@ -164,7 +164,12 @@ struct SettingsView: View {
         .sheet(item: $presentedRelease) { release in
             UpdateReleaseSheet(release: release)
         }
-        .task { moviepilot.refreshProfileIfNeeded() }
+        .task {
+            moviepilot.refreshProfileIfNeeded()
+            if updateChecker.state == .idle {
+                await updateChecker.checkForUpdates()
+            }
+        }
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。

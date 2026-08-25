@@ -51,6 +51,9 @@ struct OcPlayerApp: App {
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         PlaybackEngineAssembly.registerAll()
         AppDiagnostics.recordLaunch()
+        Task { @MainActor in
+            await AppUpdateChecker.shared.checkForUpdates()
+        }
     }
 
     var body: some Scene {
