@@ -279,6 +279,8 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     let font: PlatformFont
     let color: PlatformColor
     let size: CGSize
+    let marginX: CGFloat
+    let marginY: CGFloat
     let identifier: String
     let displayTime: Double
     let type: DanmakuCellType
@@ -308,10 +310,12 @@ final class OverlayDanmakuModel: DanmakuCellModel {
         let attributed = NSAttributedString(string: comment.text, attributes: [.font: font])
         var measured = attributed.size()
         // 描边与阴影在字形外扩，测量宽度与高度预留边距，避免边缘裁切。
-        let marginX = max(8.0, fontSize * 0.35)
-        let marginY = max(4.0, fontSize * 0.15)
-        measured.width += marginX
-        measured.height += marginY
+        let mX = max(8.0, fontSize * 0.35)
+        let mY = max(4.0, fontSize * 0.15)
+        self.marginX = mX
+        self.marginY = mY
+        measured.width += mX
+        measured.height += mY
         size = measured
     }
 
@@ -324,12 +328,17 @@ final class OverlayDanmakuModel: DanmakuCellModel {
 }
 
 /// 单条弹幕的高清绘制：
-/// 1. 开启抗锯齿、亚像素字形定位与圆润转角；
-/// 2. 亮度自适应描边（亮字深描边，极深字亮描边）；
-/// 3. 轻微投影增强立体感与高亮背景穿透力。
+/// 1. 彻底关闭透明上下文上的 LCD 亚像素平滑（Font Smoothing），杜绝白边泛白；
+/// 2. 双通道分层绘制：底层纯黑描边 + 顶层原色填充，确保弹幕原色鲜亮纯正；
+/// 3. 亮度自适应描边（亮色字纯黑描边，极深字柔和浅描边）；
+/// 4. 柔和投影增强高亮与复杂视频背景穿透力。
 final class OverlayDanmakuCell: DanmakuCell {
     override func displaying(_ context: CGContext, _ size: CGSize, _ isCancelled: Bool) {
         guard !isCancelled, let model = model as? OverlayDanmakuModel else { return }
+
+        // 透明位图上下文禁止字体平滑（Font Smoothing 默认假设白底，在透明图层上会引起暗色背景泛白）
+        context.setAllowsFontSmoothing(false)
+        context.setShouldSmoothFonts(false)
 
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
@@ -347,46 +356,49 @@ final class OverlayDanmakuCell: DanmakuCell {
         #endif
 
         let text = NSString(string: model.comment.text)
-        let strokeWidth = max(2.5, model.font.pointSize * 0.11)
 
-        // 计算文字亮度：浅色/亮色文字用深色描边，深色/黑字用半透明白描边，避免黑成一团
+        // 计算文字亮度：浅色/亮色文字用纯黑坚实描边，深色/黑字用高亮描边避免黑成一团
         let r = CGFloat((model.comment.color >> 16) & 0xFF) / 255
         let g = CGFloat((model.comment.color >> 8) & 0xFF) / 255
         let b = CGFloat(model.comment.color & 0xFF) / 255
         let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        let strokeColor: PlatformColor = luminance < 0.28
-            ? PlatformColor.white.withAlphaComponent(0.85)
-            : PlatformColor.black.withAlphaComponent(0.92)
-
-        var stroke: [NSAttributedString.Key: Any] = [
-            .font: model.font,
-            .foregroundColor: model.color,
-            .strokeColor: strokeColor,
-            .strokeWidth: strokeWidth,
-        ]
-
-        var fill: [NSAttributedString.Key: Any] = [
-            .font: model.font,
-            .foregroundColor: model.color,
-        ]
+        let strokeColor: PlatformColor = luminance < 0.25
+            ? PlatformColor(white: 0.85, alpha: 1.0)
+            : PlatformColor.black
 
         #if os(macOS)
         let shadow = NSShadow()
         shadow.shadowBlurRadius = 1.5
         shadow.shadowOffset = NSSize(width: 0, height: -1.0)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
-        stroke[.shadow] = shadow
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
         #else
         let shadow = NSShadow()
         shadow.shadowBlurRadius = 1.5
         shadow.shadowOffset = CGSize(width: 0, height: 1.0)
-        shadow.shadowColor = UIColor.black.withAlphaComponent(0.35)
-        stroke[.shadow] = shadow
+        shadow.shadowColor = UIColor.black.withAlphaComponent(0.45)
         #endif
 
-        let origin = CGPoint(x: strokeWidth / 2, y: 0)
-        text.draw(at: origin, withAttributes: stroke)
-        text.draw(at: origin, withAttributes: fill)
+        // 双通道分层绘制：
+        // 第 1 遍：底层绘制空心纯黑描边（正数 strokeWidth 表示仅描边不填充）+ 阴影
+        // 第 2 遍：顶层绘制 100% 原始色彩实体文字填充（无 strokeWidth，保留弹幕原色）
+        let strokeWidthPercent: Double = 8.0
+
+        let strokeAttributes: [NSAttributedString.Key: Any] = [
+            .font: model.font,
+            .foregroundColor: strokeColor,
+            .strokeColor: strokeColor,
+            .strokeWidth: strokeWidthPercent,
+            .shadow: shadow,
+        ]
+
+        let fillAttributes: [NSAttributedString.Key: Any] = [
+            .font: model.font,
+            .foregroundColor: model.color,
+        ]
+
+        let origin = CGPoint(x: model.marginX / 2, y: model.marginY / 2)
+        text.draw(at: origin, withAttributes: strokeAttributes)
+        text.draw(at: origin, withAttributes: fillAttributes)
     }
 }
 
