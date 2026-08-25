@@ -5,13 +5,33 @@ import SwiftUI
 /// 关联选择器：搜索 Bangumi 条目并手动关联。
 struct BangumiLinkPicker: View {
     let item: MediaItem
+    var season: MediaItem? = nil
     var onSelect: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var keyword = ""
+    @State private var keyword: String
     @State private var results: [BangumiSlimSubjectDTO] = []
     @State private var isSearching = false
     @State private var searchError: String?
+
+    init(item: MediaItem, season: MediaItem? = nil, onSelect: @escaping (Int) -> Void) {
+        self.item = item
+        self.season = season
+        self.onSelect = onSelect
+
+        let seriesName = item.seriesName ?? item.name
+        let seasonNumber = season?.seasonNumber ?? item.seasonNumber
+        let seasonName = season?.name ?? item.seasonName
+        let initialKeyword: String
+        if let seasonName, !seasonName.isEmpty, season != nil {
+            initialKeyword = "\(seriesName) \(seasonName)"
+        } else if let seasonNumber, seasonNumber > 1 {
+            initialKeyword = "\(seriesName) 第\(seasonNumber)季"
+        } else {
+            initialKeyword = seriesName
+        }
+        _keyword = State(initialValue: initialKeyword)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +106,11 @@ struct BangumiLinkPicker: View {
             }
         }
         .frame(minWidth: 480, minHeight: 420)
+        .task {
+            if results.isEmpty && !keyword.trimmingCharacters(in: .whitespaces).isEmpty {
+                await search()
+            }
+        }
     }
 
     private func search() async {

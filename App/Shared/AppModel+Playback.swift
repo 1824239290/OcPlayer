@@ -459,9 +459,12 @@ func dismissPlayer() {
             BangumiDiagnostics.log("播放结束未标记：Bangumi 未登录")
             return
         }
-        let linkItemID = item.seriesID ?? item.id
-        guard let subjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: linkItemID) else {
-            BangumiDiagnostics.log("播放结束未标记：条目未关联 jellyfin=\(linkItemID)")
+        let subjectID = (item.seasonID.flatMap { BangumiMatcher.linkedSubjectID(forJellyfinItemID: $0) })
+            ?? (item.seriesID.flatMap { BangumiMatcher.linkedSubjectID(forJellyfinItemID: $0) })
+            ?? BangumiMatcher.linkedSubjectID(forJellyfinItemID: item.id)
+        guard let subjectID else {
+            let desc = item.seasonID ?? item.seriesID ?? item.id
+            BangumiDiagnostics.log("播放结束未标记：条目未关联 jellyfin=\(desc)")
             return
         }
         Task { @MainActor [weak self] in

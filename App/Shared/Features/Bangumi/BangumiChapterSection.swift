@@ -12,6 +12,8 @@ import SwiftUI
 struct BangumiChapterSection: View {
     /// 当前详情页的 Jellyfin 条目。
     let item: MediaItem
+    /// 当前选中的季（若当前为剧集且有选季）。
+    var selectedSeason: MediaItem? = nil
 
     @Environment(AppModel.self) private var app
     @Environment(BangumiCoordinator.self) private var bangumi
@@ -22,6 +24,7 @@ struct BangumiChapterSection: View {
     @State private var episodes: [BangumiEpisodeDTO] = []
     @State private var isLoading = false
     @State private var isMatching = false
+    @State private var attemptedAutoMatchIDs: Set<String> = []
     @State private var showLinkPicker = false
     @State private var loadError: String?
     @State private var updatingEpisodeID: Int?
@@ -32,9 +35,12 @@ struct BangumiChapterSection: View {
     /// 每个写回点都对一次代次——和 DetailView / LibraryView / BangumiHomeView 的做法一致。
     @State private var loadGeneration: UInt64 = 0
 
-    /// 剧集关联挂在 series 上；电影挂自己。
+    /// 剧集关联有季优先挂季上；单季/电影挂自身或 series。
     private var linkItemID: MediaItem.ID {
-        item.seriesID ?? item.id
+        if let selectedSeason {
+            return selectedSeason.id
+        }
+        return item.seriesID ?? item.id
     }
 
     private var mainEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .main } }
@@ -53,13 +59,19 @@ struct BangumiChapterSection: View {
                 sectionBody
             }
             .padding(.horizontal, contentLeading)
-            .task(id: "\(item.id)-\(loadToken)-\(bangumi.isDatabaseReady)") { await load() }
+            .task(id: "\(linkItemID)-\(loadToken)-\(bangumi.isDatabaseReady)") { await load() }
             .onChange(of: app.detailRefreshGeneration) { _, _ in
                 loadToken += 1
             }
             .sheet(isPresented: $showLinkPicker) {
-                BangumiLinkPicker(item: item) { subjectID in
+                BangumiLinkPicker(item: item, season: selectedSeason) { subjectID in
                     BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
+                    if selectedSeason == nil || selectedSeason?.seasonNumber == 1 {
+                        let fallbackID = item.seriesID ?? item.id
+                        if fallbackID != linkItemID {
+                            BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: fallbackID)
+                        }
+                    }
                     linkedSubjectID = subjectID
                     subject = nil
                     episodes = []
@@ -202,6 +214,12 @@ struct BangumiChapterSection: View {
     private func load() async {
         loadGeneration &+= 1
         let generation = loadGeneration
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
+
         guard bangumi.isAuthenticated, bangumi.isDatabaseReady else {
             linkedSubjectID = nil
             subject = nil
@@ -209,6 +227,28 @@ struct BangumiChapterSection: View {
             return
         }
         linkedSubjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: linkItemID)
+        if linkedSubjectID == nil && (selectedSeason == nil || selectedSeason?.seasonNumber == 1) {
+            linkedSubjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: item.seriesID ?? item.id)
+        }
+
+        // 首次打开未关联条目时，主动尝试一次静默自动匹配
+        if linkedSubjectID == nil && !attemptedAutoMatchIDs.contains(linkItemID) {
+            attemptedAutoMatchIDs.insert(linkItemID)
+            isMatching = true
+            defer { if loadGeneration == generation { isMatching = false } }
+            if let matched = try? await BangumiMatcher.autoMatch(for: item, season: selectedSeason) {
+                guard loadGeneration == generation else { return }
+                BangumiMatcher.setLinkedSubjectID(matched.id, forJellyfinItemID: linkItemID)
+                if selectedSeason == nil || selectedSeason?.seasonNumber == 1 {
+                    let fallbackID = item.seriesID ?? item.id
+                    if fallbackID != linkItemID {
+                        BangumiMatcher.setLinkedSubjectID(matched.id, forJellyfinItemID: fallbackID)
+                    }
+                }
+                linkedSubjectID = matched.id
+            }
+        }
+
         guard let subjectID = linkedSubjectID else {
             subject = nil
             episodes = []
@@ -217,7 +257,6 @@ struct BangumiChapterSection: View {
         }
         isLoading = true
         loadError = nil
-        defer { if loadGeneration == generation { isLoading = false } }
 
         // 先渲染本地缓存，再补远端。
         await readLocal(subjectID, generation: generation)
@@ -255,7 +294,7 @@ struct BangumiChapterSection: View {
         loadError = nil
         defer { isMatching = false }
         do {
-            guard let matched = try await BangumiMatcher.autoMatch(for: item) else {
+            guard let matched = try await BangumiMatcher.autoMatch(for: item, season: selectedSeason) else {
                 loadError = "没找到匹配的 Bangumi 条目，试试手动选择"
                 return
             }

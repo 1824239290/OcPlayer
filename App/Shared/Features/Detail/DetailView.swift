@@ -65,7 +65,10 @@ struct DetailView: View {
                             seasonBar
                             episodeList
                         }
-                        BangumiChapterSection(item: shown)
+                        BangumiChapterSection(
+                            item: shown,
+                            selectedSeason: seasons.first(where: { $0.id == selectedSeasonID })
+                        )
                         MoviePilotResourceSection(item: shown)
                         if !shown.cast.isEmpty { castRail }
                         if !similar.isEmpty { similarRail }

@@ -111,6 +111,8 @@ extension BaseItemDto {
             officialRating: officialRating,
             seriesID: seriesID,
             seriesName: seriesName,
+            seasonID: type == .season ? (id ?? UUID().uuidString) : seasonID,
+            seasonName: type == .season ? name : seasonName,
             seasonNumber: mappedSeasonNumber,
             episodeNumber: mappedEpisodeNumber,
             playState: userData.map {

@@ -58,6 +58,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     // 剧集族谱
     public var seriesID: String?
     public var seriesName: String?
+    public var seasonID: String?
+    public var seasonName: String?
     public var seasonNumber: Int?
     public var episodeNumber: Int?
 
@@ -87,6 +89,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         officialRating: String? = nil,
         seriesID: String? = nil,
         seriesName: String? = nil,
+        seasonID: String? = nil,
+        seasonName: String? = nil,
         seasonNumber: Int? = nil,
         episodeNumber: Int? = nil,
         playState: PlayState? = nil,
@@ -108,6 +112,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.officialRating = officialRating
         self.seriesID = seriesID
         self.seriesName = seriesName
+        self.seasonID = seasonID
+        self.seasonName = seasonName
         self.seasonNumber = seasonNumber
         self.episodeNumber = episodeNumber
         self.playState = playState
