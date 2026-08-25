@@ -403,6 +403,7 @@ extension MediaItem {
         case primary
         case thumb
         case backdrop
+        case logo
     }
 
     /// 带 `tag` 的图片地址（tag 让磁盘缓存自动失效）；`authHeader` 给 `RemoteImage` 用。
@@ -411,12 +412,18 @@ extension MediaItem {
         guard let server else { return (nil, nil) }
         let tag: String?
         let type: ItemImageType
+        let targetItemID: String
         switch kind {
-        case .primary: (tag, type) = (primaryImageTag, .primary)
-        case .thumb: (tag, type) = (thumbImageTag, .thumb)
-        case .backdrop: (tag, type) = (backdropImageTag, .backdrop)
+        case .primary:
+            (tag, type, targetItemID) = (primaryImageTag, .primary, id)
+        case .thumb:
+            (tag, type, targetItemID) = (thumbImageTag, .thumb, id)
+        case .backdrop:
+            (tag, type, targetItemID) = (backdropImageTag, .backdrop, id)
+        case .logo:
+            (tag, type, targetItemID) = (logoImageTag, .logo, logoItemID)
         }
-        let url = try? server.imageURL(itemID: id, type: type, maxWidth: width, tag: tag)
+        let url = try? server.imageURL(itemID: targetItemID, type: type, maxWidth: width, tag: tag)
         return (url, server.authorizationHeader)
     }
 
@@ -435,6 +442,64 @@ extension MediaItem {
         // Keep a neutral placeholder when the episode has no image. A parent
         // series poster would imply that it belongs to this particular episode.
         return (nil, server?.authorizationHeader)
+    }
+}
+
+/// 条目标题 Logo / 文本标题视图：优先展示透明艺术字 ClearLogo，未配置或加载失败时优雅回退为文字标题。
+struct ItemTitleLogoView: View {
+    let item: MediaItem
+    let server: JellyfinServer?
+    var maxHeight: CGFloat = 64
+    var maxWidth: CGFloat = 380
+    var fontSize: CGFloat = 28
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var logoImage: PlatformImage?
+
+    private var imageFade: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.2)
+    }
+
+    var body: some View {
+        Group {
+            if let logoImage {
+                Image(platform: logoImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: maxWidth, maxHeight: maxHeight, alignment: .leading)
+                    .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
+                    .accessibilityLabel(item.name)
+                    .transition(.opacity)
+            } else {
+                Text(item.name)
+                    .font(.system(size: fontSize, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .shadow(color: .black.opacity(0.5), radius: 4)
+                    .transition(.opacity)
+            }
+        }
+        .animation(imageFade, value: logoImage != nil)
+        .task(id: "\(item.id)#\(item.logoImageTag ?? "")") {
+            guard item.logoImageTag != nil else {
+                logoImage = nil
+                return
+            }
+            let target = item.imageTarget(server, kind: .logo, width: Int(maxWidth * 2))
+            guard let url = target.url else {
+                logoImage = nil
+                return
+            }
+            do {
+                if let loaded = try await ImagePipeline.shared.load(url, authHeader: target.authHeader, maxPixelSize: Int(max(maxWidth, maxHeight) * 2)) {
+                    guard !Task.isCancelled else { return }
+                    logoImage = loaded
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                logoImage = nil
+            }
+        }
     }
 }
 

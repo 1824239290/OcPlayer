@@ -57,6 +57,7 @@ public enum ItemImageType: String, Sendable {
     case primary = "Primary"
     case backdrop = "Backdrop"
     case thumb = "Thumb"
+    case logo = "Logo"
 }
 
 /// 一台已登录（或正要登录）的 Jellyfin 服务器。
@@ -158,7 +159,7 @@ public struct JellyfinServer: Sendable {
             Paths.getLatestMedia(parameters: .init(
                 userID: profile.userID,
                 includeItemTypes: [.movie, .series],
-                enableImageTypes: [.primary, .backdrop],
+                enableImageTypes: [.primary, .backdrop, .logo],
                 limit: limit
             ))
         )
@@ -178,7 +179,7 @@ public struct JellyfinServer: Sendable {
                 includeItemTypes: [.movie, .series],
                 filters: [.isFavorite],
                 sortBy: [.dateCreated],
-                enableImageTypes: [.primary, .backdrop]
+                enableImageTypes: [.primary, .backdrop, .logo]
             ))
         )
         .items?.map(\.domainItem) ?? []
@@ -295,7 +296,7 @@ public struct JellyfinServer: Sendable {
                     kinds.compactMap { kind in BaseItemKind(kind) }
                 },
                 sortBy: [.sortName],
-                enableImageTypes: [.primary, .backdrop],
+                enableImageTypes: [.primary, .backdrop, .logo],
                 enableTotalRecordCount: true
             ))
         )
@@ -354,7 +355,7 @@ public struct JellyfinServer: Sendable {
                 userID: profile.userID,
                 seasonID: seasonID,
                 enableImages: true,
-                enableImageTypes: [.primary, .thumb],
+                enableImageTypes: [.primary, .thumb, .logo],
                 enableUserData: true,
                 sortBy: .indexNumber
             ))
@@ -385,7 +386,7 @@ public struct JellyfinServer: Sendable {
                 startItemID: startItemID,
                 limit: limit,
                 enableImages: true,
-                enableImageTypes: [.primary, .thumb],
+                enableImageTypes: [.primary, .thumb, .logo],
                 enableUserData: true,
                 sortBy: .indexNumber
             ))

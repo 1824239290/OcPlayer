@@ -226,11 +226,7 @@ struct DetailView: View {
     }
 
     private var bannerTitle: some View {
-        Text(shown.name)
-            .font(.system(size: 28, weight: .bold))
-            .foregroundStyle(.white)
-            .lineLimit(2)
-            .shadow(color: .black.opacity(0.5), radius: 4)
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 60, maxWidth: 380, fontSize: 28)
     }
 
     private var metaRow: some View {

@@ -82,6 +82,7 @@ extension BaseItemDto {
         }
         let thumbTag = imageTags?["Thumb"]
         let backdropTag = backdropImageTags?.first
+        let logoTag = imageTags?["Logo"] ?? parentLogoImageTag
 
         // Episode：parentIndexNumber = 季号，indexNumber = 集号。
         // Season：indexNumber = 季号（0 多为特典/SP），parentIndexNumber 一般是剧 id 侧字段，不能当季号。
@@ -137,6 +138,8 @@ extension BaseItemDto {
             primaryImageTag: primaryTag,
             thumbImageTag: thumbTag,
             backdropImageTag: backdropTag,
+            logoImageTag: logoTag,
+            parentLogoItemID: parentLogoItemID,
             tmdbID: providerIDs?["Tmdb"] ?? providerIDs?["tmdb"]
         )
     }

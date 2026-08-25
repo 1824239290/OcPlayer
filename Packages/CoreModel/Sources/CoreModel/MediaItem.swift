@@ -73,6 +73,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     /// 分集剧照常用的 Thumb 图像 tag。
     public var thumbImageTag: String?
     public var backdropImageTag: String?
+    /// 艺术字标题 Logo (ClearLogo) 图像 tag。
+    public var logoImageTag: String?
+    /// 继承自父级剧集的 Logo 条目 ID（用于季或分集回溯主系列的 Logo）。
+    public var parentLogoItemID: String?
 
     /// Jellyfin ProviderIds 里的 Tmdb id（外部服务对接用，如 MoviePilot 资源搜索）。
     public var tmdbID: String?
@@ -99,6 +103,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         primaryImageTag: String? = nil,
         thumbImageTag: String? = nil,
         backdropImageTag: String? = nil,
+        logoImageTag: String? = nil,
+        parentLogoItemID: String? = nil,
         tmdbID: String? = nil
     ) {
         self.id = id
@@ -122,7 +128,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.primaryImageTag = primaryImageTag
         self.thumbImageTag = thumbImageTag
         self.backdropImageTag = backdropImageTag
+        self.logoImageTag = logoImageTag
+        self.parentLogoItemID = parentLogoItemID
         self.tmdbID = tmdbID
+    }
+
+    /// 获取 Logo 图像对应的有效条目 ID（若自身无 Logo 且继承了父级则指向父级 ID，否则为自身 ID）。
+    public var logoItemID: String {
+        parentLogoItemID ?? id
     }
 
     /// 「S1E4」这样的集标，非剧集条目返回 nil。

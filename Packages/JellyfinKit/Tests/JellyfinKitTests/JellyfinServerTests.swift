@@ -446,6 +446,42 @@ final class JellyfinServerTests: XCTestCase {
         XCTAssertNil(dict["api_key"])
     }
 
+    func testImageURLWithLogoType() throws {
+        let url = try makeServer().imageURL(itemID: "series-1", type: .logo, maxWidth: 600, tag: "logo-tag")
+        XCTAssertEqual(url.path, "/Items/series-1/Images/Logo")
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let dict = Dictionary(query.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
+        XCTAssertEqual(dict["maxWidth"], "600")
+        XCTAssertEqual(dict["tag"], "logo-tag")
+    }
+
+    func testItemMappingExtractsLogoAndParentLogo() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items/ep-1")
+            return MockURLProtocol.ok(
+                """
+                {
+                  "Id":"ep-1",
+                  "Name":"第 1 集",
+                  "Type":"Episode",
+                  "SeriesId":"s-100",
+                  "SeriesName":"进击的巨人",
+                  "ParentLogoItemId":"s-100",
+                  "ParentLogoImageTag":"parent-logo-tag-123",
+                  "ImageTags":{"Primary":"ep-pri"}
+                }
+                """,
+                for: request.url!
+            )
+        } with: {
+            let item = try await makeServer().item("ep-1")
+            XCTAssertEqual(item.id, "ep-1")
+            XCTAssertEqual(item.logoImageTag, "parent-logo-tag-123")
+            XCTAssertEqual(item.parentLogoItemID, "s-100")
+            XCTAssertEqual(item.logoItemID, "s-100")
+        }
+    }
+
     func testAuthorizationHeaderFormat() {
         let header = makeServer().authorizationHeader
         let expected = ClientIdentity.mediaBrowserAuthorizationHeader(token: "tok-123")
