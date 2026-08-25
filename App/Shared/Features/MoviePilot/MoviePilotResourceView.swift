@@ -200,7 +200,7 @@ struct MoviePilotResourceView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            RemoteImage(url: media.posterURL, authHeader: nil)
+            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 300)
                 .frame(width: 72, height: 108)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 6) {

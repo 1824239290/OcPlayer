@@ -24,6 +24,11 @@
   `findSuitableTrack / findLeastNumberDanmakuTrack / findSuitableSyncTrack` 与复用池
   `cellFromPool / appendCellToPool` 从 private 放宽到 internal），供包内测试 target
   以 `@testable` 覆盖这些纯逻辑。行为零改动，纯访问级别。
+- `DanmakuView.swift`：新增 `clearPool()`——上游 `clean()` 只清在轨弹幕，复用池
+  `danmakuPool` 里播完的 cell（带整条已渲染弹幕的模型/测量/文本）没有清空入口，
+  播放器关闭后整棵 cell 树会留在被 App 单例持有的 DanmakuView 上。App 层
+  `DanmakuOverlay.clear()` 在关闭路径调用它清池并移出 subview。纯新增方法，
+  不改任何上游既有行为。
 - `Package.swift`：新增 `DanmakuRenderKitTests` test target（纯 macOS 离屏，
   不碰 GPU / 网络 / UIKit；GIF 侧因 `#if canImport(UIKit)` 不在 macOS 上测试）。
 

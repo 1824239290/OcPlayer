@@ -165,7 +165,9 @@ struct DetailView: View {
             let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             Group {
                 if let url = target.url {
-                    RemoteImage(url: url, authHeader: target.authHeader)
+                    // 横幅只占 320pt 高，1600px 原图解码约 5.8MB 只为铺一层背景；
+                    // 限长边 1000px 下采样（2x 屏 500pt 宽内仍清晰），大幅降常驻开销。
+                    RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                 } else {
                     Rectangle().fill(.quinary)
                 }

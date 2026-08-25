@@ -162,4 +162,22 @@ final class DanmakuRenderKitCoreTests: XCTestCase {
         XCTAssertTrue(pooled === cell, "入池后应原样取出")
         XCTAssertNil(view.cellFromPool(model), "池空后再取返回 nil")
     }
+
+    /// clearPool 是本地修补（见 PROVENANCE.md）：播放器关闭时把复用池里的 cell
+    /// 全部移出并清空，避免上一集已渲染弹幕的 cell 树残留在单例持有的视图上。
+    func testClearPoolEmptiesPoolAndRemovesCells() {
+        let view = DanmakuView(frame: NSRect(x: 0, y: 0, width: 800, height: 60))
+        for _ in 0..<3 {
+            let cell = DanmakuCell(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
+            cell.model = floatingModel(width: 100, displayTime: 5)
+            view.appendCellToPool(cell)
+        }
+        XCTAssertEqual(view.pooledCellCount, 3, "3 个 cell 应都在池里")
+
+        view.clearPool()
+
+        XCTAssertEqual(view.pooledCellCount, 0, "clearPool 后池必须为空")
+        XCTAssertNil(view.cellFromPool(floatingModel(width: 100, displayTime: 5)),
+                     "clearPool 后取 cell 返回 nil")
+    }
 }

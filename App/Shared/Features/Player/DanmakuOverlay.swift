@@ -104,6 +104,10 @@ final class DanmakuOverlayController {
         pointer = 0
         lastMediaSample = nil
         view.clean()
+        // 复用池里的 cell 带着整条已渲染弹幕的模型/测量，不清的话关播放器后
+        // 上一集的 cell 树整棵留在单例持有的 DanmakuView 上（vendored 层修补，
+        // 见 DanmakuRenderKit PROVENANCE.md）。
+        view.clearPool()
     }
 
     func reset() {

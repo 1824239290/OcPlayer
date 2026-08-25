@@ -59,7 +59,7 @@ struct BangumiLinkPicker: View {
                         dismiss()
                     } label: {
                         HStack(spacing: 10) {
-                            RemoteImage(url: coverURL(subject), authHeader: nil)
+                            RemoteImage(url: coverURL(subject), authHeader: nil, maxPixelSize: 120)
                                 .aspectRatio(2 / 3, contentMode: .fill)
                                 .frame(width: 34, height: 48)
                                 .clipShape(RoundedRectangle(cornerRadius: 4))

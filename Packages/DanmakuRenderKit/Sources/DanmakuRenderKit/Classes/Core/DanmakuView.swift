@@ -599,6 +599,21 @@ public extension DanmakuView {
 #endif
         toggledCell = nil
     }
+
+    /// Clear the reusable cell pool (local patch, see PROVENANCE.md).
+    ///
+    /// Upstream `clean()` only clears the on-screen tracks; cells that finished
+    /// playing live on in `danmakuPool` with their full rendered model/measurements.
+    /// The player calls this when playback is torn down so a finished episode's
+    /// cell tree doesn't linger inside the app-lifetime overlay controller.
+    public func clearPool() {
+        danmakuPool.values.forEach { $0.forEach { $0.removeFromSuperview() } }
+        danmakuPool.removeAll()
+#if os(macOS)
+        hoveredCell = nil
+#endif
+        toggledCell = nil
+    }
     
     /// When you change some properties of the danmakuView or cellModel that might affect the danmaku, you must make changes in the closure of this method.
     /// E.g.This method will be used when you change the displayTime property in the cellModel.
