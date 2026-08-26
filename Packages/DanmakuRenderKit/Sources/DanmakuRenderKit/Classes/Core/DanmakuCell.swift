@@ -107,6 +107,11 @@ extension DanmakuCell {
     func setupLayer() {
         guard let layer = layer as? DanmakuAsyncLayer else { return }
 
+        // 弹幕 cell 始终在透明上下文中绘制（描边 + 原色填充，无背景色）。
+        // 显式标记 layer 非不透明，否则 DanmakuAsyncLayer 的 opaque 分支会用
+        // UIColor.white 填充整个背景，在 iOS 上表现为弹幕文字后的白色矩形。
+        layer.isOpaque = false
+
         #if os(macOS)
         layer.contentsScale = PlatformScreen.main?.backingScaleFactor ?? 1.0
         #else

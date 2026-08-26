@@ -21,6 +21,17 @@ let package = Package(
                 .product(name: "JellyfinAPI", package: "jellyfin-sdk-swift"),
                 "CoreModel",
                 "DiagnosticsKit",
+            ],
+            // Xcode 的 iOS test build 会把 SPM 包编成动态框架，传递依赖（Get 及 swift-nio
+            // 子模块）不会进 JellyfinKit 的链接命令。Get 的 framework 名带 hash 后缀，
+            // autolink 也匹配不上；因此仅 iOS 补链 NIO 系框架并允许未定义符号推迟到
+            // 运行时解析。macOS 走静态链接，加 .when 条件确保完全不受影响。
+            linkerSettings: [
+                .linkedFramework("NIOCore", .when(platforms: [.iOS])),
+                .linkedFramework("NIOPosix", .when(platforms: [.iOS])),
+                .linkedFramework("NIO", .when(platforms: [.iOS])),
+                .linkedFramework("NIOConcurrencyHelpers", .when(platforms: [.iOS])),
+                .unsafeFlags(["-Xlinker", "-undefined", "-Xlinker", "dynamic_lookup"], .when(platforms: [.iOS])),
             ]
         ),
         .testTarget(name: "JellyfinKitTests", dependencies: ["JellyfinKit"]),
