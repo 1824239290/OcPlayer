@@ -452,6 +452,8 @@ struct ItemTitleLogoView: View {
     var maxHeight: CGFloat = 80
     var maxWidth: CGFloat = 420
     var fontSize: CGFloat = 28
+    /// 紧凑布局（iPhone 详情页）把 logo/标题居中，常规布局左对齐。
+    var centered: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var logoImage: PlatformImage?
@@ -463,13 +465,15 @@ struct ItemTitleLogoView: View {
         server: JellyfinServer?,
         maxHeight: CGFloat = 80,
         maxWidth: CGFloat = 420,
-        fontSize: CGFloat = 28
+        fontSize: CGFloat = 28,
+        centered: Bool = false
     ) {
         self.item = item
         self.server = server
         self.maxHeight = maxHeight
         self.maxWidth = maxWidth
         self.fontSize = fontSize
+        self.centered = centered
 
         // 同步从内存缓存中探测：若已有位图缓存，首帧直接上图，0 毫秒闪烁
         if item.logoImageTag != nil, let server {
@@ -497,7 +501,7 @@ struct ItemTitleLogoView: View {
                 Image(platform: logoImage)
                     .resizable()
                     .scaledToFit()
-                    .frame(maxWidth: maxWidth, maxHeight: maxHeight, alignment: .leading)
+                    .frame(maxWidth: maxWidth, maxHeight: maxHeight, alignment: centered ? .center : .leading)
                     .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
                     .accessibilityLabel(item.name)
                     .transition(.opacity)

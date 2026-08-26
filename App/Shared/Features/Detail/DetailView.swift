@@ -48,12 +48,17 @@ struct DetailView: View {
 
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
-        horizontalSizeClass == .compact ? 240 : Metrics.bannerHeight
+        horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
     }
 
     /// 紧凑宽度的播放钮窄一点，和海报/标题一起塞进窄屏不溢出。
     private var playButtonWidth: CGFloat {
         horizontalSizeClass == .compact ? 200 : 228
+    }
+
+    /// 详情页屏幕边缘留白：紧凑宽度下为 20pt，保持全页对齐；iPad/Mac 沿用 contentLeading。
+    private var detailHorizontalInset: CGFloat {
+        horizontalSizeClass == .compact ? 20 : contentLeading
     }
 
     var body: some View {
@@ -63,8 +68,12 @@ struct DetailView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        banner
-                        metadata
+                        if horizontalSizeClass == .compact {
+                            compactHeaderView
+                        } else {
+                            banner
+                            metadata
+                        }
                         if let loadError {
                             loadErrorNotice(loadError)
                         }
@@ -85,11 +94,15 @@ struct DetailView: View {
                     }
                     .padding(.bottom, 48)
                 }
+                #if os(iOS)
+                .ignoresSafeArea(edges: .top)
+                #endif
             }
         }
-        .navigationTitle(shown.name)
+        .navigationTitle(horizontalSizeClass == .compact ? "" : shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
         .sensoryFeedback(.selection, trigger: selectedEpisodeID)
         #endif
@@ -102,14 +115,15 @@ struct DetailView: View {
 
     /// 详情页骨架：**和真实内容同结构**——banner（含左下海报 + 标题/元数据/播放钮）
     /// → metadata 区 →（仅剧集）季选择行 + 选集占位。数据加载完原位替换。
-    ///
-    /// 季选择行和选集条只在剧集下铺：`shown` 在加载期就是列表页带来的 `item`，
-    /// `kind` 是已知的。写死铺出来的话，打开一部**电影**时骨架会比真实内容高出两百多 pt，
-    /// 撤掉的瞬间整页往上跳。
     private var skeleton: some View {
         VStack(spacing: 0) {
-            skeletonBanner
-            skeletonMetadata
+            if horizontalSizeClass == .compact {
+                skeletonCompactHero
+                skeletonCompactInfo
+            } else {
+                skeletonBanner
+                skeletonMetadata
+            }
             if shown.kind == .series {
                 skeletonSeasonBar
                 SkeletonEpisodeStrip()
@@ -118,6 +132,41 @@ struct DetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .skeletonShimmer()
+    }
+
+    private var skeletonCompactHero: some View {
+        ZStack(alignment: .bottom) {
+            SkeletonBlock(cornerRadius: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SkeletonBlock(cornerRadius: 6)
+                .frame(width: 220, height: 36)
+                .padding(.bottom, 16)
+        }
+        .frame(height: 290)
+        .clipped()
+    }
+
+    private var skeletonCompactInfo: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                SkeletonBlock(cornerRadius: 12).frame(width: 54, height: 24)
+                SkeletonBlock(cornerRadius: 4).frame(width: 44, height: 22)
+                SkeletonBlock(cornerRadius: 4).frame(width: 140, height: 16)
+            }
+            HStack(spacing: 12) {
+                SkeletonBlock(cornerRadius: 24)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                SkeletonBlock(cornerRadius: 24)
+                    .frame(width: 48, height: 48)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBlock(cornerRadius: 4).frame(maxWidth: .infinity).frame(height: 14)
+                SkeletonBlock(cornerRadius: 4).frame(width: 260, height: 14)
+            }
+        }
+        .padding(.horizontal, detailHorizontalInset)
+        .padding(.top, 16)
     }
 
     /// 横幅：和 `banner` 同高，左下是海报位 + 标题/元数据/按钮条。
@@ -139,7 +188,7 @@ struct DetailView: View {
                         .frame(width: playButtonWidth, height: Metrics.bannerActionHeight)
                 }
             }
-            .padding(.horizontal, contentLeading)
+            .padding(.horizontal, detailHorizontalInset)
             .padding(.bottom, 28)
         }
         .frame(height: bannerHeight)
@@ -154,7 +203,7 @@ struct DetailView: View {
             SkeletonBlock(cornerRadius: 4).frame(width: 380, height: 14)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, contentLeading)
+        .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 20)
     }
 
@@ -165,12 +214,216 @@ struct DetailView: View {
             Spacer()
             SkeletonBlock(cornerRadius: 6).frame(width: 110, height: 26)
         }
-        .padding(.horizontal, contentLeading)
+        .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 26)
         .padding(.bottom, 12)
     }
 
-    // MARK: - 顶部横幅
+    // MARK: - 移动端（紧凑端）沉浸式头部与内容区
+
+    private var compactHeaderView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            compactHeroBanner
+            compactContentStack
+        }
+    }
+
+    private var compactHeroBanner: some View {
+        ZStack(alignment: .bottom) {
+            GeometryReader { geo in
+                let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
+                if let url = target.url {
+                    RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                } else {
+                    Rectangle().fill(Color.primary.opacity(0.06))
+                }
+            }
+
+            // 底部平滑渐隐到页面底色
+            LinearGradient(
+                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // 居中/醒目的标题 Logo
+            compactBannerTitle
+                .padding(.horizontal, detailHorizontalInset)
+                .padding(.bottom, 8)
+        }
+        .frame(height: 290)
+        .clipped()
+    }
+
+    private var compactContentStack: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            compactMetaRow
+            compactActionSection
+            if let overview = shown.overview, !overview.isEmpty {
+                ExpandableOverview(text: overview)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.horizontal, detailHorizontalInset)
+        .padding(.top, 14)
+    }
+
+    private var compactMetaRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if let rating = shown.communityRating {
+                    HStack(spacing: 3) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(String(format: "%.1f", rating))
+                            .font(.subheadline.weight(.bold).monospacedDigit())
+                    }
+                    .foregroundStyle(BangumiStatusColor.rating)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(BangumiStatusColor.rating.opacity(0.14), in: Capsule())
+                }
+
+                if let official = shown.officialRating {
+                    Text(official)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4)
+                                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.8)
+                        )
+                }
+
+                if let year = shown.year {
+                    Text(String(year))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                if shown.kind == .series, let count = shown.childCount {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("\(count) 季")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                if let runtime = shown.runtimeSeconds {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(RuntimeText.format(runtime))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if !shown.genres.isEmpty {
+                Text(shown.genres.joined(separator: " · "))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var compactActionSection: some View {
+        HStack(spacing: 12) {
+            compactPlayButton
+            if canTogglePlayed {
+                compactMarkPlayedButton
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var compactPlayButton: some View {
+        Button(action: playCurrent) {
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.accentColor)
+
+                if let progress = resumeProgress {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.24))
+                        .scaleEffect(x: progress, y: 1, anchor: .leading)
+                }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 15, weight: .bold))
+                    Text(compactPlayButtonTitle)
+                        .font(.body.weight(.semibold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .frame(height: 48)
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canPlayCurrent)
+        .opacity(canPlayCurrent ? 1 : 0.55)
+        .accessibilityLabel(compactPlayButtonTitle)
+        .accessibilityValue(resumePlayState.map { "已播放 \(resumeClock($0.positionSeconds))" } ?? "")
+    }
+
+    private var compactPlayButtonTitle: String {
+        if let playState = resumePlayState {
+            if let label = playableItem?.episodeLabel {
+                return "继续播放 \(label) · \(resumeClock(playState.positionSeconds))"
+            }
+            return "继续播放 · \(resumeClock(playState.positionSeconds))"
+        }
+        if shown.kind == .series {
+            if let label = playableItem?.episodeLabel {
+                return "播放 \(label)"
+            }
+            return "播放第一集"
+        }
+        return "立即播放"
+    }
+
+    private var compactMarkPlayedButton: some View {
+        let played = isPlayableMarkedPlayed
+        return Button {
+            Task { await togglePlayed() }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(played ? AnyShapeStyle(Color.accentColor.opacity(0.15)) : AnyShapeStyle(Color.primary.opacity(0.06)))
+                if isUpdatingPlayed {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: played ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(played ? Color.accentColor : Color.primary.opacity(0.65))
+                        .symbolEffect(.bounce, value: played)
+                }
+            }
+            .frame(width: 48, height: 48)
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(played ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isUpdatingPlayed || playableItem == nil)
+        .opacity(isUpdatingPlayed ? 0.85 : 1)
+        .help(played ? "标为未看" : "已看过")
+        .accessibilityLabel(played ? "标为未看" : "已看过")
+        .accessibilityValue(played ? "当前为已看完" : "当前为未看完")
+    }
+
+    // MARK: - 桌面端顶部横幅（macOS / iPad 宽屏）
 
     private var banner: some View {
         ZStack {
@@ -178,8 +431,6 @@ struct DetailView: View {
             let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             Group {
                 if let url = target.url {
-                    // 横幅只占 320pt 高，1600px 原图解码约 5.8MB 只为铺一层背景；
-                    // 限长边 1000px 下采样（2x 屏 500pt 宽内仍清晰），大幅降常驻开销。
                     RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                 } else {
                     Rectangle().fill(.quinary)
@@ -192,33 +443,16 @@ struct DetailView: View {
                            startPoint: .bottom, endPoint: .top)
         }
         .frame(height: bannerHeight)
-        // Overlay against the already-sized banner. A bottom-aligned HStack inside
-        // the ZStack can use its intrinsic height and fall below the banner, where
-        // `.clipped()` cuts off the poster and controls.
         .overlay(alignment: .bottomLeading) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .bottom, spacing: 24) {
-                    bannerPoster(width: 120, height: 180)
-                    VStack(alignment: .leading, spacing: 8) {
-                        bannerTitle
-                        metaRow
-                        playbackActions
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .bottom, spacing: 14) {
-                        bannerPoster(width: 80, height: 120)
-                        VStack(alignment: .leading, spacing: 8) {
-                            compactBannerTitle
-                            metaRow
-                                .lineLimit(1)
-                        }
-                    }
+            HStack(alignment: .bottom, spacing: 24) {
+                bannerPoster(width: 120, height: 180)
+                VStack(alignment: .leading, spacing: 8) {
+                    bannerTitle
+                    metaRow
                     playbackActions
                 }
             }
-            .padding(.horizontal, contentLeading)
+            .padding(.horizontal, detailHorizontalInset)
             .padding(.bottom, 28)
         }
         .clipped()
@@ -240,7 +474,9 @@ struct DetailView: View {
     }
 
     private var compactBannerTitle: some View {
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 52, maxWidth: 260, fontSize: 22)
+        // 紧凑宽度：艺术字 Logo 或居中文本标题
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 68, maxWidth: 320, fontSize: 24, centered: true)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     private var metaRow: some View {
@@ -286,6 +522,8 @@ struct DetailView: View {
         }
         // 固定行高，避免图标/字体 metrics 把一侧撑高。
         .frame(height: Metrics.bannerActionHeight, alignment: .center)
+        // 紧凑宽度（iPhone）下居中显示；常规宽度保持左对齐。
+        .frame(maxWidth: horizontalSizeClass == .compact ? .infinity : nil, alignment: .center)
     }
 
     private var playButton: some View {
@@ -430,12 +668,11 @@ struct DetailView: View {
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let overview = shown.overview, !overview.isEmpty {
-                Text(overview)
+                ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)
-                    .lineSpacing(4)
             }
         }
-        .padding(.horizontal, contentLeading)
+        .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 20)
     }
 
@@ -445,19 +682,41 @@ struct DetailView: View {
         HStack(spacing: 14) {
             Text("剧集").font(.title3.weight(.bold))
             Spacer()
-            if seasons.count > 1, let selection = Binding($selectedSeasonID) {
-                Picker("季", selection: selection) {
+            if seasons.count > 1 {
+                Menu {
                     ForEach(seasons) { season in
-                        Text(season.name).tag(Optional(season.id))
+                        Button {
+                            selectedSeasonID = season.id
+                        } label: {
+                            if season.id == selectedSeasonID {
+                                Label(season.name, systemImage: "checkmark")
+                            } else {
+                                Text(season.name)
+                            }
+                        }
                     }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(selectedSeasonName)
+                            .font(.subheadline.weight(.medium))
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.tint.opacity(0.12), in: Capsule())
                 }
-                .pickerStyle(.menu)
             }
         }
-        .padding(.horizontal, contentLeading)
+        .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 26)
         .padding(.bottom, 12)
         .task(id: selectedSeasonID) { await loadEpisodes() }
+    }
+
+    private var selectedSeasonName: String {
+        seasons.first(where: { $0.id == selectedSeasonID })?.name ?? "选择季"
     }
 
     private var episodeList: some View {
@@ -474,13 +733,13 @@ struct DetailView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .padding(.horizontal, contentLeading)
+                .padding(.horizontal, detailHorizontalInset)
                 .transition(.opacity)
             } else if episodes.isEmpty {
                 ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .padding(.horizontal, contentLeading)
+                    .padding(.horizontal, detailHorizontalInset)
                     .transition(.opacity)
             } else {
                 episodePickerRail
@@ -814,7 +1073,51 @@ struct DetailView: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(.secondary)
-        .padding(.horizontal, contentLeading)
+        .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 14)
+    }
+}
+
+// MARK: - 可折叠简介
+
+/// 紧凑宽度（iPhone）下超过 3 行的简介折叠，底部附蓝色「更多」展开 / 「收起」收起。
+/// 常规宽度（iPad / Mac）直接显示全文，无折叠。
+private struct ExpandableOverview: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    let text: String
+
+    @State private var isExpanded = false
+
+    @ViewBuilder
+    var body: some View {
+        if sizeClass == .compact {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(isExpanded ? nil : 3)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(isExpanded ? "收起" : "展开全文")
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            Text(text)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
