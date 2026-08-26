@@ -277,7 +277,7 @@ struct SkeletonRail: View {
                         }
                     }
                 }
-                .padding(.horizontal, contentLeading + 28)
+                .padding(.horizontal, contentLeading)
                 .padding(.vertical, Metrics.railHoverPadding)
             }
             .frame(height: skeletonHeight)
@@ -799,7 +799,7 @@ struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
                                 .id(item.id)
                         }
                     }
-                    .padding(.horizontal, contentLeading + (showsArrowChrome ? edgeReserve : 0))
+                    .padding(.horizontal, contentLeading)
                     .padding(.vertical, verticalPadding)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1043,7 +1043,7 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
                     itemContent(item)
                 }
             }
-            .padding(.horizontal, contentLeading + 28)
+            .padding(.horizontal, contentLeading)
             .padding(.vertical, Metrics.railHoverPadding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
