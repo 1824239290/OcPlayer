@@ -162,7 +162,19 @@ final class AppModel {
     var navPaths = NavigationPaths()
 
     /// 播放覆盖层：非 nil 时播放器盖住整个 App（双端同一套，见 RootView）。
-    var presentedPlayer: PlaybackRequest?
+    var presentedPlayer: PlaybackRequest? {
+        didSet {
+            guard oldValue?.id != presentedPlayer?.id else { return }
+            #if os(iOS)
+            orientationChangeHandler?(presentedPlayer != nil)
+            #endif
+        }
+    }
+
+    #if os(iOS)
+    /// 由 OcPlayerApp 注入：presentedPlayer 变化时通知 AppDelegate 旋转设备。
+    var orientationChangeHandler: ((Bool) -> Void)?
+    #endif
 
     /// 播放结束/退出后自增，驱动打开中的详情页拉取最新 playState。
     var detailRefreshGeneration: UInt64 = 0

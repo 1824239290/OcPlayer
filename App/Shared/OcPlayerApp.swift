@@ -43,15 +43,16 @@ import UIKit
 /// SwiftUI 生命周期没有 AppDelegate，用 @UIApplicationDelegateAdaptor 桥接。
 @MainActor
 final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
-    /// 播放器覆盖层是否打开——true 时只允许横屏。
+    /// 播放器覆盖层打开时锁横屏；退出后锁竖屏。
+    /// App 非播放状态始终竖屏（浏览/设置等页面都是竖屏布局），只在播放器里允许横屏。
     private(set) var playerIsActive = false
 
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        playerIsActive ? .landscape : .all
+        playerIsActive ? .landscape : .portrait
     }
 
-    /// 由 RootView 在 `presentedPlayer` 变化时调用：切换方向约束 + 主动旋转。
+    /// 由 AppModel.presentedPlayer 的 didSet 回调调用：切换方向约束 + 主动旋转。
     func setPlayerActive(_ active: Bool) {
         guard active != playerIsActive else { return }
         playerIsActive = active
@@ -121,6 +122,12 @@ struct OcPlayerApp: App {
                 .environment(appModel.bangumi)
                 .environment(appModel.moviepilot)
                 .environment(appModel.danmakuModel)
+                .onAppear {
+                    // presentedPlayer 变化时通知 AppDelegate 旋转设备（不依赖 SwiftUI .onChange）
+                    appModel.orientationChangeHandler = { [weak iosAppDelegate] active in
+                        iosAppDelegate?.setPlayerActive(active)
+                    }
+                }
         }
         #endif
     }
