@@ -33,6 +33,9 @@ extension View {
 enum Metrics {
     static let posterWidth: CGFloat = 178      // 海报 2:3
     static let stillWidth: CGFloat = 328       // 剧照 16:9
+    /// 紧凑布局（iPhone 竖屏 / iPad 分屏窄窗）的卡片宽度。
+    static let compactPosterWidth: CGFloat = 120
+    static let compactStillWidth: CGFloat = 240
     static let cardRadius: CGFloat = 10
     /// 选集卡圆角。比 `cardRadius` 略小，选集卡在详情页里尺寸更小、更密集，
     /// 和海报/剧照卡用同一个圆角会显得偏圆。`EpisodeSelectCard` 与 `SkeletonEpisodeStrip` 共用。
@@ -54,13 +57,15 @@ enum Metrics {
     static let episodeThumbHeight: CGFloat = 112
 
     /// 海报卡（图 2:3 + 标题行）在 Rail 里的可视高度，含 hover 留白。
-    static var posterRailHeight: CGFloat {
-        posterWidth * 1.5 + 9 + 22 + railHoverPadding * 2
+    static func posterRailHeight(compact: Bool = false) -> CGFloat {
+        let w = compact ? compactPosterWidth : posterWidth
+        return w * 1.5 + 9 + 22 + railHoverPadding * 2
     }
 
     /// 剧照卡（16:9 + 进度条 + 两行文案）在 Rail 里的可视高度，含 hover 留白。
-    static var stillRailHeight: CGFloat {
-        stillWidth * 9 / 16 + 6 + 3 + 10 + 40 + railHoverPadding * 2
+    static func stillRailHeight(compact: Bool = false) -> CGFloat {
+        let w = compact ? compactStillWidth : stillWidth
+        return w * 9 / 16 + 6 + 3 + 10 + 40 + railHoverPadding * 2
     }
 
     /// 加载占位的统一灰。骨架块和 `RemoteImage` 的图片占位都用它——
@@ -211,16 +216,18 @@ struct SkeletonPosterCard: View {
 
 /// 骨架剧照卡：16:9 图块 + 两行文案条，和 `StillCard` 同尺寸。
 struct SkeletonStillCard: View {
+    var width: CGFloat = Metrics.stillWidth
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SkeletonBlock()
-                .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
+                .frame(width: width, height: width * 9 / 16)
             SkeletonBlock(cornerRadius: 4)
-                .frame(width: Metrics.stillWidth * 0.55, height: 12)
+                .frame(width: width * 0.55, height: 12)
             SkeletonBlock(cornerRadius: 4)
-                .frame(width: Metrics.stillWidth * 0.35, height: 10)
+                .frame(width: width * 0.35, height: 10)
         }
-        .frame(width: Metrics.stillWidth, alignment: .leading)
+        .frame(width: width, alignment: .leading)
     }
 }
 
@@ -233,6 +240,8 @@ struct SkeletonRail: View {
     let kind: RailKind
 
     @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isCompact: Bool { sizeClass == .compact }
 
     enum RailKind {
         case poster   // 2:3 海报卡
@@ -263,8 +272,8 @@ struct SkeletonRail: View {
                 HStack(spacing: Metrics.railSpacing) {
                     ForEach(0..<cardCount, id: \.self) { _ in
                         switch kind {
-                        case .poster: SkeletonPosterCard()
-                        case .still: SkeletonStillCard()
+                        case .poster: SkeletonPosterCard(width: isCompact ? Metrics.compactPosterWidth : nil)
+                        case .still: SkeletonStillCard(width: isCompact ? Metrics.compactStillWidth : Metrics.stillWidth)
                         }
                     }
                 }
@@ -281,8 +290,8 @@ struct SkeletonRail: View {
     /// 卡片区可视高度：和真实 Rail 的 scrollHeight 对齐，避免骨架与内容间跳动。
     private var skeletonHeight: CGFloat {
         switch kind {
-        case .poster: Metrics.posterRailHeight
-        case .still: Metrics.stillRailHeight
+        case .poster: Metrics.posterRailHeight(compact: isCompact)
+        case .still: Metrics.stillRailHeight(compact: isCompact)
         }
     }
 }
@@ -614,6 +623,7 @@ struct StillCard: View {
     let server: JellyfinServer?
     let actionIcon: String
     let actionAccessibilityLabel: String?
+    var width: CGFloat = Metrics.stillWidth
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -624,12 +634,14 @@ struct StillCard: View {
         server: JellyfinServer?,
         actionIcon: String = "play.fill",
         actionAccessibilityLabel: String? = nil,
+        width: CGFloat = Metrics.stillWidth,
         onTap: @escaping () -> Void
     ) {
         self.item = item
         self.server = server
         self.actionIcon = actionIcon
         self.actionAccessibilityLabel = actionAccessibilityLabel
+        self.width = width
         self.onTap = onTap
     }
 
@@ -669,7 +681,7 @@ struct StillCard: View {
                     let target = item.episodeThumbTarget(server, width: 720)
                     RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 720)
                         .aspectRatio(16 / 9, contentMode: .fill)
-                        .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
+                        .frame(width: width, height: width * 9 / 16)
                         .clipped()
                     // 底部只做很轻的可读性压暗；不再为常驻按钮铺厚渐变。
                     LinearGradient(
@@ -686,13 +698,13 @@ struct StillCard: View {
                         .animation(badgeMotion, value: actionBadgeVisible)
                         .accessibilityHidden(true)
                 }
-                .frame(width: Metrics.stillWidth, height: Metrics.stillWidth * 9 / 16)
+                .frame(width: width, height: width * 9 / 16)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
 
                 // 进度条是海报框的一部分：紧贴框底、与框同宽，作为一条收边，不叠在图片上。
                 // 中性半透明色，深浅色模式下都自然融入卡片，不抢海报的调子。
                 progressTrack
-                    .frame(width: Metrics.stillWidth, height: 3)
+                    .frame(width: width, height: 3)
                     .padding(.top, 6)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -701,7 +713,7 @@ struct StillCard: View {
                 }
                 .padding(.top, 10)
             }
-            .frame(width: Metrics.stillWidth)
+            .frame(width: width)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -741,7 +753,7 @@ struct StillCard: View {
             Rectangle().fill(Color.primary.opacity(0.12))
             Rectangle()
                 .fill(Color.primary.opacity(0.6))
-                .frame(width: Metrics.stillWidth * progress)
+                .frame(width: width * progress)
         }
         .clipShape(Capsule())
     }
@@ -949,10 +961,10 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
         /// 不锁高度（演员头像等矮行）
         case flexible
 
-        var scrollHeight: CGFloat? {
+        func scrollHeight(compact: Bool = false) -> CGFloat? {
             switch self {
-            case .poster: Metrics.posterRailHeight
-            case .still: Metrics.stillRailHeight
+            case .poster: Metrics.posterRailHeight(compact: compact)
+            case .still: Metrics.stillRailHeight(compact: compact)
             case .flexible: nil
             }
         }
@@ -982,6 +994,8 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
     private let itemContent: (Item) -> ItemContent
 
     @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isCompact: Bool { sizeClass == .compact }
 
     init(
         _ title: String,
@@ -1011,7 +1025,7 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
                     edgeReserve: 28,
                     verticalPadding: Metrics.railHoverPadding,
                     arrowYOffset: kind.arrowYOffset,
-                    fixedHeight: kind.scrollHeight,
+                    fixedHeight: kind.scrollHeight(compact: isCompact),
                     itemContent: itemContent
                 )
             } else {
@@ -1035,7 +1049,7 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
 
-        if let height = kind.scrollHeight {
+        if let height = kind.scrollHeight(compact: isCompact) {
             rail.frame(height: height, alignment: .top)
         } else {
             rail

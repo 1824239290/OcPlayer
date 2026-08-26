@@ -5,6 +5,10 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var isCompact: Bool { sizeClass == .compact }
+    private var stillWidth: CGFloat { isCompact ? Metrics.compactStillWidth : Metrics.stillWidth }
+    private var posterWidth: CGFloat? { isCompact ? Metrics.compactPosterWidth : nil }
 
     var body: some View {
         Group {
@@ -47,7 +51,8 @@ struct HomeView: View {
                             item: item,
                             server: app.server,
                             actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情",
+                            width: stillWidth
                         ) {
                             app.openSeriesDetail(for: item)
                         }
@@ -61,7 +66,8 @@ struct HomeView: View {
                             item: item,
                             server: app.server,
                             actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情"
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情",
+                            width: stillWidth
                         ) {
                             app.openSeriesDetail(for: item)
                         }
@@ -71,7 +77,7 @@ struct HomeView: View {
 
                 if !app.home.latest.isEmpty {
                     Rail("最近添加", kind: .poster, items: app.home.latest) { item in
-                        PosterCard(item: item, server: app.server) {
+                        PosterCard(item: item, server: app.server, width: posterWidth) {
                             app.openDetail(item)
                         }
                     }
