@@ -95,6 +95,7 @@ struct DetailView: View {
                     .padding(.bottom, 48)
                 }
                 #if os(iOS)
+                .contentMargins(.top, 0, for: .scrollContent)
                 .ignoresSafeArea(edges: .top)
                 #endif
             }
