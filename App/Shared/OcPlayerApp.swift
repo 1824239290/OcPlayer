@@ -36,6 +36,36 @@ final class MacApplicationDelegate: NSObject, NSApplicationDelegate {
 }
 #endif
 
+#if os(iOS)
+import UIKit
+
+/// iOS 方向控制：播放器覆盖层打开时锁横屏，退出时回竖屏。
+/// SwiftUI 生命周期没有 AppDelegate，用 @UIApplicationDelegateAdaptor 桥接。
+@MainActor
+final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
+    /// 播放器覆盖层是否打开——true 时只允许横屏。
+    private(set) var playerIsActive = false
+
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        playerIsActive ? .landscape : .all
+    }
+
+    /// 由 RootView 在 `presentedPlayer` 变化时调用：切换方向约束 + 主动旋转。
+    func setPlayerActive(_ active: Bool) {
+        guard active != playerIsActive else { return }
+        playerIsActive = active
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: active ? .landscape : .portrait))
+        scene.windows.first(where: \.isKeyWindow)?
+            .rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+    }
+}
+#endif
+
 @main
 struct OcPlayerApp: App {
     /// 全局两件套：会话/浏览状态 + 播放控制。
@@ -44,6 +74,9 @@ struct OcPlayerApp: App {
     @State private var controller = PlaybackController()
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacApplicationDelegate.self) private var appDelegate
+    #endif
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(IOSApplicationDelegate.self) private var iosAppDelegate
     #endif
 
     init() {

@@ -102,6 +102,13 @@ struct RootView: View {
             }
         }
         #if os(iOS)
+        // 播放器打开 → 锁横屏并旋转；退出 → 回竖屏并解锁方向。
+        .onChange(of: app.presentedPlayer) { _, request in
+            (UIApplication.shared.delegate as? IOSApplicationDelegate)?
+                .setPlayerActive(request != nil)
+        }
+        #endif
+        #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
             _ = app.playbackWillTerminate()
         }
