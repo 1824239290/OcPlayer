@@ -20,6 +20,7 @@ struct DetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
