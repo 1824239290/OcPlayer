@@ -477,7 +477,7 @@ struct DetailView: View {
 
     private var compactBannerTitle: some View {
         // 紧凑宽度：艺术字 Logo 或居中文本标题
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 68, maxWidth: 320, fontSize: 24, centered: true)
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
