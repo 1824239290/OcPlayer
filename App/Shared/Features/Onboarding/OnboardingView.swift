@@ -7,6 +7,7 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var serverAddress = ""
     /// 协议选择:HTTP / HTTPS。控制服务器 baseURL 的 scheme。
@@ -24,7 +25,9 @@ struct OnboardingView: View {
             }
             Spacer(minLength: 40)
         }
-        .frame(minWidth: 720, minHeight: 560)
+        // 常规宽度（Mac/iPad）保最小尺寸；紧凑宽度（iPhone）不设 min，让卡片自适应屏宽。
+        .frame(minWidth: sizeClass == .compact ? nil : 720,
+               minHeight: sizeClass == .compact ? nil : 560)
         .background(.background)
     }
 
@@ -55,7 +58,9 @@ struct OnboardingView: View {
             }
         }
         .padding(28)
-        .frame(width: 460)
+        // 常规宽度锁 460pt；紧凑宽度改为上限 460 并留屏幕边缘留白，窄机上不会溢出。
+        .frame(maxWidth: 460)
+        .padding(.horizontal, sizeClass == .compact ? 16 : 0)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.18), radius: 30, y: 12)

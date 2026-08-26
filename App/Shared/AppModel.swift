@@ -123,25 +123,43 @@ final class AppModel {
         case bangumi
         case moviepilot
         case library(MediaLibrary.ID)
+        /// iPhone 合并的媒体库列表 Tab（所有库类型从这里进，不占多个 Tab 位）。
+        case libraries
     }
 
     enum Route: Hashable {
         case detail(MediaItem)
+        /// iPhone 媒体库列表 → 单库网格页的 push 路由。
+        case library(MediaLibrary)
         case bangumiProfile
         case bangumiCollectionList(BangumiSubjectType)
         case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil)
         case bangumiCalendar
     }
 
-    var selectedSection: Section = .home {
-        didSet { if selectedSection != oldValue { path = [] } }
+    /// iPhone 各 Tab 的独立导航栈。每 Tab 一个路径数组，互不串。
+    struct NavigationPaths {
+        var home: [Route] = []
+        var libraries: [Route] = []
+        var bangumi: [Route] = []
+        var moviepilot: [Route] = []
+        var settings: [Route] = []
     }
 
-    /// Mac / iPad 的 push 栈。iPhone 不用它（多 Tab 多栈会串），走下面的模态。
+    var selectedSection: Section = .home {
+        didSet {
+            // 常规布局（Mac/iPad）切 Section 时清空共享栈；紧凑布局各 Tab 有独立栈，无需清。
+            if selectedSection != oldValue, !isCompact { path = [] }
+        }
+    }
+
+    /// Mac / iPad 的共享 push 栈。紧凑布局不用它（各 Tab 独立栈，见 `navPaths`）。
     var path: [Route] = []
 
-    /// iPhone：详情页 sheet。
-    var presentedDetail: MediaItem?
+    /// iPhone 各 Tab 独立的导航路径——每个 Tab 一个栈，互不串。
+    /// 之前 iPhone 走 `.sheet` 弹详情是因为多 Tab 共享一个 `path` 会互相踩；
+    /// 现在分栈后详情页走 push，播放器覆盖层不再被 sheet 遮住。
+    var navPaths = NavigationPaths()
 
     /// 播放覆盖层：非 nil 时播放器盖住整个 App（双端同一套，见 RootView）。
     var presentedPlayer: PlaybackRequest?
@@ -218,14 +236,41 @@ final class AppModel {
 
     func openDetail(_ item: MediaItem) {
         if isCompact {
-            presentedDetail = item
+            compactPath.append(.detail(item))
         } else {
             path.append(.detail(item))
         }
     }
 
     func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil) {
-        path.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+        if isCompact {
+            navPaths.bangumi.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+        } else {
+            path.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+        }
+    }
+
+    /// 紧凑布局下当前选中 Tab 对应的导航路径数组。
+    private var compactPath: [Route] {
+        get {
+            switch selectedSection {
+            case .home: navPaths.home
+            case .libraries: navPaths.libraries
+            case .bangumi: navPaths.bangumi
+            case .moviepilot: navPaths.moviepilot
+            case .settings: navPaths.settings
+            case .library: navPaths.libraries
+            }
+        }
+        set {
+            switch selectedSection {
+            case .home: navPaths.home = newValue
+            case .libraries, .library: navPaths.libraries = newValue
+            case .bangumi: navPaths.bangumi = newValue
+            case .moviepilot: navPaths.moviepilot = newValue
+            case .settings: navPaths.settings = newValue
+            }
+        }
     }
 
     /// 首页的续播条目通常是 Episode；详情入口应落到所属电视剧，而不是单集。

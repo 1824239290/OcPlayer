@@ -162,7 +162,7 @@ extension AppModel {
         libraryPages = [:]
         home = HomeData()
         path = []
-        presentedDetail = nil
+        navPaths = NavigationPaths()
         presentedPlayer = nil
         selectedSection = .home
         phase = .onboarding
@@ -176,7 +176,7 @@ extension AppModel {
     /// 未连接状态下首页的「去连接」：回登录流程。
     func reconnectFlow() {
         path = []
-        presentedDetail = nil
+        navPaths = NavigationPaths()
         selectedSection = .home
         resetOnboarding()
         phase = .onboarding

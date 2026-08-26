@@ -46,6 +46,16 @@ struct DetailView: View {
 
     private var shown: MediaItem { detail ?? item }
 
+    /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
+    private var bannerHeight: CGFloat {
+        horizontalSizeClass == .compact ? 240 : Metrics.bannerHeight
+    }
+
+    /// 紧凑宽度的播放钮窄一点，和海报/标题一起塞进窄屏不溢出。
+    private var playButtonWidth: CGFloat {
+        horizontalSizeClass == .compact ? 200 : 228
+    }
+
     var body: some View {
         Group {
             if isLoading && detail == nil {
@@ -126,13 +136,13 @@ struct DetailView: View {
                     SkeletonBlock(cornerRadius: 4)
                         .frame(width: 90, height: 14)
                     SkeletonBlock(cornerRadius: Metrics.bannerActionHeight / 2)
-                        .frame(width: Self.playButtonWidth, height: Metrics.bannerActionHeight)
+                        .frame(width: playButtonWidth, height: Metrics.bannerActionHeight)
                 }
             }
             .padding(.horizontal, contentLeading)
             .padding(.bottom, 28)
         }
-        .frame(height: Metrics.bannerHeight)
+        .frame(height: bannerHeight)
         .clipped()
     }
 
@@ -181,7 +191,7 @@ struct DetailView: View {
             LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.3), .clear],
                            startPoint: .bottom, endPoint: .top)
         }
-        .frame(height: Metrics.bannerHeight)
+        .frame(height: bannerHeight)
         // Overlay against the already-sized banner. A bottom-aligned HStack inside
         // the ZStack can use its intrinsic height and fall below the banner, where
         // `.clipped()` cuts off the poster and controls.
@@ -278,31 +288,28 @@ struct DetailView: View {
         .frame(height: Metrics.bannerActionHeight, alignment: .center)
     }
 
-    /// 播放胶囊宽度。骨架也用它，两边不会错开。
-    static let playButtonWidth: CGFloat = 228
-
     private var playButton: some View {
         Button(action: playCurrent) {
             ZStack(alignment: .leading) {
                 Rectangle()
                     .fill(.white.opacity(resumeProgress == nil ? 0.78 : 0.34))
-                if let progress = resumeProgress {
+                    if let progress = resumeProgress {
                     // 宽度是定死的 `playButtonWidth`，直接乘比例就行，不用 GeometryReader——
                     // 它测出来的就是我们已经知道的那个常量，而 `resumeProgress` 一变
                     // （选中集切换、标记已看）就要多跑一轮布局，横幅上尤其不划算。
-                    Rectangle()
-                        .fill(.white.opacity(0.82))
-                        .frame(width: Self.playButtonWidth * progress)
-                }
+                        Rectangle()
+                            .fill(.white.opacity(0.82))
+                            .frame(width: playButtonWidth * progress)
+                    }
 
-                Text(playButtonLabel)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.black.opacity(0.8))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-            .frame(width: Self.playButtonWidth, height: Metrics.bannerActionHeight)
+                    Text(playButtonLabel)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.black.opacity(0.8))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(width: playButtonWidth, height: Metrics.bannerActionHeight)
             // Only the outer capsule is rounded. The progress rectangle keeps
             // a full-height vertical boundary like the native resume control.
             .clipShape(Capsule())

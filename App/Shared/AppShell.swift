@@ -88,60 +88,50 @@ struct AppShellView: View {
 
     #if !os(macOS)
 
-    /// iPhone 底部 Tab：首页 / 电影 / 剧集 / 设置（音乐等 M4 再进）。
-    /// 详情在小屏走 sheet（多 Tab 多 NavigationStack 共享 path 会互相踩）。
+    /// iPhone 底部 Tab：首页 / 媒体库 / Bangumi / MoviePilot / 设置（固定 5 个，不触发「更多」）。
+    /// 每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非 sheet——播放器覆盖层不再被遮住。
     private var compactLayout: some View {
-        TabView(selection: Binding(
+        @Bindable var app = app
+        return TabView(selection: Binding(
             get: { app.selectedSection },
             set: { app.selectedSection = $0 }
         )) {
-            HomeView()
-                .tabItem { Label("首页", systemImage: "house.fill") }
-                .tag(AppModel.Section.home)
-            ForEach(iphoneLibraries) { library in
-                LibraryView(library: library)
-                    .tabItem { Label(library.name, systemImage: Self.icon(for: library.collectionType)) }
-                    .tag(AppModel.Section.library(library.id))
+            NavigationStack(path: $app.navPaths.home) {
+                HomeView()
+                    .appRoutes()
             }
-            NavigationStack {
+            .tabItem { Label("首页", systemImage: "house.fill") }
+            .tag(AppModel.Section.home)
+
+            NavigationStack(path: $app.navPaths.libraries) {
+                MediaLibraryListView()
+                    .appRoutes()
+            }
+            .tabItem { Label("媒体库", systemImage: "square.stack") }
+            .tag(AppModel.Section.libraries)
+
+            NavigationStack(path: $app.navPaths.bangumi) {
                 BangumiHomeView()
                     .appRoutes()
             }
             .tabItem { Label("Bangumi", systemImage: "tv.fill") }
             .tag(AppModel.Section.bangumi)
-            NavigationStack {
+
+            NavigationStack(path: $app.navPaths.moviepilot) {
                 MoviePilotHomeView()
                     .appRoutes()
             }
             .tabItem { Label("MoviePilot", systemImage: "film.stack") }
             .tag(AppModel.Section.moviepilot)
-            NavigationStack {
+
+            NavigationStack(path: $app.navPaths.settings) {
                 SettingsView()
                     .appRoutes()
             }
             .tabItem { Label("设置", systemImage: "gearshape") }
             .tag(AppModel.Section.settings)
         }
-        .sheet(item: Binding(
-            get: { app.presentedDetail },
-            set: { app.presentedDetail = $0 }
-        )) { item in
-            NavigationStack {
-                DetailView(item: item)
-                    .id(item.id)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("完成") { app.presentedDetail = nil }
-                        }
-                    }
-            }
-        }
         .onAppear { app.setCompact(true) }
-    }
-
-    /// iPhone 上只挑电影 / 剧集两个一级库，避免 Tab 爆炸；其余 M4 收进「更多」。
-    private var iphoneLibraries: [MediaLibrary] {
-        app.libraries.filter { $0.collectionType == .movies || $0.collectionType == .tvshows }
     }
     #endif
 
@@ -181,6 +171,13 @@ struct AppShellView: View {
             case .moviepilot:
                 NavigationStack(path: $app.path) {
                     MoviePilotHomeView()
+                        .appRoutes()
+                }
+                .transition(.opacity)
+            case .libraries:
+                // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
+                NavigationStack(path: $app.path) {
+                    MediaLibraryListView()
                         .appRoutes()
                 }
                 .transition(.opacity)
@@ -227,6 +224,42 @@ struct AppShellView: View {
     }
 }
 
+// MARK: - 媒体库列表页（iPhone 合并 Tab）
+
+/// iPhone 上所有媒体库的入口列表。每个库一行，点进去是 `LibraryView`。
+/// 之前每个库占一个 Tab，库多了会把 Bangumi/MoviePilot 挤进系统「更多」；
+/// 合并成一个 Tab 后 Tab 总数固定 5 个。
+struct MediaLibraryListView: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Group {
+            if app.libraries.isEmpty {
+                if let error = app.librariesError {
+                    ContentUnavailableView {
+                        Label("无法加载媒体库", systemImage: "wifi.exclamationmark")
+                    } description: {
+                        Text(error)
+                    } actions: {
+                        Button(UIStrings.retry) { Task { await app.reloadBrowserData() } }
+                    }
+                } else {
+                    ContentUnavailableView("还没有媒体库", systemImage: "square.stack")
+                }
+            } else {
+                List {
+                    ForEach(app.libraries) { library in
+                        NavigationLink(value: AppModel.Route.library(library)) {
+                            Label(library.name, systemImage: AppShellView.icon(for: library.collectionType))
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("媒体库")
+    }
+}
+
 // MARK: - 路由注册（各 NavigationStack 都挂这一个）
 
 extension View {
@@ -239,6 +272,8 @@ extension View {
             case .detail(let item):
                 DetailView(item: item)
                     .id(item.id)
+            case .library(let library):
+                LibraryView(library: library)
             case .bangumiProfile:
                 BangumiProfileView()
             case .bangumiCollectionList(let type):

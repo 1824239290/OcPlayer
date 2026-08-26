@@ -4,17 +4,17 @@ import XCTest
 
 @MainActor
 final class AppModelLifecycleTests: XCTestCase {
-    func testSignOutClearsPresentedDetailAndPlayerSession() {
+    func testSignOutClearsNavPathsAndPlayerSession() {
         let app = AppModel()
         app.phase = .ready
-        app.presentedDetail = MediaItem(id: "series-1", name: "测试剧", kind: .series)
+        app.navPaths.home = [.detail(MediaItem(id: "series-1", name: "测试剧", kind: .series))]
         app.presentedPlayer = PlaybackRequest(title: "ep", uri: "/tmp/a.mkv")
         app.playbackPreparation = .loading(title: "ep")
         app.path = [.detail(MediaItem(id: "m1", name: "电影", kind: .movie))]
 
         app.signOut()
 
-        XCTAssertNil(app.presentedDetail)
+        XCTAssertTrue(app.navPaths.home.isEmpty)
         XCTAssertNil(app.presentedPlayer)
         XCTAssertNil(app.playbackPreparation)
         XCTAssertTrue(app.path.isEmpty)
@@ -22,15 +22,15 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertEqual(app.selectedSection, .home)
     }
 
-    func testReconnectFlowClearsPresentedDetail() {
+    func testReconnectFlowClearsNavPaths() {
         let app = AppModel()
         app.phase = .ready
-        app.presentedDetail = MediaItem(id: "series-2", name: "另一部", kind: .series)
+        app.navPaths.libraries = [.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))]
         app.path = [.detail(MediaItem(id: "m2", name: "电影2", kind: .movie))]
 
         app.reconnectFlow()
 
-        XCTAssertNil(app.presentedDetail)
+        XCTAssertTrue(app.navPaths.libraries.isEmpty)
         XCTAssertTrue(app.path.isEmpty)
         XCTAssertEqual(app.phase, .onboarding)
         XCTAssertEqual(app.selectedSection, .home)
