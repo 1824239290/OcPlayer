@@ -277,7 +277,7 @@ struct SkeletonRail: View {
                         }
                     }
                 }
-                .padding(.horizontal, contentLeading)
+                .padding(.horizontal, contentLeading + 28)
                 .padding(.vertical, Metrics.railHoverPadding)
             }
             .frame(height: skeletonHeight)
@@ -1043,7 +1043,7 @@ struct Rail<Item: Identifiable, ItemContent: View>: View {
                     itemContent(item)
                 }
             }
-            .padding(.horizontal, contentLeading)
+            .padding(.horizontal, contentLeading + 28)
             .padding(.vertical, Metrics.railHoverPadding)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
