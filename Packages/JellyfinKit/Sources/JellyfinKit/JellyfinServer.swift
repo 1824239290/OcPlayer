@@ -198,31 +198,54 @@ public struct JellyfinServer: Sendable {
 
     /// 用户的媒体库列表（电影 / 剧集 / 音乐…）。
     /// Emby 没有 `/UserViews` 新式路由，走老式 `/Users/{id}/Views`（返回结构相同）。
+    /// Emby 的 `CollectionType` 会出 SDK 枚举外的值（如 "mixed"），所以两边都
+    /// 先过 sanitizer 再走 SDK 解码，未知值洗掉而不是炸整包。
     public func userViews() async throws -> [MediaLibrary] {
-        let request: Request<BaseItemDtoQueryResult>
+        let request: Request<Data>
         switch profile.kind {
         case .emby:
             request = Request(path: "/Users/\(profile.userID)/Views", method: "GET", id: "GetUserViews")
         case .jellyfin:
-            request = Paths.getUserViews(parameters: .init(userID: profile.userID))
+            request = Request(path: "/UserViews", method: "GET", query: [("userId", profile.userID)], id: "GetUserViews")
         }
-        let result = try await send(request)
+        let result = try await sendRaw(request).looseQueryResult()
         return (result.items ?? [])
             .map { MediaLibrary(id: $0.id ?? UUID().uuidString, name: $0.name ?? "", collectionType: .init($0.collectionType?.rawValue)) }
             .filter { $0.collectionType != .unknown && $0.collectionType != .folders }
     }
 
-    /// 首页「最近添加」。
+    /// 首页「最近添加」。Emby 没有带 userId query 的新式 `/Items/Latest`，
+    /// 走老式 `/Users/{id}/Items/Latest`（实测 Emby 4.10 对前者 404）。
     public func latestItems(limit: Int = 24) async throws -> [MediaItem] {
-        try await send(
-            Paths.getLatestMedia(parameters: .init(
-                userID: profile.userID,
-                includeItemTypes: [.movie, .series],
-                enableImageTypes: [.primary, .backdrop, .logo],
-                limit: limit
+        let data: Data
+        switch profile.kind {
+        case .emby:
+            data = try await sendRaw(Request<Data>(
+                path: "/Users/\(profile.userID)/Items/Latest",
+                method: "GET",
+                query: [
+                    ("limit", String(limit)),
+                    ("fields", "PrimaryImageAspectRatio"),
+                    ("enableImageTypes", "Primary,Backdrop,Thumb"),
+                ],
+                id: "GetLatestMedia"
             ))
-        )
-        .map(\.domainItem)
+        case .jellyfin:
+            data = try await sendRaw(Request<Data>(
+                path: "/Items/Latest",
+                method: "GET",
+                query: [
+                    ("userId", profile.userID),
+                    ("includeItemTypes", "Movie,Series"),
+                    ("enableImageTypes", "Primary,Backdrop,Thumb,Logo"),
+                    ("limit", String(limit)),
+                ],
+                id: "GetLatestMedia"
+            ))
+        }
+        // /Items/Latest 返回的是裸数组（不是 QueryResult 信封），且Emby 的
+        // 条目对象同样带杂字段——统一宽松解码，只抽展示要用的字段。
+        return try [MediaItem].looseItems(from: data)
     }
 
     /// 用户收藏的电影 / 剧集（M4 独立收藏页预留）。
@@ -532,6 +555,21 @@ public struct JellyfinServer: Sendable {
 
     /// 包内共享的请求发送口（ExternalSubtitles 等扩展文件也用它）。
     func send<T: Decodable & Sendable>(_ request: Request<T>) async throws -> T {
+        let path = NetworkLog.logPath(for: request.url)
+        let start = Date()
+        do {
+            let value = try await client.send(request).value
+            NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start))
+            return value
+        } catch {
+            NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))
+            throw JellyfinError.wrap(error)
+        }
+    }
+
+    /// 原始响应发送口：响应体不进 SDK 强类型解码，交给调用方宽松处理
+    /// （Emby 兼容层用；错误分类/日志语义与 `send` 完全一致）。
+    func sendRaw(_ request: Request<Data>) async throws -> Data {
         let path = NetworkLog.logPath(for: request.url)
         let start = Date()
         do {

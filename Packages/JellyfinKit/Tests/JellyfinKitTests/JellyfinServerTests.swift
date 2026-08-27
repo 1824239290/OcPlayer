@@ -767,7 +767,8 @@ final class JellyfinServerTests: XCTestCase {
     }
 
     /// Emby 登录密码错误回 400（老版本）：归成 unauthorized 提示而不是裸 HTTP 400。
-    func testEmbyPasswordSignInMaps400ToUnauthorized() async throws {        try await TestSupport.withMock { request in
+    func testEmbyPasswordSignInMaps400ToUnauthorized() async throws {
+        try await TestSupport.withMock { request in
             switch request.url?.path {
             case "/System/Info/Public":
                 return MockURLProtocol.ok(
@@ -792,6 +793,61 @@ final class JellyfinServerTests: XCTestCase {
                     return XCTFail("错误类型不对：\(error.kind)")
                 }
             }
+        }
+    }
+
+    /// Emby 4.10 的 Views 返回 SDK `CollectionType` 枚举外的值（如 "mixed"），
+    /// 强类型解码曾整包炸成 "The data couldn't be read"。sanitizer 洗掉未知值后
+    /// 正常出媒体库，已知值（含大小写变体）不受影响。
+    func testUserViewsToleratesUnknownCollectionTypes() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Views")
+            return MockURLProtocol.ok(
+                """
+                {"Items":[
+                  {"Id":"lib-1","Name":"电影","CollectionType":"movies"},
+                  {"Id":"lib-2","Name":"混合库","CollectionType":"mixed"},
+                  {"Id":"lib-3","Name":"合集","CollectionType":"BoxSets"},
+                  {"Id":"lib-4","Name":"文件夹","CollectionType":null,"Type":"CollectionFolder"}
+                ],"TotalRecordCount":4}
+                """,
+                for: request.url!
+            )
+        } with: {
+            let views = try await server.userViews()
+            // mixed 被洗掉归 unknown → 过滤；CollectionFolder 压成 Folder → folders 也过滤
+            XCTAssertEqual(views.map(\.name), ["电影", "合集"])
+        }
+    }
+
+    /// Emby 的「最近添加」必须走老式 `/Users/{id}/Items/Latest`（新式实测 404），
+    /// 返回裸数组；Type 未知值（如 CollectionFolder）洗成 Folder 后正常解码。
+    func testLatestItemsUsesLegacyRouteOnEmby() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items/Latest")
+            return MockURLProtocol.ok(
+                """
+                [{"Id":"m-1","Name":"新电影","Type":"Movie","ProductionYear":2026},
+                 {"Id":"lib-9","Name":"神秘库","Type":"CollectionFolder"}]
+                """,
+                for: request.url!
+            )
+        } with: {
+            let items = try await server.latestItems()
+            XCTAssertEqual(items.count, 2)
+            XCTAssertEqual(items[0].name, "新电影")
+            XCTAssertEqual(items[0].kind, .movie)
+            XCTAssertEqual(items[1].kind, .folder, "未知 Type 压成 Folder → 域模型 .folder")
         }
     }
 }
