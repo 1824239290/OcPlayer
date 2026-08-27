@@ -81,10 +81,6 @@ struct OcPlayerApp: App {
     #endif
 
     init() {
-        // 公网服务器（如远程 Emby）高延迟下，内核默认 2 MiB 的 HTTP 前向预取
-        // 余量太小（约 2 秒），播放容易反复进缓冲。调大到 16 MiB（≈16 秒 @8Mbps）。
-        // Erika 内核建 HTTP 源时读这个环境变量；iOS 上 setenv 不生效时回落内核默认。
-        setenv("ERIKA_HTTP_READAHEAD_BYTES", "16777216", 0)
         // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         PlaybackEngineAssembly.registerAll()
