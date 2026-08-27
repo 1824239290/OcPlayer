@@ -827,8 +827,7 @@ final class JellyfinServerTests: XCTestCase {
 
     /// 回归：宽松解码的裸 JSONDecoder 没有 SDK 的 ISO8601 日期配置，响应里
     /// 带 DateCreated 等日期字段时炸 typeMismatch，两台服务器首页/媒体库全挂。
-    func testLooseDecodeHandlesDatesAndKeylessUserData() async throws {
-        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+    func testLooseDecodeHandlesDatesAndKeylessUserData() async throws {        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
                                         baseURL: URL(string: "http://nas.local:8096/emby")!,
                                         userID: "user-e", kind: .emby)
         let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
@@ -891,6 +890,36 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(items[0].name, "新电影")
             XCTAssertEqual(items[0].kind, .movie)
             XCTAssertEqual(items[1].kind, .folder, "未知 Type 压成 Folder → 域模型 .folder")
+        }
+    }
+
+    /// Emby 没有 `/Items/{id}` 新式路由（实测 404），详情走 `/Users/{uid}/Items/{id}`。
+    func testEmbyDetailUsesLegacyRoute() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/emby/Users/user-e/Items/abc":
+                let query = TestSupport.queryItems(of: request)
+                XCTAssertEqual(query["fields"], "People,Genres,Overview,Chapters")
+                return MockURLProtocol.ok(
+                    """
+                    {"Id":"abc","Name":"沙丘 2","Type":"Movie",
+                     "People":[{"Id":"p-1","Name":"提莫西","Role":"Paul","Type":"Actor"}]}
+                    """,
+                    for: request.url!
+                )
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let item = try await server.item("abc")
+            XCTAssertEqual(item.name, "沙丘 2")
+            XCTAssertEqual(item.cast.first?.name, "提莫西")
         }
     }
 }

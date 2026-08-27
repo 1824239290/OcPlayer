@@ -1,4 +1,3 @@
-import CoreModel
 import Foundation
 import JellyfinAPI
 
@@ -6,11 +5,13 @@ import JellyfinAPI
 ///
 /// Emby 是 Jellyfin 的前身但字段值集更宽：`CollectionType` / `Type` 等字段会出
 /// jellyfin-sdk-swift 枚举不认的值（如 `"mixed"`、`"CollectionFolder"`），
-/// 强类型解码整包炸成 "The data couldn't be read because it is missing"。
-/// 这里在 SDK 解码前把脏枚举值替换成安全值，其余字段原样透传——
-/// 既有 Mapping 逻辑一行不动。
+/// `UserData` 可能缺 SDK 必填的 `Key`——强类型解码整包炸成
+/// "The data couldn't be read because it is missing"。
+/// `JellyfinServer.send` 在 SDK 解码前统一过这里把脏值替换掉，其余字段原样
+/// 透传——对 Jellyfin 标准响应是无害透传，既有 Mapping 逻辑一行不动。
 enum EmbySanitizer {
-    /// SDK `CollectionType` 认的值（大小写与 Emby 输出对齐后匹配）。
+    /// SDK `CollectionType` 认的值；Emby 会输出 "BoxSets" 这类大小写变体，
+    /// 归一化成小写 rawValue；未知值（如 "mixed"）洗掉 → 域模型 .unknown → 浏览层过滤。
     private static let knownCollectionTypes: Set<String> = [
         "movies", "tvshows", "music", "musicvideos", "trailers",
         "homevideos", "boxsets", "books", "photos", "livetv", "playlists", "folders",
@@ -21,6 +22,21 @@ enum EmbySanitizer {
     private static let knownItemKinds: Set<String> = [
         "Movie", "Series", "Episode", "Season", "BoxSet", "Folder",
         "MusicAlbum", "MusicArtist", "Playlist", "PhotoAlbum", "Channel", "ChannelFolderItem",
+    ]
+
+    /// `Type` 这字段名被多个结构共用：People[].Type 是 PersonKind、
+    /// MediaStream[].Type 是 MediaStreamType、MediaSegments[].Type 是
+    /// MediaSegmentType。这些值 SDK 本来就能解，**绝不能洗**——否则"Actor"
+    /// 被压成"Folder"直接炸掉演员表。
+    private static let knownNonItemTypeValues: Set<String> = [
+        // PersonKind（小写）
+        "unknown", "actor", "director", "composer", "writer", "gueststar", "producer",
+        "conductor", "lyricist", "arranger", "engineer", "mixer", "remixer", "creator",
+        "artist", "albumartist", "author", "illustrator", "penciller", "inker",
+        "colorist", "letterer", "coverartist", "editor", "translator", "narrator",
+        // MediaStreamType / MediaSegmentType（小写）
+        "audio", "video", "subtitle", "embeddedimage", "data", "lyric",
+        "commercial", "preview", "recap", "outro", "intro",
     ]
 
     /// 对根为对象（QueryResult 信封）或数组（/Items/Latest 裸数组）的响应做递归洗白。
@@ -36,18 +52,22 @@ enum EmbySanitizer {
         switch value {
         case let dict as [String: Any]:
             var cleaned = dict
+            // CollectionType 只出现在媒体库/合集对象上，全局安全。
             if let type = dict["CollectionType"] as? String {
                 if knownCollectionTypes.contains(type.lowercased()) {
-                    // SDK 枚举只认小写 rawValue；Emby 会输出 "BoxSets" 这类大小写变体。
                     cleaned["CollectionType"] = type.lowercased()
                 } else {
-                    // 未知值（如 "mixed"）洗掉：解码为 nil → 域模型 .unknown → 浏览层过滤。
                     cleaned["CollectionType"] = nil
                 }
             }
+            // `Type` 字段在 People[].Type("Actor") / MediaStream.Type("Subtitle") /
+            // MediaSegment.Type("Intro") 等结构里也同名且语义不同。SDK 认的值
+            // （nonItemTypeValues）原样放行；只有条目形态（带 Id+Name）且值
+            // 完全不被任何枚举认识的才压成 Folder。
             if let type = dict["Type"] as? String,
-               !knownItemKinds.contains(type) {
-                // 未知条目类型压成 Folder：SDK 能解，域映射归 .folder，浏览层自行过滤。
+               !knownItemKinds.contains(type),
+               !knownNonItemTypeValues.contains(type.lowercased()),
+               dict["Id"] != nil, dict["Name"] != nil {
                 cleaned["Type"] = "Folder"
             }
             if var userData = cleaned["UserData"] as? [String: Any] {
@@ -68,9 +88,8 @@ enum EmbySanitizer {
     }
 }
 
-/// SDK 解码用的 JSONDecoder 配置（与 jellyfin-sdk-swift 的 JellyfinClient 相同：
-/// ISO8601 日期）。宽松解码必须走同一配置，否则响应里的日期字段
-/// （DateCreated 等）会炸 typeMismatch——这正是切换服务器全挂的回归根源。
+/// 宽松解码配置：与 jellyfin-sdk-swift 的 JellyfinClient 相同的 ISO8601 日期策略。
+/// sanitizer 后的二次解码必须用同一配置，否则带 DateCreated 的响应会炸 typeMismatch。
 enum LooseDecoding {
     static let isoDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -101,23 +120,5 @@ enum LooseDecoding {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "无法解析日期 \(raw)")
         }
         return decoder
-    }
-}
-
-/// 宽松解析出来的条目数组（`/Items/Latest` 是裸数组而非 QueryResult 信封）。
-extension Array where Element == MediaItem {
-    /// 从裸数组 JSON 构造：洗白后按 SDK DTO 解码再走域映射。
-    static func looseItems(from data: Data) throws -> [MediaItem] {
-        let sanitized = EmbySanitizer.sanitize(data)
-        let dtos = try LooseDecoding.decoder.decode([BaseItemDto].self, from: sanitized)
-        return dtos.map(\.domainItem)
-    }
-}
-
-extension Data {
-    /// 洗白后按 SDK `BaseItemDtoQueryResult` 信封解码（`/UserViews` 等）。
-    func looseQueryResult() throws -> BaseItemDtoQueryResult {
-        let sanitized = EmbySanitizer.sanitize(self)
-        return try LooseDecoding.decoder.decode(BaseItemDtoQueryResult.self, from: sanitized)
     }
 }
