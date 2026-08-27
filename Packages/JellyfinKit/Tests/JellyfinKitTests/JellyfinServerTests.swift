@@ -940,6 +940,7 @@ final class JellyfinServerTests: XCTestCase {
                     {"Id":"abc","Name":"与剧","Type":"Series",
                      "Genres":["动作","科幻"],
                      "GenreItems":[{"Id":28,"Name":"动作"},{"Id":9527,"Name":"科幻"}],
+                     "Studios":[{"Id":100,"Name":"MAPPA"}],
                      "MediaSources":[{"Id":"src-1","Type":"Folder",
                        "MediaStreams":[{"Type":"Video","Index":0}]}]}
                     """,

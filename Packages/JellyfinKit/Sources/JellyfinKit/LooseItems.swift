@@ -87,17 +87,14 @@ enum EmbySanitizer {
                cleaned["MediaStreams"] != nil {
                 cleaned["Type"] = "Default"
             }
-            // Emby 的 GenreItems[].Id 可能返回数字（Jellyfin 是字符串 id），
-            // NameIDPair.Id 是 String——数字全部字符串化。
-            if let genreItems = cleaned["GenreItems"] as? [[String: Any]] {
-                cleaned["GenreItems"] = genreItems.map { pair in
-                    var p = pair
-                    if let numID = p["Id"] as? NSNumber {
-                        p["Id"] = numID.stringValue
-                    }
-                    return p
-                }
+            // NameIDPair 形态（Id+Name 同级）的对象在 Emby 上 Id 可能返回数字
+            // （Jellyfin 是字符串）：GenreItems / Studios / Networks 全是
+            // [NameIDPair]，SDK 的 id 是 String——数字统一字符串化。
+            // 特意不碰其它名字的数字字段（年份、索引号等必须是数字）。
+            if cleaned["Name"] != nil, let numID = cleaned["Id"] as? NSNumber {
+                cleaned["Id"] = numID.stringValue
             }
+            return cleaned.mapValues { sanitizeValue($0) }
             return cleaned.mapValues { sanitizeValue($0) }
         case let array as [Any]:
             return array.map { sanitizeValue($0) }
