@@ -922,4 +922,38 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(item.cast.first?.name, "提莫西")
         }
     }
+
+    /// 回归（Emby 真机实测）：MediaSources[].Type 报 "Folder"（SDK 只有
+    /// Default/Grouping/Placeholder）炸详情与 PlaybackInfo；GenreItems[].Id
+    /// 是数字（Jellyfin 是字符串）炸 typeMismatch。
+    func testSanitizeMediaSourceTypeAndNumericGenreIDs() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/emby/Users/user-e/Items/abc":
+                return MockURLProtocol.ok(
+                    """
+                    {"Id":"abc","Name":"与剧","Type":"Series",
+                     "Genres":["动作","科幻"],
+                     "GenreItems":[{"Id":28,"Name":"动作"},{"Id":9527,"Name":"科幻"}],
+                     "MediaSources":[{"Id":"src-1","Type":"Folder",
+                       "MediaStreams":[{"Type":"Video","Index":0}]}]}
+                    """,
+                    for: request.url!
+                )
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            // 修复前：GenreItems 的数字 Id 炸 typeMismatch 整包失败；
+            // 修复后：数字 Id 字符串化，解码通过、genres 正常映射。
+            let item = try await server.item("abc")
+            XCTAssertEqual(item.genres, ["动作", "科幻"])
+        }
+    }
 }

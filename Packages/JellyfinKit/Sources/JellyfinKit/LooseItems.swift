@@ -79,6 +79,25 @@ enum EmbySanitizer {
                 }
                 cleaned["UserData"] = sanitizeValue(userData)
             }
+            // MediaSources[]（MediaSourceInfo）的 Type 是 MediaSourceType
+            // （Default/Grouping/Placeholder）。Emby 会给直连源报 "Folder"
+            // 等值，SDK 解不了——洗成 Default（即普通可播放源的语义）。
+            if let type = cleaned["Type"] as? String,
+               type != "Default", type != "Grouping", type != "Placeholder",
+               cleaned["MediaStreams"] != nil {
+                cleaned["Type"] = "Default"
+            }
+            // Emby 的 GenreItems[].Id 可能返回数字（Jellyfin 是字符串 id），
+            // NameIDPair.Id 是 String——数字全部字符串化。
+            if let genreItems = cleaned["GenreItems"] as? [[String: Any]] {
+                cleaned["GenreItems"] = genreItems.map { pair in
+                    var p = pair
+                    if let numID = p["Id"] as? NSNumber {
+                        p["Id"] = numID.stringValue
+                    }
+                    return p
+                }
+            }
             return cleaned.mapValues { sanitizeValue($0) }
         case let array as [Any]:
             return array.map { sanitizeValue($0) }
