@@ -825,6 +825,49 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    /// 回归：宽松解码的裸 JSONDecoder 没有 SDK 的 ISO8601 日期配置，响应里
+    /// 带 DateCreated 等日期字段时炸 typeMismatch，两台服务器首页/媒体库全挂。
+    func testLooseDecodeHandlesDatesAndKeylessUserData() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/emby/Users/user-e/Views":
+                return MockURLProtocol.ok(
+                    """
+                    {"Items":[
+                      {"Id":"lib-1","Name":"电影","CollectionType":"movies",
+                       "DateCreated":"2026-08-01T12:34:56.0000000Z",
+                       "UserData":{"IsFavorite":false,"PlaybackPositionTicks":0}}
+                    ],"TotalRecordCount":1}
+                    """,
+                    for: request.url!
+                )
+            case "/emby/Users/user-e/Items/Latest":
+                return MockURLProtocol.ok(
+                    """
+                    [{"Id":"m-1","Name":"新电影","Type":"Movie",
+                      "DateCreated":"2026-08-20T08:00:00Z",
+                      "UserData":{"PlayedPercentage":12.5}}]
+                    """,
+                    for: request.url!
+                )
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let views = try await server.userViews()
+            XCTAssertEqual(views.map(\.name), ["电影"])
+
+            let latest = try await server.latestItems()
+            XCTAssertEqual(latest.map(\.id), ["m-1"])
+        }
+    }
+
     /// Emby 的「最近添加」必须走老式 `/Users/{id}/Items/Latest`（新式实测 404），
     /// 返回裸数组；Type 未知值（如 CollectionFolder）洗成 Folder 后正常解码。
     func testLatestItemsUsesLegacyRouteOnEmby() async throws {

@@ -50,6 +50,15 @@ enum EmbySanitizer {
                 // 未知条目类型压成 Folder：SDK 能解，域映射归 .folder，浏览层自行过滤。
                 cleaned["Type"] = "Folder"
             }
+            if var userData = cleaned["UserData"] as? [String: Any] {
+                // SDK 的 UserItemDataDto.Key 是 required decode；Emby 的 UserData
+                // 可能不带 Key。存在但缺 Key 时补占位；整个 UserData 缺失则合法
+                // （BaseItemDto.userData 可选），不动。
+                if (userData["Key"] as? String) == nil {
+                    userData["Key"] = ""
+                }
+                cleaned["UserData"] = sanitizeValue(userData)
+            }
             return cleaned.mapValues { sanitizeValue($0) }
         case let array as [Any]:
             return array.map { sanitizeValue($0) }
@@ -59,12 +68,48 @@ enum EmbySanitizer {
     }
 }
 
+/// SDK 解码用的 JSONDecoder 配置（与 jellyfin-sdk-swift 的 JellyfinClient 相同：
+/// ISO8601 日期）。宽松解码必须走同一配置，否则响应里的日期字段
+/// （DateCreated 等）会炸 typeMismatch——这正是切换服务器全挂的回归根源。
+enum LooseDecoding {
+    static let isoDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.calendar = Calendar(identifier: .iso8601)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSZ"
+        return formatter
+    }()
+
+    static let fallbackFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.calendar = Calendar(identifier: .iso8601)
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+        return formatter
+    }()
+
+    static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            if let date = isoDateFormatter.date(from: raw) ?? fallbackFormatter.date(from: raw) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "无法解析日期 \(raw)")
+        }
+        return decoder
+    }
+}
+
 /// 宽松解析出来的条目数组（`/Items/Latest` 是裸数组而非 QueryResult 信封）。
 extension Array where Element == MediaItem {
     /// 从裸数组 JSON 构造：洗白后按 SDK DTO 解码再走域映射。
     static func looseItems(from data: Data) throws -> [MediaItem] {
         let sanitized = EmbySanitizer.sanitize(data)
-        let dtos = try JSONDecoder().decode([BaseItemDto].self, from: sanitized)
+        let dtos = try LooseDecoding.decoder.decode([BaseItemDto].self, from: sanitized)
         return dtos.map(\.domainItem)
     }
 }
@@ -73,6 +118,6 @@ extension Data {
     /// 洗白后按 SDK `BaseItemDtoQueryResult` 信封解码（`/UserViews` 等）。
     func looseQueryResult() throws -> BaseItemDtoQueryResult {
         let sanitized = EmbySanitizer.sanitize(self)
-        return try JSONDecoder().decode(BaseItemDtoQueryResult.self, from: sanitized)
+        return try LooseDecoding.decoder.decode(BaseItemDtoQueryResult.self, from: sanitized)
     }
 }
