@@ -23,7 +23,18 @@ else
     exit 2
 fi
 
-"$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
+# SKIP_ERIKA_FETCH=1：使用 Vendor 里现成的内核（自编译/实验分支产物），
+# 不跑 fetch-erika.sh —— 后者会从上游 Release 拉官方包**覆盖**本地产物。
+if [[ "${SKIP_ERIKA_FETCH:-0}" != "1" ]]; then
+    "$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
+else
+    # 自编译产物至少要带新 API 符号对应的头，防呆：头文件不对就尽早失败。
+    grep -q "ErikaOpenOptions" "$ROOT/Packages/ErikaKit/Sources/CErika/include/erika.h" || {
+        echo "SKIP_ERIKA_FETCH=1 但 CErika 头里没有 ErikaOpenOptions —— Vendor 不是自编译内核？" >&2
+        exit 2
+    }
+    echo "· 跳过 fetch-erika（使用 Vendor 现有内核）"
+fi
 
 mkdir -p "$BUILD_ROOT" "$DIST_DIR"
 rm -f "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"
