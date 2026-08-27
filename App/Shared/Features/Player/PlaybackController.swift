@@ -373,12 +373,15 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if let authHeader = request.authHeader {
             headers["Authorization"] = authHeader
         }
+        let readAhead = PlaybackPreferences.httpReadAheadBytes
+        // 诊断「改了预读档位没生效」：把本次真正传给内核的值打进日志。
+        PlaybackLog.append("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
         let opened = open(
             PlaybackSource(
                 uri: request.uri,
                 headers: headers,
                 // 本地文件路径没有预取语义，内核会忽略；统一带上无妨。
-                readAheadBytes: PlaybackPreferences.httpReadAheadBytes
+                readAheadBytes: readAhead
             ),
             securityScopedURL: request.securityScopedURL
         )

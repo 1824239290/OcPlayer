@@ -16,6 +16,9 @@ struct SettingsView: View {
     @State private var isEditingMoviePilot = false
     @State private var updateChecker = AppUpdateChecker.shared
     @State private var presentedRelease: GitHubRelease?
+    /// 预读档位的 UI 选中值：直接绑 UserDefaults 不触发刷新（Picker 会停在旧值），
+    /// 所以用 @State 承载，onAppear 同步一次、onChange 写回偏好。
+    @State private var readAheadMiB = PlaybackPreferences.httpReadAheadMiB
 
     var body: some View {
         Form {
@@ -38,10 +41,7 @@ struct SettingsView: View {
             }
 
             Section("播放") {
-                Picker("网络预读缓冲", selection: Binding(
-                    get: { PlaybackPreferences.httpReadAheadMiB },
-                    set: { PlaybackPreferences.httpReadAheadMiB = $0 }
-                )) {
+                Picker("网络预读缓冲", selection: $readAheadMiB) {
                     ForEach(PlaybackPreferences.readAheadOptionsMiB, id: \.self) { mib in
                         Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
                     }
@@ -181,6 +181,9 @@ struct SettingsView: View {
             if updateChecker.state == .idle {
                 await updateChecker.checkForUpdates()
             }
+        }
+        .onChange(of: readAheadMiB) { _, newValue in
+            PlaybackPreferences.httpReadAheadMiB = newValue
         }
     }
 
