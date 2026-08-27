@@ -114,6 +114,12 @@ extension AppModel {
             quickConnectTask = nil
             quickConnectCode = nil
             loginSession = nil
+            // 换了服务器就先丢掉旧会话的数据与浏览栈：新服务器的首屏是异步拉的，
+            // 不清的话拉取完成前 UI 会一直显示上一台的内容，像“登录后没刷新”。
+            // 同一台服务器重登（token 过期）则保留数据，避免无谓的白屏。
+            if self.server?.profile.id != server.profile.id {
+                dropSessionData()
+            }
             // phase 已切到 ready，首屏数据靠 initialDataTask 异步驱动 home.isLoading
             // 的 loading 态——不阻塞登录 Task，让 Quick Connect 的轮询流尽快结束。
             activate(server: server)
@@ -122,6 +128,23 @@ extension AppModel {
         } catch {
             if loginSession === session { onboardingError = "\(error)" }
         }
+    }
+
+    /// 清空随旧会话走的浏览数据（媒体库 / 首页 / 导航栈）。
+    /// 服务器数据按 profile 隔离，条目 id 只在原服务器里有意义，不能跨会话复用。
+    private func dropSessionData() {
+        initialDataTask?.cancel()
+        initialDataTask = nil
+        sessionGeneration &+= 1
+        server = nil
+        libraries = []
+        librariesError = nil
+        libraryPages = [:]
+        home = HomeData()
+        path = []
+        navPaths = NavigationPaths()
+        presentedPlayer = nil
+        selectedSection = .home
     }
 
     func resetOnboarding() {
@@ -181,22 +204,23 @@ extension AppModel {
     /// 快速切到一台已保存的服务器。token 还有效就静默换会话 + 装载首屏；
     /// token 缺失 / 失效则探活后进登录流程（登录成功按同 id 覆盖旧档案）。
     func switchToServer(_ profile: ServerProfile) async {
-        // 播放与浏览态属于旧会话，先进主框架，别让用户看到旧服务器的数据闪一下。
+        // 播放与浏览态属于旧会话，先停掉，别让用户看到旧服务器的数据闪一下。
         cancelPlaybackOpen()
         retryPlaybackItem = nil
         _ = finishReporting()
         playback?.stopPlayback()
-        initialDataTask?.cancel()
-        initialDataTask = nil
 
         if let server = JellyfinServer.resume(profile: profile, from: store) {
+            if self.server?.profile.id != server.profile.id {
+                dropSessionData()
+            }
             resetOnboarding()
             activate(server: server)
             return
         }
-        // token 无效：保留档案（旧 token 已删不删都行，resume 失败时 store.signOut 清掉它），
-        // 探活这台服务器后进密码登录第二步。地址用档案里的 baseURL——Emby 已含 /emby 前缀，
-        // startLogin 探活对带前缀地址同样响应；识别 kind 后 finish 会落回同样的 baseURL。
+        // token 无效：清掉死 token（保留档案），探活这台服务器后进密码登录第二步。
+        // 地址用档案里的 baseURL——Emby 已含 /emby 前缀，startLogin 探活对带前缀
+        // 地址同样响应；识别 kind 后 finish 会落回同样的 baseURL。
         store.signOut(id: profile.id)
         await connectServer(profile.baseURL.absoluteString, scheme: profile.baseURL.scheme == "https" ? .https : .http)
     }
