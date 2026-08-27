@@ -84,6 +84,25 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer") }
     }
 
+    /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
+    /// 公网高延迟服务器（远程 Emby 等）建议 16 MiB（约 16 秒 @8Mbps），
+    /// 局域网默认即可。设置页「网络预读缓冲」读写此值。
+    static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
+    static var httpReadAheadMiB: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: "dev.jumusu.ocplayer.playback.httpReadAheadMiB")
+            return readAheadOptionsMiB.contains(stored) ? stored : 0
+        }
+        set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.playback.httpReadAheadMiB") }
+    }
+
+    /// 当前预读偏好换算成字节（0 = 内核默认），供 PlaybackSource 直接使用。
+    static var httpReadAheadBytes: UInt64? {
+        let mib = httpReadAheadMiB
+        guard mib > 0 else { return nil }
+        return UInt64(mib) * 1024 * 1024
+    }
+
     private static func storedDouble(
         forKey key: String,
         range: ClosedRange<Double>,

@@ -55,13 +55,15 @@ public final class ErikaPresenter {
 
     // MARK: - 媒体
 
-    /// 打开媒体源。`headers` 非空时走 `open_with_headers`。
+    /// 打开媒体源。`headers` 非空或 `readAheadBytes` 非空时走 `open_with_options`
+    /// （`readAheadBytes` 仅影响 HTTP(S) 源，0/nil = 内核默认 2 MiB）。
     public func open(_ source: PlaybackSource) throws {
-        guard !source.headers.isEmpty else {
+        guard !source.headers.isEmpty || source.readAheadBytes != nil else {
             try ErikaError.check(erika_presenter_open(handle, source.uri))
             return
         }
-        // C 侧要求 header 数组在调用期间存活：先把所有键值转成 C 字符串，调完再释放。
+        // C 侧要求 header 数组与 options 结构在调用期间存活：先把所有键值转成
+        // C 字符串，调完再释放。
         var owned: [UnsafeMutablePointer<CChar>] = []
         defer { owned.forEach { free($0) } }
         func dup(_ text: String) -> UnsafePointer<CChar> {
@@ -71,9 +73,17 @@ public final class ErikaPresenter {
         }
         let raw = source.headers.map { ErikaHttpHeader(name: dup($0.key), value: dup($0.value)) }
         try raw.withUnsafeBufferPointer { buffer in
-            try ErikaError.check(
-                erika_presenter_open_with_headers(handle, source.uri, buffer.baseAddress, UInt(buffer.count))
+            var options = ErikaOpenOptions(
+                headers: buffer.baseAddress,
+                header_count: UInt(buffer.count),
+                http_read_ahead_bytes: source.readAheadBytes ?? 0,
+                reserved: (0, 0, 0)
             )
+            try withUnsafePointer(to: &options) { optionsPtr in
+                try ErikaError.check(
+                    erika_presenter_open_with_options(handle, source.uri, optionsPtr)
+                )
+            }
         }
     }
 

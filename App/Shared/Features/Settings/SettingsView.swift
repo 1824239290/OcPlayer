@@ -38,6 +38,17 @@ struct SettingsView: View {
             }
 
             Section("播放") {
+                Picker("网络预读缓冲", selection: Binding(
+                    get: { PlaybackPreferences.httpReadAheadMiB },
+                    set: { PlaybackPreferences.httpReadAheadMiB = $0 }
+                )) {
+                    ForEach(PlaybackPreferences.readAheadOptionsMiB, id: \.self) { mib in
+                        Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
+                    }
+                }
+                Text("播放网络视频时内核提前下载的缓冲窗口。公网服务器（远程 Emby 等）建议 16 MiB 以上，局域网默认即可。对本地文件无效。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                 Button {
                     isImporting = true
                 } label: {

@@ -374,7 +374,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
             headers["Authorization"] = authHeader
         }
         let opened = open(
-            PlaybackSource(uri: request.uri, headers: headers),
+            PlaybackSource(
+                uri: request.uri,
+                headers: headers,
+                // 本地文件路径没有预取语义，内核会忽略；统一带上无妨。
+                readAheadBytes: PlaybackPreferences.httpReadAheadBytes
+            ),
             securityScopedURL: request.securityScopedURL
         )
         reportableRequestID = request.id

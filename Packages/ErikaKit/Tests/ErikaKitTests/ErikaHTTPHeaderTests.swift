@@ -98,6 +98,31 @@ struct ErikaHTTPHeaderTests {
         try presenter.close()
     }
 
+    /// 自编译内核新增的 `erika_presenter_open_with_options`：headers + readAheadBytes
+    /// 一起传（ErikaOpenOptions 路径），打开行为与 open_with_headers 一致。
+    @Test("带 readAheadBytes 的 options 路径能打开 HTTP 源")
+    func opensWithOptionsAndReadAhead() async throws {
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 2)
+        defer { try? FileManager.default.removeItem(at: movie) }
+        let (server, port) = try await Self.startServer(serving: movie)
+        defer { server.terminate() }
+
+        let presenter = try ErikaPresenter()
+        try presenter.open(PlaybackSource(
+            uri: "http://127.0.0.1:\(port)/Videos/ocplayer/stream?static=true",
+            headers: ["Authorization": #"MediaBrowser Client="OcPlayer", Token="\#(Self.token)""#],
+            readAheadBytes: 16 * 1024 * 1024
+        ))
+
+        let result = try Self.drain(presenter, seconds: 10)
+        #expect(result.failure == nil, "options 路径应该能打开：\(result.failure ?? "")")
+        #expect(result.tracks.video == 1, "应识别出 1 条视频轨，实际 \(result.tracks.video)")
+        let seconds = (result.duration?.microseconds ?? 0) / 1_000_000
+        #expect(seconds >= 1 && seconds <= 3, "时长应在 1–3 秒，实际 \(seconds)s")
+
+        try presenter.close()
+    }
+
     @Test("不带 Authorization 头会被服务器拒绝：open 当场抛 401，而不是崩")
     func failsWithoutHeader() async throws {
         let movie = try await TestMedia.makeMovieWithTone(seconds: 2)

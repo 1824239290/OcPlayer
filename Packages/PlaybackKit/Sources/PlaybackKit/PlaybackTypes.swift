@@ -70,13 +70,17 @@ public enum PlayerEvent: Sendable {
 /// 打开一个媒体源。`headers` 由适配器落到内核的带头打开接口
 /// （Erika `open_with_headers` / mpv `--http-header-fields`），
 /// Jellyfin 的 token 走这里，**不进 URL**（日志不泄露）。
+/// `readAheadBytes` 是 HTTP 源的前向预取窗口（仅 Erika 内核生效，
+/// mpv 忽略）；nil = 内核默认（2 MiB）。
 public struct PlaybackSource: Sendable, Hashable {
     public let uri: String
     public let headers: [String: String]
+    public let readAheadBytes: UInt64?
 
-    public init(uri: String, headers: [String: String] = [:]) {
+    public init(uri: String, headers: [String: String] = [:], readAheadBytes: UInt64? = nil) {
         self.uri = uri
         self.headers = headers
+        self.readAheadBytes = readAheadBytes
     }
 
     public init(fileURL: URL, headers: [String: String] = [:]) {
