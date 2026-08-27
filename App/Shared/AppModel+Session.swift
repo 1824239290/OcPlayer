@@ -176,6 +176,31 @@ extension AppModel {
         phase = .ready
     }
 
+    // MARK: - 多服务器切换
+
+    /// 快速切到一台已保存的服务器。token 还有效就静默换会话 + 装载首屏；
+    /// token 缺失 / 失效则探活后进登录流程（登录成功按同 id 覆盖旧档案）。
+    func switchToServer(_ profile: ServerProfile) async {
+        // 播放与浏览态属于旧会话，先进主框架，别让用户看到旧服务器的数据闪一下。
+        cancelPlaybackOpen()
+        retryPlaybackItem = nil
+        _ = finishReporting()
+        playback?.stopPlayback()
+        initialDataTask?.cancel()
+        initialDataTask = nil
+
+        if let server = JellyfinServer.resume(profile: profile, from: store) {
+            resetOnboarding()
+            activate(server: server)
+            return
+        }
+        // token 无效：保留档案（旧 token 已删不删都行，resume 失败时 store.signOut 清掉它），
+        // 探活这台服务器后进密码登录第二步。地址用档案里的 baseURL——Emby 已含 /emby 前缀，
+        // startLogin 探活对带前缀地址同样响应；识别 kind 后 finish 会落回同样的 baseURL。
+        store.signOut(id: profile.id)
+        await connectServer(profile.baseURL.absoluteString, scheme: profile.baseURL.scheme == "https" ? .https : .http)
+    }
+
     /// 未连接状态下首页的「去连接」：回登录流程。
     func reconnectFlow() {
         path = []

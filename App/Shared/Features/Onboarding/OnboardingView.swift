@@ -73,6 +73,8 @@ struct OnboardingView: View {
     private var serverForm: some View {
         @Bindable var app = app
         return VStack(alignment: .leading, spacing: 12) {
+            savedServersSection
+
             Text("服务器地址").font(.headline)
             TextField("例如 192.168.1.10:8096", text: $serverAddress)
                 .textFieldStyle(.roundedBorder)
@@ -251,11 +253,67 @@ struct OnboardingView: View {
         }
     }
 
+    // MARK: 已保存的服务器
+
+    /// 登录页上方的档案列表：token 还在的一键重连，失效的探活后进密码登录。
+    /// 数据来自 `ServerStore`——登出不删档案，这里就是「记忆」的展示面。
+    private var savedServersSection: some View {
+        let profiles = app.store.profiles
+        guard !profiles.isEmpty else { return AnyView(EmptyView()) }
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                Text("已保存的服务器").font(.headline)
+                ForEach(profiles) { profile in
+                    savedServerRow(profile)
+                }
+            }
+        )
+    }
+
+    private func savedServerRow(_ profile: ServerProfile) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: profile.kind == .emby ? "tv" : "server.rack")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(profile.serverName).font(.callout.weight(.medium))
+                    if profile.kind == .emby {
+                        Text("Emby")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    // 档案无 token = 上次退出过登录，点它走密码登录而不是一键切。
+                    if app.store.token(for: profile) == nil {
+                        Text("需重新登录")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Text(profile.baseURL.absoluteString)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button("连接") {
+                Task { await app.switchToServer(profile) }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(.quinary, in: RoundedRectangle(cornerRadius: 10))
+    }
+
     // MARK: - 动作
 
     private func connect() async {
         await app.connectServer(serverAddress, scheme: serverScheme)
     }
+
 
     private func submitPassword() async {
         await app.signIn(username: username, password: password)

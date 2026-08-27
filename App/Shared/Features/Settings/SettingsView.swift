@@ -34,6 +34,7 @@ struct SettingsView: View {
                         systemImage: "arrow.left.arrow.right"
                     )
                 }
+                savedServersRows
             }
 
             Section("播放") {
@@ -168,6 +169,59 @@ struct SettingsView: View {
             moviepilot.refreshProfileIfNeeded()
             if updateChecker.state == .idle {
                 await updateChecker.checkForUpdates()
+            }
+        }
+    }
+
+    /// 其余已保存档案的快速切换与删除。正在使用的服务器不在列表里（要换走它
+    /// 用上面的「连接其它服务器」，要删它先退出登录）。删除连 token 一起清，
+    /// 下次想用这台就得重新输地址登录。
+    @ViewBuilder
+    private var savedServersRows: some View {
+        let others = app.store.profiles.filter { $0.id != app.server?.profile.id }
+        if !others.isEmpty {
+            Text("已保存的服务器")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            ForEach(others) { profile in
+                HStack(spacing: 10) {
+                    Image(systemName: profile.kind == .emby ? "tv" : "server.rack")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(profile.serverName).font(.callout)
+                            if profile.kind == .emby {
+                                Text("Emby")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                            }
+                            if app.store.token(for: profile) == nil {
+                                Text("需重新登录").font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                        Text(profile.baseURL.absoluteString)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer()
+                    Button("切换") {
+                        Task { await app.switchToServer(profile) }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    Button(role: .destructive) {
+                        app.store.remove(id: profile.id)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                }
             }
         }
     }

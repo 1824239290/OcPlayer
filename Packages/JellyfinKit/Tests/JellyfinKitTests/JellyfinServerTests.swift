@@ -552,6 +552,57 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    // MARK: - 多服务器恢复
+
+    /// 按档案恢复：token 在 → 建出会话；token 不在 → nil（调用方回落登录流程）。
+    func testResumeProfileUsesStoredToken() {
+        let jellyfin = profile(id: "srv:jf", baseURL: "http://nas.local:8096")
+        let emby = profile(id: "srv:em", baseURL: "http://nas.local:8097/emby", kind: .emby)
+        store.save(jellyfin, makeCurrent: true)
+        store.save(emby, makeCurrent: false)
+        store.activate(jellyfin, token: "tok-jf")
+
+        let resumed = JellyfinServer.resume(profile: jellyfin, from: store)
+        XCTAssertEqual(resumed?.profile.id, "srv:jf")
+        XCTAssertEqual(resumed?.accessToken, "tok-jf")
+
+        XCTAssertNil(JellyfinServer.resume(profile: emby, from: store), "无 token 的档案 resume 必须返回 nil")
+    }
+
+    /// currentProfile 没 token 时，启动恢复回退到列表里第一个有 token 的档案，
+    /// 而不是直接弹登录页无视另一台的有效会话。
+    func testRestoreFallsBackToProfileWithTokenWhenCurrentHasNone() {
+        let currentNoToken = profile(id: "srv:a")
+        let otherWithToken = profile(id: "srv:b", baseURL: "http://nas.local:8098")
+        store.save(currentNoToken, makeCurrent: true)
+        store.save(otherWithToken, makeCurrent: false)
+        store.activate(otherWithToken, token: "tok-b")
+        // currentKey 仍指向 srv:a（activate(b) 会改指针，手动存回去）
+        store.save(currentNoToken, makeCurrent: true)
+
+        let restored = JellyfinServer(restoringFrom: store)
+        XCTAssertEqual(restored?.profile.id, "srv:b")
+        XCTAssertEqual(restored?.accessToken, "tok-b")
+    }
+
+    func testRestorePrefersCurrentProfileWhenItHasToken() {
+        let first = profile(id: "srv:first")
+        let second = profile(id: "srv:second")
+        store.activate(first, token: "tok-first")
+        store.activate(second, token: "tok-second")
+        // activate 已把 current 切到 second；再 save 回 first 且设为当前
+        store.save(first, makeCurrent: true)
+
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv:first")
+    }
+
+    private func profile(id: String, baseURL: String = "http://nas.local:8096",
+                         kind: ServerKind = .jellyfin) -> ServerProfile {
+        ServerProfile(id: id, serverName: "home-nas", baseURL: URL(string: baseURL)!,
+                      userID: id.split(separator: ":").last.map(String.init) ?? id,
+                      kind: kind)
+    }
+
     // MARK: - Emby 适配
 
     /// 探活返回 ProductName="Emby Server" → 识别为 Emby：QC 关闭、baseURL 带 /emby、落盘 kind。

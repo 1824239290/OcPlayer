@@ -77,13 +77,31 @@ public struct JellyfinServer: Sendable {
     }
 
     /// 用已保存的档案 + 本地 token 恢复会话。
+    ///
+    /// 优先恢复 currentProfile；它没有 token 时回退到列表里第一个有 token 的档案
+    /// （登出 A 后 A 仍是 current，但 B 的 token 还有效——这时应该直接进 B 而不是弹登录页）。
     public init?(restoringFrom store: ServerStore) {
-        guard let profile = store.currentProfile,
-              let token = store.token(for: profile)
-        else { return nil }
+        let current = store.currentProfile
+        let profile = current.flatMap { store.token(for: $0) != nil ? $0 : nil }
+            ?? store.profiles.first { store.token(for: $0) != nil }
+        guard let profile, let token = store.token(for: profile) else { return nil }
         self.init(
             profile: profile,
             client: Self.makeClient(baseURL: profile.baseURL, token: token)
+        )
+    }
+
+    /// 按指定档案恢复会话（多服务器快速切换用）。token 缺失 / 会话对象建不出来时返回 nil，
+    /// 由调用方决定回落到登录流程。
+    public static func resume(
+        profile: ServerProfile,
+        from store: ServerStore,
+        sessionConfiguration: URLSessionConfiguration = .default
+    ) -> JellyfinServer? {
+        guard let token = store.token(for: profile) else { return nil }
+        return JellyfinServer(
+            profile: profile,
+            client: Self.makeClient(baseURL: profile.baseURL, token: token, sessionConfiguration: sessionConfiguration)
         )
     }
 
