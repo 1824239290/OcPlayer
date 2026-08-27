@@ -553,6 +553,13 @@ public struct LoginResult: Sendable {
     public let userID: String
     public let userName: String?
 
+    /// 宽松解码路径（`LoginSession.parseLoginResponse`）直接构造。
+    init(token: String, userID: String, userName: String?) {
+        self.token = token
+        self.userID = userID
+        self.userName = userName
+    }
+
     init(_ result: AuthenticationResult) throws {
         guard let token = result.accessToken, let userID = result.user?.id else {
             throw JellyfinError(.unauthorized)
@@ -620,9 +627,21 @@ public final class LoginSession: Sendable {
     ///
     /// 密码错误的 HTTP 状态码 Jellyfin 是 401/403，Emby 老版本可能是 400；
     /// 登录场景下把 400 也归成「账号密码不对」的提示，避免报成莫名的 HTTP 400。
+    ///
+    /// **响应体走宽松解码**（只抽 AccessToken / User.Id / User.Name），不复用 SDK 的
+    /// `AuthenticationResult`：Emby 的 User 对象里带 Jellyfin schema 没有的字段
+    /// （如 UserPolicy 变体），强类型解码会整包炸出 "The data couldn't be read
+    /// because it is missing"，而登录只需要这三样。失败状态码维持 validate 语义。
     public func signIn(username: String, password: String) async throws -> LoginResult {
         do {
-            return try LoginResult(await client.signIn(username: username, password: password))
+            let request = Request<Data>(
+                path: "/Users/AuthenticateByName",
+                method: "POST",
+                body: LoginRequestBody(username: username, password: password),
+                id: "AuthenticateUserByName"
+            )
+            let data = try await client.send(request).value
+            return try Self.parseLoginResponse(data)
         } catch let error as JellyfinError {
             throw error
         } catch APIError.unacceptableStatusCode(400) {
@@ -630,6 +649,49 @@ public final class LoginSession: Sendable {
         } catch {
             throw JellyfinError.wrap(error)
         }
+    }
+
+    private struct LoginRequestBody: Encodable {
+        let username: String
+        let password: String
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(username, forKey: .username)
+            // Jellyfin/Emby 的约定字段名就是 Pw。
+            try container.encode(password, forKey: .pw)
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case username = "Username"
+            case pw = "Pw"
+        }
+    }
+
+    /// 从登录响应原始 JSON 抽必要字段；多余字段与类型波动全部忽略。
+    ///
+    /// Emby / Jellyfin 的顶层和 User 对象字段名一致（AccessToken / User.Id），
+    /// 只做「拿到什么算什么」的容错：类型不对的字段当 nil 处理，不炸整包。
+    static func parseLoginResponse(_ data: Data) throws -> LoginResult {
+        let object = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let dict = object as? [String: Any] else {
+            throw JellyfinError(.unauthorized)
+        }
+        guard let token = Self.nonEmptyString(dict["AccessToken"]) else {
+            // 没带 token 的"成功"响应等于没登录成。
+            throw JellyfinError(.unauthorized)
+        }
+        let user = dict["User"] as? [String: Any]
+        let userID = user.flatMap { Self.nonEmptyString($0["Id"]) }
+        let userName = user.flatMap { $0["Name"] as? String }
+        guard let userID else {
+            throw JellyfinError(.unauthorized)
+        }
+        return LoginResult(token: token, userID: userID, userName: userName)
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        (value as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     public func signIn(quickConnectSecret: String) async throws -> LoginResult {

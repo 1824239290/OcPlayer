@@ -708,9 +708,66 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
-    /// Emby 登录密码错误回 400（老版本）：归成 unauthorized 提示而不是裸 HTTP 400。
-    func testEmbyPasswordSignInMaps400ToUnauthorized() async throws {
+    /// 真实 Emby 4.10 登录成功响应带 SDK 强类型解不了的字段（UserPolicy 变体等），
+    /// 曾炸出 "The data couldn't be read because it is missing"。宽松解码只抽
+    /// AccessToken / User.Id / User.Name，其余字段无论形状一律忽略。
+    func testParseLoginResponseToleratesEmbyExtraFields() throws {
+        let embyShaped = """
+        {"User":{"Name":"jumusu","ServerName":"BBemby","Id":"e2b1longid",
+          "HasPassword":true,"HasConfiguredPassword":true,"EnableAutoLogin":false,
+          "LastLoginDate":"2026-08-27T06:00:00Z","LastActivityDate":"2026-08-27T05:59:00Z",
+          "Policy":{"IsAdministrator":true,"EnableContentDeletion":true,
+            "AuthenticationProviderId":"Emby.Server.Implementations.Library.DefaultAuthenticationProvider",
+            "PasswordResetProviderId":"Default","InvalidLoginAttemptCount":3,
+            "RemoteClientBitrateLimit":0,"EnableAllFolders":true,"EnabledFolders":[]},
+          "Configuration":{"SubtitleMode":"Default","DisplayMissingEpisodes":false}},
+         "SessionInfo":{"Id":"sess-1","UserId":"e2b1longid","Client":"Emby Web",
+           "LastActivityDate":"2026-08-27T06:00:00Z","Capabilities":{}},
+         "AccessToken":"embytoken123","ServerId":"02b4c457"}
+        """.data(using: .utf8)!
+        let result = try LoginSession.parseLoginResponse(embyShaped)
+        XCTAssertEqual(result.token, "embytoken123")
+        XCTAssertEqual(result.userID, "e2b1longid")
+        XCTAssertEqual(result.userName, "jumusu")
+    }
+
+    /// 缺 token / 缺 User.Id 的成功响应不能当作登录成功。
+    func testParseLoginResponseRejectsIncompletePayload() {
+        XCTAssertThrowsError(try LoginSession.parseLoginResponse(#"{"SessionInfo":{}}"#.data(using: .utf8)!))
+        XCTAssertThrowsError(try LoginSession.parseLoginResponse(#"{"AccessToken":"t"}"#.data(using: .utf8)!))
+        // 非对象响应（纯文本错误体出现在 2xx 之外的路径上）也不许崩成 other
+        XCTAssertThrowsError(try LoginSession.parseLoginResponse("用户名或密码无效".data(using: .utf8)!))
+    }
+
+    /// 宽松解码走真实请求链路：mock 返回带 Emby 杂字段的响应，signIn 照样出结果。
+    func testSignInWorksWithEmbyShapedSuccessResponse() async throws {
         try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/System/Info/Public":
+                return MockURLProtocol.ok(
+                    #"{"ServerName":"emby-nas","Version":"4.8.0.42","Id":"emby-1","ProductName":"Emby Server"}"#,
+                    for: request.url!
+                )
+            case "/emby/Users/AuthenticateByName":
+                let body = """
+                {"User":{"Name":"jumusu","Id":"user-e","Policy":{"IsAdministrator":true,"Odd":{"nested":[1,2,{"x":null}]}}},
+                 "AccessToken":"tok-loose","ServerId":"emby-1"}
+                """
+                return MockURLProtocol.ok(body, for: request.url!)
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let session = try await JellyfinServer.startLogin(urlString: "http://nas.local:8096", sessionConfiguration: TestSupport.mockedSessionConfiguration())
+            let result = try await session.signIn(username: "jumusu", password: "hunter2")
+            XCTAssertEqual(result.token, "tok-loose")
+            XCTAssertEqual(result.userID, "user-e")
+        }
+    }
+
+    /// Emby 登录密码错误回 400（老版本）：归成 unauthorized 提示而不是裸 HTTP 400。
+    func testEmbyPasswordSignInMaps400ToUnauthorized() async throws {        try await TestSupport.withMock { request in
             switch request.url?.path {
             case "/System/Info/Public":
                 return MockURLProtocol.ok(
