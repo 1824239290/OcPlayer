@@ -551,4 +551,139 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(segments[1].endSeconds, 11250)
         }
     }
+
+    // MARK: - Emby 适配
+
+    /// 探活返回 ProductName="Emby Server" → 识别为 Emby：QC 关闭、baseURL 带 /emby、落盘 kind。
+    func testStartLoginDetectsEmbyAndAppendsAPIPrefix() async throws {
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/System/Info/Public":
+                return MockURLProtocol.ok(
+                    #"{"ServerName":"emby-nas","Version":"4.8.0.42","Id":"emby-1","ProductName":"Emby Server"}"#,
+                    for: request.url!
+                )
+            // 登录请求应打到带 /emby 前缀的地址
+            case "/emby/Users/AuthenticateByName":
+                return MockURLProtocol.ok(
+                    #"{"AccessToken":"tok-emby","ServerId":"emby-1","User":{"Id":"user-e","Name":"jumusu"}}"#,
+                    for: request.url!
+                )
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let session = try await JellyfinServer.startLogin(urlString: "192.168.1.10:8096", sessionConfiguration: TestSupport.mockedSessionConfiguration())
+            XCTAssertEqual(session.kind, .emby)
+            XCTAssertFalse(session.supportsQuickConnect, "Emby 没有 Quick Connect")
+            XCTAssertEqual(session.baseURL.absoluteString, "http://192.168.1.10:8096/emby")
+
+            // 密码登录 → finish 落盘 kind 与带前缀的 baseURL
+            let result = try await session.signIn(username: "jumusu", password: "hunter2")
+            XCTAssertEqual(result.token, "tok-emby")
+            let server = try session.finish(result, store: store)
+            XCTAssertEqual(server.profile.kind, .emby)
+            XCTAssertEqual(server.profile.baseURL.absoluteString, "http://192.168.1.10:8096/emby")
+        }
+    }
+
+    func testStartLoginKeepsJellyfinKindAndRawBaseURL() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/System/Info/Public")
+            return MockURLProtocol.ok(
+                #"{"ServerName":"jf-nas","Version":"10.9.11","Id":"srv-1"}"#,
+                for: request.url!
+            )
+        } with: {
+            let session = try await JellyfinServer.startLogin(urlString: "192.168.1.10:8096", sessionConfiguration: TestSupport.mockedSessionConfiguration())
+            XCTAssertEqual(session.kind, .jellyfin)
+            XCTAssertTrue(session.supportsQuickConnect)
+            XCTAssertEqual(session.baseURL.absoluteString, "http://192.168.1.10:8096")
+        }
+    }
+
+    func testDetectKindByProductNameAndVersion() {
+        XCTAssertEqual(JellyfinServer.detectKind(info: .init(productName: "Emby Server", version: "4.8.0.42")), .emby)
+        XCTAssertEqual(JellyfinServer.detectKind(info: .init(productName: nil, version: "4.7.2")), .emby, "无 ProductName 时按 4.x 主版本兜底")
+        XCTAssertEqual(JellyfinServer.detectKind(info: .init(productName: "Jellyfin Server", version: "10.9.11")), .jellyfin)
+        XCTAssertEqual(JellyfinServer.detectKind(info: .init(productName: nil, version: nil)), .jellyfin)
+    }
+
+    func testEmbyAPIBaseURLAppendsPrefixOnce() throws {
+        XCTAssertEqual(JellyfinServer.embyAPIBaseURL(from: URL(string: "http://nas.local:8096")!).absoluteString,
+                       "http://nas.local:8096/emby")
+        // 已带 /emby（用户手写或反代子路径）不重复追加
+        XCTAssertEqual(JellyfinServer.embyAPIBaseURL(from: URL(string: "http://nas.local:8096/emby")!).absoluteString,
+                       "http://nas.local:8096/emby")
+        XCTAssertEqual(JellyfinServer.embyAPIBaseURL(from: URL(string: "https://media.example.com/emby/")!).absoluteString,
+                       "https://media.example.com/emby")
+        // 已有其它子路径时追加到末尾
+        XCTAssertEqual(JellyfinServer.embyAPIBaseURL(from: URL(string: "https://host/media")!).absoluteString,
+                       "https://host/media/emby")
+    }
+
+    /// Emby 走老式路由：媒体库 `/Users/{id}/Views`、继续观看 `/Users/{id}/Items/Resume`。
+    func testEmbyRoutesUseLegacyPaths() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", userName: "jumusu",
+                                        serverVersion: "4.8.0.42", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            // client baseURL 带 /emby，Get 拼 URL 保留子路径
+            case "/emby/Users/user-e/Views":
+                return MockURLProtocol.ok(
+                    #"{"Items":[{"Id":"lib-1","Name":"电影","CollectionType":"movies"}],"TotalRecordCount":1}"#,
+                    for: request.url!
+                )
+            case "/emby/Users/user-e/Items/Resume":
+                return MockURLProtocol.ok(
+                    #"{"Items":[{"Id":"m-1","Name":"沙丘","Type":"Movie"}],"TotalRecordCount":1}"#,
+                    for: request.url!
+                )
+            default:
+                XCTFail("Emby 不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let views = try await server.userViews()
+            XCTAssertEqual(views.map(\.id), ["lib-1"])
+
+            let resume = try await server.resumeItems()
+            XCTAssertEqual(resume.map(\.id), ["m-1"])
+        }
+    }
+
+    /// Emby 登录密码错误回 400（老版本）：归成 unauthorized 提示而不是裸 HTTP 400。
+    func testEmbyPasswordSignInMaps400ToUnauthorized() async throws {
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/System/Info/Public":
+                return MockURLProtocol.ok(
+                    #"{"ServerName":"emby-nas","Version":"4.7.2","Id":"emby-1","ProductName":"Emby Server"}"#,
+                    for: request.url!
+                )
+            case "/emby/Users/AuthenticateByName":
+                let response = HTTPURLResponse(url: request.url!, statusCode: 400,
+                                               httpVersion: nil, headerFields: nil)!
+                return (response, Data(#"{"error":"Invalid user or password entered."}"#.utf8))
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let session = try await JellyfinServer.startLogin(urlString: "http://nas.local:8096", sessionConfiguration: TestSupport.mockedSessionConfiguration())
+            do {
+                _ = try await session.signIn(username: "x", password: "bad")
+                XCTFail("400 应该抛错")
+            } catch let error as JellyfinError {
+                guard case .unauthorized = error.kind else {
+                    return XCTFail("错误类型不对：\(error.kind)")
+                }
+            }
+        }
+    }
 }

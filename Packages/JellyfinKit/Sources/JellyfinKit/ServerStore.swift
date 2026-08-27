@@ -1,5 +1,12 @@
 import Foundation
 
+/// 媒体服务器类型。Emby 是 Jellyfin 的前身（3.5.2 fork），两者 API 高度同源，
+/// 大部分链路共用；差异点（URL 前缀、Quick Connect、两条老式路由）按这个枚举分叉。
+public enum ServerKind: String, Codable, Sendable {
+    case jellyfin
+    case emby
+}
+
 /// 一台已登录服务器的持久化档案。token 单独存进本地 UserDefaults。
 public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     /// `serverID:userID`，同一服务器换账号 = 不同 profile。
@@ -9,15 +16,35 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     public var userID: String
     public var userName: String?
     public var serverVersion: String?
+    /// 服务器类型；Emby 的 `baseURL` 已含 `/emby` 前缀。
+    public var kind: ServerKind
 
     public init(id: String, serverName: String, baseURL: URL, userID: String,
-                userName: String? = nil, serverVersion: String? = nil) {
+                userName: String? = nil, serverVersion: String? = nil,
+                kind: ServerKind = .jellyfin) {
         self.id = id
         self.serverName = serverName
         self.baseURL = baseURL
         self.userID = userID
         self.userName = userName
         self.serverVersion = serverVersion
+        self.kind = kind
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, serverName, baseURL, userID, userName, serverVersion, kind
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        serverName = try values.decode(String.self, forKey: .serverName)
+        baseURL = try values.decode(URL.self, forKey: .baseURL)
+        userID = try values.decode(String.self, forKey: .userID)
+        userName = try values.decodeIfPresent(String.self, forKey: .userName)
+        serverVersion = try values.decodeIfPresent(String.self, forKey: .serverVersion)
+        // 旧版本落盘的 profile 没有 kind 字段：默认 Jellyfin，不炸老数据。
+        kind = try values.decodeIfPresent(ServerKind.self, forKey: .kind) ?? .jellyfin
     }
 }
 

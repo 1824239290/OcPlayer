@@ -32,7 +32,10 @@ extension AppModel {
             let session = try await JellyfinServer.startLogin(urlString: rawURL, preferredScheme: scheme)
             guard loginAttemptGeneration == attempt, phase == .onboarding else { return }
             loginSession = session
-            await startQuickConnect()
+            // Emby 没有 Quick Connect 端点，直接进密码登录，不开轮询。
+            if session.supportsQuickConnect {
+                await startQuickConnect()
+            }
         } catch let error as JellyfinError {
             if loginAttemptGeneration == attempt {
                 onboardingError = error.errorDescription

@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### 服务器支持
+
+- **新增 Emby 服务器适配**：登录流程探活时自动识别服务器类型（`ProductName` 含 Emby / 主版本 4.x），Emby 走 `/emby` API 前缀与老式路由（媒体库 `/Users/{id}/Views`、继续观看 `/Users/{id}/Items/Resume`），账号密码登录、浏览、播放、图片、字幕、播放上报全链路可用。Emby 没有 Quick Connect（Jellyfin 独有），登录页在 Emby 服务器上只显示账号密码表单；Emby 老版本密码错误返回 400 时也归入「账号密码不对」提示。
+- `ServerProfile` 新增 `kind` 字段（jellyfin/emby）；旧版本落盘的档案无此字段，解码默认 Jellyfin，静默恢复不受影响。
+
+### 版本
+
+- 版本号升至 0.1.5（等 Emby 真机验证后再发版）。
+
 ## [0.1.4] · 2026-08-25 · UI 规范统一与弹幕渲染路线收敛
 
 ### 弹幕

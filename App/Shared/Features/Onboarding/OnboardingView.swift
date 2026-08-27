@@ -143,12 +143,15 @@ struct OnboardingView: View {
             .padding(12)
             .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
 
-            quickConnectPanel
-
-            divider
+            // Emby 没有 Quick Connect：只显示账号密码，不渲染 QC 面板和分隔条。
+            if app.loginSession?.supportsQuickConnect != false {
+                quickConnectPanel
+                divider
+            }
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("或用账号密码登录").font(.headline)
+                Text(app.loginSession?.supportsQuickConnect == false ? "账号密码登录" : "或用账号密码登录")
+                    .font(.headline)
                 TextField("用户名", text: $username)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()

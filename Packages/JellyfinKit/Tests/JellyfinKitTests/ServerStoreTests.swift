@@ -89,4 +89,37 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(Set(testedStore.profiles.map(\.id)), Set(profiles.map(\.id)))
         XCTAssertEqual(testedStore.profiles.count, profiles.count)
     }
+
+    // MARK: - ServerKind
+
+    func testProfileKindRoundTripsThroughCodable() throws {
+        let emby = ServerProfile(id: "srv:e1", serverName: "emby-nas",
+                                 baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                 userID: "u1", kind: .emby)
+        let data = try JSONEncoder().encode([emby])
+        let decoded = try JSONDecoder().decode([ServerProfile].self, from: data)
+        XCTAssertEqual(decoded.first?.kind, .emby)
+
+        // UserDefaults 走一遍：落盘 → 读回，kind 不丢
+        store.activate(emby, token: "tok-emby")
+        XCTAssertEqual(store.currentProfile?.kind, .emby)
+    }
+
+    /// 0.1.4 及之前落盘的 profile 没有 kind 字段：解码必须成功且默认 Jellyfin。
+    func testLegacyProfileJSONWithoutKindDecodesAsJellyfin() throws {
+        let legacy = """
+        [{"id":"srv-legacy:user-9","serverName":"home-nas",
+          "baseURL":"http:\\/\\/nas.local:8096","userID":"user-9",
+          "userName":"jumusu","serverVersion":"10.9.11"}]
+        """
+        let data = try JSONEncoder().encode(
+            try JSONDecoder().decode([ServerProfile].self, from: Data(legacy.utf8))
+        )
+        defaults.set(data, forKey: "dev.jumusu.ocplayer.servers")
+        tokens.save("tok-legacy", account: "srv-legacy:user-9")
+
+        XCTAssertEqual(store.profiles.count, 1)
+        XCTAssertEqual(store.profiles[0].kind, .jellyfin)
+        XCTAssertNotNil(JellyfinServer(restoringFrom: store), "旧档案必须能静默恢复")
+    }
 }

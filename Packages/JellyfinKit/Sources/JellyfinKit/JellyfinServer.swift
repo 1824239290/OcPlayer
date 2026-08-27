@@ -106,6 +106,10 @@ public struct JellyfinServer: Sendable {
 
     /// 校验地址并创建登录会话。`urlString` 允许「192.168.1.10:8096」这种不带 scheme 的写法。
     /// `sessionConfiguration` 是测试注入口（塞 URLProtocol mock），业务代码不用传。
+    ///
+    /// Emby 的 API 固定挂在 `/emby` 前缀下（Jellyfin 在根路径）。探活先用原地址
+    /// （Emby 对无前缀的 `/System/Info/Public` 同样响应），识别出 Emby 后会话与
+    /// 落盘的 baseURL 都切到带 `/emby` 的地址——Get 拼 URL 保留子路径，一处前缀全链路生效。
     public static func startLogin(
         urlString rawURL: String,
         preferredScheme: JellyfinServerScheme? = nil,
@@ -121,7 +125,36 @@ public struct JellyfinServer: Sendable {
         } catch {
             throw JellyfinError.wrap(error)
         }
-        return LoginSession(baseURL: url, info: info, client: probeClient)
+        let kind = Self.detectKind(info: info)
+        let resolvedBaseURL = kind == .emby ? Self.embyAPIBaseURL(from: url) : url
+        let sessionClient = kind == .emby
+            ? makeClient(baseURL: resolvedBaseURL, token: nil, sessionConfiguration: sessionConfiguration)
+            : probeClient
+        return LoginSession(baseURL: resolvedBaseURL, info: info, client: sessionClient, kind: kind)
+    }
+
+    /// 从探活结果判服务器类型。Emby 报 `ProductName`（如 "Emby Server"）且主版本是 4.x；
+    /// Jellyfin 主版本是 10.x、通常不报 ProductName。
+    static func detectKind(info: PublicSystemInfo) -> ServerKind {
+        if let product = info.productName?.lowercased(), product.contains("emby") {
+            return .emby
+        }
+        if let version = info.version, version.hasPrefix("4.") {
+            return .emby
+        }
+        return .jellyfin
+    }
+
+    /// 给 Emby 地址追加 `/emby` API 前缀；已含该前缀则仅归一掉尾斜杠后返回。
+    static func embyAPIBaseURL(from url: URL) -> URL {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var path = components?.path ?? ""
+        while path.hasSuffix("/") { path.removeLast() }
+        if !path.lowercased().hasSuffix("/emby") {
+            path += "/emby"
+        }
+        components?.path = path
+        return components?.url ?? url
     }
 
     /// 「host:port」→「scheme://host:port/」(去尾斜杠),统一成确定性的 scheme。
@@ -146,8 +179,16 @@ public struct JellyfinServer: Sendable {
     // MARK: - 浏览
 
     /// 用户的媒体库列表（电影 / 剧集 / 音乐…）。
+    /// Emby 没有 `/UserViews` 新式路由，走老式 `/Users/{id}/Views`（返回结构相同）。
     public func userViews() async throws -> [MediaLibrary] {
-        let result = try await send(Paths.getUserViews(parameters: .init(userID: profile.userID)))
+        let request: Request<BaseItemDtoQueryResult>
+        switch profile.kind {
+        case .emby:
+            request = Request(path: "/Users/\(profile.userID)/Views", method: "GET", id: "GetUserViews")
+        case .jellyfin:
+            request = Paths.getUserViews(parameters: .init(userID: profile.userID))
+        }
+        let result = try await send(request)
         return (result.items ?? [])
             .map { MediaLibrary(id: $0.id ?? UUID().uuidString, name: $0.name ?? "", collectionType: .init($0.collectionType?.rawValue)) }
             .filter { $0.collectionType != .unknown && $0.collectionType != .folders }
@@ -185,17 +226,30 @@ public struct JellyfinServer: Sendable {
         .items?.map(\.domainItem) ?? []
     }
 
-    /// 首页「继续观看」。
+    /// 首页「继续观看」。Emby 走老式 `/Users/{id}/Items/Resume`（Jellyfin 是 `/UserItems/Resume`）。
     public func resumeItems() async throws -> [MediaItem] {
-        try await send(
-            Paths.getResumeItems(parameters: .init(
+        let request: Request<BaseItemDtoQueryResult>
+        switch profile.kind {
+        case .emby:
+            request = Request(
+                path: "/Users/\(profile.userID)/Items/Resume",
+                method: "GET",
+                query: [
+                    ("limit", "24"),
+                    ("mediaTypes", "Video"),
+                    ("enableImageTypes", "Primary,Backdrop,Thumb,Logo"),
+                ],
+                id: "GetResumeItems"
+            )
+        case .jellyfin:
+            request = Paths.getResumeItems(parameters: .init(
                 userID: profile.userID,
                 limit: 24,
                 mediaTypes: [.video],
                 enableImageTypes: [.primary, .backdrop, .thumb, .logo]
             ))
-        )
-        .items?.map(\.domainItem) ?? []
+        }
+        return try await send(request).items?.map(\.domainItem) ?? []
     }
 
     /// 「接下来看」：追剧下一集。
@@ -497,16 +551,23 @@ public final class LoginSession: Sendable {
     public let baseURL: URL
     public let serverName: String
     public let serverVersion: String?
+    /// Emby 登录后 client/baseURL 已带 `/emby` 前缀；Jellyfin 即原始地址。
+    public let kind: ServerKind
     let serverID: String?
     let client: JellyfinClient
 
-    init(baseURL: URL, info: PublicSystemInfo, client: JellyfinClient) {
+    init(baseURL: URL, info: PublicSystemInfo, client: JellyfinClient, kind: ServerKind) {
         self.baseURL = baseURL
         self.serverName = info.serverName ?? "Jellyfin"
         self.serverVersion = info.version
         self.serverID = info.id
         self.client = client
+        self.kind = kind
     }
+
+    /// Quick Connect 是 Jellyfin 自己的实现，Emby 没有这个端点；
+    /// UI 与登录流程按这个开关隐藏 / 跳过 QC。
+    public var supportsQuickConnect: Bool { kind == .jellyfin }
 
     /// Quick Connect 事件流（内置轮询，取消流即取消轮询）。
     public var quickConnectEvents: AsyncThrowingStream<QuickConnect.Event, Error> {
@@ -538,11 +599,16 @@ public final class LoginSession: Sendable {
 
     /// 账号密码登录；Quick Connect 则消费 `quickConnectEvents` 的
     /// `.authenticated(secret:)` 后调 `signIn(quickConnectSecret:)`。两者殊途同归到 `finish`。
+    ///
+    /// 密码错误的 HTTP 状态码 Jellyfin 是 401/403，Emby 老版本可能是 400；
+    /// 登录场景下把 400 也归成「账号密码不对」的提示，避免报成莫名的 HTTP 400。
     public func signIn(username: String, password: String) async throws -> LoginResult {
         do {
             return try LoginResult(await client.signIn(username: username, password: password))
         } catch let error as JellyfinError {
             throw error
+        } catch APIError.unacceptableStatusCode(400) {
+            throw JellyfinError(.unauthorized)
         } catch {
             throw JellyfinError.wrap(error)
         }
@@ -567,7 +633,8 @@ public final class LoginSession: Sendable {
             baseURL: baseURL,
             userID: result.userID,
             userName: result.userName,
-            serverVersion: serverVersion
+            serverVersion: serverVersion,
+            kind: kind
         )
         store.activate(profile, token: result.token)
         return JellyfinServer(profile: profile, client: Self.makeAuthedClient(baseURL: baseURL, token: result.token))
