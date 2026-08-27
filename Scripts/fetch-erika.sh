@@ -9,7 +9,9 @@
 set -euo pipefail
 
 MACOS_ARCH="${ERIKA_MACOS_ARCH:-arm64}"
-REPO="AimesSoft/Erika"
+# 内核来源仓库。默认上游；内核改动未合并前可设 ERIKA_REPO 指向 fork
+# （如 ERIKA_REPO=1824239290/Erika），配合对应 tag 使用。
+REPO="${ERIKA_REPO:-AimesSoft/Erika}"
 
 usage() {
   echo "用法: Scripts/fetch-erika.sh [latest|tag]" >&2
