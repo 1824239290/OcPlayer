@@ -39,17 +39,23 @@ final class MacApplicationDelegate: NSObject, NSApplicationDelegate {
 #if os(iOS)
 import UIKit
 
-/// iOS 方向控制：播放器覆盖层打开时锁横屏，退出时回竖屏。
+/// iOS 方向控制：播放器覆盖层打开时锁横屏，退出后回浏览态。
+/// iPhone 浏览态锁竖屏（浏览/设置等页面都是竖屏布局）；
+/// iPad 浏览态跟随重力自由旋转（pbxproj 已声明四方向），只有播放中锁横屏。
 /// SwiftUI 生命周期没有 AppDelegate，用 @UIApplicationDelegateAdaptor 桥接。
 @MainActor
 final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
-    /// 播放器覆盖层打开时锁横屏；退出后锁竖屏。
-    /// App 非播放状态始终竖屏（浏览/设置等页面都是竖屏布局），只在播放器里允许横屏。
+    /// 播放器覆盖层打开时锁横屏；退出后按设备类型解锁。
     private(set) var playerIsActive = false
+
+    /// 浏览态允许的方向：iPhone 竖屏，iPad 四方向跟重力。
+    private var browsingMask: UIInterfaceOrientationMask {
+        UIDevice.current.userInterfaceIdiom == .pad ? .all : .portrait
+    }
 
     func application(_ application: UIApplication,
                      supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
-        playerIsActive ? .landscape : .portrait
+        playerIsActive ? .landscape : browsingMask
     }
 
     /// 由 AppModel.presentedPlayer 的 didSet 回调调用：切换方向约束 + 主动旋转。
@@ -60,7 +66,9 @@ final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive })
         else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: active ? .landscape : .portrait))
+        // 退出播放时 iPad 请求 .all 不强转姿态，系统按设备当前朝向落位；
+        // iPhone 仍是 .portrait，行为同旧行（退出即回竖屏）。
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: active ? .landscape : browsingMask))
         scene.windows.first(where: \.isKeyWindow)?
             .rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
