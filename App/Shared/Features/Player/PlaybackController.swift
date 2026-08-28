@@ -547,6 +547,9 @@ try engine.play()
         // 这样即使某个内核的 stop/detach 组合在个别版本里会让旧实例进入不可 reopen 的状态，
         // 也不会影响下一次播放；换内核也在下一次播放自然落地。
         resetEngine()
+        // 引擎析构后 malloc 仍攥着空闲页不还系统（phys_footprint 高位横盘）：
+        // 2s / 25s 两拍 pressure relief（第二拍等内核 demux 线程尾巴退出）。
+        MallocPressureRelief.scheduleAfterStop()
         PlaybackLog.append("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
     }
 
