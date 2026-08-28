@@ -5,7 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_TAG="${1:-v0.1.5}"
 ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+readahead.1}"
-ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
+# 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
+export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 APP_NAME="OcPlayer"

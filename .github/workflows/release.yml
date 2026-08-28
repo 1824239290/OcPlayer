@@ -24,7 +24,10 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      ERIKA_VERSION: latest
+      # 与 test.yml 保持同一内核来源：release 产物必须构建在测试过的内核上。
+      # 内核改动合并上游后，这里与 test.yml、Scripts/build-macos.sh 一起切回官方。
+      ERIKA_VERSION: v0.1.7+readahead.1
+      ERIKA_REPO: 1824239290/Erika
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
