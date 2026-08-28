@@ -95,10 +95,8 @@ struct DetailView: View {
                     }
                     .padding(.bottom, 48)
                 }
-                #if os(iOS)
                 .contentMargins(.top, 0, for: .scrollContent)
                 .ignoresSafeArea(edges: .top)
-                #endif
             }
         }
         .navigationTitle(horizontalSizeClass == .compact ? "" : shown.name)
@@ -107,6 +105,8 @@ struct DetailView: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
         .sensoryFeedback(.selection, trigger: selectedEpisodeID)
+        #elseif os(macOS)
+        .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
         .background(Color.pageBackground.ignoresSafeArea())
         .task(id: item.id) { await load() }
@@ -140,6 +140,16 @@ struct DetailView: View {
         ZStack(alignment: .bottom) {
             SkeletonBlock(cornerRadius: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LinearGradient(
+                colors: [Color.pageBackground.opacity(0.7), Color.pageBackground.opacity(0.2), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            LinearGradient(
+                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                startPoint: .top,
+                endPoint: .bottom
+            )
             SkeletonBlock(cornerRadius: 6)
                 .frame(width: 220, height: 36)
                 .padding(.bottom, 16)
@@ -176,6 +186,16 @@ struct DetailView: View {
         ZStack(alignment: .bottomLeading) {
             SkeletonBlock(cornerRadius: 0)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            LinearGradient(
+                colors: [Color.pageBackground.opacity(0.8), Color.pageBackground.opacity(0.3), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            LinearGradient(
+                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                startPoint: .top,
+                endPoint: .bottom
+            )
             HStack(alignment: .bottom, spacing: 24) {
                 SkeletonBlock()
                     .frame(width: 120, height: 180)
@@ -243,6 +263,13 @@ struct DetailView: View {
                     Rectangle().fill(Color.primary.opacity(0.06))
                 }
             }
+
+            // 顶部平滑渐隐到状态栏与导航栏
+            LinearGradient(
+                colors: [Color.pageBackground.opacity(0.7), Color.pageBackground.opacity(0.2), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
 
             // 底部平滑渐隐到页面底色
             LinearGradient(
@@ -429,20 +456,39 @@ struct DetailView: View {
 
     private var banner: some View {
         ZStack {
-            // 背景层：有图铺图、没图铺灰块，占满横幅。
-            let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
-            Group {
+            // 背景层：GeometryReader 铺满并保持填充裁剪
+            GeometryReader { geo in
+                let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
                 if let url = target.url {
                     RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
                 } else {
-                    Rectangle().fill(.quinary)
+                    Rectangle().fill(Color.primary.opacity(0.06))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // 底部渐变：把背景图底部压暗，保证白字可读。
-            LinearGradient(colors: [.black.opacity(0.7), .black.opacity(0.3), .clear],
-                           startPoint: .bottom, endPoint: .top)
+            // 顶部渐隐：平滑过渡到窗口标题栏/导航栏
+            LinearGradient(
+                colors: [Color.pageBackground.opacity(0.85), Color.pageBackground.opacity(0.3), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+
+            // 底部暗部渐变：保证文字和操作按钮在浅色/高亮背景图上的清晰度
+            LinearGradient(
+                colors: [.black.opacity(0.65), .black.opacity(0.2), .clear],
+                startPoint: .bottom,
+                endPoint: .center
+            )
+
+            // 底部平滑渐隐到页面底色：无缝融入下方的正文内容
+            LinearGradient(
+                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
         .frame(height: bannerHeight)
         .overlay(alignment: .bottomLeading) {
@@ -465,9 +511,10 @@ struct DetailView: View {
         if shown.primaryImageTag != nil {
             let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
             RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
+                .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
-                .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
         }
     }
 

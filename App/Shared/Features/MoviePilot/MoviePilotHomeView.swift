@@ -27,6 +27,7 @@ struct MoviePilotHomeView: View {
 
     // MARK: - 搜索状态
     @State private var keyword = ""
+    @State private var submittedKeyword = ""
     @State private var isSearching = false
     @State private var results: [MPMediaInfo] = []
     @State private var searchError: String?
@@ -116,7 +117,7 @@ struct MoviePilotHomeView: View {
     // MARK: - 主体内容
 
     private var isSearchingMode: Bool {
-        !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var mainContent: some View {
@@ -128,7 +129,27 @@ struct MoviePilotHomeView: View {
             }
         }
         .searchable(text: $keyword, prompt: Text("搜索电影、电视剧、番剧…"))
-        .onSubmit(of: .search, search)
+        .onSubmit(of: .search) {
+            let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                submittedKeyword = ""
+                results = []
+                isSearching = false
+                searchError = nil
+                return
+            }
+            submittedKeyword = trimmed
+            search()
+        }
+        .onChange(of: keyword) { _, newValue in
+            if newValue.isEmpty {
+                submittedKeyword = ""
+                results = []
+                isSearching = false
+                searchError = nil
+                searchGeneration += 1
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
@@ -351,7 +372,7 @@ struct MoviePilotHomeView: View {
                         .buttonStyle(.borderedProminent)
                 }
             } else if results.isEmpty {
-                ContentUnavailableView.search(text: keyword)
+                ContentUnavailableView.search(text: submittedKeyword)
             } else {
                 List {
                     if let notice {
@@ -529,7 +550,7 @@ struct MoviePilotHomeView: View {
     }
 
     private func search() {
-        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isSearching else { return }
         searchGeneration += 1
         let generation = searchGeneration
