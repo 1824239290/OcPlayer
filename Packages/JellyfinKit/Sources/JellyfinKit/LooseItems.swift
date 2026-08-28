@@ -82,10 +82,21 @@ enum EmbySanitizer {
             // MediaSources[]（MediaSourceInfo）的 Type 是 MediaSourceType
             // （Default/Grouping/Placeholder）。Emby 会给直连源报 "Folder"
             // 等值，SDK 解不了——洗成 Default（即普通可播放源的语义）。
-            if let type = cleaned["Type"] as? String,
-               type != "Default", type != "Grouping", type != "Placeholder",
-               cleaned["MediaStreams"] != nil {
-                cleaned["Type"] = "Default"
+            // 注意只能作用于 MediaSources[] 内部：顶层 BaseItemDto 自己也有
+            // MediaStreams，靠「有 MediaStreams」判定会把条目的 Type（Episode/
+            // Movie 等 BaseItemKind）误洗成 "Default"，SDK 没有这个 case，
+            // 整个详情解码炸成 "Cannot initialize BaseItemKind from Default"，
+            // 章节列表 / 条目详情全挂。这里按 key 精确处理子树。
+            if var sources = cleaned["MediaSources"] as? [Any] {
+                for index in sources.indices {
+                    guard var source = sources[index] as? [String: Any] else { continue }
+                    if let type = source["Type"] as? String,
+                       type != "Default", type != "Grouping", type != "Placeholder" {
+                        source["Type"] = "Default"
+                    }
+                    sources[index] = sanitizeValue(source)
+                }
+                cleaned["MediaSources"] = sources
             }
             // NameIDPair 形态（Id+Name 同级）的对象在 Emby 上 Id 可能返回数字
             // （Jellyfin 是字符串）：GenreItems / Studios / Networks 全是
@@ -94,7 +105,8 @@ enum EmbySanitizer {
             if cleaned["Name"] != nil, let numID = cleaned["Id"] as? NSNumber {
                 cleaned["Id"] = numID.stringValue
             }
-            return cleaned.mapValues { sanitizeValue($0) }
+            // MediaSources 子树已在上面按 key 精确处理（含内部递归 sanitize）；
+            // mapValues 会对它再过一遍 sanitizeValue，但对已洗过的字典幂等无害。
             return cleaned.mapValues { sanitizeValue($0) }
         case let array as [Any]:
             return array.map { sanitizeValue($0) }

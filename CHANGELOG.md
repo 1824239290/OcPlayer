@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **Emby 章节与条目详情解码失败**：EmbySanitizer 修正 MediaSources[] 内 `Type` 字段（MediaSourceType）的洗白规则原靠「有 MediaStreams」判定，但详情接口顶层 `BaseItemDto` 自身也带 `MediaStreams`，导致条目 `Type`（Episode/Movie 等 `BaseItemKind`）被误洗成 `"Default"`，SDK 解码炸成 "Cannot initialize BaseItemKind from invalid String value Default"，章节列表每次都拉取失败只剩保底。改为按 `MediaSources` key 精确处理子树，顶层 kind 不再被波及。回归测试覆盖 Episode + 顶层 MediaStreams + MediaSources[].Type=Folder 的真实机场景。
+
 ### 播放
 
 - **网络预读缓冲可调**：设置 → 播放 新增「网络预读缓冲」（默认 2 MiB / 8 / 16 / 32 MiB）。公网高延迟服务器（远程 Emby 等）建议 16 MiB 以上，可显著减少播放中的反复缓冲。基于自编译 Erika 内核新增的 `erika_presenter_open_with_options` C API（fork 分支 `feat/http-readahead-option`，已提上游），逐请求生效，本地文件自动忽略。

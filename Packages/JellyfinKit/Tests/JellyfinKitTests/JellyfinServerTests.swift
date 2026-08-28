@@ -957,4 +957,52 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(item.genres, ["动作", "科幻"])
         }
     }
+
+    /// 回归（Emby 真机实测）：详情接口请求 `fields=Chapters`，顶层 BaseItemDto
+    /// 自己就带 `MediaStreams`。旧 sanitizer 靠「有 MediaStreams」判定是
+    /// MediaSourceInfo，把顶层 `Type:"Episode"` 洗成 `"Default"`——SDK 的
+    /// `BaseItemKind` 没有 Default（那是 MediaSourceType 的值），整包炸成
+    /// "Cannot initialize BaseItemKind from invalid String value Default"，
+    /// 章节列表每次都拉取失败只剩保底。修复后顶层 kind 保留为 episode，
+    /// 同时 MediaSources[] 里的 Folder 仍正确洗成 Default。
+    func testEmbyDetailTopLevelKindNotSanitizedAway() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch request.url?.path {
+            case "/emby/Users/user-e/Items/ep-1":
+                // 顶层 Type=Episode + 顶层 MediaStreams（fields=Chapters 带回来），
+                // MediaSources[] 里 Type=Folder（Emby 直连源常见）。
+                return MockURLProtocol.ok(
+                    """
+                    {"Id":"ep-1","Name":"第 1 集","Type":"Episode",
+                     "ParentIndexNumber":1,"IndexNumber":1,
+                     "MediaStreams":[{"Type":"Video","Index":0},
+                                      {"Type":"Subtitle","Index":1}],
+                     "MediaSources":[{"Id":"src-1","Type":"Folder",
+                       "MediaStreams":[{"Type":"Video","Index":0}]}],
+                     "Chapters":[{"StartPositionTicks":0,"Name":"章一"}]}
+                    """,
+                    for: request.url!
+                )
+            default:
+                XCTFail("不该打到 \(request.url?.path ?? "?")")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let item = try await server.item("ep-1")
+            // 顶层 kind 必须仍是 episode（旧实现被洗成 Default → .other）。
+            XCTAssertEqual(item.kind, .episode, "顶层 Type 不应被 MediaSource 规则洗掉")
+            XCTAssertEqual(item.seasonNumber, 1)
+            XCTAssertEqual(item.episodeNumber, 1)
+
+            // chapters() 走同一详情接口，修复前直接抛解码错误。
+            let chapters = try await server.chapters(itemID: "ep-1")
+            XCTAssertEqual(chapters.count, 1, "章节列表应正常解码，不再只剩保底")
+            XCTAssertEqual(chapters.first?.name, "章一")
+        }
+    }
 }
