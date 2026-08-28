@@ -756,7 +756,8 @@ try engine.play()
     // MARK: - 按住快进（右箭头长按 2x，松手恢复）
 
     /// 长按期间暂存的原速；nil = 不在长按态。
-    @ObservationIgnored private(set) var holdFastForwardRate: Double?
+    /// 可观察：2x 提示徽章（PlayerHoldFastForwardBadge）按它显隐。
+    private(set) var holdFastForwardRate: Double?
 
     var isHoldFastForwarding: Bool { holdFastForwardRate != nil }
 

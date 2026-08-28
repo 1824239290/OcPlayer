@@ -116,6 +116,14 @@ struct PlayerScreen: View {
             }
             .allowsHitTesting(true)
 
+            // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
+            VStack(spacing: 0) {
+                PlayerHoldFastForwardBadge()
+                    .padding(.top, holdBadgeTopPadding)
+                Spacer(minLength: 0)
+            }
+            .allowsHitTesting(false)
+
             PlayerScreenshotToast(message: screenshotToast)
         }
         // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
@@ -342,6 +350,14 @@ struct PlayerScreen: View {
         #endif
     }
 
+    /// 2x 徽章的顶部间距：窗口模式避开系统标题栏拖动区（与 HUD 顶栏同一挡位），全屏贴顶。
+    private var holdBadgeTopPadding: CGFloat {
+        #if os(macOS)
+        if !hudIsFullscreen { return 58 }
+        #endif
+        return isNarrow ? 14 : 22
+    }
+
     private func toggleFullscreenFromHUD() {
         #if os(macOS)
         toggleFullscreen()
@@ -399,15 +415,16 @@ struct PlayerScreen: View {
             case .keyDown:
                 if event.isARepeat {
                     controller.beginHoldFastForward()
-                    revealControls()
+                    // 加速期间不唤醒 HUD：提示由独立的 2x 徽章承担，HUD 保持原显隐。
                 }
                 return true
             case .keyUp:
                 if controller.isHoldFastForwarding {
                     controller.endHoldFastForward()
-                } else {
-                    controller.skip(by: 10)
+                    // 长按收尾同样不唤醒 HUD；轻点快进才走 reveal（与左箭头一致）。
+                    return true
                 }
+                controller.skip(by: 10)
                 revealControls()
                 return true
             default:

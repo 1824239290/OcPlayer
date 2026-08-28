@@ -142,6 +142,38 @@ struct PlayerPlaybackErrorBadge: View {
     }
 }
 
+/// 长按右键临时 2 倍速的提示徽章（「▶▶ 2.0x」胶囊，对齐 bilibili 式样）。
+/// 不挂在 HUD 里：加速期间 HUD 保持原显隐状态（可能整层隐藏），徽章独立浮在顶部中央。
+/// 常挂载 + `.opacity` 切换——macOS 上 `.transition` 的移除不被动画化（见 PlayerScreen 注释）。
+struct PlayerHoldFastForwardBadge: View {
+    @Environment(PlaybackController.self) private var controller
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isShowing: Bool { controller.isHoldFastForwarding }
+
+    var body: some View {
+        PlayerHUDPanel(in: Capsule()) {
+            HStack(spacing: 6) {
+                Image(systemName: "forward.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(String(format: "%.1fx", controller.rate))
+                    .font(.system(size: 14, weight: .semibold))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(PlayerHUDPalette.primary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+        }
+        .opacity(isShowing ? 1 : 0)
+        .scaleEffect(isShowing ? 1 : 0.92)
+        .motionAnimation(.easeInOut(duration: 0.18), value: isShowing, reduceMotion: reduceMotion)
+        .allowsHitTesting(false)
+        .accessibilityHidden(!isShowing)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("2 倍速快进中")
+    }
+}
+
 struct PlayerScreenshotToast: View {
     let message: String?
 
