@@ -22,18 +22,26 @@ import Foundation
 @MainActor
 enum MallocPressureRelief {
 
-    /// `stopPlayback()` 收尾时调用：安排 2s / 25s 两拍归还。重复调用会取消上一轮未触发的拍。
+    /// `stopPlayback()` 收尾时调用：安排多拍归还。重复调用会取消上一轮未触发的拍。
     /// Task 捕获的只有本 enum 的静态成员，不持有任何对象——播放器控制器的生命周期与它无关。
+    ///
+    /// 拍位依据真机实测（2026-08-28）：+2s/+25s 时内核媒体会话尚未释放完（malloc 仍 200MB
+    /// 在册，relief 无页可收）；vmmap 显示释放发生在之后一分钟内——内核 demux/prefetch
+    /// 线程不 join、单次 HTTP 读最长阻塞 60s（上游 AimesSoft/Erika#125），析构链条要等它。
+    /// 因此补 +60s/+120s 两拍：前两拍收 Swift 侧立释放的页，后两拍收内核尾巴释放完的页。
+    /// 多拍是幂等 no-op（没有空闲页时 pressure_relief 立即返回），代价可忽略。
     static func scheduleAfterStop() {
         stopTask?.cancel()
+        // 相对间隔（秒）：累计落点 +2s / +25s / +60s / +120s。
+        let beats: [(interval: UInt64, label: String)] = [
+            (2, "stop+2s"), (23, "stop+25s"), (35, "stop+60s"), (60, "stop+120s"),
+        ]
         stopTask = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            await Task.detached { perform(reason: "stop+2s") }.value
-
-            try? await Task.sleep(for: .seconds(23))
-            guard !Task.isCancelled else { return }
-            await Task.detached { perform(reason: "stop+25s") }.value
+            for beat in beats {
+                try? await Task.sleep(for: .seconds(beat.interval))
+                guard !Task.isCancelled else { return }
+                await Task.detached { perform(reason: beat.label) }.value
+            }
         }
     }
 
