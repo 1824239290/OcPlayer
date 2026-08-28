@@ -33,8 +33,11 @@ extension JellyfinServer {
     /// 拉取 Jellyfin `/MediaSegments/{id}` 的 Intro / Outro 片段。
     ///
     /// 这是 Jellyfin 的**智能识别**(片头 / 片尾),比章节名启发式准,有就优先用。
-    /// 该接口在较老版本可能 404 / 被禁用,调用方应捕获失败并回退到章节启发式。
+    /// 该接口是 Jellyfin 插件生态（intro skipper 等）提供的，Emby 上不存在——
+    /// Emby 直接返回空,调用方回退到章节启发式,也省掉每集一条 404 错误日志。
+    /// Jellyfin 较老版本可能 404 / 被禁用,调用方应捕获失败并回退到章节启发式。
     public func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment] {
+        guard profile.kind == .jellyfin else { return [] }
         let result = try await send(
             Paths.getItemSegments(
                 itemID: itemID,

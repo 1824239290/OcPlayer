@@ -322,6 +322,43 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    /// Emby 没有 `/UserPlayedItems/{id}` 新式路由（曾 404），走老式
+    /// `/Users/{uid}/PlayedItems/{id}`（POST / DELETE），与 Views/Resume 同批。
+    func testEmbyMarkPlayedAndUnplayedUseLegacyRoutes() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            switch (request.url?.path, request.httpMethod) {
+            case ("/emby/Users/user-e/PlayedItems/ep-9", "POST"?):
+                let query = TestSupport.queryItems(of: request)
+                XCTAssertEqual(query["userId"], "user-e")
+                return MockURLProtocol.ok(
+                    #"{"Key":"ep-9","Played":true,"PlaybackPositionTicks":0,"PlayedPercentage":100}"#,
+                    for: request.url!
+                )
+            case ("/emby/Users/user-e/PlayedItems/ep-9", "DELETE"?):
+                let query = TestSupport.queryItems(of: request)
+                XCTAssertEqual(query["userId"], "user-e")
+                return MockURLProtocol.ok(
+                    #"{"Key":"ep-9","Played":false,"PlaybackPositionTicks":0,"PlayedPercentage":0}"#,
+                    for: request.url!
+                )
+            default:
+                XCTFail("Emby 不该打到 \(request.url?.path ?? "?") [\(request.httpMethod ?? "?")]")
+                throw URLError(.unsupportedURL)
+            }
+        } with: {
+            let played = try await server.markPlayed(itemID: "ep-9")
+            XCTAssertTrue(played.played)
+
+            let unplayed = try await server.markUnplayed(itemID: "ep-9")
+            XCTAssertFalse(unplayed.played)
+        }
+    }
+
     func testFavoriteItemsFiltersFavoritesAndSortsByMediaCreationDate() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items")
@@ -549,6 +586,23 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(segments[0].endSeconds, 900)
             XCTAssertEqual(segments[1].kind, .outro)
             XCTAssertEqual(segments[1].endSeconds, 11250)
+        }
+    }
+
+    /// `/MediaSegments` 是 Jellyfin 插件端点，Emby 上不存在（曾每集刷一条 404
+    /// error 日志）。Emby 不发请求直接返回空，调用方回退章节启发式。
+    func testMediaSegmentsSkipsEmby() async throws {
+        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
+                                        baseURL: URL(string: "http://nas.local:8096/emby")!,
+                                        userID: "user-e", kind: .emby)
+        let server = JellyfinServer(profile: embyProfile, client: JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
+
+        try await TestSupport.withMock { request in
+            XCTFail("Emby 不该请求 \(request.url?.path ?? "?")")
+            throw URLError(.unsupportedURL)
+        } with: {
+            let segments = try await server.mediaSegments(itemID: "mv-1")
+            XCTAssertTrue(segments.isEmpty, "Emby 应不发请求直接返回空")
         }
     }
 

@@ -302,22 +302,43 @@ public struct JellyfinServer: Sendable {
         .items?.map(\.domainItem) ?? []
     }
 
-    /// 标记条目已看完（Jellyfin `POST /UserPlayedItems/{id}`）。
+    /// 标记条目已看完（Jellyfin `POST /UserPlayedItems/{id}`；Emby 只有老式
+    /// `POST /Users/{uid}/PlayedItems/{id}`，与 Views/Resume 同批旧路由）。
     /// 返回服务端最新的播放状态快照，便于 UI 就地更新。
     @discardableResult
     public func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
-        let data = try await send(
-            Paths.markPlayedItem(itemID: itemID, userID: profile.userID)
-        )
+        let request: Request<UserItemDataDto>
+        switch profile.kind {
+        case .emby:
+            request = Request(
+                path: "/Users/\(profile.userID)/PlayedItems/\(itemID)",
+                method: "POST",
+                query: [("userId", profile.userID)],
+                id: "MarkPlayedItem"
+            )
+        case .jellyfin:
+            request = Paths.markPlayedItem(itemID: itemID, userID: profile.userID)
+        }
+        let data = try await send(request)
         return data.domainPlayState
     }
 
-    /// 取消已看标记（Jellyfin `DELETE /UserPlayedItems/{id}`）。
+    /// 取消已看标记（Jellyfin `DELETE /UserPlayedItems/{id}`；Emby 老式 DELETE）。
     @discardableResult
     public func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
-        let data = try await send(
-            Paths.markUnplayedItem(itemID: itemID, userID: profile.userID)
-        )
+        let request: Request<UserItemDataDto>
+        switch profile.kind {
+        case .emby:
+            request = Request(
+                path: "/Users/\(profile.userID)/PlayedItems/\(itemID)",
+                method: "DELETE",
+                query: [("userId", profile.userID)],
+                id: "MarkUnplayedItem"
+            )
+        case .jellyfin:
+            request = Paths.markUnplayedItem(itemID: itemID, userID: profile.userID)
+        }
+        let data = try await send(request)
         return data.domainPlayState
     }
 
