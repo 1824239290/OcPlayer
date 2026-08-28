@@ -26,8 +26,10 @@ enum EmbySanitizer {
 
     /// `Type` 这字段名被多个结构共用：People[].Type 是 PersonKind、
     /// MediaStream[].Type 是 MediaStreamType、MediaSegments[].Type 是
-    /// MediaSegmentType。这些值 SDK 本来就能解，**绝不能洗**——否则"Actor"
-    /// 被压成"Folder"直接炸掉演员表。
+    /// MediaSegmentType、MediaSources[].Type 是 MediaSourceType。这些值 SDK
+    /// 本来就能解，**绝不能洗**——否则"Actor"被压成"Folder"直接炸掉演员表；
+    /// MediaSourceType 的 "Default" 也会被 Rule 1 压回 "Folder"（SDK 的
+    /// MediaSourceType 没有 Folder case），导致 PlaybackInfo / 详情解码失败。
     private static let knownNonItemTypeValues: Set<String> = [
         // PersonKind（小写）
         "unknown", "actor", "director", "composer", "writer", "gueststar", "producer",
@@ -37,6 +39,10 @@ enum EmbySanitizer {
         // MediaStreamType / MediaSegmentType（小写）
         "audio", "video", "subtitle", "embeddedimage", "data", "lyric",
         "commercial", "preview", "recap", "outro", "intro",
+        // MediaSourceType（小写）：Default / Grouping / Placeholder。
+        // MediaSources handler 把 Emby 报的杂值洗成 "Default" 后，外层
+        // mapValues 递归回来 Rule 1 不能再碰它——否则压回 Folder 炸解码。
+        "default", "grouping", "placeholder",
     ]
 
     /// 对根为对象（QueryResult 信封）或数组（/Items/Latest 裸数组）的响应做递归洗白。
@@ -94,7 +100,7 @@ enum EmbySanitizer {
                        type != "Default", type != "Grouping", type != "Placeholder" {
                         source["Type"] = "Default"
                     }
-                    sources[index] = sanitizeValue(source)
+                    sources[index] = source
                 }
                 cleaned["MediaSources"] = sources
             }

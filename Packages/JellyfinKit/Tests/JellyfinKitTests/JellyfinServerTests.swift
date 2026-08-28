@@ -941,7 +941,7 @@ final class JellyfinServerTests: XCTestCase {
                      "Genres":["动作","科幻"],
                      "GenreItems":[{"Id":28,"Name":"动作"},{"Id":9527,"Name":"科幻"}],
                      "Studios":[{"Id":100,"Name":"MAPPA"}],
-                     "MediaSources":[{"Id":"src-1","Type":"Folder",
+                     "MediaSources":[{"Id":"src-1","Name":"与剧 S01E01.mkv","Type":"Folder",
                        "MediaStreams":[{"Type":"Video","Index":0}]}]}
                     """,
                     for: request.url!
@@ -975,14 +975,16 @@ final class JellyfinServerTests: XCTestCase {
             switch request.url?.path {
             case "/emby/Users/user-e/Items/ep-1":
                 // 顶层 Type=Episode + 顶层 MediaStreams（fields=Chapters 带回来），
-                // MediaSources[] 里 Type=Folder（Emby 直连源常见）。
+                // MediaSources[] 里 Type=Folder（Emby 直连源常见）+ Name（Emby 一定
+                // 带，就是文件名）。Name 是关键：旧回归里 Rule 1 把 handler 刚设好
+                // 的 "Default" 又压回 "Folder"（Id+Name 都在），炸 MediaSourceType。
                 return MockURLProtocol.ok(
                     """
                     {"Id":"ep-1","Name":"第 1 集","Type":"Episode",
                      "ParentIndexNumber":1,"IndexNumber":1,
                      "MediaStreams":[{"Type":"Video","Index":0},
                                       {"Type":"Subtitle","Index":1}],
-                     "MediaSources":[{"Id":"src-1","Type":"Folder",
+                     "MediaSources":[{"Id":"src-1","Name":"剧 S01E01.mkv","Type":"Folder",
                        "MediaStreams":[{"Type":"Video","Index":0}]}],
                      "Chapters":[{"StartPositionTicks":0,"Name":"章一"}]}
                     """,
