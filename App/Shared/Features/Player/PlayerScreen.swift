@@ -5,6 +5,8 @@ import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 import Combine
+#elseif os(iOS)
+import UIKit
 #endif
 
 /// 全 App 覆盖式播放器（Infuse 风格悬浮控件）：
@@ -36,6 +38,12 @@ struct PlayerScreen: View {
     /// 键盘监听器引用（安装后持有，退出播放器时移除）。用 NSEvent local monitor 而不是
     /// `.onKeyPress`：后者要求视图先拿到键盘焦点，覆盖层播放器根本抢不到焦点，按键会静默丢失。
     @State private var keyMonitor: Any?
+    #endif
+    #if os(iOS)
+    /// 画面手势层尺寸（左右半屏分界、纵滑量程都按它折算）。
+    @State private var panAreaSize: CGSize = .zero
+    /// 活动中的滑动手势；nil = 手指不在屏上。驱动 seek 预览条与亮度/音量 OSD。
+    @State private var panSession: PlayerPanSession?
     #endif
 
     var body: some View {
@@ -124,6 +132,31 @@ struct PlayerScreen: View {
             }
             .allowsHitTesting(false)
 
+            #if os(iOS)
+            // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
+            if let session = panSession, session.mode == .seek {
+                PlayerSeekPreviewBar(
+                    fraction: PlayerPanGestureModel.fraction(
+                        seconds: session.previewSeconds,
+                        duration: session.durationSeconds
+                    ),
+                    targetSeconds: session.previewSeconds,
+                    durationSeconds: session.durationSeconds
+                )
+            }
+            if let session = panSession, session.mode != .seek {
+                VStack(spacing: 0) {
+                    PlayerAdjustOSDBadge(
+                        systemImage: session.mode == .brightness
+                            ? "sun.max.fill" : "speaker.wave.2.fill",
+                        value: session.verticalValue
+                    )
+                    .padding(.top, 14)
+                    Spacer(minLength: 0)
+                }
+            }
+            #endif
+
             PlayerScreenshotToast(message: screenshotToast)
         }
         // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
@@ -131,6 +164,10 @@ struct PlayerScreen: View {
         .motionAnimation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible, reduceMotion: reduceMotion)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
         .motionAnimation(.easeInOut(duration: 0.2), value: controller.state.state, reduceMotion: reduceMotion)
+        #if os(iOS)
+        // 滑动手势预览层（seek 进度条 / OSD）的出现消失过渡：跟着手势模式走。
+        .motionAnimation(.easeInOut(duration: 0.15), value: panSession?.mode, reduceMotion: reduceMotion)
+        #endif
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)
@@ -251,6 +288,9 @@ struct PlayerScreen: View {
             // （取消准备 / 注销这两条路只清 presentedPlayer，不停引擎，
             // 所以这里不能"按当前状态推导"，见 releaseSystemPlaybackState 注释。）
             controller.releaseSystemPlaybackState()
+            // 长按 2x 的兜底收尾（幂等）：iOS 手势被系统打断收不到抬起、
+            // macOS keyUp 丢失时也走这里。正常路径 onPressingChanged / keyUp 已先收。
+            controller.endHoldFastForward()
         }
         #if os(macOS)
         .onChange(of: controller.state.videoParams) { _, params in
@@ -263,7 +303,6 @@ struct PlayerScreen: View {
             playerLog.info("PlayerScreen onDisappear")
             PlaybackLog.append("PlayerScreen onDisappear")
             PlayerWindowFitter.restore()
-            controller.endHoldFastForward()
             uninstallKeyMonitor()
         }
         #endif
@@ -280,8 +319,124 @@ struct PlayerScreen: View {
             #else
             .onTapGesture(count: 2) { controller.togglePlayPause() }
             .onTapGesture { toggleControls() }
+            // 长按 = 临时 2 倍速（松手恢复）。与 macOS 右箭头共用 controller 状态机。
+            // 滑动已就位时不进 2x：横滑中途按住不动不该转成长按加速。
+            .onLongPressGesture(minimumDuration: 0.35) {
+                guard panSession == nil else { return }
+                controller.beginHoldFastForward()
+            } onPressingChanged: { pressing in
+                // 抬指 / 被系统打断（控制中心等）都会收到 false，幂等收尾。
+                if !pressing { controller.endHoldFastForward() }
+            }
+            // 拖动 = 横滑 seek / 左右半屏纵滑亮度音量。minimumDistance 让轻点仍走 tap 手势。
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 14)
+                    .onChanged { handlePanChanged($0) }
+                    .onEnded { handlePanEnded($0) }
+            )
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { panAreaSize = $0 }
             #endif
     }
+
+    // MARK: - iOS 滑动手势（横滑 seek / 纵滑亮度音量）
+
+    #if os(iOS)
+    private func handlePanChanged(_ value: DragGesture.Value) {
+        // 长按 2x 已就位时忽略滑动：手势互斥，2x 优先。
+        guard !controller.isHoldFastForwarding else { return }
+        if panSession != nil {
+            updatePan(translation: value.translation)
+            return
+        }
+        guard panAreaSize.width > 1, panAreaSize.height > 1 else { return }
+        guard let mode = PlayerPanGestureModel.mode(
+            translation: value.translation,
+            startX: value.startLocation.x,
+            width: panAreaSize.width
+        ) else { return }
+        var session = PlayerPanSession(
+            mode: mode,
+            startSeconds: durationSeconds(controller.state.position),
+            durationSeconds: durationSeconds(controller.state.duration)
+        )
+        switch mode {
+        case .seek:
+            // 没拿到时长无处可 seek，这次拖动不建会话。
+            guard session.durationSeconds > 0 else { return }
+            session.previewSeconds = session.startSeconds
+        case .brightness:
+            session.verticalStart = currentScreenBrightness()
+            session.verticalValue = session.verticalStart
+        case .volume:
+            session.verticalStart = controller.volume
+            session.verticalValue = controller.volume
+        }
+        panSession = session
+        updatePan(translation: value.translation)
+    }
+
+    private func updatePan(translation: CGSize) {
+        guard var session = panSession else { return }
+        switch session.mode {
+        case .seek:
+            session.previewSeconds = PlayerPanGestureModel.seekTarget(
+                startSeconds: session.startSeconds,
+                translation: translation.width,
+                width: panAreaSize.width,
+                duration: session.durationSeconds
+            )
+        case .brightness:
+            let value = PlayerPanGestureModel.verticalTarget(
+                start: session.verticalStart,
+                translation: translation.height,
+                extent: panAreaSize.height
+            )
+            session.verticalValue = value
+            keyWindowSceneScreen?.brightness = CGFloat(value)
+        case .volume:
+            let value = PlayerPanGestureModel.verticalTarget(
+                start: session.verticalStart,
+                translation: translation.height,
+                extent: panAreaSize.height
+            )
+            session.verticalValue = value
+            controller.applyVolume(value)
+        }
+        panSession = session
+    }
+
+    private func handlePanEnded(_ value: DragGesture.Value) {
+        guard let session = panSession else { return }
+        panSession = nil
+        switch session.mode {
+        case .seek:
+            // 拖动中只出预览，松手才真正跳转（与 HUD 进度条同一 seek 通道）。
+            controller.seek(toFraction: PlayerPanGestureModel.fraction(
+                seconds: session.previewSeconds,
+                duration: session.durationSeconds
+            ))
+        case .brightness, .volume:
+            break  // 已实时生效
+        }
+    }
+
+    private var keyWindowSceneScreen: UIScreen? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .screen
+    }
+
+    private func currentScreenBrightness() -> Double {
+        Double(keyWindowSceneScreen?.brightness ?? 0.5)
+    }
+
+    private func durationSeconds(_ duration: Duration) -> Double {
+        Double(duration.microseconds) / 1_000_000
+    }
+    #endif
 
     // MARK: - 显隐控制
 
