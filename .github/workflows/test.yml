@@ -67,6 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           for pkg in \
+              Packages/CoreModel \
               Packages/DiagnosticsKit \
               Packages/PlaybackKit \
               Packages/DanmakuKit \
