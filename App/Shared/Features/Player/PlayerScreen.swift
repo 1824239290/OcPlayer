@@ -44,6 +44,31 @@ struct PlayerScreen: View {
     @State private var panAreaSize: CGSize = .zero
     /// 活动中的滑动手势；nil = 手指不在屏上。驱动 seek 预览条与亮度/音量 OSD。
     @State private var panSession: PlayerPanSession?
+    /// 一次触摸的起点（nil = 手指不在屏上）。单击/双击/长按全靠它计时判定。
+    @State private var touchStart: TouchStart?
+    /// 本触摸最近一次位移；长按定时器到点时判断「手指是否还停在原地」用。
+    @State private var touchTranslation: CGSize = .zero
+    /// 上一次轻点时刻（双击判定窗口）。
+    @State private var lastTapDate: Date?
+    /// 单击延迟任务：等双击窗口过期才切 HUD，第二击来了就取消。
+    @State private var singleTapTask: Task<Void, Never>?
+    /// 长按判定任务：到点仍停在原地才进 2x。
+    @State private var holdTask: Task<Void, Never>?
+
+    struct TouchStart {
+        let date: Date
+        let location: CGPoint
+    }
+
+    /// 触摸判定阈值。移动判定统一用 slop；时间用秒（Date 差值）或 Duration（Task.sleep）。
+    private enum TouchLimits {
+        static let holdDuration: Duration = .milliseconds(350)
+        static let tapMaxDuration: TimeInterval = 0.3
+        static let movementSlop: CGFloat = 12
+        static let panThreshold: CGFloat = 14
+        static let doubleTapInterval: TimeInterval = 0.35
+        static let singleTapDelay: Duration = .milliseconds(320)
+    }
     #endif
 
     var body: some View {
@@ -289,8 +314,14 @@ struct PlayerScreen: View {
             // 所以这里不能"按当前状态推导"，见 releaseSystemPlaybackState 注释。）
             controller.releaseSystemPlaybackState()
             // 长按 2x 的兜底收尾（幂等）：iOS 手势被系统打断收不到抬起、
-            // macOS keyUp 丢失时也走这里。正常路径 onPressingChanged / keyUp 已先收。
+            // macOS keyUp 丢失时也走这里。正常路径触摸状态机 / keyUp 已先收。
             controller.endHoldFastForward()
+            #if os(iOS)
+            holdTask?.cancel()
+            singleTapTask?.cancel()
+            touchStart = nil
+            lastTapDate = nil
+            #endif
         }
         #if os(macOS)
         .onChange(of: controller.state.videoParams) { _, params in
@@ -317,42 +348,74 @@ struct PlayerScreen: View {
             .onTapGesture(count: 2) { toggleFullscreen() }
             .onTapGesture { toggleControls() }
             #else
-            .onTapGesture(count: 2) { controller.togglePlayPause() }
-            .onTapGesture { toggleControls() }
-            // 长按 = 临时 2 倍速（松手恢复）。与 macOS 右箭头共用 controller 状态机。
-            // 滑动已就位时不进 2x：横滑中途按住不动不该转成长按加速。
-            .onLongPressGesture(minimumDuration: 0.35) {
-                guard panSession == nil else { return }
-                controller.beginHoldFastForward()
-            } onPressingChanged: { pressing in
-                // 抬指 / 被系统打断（控制中心等）都会收到 false，幂等收尾。
-                if !pressing { controller.endHoldFastForward() }
-            }
-            // 拖动 = 横滑 seek / 左右半屏纵滑亮度音量。minimumDistance 让轻点仍走 tap 手势。
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 14)
-                    .onChanged { handlePanChanged($0) }
-                    .onEnded { handlePanEnded($0) }
-            )
+            // iOS 画面手势（单击 HUD / 双击暂停 / 长按 2x / 滑动 seek·亮度·音量）
+            // 由**一个** minimumDistance = 0 的 DragGesture 统一计时判定。
+            // SwiftUI 的 tap / longPress 独立仲裁和滑动手势叠在一起抢不出稳定
+            // 优先级（实测双击会被吞），自己分类是确定性的，行为同 bilibili。
+            .gesture(playerTouchGesture)
             .onGeometryChange(for: CGSize.self) { proxy in
                 proxy.size
             } action: { panAreaSize = $0 }
             #endif
     }
 
-    // MARK: - iOS 滑动手势（横滑 seek / 纵滑亮度音量）
+    // MARK: - iOS 画面触摸状态机（单击 / 双击 / 长按 2x / 滑动）
 
     #if os(iOS)
-    private func handlePanChanged(_ value: DragGesture.Value) {
-        // 长按 2x 已就位时忽略滑动：手势互斥，2x 优先。
+    private var playerTouchGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { handleTouchChanged($0) }
+            .onEnded { handleTouchEnded($0) }
+    }
+
+    private func handleTouchChanged(_ value: DragGesture.Value) {
+        if let existing = touchStart {
+            // 极少见：上次触摸被系统手势打断没收尾（onEnded 没来）。
+            // 不在 2x / 滑动中且明显超时，就当新触摸重新开始。
+            let stale = Date().timeIntervalSince(existing.date) > 2
+                && !controller.isHoldFastForwarding && panSession == nil
+            if !stale {
+                touchTranslation = value.translation
+                classifyPanIfNeeded(at: value)
+                return
+            }
+            touchStart = nil
+        }
+        touchStart = TouchStart(date: Date(), location: value.startLocation)
+        touchTranslation = value.translation
+        scheduleHoldDetection()
+    }
+
+    /// 长按判定：到点时手指仍在屏上、没滑走、不在别的手势里，进临时 2 倍速。
+    private func scheduleHoldDetection() {
+        holdTask?.cancel()
+        holdTask = Task { @MainActor in
+            try? await Task.sleep(for: TouchLimits.holdDuration)
+            guard !Task.isCancelled else { return }
+            guard touchStart != nil,
+                  abs(touchTranslation.width) < TouchLimits.movementSlop,
+                  abs(touchTranslation.height) < TouchLimits.movementSlop,
+                  panSession == nil,
+                  !controller.isHoldFastForwarding
+            else { return }
+            controller.beginHoldFastForward()
+        }
+    }
+
+    /// 滑动分类（横滑 seek / 左右半屏亮度音量）。长按 2x 已就位时忽略：互斥，2x 优先。
+    private func classifyPanIfNeeded(at value: DragGesture.Value) {
         guard !controller.isHoldFastForwarding else { return }
+        let translation = value.translation
+        guard abs(translation.width) >= TouchLimits.panThreshold
+            || abs(translation.height) >= TouchLimits.panThreshold
+        else { return }
         if panSession != nil {
-            updatePan(translation: value.translation)
+            updatePan(translation: translation)
             return
         }
         guard panAreaSize.width > 1, panAreaSize.height > 1 else { return }
         guard let mode = PlayerPanGestureModel.mode(
-            translation: value.translation,
+            translation: translation,
             startX: value.startLocation.x,
             width: panAreaSize.width
         ) else { return }
@@ -374,7 +437,7 @@ struct PlayerScreen: View {
             session.verticalValue = controller.volume
         }
         panSession = session
-        updatePan(translation: value.translation)
+        updatePan(translation: translation)
     }
 
     private func updatePan(translation: CGSize) {
@@ -407,12 +470,63 @@ struct PlayerScreen: View {
         panSession = session
     }
 
-    private func handlePanEnded(_ value: DragGesture.Value) {
-        guard let session = panSession else { return }
-        panSession = nil
+    private func handleTouchEnded(_ value: DragGesture.Value) {
+        holdTask?.cancel()
+        holdTask = nil
+        let start = touchStart
+        touchStart = nil
+        touchTranslation = .zero
+
+        // 长按 2x 中抬指：收尾恢复原速（与 macOS 右箭头共用 controller 状态机）。
+        if controller.isHoldFastForwarding {
+            controller.endHoldFastForward()
+            return
+        }
+        // 滑动中抬指：seek 落盘（拖动中只出预览，松手才跳）；亮度音量已实时生效。
+        if let session = panSession {
+            panSession = nil
+            commitPan(session)
+            return
+        }
+        // 轻点判定：时间短、位移小。
+        guard let start,
+              PlayerPanGestureModel.isQuickTap(
+                elapsed: Date().timeIntervalSince(start.date),
+                translation: value.translation,
+                slop: TouchLimits.movementSlop,
+                maxDuration: TouchLimits.tapMaxDuration
+              )
+        else { return }
+        handleTap()
+    }
+
+    /// 单击 / 双击分流：第二击落到窗口内立即切播放暂停；单击延迟到窗口过期才切 HUD。
+    private func handleTap() {
+        let now = Date()
+        if let last = lastTapDate,
+           PlayerPanGestureModel.isDoubleTap(
+            interval: now.timeIntervalSince(last),
+            window: TouchLimits.doubleTapInterval
+           ) {
+            singleTapTask?.cancel()
+            singleTapTask = nil
+            lastTapDate = nil
+            controller.togglePlayPause()
+            return
+        }
+        lastTapDate = now
+        singleTapTask?.cancel()
+        singleTapTask = Task { @MainActor in
+            try? await Task.sleep(for: TouchLimits.singleTapDelay)
+            guard !Task.isCancelled else { return }
+            lastTapDate = nil
+            toggleControls()
+        }
+    }
+
+    private func commitPan(_ session: PlayerPanSession) {
         switch session.mode {
         case .seek:
-            // 拖动中只出预览，松手才真正跳转（与 HUD 进度条同一 seek 通道）。
             controller.seek(toFraction: PlayerPanGestureModel.fraction(
                 seconds: session.previewSeconds,
                 duration: session.durationSeconds

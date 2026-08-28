@@ -111,4 +111,28 @@ final class PlayerPanGestureModelTests: XCTestCase {
         XCTAssertEqual(PlayerPanGestureModel.fraction(seconds: 999, duration: 120), 1, accuracy: 0.001)
         XCTAssertEqual(PlayerPanGestureModel.fraction(seconds: 10, duration: 0), 0, accuracy: 0.001)
     }
+
+    // MARK: - 轻点 / 双击判定
+
+    func testQuickTapRequiresShortPressAndSmallMovement() {
+        XCTAssertTrue(PlayerPanGestureModel.isQuickTap(
+            elapsed: 0.15, translation: CGSize(width: 3, height: 2), slop: 12, maxDuration: 0.3))
+        // 按太久是长按，不是轻点。
+        XCTAssertFalse(PlayerPanGestureModel.isQuickTap(
+            elapsed: 0.5, translation: .zero, slop: 12, maxDuration: 0.3))
+        // 滑走了是拖动，不是轻点。
+        XCTAssertFalse(PlayerPanGestureModel.isQuickTap(
+            elapsed: 0.1, translation: CGSize(width: 40, height: 0), slop: 12, maxDuration: 0.3))
+        XCTAssertFalse(PlayerPanGestureModel.isQuickTap(
+            elapsed: 0.1, translation: CGSize(width: 0, height: 40), slop: 12, maxDuration: 0.3))
+    }
+
+    func testDoubleTapWindow() {
+        XCTAssertTrue(PlayerPanGestureModel.isDoubleTap(interval: 0.2, window: 0.35))
+        XCTAssertTrue(PlayerPanGestureModel.isDoubleTap(interval: 0.35, window: 0.35))
+        // 超窗是两次独立单击。
+        XCTAssertFalse(PlayerPanGestureModel.isDoubleTap(interval: 0.5, window: 0.35))
+        // 负间隔是脏数据（时钟抖动），不当双击。
+        XCTAssertFalse(PlayerPanGestureModel.isDoubleTap(interval: -0.1, window: 0.35))
+    }
 }

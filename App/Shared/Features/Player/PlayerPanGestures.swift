@@ -43,6 +43,23 @@ enum PlayerPanGestureModel {
         guard duration > 0 else { return 0 }
         return min(max(seconds / duration, 0), 1)
     }
+
+    /// 轻点判定：按压时长短、位移在 slop 内（单击 / 双击共用的前置条件）。
+    static func isQuickTap(
+        elapsed: TimeInterval,
+        translation: CGSize,
+        slop: CGFloat,
+        maxDuration: TimeInterval
+    ) -> Bool {
+        elapsed < maxDuration
+            && abs(translation.width) < slop
+            && abs(translation.height) < slop
+    }
+
+    /// 双击判定：两击间隔落在窗口内。
+    static func isDoubleTap(interval: TimeInterval, window: TimeInterval) -> Bool {
+        interval >= 0 && interval <= window
+    }
 }
 
 /// 一次滑动的全程状态（nil = 手指不在屏上 / 无活动手势）。
