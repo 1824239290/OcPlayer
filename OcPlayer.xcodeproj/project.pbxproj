@@ -7,16 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1A00000000000000000000D2 /* Get in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000D0 /* Get */; };
-		1A00000000000000000000D3 /* JellyfinAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000D1 /* JellyfinAPI */; };
-		1A00000000000000000000D4 /* JellyfinKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000053 /* JellyfinKit */; };
-		1A00000000000000000000D5 /* NIOCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E0 /* NIOCore */; };
-		1A00000000000000000000D6 /* NIOPosix in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E1 /* NIOPosix */; };
-		1A00000000000000000000D7 /* NIO in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E2 /* NIO */; };
-		1A00000000000000000000D8 /* NIOConcurrencyHelpers in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E3 /* NIOConcurrencyHelpers */; };
-		1A00000000000000000000D9 /* NIOFoundationCompat in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E4 /* NIOFoundationCompat */; };
-		1A00000000000000000000DA /* NIOTLS in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E5 /* NIOTLS */; };
-		1A00000000000000000000DB /* NIOTransportServices in Frameworks */ = {isa = PBXBuildFile; productRef = 1A00000000000000000000E6 /* NIOTransportServices */; };
 		1A0000000000000000000042 /* ErikaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000041 /* ErikaKit */; };
 		1A0000000000000000000043 /* ErikaKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000041 /* ErikaKit */; };
 		1A0000000000000000000054 /* CoreModel in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000052 /* CoreModel */; };
@@ -130,16 +120,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1A00000000000000000000D4 /* JellyfinKit in Frameworks */,
-				1A00000000000000000000D2 /* Get in Frameworks */,
-				1A00000000000000000000D3 /* JellyfinAPI in Frameworks */,
-				1A00000000000000000000D5 /* NIOCore in Frameworks */,
-				1A00000000000000000000D6 /* NIOPosix in Frameworks */,
-				1A00000000000000000000D7 /* NIO in Frameworks */,
-				1A00000000000000000000D8 /* NIOConcurrencyHelpers in Frameworks */,
-				1A00000000000000000000D9 /* NIOFoundationCompat in Frameworks */,
-				1A00000000000000000000DA /* NIOTLS in Frameworks */,
-				1A00000000000000000000DB /* NIOTransportServices in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,16 +243,6 @@
 			);
 			name = "OcPlayerTests-iOS";
 			packageProductDependencies = (
-				1A0000000000000000000053 /* JellyfinKit */,
-				1A00000000000000000000D0 /* Get */,
-				1A00000000000000000000D1 /* JellyfinAPI */,
-				1A00000000000000000000E0 /* NIOCore */,
-				1A00000000000000000000E1 /* NIOPosix */,
-				1A00000000000000000000E2 /* NIO */,
-				1A00000000000000000000E3 /* NIOConcurrencyHelpers */,
-				1A00000000000000000000E4 /* NIOFoundationCompat */,
-				1A00000000000000000000E5 /* NIOTLS */,
-				1A00000000000000000000E6 /* NIOTransportServices */,
 			);
 			productName = "OcPlayerTests-iOS";
 			productReference = 1A00000000000000000000A4 /* OcPlayerTests-iOS.xctest */;
@@ -793,42 +763,6 @@
 		1A0000000000000000000095 /* MoviePilotKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MoviePilotKit;
-		};
-		1A00000000000000000000D0 /* Get */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Get;
-		};
-		1A00000000000000000000D1 /* JellyfinAPI */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = JellyfinAPI;
-		};
-		1A00000000000000000000E0 /* NIOCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOCore;
-		};
-		1A00000000000000000000E1 /* NIOPosix */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOPosix;
-		};
-		1A00000000000000000000E2 /* NIO */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIO;
-		};
-		1A00000000000000000000E3 /* NIOConcurrencyHelpers */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOConcurrencyHelpers;
-		};
-		1A00000000000000000000E4 /* NIOFoundationCompat */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOFoundationCompat;
-		};
-		1A00000000000000000000E5 /* NIOTLS */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOTLS;
-		};
-		1A00000000000000000000E6 /* NIOTransportServices */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = NIOTransportServices;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
