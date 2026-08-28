@@ -26,7 +26,7 @@ final class ExternalSubtitleTests: XCTestCase {
                 {"Items":[{
                   "Id":"item-7","Name":"沙丘 2","Type":"Movie",
                   "MediaSources":[{
-                    "Id":"item-7",
+                    "Id":"src-1",
                     "MediaStreams":[
                       {"Index":0,"Type":"Video","Codec":"hevc"},
                       {"Index":1,"Type":"Audio","Codec":"truehd"},
@@ -48,8 +48,9 @@ final class ExternalSubtitleTests: XCTestCase {
             XCTAssertEqual(subs.map(\.index), [2, 3])
             XCTAssertEqual(subs[0].fileExtension, "srt")
             XCTAssertEqual(subs[0].title, "简体中文")
-            XCTAssertEqual(subs[0].remotePath, "/Videos/item-7/item-7/Subtitles/2/Stream.srt")
-            XCTAssertEqual(subs[1].remotePath, "/Videos/item-7/item-7/Subtitles/3/Stream.ass")
+            // 下载路径第二段必须是 MediaSource 的真实 Id（多源条目 != itemId）
+            XCTAssertEqual(subs[0].remotePath, "/Videos/item-7/src-1/Subtitles/2/Stream.srt")
+            XCTAssertEqual(subs[1].remotePath, "/Videos/item-7/src-1/Subtitles/3/Stream.ass")
         }
     }
 
@@ -57,15 +58,15 @@ final class ExternalSubtitleTests: XCTestCase {
         let body = "1\n00:00:01,000 --> 00:00:02,000\n你好\n"
         var capturedAuth: String?
         try await TestSupport.withMock { request in
-            XCTAssertEqual(request.url?.path, "/Videos/item-7/item-7/Subtitles/2/Stream.srt")
+            XCTAssertEqual(request.url?.path, "/Videos/item-7/src-1/Subtitles/2/Stream.srt")
             capturedAuth = request.value(forHTTPHeaderField: "Authorization")
             let response = HTTPURLResponse(url: request.url!, statusCode: 200,
                                            httpVersion: nil,
                                            headerFields: ["Content-Type": "text/plain"])!
             return (response, Data(body.utf8))
         } with: {
-            let sub = ExternalSubtitle(itemID: "item-7", index: 2, title: "简体中文",
-                                       language: "chi", codec: "subrip")
+            let sub = ExternalSubtitle(itemID: "item-7", mediaSourceID: "src-1", index: 2,
+                                       title: "简体中文", language: "chi", codec: "subrip")
             let url = try await Self.server().downloadSubtitle(sub)
             defer { try? FileManager.default.removeItem(at: url) }
 

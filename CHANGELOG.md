@@ -6,7 +6,8 @@
 
 ### 修复
 
-- **Emby 章节与条目详情解码失败**：EmbySanitizer 修正 MediaSources[] 内 `Type` 字段（MediaSourceType）的洗白规则原靠「有 MediaStreams」判定，但详情接口顶层 `BaseItemDto` 自身也带 `MediaStreams`，导致条目 `Type`（Episode/Movie 等 `BaseItemKind`）被误洗成 `"Default"`，SDK 解码炸成 "Cannot initialize BaseItemKind from invalid String value Default"，章节列表每次都拉取失败只剩保底。改为按 `MediaSources` key 精确处理子树，顶层 kind 不再被波及。回归测试覆盖 Episode + 顶层 MediaStreams + MediaSources[].Type=Folder 的真实机场景。
+- **Emby 外挂字幕下载路径**：字幕下载路由 `/Videos/{itemId}/{mediaSourceId}/Subtitles/...` 的第二段原先硬编码为条目 id，多版本条目（同一影片挂多个 MediaSource）会 404。现从 `/Items` 响应透传真实的 MediaSource id；单源条目行为不变。
+- **Emby 章节与条目详情解码失败**：EmbySanitizer 修正 MediaSources[] 内 `Type` 字段（MediaSourceType）的洗白规则原靠「有 MediaStreams」判定，但详情接口顶层 `BaseItemDto` 自身也带 `MediaStreams`，导致条目 `Type`（Episode/Movie 等 `BaseItemKind`）被误洗成 `"Default"`，SDK 解码炸成 "Cannot initialize BaseItemKind from invalid String value Default"，章节列表每次都拉取失败只剩保底。改为按 `MediaSources` key 精确处理子树，顶层 kind 不再被波及；并把 MediaSourceType 的值（Default/Grouping/Placeholder）加入 Type→Folder 规则的排除集，避免洗白结果被二次压回 "Folder"。回归测试覆盖 Episode + 顶层 MediaStreams + MediaSources[].Type=Folder 的真实机场景。
 
 ### 播放
 

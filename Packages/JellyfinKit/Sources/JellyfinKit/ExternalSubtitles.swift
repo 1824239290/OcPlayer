@@ -16,14 +16,18 @@ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
     /// 下载路径（不带 host、不带 token —— 认证走请求头）。
     public let remotePath: String
 
-    init(itemID: String, index: Int, title: String?, language: String?, codec: String) {
+    init(itemID: String, mediaSourceID: String? = nil, index: Int, title: String?, language: String?, codec: String) {
         self.id = "\(itemID)#\(index)"
         self.index = index
         self.title = title
         self.language = language
         self.codec = codec
         self.fileExtension = Self.fileExtension(forCodec: codec) ?? codec
-        self.remotePath = "/Videos/\(itemID)/\(itemID)/Subtitles/\(index)/Stream.\(fileExtension)"
+        // Jellyfin/Emby 的外挂字幕路由是 /Videos/{itemId}/{mediaSourceId}/Subtitles/
+        // {index}/Stream.{format}。单源条目 mediaSourceId 通常 == itemId，但多源
+        // （同一 item 挂多个版本）时必须用真正的 mediaSourceId，否则 404。
+        let resolvedMediaSourceID = mediaSourceID ?? itemID
+        self.remotePath = "/Videos/\(itemID)/\(resolvedMediaSourceID)/Subtitles/\(index)/Stream.\(fileExtension)"
     }
 
     /// 文本字幕的扩展名映射；图像字幕（PGS sup 等）内核外挂不吃，返回 nil 跳过。
@@ -53,7 +57,9 @@ extension JellyfinServer {
                 ids: [itemID]
             ))
         )
-        let streams = result.items?.first?.mediaSources?.first?.mediaStreams ?? []
+        let mediaSource = result.items?.first?.mediaSources?.first
+        let mediaSourceID = mediaSource?.id
+        let streams = mediaSource?.mediaStreams ?? []
         return streams.compactMap { stream in
             guard stream.type == .subtitle,
                   stream.isExternal == true,
@@ -64,6 +70,7 @@ extension JellyfinServer {
             else { return nil }
             return ExternalSubtitle(
                 itemID: itemID,
+                mediaSourceID: mediaSourceID,
                 index: index,
                 title: stream.title ?? stream.displayTitle,
                 language: stream.language,
