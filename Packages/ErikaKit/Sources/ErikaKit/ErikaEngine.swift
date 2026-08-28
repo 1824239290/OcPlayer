@@ -191,11 +191,12 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
             throw error
         }
         // stop 后 5s 的进程基线采样：量化「播放结束内存有没有完全归还系统」。
-        // 跨集连播时若基线逐次抬高，就是媒体读取缓冲跨播放残留。独立 Task 只读
-        // 进程内存，不持锁、不摸内核句柄，stop 后照常跑。
-        Task { [weak self] in
+        // 跨集连播时若基线逐次抬高，就是媒体读取缓冲跨播放残留。Task 刻意不捕获
+        // self：引擎在 stop 后本来就该被宿主析构（weak self 到 5s 时必为 nil，
+        // 基线一条都打不出来），而 footprint 是纯进程读数，不需要引擎活着。
+        // 此处 relief 由宿主侧 MallocPressureRelief 负责，这里只留裸基线。
+        Task {
             try? await Task.sleep(for: .seconds(5))
-            guard let self else { return }
             let fp = ProcessFootprint.current()
             PlaybackLog.info("停止后基线 \(fp.summaryLine)", fields: fp.logFields)
         }
