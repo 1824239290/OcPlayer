@@ -313,7 +313,7 @@ struct URLEntrySheet: View {
             Text("打开直连链接").font(.headline)
             TextField("http://…/Videos/{id}/stream?static=true", text: $uri)
                 .textFieldStyle(.roundedBorder)
-            SecureField("Jellyfin AccessToken（可留空）", text: $token)
+            SecureField("服务器 AccessToken（可留空）", text: $token)
                 .textFieldStyle(.roundedBorder)
             Text("token 只作为请求头发给内核，不写进 URL、不落日志。")
                 .font(.caption)

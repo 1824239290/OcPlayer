@@ -30,7 +30,7 @@ struct HomeView: View {
 
     private var noServerState: some View {
         ContentUnavailableView {
-            Label("还没连接 Jellyfin", systemImage: "antenna.radiowaves.left.and.right.slash")
+            Label("还没连接服务器", systemImage: "antenna.radiowaves.left.and.right.slash")
         } description: {
             Text("连上媒体库后，这里会有继续观看和最近添加。本地文件播放不受影响。")
         } actions: {

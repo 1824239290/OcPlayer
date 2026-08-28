@@ -326,6 +326,7 @@ final class AppModel {
 
     var serverLabel: String {
         guard let profile = server?.profile else { return "" }
-        return "\(profile.serverName) · Jellyfin \(profile.serverVersion ?? "")"
+        let version = profile.serverVersion.map { " \($0)" } ?? ""
+        return "\(profile.serverName) · \(profile.kind.displayName)\(version)"
     }
 }

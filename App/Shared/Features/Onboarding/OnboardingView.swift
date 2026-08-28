@@ -37,7 +37,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("OcPlayer", systemImage: "cat.fill")
                     .font(.largeTitle.weight(.bold))
-                Text("连接你的 Jellyfin 媒体库")
+                Text("连接 Jellyfin / Emby 媒体库")
                     .foregroundStyle(.secondary)
             }
 
@@ -132,7 +132,7 @@ struct OnboardingView: View {
             HStack(spacing: 10) {
                 Circle().fill(.green).frame(width: 8, height: 8)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(app.loginSession?.serverName ?? "Jellyfin")
+                    Text(app.loginSession?.serverName ?? "服务器")
                         .font(.headline)
                     Text(app.loginSession?.baseURL.absoluteString ?? "")
                         .font(.caption)
