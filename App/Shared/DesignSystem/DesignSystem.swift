@@ -588,10 +588,12 @@ struct PosterCard: View {
     @State private var hovering = false
 
     var body: some View {
-        Button(action: onTap) {
+        // 卡宽必须是确定值：width 传 nil（紧凑网格的自适应列）时也回落到默认海报宽，
+        // 否则超长标题会把标题行撑得比海报还宽，挤乱横向 Rail 和网格。
+        let cardWidth = width ?? Metrics.posterWidth
+        return Button(action: onTap) {
             VStack(alignment: .leading, spacing: 9) {
                 let target = item.imageTarget(server, kind: .primary, width: 400)
-                let cardWidth = width ?? Metrics.posterWidth
                 RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 400)
                     .aspectRatio(2 / 3, contentMode: .fill)
                     .frame(width: cardWidth, height: cardWidth * 1.5)
@@ -604,12 +606,13 @@ struct PosterCard: View {
                     if let year = item.year {
                         Text(String(year))
                             .monospacedDigit()
+                            .layoutPriority(1)
                             .foregroundStyle(.tertiary)
                     }
                 }
                 .font(.footnote)
             }
-            .frame(width: width)
+            .frame(width: cardWidth)
         }
         .buttonStyle(.plain)
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
