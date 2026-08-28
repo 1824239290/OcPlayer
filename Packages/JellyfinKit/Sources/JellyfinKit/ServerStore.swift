@@ -5,6 +5,14 @@ import Foundation
 public enum ServerKind: String, Codable, Sendable {
     case jellyfin
     case emby
+
+    /// 服务器列表标识上显示的产品名。
+    public var displayName: String {
+        switch self {
+        case .jellyfin: return "Jellyfin"
+        case .emby: return "Emby"
+        }
+    }
 }
 
 /// 一台已登录服务器的持久化档案。token 单独存进本地 UserDefaults。

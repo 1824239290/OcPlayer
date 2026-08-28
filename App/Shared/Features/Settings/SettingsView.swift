@@ -205,13 +205,11 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
                             Text(profile.serverName).font(.callout)
-                            if profile.kind == .emby {
-                                Text("Emby")
-                                    .font(.caption2.weight(.semibold))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                            }
+                            Text(profile.kind.displayName)
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
                             if app.store.token(for: profile) == nil {
                                 Text("需重新登录").font(.caption2).foregroundStyle(.tertiary)
                             }

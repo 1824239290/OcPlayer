@@ -277,13 +277,11 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
                     Text(profile.serverName).font(.callout.weight(.medium))
-                    if profile.kind == .emby {
-                        Text("Emby")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    }
+                    Text(profile.kind.displayName)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
                     // 档案无 token = 上次退出过登录，点它走密码登录而不是一键切。
                     if app.store.token(for: profile) == nil {
                         Text("需重新登录")
