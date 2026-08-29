@@ -107,7 +107,13 @@ public struct JellyfinServer: Sendable {
 
     static func makeClient(baseURL: URL, token: String?,
                            sessionConfiguration: URLSessionConfiguration = .default) -> JellyfinClient {
-        JellyfinClient(
+        // .default 是进程级共享单例，直接改会影响全 App 的会话；copy 一份再调。
+        // request 30s：服务器半死时浏览 / PlaybackInfo 不干等默认 60s；
+        // resource 300s：字幕 / 图片这类资源下载留足总时长（默认 7 天太宽）。
+        let configuration = sessionConfiguration.copy() as! URLSessionConfiguration
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 300
+        return JellyfinClient(
             configuration: .init(
                 url: baseURL,
                 accessToken: token,
@@ -116,7 +122,7 @@ public struct JellyfinServer: Sendable {
                 deviceID: ClientIdentity.deviceID,
                 version: ClientIdentity.version
             ),
-            sessionConfiguration: sessionConfiguration
+            sessionConfiguration: configuration
         )
     }
 
@@ -592,7 +598,20 @@ public struct JellyfinServer: Sendable {
             // data(for:) 返回原始响应体（已经过 client 的 2xx 校验 + 认证头注入），
             // 洗白后用与 SDK 相同配置的 decoder 二次解码。
             let response = try await client.data(for: request)
-            let value = try LooseDecoding.decoder.decode(T.self, from: EmbySanitizer.sanitize(response.value))
+            // sanitizer 是全量 JSON 重解析 + 递归深拷贝重建，纯 Jellyfin 响应没理由
+            // 每个请求都付这笔账：只有 Emby 档案无条件洗；其余档案先直接解码，
+            // 失败再回退洗白（个别自建 Jellyfin 也会有 Emby 式脏枚举值）。
+            let payload = response.value
+            let value: T
+            if profile.kind == .emby {
+                value = try LooseDecoding.decoder.decode(T.self, from: EmbySanitizer.sanitize(payload))
+            } else {
+                do {
+                    value = try LooseDecoding.decoder.decode(T.self, from: payload)
+                } catch {
+                    value = try LooseDecoding.decoder.decode(T.self, from: EmbySanitizer.sanitize(payload))
+                }
+            }
             NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start))
             return value
         } catch {
