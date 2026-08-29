@@ -12,6 +12,8 @@ struct BangumiCollectionListView: View {
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var reloader = false
+    /// 列表代次：load() 重置列表时自增，作废在途旧翻页，防止旧类型数据混进新列表。
+    @State private var listGeneration = 0
 
     private let pageSize = 20
 
@@ -70,14 +72,18 @@ struct BangumiCollectionListView: View {
     }
 
     private func load() async {
+        listGeneration += 1
+        let generation = listGeneration
         isLoading = true
         loadError = nil
         defer { isLoading = false }
         do {
             counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
-            subjects = try await bangumi.context.fetchCollectionSubjects(
+            let firstPage = try await bangumi.context.fetchCollectionSubjects(
                 subjectType: subjectType, collectionType: collectionType,
                 limit: pageSize, offset: 0)
+            guard generation == listGeneration else { return }
+            subjects = firstPage
         } catch let error as BangumiError {
             loadError = error.userMessage
         } catch {
@@ -87,11 +93,14 @@ struct BangumiCollectionListView: View {
 
     private func loadMore() async {
         guard !isLoading else { return }
+        let generation = listGeneration
         isLoading = true
         defer { isLoading = false }
         if let more = try? await bangumi.context.fetchCollectionSubjects(
             subjectType: subjectType, collectionType: collectionType,
             limit: pageSize, offset: subjects.count) {
+            // 期间切了收藏类型（generation 已自增）就丢弃，append 会污染新列表。
+            guard generation == listGeneration else { return }
             subjects.append(contentsOf: more)
         }
     }

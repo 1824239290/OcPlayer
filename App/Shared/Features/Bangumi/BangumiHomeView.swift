@@ -346,11 +346,9 @@ struct BangumiHomeView: View {
         let isSelected = searchTypeFilter == type
         return Button {
             guard searchTypeFilter != type else { return }
+            // 搜索请求统一走 onChange(of: searchTypeFilter)；这里再起 Task 会
+            // 和它各搜一份（且用的是未提交的 searchKeyword），双份请求互竞代次。
             searchTypeFilter = type
-            let trimmed = searchKeyword.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty {
-                Task { await performSearch(trimmed) }
-            }
         } label: {
             HStack(spacing: 5) {
                 if type != .none {
