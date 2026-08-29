@@ -74,7 +74,15 @@ public struct BangumiDomains: Hashable, Sendable {
 
     private func url(domain: String, path: String) -> URL {
         let normalizedPath = path.isEmpty || path.hasPrefix("/") ? path : "/\(path)"
-        return URL(string: "https://\(domain)\(normalizedPath)")!
+        // 域名虽经 normalizedDomain 校验，仍不强制解包：镜像输入异常时
+        // URL(string:)! 会在用户设备上直接崩。构造失败先对 path 做百分号转义
+        // 重试，再不行退回官方主站（保证不崩，语义退化可接受）。
+        if let url = URL(string: "https://\(domain)\(normalizedPath)") {
+            return url
+        }
+        let encodedPath = normalizedPath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? normalizedPath
+        return URL(string: "https://\(domain)\(encodedPath)")
+            ?? URL(string: "https://bgm.tv")!
     }
 
     private static func normalizedDomain(_ rawValue: String?) -> String? {

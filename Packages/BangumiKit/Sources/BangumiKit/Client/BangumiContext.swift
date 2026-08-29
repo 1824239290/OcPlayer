@@ -236,7 +236,10 @@ public final class BangumiContext {
         guard setupTask == nil else { return }
         // 先从 store 恢复登录态到内存（启动时如果已登录，UI 立刻显示正确状态）。
         syncAuthState()
-        setupTask = Task { @MainActor in
+        // 建库（文件 IO + SQLite 迁移）放在后台线程做——本类是 @MainActor，
+        // 直接 Task { } 会让整段建库卡在主 actor 上，启动期掉帧；只在回主 actor
+        // 时写结果属性。
+        setupTask = Task.detached(priority: .userInitiated) {
             let base = directory
                 ?? FileManager.default.urls(
                     for: .applicationSupportDirectory, in: .userDomainMask
@@ -244,8 +247,11 @@ public final class BangumiContext {
             let appDir = base.appendingPathComponent("OcPlayer", isDirectory: true)
             do {
                 let dbQueue = try BangumiDatabaseFactory.makeDatabase(at: appDir)
-                self.database = BangumiDatabaseOperator(database: dbQueue)
-                self.isDatabaseReady = true
+                let database = BangumiDatabaseOperator(database: dbQueue)
+                await MainActor.run {
+                    self.database = database
+                    self.isDatabaseReady = true
+                }
             } catch {
                 BangumiNetworkLog.logger.error("Bangumi 建库失败 error=\(error)")
             }
@@ -283,10 +289,12 @@ public final class BangumiContext {
         syncAuthState()
     }
 
-    /// 登出后调：清 store + 同步内存属性。
+    /// 登出后调：清 store + 同步内存属性。收藏同步时间戳一并归零——换号后
+    /// 带着旧账号的 `since` 做增量同步会漏拉早于该时间戳的收藏。
     public func clearAuthState() {
         store.setAuthenticated(false)
         store.setProfile(nil)
+        store.setCollectionsUpdatedAt(0)
         syncAuthState()
     }
 
