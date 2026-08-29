@@ -21,6 +21,7 @@ struct PlayerScreen: View {
     @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(\.accessibilityVoiceOverEnabled) private var isVoiceOverEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     /// 覆盖层出现时要打开的源；nil = 空画面（引擎失败等极端情况）。
     let request: PlaybackRequest?
@@ -356,6 +357,12 @@ struct PlayerScreen: View {
             .onGeometryChange(for: CGSize.self) { proxy in
                 proxy.size
             } action: { panAreaSize = $0 }
+            // 切后台 / 来电中断：被打断的触摸不会再有 onEnded，在场景切换时收尾，
+            // 避免回前台后 hold 任务到点触发 2x、或滑动会话从旧起点继续。
+            .onChange(of: scenePhase) { _, phase in
+                guard phase != .active else { return }
+                interruptTouchSession()
+            }
             #endif
     }
 
@@ -468,6 +475,22 @@ struct PlayerScreen: View {
             controller.applyVolume(value)
         }
         panSession = session
+    }
+
+    /// 系统打断（切后台 / 来电）时的触摸收尾。与 handleTouchEnded 的差异：
+    /// seek 不落盘——被打断的拖动不该当成用户确认过的跳转。
+    private func interruptTouchSession() {
+        holdTask?.cancel()
+        holdTask = nil
+        singleTapTask?.cancel()
+        singleTapTask = nil
+        lastTapDate = nil
+        touchStart = nil
+        touchTranslation = .zero
+        panSession = nil
+        if controller.isHoldFastForwarding {
+            controller.endHoldFastForward()
+        }
     }
 
     private func handleTouchEnded(_ value: DragGesture.Value) {
