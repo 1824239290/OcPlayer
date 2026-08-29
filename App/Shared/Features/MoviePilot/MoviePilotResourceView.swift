@@ -23,6 +23,7 @@ struct MoviePilotResourceView: View {
     @State private var hasSearched = false
     @State private var searchError: String?
     @State private var searchGeneration = 0
+    @State private var searchTask: Task<Void, Never>?
 
     // 筛选与排序（对齐 MP 网页端：本地过滤，选项从结果聚合；排序偏好记忆）。
     @State private var filters = TorrentFilters()
@@ -341,7 +342,9 @@ struct MoviePilotResourceView: View {
 
     private func search() {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isSearching else { return }
+        guard !trimmed.isEmpty else { return }
+        // 允许重入：搜索在途时再点不静默丢弃，旧任务直接取消（SSE 循环随任务取消收尾）。
+        searchTask?.cancel()
         searchGeneration += 1
         let generation = searchGeneration
         isSearching = true
@@ -352,25 +355,43 @@ struct MoviePilotResourceView: View {
         progressText = nil
         // 新搜索换一批数据源，旧筛选多半失效，整组重置。
         filters = TorrentFilters()
-        Task {
-            do {
-                try await MoviePilotAPIClient.shared.searchTorrentsByTitleStream(
-                    keyword: trimmed,
-                    sites: selectedSiteIDs.isEmpty ? [] : selectedSiteIDs.sorted()
-                ) { current, progress in
-                    // 回调在后台线程，回主线程并对一次代际（连搜时旧流不能覆盖新流）。
-                    Task { @MainActor in
-                        guard generation == searchGeneration else { return }
-                        torrents = current
-                        progressText = progress.text
+        searchTask = Task {
+            let (updates, continuation) = AsyncStream.makeStream(
+                of: SearchStreamEvent.self,
+                bufferingPolicy: .bufferingNewest(1)
+            )
+            // 生产者：SSE 拉流跑在 client actor 上，回调只往流里投递，不碰 UI。
+            let producer = Task {
+                defer { continuation.finish() }
+                do {
+                    try await MoviePilotAPIClient.shared.searchTorrentsByTitleStream(
+                        keyword: trimmed,
+                        sites: selectedSiteIDs.isEmpty ? [] : selectedSiteIDs.sorted()
+                    ) { current, progress in
+                        continuation.yield(.batch(current, progress))
+                    }
+                } catch {
+                    if generation == searchGeneration, !Task.isCancelled {
+                        continuation.yield(.failure((error as? MoviePilotError)?.userMessage ?? "\(error)"))
                     }
                 }
-                guard generation == searchGeneration else { return }
-                // 排序交给筛选栏的设置（displayedTorrents 持续应用），这里不再终态重排。
-            } catch {
-                guard generation == searchGeneration else { return }
-                searchError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
             }
+            // 消费端：本任务继承视图主 actor，批次按投递顺序应用——
+            // 旧实现经无序 Task{@MainActor} 跳转回主线程，连搜时旧批次可能反超新批次。
+            // 缓冲只留最新一批：每个事件都带全量累计结果，中间批次不值得排队。
+            for await update in updates {
+                guard generation == searchGeneration else { break }
+                switch update {
+                case .batch(let current, let progress):
+                    torrents = current
+                    progressText = progress.text
+                case .failure(let message):
+                    searchError = message
+                }
+            }
+            // 消费端退出（被新一代取代/取消）时，把还在跑的旧 SSE 流一并停掉。
+            producer.cancel()
+            // 排序交给筛选栏的设置（displayedTorrents 持续应用），终态不再重排。
             if generation == searchGeneration {
                 isSearching = false
                 progressText = nil
@@ -394,6 +415,12 @@ struct MoviePilotResourceView: View {
             addingDownloadID = nil
         }
     }
+}
+
+/// 资源搜索的流式事件：批次/失败统一经 AsyncStream 有序送主 actor。
+private enum SearchStreamEvent: Sendable {
+    case batch([MPTorrent], MPSearchProgress)
+    case failure(String)
 }
 
 /// 站点多选弹窗：空选 = 全部站点（与 MP 网页端一致的语义）。
