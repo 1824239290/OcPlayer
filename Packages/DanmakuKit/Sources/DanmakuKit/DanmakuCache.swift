@@ -76,19 +76,34 @@ public actor DanmakuCache {
         directory.appendingPathComponent("mapping.json")
     }
 
+    /// mapping 内存缓存（写穿）。nil = 尚未加载；读取/解码失败的失败态**不缓存**，
+    /// 保持每次重读盘以自愈（否则一次临时 I/O 错误会让写入被永久阻断）。
+    private var cachedMapping: [String: DanmakuEpisodeMatch]?
+    private var mappingCacheLoaded = false
+
     /// nil 表示文件不存在（可安全创建新映射）；非 nil 但读取/解码失败时返回
     /// nil 并阻止写入，避免临时 I/O 错误覆盖已有映射。
     private func loadMapping() -> [String: DanmakuEpisodeMatch]? {
+        if mappingCacheLoaded, let cached = cachedMapping { return cached }
         let url = mappingURL()
-        guard fileManager.fileExists(atPath: url.path) else { return [:] }
+        guard fileManager.fileExists(atPath: url.path) else {
+            cachedMapping = [:]
+            mappingCacheLoaded = true
+            return [:]
+        }
         guard let data = try? Data(contentsOf: url) else { return nil }
         if let mapping = try? decoder.decode([String: DanmakuEpisodeMatch].self, from: data) {
+            cachedMapping = mapping
+            mappingCacheLoaded = true
             return mapping
         }
         // Migrate the original `mediaID: episodeID` format without discarding
         // existing matches. The next successful write persists the new shape.
         if let legacy = try? decoder.decode([String: Int64].self, from: data) {
-            return legacy.mapValues { DanmakuEpisodeMatch(episodeID: $0) }
+            let mapping = legacy.mapValues { DanmakuEpisodeMatch(episodeID: $0) }
+            cachedMapping = mapping
+            mappingCacheLoaded = true
+            return mapping
         }
         return nil
     }
@@ -96,6 +111,8 @@ public actor DanmakuCache {
     private func saveMapping(_ mapping: [String: DanmakuEpisodeMatch]) {
         guard let data = try? encoder.encode(mapping) else { return }
         try? data.write(to: mappingURL(), options: .atomic)
+        cachedMapping = mapping
+        mappingCacheLoaded = true
     }
 
     private func acceptMappingMutation(for mediaID: String, revision: UInt64?) -> Bool {
@@ -114,7 +131,12 @@ public actor DanmakuCache {
         let url = commentsURL(episodeID)
         guard let data = try? Data(contentsOf: url) else { return nil }
         guard let entry = try? decoder.decode(CachedComments.self, from: data) else { return nil }
-        if Date().timeIntervalSince(entry.fetchedAt) > commentsTTL { return nil }
+        if Date().timeIntervalSince(entry.fetchedAt) > commentsTTL {
+            // 过期即删：TTL 只影响读取的话，过期文件会永远躺在盘上
+            //（每集一份弹幕正文，几十 MB 很快就堆出来）。
+            try? fileManager.removeItem(at: url)
+            return nil
+        }
         return entry.comments
     }
 
@@ -140,6 +162,8 @@ public actor DanmakuCache {
         latestMappingRevision.removeAll()
         try? fileManager.removeItem(at: directory)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        cachedMapping = nil
+        mappingCacheLoaded = false
     }
 }
 

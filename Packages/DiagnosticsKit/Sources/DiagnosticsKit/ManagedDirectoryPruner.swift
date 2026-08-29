@@ -30,6 +30,7 @@ public enum ManagedDirectoryPruner {
         allowedExtensions: Set<String>,
         maxFileCount: Int,
         maxTotalBytes: Int64,
+        preservedFileNames: Set<String> = [],
         fileManager: FileManager = .default
     ) -> Result {
         guard let attributes = try? fileManager.attributesOfItem(atPath: directory.path) else {
@@ -52,12 +53,16 @@ public enum ManagedDirectoryPruner {
         ) else { return Result() }
 
         let normalizedExtensions = Set(allowedExtensions.map { $0.lowercased() })
+        let normalizedPreserved = Set(preservedFileNames.map { $0.lowercased() })
         let files = urls.compactMap { url -> ManagedFile? in
             guard normalizedExtensions.contains(url.pathExtension.lowercased()),
                   let values = try? url.resourceValues(forKeys: keys),
                   values.isRegularFile == true,
                   values.isSymbolicLink != true
             else { return nil }
+            // 永久性文件（如弹幕 mapping.json）不参与限额：被当普通缓存删掉的话
+            // 同一集会反复回源网关，且映射丢了没法重建。
+            guard !normalizedPreserved.contains(url.lastPathComponent.lowercased()) else { return nil }
             return ManagedFile(
                 url: url,
                 modifiedAt: values.contentModificationDate ?? .distantPast,

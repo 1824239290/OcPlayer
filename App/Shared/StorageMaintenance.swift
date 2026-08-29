@@ -65,7 +65,9 @@ final class AppStorageMaintenance: @unchecked Sendable {
             directory: AppStorageDirectories.danmaku,
             allowedExtensions: ["json"],
             maxFileCount: 300,
-            maxTotalBytes: 256 * 1024 * 1024
+            maxTotalBytes: 256 * 1024 * 1024,
+            // mapping.json 是永久性的剧集映射，被当普通缓存删掉会让同一集反复回源网关。
+            preservedFileNames: ["mapping.json"]
         )
 
         let removedCount = subtitleResult.removedCount + screenshotResult.removedCount + danmakuResult.removedCount
