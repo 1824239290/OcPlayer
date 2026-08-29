@@ -22,8 +22,9 @@ class Handler(BaseHTTPRequestHandler):
         pass  # 静音，别把测试输出淹了
 
     def _authorized(self):
-        header = self.headers.get("Authorization", "")
-        return TOKEN in header
+        # 精确匹配 "Bearer <TOKEN>"：子串包含会让任意含 token 字样的头放行，
+        # 测不出「带错凭证必须 401」这条行为。
+        return self.headers.get("Authorization", "") == f"Bearer {TOKEN}"
 
     def _range(self):
         raw = self.headers.get("Range")

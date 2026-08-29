@@ -30,7 +30,11 @@ class DanmakuQueuePool {
         return getQueue()
     }
     
+    private let counterLock = NSLock()
+
     private func getQueue() -> DispatchQueue {
+        counterLock.lock()
+        defer { counterLock.unlock() }
         if counter == Int.max {
             counter = 0
         }

@@ -468,6 +468,7 @@ class DanmakuVerticalTrack: NSObject, DanmakuTrack, CAAnimationDelegate {
                 #else
                 danmaku.layer.removeAllAnimations()
                 danmaku.frame.origin.x = MAX_FLOAT_X
+                danmaku.leaveTrack()
                 stopClosure?(cell)
                 #endif
             }

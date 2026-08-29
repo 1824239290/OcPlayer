@@ -48,7 +48,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     public var latestErikaStats: ErikaPresenterStats { withLock { _latestStats } }
     private var _latestStats = ErikaPresenterStats()
 
-    /// 最近一次内核内存分项快照（渲染线程每 10s 采样，任意线程可读）。
+    /// 最近一次内核内存分项快照（渲染线程每 5s 采样，任意线程可读）。
     /// 两条弹幕路线共用：2G 峰值和 overlay 缓慢爬升分别落在哪些分项，看它的趋势。
     public var latestMemory: ErikaMemorySnapshot { withLock { _latestMemory } }
     private var _latestMemory = ErikaMemorySnapshot()
@@ -411,7 +411,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         lock.lock()
         do {
             _latestStats = try presenter.renderTick(at: presentationTime)
-            // 每 10s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
+            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
             if presentationTime - lastMemorySampleAt >= Self.memorySampleIntervalSeconds {
                 lastMemorySampleAt = presentationTime
                 sampleMemoryAt(reason: "tick")

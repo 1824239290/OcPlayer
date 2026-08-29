@@ -11,18 +11,23 @@ import UIKit
 import AppKit
 #endif
 
-class Sentinel {
-    
+class Sentinel: @unchecked Sendable {
+
+    private let lock = NSLock()
     private var value: Int32 = 0
-    
+
     public func getValue() -> Int32 {
+        lock.lock()
+        defer { lock.unlock() }
         return value
     }
-    
+
     public func increase() {
-        _ = OSAtomicIncrement32(&value)
+        lock.lock()
+        value += 1
+        lock.unlock()
     }
-    
+
 }
 
 public class DanmakuAsyncLayer: CALayer {
@@ -130,12 +135,14 @@ public class DanmakuAsyncLayer: CALayer {
                     context.saveGState()
                     if backgroundColor == nil || (backgroundColor?.alpha ?? 0) < 1 {
                         context.setFillColor(UIColor.white.cgColor)
-                        context.addRect(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+                        // UIGraphics 上下文已带 scale 变换，坐标系里直接用逻辑尺寸
+                        //（原先再乘一次 scale 是双重缩放，靠越界裁剪掩盖）。
+                        context.addRect(CGRect(origin: .zero, size: size))
                         context.fillPath()
                     }
                     if let backgroundColor = backgroundColor {
                         context.setFillColor(backgroundColor)
-                        context.addRect(CGRect(x: 0, y: 0, width: size.width * scale, height: size.height * scale))
+                        context.addRect(CGRect(origin: .zero, size: size))
                         context.fillPath()
                     }
                     context.restoreGState()

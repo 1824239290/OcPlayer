@@ -272,7 +272,8 @@ public class DanmakuView: PlatformView {
     }
     
     required init?(coder: NSCoder) {
-        super.init(coder: coder)
+        // 只支持代码构造：解码路径绕过轨道初始化/手势安装，显式拒绝。
+        nil
     }
 #if os(macOS)
     // Use a top-left origin like iOS so tracks are laid out from the top.

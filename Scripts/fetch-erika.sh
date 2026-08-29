@@ -90,7 +90,7 @@ VERSION_MARKER="$OUT/.erika-version"
 PINNED="$ROOT/Scripts/erika-$TAG.sha256"
 if [[ ! -f "$PINNED" ]]; then
   echo "⚠ Erika $TAG 没有仓库内固定哈希；本次仅校验 HTTPS 下载与 zip 完整性" >&2
-  echo "  可将 Vendor/erika-$TAG.sha256 审核后复制到 Scripts/ 以固定该版本" >&2
+  echo "  固定方法：从 Release 资产下载 sha256，审核后存为 Scripts/erika-$TAG.sha256" >&2
 fi
 
 manifest_matches() {
@@ -170,6 +170,10 @@ fetch() { # $1 = 包名
   fi
   shasum -a 256 "$zip" | awk '{print $1"  '"$1"'.zip"}' >> "$VENDOR/erika-$TAG.sha256.tmp"
   rm -rf "$WORK/$1"
+  # zip-slip 防护：条目路径带 .. 或绝对路径 = 解包逃逸，拒绝。
+  if unzip -l "$zip" | awk '{print $NF}' | grep -qE '(^|/)\.\.(/|$)|^/'; then
+    echo "✗ $1.zip 含可疑路径（zip-slip），拒绝解包" >&2; exit 1
+  fi
   unzip -qq "$zip" -d "$WORK"
 }
 
