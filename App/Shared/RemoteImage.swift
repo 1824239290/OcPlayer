@@ -391,7 +391,7 @@ struct RemoteImage: View {
             // 视图再次出现时还能重试（瞬时断网不该让这张图永远 404 下去）。
             // 复合键（URL+凭证+目标尺寸）一致才跳过：同 URL 换尺寸/凭证要重载，
             // 否则会一直显示错误尺寸的旧位图。
-            guard loadedKey == loadKey else { return }
+            guard loadedKey != loadKey else { return }
             image = nil
             loadedKey = nil
             failed = false
