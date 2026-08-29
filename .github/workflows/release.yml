@@ -18,8 +18,80 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 测试门禁：tag 直接 push 时不经过 Test 工作流的 PR/push 触发也能保证
+  # 「发出去的包构建在测试过的代码上」。步骤与 test.yml 的 macos job 保持一致
+  # （收敛成 composite action 之前先接受这份复制）。
+  tests:
+    name: Tests (AppTests + SwiftPM packages)
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ERIKA_VERSION: v0.1.7+readahead.1
+      ERIKA_REPO: 1824239290/Erika
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Resolve Erika version
+        id: erika
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolved_version="$(Scripts/fetch-erika.sh --resolve-version "$ERIKA_VERSION")"
+          echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
+          echo "ERIKA_VERSION=$resolved_version" >> "$GITHUB_ENV"
+
+      - name: Cache Erika binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            Vendor/downloads
+            Vendor/extracted
+            Packages/ErikaKit/Vendor/Erika.xcframework
+          key: erika-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
+
+      - name: Fetch Erika kernel
+        shell: bash
+        run: Scripts/fetch-erika.sh "$ERIKA_VERSION"
+
+      - name: Run App tests (macOS scheme)
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project OcPlayer.xcodeproj \
+            -scheme OcPlayer-macOS \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath .local-build/ci-release-test \
+            test
+
+      - name: Run SwiftPM package tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for pkg in \
+              Packages/CoreModel \
+              Packages/DiagnosticsKit \
+              Packages/PlaybackKit \
+              Packages/DanmakuKit \
+              Packages/DanmakuRenderKit \
+              Packages/JellyfinKit \
+              Packages/BangumiKit \
+              Packages/MoviePilotKit; do
+            echo "==> $pkg"
+            swift test --package-path "$pkg"
+          done
+          echo "==> Packages/ErikaKit (excluding presenter-dependent suites)"
+          swift test --package-path Packages/ErikaKit \
+            --skip ErikaRenderTests --skip ErikaSmokeTests --skip ErikaOpenFileTests \
+            --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests \
+            --skip ErikaReadAheadBehaviorTests
+
   macos:
     name: Build macOS arm64
+    needs: tests
     runs-on: macos-26
     timeout-minutes: 60
     env:

@@ -80,12 +80,14 @@ jobs:
           done
           # ErikaKit 里实例化 ErikaPresenter 的 Swift Testing suite 依赖 Metal / 真内核，
           # 无 GPU 的 GitHub runner 上会直接 hang（不是报错），只能全 skip：
-          # 离屏渲染 / C ABI 冒烟 / 打开真文件 / HTTP 直连 / 播放生命周期 / 内存快照。
+          # 离屏渲染 / C ABI 冒烟 / 打开真文件 / HTTP 直连 / 播放生命周期 / 内存快照
+          # / 预读行为（会 try ErikaPresenter()，随预读内核 API 加入）。
           # 留下的 XCTest（弹幕 JSON/配置/轨道/状态）是纯逻辑，不碰内核。
           echo "==> Packages/ErikaKit (excluding presenter-dependent suites)"
           swift test --package-path Packages/ErikaKit \
             --skip ErikaRenderTests --skip ErikaSmokeTests --skip ErikaOpenFileTests \
-            --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests
+            --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests \
+            --skip ErikaReadAheadBehaviorTests
 
       - name: Upload test logs on failure
         if: failure()
