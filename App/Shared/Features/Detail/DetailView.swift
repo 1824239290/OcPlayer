@@ -252,28 +252,26 @@ struct DetailView: View {
 
     private var compactHeroBanner: some View {
         ZStack(alignment: .bottom) {
-            GeometryReader { geo in
-                let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
-                if let url = target.url {
-                    RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                } else {
-                    Rectangle().fill(Color.primary.opacity(0.06))
-                }
+            // 填充裁剪直接交给 aspectRatio(.fill) + 外层 .clipped()，
+            // 不用 GeometryReader——它量出来的尺寸 ZStack 本来就会给。
+            let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
+            if let url = target.url {
+                RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Rectangle().fill(Color.primary.opacity(0.06))
             }
 
-            // 顶部平滑渐隐到状态栏与导航栏
+            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
+            //（旧实现是两条全尺寸渐变叠着合成，合成权重见各 stop）。
             LinearGradient(
-                colors: [Color.pageBackground.opacity(0.7), Color.pageBackground.opacity(0.2), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-
-            // 底部平滑渐隐到页面底色
-            LinearGradient(
-                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                stops: [
+                    .init(color: Color.pageBackground.opacity(0.7), location: 0),
+                    .init(color: Color.pageBackground.opacity(0.34), location: 0.25),
+                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
+                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
+                    .init(color: Color.pageBackground, location: 1),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -456,25 +454,15 @@ struct DetailView: View {
 
     private var banner: some View {
         ZStack {
-            // 背景层：GeometryReader 铺满并保持填充裁剪
-            GeometryReader { geo in
-                let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
-                if let url = target.url {
-                    RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .clipped()
-                } else {
-                    Rectangle().fill(Color.primary.opacity(0.06))
-                }
+            // 背景层：填充裁剪交给 aspectRatio(.fill) + 外层 .clipped()，
+            // 不需要 GeometryReader 量尺寸（ZStack 的建议尺寸就是它的尺寸）。
+            let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
+            if let url = target.url {
+                RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Rectangle().fill(Color.primary.opacity(0.06))
             }
-
-            // 顶部渐隐：平滑过渡到窗口标题栏/导航栏
-            LinearGradient(
-                colors: [Color.pageBackground.opacity(0.85), Color.pageBackground.opacity(0.3), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
 
             // 底部暗部渐变：保证文字和操作按钮在浅色/高亮背景图上的清晰度
             LinearGradient(
@@ -483,9 +471,17 @@ struct DetailView: View {
                 endPoint: .center
             )
 
-            // 底部平滑渐隐到页面底色：无缝融入下方的正文内容
+            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
+            //（旧实现是两条全尺寸渐变叠着合成，各 stop 的透明度按
+            // 「底混上」的合成权重算好，视觉不变，少一层全尺寸合成）。
             LinearGradient(
-                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
+                stops: [
+                    .init(color: Color.pageBackground.opacity(0.85), location: 0),
+                    .init(color: Color.pageBackground.opacity(0.42), location: 0.25),
+                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
+                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
+                    .init(color: Color.pageBackground, location: 1),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -937,21 +933,44 @@ struct DetailView: View {
             guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
             episodesBySeason[seasonID]?[index].playState = state
         }
+        storeSnapshot()
     }
 
     private func load() async {
         guard let server = app.server else { return }
-        isLoading = true
-        loadError = nil
-        detail = nil
-        seasons = []
-        episodes = []
-        episodesBySeason = [:]
-        selectedEpisodeBySeason = [:]
-        selectedSeasonID = nil
-        selectedEpisodeID = nil
-        episodeScrollFocusID = nil
-        episodeLoadError = nil
+        // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
+        // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
+        let snapshot = app.detailSnapshots[item.id]
+        if let snapshot {
+            detail = snapshot.detail
+            seasons = snapshot.seasons
+            similar = snapshot.similar
+            selectedSeasonID = snapshot.selectedSeasonID
+            episodesBySeason = snapshot.episodesBySeason
+            if let seasonID = snapshot.selectedSeasonID,
+               let cached = snapshot.episodesBySeason[seasonID] {
+                episodes = cached
+                let restored = selectedEpisodeBySeason[seasonID]
+                    .flatMap { id in cached.contains { $0.id == id } ? id : nil }
+                    ?? preferredEpisodeID(in: cached, seriesID: snapshot.detail.id)
+                selectedEpisodeID = restored
+                episodeScrollFocusID = restored
+            }
+        }
+
+        isLoading = snapshot == nil
+        if snapshot == nil {
+            loadError = nil
+            detail = nil
+            seasons = []
+            episodes = []
+            episodesBySeason = [:]
+            selectedEpisodeBySeason = [:]
+            selectedSeasonID = nil
+            selectedEpisodeID = nil
+            episodeScrollFocusID = nil
+            episodeLoadError = nil
+        }
 
         // Similar recommendations are optional and may be unavailable on
         // servers with that endpoint disabled. Keep the required detail path
@@ -969,18 +988,28 @@ struct DetailView: View {
                     seasons = loadedSeasons
                     selectedSeasonID = preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
                 } catch let e as JellyfinError {
-                    loadError = e.errorDescription
+                    if snapshot == nil { loadError = e.errorDescription }
                 } catch {
-                    loadError = "\(error)"
+                    if snapshot == nil { loadError = "\(error)" }
                 }
             }
         } catch let e as JellyfinError {
-            loadError = e.errorDescription
+            if snapshot == nil { loadError = e.errorDescription }
         } catch {
-            loadError = "\(error)"
+            if snapshot == nil { loadError = "\(error)" }
         }
         isLoading = false
-        similar = (try? await similarItems) ?? []
+        similar = (try? await similarItems) ?? similar
+        storeSnapshot()
+    }
+
+    /// 把当前内容写进跨进入快照（SWR 的「stale」来源）。
+    private func storeSnapshot() {
+        guard let detail else { return }
+        app.storeDetailSnapshot(
+            .init(detail: detail, seasons: seasons, similar: similar,
+                  selectedSeasonID: selectedSeasonID, episodesBySeason: episodesBySeason),
+            for: item.id)
     }
 
     /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
@@ -990,8 +1019,8 @@ struct DetailView: View {
             detail = loaded
         }
         if shown.kind == .series {
-            // 清理旧缓存，拉取当前季最新的播放进度
-            episodesBySeason.removeAll()
+            // 只回填当前季：其他季的缓存不包含本次播放的那一集，清空整份
+            // episodesBySeason 只会让切季时白拉一遍、闪一下 loading。
             if let seasonID = selectedSeasonID {
                 if let loaded = try? await server.episodes(seriesID: shown.id, seasonID: seasonID) {
                     episodesBySeason[seasonID] = loaded
@@ -1006,6 +1035,7 @@ struct DetailView: View {
                 }
             }
         }
+        storeSnapshot()
     }
 
     private func loadEpisodes() async {
@@ -1047,6 +1077,7 @@ struct DetailView: View {
             let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
             selectedEpisodeID = preferred
             episodeScrollFocusID = preferred
+            storeSnapshot()
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription

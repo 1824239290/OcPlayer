@@ -89,6 +89,43 @@ final class AppModel {
 
     var libraryPages: [MediaLibrary.ID: LibraryPage] = [:]
 
+    /// 分页缓存条目总量上限：超大服务器深翻多个库时无上限增长会吃掉几百 MB
+    /// （每条 MediaItem 带长 overview）。超限就整份清空、只回填当前正在浏览的
+    /// 这一库——分页缓存只是「回库不重拉」的加速器，清空代价是下次进库重新翻页，
+    /// 不值得为它维护 LRU 结构。
+    static let libraryPagesItemLimit = 20_000
+
+    func cacheLibraryPage(_ page: LibraryPage, for id: MediaLibrary.ID) {
+        libraryPages[id] = page
+        let totalItems = libraryPages.values.reduce(0) { $0 + $1.items.count }
+        if totalItems > Self.libraryPagesItemLimit {
+            libraryPages = [id: page]
+        }
+    }
+
+    // MARK: - 详情页快照缓存（stale-while-revalidate）
+
+    /// 详情页跨进入的内容快照：再次进入同一详情先用快照即时渲染（不闪骨架屏），
+    /// 同时后台重拉并原位覆盖。快照都是小结构体，正常会话远到不了上限；
+    /// 超限整份清空（下次进入回到首拉行为，代价可忽略）。
+    struct DetailSnapshot {
+        var detail: MediaItem
+        var seasons: [MediaItem]
+        var similar: [MediaItem]
+        var selectedSeasonID: String?
+        var episodesBySeason: [String: [MediaItem]]
+    }
+
+    static let detailSnapshotLimit = 40
+    var detailSnapshots: [MediaItem.ID: DetailSnapshot] = [:]
+
+    func storeDetailSnapshot(_ snapshot: DetailSnapshot, for id: MediaItem.ID) {
+        detailSnapshots[id] = snapshot
+        if detailSnapshots.count > Self.detailSnapshotLimit {
+            detailSnapshots.removeAll()
+        }
+    }
+
     struct HomeData: Equatable {
         var resume: [MediaItem] = []
         var nextUp: [MediaItem] = []

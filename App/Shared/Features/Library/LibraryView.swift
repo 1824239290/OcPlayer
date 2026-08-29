@@ -241,7 +241,7 @@ struct LibraryView: View {
                 cached.items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
             }
             cached.totalCount = page.totalRecordCount
-            app.libraryPages[libraryID] = cached
+            app.cacheLibraryPage(cached, for: libraryID)
             loadError = nil
         } catch is CancellationError {
             return

@@ -582,6 +582,8 @@ func dismissPlayer() {
             for subtitle in subtitles {
                 guard !Task.isCancelled else { return }
                 guard let file = try? await server.downloadSubtitle(subtitle) else { continue }
+                // 下载的字幕进了受管目录：捎带触发一次限额维护（日定时器也会兜底）。
+                AppDiagnostics.requestStorageMaintenance()
                 guard !Task.isCancelled,
                       self.activePlaybackIdentity == identity else { return }
                 // 名字和语言都喂过去：内核不带这些元数据，靠 App 层映射在菜单里显示。
