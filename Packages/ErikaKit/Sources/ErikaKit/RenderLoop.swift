@@ -58,7 +58,25 @@ final class RenderLoop {
         guard let thread else { return }
         self.thread = nil
         thread.cancel()
-        thread.waitUntilExited(timeout: 1.0)
+        if thread.waitUntilExited(timeout: 1.0) == .timedOut {
+            // 线程还卡在 runloop 里没来得及退出：引用必须保住（挂进泄漏池），
+            // 释放一个 main() 还在跑的 Thread 有崩溃风险。cancel 已发出，
+            // 它最迟在下一个 runloop 唤醒点自行退出，这里只是不让它提前释放。
+            Self.leakPool.add(thread)
+        }
+    }
+
+    /// 等不到退出的渲染线程的"泄漏池"。正常退出路径（cancel 后 ≤50ms）走不到。
+    private static let leakPool = LeakPool()
+
+    private final class LeakPool: @unchecked Sendable {
+        private let lock = NSLock()
+        private var threads: [RenderThread] = []
+        func add(_ thread: RenderThread) {
+            lock.lock()
+            threads.append(thread)
+            lock.unlock()
+        }
     }
 }
 
@@ -139,7 +157,8 @@ private final class RenderThread: Thread {
         exited.signal()
     }
 
-    func waitUntilExited(timeout: TimeInterval) {
-        _ = exited.wait(timeout: .now() + timeout)
+    @discardableResult
+    func waitUntilExited(timeout: TimeInterval) -> DispatchTimeoutResult {
+        exited.wait(timeout: .now() + timeout)
     }
 }

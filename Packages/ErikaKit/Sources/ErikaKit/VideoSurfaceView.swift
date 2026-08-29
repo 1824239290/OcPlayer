@@ -97,12 +97,20 @@ final class MetalHostView: NSView {
     private var appliedPixelSize: CGSize = .zero
     private var appliedScale: CGFloat = 0
     private var coalescer = SurfaceResizeCoalescer()
+    /// teardown 时 `detachSurface` 失败过：内核可能仍攥着 layer 裸指针，
+    /// deinit 里要再强制补断一次。
+    private var needsDetachRetry = false
 
     init(engine: ErikaEngine) {
         self.engine = engine
         super.init(frame: .zero)
         wantsLayer = true
         layerContentsRedrawPolicy = .duringViewResize
+    }
+
+    deinit {
+        guard needsDetachRetry else { return }
+        engine.detach()
     }
 
     @available(*, unavailable)
@@ -208,7 +216,7 @@ final class MetalHostView: NSView {
         torndown = true
         guard attached else { return }
         attached = false
-        engine.detach()
+        needsDetachRetry = !engine.detach()
     }
 }
 
@@ -243,6 +251,9 @@ final class MetalHostView: UIView {
     private var appliedPixelSize: CGSize = .zero
     private var appliedScale: CGFloat = 0
     private var coalescer = SurfaceResizeCoalescer()
+    /// teardown 时 `detachSurface` 失败过：内核可能仍攥着 layer 裸指针，
+    /// deinit 里要再强制补断一次。
+    private var needsDetachRetry = false
 
     init(engine: ErikaEngine) {
         self.engine = engine
@@ -251,6 +262,11 @@ final class MetalHostView: UIView {
         // 同 macOS：首帧前垫黑，避免未初始化内容白闪。
         (layer as? CAMetalLayer)?.isOpaque = true
         (layer as? CAMetalLayer)?.backgroundColor = UIColor.black.cgColor
+    }
+
+    deinit {
+        guard needsDetachRetry else { return }
+        engine.detach()
     }
 
     @available(*, unavailable)
@@ -319,7 +335,7 @@ final class MetalHostView: UIView {
         torndown = true
         guard attached else { return }
         attached = false
-        engine.detach()
+        needsDetachRetry = !engine.detach()
     }
 }
 #endif

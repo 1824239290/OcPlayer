@@ -129,14 +129,19 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     }
 
     /// 先停帧驱动（等线程退出），再 detach —— 顺序反了就是随机崩。
-    func detach() {
+    /// 返回是否成功断开：失败时内核可能仍攥着 layer 的裸指针，调用方
+    /// （MetalHostView）会记标志、在视图释放前再强制补断一次。
+    @discardableResult
+    func detach() -> Bool {
         PlaybackLog.append("detach surface")
         renderLoop.stop()
         do {
             try withLock { try presenter.detachSurface() }
             PlaybackLog.append("detach surface 成功")
+            return true
         } catch {
             PlaybackLog.error("detach surface 失败 error=\(error)")
+            return false
         }
     }
 
