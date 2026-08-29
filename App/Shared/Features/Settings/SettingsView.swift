@@ -1,4 +1,5 @@
 import DanmakuKit
+import JellyfinKit
 import DiagnosticsKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -16,9 +17,15 @@ struct SettingsView: View {
     @State private var isEditingMoviePilot = false
     @State private var updateChecker = AppUpdateChecker.shared
     @State private var presentedRelease: GitHubRelease?
-    /// 预读档位的 UI 选中值：直接绑 UserDefaults 不触发刷新（Picker 会停在旧值），
-    /// 所以用 @State 承载，onAppear 同步一次、onChange 写回偏好。
-    @State private var readAheadMiB = PlaybackPreferences.httpReadAheadMiB
+    /// 待确认删除的已保存服务器档案（删除连 token 一起清，不可恢复）。
+    @State private var pendingDeleteProfile: ServerProfile?
+    /// 预读档位的选中值：直接绑 UserDefaults 的原始 key（@AppStorage 可观察，
+    /// 别处改了 Picker 也会刷新）。非法值显示为 0（与 PlaybackPreferences 的
+    /// 读取校验一致）；Picker 只写合法档位。
+    @AppStorage("dev.jumusu.ocplayer.playback.httpReadAheadMiB") private var storedReadAheadMiB = 0
+    private var readAheadMiB: Int {
+        PlaybackPreferences.readAheadOptionsMiB.contains(storedReadAheadMiB) ? storedReadAheadMiB : 0
+    }
 
     var body: some View {
         Form {
@@ -41,7 +48,10 @@ struct SettingsView: View {
             }
 
             Section("播放") {
-                Picker("网络预读缓冲", selection: $readAheadMiB) {
+                Picker("网络预读缓冲", selection: Binding(
+                    get: { readAheadMiB },
+                    set: { storedReadAheadMiB = $0 }
+                )) {
                     ForEach(PlaybackPreferences.readAheadOptionsMiB, id: \.self) { mib in
                         Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
                     }
@@ -176,14 +186,26 @@ struct SettingsView: View {
         .sheet(item: $presentedRelease) { release in
             UpdateReleaseSheet(release: release)
         }
+        .confirmationDialog(
+            "删除服务器？",
+            isPresented: Binding(
+                get: { pendingDeleteProfile != nil },
+                set: { if !$0 { pendingDeleteProfile = nil } }
+            ),
+            presenting: pendingDeleteProfile
+        ) { profile in
+            Button("删除「\(profile.serverName)」", role: .destructive) {
+                app.store.remove(id: profile.id)
+                pendingDeleteProfile = nil
+            }
+        } message: { _ in
+            Text("服务器地址与登录凭据会一起删除。下次想用这台需要重新输入地址并登录。")
+        }
         .task {
             moviepilot.refreshProfileIfNeeded()
             if updateChecker.state == .idle {
                 await updateChecker.checkForUpdates()
             }
-        }
-        .onChange(of: readAheadMiB) { _, newValue in
-            PlaybackPreferences.httpReadAheadMiB = newValue
         }
     }
 
@@ -227,7 +249,7 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     Button(role: .destructive) {
-                        app.store.remove(id: profile.id)
+                        pendingDeleteProfile = profile
                     } label: {
                         Image(systemName: "trash")
                     }
