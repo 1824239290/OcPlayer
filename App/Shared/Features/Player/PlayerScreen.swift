@@ -55,6 +55,8 @@ struct PlayerScreen: View {
     @State private var singleTapTask: Task<Void, Never>?
     /// 长按判定任务：到点仍停在原地才进 2x。
     @State private var holdTask: Task<Void, Never>?
+    /// seek 提交去抖任务：吃掉换指瞬间 SwiftUI 强发 onEnded 的假提交。
+    @State private var pendingPanCommit: Task<Void, Never>?
 
     struct TouchStart {
         let date: Date
@@ -69,6 +71,9 @@ struct PlayerScreen: View {
         static let panThreshold: CGFloat = 14
         static let doubleTapInterval: TimeInterval = 0.35
         static let singleTapDelay: Duration = .milliseconds(320)
+        /// seek 提交去抖：DragGesture 单触点，第二根手指落下会强制结束当前拖动
+        /// （onEnded 照发），紧接着换指的新 onChanged 用它把这个假提交取消掉。
+        static let panCommitDebounce: Duration = .milliseconds(80)
     }
     #endif
 
@@ -377,16 +382,16 @@ struct PlayerScreen: View {
 
     private func handleTouchChanged(_ value: DragGesture.Value) {
         if let existing = touchStart {
-            // 极少见：上次触摸被系统手势打断没收尾（onEnded 没来）。
-            // 不在 2x / 滑动中且明显超时，就当新触摸重新开始。
-            let stale = Date().timeIntervalSince(existing.date) > 2
-                && !controller.isHoldFastForwarding && panSession == nil
-            if !stale {
+            if value.startLocation == existing.location {
+                // 同一触摸在延续（startLocation 在拖动开始时就固定了）。
                 touchTranslation = value.translation
                 classifyPanIfNeeded(at: value)
                 return
             }
-            touchStart = nil
+            // startLocation 变了：不是同一根手指的延续。SwiftUI 会把拖动重定向到
+            // 第二根手指、或旧触摸被系统手势打断后重启拖动——旧触摸按打断收尾
+            // （seek 不落盘），新触摸重新起会话，亮度/音量不再沿用旧起点跳变。
+            interruptTouchSession()
         }
         touchStart = TouchStart(date: Date(), location: value.startLocation)
         touchTranslation = value.translation
@@ -477,13 +482,15 @@ struct PlayerScreen: View {
         panSession = session
     }
 
-    /// 系统打断（切后台 / 来电）时的触摸收尾。与 handleTouchEnded 的差异：
-    /// seek 不落盘——被打断的拖动不该当成用户确认过的跳转。
+    /// 系统打断（切后台 / 来电 / 换指重定向）时的触摸收尾。与 handleTouchEnded
+    /// 的差异：seek 不落盘——被打断的拖动不该当成用户确认过的跳转。
     private func interruptTouchSession() {
         holdTask?.cancel()
         holdTask = nil
         singleTapTask?.cancel()
         singleTapTask = nil
+        pendingPanCommit?.cancel()
+        pendingPanCommit = nil
         lastTapDate = nil
         touchStart = nil
         touchTranslation = .zero
@@ -508,7 +515,7 @@ struct PlayerScreen: View {
         // 滑动中抬指：seek 落盘（拖动中只出预览，松手才跳）；亮度音量已实时生效。
         if let session = panSession {
             panSession = nil
-            commitPan(session)
+            schedulePanCommit(session)
             return
         }
         // 轻点判定：时间短、位移小。
@@ -521,6 +528,19 @@ struct PlayerScreen: View {
               )
         else { return }
         handleTap()
+    }
+
+    /// seek 提交去抖：真抬指后 ~80ms 落盘；若这期间来了换指的新 onChanged
+    /// （interruptTouchSession 取消本任务），说明那个 onEnded 是多指强制结束
+    /// 的假抬指，放弃提交。真抬指场景多等 80ms 无感知。
+    private func schedulePanCommit(_ session: PlayerPanSession) {
+        pendingPanCommit?.cancel()
+        pendingPanCommit = Task { @MainActor in
+            try? await Task.sleep(for: TouchLimits.panCommitDebounce)
+            guard !Task.isCancelled else { return }
+            pendingPanCommit = nil
+            commitPan(session)
+        }
     }
 
     /// 单击 / 双击分流：第二击落到窗口内立即切播放暂停；单击延迟到窗口过期才切 HUD。
