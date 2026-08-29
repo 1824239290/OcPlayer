@@ -36,14 +36,30 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var reportableRequestID: PlaybackRequest.ID?
 
     var rate: Double = PlaybackPreferences.rate {
-        didSet { if rate != oldValue { PlaybackPreferences.rate = rate } }
+        didSet {
+            guard rate != oldValue else { return }
+            // 长按 2x 的临时倍速不落盘：加速中杀 App，下次启动不该默认 2 倍速。
+            if holdFastForwardRate == nil { PlaybackPreferences.rate = rate }
+        }
     }
+    /// 音量尾去抖任务：连续调节每 tick 都写 volume，落盘合并到最后一次之后。
+    private var volumePersistTask: Task<Void, Never>?
     var volume: Double = PlaybackPreferences.volume {
         didSet {
-            if volume != oldValue {
-                PlaybackPreferences.volume = volume
-                if volume > 0, muted { muted = false }
-            }
+            guard volume != oldValue else { return }
+            if volume > 0, muted { muted = false }
+            scheduleVolumePersist()
+        }
+    }
+
+    /// 音量落盘用 300ms 尾去抖：iOS 纵滑 / macOS 滑杆拖动期间每秒可产生上百次
+    /// volume 写入，逐次同步写 UserDefaults 太重；最终值总会落一次盘。
+    private func scheduleVolumePersist() {
+        volumePersistTask?.cancel()
+        volumePersistTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard let self, !Task.isCancelled else { return }
+            PlaybackPreferences.volume = self.volume
         }
     }
     /// 静音（保留原音量，解除时还原）。
