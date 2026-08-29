@@ -171,6 +171,11 @@ extension AppModel {
 
     func signOut() {
         stopPlaybackForSessionChange()
+        // Stopped 已在上面补发。登出场景把 reporter 与终报 handoff 一并放手：
+        // coordinator 强引用旧 server（含 token），不该在登出后仍被 App 层持有；
+        // 终报任务是独立 Task，没有引用也会自己跑完落库。
+        playbackReporting = nil
+        pendingPlaybackReportingHandoff = nil
         initialDataTask?.cancel()
         initialDataTask = nil
         quickConnectTask?.cancel()
