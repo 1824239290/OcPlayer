@@ -1,11 +1,11 @@
 # OcPlayer · 橘猫播放器
 
-自用的 Jellyfin 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染），弹幕接入弹弹play 并统一由 App 层 overlay 渲染，另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
+自用的 Jellyfin / Emby 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染），弹幕接入弹弹play 并统一由 App 层 overlay 渲染，另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
 
 ## 功能
 
-- **媒体库**：Jellyfin 登录（账号密码 + Quick Connect）、媒体库分页浏览、电影/剧集详情、季/集选择；首页继续观看、接下来看、最近添加
-- **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报 / 自动连播下一集 / macOS 键盘快捷键；章节列表跳转；片头片尾识别 + 悬浮「跳过」按钮；macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝
+- **媒体库**：Jellyfin / Emby 服务器自动识别（登录探活判定类型），Jellyfin 账号密码 + Quick Connect、Emby 账号密码；多服务器记忆与一键切换（登出不再遗忘档案，token 失效自动尝试其它已存服务器）；媒体库分页浏览、电影/剧集详情、季/集选择；首页继续观看、接下来看、最近添加
+- **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报 / 自动连播下一集 / macOS 键盘快捷键；章节列表跳转；片头片尾识别 + 悬浮「跳过」按钮；网络预读缓冲可调（2 / 8 / 16 / 32 MiB，公网高延迟服务器建议调大）；macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝
 - **弹幕**：已有剧集映射直接复用；首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；手动搜索选集、匹配缓存、时间偏移、不透明度、显示区域与类型过滤
 - **Bangumi（番剧追踪）**：OAuth 登录、收藏与在看进度、每日放送日历、条目详情与章节标记、播放结束自动标记本集看过
 - **MoviePilot（找片 + 下载 + 订阅）**：按标题搜站点资源、下载任务列表、订阅管理
@@ -27,10 +27,10 @@ Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板
 Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 753 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
-Scripts/package-macos.sh v0.1.1  # 本地打包，产出与 CI 相同的 dist/ 产物
+Scripts/package-macos.sh v0.1.5  # 本地打包，产出与 CI 相同的 dist/ 产物
 ```
 
-各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。
+各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。
 
 > 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的 `v0.1.7+readahead.1`（新增 HTTP 预读 API，改动已提上游）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch。
 
@@ -38,7 +38,7 @@ Scripts/package-macos.sh v0.1.1  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 使用建议
 
-- 需要一台 Jellyfin 服务器（10.x），登录时显式选择 HTTP/HTTPS
+- 支持 Jellyfin（10.x）与 Emby（4.x），登录时显式选择 HTTP/HTTPS；Emby 没有 Quick Connect，只显示账号密码表单
 - 弹幕开箱即用：内置公共 OcPlay 网关（Cloudflare Workers 部署，持有弹弹play AppSecret）签发的 API Key；如需自建网关 / 自有 Key，在 设置 → 弹幕 中修改
 - 内核弹幕渲染当前因内存问题被禁用，运行时固定走 App 层 overlay 渲染，详见下文「弹幕渲染路线」
 
@@ -50,7 +50,7 @@ Scripts/package-macos.sh v0.1.1  # 本地打包，产出与 CI 相同的 dist/ �
 | PlaybackKit | `Packages/PlaybackKit/` | 内核抽象层：`PlaybackEngine` 协议、注册与失效回退、契约测试 |
 | CoreModel | `Packages/CoreModel/` | 纯数据模型，双端共享，无第三方依赖 |
 | ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态 |
-| JellyfinKit | `Packages/JellyfinKit/` | Jellyfin 薄封装：登录、媒体库、PlaybackInfo、进度上报 |
+| JellyfinKit | `Packages/JellyfinKit/` | Jellyfin / Emby 薄封装：登录探活识别服务器类型、媒体库、PlaybackInfo、进度上报；Emby 走 `/emby` 前缀与老式路由适配 |
 | DanmakuKit | `Packages/DanmakuKit/` | 弹弹play 网关客户端：match/search/comments、JSON 转换、缓存、16MiB 哈希 |
 | DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、SwiftUI 适配 |
 | BangumiKit | `Packages/BangumiKit/` | Bangumi OAuth、收藏/章节/搜索/日历 API、GRDB 本地库 |
@@ -83,10 +83,8 @@ Scripts/package-macos.sh v0.1.1  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 文档
 
-- 开发计划与剩余范围：`PLAN.md`
-- 代码 review 待办：`REVIEW_TODO.md`
 - 更新日志：`CHANGELOG.md`
 
 ## 路线
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中（macOS 体验、设置、动效与可访问性）。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；近期并入 Emby 适配（登录探活自动识别、老式路由全链路）、多服务器记忆与切换、自编译 fork 内核的网络预读缓冲。M4 打磨进行中；0.1.5 待 Emby 真机验证后发版。
