@@ -32,8 +32,11 @@ struct MoviePilotHomeView: View {
     @State private var results: [MPMediaInfo] = []
     @State private var searchError: String?
     @State private var searchGeneration = 0
+    @State private var searchTask: Task<Void, Never>?
     @State private var subscribingMediaIDs: Set<String> = []
     @State private var localSubscribedMediaIDs: Set<String> = []
+    /// 当前订阅/搜索缓存属于哪台服务器（coordinator.boundServerID），用于换服时作废。
+    @State private var loadedForServerID: String?
 
     // MARK: - 提示信息
     @State private var notice: String?
@@ -147,6 +150,7 @@ struct MoviePilotHomeView: View {
                 results = []
                 isSearching = false
                 searchError = nil
+                searchTask?.cancel()
                 searchGeneration += 1
             }
         }
@@ -188,7 +192,14 @@ struct MoviePilotHomeView: View {
                 }
             }
         }
-        .task {
+        .task(id: moviepilot.boundServerID) {
+            // iOS 上 tab 保活：换绑另一台 MP 服务器后本页 @State 不销毁，
+            // 旧服务器的订阅/搜索残留。绑定标识变化（登出后重绑、换一台）即整体作废；
+            // 回到同一台服务器则保留数据，避免每次切回 tab 都重拉。
+            if loadedForServerID != moviepilot.boundServerID {
+                resetServerScopedState()
+                loadedForServerID = moviepilot.boundServerID
+            }
             // Bangumi 详情页「MoviePilot下载」带过来的搜索词：取走即清，发起一次搜索。
             if let pending = app.pendingMoviePilotQuery {
                 app.pendingMoviePilotQuery = nil
@@ -557,12 +568,14 @@ struct MoviePilotHomeView: View {
 
     private func search() {
         let trimmed = submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isSearching else { return }
+        guard !trimmed.isEmpty else { return }
+        // 允许重入：搜索在途时再次提交直接取消旧任务，不再静默吞掉新关键词。
+        searchTask?.cancel()
         searchGeneration += 1
         let generation = searchGeneration
         isSearching = true
         searchError = nil
-        Task {
+        searchTask = Task {
             do {
                 let found = try await MoviePilotAPIClient.shared.searchMedia(title: trimmed)
                 guard generation == searchGeneration else { return }
@@ -575,6 +588,23 @@ struct MoviePilotHomeView: View {
                 isSearching = false
             }
         }
+    }
+
+    /// 换绑服务器后作废本页所有服务器相关的本地缓存。
+    private func resetServerScopedState() {
+        searchTask?.cancel()
+        searchGeneration += 1
+        subscribes = []
+        subscribingMediaIDs = []
+        localSubscribedMediaIDs = []
+        results = []
+        submittedKeyword = ""
+        keyword = ""
+        isSearching = false
+        searchError = nil
+        subscribesError = nil
+        notice = nil
+        pendingDeleteSubscribe = nil
     }
 
     private func addSubscribeForMedia(_ media: MPMediaInfo) async {

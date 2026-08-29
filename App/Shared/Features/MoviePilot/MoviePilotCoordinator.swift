@@ -24,6 +24,10 @@ final class MoviePilotCoordinator {
     /// 当前用户（登录成功或恢复会话后有值）。
     var profile: MPUser?
 
+    /// 最近一次成功登录绑定的服务器标识（原始地址串），nil = 从未登录。
+    /// @Observable 供分区首页感知换服，作废旧服务器的订阅/搜索等本地 @State 缓存。
+    private(set) var boundServerID: String?
+
     /// 最近一次登录失败的文案（设置页展示，成功后清空）。
     var authError: String?
 
@@ -59,6 +63,9 @@ final class MoviePilotCoordinator {
         do {
             profile = try await MoviePilotAPIClient.shared.login()
             authError = nil
+            // 登录成功才更新绑定标识：改绑后登录失败的场合，首页保留旧数据即可
+            // （反正 gate 挡着），避免用未就绪的会话去拉新服务器。
+            boundServerID = store.serverURLString
             return nil
         } catch {
             let message = (error as? MoviePilotError)?.userMessage ?? "\(error)"
