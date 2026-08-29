@@ -64,6 +64,10 @@ public actor MoviePilotAPIClient {
     /// 单飞的静默重登：并发请求同时撞 401 时只登一次，其余等同一个 Task。
     private var reloginTask: Task<String, Error>?
     private var reloginGeneration: UInt64 = 0
+    /// 静默重登熔断标记：上次静默重登成功/被拒时的 authGeneration。等于当前
+    /// 代际说明这个密码已经换不来有效凭证（或刚换来仍被 401），重试循环里
+    /// 不再连发带密码的 login。凭据/会话变化时重置。
+    private var reloginExhaustedGeneration: UInt64?
 
     public init(
         store: MoviePilotStore = MoviePilotStore(),
@@ -110,6 +114,8 @@ public actor MoviePilotAPIClient {
         }
         cancelRelogin()
         bumpGeneration()
+        // 手动登录会重置凭据，解除静默重登的熔断。
+        reloginExhaustedGeneration = nil
         let token = try await postLogin(username: store.username, password: store.password)
         // 拿新 token 直接取用户信息（不经重登路径——token 就是刚换的）。
         let request = MPRequest(path: "/api/v1/user/current")
@@ -125,6 +131,7 @@ public actor MoviePilotAPIClient {
         }
         store.accessToken = token
         bumpGeneration()
+        reloginExhaustedGeneration = nil
         return user
     }
 
@@ -142,6 +149,7 @@ public actor MoviePilotAPIClient {
         cancelRelogin()
         store.clearSession()
         bumpGeneration()
+        reloginExhaustedGeneration = nil
         return authGeneration
     }
 
@@ -150,6 +158,7 @@ public actor MoviePilotAPIClient {
         guard expectedGeneration == authGeneration else { return nil }
         store.accessToken = nil
         bumpGeneration()
+        reloginExhaustedGeneration = nil
         return authGeneration
     }
 
@@ -370,6 +379,12 @@ public actor MoviePilotAPIClient {
         if let existing = reloginTask {
             return try await existing.value
         }
+        // 熔断：当前代际的 token 就是上一次静默重登刚发的（或刚被密码错误拒绝），
+        // 再登一次大概率还是同样结果，直接抛 requireLogin 让上层走登录 UI，
+        // 不在重试循环里每个 attempt 连发一次带密码的 login。
+        if reloginExhaustedGeneration == authGeneration {
+            throw MoviePilotError.requireLogin
+        }
         guard !store.username.isEmpty, !store.password.isEmpty else {
             // 没存密码就没法静默重登（比如退出登录后残留请求）。
             store.accessToken = nil
@@ -387,10 +402,19 @@ public actor MoviePilotAPIClient {
             }
             self.store.accessToken = token
             self.bumpGeneration()
+            // 刚发的 token 若仍被 401，本轮代际内不再重试重登（见入口熔断）。
+            self.reloginExhaustedGeneration = self.authGeneration
             return token
         }
         reloginTask = task
+
+        // 15 秒超时看门狗：登录卡住时取消（与 Bangumi 侧刷新同款），不让上层请求无限等。
+        let watchdog = Task {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            task.cancel()
+        }
         defer {
+            watchdog.cancel()
             if reloginGeneration == myRelogin {
                 reloginTask = nil
             }
@@ -401,9 +425,10 @@ public actor MoviePilotAPIClient {
         } catch let error as MoviePilotError {
             switch error {
             case .requireLogin, .badRequest:
-                // 密码已改 / 账号被停：token 作废，通知 UI 重新登录。
+                // 密码已改 / 账号被停：token 作废，通知 UI 重新登录；本轮熔断。
                 if generation == authGeneration {
                     store.accessToken = nil
+                    reloginExhaustedGeneration = authGeneration
                     await notifyAuthenticationRequired(ifCurrent: generation)
                 }
                 throw MoviePilotError.requireLogin
