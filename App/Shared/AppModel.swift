@@ -72,6 +72,10 @@ final class AppModel {
     /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
     var librariesError: String?
 
+    /// Bangumi 详情页「找片下载」待消费的搜索词。详情页只放词 + 切分区，
+    /// MoviePilot 首页出现后取走并清空（视图不重建就不会丢）。
+    var pendingMoviePilotQuery: String?
+
     /// 媒体库网格的分页缓存，按 libraryID 存。
     ///
     /// 原来 items / totalCount 是 `LibraryView` 的 `@State`：侧栏切走再切回来，

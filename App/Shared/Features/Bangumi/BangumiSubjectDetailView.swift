@@ -247,6 +247,7 @@ struct BangumiSubjectDetailView: View {
                     Button {
                         let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
                         if !query.isEmpty {
+                            app.pendingMoviePilotQuery = query
                             app.selectedSection = .moviepilot
                         }
                     } label: {
