@@ -609,6 +609,18 @@ public actor BangumiDatabaseOperator {
             .map { BangumiEpisode(row: $0) }
     }
 
+    /// 按单集 id 反查所属条目 id（标「看过」前推进条目「在看」用）。
+    /// 本地没有这一集时返回 nil，调用方跳过推进直接标集。
+    public func subjectID(ofEpisode episodeId: Int) throws -> Int? {
+        try database.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT subject_id FROM episodes WHERE episode_id = ?",
+                arguments: [episodeId]
+            )
+        }
+    }
+
     private func fetchEpisodes(in db: Database, subjectId: Int) throws -> [BangumiEpisode] {
         try Row.fetchAll(db, sql: "SELECT * FROM episodes WHERE subject_id = ?", arguments: [subjectId])
             .map { BangumiEpisode(row: $0) }

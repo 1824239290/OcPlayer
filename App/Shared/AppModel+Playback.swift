@@ -499,19 +499,7 @@ extension AppModel {
                         "播放结束未标记：本集已是看过 subject=\(subjectID) ep=\(episodeID)")
                     return
                 }
-                // 服务端只对「在看」条目推进单集进度：未收藏/想看/搁置要先推成在看，
-                // 否则标集不生效。失败就不标集——条目状态没推进，PATCH 大概率白打。
-                do {
-                    let advanced = try await self.bangumi.context.ensureSubjectWatching(subjectID)
-                    if advanced {
-                        BangumiDiagnostics.log(
-                            "播放结束联动：条目先推为在看 subject=\(subjectID)")
-                    }
-                } catch {
-                    BangumiDiagnostics.log(
-                        "播放结束标记中断：条目推为在看失败 subject=\(subjectID) error=\(error)")
-                    return
-                }
+                // 条目不在看时先推为在看已下沉到 updateEpisodeCollection（标看过自动前置）。
                 try await self.bangumi.context.updateEpisodeCollection(
                     episodeId: episode.id, type: .collect)
                 let episodeID = episode.id

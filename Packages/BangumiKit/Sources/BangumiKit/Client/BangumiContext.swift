@@ -405,6 +405,16 @@ public final class BangumiContext {
     public func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) async throws {
+        // 服务端只对「在看」条目可靠推进单集进度：条目不在看（未收藏/想看/搁置/
+        // 抛弃）时标看过不生效。所有标「看过」的入口（手动点击/播放结束）都先做
+        // 这个推进；「看过」不回退，完结条目不被重看一集拨回去。以远端状态为准，
+        // 推进失败不拦标集——手动点击是用户明确意图，能标则标，剩余偏差下次同步纠正。
+        if type == .collect {
+            let subjectId = try await database?.subjectID(ofEpisode: episodeId)
+            if let subjectId {
+                _ = try? await BangumiEpisodeRepository.ensureSubjectWatching(subjectId)
+            }
+        }
         try await BangumiEpisodeRepository.updateEpisodeCollection(
             episodeId: episodeId, type: type, batch: batch)
     }

@@ -82,6 +82,17 @@ struct BangumiKitTests {
         #expect(BangumiEpisodeRepository.targetWatchingState(for: .doing) == nil)
         #expect(BangumiEpisodeRepository.targetWatchingState(for: .collect) == nil)
     }
+
+    /// 标「看过」前要按单集 id 反查条目 id 做在看推进；本地缺集时返回 nil 不拦截标集。
+    @Test func subjectIDOfEpisodeResolvesAndMisses() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 7, eps: 2, epStatus: 0))
+        try await db.saveEpisodes(
+            subjectId: 7,
+            items: [BangumiFixture.episode(id: 71, subjectID: 7, sort: 1)])
+        #expect(try await db.subjectID(ofEpisode: 71) == 7)
+        #expect(try await db.subjectID(ofEpisode: 999) == nil)
+    }
 }
 
 // MARK: - 本地库
