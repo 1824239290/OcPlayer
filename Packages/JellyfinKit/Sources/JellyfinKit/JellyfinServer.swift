@@ -4,6 +4,14 @@ import Foundation
 import Get
 import JellyfinAPI
 
+/// 鉴权失效通知：鉴权 API（`send`/`sendRaw`）收到 401 时发出，object = `ServerProfile.id`。
+/// 登录/QuickConnect 接口自身的 401 是密码错误，**不**经过此通知。
+/// 接收方（App 根视图）按 profileID + 当前会话状态去重，引导用户重新登录。
+public enum JellyfinAuthentication {
+    public static let authenticationRequired = Notification.Name(
+        "dev.jumusu.OcPlayer.jellyfin.authenticationRequired")
+}
+
 /// 连接服务器时用户显式选择的网络协议。
 /// 存到 `baseURL` 里作为唯一事实源:Jellyfin API、图片、播放流全部从这里派生。
 public enum JellyfinServerScheme: String, Sendable {
@@ -616,7 +624,9 @@ public struct JellyfinServer: Sendable {
             return value
         } catch {
             NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))
-            throw JellyfinError.wrapPreservingCancellation(error)
+            let wrapped = JellyfinError.wrapPreservingCancellation(error)
+            await notifyIfTokenExpired(wrapped)
+            throw wrapped
         }
     }
 
@@ -628,7 +638,24 @@ public struct JellyfinServer: Sendable {
             return try await client.send(request).value
         } catch {
             NetworkLog.requestFailed(path, error: error, duration: 0)
-            throw JellyfinError.wrapPreservingCancellation(error)
+            let wrapped = JellyfinError.wrapPreservingCancellation(error)
+            await notifyIfTokenExpired(wrapped)
+            throw wrapped
+        }
+    }
+
+    /// 鉴权 API 上的 401 = token 失效且包内没有重登兜底（对比 MoviePilot 的
+    /// silentRelogin）——发通知把 UI 拉回重登流程，别让后续请求持续裸报
+    /// `.unauthorized`。主线程投递（App 侧 .onReceive 在主线程收）。
+    private func notifyIfTokenExpired(_ error: any Error) async {
+        guard let jellyfinError = error as? JellyfinError,
+              case .unauthorized = jellyfinError.kind
+        else { return }
+        let profileID = profile.id
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: JellyfinAuthentication.authenticationRequired,
+                object: profileID)
         }
     }
 }

@@ -252,5 +252,16 @@ extension AppModel {
         resetOnboarding()
         phase = .onboarding
     }
+
+    /// Jellyfin 401 通知（token 失效且包内无重登兜底）：停播、清死 token、
+    /// 拉回登录流程——与 switchToServer 死 token 分支同口径。
+    /// profileID 不匹配（换服后迟到的旧 401）或已不在会话中则忽略，天然去重。
+    func handleJellyfinAuthenticationRequired(profileID: String) {
+        guard phase == .ready, server?.profile.id == profileID else { return }
+        stopPlaybackForSessionChange()
+        store.signOut(id: profileID)
+        reconnectFlow()
+        onboardingError = "登录已过期，请重新登录"
+    }
 }
 
