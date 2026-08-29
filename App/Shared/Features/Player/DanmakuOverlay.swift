@@ -70,6 +70,10 @@ final class DanmakuOverlayController {
     }()
 
     private var comments: [Comment] = []
+
+    /// 弹幕数据是否已装载（HUD「时间偏移」区块的显隐用；overlay 路线下
+    /// controller 的内核轨道恒为空，不能拿轨道数判断）。
+    var hasComments: Bool { !comments.isEmpty }
     /// 下一条待出场弹幕的下标（comments 已按 time 排序）。
     private var pointer = 0
     /// 匹配返回的时间轴校正（dandanplay shift），与 HUD 全局偏移分开工。
@@ -140,8 +144,11 @@ final class DanmakuOverlayController {
             case 4: mode = .bottom
             default: mode = .scroll
             }
+            // color 可能是负数（服务端按有符号 int 写 0xFFFFFFFF 类颜色），
+            // UInt32(负数) 会直接 trap，必须先夹进 [0, 0xFFFFFF] 再转。
+            let color = max(0, min(item.color ?? 0xFF_FF_FF, 0xFF_FF_FF))
             return Comment(time: item.time, mode: mode,
-                           color: UInt32(item.color ?? 0xFF_FF_FF) & 0xFF_FF_FF,
+                           color: UInt32(color) & 0xFF_FF_FF,
                            text: item.content)
         }
     }
