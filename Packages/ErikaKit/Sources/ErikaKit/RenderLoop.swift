@@ -45,12 +45,22 @@ final class RenderLoop {
         thread.start()
     }
 
-    /// 暂停时把帧率降下来（可从任意线程调用，实际生效在渲染线程的下一帧）。
+    /// 帧率档位。`setTier` 可从任意线程调用，实际生效在渲染线程的下一帧。
     ///
     /// **不能直接停掉 link**：seek 后的重绘、resize 后的首帧、字幕/弹幕配置变更都靠
-    /// 同一条 tick 出画面，事件轮询也挂在上面，停了就再也不动了。
-    func setPaused(_ paused: Bool) {
-        frameRate.setPaused(paused)
+    /// 同一条 tick 出画面，事件轮询也挂在上面，停了就再也不动了——idle 档也只是
+    /// 把帧率压到个位数，轮询保持活着。
+    enum RateTier {
+        /// 播放中：跟随所在显示器的原生刷新率。
+        case active
+        /// 暂停：15-30，拖窗口 / resize 仍要跟手。
+        case paused
+        /// stopped / error：tick 只剩事件轮询在跑，压到个位数帧率别全速空转。
+        case idle
+    }
+
+    func setTier(_ tier: RateTier) {
+        frameRate.setTier(tier)
     }
 
     /// 停到线程真正退出为止 —— 保证 `detach_surface` 之后不会再来一次 tick。
@@ -84,8 +94,8 @@ final class RenderLoop {
 /// `CADisplayLink` 不是线程安全的，所以只在 `TickProxy.step` 里改它。
 private final class FrameRatePolicy: @unchecked Sendable {
     private let lock = NSLock()
-    private var paused = false
-    private var applied: Bool?
+    private var tier: RenderLoop.RateTier = .active
+    private var applied: RenderLoop.RateTier?
     private var defaultRange = CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
 
     /// 渲染线程启动前在主线程调用一次。
@@ -95,25 +105,31 @@ private final class FrameRatePolicy: @unchecked Sendable {
         lock.unlock()
     }
 
-    func setPaused(_ value: Bool) {
+    func setTier(_ value: RenderLoop.RateTier) {
         lock.lock()
-        paused = value
+        tier = value
         lock.unlock()
     }
 
     /// 渲染线程每帧调用；档位没变就什么都不做。
     func applyIfNeeded(to link: CADisplayLink) {
         lock.lock()
-        let desired = paused
+        let desired = tier
         let needsApply = applied != desired
         if needsApply { applied = desired }
         let restore = defaultRange
         lock.unlock()
         guard needsApply else { return }
-        // 暂停档位故意不压到个位数：暂停时拖窗口 / resize 仍要跟手。
-        link.preferredFrameRateRange = desired
-            ? CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
-            : restore
+        switch desired {
+        case .active:
+            link.preferredFrameRateRange = restore
+        case .paused:
+            // 暂停档位故意不压到个位数：暂停时拖窗口 / resize 仍要跟手。
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
+        case .idle:
+            // stopped/error 后 tick 只剩事件轮询，个位数帧率足够发觉状态恢复。
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 2, maximum: 10, preferred: 5)
+        }
     }
 }
 

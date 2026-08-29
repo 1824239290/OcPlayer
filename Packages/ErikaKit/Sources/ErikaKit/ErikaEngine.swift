@@ -122,9 +122,17 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     }
 
     /// 尺寸 / DPI 变化。内部保证在下一次 tick 之前生效（同一把锁）。
+    /// 失败补节流日志：吞掉的话失败后画面停在旧 viewport（黑屏/拉伸），只有现象没有原因。
+    private static let resizeThrottle = DiagnosticThrottle(key: "resize-surface", interval: 1)
+
     func resize(pixelWidth: Int, pixelHeight: Int, scale: Double) {
-        try? withLock {
-            try presenter.resizeSurface(pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
+        do {
+            try withLock {
+                try presenter.resizeSurface(pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
+            }
+        } catch {
+            PlaybackLog.error("resize_surface 失败 size=\(pixelWidth)x\(pixelHeight) scale=\(scale) error=\(error)",
+                              throttle: Self.resizeThrottle)
         }
     }
 
@@ -415,8 +423,12 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
             PlaybackLog.error("render_tick 失败（未知） error=\(error)", throttle: Self.renderThrottle)
             pending.append(.failed(code: 0, message: "\(error)"))
         }
-        // 事件是轮询模型：每帧抽干，不然会积压。
-        while true {
+        // 事件是轮询模型：每帧抽干，不然会积压。但每帧迭代要有上限——内核坏掉
+        // 疯狂产事件时，锁内 while true 会把等这把锁的 UI 控制调用饿死；上限内
+        // 抽不完的留给下一帧（poll 模型本来就能留）。
+        var polled = 0
+        while polled < Self.maxEventsPerFrame {
+            polled += 1
             do {
                 guard let event = try presenter.pollEvent() else { break }
                 if case .positionChanged(let value) = event {
@@ -437,12 +449,25 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         lock.unlock()
 
         for event in pending {
-            // 暂停时降帧：在这里改是因为 step() 就跑在渲染线程上，而 CADisplayLink
-            // 只能在自己的 runloop 线程上安全改动。
+            // 帧率档位跟随播放状态：paused 降帧 15-30（拖窗口/resize 仍要跟手）；
+            // stopped/error 进 idle 档——tick 只剩事件轮询在跑，没必要全刷新率空转。
+            // 在这里改是因为 step() 就跑在渲染线程上，CADisplayLink 只能在自己的
+            // runloop 线程上安全改动。
             if case .stateChanged(let value) = event {
-                renderLoop.setPaused(value == .paused)
+                renderLoop.setTier(Self.tier(for: value))
             }
             continuation.yield(event)
+        }
+    }
+
+    /// 每帧事件抽干上限。正常播放每帧个位数事件，256 只是风暴时的保险丝。
+    private static let maxEventsPerFrame = 256
+
+    private static func tier(for state: PlaybackState) -> RenderLoop.RateTier {
+        switch state {
+        case .paused: .paused
+        case .stopped, .error: .idle
+        default: .active
         }
     }
 }
