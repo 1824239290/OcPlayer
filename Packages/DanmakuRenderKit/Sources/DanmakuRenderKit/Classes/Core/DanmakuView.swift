@@ -257,6 +257,7 @@ public class DanmakuView: PlatformView {
     public override init(frame: CGRect) {
         super.init(frame: frame)
         recalculateTracks()
+        lastTrackLayoutSize = bounds.size
         // 统一用父级视图的GestureRegnizer管理子视图点击事件
 #if os(macOS)
         let containerClick = NSClickGestureRecognizer(target: self, action: #selector(containerDidClick(_:)))
@@ -276,17 +277,29 @@ public class DanmakuView: PlatformView {
 #if os(macOS)
     // Use a top-left origin like iOS so tracks are laid out from the top.
     public override var isFlipped: Bool { true }
-    
+
     public override func layout() {
         super.layout()
-        recalculateTracks()
+        recalculateTracksIfResized()
     }
 #else
     public override func layoutSubviews() {
         super.layoutSubviews()
-        recalculateTracks()
+        recalculateTracksIfResized()
     }
 #endif
+
+    /// 上次轨道重算时的画布尺寸。layout 在子视图增删（每条弹幕 shoot/回收）时
+    /// 都会走一遍，轨道几何只跟 bounds.size 有关——尺寸没变就不全量重排。
+    /// SwiftUI 适配器的 frame KVO 与 layout 是同一变化的两条通道，守卫顺带把
+    /// 重复触发收敛成一次。
+    private var lastTrackLayoutSize: CGSize = .zero
+
+    func recalculateTracksIfResized() {
+        guard bounds.size != lastTrackLayoutSize else { return }
+        lastTrackLayoutSize = bounds.size
+        recalculateTracks()
+    }
     
     deinit {
         stop()
@@ -869,6 +882,13 @@ extension DanmakuView {
             cell.removeFromSuperview()
             return
         }
+        // 入池前丢掉上次渲染的位图：layer 的 contents 在池里闲着也白占一份
+        // cell 尺寸的内存（弹幕池一开就是上百个 cell）；复用时反正会整帧重画。
+        #if os(macOS)
+        cell.layer?.contents = nil
+        #else
+        cell.layer.contents = nil
+        #endif
         var array = danmakuPool[NSStringFromClass(cs)]
         if array == nil {
             array = []

@@ -125,14 +125,15 @@ public struct DanmakuViewAdapter: PlatformViewRepresentable {
 #if canImport(UIKit)
             frameObserver = danmakuView?.publisher(for: \.frame).sink { [weak self] _ in
                 guard let self = self else { return }
-                self.danmakuView?.recalculateTracks()
+                // 只有 bounds.size 真的变了才重排（frame origin 抖动不重排）。
+                self.danmakuView?.recalculateTracksIfResized()
             }
 #elseif os(macOS)
             danmakuView?.postsFrameChangedNotifications = true
             frameObserver = NotificationCenter.default
                 .publisher(for: NSView.frameDidChangeNotification, object: danmakuView)
                 .sink { [weak self] _ in
-                    self?.danmakuView?.recalculateTracks()
+                    self?.danmakuView?.recalculateTracksIfResized()
                 }
 #endif
             return danmakuView!
