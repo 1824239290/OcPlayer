@@ -26,6 +26,8 @@ extension PlaybackController {
             formatter.dateFormat = "yyyyMMdd-HHmmss"
             let name = "截图-\(currentTitle?.prefix(40) ?? "frame")-\(formatter.string(from: Date())).png"
                 .replacingOccurrences(of: "/", with: "-")
+                .replacingOccurrences(of: ":", with: "-")
+                .filter { !$0.isNewline && ($0.isLetter || $0.isNumber || $0.isPunctuation || $0.isSymbol || $0 == " " || $0 == "-" || $0 == ".") }
             let url = directory.appending(path: name)
             try image.write(to: url)
             AppDiagnostics.requestStorageMaintenance()

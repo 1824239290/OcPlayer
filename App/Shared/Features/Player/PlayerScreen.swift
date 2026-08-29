@@ -33,6 +33,9 @@ struct PlayerScreen: View {
     @State private var isImportingSubtitle = false
     @State private var isSelectingDanmaku = false
     @State private var screenshotToast: String?
+    @State private var screenshotToastToken: UUID?
+    // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
+    @State private var cachedShareURL: URL?
     /// 只存布局档位，不存逐像素宽度，窗口缩放时不会让整套 HUD 每像素重建。
     @State private var isNarrow = false
     #if os(macOS)
@@ -128,7 +131,7 @@ struct PlayerScreen: View {
                     isSelectingDanmaku: $isSelectingDanmaku,
                     showStats: $showStats,
                     showInfoCard: $showInfoCard,
-                    shareURL: shareURL,
+                    shareURL: cachedShareURL,
                     isFullscreen: hudIsFullscreen,
                     onClose: closePlayer,
                     onToggleFullscreen: toggleFullscreenFromHUD,
@@ -253,6 +256,8 @@ struct PlayerScreen: View {
         .task(id: request) {
             guard let request, !Task.isCancelled else { return }
             PlaybackLog.append("PlayerScreen task id=\(request.title)")
+            // 含 FileManager.stat，缓存住别在每次 body 都 stat；换片随 id 重算。
+            cachedShareURL = computeShareURL()
             controller.openIfNeeded(request)
             guard !Task.isCancelled else { return }
             revealControls()
@@ -760,14 +765,16 @@ struct PlayerScreen: View {
     /// 分享：macOS 弹系统分享面板——直连流分享 URL，本地文件分享文件本身。
     private func shareNow() {
         #if os(macOS)
-        guard let view = NSApp.keyWindow?.contentView, let shareURL else { return }
+        guard let view = NSApp.keyWindow?.contentView, let shareURL = cachedShareURL else { return }
         let picker = NSSharingServicePicker(items: [shareURL])
         picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
         #endif
     }
 
     /// Jellyfin 流依赖 Authorization 请求头，不能只分享裸 URL；这类源不显示分享入口。
-    private var shareURL: URL? {
+    // 计算 involves FileManager.stat，缓存在 @State 里随 request 变化重算一次，
+    // 不在每次 body 求值时都做系统调用。
+    private func computeShareURL() -> URL? {
         if let local = request?.securityScopedURL { return local }
         if let uri = request?.uri, FileManager.default.fileExists(atPath: uri) {
             return URL(fileURLWithPath: uri)
@@ -786,9 +793,13 @@ struct PlayerScreen: View {
             revealControls()
             return
         }
+        // 连续截图时旧清除任务不能把新 toast 提前抹掉：用 token 归属判定。
+        let token = UUID()
+        screenshotToastToken = token
         screenshotToast = "已保存：\(name)"
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
+            guard screenshotToastToken == token else { return }
             screenshotToast = nil
         }
     }

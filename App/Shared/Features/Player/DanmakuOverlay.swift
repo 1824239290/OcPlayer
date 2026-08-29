@@ -135,7 +135,12 @@ final class DanmakuOverlayController {
         }
         struct Payload: Decodable { let comments: [Item]? }
         guard let data = json.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return [] }
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            // 解析失败原先静默返回空列表——网关响应异常时看起来像「没有弹幕」，
+            // 留一条日志区分「真没有」和「解析挂了」。
+            PlaybackLog.info("弹幕 JSON 解析失败 size=\(json.count)")
+            return []
+        }
         return (payload.comments ?? []).compactMap { item in
             guard item.time.isFinite, item.time >= 0, !item.content.isEmpty else { return nil }
             let mode: Comment.Mode

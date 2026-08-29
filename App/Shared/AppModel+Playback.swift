@@ -51,6 +51,8 @@ extension AppModel {
         playbackOpenTask = nil
         preparationDismissTask?.cancel()
         preparationDismissTask = nil
+        dismissFollowUpTask?.cancel()
+        dismissFollowUpTask = nil
         playbackPreparation = nil
         danmakuModel.danmaku.cancel()
     }
@@ -303,7 +305,7 @@ extension AppModel {
         }
     }
 
-func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
+    func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
         let context: DanmakuPlaybackContext
         if let item, let server {
             context = .jellyfin(
@@ -351,7 +353,7 @@ func startDanmaku(for request: PlaybackRequest, item: MediaItem?) {
         return "OcPlay/\(ClientIdentity.marketingVersion) (\(platform); \(architecture))"
     }
 
-func dismissPlayer() {
+    func dismissPlayer() {
         cancelPlaybackOpen()
         retryPlaybackItem = nil
         let stopped = finishReporting()   // 退出播放器 → Stopped,服务器记下续播位置
@@ -363,8 +365,12 @@ func dismissPlayer() {
         }
         presentedPlayer = nil
         // 等 Stopped 上报落库后刷新首页与详情页,让「继续观看」和打开中的详情页立刻反映刚退出的进度。
-        Task {
+        // 挂到 dismissFollowUpTask：快速退出/重进播放时 cancelPlaybackOpen 会取消旧收尾，
+        // 不让 fire-and-forget 的刷新在旧会话上跑完。
+        dismissFollowUpTask?.cancel()
+        dismissFollowUpTask = Task {
             await stopped?.value
+            guard !Task.isCancelled else { return }
             await loadHome()
             self.detailRefreshGeneration &+= 1
         }

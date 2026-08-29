@@ -1119,7 +1119,6 @@ extension View {
 /// 这里只做背景填充提亮 + accentColor 描边，轻量但明确。
 private struct HoverRowHighlight: ViewModifier {
     let active: Bool
-    let reduceMotion: Bool
 
     func body(content: Content) -> some View {
         content
@@ -1141,7 +1140,7 @@ extension View {
     /// 列表式卡片的悬停高亮：背景提亮 + accent 描边。给行式卡片用，
     /// 不放大（放大会让行撑出列表边界）。海报/剧照网格卡用 `hoverLift`。
     func hoverRowHighlight(active: Bool) -> some View {
-        modifier(HoverRowHighlight(active: active, reduceMotion: false))
+        modifier(HoverRowHighlight(active: active))
     }
 }
 

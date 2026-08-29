@@ -43,6 +43,8 @@ struct DetailView: View {
     @State private var isLoadingEpisodes = false
     @State private var episodeLoadError: String?
     @State private var isUpdatingPlayed = false
+    /// 播放退出后的静默刷新任务：离页时取消。
+    @State private var reloadAfterPlaybackTask: Task<Void, Never>?
     @State private var playedActionError: String?
 
     private var shown: MediaItem { detail ?? item }
@@ -111,7 +113,12 @@ struct DetailView: View {
         .background(Color.pageBackground.ignoresSafeArea())
         .task(id: item.id) { await load() }
         .onChange(of: app.detailRefreshGeneration) { _, _ in
-            Task { await reloadAfterPlayback() }
+            // 挂住任务：离页 / 换条目时取消，fire-and-forget 不再跑到旧页面上。
+            reloadAfterPlaybackTask?.cancel()
+            reloadAfterPlaybackTask = Task { await reloadAfterPlayback() }
+        }
+        .onDisappear {
+            reloadAfterPlaybackTask?.cancel()
         }
     }
 
@@ -526,8 +533,8 @@ struct DetailView: View {
 
     private var metaRow: some View {
         HStack(spacing: 9) {
-            ForEach(metaParts, id: \.self) { part in
-                if part != metaParts.first {
+            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
                     Text("·").foregroundStyle(.white.opacity(0.4))
                 }
                 Text(part).foregroundStyle(.white.opacity(0.85))
@@ -1081,6 +1088,9 @@ struct DetailView: View {
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription
+        } catch is CancellationError {
+            // 切季/离页的取消不是错误，别闪错误条。
+            return
         } catch {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = "\(error)"

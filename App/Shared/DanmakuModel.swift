@@ -21,7 +21,6 @@ final class DanmakuModel {
         self.dandanplayStore = dandanplayStore
     }
 
-    var dandanplayGatewayURL: URL { dandanplayStore.gatewayURL }
 
     var dandanplayGatewayURLString: String {
         dandanplayStore.gatewayURLString ?? DandanplaySettingsStore.defaultGatewayURL.absoluteString

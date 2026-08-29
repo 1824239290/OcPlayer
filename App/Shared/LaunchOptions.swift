@@ -88,7 +88,13 @@ enum LaunchOptions {
         var tick = 0
         emit("[selftest] start file=\(fileFromEnvironment?.path ?? "由 open 传入")")
         while Date().timeIntervalSince(start) < seconds {
-            try? await Task.sleep(for: .milliseconds(500))
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                // 自检循环响应取消（进程退出信号会取消任务），不再继续轮询。
+                emit("[selftest] cancelled")
+                exit(0)
+            }
             tick += 1
             if let step = controls[tick] {
                 emit("[selftest] >>> \(step.0)")

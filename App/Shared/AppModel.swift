@@ -250,6 +250,8 @@ final class AppModel {
     var playbackOpenGeneration: UInt64 = 0
     /// loading 层延后撤除的观察任务（等内核出帧）。
     var preparationDismissTask: Task<Void, Never>?
+    // dismissPlayer 的收尾刷新任务（等 Stopped 落库后刷首页/详情）：可取消。
+    var dismissFollowUpTask: Task<Void, Never>?
     /// 播放准备态：nil = 不在准备（空闲，或已呈现给 PlayerScreen）。
     var playbackPreparation: PlaybackPreparation?
     /// 保留 Jellyfin 条目，重试请求期间 finishReporting 清掉 nowPlayingItem 后仍可安全重试。

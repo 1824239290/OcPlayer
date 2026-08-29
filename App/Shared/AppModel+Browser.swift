@@ -126,8 +126,12 @@ extension AppModel {
                 nextUp: !nextUpItems.isEmpty,
                 latest: !latestItems.isEmpty
             )
+            let changed = home.railPresence != presence
             home.railPresence = presence
-            presence.persist()
+            // 低频变化的三位布尔掩码，只在翻转时写盘（原先每次加载成功都同步写）。
+            if changed {
+                presence.persist()
+            }
         } catch let error as JellyfinError {
             guard sessionIsCurrent(generation, server: server),
                   homeLoadGeneration == loadGeneration
