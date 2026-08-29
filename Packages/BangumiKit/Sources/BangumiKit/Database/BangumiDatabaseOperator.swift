@@ -765,7 +765,9 @@ public actor BangumiDatabaseOperator {
         var sql = "(? = 0 OR type = ?) AND ctype = ?"
         if !search.isEmpty {
             // 原名和中文名都要搜；`alias` 列没有写入来源，恒为空串，不参与匹配。
-            sql += " AND (name LIKE ? COLLATE NOCASE OR name_cn LIKE ? COLLATE NOCASE)"
+            // ESCAPE '\\' 与 likePattern 的 \% \_ 转义配对：SQLite 默认没有转义符，
+            // 不加的话含 %/_ 的关键词会被当通配符，搜索结果错误。
+            sql += " AND (name LIKE ? ESCAPE '\\' COLLATE NOCASE OR name_cn LIKE ? ESCAPE '\\' COLLATE NOCASE)"
             let pattern = likePattern(search)
             arguments += [pattern, pattern]
         }
