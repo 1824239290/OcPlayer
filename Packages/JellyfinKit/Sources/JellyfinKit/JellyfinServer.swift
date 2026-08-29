@@ -4,7 +4,7 @@ import Foundation
 import Get
 import JellyfinAPI
 
-/// 鉴权失效通知：鉴权 API（`send`/`sendRaw`）收到 401 时发出，object = `ServerProfile.id`。
+/// 鉴权失效通知：鉴权 API（`send`）收到 401 时发出，object = `ServerProfile.id`。
 /// 登录/QuickConnect 接口自身的 401 是密码错误，**不**经过此通知。
 /// 接收方（App 根视图）按 profileID + 当前会话状态去重，引导用户重新登录。
 public enum JellyfinAuthentication {
@@ -461,8 +461,10 @@ public struct JellyfinServer: Sendable {
         let pageSize = max(limit, 1)
         var startIndex = 0
         var loaded: [MediaItem] = []
+        // 硬上限：totalRecordCount 异常（nil 恒缺 / 数字畸大）时防无限翻页。
+        let hardLimit = 10_000
 
-        while true {
+        while loaded.count < hardLimit {
             let page = try await itemsPage(
                 parentID: parentID,
                 kinds: kinds,
@@ -479,6 +481,7 @@ public struct JellyfinServer: Sendable {
             }
             startIndex += page.items.count
         }
+        return loaded
     }
 
     /// 剧集 → 季列表。
@@ -630,19 +633,6 @@ public struct JellyfinServer: Sendable {
         }
     }
 
-    /// 原始响应发送口：响应体不进解码，交给调用方宽松处理。
-    /// 错误分类 / 日志语义由 `send` 统一承担。
-    func sendRaw(_ request: Request<Data>) async throws -> Data {
-        let path = NetworkLog.logPath(for: request.url)
-        do {
-            return try await client.send(request).value
-        } catch {
-            NetworkLog.requestFailed(path, error: error, duration: 0)
-            let wrapped = JellyfinError.wrapPreservingCancellation(error)
-            await notifyIfTokenExpired(wrapped)
-            throw wrapped
-        }
-    }
 
     /// 鉴权 API 上的 401 = token 失效且包内没有重登兜底（对比 MoviePilot 的
     /// silentRelogin）——发通知把 UI 拉回重登流程，别让后续请求持续裸报

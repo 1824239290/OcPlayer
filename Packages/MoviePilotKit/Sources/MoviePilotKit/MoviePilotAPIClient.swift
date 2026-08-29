@@ -74,7 +74,10 @@ public actor MoviePilotAPIClient {
         sessionConfiguration: URLSessionConfiguration = .default
     ) {
         self.store = store
-        let configuration = sessionConfiguration
+        // 复制后再改：直接改写入参 configuration 会污染调用方手里的对象
+        //（共享 .default 的属性是进程级单例，改动影响全局）。
+        let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
+            ?? URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
         configuration.httpAdditionalHeaders = [
@@ -84,8 +87,8 @@ public actor MoviePilotAPIClient {
 
         // 流式会话：请求间空闲 30s 超时（心跳 15s 兜着），整场 5 分钟上限。
         // cookie 存储跟随原配置（默认共享，登录种的 resource cookie 全局可见）。
-        let streamConfiguration =
-            (sessionConfiguration.copy() as? URLSessionConfiguration) ?? configuration
+        let streamConfiguration = (sessionConfiguration.copy() as? URLSessionConfiguration)
+            ?? URLSessionConfiguration.default
         streamConfiguration.timeoutIntervalForRequest = 30
         streamConfiguration.timeoutIntervalForResource = 300
         self.streamSession = URLSession(configuration: streamConfiguration)
@@ -342,8 +345,17 @@ public actor MoviePilotAPIClient {
         }
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
             ?? URLComponents()
-        let prefix = components.path == "/" ? "" : components.path
-        components.path = prefix + request.path
+        // 规范化拼接：baseURL 尾斜杠 / path 首字符差异都会拼出 //；path 逐段
+        // 百分号编码（媒体键带 `tmdb:` 这类冒号，URLQueryItem 只管 query 段）。
+        // path 自身的尾斜杠是端点语义（/download/ vs /download 不同路由），必须保留。
+        let prefix = components.path.hasSuffix("/")
+            ? String(components.path.dropLast()) : components.path
+        let trailingSlash = request.path.hasSuffix("/") ? "/" : ""
+        let encodedPath = request.path
+            .split(separator: "/", omittingEmptySubsequences: true)
+            .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+            .joined(separator: "/")
+        components.path = prefix + "/" + encodedPath + trailingSlash
         if !request.query.isEmpty {
             components.queryItems = request.query
         }

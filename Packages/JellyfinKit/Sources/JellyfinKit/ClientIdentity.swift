@@ -56,8 +56,12 @@ public enum ClientIdentity {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// 稳定设备 ID（UUID，首用生成）。
+    private static let identityLock = NSLock()
+
+    /// 稳定设备 ID（UUID，首用生成）。读改写加锁：并发首用会双写两个不同值。
     public static var deviceID: String {
+        identityLock.lock()
+        defer { identityLock.unlock() }
         let defaults = UserDefaults.standard
         if let stored = defaults.string(forKey: deviceIDKey) {
             return stored
@@ -70,6 +74,8 @@ public enum ClientIdentity {
     /// 展示用设备名。不用 AppKit/UIKit 取「漂亮名字」：那些 API 有主线程约束，
     /// 机器名对服务器只是展示，`ProcessInfo.hostName`（如 "macbook.local"）足够。
     public static var deviceName: String {
+        identityLock.lock()
+        defer { identityLock.unlock() }
         let defaults = UserDefaults.standard
         if let stored = defaults.string(forKey: deviceNameKey) {
             return stored

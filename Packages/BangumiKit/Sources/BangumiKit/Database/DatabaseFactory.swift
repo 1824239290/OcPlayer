@@ -29,10 +29,8 @@ enum BangumiDatabaseFactory {
             try db.execute(
                 sql: "ALTER TABLE subjects ADD COLUMN episodes_synced_at INTEGER NOT NULL DEFAULT 0")
         }
-        migrator.registerMigration("addProgressAllIndex") { db in
-            try db.execute(
-                sql: "CREATE INDEX IF NOT EXISTS subjects_ctype_collected_idx ON subjects(ctype, collected_at DESC)")
-        }
+        // 历史迁移 addProgressAllIndex 已并入 createSubjects（建表时一并建
+        // subjects_ctype_collected_idx）；保留迁移记录本身，老库不会再执行到重复建索引。
         try migrator.migrate(dbPool)
         return dbPool
     }

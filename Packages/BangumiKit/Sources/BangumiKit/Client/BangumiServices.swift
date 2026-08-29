@@ -61,15 +61,15 @@ public enum BangumiCollectionService {
         rate: Int? = nil
     ) async throws {
         let url = BangumiURL.api(path: "v0/users/-/collections/\(subjectId)")
-        var body: [String: Any] = [:]
+        var body: [String: BangumiJSONValue] = [:]
         if let type, type != .none {
-            body["type"] = type.rawValue
+            body["type"] = .int(type.rawValue)
         }
         if let rate {
-            body["rate"] = rate
+            body["rate"] = .int(rate)
         }
         _ = try await BangumiAPIClient.shared.request(
-            url: url, method: "POST", body: body, auth: .required)
+            url: url, method: "POST", body: .object(body), auth: .required)
     }
 }
 
@@ -120,12 +120,12 @@ public enum BangumiEpisodeService {
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) async throws {
         let url = BangumiURL.next(path: "p1/collections/episodes/\(episodeId)")
-        var body: [String: Any] = ["type": type.rawValue]
+        var body: [String: BangumiJSONValue] = ["type": .int(type.rawValue)]
         if batch {
-            body["batch"] = true
+            body["batch"] = .bool(true)
         }
         _ = try await BangumiAPIClient.shared.request(
-            url: url, method: "PATCH", body: body, auth: .required)
+            url: url, method: "PATCH", body: .object(body), auth: .required)
     }
 }
 
@@ -140,15 +140,15 @@ public enum BangumiSubjectService {
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
         ])
-        var body: [String: Any] = [
-            "keyword": keyword,
-            "sort": "match",
+        var body: [String: BangumiJSONValue] = [
+            "keyword": .string(keyword),
+            "sort": .string("match"),
         ]
         if let filter, filter != .none {
-            body["filter"] = ["type": [filter.rawValue]]
+            body["filter"] = .object(["type": .object(["0": .int(filter.rawValue)])])
         }
         let data = try await BangumiAPIClient.shared.request(
-            url: pageURL, method: "POST", body: body)
+            url: pageURL, method: "POST", body: .object(body))
         return try await BangumiAPIClient.shared.decodeResponse(data)
     }
 

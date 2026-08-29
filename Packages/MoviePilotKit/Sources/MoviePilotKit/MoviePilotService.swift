@@ -51,10 +51,7 @@ extension MoviePilotAPIClient {
             timeout: 30
         )
         let data = try await requestData(request)
-        let wrapped = try Self.plainDecoder.decode(MPStatusResponse.self, from: data)
-        guard wrapped.success ?? true else {
-            throw MoviePilotError.generic(wrapped.message ?? "添加下载失败")
-        }
+        try Self.checkStatus(data)
     }
 
     /// 下载中的任务列表（含进度）。
@@ -218,9 +215,13 @@ extension MoviePilotAPIClient {
         try Self.checkStatus(data)
     }
 
+    /// 2xx 响应的成功校验。部分端点成功时回非 JSON（纯文本 ok / 空体 204）：
+    /// 解不出信封就当成功，别把成功当失败；解得出才按 success 判。
     private static func checkStatus(_ data: Data) throws {
         guard !data.isEmpty else { return }
-        let wrapped = try plainDecoder.decode(MPStatusResponse.self, from: data)
+        guard let wrapped = try? plainDecoder.decode(MPStatusResponse.self, from: data) else {
+            return
+        }
         guard wrapped.success ?? true else {
             throw MoviePilotError.generic(wrapped.message ?? "操作失败")
         }

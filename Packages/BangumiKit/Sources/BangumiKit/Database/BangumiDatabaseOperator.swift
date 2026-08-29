@@ -87,13 +87,17 @@ public actor BangumiDatabaseOperator {
         subjectType: BangumiSubjectType
     ) throws -> [BangumiCollectionType: Int] {
         try database.read { db in
+            // 一条 GROUP BY 出全部类型计数，替代逐类型 9 趟 COUNT 扫描。
+            let rows = try Row.fetchAll(
+                db,
+                sql: "SELECT ctype, COUNT(*) AS n FROM subjects WHERE type = ? GROUP BY ctype",
+                arguments: [subjectType.rawValue]
+            )
             var counts: [BangumiCollectionType: Int] = [:]
-            for type in BangumiCollectionType.allTypes() {
-                counts[type] = try Int.fetchOne(
-                    db,
-                    sql: "SELECT COUNT(*) FROM subjects WHERE ctype = ? AND type = ?",
-                    arguments: [type.rawValue, subjectType.rawValue]
-                ) ?? 0
+            for row in rows {
+                if let type = BangumiCollectionType(rawValue: row["ctype"]) {
+                    counts[type] = row["n"]
+                }
             }
             return counts
         }
@@ -314,6 +318,7 @@ public actor BangumiDatabaseOperator {
     }
 
     /// 删除本地不在远端集合里的章节（远端删除后清理）。
+    /// NOT IN 的占位符逐批 ≤900（SQLite 变量上限 999）：超长剧集一口气传会撞上限。
     public func deleteEpisodesNotIn(subjectId: Int, episodeIds: Set<Int>) throws {
         try database.write { db in
             if episodeIds.isEmpty {
@@ -322,13 +327,18 @@ public actor BangumiDatabaseOperator {
                 return
             }
             let ids = Array(episodeIds)
-            try db.execute(
-                sql: """
-                    DELETE FROM episodes
-                    WHERE subject_id = ? AND episode_id NOT IN (\(placeholders(ids.count)))
-                    """,
-                arguments: StatementArguments([subjectId] + ids)
-            )
+            var start = 0
+            while start < ids.count {
+                let batch = ids[start..<min(start + 900, ids.count)]
+                try db.execute(
+                    sql: """
+                        DELETE FROM episodes
+                        WHERE subject_id = ? AND episode_id NOT IN (\(placeholders(batch.count)))
+                        """,
+                    arguments: StatementArguments([subjectId] + batch)
+                )
+                start += 900
+            }
         }
     }
 

@@ -53,6 +53,14 @@ extension MediaLibrary.CollectionType {
 }
 
 /// Jellyfin tick（100 ns）→ 秒。
+/// 确定性短哈希（缺失 id 的派生用，只要求跨进程稳定，不要求密码学强度）。
+private func stableHash(_ part: String?, _ kind: BaseItemKind?) -> String {
+    var hasher = Hasher()
+    hasher.combine(part)
+    hasher.combine(kind?.rawValue)
+    return String(hasher.finalize())
+}
+
 func seconds(fromTicks ticks: Int?) -> Double? {
     ticks.map { Double($0) / 10_000_000 }
 }
@@ -100,8 +108,12 @@ extension BaseItemDto {
             mappedEpisodeNumber = indexNumber
         }
 
+        // id 缺失时兜底 UUID() 每次解析都会生成新 id——同一个条目两次拉取
+        // 身份不同，SwiftUI 当成不同条目闪烁重排。改用「确定性派生 id」：
+        // 名称+类型哈希，同一缺失条目跨拉取稳定（服务器本不该漏 id，这是兜底）。
+        let resolvedID = id ?? "missing-\(stableHash(name ?? "unnamed", type))"
         return MediaItem(
-            id: id ?? UUID().uuidString,
+            id: resolvedID,
             name: name ?? "未命名",
             kind: MediaItem.Kind(type),
             overview: overview,
@@ -112,7 +124,7 @@ extension BaseItemDto {
             officialRating: officialRating,
             seriesID: seriesID,
             seriesName: seriesName,
-            seasonID: type == .season ? (id ?? UUID().uuidString) : seasonID,
+            seasonID: type == .season ? resolvedID : seasonID,
             seasonName: type == .season ? name : seasonName,
             seasonNumber: mappedSeasonNumber,
             episodeNumber: mappedEpisodeNumber,

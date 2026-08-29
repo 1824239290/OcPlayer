@@ -137,14 +137,14 @@ public actor BangumiAPIClient {
     public func exchangeForAccessToken(code: String) async throws -> UInt64 {
         let exchangeGeneration = beginOAuthExchange()
         let url = URL(string: "\(oauthBase())/access_token")!
-        let body: [String: String] = [
-            "grant_type": "authorization_code",
-            "client_id": appInfo.clientId,
-            "client_secret": appInfo.clientSecret,
-            "code": code,
-            "redirect_uri": appInfo.callbackURL,
+        let body: [String: BangumiJSONValue] = [
+            "grant_type": .string("authorization_code"),
+            "client_id": .string(appInfo.clientId),
+            "client_secret": .string(appInfo.clientSecret),
+            "code": .string(code),
+            "redirect_uri": .string(appInfo.callbackURL),
         ]
-        let data = try await request(url: url, method: "POST", body: body, auth: .disabled)
+        let data = try await request(url: url, method: "POST", body: .object(body), auth: .disabled)
         let credentials = try saveAuthResponse(
             data: data, commit: .oauth(exchangeGeneration: exchangeGeneration))
         return credentials.generation
@@ -185,7 +185,7 @@ public actor BangumiAPIClient {
     }
 
     public func request(
-        url: URL, method: String, body: Any? = nil, auth: BangumiAuthMode = .auto
+        url: URL, method: String, body: BangumiJSONValue? = nil, auth: BangumiAuthMode = .auto
     ) async throws -> Data {
         let maxRetries = 2
         var lastError: Error?
@@ -220,7 +220,7 @@ public actor BangumiAPIClient {
             request.addValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpMethod = method
             if let body {
-                request.httpBody = try JSONSerialization.data(withJSONObject: body)
+                request.httpBody = try JSONEncoder().encode(body)
             }
 
             let data: Data
@@ -426,16 +426,16 @@ public actor BangumiAPIClient {
         auth: BangumiAuth, expectedGeneration: UInt64
     ) async throws -> CredentialSnapshot {
         let url = URL(string: "\(oauthBase())/access_token")!
-        let body: [String: String] = [
-            "grant_type": "refresh_token",
-            "client_id": appInfo.clientId,
-            "client_secret": appInfo.clientSecret,
-            "refresh_token": auth.refreshToken,
-            "redirect_uri": appInfo.callbackURL,
+        let body: [String: BangumiJSONValue] = [
+            "grant_type": .string("refresh_token"),
+            "client_id": .string(appInfo.clientId),
+            "client_secret": .string(appInfo.clientSecret),
+            "refresh_token": .string(auth.refreshToken),
+            "redirect_uri": .string(appInfo.callbackURL),
         ]
         let data: Data
         do {
-            data = try await request(url: url, method: "POST", body: body, auth: .disabled)
+            data = try await request(url: url, method: "POST", body: .object(body), auth: .disabled)
         } catch let error as BangumiError {
             if case .badRequest(let response) = error,
                let responseData = response.data(using: .utf8),
@@ -517,6 +517,27 @@ public actor BangumiAPIClient {
             NotificationCenter.default.post(
                 name: Self.authenticationRequiredNotification,
                 object: NSNumber(value: generation))
+        }
+    }
+}
+
+
+/// JSON 请求体值（Sendable）：替代 body: Any? 的非 Sendable 签名。
+public enum BangumiJSONValue: Encodable, Sendable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case object([String: BangumiJSONValue])
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .bool(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
         }
     }
 }

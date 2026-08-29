@@ -42,7 +42,9 @@ public struct BangumiAuth: Codable, Sendable {
     }
 
     public func isExpired() -> Bool {
-        Date() > expiresAt
+        // 60s leeway：本机时钟略慢于服务器时，卡着过期点发出的请求会带着
+        // 已失效的 token 白跑一趟（401 再重登）。
+        Date().addingTimeInterval(60) > expiresAt
     }
 }
 
