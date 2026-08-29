@@ -118,6 +118,7 @@ extension AppModel {
             // 不清的话拉取完成前 UI 会一直显示上一台的内容，像“登录后没刷新”。
             // 同一台服务器重登（token 过期）则保留数据，避免无谓的白屏。
             if self.server?.profile.id != server.profile.id {
+                stopPlaybackForSessionChange()
                 dropSessionData()
             }
             // phase 已切到 ready，首屏数据靠 initialDataTask 异步驱动 home.isLoading
@@ -130,8 +131,18 @@ extension AppModel {
         }
     }
 
+    /// 会话级变更（登出 / 换服务器 / 重连）共用的播放清理：停掉在播引擎与在途的
+    /// 打开流程。不做的话会留下无 UI 覆盖、仍在出声的播放会话。
+    func stopPlaybackForSessionChange() {
+        cancelPlaybackOpen()
+        retryPlaybackItem = nil
+        _ = finishReporting()
+        playback?.stopPlayback()
+    }
+
     /// 清空随旧会话走的浏览数据（媒体库 / 首页 / 导航栈）。
     /// 服务器数据按 profile 隔离，条目 id 只在原服务器里有意义，不能跨会话复用。
+    /// 播放侧的清理由调用方按需配 `stopPlaybackForSessionChange()`。
     private func dropSessionData() {
         initialDataTask?.cancel()
         initialDataTask = nil
@@ -159,10 +170,7 @@ extension AppModel {
     }
 
     func signOut() {
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        _ = finishReporting()
-        playback?.stopPlayback()
+        stopPlaybackForSessionChange()
         initialDataTask?.cancel()
         initialDataTask = nil
         quickConnectTask?.cancel()
@@ -205,10 +213,7 @@ extension AppModel {
     /// token 缺失 / 失效则探活后进登录流程（登录成功按同 id 覆盖旧档案）。
     func switchToServer(_ profile: ServerProfile) async {
         // 播放与浏览态属于旧会话，先停掉，别让用户看到旧服务器的数据闪一下。
-        cancelPlaybackOpen()
-        retryPlaybackItem = nil
-        _ = finishReporting()
-        playback?.stopPlayback()
+        stopPlaybackForSessionChange()
 
         if let server = JellyfinServer.resume(profile: profile, from: store) {
             if self.server?.profile.id != server.profile.id {
@@ -222,6 +227,15 @@ extension AppModel {
         // 地址用档案里的 baseURL——Emby 已含 /emby 前缀，startLogin 探活对带前缀
         // 地址同样响应；识别 kind 后 finish 会落回同样的 baseURL。
         store.signOut(id: profile.id)
+        // connectServer 完成探测时要求 phase == .onboarding 才会挂上 loginSession；
+        // 不先切过去（设置页里 phase 是 .ready），探活结果会被静默丢弃——
+        // 表现为点了「切换」毫无反应，token 还已经被删掉了。换服务器时旧会话
+        // 的浏览数据也一并清掉，和 resume 分支、completeLogin 的口径一致。
+        if self.server?.profile.id != profile.id {
+            dropSessionData()
+        }
+        resetOnboarding()
+        phase = .onboarding
         await connectServer(profile.baseURL.absoluteString, scheme: profile.baseURL.scheme == "https" ? .https : .http)
     }
 
