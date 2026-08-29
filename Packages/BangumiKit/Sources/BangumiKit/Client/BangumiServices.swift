@@ -162,11 +162,23 @@ public enum BangumiSubjectService {
 
 /// 每日放送（番剧时间表）远程 API。
 public enum BangumiCalendarService {
+    /// 内存 TTL 缓存：日历是低频变化的数据，每次进分区都全量重拉纯属浪费。
+    /// TTL 过后（或拉取失败）下次调用回源；TTL 内直接复用。
+    private nonisolated(unsafe) static var cachedDays: [BangumiCalendarDayDTO]?
+    private nonisolated(unsafe) static var cachedAt: Date?
+    private static let ttl: TimeInterval = 30 * 60
+
     /// 拉取每日放送列表（按周一至周日 7 天分组）。
-    public static func getCalendar() async throws -> [BangumiCalendarDayDTO] {
+    public static func getCalendar(force: Bool = false) async throws -> [BangumiCalendarDayDTO] {
+        if !force, let cachedDays, let cachedAt, Date().timeIntervalSince(cachedAt) < ttl {
+            return cachedDays
+        }
         let url = BangumiURL.api(path: "calendar")
         let data = try await BangumiAPIClient.shared.request(url: url, method: "GET", auth: .disabled)
-        return try await BangumiAPIClient.shared.decodeResponse(data)
+        let days: [BangumiCalendarDayDTO] = try await BangumiAPIClient.shared.decodeResponse(data)
+        cachedDays = days
+        cachedAt = Date()
+        return days
     }
 }
 

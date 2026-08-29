@@ -83,6 +83,7 @@ private struct CollectionSection: View {
     @State private var selected: BangumiCollectionType = .collect
     @State private var subjects: [BangumiSubjectDTO] = []
     @State private var loaded = false
+    @State private var loadError: String?
     @State private var hasInitializedSelection = false
 
     var body: some View {
@@ -103,7 +104,20 @@ private struct CollectionSection: View {
 
             chips
 
-            if subjects.isEmpty {
+            if let loadError, loaded {
+                HStack(spacing: 8) {
+                    Text(loadError)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Button(UIStrings.retry) {
+                        Task { await load() }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+                }
+                .padding(.vertical, 6)
+            } else if subjects.isEmpty {
                 if loaded {
                     Text("暂无收藏")
                         .font(.footnote)
@@ -154,7 +168,13 @@ private struct CollectionSection: View {
     }
 
     private func load() async {
-        counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
+        loadError = nil
+        do {
+            counts = try await bangumi.context.fetchCollectionCounts(subjectType: subjectType)
+        } catch {
+            // 计数拉失败不挡列表，但要有痕迹（原先静默，看起来像「暂无收藏」）。
+            loadError = (error as? BangumiError)?.userMessage ?? "\(error)"
+        }
         // 首次加载时默认选中「在看」，其次「看过」（有数据的类型优先）。用户手动切换后不再覆盖。
         if !hasInitializedSelection {
             hasInitializedSelection = true
@@ -162,8 +182,13 @@ private struct CollectionSection: View {
                 selected = preferred
             }
         }
-        subjects = (try? await bangumi.context.fetchCollectionSubjects(
-            subjectType: subjectType, collectionType: selected, limit: 12, offset: 0)) ?? []
+        do {
+            subjects = try await bangumi.context.fetchCollectionSubjects(
+                subjectType: subjectType, collectionType: selected, limit: 12, offset: 0)
+        } catch {
+            loadError = (error as? BangumiError)?.userMessage ?? "\(error)"
+            subjects = []
+        }
         loaded = true
     }
 }

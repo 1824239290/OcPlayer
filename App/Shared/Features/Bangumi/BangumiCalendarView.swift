@@ -388,7 +388,7 @@ struct BangumiCalendarView: View {
         }
 
         do {
-            let fetchedDays = try await BangumiCalendarService.getCalendar()
+            let fetchedDays = try await BangumiCalendarService.getCalendar(force: force)
             guard loadGeneration == gen else { return }
             days = fetchedDays
             await reloadLocalInterests()
