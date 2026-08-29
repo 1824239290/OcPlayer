@@ -622,7 +622,12 @@ try engine.play()
 
     func skip(by seconds: Double) {
         guard let engine else { return }
-        let target = Double(state.position.microseconds) + seconds * 1_000_000
+        var target = Double(state.position.microseconds) + seconds * 1_000_000
+        // 别越过片长：seek 到 EOF 之后内核会进「audio output stalled at EOF」
+        // 错误风暴（逐帧重发 .failed，实测一次刷了 6302 条），画面冻结假死。
+        if state.duration > .zero {
+            target = min(target, Double(state.duration.microseconds) - 500_000)
+        }
         try? engine.seek(to: .microseconds(Int64(max(0, target))))
     }
 

@@ -70,6 +70,10 @@ public final class PlayerState {
     /// 最近一条内核错误，UI 可以显示后自行清掉。
     public private(set) var lastError: String?
 
+    /// 连续重复的内核错误去重键。内核卡进坏状态（如 EOF stall）会逐帧重发同一条
+    /// `.failed`，不去重的话主线程和诊断日志会被错误风暴刷爆（实测 6302 条）。
+    private var lastFailedEventKey: String?
+
     /// 独立时间轴快照：高频 progress/position 封装在此，隔离其它观察者。
     public let timeline = PlayerTimeline()
 
@@ -127,6 +131,7 @@ public final class PlayerState {
         audioTracks = []
         subtitleTracks = []
         lastError = nil
+        lastFailedEventKey = nil
     }
 
     func apply(_ event: PlayerEvent) {
@@ -150,8 +155,14 @@ public final class PlayerState {
         case .videoDecoderChanged, .audioOutputChanged, .trackSelectionChanged:
             break
         case .failed(let code, let message):
-            PlaybackLog.error("内核错误事件 code=\(code) message=\(message ?? "nil")")
-            state = .error
+            // 同一条错误只记一次：内核卡死时 .failed 会逐帧重发，去重前一次
+            // EOF stall 刷了 6302 条日志、主线程被事件轰炸到假死。
+            let key = "\(code)|\(message ?? "")"
+            if key != lastFailedEventKey {
+                PlaybackLog.error("内核错误事件 code=\(code) message=\(message ?? "nil")")
+                lastFailedEventKey = key
+            }
+            if state != .error { state = .error }
             lastError = message ?? "内核错误 code=\(code)"
         }
     }
