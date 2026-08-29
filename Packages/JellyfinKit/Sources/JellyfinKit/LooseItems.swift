@@ -125,7 +125,24 @@ enum EmbySanitizer {
 /// 宽松解码配置：与 jellyfin-sdk-swift 的 JellyfinClient 相同的 ISO8601 日期策略。
 /// sanitizer 后的二次解码必须用同一配置，否则带 DateCreated 的响应会炸 typeMismatch。
 enum LooseDecoding {
-    static let isoDateFormatter: DateFormatter = {
+    /// 全部静态复用：原先 `static var decoder` 是计算属性，每个请求新建
+    /// JSONDecoder，每个日期字段跑两遍 DateFormatter（慢且覆盖窄——`Z` 模式
+    /// 认不得 `+08:00` 带冒号偏移，一条带时区偏移的日期炸整包解码）。
+    ///
+    /// 热路径用 ISO8601DateFormatter（快一个量级）：带小数秒与不带各一；
+    /// `.withInternetDateTime` 只认 RFC3339 标准偏移（`Z`/`+08:00`），
+    /// `+0800` 这类无冒号写法由末位的 DateFormatter 兜底。
+    // ISO8601DateFormatter/DateFormatter 均为文档保证的线程安全类型（DateFormatter
+    // 自 iOS 7/macOS 10.9 起），跨线程复用安全，nonisolated(unsafe) 只豁免检查。
+    nonisolated(unsafe) private static let isoFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    nonisolated(unsafe) private static let isoBasic = ISO8601DateFormatter()
+
+    nonisolated(unsafe) private static let legacyFractional: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -134,7 +151,7 @@ enum LooseDecoding {
         return formatter
     }()
 
-    static let fallbackFormatter: DateFormatter = {
+    nonisolated(unsafe) private static let legacyBasic: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
@@ -143,16 +160,19 @@ enum LooseDecoding {
         return formatter
     }()
 
-    static var decoder: JSONDecoder {
+    static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
-            if let date = isoDateFormatter.date(from: raw) ?? fallbackFormatter.date(from: raw) {
+            if let date = isoFractional.date(from: raw)
+                ?? isoBasic.date(from: raw)
+                ?? legacyFractional.date(from: raw)
+                ?? legacyBasic.date(from: raw) {
                 return date
             }
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "无法解析日期 \(raw)")
         }
         return decoder
-    }
+    }()
 }
