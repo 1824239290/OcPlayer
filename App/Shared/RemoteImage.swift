@@ -338,12 +338,17 @@ final class ImagePipeline: @unchecked Sendable {
 struct RemoteImage: View {
     @State private var image: PlatformImage?
     @State private var failed = false
-    @State private var loadedURL: URL?
+    @State private var loadedKey: String?
 
     let url: URL?
     var authHeader: String?
     /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
     var maxPixelSize: Int? = nil
+
+    /// 与 .task(id:) 一致的复合加载键：URL + 凭证指纹 + 目标尺寸。
+    private var loadKey: String {
+        "\(url?.absoluteString ?? "")#\(authHeader.map { String($0.hashValue) } ?? "none")#\(maxPixelSize ?? 0)"
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -371,29 +376,31 @@ struct RemoteImage: View {
         }
         .clipped()
         .animation(imageFade, value: image != nil)
-        .task(id: "\(url?.absoluteString ?? "")#\(authHeader.map { String($0.hashValue) } ?? "none")#\(maxPixelSize ?? 0)") {
+        .task(id: loadKey) {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Clear the previous bitmap before
             // loading the new URL, otherwise the old poster can sit beside the
             // new title until another redraw.
             guard let url else {
                 image = nil
-                loadedURL = nil
+                loadedKey = nil
                 failed = false
                 return
             }
-            // 只有成功过的 URL 才跳过重载：失败的不记 loadedURL，
+            // 只有成功过的组合才跳过重载：失败的不记 loadedKey，
             // 视图再次出现时还能重试（瞬时断网不该让这张图永远 404 下去）。
-            guard loadedURL != url else { return }
+            // 复合键（URL+凭证+目标尺寸）一致才跳过：同 URL 换尺寸/凭证要重载，
+            // 否则会一直显示错误尺寸的旧位图。
+            guard loadedKey == loadKey else { return }
             image = nil
-            loadedURL = nil
+            loadedKey = nil
             failed = false
             do {
                 let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
                 guard !Task.isCancelled else { return }   // 换 URL / 消失：新任务会接手，别写旧图
                 if let loaded {
                     image = loaded
-                    loadedURL = url
+                    loadedKey = loadKey
                 } else {
                     failed = true
                 }
