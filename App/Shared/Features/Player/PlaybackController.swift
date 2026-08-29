@@ -656,6 +656,7 @@ try engine.play()
             let duration = Double(state.duration.microseconds) / 1_000_000
             // 跳到片尾结束前 20 秒,保留一点尾声画面。
             target = max(duration - 20, position)
+            chapterSession.noteEndCreditsSkipped()
             PlaybackLog.append("保底跳过片尾 → \(target)s")
         }
         try? engine?.seek(to: .seconds(max(0, target)))

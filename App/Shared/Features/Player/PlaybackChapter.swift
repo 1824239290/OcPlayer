@@ -210,11 +210,15 @@ struct ChapterSession {
     var skipMarks: [SkipMark] = []
     /// 已跳过的标记 id(会话内去重)。
     private(set) var skippedIDs: Set<String> = []
+    /// 保底片尾是否已跳过(会话内只兜一次)。不记的话跳到「片尾前 20s」仍在
+    /// 90s 窗口内，提示立刻重现、按钮原地循环。
+    private(set) var didSkipEndCredits = false
 
     mutating func reset() {
         chapters = []
         skipMarks = []
         skippedIDs = []
+        didSkipEndCredits = false
     }
 
     /// 当前应展示的「跳过」提示。
@@ -238,8 +242,9 @@ struct ChapterSession {
             }
         }
 
-        // 2. 保底:最后一分三十秒,给「跳过片尾」。
+        // 2. 保底:最后一分三十秒,给「跳过片尾」。会话内只兜一次。
         if !preventCreditsSkip,
+           !didSkipEndCredits,
            duration - position <= 90,
            duration - position > 1 {
             return .endCredits(duration: position)
@@ -250,5 +255,10 @@ struct ChapterSession {
     /// 记录一次跳过(会话内去重)。`mark` 的 id 被标记后,后续不再弹。
     mutating func noteSkipped(_ mark: SkipMark) {
         skippedIDs.insert(mark.id)
+    }
+
+    /// 记录一次保底片尾跳过,后续不再重复弹「跳过片尾」。
+    mutating func noteEndCreditsSkipped() {
+        didSkipEndCredits = true
     }
 }
