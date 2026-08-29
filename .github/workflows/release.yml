@@ -19,8 +19,8 @@ concurrency:
 
 jobs:
   # 测试门禁：tag 直接 push 时不经过 Test 工作流的 PR/push 触发也能保证
-  # 「发出去的包构建在测试过的代码上」。步骤与 test.yml 的 macos job 保持一致
-  # （收敛成 composite action 之前先接受这份复制）。
+  # 「发出去的包构建在测试过的代码上」。Erika 环境准备收敛在
+  # .github/actions/setup-erika，与 test.yml 共用同一份定义。
   tests:
     name: Tests (AppTests + SwiftPM packages)
     runs-on: macos-26
@@ -33,27 +33,21 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Resolve Erika version
-        id: erika
-        shell: bash
-        run: |
-          set -euo pipefail
-          resolved_version="$(Scripts/fetch-erika.sh --resolve-version "$ERIKA_VERSION")"
-          echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
-          echo "ERIKA_VERSION=$resolved_version" >> "$GITHUB_ENV"
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
 
-      - name: Cache Erika binaries
+      - name: Cache SwiftPM builds
         uses: actions/cache@v4
         with:
           path: |
-            Vendor/downloads
-            Vendor/extracted
-            Packages/ErikaKit/Vendor/Erika.xcframework
-          key: erika-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
-
-      - name: Fetch Erika kernel
-        shell: bash
-        run: Scripts/fetch-erika.sh "$ERIKA_VERSION"
+            .local-build/ci-release-test
+            Packages/*/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-
+            spm-${{ runner.os }}-
 
       - name: Run App tests (macOS scheme)
         shell: bash
@@ -134,27 +128,10 @@ jobs:
             exit 1
           fi
 
-      - name: Resolve Erika version
-        id: erika
-        shell: bash
-        run: |
-          set -euo pipefail
-          resolved_version="$(Scripts/fetch-erika.sh --resolve-version "$ERIKA_VERSION")"
-          echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
-          echo "ERIKA_VERSION=$resolved_version" >> "$GITHUB_ENV"
-
-      - name: Cache Erika binaries
-        uses: actions/cache@v4
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
         with:
-          path: |
-            Vendor/downloads
-            Vendor/extracted
-            Packages/ErikaKit/Vendor/Erika.xcframework
-          key: erika-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
-
-      - name: Fetch Erika
-        shell: bash
-        run: Scripts/fetch-erika.sh "$ERIKA_VERSION"
+          erika-version: ${{ env.ERIKA_VERSION }}
 
       - name: Build release packages
         shell: bash

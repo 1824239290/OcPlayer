@@ -26,27 +26,21 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Resolve Erika version
-        id: erika
-        shell: bash
-        run: |
-          set -euo pipefail
-          resolved_version="$(Scripts/fetch-erika.sh --resolve-version "$ERIKA_VERSION")"
-          echo "version=$resolved_version" >> "$GITHUB_OUTPUT"
-          echo "ERIKA_VERSION=$resolved_version" >> "$GITHUB_ENV"
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
 
-      - name: Cache Erika binaries
+      - name: Cache SwiftPM builds
         uses: actions/cache@v4
         with:
           path: |
-            Vendor/downloads
-            Vendor/extracted
-            Packages/ErikaKit/Vendor/Erika.xcframework
-          key: erika-${{ runner.os }}-${{ runner.arch }}-${{ steps.erika.outputs.version }}
-
-      - name: Fetch Erika kernel
-        shell: bash
-        run: Scripts/fetch-erika.sh "$ERIKA_VERSION"
+            .local-build/ci-test
+            Packages/*/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-
+            spm-${{ runner.os }}-
 
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
       # 渲染集成测试在 SPM 包内，下面单独跑。
