@@ -54,6 +54,9 @@ struct DetailView: View {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
     }
 
+    /// 紧凑端（iPhone）沉浸式横幅高度。
+    private var compactBannerHeight: CGFloat { 290 }
+
     /// 紧凑宽度的播放钮窄一点，和海报/标题一起塞进窄屏不溢出。
     private var playButtonWidth: CGFloat {
         horizontalSizeClass == .compact ? 200 : 228
@@ -259,12 +262,13 @@ struct DetailView: View {
 
     private var compactHeroBanner: some View {
         ZStack(alignment: .bottom) {
-            // 填充裁剪直接交给 aspectRatio(.fill) + 外层 .clipped()，
-            // 不用 GeometryReader——它量出来的尺寸 ZStack 本来就会给。
             let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             if let url = target.url {
                 RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                     .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: compactBannerHeight)
+                    .clipped()
             } else {
                 Rectangle().fill(Color.primary.opacity(0.06))
             }
@@ -288,7 +292,7 @@ struct DetailView: View {
                 .padding(.horizontal, detailHorizontalInset)
                 .padding(.bottom, 8)
         }
-        .frame(height: 290)
+        .frame(height: compactBannerHeight)
         .clipped()
     }
 
@@ -461,12 +465,16 @@ struct DetailView: View {
 
     private var banner: some View {
         ZStack {
-            // 背景层：填充裁剪交给 aspectRatio(.fill) + 外层 .clipped()，
-            // 不需要 GeometryReader 量尺寸（ZStack 的建议尺寸就是它的尺寸）。
+            // 背景层：fill 的溢出尺寸会参与 ZStack 布局、把渐变层的坐标系一起
+            // 撑高，底部渐隐就画到了裁剪窗口之外（视觉上「渐变没了」）。先把
+            // 图片层钳回定高、原位裁掉溢出，渐变才对齐可见区域。
             let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             if let url = target.url {
                 RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                     .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: bannerHeight)
+                    .clipped()
             } else {
                 Rectangle().fill(Color.primary.opacity(0.06))
             }
