@@ -6,7 +6,7 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
     /// 未登录 / token 已失效且静默重登失败。
     case requireLogin
     case notConfigured
-    case network(String)
+    case network(failure: NetworkErrorClassifier.Kind?, message: String)
     case request(String)
     case badRequest(String)
     case forbidden(String)
@@ -25,19 +25,19 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
     public init(networkError error: NSError) {
         switch NetworkErrorClassifier.kind(for: error.code) {
         case .some(.noConnection):
-            self = .network("没有网络连接，请检查网络设置或权限后重试")
+            self = .network(failure: .noConnection, message: "没有网络连接，请检查网络设置或权限后重试")
         case .some(.timedOut):
-            self = .network("请求超时，请稍后再试")
+            self = .network(failure: .timedOut, message: "请求超时，请稍后再试")
         case .some(.cannotResolveHost):
-            self = .network("无法解析 MoviePilot 服务器地址，请检查地址后重试")
+            self = .network(failure: .cannotResolveHost, message: "无法解析 MoviePilot 服务器地址，请检查地址后重试")
         case .some(.cannotConnect):
-            self = .network("无法连接到 MoviePilot 服务器，请检查网络后重试")
+            self = .network(failure: .cannotConnect, message: "无法连接到 MoviePilot 服务器，请检查网络后重试")
         case .some(.secureConnectionFailed):
-            self = .network("无法建立安全连接，请检查 MoviePilot 证书或网络环境")
+            self = .network(failure: .secureConnectionFailed, message: "无法建立安全连接，请检查 MoviePilot 证书或网络环境")
         case .some(.cancelled):
             self = .ignore("请求已取消")
         case .none:
-            self = .network("网络请求失败，请稍后再试")
+            self = .network(failure: nil, message: "网络请求失败，请稍后再试")
         }
     }
 
@@ -74,7 +74,7 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
             return "MoviePilot 登录状态已失效，请重新登录"
         case .notConfigured:
             return "MoviePilot 服务器未配置，请先在设置页填写地址与账号"
-        case .network(let message), .generic(let message), .notice(let message):
+        case .network(_, let message), .generic(let message), .notice(let message):
             return message
         case .request:
             return "请求处理失败，请稍后再试"
@@ -101,7 +101,7 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
             return "Please login with MoviePilot"
         case .notConfigured:
             return "MoviePilot server not configured"
-        case .network(let message), .generic(let message), .notice(let message), .ignore(let message):
+        case .network(_, let message), .generic(let message), .notice(let message), .ignore(let message):
             return message
         case .request(let message):
             return "Request Error!\n\(message)"
@@ -118,8 +118,8 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
 
     public var isRetryable: Bool {
         switch self {
-        case .network(let message):
-            return message == "请求超时，请稍后再试" || message == "无法连接到 MoviePilot 服务器，请检查网络后重试"
+        case .network(let failure, _):
+            return failure == .timedOut || failure == .noConnection
         case .http(let statusCode, _):
             return statusCode == 502 || statusCode == 503 || statusCode == 504
         default:

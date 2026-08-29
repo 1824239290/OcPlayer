@@ -261,7 +261,8 @@ public actor MoviePilotAPIClient {
 
         for attempt in 0...maxRetries {
             if attempt > 0 {
-                let delay = UInt64(pow(2.0, Double(attempt - 1))) * 1_000_000_000
+                // 指数退避乘 0.5~1.5 抖动：避免多端同拍重试放大服务端压力。
+                let delay = UInt64((pow(2.0, Double(attempt - 1)) * Double.random(in: 0.5...1.5)) * 1_000_000_000)
                 try await Task.sleep(nanoseconds: delay)
                 MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(self.maxRetries + 1))")
             }
