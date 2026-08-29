@@ -132,7 +132,7 @@ public struct DanmakuGatewayClient: Sendable {
 
     public init(configuration: DandanplayConfiguration, session: URLSession? = nil) {
         self.configuration = configuration
-        self.session = session ?? .shared
+        self.session = session ?? DanmakuNetworking.makeSession()
     }
 
     // MARK: 接口
@@ -283,18 +283,29 @@ public struct DanmakuGatewayClient: Sendable {
 
             switch status {
             case 200..<300:
-                // match/search 带 ResponseBase 基座先校验 success；comments 不带基座直接解码。
-                if let base = try? JSONDecoder().decode(ResponseBase.self, from: data),
-                   !base.success {
-                    DanmakuNetworkLog.requestFailed(logPath, error: DandanplayError.businessError(
-                        code: base.errorCode ?? -1, message: base.errorMessage), duration: duration)
-                    throw DandanplayError.businessError(code: base.errorCode ?? -1, message: base.errorMessage)
-                }
+                // 单遍解码：match/search 的 T 自带基座字段，解码后直接判 success，
+                // 不再先整包 decode(ResponseBase) 把数 MB 的 comments 解两遍。
+                // T 解码失败时回退基座判定——业务错误载荷（success=false）缺业务
+                // 字段，T 必然解失败，靠这一步保留 businessError 语义。
                 do {
                     let payload = try JSONDecoder().decode(T.self, from: data)
+                    if let base = payload as? GatewayBaseChecking, !base.success {
+                        let error = DandanplayError.businessError(
+                            code: base.errorCode ?? -1, message: base.errorMessage)
+                        DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
+                        throw error
+                    }
                     DanmakuNetworkLog.requestSucceeded(logPath, cache: cache, duration: duration)
                     return GatewayResult(payload: payload, cacheStatus: cache)
+                } catch let error as DandanplayError {
+                    throw error
                 } catch {
+                    if let base = try? JSONDecoder().decode(ResponseBase.self, from: data), !base.success {
+                        let businessError = DandanplayError.businessError(
+                            code: base.errorCode ?? -1, message: base.errorMessage)
+                        DanmakuNetworkLog.requestFailed(logPath, error: businessError, duration: duration)
+                        throw businessError
+                    }
                     DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
                     throw DandanplayError.decodingFailed("\(error)")
                 }
@@ -318,6 +329,14 @@ public struct DanmakuGatewayClient: Sendable {
             throw DandanplayError.decodingFailed("\(error)")
         }
     }
+}
+
+/// match/search 响应共享的业务基座字段：单遍解码后据此判业务错误。
+/// comments（CommentResponse）不带基座，不遵守此协议、不参与判定。
+protocol GatewayBaseChecking {
+    var success: Bool { get }
+    var errorCode: Int? { get }
+    var errorMessage: String? { get }
 }
 
 /// match/search 响应共享的 ResponseBase 基座，用于在解码 payload 前先校验 `success`。

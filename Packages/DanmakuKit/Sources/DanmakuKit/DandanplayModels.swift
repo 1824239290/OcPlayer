@@ -145,3 +145,9 @@ public struct DanmakuComment: Codable, Sendable, Equatable {
         self.m = m
     }
 }
+
+// MARK: - 业务基座字段（网关单遍解码用）
+
+extension MatchResponse: GatewayBaseChecking {}
+extension SearchAnimeResponse: GatewayBaseChecking {}
+extension SearchEpisodesResponse: GatewayBaseChecking {}

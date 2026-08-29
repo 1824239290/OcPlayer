@@ -40,7 +40,7 @@ public enum FileHash {
         from url: URL,
         headers: [String: String] = [:],
         expectedFileSize: Int64? = nil,
-        session: URLSession = .shared
+        session: URLSession = DanmakuNetworking.makeSession()
     ) async throws -> String {
         var request = URLRequest(url: url)
         request.setValue("bytes=0-\(headByteCount - 1)", forHTTPHeaderField: "Range")
