@@ -43,7 +43,10 @@ struct MoviePilotResourceView: View {
     }
 
     var body: some View {
-        List {
+        // 全量过滤+排序每次 body 只算一遍：displayedTorrents 在本页被引用 4 处
+        // （空态判断 / ForEach / header 计数×2），直接内联会在流式期间一遍事件排 4 次序。
+        let displayed = displayedTorrents
+        return List {
             Section {
                 header
                     .listRowBackground(Color.clear)
@@ -77,7 +80,7 @@ struct MoviePilotResourceView: View {
                         .foregroundStyle(.red)
                         .font(.callout)
                     Button(UIStrings.retry) { search() }
-                } else if displayedTorrents.isEmpty {
+                } else if displayed.isEmpty {
                     Text(hasSearched
                          ? (filters.isActive
                             ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
@@ -86,14 +89,14 @@ struct MoviePilotResourceView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(displayedTorrents) { torrent in
+                    ForEach(displayed) { torrent in
                         torrentRow(torrent)
                     }
                 }
             } header: {
                 if !torrents.isEmpty || isSearching || searchError != nil {
-                    if filters.isActive, displayedTorrents.count != torrents.count {
-                        Text("资源 \(displayedTorrents.count) / \(torrents.count)")
+                    if filters.isActive, displayed.count != torrents.count {
+                        Text("资源 \(displayed.count) / \(torrents.count)")
                     } else {
                         Text("资源 \(torrents.count)")
                     }
