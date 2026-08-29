@@ -3,3 +3,7 @@
 #include? "../Secrets.xcconfig"
 
 INFOPLIST_FILE = Config/Info.plist
+
+// 版本号唯一事实源：发版只改这里（package-macos.sh 不带参数时也读它）。
+// target 级不再各写一份 MARKETING_VERSION，避免三处漂移。
+MARKETING_VERSION = 0.1.5

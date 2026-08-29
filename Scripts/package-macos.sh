@@ -3,7 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RELEASE_TAG="${1:-v0.1.5}"
+# 不带参数时从 App.xcconfig 读版本号（唯一事实源），避免脚本里再硬编码一份漂移。
+XCCONFIG_VERSION="$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/Config/App.xcconfig" | head -1 | tr -d '[:space:]')"
+RELEASE_TAG="${1:-${XCCONFIG_VERSION:+v$XCCONFIG_VERSION}}"
 ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+readahead.1}"
 # 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
 export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
@@ -61,13 +63,9 @@ if [[ ! -d "$APP_PATH" ]]; then
     exit 1
 fi
 
-# Ad-hoc signing makes the bundle internally consistent. Public distribution
-# still requires Developer ID signing and Apple notarization.
-codesign --force --deep --sign - "$APP_PATH"
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
-
 # Third-party license compliance: ship Erika's bundled notices and every
 # resolved SwiftPM dependency license with the app.
+# 签名放在许可证拷贝之后只做一次：先签再改 bundle 会作废签名，前一次纯浪费。
 NOTICES_DIR="$APP_PATH/Contents/Resources/THIRD_PARTY_LICENSES"
 ERIKA_MAC_EXTRACTED="$ROOT/Vendor/extracted/erika-capi-macos-arm64"
 SWIFTPM_CHECKOUTS="$BUILD_ROOT/DerivedData/SourcePackages/checkouts"
