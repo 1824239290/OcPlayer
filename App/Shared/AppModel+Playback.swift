@@ -208,9 +208,17 @@ extension AppModel {
                 // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
                 if playback.engine?.hasRenderedFirstFrame == true {
                     // 保底 400ms：加载太快时 loading 闪现即消失会晃眼。
+                    // 这个等待要响应取消（换片/关闭）：吞掉取消错误的话，任务会在
+                    // 别人已经接管 loading 之后醒来再改状态。
                     if clock.now - startTime < .milliseconds(400) {
-                        try? await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
+                        do {
+                            try await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
+                        } catch {
+                            return
+                        }
                     }
+                    // 等待期间可能已换片：只有仍是本 request 的 loading 才归我撤。
+                    guard self.presentedPlayer?.id == request.id else { return }
                     self.playbackPreparation = nil
                     return
                 }
@@ -238,14 +246,6 @@ extension AppModel {
                 }
             }
         }
-    }
-
-    /// HUD「Continue Watching」：手动跳到连播解析出的下一集（走完整播放串联）。
-    func playNextEpisode() {
-        guard let next = nextEpisode else { return }
-        // 立即消费，避免 PlaybackInfo 请求返回前连续点击触发多次换片。
-        nextEpisode = nil
-        play(next, resumeSeconds: 0)
     }
 
     /// 本地文件（onOpenURL / 设置页 / 自检）：不走 Jellyfin，直接上覆盖层。
@@ -532,12 +532,22 @@ func dismissPlayer() {
         nextEpisodeTask?.cancel()
         nextEpisodeTask = Task { [weak self] in
             // 只取当前集往后的一小窗，不再拉整部剧的集列表。
-            guard let window = try? await server.episodes(
-                seriesID: seriesID,
-                startingAt: item.id,
-                limit: Self.nextEpisodeWindow
-            ), let self
-            else { return }
+            let window: [MediaItem]
+            do {
+                window = try await server.episodes(
+                    seriesID: seriesID,
+                    startingAt: item.id,
+                    limit: Self.nextEpisodeWindow
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                // 拉不到连播窗口不该让播放出错，但静默吞掉的话「看完这集不连播」
+                // 没有任何排查线索。
+                AppDiagnostics.logWarning("拉取连播窗口失败 series=\(seriesID) after=\(item.id) error=\(error)")
+                return
+            }
+            guard let self else { return }
             guard !Task.isCancelled,
                   self.activePlaybackIdentity == identity else { return }
             // 窗口是服务端顺序，当前集应该在第一条；找不到就不猜。
@@ -570,9 +580,18 @@ func dismissPlayer() {
         let itemID = item.id
         externalSubtitleTask?.cancel()
         externalSubtitleTask = Task { [weak self] in
-            guard let subtitles = try? await server.externalSubtitles(itemID: itemID),
-                  !subtitles.isEmpty, let self
-            else { return }
+            let subtitles: [ExternalSubtitle]
+            do {
+                subtitles = try await server.externalSubtitles(itemID: itemID)
+            } catch is CancellationError {
+                return
+            } catch {
+                // 列不出侧车字幕只是「没字幕可挂」，但不该静默——断网/服务端异常时
+                // 用户看到的是「没字幕」，得有日志能区分。
+                AppDiagnostics.logWarning("列出外挂字幕失败 item=\(itemID) error=\(error)")
+                return
+            }
+            guard !subtitles.isEmpty, let self else { return }
             // 解析期间用户已换片 → 丢弃，避免字幕串台
             guard !Task.isCancelled,
                   self.activePlaybackIdentity == identity,
@@ -581,7 +600,17 @@ func dismissPlayer() {
             else { return }
             for subtitle in subtitles {
                 guard !Task.isCancelled else { return }
-                guard let file = try? await server.downloadSubtitle(subtitle) else { continue }
+                let file: URL
+                do {
+                    file = try await server.downloadSubtitle(subtitle)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    // 单条下载失败跳过下一条，但留日志——静默的话用户只看到
+                    // 「明明有字幕却挂不上」。
+                    AppDiagnostics.logWarning("下载外挂字幕失败 item=\(itemID) track=\(subtitle.index) error=\(error)")
+                    continue
+                }
                 // 下载的字幕进了受管目录：捎带触发一次限额维护（日定时器也会兜底）。
                 AppDiagnostics.requestStorageMaintenance()
                 guard !Task.isCancelled,
