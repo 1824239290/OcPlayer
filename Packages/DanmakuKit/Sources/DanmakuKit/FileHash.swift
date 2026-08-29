@@ -48,7 +48,7 @@ public enum FileHash {
             request.setValue(value, forHTTPHeaderField: name)
         }
 
-        let (bytes, response) = try await session.bytes(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw FileHashError.invalidResponse
         }
@@ -84,21 +84,11 @@ public enum FileHash {
             throw FileHashError.httpStatus(http.statusCode)
         }
 
+        // Range 校验已保证响应体 ≤ 16 MiB，一次拿全再喂哈希。原先逐字节迭代
+        // AsyncBytes（16 MiB = 1600 万次异步跳 + 逐字节 append），慢几个数量级。
         var hasher = Insecure.MD5()
-        var buffer = Data()
-        buffer.reserveCapacity(64 * 1024)
-        var received = 0
-        for try await byte in bytes {
-            try Task.checkCancellation()
-            buffer.append(byte)
-            received += 1
-            if buffer.count == 64 * 1024 {
-                hasher.update(data: buffer)
-                buffer.removeAll(keepingCapacity: true)
-            }
-            if received == headByteCount { break }
-        }
-        if !buffer.isEmpty { hasher.update(data: buffer) }
+        let received = data.count
+        if !data.isEmpty { hasher.update(data: data) }
 
         if let declaredRangeLength {
             guard Int64(received) == declaredRangeLength else { throw FileHashError.readFailed }
