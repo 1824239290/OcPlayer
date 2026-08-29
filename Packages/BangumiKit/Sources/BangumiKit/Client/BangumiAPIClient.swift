@@ -170,6 +170,20 @@ public actor BangumiAPIClient {
 
     // MARK: - 请求
 
+    /// 重试退避：指数基础（1s/2s/…）乘 0.5~1.5 抖动，避免多端同拍重试放大
+    /// 服务端压力；429 且服务器给了 Retry-After（秒）时以其为准，封顶 60s
+    /// 防止异常大数把调用挂死。
+    static func backoffDelay(attempt: Int, after error: (any Error)?) -> UInt64 {
+        let base = pow(2.0, Double(max(0, attempt - 1)))
+        var seconds = base * Double.random(in: 0.5...1.5)
+        if let error,
+           case .rateLimited(let retryAfter) = error as? BangumiError,
+           let after = retryAfter, after > 0 {
+            seconds = min(after, 60)
+        }
+        return UInt64((seconds * 1_000_000_000).rounded())
+    }
+
     public func request(
         url: URL, method: String, body: Any? = nil, auth: BangumiAuthMode = .auto
     ) async throws -> Data {
@@ -178,7 +192,8 @@ public actor BangumiAPIClient {
 
         for attempt in 0...maxRetries {
             if attempt > 0 {
-                let delay = UInt64(pow(2.0, Double(attempt - 1))) * 1_000_000_000
+                // 退避带抖动 + 429 的 Retry-After 优先，见 backoffDelay。
+                let delay = Self.backoffDelay(attempt: attempt, after: lastError)
                 try await Task.sleep(nanoseconds: delay)
                 BangumiNetworkLog.logger.warning(
                     "重试 \(method) \(url.absoluteString) (尝试 \(attempt + 1)/\(maxRetries + 1))")
@@ -242,7 +257,10 @@ public actor BangumiAPIClient {
                     BangumiNetworkLog.logPath(for: url), duration: duration.timeInterval)
                 return data
             } else if httpResponse.statusCode == 429 {
-                let err = BangumiError(notice: "请求过于频繁，请稍后再试")
+                // Retry-After 只认秒数写法（HTTP-date 少见且解析收益低），没给就 nil。
+                let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
+                    .flatMap { Double($0) }
+                let err = BangumiError.rateLimited(retryAfter: retryAfter)
                 BangumiNetworkLog.requestFailed(
                     BangumiNetworkLog.logPath(for: url), error: err,
                     duration: duration.timeInterval)

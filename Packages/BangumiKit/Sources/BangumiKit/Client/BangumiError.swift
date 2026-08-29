@@ -4,7 +4,7 @@ import Foundation
 /// Bangumi API 统一错误。
 public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendable {
     case requireLogin
-    case network(String)
+    case network(failure: NetworkErrorClassifier.Kind?, message: String)
     case request(String)
     case badRequest(String)
     case forbidden(String)
@@ -13,6 +13,8 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
     case http(statusCode: Int, response: String, requestID: String?)
     case generic(String)
     case notice(String)
+    /// 429 限流：retryAfter 取 Retry-After 头（秒），服务器没给就是 nil。
+    case rateLimited(retryAfter: TimeInterval?)
     case ignore(String)
 
     public init(request: String) {
@@ -24,19 +26,19 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
     public init(networkError error: NSError) {
         switch NetworkErrorClassifier.kind(for: error.code) {
         case .some(.noConnection):
-            self = .network("没有网络连接，请检查网络设置或权限后重试")
+            self = .network(failure: .noConnection, message: "没有网络连接，请检查网络设置或权限后重试")
         case .some(.timedOut):
-            self = .network("请求超时，请稍后再试")
+            self = .network(failure: .timedOut, message: "请求超时，请稍后再试")
         case .some(.cannotResolveHost):
-            self = .network("无法解析服务器地址，请稍后再试")
+            self = .network(failure: .cannotResolveHost, message: "无法解析服务器地址，请稍后再试")
         case .some(.cannotConnect):
-            self = .network("无法连接到服务器，请检查网络后重试")
+            self = .network(failure: .cannotConnect, message: "无法连接到服务器，请检查网络后重试")
         case .some(.secureConnectionFailed):
-            self = .network("无法建立安全连接，请检查网络环境或稍后再试")
+            self = .network(failure: .secureConnectionFailed, message: "无法建立安全连接，请检查网络环境或稍后再试")
         case .some(.cancelled):
             self = .ignore("请求已取消")
         case .none:
-            self = .network("网络请求失败，请稍后再试")
+            self = .network(failure: nil, message: "网络请求失败，请稍后再试")
         }
     }
 
@@ -73,7 +75,9 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
         switch self {
         case .requireLogin:
             return "登录状态已失效，请重新登录"
-        case .network(let message), .generic(let message), .notice(let message):
+        case .rateLimited:
+            return "请求过于频繁，请稍后再试"
+        case .network(_, let message), .generic(let message), .notice(let message):
             return message
         case .request:
             return "请求处理失败，请稍后再试"
@@ -100,7 +104,9 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
         switch self {
         case .requireLogin:
             return "Please login with Bangumi"
-        case .network(let message), .generic(let message), .notice(let message), .ignore(let message):
+        case .rateLimited:
+            return "Too Many Requests"
+        case .network(_, let message), .generic(let message), .notice(let message), .ignore(let message):
             return message
         case .request(let message):
             return "Request Error!\n\(message)"
@@ -116,12 +122,14 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
         userMessage
     }
 
+    /// 重试判定用结构化失败原因（构造点分类好），不再靠用户文案字符串反推——
+    /// 改文案会静默破坏重试。
     public var isRetryable: Bool {
         switch self {
-        case .network(let message):
-            return message == "请求超时，请稍后再试" || message == "无法连接到服务器，请检查网络后重试"
-        case .notice(let message):
-            return message == "请求超时，请稍后再试" || message == "请求过于频繁，请稍后再试"
+        case .network(let failure, _):
+            return failure == .timedOut || failure == .noConnection
+        case .rateLimited:
+            return true
         case .http(let statusCode, _, _):
             return statusCode == 502 || statusCode == 503
                 || statusCode == 504

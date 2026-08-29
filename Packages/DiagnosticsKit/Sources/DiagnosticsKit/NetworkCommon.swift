@@ -77,7 +77,7 @@ public enum NetworkLog {
 /// Bangumi / MoviePilot 两个服务端错误枚举各自保留精确的面向用户文案，只在这里按码分类，
 /// 避免一整段 24 行 switch 抄两份。
 public enum NetworkErrorClassifier {
-    public enum Kind: Sendable {
+    public enum Kind: Sendable, Equatable {
         case noConnection
         case timedOut
         case cannotResolveHost
