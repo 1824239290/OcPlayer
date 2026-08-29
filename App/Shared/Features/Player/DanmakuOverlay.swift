@@ -190,14 +190,25 @@ final class DanmakuOverlayController {
 
     // MARK: - 采样同步
 
+    /// 当前是否处于活跃档（60Hz）。暂停/缓冲/禁用/空数据时降到 2Hz 轮询。
+    private var timerIsFast = true
+
     func startTimer() {
         guard timer == nil else { return }
-        // 60Hz 平滑采样发射：消除 30Hz 定时器带来的成团发射突发感。
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        armTimer(fast: true)
+    }
+
+    /// 活跃时 60Hz 平滑采样发射（消除 30Hz 定时器的成团发射突发感）；
+    /// 暂停/缓冲/禁用/空数据这些没有可做事的状态降到 2Hz——只留「发觉状态恢复」
+    /// 的轮询，不再每秒空醒主线程 60 次。
+    private func armTimer(fast: Bool) {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: fast ? 1.0 / 60.0 : 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.tick()
             }
         }
+        timerIsFast = fast
     }
 
     private func stopTimer() {
@@ -205,7 +216,18 @@ final class DanmakuOverlayController {
         timer = nil
     }
 
+    /// 弹幕是否处于「有事可做」的活跃状态。
+    private var isDanmakuActive: Bool {
+        guard let engine = engineProvider(), preferences.enabled, !comments.isEmpty else { return false }
+        if let playback = playbackStateProvider(), !playback.playing || playback.buffering { return false }
+        return true
+    }
+
     private func tick() {
+        // 频率按状态升降：恢复播放回到 60Hz 由这里的轮询发觉（≤0.5s 延迟）。
+        let active = isDanmakuActive
+        if timerIsFast != active { armTimer(fast: active) }
+
         guard let engine = engineProvider(), preferences.enabled, !comments.isEmpty else { return }
         let now = mediaSeconds(engine)
 
