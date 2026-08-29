@@ -20,6 +20,11 @@
 	<string>$(BANGUMI_APP_SECRET)</string>
 	<key>BANGUMI_OAUTH_CALLBACK</key>
 	<string>ocplayer://oauth/callback</string>
+	<!-- 更新检查的 GitHub 仓库：仓库挪窝只改这里，AppUpdateChecker 从 Bundle 读取。 -->
+	<key>GitHubRepoOwner</key>
+	<string>1824239290</string>
+	<key>GitHubRepoName</key>
+	<string>OcPlayer</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

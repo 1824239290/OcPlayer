@@ -145,13 +145,24 @@ public final class AppUpdateChecker {
     private let session: URLSession
 
     public init(
-        repoOwner: String = "1824239290",
-        repoName: String = "OcPlayer",
+        repoOwner: String? = nil,
+        repoName: String? = nil,
         session: URLSession = .shared
     ) {
-        self.repoOwner = repoOwner
-        self.repoName = repoName
+        // 仓库归属从 Info.plist 读（挪窝只改 plist，不动代码）；缺省兜底旧值，
+        // 测试可显式注入。
+        let configured = Self.configuredRepo()
+        self.repoOwner = repoOwner ?? configured.owner
+        self.repoName = repoName ?? configured.name
         self.session = session
+    }
+
+    private static func configuredRepo() -> (owner: String, name: String) {
+        let info = Bundle.main.infoDictionary
+        guard let owner = info?["GitHubRepoOwner"] as? String,
+              let name = info?["GitHubRepoName"] as? String
+        else { return ("1824239290", "OcPlayer") }
+        return (owner, name)
     }
 
     /// 忽略指定版本的自动弹窗提醒
@@ -191,6 +202,15 @@ public final class AppUpdateChecker {
             }
 
             if httpResponse.statusCode == 404 {
+                // 仓库没有任何 Release、仓库挪走或转私有，GitHub 都回 404——App 区分
+                // 不了。维持「视为最新」的兜底语义，但记日志留排查线索（原先是纯静默，
+                // 仓库挪窝后更新检查会永远安静地失效）。
+                AppDiagnostics.logWarning(
+                    "更新检查 404：仓库无 Release 或仓库地址已变更",
+                    fields: [
+                        "owner": .string(repoOwner),
+                        "repo": .string(repoName),
+                    ])
                 state = .upToDate(version: AppVersion.currentShortVersion)
                 lastCheckedDate = Date()
                 return
