@@ -88,7 +88,7 @@ extension JellyfinServer {
             data = try await client.send(request).value
         } catch {
             NetworkLog.reportFailed("DownloadSubtitle \(subtitle.remotePath)", error: error)
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)

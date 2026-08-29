@@ -147,7 +147,7 @@ public struct JellyfinServer: Sendable {
         do {
             info = try await probeClient.send(Paths.getPublicSystemInfo).value
         } catch {
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
         let kind = Self.detectKind(info: info)
         let resolvedBaseURL = kind == .emby ? Self.embyAPIBaseURL(from: url) : url
@@ -616,7 +616,7 @@ public struct JellyfinServer: Sendable {
             return value
         } catch {
             NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
     }
 
@@ -628,7 +628,7 @@ public struct JellyfinServer: Sendable {
             return try await client.send(request).value
         } catch {
             NetworkLog.requestFailed(path, error: error, duration: 0)
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
     }
 }
@@ -700,7 +700,7 @@ public final class LoginSession: Sendable {
                     } else if let jellyfinError = error as? JellyfinError, case .http(404) = jellyfinError.kind {
                         continuation.finish(throwing: JellyfinError(.quickConnectDisabled, underlying: jellyfinError.underlying ?? error))
                     } else {
-                        continuation.finish(throwing: JellyfinError.wrap(error))
+                        continuation.finish(throwing: JellyfinError.wrapPreservingCancellation(error))
                     }
                 }
             }
@@ -735,7 +735,7 @@ public final class LoginSession: Sendable {
         } catch APIError.unacceptableStatusCode(400) {
             throw JellyfinError(.unauthorized)
         } catch {
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
     }
 
@@ -788,7 +788,7 @@ public final class LoginSession: Sendable {
         } catch let error as JellyfinError {
             throw error
         } catch {
-            throw JellyfinError.wrap(error)
+            throw JellyfinError.wrapPreservingCancellation(error)
         }
     }
 

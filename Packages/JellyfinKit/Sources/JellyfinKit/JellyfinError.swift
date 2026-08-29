@@ -51,6 +51,20 @@ public struct JellyfinError: Error, LocalizedError {
         return JellyfinError(.other(ns.localizedDescription), underlying: error)
     }
 
+    /// 与 `wrap` 搭配的 throw 口：取消原样透传（不包壳），其余归一成 JellyfinError。
+    /// 包壳会把用户/任务取消变成一条 `.transport` 错误文案，UI 的
+    /// `catch let error as JellyfinError` 就会把取消弹成错误框。
+    public static func wrapPreservingCancellation(_ error: any Error) -> any Error {
+        isCancellation(error) ? error : JellyfinError.wrap(error)
+    }
+
+    /// 任务取消（CancellationError）与 URLSession 中断（URLError.cancelled）都算。
+    public static func isCancellation(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        let ns = error as NSError
+        return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+    }
+
     /// 连不上（DNS / 拒绝连接 / 断网）给出可操作的「检查地址」提示；
     /// 超时、连接中断等其它传输错误带具体细节，方便区分「地址写错」和「网络抽风」。
     private static func wrapTransport(_ ns: NSError) -> JellyfinError {
