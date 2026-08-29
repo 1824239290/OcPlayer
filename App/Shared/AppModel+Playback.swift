@@ -1,4 +1,5 @@
 import CoreModel
+import BangumiKit
 import DanmakuKit
 import DiagnosticsKit
 import Foundation
@@ -481,9 +482,11 @@ extension AppModel {
                 let episodes = try await self.bangumi.context.fetchEpisodes(subjectId: subjectID)
                 // 精确匹配主篇集号。sort 是 Float（特典可能是 12.5），只认整数集号相等的，
                 // 匹配不上就不动——宁可不标，也不要标错集。
-                let matched = episodes.first(where: {
-                    $0.type == .main && $0.sort == Float(episodeNumber)
-                })
+                let targetSort = Float(episodeNumber)
+                func isMainEpisode(_ episode: BangumiEpisodeDTO) -> Bool {
+                    episode.type == .main && episode.sort == targetSort
+                }
+                let matched = episodes.first(where: isMainEpisode)
                 guard let episode = matched else {
                     BangumiDiagnostics.log(
                         "播放结束未标记：集号匹配不上 subject=\(subjectID) ep=\(episodeNumber)")
@@ -494,6 +497,19 @@ extension AppModel {
                     let episodeID = episode.id
                     BangumiDiagnostics.log(
                         "播放结束未标记：本集已是看过 subject=\(subjectID) ep=\(episodeID)")
+                    return
+                }
+                // 服务端只对「在看」条目推进单集进度：未收藏/想看/搁置要先推成在看，
+                // 否则标集不生效。失败就不标集——条目状态没推进，PATCH 大概率白打。
+                do {
+                    let advanced = try await self.bangumi.context.ensureSubjectWatching(subjectID)
+                    if advanced {
+                        BangumiDiagnostics.log(
+                            "播放结束联动：条目先推为在看 subject=\(subjectID)")
+                    }
+                } catch {
+                    BangumiDiagnostics.log(
+                        "播放结束标记中断：条目推为在看失败 subject=\(subjectID) error=\(error)")
                     return
                 }
                 try await self.bangumi.context.updateEpisodeCollection(

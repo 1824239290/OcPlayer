@@ -70,6 +70,18 @@ struct BangumiKitTests {
             episodes: [BangumiFixture.episode(id: 1, subjectID: 2, sort: 1, status: .collect)])
         #expect(finished.isFinished)
     }
+
+    /// 播放结束自动标记前的条目状态推进决策：未收藏/想看/搁置/抛弃推成「在看」，
+    /// 「在看」不动，「看过」不回退（完结条目不该被重看一集拨回去）。
+    @Test func targetWatchingStateOnlyAdvancesNonDoing() {
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: nil) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .none) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .wish) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .onHold) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .dropped) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .doing) == nil)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collect) == nil)
+    }
 }
 
 // MARK: - 本地库

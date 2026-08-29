@@ -188,6 +188,35 @@ public enum BangumiEpisodeRepository {
             subjectId: subjectId, mayChangeProgressMembership: true)
     }
 
+    /// 播放结束自动标记前，条目收藏状态需要推进到的目标（nil = 不动）。
+    ///
+    /// 服务端只对「在看」条目可靠推进单集进度：从未收藏/想看/搁置/抛弃要先推成
+    /// 「在看」，单集 PATCH 才生效；「在看」不用动；「看过」不回退——完结条目
+    /// 不该被重看一集拨回去。纯决策函数，拆出来便于测试。
+    nonisolated static func targetWatchingState(
+        for current: BangumiCollectionType?
+    ) -> BangumiCollectionType? {
+        switch current ?? .none {
+        case .doing, .collect:
+            return nil
+        case .none, .wish, .onHold, .dropped:
+            return .doing
+        }
+    }
+
+    /// 播放结束自动标记前确保条目处于「在看」。以远端收藏状态为准（本地可能过期，
+    /// 用户可能在网页上改过状态），未收藏时 POST 会直接以「在看」建收藏。
+    /// 返回是否发生了推进。
+    @discardableResult
+    nonisolated static func ensureSubjectWatching(_ subjectId: Int) async throws -> Bool {
+        let current = try await BangumiCollectionService.getSubjectCollection(subjectId)?.type
+        guard let target = targetWatchingState(for: current) else { return false }
+        try await BangumiCollectionService.updateSubjectCollection(
+            subjectId: subjectId, type: target)
+        BangumiNetworkLog.logger.info("播放联动：条目推进为在看 subject=\(subjectId)")
+        return true
+    }
+
     /// 更新单集状态：先远程成功后改本地，再发失效通知。
     public static func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
@@ -383,6 +412,14 @@ public final class BangumiContext {
     /// 单集标记后的服务端对齐（播放结束自动标记用），实例侧入口。
     public func refreshSubjectAfterProgressChange(_ subjectId: Int) async {
         await BangumiEpisodeRepository.refreshSubjectAfterProgressChange(subjectId)
+    }
+
+    /// 播放结束自动标记前确保条目处于「在看」，实例侧入口。
+    /// 返回是否发生了推进。失败抛错由调用方决定是否继续标集
+    /// （服务端语义是「非在看时标集无效」，前置失败后单集 PATCH 大概率也不生效）。
+    @discardableResult
+    public func ensureSubjectWatching(_ subjectId: Int) async throws -> Bool {
+        try await BangumiEpisodeRepository.ensureSubjectWatching(subjectId)
     }
 
     /// 手动更改条目收藏状态（进度页状态菜单）：远端 POST → 本地对齐 →
