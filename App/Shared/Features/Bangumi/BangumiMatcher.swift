@@ -213,11 +213,13 @@ public enum AnimeTitleParser {
                     let range = Range(match.range(at: 1), in: converted) {
                 detectedSeason = Int(converted[range])
             }
-            // 特殊单字母续作（超电磁炮S -> 2, 超电磁炮T -> 3）
-            else if converted.hasSuffix("S") || converted.hasSuffix("s") || converted.contains(" S ") {
+            // 特殊单字母续作（超电磁炮S -> 2, 超电磁炮T -> 3）。只认「结尾
+            // S/T 的前一个字符是 CJK 或分隔符」——Arknights 这类以拉丁字母
+            // 结尾的标题不能被误判成第二季（整季误绑）。
+            else if AnimeTitleParser.trailingSeasonLetter(converted) == "S" || converted.contains(" S ") {
                 subtitle = "s"
                 detectedSeason = 2
-            } else if converted.hasSuffix("T") || converted.hasSuffix("t") || converted.contains(" T ") {
+            } else if AnimeTitleParser.trailingSeasonLetter(converted) == "T" || converted.contains(" T ") {
                 subtitle = "t"
                 detectedSeason = 3
             } else if converted.hasSuffix("续") {
@@ -393,38 +395,73 @@ public enum BangumiMatcher {
 
         var candidates: [BangumiSlimSubjectDTO] = []
         var seenIDs = Set<Int>()
+        var lastError: (any Error)?
 
-        // 2. 依次按动画类型过滤搜索，收集候选条目
-        for kw in keywordsToTry {
-            let trimmed = kw.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            if let page = try? await BangumiSubjectService.search(keyword: trimmed, filter: .anime, limit: 30, offset: 0) {
-                for item in page.data where !seenIDs.contains(item.id) {
-                    candidates.append(item)
-                    seenIDs.insert(item.id)
+        let trimmedKeywords = keywordsToTry
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        // 合并一批搜索结果（按关键词原顺序去重，保证打分确定性）。
+        func merge(_ page: BangumiPagedDTO<BangumiSlimSubjectDTO>) {
+            for item in page.data where !seenIDs.contains(item.id) {
+                candidates.append(item)
+                seenIDs.insert(item.id)
+            }
+        }
+
+        // 2. 并行按动画类型过滤搜索（原先 3 发串行，且 try? 把网络错误全吞掉，
+        //    断网时静默返回 nil 被 UI 解读成「没找到」）。并行省两轮往返；
+        //    高分提前返回改为收集完再判（并行本身已把请求都发出去了）。
+        let animePages = await withTaskGroup(
+            of: Result<BangumiPagedDTO<BangumiSlimSubjectDTO>, Error>.self
+        ) { group in
+            for kw in trimmedKeywords {
+                group.addTask {
+                    do { return .success(try await BangumiSubjectService.search(keyword: kw, filter: .anime, limit: 30, offset: 0)) }
+                    catch { return .failure(error) }
                 }
             }
-            if !candidates.isEmpty {
-                // 如果已经有匹配度很高的条目，不必继续发大量请求
-                if let best = pickBestCandidate(from: candidates, query: queryInfo), best.score >= 2000 {
-                    return best.candidate
-                }
+            var results: [Result<BangumiPagedDTO<BangumiSlimSubjectDTO>, Error>] = []
+            for await result in group { results.append(result) }
+            return results
+        }
+        for result in animePages {
+            switch result {
+            case .success(let page): merge(page)
+            case .failure(let error): lastError = error
             }
+        }
+        if let best = pickBestCandidate(from: candidates, query: queryInfo), best.score >= 2000 {
+            return best.candidate
         }
 
         // 3. 若仍无候选条目（可能为三次元真人剧），放开类型过滤
         if candidates.isEmpty {
-            for kw in keywordsToTry {
-                let trimmed = kw.trimmingCharacters(in: .whitespaces)
-                guard !trimmed.isEmpty else { continue }
-                if let page = try? await BangumiSubjectService.search(keyword: trimmed, filter: nil, limit: 30, offset: 0) {
-                    for item in page.data where !seenIDs.contains(item.id) {
-                        candidates.append(item)
-                        seenIDs.insert(item.id)
+            let allPages = await withTaskGroup(
+                of: Result<BangumiPagedDTO<BangumiSlimSubjectDTO>, Error>.self
+            ) { group in
+                for kw in trimmedKeywords {
+                    group.addTask {
+                        do { return .success(try await BangumiSubjectService.search(keyword: kw, filter: nil, limit: 30, offset: 0)) }
+                        catch { return .failure(error) }
                     }
                 }
-                if !candidates.isEmpty { break }
+                var results: [Result<BangumiPagedDTO<BangumiSlimSubjectDTO>, Error>] = []
+                for await result in group { results.append(result) }
+                return results
             }
+            for result in allPages {
+                switch result {
+                case .success(let page): merge(page)
+                case .failure(let error): lastError = error
+                }
+            }
+        }
+
+        // 关键词全发失败（断网 / 服务端异常）且一个候选都没有：抛出最后一个
+        // 错误让 UI 显示失败，而不是误导成「没找到」。
+        if candidates.isEmpty, let lastError {
+            throw lastError
         }
 
         guard !candidates.isEmpty else { return nil }
@@ -572,5 +609,25 @@ public enum BangumiMatcher {
         score += max(30 - rankIndex, 0)
 
         return score
+    }
+}
+
+extension AnimeTitleParser {
+    /// 标题结尾的「单字母续作记号」（超电磁炮S/T）：末字符是 S/T 且前一个字符
+    /// 是 CJK 或分隔符时返回大写字母；末字符前是拉丁字母（Arknights、GOSICK
+    /// 这类以字母结尾的标题）返回 nil，不算续作记号。
+    static func trailingSeasonLetter(_ title: String) -> String? {
+        guard let last = title.last, last == "S" || last == "s" || last == "T" || last == "t" else {
+            return nil
+        }
+        let beforeLast = title.index(before: title.endIndex)
+        guard let previous = title[..<beforeLast].last else { return nil }
+        let isCJK = previous.unicodeScalars.contains { scalar in
+            (0x4E00...0x9FFF).contains(scalar.value)     // CJK 统一表意文字
+            || (0x3040...0x30FF).contains(scalar.value)  // 平假名 / 片假名
+        }
+        let isSeparator = " -_.·[(".contains(previous)
+        guard isCJK || isSeparator else { return nil }
+        return String(last).uppercased()
     }
 }

@@ -133,6 +133,15 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.tmdbID = tmdbID
     }
 
+    /// 哈希只取 id + kind + name：合成实现要哈希全部 ~25 个字段（含长文
+    /// overview 与 cast 数组），大库的 SwiftUI diff / 集合操作是纯浪费。
+    /// 相等判定仍是全字段（== 未动）；id 唯一，碰撞率不会因此上升。
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(kind)
+        hasher.combine(name)
+    }
+
     /// 获取 Logo 图像对应的有效条目 ID（若自身无 Logo 且继承了父级则指向父级 ID，否则为自身 ID）。
     public var logoItemID: String {
         parentLogoItemID ?? id
