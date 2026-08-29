@@ -315,7 +315,7 @@ struct PlayerHUDDanmakuPanelContent: View {
                 .buttonStyle(.plain)
             }
 
-            if !controller.danmakuTracks.isEmpty {
+            if controller.hasDanmakuLoaded {
                 // 时间偏移
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {

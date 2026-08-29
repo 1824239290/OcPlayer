@@ -16,6 +16,12 @@ extension PlaybackController {
         return track.displayTitle
     }
 
+    /// 弹幕是否已装载。当前恒走 overlay 渲染（内核轨道恒为空），所以不能只看
+    /// `danmakuTracks`——HUD 的时间偏移区块显隐要一并看 overlay 的数据。
+    var hasDanmakuLoaded: Bool {
+        !danmakuTracks.isEmpty || danmakuOverlay.hasComments
+    }
+
     /// Replace the current source's danmaku only while its generation token is valid.
     @discardableResult
     func replaceDanmaku(
