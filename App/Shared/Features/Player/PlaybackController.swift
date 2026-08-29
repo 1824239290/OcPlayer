@@ -542,6 +542,10 @@ try engine.play()
     func stopPlayback() {
         playerLog.info("stopPlayback")
         PlaybackLog.append("stopPlayback() hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        // 音量尾去抖的落盘任务大概率等不到 300ms（控制器即将销毁）：收口补写一次，
+        // 否则「调完音量立刻退出」会丢掉最后一拍音量。
+        volumePersistTask?.cancel()
+        PlaybackPreferences.volume = volume
         try? engine?.stop()
         // 清空去重标记：否则下次打开同一视频时 openIfNeeded 会误判「已打开同一个源」
         // 直接跳过（画面停在旧帧/黑屏，进度丢失）。
