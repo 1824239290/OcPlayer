@@ -253,9 +253,7 @@ struct BangumiHomeView: View {
                             .buttonStyle(.borderedProminent)
 
                             Button("返回在看") {
-                                searchKeyword = ""
-                                submittedSearchKeyword = ""
-                                searchResults = []
+                                exitSearchMode()
                             }
                             .buttonStyle(.bordered)
                         }
@@ -268,9 +266,7 @@ struct BangumiHomeView: View {
                         Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
                     } actions: {
                         Button("返回在看") {
-                            searchKeyword = ""
-                            submittedSearchKeyword = ""
-                            searchResults = []
+                            exitSearchMode()
                         }
                         .buttonStyle(.bordered)
                     }
@@ -297,15 +293,20 @@ struct BangumiHomeView: View {
         }
     }
 
+    /// 退出搜索模式的统一清理（原先三处各抄一份，字段清单已经漂移）。
+    private func exitSearchMode() {
+        searchTask?.cancel()
+        searchKeyword = ""
+        submittedSearchKeyword = ""
+        searchResults = []
+        isSearching = false
+        searchError = nil
+    }
+
     private var searchHeader: some View {
         HStack(spacing: 10) {
             Button {
-                searchTask?.cancel()
-                searchKeyword = ""
-                submittedSearchKeyword = ""
-                searchResults = []
-                isSearching = false
-                searchError = nil
+                exitSearchMode()
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
@@ -797,14 +798,9 @@ private struct ProgressCard: View {
     }
 
     private static func statusLabel(_ type: BangumiCollectionType) -> String {
-        switch type {
-        case .wish: return "想看"
-        case .collect: return "看过"
-        case .doing: return "在看"
-        case .onHold: return "搁置"
-        case .dropped: return "抛弃"
-        case .none: return "未收藏"
-        }
+        // 复用 CollectionType.description 的文案源，不再两处各自维护。
+        // description(nil) 对 .none 返回「全部」，这里要的是「未收藏」，单独兜。
+        type == .none ? "未收藏" : type.description(nil)
     }
 
     private func setSubjectStatus(_ type: BangumiCollectionType) async {

@@ -116,7 +116,7 @@ struct MoviePilotResourceView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task { await loadSites() }
-        .refreshable { search() }
+        .refreshable { await search().value }
         .sheet(isPresented: $showSitePicker) {
             MoviePilotSitePickerSheet(sites: sites, selection: $selectedSiteIDs)
         }
@@ -234,8 +234,8 @@ struct MoviePilotResourceView: View {
                     .textInputAutocapitalization(.never)
                     .submitLabel(.search)
                     #endif
-                    .onSubmit(search)
-                Button("搜索", action: search)
+                    .onSubmit { search() }
+                Button("搜索") { search() }
                     .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
             }
             Button {
@@ -343,9 +343,12 @@ struct MoviePilotResourceView: View {
         }
     }
 
-    private func search() {
+    /// 返回搜索任务：`.refreshable` 需要 await 它，下拉刷新的转圈才跟随流式
+    /// 结束（原先同步调用即刻返回，转圈瞬间消失而搜索还在跑）。
+    @discardableResult
+    private func search() -> Task<Void, Never> {
         let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return Task {} }
         // 允许重入：搜索在途时再点不静默丢弃，旧任务直接取消（SSE 循环随任务取消收尾）。
         searchTask?.cancel()
         searchGeneration += 1
@@ -400,6 +403,7 @@ struct MoviePilotResourceView: View {
                 progressText = nil
             }
         }
+        return searchTask ?? Task {}
     }
 
     private func addDownload(_ torrent: MPTorrent) {

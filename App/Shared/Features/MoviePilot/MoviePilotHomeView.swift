@@ -491,7 +491,6 @@ struct MoviePilotHomeView: View {
 
                 NavigationLink {
                     MoviePilotResourceView(media: media)
-                        .id(media.id)
                 } label: {
                     Label("查资源", systemImage: "arrow.down.circle")
                         .font(.caption.weight(.medium))
@@ -749,7 +748,6 @@ private struct MoviePilotSubscribeCard: View {
 
             NavigationLink {
                 MoviePilotResourceView(media: subscribe.asMediaInfo)
-                    .id(subscribe.id)
             } label: {
                 Label("搜索站点资源", systemImage: "magnifyingglass")
             }

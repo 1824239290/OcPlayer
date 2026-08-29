@@ -18,7 +18,7 @@ struct MoviePilotSubscribeSheet: View {
     @State private var name: String = ""
     @State private var mediaType: String = "电视剧" // "电影" or "电视剧"
     @State private var year: String = ""
-    @State private var state: String = "R" // R, P, O
+    @State private var state: String = MPSubscribeState.running
     @State private var tmdbIdText: String = ""
     @State private var doubanId: String = ""
     @State private var bangumiIdText: String = ""
@@ -51,6 +51,43 @@ struct MoviePilotSubscribeSheet: View {
     init(mode: Mode, onSaved: (() -> Void)? = nil) {
         self.mode = mode
         self.onSaved = onSaved
+        // 表单初值在 init 里就位（原先 .task 才灌，首帧闪占位）。
+        switch mode {
+        case .add(let media):
+            if let media {
+                _name = State(initialValue: media.title ?? "")
+                _mediaType = State(initialValue: media.type ?? "电视剧")
+                _year = State(initialValue: media.year ?? "")
+                _season = State(initialValue: media.season ?? 1)
+                _overview = State(initialValue: media.overview ?? "")
+                if let tmdb = media.tmdbId { _tmdbIdText = State(initialValue: String(tmdb)) }
+                if let douban = media.doubanId { _doubanId = State(initialValue: douban) }
+                if let bgm = media.bangumiId { _bangumiIdText = State(initialValue: String(bgm)) }
+                _posterURLString = State(initialValue: media.posterURL?.absoluteString ?? "")
+            }
+            _state = State(initialValue: MPSubscribeState.running)
+        case .edit(let subscribe):
+            _name = State(initialValue: subscribe.name ?? "")
+            _mediaType = State(initialValue: subscribe.isMovie ? "电影" : "电视剧")
+            _year = State(initialValue: subscribe.year ?? "")
+            _season = State(initialValue: subscribe.season ?? 1)
+            _startEpisode = State(initialValue: subscribe.startEpisode ?? 1)
+            _totalEpisode = State(initialValue: subscribe.totalEpisode ?? 0)
+            _lackEpisode = State(initialValue: subscribe.lackEpisode ?? 0)
+            _state = State(initialValue: subscribe.state ?? MPSubscribeState.running)
+            _overview = State(initialValue: subscribe.description ?? "")
+            _keyword = State(initialValue: subscribe.keyword ?? "")
+            _include = State(initialValue: subscribe.include ?? "")
+            _exclude = State(initialValue: subscribe.exclude ?? "")
+            _quality = State(initialValue: subscribe.quality ?? "")
+            _savePath = State(initialValue: subscribe.savePath ?? "")
+            _bestVersion = State(initialValue: subscribe.bestVersion)
+            _selectedSiteIDs = State(initialValue: Set(subscribe.sites))
+            if let tmdb = subscribe.tmdbId { _tmdbIdText = State(initialValue: String(tmdb)) }
+            if let douban = subscribe.doubanId { _doubanId = State(initialValue: douban) }
+            if let bgm = subscribe.bangumiId { _bangumiIdText = State(initialValue: String(bgm)) }
+            _posterURLString = State(initialValue: subscribe.posterURL?.absoluteString ?? (subscribe.poster ?? ""))
+        }
     }
 
     private var isEditMode: Bool {
@@ -109,7 +146,6 @@ struct MoviePilotSubscribeSheet: View {
                 }
             }
             .task {
-                setupInitialValues()
                 await loadSites()
             }
         }
@@ -201,9 +237,9 @@ struct MoviePilotSubscribeSheet: View {
             }
 
             Picker("订阅状态", selection: $state) {
-                Text("追更中 (运行)").tag("R")
-                Text("暂停订阅").tag("P")
-                Text("已完成").tag("O")
+                Text("追更中 (运行)").tag(MPSubscribeState.running)
+                Text("暂停订阅").tag(MPSubscribeState.paused)
+                Text("已完成").tag(MPSubscribeState.completed)
             }
 
             HStack {
@@ -393,46 +429,6 @@ struct MoviePilotSubscribeSheet: View {
 
     // MARK: - 初始化与保存
 
-    private func setupInitialValues() {
-        switch mode {
-        case .add(let media):
-            guard let media else { return }
-            name = media.title ?? ""
-            mediaType = media.type ?? "电视剧"
-            year = media.year ?? ""
-            season = media.season ?? 1
-            overview = media.overview ?? ""
-            if let tmdb = media.tmdbId { tmdbIdText = String(tmdb) }
-            if let douban = media.doubanId { doubanId = douban }
-            if let bgm = media.bangumiId { bangumiIdText = String(bgm) }
-            posterURLString = media.posterURL?.absoluteString ?? ""
-            state = "R"
-
-        case .edit(let subscribe):
-            name = subscribe.name ?? ""
-            mediaType = subscribe.isMovie ? "电影" : "电视剧"
-            year = subscribe.year ?? ""
-            season = subscribe.season ?? 1
-            startEpisode = subscribe.startEpisode ?? 1
-            totalEpisode = subscribe.totalEpisode ?? 0
-            lackEpisode = subscribe.lackEpisode ?? 0
-            state = subscribe.state ?? "R"
-            overview = subscribe.description ?? ""
-            keyword = subscribe.keyword ?? ""
-            include = subscribe.include ?? ""
-            exclude = subscribe.exclude ?? ""
-            quality = subscribe.quality ?? ""
-            savePath = subscribe.savePath ?? ""
-            bestVersion = subscribe.bestVersion
-            selectedSiteIDs = Set(subscribe.sites)
-
-            if let tmdb = subscribe.tmdbId { tmdbIdText = String(tmdb) }
-            if let douban = subscribe.doubanId { doubanId = douban }
-            if let bgm = subscribe.bangumiId { bangumiIdText = String(bgm) }
-            posterURLString = subscribe.posterURL?.absoluteString ?? (subscribe.poster ?? "")
-        }
-    }
-
     private func loadSites() async {
         do {
             availableSites = try await MoviePilotAPIClient.shared.sites()
@@ -542,4 +538,15 @@ struct MoviePilotSubscribeSheet: View {
             isSaving = false
         }
     }
+}
+
+
+/// MoviePilot 订阅状态的服务端取值（API 约定字符），不再散落魔法串。
+private enum MPSubscribeState {
+    /// 追更中（运行）
+    static let running = "R"
+    /// 暂停订阅
+    static let paused = "P"
+    /// 已完成
+    static let completed = "O"
 }

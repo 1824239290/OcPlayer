@@ -47,7 +47,9 @@ struct UpdateReleaseSheet: View {
                             .font(.headline)
 
                         if let body = release.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text(LocalizedStringKey(body))
+                            // changelog 是 Markdown 原文，当 LocalizedStringKey
+                            // 会整段进本地化查找（且 % 字符有格式化歧义），原样输出。
+                            Text(verbatim: body)
                                 .font(.body)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)

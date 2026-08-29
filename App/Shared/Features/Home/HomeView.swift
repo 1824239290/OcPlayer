@@ -51,7 +51,7 @@ struct HomeView: View {
                             item: item,
                             server: app.server,
                             actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
                             width: stillWidth
                         ) {
                             app.openSeriesDetail(for: item)
@@ -66,7 +66,7 @@ struct HomeView: View {
                             item: item,
                             server: app.server,
                             actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 电视剧详情",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
                             width: stillWidth
                         ) {
                             app.openSeriesDetail(for: item)

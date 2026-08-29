@@ -257,17 +257,17 @@ struct OnboardingView: View {
 
     /// 登录页上方的档案列表：token 还在的一键重连，失效的探活后进密码登录。
     /// 数据来自 `ServerStore`——登出不删档案，这里就是「记忆」的展示面。
+    @ViewBuilder
     private var savedServersSection: some View {
         let profiles = app.store.profiles
-        guard !profiles.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !profiles.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 Text("已保存的服务器").font(.headline)
                 ForEach(profiles) { profile in
                     savedServerRow(profile)
                 }
             }
-        )
+        }
     }
 
     private func savedServerRow(_ profile: ServerProfile) -> some View {

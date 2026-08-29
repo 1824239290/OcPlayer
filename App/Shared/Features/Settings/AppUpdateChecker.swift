@@ -36,7 +36,20 @@ public enum AppVersion {
                 return .orderedDescending // current is newer
             }
         }
+        // 数字部分同号时按预发布规则：正式版 > 预发布版（装了 0.1.6-beta.1 的
+        // 用户要能收到 0.1.6 正式版提醒，原先两者 sanitize 后同号被当成「最新」）。
+        let currentIsPrerelease = hasPrereleaseSuffix(current)
+        let remoteIsPrerelease = hasPrereleaseSuffix(remote)
+        if currentIsPrerelease && !remoteIsPrerelease { return .orderedAscending }
+        if !currentIsPrerelease && remoteIsPrerelease { return .orderedDescending }
         return .orderedSame
+    }
+
+    /// 原始版本串里带预发布后缀（-beta.1 / +readahead.1 等非数字点号字符）。
+    private static func hasPrereleaseSuffix(_ version: String) -> Bool {
+        var v = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        if v.hasPrefix("v") || v.hasPrefix("V") { v.removeFirst() }
+        return v.contains { !$0.isNumber && $0 != "." }
     }
 
     public static func isNewer(remote: String, than current: String = currentShortVersion) -> Bool {

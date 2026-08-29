@@ -595,8 +595,15 @@ public enum BangumiMatcher {
                 let matchCN = cCNBase.contains(qBase) || qBase.contains(cCNBase)
                 let matchJP = cJPBase.contains(qBase) || qBase.contains(cJPBase)
                 if matchCN || matchJP {
-                    let lenMatch = max(cCNBase.count, cJPBase.count)
-                    let ratio = lenMatch > 0 ? Double(min(qBase.count, lenMatch)) / Double(max(qBase.count, lenMatch)) : 0.5
+                    // 相似度按「实际命中的那门语言」分别算再取最优——原先用
+                    // max(中文名长度, 日文名长度) 当基准，未命中语言的长度会
+                    // 把比例拉偏（日文长标题拖低中文命中的得分）。
+                    func similarity(_ a: String, _ b: String) -> Double {
+                        let longer = max(a.count, b.count)
+                        guard longer > 0 else { return 0.5 }
+                        return Double(min(a.count, b.count)) / Double(longer)
+                    }
+                    let ratio = max(similarity(qBase, cCNBase), similarity(qBase, cJPBase))
                     score += Int(ratio * 600)
                 } else {
                     // 主标题完全无关

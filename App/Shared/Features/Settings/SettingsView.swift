@@ -15,7 +15,8 @@ struct SettingsView: View {
     @State private var isEnteringURL = false
     @State private var isEditingDanmakuGateway = false
     @State private var isEditingMoviePilot = false
-    @State private var updateChecker = AppUpdateChecker.shared
+    /// 单例是引用类型，不需要 @State 的存储语义；let 即可（@Observable 变化照常驱动刷新）。
+    private let updateChecker = AppUpdateChecker.shared
     @State private var presentedRelease: GitHubRelease?
     /// 待确认删除的已保存服务器档案（删除连 token 一起清，不可恢复）。
     @State private var pendingDeleteProfile: ServerProfile?

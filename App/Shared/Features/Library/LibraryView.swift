@@ -13,13 +13,17 @@ struct LibraryView: View {
     let library: MediaLibrary
 
     private static let pageSize = 100
-    /// 单库分页缓存上限：超过直接丢最旧的页（无限滚动会再拉）。1000 条 ≈
-    /// 十几 MB 元数据，是「切回来不重拉」和「会话内不无界累积」的折中点。
+    /// 单库分页缓存上限：到顶后 `hasMore` 置 false（**停止翻页**，不是淘汰旧页——
+    /// 注释曾宣称淘汰，与实现不符）。1000 条 ≈ 十几 MB 元数据，是「切回来不重拉」
+    /// 和「会话内不无界累积」的折中点；全局兜底是 AppModel.cacheLibraryPage 的
+    /// 20 000 条目上限（超限整份清空）。
     private static let maxCachedItems = 1000
 
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var loadError: String?
+    /// 最近一次拉取是否为服务端满页（hasMore 在总数未知时的判据）。
+    @State private var lastPageFull = false
     @State private var activeLoadID: UUID?
 
     /// 分页数据住在 `AppModel.libraryPages`，不在视图 `@State` 里：
@@ -54,8 +58,9 @@ struct LibraryView: View {
         if let totalCount {
             return items.count < totalCount
         }
-        // 总数未知时：上一页若满页，允许再试一页。
-        return !items.isEmpty && items.count % Self.pageSize == 0
+        // 总数未知时：上一页是服务端满页才允许再试。按本地条数取模的启发式
+        // 会被去重/过滤干扰（100 条里去重掉 3 条就误判「没有更多了」）。
+        return lastPageFull
     }
 
     var body: some View {
@@ -235,12 +240,14 @@ struct LibraryView: View {
             var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())
             if reset {
                 cached.items = page.items
+                lastPageFull = false
             } else {
                 // 防御服务端重复页：按 id 去重追加。
                 let existing = Set(cached.items.map(\.id))
                 cached.items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
             }
             cached.totalCount = page.totalRecordCount
+            lastPageFull = page.items.count == Self.pageSize
             app.cacheLibraryPage(cached, for: libraryID)
             loadError = nil
         } catch is CancellationError {
