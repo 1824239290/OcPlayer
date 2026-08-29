@@ -33,6 +33,9 @@ public final class PlayerTimeline {
     }
 
     func setDuration(_ value: Duration) {
+        // 同值跳过：durationChanged 被逐帧重发时，force 刷新会把 displayPosition/
+        // progress 的发布也整帧拖着跑。
+        guard duration != value else { return }
         duration = value
         publishDerivedPosition(force: true)
     }
@@ -137,17 +140,20 @@ public final class PlayerState {
     func apply(_ event: PlayerEvent) {
         switch event {
         case .stateChanged(let value):
-            state = value
+            // 内核卡进坏状态时会逐帧重发同一事件；@Observable 的写入即使同值
+            // 也会触发观察者，同值直接丢（上次错误风暴被 .failed 去重救场，
+            // 这里把其余事件类型一并防住）。
+            if state != value { state = value }
         case .positionChanged(let value):
             timeline.setPosition(value)
         case .durationChanged(let value):
             timeline.setDuration(value)
         case .bufferingChanged(let value):
-            isBuffering = value
+            if isBuffering != value { isBuffering = value }
         case .videoParamsChanged(let value):
-            videoParams = value
+            if videoParams != value { videoParams = value }
         case .tracksChanged(let value):
-            trackCounts = value
+            if trackCounts != value { trackCounts = value }
         case .surfaceAttached:
             hasSurface = true
         case .surfaceDetached:
