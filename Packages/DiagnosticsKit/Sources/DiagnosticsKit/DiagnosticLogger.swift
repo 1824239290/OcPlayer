@@ -179,10 +179,12 @@ public final class DiagnosticLogger: @unchecked Sendable {
                     fields: [String: DiagnosticValue] = [:],
                     throttle: DiagnosticThrottle? = nil) {
         let now = clock()
-        let safeMessage = DiagnosticRedactor.redact(message())
-        let safeFields = DiagnosticRedactor.redact(fields)
+        // 先判节流再脱敏：被节流压掉的热点日志不该照付 5 趟正则的全量成本；
+        // message 是 @autoclosure，天然支持推迟到节流判定之后求值。
         let suppressed = takeThrottleDecision(throttle, level: level, now: now)
         guard let suppressed else { return }
+        let safeMessage = DiagnosticRedactor.redact(message())
+        let safeFields = DiagnosticRedactor.redact(fields)
         submit(level: level, message: safeMessage, fields: safeFields,
                suppressed: suppressed, date: now)
     }
@@ -486,19 +488,42 @@ private final class DiagnosticBackend: @unchecked Sendable {
     }
 
     func summary() -> DiagnosticSummary? {
-        queue.sync {
-            try? handle?.synchronize()
-            guard FileManager.default.fileExists(atPath: fileURL.path),
-                  let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
-                  let size = (attributes[.size] as? NSNumber)?.int64Value,
-                  let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
-            else { return nil }
-            // 逐字节数换行：`filter{}.count` 会先物化出一个几万元素的字节数组。
-            var recordCount = 0
-            data.withUnsafeBytes { buffer in
-                for byte in buffer where byte == 0x0A { recordCount += 1 }
-            }
-            return DiagnosticSummary(fileSizeBytes: size, recordCount: recordCount)
+        // summary() 由设置页在主线程调用，2MB 逐字节扫描别占主线程 CPU：
+        // 扫描投到自己的串行队列上跑，调用方只阻塞等结果（等待不烧 CPU）。
+        // 队列串行 → 扫描与写入天然互斥，读到的计数与文件一致。
+        let box = SummaryBox()
+        queue.async { box.fill(self.summaryOnQueue()) }
+        return box.wait()
+    }
+
+    private func summaryOnQueue() -> DiagnosticSummary? {
+        try? handle?.synchronize()
+        guard FileManager.default.fileExists(atPath: fileURL.path),
+              let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let size = (attributes[.size] as? NSNumber)?.int64Value,
+              let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
+        else { return nil }
+        // 逐字节数换行：`filter{}.count` 会先物化出一个几万元素的字节数组。
+        var recordCount = 0
+        data.withUnsafeBytes { buffer in
+            for byte in buffer where byte == 0x0A { recordCount += 1 }
+        }
+        return DiagnosticSummary(fileSizeBytes: size, recordCount: recordCount)
+    }
+
+    /// 单次结果信箱：fill 一次，wait 取走（`stored` 的外层 nil 只在未 fill 时出现）。
+    private final class SummaryBox: @unchecked Sendable {
+        private let semaphore = DispatchSemaphore(value: 0)
+        private var stored: DiagnosticSummary??
+
+        func fill(_ value: DiagnosticSummary?) {
+            stored = .some(value)
+            semaphore.signal()
+        }
+
+        func wait() -> DiagnosticSummary? {
+            semaphore.wait()
+            return stored ?? nil
         }
     }
 
