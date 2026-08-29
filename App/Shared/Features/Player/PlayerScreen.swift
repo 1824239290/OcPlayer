@@ -393,6 +393,12 @@ struct PlayerScreen: View {
             // （seek 不落盘），新触摸重新起会话，亮度/音量不再沿用旧起点跳变。
             interruptTouchSession()
         }
+        // 全新触摸：若 seek 提交还在 80ms 去抖窗口内，几乎必然是「假 onEnded
+        // （多指强制结束）之后紧接着落下的第二根手指」——取消那个提交。
+        // 真松手后 80ms 内就重开新拖动的场景几乎不存在，且后果只是这次拖动
+        // 不落盘，手指还在屏上、重拖成本≈0。
+        pendingPanCommit?.cancel()
+        pendingPanCommit = nil
         touchStart = TouchStart(date: Date(), location: value.startLocation)
         touchTranslation = value.translation
         scheduleHoldDetection()
