@@ -67,6 +67,8 @@ public final class ServerStore: @unchecked Sendable {
 
     private let profilesKey = "dev.jumusu.ocplayer.servers"
     private let currentKey = "dev.jumusu.ocplayer.currentServer"
+    /// 解码缓存，nil = 尚未读过；受 `lock` 保护（读路径 profilesUnlocked 也在锁内）。
+    private var cachedProfiles: [ServerProfile]?
 
     public init(defaults: UserDefaults = .standard, tokens: TokenStoring? = nil) {
         self.defaults = defaults
@@ -113,12 +115,22 @@ public final class ServerStore: @unchecked Sendable {
     }
 
     private func profilesUnlocked() -> [ServerProfile] {
-        guard let data = defaults.data(forKey: profilesKey) else { return [] }
+        // 进程内缓存：profiles 被视图高频读取（每次重渲染都来问），逐次从
+        // UserDefaults 全量 JSONDecoder 解码纯浪费。所有写路径都经同一把锁的
+        // persistUnlocked，缓存写穿即可；nil = 还没读过（空列表是合法缓存值）。
+        if let cached = cachedProfiles { return cached }
+        guard let data = defaults.data(forKey: profilesKey) else {
+            cachedProfiles = []
+            return []
+        }
         do {
-            return try JSONDecoder().decode([ServerProfile].self, from: data)
+            let list = try JSONDecoder().decode([ServerProfile].self, from: data)
+            cachedProfiles = list
+            return list
         } catch {
             // 坏数据就当没有（返回空列表是合理兜底），但留一条日志方便排查。
             NetworkLog.logger.error("读取服务器列表解码失败 error=\(error)")
+            cachedProfiles = []
             return []
         }
     }
@@ -128,6 +140,7 @@ public final class ServerStore: @unchecked Sendable {
     private func persistUnlocked(_ list: [ServerProfile]) {
         do {
             defaults.set(try JSONEncoder().encode(list), forKey: profilesKey)
+            cachedProfiles = list
         } catch {
             NetworkLog.logger.error("保存服务器列表编码失败，保留旧数据 error=\(error)")
         }
