@@ -119,7 +119,7 @@ extension AppModel {
             // 同一台服务器重登（token 过期）则保留数据，避免无谓的白屏。
             if self.server?.profile.id != server.profile.id {
                 stopPlaybackForSessionChange()
-                dropSessionData()
+                resetBrowseState()
             }
             // phase 已切到 ready，首屏数据靠 initialDataTask 异步驱动 home.isLoading
             // 的 loading 态——不阻塞登录 Task，让 Quick Connect 的轮询流尽快结束。
@@ -140,12 +140,17 @@ extension AppModel {
         playback?.stopPlayback()
     }
 
-    /// 清空随旧会话走的浏览数据（媒体库 / 首页 / 导航栈）。
+    /// 清空随旧会话走的浏览数据与会话任务（媒体库 / 首页 / 导航栈）。
     /// 服务器数据按 profile 隔离，条目 id 只在原服务器里有意义，不能跨会话复用。
     /// 播放侧的清理由调用方按需配 `stopPlaybackForSessionChange()`。
-    private func dropSessionData() {
+    /// signOut 曾有第二份几乎相同的手工清单，两处已各自漂移——现在只有这一份。
+    func resetBrowseState() {
         initialDataTask?.cancel()
         initialDataTask = nil
+        nextEpisodeTask?.cancel()
+        nextEpisodeTask = nil
+        externalSubtitleTask?.cancel()
+        externalSubtitleTask = nil
         sessionGeneration &+= 1
         server = nil
         libraries = []
@@ -176,34 +181,12 @@ extension AppModel {
         // 终报任务是独立 Task，没有引用也会自己跑完落库。
         playbackReporting = nil
         pendingPlaybackReportingHandoff = nil
-        initialDataTask?.cancel()
-        initialDataTask = nil
-        quickConnectTask?.cancel()
-        quickConnectTask = nil
-        loginAttemptGeneration &+= 1
-        nextEpisodeTask?.cancel()
-        nextEpisodeTask = nil
-        externalSubtitleTask?.cancel()
-        externalSubtitleTask = nil
-        sessionGeneration &+= 1
         if let server {
             store.signOut(id: server.profile.id)
         }
-        loginSession = nil
-        quickConnectCode = nil
-        quickConnectError = nil
+        resetBrowseState()
         isProbingServer = false
-        isAuthenticating = false
-        onboardingError = nil
-        server = nil
-        libraries = []
-        librariesError = nil
-        libraryPages = [:]
-        home = HomeData()
-        path = []
-        navPaths = NavigationPaths()
-        presentedPlayer = nil
-        selectedSection = .home
+        resetOnboarding()
         phase = .onboarding
     }
 
@@ -222,7 +205,7 @@ extension AppModel {
 
         if let server = JellyfinServer.resume(profile: profile, from: store) {
             if self.server?.profile.id != server.profile.id {
-                dropSessionData()
+                resetBrowseState()
             }
             resetOnboarding()
             activate(server: server)
@@ -237,7 +220,7 @@ extension AppModel {
         // 表现为点了「切换」毫无反应，token 还已经被删掉了。换服务器时旧会话
         // 的浏览数据也一并清掉，和 resume 分支、completeLogin 的口径一致。
         if self.server?.profile.id != profile.id {
-            dropSessionData()
+            resetBrowseState()
         }
         resetOnboarding()
         phase = .onboarding
