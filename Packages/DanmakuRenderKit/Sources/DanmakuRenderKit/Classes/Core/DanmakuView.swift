@@ -142,6 +142,10 @@ public class DanmakuView: PlatformView {
     
     /// State of play,  The danmaku can only be sent in play status.
     public private(set) var status: DanmakuStatus = .stop
+
+    /// `update(_:)` 的延时恢复任务代次：连续 update 时旧的恢复任务作废，
+    /// 防止叠加多个 play（本地修补，见 PROVENANCE.md）。
+    private var updateResumeGeneration = 0
     
     /// The display area of the danmaku is set between 0 and 1. Setting this property will affect the number of danmaku tracks.
     public var displayArea: CGFloat = 1.0 {
@@ -618,10 +622,18 @@ public extension DanmakuView {
     /// When you change some properties of the danmakuView or cellModel that might affect the danmaku, you must make changes in the closure of this method.
     /// E.g.This method will be used when you change the displayTime property in the cellModel.
     /// - Parameter closure: update closure
+    /// - Note: 本地修补——只在 update 前本就处于播放态时才延时恢复。原先无条件
+    ///   pause→play，视频暂停时改弹幕速度会把弹幕“救活”继续滚动；连续 update
+    ///   也会叠加多个 play 定时器反复重排。
     func update(_ closure: () -> Void) {
+        let wasPlaying = status == .play
         pause()
         closure()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
+        updateResumeGeneration += 1
+        guard wasPlaying else { return }
+        let generation = updateResumeGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) { [weak self] in
+            guard let self, self.updateResumeGeneration == generation else { return }
             self.play()
         }
     }
