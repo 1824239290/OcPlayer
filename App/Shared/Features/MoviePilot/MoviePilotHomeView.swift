@@ -189,7 +189,7 @@ struct MoviePilotHomeView: View {
             }
         }
         .task {
-            // Bangumi 详情页「找片下载」带过来的搜索词：取走即清，发起一次搜索。
+            // Bangumi 详情页「MoviePilot下载」带过来的搜索词：取走即清，发起一次搜索。
             if let pending = app.pendingMoviePilotQuery {
                 app.pendingMoviePilotQuery = nil
                 submittedKeyword = pending

@@ -11,7 +11,7 @@ import SwiftUI
 /// - 故事简介：多行简介展示与展开/收起。
 /// - 作品信息（Infobox）：制作阵容（监督、脚本、原作、动画制作公司、音乐、人物设定等）及官网链接。
 /// - 标签（Tags）与全站收藏统计：展示热门标签及各状态收藏人数。
-/// - 联动跳转：支持一键在 MoviePilot（找片）中按番名搜索下载资源；在浏览器中打开 Bangumi 原站。
+/// - 联动跳转：支持一键在 MoviePilot 中按番名搜索下载资源；在浏览器中打开 Bangumi 原站。
 struct BangumiSubjectDetailView: View {
     let subjectID: Int
     var initialSubject: BangumiSlimSubjectDTO? = nil
@@ -227,7 +227,7 @@ struct BangumiSubjectDetailView: View {
 
                 Spacer(minLength: 4)
 
-                // 操作行：收藏状态 + 我的评分 + 找片
+                // 操作行：收藏状态 + 我的评分 + MoviePilot 下载
                 HStack(spacing: 10) {
                     statusSelectorMenu
 
@@ -243,7 +243,7 @@ struct BangumiSubjectDetailView: View {
 
                     Spacer()
 
-                    // MoviePilot 找片快捷入口
+                    // MoviePilot 下载快捷入口
                     Button {
                         let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
                         if !query.isEmpty {
@@ -251,7 +251,7 @@ struct BangumiSubjectDetailView: View {
                             app.selectedSection = .moviepilot
                         }
                     } label: {
-                        Label("找片下载", systemImage: "arrow.down.circle")
+                        Label("MoviePilot下载", systemImage: "arrow.down.circle")
                             .font(.callout.weight(.medium))
                     }
                     .buttonStyle(.bordered)
