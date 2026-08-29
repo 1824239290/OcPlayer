@@ -5,7 +5,11 @@ import GRDB
 /// 不背 Bangumi-iOS 的完整 schema（字符/人物/小组/草稿等本次不移植）。
 enum BangumiDatabaseFactory {
     /// 数据库文件：Application Support/OcPlayer/Bangumi.sqlite
-    static func makeDatabase(at directory: URL) throws -> DatabaseQueue {
+    ///
+    /// 用 DatabasePool（自带 WAL + 多连接读写并发）：章节同步是批量写事务，
+    /// 单连接 DatabaseQueue 会让期间的读全部排队（首页进度条/收藏列表卡顿）。
+    /// prepareDatabase 对 Pool 的每条新连接都会执行，foreign_keys 逐连接生效。
+    static func makeDatabase(at directory: URL) throws -> DatabasePool {
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
         let databaseURL = directory.appendingPathComponent("Bangumi.sqlite")
@@ -13,7 +17,7 @@ enum BangumiDatabaseFactory {
         configuration.prepareDatabase { db in
             try db.execute(sql: "PRAGMA foreign_keys = ON")
         }
-        let dbQueue = try DatabaseQueue(path: databaseURL.path, configuration: configuration)
+        let dbPool = try DatabasePool(path: databaseURL.path, configuration: configuration)
         var migrator = DatabaseMigrator()
         migrator.registerMigration("createBangumiSchemaV1") { db in
             try createSubjects(in: db)
@@ -29,8 +33,8 @@ enum BangumiDatabaseFactory {
             try db.execute(
                 sql: "CREATE INDEX IF NOT EXISTS subjects_ctype_collected_idx ON subjects(ctype, collected_at DESC)")
         }
-        try migrator.migrate(dbQueue)
-        return dbQueue
+        try migrator.migrate(dbPool)
+        return dbPool
     }
 
     private static func createSubjects(in db: Database) throws {

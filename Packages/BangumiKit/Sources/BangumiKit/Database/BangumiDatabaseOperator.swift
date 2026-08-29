@@ -9,9 +9,9 @@ public enum BangumiProgressSortMode: Sendable {
 
 /// 本地数据库操作层：进度/收藏/章节的读写都在这里，通过 read/write 包裹。
 public actor BangumiDatabaseOperator {
-    private let database: DatabaseQueue
+    private let database: DatabasePool
 
-    public init(database: DatabaseQueue) {
+    public init(database: DatabasePool) {
         self.database = database
     }
 
