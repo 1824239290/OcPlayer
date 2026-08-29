@@ -2,6 +2,7 @@ import CoreGraphics
 import DiagnosticsKit
 import Foundation
 import ImageIO
+import CryptoKit
 import SwiftUI
 
 #if canImport(UIKit)
@@ -346,8 +347,19 @@ struct RemoteImage: View {
     var maxPixelSize: Int? = nil
 
     /// 与 .task(id:) 一致的复合加载键：URL + 凭证指纹 + 目标尺寸。
+    ///
+    /// 凭证指纹用 SHA256 截断，不用 `String.hashValue`：hashValue 只保证同进程内
+    /// 同一字符串稳定，且这里比较的是「头字符串是否逐字节一致」——历史教训是
+    /// authHeader 由 Dictionary 拼接、键序会抖，同语义头产生多种字节串、hash
+    /// 随之漂移，.task(id:) 每次漂移都当作「新任务」清图重载，表现为图片反复闪。
+    private static func credentialFingerprint(_ header: String?) -> String {
+        guard let header else { return "none" }
+        let digest = SHA256.hash(data: Data(header.utf8))
+        return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
     private var loadKey: String {
-        "\(url?.absoluteString ?? "")#\(authHeader.map { String($0.hashValue) } ?? "none")#\(maxPixelSize ?? 0)"
+        "\(url?.absoluteString ?? "")#\(Self.credentialFingerprint(authHeader))#\(maxPixelSize ?? 0)"
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

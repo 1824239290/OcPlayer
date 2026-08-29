@@ -88,16 +88,20 @@ public enum ClientIdentity {
     /// Jellyfin `Authorization: MediaBrowser …` 头。API 客户端、图片管线和
     /// 内核 `open_with_headers`（含设置页直连）共用同一套身份字段，避免出现
     /// 硬编码 DeviceId / 版本漂移的第二套客户端。
+    ///
+    /// 字段必须按固定顺序拼接：Dictionary 字面量每次构造的迭代顺序随实例种子抖动
+    /// （并发/多次调用会产出键序不同的字符串）。语义等价的头若字节不同，
+    /// 上层以其哈希做缓存键时（如 RemoteImage 的凭证指纹）会误判「凭证变了」。
     public static func mediaBrowserAuthorizationHeader(token: String? = nil) -> String {
-        var fields = [
-            "Client": clientName,
-            "Device": deviceName,
-            "DeviceId": deviceID,
-            "Version": version,
+        var fields: [(String, String)] = [
+            ("Client", clientName),
+            ("Device", deviceName),
+            ("DeviceId", deviceID),
+            ("Version", version),
         ]
         if let token, !token.isEmpty {
-            fields["Token"] = token
+            fields.append(("Token", token))
         }
-        return "MediaBrowser " + fields.map { "\($0.key)=\"\($0.value)\"" }.joined(separator: ", ")
+        return "MediaBrowser " + fields.map { "\($0.0)=\"\($0.1)\"" }.joined(separator: ", ")
     }
 }
