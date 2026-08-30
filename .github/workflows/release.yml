@@ -160,3 +160,69 @@ jobs:
             flags+=(--prerelease)
           fi
           gh release create "$RELEASE_TAG" dist/* "${flags[@]}"
+
+  ios:
+    name: Build iOS (iPhone + iPad)
+    # 排在 macOS 之后：Release 由 macOS job 创建，这里只上传，避免并发建 release 竞态。
+    needs: macos
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      # 与 test.yml 保持同一内核来源：release 产物必须构建在测试过的内核上。
+      # 内核改动合并上游后，这里与 test.yml、Scripts/package-ios.sh 一起切回官方。
+      ERIKA_VERSION: v0.1.7+readahead.1
+      ERIKA_REPO: 1824239290/Erika
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out dispatch tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
+            exit 2
+          fi
+          git checkout "$RELEASE_TAG"
+
+      - name: Validate release environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          if (( ${sdk_version%%.*} < 26 )); then
+            echo "OcPlayer requires the iOS 26 SDK; runner has $sdk_version" >&2
+            exit 1
+          fi
+
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
+
+      - name: Build release package
+        shell: bash
+        run: Scripts/package-ios.sh "$RELEASE_TAG"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OcPlayer-${{ env.RELEASE_TAG }}-iOS
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Upload to GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" dist/* --clobber

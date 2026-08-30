@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 不带参数时从 App.xcconfig 读版本号（唯一事实源），避免脚本里再硬编码一份漂移。
+XCCONFIG_VERSION="$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/Config/App.xcconfig" | head -1 | tr -d '[:space:]')"
+RELEASE_TAG="${1:-${XCCONFIG_VERSION:+v$XCCONFIG_VERSION}}"
+ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+readahead.1}"
+# 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
+export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
+BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release-ios}"
+DIST_DIR="${DIST_DIR:-$ROOT/dist}"
+APP_NAME="OcPlayer"
+SCHEME="OcPlayer-iOS"
+
+SAFE_TAG="$(printf '%s' "$RELEASE_TAG" | tr -c 'A-Za-z0-9._-' '-')"
+ARTIFACT_BASE="$APP_NAME-$SAFE_TAG-ios-unsigned"
+IPA_PATH="$DIST_DIR/$ARTIFACT_BASE.ipa"
+CHECKSUM_PATH="$DIST_DIR/SHA256SUMS-ios.txt"
+
+if [[ "$RELEASE_TAG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+)([-+][A-Za-z0-9.-]+)?$ ]]; then
+    MARKETING_VERSION="${BASH_REMATCH[1]}"
+else
+    echo "Release tag must use semantic versioning, for example v0.1.0" >&2
+    exit 2
+fi
+
+# SKIP_ERIKA_FETCH=1：使用 Vendor 里现成的内核（自编译/实验分支产物），
+# 不跑 fetch-erika.sh —— 后者会从上游 Release 拉官方包**覆盖**本地产物。
+if [[ "${SKIP_ERIKA_FETCH:-0}" != "1" ]]; then
+    "$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
+else
+    # 自编译产物至少要带新 API 符号对应的头，防呆：头文件不对就尽早失败。
+    grep -q "ErikaOpenOptions" "$ROOT/Packages/ErikaKit/Sources/CErika/include/erika.h" || {
+        echo "SKIP_ERIKA_FETCH=1 但 CErika 头里没有 ErikaOpenOptions —— Vendor 不是自编译内核？" >&2
+        exit 2
+    }
+    echo "· 跳过 fetch-erika（使用 Vendor 现有内核）"
+fi
+
+mkdir -p "$BUILD_ROOT" "$DIST_DIR"
+rm -f "$IPA_PATH" "$CHECKSUM_PATH"
+
+xcodebuild \
+    -project "$ROOT/OcPlayer.xcodeproj" \
+    -scheme "$SCHEME" \
+    -configuration Release \
+    -destination "generic/platform=iOS" \
+    -derivedDataPath "$BUILD_ROOT/DerivedData" \
+    ARCHS=arm64 \
+    ONLY_ACTIVE_ARCH=NO \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO \
+    DEBUG_INFORMATION_FORMAT=dwarf \
+    MARKETING_VERSION="$MARKETING_VERSION" \
+    CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER:-1}" \
+    build
+
+APP_PATH="$BUILD_ROOT/DerivedData/Build/Products/Release-iphoneos/$APP_NAME.app"
+if [[ ! -d "$APP_PATH" ]]; then
+    echo "Build succeeded but $APP_PATH was not produced" >&2
+    exit 1
+fi
+
+# Third-party license compliance: same bundle as macOS, with Erika notices
+# taken from the iOS kernel package.
+# 未签名 IPA：不 codesign —— 分发侧由 AltStore / Sideloadly / TrollStore 重签。
+NOTICES_DIR="$APP_PATH/THIRD_PARTY_LICENSES"
+ERIKA_IOS_EXTRACTED="$ROOT/Vendor/extracted/erika-capi-ios"
+SWIFTPM_CHECKOUTS="$BUILD_ROOT/DerivedData/SourcePackages/checkouts"
+if [[ ! -d "$ERIKA_IOS_EXTRACTED/licenses" ]]; then
+    echo "Missing Erika license texts under $ERIKA_IOS_EXTRACTED/licenses" >&2
+    exit 1
+fi
+if [[ ! -d "$SWIFTPM_CHECKOUTS" ]]; then
+    echo "Missing SwiftPM checkouts under $SWIFTPM_CHECKOUTS" >&2
+    exit 1
+fi
+
+copy_license() {
+    local source_path="$1"
+    local destination_path="$2"
+    if [[ ! -f "$source_path" ]]; then
+        echo "Missing third-party license: $source_path" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$destination_path")"
+    cp "$source_path" "$destination_path"
+}
+
+verify_sha256() {
+    local file_path="$1"
+    local expected="$2"
+    local actual
+    actual="$(shasum -a 256 "$file_path" | awk '{print $1}')"
+    if [[ "$actual" != "$expected" ]]; then
+        echo "SHA-256 mismatch for $file_path" >&2
+        echo "Expected: $expected" >&2
+        echo "Actual:   $actual" >&2
+        exit 1
+    fi
+}
+
+rm -rf "$NOTICES_DIR"
+mkdir -p "$NOTICES_DIR/erika"
+copy_license "$ERIKA_IOS_EXTRACTED/LICENSE" "$NOTICES_DIR/erika/LICENSE"
+copy_license "$ERIKA_IOS_EXTRACTED/MANIFEST.txt" "$NOTICES_DIR/erika/MANIFEST.txt"
+copy_license "$ERIKA_IOS_EXTRACTED/THIRD_PARTY_NOTICES.md" "$NOTICES_DIR/erika/THIRD_PARTY_NOTICES.md"
+cp -R "$ERIKA_IOS_EXTRACTED/licenses/." "$NOTICES_DIR/erika/licenses/"
+
+# jellyfin-sdk-swift identifies its sources as MPL-2.0 but does not ship a
+# top-level LICENSE file. Erika's LICENSE is the canonical, unmodified MPL-2.0
+# text. Verify that exact standard text before reusing it; no network fetch is
+# needed during packaging.
+verify_sha256 \
+    "$ERIKA_IOS_EXTRACTED/LICENSE" \
+    "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
+copy_license \
+    "$ERIKA_IOS_EXTRACTED/LICENSE" \
+    "$NOTICES_DIR/swiftpm/jellyfin-sdk-swift/LICENSE-MPL-2.0"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/Get/LICENSE" \
+    "$NOTICES_DIR/swiftpm/Get/LICENSE"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio-transport-services/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio-transport-services/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-nio/NOTICE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-nio/NOTICE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-atomics/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-atomics/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-collections/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-collections/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/swift-system/LICENSE.txt" \
+    "$NOTICES_DIR/swiftpm/swift-system/LICENSE.txt"
+copy_license \
+    "$SWIFTPM_CHECKOUTS/GRDB.swift/LICENSE" \
+    "$NOTICES_DIR/swiftpm/GRDB.swift/LICENSE"
+copy_license \
+    "$ROOT/OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved" \
+    "$NOTICES_DIR/swiftpm/Package.resolved"
+
+# Vendored 本地包（Packages/ 下带 PROVENANCE.md 的第三方代码）也在随包分发之列。
+copy_license \
+    "$ROOT/Packages/DanmakuRenderKit/LICENSE" \
+    "$NOTICES_DIR/DanmakuRenderKit/LICENSE"
+copy_license \
+    "$ROOT/Packages/DanmakuRenderKit/PROVENANCE.md" \
+    "$NOTICES_DIR/DanmakuRenderKit/PROVENANCE.md"
+
+# The license list above is hand-written, so a new SwiftPM dependency would
+# otherwise ship without its notice. Fail the build when a resolved checkout has
+# no corresponding entry under THIRD_PARTY_LICENSES.
+for checkout in "$SWIFTPM_CHECKOUTS"/*; do
+    [[ -d "$checkout" ]] || continue
+    name="$(basename "$checkout")"
+    if [[ ! -d "$NOTICES_DIR/swiftpm/$name" ]]; then
+        echo "SwiftPM dependency '$name' has no license bundled under $NOTICES_DIR/swiftpm" >&2
+        echo "Add a copy_license entry for it in Scripts/package-ios.sh" >&2
+        exit 1
+    fi
+done
+
+# 本地 vendored 包（有 PROVENANCE.md）不在 SWIFTPM_CHECKOUTS 里，上面那个循环
+# 看不到它们——单独校验：漏登记 / 漏拷贝直接让打包失败。
+for pkg in "$ROOT"/Packages/*; do
+    [[ -d "$pkg" ]] || continue
+    name="$(basename "$pkg")"
+    [[ -f "$pkg/PROVENANCE.md" ]] || continue
+    if [[ ! -d "$NOTICES_DIR/$name" ]]; then
+        echo "Vendored package '$name' has no license bundled under $NOTICES_DIR/$name" >&2
+        echo "Add a copy_license entry for it in Scripts/package-ios.sh" >&2
+        exit 1
+    fi
+done
+
+IPA_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/ocplayer-ipa.XXXXXX")"
+trap 'rm -rf "$IPA_STAGE"' EXIT
+mkdir "$IPA_STAGE/Payload"
+ditto "$APP_PATH" "$IPA_STAGE/Payload/$APP_NAME.app"
+(
+    cd "$IPA_STAGE"
+    zip -qry "$IPA_PATH" Payload
+)
+
+(
+    cd "$DIST_DIR"
+    shasum -a 256 "$(basename "$IPA_PATH")" > "$(basename "$CHECKSUM_PATH")"
+)
+
+echo "Release artifacts:"
+printf '  %s\n' "$IPA_PATH" "$CHECKSUM_PATH"
