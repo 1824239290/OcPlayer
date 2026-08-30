@@ -4,26 +4,79 @@
 
 ## [Unreleased]
 
-### 修复
+## [0.1.5] · 2026-08-30 · Emby 适配、iOS 安装包与自编译预读内核
 
-- **Emby 标记已看/取消已看失败**：`/UserPlayedItems/{id}` 是 Jellyfin 新式路由，Emby 上不存在（404）。Emby 改走老式 `/Users/{uid}/PlayedItems/{id}`，与媒体库/继续观看同批旧路由；详情页「标记已看」按钮在 Emby 上恢复可用。
-- **Emby 播放时 MediaSegments 404 日志噪音**：`/MediaSegments/{id}` 是 Jellyfin 插件（intro skipper 等）提供的端点，Emby 没有。Emby 服务器现在跳过该调用直接回退章节启发式，不再每集刷一条错误日志。
-- **Emby 外挂字幕下载路径**：字幕下载路由 `/Videos/{itemId}/{mediaSourceId}/Subtitles/...` 的第二段原先硬编码为条目 id，多版本条目（同一影片挂多个 MediaSource）会 404。现从 `/Items` 响应透传真实的 MediaSource id；单源条目行为不变。
-- **Emby 章节与条目详情解码失败**：EmbySanitizer 修正 MediaSources[] 内 `Type` 字段（MediaSourceType）的洗白规则原靠「有 MediaStreams」判定，但详情接口顶层 `BaseItemDto` 自身也带 `MediaStreams`，导致条目 `Type`（Episode/Movie 等 `BaseItemKind`）被误洗成 `"Default"`，SDK 解码炸成 "Cannot initialize BaseItemKind from invalid String value Default"，章节列表每次都拉取失败只剩保底。改为按 `MediaSources` key 精确处理子树，顶层 kind 不再被波及；并把 MediaSourceType 的值（Default/Grouping/Placeholder）加入 Type→Folder 规则的排除集，避免洗白结果被二次压回 "Folder"。回归测试覆盖 Episode + 顶层 MediaStreams + MediaSources[].Type=Folder 的真实机场景。
-
-### 播放
-
-- **网络预读缓冲可调**：设置 → 播放 新增「网络预读缓冲」（默认 2 MiB / 8 / 16 / 32 MiB）。公网高延迟服务器（远程 Emby 等）建议 16 MiB 以上，可显著减少播放中的反复缓冲。基于自编译 Erika 内核新增的 `erika_presenter_open_with_options` C API（fork 分支 `feat/http-readahead-option`，已提上游），逐请求生效，本地文件自动忽略。
+> 这可能是最后一个搭载 Erika 播放内核的版本：后续计划更换播放内核方案，届时内核相关的设置项会一并调整。
 
 ### 服务器支持
 
-- **新增 Emby 服务器适配**：登录流程探活时自动识别服务器类型（`ProductName` 含 Emby / 主版本 4.x），Emby 走 `/emby` API 前缀与老式路由（媒体库 `/Users/{id}/Views`、继续观看 `/Users/{id}/Items/Resume`），账号密码登录、浏览、播放、图片、字幕、播放上报全链路可用。Emby 没有 Quick Connect（Jellyfin 独有），登录页在 Emby 服务器上只显示账号密码表单；Emby 老版本密码错误返回 400 时也归入「账号密码不对」提示。
+- **新增 Emby 服务器适配**：登录流程探活时自动识别服务器类型（`ProductName` 含 Emby / 主版本 4.x），Emby 走 `/emby` API 前缀与老式路由（媒体库 `/Users/{id}/Views`、继续观看 `/Users/{id}/Items/Resume`），账号密码登录、浏览、播放、图片、字幕、播放上报全链路可用。Emby 没有 Quick Connect（Jellyfin 独有），登录页在 Emby 服务器上只显示账号密码表单；Emby 老版本密码错误返回 400 时也归入「账号密码不对」提示。服务器卡片显示所属类型（Jellyfin / Emby）。
 - `ServerProfile` 新增 `kind` 字段（jellyfin/emby）；旧版本落盘的档案无此字段，解码默认 Jellyfin，静默恢复不受影响。
-- **多服务器记忆与快速切换**：登录页新增「已保存的服务器」区块，token 还在的一键重连；设置页「服务器」区块列出其余已保存的服务器，支持就地切换和删除（删除连 token 一起清）。登出不再等于遗忘——档案持续保留，来回切服务器不用重新输地址。启动恢复也更聪明：当前服务器 token 失效时自动尝试其它有有效 token 的档案，而不是直接弹登录页。
+- **多服务器记忆与快速切换**：登录页新增「已保存的服务器」区块，token 还在的一键重连；设置页「服务器」区块列出其余已保存的服务器，支持就地切换和删除（删除连 token 一起清，有确认弹窗）。登出不再等于遗忘——档案持续保留，来回切服务器不用重新输地址。启动恢复也更聪明：当前服务器 token 失效时自动尝试其它有有效 token 的档案，而不是直接弹登录页。
+
+### Emby 真机联调修复
+
+- **标记已看/取消已看失败**：`/UserPlayedItems/{id}` 是 Jellyfin 新式路由，Emby 上不存在（404）。Emby 改走老式 `/Users/{uid}/PlayedItems/{id}`；详情页「标记已看」按钮在 Emby 上恢复可用。
+- **播放时 MediaSegments 404 日志噪音**：`/MediaSegments/{id}` 是 Jellyfin 插件提供的端点，Emby 没有。Emby 服务器现在跳过该调用直接回退章节启发式。
+- **外挂字幕下载路径**：路由第二段原先硬编码为条目 id，多版本条目（同一影片挂多个 MediaSource）会 404。现从 `/Items` 响应透传真实的 MediaSource id；单源条目行为不变。
+- **章节与条目详情解码失败**：Emby 响应洗白规则误伤顶层 `Type` 字段，SDK 解码报 "Cannot initialize BaseItemKind from invalid String value Default"，章节列表每次都拉取失败。改为按 `MediaSources` key 精确处理子树；回归测试覆盖真实机场景。
+
+### iOS
+
+- **首次提供 iOS 安装包**：release 附带未签名 IPA（`OcPlayer-<版本>-ios-unsigned.ipa`），通过 AltStore / Sideloadly / TrollStore 等工具重签安装；与 macOS 包同一内核、同一测试门禁。iPhone 与 iPad 均已真机验证。
+- **播放画面手势**：长按 2 倍速（HUD 独立「▶▶ 2.0x」徽章，不唤醒面板）、横滑 seek（独立进度条）、纵滑调节亮度/音量；手势收敛为单一状态机，双击暂停不再被吞，多指不再误触发，切后台/来电自动收尾。
+- 打开播放器自动转横屏；iPad 浏览态跟随重力旋转，不再锁竖屏；iPhone 首页横向卡片收紧显示更多内容、详情页紧凑重设计、海报上下渐变适配全端。
+- iOS 测试链路修复：测试 target 改为零产品依赖 + BUNDLE_LOADER，Archive 链接失败修复。
+
+### 播放内核（Erika）
+
+- **网络预读缓冲可调**：设置 → 播放 新增「网络预读缓冲」（默认 2 MiB / 8 / 16 / 32 MiB）。公网高延迟服务器（远程 Emby 等）建议 16 MiB 以上，可显著减少播放中的反复缓冲。基于自编译 Erika 内核新增的 `erika_presenter_open_with_options` C API（fork 分支 `feat/http-readahead-option`，已提上游），逐请求生效，本地文件自动忽略。
+- 发版内核 `v0.1.7+readahead.1` 的下载哈希固化入仓（`Scripts/erika-v0.1.7+readahead.1.sha256`），构建时可复验。
+- 修复拉取脚本 zip-slip 防护对绝对路径归档必然误报的问题（会让全新 CI 环境无法拉取内核）。
+
+### 应用内更新
+
+- 关于区显示版本号，可手动检查 GitHub Release 更新；应用启动与进入设置页时静默检查，发现新版本自动弹窗，支持「忽略此版本」。
+
+### 新功能与优化
+
+- **Jellyfin Clear Logo**：媒体库与详情页支持服务器提供的透明 logo 展示。
+- **Bangumi**：播放结束自动标记已看时先把条目推进为「在看」；番剧候选打分算法多维度优化并与剧集季信息联动。
+- 详情页海报顶部/底部渐变过渡适配全端。
+
+### 播放器修正
+
+- 弹幕颜色为负数时先夹紧再转换，修复内核 trap 崩溃（P0）。
+- seek 不再越过片长；内核重复错误事件去重。
+- 保底跳过片尾记入会话，按钮不再原地循环。
+- 弹幕「时间偏移」按 overlay 数据显隐；暂停态下弹幕恢复逻辑不再被误触发。
+- 音量落盘 300ms 尾去抖并在停止收口补写，消除丢失窗口；2x 临时倍速不再持久化。
+
+### 稳定性与性能
+
+- 播放停止后 malloc pressure relief 四拍调度（+2/+25/+60/+120s），进程占用回落更快。
+- RemoteImage 复合加载键守卫修复：图片悬停闪烁（认证头字典序抖动致缓存键漂移）与全量图片不加载回归。
+- 详情页横幅渐变被裁剪的回归修复（图片层定高钳制）。
+- Bangumi 数据库换 DatabasePool（WAL 多连接并发）；弹幕网关响应单遍解码、mapping 内存缓存；overlay 采样 Timer 频率自适应；Erika idle 帧率档。
+- 网络健壮性：429 读取 Retry-After、退避加抖动、鉴权 401 发通知引导重登、用户取消原样透传、MoviePilot 静默重登加看门狗与熔断。
+
+### 工程与质量
+
+- 2026-08-29 全项目 review（161 条）处置完毕：P0–P3 全部收官，覆盖并发、网络、性能、构建与 UI 细节；报告入库 `Reports/review-20260829.md`。
+- 发版流水线：tag 构建必过全量测试门禁；Erika 环境准备抽为 composite action；SwiftPM 构建加缓存；`MARKETING_VERSION` 收敛 `App.xcconfig` 单源。
+- release 新增 iOS 产物：`OcPlayer-<版本>-ios-unsigned.ipa` 与 `SHA256SUMS-ios.txt`。
+
+### 随 0.1.4 附带但当时说明未展开
+
+以下功能已包含在 0.1.4 的安装包中，当时发布说明过于简略，在此补记：
+
+- Bangumi 全套：OAuth 登录、进度管理、个人主页、收藏列表、番剧日历、播放联动（看完整季自动推进条目状态）。
+- MoviePilot 全套：设置页登录、找片下载（搜索 → 选种 → 下载）、订阅管理。
+- 播放器章节列表与片头片尾/末 90 秒跳过；弹幕手动搜索选集与 HUD 弹幕菜单。
 
 ### 版本
 
-- 版本号升至 0.1.5（等 Emby 真机验证后再发版）。
+- 版本号 0.1.5。
 
 ## [0.1.4] · 2026-08-25 · UI 规范统一与弹幕渲染路线收敛
 
