@@ -171,7 +171,9 @@ fetch() { # $1 = 包名
   shasum -a 256 "$zip" | awk '{print $1"  '"$1"'.zip"}' >> "$VENDOR/erika-$TAG.sha256.tmp"
   rm -rf "$WORK/$1"
   # zip-slip 防护：条目路径带 .. 或绝对路径 = 解包逃逸，拒绝。
-  if unzip -l "$zip" | awk '{print $NF}' | grep -qE '(^|/)\.\.(/|$)|^/'; then
+  # 用 zipinfo -1 只取条目名：unzip -l 的 "Archive: /abs/path.zip" 头行会被
+  # awk 取成以 / 开头的字段，令 ^/ 规则对任何绝对路径归档必然误报。
+  if zipinfo -1 "$zip" | grep -qE '(^|/)\.\.(/|$)|^/'; then
     echo "✗ $1.zip 含可疑路径（zip-slip），拒绝解包" >&2; exit 1
   fi
   unzip -qq "$zip" -d "$WORK"
