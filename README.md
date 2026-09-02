@@ -1,11 +1,11 @@
 # OcPlayer · 橘猫播放器
 
-自用的 Jellyfin / Emby 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS）。播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染），弹幕接入弹弹play 并统一由 App 层 overlay 渲染，另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
+自用的 Jellyfin / Emby 播放器，SwiftUI 真原生双端（macOS 为主 + iOS/iPadOS），系统要求 macOS 26 / iOS 26 起。播放内核基于 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)（C ABI 接入，内置 FFmpeg 解码 + libass 字幕渲染），弹幕接入弹弹play 并统一由 App 层 overlay 渲染，另集成 Bangumi（番剧追踪）与 MoviePilot（找片 / 下载 / 订阅）。
 
 ## 功能
 
 - **媒体库**：Jellyfin / Emby 服务器自动识别（登录探活判定类型），Jellyfin 账号密码 + Quick Connect、Emby 账号密码；多服务器记忆与一键切换（登出不再遗忘档案，token 失效自动尝试其它已存服务器）；媒体库分页浏览、电影/剧集详情、季/集选择；首页继续观看、接下来看、最近添加
-- **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报 / 自动连播下一集 / macOS 键盘快捷键；章节列表跳转；片头片尾识别 + 悬浮「跳过」按钮；网络预读缓冲可调（2 / 8 / 16 / 32 MiB，公网高延迟服务器建议调大）；macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝
+- **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报 / 自动连播下一集 / macOS 键盘快捷键；章节列表跳转；片头片尾识别 + 悬浮「跳过」按钮；网络预读缓冲可调（2 / 8 / 16 / 32 MiB，公网高延迟服务器建议调大）；macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝；HUD 为原生 Liquid Glass——右下角功能按钮融合成玻璃胶囊，点开的按钮液态形变为「行 + 子菜单」式玻璃面板（Infuse 风格）
 - **弹幕**：已有剧集映射直接复用；首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；手动搜索选集、匹配缓存、时间偏移、不透明度、显示区域与类型过滤
 - **Bangumi（番剧追踪）**：OAuth 登录、收藏与在看进度、每日放送日历、条目详情与章节标记、播放结束自动标记本集看过
 - **MoviePilot（找片 + 下载 + 订阅）**：按标题搜站点资源、下载任务列表、订阅管理
