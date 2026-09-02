@@ -1255,25 +1255,46 @@ struct DetailView: View {
 
 // MARK: - 可折叠简介
 
-/// 紧凑宽度（iPhone）下超过 3 行的简介折叠，底部附蓝色「更多」展开 / 「收起」收起。
-/// 常规宽度（iPad / Mac）直接显示全文，无折叠。
+/// 超过 3 行的简介折叠，底部附「展开全文」/「收起」按钮；紧凑（iPhone）与常规
+/// （iPad / Mac）宽度行为一致，仅字号随宽度。按钮按实测截断与否显隐：
+/// 全文没超 3 行不出按钮，窗口拉宽到不再截断时也会自动消失。
 private struct ExpandableOverview: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     let text: String
 
     @State private var isExpanded = false
+    /// 全文自然高度（背景隐藏副本量出）与限行后的实高；初始 0 = 还没量出，先不出按钮。
+    @State private var fullHeight: CGFloat = 0
+    @State private var foldedHeight: CGFloat = 0
 
-    @ViewBuilder
+    private var showsToggleButton: Bool {
+        isExpanded || (fullHeight > 0 && foldedHeight > 0 && fullHeight - foldedHeight > 1)
+    }
+
+    private var overviewFont: Font {
+        sizeClass == .compact ? .subheadline : .body
+    }
+
     var body: some View {
-        if sizeClass == .compact {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(isExpanded ? nil : 3)
-                    .lineSpacing(4)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text)
+                .font(overviewFont)
+                .foregroundStyle(.secondary)
+                .lineLimit(isExpanded ? nil : 3)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { foldedHeight = $0 }
+                .background {
+                    // 同字号的无限行副本：量出全文该有的高度，和限行实高比才知道截没截断。
+                    Text(text)
+                        .font(overviewFont)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { fullHeight = $0 }
+                }
+            if showsToggleButton {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
                 } label: {
@@ -1287,12 +1308,6 @@ private struct ExpandableOverview: View {
                 }
                 .buttonStyle(.plain)
             }
-        } else {
-            Text(text)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .lineSpacing(4)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
