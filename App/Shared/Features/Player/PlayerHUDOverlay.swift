@@ -17,8 +17,7 @@ struct PlayerHUDOverlay: View {
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
-    @Binding var showStats: Bool
-    @Binding var showInfoCard: Bool
+    @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
     let isFullscreen: Bool
@@ -63,8 +62,7 @@ struct PlayerHUDOverlay: View {
                     kicker: kicker,
                     isImportingSubtitle: $isImportingSubtitle,
                     isSelectingDanmaku: $isSelectingDanmaku,
-                    showStats: $showStats,
-                    showInfoCard: $showInfoCard,
+                    showInfoPanel: $showInfoPanel,
                     shareURL: shareURL,
                     isFullscreen: isFullscreen,
                     onToggleFullscreen: onToggleFullscreen,
@@ -96,8 +94,7 @@ struct PlayerHUDOverlay: View {
                             expandedTab: $expandedTab,
                             isImportingSubtitle: $isImportingSubtitle,
                             isSelectingDanmaku: $isSelectingDanmaku,
-                            showStats: $showStats,
-                            showInfoCard: $showInfoCard,
+                            showInfoPanel: $showInfoPanel,
                             shareURL: shareURL,
                             isFullscreen: isFullscreen,
                             onToggleFullscreen: onToggleFullscreen,

@@ -125,8 +125,7 @@ struct PlayerHUDExpandedActionCard: View {
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
-    @Binding var showStats: Bool
-    @Binding var showInfoCard: Bool
+    @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
     let isFullscreen: Bool
@@ -216,8 +215,7 @@ struct PlayerHUDExpandedActionCard: View {
                         PlayerHUDChaptersPanelContent(onUserInteraction: onUserInteraction)
                     case .more:
                         PlayerHUDMorePanelContent(
-                            showStats: $showStats,
-                            showInfoCard: $showInfoCard,
+                            showInfoPanel: $showInfoPanel,
                             shareURL: shareURL,
                             isFullscreen: isFullscreen,
                             onToggleFullscreen: onToggleFullscreen,
@@ -599,8 +597,7 @@ struct PlayerHUDAudioPanelContent: View {
 struct PlayerHUDMorePanelContent: View {
     @Environment(PlaybackController.self) private var controller
 
-    @Binding var showStats: Bool
-    @Binding var showInfoCard: Bool
+    @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
     let isFullscreen: Bool
@@ -631,24 +628,17 @@ struct PlayerHUDMorePanelContent: View {
                 }
             }
 
-            // HUD 面板开关
+            // HUD 面板开关（原「播放信息」+「播放统计」两块已合并成一个面板）
             VStack(alignment: .leading, spacing: 8) {
                 Text("辅助面板")
                     .font(.caption)
                     .foregroundStyle(PlayerHUDPalette.secondary)
 
-                HStack(spacing: 8) {
-                    PlayerHUDToggleChip(
-                        title: "播放信息",
-                        icon: "info.circle",
-                        isOn: $showInfoCard
-                    )
-                    PlayerHUDToggleChip(
-                        title: "播放统计",
-                        icon: "waveform.path.ecg.rectangle",
-                        isOn: $showStats
-                    )
-                }
+                PlayerHUDToggleChip(
+                    title: "播放信息",
+                    icon: "info.circle",
+                    isOn: $showInfoPanel
+                )
             }
 
             // 快捷动作

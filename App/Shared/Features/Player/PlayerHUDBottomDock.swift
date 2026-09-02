@@ -15,8 +15,7 @@ struct PlayerHUDBottomDock: View {
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
-    @Binding var showStats: Bool
-    @Binding var showInfoCard: Bool
+    @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
     let isFullscreen: Bool

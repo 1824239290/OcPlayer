@@ -28,8 +28,7 @@ struct PlayerScreen: View {
     let request: PlaybackRequest?
 
     @State private var hudVisibility = PlayerHUDVisibilityCoordinator()
-    @State private var showStats = false
-    @State private var showInfoCard = false
+    @State private var showInfoPanel = false
     @State private var isImportingSubtitle = false
     @State private var isSelectingDanmaku = false
     @State private var screenshotToast: String?
@@ -129,8 +128,7 @@ struct PlayerScreen: View {
                     kicker: titleKicker,
                     isImportingSubtitle: $isImportingSubtitle,
                     isSelectingDanmaku: $isSelectingDanmaku,
-                    showStats: $showStats,
-                    showInfoCard: $showInfoCard,
+                    showInfoPanel: $showInfoPanel,
                     shareURL: cachedShareURL,
                     isFullscreen: hudIsFullscreen,
                     onClose: closePlayer,
@@ -145,10 +143,7 @@ struct PlayerScreen: View {
                 .accessibilityHidden(!hudVisibility.isVisible)
             }
 
-            if showStats {
-                PlayerHUDStatsPanel()
-            }
-            if showInfoCard {
+            if showInfoPanel {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
             // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
@@ -607,8 +602,7 @@ struct PlayerScreen: View {
         controller.state.state == .playing
             && !controller.state.isBuffering
             && controller.setupError == nil
-            && !showStats
-            && !showInfoCard
+            && !showInfoPanel
             && !isImportingSubtitle
             && !isSelectingDanmaku
             && !isVoiceOverEnabled

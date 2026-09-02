@@ -853,7 +853,8 @@ try engine.play()
     }
 
 
-    /// 硬解 / 丢帧等实时数字，播放页的调试行用。
+    /// 硬解 / 丢帧等实时数字的单行快照，诊断日志用（播放页信息面板已改为
+    /// 直接读 `latestStats` 分列排版，不走这条拼接线）。
     /// 具体列由 `PlaybackEngine.debugStatsLine()` 决定（拿不到的内核填 0）。
     func statsLine() -> String {
         engine?.debugStatsLine() ?? "—"
