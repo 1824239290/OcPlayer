@@ -199,8 +199,10 @@ struct PlayerHUDExpandedActionCard: View {
     let onUserInteraction: () -> Void
 
     @State private var submenu: PlayerHUDPanelSubmenu?
+    @State private var panelContentHeight: CGFloat = .zero
 
     private var navAnimation: Animation { .smooth(duration: 0.28) }
+    private var maxPanelContentHeight: CGFloat { 320 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,29 +212,50 @@ struct PlayerHUDExpandedActionCard: View {
 
             ZStack(alignment: .top) {
                 if let submenu {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        submenuContent(submenu)
-                            .padding(.horizontal, 8)
-                            .padding(.top, 2)
-                            .padding(.bottom, 8)
-                    }
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    panelBody(submenuContent(submenu))
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        rootContent
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
-                    }
-                    .transition(.opacity)
+                    panelBody(rootContent)
+                        .transition(.opacity)
                 }
             }
-            .frame(maxHeight: 320)
             // 子菜单推入时内容从右滑入，裁到卡片圆角内
             .clipShape(.rect(cornerRadius: 22, style: .continuous))
         }
         .frame(width: 320)
         .animation(navAnimation, value: submenu)
         .onChange(of: tab) { submenu = nil }
+    }
+
+    /// 面板主体高度随内容收缩：放得下就原生高度，超过 320 才滚动。
+    /// 不能只给 ScrollView 套 `frame(maxHeight:)`——ScrollView 是贪婪布局，
+    /// 两三行的小面板也会被撑满。这里用隐藏镜像（fixedSize 实测自然高度）
+    /// 驱动分支，不依赖 ViewThatFits 在 GlassEffectContainer 内的提案表现。
+    @ViewBuilder
+    private func panelBody(_ content: some View) -> some View {
+        let padded = content
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+        Group {
+            if panelContentHeight > maxPanelContentHeight {
+                ScrollView(.vertical, showsIndicators: false) {
+                    padded
+                }
+                .frame(height: maxPanelContentHeight)
+            } else {
+                padded
+            }
+        }
+        .overlay {
+            padded
+                .fixedSize(horizontal: false, vertical: true)
+                .hidden()
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
+                    panelContentHeight = $0
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 
     // MARK: 导航
