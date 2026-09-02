@@ -59,52 +59,42 @@ struct PlayerHUDOverlay: View {
                     playbackID: playbackID,
                     title: title,
                     kicker: kicker,
-                    isImportingSubtitle: $isImportingSubtitle,
-                    isSelectingDanmaku: $isSelectingDanmaku,
-                    showInfoPanel: $showInfoPanel,
-                    shareURL: shareURL,
-                    isFullscreen: isFullscreen,
-                    onToggleFullscreen: onToggleFullscreen,
-                    onCapture: onCapture,
-                    onShare: onShare,
-                    onInteractionChanged: onInteractionChanged,
-                    onUserInteraction: onUserInteraction,
-                    expandedTab: $expandedTab
+                    onInteractionChanged: onInteractionChanged
                 )
             }
 
-            // 浮动详情面板层：以全局坐标锚定在右下角，完全不推挤底部标题和进度条
-            if let tab = expandedTab {
-                // 全屏空白区域点击捕获层：点击面板外部自动平滑收起
+            // 面板展开时捕获外点：位于簇层之下，面板与按钮簇照常接收点击
+            if expandedTab != nil {
                 Color.black.opacity(0.0001)
                     .contentShape(Rectangle())
                     .ignoresSafeArea()
                     .onTapGesture {
                         closeExpanded()
                     }
+            }
 
-                VStack(spacing: 0) {
+            // 右下角动作簇：静息 5 钮融合成胶囊，点开的按钮液态形变为面板。
+            // 底边对齐底部 dock 的按钮原位（timeline 64 + dock 间距/边距），悬浮在进度条上方。
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                HStack(spacing: 0) {
                     Spacer(minLength: 0)
-                    HStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        PlayerHUDExpandedActionCard(
-                            tab: tab,
-                            expandedTab: $expandedTab,
-                            isImportingSubtitle: $isImportingSubtitle,
-                            isSelectingDanmaku: $isSelectingDanmaku,
-                            showInfoPanel: $showInfoPanel,
-                            shareURL: shareURL,
-                            isFullscreen: isFullscreen,
-                            onToggleFullscreen: onToggleFullscreen,
-                            onCapture: onCapture,
-                            onShare: onShare,
-                            onClose: closeExpanded,
-                            onUserInteraction: onUserInteraction
-                        )
-                    }
-                    .padding(.trailing, isNarrow ? 16 : 28)
-                    .padding(.bottom, isNarrow ? 70 : 88)
+                    PlayerHUDActionCluster(
+                        expandedTab: $expandedTab,
+                        isImportingSubtitle: $isImportingSubtitle,
+                        isSelectingDanmaku: $isSelectingDanmaku,
+                        showInfoPanel: $showInfoPanel,
+                        shareURL: shareURL,
+                        isFullscreen: isFullscreen,
+                        onToggleFullscreen: onToggleFullscreen,
+                        onCapture: onCapture,
+                        onShare: onShare,
+                        onInteractionChanged: onInteractionChanged,
+                        onUserInteraction: onUserInteraction
+                    )
                 }
+                .padding(.trailing, isNarrow ? 16 : 28)
+                .padding(.bottom, isNarrow ? 90 : 106)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

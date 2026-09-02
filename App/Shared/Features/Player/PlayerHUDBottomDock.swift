@@ -13,23 +13,11 @@ struct PlayerHUDBottomDock: View {
     let title: String
     let kicker: String
 
-    @Binding var isImportingSubtitle: Bool
-    @Binding var isSelectingDanmaku: Bool
-    @Binding var showInfoPanel: Bool
-
-    let shareURL: URL?
-    let isFullscreen: Bool
-    let onToggleFullscreen: () -> Void
-    let onCapture: () -> Void
-    let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
-    let onUserInteraction: () -> Void
-
-    @Binding var expandedTab: PlayerHUDActionTab?
 
     var body: some View {
         VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
-            header
+            PlayerHUDTitleBlock(title: title, kicker: kicker, isNarrow: isNarrow)
 
             PlayerHUDTimeline(
                 playbackID: playbackID,
@@ -39,33 +27,6 @@ struct PlayerHUDBottomDock: View {
         .padding(.horizontal, isNarrow ? 16 : 28)
         .padding(.bottom, isNarrow ? 16 : 28)
         .frame(maxWidth: .infinity)
-    }
-
-    @ViewBuilder
-    private var header: some View {
-        if isNarrow {
-            VStack(alignment: .leading, spacing: 10) {
-                PlayerHUDTitleBlock(title: title, kicker: kicker, isNarrow: true)
-                actions
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        } else {
-            HStack(alignment: .bottom, spacing: 20) {
-                PlayerHUDTitleBlock(title: title, kicker: kicker, isNarrow: false)
-                    .frame(minWidth: 0)
-                actions
-            }
-        }
-    }
-
-    private var actions: some View {
-        PlayerHUDActionButtonsBar(
-            expandedTab: $expandedTab,
-            onInteractionChanged: onInteractionChanged,
-            onUserInteraction: onUserInteraction
-        )
-        .fixedSize(horizontal: true, vertical: true)
-        .layoutPriority(2)
     }
 }
 
