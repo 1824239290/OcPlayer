@@ -509,9 +509,14 @@ struct DetailView: View {
                 Rectangle().fill(Color.primary.opacity(0.06))
             }
 
-            // 底部暗部渐变：保证文字和操作按钮在浅色/高亮背景图上的清晰度
+            // 底部渐变：夜间黑纱保白字；日间换白雾垫自适应深字（与氛围布局
+            // 同套「文字随外观」逻辑），两种模式都有足够的文字对比度。
             LinearGradient(
-                colors: [.black.opacity(0.65), .black.opacity(0.2), .clear],
+                colors: [
+                    (colorScheme == .light ? Color.white : Color.black).opacity(0.65),
+                    (colorScheme == .light ? Color.white : Color.black).opacity(0.2),
+                    .clear,
+                ],
                 startPoint: .bottom,
                 endPoint: .center
             )
@@ -541,6 +546,9 @@ struct DetailView: View {
                     metaRow
                     playbackActions
                 }
+                // 日间白雾上的白胶囊按钮缺少分界，给文字列一层柔和投影
+                //（海报自带投影，不并入，避免双重阴影）。
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
             }
             .padding(.horizontal, detailHorizontalInset)
             .padding(.bottom, 28)
@@ -552,30 +560,30 @@ struct DetailView: View {
     // MARK: - 氛围布局头部（开关开且条目有 backdrop 时替代横幅）
 
     /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
-    /// 内容与老横幅的 overlay 完全同套组件，只是不再有图片层和渐变，
-    /// 也没有压暗带——文字/按钮颜色跟随外观自适应。
+    /// 内容与老横幅的 overlay 完全同套组件（同为外观自适应色），
+    /// 只是不再有图片层和渐变，也没有压暗带。
     private var ambientHeader: some View {
         HStack(alignment: .bottom, spacing: 24) {
             bannerPoster(width: 120, height: 180)
             VStack(alignment: .leading, spacing: 8) {
-                ambientBannerTitle
-                ambientMetaRow
+                bannerTitle
+                metaRow
                 playbackActions
             }
+            // 白色胶囊按钮压在日间浅雾上缺少分界，给一层柔和投影兜底。
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         }
         // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，自己撑满全宽。
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 64)
         .padding(.bottom, 28)
-        // 白色胶囊按钮压在日间浅雾上缺少分界，给一层柔和投影兜底。
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
     }
 
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
     private var ambientCompactHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ambientCompactBannerTitle
+            compactBannerTitle
                 .padding(.horizontal, detailHorizontalInset)
                 .padding(.top, 52)
                 .padding(.bottom, 10)
@@ -583,17 +591,31 @@ struct DetailView: View {
         }
     }
 
-    private var ambientBannerTitle: some View {
+    @ViewBuilder
+    private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
+        if shown.primaryImageTag != nil {
+            let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
+            RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
+                .aspectRatio(2 / 3, contentMode: .fill)
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+        }
+    }
+
+    private var bannerTitle: some View {
         ItemTitleLogoView(item: shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28, adaptiveText: true)
     }
 
-    private var ambientCompactBannerTitle: some View {
+    private var compactBannerTitle: some View {
+        // 紧凑宽度：艺术字 Logo 或居中文本标题
         ItemTitleLogoView(item: shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    /// 氛围布局的元数据行：没有压暗带兜底，颜色跟随外观（日间深字 / 夜间白字）。
-    private var ambientMetaRow: some View {
+    /// 元数据行：颜色跟随外观——横幅底部渐变与氛围布局都按模式垫
+    /// 黑纱（夜间配白字）或白雾（日间配深字），文字与之同套自适应。
+    private var metaRow: some View {
         let base = colorScheme == .light ? Color.black : Color.white
         return HStack(spacing: 9) {
             ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
@@ -611,50 +633,6 @@ struct DetailView: View {
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(base.opacity(colorScheme == .light ? 0.08 : 0.2), in: RoundedRectangle(cornerRadius: 4))
                     .foregroundStyle(base.opacity(0.9))
-            }
-        }
-        .font(.subheadline)
-    }
-
-    @ViewBuilder
-    private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
-        if shown.primaryImageTag != nil {
-            let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
-            RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: width, height: height)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
-                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
-        }
-    }
-
-    private var bannerTitle: some View {
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28)
-    }
-
-    private var compactBannerTitle: some View {
-        // 紧凑宽度：艺术字 Logo 或居中文本标题
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true)
-            .frame(maxWidth: .infinity, alignment: .center)
-    }
-
-    private var metaRow: some View {
-        HStack(spacing: 9) {
-            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
-                if index > 0 {
-                    Text("·").foregroundStyle(.white.opacity(0.4))
-                }
-                Text(part).foregroundStyle(.white.opacity(0.85))
-            }
-            if let rating = shown.communityRating {
-                Label(String(format: "%.1f", rating), systemImage: "star.fill")
-                    .foregroundStyle(BangumiStatusColor.rating)
-            }
-            if let official = shown.officialRating {
-                Text(official)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 4))
-                    .foregroundStyle(.white.opacity(0.9))
             }
         }
         .font(.subheadline)
