@@ -49,24 +49,17 @@ struct BackdropAmbienceView: View {
         return Group {
             switch scrim {
             case .detail:
-                // 顶部压暗保白字头部可读（Emby 日间主题同款做法）；日间从
-                // 0.45 起过渡到白雾，给下半页的黑字正文让对比度。
+                // 全屏遮罩保持模式自适应：日间白雾、夜间黑纱，下半段沉回
+                // 页面底色。白字头部的压暗不在这层——那会把日间上半屏
+                // 染成浑浊过渡带；它绑在详情页英雄区视图上随头部滚动。
+                let tint: Color = light ? .white : .black
                 LinearGradient(
-                    stops: light
-                        ? [
-                            .init(color: .black.opacity(0.6), location: 0),
-                            .init(color: .black.opacity(0.45), location: 0.28),
-                            .init(color: .white.opacity(0.35), location: 0.48),
-                            .init(color: Color.pageBackground.opacity(0.9), location: 0.7),
-                            .init(color: Color.pageBackground, location: 1),
-                        ]
-                        : [
-                            .init(color: .black.opacity(0.6), location: 0),
-                            .init(color: .black.opacity(0.45), location: 0.28),
-                            .init(color: .black.opacity(0.15), location: 0.45),
-                            .init(color: Color.pageBackground.opacity(0.85), location: 0.7),
-                            .init(color: Color.pageBackground, location: 1),
-                        ],
+                    stops: [
+                        .init(color: tint.opacity(light ? 0.5 : 0.22), location: 0),
+                        .init(color: tint.opacity(light ? 0.6 : 0.4), location: 0.45),
+                        .init(color: Color.pageBackground.opacity(0.88), location: 0.85),
+                        .init(color: Color.pageBackground, location: 1),
+                    ],
                     startPoint: .top,
                     endPoint: .bottom
                 )

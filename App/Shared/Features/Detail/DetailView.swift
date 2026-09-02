@@ -550,6 +550,21 @@ struct DetailView: View {
     @ViewBuilder
     // MARK: - 氛围布局头部（开关开且条目有 backdrop 时替代横幅）
 
+    /// 英雄区压暗带：只罩头部范围（含顶部让位 padding）、随头部滚动，
+    /// 白字体系（Logo/元数据/播放钮）的可读性由它兜底。不放进全屏遮罩——
+    /// 日间主题整屏压暗会让上半屏变成浑浊过渡带，滚过头部后顶部也应干净。
+    private var heroScrim: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .black.opacity(0.55), location: 0),
+                .init(color: .black.opacity(0.3), location: 0.6),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
     /// 内容与老横幅的 overlay 完全同套组件，只是不再有图片层和渐变。
     private var ambientHeader: some View {
@@ -564,15 +579,18 @@ struct DetailView: View {
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 64)
         .padding(.bottom, 28)
+        .background { heroScrim }
     }
 
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
+    /// 压暗带只罩标题带（下面的元数据是自适应色，落在全屏遮罩上即可）。
     private var ambientCompactHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
             compactBannerTitle
                 .padding(.horizontal, detailHorizontalInset)
                 .padding(.top, 52)
                 .padding(.bottom, 10)
+                .background { heroScrim }
             compactContentStack
         }
     }
