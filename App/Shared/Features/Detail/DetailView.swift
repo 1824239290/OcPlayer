@@ -576,6 +576,9 @@ struct DetailView: View {
                 playbackActions
             }
         }
+        // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，必须自己撑满，
+        // 否则 heroScrim 只罩到内容右缘、右侧露出一道硬边。
+        .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 64)
         .padding(.bottom, 28)
