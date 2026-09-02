@@ -27,6 +27,11 @@ public enum PlaybackLog {
         logger.info(message, fields: fields)
     }
 
+    /// 追加一条 warning 级日志（值得注意但非致命，如弹幕爆发补发、续播定位失败）。
+    public static func warning(_ message: String, fields: [String: DiagnosticValue] = [:]) {
+        logger.warning(message, fields: fields)
+    }
+
     /// 追加一条 error 级日志（渲染线程 / 内核错误事件这类真正要捞出来的）。
     public static func error(_ message: String,
                              fields: [String: DiagnosticValue] = [:],

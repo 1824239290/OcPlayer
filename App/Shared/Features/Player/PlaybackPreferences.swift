@@ -16,6 +16,7 @@ enum PlaybackPreferences {
     private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
     private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
     private static let danmakuFontSizeKey = "dev.jumusu.ocplayer.danmaku.fontSize"
+    private static let danmakuDiagnosticsKey = "dev.jumusu.ocplayer.danmaku.diagnostics"
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -73,6 +74,13 @@ enum PlaybackPreferences {
     static var danmakuFontSize: Double {
         get { storedDouble(forKey: danmakuFontSizeKey, range: 14...36, default: 22.0) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuFontSizeKey) }
+    }
+    /// 弹幕诊断日志开关（默认关闭）。开启后弹幕 overlay 记录时间轴对齐点、
+    /// 爆发发射与续播定位日志（写入 diagnostics.jsonl），供排查「续播起播
+    /// 爆一大片弹幕」等时间轴问题用；平时关闭以减少日志噪声。
+    static var danmakuDiagnosticsEnabled: Bool {
+        get { storedBool(forKey: danmakuDiagnosticsKey, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: danmakuDiagnosticsKey) }
     }
 
     /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。

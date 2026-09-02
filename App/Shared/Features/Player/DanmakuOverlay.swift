@@ -85,6 +85,10 @@ final class DanmakuOverlayController {
     /// 每 5s 打一条 overlay 状态日志（诊断内存爬升用）：已发射条数 / 子视图数 / 复用池大小。
     /// 子视图数在播放途中持续增长 = cell 没有被正确回收复用。
     private var lastStateLogAt: TimeInterval = 0
+    /// 单帧发射超过此数即判定「爆发补发」（正常节奏单帧只发几条），写 warning 日志。
+    private static let burstSpawnThreshold = 40
+    /// 弹幕诊断日志开关（PlaybackPreferences 默认关，设置页「弹幕诊断日志」控制）。
+    private var diagnosticsEnabled: Bool { PlaybackPreferences.danmakuDiagnosticsEnabled }
 
     init(engineProvider: @escaping () -> (any PlaybackEngine)?,
          playbackStateProvider: @escaping () -> (playing: Bool, buffering: Bool)? = { nil }) {
@@ -100,7 +104,7 @@ final class DanmakuOverlayController {
         comments = Self.parse(json).sorted { $0.time < $1.time }
         self.trackOffsetSeconds = trackOffsetSeconds
         PlaybackLog.append("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
-        resync()
+        resync(reason: "replace")
     }
 
     func clear() {
@@ -167,7 +171,7 @@ final class DanmakuOverlayController {
         let fontSizeChanged = next.fontSize != preferences.fontSize
         preferences = next
         applyPreferences(to: view)
-        if offsetChanged || fontSizeChanged { resync() }
+        if offsetChanged || fontSizeChanged { resync(reason: "preferences") }
     }
 
     private func applyPreferences(to view: DanmakuView) {
@@ -255,18 +259,21 @@ final class DanmakuOverlayController {
         let delta = now - last
         if delta < -0.5 || delta > 2.0 {
             // seek：媒体时间跳变，清屏重同步。
-            resync()
+            resync(reason: "seek")
             return
         }
         if viewPausedBySync { return }
         // 5s 状态采样（诊断内存爬升）：cell 回收/复用是否失衡。
-        let wall = Date().timeIntervalSinceReferenceDate
-        if wall - lastStateLogAt >= 5 {
-            lastStateLogAt = wall
-            PlaybackLog.info(
-                "弹幕 overlay 状态 已发射=\(pointer) 子视图=\(view.subviews.count) "
-                    + "池=\(view.pooledCellCount) 总数=\(comments.count)"
-            )
+        // 平时关（诊断开关）不打——每 5s 一条属「排查时才需要」的高频日志。
+        if diagnosticsEnabled {
+            let wall = Date().timeIntervalSinceReferenceDate
+            if wall - lastStateLogAt >= 5 {
+                lastStateLogAt = wall
+                PlaybackLog.info(
+                    "弹幕 overlay 状态 已发射=\(pointer) 子视图=\(view.subviews.count) "
+                        + "池=\(view.pooledCellCount) 总数=\(comments.count)"
+                )
+            }
         }
         spawnUpTo(now)
     }
@@ -281,22 +288,45 @@ final class DanmakuOverlayController {
     }
 
     /// seek / 换数据 / 改偏移后：清屏，指针对齐当前媒体时间。
-    private func resync() {
+    /// `reason` 只进诊断日志，用于区分对齐触发源（replace/seek/preferences）。
+    private func resync(reason: String = "seek") {
         guard preferences.enabled, let engine = engineProvider() else { return }
         view.stop()
         view.play()
         viewPausedBySync = false
         let now = effectiveSeconds(mediaSeconds(engine))
         pointer = comments.firstIndex { $0.time > now } ?? comments.count
+        if diagnosticsEnabled {
+            // 对齐点即「从此刻起才发射的弹幕时间轴」。续播起播若这里对齐到 ~0
+            // 而实际播放已在续播位，后面 tick 会把 0~续播位 的弹幕一次补发。
+            PlaybackLog.info(
+                "弹幕时间轴对齐 reason=\(reason) "
+                    + "mediaTime=\(String(format: "%.1f", now))s "
+                    + "pointer=\(pointer)/\(comments.count) "
+                    + "trackOffset=\(String(format: "%.1f", trackOffsetSeconds))s"
+            )
+        }
         lastMediaSample = nil
         startTimer()
     }
 
     private func spawnUpTo(_ mediaSeconds: Double) {
         let threshold = effectiveSeconds(mediaSeconds)
+        let start = pointer
         while pointer < comments.count, comments[pointer].time <= threshold {
             view.shoot(danmaku: makeModel(for: comments[pointer]))
             pointer += 1
+        }
+        let spawned = pointer - start
+        // 单帧发射远超正常节奏 = 时间轴对齐错位导致补发（典型：续播起播对齐到 0），
+        // 与「弹幕时间轴对齐」日志对照即可定位根因。
+        if diagnosticsEnabled, spawned >= Self.burstSpawnThreshold {
+            PlaybackLog.warning(
+                "弹幕爆发发射 spawned=\(spawned) "
+                    + "mediaTime=\(String(format: "%.1f", mediaSeconds))s "
+                    + "pointer=\(pointer)/\(comments.count) "
+                    + "threshold=\(String(format: "%.1f", threshold))s"
+            )
         }
     }
 

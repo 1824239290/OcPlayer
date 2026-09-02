@@ -440,6 +440,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
         generation: UInt64,
         engineID: ObjectIdentifier
     ) async {
+        if PlaybackPreferences.danmakuDiagnosticsEnabled {
+            // 与弹幕「时间轴对齐」日志同落 diagnostics.jsonl，时间戳可比：
+            // 判断弹幕注入与续播 seek 的先后竞态。
+            PlaybackLog.info(
+                "续播定位等待开始 resume=\(String(format: "%.1f", resumeSeconds))s request=\(requestID)"
+            )
+        }
         while !Task.isCancelled {
             guard sourceGeneration == generation,
                   expectedRequestID == requestID,
@@ -453,10 +460,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
             if isSourceReady, state.duration > .zero {
                 let duration = Double(state.duration.microseconds) / 1_000_000
                 let target = min(max(resumeSeconds, 0), max(duration - 0.5, 0))
+                if PlaybackPreferences.danmakuDiagnosticsEnabled {
+                    PlaybackLog.info(
+                        "续播定位 seek target=\(String(format: "%.1f", target))s duration=\(String(format: "%.1f", duration))s"
+                    )
+                }
                 do {
                     try engine.seek(to: .seconds(target))
                 } catch {
                     setupError = "续播定位失败：\(error)"
+                    if PlaybackPreferences.danmakuDiagnosticsEnabled {
+                        PlaybackLog.warning("续播定位失败 error=\(error)")
+                    }
                 }
                 return
             }

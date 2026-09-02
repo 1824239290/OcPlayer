@@ -27,6 +27,9 @@ struct SettingsView: View {
     private var readAheadMiB: Int {
         PlaybackPreferences.readAheadOptionsMiB.contains(storedReadAheadMiB) ? storedReadAheadMiB : 0
     }
+    /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
+    /// 同一 key，@AppStorage 双向可观察，改了立即生效。
+    @AppStorage("dev.jumusu.ocplayer.danmaku.diagnostics") private var danmakuDiagnosticsEnabled = false
 
     var body: some View {
         Form {
@@ -144,6 +147,10 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
+                Text("开启后记录弹幕时间轴对齐 / 爆发发射与续播定位日志（写入 diagnostics.jsonl），排查「续播起播弹幕错位」等问题时再开，平时保持关闭。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 DiagnosticsSection()
             } header: {
                 Text("诊断")
