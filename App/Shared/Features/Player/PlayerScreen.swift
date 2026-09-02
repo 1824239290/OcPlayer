@@ -40,6 +40,10 @@ struct PlayerScreen: View {
     @State private var screenshotToastToken: UUID?
     // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
     @State private var cachedShareURL: URL?
+    /// 关闭流程进行中（点 × / ESC 到 dismiss 完成）：窗口带着画面缩回原位、
+    /// 停播被推迟到缩完。抑制无引擎占位图，避免「画中画样式图标 + 标题」
+    /// 在停播到退出播放器的窗口期裸露闪现。
+    @State private var isClosing = false
     /// 只存布局档位，不存逐像素宽度，窗口缩放时不会让整套 HUD 每像素重建。
     @State private var isNarrow = false
     #if os(macOS)
@@ -95,7 +99,8 @@ struct PlayerScreen: View {
             PlayerVideoSurface(
                 engine: controller.engine,
                 title: request?.title ?? "没有正在播放的内容",
-                setupError: controller.setupError
+                setupError: controller.setupError,
+                showsPlaceholder: !isClosing
             )
             #if os(macOS)
             PlayerMouseTrackingView { location in
@@ -626,20 +631,34 @@ struct PlayerScreen: View {
     private func closePlayer() {
         playerLog.info("closePlayer（ESC / ×）")
         PlaybackLog.append("closePlayer（ESC / ×）")
+        guard !isClosing else { return }
+        isClosing = true
+        // 缩窗期间 HUD 立即淡出卸载；hide() 自带 userHidden 锁，
+        // 鼠标移动不会在缩窗途中把 HUD 唤回。
         hudVisibility.cancel()
+        hudVisibility.hide()
         // 绑定本次关闭的 request：延迟 dismiss 期间若用户已开新片，不能误清新 presentedPlayer。
         let closingID = request?.id
-        // 先触发窗口还原动画（画面还在，窗口缩小时播放内容跟着一起缩小），
-        // 再停引擎，等窗口缩完再退出播放器——不会出现「播放器没了，窗口自己在动」的不连贯。
-        // PlayerWindowFitter 只有 App/macOS 一份，iOS 没有窗口可还原。
+        // 先触发窗口还原动画，画面还活着、跟着窗口一起缩回去（与打开时的
+        // 展开动画对称）；缩完再停引擎、退出播放器——不会出现「播放器没了，
+        // 窗口自己在动」的不连贯。停播若是同步做，画面第 0ms 就黑掉，
+        // 无引擎占位图会裸露闪现。PlayerWindowFitter 只有 App/macOS 一份，
+        // iOS 没有窗口可还原。
         #if os(macOS)
         PlayerWindowFitter.restore()
         #endif
-        controller.stopPlayback()
         Task { @MainActor in
-            // 窗口弹性动画约 0.18-0.2s，等一下让它跑完再 dismiss。
+            // 窗口弹性动画约 0.18-0.2s，等它带着画面缩完再停引擎。
             try? await Task.sleep(for: .seconds(0.25))
             guard !Task.isCancelled else { return }
+            // 停播前确认屏上还是被关的这片：PlaybackController 是全局共享单例，
+            // 延迟停播不能误停用户在这 0.25s 内新开的片。closingID 为 nil
+            // 保持老行为（照常停引擎，只是不 dismiss）。
+            if let closingID,
+               !PlayerClosePolicy.shouldDismiss(presentedID: app.presentedPlayer?.id, closingID: closingID) {
+                return
+            }
+            controller.stopPlayback()
             guard PlayerClosePolicy.shouldDismiss(
                 presentedID: app.presentedPlayer?.id,
                 closingID: closingID

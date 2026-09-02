@@ -82,6 +82,9 @@ struct PlayerVideoSurface: View {
     let engine: (any PlaybackEngine)?
     let title: String
     let setupError: String?
+    /// 关闭流程中置 false：停播到 dismiss 之间引擎已空，占位图（画中画样式
+    /// 图标 + 标题）若照常渲染会裸露闪现，此时落到底层纯黑即可。
+    var showsPlaceholder: Bool = true
 
     @ViewBuilder
     var body: some View {
@@ -92,7 +95,7 @@ struct PlayerVideoSurface: View {
             engine.makeSurfaceView()
                 .id(ObjectIdentifier(engine))
                 .ignoresSafeArea()
-        } else {
+        } else if showsPlaceholder {
             VStack(spacing: 14) {
                 Image(systemName: "play.rectangle.on.rectangle")
                     .font(.system(size: 44, weight: .light))
