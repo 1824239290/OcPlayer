@@ -30,6 +30,9 @@ struct SettingsView: View {
     /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
     /// 同一 key，@AppStorage 双向可观察，改了立即生效。
     @AppStorage("dev.jumusu.ocplayer.danmaku.diagnostics") private var danmakuDiagnosticsEnabled = false
+    /// 海报氛围背景开关（默认开）：DetailView / AmbientBackdropCarousel 读同一 key，
+    /// 改了立即生效。
+    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop") private var ambientBackdropEnabled = true
 
     var body: some View {
         Form {
@@ -79,6 +82,13 @@ struct SettingsView: View {
             }
 
             PlaybackKernelSection()
+
+            Section("界面") {
+                Toggle("海报氛围背景", isOn: $ambientBackdropEnabled)
+                Text("详情页与首页垫一张模糊的海报背景，首页会从媒体库随机轮播。关闭后详情页恢复清晰横幅、首页无背景。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
 
             Section("弹幕") {
                 Toggle("自动加载弹幕", isOn: Binding(

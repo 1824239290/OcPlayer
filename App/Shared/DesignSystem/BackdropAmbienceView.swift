@@ -1,17 +1,18 @@
 import CoreModel
 import SwiftUI
 
-/// 全页氛围背景（Emby 详情页同款）：一张 backdrop 铺满整页、高斯模糊后
-/// 压暗（夜间）/ 雾化（日间），内容浮在上面滚动。
+/// 全页氛围背景（Emby 详情页同款）：一张 backdrop 铺满整页、高斯模糊后垫底，
+/// 内容浮在上面滚动。
 ///
 /// 纯装饰层：取不到图（`url == nil`）时整体不渲染，页面自然回退到
 /// `Color.pageBackground` 纯色。详情页放单图，首页由 `AmbientBackdropCarousel`
 /// 换着放，共用这里的遮罩与裁剪。
 struct BackdropAmbienceView: View {
     enum Scrim {
-        /// 详情页：大段正文浮在上面，遮罩适中，底部渐隐进页面底色。
+        /// 详情页：顶部要浮白字头部（Logo 白字兜底 / metaRow 白字 / 白胶囊播放钮），
+        /// 遮罩顶部两种外观下都压暗，下半段沉回页面底色。
         case detail
-        /// 首页：Rail 标题、卡片直接压在背景上，遮罩再重一档保对比度。
+        /// 首页：Rail 标题、卡片直接压在背景上，全屏均衡的雾化/压暗。
         case home
     }
 
@@ -33,7 +34,8 @@ struct BackdropAmbienceView: View {
                 // 模糊会让图片边缘发虚透光，放大一点把虚边推出可视区，
                 // 再钳回布局边界——blur/scale 的输出会画出 frame，
                 // 不裁的话会盖到 macOS 侧栏等兄弟层上。
-                .blur(radius: colorScheme == .light ? 36 : 28)
+                // 半径取低档：背景要能认出是哪部剧的海报。
+                .blur(radius: colorScheme == .light ? 20 : 14)
                 .scaleEffect(1.12)
                 .clipped()
                 .overlay { scrimGradient }
@@ -41,32 +43,48 @@ struct BackdropAmbienceView: View {
         }
     }
 
-    /// 模式自适应遮罩：夜间黑纱压暗、日间白雾化（黑字内容的对比度由白雾保证），
-    /// 底部统一渐隐到 `pageBackground`，让长内容区沉回页面底色。
-    /// `pageBackground` 本身随模式取值，所以只有 tint 两个 stop 需要分模式。
+    /// 模式自适应遮罩。`pageBackground` 本身随模式取值，分模式的只是 tint。
     private var scrimGradient: some View {
         let light = colorScheme == .light
-        let tint: Color = light ? .white : .black
-        let top: Double
-        let mid: Double
-        switch scrim {
-        case .detail:
-            top = light ? 0.5 : 0.22
-            mid = light ? 0.6 : 0.4
-        case .home:
-            top = light ? 0.55 : 0.28
-            mid = light ? 0.66 : 0.48
+        return Group {
+            switch scrim {
+            case .detail:
+                // 顶部压暗保白字头部可读（Emby 日间主题同款做法）；日间从
+                // 0.45 起过渡到白雾，给下半页的黑字正文让对比度。
+                LinearGradient(
+                    stops: light
+                        ? [
+                            .init(color: .black.opacity(0.6), location: 0),
+                            .init(color: .black.opacity(0.45), location: 0.28),
+                            .init(color: .white.opacity(0.35), location: 0.48),
+                            .init(color: Color.pageBackground.opacity(0.9), location: 0.7),
+                            .init(color: Color.pageBackground, location: 1),
+                        ]
+                        : [
+                            .init(color: .black.opacity(0.6), location: 0),
+                            .init(color: .black.opacity(0.45), location: 0.28),
+                            .init(color: .black.opacity(0.15), location: 0.45),
+                            .init(color: Color.pageBackground.opacity(0.85), location: 0.7),
+                            .init(color: Color.pageBackground, location: 1),
+                        ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            case .home:
+                // 全屏均衡档：夜间黑纱、日间白雾，底部渐隐回页面底色。
+                let tint: Color = light ? .white : .black
+                LinearGradient(
+                    stops: [
+                        .init(color: tint.opacity(light ? 0.55 : 0.28), location: 0),
+                        .init(color: tint.opacity(light ? 0.66 : 0.48), location: 0.45),
+                        .init(color: Color.pageBackground.opacity(0.88), location: 0.85),
+                        .init(color: Color.pageBackground, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
         }
-        return LinearGradient(
-            stops: [
-                .init(color: tint.opacity(top), location: 0),
-                .init(color: tint.opacity(mid), location: 0.45),
-                .init(color: Color.pageBackground.opacity(0.88), location: 0.85),
-                .init(color: Color.pageBackground, location: 1),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
         .animation(.easeInOut(duration: 0.5), value: colorScheme)
     }
 }

@@ -21,6 +21,9 @@ struct DetailView: View {
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
+    /// 海报氛围背景开关（默认开）：与设置页「界面」分区同一 key。
+    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop")
+    private var ambientBackdropEnabled = true
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
@@ -49,6 +52,12 @@ struct DetailView: View {
 
     private var shown: MediaItem { detail ?? item }
 
+    /// 氛围布局是否生效：开关开且条目有 backdrop 图。没图时没有氛围层，
+    /// 浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
+    private var isAmbientActive: Bool {
+        ambientBackdropEnabled && shown.backdropImageTag != nil && app.server != nil
+    }
+
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
@@ -75,7 +84,15 @@ struct DetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         if horizontalSizeClass == .compact {
-                            compactHeaderView
+                            if isAmbientActive {
+                                ambientCompactHeader
+                            } else {
+                                compactHeaderView
+                            }
+                        } else if isAmbientActive {
+                            // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
+                            ambientHeader
+                            metadata
                         } else {
                             banner
                             metadata
@@ -105,10 +122,14 @@ struct DetailView: View {
                 // 氛围背景只挂内容分支（骨架不带）：挂在 ScrollView 上的固定层，
                 // 不随内容滚动；取不到 backdrop 时组件整体不渲染，回退纯色底。
                 .background {
-                    BackdropAmbienceView(
-                        target: shown.imageTarget(app.server, kind: .backdrop, width: 800),
-                        scrim: .detail
-                    )
+                    // 氛围背景只挂内容分支（骨架不带）：挂在 ScrollView 上的固定层，
+                    // 不随内容滚动；开关关闭或取不到 backdrop 时整体不渲染。
+                    if isAmbientActive {
+                        BackdropAmbienceView(
+                            target: shown.imageTarget(app.server, kind: .backdrop, width: 800),
+                            scrim: .detail
+                        )
+                    }
                 }
             }
         }
@@ -494,17 +515,17 @@ struct DetailView: View {
                 endPoint: .center
             )
 
-            // 顶部/底部 pageBackground 渐隐合并成一条多 stop 渐变。底部 stop
-            // 只调到低透明度：横幅底下现在垫着同一张图的全页模糊层（氛围背景），
-            // 渐隐到实色会切出一条「实色横带」接缝；文字对比度由上面的黑色
-            // 渐变兜底，不靠这层。
+            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
+            //（旧实现是两条全尺寸渐变叠着合成，各 stop 的透明度按
+            // 「底混上」的合成权重算好，视觉不变，少一层全尺寸合成）。
+            // 仅在老横幅布局（氛围背景关）使用，底部必须渐隐到实色。
             LinearGradient(
                 stops: [
                     .init(color: Color.pageBackground.opacity(0.85), location: 0),
                     .init(color: Color.pageBackground.opacity(0.42), location: 0.25),
-                    .init(color: Color.pageBackground.opacity(0.18), location: 0.5),
-                    .init(color: Color.pageBackground.opacity(0.3), location: 0.75),
-                    .init(color: Color.pageBackground.opacity(0.12), location: 1),
+                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
+                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
+                    .init(color: Color.pageBackground, location: 1),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
@@ -524,6 +545,36 @@ struct DetailView: View {
             .padding(.bottom, 28)
         }
         .clipped()
+    }
+
+    @ViewBuilder
+    // MARK: - 氛围布局头部（开关开且条目有 backdrop 时替代横幅）
+
+    /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
+    /// 内容与老横幅的 overlay 完全同套组件，只是不再有图片层和渐变。
+    private var ambientHeader: some View {
+        HStack(alignment: .bottom, spacing: 24) {
+            bannerPoster(width: 120, height: 180)
+            VStack(alignment: .leading, spacing: 8) {
+                bannerTitle
+                metaRow
+                playbackActions
+            }
+        }
+        .padding(.horizontal, detailHorizontalInset)
+        .padding(.top, 64)
+        .padding(.bottom, 28)
+    }
+
+    /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
+    private var ambientCompactHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            compactBannerTitle
+                .padding(.horizontal, detailHorizontalInset)
+                .padding(.top, 52)
+                .padding(.bottom, 10)
+            compactContentStack
+        }
     }
 
     @ViewBuilder
