@@ -34,6 +34,8 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
 /// 同一个 `GlassEffectContainer` 内共享取样区域（玻璃不能取样玻璃）。
 struct PlayerHUDActionCluster: View {
     @Binding var expandedTab: PlayerHUDActionTab?
+    // 面板内容自然高度（卡片内实测回传），供 PlayerScreen 把跳过钮抬到面板上方。
+    @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
@@ -63,6 +65,7 @@ struct PlayerHUDActionCluster: View {
                 if let tab = expandedTab {
                     PlayerHUDExpandedActionCard(
                         tab: tab,
+                        panelContentHeight: $panelContentHeight,
                         isImportingSubtitle: $isImportingSubtitle,
                         isSelectingDanmaku: $isSelectingDanmaku,
                         showInfoPanel: $showInfoPanel,
@@ -187,6 +190,10 @@ struct PlayerHUDExpandedActionCard: View {
 
     let tab: PlayerHUDActionTab
 
+    // 面板内容自然高度（本视图内实测）。Binding 归 PlayerScreen 所有：
+    // 跳过按钮层用它计算「面板上方空位」的锚点。
+    @Binding var panelContentHeight: CGFloat
+
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showInfoPanel: Bool
@@ -199,7 +206,6 @@ struct PlayerHUDExpandedActionCard: View {
     let onUserInteraction: () -> Void
 
     @State private var submenu: PlayerHUDPanelSubmenu?
-    @State private var panelContentHeight: CGFloat = .zero
 
     private var navAnimation: Animation { .smooth(duration: 0.28) }
     private var maxPanelContentHeight: CGFloat { 320 }

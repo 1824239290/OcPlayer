@@ -31,6 +31,11 @@ struct PlayerScreen: View {
     @State private var showInfoPanel = false
     @State private var isImportingSubtitle = false
     @State private var isSelectingDanmaku = false
+    // 右下角功能面板当前展开的 Tab（nil = 收起）。跳过按钮层据此让位：
+    // 面板打开时跳过钮由 HUD 簇浮动到面板上方，这里的独立实例隐藏。
+    @State private var expandedActionTab: PlayerHUDActionTab?
+    // 展开面板内容的自然高度（面板内实测回传），面板打开时跳过钮抬到其上方。
+    @State private var panelContentHeight: CGFloat = .zero
     @State private var screenshotToast: String?
     @State private var screenshotToastToken: UUID?
     // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
@@ -126,6 +131,8 @@ struct PlayerScreen: View {
                     playbackID: request?.id.uuidString ?? "",
                     title: mainTitle,
                     kicker: titleKicker,
+                    expandedTab: $expandedActionTab,
+                    panelContentHeight: $panelContentHeight,
                     isImportingSubtitle: $isImportingSubtitle,
                     isSelectingDanmaku: $isSelectingDanmaku,
                     showInfoPanel: $showInfoPanel,
@@ -147,16 +154,24 @@ struct PlayerScreen: View {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
             // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
+            // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）：
+            // 功能面板打开时改用「簇底距 + 按钮高 + 间距 + 面板实测高度」抬到面板上方空位。
+            let isActionPanelOpen = expandedActionTab != nil
+            let skipBottomPadding: CGFloat = isActionPanelOpen
+                ? (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + panelContentHeight + 12
+                : (isNarrow ? 150 : 168)
             VStack {
                 Spacer(minLength: 0)
                 HStack {
                     Spacer(minLength: 0)
                     PlayerSkipPromptView()
                         .padding(.trailing, isNarrow ? 16 : 28)
-                        .padding(.bottom, isNarrow ? 150 : 168)
+                        .padding(.bottom, skipBottomPadding)
                 }
             }
             .allowsHitTesting(true)
+            .motionAnimation(.smooth(duration: 0.3), value: expandedActionTab, reduceMotion: reduceMotion)
+            .motionAnimation(.smooth(duration: 0.3), value: panelContentHeight, reduceMotion: reduceMotion)
 
             // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
             VStack(spacing: 0) {

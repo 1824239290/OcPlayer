@@ -15,6 +15,11 @@ struct PlayerHUDOverlay: View {
     let title: String
     let kicker: String
 
+    // 状态归 PlayerScreen：跳过按钮层要据它让位（面板打开时跳过钮浮到面板上方）。
+    @Binding var expandedTab: PlayerHUDActionTab?
+    // 面板内容自然高度（簇内卡片实测），透传给 PlayerScreen 计算跳过钮锚点。
+    @Binding var panelContentHeight: CGFloat
+
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showInfoPanel: Bool
@@ -27,8 +32,6 @@ struct PlayerHUDOverlay: View {
     let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
-
-    @State private var expandedTab: PlayerHUDActionTab?
 
     private var animation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.35)
@@ -81,6 +84,7 @@ struct PlayerHUDOverlay: View {
                     Spacer(minLength: 0)
                     PlayerHUDActionCluster(
                         expandedTab: $expandedTab,
+                        panelContentHeight: $panelContentHeight,
                         isImportingSubtitle: $isImportingSubtitle,
                         isSelectingDanmaku: $isSelectingDanmaku,
                         showInfoPanel: $showInfoPanel,
