@@ -26,6 +26,29 @@ struct HomeView: View {
         #if os(macOS)
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
         #endif
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                refreshToolbarButton
+            }
+        }
+    }
+
+    /// 右上角刷新按钮：点击等同下拉刷新，重新向服务器请求首页与媒体库数据。
+    /// 不额外套材质——macOS 26 / iOS 26 的工具栏按钮由系统渲染成液态玻璃，
+    /// 手动再叠 `.glassEffect` 会双倍玻璃。加载中换成小转圈给反馈。
+    private var refreshToolbarButton: some View {
+        Button {
+            Task { await app.reloadBrowserData() }
+        } label: {
+            if app.home.isLoading {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .help("刷新首页")
+        .accessibilityLabel("刷新首页")
+        .disabled(app.server == nil)
     }
 
     private var noServerState: some View {
