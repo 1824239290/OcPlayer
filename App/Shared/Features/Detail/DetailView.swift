@@ -102,6 +102,14 @@ struct DetailView: View {
                 }
                 .contentMargins(.top, 0, for: .scrollContent)
                 .ignoresSafeArea(edges: .top)
+                // 氛围背景只挂内容分支（骨架不带）：挂在 ScrollView 上的固定层，
+                // 不随内容滚动；取不到 backdrop 时组件整体不渲染，回退纯色底。
+                .background {
+                    BackdropAmbienceView(
+                        target: shown.imageTarget(app.server, kind: .backdrop, width: 800),
+                        scrim: .detail
+                    )
+                }
             }
         }
         .navigationTitle(horizontalSizeClass == .compact ? "" : shown.name)
@@ -486,16 +494,17 @@ struct DetailView: View {
                 endPoint: .center
             )
 
-            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
-            //（旧实现是两条全尺寸渐变叠着合成，各 stop 的透明度按
-            // 「底混上」的合成权重算好，视觉不变，少一层全尺寸合成）。
+            // 顶部/底部 pageBackground 渐隐合并成一条多 stop 渐变。底部 stop
+            // 只调到低透明度：横幅底下现在垫着同一张图的全页模糊层（氛围背景），
+            // 渐隐到实色会切出一条「实色横带」接缝；文字对比度由上面的黑色
+            // 渐变兜底，不靠这层。
             LinearGradient(
                 stops: [
                     .init(color: Color.pageBackground.opacity(0.85), location: 0),
                     .init(color: Color.pageBackground.opacity(0.42), location: 0.25),
-                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
-                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
-                    .init(color: Color.pageBackground, location: 1),
+                    .init(color: Color.pageBackground.opacity(0.18), location: 0.5),
+                    .init(color: Color.pageBackground.opacity(0.3), location: 0.75),
+                    .init(color: Color.pageBackground.opacity(0.12), location: 1),
                 ],
                 startPoint: .top,
                 endPoint: .bottom

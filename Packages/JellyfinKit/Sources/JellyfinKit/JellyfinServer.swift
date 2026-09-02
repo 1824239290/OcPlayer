@@ -316,6 +316,23 @@ public struct JellyfinServer: Sendable {
         .items?.map(\.domainItem) ?? []
     }
 
+    /// 首页氛围背景取材：全库随机一批带 backdrop 的电影 / 剧集。
+    /// `SortBy=Random` Emby/Jellyfin 双端都支持；hasBackdrop 服务端过滤差异大，
+    /// 拿回来后按 tag 过滤兜底，数量不够由调用方自行回退（如首页已加载条目）。
+    public func randomBackdropItems(limit: Int = 24) async throws -> [MediaItem] {
+        let result = try await send(
+            Paths.getItems(parameters: .init(
+                userID: profile.userID,
+                limit: limit,
+                isRecursive: true,
+                includeItemTypes: [.movie, .series],
+                sortBy: [.random],
+                enableImageTypes: [.primary, .backdrop]
+            ))
+        )
+        return (result.items?.map(\.domainItem) ?? []).filter { $0.backdropImageTag != nil }
+    }
+
     /// 标记条目已看完（Jellyfin `POST /UserPlayedItems/{id}`；Emby 只有老式
     /// `POST /Users/{uid}/PlayedItems/{id}`，与 Views/Resume 同批旧路由）。
     /// 返回服务端最新的播放状态快照，便于 UI 就地更新。

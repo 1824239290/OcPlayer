@@ -22,6 +22,9 @@ struct HomeView: View {
                 content
             }
         }
+        // 氛围背景垫在最底层：骨架 / 错误 / 空态都盖着它（未连服务器时
+        // 轮播自己拿不到图，整体不渲染）。
+        .background { AmbientBackdropCarousel() }
         .navigationTitle("首页")
         #if os(macOS)
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
