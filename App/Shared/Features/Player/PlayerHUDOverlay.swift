@@ -28,7 +28,6 @@ struct PlayerHUDOverlay: View {
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
 
-    @Namespace private var morphAnimation
     @State private var expandedTab: PlayerHUDActionTab?
 
     private var animation: Animation? {
@@ -70,8 +69,7 @@ struct PlayerHUDOverlay: View {
                     onShare: onShare,
                     onInteractionChanged: onInteractionChanged,
                     onUserInteraction: onUserInteraction,
-                    expandedTab: $expandedTab,
-                    morphAnimation: morphAnimation
+                    expandedTab: $expandedTab
                 )
             }
 
@@ -101,8 +99,7 @@ struct PlayerHUDOverlay: View {
                             onCapture: onCapture,
                             onShare: onShare,
                             onClose: closeExpanded,
-                            onUserInteraction: onUserInteraction,
-                            morphAnimation: morphAnimation
+                            onUserInteraction: onUserInteraction
                         )
                     }
                     .padding(.trailing, isNarrow ? 16 : 28)
@@ -166,13 +163,8 @@ struct PlayerHUDTopBar: View {
         return isNarrow ? 14 : 22
     }
 
-    @ViewBuilder
     private var leadingControls: some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            GlassEffectContainer(spacing: 10) {
-                leadingButtons
-            }
-        } else {
+        GlassEffectContainer(spacing: 10) {
             leadingButtons
         }
     }

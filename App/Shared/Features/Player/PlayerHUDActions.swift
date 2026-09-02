@@ -31,7 +31,6 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
 
 struct PlayerHUDActionButtonsBar: View {
     @Binding var expandedTab: PlayerHUDActionTab?
-    let morphAnimation: Namespace.ID
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
 
@@ -57,11 +56,7 @@ struct PlayerHUDActionButtonsBar: View {
                     PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
                 }
                 .buttonStyle(PlayerHUDInteractiveButtonStyle())
-                .playerHUDGlassButton(
-                    in: Circle(),
-                    id: tab.id,
-                    namespace: morphAnimation
-                )
+                .playerHUDGlassButton()
                 .opacity(expandedTab == nil ? 1 : (isCurrentExpanded ? 0 : 0.35))
                 .scaleEffect(expandedTab == nil ? 1 : 0.85)
                 .allowsHitTesting(expandedTab == nil)
@@ -134,7 +129,6 @@ struct PlayerHUDExpandedActionCard: View {
     let onShare: () -> Void
     let onClose: () -> Void
     let onUserInteraction: () -> Void
-    let morphAnimation: Namespace.ID
 
     var body: some View {
         VStack(spacing: 0) {
@@ -230,11 +224,7 @@ struct PlayerHUDExpandedActionCard: View {
             .frame(maxHeight: 320)
         }
         .frame(width: 320)
-        .playerHUDGlassCard(
-            cornerRadius: 22,
-            id: tab.id,
-            namespace: morphAnimation
-        )
+        .playerHUDGlassCard(cornerRadius: 22)
     }
 }
 
@@ -911,7 +901,6 @@ struct PlayerSkipPromptView: View {
     @Environment(PlaybackController.self) private var controller
 
     @State private var prompt: SkipPrompt?
-    @Namespace private var skipNamespace
 
     var body: some View {
         Group {
@@ -931,7 +920,7 @@ struct PlayerSkipPromptView: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(PlayerSkipButtonStyle())
-                .playerHUDGlassButton(in: Capsule(), id: "skip-prompt", namespace: skipNamespace)
+                .playerHUDGlassButton(in: Capsule())
                 .shadow(color: .black.opacity(0.45), radius: 6, y: 3)
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
             }
@@ -956,80 +945,14 @@ struct PlayerSkipButtonStyle: ButtonStyle {
 // MARK: - Liquid Glass View Modifiers
 
 extension View {
-    @ViewBuilder
-    func playerHUDGlassCard(
-        cornerRadius: CGFloat = 22,
-        id: (some Hashable & Sendable)? = nil,
-        namespace: Namespace.ID? = nil
-    ) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            if let id, let namespace {
-                self
-                    .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
-                    .glassEffectID(id, in: namespace)
-                    .matchedGeometryEffect(id: id, in: namespace)
-            } else {
-                self
-                    .glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
-            }
-        } else {
-            if let id, let namespace {
-                self
-                    .background(
-                        .ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                    }
-                    .matchedGeometryEffect(id: id, in: namespace)
-            } else {
-                self
-                    .background(
-                        .ultraThinMaterial,
-                        in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                    }
-            }
-        }
+    /// 面板玻璃：圆角矩形取样。形变配对（glassEffectID）由调用方在 `GlassEffectContainer` 内施加。
+    func playerHUDGlassCard(cornerRadius: CGFloat = 22) -> some View {
+        glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    @ViewBuilder
-    func playerHUDGlassButton(
-        in shape: some Shape = Circle(),
-        id: (some Hashable & Sendable)? = nil,
-        namespace: Namespace.ID? = nil
-    ) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            if let id, let namespace {
-                self
-                    .glassEffect(.regular.interactive(), in: shape)
-                    .glassEffectID(id, in: namespace)
-                    .matchedGeometryEffect(id: id, in: namespace)
-            } else {
-                self
-                    .glassEffect(.regular.interactive(), in: shape)
-            }
-        } else {
-            if let id, let namespace {
-                self
-                    .background(.ultraThinMaterial, in: shape)
-                    .overlay {
-                        shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                    }
-                    .matchedGeometryEffect(id: id, in: namespace)
-            } else {
-                self
-                    .background(.ultraThinMaterial, in: shape)
-                    .overlay {
-                        shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                    }
-            }
-        }
+    /// 按钮玻璃：interactive 取样，按压/悬停有液态反馈。
+    func playerHUDGlassButton(in shape: some Shape = Circle()) -> some View {
+        glassEffect(.regular.interactive(), in: shape)
     }
 }
 

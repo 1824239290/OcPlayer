@@ -26,7 +26,6 @@ struct PlayerHUDBottomDock: View {
     let onUserInteraction: () -> Void
 
     @Binding var expandedTab: PlayerHUDActionTab?
-    let morphAnimation: Namespace.ID
 
     var body: some View {
         VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
@@ -62,7 +61,6 @@ struct PlayerHUDBottomDock: View {
     private var actions: some View {
         PlayerHUDActionButtonsBar(
             expandedTab: $expandedTab,
-            morphAnimation: morphAnimation,
             onInteractionChanged: onInteractionChanged,
             onUserInteraction: onUserInteraction
         )

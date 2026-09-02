@@ -25,18 +25,9 @@ struct PlayerHUDGlassSurface<SurfaceShape: Shape, Content: View>: View {
         self.content = content()
     }
 
-    @ViewBuilder
     var body: some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            content
-                .glassEffect(.regular, in: shape)
-        } else {
-            content
-                .background(.ultraThinMaterial, in: shape)
-                .overlay {
-                    shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                }
-        }
+        content
+            .glassEffect(.regular, in: shape)
     }
 }
 
@@ -54,21 +45,9 @@ struct PlayerHUDGlassIconButton: View {
         #endif
     }
 
-    @ViewBuilder
     var body: some View {
-        if #available(macOS 26.0, iOS 26.0, *) {
-            button
-                .glassEffect(
-                    .regular.interactive(),
-                    in: Circle()
-                )
-        } else {
-            button
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle().stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-                }
-        }
+        button
+            .glassEffect(.regular.interactive(), in: Circle())
     }
 
     private var button: some View {
