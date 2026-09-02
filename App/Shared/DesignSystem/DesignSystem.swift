@@ -463,8 +463,12 @@ struct ItemTitleLogoView: View {
     var fontSize: CGFloat = 28
     /// 紧凑布局（iPhone 详情页）把 logo/标题居中，常规布局左对齐。
     var centered: Bool = false
+    /// 文本兜底色跟随外观（日间深字 / 夜间白字）。氛围布局没有压暗带兜底时开；
+    /// 老横幅恒在暗色图上，保持白字默认。
+    var adaptiveText: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @State private var logoImage: PlatformImage?
     @State private var loadFailed = false
     @State private var loadedKey: String?
@@ -475,7 +479,8 @@ struct ItemTitleLogoView: View {
         maxHeight: CGFloat = 80,
         maxWidth: CGFloat = 420,
         fontSize: CGFloat = 28,
-        centered: Bool = false
+        centered: Bool = false,
+        adaptiveText: Bool = false
     ) {
         self.item = item
         self.server = server
@@ -483,6 +488,7 @@ struct ItemTitleLogoView: View {
         self.maxWidth = maxWidth
         self.fontSize = fontSize
         self.centered = centered
+        self.adaptiveText = adaptiveText
 
         // 同步从内存缓存中探测：若已有位图缓存，首帧直接上图，0 毫秒闪烁
         if item.logoImageTag != nil, let server {
@@ -524,7 +530,7 @@ struct ItemTitleLogoView: View {
                 // 未配置 Logo 或加载失败：展示标准文本标题
                 Text(item.name)
                     .font(.system(size: fontSize, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(adaptiveText && colorScheme == .light ? Color.primary : .white)
                     .lineLimit(2)
                     .shadow(color: .black.opacity(0.5), radius: 4)
                     .transition(.opacity)

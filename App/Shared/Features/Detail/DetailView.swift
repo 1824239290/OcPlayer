@@ -21,6 +21,7 @@ struct DetailView: View {
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     /// 海报氛围背景开关（默认开）：与设置页「界面」分区同一 key。
     @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop")
     private var ambientBackdropEnabled = true
@@ -550,52 +551,69 @@ struct DetailView: View {
     @ViewBuilder
     // MARK: - 氛围布局头部（开关开且条目有 backdrop 时替代横幅）
 
-    /// 英雄区压暗带：只罩头部范围（含顶部让位 padding）、随头部滚动，
-    /// 白字体系（Logo/元数据/播放钮）的可读性由它兜底。不放进全屏遮罩——
-    /// 日间主题整屏压暗会让上半屏变成浑浊过渡带，滚过头部后顶部也应干净。
-    private var heroScrim: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .black.opacity(0.55), location: 0),
-                .init(color: .black.opacity(0.3), location: 0.6),
-                .init(color: .clear, location: 1),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
     /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
-    /// 内容与老横幅的 overlay 完全同套组件，只是不再有图片层和渐变。
+    /// 内容与老横幅的 overlay 完全同套组件，只是不再有图片层和渐变，
+    /// 也没有压暗带——文字/按钮颜色跟随外观自适应。
     private var ambientHeader: some View {
         HStack(alignment: .bottom, spacing: 24) {
             bannerPoster(width: 120, height: 180)
             VStack(alignment: .leading, spacing: 8) {
-                bannerTitle
-                metaRow
+                ambientBannerTitle
+                ambientMetaRow
                 playbackActions
             }
         }
-        // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，必须自己撑满，
-        // 否则 heroScrim 只罩到内容右缘、右侧露出一道硬边。
+        // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，自己撑满全宽。
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 64)
         .padding(.bottom, 28)
-        .background { heroScrim }
+        // 白色胶囊按钮压在日间浅雾上缺少分界，给一层柔和投影兜底。
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
     }
 
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
-    /// 压暗带只罩标题带（下面的元数据是自适应色，落在全屏遮罩上即可）。
     private var ambientCompactHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
-            compactBannerTitle
+            ambientCompactBannerTitle
                 .padding(.horizontal, detailHorizontalInset)
                 .padding(.top, 52)
                 .padding(.bottom, 10)
-                .background { heroScrim }
             compactContentStack
         }
+    }
+
+    private var ambientBannerTitle: some View {
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28, adaptiveText: true)
+    }
+
+    private var ambientCompactBannerTitle: some View {
+        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// 氛围布局的元数据行：没有压暗带兜底，颜色跟随外观（日间深字 / 夜间白字）。
+    private var ambientMetaRow: some View {
+        let base = colorScheme == .light ? Color.black : Color.white
+        return HStack(spacing: 9) {
+            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Text("·").foregroundStyle(base.opacity(0.4))
+                }
+                Text(part).foregroundStyle(base.opacity(0.78))
+            }
+            if let rating = shown.communityRating {
+                Label(String(format: "%.1f", rating), systemImage: "star.fill")
+                    .foregroundStyle(BangumiStatusColor.rating)
+            }
+            if let official = shown.officialRating {
+                Text(official)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(base.opacity(colorScheme == .light ? 0.08 : 0.2), in: RoundedRectangle(cornerRadius: 4))
+                    .foregroundStyle(base.opacity(0.9))
+            }
+        }
+        .font(.subheadline)
     }
 
     @ViewBuilder
