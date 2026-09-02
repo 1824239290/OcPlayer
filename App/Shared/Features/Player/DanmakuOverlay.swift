@@ -80,6 +80,9 @@ final class DanmakuOverlayController {
     private var trackOffsetSeconds: Double = 0
     private var timer: Timer?
     private var lastMediaSample: Double?
+    /// 上次发射机会的 effective 阈值。与本次阈值差 >2s = 媒体时间发生了 tick
+    /// 没看见的跳变，spawnUpTo 据此跳过积压（结构性兜底，见其注释）。
+    private var lastSpawnThreshold: Double?
     private var viewPausedBySync = false
 
     /// 每 5s 打一条 overlay 状态日志（诊断内存爬升用）：已发射条数 / 子视图数 / 复用池大小。
@@ -87,6 +90,8 @@ final class DanmakuOverlayController {
     private var lastStateLogAt: TimeInterval = 0
     /// 单帧发射超过此数即判定「爆发补发」（正常节奏单帧只发几条），写 warning 日志。
     private static let burstSpawnThreshold = 40
+    /// seek 跳变判定阈值（秒）：tick 的 delta 检测与 spawnUpTo 的积压兜底共用同一标准。
+    private static let seekJumpSeconds = 2.0
     /// 弹幕诊断日志开关（PlaybackPreferences 默认关，设置页「弹幕诊断日志」控制）。
     private var diagnosticsEnabled: Bool { PlaybackPreferences.danmakuDiagnosticsEnabled }
 
@@ -111,6 +116,7 @@ final class DanmakuOverlayController {
         comments = []
         pointer = 0
         lastMediaSample = nil
+        lastSpawnThreshold = nil
         view.clean()
         // 复用池里的 cell 带着整条已渲染弹幕的模型/测量，不清的话关播放器后
         // 上一集的 cell 树整棵留在单例持有的 DanmakuView 上（vendored 层修补，
@@ -257,7 +263,7 @@ final class DanmakuOverlayController {
         lastMediaSample = now
 
         let delta = now - last
-        if delta < -0.5 || delta > 2.0 {
+        if delta < -0.5 || delta > Self.seekJumpSeconds {
             // seek：媒体时间跳变，清屏重同步。
             resync(reason: "seek")
             return
@@ -288,7 +294,7 @@ final class DanmakuOverlayController {
     }
 
     /// seek / 换数据 / 改偏移后：清屏，指针对齐当前媒体时间。
-    /// `reason` 只进诊断日志，用于区分对齐触发源（replace/seek/preferences）。
+    /// `reason` 只进诊断日志，用于区分对齐触发源（replace/seek/preferences/backlog）。
     private func resync(reason: String = "seek") {
         guard preferences.enabled, let engine = engineProvider() else { return }
         view.stop()
@@ -306,12 +312,31 @@ final class DanmakuOverlayController {
                     + "trackOffset=\(String(format: "%.1f", trackOffsetSeconds))s"
             )
         }
-        lastMediaSample = nil
+        // 置为对齐点而非 nil：resync 后首拍 tick 仍要做 seek 跳变检测。置 nil 的话，
+        // 续播 seek 若落在「注入对齐」与首拍之间（日志实证的爆发根因），跳变会被
+        // 首拍静默吞掉，第二拍就把 0~续播位 的弹幕一次补发。
+        lastMediaSample = now
+        lastSpawnThreshold = now
         startTimer()
     }
 
     private func spawnUpTo(_ mediaSeconds: Double) {
         let threshold = effectiveSeconds(mediaSeconds)
+        // 结构性兜底：正常节奏下两次发射机会之间媒体时间只前进不到一帧，差出
+        // seekJumpSeconds 说明发生了 tick 没看见的跳变（暂停中 seek、内核时间源
+        // 异常等）。积压的是「早已过点」的过期弹幕，补发就是「起播爆一大片」的
+        // 用户观感——清屏重对齐跳过它，而不是喷出来。
+        if let last = lastSpawnThreshold, threshold - last > Self.seekJumpSeconds {
+            PlaybackLog.warning(
+                "弹幕积压跳变已跳过 last=\(String(format: "%.1f", last))s "
+                    + "now=\(String(format: "%.1f", threshold))s "
+                    + "pointer=\(pointer)/\(comments.count)"
+            )
+            lastSpawnThreshold = threshold
+            resync(reason: "backlog")
+            return
+        }
+        lastSpawnThreshold = threshold
         let start = pointer
         while pointer < comments.count, comments[pointer].time <= threshold {
             view.shoot(danmaku: makeModel(for: comments[pointer]))
