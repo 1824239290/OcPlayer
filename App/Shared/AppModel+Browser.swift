@@ -1,3 +1,4 @@
+import CoreModel
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
@@ -38,6 +39,18 @@ struct HomeRailPresence: Equatable {
 
 extension AppModel {
     // MARK: - 数据加载
+
+    /// 「接下来看」剔除已经在「继续观看」里的条目。
+    ///
+    /// 半集（播了一部分但没看完）会被两个接口同时返回：Resume 按 IsResumable
+    /// 收录它；NextUp 把「第一部未看完的剧」也算上它——服务端只认 PlayCount，
+    /// 半集仍是未看。不剔的话同一条目会在两条 Rail 并排出现两次。
+    /// 有播放进度的归「继续观看」，因此从「接下来看」侧剔除。
+    nonisolated static func deduplicatedNextUp(_ nextUp: [MediaItem], resume: [MediaItem]) -> [MediaItem] {
+        guard !nextUp.isEmpty, !resume.isEmpty else { return nextUp }
+        let resumeIDs = Set(resume.map(\.id))
+        return nextUp.filter { !resumeIDs.contains($0.id) }
+    }
 
     func activate(server: JellyfinServer) {
         initialDataTask?.cancel()
@@ -117,13 +130,14 @@ extension AppModel {
             guard sessionIsCurrent(generation, server: server),
                   homeLoadGeneration == loadGeneration
             else { return }
+            let visibleNextUp = Self.deduplicatedNextUp(nextUpItems, resume: resumeItems)
             home.resume = resumeItems
-            home.nextUp = nextUpItems
+            home.nextUp = visibleNextUp
             home.latest = latestItems
             // 记下这次的 Rail 组成，供下次首屏骨架决定铺几条。
             let presence = HomeRailPresence(
                 resume: !resumeItems.isEmpty,
-                nextUp: !nextUpItems.isEmpty,
+                nextUp: !visibleNextUp.isEmpty,
                 latest: !latestItems.isEmpty
             )
             let changed = home.railPresence != presence
