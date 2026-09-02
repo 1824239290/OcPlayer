@@ -8,10 +8,16 @@ import SwiftUI
 /// Erika 内核适配器：`PlaybackEngine` 的第一个实现。
 ///
 /// **锁契约**（改这个文件前先读）：
-/// - 内核句柄没有内部同步，所以**每一次** C 调用都必须握着 `lock`。
-/// - 渲染线程（`RenderLoop`）每帧：加锁 → `render_tick(绝对呈现时间)` → 把 `poll_event` 抽干 → 解锁，
+/// - 内核句柄没有内部同步，所以**每一次** C 调用都必须握着 `lock`（下称**主锁**）。
+/// - 渲染线程（`RenderLoop`）每帧：加主锁 → `render_tick(绝对呈现时间)` → 把 `poll_event` 抽干 → 解锁，
 ///   事件**出锁之后**才投递给 `events`，避免在锁内回调用户代码造成死锁。
-/// - UI 侧的 open / play / seek / 改配置都是短暂加同一把锁后直接调，因此和 tick 天然串行。
+/// - **open 是唯一的长持主锁调用**：内核在调用线程上同步完成网络连接与格式探测，
+///   弱网下可达数十秒。因此 open 期间其余入口走**让位契约**（见 `yieldLock` 一节）：
+///   UI 侧的 stop / detach / resize 只登记意图立即返回，由 open 收尾在 open 线程补做；
+///   play / pause / seek / 改速率音量在 open 期间直接丢弃（那时没有媒体内容，操作无意义）。
+///   open 本身因此必须由宿主安排在**非主线程**执行，否则上述让位救不了主线程。
+/// - 统计快照（`latestStats` / `latestMemory`）走独立的 `statsLock`：UI 会以 10Hz 轮询
+///   首帧标志，绝不能让这些读撞上 open 的长持锁（先例：`mediaTimeLock`）。
 /// - 不用 `actor`：actor 的执行器无法保证落在显示线程上，反而多跳一次。
 ///
 /// 这套串行化是 **Erika 特有的**，不是 `PlaybackEngine` 的要求：换成 libmpv 这类
@@ -37,20 +43,76 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     private let renderLoop: RenderLoop
     private let continuation: AsyncStream<PlayerEvent>.Continuation
 
+    // MARK: open 让位契约（改 open / stop / detach 前先读）
+
+    /// open 长持主锁期间的让位状态。**独立小锁，绝不与主锁嵌套获取**——
+    /// 让位路径的全部意义就是在这段时间不碰主锁。
+    private let yieldLock = NSLock()
+    /// open 在飞（`open()` 进入到收尾之间）。读方是 UI 线程的让位入口。
+    private var _isOpening = false
+    /// open 期间有人请求过 stop：open 收尾在 open 线程补做。
+    private var _pendingStop = false
+    /// open 期间收到的 surface 操作（attach / resize / detach 后写胜出），
+    /// open 收尾按最终意图补做一次。detach 与 attach/resize 互斥覆盖。
+    private var _deferredSurface: DeferredSurfaceUpdate?
+    /// open 收尾是否补做过让位的 stop / detach（即这次 open 的成果已被放弃）。
+    /// 宿主用它决定是否跳过后续的 play / 参数设置（stop 之后 play 会重头播）。
+    private var _openingInterrupted = false
+
+/// open 期间登记的 surface 操作。
+private struct DeferredSurfaceUpdate {
+    enum Op {
+        /// layer 已由视图创建，token 与几何一起延后交给内核。
+        case attach(view: PlatformView, layerToken: UInt64)
+        case resize
+        case detach
+    }
+    let op: Op
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let scale: Double
+}
+
+/// Sendable 检查逃生舱：值本身只在单一执行环境（这里是主线程）访问，
+/// 由调用点保证，盒子只为携带它跨过 Task 边界。
+private struct UncheckedSendableBox<T>: @unchecked Sendable {
+    let value: T
+}
+
+    // MARK: 统计快照（独立于主锁，UI 高频读）
+
+    /// `_latestStats` / `_latestMemory` 的专用锁。写方：渲染线程（step / sampleMemoryAt）；
+    /// 读方：UI 轮询与 HUD。与主锁的嵌套只允许「主锁 → statsLock」一个方向
+    /// （渲染线程在主锁内写），反向无嵌套，无死锁环。
+    private let statsLock = NSLock()
+
     /// 内核事件流。多处消费请各自 `for await`，此流为单播 —— 由 `PlayerState` 独占更省心。
     public let events: AsyncStream<PlayerEvent>
 
-    /// 中立统计快照（`PlaybackEngine` 要求），UI 侧可随时读。
-    public var latestStats: PlaybackStats { withLock { PlaybackStats(_latestStats) } }
+    /// 中立统计快照（`PlaybackEngine` 要求），UI 侧可随时读、不与 open 的长持锁竞争
+    /// （loading 轮询以 10Hz 读首帧标志，走主锁会撞上 open）。
+    public var latestStats: PlaybackStats {
+        statsLock.lock()
+        defer { statsLock.unlock() }
+        return PlaybackStats(_latestStats)
+    }
 
     /// Erika 原始统计（HDR / 音频恢复 / 升采样等中立结构体不带的细项）。
     /// 需要这些字段时 downcast 到 `ErikaEngine` 再读。
-    public var latestErikaStats: ErikaPresenterStats { withLock { _latestStats } }
+    public var latestErikaStats: ErikaPresenterStats {
+        statsLock.lock()
+        defer { statsLock.unlock() }
+        return _latestStats
+    }
     private var _latestStats = ErikaPresenterStats()
 
     /// 最近一次内核内存分项快照（渲染线程每 5s 采样，任意线程可读）。
     /// 两条弹幕路线共用：2G 峰值和 overlay 缓慢爬升分别落在哪些分项，看它的趋势。
-    public var latestMemory: ErikaMemorySnapshot { withLock { _latestMemory } }
+    public var latestMemory: ErikaMemorySnapshot {
+        statsLock.lock()
+        defer { statsLock.unlock() }
+        return _latestMemory
+    }
     private var _latestMemory = ErikaMemorySnapshot()
     private static let memorySampleIntervalSeconds: Double = 5
     /// 只被渲染线程写；初始 `-.infinity` 让第一帧 tick 先采一条当基线。
@@ -102,10 +164,19 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     /// 挂上 `CAMetalLayer` 并启动帧驱动。主线程调用。
     /// 尺寸传**物理像素**，`scale` 传 backingScaleFactor / contentsScale。
+    ///
+    /// open 在飞时让位：只登记意图（后写胜出），由 open 收尾在 open 线程补
+    /// `attach_metal_layer`，回主线程补 `renderLoop.start`。正常时序里 attach 发生在
+    /// open 派发之前（视图先布局、`.task` 后跑），这条是防御 + attach 失败后的
+    /// layout 重试落在 open 期间的兜底。
     @MainActor
     func attach(to view: PlatformView, layer: CAMetalLayer,
                 pixelWidth: Int, pixelHeight: Int, scale: Double) throws {
         let raw = UInt64(UInt(bitPattern: Unmanaged.passUnretained(layer).toOpaque()))
+        if deferSurfaceDuringOpen(.attach(view: view, layerToken: raw),
+                                  pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale) {
+            return
+        }
         do {
             try withLock {
                 try presenter.attachMetalLayer(raw, pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
@@ -123,9 +194,14 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     /// 尺寸 / DPI 变化。内部保证在下一次 tick 之前生效（同一把锁）。
     /// 失败补节流日志：吞掉的话失败后画面停在旧 viewport（黑屏/拉伸），只有现象没有原因。
-    private static let resizeThrottle = DiagnosticThrottle(key: "resize-surface", interval: 1)
-
+    ///
+    /// open 在飞时让位：登记最终几何（后写胜出），open 收尾补做——否则拖窗口 /
+    /// 全屏切换会从主线程撞上 open 的长持锁。
     func resize(pixelWidth: Int, pixelHeight: Int, scale: Double) {
+        if deferSurfaceDuringOpen(.resize,
+                                  pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale) {
+            return
+        }
         do {
             try withLock {
                 try presenter.resizeSurface(pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
@@ -139,9 +215,16 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     /// 先停帧驱动（等线程退出），再 detach —— 顺序反了就是随机崩。
     /// 返回是否成功断开：失败时内核可能仍攥着 layer 的裸指针，调用方
     /// （MetalHostView）会记标志、在视图释放前再强制补断一次。
+    ///
+    /// open 在飞时让位：**连 `renderLoop.stop()` 都不做**——它会 join 正被 open
+    /// 挡住的渲染线程（cancel 后仍要等 runloop 唤醒点），主线程一样会被拖住。
+    /// 全部登记给 open 收尾补做。
     @discardableResult
     func detach() -> Bool {
         PlaybackLog.append("detach surface")
+        if deferSurfaceDuringOpen(.detach, pixelWidth: 0, pixelHeight: 0, scale: 0) {
+            return false
+        }
         renderLoop.stop()
         do {
             try withLock { try presenter.detachSurface() }
@@ -153,10 +236,102 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         }
     }
 
+    // MARK: open 让位（yield）内部
+
+    /// open 在飞时登记 surface 操作；返回 true 表示已登记（调用方立即返回，不碰主锁）。
+    private func deferSurfaceDuringOpen(_ op: DeferredSurfaceUpdate.Op,
+                                        pixelWidth: Int, pixelHeight: Int, scale: Double) -> Bool {
+        yieldLock.lock()
+        defer { yieldLock.unlock() }
+        guard _isOpening else { return false }
+        _deferredSurface = DeferredSurfaceUpdate(
+            op: op, pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
+        return true
+    }
+
+    /// open 进入时调用：清上一轮让位残留，置 opening 标志。
+    /// internal 供测试驱动（无真实 open 的让位路径回归）。
+    func markOpeningStarted() {
+        yieldLock.lock()
+        _isOpening = true
+        _pendingStop = false
+        _deferredSurface = nil
+        _openingInterrupted = false
+        yieldLock.unlock()
+    }
+
+    /// open 收尾（`open()` 的 defer，主锁之外）调用：清标志并补做让位登记的操作。
+    /// 补做顺序 stop → surface，与正常路径 stopPlayback → detach 一致。
+    /// internal 供测试驱动。
+    func finishOpening() {
+        var pendingStop = false
+        var surface: DeferredSurfaceUpdate?
+        yieldLock.lock()
+        _isOpening = false
+        pendingStop = _pendingStop
+        surface = _deferredSurface
+        _pendingStop = false
+        _deferredSurface = nil
+        _openingInterrupted = pendingStop || surface != nil
+        yieldLock.unlock()
+
+        if pendingStop {
+            PlaybackLog.append("open 让位收尾：补 stop")
+            try? withLock { try presenter.stop() }
+        }
+        guard let surface else { return }
+        switch surface.op {
+        case .detach:
+            PlaybackLog.append("open 让位收尾：补 detach")
+            renderLoop.stop()
+            try? withLock { try presenter.detachSurface() }
+        case .resize:
+            PlaybackLog.append("open 让位收尾：补 resize \(surface.pixelWidth)x\(surface.pixelHeight)")
+            try? withLock {
+                try presenter.resizeSurface(pixelWidth: surface.pixelWidth,
+                                            pixelHeight: surface.pixelHeight, scale: surface.scale)
+            }
+        case .attach(let view, let layerToken):
+            PlaybackLog.append("open 让位收尾：补 attach \(surface.pixelWidth)x\(surface.pixelHeight) scale=\(surface.scale)")
+            do {
+                try withLock {
+                    try presenter.attachMetalLayer(layerToken, pixelWidth: surface.pixelWidth,
+                                                   pixelHeight: surface.pixelHeight, scale: surface.scale)
+                }
+            } catch {
+                PlaybackLog.error("open 让位收尾补 attach 失败 error=\(error)")
+                continuation.yield(.failed(code: (error as? ErikaError).map { Int32(bitPattern: $0.status.rawValue) } ?? 0,
+                                           message: "画面挂载失败：\(error)"))
+                return
+            }
+            // renderLoop.start 要求主线程（要摸视图）。view / renderLoop 都不是
+            // Sendable,但真实访问被 @MainActor 闭环限定,盒子只为过并发检查。
+            let viewBox = UncheckedSendableBox(value: view)
+            let loopBox = UncheckedSendableBox(value: renderLoop)
+            Task { @MainActor in
+                guard viewBox.value.window != nil else { return }
+                loopBox.value.start(on: viewBox.value)
+            }
+        }
+    }
+
+    private static let resizeThrottle = DiagnosticThrottle(key: "resize-surface", interval: 1)
+
     // MARK: - 播放控制
+
+    /// 这次 open 收尾是否已把成果让位给 stop/detach（即 open 期间宿主请求过 stop
+    /// 或 surface 拆卸）。宿主在 `open()` 返回后读取，决定要不要跳过 play / 参数设置
+    /// ——内核 stop 之后 play 是合法的重播操作，跳过才不会让已放弃的源幽灵出声。
+    public var openWasInterrupted: Bool {
+        yieldLock.lock()
+        defer { yieldLock.unlock() }
+        return _openingInterrupted
+    }
 
     public func open(_ source: PlaybackSource) throws {
         PlaybackLog.append("open() 开始")
+        markOpeningStarted()
+        defer { finishOpening() }
         do {
             try withLock {
                 try presenter.open(source)
@@ -171,6 +346,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     }
 
     public func play() throws {
+        if dropControlDuringOpen("play") { return }
         do {
             try withLock { try presenter.play() }
             PlaybackLog.append("play() 成功")
@@ -181,6 +357,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     }
 
     public func pause() throws {
+        if dropControlDuringOpen("pause") { return }
         do {
             try withLock { try presenter.pause() }
             PlaybackLog.append("pause() 成功")
@@ -192,6 +369,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     public func stop() throws {
         PlaybackLog.append("stop() 开始")
+        if deferStopDuringOpen() { return }
         do {
             try withLock {
                 try presenter.stop()
@@ -230,9 +408,38 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         }
     }
 
-    public func seek(to position: Duration) throws { try withLock { try presenter.seek(to: position) } }
-    public func setRate(_ rate: Double) throws { try withLock { try presenter.setRate(rate) } }
-    public func setVolume(_ volume: Double) throws { try withLock { try presenter.setVolume(volume) } }
+    /// open 期间丢弃播放控制（play/pause/seek/速率/音量）：此时还没有媒体内容，
+    /// 操作无意义；不丢弃的话调用线程会撞上 open 的长持锁。
+    private func dropControlDuringOpen(_ name: String) -> Bool {
+        yieldLock.lock()
+        defer { yieldLock.unlock() }
+        guard _isOpening else { return false }
+        PlaybackLog.append("open 在飞，丢弃 \(name)")
+        return true
+    }
+
+    /// open 期间把 stop 登记给 open 收尾补做；返回 true 表示已登记。
+    private func deferStopDuringOpen() -> Bool {
+        yieldLock.lock()
+        defer { yieldLock.unlock() }
+        guard _isOpening else { return false }
+        _pendingStop = true
+        PlaybackLog.append("open 在飞，stop 让位登记")
+        return true
+    }
+
+    public func seek(to position: Duration) throws {
+        if dropControlDuringOpen("seek") { return }
+        try withLock { try presenter.seek(to: position) }
+    }
+    public func setRate(_ rate: Double) throws {
+        if dropControlDuringOpen("setRate") { return }
+        try withLock { try presenter.setRate(rate) }
+    }
+    public func setVolume(_ volume: Double) throws {
+        if dropControlDuringOpen("setVolume") { return }
+        try withLock { try presenter.setVolume(volume) }
+    }
 
     public func stats() throws -> ErikaPresenterStats {
         try withLock { try presenter.stats() }
@@ -369,7 +576,9 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         do {
             let snapshot = ErikaMemorySnapshot(try presenter.resourceStatus())
             let process = ProcessFootprint.current()
+            statsLock.lock()
             _latestMemory = snapshot
+            statsLock.unlock()
             memorySampleFailed = false
             var fields = snapshot.logFields
             for (key, value) in process.logFields { fields[key] = value }
@@ -410,8 +619,10 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
         lock.lock()
         do {
-            _latestStats = try presenter.renderTick(at: presentationTime)
-            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
+            let stats = try presenter.renderTick(at: presentationTime)
+            statsLock.lock()
+            _latestStats = stats
+            statsLock.unlock()            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
             if presentationTime - lastMemorySampleAt >= Self.memorySampleIntervalSeconds {
                 lastMemorySampleAt = presentationTime
                 sampleMemoryAt(reason: "tick")

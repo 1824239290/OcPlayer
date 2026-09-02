@@ -74,6 +74,11 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     // MARK: - 播放控制
 
     func open(_ source: PlaybackSource) throws
+    /// open 返回后：本次 open 的成果是否已被让位（open 期间宿主请求过 stop /
+    /// surface 拆卸，引擎收尾已补 stop）。宿主据此跳过 play / 参数设置——
+    /// stop 之后 play 是合法的重播，不跳过会让已放弃的源幽灵出声。
+    /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认值恒 false。
+    var openWasInterrupted: Bool { get }
     func play() throws
     func pause() throws
     func stop() throws
@@ -123,6 +128,9 @@ public extension PlaybackEngine {
     /// 实例侧的便捷读取（`type(of:).descriptor` 写起来太吵）。
     var descriptor: PlaybackEngineDescriptor { Self.descriptor }
     var supportsKernelDanmaku: Bool { Self.supportsKernelDanmaku }
+
+    /// 不支持让位语义的内核：open 期间不存在让位，恒 false。
+    var openWasInterrupted: Bool { false }
 
     /// 首帧是否已经出画。播放 loading 覆盖层撤掉的判据——
     /// 内核报了 ready 不代表屏幕上有东西，必须等真正渲染过一帧，

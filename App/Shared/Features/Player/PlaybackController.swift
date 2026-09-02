@@ -141,6 +141,19 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
     var currentlyOpenURI: String?
+    // MARK: open 在飞状态（open 已移出主线程,见 engineOpenQueue 注释）
+    /// 在飞的 open。用途：同请求重入去重、换片时判定「旧引擎还在 open」、看门狗。
+    /// 完成 / 失败 / 看门狗触发即按 request 匹配清空。
+    private(set) var openingRequestID: PlaybackRequest.ID?
+    private(set) var openingSourceURI: String?
+    private var openingWatchdogTask: Task<Void, Never>?
+    /// 引擎 open 专用串行队列：内核在调用线程上**同步**完成网络连接与格式探测，
+    /// 弱网下可达数十秒（DNS 甚至无超时），在主线程执行就是繁忙光标 + UI 冻结。
+    /// 串行保证多次 open 的引擎操作天然有序。
+    private static let engineOpenQueue = DispatchQueue(
+        label: "dev.jumusu.OcPlayer.engine-open", qos: .userInitiated)
+    /// open 看门狗时长。默认 60s；测试注入缩短。
+    static var openWatchdogTimeout: Duration = .seconds(60)
     /// Changes as soon as a new request is presented, before its engine opens.
     var sourceGeneration: UInt64 = 0
     /// 最近一次请求（出错重试用）。
@@ -360,6 +373,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("openIfNeeded 跳过（已打开同一个源） title=\(request.title)")
             return
         }
+        if openingRequestID == request.id {
+            // 同一请求的 open 还在后台跑（视图重建触发 .task 重跑）：跳过。
+            PlaybackLog.append("openIfNeeded 跳过（open 在飞） title=\(request.title)")
+            return
+        }
         PlaybackLog.append("openIfNeeded title=\(request.title)")
         openPreparedRequest(request)
     }
@@ -392,30 +410,20 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let readAhead = PlaybackPreferences.httpReadAheadBytes
         // 诊断「改了预读档位没生效」：把本次真正传给内核的值打进日志。
         PlaybackLog.append("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
-        let opened = open(
+        open(
             PlaybackSource(
                 uri: request.uri,
                 headers: headers,
                 // 本地文件路径没有预取语义，内核会忽略；统一带上无妨。
                 readAheadBytes: readAhead
             ),
-            securityScopedURL: request.securityScopedURL
+            securityScopedURL: request.securityScopedURL,
+            request: request
         )
         reportableRequestID = request.id
-        guard opened, let engine else {
-            // A failed open may leave the fresh PlayerState in idle without an
-            // error event. Invalidate the presentation boundary so async
-            // subtitle/danmaku waiters finish instead of polling forever.
-            if expectedRequestID == request.id {
-                expectedRequestID = nil
-                sourceGeneration &+= 1
-            }
-            failedRequestID = request.id
-            return
-        }
-        activeRequest = request
         // 续播位置不立刻 seek（源还没就绪），挂到 pending 等 duration 到达。
-        if let resume = request.resumeSeconds, resume >= 30 {
+        // open 失败时完成路径会失效 generation，这个等待循环按代次守卫自行退出。
+        if let resume = request.resumeSeconds, resume >= 30, let engine {
             let generation = sourceGeneration
             let engineID = ObjectIdentifier(engine)
             resumeTask = Task { [weak self] in
@@ -490,19 +498,17 @@ final class PlaybackController: DanmakuPlaybackHosting {
             && lhs.sessionContext == rhs.sessionContext
     }
 
-    @discardableResult
-    func open(_ source: PlaybackSource, securityScopedURL: URL? = nil) -> Bool {
-        // 换片：先 stop 旧源，再整体丢弃重建引擎。
-        //
-        // 两个理由：
-        // 1. Erika 的 `close()` 是终态——同一 presenter close 后不能再 open（实测抛
-        //    `ErikaError "player is closed"`），所以一律不复用旧引擎；
-        // 2. 重建是「换内核」的落地时机——`prepareEngine()` 会重新读注册表的选择。
-        //
-        // `prepareEngine()` 在下面会重建新引擎。
-        if hasLoadedSource {
-            playerLog.info("open 前 stop 旧源并重建引擎（换片）")
-            PlaybackLog.append("open() 前 stop 旧源并重建引擎（换片）")
+    /// 打开源。**open 的阻塞段在 `engineOpenQueue` 执行**（内核在调用线程同步做
+    /// 网络连接与格式探测，弱网可达数十秒），完成/失败回主线程落状态，代次守卫防串台。
+    ///
+    /// 换片 / 上一发 open 还在飞：旧引擎**让位退役**——`stop()` 在 open 期间只登记
+    /// 意图（ErikaKit 让位契约），由旧 open 收尾在后台补做；引擎引用随旧 open 的
+    /// 闭包移交后台，析构也发生在后台，主线程全程不碰旧引擎。
+    func open(_ source: PlaybackSource, securityScopedURL: URL? = nil, request: PlaybackRequest) {
+        let generation = sourceGeneration
+        if hasLoadedSource || openingRequestID != nil {
+            playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
+            PlaybackLog.append("open() 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
             try? engine?.stop()
             hasLoadedSource = false
             currentlyOpenURI = nil
@@ -513,50 +519,235 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // old consumer only holds the old state weakly, so buffered events cannot
         // overwrite this source's position or duration.
         state = PlayerState()
-        guard let engine = prepareEngine() else { return false }
+        guard let engine = prepareEngine() else {
+            finishOpenFailure(request: request, generation: generation,
+                              securityScopedURL: securityScopedURL, acquiredScope: false,
+                              error: setupError ?? "内核创建失败")
+            return
+        }
         let acquiredScope = securityScopedURL?.startAccessingSecurityScopedResource() == true
-        do {
-            PlaybackLog.append("open() 开始")
-            try engine.open(source)
-            hasLoadedSource = true
-            try engine.setVolume(muted ? 0 : volume)
-            try engine.setRate(rate)
-            if subtitleScale != 1.0 {
-                try? engine.setSubtitleScale(subtitleScale)
-            }
+        openingRequestID = request.id
+        openingSourceURI = source.uri
+        scheduleOpenWatchdog(for: request, generation: generation,
+                             securityScopedURL: securityScopedURL, acquiredScope: acquiredScope)
+        PlaybackLog.append("open() 派发到后台 title=\(request.title)")
+        // 主线程快照：队列闭包只碰引擎，不读 @MainActor 状态。
+        let volumeNow = muted ? 0.0 : volume
+        let rateNow = rate
+        let scaleNow = subtitleScale
+        let danmakuPrefs = DanmakuPrefsSnapshot(
+            enabled: danmakuEnabled,
+            opacity: danmakuOpacity,
+            displayArea: danmakuDisplayArea,
+            blockTop: danmakuBlockTop,
+            blockBottom: danmakuBlockBottom,
+            blockScroll: danmakuBlockScroll,
+            mergeDuplicates: danmakuMergeDuplicates,
+            allowStacking: danmakuAllowStacking,
+            globalOffsetSeconds: danmakuGlobalOffsetSeconds)
+        let engineID = ObjectIdentifier(engine)
+        Self.engineOpenQueue.async { [weak self] in
+            var openError: Error?
             do {
-                try applyDanmakuPreferences(to: engine)
+                try engine.open(source)
             } catch {
-                playerLog.warning("弹幕偏好应用失败，继续播放 error=\(error)")
-                PlaybackLog.append("danmaku preferences skipped error=\(error)")
+                openError = error
             }
-try engine.play()
-            // 成功打开 → 清掉上一次的报错,别让错误条残留。
-            setupError = nil
-            currentlyOpenURI = source.uri
-            activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
-            activeSecurityScope = acquiredScope
-            engineIsActive = true
-            playerLog.info("open 成功")
-            PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
-            return true
-        } catch {
-            playerLog.error("open 失败 \(error)")
-            PlaybackLog.append("open() 失败 error=\(error) title=\(currentTitle ?? "?")")
-            currentlyOpenURI = nil
+            // open 期间被让位的 stop（取消/换片）意味着成果已被放弃，收尾已补 stop：
+            // 必须跳过 play/参数设置——内核 stop 之后 play 是合法的重播，不能让
+            // 已放弃的源幽灵出声。
+            let interrupted = engine.openWasInterrupted
+            if openError == nil, !interrupted {
+                try? engine.setVolume(volumeNow)
+                try? engine.setRate(rateNow)
+                if scaleNow != 1.0 {
+                    try? engine.setSubtitleScale(scaleNow)
+                }
+                do {
+                    try Self.applyDanmakuPrefs(danmakuPrefs, to: engine)
+                } catch {
+                    playerLog.warning("弹幕偏好应用失败，继续播放 error=\(error)")
+                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
+                }
+                try? engine.play()
+            }
+            let error = openError
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if let error {
+                    self.finishOpenFailure(request: request, generation: generation,
+                                           securityScopedURL: securityScopedURL,
+                                           acquiredScope: acquiredScope, error: "\(error)")
+                } else if interrupted {
+                    self.finishOpenSuperseded(request: request, generation: generation,
+                                              securityScopedURL: securityScopedURL,
+                                              acquiredScope: acquiredScope)
+                } else {
+                    self.finishOpenSuccess(request: request, generation: generation, uri: source.uri,
+                                           securityScopedURL: securityScopedURL,
+                                           acquiredScope: acquiredScope,
+                                           engine: engine, engineID: engineID)
+                }
+            }
+        }
+    }
+
+    /// open 成功完成（主线程）：仍然是当前代次才落状态，否则按孤儿引擎处理。
+    private func finishOpenSuccess(
+        request: PlaybackRequest,
+        generation: UInt64,
+        uri: String,
+        securityScopedURL: URL?,
+        acquiredScope: Bool,
+        engine: any PlaybackEngine,
+        engineID: ObjectIdentifier
+    ) {
+        clearOpeningState(request: request)
+        guard sourceGeneration == generation,
+              let currentEngine = self.engine,
+              ObjectIdentifier(currentEngine) == engineID
+        else {
+            // 期间已换片/取消：孤儿引擎在队列上补 stop（防幽灵音频），作用域即刻释放。
+            PlaybackLog.append("open() 成功但已过期，孤儿引擎补 stop title=\(request.title)")
+            Self.engineOpenQueue.async { try? engine.stop() }
             if acquiredScope {
                 securityScopedURL?.stopAccessingSecurityScopedResource()
             }
-            // 引擎可能停在半开状态，直接丢弃重建；close 是终态，留着复用到下次 open 必失败。
-            resetEngine()
-            setupError = "\(error)"
-            return false
+            return
         }
+        hasLoadedSource = true
+        activeRequest = request
+        // open 在飞期间音量/倍速可能又变了（让位路径会丢弃引擎侧设置），按当前值重同步。
+        try? engine.setVolume(muted ? 0 : volume)
+        try? engine.setRate(rate)
+        setupError = nil
+        currentlyOpenURI = uri
+        activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
+        activeSecurityScope = acquiredScope
+        engineIsActive = true
+        playerLog.info("open 成功")
+        PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
+    }
+
+    /// open 失败（主线程）：过期时只释放作用域；当前代次走完整失败路径
+    /// （失效 expectedRequestID、记 failedRequestID、丢弃半开引擎）。
+    private func finishOpenFailure(
+        request: PlaybackRequest,
+        generation: UInt64,
+        securityScopedURL: URL?,
+        acquiredScope: Bool,
+        error: String
+    ) {
+        clearOpeningState(request: request)
+        guard sourceGeneration == generation else {
+            if acquiredScope {
+                securityScopedURL?.stopAccessingSecurityScopedResource()
+            }
+            return
+        }
+        if acquiredScope {
+            securityScopedURL?.stopAccessingSecurityScopedResource()
+        }
+        if expectedRequestID == request.id {
+            expectedRequestID = nil
+            sourceGeneration &+= 1
+        }
+        // 引擎可能停在半开状态，直接丢弃重建；close 是终态，留着复用到下次 open 必失败。
+        resetEngine()
+        failedRequestID = request.id
+        setupError = error
+        playerLog.error("open 失败 \(error)")
+        PlaybackLog.append("open() 失败 error=\(error) title=\(request.title)")
+    }
+
+    /// open 成功但成果已被让位（open 期间用户取消/换片，收尾已补 stop）：释放作用域即可。
+    private func finishOpenSuperseded(
+        request: PlaybackRequest,
+        generation: UInt64,
+        securityScopedURL: URL?,
+        acquiredScope: Bool
+    ) {
+        clearOpeningState(request: request)
+        if acquiredScope {
+            securityScopedURL?.stopAccessingSecurityScopedResource()
+        }
+        PlaybackLog.append("open() 成果已让位（收尾已 stop）title=\(request.title)")
+        guard sourceGeneration == generation else { return }
+        // 同代次却被让位：代次没动说明没有换片/取消落地，理论上到不了；记日志留痕。
+        PlaybackLog.append("open() 让位但代次未变（异常路径）title=\(request.title)")
+    }
+
+    private func clearOpeningState(request: PlaybackRequest) {
+        guard openingRequestID == request.id || openingWatchdogTask != nil else { return }
+        openingWatchdogTask?.cancel()
+        openingWatchdogTask = nil
+        if openingRequestID == request.id {
+            openingRequestID = nil
+            openingSourceURI = nil
+        }
+    }
+
+    /// open 看门狗：内核对 DNS 解析没有任何超时，弱网下 open 理论上可无限挂。
+    /// 60s 仍未完成就强制转失败，给用户确定的错误 + 重试入口；后台 open 继续跑，
+    /// 完成时按过期/让位处理，不会串台。
+    private func scheduleOpenWatchdog(
+        for request: PlaybackRequest,
+        generation: UInt64,
+        securityScopedURL: URL?,
+        acquiredScope: Bool
+    ) {
+        openingWatchdogTask?.cancel()
+        openingWatchdogTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.openWatchdogTimeout)
+            guard let self, !Task.isCancelled else { return }
+            guard self.openingRequestID == request.id,
+                  self.expectedRequestID == request.id,
+                  self.sourceGeneration == generation else { return }
+            PlaybackLog.append("open 看门狗触发（60s）title=\(request.title)")
+            self.finishOpenFailure(request: request, generation: generation,
+                                   securityScopedURL: securityScopedURL,
+                                   acquiredScope: acquiredScope,
+                                   error: "连接媒体服务器超时，请检查网络后重试")
+        }
+    }
+
+    /// 弹幕偏好快照（主线程采集，open 队列闭包里应用到引擎）。
+    private struct DanmakuPrefsSnapshot {
+        var enabled: Bool
+        var opacity: Double
+        var displayArea: Double
+        var blockTop: Bool
+        var blockBottom: Bool
+        var blockScroll: Bool
+        var mergeDuplicates: Bool
+        var allowStacking: Bool
+        var globalOffsetSeconds: Double
+    }
+
+    /// 队列闭包内用：把主线程采集的弹幕偏好应用到引擎（与 applyDanmakuPreferences 同语义）。
+    private static func applyDanmakuPrefs(_ prefs: DanmakuPrefsSnapshot, to engine: any PlaybackEngine) throws {
+        var config = try engine.danmakuConfig()
+        config.enabled = prefs.enabled
+        config.opacity = Float(prefs.opacity)
+        config.displayArea = Float(prefs.displayArea)
+        config.blockTop = prefs.blockTop
+        config.blockBottom = prefs.blockBottom
+        config.blockScroll = prefs.blockScroll
+        config.mergeDuplicates = prefs.mergeDuplicates
+        config.allowStacking = prefs.allowStacking
+        try engine.setDanmakuConfig(config)
+        try engine.setDanmakuGlobalOffset(.seconds(prefs.globalOffsetSeconds))
     }
 
     func stopPlayback() {
         playerLog.info("stopPlayback")
         PlaybackLog.append("stopPlayback() hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        // open 在飞时的收口：看门狗与在飞标记全部清掉。在飞引擎的让位登记
+        // （下面的 stop()）由其 open 收尾补做，完成回调按过期代次落空。
+        openingWatchdogTask?.cancel()
+        openingWatchdogTask = nil
+        openingRequestID = nil
+        openingSourceURI = nil
         // 音量尾去抖的落盘任务大概率等不到 300ms（控制器即将销毁）：收口补写一次，
         // 否则「调完音量立刻退出」会丢掉最后一拍音量。
         volumePersistTask?.cancel()
