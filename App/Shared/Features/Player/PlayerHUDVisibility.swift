@@ -30,7 +30,7 @@ final class PlayerHUDVisibilityCoordinator {
     /// 驱动 `.opacity` 属性动画。这里同时用它决定卸载延时——动画多长就等多久。
     ///
     /// nil = 不动画（减弱动态效果）。协调器拿不到 Environment，由视图解析后灌进来。
-    @ObservationIgnored var motionAnimation: Animation? = .easeInOut(duration: 0.2)
+    @ObservationIgnored var motionAnimation: Animation? = Motion.standard
 
     /// 卸载延时：和动画时长一致，动画跑完才真正卸载。reduceMotion（无动画）
     /// 时为 0，直接卸载。由视图随 motionAnimation 一起注入。

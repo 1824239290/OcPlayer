@@ -78,6 +78,6 @@ struct BackdropAmbienceView: View {
                 )
             }
         }
-        .animation(.easeInOut(duration: 0.5), value: colorScheme)
+        .animation(Motion.theme, value: colorScheme)
     }
 }

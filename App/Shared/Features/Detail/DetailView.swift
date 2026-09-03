@@ -81,6 +81,7 @@ struct DetailView: View {
         Group {
             if isLoading && detail == nil {
                 skeleton
+                    .transition(.section)
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -132,8 +133,11 @@ struct DetailView: View {
                         )
                     }
                 }
+                .transition(.section)
             }
         }
+        // 骨架 → 内容原位交叉淡入，不再硬切。
+        .motion(Motion.standard, value: isLoading)
         .navigationTitle(horizontalSizeClass == .compact ? "" : shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -871,16 +875,16 @@ struct DetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, detailHorizontalInset)
-                .transition(.opacity)
+                .transition(.section)
             } else if episodes.isEmpty {
                 ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .padding(.horizontal, detailHorizontalInset)
-                    .transition(.opacity)
+                    .transition(.section)
             } else {
                 episodePickerRail
-                    .transition(.opacity)
+                    .transition(.section)
             }
         }
         // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
@@ -891,7 +895,7 @@ struct DetailView: View {
 
     /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
     private var episodeListMotion: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.2)
+        reduceMotion ? nil : Motion.standard
     }
 
     /// 选集加载骨架：一排和 `EpisodeSelectCard` 同尺寸的占位卡，切季时不闪不跳。
@@ -899,7 +903,7 @@ struct DetailView: View {
     private var skeletonEpisodes: some View {
         SkeletonEpisodeStrip()
             .skeletonShimmer()
-            .transition(.opacity)
+            .transition(.section)
     }
 
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
@@ -1260,6 +1264,7 @@ struct DetailView: View {
 /// 全文没超 3 行不出按钮，窗口拉宽到不再截断时也会自动消失。
 private struct ExpandableOverview: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let text: String
 
@@ -1296,7 +1301,7 @@ private struct ExpandableOverview: View {
                 }
             if showsToggleButton {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                    withAnimation(reduceMotion ? nil : Motion.standard) { isExpanded.toggle() }
                 } label: {
                     HStack(spacing: 3) {
                         Text(isExpanded ? "收起" : "展开全文")

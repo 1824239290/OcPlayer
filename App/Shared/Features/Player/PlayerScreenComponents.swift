@@ -169,7 +169,7 @@ struct PlayerHoldFastForwardBadge: View {
         }
         .opacity(isShowing ? 1 : 0)
         .scaleEffect(isShowing ? 1 : 0.92)
-        .motionAnimation(.easeInOut(duration: 0.18), value: isShowing, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: isShowing, reduceMotion: reduceMotion)
         .allowsHitTesting(false)
         .accessibilityHidden(!isShowing)
         .accessibilityElement(children: .ignore)

@@ -139,7 +139,7 @@ struct LibraryView: View {
 
     /// 翻页新卡片入场过渡；减弱动态效果时直接显示。
     private var loadedMoreMotion: Animation? {
-        reduceMotion ? nil : .easeOut(duration: 0.25)
+        reduceMotion ? nil : Motion.standard
     }
 
     private var loadMoreFooter: some View {

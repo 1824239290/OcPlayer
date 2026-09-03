@@ -106,7 +106,7 @@ struct PlayerSeekPreviewBar: View {
             .padding(.bottom, 64)
         }
         .allowsHitTesting(false)
-        .transition(.opacity)
+        .transition(.section)
     }
 }
 
@@ -140,7 +140,7 @@ struct PlayerAdjustOSDBadge: View {
         }
         .fixedSize()
         .allowsHitTesting(false)
-        .transition(.opacity)
+        .transition(.section)
     }
 }
 #endif

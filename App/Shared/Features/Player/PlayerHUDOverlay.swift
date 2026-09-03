@@ -34,7 +34,7 @@ struct PlayerHUDOverlay: View {
     let onUserInteraction: () -> Void
 
     private var animation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.35)
+        reduceMotion ? nil : Motion.glass
     }
 
     var body: some View {
@@ -324,7 +324,7 @@ struct PlayerHUDTransportButtonStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .motion(Motion.fast, value: configuration.isPressed)
     }
 }
 

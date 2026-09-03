@@ -50,6 +50,7 @@ struct PlayerHUDActionCluster: View {
     let onUserInteraction: () -> Void
 
     @Namespace private var glassNamespace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var controlSide: CGFloat {
         #if os(iOS)
@@ -87,7 +88,7 @@ struct PlayerHUDActionCluster: View {
                         // 展开中的 Tab 整体移出布局，其玻璃形由同 ID 的面板接管
                         if expandedTab != tab {
                             Button {
-                                withAnimation(.smooth(duration: 0.35)) {
+                                withAnimation(reduceMotion ? nil : Motion.glass) {
                                     expandedTab = tab
                                 }
                                 onInteractionChanged(.menuTracking, true)
@@ -121,7 +122,7 @@ struct PlayerHUDActionIconContent: View {
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(PlayerHUDPalette.primary)
             .opacity(isActive ? 1 : 0.45)
-            .animation(.easeInOut(duration: 0.2), value: isActive)
+            .motion(Motion.standard, value: isActive)
             .frame(width: controlSide, height: controlSide)
             .contentShape(Circle())
     }
@@ -207,7 +208,6 @@ struct PlayerHUDExpandedActionCard: View {
 
     @State private var submenu: PlayerHUDPanelSubmenu?
 
-    private var navAnimation: Animation { .smooth(duration: 0.28) }
     private var maxPanelContentHeight: CGFloat { 320 }
 
     var body: some View {
@@ -222,14 +222,14 @@ struct PlayerHUDExpandedActionCard: View {
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 } else {
                     panelBody(rootContent)
-                        .transition(.opacity)
+                        .transition(.section)
                 }
             }
             // 子菜单推入时内容从右滑入，裁到卡片圆角内
             .clipShape(.rect(cornerRadius: 22, style: .continuous))
         }
         .frame(width: 320)
-        .animation(navAnimation, value: submenu)
+        .motion(Motion.glass, value: submenu)
         .onChange(of: tab) { submenu = nil }
     }
 
@@ -708,7 +708,7 @@ struct PlayerHUDInteractiveButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
             .opacity(configuration.isPressed ? 0.8 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .motion(Motion.fast, value: configuration.isPressed)
     }
 }
 
@@ -772,8 +772,8 @@ struct PlayerHUDMenuRowButtonStyle: ButtonStyle {
                             : (isHovering ? Color.white.opacity(0.08) : Color.clear)
                     )
             )
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-            .animation(.easeOut(duration: 0.12), value: isHovering)
+            .motion(Motion.fast, value: configuration.isPressed)
+            .motion(Motion.fast, value: isHovering)
             .onHover { isHovering = $0 }
     }
 }
@@ -880,7 +880,7 @@ private struct PlayerHUDMiniSwitch: View {
                 .offset(x: isOn ? 16 : 2)
         }
         .frame(width: 32, height: 18)
-        .animation(.easeInOut(duration: 0.15), value: isOn)
+        .motion(Motion.standard, value: isOn)
     }
 }
 
@@ -918,7 +918,7 @@ struct PlayerSkipPromptView: View {
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.25), value: prompt)
+        .motion(Motion.standard, value: prompt)
         // 播放走帧时 top-level 的 position 不发布观察;用 100ms 发布的 progress 派生 prompt。
         .onChange(of: controller.state.timeline.progress, initial: true) {
             prompt = controller.currentSkipPrompt
@@ -931,7 +931,7 @@ struct PlayerSkipButtonStyle: ButtonStyle {
         configuration.label
             .opacity(configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .motion(Motion.fast, value: configuration.isPressed)
     }
 }
 

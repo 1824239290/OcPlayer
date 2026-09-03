@@ -175,8 +175,8 @@ struct PlayerScreen: View {
                 }
             }
             .allowsHitTesting(true)
-            .motionAnimation(.smooth(duration: 0.3), value: expandedActionTab, reduceMotion: reduceMotion)
-            .motionAnimation(.smooth(duration: 0.3), value: panelContentHeight, reduceMotion: reduceMotion)
+            .motionAnimation(Motion.glass, value: expandedActionTab, reduceMotion: reduceMotion)
+            .motionAnimation(Motion.glass, value: panelContentHeight, reduceMotion: reduceMotion)
 
             // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
             VStack(spacing: 0) {
@@ -196,9 +196,9 @@ struct PlayerScreen: View {
         }
         // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
         // 两个方向都渐变（macOS 上 transition removal 不生效，见上方注释）。
-        .motionAnimation(.easeInOut(duration: 0.2), value: hudVisibility.isVisible, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
-        .motionAnimation(.easeInOut(duration: 0.2), value: controller.state.state, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)
@@ -282,7 +282,7 @@ struct PlayerScreen: View {
         }
         // 协调器没有 Environment，减弱动态效果由这里解析后灌给它。
         .onChange(of: reduceMotion, initial: true) {
-            hudVisibility.motionAnimation = reduceMotion ? nil : .easeInOut(duration: 0.2)
+            hudVisibility.motionAnimation = reduceMotion ? nil : Motion.standard
             // 卸载延时跟随动画：无动画（reduceMotion）时立即卸载。
             hudVisibility.unmountDelay = reduceMotion ? .zero : .milliseconds(200)
         }
@@ -960,7 +960,7 @@ private struct PlayerPanFeedbackOverlay: View {
                 }
             }
         }
-        .motionAnimation(.easeInOut(duration: 0.15), value: feedback.session?.mode, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.fast, value: feedback.session?.mode, reduceMotion: reduceMotion)
     }
 }
 #endif

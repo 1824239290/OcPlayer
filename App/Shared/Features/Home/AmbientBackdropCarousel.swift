@@ -30,10 +30,10 @@ struct AmbientBackdropCarousel: View {
                     scrim: .home
                 )
                 .id(index)
-                .transition(.opacity)
+                .transition(.section)
             }
         }
-        .animation(.easeInOut(duration: 1.6), value: index)
+        .animation(Motion.ambient, value: index)
         // 开关并进 task id：停留首页时切开关，关→清空退场，开→重新拉池子。
         .task(id: "\(app.sessionGeneration)#\(ambientBackdropEnabled)") {
             await loadPool()

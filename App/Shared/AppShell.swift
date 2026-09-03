@@ -144,46 +144,46 @@ struct AppShellView: View {
                     HomeView()
                         .appRoutes()
                 }
-                .transition(.opacity)
+                .transition(.section)
             case .library(let id):
                 if let library = app.libraries.first(where: { $0.id == id }) {
                     NavigationStack(path: $app.path) {
                         LibraryView(library: library)
                             .appRoutes()
                     }
-                    .transition(.opacity)
+                    .transition(.section)
                 } else {
                     ContentUnavailableView("媒体库不存在", systemImage: "tray")
-                        .transition(.opacity)
+                        .transition(.section)
                 }
             case .settings:
                 NavigationStack(path: $app.path) {
                     SettingsView()
                         .appRoutes()
                 }
-                .transition(.opacity)
+                .transition(.section)
             case .bangumi:
                 NavigationStack(path: $app.path) {
                     BangumiHomeView()
                         .appRoutes()
                 }
-                .transition(.opacity)
+                .transition(.section)
             case .moviepilot:
                 NavigationStack(path: $app.path) {
                     MoviePilotHomeView()
                         .appRoutes()
                 }
-                .transition(.opacity)
+                .transition(.section)
             case .libraries:
                 // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
                 NavigationStack(path: $app.path) {
                     MediaLibraryListView()
                         .appRoutes()
                 }
-                .transition(.opacity)
+                .transition(.section)
             }
         }
-        .motionAnimation(.easeInOut(duration: 0.2), value: app.selectedSection, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
     }
 
     private var settingsFooter: some View {

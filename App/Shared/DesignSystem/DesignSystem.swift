@@ -15,10 +15,49 @@ import UIKit
 /// 刻意不使用这里的 `Metrics` / `contentLeading` / `cardRadius`：HUD 是浮在视频
 /// 上的半透明层，有自己的圆角体系（7/8/14/18/22）和调色板。两套系统各管各的，
 /// 不要在播放器 HUD 里套 `Metrics.cardRadius`。
+// MARK: - 动效 token（全站统一节奏）
+
+/// 全站唯一的动效语义 token。交互微反馈走短 `fast`，页面/内容过渡走 `standard`，
+/// 大区间切换走 `slide`，悬浮抬升走 `lift`，玻璃形变走 `glass`，氛围层走 `ambient`。
+/// **不要在代码里再写裸的 `.easeInOut(duration:)` 自定义值**——统一从这里取。
+enum Motion {
+    /// 交互微反馈：按压 / 悬停 / 开关 / HUD 淡入淡出。
+    static let fast = Animation.easeOut(duration: 0.12)
+    /// 常用标准过渡：面板出现、骨架→内容、行内状态切换。
+    static let standard = Animation.easeInOut(duration: 0.2)
+    /// 稍长的切换：大区间 / Tab 切换 / 全屏进出。
+    static let slide = Animation.easeInOut(duration: 0.25)
+    /// 沉浸/氛围：仅氛围层（首页轮播），交互不用。
+    static let ambient = Animation.easeInOut(duration: 1.6)
+    /// 外观/主题切换（深浅色）的柔和短淡变。
+    static let theme = Animation.easeInOut(duration: 0.5)
+    /// 卡片/对象抬升的轻弹簧（悬停 lift、选集高亮）。
+    static let lift = Animation.spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12)
+    /// 玻璃 / Liquid 形变（HUD 面板）。
+    static let glass = Animation.smooth(duration: 0.35)
+}
+
+private struct MotionModifier<V: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: V
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
 extension View {
-    /// 与 `.animation(_:value:)` 同义，但把 `accessibilityReduceMotion` 收进来：
-    /// 减弱动态效果时传 nil（SwiftUI 视作无动画、立即切换）。
-    /// 用法：`.motionAnimation(.easeInOut(duration: 0.2), value: foo, reduceMotion: reduceMotion)`
+    /// 全站**唯一**动画入口：内部自动感知 `accessibilityReduceMotion`，
+    /// UI 层无需再手动传 reduceMotion，也杜绝「忘了关动画」的疏漏。
+    /// 减弱动态效果时自动传 nil（SwiftUI 视作无动画、立即切换）。
+    /// 用法：`.motion(Motion.standard, value: foo)`
+    func motion<V: Equatable>(_ animation: Animation, value: V) -> some View {
+        modifier(MotionModifier(animation: animation, value: value))
+    }
+
+    /// 与 `.motion(_:value:)` 同义，但显式传入 `reduceMotion`（供明确需要
+    /// 手动控制的调用点使用；新代码优先用 `.motion(_:value:)`）。
     func motionAnimation<V: Equatable>(
         _ animation: Animation,
         value: V,
@@ -26,6 +65,24 @@ extension View {
     ) -> some View {
         self.animation(reduceMotion ? nil : animation, value: value)
     }
+}
+
+// MARK: - 命名过渡
+
+extension AnyTransition {
+    /// 全屏覆盖层开片（播放器进出）：轻缩放 + 淡入；退出只淡出。
+    /// 用纯 transform，不绑定卡片原点，跨 iOS/macOS 稳定。
+    /// computed（非存储）以规避 `AnyTransition` 非 Sendable 的并发校验。
+    static var cinematic: AnyTransition {
+        .asymmetric(
+            insertion: .scale(scale: 1.04).combined(with: .opacity),
+            removal: .opacity
+        )
+    }
+    /// 大区 / 模块平级切换：统一 crossfade。
+    static var section: AnyTransition { .opacity }
+    /// 面板 / 行内出现：微收缩 + 淡入。
+    static var pop: AnyTransition { .scale(scale: 0.96).combined(with: .opacity) }
 }
 
 // MARK: - 尺寸 token（design/apple-native.html）
@@ -507,7 +564,7 @@ struct ItemTitleLogoView: View {
     }
 
     private var imageFade: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.2)
+        reduceMotion ? nil : Motion.standard
     }
 
     var body: some View {
@@ -519,13 +576,13 @@ struct ItemTitleLogoView: View {
                     .frame(maxWidth: maxWidth, maxHeight: maxHeight, alignment: centered ? .center : .leading)
                     .shadow(color: .black.opacity(0.6), radius: 4, y: 2)
                     .accessibilityLabel(item.name)
-                    .transition(.opacity)
+                    .transition(.section)
             } else if item.logoImageTag != nil && !loadFailed {
                 // 已知有 Logo 且正在加载中（来自磁盘或网络）：展示骨架占位，避免先闪出文字标题
                 SkeletonBlock(cornerRadius: 4)
                     .frame(width: min(maxWidth * 0.55, 180), height: min(maxHeight * 0.55, 28))
                     .skeletonShimmer()
-                    .transition(.opacity)
+                    .transition(.section)
             } else {
                 // 未配置 Logo 或加载失败：展示标准文本标题
                 Text(item.name)
@@ -533,7 +590,7 @@ struct ItemTitleLogoView: View {
                     .foregroundStyle(adaptiveText && colorScheme == .light ? Color.primary : .white)
                     .lineLimit(2)
                     .shadow(color: .black.opacity(0.5), radius: 4)
-                    .transition(.opacity)
+                    .transition(.section)
             }
         }
         .animation(imageFade, value: logoImage != nil)
@@ -738,7 +795,7 @@ struct StillCard: View {
     }
 
     private var badgeMotion: Animation? {
-        reduceMotion ? nil : .easeOut(duration: 0.16)
+        reduceMotion ? nil : Motion.fast
     }
 
     private var actionBadge: some View {
@@ -882,11 +939,11 @@ struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
     }
 
     private var arrowAnimation: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.16)
+        reduceMotion ? nil : Motion.fast
     }
 
     private var scrollAnimation: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.22)
+        reduceMotion ? nil : Motion.standard
     }
 
     private func railArrow(
@@ -1090,10 +1147,9 @@ private struct HoverLift: ViewModifier {
 
     /// 比短 bounce spring 更顺：稍长 response + 高阻尼，进出都像被托起来而不是弹一下。
     /// 不用 body 里的 `withAnimation { content… }`——每次 body 重算都会重开事务，悬停进出容易发硬。
+    /// 统一走 `Motion.lift` token。
     private var motion: Animation? {
-        reduceMotion
-            ? nil
-            : .spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12)
+        reduceMotion ? nil : Motion.lift
     }
 
     private var lifted: Bool { active && !reduceMotion }

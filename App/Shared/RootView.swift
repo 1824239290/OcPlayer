@@ -25,16 +25,16 @@ struct RootView: View {
                     ProgressView().controlSize(.small)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.opacity)
+                .transition(.section)
             case .onboarding:
                 OnboardingView()
-                    .transition(.opacity)
+                    .transition(.section)
             case .ready:
                 AppShellView()
-                    .transition(.opacity)
+                    .transition(.section)
             }
         }
-        .motionAnimation(.easeInOut(duration: 0.25), value: app.phase, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.phase, reduceMotion: reduceMotion)
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
@@ -48,7 +48,7 @@ struct RootView: View {
                     #if os(iOS)
                     .statusBarHidden(true)
                     #endif
-                    .transition(.opacity)
+                    .transition(.cinematic)
             }
             // 准备态 loading 盖在 PlayerScreen 之上，一直盖到内核真正出帧
             // （ready/playing）才由 AppModel 撤除——全程一段 loading，不再
@@ -59,14 +59,14 @@ struct RootView: View {
                                    onRetry: app.retryPlayback)
                     .ignoresSafeArea()
                     .persistentSystemOverlays(.hidden)
-                    .transition(.opacity)
+                    .transition(.section)
                     .zIndex(1)
             }
         }
-        .motionAnimation(.easeInOut(duration: 0.18), value: app.presentedPlayer, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.presentedPlayer, reduceMotion: reduceMotion)
         // loading 淡出（首帧已上屏后）稍长一点：黑屏 loading 与画面交叉融化，
         // 出画面是"浮现"而不是"闪现"。
-        .motionAnimation(.easeInOut(duration: 0.3), value: app.playbackPreparation, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.playbackPreparation, reduceMotion: reduceMotion)
         .onOpenURL { url in
             if url.scheme == "ocplayer", url.host == "oauth" {
                 // 错误由 BangumiCoordinator.authError 承接，登录页会显示出来。

@@ -83,7 +83,7 @@ struct HomeView: View {
                             app.openSeriesDetail(for: item)
                         }
                     }
-                    .transition(.opacity)
+                    .transition(.section)
                 }
 
                 if !app.home.nextUp.isEmpty {
@@ -98,7 +98,7 @@ struct HomeView: View {
                             app.openSeriesDetail(for: item)
                         }
                     }
-                    .transition(.opacity)
+                    .transition(.section)
                 }
 
                 if !app.home.latest.isEmpty {
@@ -107,7 +107,7 @@ struct HomeView: View {
                             app.openDetail(item)
                         }
                     }
-                    .transition(.opacity)
+                    .transition(.section)
                 }
 
                 if app.home.resume.isEmpty && app.home.nextUp.isEmpty && app.home.latest.isEmpty {
@@ -118,7 +118,7 @@ struct HomeView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)
-                    .transition(.opacity)
+                    .transition(.section)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -128,9 +128,9 @@ struct HomeView: View {
         .contentMargins(.horizontal, 0, for: .scrollContent)
         .refreshable { await app.reloadBrowserData() }
         // 下拉刷新会先清空再填充三条 Rail 的数组，count 变化触发整体 crossfade。
-        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.resume.count, reduceMotion: reduceMotion)
-        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.nextUp.count, reduceMotion: reduceMotion)
-        .motionAnimation(.easeInOut(duration: 0.25), value: app.home.latest.count, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.home.resume.count, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.home.nextUp.count, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.home.latest.count, reduceMotion: reduceMotion)
     }
 
     private var loadingState: some View {

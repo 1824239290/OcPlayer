@@ -420,7 +420,7 @@ struct BangumiSubjectDetailView: View {
 
                     if summary.count > 160 {
                         Button(showFullSummary ? "收起简介" : "展开全文") {
-                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+withAnimation(reduceMotion ? nil : Motion.standard) {
                                 showFullSummary.toggle()
                             }
                         }

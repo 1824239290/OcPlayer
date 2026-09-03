@@ -43,10 +43,10 @@ struct OnboardingView: View {
 
             if app.loginSession == nil {
                 serverForm
-                    .transition(.opacity)
+                    .transition(.section)
             } else {
                 loginForms
-                    .transition(.opacity)
+                    .transition(.section)
             }
 
             if let error = app.onboardingError {
@@ -64,8 +64,8 @@ struct OnboardingView: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.18), radius: 30, y: 12)
-        .motionAnimation(.easeInOut(duration: 0.2), value: app.loginSession != nil, reduceMotion: reduceMotion)
-        .motionAnimation(.easeInOut(duration: 0.2), value: app.onboardingError, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.loginSession != nil, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.onboardingError, reduceMotion: reduceMotion)
     }
 
     // MARK: 第一步：服务器地址
@@ -230,8 +230,8 @@ struct OnboardingView: View {
                 }
             }
         }
-        .motionAnimation(.easeInOut(duration: 0.2), value: app.quickConnectCode, reduceMotion: reduceMotion)
-        .motionAnimation(.easeInOut(duration: 0.2), value: app.quickConnectError, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.quickConnectCode, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.standard, value: app.quickConnectError, reduceMotion: reduceMotion)
     }
 
     /// 三种状态共用同一个盒子，切换时框体不跳。
@@ -242,7 +242,7 @@ struct OnboardingView: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
-            .transition(.opacity)
+            .transition(.section)
     }
 
     private var divider: some View {

@@ -375,7 +375,7 @@ struct RemoteImage: View {
                     .resizable()
                     .scaledToFill()
                     // 加载完成在占位层上淡入，不再硬弹出；换 URL 清空旧图时沿同一过渡淡出。
-                    .transition(.opacity)
+                    .transition(.section)
             } else if failed || url == nil {
                 // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
                 // 显示静态占位图标。否则 url 为 nil 时会永远转圈（task 里被 guard 挡掉）。
@@ -427,6 +427,6 @@ struct RemoteImage: View {
 
     /// 图片出现/消失的淡入淡出；减弱动态效果时直接切换，不播动画。
     private var imageFade: Animation? {
-        reduceMotion ? nil : .easeInOut(duration: 0.2)
+        reduceMotion ? nil : Motion.standard
     }
 }
