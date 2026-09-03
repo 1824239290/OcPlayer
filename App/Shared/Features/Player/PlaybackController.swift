@@ -458,14 +458,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
         while !Task.isCancelled {
             guard sourceGeneration == generation,
                   expectedRequestID == requestID,
-                  activeRequest?.id == requestID,
                   let engine,
                   ObjectIdentifier(engine) == engineID
             else { return }
             if state.state == .error || state.state == .stopped || state.state == .closed {
                 return
             }
-            if isSourceReady, state.duration > .zero {
+            // open 在后台执行期间 activeRequest 尚未就绪，等 finishOpenSuccess 完成且源 ready
+            if activeRequest?.id == requestID, isSourceReady, state.duration > .zero {
                 let duration = Double(state.duration.microseconds) / 1_000_000
                 let target = min(max(resumeSeconds, 0), max(duration - 0.5, 0))
                 if PlaybackPreferences.danmakuDiagnosticsEnabled {

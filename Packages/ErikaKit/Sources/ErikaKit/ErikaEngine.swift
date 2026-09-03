@@ -244,8 +244,42 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         yieldLock.lock()
         defer { yieldLock.unlock() }
         guard _isOpening else { return false }
-        _deferredSurface = DeferredSurfaceUpdate(
-            op: op, pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
+        switch op {
+        case .attach(let view, let layerToken):
+            _deferredSurface = DeferredSurfaceUpdate(
+                op: .attach(view: view, layerToken: layerToken),
+                pixelWidth: pixelWidth,
+                pixelHeight: pixelHeight,
+                scale: scale
+            )
+        case .resize:
+            if let current = _deferredSurface, case .attach(let view, let layerToken) = current.op {
+                // 关键修复：open 期间视图先 attach 再 layout 触发 resize，
+                // 后续的 resize 必须继承已有的 view 和 layerToken，只更新几何尺寸，
+                // 绝不能把 .attach 冲掉替换成纯 .resize！
+                // 否则 view 和 layerToken 丢失，收尾无法挂载 layer 和启动渲染循环。
+                _deferredSurface = DeferredSurfaceUpdate(
+                    op: .attach(view: view, layerToken: layerToken),
+                    pixelWidth: pixelWidth,
+                    pixelHeight: pixelHeight,
+                    scale: scale
+                )
+            } else {
+                _deferredSurface = DeferredSurfaceUpdate(
+                    op: .resize,
+                    pixelWidth: pixelWidth,
+                    pixelHeight: pixelHeight,
+                    scale: scale
+                )
+            }
+        case .detach:
+            _deferredSurface = DeferredSurfaceUpdate(
+                op: .detach,
+                pixelWidth: 0,
+                pixelHeight: 0,
+                scale: 0
+            )
+        }
         return true
     }
 
@@ -272,7 +306,17 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         surface = _deferredSurface
         _pendingStop = false
         _deferredSurface = nil
-        _openingInterrupted = pendingStop || surface != nil
+        // 只有 stop 与 surface 拆卸（detach）让位才视为中断：宿主跳过 play / 参数设置。
+        // 兜底的 attach / resize（open 期间视图布局落在让位窗口内）是防御性补做，仍照常播放，
+        // 若也计作中断会让宿主错过 play，Jellyfin 等慢源 open 结束后一直停在 loading。
+        // `.attach` 带关联值不能 ==，用模式匹配判断是否拆卸让位。
+        let interruptedBySurface: Bool
+        if let s = surface, case .detach = s.op {
+            interruptedBySurface = true
+        } else {
+            interruptedBySurface = false
+        }
+        _openingInterrupted = pendingStop || interruptedBySurface
         yieldLock.unlock()
 
         if pendingStop {
@@ -309,7 +353,6 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             let viewBox = UncheckedSendableBox(value: view)
             let loopBox = UncheckedSendableBox(value: renderLoop)
             Task { @MainActor in
-                guard viewBox.value.window != nil else { return }
                 loopBox.value.start(on: viewBox.value)
             }
         }

@@ -1,5 +1,11 @@
 import Foundation
+import QuartzCore
 import Testing
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 import PlaybackKit
 @testable import ErikaKit
 
@@ -63,7 +69,25 @@ struct ErikaOpenYieldTests {
         // 直接通过 resize 覆盖——登记槽是单槽后写胜出。
         engine.resize(pixelWidth: 100, pixelHeight: 80, scale: 2)
         engine.finishOpening()
-        // 断言落在行为上：收尾不崩溃、interrupted 置位（有 surface 操作被补做）。
-        #expect(engine.openWasInterrupted)
+        // 断言落在行为上：收尾不崩溃；且最终补做的是良性 resize，
+        // 不算拆卸，所以 interrupted 不置位（否则慢速 Jellyfin open 会被误判打断而不 play，永久转圈）。
+        #expect(!engine.openWasInterrupted)
+    }
+
+    @Test("open 在飞时 attach 紧随 resize，收尾补做 attach 且几何更新为最新值")
+    @MainActor
+    func attachFollowedByResizePreservesAttach() throws {
+        let engine = try ErikaEngine()
+        engine.markOpeningStarted()
+        #if os(macOS)
+        let view = AppKit.NSView()
+        #else
+        let view = UIKit.UIView()
+        #endif
+        let layer = QuartzCore.CAMetalLayer()
+        try engine.attach(to: view, layer: layer, pixelWidth: 100, pixelHeight: 80, scale: 1)
+        engine.resize(pixelWidth: 200, pixelHeight: 160, scale: 2)
+        engine.finishOpening()
+        #expect(!engine.openWasInterrupted)
     }
 }
