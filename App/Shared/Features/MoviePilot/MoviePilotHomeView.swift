@@ -377,8 +377,14 @@ struct MoviePilotHomeView: View {
     private var searchResultsView: some View {
         Group {
             if isSearching && results.isEmpty {
-                ProgressView("正在搜索…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .controlSize(.regular)
+                    Text("正在搜索媒体…")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError, results.isEmpty {
                 ContentUnavailableView {
                     Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
@@ -388,117 +394,72 @@ struct MoviePilotHomeView: View {
                     Button(UIStrings.retry, action: search)
                         .buttonStyle(.borderedProminent)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if results.isEmpty {
                 ContentUnavailableView.search(text: submittedKeyword)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    if let notice {
-                        Section {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        if let notice {
                             noticeBanner(notice, isError: isNoticeError)
+                                .padding(.top, 8)
                         }
-                    }
 
-                    if isSearching {
-                        Section {
+                        if isSearching {
                             HStack(spacing: 10) {
                                 ProgressView().controlSize(.small)
                                 Text("正在更新搜索结果…")
                                     .foregroundStyle(.secondary)
                                     .font(.callout)
                             }
-                        }
-                    } else if let searchError {
-                        Section {
+                            .padding(.vertical, 4)
+                        } else if let searchError {
                             Text(searchError)
                                 .foregroundStyle(.red)
                                 .font(.callout)
+                                .padding(.vertical, 4)
                         }
-                    }
 
-                    Section("媒体结果 (\(results.count))") {
+                        // 媒体结果标题与数量统计
+                        HStack(spacing: 8) {
+                            Text("媒体结果")
+                                .font(.title3.weight(.bold))
+                                .foregroundStyle(.primary)
+
+                            Text("\(results.count)")
+                                .font(.footnote.weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(.fill.quaternary, in: Capsule())
+
+                            Spacer()
+                        }
+                        .padding(.top, 10)
+                        .padding(.bottom, 2)
+
+                        // 结果卡片流（液态玻璃）
                         ForEach(results) { media in
-                            searchResultRow(media)
+                            MoviePilotMediaGlassCard(
+                                media: media,
+                                isSubscribed: isMediaSubscribed(media),
+                                isAdding: subscribingMediaIDs.contains(media.id),
+                                onQuickSubscribe: {
+                                    Task { await addSubscribeForMedia(media) }
+                                },
+                                onConfigureSubscribe: {
+                                    sheetMedia = media
+                                    isPresentingAddSheet = true
+                                }
+                            )
                         }
                     }
+                    .padding(.horizontal, contentLeading)
+                    .padding(.bottom, 48)
                 }
+                .scrollBounceBehavior(.basedOnSize)
             }
         }
-    }
-
-    private func searchResultRow(_ media: MPMediaInfo) -> some View {
-        HStack(spacing: 14) {
-            Color.clear
-                .aspectRatio(2 / 3, contentMode: .fit)
-                .frame(width: 52)
-                .overlay {
-                    RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 300)
-                        .scaledToFill()
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(media.title ?? "未知条目")
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-
-                Text(media.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let overview = media.overview {
-                    Text(overview)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(2)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            // 操作区：快捷订阅 + 自定义配置订阅 + 查资源
-            HStack(spacing: 8) {
-                let isSubscribed = isMediaSubscribed(media)
-                let isAdding = subscribingMediaIDs.contains(media.id)
-
-                Menu {
-                    Button {
-                        Task { await addSubscribeForMedia(media) }
-                    } label: {
-                        Label("快捷加入订阅", systemImage: "plus.circle")
-                    }
-                    .disabled(isSubscribed || isAdding)
-
-                    Button {
-                        sheetMedia = media
-                        isPresentingAddSheet = true
-                    } label: {
-                        Label("配置规则并订阅…", systemImage: "slider.horizontal.3")
-                    }
-                } label: {
-                    if isAdding {
-                        ProgressView().controlSize(.small)
-                    } else if isSubscribed {
-                        Label("已订阅", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.caption.weight(.medium))
-                    } else {
-                        Label("订阅", systemImage: "plus.circle")
-                            .font(.caption.weight(.medium))
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(isSubscribed || isAdding)
-
-                NavigationLink {
-                    MoviePilotResourceView(media: media)
-                } label: {
-                    Label("查资源", systemImage: "arrow.down.circle")
-                        .font(.caption.weight(.medium))
-                }
-                .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(.vertical, 3)
     }
 
     private func isMediaSubscribed(_ media: MPMediaInfo) -> Bool {
@@ -673,9 +634,6 @@ private struct MoviePilotSubscribeCard: View {
     var onDelete: () -> Void
     var onRefresh: () -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var hovering = false
-
     var body: some View {
         NavigationLink {
             MoviePilotResourceView(media: subscribe.asMediaInfo)
@@ -737,8 +695,6 @@ private struct MoviePilotSubscribeCard: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.plain)
-        .hoverLift(active: hovering, reduceMotion: reduceMotion)
-        .onHover { hovering = $0 }
         .contextMenu {
             Button {
                 onEdit()
@@ -866,5 +822,158 @@ private struct MoviePilotSubscribeCard: View {
             )
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
+    }
+}
+
+// MARK: - 媒体搜索结果液态玻璃卡片
+
+private struct MoviePilotMediaGlassCard: View {
+    let media: MPMediaInfo
+    let isSubscribed: Bool
+    let isAdding: Bool
+    let onQuickSubscribe: () -> Void
+    let onConfigureSubscribe: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            // 2:3 标准胶片海报
+            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 360)
+                .frame(width: 76, height: 114)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+
+            // 媒体主要元信息
+            VStack(alignment: .leading, spacing: 6) {
+                Text(media.title ?? "未知条目")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                // 标签行（类型 / 年份 / 评分 / 源）
+                HStack(spacing: 6) {
+                    if let type = media.type, !type.isEmpty {
+                        Text(type)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                    }
+
+                    if let year = media.titleYear ?? media.year, !year.isEmpty {
+                        Text(year)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                    }
+
+                    if let rating = media.voteAverage, rating > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8.5))
+                                .foregroundStyle(.yellow)
+                            Text(String(format: "%.1f", rating))
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2.5)
+                        .background(Color.yellow.opacity(0.12), in: Capsule())
+                    }
+
+                    if let source = media.mediaSource, !source.isEmpty {
+                        Text(source.uppercased())
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2.5)
+                            .background(Color.primary.opacity(0.04), in: Capsule())
+                    }
+                }
+
+                if let overview = media.overview, !overview.isEmpty {
+                    Text(overview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .lineSpacing(2)
+                } else if !media.subtitle.isEmpty {
+                    Text(media.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            // 操作区：液态玻璃胶囊交互组
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    // 订阅菜单
+                    Menu {
+                        Button {
+                            onQuickSubscribe()
+                        } label: {
+                            Label("快捷加入订阅", systemImage: "plus.circle")
+                        }
+                        .disabled(isSubscribed || isAdding)
+
+                        Button {
+                            onConfigureSubscribe()
+                        } label: {
+                            Label("配置规则并订阅…", systemImage: "slider.horizontal.3")
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            if isAdding {
+                                ProgressView().controlSize(.small)
+                            } else if isSubscribed {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text("已订阅")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Image(systemName: "plus")
+                                Text("订阅")
+                            }
+                        }
+                        .font(.subheadline.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlassCapsule(
+                        tint: isSubscribed ? Color.green.opacity(0.15) : nil,
+                        isInteractive: !isSubscribed && !isAdding
+                    )
+                    .disabled(isSubscribed || isAdding)
+
+                    // 查资源入口
+                    NavigationLink {
+                        MoviePilotResourceView(media: media)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "magnifyingglass")
+                            Text("查资源")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlassCapsule(
+                        tint: Color.accentColor.opacity(0.22),
+                        isInteractive: true
+                    )
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .liquidGlassCard(cornerRadius: 18, isInteractive: false)
     }
 }

@@ -6,8 +6,6 @@ import SwiftUI
 /// `/search/title`，可选站点；聚合结果自己挑。下载完成后由 MoviePilot
 /// 服务端自动整理入库，这里不做任何入库追踪。
 struct MoviePilotResourceView: View {
-    @Environment(AppModel.self) private var app
-
     /// 媒体上下文：标题预填 + 下载时 media_in 回传。
     let media: MPMediaInfo
 
@@ -37,79 +35,46 @@ struct MoviePilotResourceView: View {
     /// 添加下载成功后直接推入下载管理页。
     @State private var navigateToDownloads = false
 
+    @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     init(media: MPMediaInfo) {
         self.media = media
         _keyword = State(initialValue: media.title ?? "")
     }
 
     var body: some View {
-        // 全量过滤+排序每次 body 只算一遍：displayedTorrents 在本页被引用 4 处
-        // （空态判断 / ForEach / header 计数×2），直接内联会在流式期间一遍事件排 4 次序。
         let displayed = displayedTorrents
-        return List {
-            Section {
-                header
-                    .listRowBackground(Color.clear)
-                    .padding(.vertical, 4)
-                searchControls
-                    .listRowBackground(Color.clear)
-            }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                // 1. 媒体悬浮卡片（Hero Glass Banner）
+                heroGlassCard
 
-            if !torrents.isEmpty || filters.isActive {
-                filterBar
-                    .listRowBackground(Color.clear)
-            }
+                // 2. 搜索框与控制条（Search & Controls）
+                searchAndControlBar
 
-            Section {
-                if isSearching {
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(progressText ?? "正在搜索各站点资源…")
-                                .foregroundStyle(.secondary)
-                                .font(.callout)
-                            if !torrents.isEmpty {
-                                Text("已收到 \(torrents.count) 条，边搜边出——可以直接挑")
-                                    .foregroundStyle(.tertiary)
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                } else if let searchError {
-                    Text(searchError)
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                    Button(UIStrings.retry) { search() }
-                } else if displayed.isEmpty {
-                    Text(hasSearched
-                         ? (filters.isActive
-                            ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
-                            : "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。")
-                         : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(displayed) { torrent in
-                        torrentRow(torrent)
-                    }
+                // 3. 筛选与排序行（Filters & Sort）
+                if !torrents.isEmpty || filters.isActive {
+                    filterAndSortBar
                 }
-            } header: {
-                if !torrents.isEmpty || isSearching || searchError != nil {
-                    if filters.isActive, displayed.count != torrents.count {
-                        Text("资源 \(displayed.count) / \(torrents.count)")
-                    } else {
-                        Text("资源 \(torrents.count)")
-                    }
-                }
-            }
 
-            if let notice {
-                Section {
-                    Label(notice, systemImage: isNoticeError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(isNoticeError ? .red : .green)
-                        .font(.callout)
+                // 4. 状态提示条
+                if let notice {
+                    noticeBanner(notice, isError: isNoticeError)
                 }
+
+                // 5. 资源列表（Torrents List）
+                torrentsSection(displayed: displayed)
             }
+            .padding(.horizontal, contentLeading)
+            .padding(.top, 16)
+            .padding(.bottom, 48)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .background {
+            BackdropAmbienceView(target: (url: media.posterURL, authHeader: nil), scrim: .detail)
+                .drawingGroup()
+                .allowsHitTesting(false)
         }
         .navigationTitle(media.title ?? "资源搜索")
         #if os(iOS)
@@ -131,6 +96,127 @@ struct MoviePilotResourceView: View {
         }
     }
 
+    // MARK: - 头部英雄卡片
+
+    private var heroGlassCard: some View {
+        HStack(alignment: .top, spacing: 16) {
+            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 360)
+                .frame(width: 84, height: 126)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: .black.opacity(0.22), radius: 10, y: 4)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(media.title ?? "未知条目")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 6) {
+                    if let type = media.type, !type.isEmpty {
+                        Text(type)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                    }
+                    if let year = media.titleYear ?? media.year, !year.isEmpty {
+                        Text(year)
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2.5)
+                            .background(Color.primary.opacity(0.06), in: Capsule())
+                    }
+                    if let rating = media.voteAverage, rating > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.yellow)
+                            Text(String(format: "%.1f", rating))
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2.5)
+                        .background(Color.yellow.opacity(0.12), in: Capsule())
+                    }
+                }
+
+                if let overview = media.overview, !overview.isEmpty {
+                    Text(overview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .lineSpacing(2)
+                } else if !media.subtitle.isEmpty {
+                    Text(media.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .padding(16)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+        )
+    }
+
+    // MARK: - 搜索控件
+
+    private var searchAndControlBar: some View {
+        HStack(spacing: 10) {
+            // 搜索输入框
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .font(.callout)
+
+                TextField("搜索关键词", text: $keyword)
+                    .textFieldStyle(.plain)
+                    .font(.callout)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.search)
+                    #endif
+                    .onSubmit { search() }
+
+                if !keyword.isEmpty {
+                    Button {
+                        keyword = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.04), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+
+            // 搜索按钮
+            Button {
+                search()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.right.circle.fill")
+                    Text("搜索")
+                }
+                .font(.callout.weight(.semibold))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background(Color.accentColor.opacity(0.22), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
+        }
+    }
+
     // MARK: - 筛选与排序
 
     private var sortField: TorrentSortField {
@@ -146,105 +232,15 @@ struct MoviePilotResourceView: View {
         )
     }
 
-    private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Button {
-                    showTorrentFilter = true
-                } label: {
-                    Label(
-                        filters.isActive ? "筛选 · \(filters.activeCount)" : "筛选",
-                        systemImage: "line.3.horizontal.decrease.circle"
-                    )
-                    .font(.callout)
-                }
-                Spacer()
-                Menu {
-                    Picker("排序", selection: Binding(
-                        get: { sortField },
-                        set: { sortFieldRaw = $0.rawValue }
-                    )) {
-                        ForEach(TorrentSortField.allCases, id: \.self) { field in
-                            Text(field.label).tag(field)
-                        }
-                    }
-                } label: {
-                    Label("排序 · \(sortField.label)", systemImage: "arrow.up.arrow.down")
-                        .font(.callout)
-                }
-                .fixedSize()
-                Button {
-                    sortAscending.toggle()
-                } label: {
-                    Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                        .font(.callout)
-                }
-                .buttonStyle(.borderless)
-                .help(sortAscending ? "当前升序，点击切换降序" : "当前降序，点击切换升序")
-            }
-            if filters.isActive {
-                HStack(spacing: 8) {
-                    Text(filters.activeSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                    Spacer()
-                    Button("清除") {
-                        filters = TorrentFilters()
-                    }
-                    .font(.caption)
-                    .buttonStyle(.borderless)
-                }
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    // MARK: - 头部
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 300)
-                .frame(width: 72, height: 108)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(media.title ?? "未知条目")
-                    .font(.title3.weight(.semibold))
-                Text(media.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let overview = media.overview {
-                    Text(overview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
-            }
-        }
-    }
-
-    // MARK: - 搜索控件
-
-    private var searchControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("搜索关键词", text: $keyword)
-                    .textFieldStyle(.roundedBorder)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .submitLabel(.search)
-                    #endif
-                    .onSubmit { search() }
-                Button("搜索") { search() }
-                    .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
-            }
+    private var filterAndSortBar: some View {
+        HStack(spacing: 8) {
+            // 站点选择胶囊
             Button {
                 showSitePicker = true
             } label: {
                 HStack(spacing: 6) {
-                    Label(siteFilterText, systemImage: "antenna.radiowaves.left.and.right")
-                        .font(.callout)
-                    Spacer()
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                    Text(siteFilterText)
                     if !sites.isEmpty {
                         Text("共 \(sites.count) 站")
                             .foregroundStyle(.tertiary)
@@ -253,81 +249,181 @@ struct MoviePilotResourceView: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            if let sitesError {
-                Text(sitesError)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+
+            // 筛选按钮
+            Button {
+                showTorrentFilter = true
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                    Text(filters.isActive ? "筛选 · \(filters.activeCount)" : "筛选")
+                }
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    filters.isActive ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.04),
+                    in: Capsule()
+                )
+                .overlay(
+                    Capsule().strokeBorder(
+                        filters.isActive ? Color.accentColor.opacity(0.35) : Color.white.opacity(0.1),
+                        lineWidth: 0.5
+                    )
+                )
             }
+            .buttonStyle(.plain)
+
+            Spacer()
+
+            // 排序菜单与升降序切换
+            Menu {
+                Picker("排序", selection: Binding(
+                    get: { sortField },
+                    set: { sortFieldRaw = $0.rawValue }
+                )) {
+                    ForEach(TorrentSortField.allCases, id: \.self) { field in
+                        Text(field.label).tag(field)
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                    Text("排序 · \(sortField.label)")
+                }
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                sortAscending.toggle()
+            } label: {
+                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .help(sortAscending ? "当前升序，点击切换降序" : "当前降序，点击切换升序")
         }
-        .padding(.vertical, 2)
     }
 
     private var siteFilterText: String {
         selectedSiteIDs.isEmpty ? "全部站点" : "已选 \(selectedSiteIDs.count) 个站点"
     }
 
-    // MARK: - 种子行
+    // MARK: - 资源列表与空态
 
-    private func torrentRow(_ torrent: MPTorrent) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(torrent.title ?? "未命名资源")
-                    .font(.callout)
-                    .lineLimit(2)
-                if let description = torrent.description, !description.isEmpty {
-                    Text(description)
-                        .font(.caption)
+    @ViewBuilder
+    private func torrentsSection(displayed: [MPTorrent]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("资源")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+
+                if filters.isActive, displayed.count != torrents.count {
+                    Text("\(displayed.count) / \(torrents.count)")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.fill.quaternary, in: Capsule())
+                } else if !torrents.isEmpty {
+                    Text("\(torrents.count)")
+                        .font(.footnote.weight(.semibold))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.fill.quaternary, in: Capsule())
+                }
+
+                Spacer()
+            }
+            .padding(.top, 4)
+
+            if isSearching {
+                HStack(spacing: 12) {
+                    ProgressView().controlSize(.regular)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(progressText ?? "正在搜索各站点资源…")
+                            .foregroundStyle(.primary)
+                            .font(.callout.weight(.medium))
+                        if !torrents.isEmpty {
+                            Text("已收到 \(torrents.count) 条，边搜边出——可以直接挑选下载")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .liquidGlassCard(cornerRadius: 16)
+            } else if let searchError {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(searchError)
+                        .foregroundStyle(.red)
+                        .font(.callout)
+                    Spacer()
+                    Button(UIStrings.retry) { search() }
+                        .buttonStyle(.bordered)
+                }
+                .padding(14)
+                .liquidGlassCard(cornerRadius: 16)
+            } else if displayed.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: hasSearched ? "line.3.horizontal.decrease.circle" : "arrow.down.circle")
+                        .font(.system(size: 36))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    Text(hasSearched
+                         ? (filters.isActive
+                            ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
+                            : "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。")
+                         : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-                HStack(spacing: 6) {
-                    if let site = torrent.siteName {
-                        badge(site, tint: .blue)
-                    }
-                    if torrent.isFree {
-                        badge("免费", tint: .green)
-                    }
-                    ForEach(torrent.labels.prefix(2), id: \.self) { label in
-                        badge(label, tint: .orange)
-                    }
-                    Text(torrent.sizeText)
-                    if let seeders = torrent.seeders {
-                        Label("\(seeders)", systemImage: "arrow.up")
-                            .foregroundStyle(seeders >= 5 ? .green : .secondary)
-                    }
-                    if let elapsed = torrent.dateElapsed ?? torrent.pubdate {
-                        Text(elapsed)
-                            .lineLimit(1)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .liquidGlassCard(cornerRadius: 16)
             }
-            Spacer(minLength: 8)
-            Button {
-                addDownload(torrent)
-            } label: {
-                if addingDownloadID == torrent.id {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label("下载", systemImage: "arrow.down.circle")
-                }
+
+            // 种子卡片流
+            ForEach(displayed) { torrent in
+                MoviePilotTorrentGlassCard(
+                    torrent: torrent,
+                    isAdding: addingDownloadID == torrent.id,
+                    onDownload: { addDownload(torrent) }
+                )
             }
-            .disabled(addingDownloadID != nil)
         }
-        .padding(.vertical, 2)
     }
 
-    private func badge(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-            .foregroundStyle(tint)
+    private func noticeBanner(_ text: String, isError: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(isError ? .red : .green)
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(isError ? .red : .green)
+            Spacer()
+        }
+        .padding(12)
+        .liquidGlassCard(cornerRadius: 14)
     }
 
     // MARK: - 动作
@@ -499,5 +595,114 @@ private struct MoviePilotSitePickerSheet: View {
         #if os(macOS)
         .frame(width: 420, height: 520)
         #endif
+    }
+}
+
+// MARK: - 种子资源液态玻璃卡片
+
+private struct MoviePilotTorrentGlassCard: View {
+    let torrent: MPTorrent
+    let isAdding: Bool
+    let onDownload: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(torrent.title ?? "未命名资源")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                if let description = torrent.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                // 微型发光胶囊标签行
+                HStack(spacing: 6) {
+                    if let site = torrent.siteName {
+                        glassBadge(site, tint: .blue)
+                    }
+                    if torrent.isFree {
+                        glassBadge("免费", tint: .green)
+                    }
+                    ForEach(torrent.labels.prefix(2), id: \.self) { label in
+                        glassBadge(label, tint: .orange)
+                    }
+
+                    Text(torrent.sizeText)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.04), in: Capsule())
+
+                    if let seeders = torrent.seeders {
+                        HStack(spacing: 2) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 8, weight: .bold))
+                            Text("\(seeders)")
+                                .font(.caption2.weight(.bold).monospacedDigit())
+                        }
+                        .foregroundStyle(seeders >= 5 ? Color.green : Color.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background((seeders >= 5 ? Color.green : Color.primary).opacity(0.08), in: Capsule())
+                    }
+
+                    if let date = torrent.dateElapsed ?? torrent.pubdate {
+                        Text(date)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            // 下载按钮
+            Button {
+                onDownload()
+            } label: {
+                HStack(spacing: 5) {
+                    if isAdding {
+                        ProgressView().controlSize(.small)
+                        Text("添加中…")
+                    } else {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text("下载")
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(Color.accentColor.opacity(0.18), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
+            }
+            .buttonStyle(.plain)
+            .disabled(isAdding)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+        )
+    }
+
+    private func glassBadge(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.12), in: Capsule())
+            .overlay(Capsule().strokeBorder(tint.opacity(0.2), lineWidth: 0.5))
     }
 }

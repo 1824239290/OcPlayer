@@ -223,6 +223,7 @@ struct PlayerScreen: View {
                     ?? app.nowPlayingItem?.episodeNumber.map(String.init)
                     ?? ""
             )
+            .presentationBackground(.clear)
         }
         #if os(macOS)
         // 鼠标移动只走 PlayerMouseTrackingView（NSTrackingArea，.activeAlways）一条通道；

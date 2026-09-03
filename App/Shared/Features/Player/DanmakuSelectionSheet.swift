@@ -15,6 +15,7 @@ struct DanmakuSelectionSheet: View {
     @State private var animeQuery: String
     @State private var episodeQuery: String
     @State private var results: [AnimeWithEpisodes] = []
+    @State private var selectedAnime: AnimeWithEpisodes?
     @State private var isSearching = false
     @State private var hasSearched = false
     @State private var errorMessage: String?
@@ -33,27 +34,46 @@ struct DanmakuSelectionSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            headerBar
+
+            Divider()
+                .opacity(0.15)
+
+            if selectedAnime == nil {
                 searchHeader
 
                 Divider()
-
-                contentView
+                    .opacity(0.12)
             }
-            .navigationTitle("选择弹幕")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+
+            ZStack {
+                if let anime = selectedAnime {
+                    episodeSubmenuView(for: anime)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
+                } else {
+                    contentView
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .leading).combined(with: .opacity)
+                        ))
                 }
             }
+            .clipped()
         }
         #if os(macOS)
-        .frame(minWidth: 540, idealWidth: 600, minHeight: 480, idealHeight: 560)
+        .frame(minWidth: 500, idealWidth: 560, minHeight: 460, idealHeight: 520)
         #endif
+        .liquidGlassCard(cornerRadius: 24)
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+        }
+        .padding(16)
+        .presentationBackground(.clear)
         .onAppear {
             if !didStartInitialSearch,
                !animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -67,111 +87,171 @@ struct DanmakuSelectionSheet: View {
         }
     }
 
+    // MARK: - 顶栏（支持多层子菜单返回）
+
+    private var headerBar: some View {
+        HStack(spacing: 10) {
+            if let anime = selectedAnime {
+                // 子菜单第二层：返回作品列表按钮
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        selectedAnime = nil
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("作品列表")
+                    }
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
+                .liquidGlassCapsule(isInteractive: true)
+
+                Text(anime.animeTitle ?? "选集")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            } else {
+                // 根层：标题与图标
+                Image(systemName: "text.bubble.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+
+                Text("选择弹幕")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(.primary)
+            }
+
+            Spacer()
+
+            Button {
+                dismiss()
+            } label: {
+                Text("完成")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.plain)
+            .liquidGlassCapsule(isInteractive: true)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 10)
+    }
+
     // MARK: - 搜索栏与状态条
 
     private var searchHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             // 输入行：作品名 + 集数 + 搜索按钮
-            HStack(spacing: 10) {
-                // 作品名输入框
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(focusedField == .anime ? Color.accentColor : Color.secondary)
-                    TextField("作品名（如：葬送的芙莉莲）", text: $animeQuery)
-                        .textFieldStyle(.plain)
-                        .focused($focusedField, equals: .anime)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                        #endif
-                        .autocorrectionDisabled()
-                        .onSubmit(startSearch)
-                        .onChange(of: animeQuery) { invalidateChangedSearch() }
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    // 作品名输入框
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(focusedField == .anime ? Color.accentColor : Color.secondary)
+                        TextField("作品名（如：葬送的芙莉莲）", text: $animeQuery)
+                            .textFieldStyle(.plain)
+                            .font(.callout)
+                            .focused($focusedField, equals: .anime)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .submitLabel(.search)
+                            #endif
+                            .autocorrectionDisabled()
+                            .onSubmit(startSearch)
+                            .onChange(of: animeQuery) { invalidateChangedSearch() }
 
-                    if !animeQuery.isEmpty {
-                        Button {
-                            animeQuery = ""
-                            invalidateChangedSearch()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+                        if !animeQuery.isEmpty {
+                            Button {
+                                animeQuery = ""
+                                invalidateChangedSearch()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.04))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(
-                            focusedField == .anime ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.12),
-                            lineWidth: 1
-                        )
-                )
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.primary.opacity(0.04), in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                focusedField == .anime ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08),
+                                lineWidth: 0.5
+                            )
+                    )
 
-                // 集数输入框
-                HStack(spacing: 4) {
-                    TextField("集数（可选）", text: $episodeQuery)
-                        .textFieldStyle(.plain)
-                        .focused($focusedField, equals: .episode)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .submitLabel(.search)
-                        #endif
-                        .autocorrectionDisabled()
-                        .onSubmit(startSearch)
-                        .onChange(of: episodeQuery) { invalidateChangedSearch() }
+                    // 集数输入框
+                    HStack(spacing: 4) {
+                        TextField("集数", text: $episodeQuery)
+                            .textFieldStyle(.plain)
+                            .font(.callout)
+                            .focused($focusedField, equals: .episode)
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .submitLabel(.search)
+                            #endif
+                            .autocorrectionDisabled()
+                            .onSubmit(startSearch)
+                            .onChange(of: episodeQuery) { invalidateChangedSearch() }
 
-                    if !episodeQuery.isEmpty {
-                        Button {
-                            episodeQuery = ""
-                            invalidateChangedSearch()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+                        if !episodeQuery.isEmpty {
+                            Button {
+                                episodeQuery = ""
+                                invalidateChangedSearch()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                #if os(macOS)
-                .frame(width: 120)
-                #else
-                .frame(maxWidth: 110)
-                #endif
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.04))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(
-                            focusedField == .episode ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.12),
-                            lineWidth: 1
-                        )
-                )
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    #if os(macOS)
+                    .frame(width: 80)
+                    #else
+                    .frame(maxWidth: 80)
+                    #endif
+                    .background(Color.primary.opacity(0.04), in: Capsule())
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                focusedField == .episode ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08),
+                                lineWidth: 0.5
+                            )
+                    )
 
-                // 搜索按钮
-                Button(action: startSearch) {
-                    Label("搜索", systemImage: "magnifyingglass")
+                    // 搜索按钮
+                    Button(action: startSearch) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "magnifyingglass")
+                            Text("搜索")
+                        }
                         .font(.callout.weight(.medium))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.plain)
+                    .liquidGlassCapsule(tint: Color.accentColor.opacity(0.25), isInteractive: true)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSearching || animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-                .disabled(isSearching || animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             // 当前状态与匹配指示
             HStack(spacing: 8) {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Circle()
                         .fill(statusIndicatorColor)
-                        .frame(width: 6, height: 6)
+                        .frame(width: 7, height: 7)
                     Text("弹幕状态：\(danmakuModel.danmaku.status.label)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -180,7 +260,7 @@ struct DanmakuSelectionSheet: View {
                 if let match = danmakuModel.danmaku.currentMatch {
                     Text("·")
                         .foregroundStyle(.tertiary)
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                             .foregroundStyle(.green)
@@ -188,6 +268,9 @@ struct DanmakuSelectionSheet: View {
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.green.opacity(0.08), in: Capsule())
                 }
 
                 Spacer()
@@ -200,11 +283,16 @@ struct DanmakuSelectionSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                } else if !validAnimeResults.isEmpty {
+                    Text("检索到 \(validAnimeResults.count) 部相关作品")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     private var statusIndicatorColor: Color {
@@ -220,12 +308,12 @@ struct DanmakuSelectionSheet: View {
         }
     }
 
-    // MARK: - 结果内容区
+    // MARK: - 结果内容区（第一层：作品列表）
 
     @ViewBuilder
     private var contentView: some View {
         if isSearching && results.isEmpty {
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 ProgressView()
                     .controlSize(.regular)
                 Text("正在搜索弹幕库…")
@@ -252,7 +340,7 @@ struct DanmakuSelectionSheet: View {
             initialGuideView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            resultsList
+            animeSubmenuListView
         }
     }
 
@@ -286,56 +374,108 @@ struct DanmakuSelectionSheet: View {
         }
     }
 
-    private var resultsList: some View {
-        List {
-            ForEach(validAnimeResults, id: \.animeId) { anime in
-                Section {
-                    ForEach(anime.episodes) { episode in
-                        let isCurrent = danmakuModel.danmaku.currentMatch?.episodeID == episode.episodeId
-                        DanmakuEpisodeRow(
-                            episode: episode,
-                            isCurrentMatch: isCurrent
-                        ) {
-                            if let requestID {
-                                danmakuModel.danmaku.selectEpisode(
-                                    episode,
-                                    animeTitle: anime.animeTitle,
-                                    for: requestID
-                                )
+    /// 第一层子菜单：匹配到的动画作品列表（点击下钻进入选集）
+    private var animeSubmenuListView: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(validAnimeResults, id: \.animeId) { anime in
+                    let containsMatch = anime.episodes.contains {
+                        $0.episodeId == danmakuModel.danmaku.currentMatch?.episodeID
+                    }
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                            selectedAnime = anime
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "play.tv.fill")
+                                .font(.system(size: 16))
+                                .foregroundStyle(containsMatch ? Color.accentColor : Color.secondary)
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(anime.animeTitle ?? "未命名作品")
+                                    .font(.callout.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+
+                                HStack(spacing: 6) {
+                                    if let typeDesc = anime.typeDescription ?? anime.type, !typeDesc.isEmpty {
+                                        Text(typeDesc)
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(.secondary)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.primary.opacity(0.06), in: Capsule())
+                                    }
+
+                                    if containsMatch {
+                                        Text("包含当前匹配")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(Color.green)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.green.opacity(0.12), in: Capsule())
+                                    }
+                                }
                             }
-                            dismiss()
-                        }
-                    }
-                } header: {
-                    HStack(spacing: 8) {
-                        Text(anime.animeTitle ?? "未命名作品")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
 
-                        if let typeDesc = anime.typeDescription ?? anime.type, !typeDesc.isEmpty {
-                            Text(typeDesc)
-                                .font(.caption2.weight(.medium))
+                            Spacer(minLength: 8)
+
+                            Text("共 \(anime.episodes.count) 集")
+                                .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.secondary.opacity(0.12), in: Capsule())
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
-
-                        Spacer()
-
-                        Text("共 \(anime.episodes.count) 集")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.primary.opacity(containsMatch ? 0.06 : 0.03))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(
+                                    containsMatch ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.06),
+                                    lineWidth: 0.5
+                                )
+                        )
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
                 }
             }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
         }
-        #if os(macOS)
-        .listStyle(.inset)
-        #else
-        .listStyle(.insetGrouped)
-        #endif
+    }
+
+    /// 第二层子菜单：选定作品下的集数列表
+    private func episodeSubmenuView(for anime: AnimeWithEpisodes) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                ForEach(anime.episodes) { episode in
+                    let isCurrent = danmakuModel.danmaku.currentMatch?.episodeID == episode.episodeId
+                    DanmakuEpisodeRow(
+                        episode: episode,
+                        isCurrentMatch: isCurrent
+                    ) {
+                        if let requestID {
+                            danmakuModel.danmaku.selectEpisode(
+                                episode,
+                                animeTitle: anime.animeTitle,
+                                for: requestID
+                            )
+                        }
+                        dismiss()
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+        }
     }
 
     // MARK: - 搜索逻辑
@@ -372,6 +512,10 @@ struct DanmakuSelectionSheet: View {
             try Task.checkCancellation()
             guard searchRequest?.id == request.id else { return }
             results = found
+            // 如果只有 1 个作品，或者正好匹配，可以保持在作品列表供下钻，也可以让用户看清各季
+            if let current = selectedAnime, !found.contains(where: { $0.animeId == current.animeId }) {
+                selectedAnime = nil
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -393,6 +537,7 @@ struct DanmakuSelectionSheet: View {
         let episode = episodeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard anime != searchRequest.anime || episode != searchRequest.episode else { return }
         self.searchRequest = nil
+        self.selectedAnime = nil
         isSearching = false
         hasSearched = false
         errorMessage = nil
@@ -418,7 +563,7 @@ private struct DanmakuEpisodeRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(episode.episodeTitle ?? "Episode \(episode.episodeId)")
-                        .font(.body.weight(isCurrentMatch ? .semibold : .regular))
+                        .font(.callout.weight(isCurrentMatch ? .semibold : .regular))
                         .foregroundStyle(isCurrentMatch ? Color.accentColor : Color.primary)
                         .lineLimit(1)
                 }
@@ -428,33 +573,45 @@ private struct DanmakuEpisodeRow: View {
                 Text(verbatim: "ID \(episode.episodeId)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
                     .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.primary.opacity(0.06))
+                        Capsule()
+                            .fill(Color.primary.opacity(0.05))
                     )
 
                 if isCurrentMatch {
                     Text("当前匹配")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor.opacity(0.15), in: Capsule())
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background {
+                if isCurrentMatch {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.08))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 0.5)
+                        }
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         #if os(macOS)
-        .hoverRowHighlight(active: isHovered)
         .onHover { isHovered = $0 }
         #endif
         .accessibilityLabel(episode.episodeTitle ?? "Episode \(episode.episodeId)")
