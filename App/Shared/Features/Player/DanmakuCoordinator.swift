@@ -61,6 +61,11 @@ struct DanmakuPlaybackContext {
     let remoteHeaders: [String: String]
     let suggestedAnime: String
     let suggestedEpisode: String
+    let animeTitle: String?
+    let episodeNumber: Int?
+    let seasonNumber: Int?
+    let isFinal: Bool
+    let tmdbID: Int?
 
     static func jellyfin(
         item: MediaItem,
@@ -68,11 +73,33 @@ struct DanmakuPlaybackContext {
         serverProfileID: String
     ) -> DanmakuPlaybackContext {
         let source = request.sessionContext
-        let fileName = normalizedFileName(
+        let rawFileName = normalizedFileName(
             source?.mediaSourcePath,
             source?.mediaSourceName,
             request.title
         )
+        let seriesName = (item.seriesName ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        let seasonNumber = item.seasonNumber
+        let episodeNumber = item.episodeNumber
+        let tmdbID = item.tmdbID.flatMap(Int.init)
+
+        // 智能文件名合成：若源文件名不包含番剧名（常见如 01.mkv, S01E01.mkv），合成完整的番剧名与季度/集数
+        let fileName: String
+        let rawLower = rawFileName.lowercased()
+        let seriesLower = seriesName.lowercased()
+        if !seriesLower.isEmpty && !rawLower.contains(seriesLower) {
+            var prefix = seriesName
+            if let season = seasonNumber, season > 1 {
+                prefix += " 第\(season)季"
+            }
+            if let ep = episodeNumber {
+                prefix += " E\(String(format: "%02d", ep))"
+            }
+            fileName = "\(prefix) \(rawFileName)"
+        } else {
+            fileName = rawFileName
+        }
+
         let sourceID = source?.mediaSourceID ?? "default"
         let fileSize = source?.mediaSourceSize.map(Int64.init)
         let durationSeconds = roundedSeconds(source?.durationSeconds ?? item.runtimeSeconds)
@@ -92,8 +119,13 @@ struct DanmakuPlaybackContext {
             localFileURL: nil,
             remoteURL: URL(string: request.uri),
             remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
-            suggestedAnime: item.seriesName ?? item.name,
-            suggestedEpisode: item.episodeNumber.map(String.init) ?? ""
+            suggestedAnime: seriesName,
+            suggestedEpisode: episodeNumber.map(String.init) ?? "",
+            animeTitle: seriesName.isEmpty ? nil : seriesName,
+            episodeNumber: episodeNumber,
+            seasonNumber: seasonNumber,
+            isFinal: false,
+            tmdbID: tmdbID
         )
     }
 
@@ -118,19 +150,48 @@ struct DanmakuPlaybackContext {
             identity = remoteURL?.absoluteString ?? request.uri
             allowsCachedMatchReuse = false
         }
+
+        let rawFileName = normalizedFileName(localURL?.lastPathComponent, remoteURL?.lastPathComponent, request.title)
+        let parsed = DanmakuFilenameParser.parse(rawFileName)
+
+        // 若本地文件名为简单数字或短词（如 01.mp4, S01E01.mkv），尝试从父文件夹或祖父文件夹推断番剧名
+        var effectiveAnimeTitle = parsed.title
+        if let localURL {
+            let parentDir = localURL.deletingLastPathComponent().lastPathComponent
+            let parentParsed = DanmakuFilenameParser.parse(parentDir)
+            if (parsed.title.count <= 3 || parsed.title.allSatisfy({ $0.isNumber || $0.isWhitespace })) && !parentDir.isEmpty {
+                if parentParsed.seasonNumber != nil && parentParsed.title.isEmpty {
+                    let grandParent = localURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
+                    if !grandParent.isEmpty {
+                        effectiveAnimeTitle = grandParent
+                    }
+                } else {
+                    effectiveAnimeTitle = parentDir
+                }
+            }
+        }
+
+        let suggestedAnime = effectiveAnimeTitle.isEmpty ? rawFileName : effectiveAnimeTitle
+        let suggestedEpisode = parsed.episodeNumber.map(String.init) ?? ""
+
         return DanmakuPlaybackContext(
             requestID: request.id,
             cacheKey: "standalone:\(sha256(identity))",
             allowsCachedMatchReuse: allowsCachedMatchReuse,
             sourceKind: localURL == nil ? .remoteURL : .localFile,
-            fileName: normalizedFileName(localURL?.lastPathComponent, remoteURL?.lastPathComponent, request.title),
+            fileName: rawFileName,
             fileSize: fileSize,
             durationSeconds: nil,
             localFileURL: localURL,
             remoteURL: remoteURL,
             remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
-            suggestedAnime: normalizedFileName(request.title),
-            suggestedEpisode: ""
+            suggestedAnime: suggestedAnime,
+            suggestedEpisode: suggestedEpisode,
+            animeTitle: effectiveAnimeTitle.isEmpty ? nil : effectiveAnimeTitle,
+            episodeNumber: parsed.episodeNumber,
+            seasonNumber: parsed.seasonNumber,
+            isFinal: parsed.isFinal,
+            tmdbID: nil
         )
     }
 
@@ -420,7 +481,12 @@ final class DanmakuCoordinator {
             durationSeconds: context.durationSeconds,
             localFileURL: context.localFileURL,
             remoteURL: context.remoteURL,
-            remoteHeaders: context.remoteHeaders
+            remoteHeaders: context.remoteHeaders,
+            animeTitle: context.animeTitle,
+            episodeNumber: context.episodeNumber,
+            seasonNumber: context.seasonNumber,
+            isFinal: context.isFinal,
+            tmdbID: context.tmdbID
         )
     }
 

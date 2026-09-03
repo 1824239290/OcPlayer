@@ -54,6 +54,7 @@ public actor DanmakuService {
         cacheKey: String,
         request: MatchRequest,
         client: DanmakuGatewayClient,
+        targetContext: DanmakuCandidateScorer.TargetContext? = nil,
         ignoringCachedMatch: Bool = false,
         persistingResult: Bool = true
     ) async throws -> DanmakuEpisodeMatch? {
@@ -63,13 +64,34 @@ public actor DanmakuService {
 
         let response = try await client.match(request).payload
         try Task.checkCancellation()
-        guard response.isMatched == true, let match = response.matches.first else { return nil }
-        let selected = DanmakuEpisodeMatch(
-            episodeID: match.episodeId,
-            shiftSeconds: match.shift ?? 0,
-            animeTitle: match.animeTitle,
-            episodeTitle: match.episodeTitle
-        )
+
+        let match: DanmakuEpisodeMatch?
+        if response.isMatched == true, let first = response.matches.first {
+            match = DanmakuEpisodeMatch(
+                episodeID: first.episodeId,
+                shiftSeconds: first.shift ?? 0,
+                animeTitle: first.animeTitle,
+                episodeTitle: first.episodeTitle
+            )
+        } else if !response.matches.isEmpty {
+            let target: DanmakuCandidateScorer.TargetContext
+            if let targetContext {
+                target = targetContext
+            } else {
+                let parsed = DanmakuFilenameParser.parse(request.fileName ?? "")
+                target = DanmakuCandidateScorer.TargetContext(
+                    animeTitle: parsed.title,
+                    episodeNumber: parsed.episodeNumber,
+                    seasonNumber: parsed.seasonNumber,
+                    isFinal: parsed.isFinal
+                )
+            }
+            match = DanmakuCandidateScorer.pickBestMatch(from: response.matches, target: target)?.match
+        } else {
+            match = nil
+        }
+
+        guard let selected = match else { return nil }
         if persistingResult {
             await cache.setEpisodeMatch(selected, for: cacheKey)
         }

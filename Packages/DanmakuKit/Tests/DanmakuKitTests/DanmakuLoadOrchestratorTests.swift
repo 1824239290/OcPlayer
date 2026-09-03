@@ -372,6 +372,170 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertNil(pb.injectedJSON, "取消后不应注入弹幕")
     }
 
+    // MARK: - 智能多级降级检索测试
+
+    func testMatchFallbackToTitleSearchWhenHashFails() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        let fingerprint = makeFingerprintData()
+        let noMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":0,"isMatched":false,"matches":[]}
+        """
+        let searchBody = """
+        {"success":true,"errorCode":0,"animes":[{"animeId":10,"animeTitle":"葬送的芙莉莲","type":"tvseries","episodes":[{"episodeId":5001,"episodeTitle":"第1话"}]}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"1,1,16777215,1","m":"降级搜索弹幕"}]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/match":
+                return TestSupport.response(noMatchBody, url: request.url!)
+            case "/v1/search/episodes":
+                return TestSupport.response(searchBody, url: request.url!)
+            case "/v1/comments/5001":
+                return TestSupport.response(commentsBody, url: request.url!)
+            default:
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(episodeID: 5001, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+    }
+
+    func testMatchFallbackToTMDBIdSearch() async throws {
+        let configuration = makeConfiguration()
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "jellyfin:tmdb-test",
+            allowsCachedMatchReuse: true,
+            fileName: "02.mkv",
+            fileSize: 64,
+            durationSeconds: 1440,
+            localFileURL: nil,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            remoteHeaders: [:],
+            animeTitle: "葬送的芙莉莲",
+            episodeNumber: 2,
+            seasonNumber: 1,
+            tmdbID: 209867
+        )
+        let fingerprint = makeFingerprintData()
+        let noMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":0,"isMatched":false,"matches":[]}
+        """
+        let tmdbSearchBody = """
+        {"success":true,"errorCode":0,"animes":[{"animeId":10,"animeTitle":"葬送的芙莉莲","type":"tvseries","episodes":[{"episodeId":5002,"episodeTitle":"第2话"}]}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"1,1,16777215,1","m":"TMDB命中弹幕"}]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/match":
+                return TestSupport.response(noMatchBody, url: request.url!)
+            case "/v1/search/episodes":
+                let items = TestSupport.queryItems(of: request)
+                if items["tmdbId"] == "209867" {
+                    return TestSupport.response(tmdbSearchBody, url: request.url!)
+                }
+                return TestSupport.response("{\"success\":true,\"animes\":[]}", url: request.url!)
+            case "/v1/comments/5002":
+                return TestSupport.response(commentsBody, url: request.url!)
+            default:
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(episodeID: 5002, commentCount: 1, title: "葬送的芙莉莲 · 第2话"))
+    }
+
+    func testCandidateAcceptedWhenIsMatchedIsFalse() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        let fingerprint = makeFingerprintData()
+        let fuzzyMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":1,"isMatched":false,
+         "matches":[{"episodeId":5003,"animeTitle":"葬送的芙莉莲","episodeTitle":"第1话","shift":0}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"1,1,16777215,1","m":"模糊命中弹幕"}]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/match":
+                return TestSupport.response(fuzzyMatchBody, url: request.url!)
+            case "/v1/comments/5003":
+                return TestSupport.response(commentsBody, url: request.url!)
+            default:
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(episodeID: 5003, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+    }
+
+    func testFingerprintUnavailableFallbackToSearchSuccess() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext(
+            cacheKey: "standalone:remote-no-range-fallback",
+            allowsCachedMatchReuse: false,
+            fileSize: 17 * 1024 * 1024
+        )
+        let data = makeFingerprintData()
+        let searchBody = """
+        {"success":true,"errorCode":0,"animes":[{"animeId":10,"animeTitle":"葬送的芙莉莲","type":"tvseries","episodes":[{"episodeId":5004,"episodeTitle":"第1话"}]}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"1,1,16777215,1","m":"无指纹搜索命中"}]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/search/episodes":
+                return TestSupport.response(searchBody, url: request.url!)
+            case "/v1/comments/5004":
+                return TestSupport.response(commentsBody, url: request.url!)
+            default:
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [
+                        "Content-Type": "application/octet-stream",
+                    ]
+                )!
+                return (response, data)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(episodeID: 5004, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+    }
+
     // MARK: 辅助
 
     private func assertInjectedJSON(commentCount: Int, firstContent: String, firstTime: Double) throws {

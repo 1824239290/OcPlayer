@@ -80,41 +80,98 @@ public struct DanmakuLoadOrchestrator {
                 )
             }
 
-            let hash: String
+            // 1. 构建目标识别基准（优先外部传入，否则由文件名解析补全）
+            let parsed = DanmakuFilenameParser.parse(matchContext.fileName)
+            let target = DanmakuCandidateScorer.TargetContext(
+                animeTitle: matchContext.animeTitle?.nilIfEmpty ?? parsed.title.nilIfEmpty,
+                episodeNumber: matchContext.episodeNumber ?? parsed.episodeNumber,
+                seasonNumber: matchContext.seasonNumber ?? parsed.seasonNumber,
+                isFinal: matchContext.isFinal || parsed.isFinal
+            )
+
+            // 2. 多级智能匹配
+            var matched: DanmakuEpisodeMatch? = nil
+            var fingerprintFailed = false
+
+            // Tier 1: 尝试 Hash + 文件名匹配
+            var hashValue: String? = nil
             do {
-                guard let value = try await matchContext.mediaHash(session: session) else {
-                    throw AutomaticMatchError.fingerprintUnavailable
-                }
-                hash = value
+                hashValue = try await matchContext.mediaHash(session: session)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                throw AutomaticMatchError.fingerprintUnavailable
+                fingerprintFailed = true
             }
+            if hashValue == nil {
+                fingerprintFailed = true
+            }
+
+            if let hash = hashValue {
+                try Task.checkCancellation()
+                guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
+
+                matched = try? await service.automaticMatch(
+                    cacheKey: cacheKey,
+                    request: MatchRequest(
+                        fileName: matchContext.fileName,
+                        fileHash: hash,
+                        fileSize: matchContext.fileSize,
+                        videoDuration: matchContext.durationSeconds,
+                        matchMode: .hashAndFileName
+                    ),
+                    client: client,
+                    targetContext: target,
+                    ignoringCachedMatch: true,
+                    persistingResult: false
+                )
+            }
+
+            // Tier 2: 若未命中且有 TMDB ID，按 TMDB ID 搜索分集
+            if matched == nil, let tmdbID = matchContext.tmdbID {
+                try Task.checkCancellation()
+                guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
+                matched = try? await searchByTMDB(
+                    tmdbID: tmdbID,
+                    target: target,
+                    client: client
+                )
+            }
+
+            // Tier 3: 若仍未命中，按动画标题 + 集数搜索分集
+            if matched == nil, let animeTitle = target.animeTitle, !animeTitle.isEmpty {
+                try Task.checkCancellation()
+                guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
+                matched = try? await searchByTitleAndEpisode(
+                    animeTitle: animeTitle,
+                    target: target,
+                    client: client
+                )
+            }
+
+            // Tier 4: 若仍未命中且解析出的纯化标题不同，用纯化标题再次尝试搜索
+            if matched == nil, let cleanTitle = parsed.title.nilIfEmpty, cleanTitle != target.animeTitle {
+                try Task.checkCancellation()
+                guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
+                matched = try? await searchByTitleAndEpisode(
+                    animeTitle: cleanTitle,
+                    target: target,
+                    client: client
+                )
+            }
+
             try Task.checkCancellation()
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
 
-            let match = try await service.automaticMatch(
-                cacheKey: cacheKey,
-                request: MatchRequest(
-                    fileName: matchContext.fileName,
-                    fileHash: hash,
-                    fileSize: matchContext.fileSize,
-                    videoDuration: matchContext.durationSeconds,
-                    matchMode: .hashAndFileName
-                ),
-                client: client,
-                ignoringCachedMatch: true,
-                persistingResult: false
-            )
-            try Task.checkCancellation()
-            guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
-            guard let match else {
+            guard let match = matched else {
                 if forceRematch {
                     await service.forgetMatch(cacheKey: cacheKey, revision: revision)
                 }
+                if fingerprintFailed && matched == nil {
+                    return .failed(message: userMessage(for: AutomaticMatchError.fingerprintUnavailable))
+                }
                 return .noMatch
             }
+
             await service.remember(match: match, cacheKey: cacheKey, revision: revision)
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
             return await loadPayload(
@@ -132,6 +189,78 @@ public struct DanmakuLoadOrchestrator {
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
             return .failed(message: userMessage(for: error))
         }
+    }
+
+    private func searchByTMDB(
+        tmdbID: Int,
+        target: DanmakuCandidateScorer.TargetContext,
+        client: DanmakuGatewayClient
+    ) async throws -> DanmakuEpisodeMatch? {
+        let episodeQuery = target.episodeNumber.map(String.init)
+        if let result = try? await client.searchEpisodes(
+            tmdbId: tmdbID,
+            tmdbIdType: 0,
+            episode: episodeQuery
+        ).payload.animes, !result.isEmpty {
+            if let best = DanmakuCandidateScorer.pickBestEpisode(from: result, target: target) {
+                return best.match
+            }
+        }
+        if target.episodeNumber != nil,
+           let all = try? await client.searchEpisodes(
+            tmdbId: tmdbID,
+            tmdbIdType: 0,
+            episode: nil
+        ).payload.animes, !all.isEmpty {
+            if let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
+                return best.match
+            }
+        }
+        if let movieResult = try? await client.searchEpisodes(
+            tmdbId: tmdbID,
+            tmdbIdType: 1,
+            episode: nil
+        ).payload.animes, !movieResult.isEmpty {
+            if let best = DanmakuCandidateScorer.pickBestEpisode(from: movieResult, target: target) {
+                return best.match
+            }
+        }
+        return nil
+    }
+
+    private func searchByTitleAndEpisode(
+        animeTitle: String,
+        target: DanmakuCandidateScorer.TargetContext,
+        client: DanmakuGatewayClient
+    ) async throws -> DanmakuEpisodeMatch? {
+        let trimmedTitle = animeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return nil }
+
+        let episodeQuery = target.episodeNumber.map(String.init)
+
+        // 1. 精准搜索：动画名 + 集数
+        if let ep = episodeQuery {
+            if let result = try? await client.searchEpisodes(
+                anime: trimmedTitle,
+                episode: ep
+            ).payload.animes, !result.isEmpty {
+                if let best = DanmakuCandidateScorer.pickBestEpisode(from: result, target: target) {
+                    return best.match
+                }
+            }
+        }
+
+        // 2. 全集搜索：仅传动画名，在返回的所有分集中匹配集数与季度
+        if let all = try? await client.searchEpisodes(
+            anime: trimmedTitle,
+            episode: nil
+        ).payload.animes, !all.isEmpty {
+            if let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
+                return best.match
+            }
+        }
+
+        return nil
     }
 
     /// 用户手动选择某一集后的装载。
@@ -244,6 +373,11 @@ public struct DanmakuMatchContext: Sendable {
     public let fileName: String
     public let fileSize: Int64?
     public let durationSeconds: Int?
+    public let animeTitle: String?
+    public let episodeNumber: Int?
+    public let seasonNumber: Int?
+    public let isFinal: Bool
+    public let tmdbID: Int?
     private let localFileURL: URL?
     private let remoteURL: URL?
     private let remoteHeaders: [String: String]
@@ -253,11 +387,16 @@ public struct DanmakuMatchContext: Sendable {
         cacheKey: String,
         allowsCachedMatchReuse: Bool,
         fileName: String,
-        fileSize: Int64?,
-        durationSeconds: Int?,
-        localFileURL: URL?,
-        remoteURL: URL?,
-        remoteHeaders: [String: String]
+        fileSize: Int64? = nil,
+        durationSeconds: Int? = nil,
+        localFileURL: URL? = nil,
+        remoteURL: URL? = nil,
+        remoteHeaders: [String: String] = [:],
+        animeTitle: String? = nil,
+        episodeNumber: Int? = nil,
+        seasonNumber: Int? = nil,
+        isFinal: Bool = false,
+        tmdbID: Int? = nil
     ) {
         self.uuid = uuid
         self.cacheKey = cacheKey
@@ -268,6 +407,11 @@ public struct DanmakuMatchContext: Sendable {
         self.localFileURL = localFileURL
         self.remoteURL = remoteURL
         self.remoteHeaders = remoteHeaders
+        self.animeTitle = animeTitle
+        self.episodeNumber = episodeNumber
+        self.seasonNumber = seasonNumber
+        self.isFinal = isFinal
+        self.tmdbID = tmdbID
     }
 
     /// 计算媒体指纹：本地文件读前 16 MiB；远程走 Range 请求。都不支持返回 nil。
