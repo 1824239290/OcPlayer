@@ -32,21 +32,21 @@ final class PlaybackEngineRegistryTests: XCTestCase {
 
     func testAvailableFollowsRegistrationOrder() {
         registerStub("erika")
-        registerStub("mpv")
-        XCTAssertEqual(PlaybackEngineRegistry.available.map(\.id), ["erika", "mpv"])
+        registerStub("stub2")
+        XCTAssertEqual(PlaybackEngineRegistry.available.map(\.id), ["erika", "stub2"])
     }
 
     func testReRegisteringSameIDReplacesInPlace() {
         registerStub("erika")
-        registerStub("mpv")
+        registerStub("stub2")
         registerStub("erika")
         // 覆盖而不是追加，顺序也不该被打乱。
-        XCTAssertEqual(PlaybackEngineRegistry.available.map(\.id), ["erika", "mpv"])
+        XCTAssertEqual(PlaybackEngineRegistry.available.map(\.id), ["erika", "stub2"])
     }
 
     func testDefaultsToFirstRegisteredWhenNothingSelected() {
         registerStub("erika")
-        registerStub("mpv")
+        registerStub("stub2")
         XCTAssertNil(PlaybackEngineRegistry.storedSelectionID)
         XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "erika")
         XCTAssertFalse(PlaybackEngineRegistry.selectionIsStale)
@@ -54,24 +54,24 @@ final class PlaybackEngineRegistryTests: XCTestCase {
 
     func testExplicitSelectionWins() {
         registerStub("erika")
-        registerStub("mpv")
-        PlaybackEngineRegistry.select("mpv")
-        XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "mpv")
+        registerStub("stub2")
+        PlaybackEngineRegistry.select("stub2")
+        XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "stub2")
         XCTAssertFalse(PlaybackEngineRegistry.selectionIsStale)
     }
 
-    /// 核心保证：选了 mpv，之后 mpv 适配器被删掉——不能崩、不能打不开，
+    /// 核心保证：选了第二个内核，之后该适配器被删掉——不能崩、不能打不开，
     /// 要静默回退到还在的那个，并且能把「回退了」这件事告诉设置页。
     func testStaleSelectionFallsBackInsteadOfFailing() throws {
         registerStub("erika")
-        registerStub("mpv")
-        PlaybackEngineRegistry.select("mpv")
+        registerStub("stub2")
+        PlaybackEngineRegistry.select("stub2")
 
-        // 模拟「mpv 适配器被移除」：重建注册表，只剩 erika。存的偏好还指向 mpv。
+        // 模拟「第二个适配器被移除」：重建注册表，只剩 erika。存的偏好还指向已删的 id。
         PlaybackEngineRegistry.resetForTesting()
         registerStub("erika")
 
-        XCTAssertEqual(PlaybackEngineRegistry.storedSelectionID, "mpv")
+        XCTAssertEqual(PlaybackEngineRegistry.storedSelectionID, "stub2")
         XCTAssertTrue(PlaybackEngineRegistry.selectionIsStale)
         XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "erika")
         XCTAssertNoThrow(try PlaybackEngineRegistry.makeSelected())
@@ -87,8 +87,8 @@ final class PlaybackEngineRegistryTests: XCTestCase {
 
     func testClearSelectionReturnsToDefault() {
         registerStub("erika")
-        registerStub("mpv")
-        PlaybackEngineRegistry.select("mpv")
+        registerStub("stub2")
+        PlaybackEngineRegistry.select("stub2")
         PlaybackEngineRegistry.clearSelection()
         XCTAssertNil(PlaybackEngineRegistry.storedSelectionID)
         XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "erika")

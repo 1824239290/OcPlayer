@@ -6,20 +6,15 @@ import SwiftUI
 /// ## 边界画在哪
 ///
 /// **画面承载的边界是「整个视图」（`makeSurfaceView()`），不是「layer + 每帧 tick」。**
-/// 这是唯一能同时容纳几种内核的粒度：
-///
-/// | 内核 | 谁建 layer | 谁驱动渲染 |
-/// |---|---|---|
-/// | Erika | 宿主（`CAMetalLayer`） | 宿主（`CADisplayLink` → `render_tick`） |
-/// | libmpv + render API | 宿主（GL layer） | 宿主（→ `mpv_render_context_render`） |
-/// | libmpv + `--wid` | **内核自己** | **内核自己** |
+/// 这是唯一能同时容纳多种内核的粒度：当前 Erika 由宿主建 `CAMetalLayer` 并由
+/// 宿主经 `CADisplayLink` 驱动 `render_tick`。
 ///
 /// 所以 attach / resize / detach / 帧驱动 / 呈现时间语义全部是**适配器内部实现**，
 /// 一个都不出现在这个协议里。连续 resize 合并、DPI 变化处理同理。
 ///
 /// ## 刻意不放进协议的东西
 ///
-/// - `close()`：Erika 的 close 是终态（close 后不能 reopen），mpv 没这个概念。
+/// - `close()`：Erika 的 close 是终态（close 后不能 reopen）。
 ///   把它抽象出来只会把一个内核的地雷变成所有内核的地雷。要用就 downcast。
 /// - `audioOnlyTick()`：只有宿主驱动帧的内核需要，且 App 层从未调用过。
 /// - HDR output mode / EDR headroom / ArtCNN upscaler / 字幕样式覆盖 / 内存字体：
@@ -28,8 +23,8 @@ import SwiftUI
 /// ## 线程约定
 ///
 /// 协议**不要求**内核内部同步：串行化（如果需要）是适配器的责任。
-/// Erika 的句柄没有内部同步，`ErikaEngine` 用锁串起来；libmpv 本身线程安全，
-/// 适配器不用加锁。调用方可以从任意线程调用本协议的方法。
+/// Erika 的句柄没有内部同步，`ErikaEngine` 用锁串起来。
+/// 调用方可以从任意线程调用本协议的方法。
 public protocol PlaybackEngine: AnyObject, Sendable {
 
     // MARK: - 身份
@@ -56,7 +51,7 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     ///
     /// ⚠️ **必须是协议要求，不能只放在扩展里**：调用点持有的是 `any PlaybackEngine`，
     /// 扩展里的实现是静态派发，适配器的重写永远不会被调到。
-    /// 实测踩过：mpv 适配器重写了它，但通过协议调用时仍然走默认实现（恒 false），
+    /// 实测踩过：适配器重写了它，但通过协议调用时仍然走默认实现（恒 false），
     /// loading 覆盖层永远不撤。
     var hasRenderedFirstFrame: Bool { get }
 

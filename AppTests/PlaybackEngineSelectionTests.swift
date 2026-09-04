@@ -60,7 +60,7 @@ final class PlaybackEngineSelectionTests: XCTestCase {
 
     /// 内核**不支持**内核弹幕时强制 overlay，用户偏好说什么都不管——
     /// 否则弹幕会静默消失（内核收下数据但没有渲染器）。
-    /// 这条为将来的非弹幕内核（libmpv / libVLC）守着这段逻辑。
+    /// 这条为将来的非弹幕内核守着这段逻辑。
     func testDanmakuRouteIsForcedToOverlayWhenKernelCannotRenderIt() {
         PlaybackEngineRegistry.register(NoDanmakuEngine.descriptor) { NoDanmakuEngine() }
         PlaybackEngineRegistry.select(NoDanmakuEngine.descriptor.id)
@@ -78,7 +78,7 @@ final class PlaybackEngineSelectionTests: XCTestCase {
     /// 选择失效时设置页要能显示「回退了」，而且播放照样能开。
     func testStaleSelectionSurfacesToSettingsAndStillResolves() {
         PlaybackEngineAssembly.registerAll()
-        PlaybackEngineRegistry.select("mpv-that-does-not-exist")
+        PlaybackEngineRegistry.select("kernel-that-does-not-exist")
 
         XCTAssertTrue(PlaybackEngineRegistry.selectionIsStale)
         XCTAssertEqual(PlaybackEngineRegistry.selected?.id, "erika",

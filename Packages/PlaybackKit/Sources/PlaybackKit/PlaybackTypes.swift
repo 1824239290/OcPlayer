@@ -46,8 +46,7 @@ public struct TrackCounts: Sendable, Hashable {
 
 /// 内核事件。已经脱离内核内存，可跨线程传递。
 ///
-/// 适配器负责把自己的事件模型（Erika 是轮询 `poll_event`，libmpv 是
-/// `mpv_wait_event` + 属性观察）折叠成这一套，**并保证事件已经离开内核内存**
+/// 适配器负责把自己的事件模型（Erika 是轮询 `poll_event`）折叠成这一套，**并保证事件已经离开内核内存**
 /// —— 有些内核的错误文本是线程局部的，必须在出错线程上就地读走。
 public enum PlayerEvent: Sendable {
     case stateChanged(PlaybackState)
@@ -68,10 +67,9 @@ public enum PlayerEvent: Sendable {
 }
 
 /// 打开一个媒体源。`headers` 由适配器落到内核的带头打开接口
-/// （Erika `open_with_headers` / mpv `--http-header-fields`），
+/// （Erika `open_with_headers`），
 /// Jellyfin 的 token 走这里，**不进 URL**（日志不泄露）。
-/// `readAheadBytes` 是 HTTP 源的前向预取窗口（仅 Erika 内核生效，
-/// mpv 忽略）；nil = 内核默认（2 MiB）。
+/// `readAheadBytes` 是 HTTP 源的前向预取窗口（仅当前内核生效；nil = 内核默认（2 MiB）。
 public struct PlaybackSource: Sendable, Hashable {
     public let uri: String
     public let headers: [String: String]

@@ -18,7 +18,7 @@ typealias PlatformFont = UIFont
 /// 再次出现,当前版本**禁用内核弹幕渲染,一律走本 overlay**:DanmakuRenderKit 的
 /// 轨道模型是入轨时「追击判定」、入轨后不换轨,结构上不会有重排换轨。
 /// `PlaybackController.resolveOverlayDanmakuRoute()` 当前恒 true,内核修复后恢复
-/// 旧判定（内核支持则听偏好,不支持则强制 overlay——如 libmpv 只能走这条路）。
+/// 旧判定（内核支持则听偏好,不支持则强制 overlay）。
 ///
 /// 时间桥：内核每帧发 positionChanged（`PlaybackEngine.latestMediaTime`），本控制器
 /// 30Hz 采样它决定谁出场。暂停/缓冲＝媒体时间冻结 → 冻结检测暂停视图动画；

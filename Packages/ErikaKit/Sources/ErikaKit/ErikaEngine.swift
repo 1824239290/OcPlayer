@@ -20,7 +20,7 @@ import SwiftUI
 ///   首帧标志，绝不能让这些读撞上 open 的长持锁（先例：`mediaTimeLock`）。
 /// - 不用 `actor`：actor 的执行器无法保证落在显示线程上，反而多跳一次。
 ///
-/// 这套串行化是 **Erika 特有的**，不是 `PlaybackEngine` 的要求：换成 libmpv 这类
+/// 这套串行化是 **Erika 特有的**，不是 `PlaybackEngine` 的要求：换成
 /// 本身线程安全的内核时，适配器不需要任何锁。
 public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
