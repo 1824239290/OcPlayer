@@ -47,6 +47,11 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// 最近一次的调试计数器快照（任意线程可读）。
     var latestStats: PlaybackStats { get }
 
+    /// 内核当前的输出编码（SDR / Apple EDR / HDR10 PQ）。任意线程可读；
+    /// 内核没报或此刻不适用时为 `.unknown`。
+    /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认值恒 `.unknown`。
+    var latestOutputEncoding: PlaybackOutputEncoding { get }
+
     /// 首帧是否已经出画（播放 loading 覆盖层撤掉的判据）。
     ///
     /// ⚠️ **必须是协议要求，不能只放在扩展里**：调用点持有的是 `any PlaybackEngine`，
@@ -126,6 +131,9 @@ public extension PlaybackEngine {
 
     /// 不支持让位语义的内核：open 期间不存在让位，恒 false。
     var openWasInterrupted: Bool { false }
+
+    /// 不暴露输出编码概念的内核：恒 `.unknown`，动态范围标注退回纯源侧判定。
+    var latestOutputEncoding: PlaybackOutputEncoding { .unknown }
 
     /// 首帧是否已经出画。播放 loading 覆盖层撤掉的判据——
     /// 内核报了 ready 不代表屏幕上有东西，必须等真正渲染过一帧，

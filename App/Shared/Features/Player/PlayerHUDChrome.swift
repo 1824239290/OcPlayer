@@ -1,3 +1,4 @@
+import JellyfinKit
 import PlaybackKit
 import Foundation
 import Observation
@@ -124,7 +125,14 @@ struct PlayerHUDInfoPanel: View {
                     PlayerHUDInfoSection(title: "视频") {
                         if let params = controller.state.videoParams {
                             infoRow("分辨率", "\(params.width)×\(params.height) · \(PlayerVideoColorLabel.aspect(width: params.width, height: params.height))")
-                            infoRow("动态范围", PlayerVideoColorLabel.dynamicRange(transfer: params.transfer))
+                            infoRow(
+                                "动态范围",
+                                PlayerVideoColorLabel.dynamicRange(
+                                    transfer: params.transfer,
+                                    isDolbyVision: controller.activeRequest?.sessionContext?.isDolbyVision == true,
+                                    outputEncoding: controller.engine?.latestOutputEncoding ?? .unknown
+                                )
+                            )
                             infoRow(
                                 "色彩",
                                 "\(PlayerVideoColorLabel.primaries(params.primaries)) · \(PlayerVideoColorLabel.transfer(params.transfer))"
@@ -290,12 +298,28 @@ private struct PlayerHUDInfoSection<Content: View>: View {
 /// `VideoParams` 的 AVCol 原始编码 → 可读标签。认不出的码退回原始值：
 /// 宁可显示 "TRC 23" 也不猜错。
 enum PlayerVideoColorLabel {
-    /// HDR 判定只认传输函数：PQ（SMPTE 2084）与 HLG（ARIB STD-B67）。
-    static func dynamicRange(transfer: UInt32) -> String {
+    /// 动态范围标注：源侧认传输函数（PQ/HLG），再叠加杜比视界与实际输出编码。
+    ///
+    /// - 杜比源：内核（profile 5）会把 RPU 映射进标准 HDR 链、（profile 8）走 HDR10
+    ///   底层，源侧 transfer 不再是可靠的判定依据，标注统一以「杜比视界」开头；
+    ///   输出编码已知时补上「映射 SDR / HDR」——SDR 屏上看杜比片是用户最想确认的场景。
+    /// - 输出未知（`.unknown`）时杜比源也只报「杜比视界」，不猜。
+    static func dynamicRange(
+        transfer: UInt32,
+        isDolbyVision: Bool = false,
+        outputEncoding: PlaybackOutputEncoding = .unknown
+    ) -> String {
+        if isDolbyVision {
+            switch outputEncoding {
+            case .sdr: return "杜比视界（映射 SDR）"
+            case .appleEdr, .hdr10Pq, .extendedLinear: return "杜比视界（HDR）"
+            case .unknown: return "杜比视界"
+            }
+        }
         switch transfer {
-        case 16: "HDR (PQ)"
-        case 18: "HLG"
-        default: "SDR"
+        case 16: return "HDR (PQ)"
+        case 18: return "HLG"
+        default: return "SDR"
         }
     }
 

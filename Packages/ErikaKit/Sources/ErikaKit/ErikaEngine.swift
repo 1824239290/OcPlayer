@@ -109,6 +109,28 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     }
     private var _latestStats = ErikaPresenterStats()
 
+    /// 内核当前实际生效的输出编码。信息面板的动态范围标注按它区分
+    /// 「源是 HDR 但输出端映射成了 SDR」和「真的在出 HDR」。
+    /// 直查型读入口，遵守 open 让位契约（open 在飞返回 `.unknown`，不撞长持锁）。
+    public var latestOutputEncoding: PlaybackOutputEncoding {
+        if dropControlDuringOpen("latestOutputEncoding") { return .unknown }
+        guard let status = try? withLock({ try presenter.outputStatus() }) else {
+            return .unknown
+        }
+        switch Int32(status.active_encoding) {
+        case Int32(ErikaActiveOutputEncoding_SdrSrgb.rawValue):
+            return .sdr
+        case Int32(ErikaActiveOutputEncoding_AppleEdr.rawValue):
+            return .appleEdr
+        case Int32(ErikaActiveOutputEncoding_AndroidExtendedLinearScRgb.rawValue):
+            return .extendedLinear
+        case Int32(ErikaActiveOutputEncoding_Hdr10Pq.rawValue):
+            return .hdr10Pq
+        default:
+            return .unknown
+        }
+    }
+
     /// 最近一次内核内存分项快照（渲染线程每 5s 采样，任意线程可读）。
     /// 两条弹幕路线共用：2G 峰值和 overlay 缓慢爬升分别落在哪些分项，看它的趋势。
     public var latestMemory: ErikaMemorySnapshot {

@@ -110,6 +110,65 @@ final class PlaybackInfoTests: XCTestCase {
         }
     }
 
+    /// 视频流的 VideoRangeType 按原始串透传；杜比判定认 DOVI 前缀（覆盖全部变体），
+    /// 无 MediaStreams 的源不误报。
+    func testVideoRangeTypeExtractionAndDolbyVisionFlag() async throws {
+        try await TestSupport.withMock { request in
+            MockURLProtocol.ok(
+                """
+                {
+                  "MediaSources": [
+                    {
+                      "Id": "ms-dv",
+                      "MediaStreams": [
+                        { "Type": "Video", "Codec": "hevc", "VideoRangeType": "DOVIWithHDR10" },
+                        { "Type": "Audio", "Codec": "truehd" }
+                      ]
+                    },
+                    { "Id": "ms-sdr", "MediaStreams": [
+                        { "Type": "Video", "Codec": "h264", "VideoRangeType": "SDR" }
+                      ]},
+                    { "Id": "ms-plain" }
+                  ],
+                  "PlaySessionId": "ps-3"
+                }
+                """,
+                for: request.url!
+            )
+        } with: {
+            let info = try await Self.mockServer().playbackInfo(itemID: "item-3")
+            XCTAssertEqual(info.mediaSources.count, 3)
+
+            let dolby = info.mediaSources[0]
+            XCTAssertEqual(dolby.videoRangeType, "DOVIWithHDR10")
+            let dolbyContext = info.sessionContext(itemID: "item-3", selectedSource: dolby)
+            XCTAssertTrue(dolbyContext.isDolbyVision)
+
+            let sdr = info.mediaSources[1]
+            XCTAssertEqual(sdr.videoRangeType, "SDR")
+            XCTAssertFalse(info.sessionContext(itemID: "item-3", selectedSource: sdr).isDolbyVision)
+
+            // 无流信息（老服务端 / 洗白层剥离）：videoRangeType 为 nil，不误报杜比。
+            let plain = info.mediaSources[2]
+            XCTAssertNil(plain.videoRangeType)
+            XCTAssertNil(info.sessionContext(itemID: "item-3", selectedSource: plain).videoRangeType)
+        }
+    }
+
+    /// isDolbyVision 判定本身：大小写不敏感、认前缀、空串不算。
+    func testSessionContextDolbyVisionPrefixMatching() {
+        func context(_ videoRangeType: String?) -> PlaybackSessionContext {
+            PlaybackSessionContext(itemID: "i", videoRangeType: videoRangeType)
+        }
+        XCTAssertTrue(context("DOVI").isDolbyVision)
+        XCTAssertTrue(context("DOVIWithEL").isDolbyVision)
+        XCTAssertTrue(context("doviwithhdr10").isDolbyVision)
+        XCTAssertFalse(context("HDR10").isDolbyVision)
+        XCTAssertFalse(context("SDR").isDolbyVision)
+        XCTAssertFalse(context("").isDolbyVision)
+        XCTAssertFalse(context(nil).isDolbyVision)
+    }
+
     private static func mockServer() -> JellyfinServer {
         let profile = ServerProfile(id: "srv:user", serverName: "nas",
                                     baseURL: URL(string: "http://nas.local:8096")!,

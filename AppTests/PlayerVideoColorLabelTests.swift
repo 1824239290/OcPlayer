@@ -1,4 +1,5 @@
 @testable import OcPlayer
+import PlaybackKit
 import XCTest
 
 /// 播放信息面板的 AVCol 标签与宽高比格式化。
@@ -9,6 +10,32 @@ final class PlayerVideoColorLabelTests: XCTestCase {
         // BT.709 / 未知传输函数都归 SDR。
         XCTAssertEqual(PlayerVideoColorLabel.dynamicRange(transfer: 1), "SDR")
         XCTAssertEqual(PlayerVideoColorLabel.dynamicRange(transfer: 99), "SDR")
+    }
+
+    func testDynamicRangeDolbyVision() {
+        // 杜比源 + 输出端已知：映射 SDR 与 HDR 分开标注。
+        XCTAssertEqual(
+            PlayerVideoColorLabel.dynamicRange(transfer: 16, isDolbyVision: true, outputEncoding: .sdr),
+            "杜比视界（映射 SDR）"
+        )
+        XCTAssertEqual(
+            PlayerVideoColorLabel.dynamicRange(transfer: 16, isDolbyVision: true, outputEncoding: .appleEdr),
+            "杜比视界（HDR）"
+        )
+        XCTAssertEqual(
+            PlayerVideoColorLabel.dynamicRange(transfer: 16, isDolbyVision: true, outputEncoding: .hdr10Pq),
+            "杜比视界（HDR）"
+        )
+        // 输出未知（打开中 / 内核没报）不猜输出端，只报杜比视界。
+        XCTAssertEqual(
+            PlayerVideoColorLabel.dynamicRange(transfer: 16, isDolbyVision: true, outputEncoding: .unknown),
+            "杜比视界"
+        )
+        // 杜比标记不受源侧 transfer 影响：容器标错成 SDR TRC 也以杜比源为准。
+        XCTAssertEqual(
+            PlayerVideoColorLabel.dynamicRange(transfer: 1, isDolbyVision: true, outputEncoding: .sdr),
+            "杜比视界（映射 SDR）"
+        )
     }
 
     func testTransferLabels() {

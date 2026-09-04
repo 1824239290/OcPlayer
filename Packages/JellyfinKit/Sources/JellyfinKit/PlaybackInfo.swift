@@ -15,6 +15,9 @@ public struct PlaybackMediaSource: Hashable, Sendable {
     public let supportsTranscoding: Bool?
     public let bitrate: Int?
     public let runTimeSeconds: Double?
+    /// 第一个视频流的 videoRangeType 原始串（Jellyfin：SDR/HDR10/DOVI/DOVIWithHDR10…）。
+    /// 存原始字符串而非 SDK 枚举，兼容 Emby 兼容层的任意取值；nil 表示未知。
+    public let videoRangeType: String?
 
     init(_ source: MediaSourceInfo, fallbackID: String) {
         self.id = source.id ?? fallbackID
@@ -27,6 +30,10 @@ public struct PlaybackMediaSource: Hashable, Sendable {
         self.supportsTranscoding = source.isSupportsTranscoding
         self.bitrate = source.bitrate
         self.runTimeSeconds = source.runTimeTicks.map { Double($0) / 10_000_000 }
+        self.videoRangeType = source.mediaStreams?
+            .first(where: { $0.type == .video })?
+            .videoRangeType?
+            .rawValue
     }
 }
 
@@ -48,6 +55,15 @@ public struct PlaybackSessionContext: Hashable, Sendable {
     public let mediaSourceSize: Int?
     public let durationSeconds: Double?
     public let deliveryMethod: PlaybackDeliveryMethod
+    /// 第一个视频流的 videoRangeType 原始串；nil 表示未知（本地文件/手动 URL）。
+    public let videoRangeType: String?
+
+    /// `videoRangeType` 前缀 DOVI（大小写不敏感）即杜比视界：
+    /// 覆盖 DOVI、DOVIWithHDR10/HLG/SDR/EL 等全部变体；DOVIInvalid 也算杜比源。
+    public var isDolbyVision: Bool {
+        guard let videoRangeType else { return false }
+        return videoRangeType.uppercased().hasPrefix("DOVI")
+    }
 
     public init(
         itemID: String,
@@ -57,7 +73,8 @@ public struct PlaybackSessionContext: Hashable, Sendable {
         mediaSourcePath: String? = nil,
         mediaSourceSize: Int? = nil,
         durationSeconds: Double? = nil,
-        deliveryMethod: PlaybackDeliveryMethod = .directPlay
+        deliveryMethod: PlaybackDeliveryMethod = .directPlay,
+        videoRangeType: String? = nil
     ) {
         self.itemID = itemID
         self.playSessionID = playSessionID
@@ -67,6 +84,7 @@ public struct PlaybackSessionContext: Hashable, Sendable {
         self.mediaSourceSize = mediaSourceSize
         self.durationSeconds = durationSeconds
         self.deliveryMethod = deliveryMethod
+        self.videoRangeType = videoRangeType
     }
 }
 
@@ -92,7 +110,8 @@ public struct PlaybackInfo: Hashable, Sendable {
             mediaSourcePath: selectedSource?.path,
             mediaSourceSize: selectedSource?.size,
             durationSeconds: selectedSource?.runTimeSeconds,
-            deliveryMethod: Self.deliveryMethod(for: selectedSource)
+            deliveryMethod: Self.deliveryMethod(for: selectedSource),
+            videoRangeType: selectedSource?.videoRangeType
         )
     }
 

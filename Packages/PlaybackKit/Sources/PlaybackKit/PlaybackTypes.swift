@@ -86,6 +86,25 @@ public struct PlaybackSource: Sendable, Hashable {
     }
 }
 
+/// 内核当前的输出编码。动态范围标注用它区分「源是 HDR 但屏幕输出已被映射成 SDR」
+/// 和「真的在出 HDR」——源侧的 `VideoParams.transfer` 不随输出变化。
+public enum PlaybackOutputEncoding: String, Sendable, Hashable {
+    case sdr
+    case appleEdr
+    case hdr10Pq
+    case extendedLinear
+    /// 内核未报或不适用的场合（无画面、打开中、非 Erika 内核）。
+    case unknown
+
+    /// 是否正在输出 HDR（Apple EDR 与 HDR10 PQ 都算；extended linear 亦为 HDR 路线）。
+    public var isHDR: Bool {
+        switch self {
+        case .appleEdr, .hdr10Pq, .extendedLinear: true
+        case .sdr, .unknown: false
+        }
+    }
+}
+
 /// 内核视角的一条轨道（视频 / 音频 / 字幕）。
 /// 外挂字幕通过 `addExternalSubtitle` 加入后也会出现在列表里（`source == .external`）。
 public struct TrackInfo: Identifiable, Hashable, Sendable {
