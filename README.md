@@ -32,7 +32,7 @@ Scripts/package-macos.sh v0.1.5  # 本地打包，产出与 CI 相同的 dist/ �
 
 各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。
 
-> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的 `v0.1.7+readahead.1`（新增 HTTP 预读 API，改动已提上游）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch。
+> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的 `v0.1.7+dolby.2`（在 HTTP 预读 API 之上新增杜比视界支持：profile 5 强制软解 + RPU 逐帧色彩映射，profile 8 走 HDR10 底层硬解；C ABI 无变化）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch。
 
 > `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑全量测试门禁，语义化版本标签触发 Release 工作流。
 

@@ -41,7 +41,9 @@ public final class ErikaPresenter {
         let config = ErikaPresenterConfig(
             output_mode: Int32(outputMode.rawValue),
             edr_headroom: edrHeadroom,
-            luma_upscaler: Int32(upscaler.rawValue)
+            luma_upscaler: Int32(upscaler.rawValue),
+            // v0.1.7+dolby.2 新增（透明视频合成）；普通播放固定不透明。
+            video_alpha_mode: Int32(ErikaVideoAlphaMode_Opaque.rawValue)
         )
         guard let handle = erika_presenter_create_with_config(config) else {
             throw ErikaError(status: ErikaStatus_PlayerError, message: ErikaError.takeLastMessage())
@@ -154,6 +156,14 @@ public final class ErikaPresenter {
     public func resourceStatus() throws -> ErikaPresenterResourceStatus {
         var status = ErikaPresenterResourceStatus()
         try ErikaError.check(erika_presenter_get_resource_status(handle, &status))
+        return status
+    }
+
+    /// 内核输出状态：当前实际生效的输出编码（SDR / Apple EDR / HDR10 PQ）等。
+    /// 动态范围标注用它区分「源是 HDR 但输出端已被映射成 SDR」和「真的在出 HDR」。
+    public func outputStatus() throws -> ErikaOutputStatus {
+        var status = ErikaOutputStatus()
+        try ErikaError.check(erika_presenter_get_output_status(handle, &status))
         return status
     }
 

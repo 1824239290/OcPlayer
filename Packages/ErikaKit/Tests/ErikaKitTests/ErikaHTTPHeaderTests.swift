@@ -83,9 +83,11 @@ struct ErikaHTTPHeaderTests {
         defer { server.terminate() }
 
         let presenter = try ErikaPresenter()
+        // 服务器契约是精确 "Bearer <TOKEN>"（472bc8d 收紧，拒绝子串匹配）；
+        // 这里测的是「token 只走 HTTP 头、不进 URL」，凭证格式本身无关紧要。
         try presenter.open(PlaybackSource(
             uri: "http://127.0.0.1:\(port)/Videos/ocplayer/stream?static=true",
-            headers: ["Authorization": #"MediaBrowser Client="OcPlayer", Token="\#(Self.token)""#]
+            headers: ["Authorization": "Bearer \(Self.token)"]
         ))
 
         let result = try Self.drain(presenter, seconds: 10)
@@ -110,7 +112,7 @@ struct ErikaHTTPHeaderTests {
         let presenter = try ErikaPresenter()
         try presenter.open(PlaybackSource(
             uri: "http://127.0.0.1:\(port)/Videos/ocplayer/stream?static=true",
-            headers: ["Authorization": #"MediaBrowser Client="OcPlayer", Token="\#(Self.token)""#],
+            headers: ["Authorization": "Bearer \(Self.token)"],
             readAheadBytes: 16 * 1024 * 1024
         ))
 
