@@ -52,6 +52,35 @@ struct ErikaOpenYieldTests {
         #expect(!engine.openWasInterrupted, "丢弃的控制调用不是让位，open 成果应保留")
     }
 
+    @Test("open 在飞时轨道/字幕/截图/弹幕/统计入口让位：读给默认值、动作丢弃")
+    func secondaryEntriesYieldDuringOpening() throws {
+        let engine = try ErikaEngine()
+        engine.markOpeningStarted()
+
+        // 读方法：立即返回默认值，不抛、不撞锁
+        #expect(try engine.tracks().isEmpty)
+        #expect(try engine.danmakuTracks().isEmpty)
+        #expect(try engine.danmakuConfig() == DanmakuConfig())
+        _ = try engine.stats()
+        #expect(try engine.captureFrameRGBA(width: 4, height: 4).isEmpty)
+
+        // 动作方法：丢弃不抛，也不算让位登记
+        #expect(throws: Never.self) { try engine.selectAudioTrack(1) }
+        #expect(throws: Never.self) { try engine.selectSubtitleTrack(nil) }
+        #expect(throws: Never.self) { _ = try engine.addExternalSubtitle("/tmp/ocplayer-yield.srt") }
+        #expect(throws: Never.self) { try engine.setSubtitleScale(1.2) }
+        #expect(throws: Never.self) { try engine.setDanmakuEnabled(false) }
+        #expect(throws: Never.self) { try engine.setDanmakuGlobalOffset(.seconds(1)) }
+        #expect(throws: Never.self) { try engine.setDanmakuConfig(DanmakuConfig()) }
+        #expect(throws: Never.self) { try engine.loadDanmaku(json: "[]") }
+        #expect(throws: Never.self) { try engine.clearDanmaku() }
+
+        engine.finishOpening()
+        #expect(!engine.openWasInterrupted, "这批让位是丢弃/默认值语义，不是 stop/detach 登记")
+        // 收尾之后再走一遍：opening 已结束，正常路径（无媒体，presenter 错误由调用方处理）
+        #expect(throws: Never.self) { _ = try engine.tracks() }
+    }
+
     @Test("无让位登记的干净 open 收尾不置 interrupted")
     func cleanOpenNotMarkedInterrupted() throws {
         let engine = try ErikaEngine()

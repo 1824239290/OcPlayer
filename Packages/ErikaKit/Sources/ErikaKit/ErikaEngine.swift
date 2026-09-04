@@ -14,7 +14,10 @@ import SwiftUI
 /// - **open 是唯一的长持主锁调用**：内核在调用线程上同步完成网络连接与格式探测，
 ///   弱网下可达数十秒。因此 open 期间其余入口走**让位契约**（见 `yieldLock` 一节）：
 ///   UI 侧的 stop / detach / resize 只登记意图立即返回，由 open 收尾在 open 线程补做；
-///   play / pause / seek / 改速率音量在 open 期间直接丢弃（那时没有媒体内容，操作无意义）。
+///   play / pause / seek / 改速率音量在 open 期间直接丢弃（那时没有媒体内容，操作无意义）；
+///   其余全部入口（轨道 / 字幕 / 截图 / 弹幕 / 统计直查）同样让位——读方法返回默认值、
+///   动作方法丢弃并记日志，任何主线程调用都不允许在 open 期间撞上主锁（7adb4be 之后
+///   open 在飞时 UI 是活的，漏一处就是把弱网卡死从侧门放回来）。
 ///   open 本身因此必须由宿主安排在**非主线程**执行，否则上述让位救不了主线程。
 /// - 统计快照（`latestStats` / `latestMemory`）走独立的 `statsLock`：UI 会以 10Hz 轮询
 ///   首帧标志，绝不能让这些读撞上 open 的长持锁（先例：`mediaTimeLock`）。
@@ -485,57 +488,76 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     }
 
     public func stats() throws -> ErikaPresenterStats {
-        try withLock { try presenter.stats() }
+        if dropControlDuringOpen("stats") { return ErikaPresenterStats() }
+        return try withLock { try presenter.stats() }
     }
 
     /// 没有画面（窗口隐藏 / 纯音频推进）时的帧驱动。Erika 独有：
     /// 宿主驱动帧的内核才需要这个，App 层目前没有用到。
     @discardableResult
     public func audioOnlyTick() throws -> ErikaPresenterStats {
-        try withLock { try presenter.audioOnlyTick() }
+        if dropControlDuringOpen("audioOnlyTick") { return ErikaPresenterStats() }
+        return try withLock { try presenter.audioOnlyTick() }
     }
 
     // MARK: - 轨道与字幕
 
+    /// open 在飞时返回空列表：宿主加载轨道列表本来就要等源 ready，丢一拍无副作用。
     public func tracks() throws -> [TrackInfo] {
-        try withLock { try presenter.tracks() }
+        if dropControlDuringOpen("tracks") { return [] }
+        return try withLock { try presenter.tracks() }
     }
 
     public func selectAudioTrack(_ id: Int64) throws {
+        if dropControlDuringOpen("selectAudioTrack") { return }
         try withLock { try presenter.selectAudioTrack(id) }
     }
 
     public func selectSubtitleTrack(_ id: Int64?) throws {
+        if dropControlDuringOpen("selectSubtitleTrack") { return }
         try withLock { try presenter.selectSubtitleTrack(id) }
     }
 
-    /// 外挂字幕（本地路径 / URL），返回新轨道 id。
+    /// 外挂字幕（本地路径 / URL），返回新轨道 id。open 在飞时丢弃，返回 -1 哨兵
+    /// （内核轨道 id 恒非负；调用方拿着它继续 selectSubtitleTrack 也一并被让位）。
     @discardableResult
     public func addExternalSubtitle(_ uri: String) throws -> Int64 {
-        try withLock { try presenter.addExternalSubtitle(uri) }
+        if dropControlDuringOpen("addExternalSubtitle") { return -1 }
+        return try withLock { try presenter.addExternalSubtitle(uri) }
     }
 
     /// 字幕整体缩放（1.0 = 默认字号；HUD 的「字号 +/-」用）。
+    /// open 在飞时丢弃：open 成功路径会按宿主快照重放字幕缩放，无需登记。
     public func setSubtitleScale(_ scale: Double) throws {
+        if dropControlDuringOpen("setSubtitleScale") { return }
         try withLock { try ErikaError.check(erika_presenter_set_subtitle_scale(presenter.handle, scale)) }
     }
 
     // MARK: - 截图
 
     /// 离屏截当前合成帧（视频 + 字幕），RGBA8，尺寸传视频物理分辨率。
+    /// open 在飞时返回空缓冲（宿主侧还有 videoParams 守卫双保险）。
     public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
-        try withLock { try presenter.captureFrameRGBA(width: width, height: height) }
+        if dropControlDuringOpen("captureFrameRGBA") { return [] }
+        return try withLock { try presenter.captureFrameRGBA(width: width, height: height) }
     }
 
     // MARK: - 内核内置弹幕（DFM+）
 
+    // 弹幕入口在 open 期间全部让位：当前版本弹幕统一走 App 层 overlay
+    // （usesOverlayDanmakuRenderer 恒 true），open 后宿主会用快照统一装载，
+    // 中途让位登记没有意义，丢弃 + 日志即可。恢复内核弹幕后，装载入口
+    // （loadDanmaku / addDanmakuTrack / clearDanmaku）需要评估改成登记补做。
+
     /// Replace all current danmaku with one anonymous Bilibili XML source.
     public func loadDanmaku(fileURI: String) throws {
+        if dropControlDuringOpen("loadDanmaku(fileURI:)") { return }
         try withLock { try presenter.loadDanmaku(fileURI: fileURI) }
     }
 
     /// Replace all current danmaku with one anonymous inline JSON source.
     public func loadDanmaku(json: String) throws {
+        if dropControlDuringOpen("loadDanmaku(json:)") { return }
         try withLock { try presenter.loadDanmaku(json: json) }
     }
 
@@ -545,7 +567,8 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         name: String,
         offset: Duration = .zero
     ) throws -> UInt64 {
-        try withLock {
+        if dropControlDuringOpen("addDanmakuTrack(fileURI:)") { return 0 }
+        return try withLock {
             try presenter.addDanmakuTrack(fileURI: fileURI, name: name, offset: offset)
         }
     }
@@ -556,52 +579,64 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         name: String,
         offset: Duration = .zero
     ) throws -> UInt64 {
-        try withLock {
+        if dropControlDuringOpen("addDanmakuTrack(json:)") { return 0 }
+        return try withLock {
             try presenter.addDanmakuTrack(json: json, name: name, offset: offset)
         }
     }
 
     public func removeDanmakuTrack(_ id: UInt64) throws {
+        if dropControlDuringOpen("removeDanmakuTrack") { return }
         try withLock { try presenter.removeDanmakuTrack(id) }
     }
 
     public func setDanmakuTrack(_ id: UInt64, enabled: Bool) throws {
+        if dropControlDuringOpen("setDanmakuTrack(enabled:)") { return }
         try withLock { try presenter.setDanmakuTrack(id, enabled: enabled) }
     }
 
     public func setDanmakuTrack(_ id: UInt64, offset: Duration) throws {
+        if dropControlDuringOpen("setDanmakuTrack(offset:)") { return }
         try withLock { try presenter.setDanmakuTrack(id, offset: offset) }
     }
 
     public func setDanmakuGlobalOffset(_ offset: Duration) throws {
+        if dropControlDuringOpen("setDanmakuGlobalOffset") { return }
         try withLock { try presenter.setDanmakuGlobalOffset(offset) }
     }
 
     public func danmakuTracks() throws -> [DanmakuTrackInfo] {
-        try withLock { try presenter.danmakuTracks() }
+        if dropControlDuringOpen("danmakuTracks") { return [] }
+        return try withLock { try presenter.danmakuTracks() }
     }
 
     public func clearDanmaku() throws {
+        if dropControlDuringOpen("clearDanmaku") { return }
         try withLock { try presenter.clearDanmaku() }
     }
 
     public func setDanmakuEnabled(_ enabled: Bool) throws {
+        if dropControlDuringOpen("setDanmakuEnabled") { return }
         try withLock { try presenter.setDanmakuEnabled(enabled) }
     }
 
     public func danmakuConfig() throws -> DanmakuConfig {
-        try withLock { try presenter.danmakuConfig() }
+        if dropControlDuringOpen("danmakuConfig") { return DanmakuConfig() }
+        return try withLock { try presenter.danmakuConfig() }
     }
 
     public func setDanmakuConfig(_ config: DanmakuConfig) throws {
+        if dropControlDuringOpen("setDanmakuConfig") { return }
         try withLock { try presenter.setDanmakuConfig(config) }
     }
 
     public func setDanmakuFont(family: String?, filePath: String?) throws {
+        if dropControlDuringOpen("setDanmakuFont") { return }
         try withLock { try presenter.setDanmakuFont(family: family, filePath: filePath) }
     }
 
     public func setDanmakuBlockWords(json: String) throws {
+        if dropControlDuringOpen("setDanmakuBlockWords") { return }
         try withLock { try presenter.setDanmakuBlockWords(json: json) }
     }
 

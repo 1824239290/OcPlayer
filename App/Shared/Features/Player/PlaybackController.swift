@@ -147,6 +147,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     private(set) var openingRequestID: PlaybackRequest.ID?
     private(set) var openingSourceURI: String?
     private var openingWatchdogTask: Task<Void, Never>?
+    /// open 在飞期间按下的暂停意图：引擎对 play/pause 让位丢弃，且 open 成功后
+    /// 队列闭包的 play() 会盖掉任何早于它的 pause——只有 open 成功落状态后再补
+    /// 一次 pause 才能真正生效。换片 / 失败 / 停播路径随 resetEngine 一并清除。
+    private(set) var openingPauseIntent = false
     /// 引擎 open 专用串行队列：内核在调用线程上**同步**完成网络连接与格式探测，
     /// 弱网下可达数十秒（DNS 甚至无超时），在主线程执行就是繁忙光标 + UI 冻结。
     /// 串行保证多次 open 的引擎操作天然有序。
@@ -620,6 +624,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // open 在飞期间音量/倍速可能又变了（让位路径会丢弃引擎侧设置），按当前值重同步。
         try? engine.setVolume(muted ? 0 : volume)
         try? engine.setRate(rate)
+        // 队列闭包的 play() 已经走完，这里补放 open 在飞期间暂存的暂停意图才不被盖掉。
+        if openingPauseIntent {
+            openingPauseIntent = false
+            try? engine.pause()
+            PlaybackLog.append("open() 成功，补放 open 在飞期间的暂停意图 title=\(request.title)")
+        }
         setupError = nil
         currentlyOpenURI = uri
         activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
@@ -808,6 +818,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         danmakuOverlay.reset()
         engine = nil
         engineIsActive = false
+        openingPauseIntent = false
         failedRequestID = nil
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
@@ -832,6 +843,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
     // MARK: - 控制
 
     func togglePlayPause() {
+        // open 在飞（loading 层）时按下播放/暂停：把意图记下来，open 成功后补 pause。
+        // 此时没有媒体内容，引擎侧 play/pause 都是丢弃；而 open 成功路径的 play()
+        // 在队列闭包里，任何更早的 pause 都会被它盖掉。
+        if openingRequestID != nil {
+            openingPauseIntent = true
+            PlaybackLog.append("open 在飞，暂存暂停意图（open 成功后生效）")
+            return
+        }
         guard let engine else { return }
         do {
             if state.state == .playing { try engine.pause() } else { try engine.play() }
@@ -936,6 +955,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 )
             }
         } catch {
+            // Emby 老版本 / 未装 Intro 插件没有这个端点，静默回退可；但其余失败
+            // （网络 / 鉴权）无线索就没法排查「为什么没跳片头」，落一条 debug。
+            PlaybackLog.append("MediaSegments 拉取失败,回退章节启发式:\(error)")
             segmentMarks = []
         }
         guard !Task.isCancelled, currentSourceMatches(source) else { return }

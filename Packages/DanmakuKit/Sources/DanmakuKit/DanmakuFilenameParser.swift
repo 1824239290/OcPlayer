@@ -32,6 +32,61 @@ public struct ParsedAnimeInfo: Sendable, Equatable {
 /// 能够从各类 BT/PT 发布组、WEB-DL、内嵌字幕及各种命名习惯中提取纯净的动画名、季数与集数。
 public enum DanmakuFilenameParser {
 
+    // MARK: 静态编译的正则缓存
+    //
+    // 打分器对每个候选都调一次 parse()/extractEpisodeNumber()，「全集搜索」可返回
+    // 数百分集——现场编译正则就是主线程秒级卡顿。全部 pattern 编译一次挂静态
+    // （模式是常量，编译失败属程序错误，preconditionFailure 暴露而不是静默跳过）。
+
+    /// 模块内共享的常量正则编译助手（DanmakuCandidateScorer 也用）。
+    static func compiled(_ pattern: String, options: NSRegularExpression.Options = []) -> NSRegularExpression {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+            preconditionFailure("DanmakuFilenameParser 内置正则编译失败: \(pattern)")
+        }
+        return regex
+    }
+
+    private static let isFinalRegex = compiled(
+        "(?:the\\s+)?final\\s+season|最终季|完结篇", options: [.caseInsensitive])
+
+    private static let seasonRegexes: [NSRegularExpression] = [
+        "(?i)(?:^|[\\s_\\-.\\[(])S(\\d{1,2})(?:[Ee]|\\b|[\\s_\\-.\\])])",
+        "(?i)(?<!final\\s)season\\s*(\\d{1,2})",
+        "第\\s*(\\d{1,2})\\s*[季期部]",
+        "(?i)(\\d{1,2})(?:st|nd|rd|th)\\s*season",
+    ].map { compiled($0) }
+
+    private static let chineseSeasonRegex = compiled("第\\s*([一二两三四五六七八九十]+)\\s*[季期部]")
+
+    private static let episodeRegexes: [NSRegularExpression] = [
+        "(?i)(?:s\\d{1,2})?[Ee](?:p)?\\s*(\\d{1,4})(?:v\\d+)?(?:\\b|[^a-zA-Z0-9])",
+        "第\\s*(\\d{1,4})\\s*[话話集回期]",
+        "(?:^|[\\s_\\-.\\[【(])(\\d{1,4})(?:v\\d+)?(?=[\\s_\\-.\\]】)]|$)",
+    ].map { compiled($0) }
+
+    private static let chineseEpisodeRegex = compiled("第\\s*([一二两三四五六七八九十]+)\\s*[话話集回期]")
+
+    private static let tagRegexes: [NSRegularExpression] = [
+        "\\[[^\\]]*\\]",
+        "【[^】]*】",
+        "\\([^\\)]*\\)",
+        "（[^）]*）",
+        "★[^★]*★",
+    ].map { compiled($0) }
+
+    private static let techNoiseRegexes: [NSRegularExpression] = [
+        "(?i)\\b(?:1080p|720p|2160p|4k|uhd|fhd|hd)\\b",
+        "(?i)\\b(?:hevc|avc|x264|x265|h264|h265|10bit|8bit|ma10p)\\b",
+        "(?i)\\b(?:aac|flac|mp3|dts|ac3|eac3|ddp?)\\b",
+        "(?i)\\b(?:web-?dl|web-?rip|baha|cr|bilibili|abema|bdrip|dvdrip)\\b",
+        "(?i)\\b(?:chs|cht|gb|big5|jp|sc|tc|eng|ita)\\b",
+        "(?i)\\b(?:s\\d{1,2}e\\d{1,4}|ep?\\d{1,4})\\b",
+        "第\\s*\\d{1,4}\\s*[话話集回期]",
+        "(?i)season\\s*\\d+",
+        "第\\s*\\d+\\s*[季期部]",
+        "(?i)(?:the\\s+)?final\\s+season|最终季|完结篇",
+    ].map { compiled($0) }
+
     /// 全角字符转半角。
     public static func normalizeFullWidth(_ str: String) -> String {
         var result = ""
@@ -91,23 +146,14 @@ public enum DanmakuFilenameParser {
         let working = filename
 
         // 1. 识别最终季
-        let isFinal = working.range(
-            of: "(?i)(?:the\\s+)?final\\s+season|最终季|完结篇",
-            options: .regularExpression
-        ) != nil
+        let isFinal = isFinalRegex.firstMatch(
+            in: working, range: NSRange(working.startIndex..., in: working)) != nil
 
         // 2. 识别季度（如果是最终季，不应把紧随其后的集数当成 Season 编号）
         var detectedSeason: Int? = nil
         if !isFinal {
-            let seasonPatterns = [
-                "(?i)(?:^|[\\s_\\-.\\[(])S(\\d{1,2})(?:[Ee]|\\b|[\\s_\\-.\\])])",
-                "(?i)(?<!final\\s)season\\s*(\\d{1,2})",
-                "第\\s*(\\d{1,2})\\s*[季期部]",
-                "(?i)(\\d{1,2})(?:st|nd|rd|th)\\s*season",
-            ]
-            for pattern in seasonPatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern),
-                   let match = regex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
+            for regex in seasonRegexes {
+                if let match = regex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
                    let range = Range(match.range(at: 1), in: working),
                    let num = Int(working[range]) {
                     detectedSeason = num
@@ -116,8 +162,7 @@ public enum DanmakuFilenameParser {
             }
             if detectedSeason == nil {
                 // 中文季数：如 "第二季" / "第2季"
-                if let regex = try? NSRegularExpression(pattern: "第\\s*([一二两三四五六七八九十]+)\\s*[季期部]"),
-                   let match = regex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
+                if let match = chineseSeasonRegex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
                    let range = Range(match.range(at: 1), in: working),
                    let num = parseChineseNumber(String(working[range])) {
                     detectedSeason = num
@@ -127,34 +172,26 @@ public enum DanmakuFilenameParser {
 
         // 3. 识别集数
         var detectedEpisode: Int? = nil
-        let epPatterns = [
-            "(?i)(?:s\\d{1,2})?[Ee](?:p)?\\s*(\\d{1,4})(?:v\\d+)?(?:\\b|[^a-zA-Z0-9])",
-            "第\\s*(\\d{1,4})\\s*[话話集回期]",
-            "(?:^|[\\s_\\-.\\[【(])(\\d{1,4})(?:v\\d+)?(?=[\\s_\\-.\\]】)]|$)"
-        ]
-        for pattern in epPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern) {
-                let matches = regex.matches(in: working, range: NSRange(working.startIndex..., in: working))
-                for match in matches {
-                    if let range = Range(match.range(at: 1), in: working),
-                       let num = Int(working[range]) {
-                        if num == 1080 || num == 720 || num == 2160 || (num >= 1970 && num <= 2050) {
-                            continue
-                        }
-                        if let s = detectedSeason, num == s {
-                            continue
-                        }
-                        detectedEpisode = num
-                        break
+        for regex in episodeRegexes {
+            let matches = regex.matches(in: working, range: NSRange(working.startIndex..., in: working))
+            for match in matches {
+                if let range = Range(match.range(at: 1), in: working),
+                   let num = Int(working[range]) {
+                    if num == 1080 || num == 720 || num == 2160 || (num >= 1970 && num <= 2050) {
+                        continue
                     }
+                    if let s = detectedSeason, num == s {
+                        continue
+                    }
+                    detectedEpisode = num
+                    break
                 }
-                if detectedEpisode != nil { break }
             }
+            if detectedEpisode != nil { break }
         }
         if detectedEpisode == nil {
             // 中文集数：如 "第十二话"
-            if let regex = try? NSRegularExpression(pattern: "第\\s*([一二两三四五六七八九十]+)\\s*[话話集回期]"),
-               let match = regex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
+            if let match = chineseEpisodeRegex.firstMatch(in: working, range: NSRange(working.startIndex..., in: working)),
                let range = Range(match.range(at: 1), in: working),
                let num = parseChineseNumber(String(working[range])) {
                 detectedEpisode = num
@@ -165,47 +202,24 @@ public enum DanmakuFilenameParser {
         var cleanTitle = working
 
         // 准确提取并剥离各组括号内容：[...]、【...】、(...)、（...）、★...★
-        let tagPatterns = [
-            "\\[[^\\]]*\\]",
-            "【[^】]*】",
-            "\\([^\\)]*\\)",
-            "（[^）]*）",
-            "★[^★]*★"
-        ]
-        for pat in tagPatterns {
-            if let regex = try? NSRegularExpression(pattern: pat) {
-                let matches = regex.matches(in: cleanTitle, range: NSRange(cleanTitle.startIndex..., in: cleanTitle))
-                for m in matches.reversed() {
-                    if let r = Range(m.range, in: cleanTitle) {
-                        let fullTag = String(cleanTitle[r])
-                        let inner = fullTag
-                            .trimmingCharacters(in: CharacterSet(charactersIn: "[]【】()（）★ "))
-                        if isNoiseTag(inner) || (detectedEpisode != nil && (inner == "\(detectedEpisode!)" || inner == String(format: "%02d", detectedEpisode!))) {
-                            cleanTitle.removeSubrange(r)
-                        }
+        for regex in tagRegexes {
+            let matches = regex.matches(in: cleanTitle, range: NSRange(cleanTitle.startIndex..., in: cleanTitle))
+            for m in matches.reversed() {
+                if let r = Range(m.range, in: cleanTitle) {
+                    let fullTag = String(cleanTitle[r])
+                    let inner = fullTag
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "[]【】()（）★ "))
+                    if isNoiseTag(inner) || (detectedEpisode != nil && (inner == "\(detectedEpisode!)" || inner == String(format: "%02d", detectedEpisode!))) {
+                        cleanTitle.removeSubrange(r)
                     }
                 }
             }
         }
 
         // 剥离分辨率和常见技术关键词
-        let techNoisePatterns = [
-            "(?i)\\b(?:1080p|720p|2160p|4k|uhd|fhd|hd)\\b",
-            "(?i)\\b(?:hevc|avc|x264|x265|h264|h265|10bit|8bit|ma10p)\\b",
-            "(?i)\\b(?:aac|flac|mp3|dts|ac3|eac3|ddp?)\\b",
-            "(?i)\\b(?:web-?dl|web-?rip|baha|cr|bilibili|abema|bdrip|dvdrip)\\b",
-            "(?i)\\b(?:chs|cht|gb|big5|jp|sc|tc|eng|ita)\\b",
-            "(?i)\\b(?:s\\d{1,2}e\\d{1,4}|ep?\\d{1,4})\\b",
-            "第\\s*\\d{1,4}\\s*[话話集回期]",
-            "(?i)season\\s*\\d+",
-            "第\\s*\\d+\\s*[季期部]",
-            "(?i)(?:the\\s+)?final\\s+season|最终季|完结篇",
-        ]
-        for p in techNoisePatterns {
-            if let regex = try? NSRegularExpression(pattern: p) {
-                let range = NSRange(cleanTitle.startIndex..., in: cleanTitle)
-                cleanTitle = regex.stringByReplacingMatches(in: cleanTitle, options: [], range: range, withTemplate: " ")
-            }
+        for regex in techNoiseRegexes {
+            let range = NSRange(cleanTitle.startIndex..., in: cleanTitle)
+            cleanTitle = regex.stringByReplacingMatches(in: cleanTitle, options: [], range: range, withTemplate: " ")
         }
 
         // 如果包含 " - "，通常格式为 "动画名 - 集数"

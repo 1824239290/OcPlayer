@@ -4,6 +4,15 @@ import Foundation
 /// 或搜索结果（searchEpisodes）时，自动挑选出置信度最高且无歧义的分集。
 public enum DanmakuCandidateScorer {
 
+    // 常量正则静态缓存：打分循环对每个候选都会走 extractEpisodeNumber，
+    // 现场编译正则会让长篇「全集搜索」在主线程卡出可感停顿。
+    private static let numberedEpisodeRegex = DanmakuFilenameParser.compiled(
+        "(?i)第\\s*(\\d+)\\s*[话話集回期]")
+    private static let chineseWordEpisodeRegex = DanmakuFilenameParser.compiled(
+        "(?i)第\\s*([一二两三四五六七八九十]+)\\s*[话話集回期]")
+    private static let leadingNumberEpisodeRegex = DanmakuFilenameParser.compiled(
+        "^(?:EP|E)?\\s*(\\d{1,4})(?:\\b|\\s|$)")
+
     /// 目标匹配基准。
     public struct TargetContext: Sendable {
         public let animeTitle: String?
@@ -222,24 +231,21 @@ public enum DanmakuCandidateScorer {
         let normalized = DanmakuFilenameParser.normalizeFullWidth(title)
 
         // 优先 "第 N 话/集/回"
-        if let regex = try? NSRegularExpression(pattern: "(?i)第\\s*(\\d+)\\s*[话話集回期]"),
-           let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+        if let match = numberedEpisodeRegex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
            let range = Range(match.range(at: 1), in: normalized),
            let num = Int(normalized[range]) {
             return num
         }
 
         // 中文数字 "第十二话"
-        if let regex = try? NSRegularExpression(pattern: "(?i)第\\s*([一二两三四五六七八九十]+)\\s*[话話集回期]"),
-           let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+        if let match = chineseWordEpisodeRegex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
            let range = Range(match.range(at: 1), in: normalized),
            let num = DanmakuFilenameParser.parseChineseNumber(String(normalized[range])) {
             return num
         }
 
         // 开头独立数字（如 "01 冒险的结束" 或 "01" 或 "1"）
-        if let regex = try? NSRegularExpression(pattern: "^(?:EP|E)?\\s*(\\d{1,4})(?:\\b|\\s|$)"),
-           let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
+        if let match = leadingNumberEpisodeRegex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
            let range = Range(match.range(at: 1), in: normalized),
            let num = Int(normalized[range]) {
             return num
