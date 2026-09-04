@@ -25,6 +25,9 @@
 	<string>1824239290</string>
 	<key>GitHubRepoName</key>
 	<string>OcPlayer</string>
+	<!-- 构建时注入的 Git 提交哈希，用于版本号关于页展示与启动日志排查 -->
+	<key>GitCommit</key>
+	<string>$(GIT_COMMIT_HASH)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

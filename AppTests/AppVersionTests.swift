@@ -74,4 +74,13 @@ final class AppVersionTests: XCTestCase {
         checker.clearIgnoredVersion()
         XCTAssertNil(checker.ignoredVersion)
     }
+
+    func testDisplayString() {
+        let display = AppVersion.displayString
+        XCTAssertTrue(display.contains("v\(AppVersion.currentShortVersion)"))
+        XCTAssertTrue(display.contains("Build \(AppVersion.currentBuildVersion)"))
+        if let commit = AppVersion.gitCommit {
+            XCTAssertTrue(display.contains(commit))
+        }
+    }
 }

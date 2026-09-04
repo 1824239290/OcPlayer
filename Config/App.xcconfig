@@ -7,3 +7,7 @@ INFOPLIST_FILE = Config/Info.plist
 // 版本号唯一事实源：发版只改这里（package-macos.sh 不带参数时也读它）。
 // target 级不再各写一份 MARKETING_VERSION，避免三处漂移。
 MARKETING_VERSION = 0.1.5
+
+// 默认构建号与提交哈希（构建脚本和 CI 会通过 xcodebuild 命令行参数动态覆盖）
+CURRENT_PROJECT_VERSION = 1
+GIT_COMMIT_HASH = dev

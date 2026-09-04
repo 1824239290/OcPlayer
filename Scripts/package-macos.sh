@@ -5,7 +5,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # 不带参数时从 App.xcconfig 读版本号（唯一事实源），避免脚本里再硬编码一份漂移。
 XCCONFIG_VERSION="$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/Config/App.xcconfig" | head -1 | tr -d '[:space:]')"
-RELEASE_TAG="${1:-${XCCONFIG_VERSION:+v$XCCONFIG_VERSION}}"
+
+# Git 信息与构建号推导：
+# 1. 提交总数作为默认 Build 号（严格单调递增，符合 Apple CFBundleVersion 规范）
+# 2. 短 commit hash 与 dirty 标记（方便测试追踪具体代码改动）
+GIT_COUNT="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
+GIT_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+if [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]]; then
+    GIT_DIRTY="-dirty"
+else
+    GIT_DIRTY=""
+fi
+GIT_INFO="${GIT_COMMIT}${GIT_DIRTY}"
+BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$GIT_COUNT}}"
+
+IS_LOCAL_BUILD=0
+if [[ $# -eq 0 ]]; then
+    IS_LOCAL_BUILD=1
+    RELEASE_TAG="${XCCONFIG_VERSION:+v$XCCONFIG_VERSION}"
+else
+    RELEASE_TAG="$1"
+fi
+
 ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+readahead.1}"
 # 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
 export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
@@ -15,7 +36,12 @@ APP_NAME="OcPlayer"
 SCHEME="OcPlayer-macOS"
 
 SAFE_TAG="$(printf '%s' "$RELEASE_TAG" | tr -c 'A-Za-z0-9._-' '-')"
-ARTIFACT_BASE="$APP_NAME-$SAFE_TAG-macOS-arm64"
+if [[ "$IS_LOCAL_BUILD" -eq 1 ]]; then
+    SAFE_BUILD="$(printf '%s' "$GIT_INFO" | tr -c 'A-Za-z0-9._-' '-')"
+    ARTIFACT_BASE="$APP_NAME-$SAFE_TAG-b$BUILD_NUMBER-$SAFE_BUILD-macOS-arm64"
+else
+    ARTIFACT_BASE="$APP_NAME-$SAFE_TAG-macOS-arm64"
+fi
 ZIP_PATH="$DIST_DIR/$ARTIFACT_BASE.zip"
 DMG_PATH="$DIST_DIR/$ARTIFACT_BASE.dmg"
 CHECKSUM_PATH="$DIST_DIR/SHA256SUMS.txt"
@@ -54,7 +80,8 @@ xcodebuild \
     CODE_SIGNING_ALLOWED=NO \
     DEBUG_INFORMATION_FORMAT=dwarf \
     MARKETING_VERSION="$MARKETING_VERSION" \
-    CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER:-1}" \
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    GIT_COMMIT_HASH="$GIT_INFO" \
     build
 
 APP_PATH="$BUILD_ROOT/DerivedData/Build/Products/Release/$APP_NAME.app"
@@ -201,5 +228,5 @@ hdiutil create \
     shasum -a 256 "$(basename "$ZIP_PATH")" "$(basename "$DMG_PATH")" > "$(basename "$CHECKSUM_PATH")"
 )
 
-echo "Release artifacts:"
+echo "Release artifacts (v$MARKETING_VERSION Build $BUILD_NUMBER · $GIT_INFO):"
 printf '  %s\n' "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"

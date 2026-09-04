@@ -46,11 +46,15 @@ enum AppDiagnostics {
         #endif
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-        logInfo("应用启动", fields: [
+        var fields: [String: DiagnosticValue] = [
             "platform": .string(platform),
             "version": .string(version),
             "build": .string(build),
-        ])
+        ]
+        if let commit = AppVersion.gitCommit {
+            fields["commit"] = .string(commit)
+        }
+        logInfo("应用启动", fields: fields)
     }
 
     static func requestStorageMaintenance() {
