@@ -202,14 +202,28 @@ public enum DanmakuFilenameParser {
         var cleanTitle = working
 
         // 准确提取并剥离各组括号内容：[...]、【...】、(...)、（...）、★...★
+        // 逐正则扫（每趟在当前串上重新匹配，删除后其余正则的范围不失效）。
+        let bracketCharacterSet = CharacterSet(charactersIn: "[]【】()（）★ ")
+        // 社区命名惯例：行首第一个方括号是发布组位（VCB-Studio 等枚举外组名也成立）。
+        // 但仅当全名还有别的括号组时才按位置剥——单括号组的首槽往往是标题本身，
+        // 剥了会把标题剥没（"[标题] 02"）。
+        let totalTagCount = tagRegexes.reduce(0) { count, regex in
+            count + regex.numberOfMatches(
+                in: cleanTitle, range: NSRange(cleanTitle.startIndex..., in: cleanTitle))
+        }
         for regex in tagRegexes {
             let matches = regex.matches(in: cleanTitle, range: NSRange(cleanTitle.startIndex..., in: cleanTitle))
             for m in matches.reversed() {
                 if let r = Range(m.range, in: cleanTitle) {
                     let fullTag = String(cleanTitle[r])
-                    let inner = fullTag
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "[]【】()（）★ "))
-                    if isNoiseTag(inner) || (detectedEpisode != nil && (inner == "\(detectedEpisode!)" || inner == String(format: "%02d", detectedEpisode!))) {
+                    let inner = fullTag.trimmingCharacters(in: bracketCharacterSet)
+                    let isEpisodeTag = detectedEpisode != nil
+                        && (inner == "\(detectedEpisode!)" || inner == String(format: "%02d", detectedEpisode!))
+                    // 4 位年份（如 [2023]）：集数检测跳过年份，标题清理同样剥掉。
+                    let isYearTag = inner.count == 4 && inner.allSatisfy(\.isNumber)
+                        && (1900...2100).contains(Int(inner) ?? 0)
+                    let isLeadingReleaseGroupSlot = m.range.location == 0 && totalTagCount > 1
+                    if isNoiseTag(inner) || isEpisodeTag || isYearTag || isLeadingReleaseGroupSlot {
                         cleanTitle.removeSubrange(r)
                     }
                 }
@@ -228,6 +242,15 @@ public enum DanmakuFilenameParser {
             .filter { !$0.isEmpty }
         if dashSegments.count >= 2 {
             cleanTitle = dashSegments[0]
+        } else if dashSegments.count == 1, detectedEpisode != nil {
+            // 无 dash 的简单命名（"[标题] 02"）：集数已在括号阶段识别，剥掉标题
+            // 尾部裸露的集数尾巴，避免 "Frieren] 02" 这类残留。
+            let epPatterns = ["\\s*\\]?", String(format: "%02d", detectedEpisode!), "\\s*$"]
+            let tailRegex = compiled(epPatterns.joined())
+            cleanTitle = tailRegex.stringByReplacingMatches(
+                in: cleanTitle,
+                range: NSRange(cleanTitle.startIndex..., in: cleanTitle),
+                withTemplate: "")
         }
 
         // 针对 "Title.S01E05" 这种点号分隔命名，若集数在末尾或被剥除后以点号结尾，清理点号
@@ -266,6 +289,12 @@ public enum DanmakuFilenameParser {
 
         // 纯数字集数（如 "01", "12"）
         if let num = Int(lower), num >= 0 && num <= 2000 && num != 1080 && num != 720 {
+            return true
+        }
+
+        // 4 位年份（如 2023）：与集数检测跳过年份的口径一致（1970-2050 不是集数）。
+        if lower.count == 4, lower.allSatisfy(\.isHexDigit),
+           let num = Int(lower), (1900...2100).contains(num) {
             return true
         }
 

@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 
 /// 弹幕装载流水线的编排结果。`DanmakuCoordinator`（app 层）把它映射成
@@ -89,9 +90,12 @@ public struct DanmakuLoadOrchestrator {
                 isFinal: matchContext.isFinal || parsed.isFinal
             )
 
-            // 2. 多级智能匹配
+            // 2. 多级智能匹配。每级显式 do/catch：取消照抛；其余错误记入 tierError
+            // 后继续降级——最终无命中时按「失败可重试」上报，不再吞成「未匹配」。
             var matched: DanmakuEpisodeMatch? = nil
             var fingerprintFailed = false
+            /// 最近一次降级检索抛出的非取消错误（网关/网络/协议）。
+            var tierError: Error?
 
             // Tier 1: 尝试 Hash + 文件名匹配
             var hashValue: String? = nil
@@ -110,53 +114,77 @@ public struct DanmakuLoadOrchestrator {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
 
-                matched = try? await service.automaticMatch(
-                    cacheKey: cacheKey,
-                    request: MatchRequest(
-                        fileName: matchContext.fileName,
-                        fileHash: hash,
-                        fileSize: matchContext.fileSize,
-                        videoDuration: matchContext.durationSeconds,
-                        matchMode: .hashAndFileName
-                    ),
-                    client: client,
-                    targetContext: target,
-                    ignoringCachedMatch: true,
-                    persistingResult: false
-                )
+                do {
+                    matched = try await service.automaticMatch(
+                        cacheKey: cacheKey,
+                        request: MatchRequest(
+                            fileName: matchContext.fileName,
+                            fileHash: hash,
+                            fileSize: matchContext.fileSize,
+                            videoDuration: matchContext.durationSeconds,
+                            matchMode: .hashAndFileName
+                        ),
+                        client: client,
+                        targetContext: target,
+                        ignoringCachedMatch: true,
+                        persistingResult: false
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    tierError = error
+                }
             }
 
             // Tier 2: 若未命中且有 TMDB ID，按 TMDB ID 搜索分集
             if matched == nil, let tmdbID = matchContext.tmdbID {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
-                matched = try? await searchByTMDB(
-                    tmdbID: tmdbID,
-                    target: target,
-                    client: client
-                )
+                do {
+                    matched = try await searchByTMDB(
+                        tmdbID: tmdbID,
+                        target: target,
+                        client: client
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    tierError = error
+                }
             }
 
             // Tier 3: 若仍未命中，按动画标题 + 集数搜索分集
             if matched == nil, let animeTitle = target.animeTitle, !animeTitle.isEmpty {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
-                matched = try? await searchByTitleAndEpisode(
-                    animeTitle: animeTitle,
-                    target: target,
-                    client: client
-                )
+                do {
+                    matched = try await searchByTitleAndEpisode(
+                        animeTitle: animeTitle,
+                        target: target,
+                        client: client
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    tierError = error
+                }
             }
 
             // Tier 4: 若仍未命中且解析出的纯化标题不同，用纯化标题再次尝试搜索
             if matched == nil, let cleanTitle = parsed.title.nilIfEmpty, cleanTitle != target.animeTitle {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
-                matched = try? await searchByTitleAndEpisode(
-                    animeTitle: cleanTitle,
-                    target: target,
-                    client: client
-                )
+                do {
+                    matched = try await searchByTitleAndEpisode(
+                        animeTitle: cleanTitle,
+                        target: target,
+                        client: client
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    tierError = error
+                }
             }
 
             try Task.checkCancellation()
@@ -166,8 +194,26 @@ public struct DanmakuLoadOrchestrator {
                 if forceRematch {
                     await service.forgetMatch(cacheKey: cacheKey, revision: revision)
                 }
-                if fingerprintFailed && matched == nil {
+                if fingerprintFailed {
+                    // 指纹不可用是更具体的诊断（引导手动选集）；GatewayClient 已逐请求
+                    // 记录了失败日志，这里维持既有文案优先级。
                     return .failed(message: userMessage(for: AutomaticMatchError.fingerprintUnavailable))
+                }
+                if let tierError {
+                    // 网络/网关失败不能谎报「未匹配到剧集」：UI 走可重试的失败态，
+                    // 文案复用 DandanplayError 的稳定用户文案（额度用完/网络失败等）。
+                    NetworkLog.report(
+                        category: "Danmaku",
+                        level: .warning,
+                        "弹幕自动匹配降级检索失败",
+                        fields: [
+                            "cacheKey": .string(cacheKey),
+                            "error": .string(String(describing: tierError)),
+                        ]
+                    )
+                    return .failed(
+                        message: (tierError as? DandanplayError)?.userMessage
+                            ?? "弹幕网络请求失败，请检查网络后重试")
                 }
                 return .noMatch
             }
@@ -197,33 +243,36 @@ public struct DanmakuLoadOrchestrator {
         client: DanmakuGatewayClient
     ) async throws -> DanmakuEpisodeMatch? {
         let episodeQuery = target.episodeNumber.map(String.init)
-        if let result = try? await client.searchEpisodes(
+        // 错误直接上抛给 tier 的 do/catch（不再内部 try? 吞掉）：
+        // 网关挂了要能让最终结果落「失败可重试」而不是「未匹配」。
+        let episodeScoped = try await client.searchEpisodes(
             tmdbId: tmdbID,
             tmdbIdType: 0,
             episode: episodeQuery
-        ).payload.animes, !result.isEmpty {
-            if let best = DanmakuCandidateScorer.pickBestEpisode(from: result, target: target) {
+        ).payload.animes
+        if !episodeScoped.isEmpty,
+           let best = DanmakuCandidateScorer.pickBestEpisode(from: episodeScoped, target: target) {
+            return best.match
+        }
+        if target.episodeNumber != nil {
+            let all = try await client.searchEpisodes(
+                tmdbId: tmdbID,
+                tmdbIdType: 0,
+                episode: nil
+            ).payload.animes
+            if !all.isEmpty,
+               let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
                 return best.match
             }
         }
-        if target.episodeNumber != nil,
-           let all = try? await client.searchEpisodes(
-            tmdbId: tmdbID,
-            tmdbIdType: 0,
-            episode: nil
-        ).payload.animes, !all.isEmpty {
-            if let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
-                return best.match
-            }
-        }
-        if let movieResult = try? await client.searchEpisodes(
+        let movieScoped = try await client.searchEpisodes(
             tmdbId: tmdbID,
             tmdbIdType: 1,
             episode: nil
-        ).payload.animes, !movieResult.isEmpty {
-            if let best = DanmakuCandidateScorer.pickBestEpisode(from: movieResult, target: target) {
-                return best.match
-            }
+        ).payload.animes
+        if !movieScoped.isEmpty,
+           let best = DanmakuCandidateScorer.pickBestEpisode(from: movieScoped, target: target) {
+            return best.match
         }
         return nil
     }
@@ -238,26 +287,26 @@ public struct DanmakuLoadOrchestrator {
 
         let episodeQuery = target.episodeNumber.map(String.init)
 
-        // 1. 精准搜索：动画名 + 集数
+        // 1. 精准搜索：动画名 + 集数（错误上抛给 tier 的 do/catch）
         if let ep = episodeQuery {
-            if let result = try? await client.searchEpisodes(
+            let scoped = try await client.searchEpisodes(
                 anime: trimmedTitle,
                 episode: ep
-            ).payload.animes, !result.isEmpty {
-                if let best = DanmakuCandidateScorer.pickBestEpisode(from: result, target: target) {
-                    return best.match
-                }
+            ).payload.animes
+            if !scoped.isEmpty,
+               let best = DanmakuCandidateScorer.pickBestEpisode(from: scoped, target: target) {
+                return best.match
             }
         }
 
         // 2. 全集搜索：仅传动画名，在返回的所有分集中匹配集数与季度
-        if let all = try? await client.searchEpisodes(
+        let all = try await client.searchEpisodes(
             anime: trimmedTitle,
             episode: nil
-        ).payload.animes, !all.isEmpty {
-            if let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
-                return best.match
-            }
+        ).payload.animes
+        if !all.isEmpty,
+           let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
+            return best.match
         }
 
         return nil

@@ -58,4 +58,25 @@ final class DanmakuFilenameParserTests: XCTestCase {
         XCTAssertEqual(r2.seasonNumber, 1)
         XCTAssertEqual(r2.episodeNumber, 12)
     }
+
+    /// 枚举外发布组（VCB-Studio）：行首方括号 + 全名另有括号组 → 按发布组位剥除。
+    func testUnlistedReleaseGroupLeadingSlotIsStripped() {
+        let r = DanmakuFilenameParser.parse("[VCB-Studio] 葬送的芙莉莲 - 01 [Ma10p][1080p].mkv")
+        XCTAssertEqual(r.title, "葬送的芙莉莲")
+        XCTAssertEqual(r.episodeNumber, 1)
+    }
+
+    /// 防误伤：全名只有单个方括号组时首槽视为标题本身，不得剥除。
+    func testSingleBracketSlotIsKeptAsTitle() {
+        let r = DanmakuFilenameParser.parse("[Frieren] 02.mp4")
+        XCTAssertEqual(r.title, "Frieren")
+        XCTAssertEqual(r.episodeNumber, 2)
+    }
+
+    /// 年份括号（如 [2023]）按年份剥除，不进标题。
+    func testYearBracketIsStripped() {
+        let r = DanmakuFilenameParser.parse("葬送的芙莉莲 [2023] - 01.mp4")
+        XCTAssertEqual(r.title, "葬送的芙莉莲")
+        XCTAssertEqual(r.episodeNumber, 1)
+    }
 }

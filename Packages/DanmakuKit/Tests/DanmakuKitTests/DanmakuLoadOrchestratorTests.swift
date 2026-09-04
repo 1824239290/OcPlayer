@@ -147,6 +147,10 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             switch request.url!.path {
             case "/v1/match":
                 return TestSupport.response(body, url: request.url!)
+            case "/v1/search/episodes":
+                // 干净的空搜索结果（旧 mock 这里返回二进制、靠旧版吞错兜底；
+                // 分流后错误会走 failed，这里必须模拟网关真的返回空）。
+                return TestSupport.response("{\"success\":true,\"errorCode\":0,\"animes\":[]}", url: request.url!)
             default:
                 return makeRange206Response(fingerprint, url: request.url!)
             }
@@ -161,6 +165,67 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         )
         XCTAssertEqual(outcome, .noMatch)
         XCTAssertNil(playback.injectedJSON)
+    }
+
+    /// 网关全线失败（match + search 都 500）：必须报「失败可重试」，
+    /// 不得谎报「未匹配到剧集」。
+    func testGatewayErrorsYieldFailedInsteadOfNoMatch() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        let fingerprint = makeFingerprintData()
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/video.mp4":
+                return makeRange206Response(fingerprint, url: request.url!)
+            default:
+                return TestSupport.response("{\"error\":\"boom\"}", status: 500, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        guard case .failed(let message) = outcome else {
+            return XCTFail("网关错误应报失败，got \(outcome)")
+        }
+        XCTAssertEqual(message, "弹幕服务暂时不可用", "httpStatus(500) 应复用既有用户文案")
+        XCTAssertNil(playback.injectedJSON, "失败路径不应注入弹幕")
+    }
+
+    /// 混合结局：tier 1 干净返回无匹配、tier 3 搜索网络断 → 仍应报失败。
+    func testMixedCleanAndErrorTiersYieldFailed() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        let fingerprint = makeFingerprintData()
+        let noMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":0,"isMatched":false,"matches":[]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/match":
+                return TestSupport.response(noMatchBody, url: request.url!)
+            case "/video.mp4":
+                return makeRange206Response(fingerprint, url: request.url!)
+            default:
+                throw URLError(.notConnectedToInternet)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        guard case .failed(let message) = outcome else {
+            return XCTFail("混合结局应报失败，got \(outcome)")
+        }
+        XCTAssertEqual(message, "弹幕网络请求失败", "URLError 应映射为网络失败文案")
     }
 
     func testForceRematchClearsRememberedMatch() async throws {
@@ -179,6 +244,8 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             switch request.url!.path {
             case "/v1/match":
                 return TestSupport.response(noMatchBody, url: request.url!)
+            case "/v1/search/episodes":
+                return TestSupport.response("{\"success\":true,\"errorCode\":0,\"animes\":[]}", url: request.url!)
             default:
                 return makeRange206Response(fingerprint, url: request.url!)
             }
