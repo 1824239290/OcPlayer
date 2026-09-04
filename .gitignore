@@ -38,6 +38,7 @@ design/
 CLAUDE.md
 PLAN.md
 REVIEW_TODO.md
+Reports/
 
 # ZCode 本地会话数据，不入库
 .zcode/

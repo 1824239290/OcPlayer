@@ -11,8 +11,23 @@ public enum AppVersion {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 
+    /// 构建时注入的 Git commit 标识（如 "e657463"、"e657463-dirty" 或本地 Xcode 调试 "dev"）
+    public static var gitCommit: String? {
+        guard let raw = Bundle.main.object(forInfoDictionaryKey: "GitCommit") as? String else {
+            return nil
+        }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "$(GIT_COMMIT_HASH)" else {
+            return nil
+        }
+        return trimmed
+    }
+
     public static var displayString: String {
-        "v\(currentShortVersion) (Build \(currentBuildVersion))"
+        if let commit = gitCommit {
+            return "v\(currentShortVersion) (Build \(currentBuildVersion) · \(commit))"
+        }
+        return "v\(currentShortVersion) (Build \(currentBuildVersion))"
     }
 
     /// 比较两个版本号（如 "1.2.0" 和 "1.2.1" 或带 "v" 前缀）

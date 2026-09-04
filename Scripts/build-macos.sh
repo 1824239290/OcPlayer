@@ -61,7 +61,18 @@ echo "Cleaning previous build: $BUILD_DIR"
 rm -rf "$BUILD_DIR"
 mkdir -p "$DERIVED_DATA"
 
-echo "Building $SCHEME ($CONFIGURATION)..."
+XCCONFIG_VERSION="$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/Config/App.xcconfig" | head -1 | tr -d '[:space:]')"
+GIT_COUNT="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
+GIT_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
+if [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]]; then
+    GIT_DIRTY="-dirty"
+else
+    GIT_DIRTY=""
+fi
+GIT_INFO="${GIT_COMMIT}${GIT_DIRTY}"
+BUILD_NUMBER="${BUILD_NUMBER:-${GITHUB_RUN_NUMBER:-$GIT_COUNT}}"
+
+echo "Building $SCHEME ($CONFIGURATION) [v$XCCONFIG_VERSION Build $BUILD_NUMBER · $GIT_INFO]..."
 xcodebuild \
     -project "$PROJECT" \
     -scheme "$SCHEME" \
@@ -71,6 +82,9 @@ xcodebuild \
     -quiet \
     ARCHS=arm64 \
     ONLY_ACTIVE_ARCH=NO \
+    MARKETING_VERSION="$XCCONFIG_VERSION" \
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    GIT_COMMIT_HASH="$GIT_INFO" \
     build
 
 APP_PATH="$DERIVED_DATA/Build/Products/$CONFIGURATION/OcPlayer.app"
@@ -80,5 +94,5 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 echo
-echo "Build complete:"
+echo "Build complete (v$XCCONFIG_VERSION Build $BUILD_NUMBER · $GIT_INFO):"
 echo "  $APP_PATH"
