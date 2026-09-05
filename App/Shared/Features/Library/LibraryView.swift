@@ -25,6 +25,22 @@ struct LibraryView: View {
     /// 最近一次拉取是否为服务端满页（hasMore 在总数未知时的判据）。
     @State private var lastPageFull = false
     @State private var activeLoadID: UUID?
+    /// 排序下拉是否展开。
+    @State private var showsSortPopover = false
+
+    /// 每库独立记忆的排序字段与方向（key 带库 id，各库互不干扰）。
+    /// 动态 key 的 @AppStorage 只能在 init 里注入，存 rawValue 字符串。
+    @AppStorage private var sortFieldRaw: String
+    @AppStorage private var sortAscending: Bool
+
+    init(library: MediaLibrary) {
+        self.library = library
+        _sortFieldRaw = AppStorage(
+            wrappedValue: MediaItemsSortField.name.rawValue,
+            "library.sort.field.\(library.id)"
+        )
+        _sortAscending = AppStorage(wrappedValue: true, "library.sort.ascending.\(library.id)")
+    }
 
     /// 分页数据住在 `AppModel.libraryPages`，不在视图 `@State` 里：
     /// 侧栏切走再切回来时不用从第一页重拉（见 `AppModel.LibraryPage`）。
@@ -85,6 +101,11 @@ struct LibraryView: View {
         #if os(macOS)
         .navigationSubtitle(subtitleText)
         #endif
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                sortToolbarButton
+            }
+        }
         .task(id: library.id) { await loadIfNeeded() }
     }
 
@@ -178,6 +199,101 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - 排序
+
+    /// 当前生效的排序字段：存档值不在该库候选集里（换了服务器 / 库类型变化）时回落名称。
+    private var sortField: MediaItemsSortField {
+        LibrarySort.resolvedField(rawValue: sortFieldRaw, collectionType: library.collectionType)
+    }
+
+    private var sortOptions: [MediaItemsSortField] {
+        MediaItemsSortField.options(for: library.collectionType)
+    }
+
+    /// 右上角排序按钮：工具栏本身由系统渲染液态玻璃（不手动叠材质），
+    /// 点开弹同款玻璃 chips 下拉——单选即点即换，与 MoviePilot 筛选条一套交互。
+    private var sortToolbarButton: some View {
+        Button {
+            showsSortPopover.toggle()
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+        .help("排序方式")
+        .accessibilityLabel("排序方式")
+        .popover(isPresented: $showsSortPopover) {
+            sortPopover
+        }
+    }
+
+    /// 排序下拉：上半是字段 chips，字段有方向时下半给「升序 / 降序」。
+    /// 换字段即关（方向已重置到该字段自然默认）；调方向留在原地，方便对着看。
+    private var sortPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("排序")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(sortOptions, id: \.self) { field in
+                    Button {
+                        changeSort(field)
+                        showsSortPopover = false
+                    } label: {
+                        OptionChip(title: field.sortLabel, selected: field == sortField)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if sortField.hasSortDirection {
+                Text("方向")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    directionChip("升序", ascending: true)
+                    directionChip("降序", ascending: false)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: isCompact ? .infinity : nil)
+        .frame(width: isCompact ? nil : 300, alignment: .leading)
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
+    }
+
+    private func directionChip(_ title: String, ascending: Bool) -> some View {
+        Button {
+            setSortDirection(ascending)
+        } label: {
+            OptionChip(title: title, selected: sortAscending == ascending)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 换字段：方向重置到该字段的自然默认（避免「评分按低到高」这种反直觉组合）。
+    private func changeSort(_ field: MediaItemsSortField) {
+        guard field != sortField else { return }
+        sortFieldRaw = field.rawValue
+        sortAscending = field.defaultAscending
+        reloadAfterSortChange()
+    }
+
+    private func setSortDirection(_ ascending: Bool) {
+        guard ascending != sortAscending else { return }
+        sortAscending = ascending
+        reloadAfterSortChange()
+    }
+
+    /// 排序变了，旧分页在新顺序下是错序数据：作废缓存从第一页重取。
+    /// `activeLoadID` 会让在途的旧请求落账前自行作废，不会写回错序页。
+    private func reloadAfterSortChange() {
+        app.clearLibraryPage(for: library.id)
+        Task { await load(reset: true) }
+    }
+
     /// 切到这个库时：缓存里已经有内容就直接用，不重新请求。
     /// 视图实例在两个库之间是复用的（同一个 `case .library` 分支），
     /// 所以这里要顺手把上一个库残留的加载/错误态清掉。
@@ -234,7 +350,8 @@ struct LibraryView: View {
                 kinds: kinds,
                 recursive: true,
                 startIndex: startIndex,
-                limit: Self.pageSize
+                limit: Self.pageSize,
+                sort: MediaItemsSort(field: sortField, ascending: sortAscending)
             )
             guard !Task.isCancelled, activeLoadID == loadID else { return }
             var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())

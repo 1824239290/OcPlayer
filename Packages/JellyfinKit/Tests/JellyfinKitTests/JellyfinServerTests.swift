@@ -464,6 +464,60 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    /// query 重复键取值数组（GetItems 的数组参数走 explode 编码：
+    /// `sortBy=DateCreated&sortBy=SortName`，与 includeItemTypes 现网同款）。
+    private func queryValues(of request: URLRequest, name: String) -> [String] {
+        guard let url = request.url,
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        else { return [] }
+        return items.filter { $0.name == name }.compactMap(\.value)
+    }
+
+    func testItemsPageSortDefaultsToNameAscending() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(self.queryValues(of: request, name: "sortBy"), ["SortName"])
+            XCTAssertEqual(self.queryValues(of: request, name: "sortOrder"), ["Ascending"])
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(parentID: "lib-1", limit: 2)
+        }
+    }
+
+    func testItemsPageSortPassesKeysAndPairedOrders() async throws {
+        // 主键带用户方向，副键固定名称升序——副键不受「降序」牵连。
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(self.queryValues(of: request, name: "sortBy"), ["DateCreated", "SortName"])
+            XCTAssertEqual(self.queryValues(of: request, name: "sortOrder"), ["Descending", "Ascending"])
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(
+                parentID: "lib-1",
+                sort: MediaItemsSort(field: .dateAdded, ascending: false)
+            )
+        }
+    }
+
+    func testItemsPageSortRandomSendsRandomKey() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(self.queryValues(of: request, name: "sortBy"), ["Random"])
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(
+                parentID: "lib-1",
+                sort: MediaItemsSort(field: .random, ascending: false)
+            )
+        }
+    }
+
     // MARK: - URL 与认证头
 
     func testStreamURLHasNoToken() throws {

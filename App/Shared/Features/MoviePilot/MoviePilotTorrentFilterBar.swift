@@ -91,7 +91,7 @@ struct MoviePilotTorrentFilterBar: View {
             sortField = field
             showsSortPopover = false
         } label: {
-            optionChipLabel(field.label, selected: selected)
+            OptionChip(title: field.label, selected: selected)
         }
         .buttonStyle(.plain)
     }
@@ -195,37 +195,12 @@ struct MoviePilotTorrentFilterBar: View {
         #endif
     }
 
-    /// 选项 chip 的统一外观（筛选候选与排序字段共用）：选中带对勾 + accent 高亮。
-    private func optionChipLabel(_ text: String, selected: Bool) -> some View {
-        HStack(spacing: 4) {
-            if selected {
-                Image(systemName: "checkmark")
-                    .font(.caption2.weight(.bold))
-            }
-            Text(text)
-        }
-        .font(.caption.weight(.medium))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(
-            selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05),
-            in: Capsule()
-        )
-        .overlay(
-            Capsule().strokeBorder(
-                selected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
-                lineWidth: 0.5
-            )
-        )
-        .foregroundStyle(selected ? Color.accentColor : Color.primary)
-    }
-
     private func candidateChip(_ value: String, field: TorrentFilterField) -> some View {
         let selected = filters[keyPath: field.selectionKeyPath].contains(value)
         return Button {
             toggle(field, value)
         } label: {
-            optionChipLabel(value, selected: selected)
+            OptionChip(title: value, selected: selected)
         }
         .buttonStyle(.plain)
     }
@@ -304,49 +279,5 @@ struct MoviePilotTorrentFilterBar: View {
 
     private func remove(_ field: TorrentFilterField, _ value: String) {
         filters[keyPath: field.selectionKeyPath].remove(value)
-    }
-}
-
-// MARK: - Chips 流式布局
-
-/// 逐个测量、按行折行的流式布局（Bangumi 详情页标签流同款实现）。
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > width, currentX > 0 {
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-            currentX += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-        return CGSize(width: width, height: currentY + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var currentX: CGFloat = bounds.minX
-        var currentY: CGFloat = bounds.minY
-        var lineHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > bounds.maxX, currentX > bounds.minX {
-                currentX = bounds.minX
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-            subview.place(at: CGPoint(x: currentX, y: currentY), proposal: .unspecified)
-            currentX += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
     }
 }

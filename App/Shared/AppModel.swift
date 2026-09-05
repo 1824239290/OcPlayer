@@ -103,6 +103,12 @@ final class AppModel {
         }
     }
 
+    /// 作废某库的分页缓存。换排序时旧页在新顺序下是错序数据，直接清掉重取；
+    /// 分页缓存只是「回库不重拉」的加速器，清空的代价是下次进库从第一页翻。
+    func clearLibraryPage(for id: MediaLibrary.ID) {
+        libraryPages[id] = nil
+    }
+
     // MARK: - 详情页快照缓存（stale-while-revalidate）
 
     /// 详情页跨进入的内容快照：再次进入同一详情先用快照即时渲染（不闪骨架屏），

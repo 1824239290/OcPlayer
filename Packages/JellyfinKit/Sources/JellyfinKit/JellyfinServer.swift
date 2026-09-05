@@ -434,26 +434,31 @@ public struct JellyfinServer: Sendable {
     }
 
     /// 媒体库单页浏览。`limit` 只表示本页大小，不会自动翻到 TotalRecordCount。
+    /// `sort` 传 nil 时保持历史行为（按名称升序）；方向与主键在服务端生效，
+    /// 副键固定名称升序，返回顺序即请求顺序。
     public func itemsPage(
         parentID: String?,
         kinds: [MediaItem.Kind]? = nil,
         recursive: Bool = true,
         startIndex: Int = 0,
-        limit: Int = 100
+        limit: Int = 100,
+        sort: MediaItemsSort? = nil
     ) async throws -> MediaItemsPage {
         let pageSize = max(limit, 1)
         let pageStart = max(startIndex, 0)
+        let (sortKeys, sortOrders) = sort.map { $0.serverKeysAndOrders() } ?? ([.sortName], [.ascending])
         let result = try await send(
             Paths.getItems(parameters: .init(
                 userID: profile.userID,
                 startIndex: pageStart,
                 limit: pageSize,
                 isRecursive: recursive,
+                sortOrder: sortOrders,
                 parentID: parentID,
                 includeItemTypes: kinds.map { kinds in
                     kinds.compactMap { kind in BaseItemKind(kind) }
                 },
-                sortBy: [.sortName],
+                sortBy: sortKeys,
                 enableImageTypes: [.primary, .backdrop, .logo],
                 enableTotalRecordCount: true
             ))
