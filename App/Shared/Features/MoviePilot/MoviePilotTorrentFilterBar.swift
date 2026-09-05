@@ -15,6 +15,8 @@ struct MoviePilotTorrentFilterBar: View {
 
     /// 当前展开下拉的分组（同一时刻至多一个）。
     @State private var activeField: TorrentFilterField?
+    /// 排序下拉是否展开。
+    @State private var showsSortPopover = false
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -22,7 +24,7 @@ struct MoviePilotTorrentFilterBar: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    sortMenu
+                    sortButton
                     sortDirectionButton
 
                     ForEach(TorrentFilterField.allCases) { field in
@@ -38,13 +40,11 @@ struct MoviePilotTorrentFilterBar: View {
 
     // MARK: - 排序
 
-    private var sortMenu: some View {
-        Menu {
-            Picker("排序", selection: $sortField) {
-                ForEach(TorrentSortField.allCases, id: \.self) { field in
-                    Text(field.label).tag(field)
-                }
-            }
+    /// 排序按钮：点开直接弹同款玻璃 chips 下拉（单选即点即换），
+    /// 不走系统菜单再套一层「排序」子菜单。
+    private var sortButton: some View {
+        Button {
+            showsSortPopover.toggle()
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.up.arrow.down")
@@ -58,7 +58,42 @@ struct MoviePilotTorrentFilterBar: View {
             .padding(.vertical, 6)
             .liquidGlassCapsule()
         }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showsSortPopover) {
+            sortPopover
+        }
         .help("结果排序字段")
+    }
+
+    private var sortPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("排序")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            FlowLayout(spacing: 8) {
+                ForEach(TorrentSortField.allCases, id: \.self) { field in
+                    sortChip(field)
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: sizeClass == .compact ? .infinity : nil)
+        .frame(width: sizeClass == .compact ? nil : 300, alignment: .leading)
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
+    }
+
+    private func sortChip(_ field: TorrentSortField) -> some View {
+        let selected = sortField == field
+        return Button {
+            sortField = field
+            showsSortPopover = false
+        } label: {
+            optionChipLabel(field.label, selected: selected)
+        }
+        .buttonStyle(.plain)
     }
 
     private var sortDirectionButton: some View {
@@ -160,34 +195,39 @@ struct MoviePilotTorrentFilterBar: View {
         #endif
     }
 
+    /// 选项 chip 的统一外观（筛选候选与排序字段共用）：选中带对勾 + accent 高亮。
+    private func optionChipLabel(_ text: String, selected: Bool) -> some View {
+        HStack(spacing: 4) {
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.bold))
+            }
+            Text(text)
+        }
+        .font(.caption.weight(.medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                selected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
+                lineWidth: 0.5
+            )
+        )
+        .foregroundStyle(selected ? Color.accentColor : Color.primary)
+    }
+
     private func candidateChip(_ value: String, field: TorrentFilterField) -> some View {
         let selected = filters[keyPath: field.selectionKeyPath].contains(value)
         return Button {
             toggle(field, value)
         } label: {
-            HStack(spacing: 4) {
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.caption2.weight(.bold))
-                }
-                Text(value)
-            }
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().strokeBorder(
-                    selected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
-                    lineWidth: 0.5
-                )
-            )
+            optionChipLabel(value, selected: selected)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(selected ? Color.accentColor : Color.primary)
     }
 
     // MARK: - 已选汇总
