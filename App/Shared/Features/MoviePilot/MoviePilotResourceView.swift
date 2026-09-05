@@ -31,9 +31,10 @@ struct MoviePilotResourceView: View {
     @State private var searchGeneration = 0
     @State private var searchTask: Task<Void, Never>?
 
-    // 筛选与排序（对齐 MP 网页端：本地过滤，选项从结果聚合；排序偏好记忆）。
+    // 筛选与排序（对齐 MP 网页端：本地过滤，候选值从结果聚合；排序偏好记忆）。
     @State private var filters = TorrentFilters()
-    @State private var showTorrentFilter = false
+    /// 各分组筛选候选值（从结果聚合）。随批次落账记忆化，不随 body 求值重算。
+    @State private var filterOptions = TorrentFilterEngine.Options()
     @AppStorage("moviepilot.torrentSortField") private var sortFieldRaw = TorrentSortField.defaultOrder.rawValue
     @AppStorage("moviepilot.torrentSortAscending") private var sortAscending = false
 
@@ -65,7 +66,23 @@ struct MoviePilotResourceView: View {
 
                 // 3. 筛选与排序行（Filters & Sort）
                 if !torrents.isEmpty || filters.isActive {
-                    filterAndSortBar
+                    MoviePilotTorrentFilterBar(
+                        filters: Binding(
+                            get: { filters },
+                            set: { filters = $0; recomputeDisplayed() }
+                        ),
+                        options: filterOptions,
+                        scopeLabel: siteScopeText,
+                        onScopeTap: { showSitePicker = true },
+                        sortField: Binding(
+                            get: { sortField },
+                            set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
+                        ),
+                        sortAscending: Binding(
+                            get: { sortAscending },
+                            set: { sortAscending = $0; recomputeDisplayed() }
+                        )
+                    )
                 }
 
                 // 4. 状态提示条
@@ -96,17 +113,6 @@ struct MoviePilotResourceView: View {
         .refreshable { await search().value }
         .sheet(isPresented: $showSitePicker) {
             MoviePilotSitePickerSheet(sites: sites, selection: $selectedSiteIDs)
-        }
-        .sheet(isPresented: $showTorrentFilter) {
-            MoviePilotTorrentFilterSheet(
-                options: TorrentFilterEngine.options(torrents),
-                // 自定义 binding：弹窗里勾选/清除（含「清除全部筛选」）都从
-                // set 侧过一道，落账 filters 的同时重算展示序列。
-                filters: Binding(
-                    get: { filters },
-                    set: { filters = $0; recomputeDisplayed() }
-                )
-            )
         }
         .navigationDestination(isPresented: $navigateToDownloads) {
             MoviePilotDownloadsView()
@@ -250,98 +256,10 @@ struct MoviePilotResourceView: View {
         )
     }
 
-    private var filterAndSortBar: some View {
-        HStack(spacing: 8) {
-            // 站点选择胶囊
-            Button {
-                showSitePicker = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                    Text(siteFilterText)
-                    if !sites.isEmpty {
-                        Text("共 \(sites.count) 站")
-                            .foregroundStyle(.tertiary)
-                    }
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            // 筛选按钮
-            Button {
-                showTorrentFilter = true
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                    Text(filters.isActive ? "筛选 · \(filters.activeCount)" : "筛选")
-                }
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    filters.isActive ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.04),
-                    in: Capsule()
-                )
-                .overlay(
-                    Capsule().strokeBorder(
-                        filters.isActive ? Color.accentColor.opacity(0.35) : Color.white.opacity(0.1),
-                        lineWidth: 0.5
-                    )
-                )
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            // 排序菜单与升降序切换
-            Menu {
-                Picker("排序", selection: Binding(
-                    get: { sortField },
-                    set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
-                )) {
-                    ForEach(TorrentSortField.allCases, id: \.self) { field in
-                        Text(field.label).tag(field)
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                    Text("排序 · \(sortField.label)")
-                }
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                sortAscending.toggle()
-                recomputeDisplayed()
-            } label: {
-                Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain)
-            .help(sortAscending ? "当前升序，点击切换降序" : "当前降序，点击切换升序")
-        }
-    }
-
-    private var siteFilterText: String {
-        selectedSiteIDs.isEmpty ? "全部站点" : "已选 \(selectedSiteIDs.count) 个站点"
+    /// 搜索范围胶囊文案：语义是「下次搜索跑哪些站点」（服务端范围），
+    /// 与筛选条里的「站点」分组（结果本地过滤）互不相干。
+    private var siteScopeText: String {
+        selectedSiteIDs.isEmpty ? "搜索范围 · 全部站点" : "搜索范围 · 已选 \(selectedSiteIDs.count) 站"
     }
 
     // MARK: - 资源列表与空态
@@ -494,8 +412,9 @@ struct MoviePilotResourceView: View {
         progressText = nil
         // 新搜索换一批数据源，旧筛选多半失效，整组重置。
         filters = TorrentFilters()
-        // 展示序列与懒加载窗口一并打回首页大小。
+        // 展示序列、筛选候选与懒加载窗口一并打回首页大小。
         displayed = []
+        filterOptions = TorrentFilterEngine.Options()
         displayLimit = Self.displayPageSize
         searchTask = Task {
             let (updates, continuation) = AsyncStream.makeStream(
@@ -527,6 +446,7 @@ struct MoviePilotResourceView: View {
                 case .batch(let current, let progress):
                     torrents = current
                     recomputeDisplayed()
+                    filterOptions = TorrentFilterEngine.options(current)
                     progressText = progress.text
                 case .failure(let message):
                     searchError = message

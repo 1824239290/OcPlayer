@@ -105,4 +105,26 @@ final class TorrentFilterTests: XCTestCase {
         XCTAssertEqual(options.videoCode, ["AV1"])
         XCTAssertEqual(options.releaseGroup, ["OurBits"])
     }
+
+    /// TorrentFilterField 的 keyPath 映射必须各组落点互不相同且读写一致，
+    /// 否则筛选条上某组的勾选会写进别组（UI 纯 keyPath 派发，编译器兜不住）。
+    func testFilterFieldKeyPathsRoundTrip() {
+        var filters = TorrentFilters()
+        for (index, field) in TorrentFilterField.allCases.enumerated() {
+            filters[keyPath: field.selectionKeyPath] = ["值\(index)"]
+        }
+        XCTAssertEqual(filters.activeCount, TorrentFilterField.allCases.count, "各组写入互不覆盖")
+        for (index, field) in TorrentFilterField.allCases.enumerated() {
+            XCTAssertEqual(filters[keyPath: field.selectionKeyPath], ["值\(index)"])
+        }
+        // optionsKeyPath 只读：与各组的字面属性一一对应（映射错组在此暴露）。
+        let options = TorrentFilterEngine.options(Self.sample)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.site.optionsKeyPath] == options.site)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.season.optionsKeyPath] == options.season)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.freeState.optionsKeyPath] == options.freeState)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.videoCode.optionsKeyPath] == options.videoCode)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.edition.optionsKeyPath] == options.edition)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.resolution.optionsKeyPath] == options.resolution)
+        XCTAssertTrue(options[keyPath: TorrentFilterField.releaseGroup.optionsKeyPath] == options.releaseGroup)
+    }
 }

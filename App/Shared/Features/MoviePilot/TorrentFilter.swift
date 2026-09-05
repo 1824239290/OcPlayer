@@ -76,6 +76,71 @@ enum TorrentSortField: String, CaseIterable {
     }
 }
 
+/// 筛选分组的字段元数据（对齐 MP 网页端 TorrentFilterBar 的分组顺序与文案：
+/// 站点 / 季 / 促销 / 编码 / 质量 / 分辨率 / 制作组）。顺序即筛选条按钮顺序。
+enum TorrentFilterField: String, CaseIterable, Identifiable {
+    case site
+    case season
+    case freeState
+    case videoCode
+    case edition
+    case resolution
+    case releaseGroup
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .site: "站点"
+        case .season: "季"
+        case .freeState: "促销"
+        case .videoCode: "编码"
+        case .edition: "质量"
+        case .resolution: "分辨率"
+        case .releaseGroup: "制作组"
+        }
+    }
+
+    /// SF Symbol（对齐 MP 网页端各组的图标语义）。
+    var icon: String {
+        switch self {
+        case .site: "display"
+        case .season: "square.stack.3d.up"
+        case .freeState: "gift"
+        case .videoCode: "video"
+        case .edition: "opticaldiscdrive"
+        case .resolution: "tv"
+        case .releaseGroup: "person.3"
+        }
+    }
+
+    /// 选中集在 `TorrentFilters` 里的落点（弹窗勾选 / 移除 chip 都经它写）。
+    var selectionKeyPath: WritableKeyPath<TorrentFilters, Set<String>> {
+        switch self {
+        case .site: \TorrentFilters.site
+        case .season: \TorrentFilters.season
+        case .freeState: \TorrentFilters.freeState
+        case .videoCode: \TorrentFilters.videoCode
+        case .edition: \TorrentFilters.edition
+        case .resolution: \TorrentFilters.resolution
+        case .releaseGroup: \TorrentFilters.releaseGroup
+        }
+    }
+
+    /// 候选值在 `TorrentFilterEngine.Options` 里的落点。
+    var optionsKeyPath: KeyPath<TorrentFilterEngine.Options, [String]> {
+        switch self {
+        case .site: \TorrentFilterEngine.Options.site
+        case .season: \TorrentFilterEngine.Options.season
+        case .freeState: \TorrentFilterEngine.Options.freeState
+        case .videoCode: \TorrentFilterEngine.Options.videoCode
+        case .edition: \TorrentFilterEngine.Options.edition
+        case .resolution: \TorrentFilterEngine.Options.resolution
+        case .releaseGroup: \TorrentFilterEngine.Options.releaseGroup
+        }
+    }
+}
+
 /// 纯函数筛选 / 排序 / 候选聚合。
 enum TorrentFilterEngine {
 
