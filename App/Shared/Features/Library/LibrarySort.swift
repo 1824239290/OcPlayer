@@ -15,8 +15,20 @@ extension MediaItemsSortField {
         }
     }
 
-    /// 随机没有方向可言，下拉里不显示升降序。
+    /// 随机没有方向可言，菜单里不给升降序。
     var hasSortDirection: Bool { self != .random }
+
+    /// 菜单图标（系统下拉菜单里的视觉锚点）。
+    var sortIcon: String {
+        switch self {
+        case .name: "textformat"
+        case .dateAdded: "clock.arrow.circlepath"
+        case .year: "calendar"
+        case .rating: "star"
+        case .runtime: "timer"
+        case .random: "shuffle"
+        }
+    }
 
     /// 自然默认方向：名称 A→Z 升，其余按「新 / 高 / 长」在前（降）。
     /// 换字段时方向重置到这个值，避免「评分按低到高」这种反直觉组合。

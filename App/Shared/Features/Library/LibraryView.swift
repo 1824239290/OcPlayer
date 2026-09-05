@@ -25,8 +25,6 @@ struct LibraryView: View {
     /// 最近一次拉取是否为服务端满页（hasMore 在总数未知时的判据）。
     @State private var lastPageFull = false
     @State private var activeLoadID: UUID?
-    /// 排序下拉是否展开。
-    @State private var showsSortPopover = false
 
     /// 每库独立记忆的排序字段与方向（key 带库 id，各库互不干扰）。
     /// 动态 key 的 @AppStorage 只能在 init 里注入，存 rawValue 字符串。
@@ -210,67 +208,37 @@ struct LibraryView: View {
         MediaItemsSortField.options(for: library.collectionType)
     }
 
-    /// 右上角排序按钮：工具栏本身由系统渲染液态玻璃（不手动叠材质），
-    /// 点开弹同款玻璃 chips 下拉——单选即点即换，与 MoviePilot 筛选条一套交互。
+    /// 右上角排序：系统下拉菜单（与 MoviePilot 首页菜单 / Bangumi 排序同款，
+    /// macOS 26 / iOS 26 由系统渲染成液态玻璃）。字段单选带对勾；字段有方向时
+    /// 菜单里再给一组升序 / 降序。
     private var sortToolbarButton: some View {
-        Button {
-            showsSortPopover.toggle()
+        Menu {
+            Picker("排序方式", selection: Binding(
+                get: { sortField },
+                set: { changeSort($0) }
+            )) {
+                ForEach(sortOptions, id: \.self) { field in
+                    Label(field.sortLabel, systemImage: field.sortIcon).tag(field)
+                }
+            }
+            .pickerStyle(.inline)
+
+            if sortField.hasSortDirection {
+                Picker("方向", selection: Binding(
+                    get: { sortAscending },
+                    set: { setSortDirection($0) }
+                )) {
+                    Label("升序", systemImage: "arrow.up").tag(true)
+                    Label("降序", systemImage: "arrow.down").tag(false)
+                }
+                .pickerStyle(.inline)
+            }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
         .help("排序方式")
         .accessibilityLabel("排序方式")
-        .popover(isPresented: $showsSortPopover) {
-            sortPopover
-        }
-    }
-
-    /// 排序下拉：上半是字段 chips，字段有方向时下半给「升序 / 降序」。
-    /// 换字段即关（方向已重置到该字段自然默认）；调方向留在原地，方便对着看。
-    private var sortPopover: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("排序")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            FlowLayout(spacing: 8) {
-                ForEach(sortOptions, id: \.self) { field in
-                    Button {
-                        changeSort(field)
-                        showsSortPopover = false
-                    } label: {
-                        OptionChip(title: field.sortLabel, selected: field == sortField)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            if sortField.hasSortDirection {
-                Text("方向")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    directionChip("升序", ascending: true)
-                    directionChip("降序", ascending: false)
-                }
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: isCompact ? .infinity : nil)
-        .frame(width: isCompact ? nil : 300, alignment: .leading)
-        #if os(iOS)
-        .presentationDetents([.medium])
-        #endif
-    }
-
-    private func directionChip(_ title: String, ascending: Bool) -> some View {
-        Button {
-            setSortDirection(ascending)
-        } label: {
-            OptionChip(title: title, selected: sortAscending == ascending)
-        }
-        .buttonStyle(.plain)
+        .accessibilityValue(sortField.sortLabel)
     }
 
     /// 换字段：方向重置到该字段的自然默认（避免「评分按低到高」这种反直觉组合）。
