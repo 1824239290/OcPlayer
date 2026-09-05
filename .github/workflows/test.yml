@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 45
     env:
       # 内核改动未合并上游前，用 fork 上的预读版（tag 对应 fork Release 资产）
-      ERIKA_VERSION: v0.1.7+dolby.2
+      ERIKA_VERSION: v0.1.7+dolby.3
       ERIKA_REPO: 1824239290/Erika
 
     steps:

@@ -6,6 +6,9 @@
 
 ### 改动
 
+- **播放内核升级到 fork 的 `v0.1.7+dolby.3`，修复播放中切换全屏的音画失步**：全屏 Space 切换动画期间 WindowServer 扣住 `CAMetalLayer` 全部 drawable，内核渲染线程的 `nextDrawable()` 会被阻塞（实测 733ms，GPU 本身仅 0.4ms），而音频补泵同在该渲染 tick 上——音频环（原 ~290ms 存货）被抽干，underflow 约 450ms 静音；更糟的是恢复后积压回填让环指针落后时钟 ~0.7s，距离型 stale 判定（250ms）把之后所有时钟重锚永久拒绝，**失步一直持续到手动 seek/暂停**（trace 实测 35,769 次重锚全部被拒）。三处内核修复：Metal surface 启用 `allowsNextDrawableTimeout`（拿不到 drawable 跳帧而非阻塞，含跳过计数与节流诊断）；播放时钟对音频环样本改按设备活性判定（计数推进即重锚，大偏差走既有 snap），积压照常播出、画面短暂定格后重新对齐；CoreAudio 输出环 1.2s 真门控 + worker 预填同步加深，停顿期间音频从积压播出。真机压测：6 次全屏切换 underflow 从 1,140ms 降至 25ms（不可闻）、时钟校正零断流、窗口态渲染 tick 均值 1.35ms。C ABI 无变化，下载哈希 pin、脚本与 CI 钉点同步换版。
+- **`build-macos.sh` 支持 `SKIP_ERIKA_FETCH=1`**（与 `package-macos.sh` / `package-ios.sh` 同一开关，含 shim 头防呆）：此前 build 脚本无条件跑 fetch，会把手动铺进 Vendor 的自编译内核按钉点版本静默覆盖回 Release 产物。
+
 - **播放内核升级到 fork 的 `v0.1.7+dolby.2`，新增杜比视界支持**：内核在 HTTP 预读之上引入杜比视界 RPU 处理——profile 5（单层非兼容）自动回落 FFmpeg 软解并按 RPU 逐帧重映射色彩（libplacebo 同路线），profile 8（HDR10 兼容双层）保持硬解走 HDR10 底层；C ABI 无变化，预读链路不受影响。下载哈希 pin、脚本与 CI 钉点同步换版。
 - **播放信息面板「动态范围」标注杜比视界**：从 Jellyfin/Emby 的流信息（`MediaStreams.videoRangeType`）识别杜比源，杜比片源不再裸报 HDR (PQ)/SDR——输出端实际映射成 SDR 时显示「杜比视界（映射 SDR）」（SDR 屏上放杜比片的最常见场景），真出 HDR 时显示「杜比视界（HDR）」；输出状态来自内核 `get_output_status` 的新封装（`PlaybackOutputEncoding` 中立枚举进 `PlaybackEngine` 协议）。本地文件/手动 URL 拿不到服务端流信息，维持原有文案。
 

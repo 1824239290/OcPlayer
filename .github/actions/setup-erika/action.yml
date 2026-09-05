@@ -2,7 +2,7 @@ name: 'Set up Erika kernel'
 description: 'Resolve Erika fork version, restore binaries from cache, fetch if missing.'
 inputs:
   erika-version:
-    description: 'Erika fork tag, e.g. v0.1.7+dolby.2'
+    description: 'Erika fork tag, e.g. v0.1.7+dolby.3'
     required: true
 outputs:
   version:

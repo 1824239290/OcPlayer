@@ -10,7 +10,7 @@ DERIVED_DATA="$BUILD_DIR/DerivedData"
 # 默认拉 fork 的预读内核：与 Vendor 现有产物同版本，fetch 直接命中缓存，
 # 不会像旧的 latest 那样去上游下载官方内核覆盖本地自编译产物。
 # 内核改动合并上游后，这里与 CI 两个 workflow 一起切回官方 latest。
-export ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+dolby.2}"
+export ERIKA_VERSION="${ERIKA_VERSION:-v0.1.7+dolby.3}"
 export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
 
 usage() {
@@ -49,7 +49,18 @@ if ! xcodebuild -version >/dev/null 2>&1; then
 fi
 
 echo "Checking Erika core ($ERIKA_VERSION)..."
-"$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
+# SKIP_ERIKA_FETCH=1 跳过 fetch,直接用 Vendor 现有产物构建本地自编译内核
+# (与 package-macos.sh / package-ios.sh 同一开关)。fetch 会按 ERIKA_VERSION
+# 重新解包 Release 产物,把手动铺进 Vendor 的自编译内核静默覆盖回发行版。
+if [[ "${SKIP_ERIKA_FETCH:-0}" != "1" ]]; then
+    "$ROOT/Scripts/fetch-erika.sh" "$ERIKA_VERSION"
+else
+    if ! grep -q "ErikaOpenOptions" Packages/ErikaKit/Sources/CErika/include/erika.h; then
+        echo "SKIP_ERIKA_FETCH=1 but shim header looks stale (missing ErikaOpenOptions)" >&2
+        exit 1
+    fi
+    echo "Skipping Erika fetch (SKIP_ERIKA_FETCH=1) — using Vendor as-is."
+fi
 
 # This path is intentionally fixed: every run replaces the previous local build.
 if [[ "$BUILD_DIR" != "$ROOT/.local-build/current" ]]; then
