@@ -222,9 +222,9 @@ final class AppModel {
 
     var isCompact = false
 
-    /// 常规布局侧栏的氛围底声明（Mac/iPad）：有氛围图的页面经
-    /// `windowAmbience(_:)` 出现时声明、离屏时撤回，`AppShellView.sidebar`
-    /// 据此把同源模糊图垫进侧栏列；nil = 侧栏维持系统玻璃。紧凑布局无侧栏。
+    /// 整窗氛围底声明（常规布局 Mac/iPad）：有氛围图的页面经 `windowAmbience(_:)`
+    /// 出现时声明、离屏时撤回，AppShell 据此在导航栈之外垫同一张模糊图——
+    /// macOS 26 只有栈根宿主是全窗的，pushed 页自己够不到侧栏底下。
     var windowAmbience: WindowAmbience?
 
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。

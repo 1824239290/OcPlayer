@@ -42,6 +42,7 @@ struct MoviePilotResourceView: View {
 
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// 懒加载窗口步长：触底一次续载这么多条。
     private static let displayPageSize = 60
@@ -52,61 +53,66 @@ struct MoviePilotResourceView: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                // 1. 媒体悬浮卡片（Hero Glass Banner）
-                heroGlassCard
+        Group {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    // 1. 媒体悬浮卡片（Hero Glass Banner）
+                    heroGlassCard
 
-                // 2. 搜索框与控制条（Search & Controls）
-                searchAndControlBar
+                    // 2. 搜索框与控制条（Search & Controls）
+                    searchAndControlBar
 
-                // 3. 筛选与排序行（Filters & Sort）
-                if !torrents.isEmpty || filters.isActive {
-                    MoviePilotTorrentFilterBar(
-                        filters: Binding(
-                            get: { filters },
-                            set: { filters = $0; recomputeDisplayed() }
-                        ),
-                        options: filterOptions,
-                        sortField: Binding(
-                            get: { sortField },
-                            set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
-                        ),
-                        sortAscending: Binding(
-                            get: { sortAscending },
-                            set: { sortAscending = $0; recomputeDisplayed() }
+                    // 3. 筛选与排序行（Filters & Sort）
+                    if !torrents.isEmpty || filters.isActive {
+                        MoviePilotTorrentFilterBar(
+                            filters: Binding(
+                                get: { filters },
+                                set: { filters = $0; recomputeDisplayed() }
+                            ),
+                            options: filterOptions,
+                            sortField: Binding(
+                                get: { sortField },
+                                set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
+                            ),
+                            sortAscending: Binding(
+                                get: { sortAscending },
+                                set: { sortAscending = $0; recomputeDisplayed() }
+                            )
                         )
-                    )
-                }
+                    }
 
-                // 4. 状态提示条
-                if let notice {
-                    noticeBanner(notice, isError: isNoticeError)
-                }
+                    // 4. 状态提示条
+                    if let notice {
+                        noticeBanner(notice, isError: isNoticeError)
+                    }
 
-                // 5. 资源列表（Torrents List）
-                torrentsSection(displayed: displayed)
+                    // 5. 资源列表（Torrents List）
+                    torrentsSection(displayed: displayed)
+                }
+                .padding(.horizontal, contentLeading)
+                .padding(.top, 16)
+                .padding(.bottom, 48)
             }
-            .padding(.horizontal, contentLeading)
-            .padding(.top, 16)
-            .padding(.bottom, 48)
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle(media.title ?? "资源搜索")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .refreshable { await search().value }
+            .navigationDestination(isPresented: $navigateToDownloads) {
+                MoviePilotDownloadsView()
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
+        // 氛围背景：常规布局（Mac/iPad 分栏）由 AppShell 的整窗层垫声明图——
+        // 页面保持透明，窗口里才是同一张连续的图；紧凑布局没有整窗层，自己垫。
         .background {
-            BackdropAmbienceView(target: (url: media.posterURL, authHeader: nil), scrim: .detail)
-                .drawingGroup()
-                .allowsHitTesting(false)
+            if sizeClass == .compact {
+                BackdropAmbienceView(target: (url: media.posterURL, authHeader: nil), scrim: .detail)
+                    .drawingGroup()
+                    .allowsHitTesting(false)
+            }
         }
-        .navigationTitle(media.title ?? "资源搜索")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        // 常规布局侧栏垫同一张海报当氛围底（无海报时不声明，侧栏维持系统玻璃）。
         .windowAmbience(WindowAmbience(url: media.posterURL, authHeader: nil))
-        .refreshable { await search().value }
-        .navigationDestination(isPresented: $navigateToDownloads) {
-            MoviePilotDownloadsView()
-        }
     }
 
     // MARK: - 头部英雄卡片

@@ -43,6 +43,14 @@ struct AppShellView: View {
         } detail: {
             detailColumn
         }
+        // 整窗氛围底（页面经 windowAmbience(_:) 声明）：垫在整块 split view
+        // **后面**。macOS 26 上只有栈根的背景能铺满全窗（首页轮播就是这么垫到
+        // 侧栏玻璃底下的），pushed 页被裁在详情列里、导航栈宿主自带不透明底，
+        // 页面自己在列内垫什么都连不到侧栏——垫在这里，透明的 pushed 页和
+        // 侧栏玻璃透出的才是同一张连续的图。
+        // 必须走 layout 隔离的 `.background`：氛围图的 fill 溢出若作为 ZStack
+        // 兄弟参与布局，会把 split view 撑出窗口（4e7287e 同款坑）。
+        .background { windowAmbienceLayer }
         .onAppear { app.setCompact(false) }
     }
 
@@ -84,31 +92,6 @@ struct AppShellView: View {
             settingsFooter
         }
         .listStyle(.sidebar)
-        // macOS 26 的侧栏玻璃只对窗外取景：垫在 split view / 窗口容器底下的
-        // 内容都透不出来（scratch 实测）。有氛围声明时摘掉系统玻璃底、把同源
-        // 氛围图直接垫进列内；无氛围页维持系统玻璃原样。
-        .scrollContentBackground(app.windowAmbience == nil ? .visible : .hidden)
-        .background { sidebarAmbience }
-    }
-
-    /// 侧栏列的氛围底：渲染当前声明页（详情 / 资源搜索）同一张模糊图，
-    /// 让整窗沉浸连贯，侧栏不再是一整条空玻璃（尤其下半截）。
-    @ViewBuilder
-    private var sidebarAmbience: some View {
-        ZStack {
-            if let ambience = app.windowAmbience {
-                BackdropAmbienceView(
-                    target: (url: ambience.url, authHeader: ambience.authHeader),
-                    scrim: .sidebar
-                )
-                .drawingGroup()
-                .allowsHitTesting(false)
-                .id(ambience)
-                .transition(.opacity)
-            }
-        }
-        // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
-        .motion(Motion.ambient, value: app.windowAmbience)
     }
 
     #if !os(macOS)
@@ -209,6 +192,25 @@ struct AppShellView: View {
             }
         }
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
+    }
+
+    /// 当前声明页的整窗氛围层；无声明时整体不渲染，各页自己兜底纯色。
+    @ViewBuilder
+    private var windowAmbienceLayer: some View {
+        ZStack {
+            if let ambience = app.windowAmbience {
+                BackdropAmbienceView(
+                    target: (url: ambience.url, authHeader: ambience.authHeader),
+                    scrim: ambience.scrim
+                )
+                .drawingGroup()
+                .allowsHitTesting(false)
+                .id(ambience)
+                .transition(.opacity)
+            }
+        }
+        // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
+        .motion(Motion.ambient, value: app.windowAmbience)
     }
 
     private var settingsFooter: some View {
