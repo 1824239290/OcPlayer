@@ -63,6 +63,15 @@ struct BangumiChapterSection: View {
             .onChange(of: app.detailRefreshGeneration) { _, _ in
                 loadToken += 1
             }
+            .onReceive(NotificationCenter.default.publisher(for: BangumiProgressInvalidation.notificationName)) { note in
+                // 播放结束的自动标记不经过本区块：AppModel 直接 PATCH 后写库再广播失效通知，
+                // 而退出播放器触发的 detailRefreshGeneration 重载通常赶在标记落库之前，
+                // 不监听这条通知，格子会一直停在旧的已看状态（进度页/条目详情页同款机制）。
+                guard let noteSubjectID = (note.object as? NSNumber)?.intValue,
+                      noteSubjectID == linkedSubjectID else { return }
+                let generation = loadGeneration
+                Task { await readLocal(noteSubjectID, generation: generation) }
+            }
             .sheet(isPresented: $showLinkPicker) {
                 BangumiLinkPicker(item: item, season: selectedSeason) { subjectID in
                     BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
