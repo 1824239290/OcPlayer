@@ -619,11 +619,13 @@ struct PlayerScreen: View {
     }
 
     /// 播放、拖动、缓冲和辅助面板都由同一条规则决定 HUD 是否可以自动收起。
+    /// 播放信息面板**不**放进这条规则：它只读、不拦截任何交互、且独立于 HUD
+    /// 挂载（HUD 卸载后照常每秒刷新），收进来的后果是快捷键唤出的 HUD 被钉死，
+    /// 直到关掉面板才恢复计时。
     private var canAutoHideControls: Bool {
         controller.state.state == .playing
             && !controller.state.isBuffering
             && controller.setupError == nil
-            && !showInfoPanel
             && !isImportingSubtitle
             && !isSelectingDanmaku
             && !isVoiceOverEnabled
