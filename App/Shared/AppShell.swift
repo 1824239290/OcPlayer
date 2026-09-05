@@ -205,6 +205,12 @@ struct AppShellView: View {
                 )
                 .drawingGroup()
                 .allowsHitTesting(false)
+                // 顶栏必须由本层盖住：页面自身的 ignoresSafeArea 用法会改变
+                // 层继承到的安全区（详情页 ScrollView 忽略顶部后，层内
+                // BackdropAmbienceView 的内部 ignoresSafeArea 不再生效，
+                // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
+                // 所以在调用点再显式退出一次安全区。
+                .ignoresSafeArea()
                 .id(ambience)
                 .transition(.opacity)
             }
