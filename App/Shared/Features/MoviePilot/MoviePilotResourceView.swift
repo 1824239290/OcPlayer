@@ -2,18 +2,14 @@ import MoviePilotKit
 import SwiftUI
 
 /// 站点资源搜索页（复刻 MP 网页端「资源搜索」逻辑）：
-/// 剧集只用来预填标题和回传 media_in——真正的搜索是**按标题**走
-/// `/search/title`，可选站点；聚合结果自己挑。下载完成后由 MoviePilot
-/// 服务端自动整理入库，这里不做任何入库追踪。
+/// 剧集只用来预填标题和回传 media_in——真正的搜索是**按标题**全站走
+/// `/search/title`；聚合结果自己挑，站点收窄一律走结果筛选条（本地过滤）。
+/// 下载完成后由 MoviePilot 服务端自动整理入库，这里不做任何入库追踪。
 struct MoviePilotResourceView: View {
     /// 媒体上下文：标题预填 + 下载时 media_in 回传。
     let media: MPMediaInfo
 
     @State private var keyword: String
-    @State private var sites: [MPSite] = []
-    @State private var sitesError: String?
-    @State private var selectedSiteIDs: Set<Int> = []
-    @State private var showSitePicker = false
 
     @State private var torrents: [MPTorrent] = []
     /// 筛选+排序后的完整展示序列。**记忆化**：只在结果/筛选/排序变化的赋值点
@@ -72,8 +68,6 @@ struct MoviePilotResourceView: View {
                             set: { filters = $0; recomputeDisplayed() }
                         ),
                         options: filterOptions,
-                        scopeLabel: siteScopeText,
-                        onScopeTap: { showSitePicker = true },
                         sortField: Binding(
                             get: { sortField },
                             set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
@@ -109,11 +103,7 @@ struct MoviePilotResourceView: View {
         #endif
         // 常规布局侧栏垫同一张海报当氛围底（无海报时不声明，侧栏维持系统玻璃）。
         .windowAmbience(WindowAmbience(url: media.posterURL, authHeader: nil))
-        .task { await loadSites() }
         .refreshable { await search().value }
-        .sheet(isPresented: $showSitePicker) {
-            MoviePilotSitePickerSheet(sites: sites, selection: $selectedSiteIDs)
-        }
         .navigationDestination(isPresented: $navigateToDownloads) {
             MoviePilotDownloadsView()
         }
@@ -256,12 +246,6 @@ struct MoviePilotResourceView: View {
         )
     }
 
-    /// 搜索范围胶囊文案：语义是「下次搜索跑哪些站点」（服务端范围），
-    /// 与筛选条里的「站点」分组（结果本地过滤）互不相干。
-    private var siteScopeText: String {
-        selectedSiteIDs.isEmpty ? "搜索范围 · 全部站点" : "搜索范围 · 已选 \(selectedSiteIDs.count) 站"
-    }
-
     // MARK: - 资源列表与空态
 
     @ViewBuilder
@@ -383,17 +367,6 @@ struct MoviePilotResourceView: View {
 
     // MARK: - 动作
 
-    private func loadSites() async {
-        guard sites.isEmpty else { return }
-        do {
-            sites = try await MoviePilotAPIClient.shared.sites()
-            sitesError = nil
-        } catch {
-            // 站点列表拉不到不挡搜索（默认全部站点），给个提示就行。
-            sitesError = "站点列表加载失败（不影响按全部站点搜索）：\((error as? MoviePilotError)?.userMessage ?? "\(error)")"
-        }
-    }
-
     /// 返回搜索任务：`.refreshable` 需要 await 它，下拉刷新的转圈才跟随流式
     /// 结束（原先同步调用即刻返回，转圈瞬间消失而搜索还在跑）。
     @discardableResult
@@ -426,8 +399,7 @@ struct MoviePilotResourceView: View {
                 defer { continuation.finish() }
                 do {
                     try await MoviePilotAPIClient.shared.searchTorrentsByTitleStream(
-                        keyword: trimmed,
-                        sites: selectedSiteIDs.isEmpty ? [] : selectedSiteIDs.sorted()
+                        keyword: trimmed
                     ) { current, progress in
                         continuation.yield(.batch(current, progress))
                     }
@@ -485,78 +457,6 @@ struct MoviePilotResourceView: View {
 private enum SearchStreamEvent: Sendable {
     case batch([MPTorrent], MPSearchProgress)
     case failure(String)
-}
-
-/// 站点多选弹窗：空选 = 全部站点（与 MP 网页端一致的语义）。
-private struct MoviePilotSitePickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let sites: [MPSite]
-    @Binding var selection: Set<Int>
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Button("搜索全部站点") {
-                        selection = []
-                        dismiss()
-                    }
-                } footer: {
-                    Text("不选任何具体站点时，MoviePilot 会在所有启用的站点里搜。")
-                }
-
-                Section("按站点筛选") {
-                    if sites.isEmpty {
-                        Text("站点列表为空或加载失败。")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(sites) { site in
-                            Button {
-                                if selection.contains(site.id) {
-                                    selection.remove(site.id)
-                                } else {
-                                    selection.insert(site.id)
-                                }
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(site.name ?? "站点 \(site.id)")
-                                        if let domain = site.domain {
-                                            Text(domain)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    if !site.isActive {
-                                        Text("已停用")
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                    if selection.contains(site.id) {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(.tint)
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("选择站点")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-        }
-        #if os(macOS)
-        .frame(width: 420, height: 520)
-        #endif
-    }
 }
 
 // MARK: - 种子资源液态玻璃卡片

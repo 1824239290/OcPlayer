@@ -1,19 +1,14 @@
 import SwiftUI
 
 /// 资源筛选排序条（交互复刻 MP 网页端 TorrentFilterBar，液态玻璃质感）：
-/// 左起「搜索范围 → 排序 → 升降序」+ 每组一个下拉弹窗（站点 / 季 / 促销 /
-/// 编码 / 质量 / 分辨率 / 制作组），点开是候选值 chips 流（头部 全选 / 清除，
-/// 可多选）；激活的分组在按钮上记数、tint 玻璃高亮，并在下方以可逐个移除的
-/// chip 汇总。所有筛选经 `filters` binding 落账——父级在 set 侧重算展示序列。
+/// 左起「排序 → 升降序」+ 每组一个下拉弹窗（站点 / 季 / 促销 / 编码 / 质量 /
+/// 分辨率 / 制作组），点开是候选值 chips 流（头部 全选 / 清除，可多选）；
+/// 激活的分组在按钮上记数、tint 玻璃高亮，并在下方以可逐个移除的 chip 汇总。
+/// 所有筛选经 `filters` binding 落账——父级在 set 侧重算展示序列。
 struct MoviePilotTorrentFilterBar: View {
     @Binding var filters: TorrentFilters
     /// 各分组候选值（父级随搜索结果聚合，记忆化传入）。
     let options: TorrentFilterEngine.Options
-
-    /// 搜索范围（站点选择）入口：语义是「下次搜索跑哪些站点」，与结果筛选
-    /// 互不相干；文案与点击交给父级。
-    let scopeLabel: String
-    let onScopeTap: () -> Void
 
     @Binding var sortField: TorrentSortField
     @Binding var sortAscending: Bool
@@ -27,7 +22,6 @@ struct MoviePilotTorrentFilterBar: View {
         VStack(alignment: .leading, spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    scopeButton
                     sortMenu
                     sortDirectionButton
 
@@ -42,25 +36,7 @@ struct MoviePilotTorrentFilterBar: View {
         }
     }
 
-    // MARK: - 排序与搜索范围
-
-    private var scopeButton: some View {
-        Button(action: onScopeTap) {
-            HStack(spacing: 5) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                Text(scopeLabel)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .opacity(0.6)
-            }
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .liquidGlassCapsule()
-        }
-        .buttonStyle(.plain)
-        .help("选择参与搜索的站点（搜索范围，不影响已出结果的筛选）")
-    }
+    // MARK: - 排序
 
     private var sortMenu: some View {
         Menu {
