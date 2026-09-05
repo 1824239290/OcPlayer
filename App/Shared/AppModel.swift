@@ -222,6 +222,11 @@ final class AppModel {
 
     var isCompact = false
 
+    /// 常规布局侧栏的氛围底声明（Mac/iPad）：有氛围图的页面经
+    /// `windowAmbience(_:)` 出现时声明、离屏时撤回，`AppShellView.sidebar`
+    /// 据此把同源模糊图垫进侧栏列；nil = 侧栏维持系统玻璃。紧凑布局无侧栏。
+    var windowAmbience: WindowAmbience?
+
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。
     weak var playback: PlaybackController? {
         didSet {

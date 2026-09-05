@@ -59,6 +59,13 @@ struct DetailView: View {
         ambientBackdropEnabled && shown.backdropImageTag != nil && app.server != nil
     }
 
+    /// 侧栏氛围声明（常规布局侧栏玻璃底下那张图，与页面氛围层同源同开关）。
+    private var sidebarAmbience: WindowAmbience? {
+        guard isAmbientActive else { return nil }
+        let target = shown.imageTarget(app.server, kind: .backdrop, width: 800)
+        return WindowAmbience(url: target.url, authHeader: target.authHeader)
+    }
+
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
@@ -161,6 +168,7 @@ struct DetailView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
         .background(Color.pageBackground.ignoresSafeArea())
+        .windowAmbience(sidebarAmbience)
         .task(id: item.id) { await load() }
         .onChange(of: app.detailRefreshGeneration) { _, _ in
             // 挂住任务：离页 / 换条目时取消，fire-and-forget 不再跑到旧页面上。

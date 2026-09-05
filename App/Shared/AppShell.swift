@@ -84,6 +84,31 @@ struct AppShellView: View {
             settingsFooter
         }
         .listStyle(.sidebar)
+        // macOS 26 的侧栏玻璃只对窗外取景：垫在 split view / 窗口容器底下的
+        // 内容都透不出来（scratch 实测）。有氛围声明时摘掉系统玻璃底、把同源
+        // 氛围图直接垫进列内；无氛围页维持系统玻璃原样。
+        .scrollContentBackground(app.windowAmbience == nil ? .visible : .hidden)
+        .background { sidebarAmbience }
+    }
+
+    /// 侧栏列的氛围底：渲染当前声明页（详情 / 资源搜索）同一张模糊图，
+    /// 让整窗沉浸连贯，侧栏不再是一整条空玻璃（尤其下半截）。
+    @ViewBuilder
+    private var sidebarAmbience: some View {
+        ZStack {
+            if let ambience = app.windowAmbience {
+                BackdropAmbienceView(
+                    target: (url: ambience.url, authHeader: ambience.authHeader),
+                    scrim: .sidebar
+                )
+                .drawingGroup()
+                .allowsHitTesting(false)
+                .id(ambience)
+                .transition(.opacity)
+            }
+        }
+        // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
+        .motion(Motion.ambient, value: app.windowAmbience)
     }
 
     #if !os(macOS)

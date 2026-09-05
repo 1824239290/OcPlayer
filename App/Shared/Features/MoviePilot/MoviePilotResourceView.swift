@@ -80,6 +80,8 @@ struct MoviePilotResourceView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // 常规布局侧栏垫同一张海报当氛围底（无海报时不声明，侧栏维持系统玻璃）。
+        .windowAmbience(WindowAmbience(url: media.posterURL, authHeader: nil))
         .task { await loadSites() }
         .refreshable { await search().value }
         .sheet(isPresented: $showSitePicker) {
