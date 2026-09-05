@@ -67,6 +67,19 @@ struct DetailView: View {
     /// 紧凑端（iPhone）沉浸式横幅高度。
     private var compactBannerHeight: CGFloat { 290 }
 
+    /// 氛围头部与屏幕顶部的间距。内容整体越过顶部安全区（ScrollView
+    /// `ignoresSafeArea(.top)`），iPadOS 26 的导航栏玻璃按钮（侧栏开关 +
+    /// 返回）悬深到 ~76pt、滚动边缘渐进模糊尾部到 ~82pt，64pt 会把海报
+    /// 顶部压进两者——收起侧栏后海报左缘(52pt)正对按钮列尤其明显。
+    /// iOS 抬到 104pt 让海报整张落在模糊带之下；macOS 工具栏浅，维持原深度。
+    private var ambientHeaderTopInset: CGFloat {
+        #if os(iOS)
+        104
+        #else
+        64
+        #endif
+    }
+
     /// 紧凑宽度的播放钮窄一点，和海报/标题一起塞进窄屏不溢出。
     private var playButtonWidth: CGFloat {
         horizontalSizeClass == .compact ? 200 : 228
@@ -580,7 +593,7 @@ struct DetailView: View {
         // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，自己撑满全宽。
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, 64)
+        .padding(.top, ambientHeaderTopInset)
         .padding(.bottom, 28)
     }
 
