@@ -16,6 +16,14 @@ struct MoviePilotResourceView: View {
     @State private var showSitePicker = false
 
     @State private var torrents: [MPTorrent] = []
+    /// 筛选+排序后的完整展示序列。**记忆化**：只在结果/筛选/排序变化的赋值点
+    /// 重算（recomputeDisplayed），不随每次 body 求值重排——关键词输入、进度
+    /// 文案、下载按钮状态这些高频求值不再触发全量过滤+排序。
+    @State private var displayed: [MPTorrent] = []
+    /// 懒加载窗口：一次只物化前 displayLimit 条进 ForEach，触底续载一批。
+    /// 全量结果仍在内存（筛选候选聚合与下载原样回传需要），但视图 diff、
+    /// 卡片状态与滚动簿记只随窗口走，几千条结果不再把页面顶爆。
+    @State private var displayLimit = Self.displayPageSize
     @State private var isSearching = false
     @State private var progressText: String?
     @State private var hasSearched = false
@@ -38,13 +46,15 @@ struct MoviePilotResourceView: View {
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// 懒加载窗口步长：触底一次续载这么多条。
+    private static let displayPageSize = 60
+
     init(media: MPMediaInfo) {
         self.media = media
         _keyword = State(initialValue: media.title ?? "")
     }
 
     var body: some View {
-        let displayed = displayedTorrents
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 // 1. 媒体悬浮卡片（Hero Glass Banner）
@@ -90,7 +100,12 @@ struct MoviePilotResourceView: View {
         .sheet(isPresented: $showTorrentFilter) {
             MoviePilotTorrentFilterSheet(
                 options: TorrentFilterEngine.options(torrents),
-                filters: $filters
+                // 自定义 binding：弹窗里勾选/清除（含「清除全部筛选」）都从
+                // set 侧过一道，落账 filters 的同时重算展示序列。
+                filters: Binding(
+                    get: { filters },
+                    set: { filters = $0; recomputeDisplayed() }
+                )
             )
         }
         .navigationDestination(isPresented: $navigateToDownloads) {
@@ -225,9 +240,10 @@ struct MoviePilotResourceView: View {
         TorrentSortField(rawValue: sortFieldRaw) ?? .defaultOrder
     }
 
-    /// 筛选 + 排序后的展示列表（流式期间也持续应用）。
-    private var displayedTorrents: [MPTorrent] {
-        TorrentFilterEngine.sorted(
+    /// 重算筛选+排序后的展示序列。只在输入变化的赋值点调用：
+    /// 搜索批次落账、筛选弹窗关闭侧的 binding、排序菜单/升降序切换、新搜索清空。
+    private func recomputeDisplayed() {
+        displayed = TorrentFilterEngine.sorted(
             TorrentFilterEngine.filtered(torrents, filters: filters),
             field: sortField,
             ascending: sortAscending
@@ -289,7 +305,7 @@ struct MoviePilotResourceView: View {
             Menu {
                 Picker("排序", selection: Binding(
                     get: { sortField },
-                    set: { sortFieldRaw = $0.rawValue }
+                    set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
                 )) {
                     ForEach(TorrentSortField.allCases, id: \.self) { field in
                         Text(field.label).tag(field)
@@ -310,6 +326,7 @@ struct MoviePilotResourceView: View {
 
             Button {
                 sortAscending.toggle()
+                recomputeDisplayed()
             } label: {
                 Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
                     .font(.caption.weight(.semibold))
@@ -404,15 +421,33 @@ struct MoviePilotResourceView: View {
                 .liquidGlassCard(cornerRadius: 16)
             }
 
-            // 种子卡片流
-            ForEach(displayed) { torrent in
+            // 种子卡片流（懒加载窗口：只物化前 displayLimit 条，触底哨兵续载）
+            let window = displayed.prefix(displayLimit)
+            ForEach(window) { torrent in
                 MoviePilotTorrentGlassCard(
                     torrent: torrent,
                     isAdding: addingDownloadID == torrent.id,
                     onDownload: { addDownload(torrent) }
                 )
             }
+
+            if displayed.count > window.count {
+                lazyLoadFooter(shown: window.count, total: displayed.count)
+            }
         }
+    }
+
+    /// 触底续载：哨兵滚进视野就扩一批窗口；文案同时交代剩余量。
+    /// 反复滚出/滚回会重复触发，min 钳制保证幂等。
+    private func lazyLoadFooter(shown: Int, total: Int) -> some View {
+        Text("已展示 \(shown) / \(total) 条，继续下滑加载更多")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 8)
+            .onAppear {
+                displayLimit = min(displayLimit + Self.displayPageSize, total)
+            }
     }
 
     private func noticeBanner(_ text: String, isError: Bool) -> some View {
@@ -459,6 +494,9 @@ struct MoviePilotResourceView: View {
         progressText = nil
         // 新搜索换一批数据源，旧筛选多半失效，整组重置。
         filters = TorrentFilters()
+        // 展示序列与懒加载窗口一并打回首页大小。
+        displayed = []
+        displayLimit = Self.displayPageSize
         searchTask = Task {
             let (updates, continuation) = AsyncStream.makeStream(
                 of: SearchStreamEvent.self,
@@ -488,6 +526,7 @@ struct MoviePilotResourceView: View {
                 switch update {
                 case .batch(let current, let progress):
                     torrents = current
+                    recomputeDisplayed()
                     progressText = progress.text
                 case .failure(let message):
                     searchError = message
@@ -495,7 +534,7 @@ struct MoviePilotResourceView: View {
             }
             // 消费端退出（被新一代取代/取消）时，把还在跑的旧 SSE 流一并停掉。
             producer.cancel()
-            // 排序交给筛选栏的设置（displayedTorrents 持续应用），终态不再重排。
+            // 展示序列已随每批 recomputeDisplayed 落账，终态不需要再排一次。
             if generation == searchGeneration {
                 isSearching = false
                 progressText = nil
