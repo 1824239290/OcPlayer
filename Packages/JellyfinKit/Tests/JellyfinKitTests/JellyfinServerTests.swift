@@ -518,6 +518,39 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    func testItemsPageWatchStatePassesServerFilters() async throws {
+        // 看过 → IsPlayed；没看过 → IsUnplayed；默认（all / nil）不带 filters。
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(self.queryValues(of: request, name: "filters"), ["IsPlayed"])
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(parentID: "lib-1", watchState: .watched)
+        }
+
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(self.queryValues(of: request, name: "filters"), ["IsUnplayed"])
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(parentID: "lib-1", watchState: .unwatched)
+        }
+
+        try await TestSupport.withMock { request in
+            XCTAssertTrue(self.queryValues(of: request, name: "filters").isEmpty)
+            return MockURLProtocol.ok(
+                #"{"Items":[],"TotalRecordCount":0}"#,
+                for: request.url!
+            )
+        } with: {
+            _ = try await makeServer().itemsPage(parentID: "lib-1")
+        }
+    }
+
     // MARK: - URL 与认证头
 
     func testStreamURLHasNoToken() throws {

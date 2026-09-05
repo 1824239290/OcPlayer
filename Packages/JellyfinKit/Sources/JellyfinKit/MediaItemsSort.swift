@@ -48,3 +48,11 @@ public struct MediaItemsSort: Sendable, Equatable {
         }
     }
 }
+
+/// 观看状态筛选（isPlayed / isUnplayed 服务端过滤；all = 不过滤）。
+/// 这是筛选不是排序——按状态排序只会把条目分成两坨，用户要的是「只看没看过的」。
+public enum MediaItemsWatchState: String, Sendable, Equatable, CaseIterable {
+    case all
+    case watched
+    case unwatched
+}

@@ -30,6 +30,8 @@ struct LibraryView: View {
     /// 动态 key 的 @AppStorage 只能在 init 里注入，存 rawValue 字符串。
     @AppStorage private var sortFieldRaw: String
     @AppStorage private var sortAscending: Bool
+    /// 每库独立记忆的观看状态筛选（全部 / 没看过 / 看过）。
+    @AppStorage private var watchStateRaw: String
 
     init(library: MediaLibrary) {
         self.library = library
@@ -38,6 +40,10 @@ struct LibraryView: View {
             "library.sort.field.\(library.id)"
         )
         _sortAscending = AppStorage(wrappedValue: true, "library.sort.ascending.\(library.id)")
+        _watchStateRaw = AppStorage(
+            wrappedValue: MediaItemsWatchState.all.rawValue,
+            "library.watch.\(library.id)"
+        )
     }
 
     /// 分页数据住在 `AppModel.libraryPages`，不在视图 `@State` 里：
@@ -197,7 +203,7 @@ struct LibraryView: View {
         }
     }
 
-    // MARK: - 排序
+    // MARK: - 排序与筛选
 
     /// 当前生效的排序字段：存档值不在该库候选集里（换了服务器 / 库类型变化）时回落名称。
     private var sortField: MediaItemsSortField {
@@ -208,12 +214,17 @@ struct LibraryView: View {
         MediaItemsSortField.options(for: library.collectionType)
     }
 
+    /// 当前生效的观看状态筛选（all = 不过滤）。
+    private var watchState: MediaItemsWatchState {
+        LibrarySort.resolvedWatchState(rawValue: watchStateRaw)
+    }
+
     /// 右上角排序：系统下拉菜单（与 MoviePilot 首页菜单 / Bangumi 排序同款，
-    /// macOS 26 / iOS 26 由系统渲染成液态玻璃）。字段单选带对勾；字段有方向时
-    /// 菜单里再给一组升序 / 降序。
+    /// macOS 26 / iOS 26 由系统渲染成液态玻璃）。三组单选：排序字段（带对勾）、
+    /// 顺序（字段有方向时才有）、观看状态筛选。
     private var sortToolbarButton: some View {
         Menu {
-            Picker("排序方式", selection: Binding(
+            Picker("排序", selection: Binding(
                 get: { sortField },
                 set: { changeSort($0) }
             )) {
@@ -224,7 +235,7 @@ struct LibraryView: View {
             .pickerStyle(.inline)
 
             if sortField.hasSortDirection {
-                Picker("方向", selection: Binding(
+                Picker("顺序", selection: Binding(
                     get: { sortAscending },
                     set: { setSortDirection($0) }
                 )) {
@@ -233,12 +244,24 @@ struct LibraryView: View {
                 }
                 .pickerStyle(.inline)
             }
+
+            Picker("观看状态", selection: Binding(
+                get: { watchState },
+                set: { changeWatchState($0) }
+            )) {
+                ForEach(MediaItemsWatchState.allCases, id: \.self) { state in
+                    Label(state.watchLabel, systemImage: state.watchIcon).tag(state)
+                }
+            }
+            .pickerStyle(.inline)
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
-        .help("排序方式")
-        .accessibilityLabel("排序方式")
-        .accessibilityValue(sortField.sortLabel)
+        .help("排序与观看状态筛选")
+        .accessibilityLabel("排序与观看状态筛选")
+        .accessibilityValue(
+            watchState == .all ? sortField.sortLabel : "\(sortField.sortLabel)、\(watchState.watchLabel)"
+        )
     }
 
     /// 换字段：方向重置到该字段的自然默认（避免「评分按低到高」这种反直觉组合）。
@@ -246,18 +269,24 @@ struct LibraryView: View {
         guard field != sortField else { return }
         sortFieldRaw = field.rawValue
         sortAscending = field.defaultAscending
-        reloadAfterSortChange()
+        reloadFromFirstPage()
     }
 
     private func setSortDirection(_ ascending: Bool) {
         guard ascending != sortAscending else { return }
         sortAscending = ascending
-        reloadAfterSortChange()
+        reloadFromFirstPage()
     }
 
-    /// 排序变了，旧分页在新顺序下是错序数据：作废缓存从第一页重取。
-    /// `activeLoadID` 会让在途的旧请求落账前自行作废，不会写回错序页。
-    private func reloadAfterSortChange() {
+    private func changeWatchState(_ state: MediaItemsWatchState) {
+        guard state != watchState else { return }
+        watchStateRaw = state.rawValue
+        reloadFromFirstPage()
+    }
+
+    /// 排序或观看状态变了，旧分页在新条件下是错序 / 多余数据：作废缓存从第一页重取。
+    /// `activeLoadID` 会让在途的旧请求落账前自行作废，不会写回过期页。
+    private func reloadFromFirstPage() {
         app.clearLibraryPage(for: library.id)
         Task { await load(reset: true) }
     }
@@ -319,7 +348,8 @@ struct LibraryView: View {
                 recursive: true,
                 startIndex: startIndex,
                 limit: Self.pageSize,
-                sort: MediaItemsSort(field: sortField, ascending: sortAscending)
+                sort: MediaItemsSort(field: sortField, ascending: sortAscending),
+                watchState: watchState
             )
             guard !Task.isCancelled, activeLoadID == loadID else { return }
             var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())

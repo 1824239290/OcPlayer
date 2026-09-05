@@ -97,6 +97,19 @@ final class LibrarySortTests: XCTestCase {
         }
     }
 
+    // MARK: - 观看状态筛选
+
+    func testResolvedWatchStateFallsBackToAll() {
+        XCTAssertEqual(LibrarySort.resolvedWatchState(rawValue: nil), .all)
+        XCTAssertEqual(LibrarySort.resolvedWatchState(rawValue: "nonsense"), .all)
+    }
+
+    func testResolvedWatchStateAcceptsStoredValue() {
+        XCTAssertEqual(LibrarySort.resolvedWatchState(rawValue: "watched"), .watched)
+        XCTAssertEqual(LibrarySort.resolvedWatchState(rawValue: "unwatched"), .unwatched)
+        XCTAssertEqual(LibrarySort.resolvedWatchState(rawValue: "all"), .all)
+    }
+
     // MARK: - rawValue 稳定性（持久化键）
 
     func testRawValuesAreStable() {
