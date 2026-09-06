@@ -19,4 +19,11 @@ struct ErikaSmokeTests {
         #expect(stats.decoded_video_frames == 0)
         #expect(stats.render_failures == 0)
     }
+
+    @Test("setOutputHeadroom 接受合法区间值（macOS Metal 未实现运行时更新也不应报错）")
+    func setOutputHeadroom() throws {
+        let presenter = try ErikaPresenter()
+        try presenter.setOutputHeadroom(8.0)
+        try presenter.setOutputHeadroom(1.0, known: false)
+    }
 }

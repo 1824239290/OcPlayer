@@ -258,6 +258,19 @@ struct PlayerScreen: View {
             for: NSApplication.didResignActiveNotification)) { _ in
             controller.endHoldFastForward()
         }
+        // 显示器 EDR headroom 探针：换屏 / 显示配置变化时重报。内核 macOS 端
+        // 不探测屏幕，HDR 输出档位全靠宿主喂（创建 config + 运行时推送）。
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSWindow.didChangeScreenNotification)) { notification in
+            guard let window = notification.object as? NSWindow,
+                  window.isKeyWindow || window.isMainWindow
+            else { return }
+            reportDisplayEDRHeadroom()
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didChangeScreenParametersNotification)) { _ in
+            reportDisplayEDRHeadroom()
+        }
         #endif
         .onAppear {
             PlaybackLog.append("PlayerScreen onAppear request=\(request?.title ?? "nil")")
@@ -266,6 +279,7 @@ struct PlayerScreen: View {
             PlayerWindowFitter.saveOriginalIfNeeded()
             installKeyMonitor()
             isFullscreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) ?? false
+            reportDisplayEDRHeadroom()
             #endif
         }
         // task(id:)：覆盖层已开着时换片（onOpenURL / 播另一集）也能重新打开
@@ -705,6 +719,13 @@ struct PlayerScreen: View {
     // MARK: - 键盘（macOS）
 
     #if os(macOS)
+    /// 把当前屏的 EDR headroom 报给控制器。屏幕读数拿不到就静默跳过
+    /// （引擎创建 config 另有一次兜底查询，见 PlaybackDisplayMetrics）。
+    private func reportDisplayEDRHeadroom() {
+        guard let headroom = PlaybackDisplayMetrics.currentScreenEDRHeadroom() else { return }
+        controller.updateDisplayEDRHeadroom(PlaybackDisplayMetrics.sanitized(headroom))
+    }
+
     /// 安装全局本地键盘监听。`NSEvent.addLocalMonitorForEvents` 在主线程拦截 App 的按键，
     /// 不依赖视图焦点——播放器是覆盖层，`.onKeyPress` 抢不到焦点所以不响。
     /// 同时监听 keyUp：右箭头的「长按 2x / 轻点快进」要靠 keyUp 与 autorepeat 分辨。

@@ -34,6 +34,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// `activeRequest`, this survives `stopPlayback()` until AppModel reports
     /// the final position.
     var reportableRequestID: PlaybackRequest.ID?
+    /// 播放器窗口所在屏最近的 EDR headroom 报告（macOS 探针写）。引擎懒创建
+    /// 时探针可能还没挂上/已经报过，这里记最近值，创建后补推一次，保证
+    /// 换片重建引擎不丢显示状态。
+    private var lastDisplayEDRHeadroom: Double?
 
     var rate: Double = PlaybackPreferences.rate {
         didSet {
@@ -254,6 +258,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
             eventTask = state.start(consuming: engine)
             self.engine = engine
             setupError = nil
+            // 创建 config 里的 headroom 取自工厂时刻的屏幕查询；探针若已报过
+            // 更新的值（或工厂查询没拿到屏），创建后立即补推对齐。
+            if let headroom = lastDisplayEDRHeadroom {
+                engine.updateDisplayEDRHeadroom(headroom)
+            }
             PlaybackLog.append(
                 "PlaybackController prepareEngine 成功 kernel=\(engine.descriptor.id) "
                     + "danmaku=\(usesOverlayDanmakuRenderer ? "overlay" : "kernel")"
@@ -264,6 +273,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("PlaybackController prepareEngine 失败 error=\(error)")
             return nil
         }
+    }
+
+    /// macOS 显示器探针入口：播放器出现 / 换屏 / 显示配置变化时调用。
+    /// 记住最近值（引擎重建时补推），引擎在就转推内核。
+    func updateDisplayEDRHeadroom(_ headroom: Double) {
+        lastDisplayEDRHeadroom = headroom
+        engine?.updateDisplayEDRHeadroom(headroom)
     }
 
     // MARK: - 打开源

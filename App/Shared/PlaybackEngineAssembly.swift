@@ -17,6 +17,11 @@ import PlaybackKit
 enum PlaybackEngineAssembly {
     @MainActor
     static func registerAll() {
-        PlaybackEngineRegistry.register(ErikaEngine.descriptor) { try ErikaEngine() }
+        // 工厂闭包每次播放的引擎懒创建时才跑：此刻查询窗口所在屏的 EDR headroom
+        // 进创建 config。内核 macOS 端不探测屏幕，创建值是目前唯一生效的 HDR
+        // 档位通道（播放中换屏经 updateDisplayEDRHeadroom 推送，内核补齐后生效）。
+        PlaybackEngineRegistry.register(ErikaEngine.descriptor) {
+            try ErikaEngine(edrHeadroom: PlaybackDisplayMetrics.headroomForEngineCreation())
+        }
     }
 }

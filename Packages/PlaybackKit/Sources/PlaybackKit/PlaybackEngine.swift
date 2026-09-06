@@ -52,6 +52,12 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认值恒 `.unknown`。
     var latestOutputEncoding: PlaybackOutputEncoding { get }
 
+    /// 宿主把显示器当前 EDR headroom（SDR 参考白的倍数：SDR 屏 ≈ 1.0，
+    /// 内置 XDR ≈ 8）推给内核。不感知显示器的内核靠它决定 HDR 源是否真出
+    /// EDR；换屏 / 显示配置变化时宿主要重推。非抛——提示性调用，失败不打断播放。
+    /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认空实现。
+    func updateDisplayEDRHeadroom(_ headroom: Double)
+
     /// 首帧是否已经出画（播放 loading 覆盖层撤掉的判据）。
     ///
     /// ⚠️ **必须是协议要求，不能只放在扩展里**：调用点持有的是 `any PlaybackEngine`，
@@ -134,6 +140,10 @@ public extension PlaybackEngine {
 
     /// 不暴露输出编码概念的内核：恒 `.unknown`，动态范围标注退回纯源侧判定。
     var latestOutputEncoding: PlaybackOutputEncoding { .unknown }
+
+    /// 不接收显示器 headroom 更新的内核：空操作。headroom 只由创建参数决定
+    /// （或内核自己探测显示器）。
+    func updateDisplayEDRHeadroom(_ headroom: Double) {}
 
     /// 首帧是否已经出画。播放 loading 覆盖层撤掉的判据——
     /// 内核报了 ready 不代表屏幕上有东西，必须等真正渲染过一帧，

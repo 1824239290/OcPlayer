@@ -509,6 +509,20 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         try withLock { try presenter.setVolume(volume) }
     }
 
+    /// 宿主推送的显示器 EDR headroom（见 PlaybackEngine 协议注释）。钳到内核
+    /// capi 接受区间；open 在飞时丢弃（与其它控制调用同一契约）；失败只记日志
+    /// 不打断播放——提示性调用，内核侧（如 macOS Metal）没实现时静默无效果。
+    public func updateDisplayEDRHeadroom(_ headroom: Double) {
+        if dropControlDuringOpen("updateDisplayEDRHeadroom") { return }
+        let clamped = Float(min(max(headroom, 1.0), 10_000))
+        do {
+            try withLock { try presenter.setOutputHeadroom(clamped) }
+            PlaybackLog.append(String(format: "displayEDRHeadroom → %.2f", clamped))
+        } catch {
+            PlaybackLog.append("updateDisplayEDRHeadroom 失败 error=\(error)")
+        }
+    }
+
     public func stats() throws -> ErikaPresenterStats {
         if dropControlDuringOpen("stats") { return ErikaPresenterStats() }
         return try withLock { try presenter.stats() }

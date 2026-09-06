@@ -167,6 +167,14 @@ public final class ErikaPresenter {
         return status
     }
 
+    /// 推送显示器 EDR headroom（SDR 参考白的倍数）。`known: false` 表示宿主
+    /// 不知道显示器能力，内核回落默认。注意 macOS Metal 后端当前未实现运行时
+    /// 更新（调用成功但无效），headroom 实际生效点在创建 config 的 `edr_headroom`；
+    /// 内核侧补齐 `set_output_headroom` 后本调用即生效。
+    public func setOutputHeadroom(_ headroom: Float, known: Bool = true) throws {
+        try ErikaError.check(erika_presenter_set_output_headroom(handle, headroom, known))
+    }
+
     /// 离屏截当前合成帧（视频 + 字幕 + 弹幕），RGBA8。没有可用帧时内核会报错。
     /// 后续「截图」功能直接用它；测试里也用它证明画面真的解出来了。
     public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
