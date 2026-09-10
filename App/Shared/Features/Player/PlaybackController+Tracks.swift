@@ -172,18 +172,9 @@ extension PlaybackController {
         try? engine?.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
     }
 
+    /// 实例路径：采当前偏好快照，走与 open 队列闭包同一份映射（`applyDanmakuPrefs`）。
     func applyDanmakuPreferences(to engine: any PlaybackEngine) throws {
-        var config = try engine.danmakuConfig()
-        config.enabled = danmakuEnabled
-        config.opacity = Float(danmakuOpacity)
-        config.displayArea = Float(danmakuDisplayArea)
-        config.blockTop = danmakuBlockTop
-        config.blockBottom = danmakuBlockBottom
-        config.blockScroll = danmakuBlockScroll
-        config.mergeDuplicates = danmakuMergeDuplicates
-        config.allowStacking = danmakuAllowStacking
-        try engine.setDanmakuConfig(config)
-        try engine.setDanmakuGlobalOffset(.seconds(danmakuGlobalOffsetSeconds))
+        try Self.applyDanmakuPrefs(danmakuPrefsSnapshot(), to: engine)
     }
 
     func updateDanmakuConfig(_ update: (inout DanmakuConfig) -> Void) {

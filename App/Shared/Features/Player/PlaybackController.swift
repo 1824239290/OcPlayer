@@ -555,16 +555,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let volumeNow = muted ? 0.0 : volume
         let rateNow = rate
         let scaleNow = subtitleScale
-        let danmakuPrefs = DanmakuPrefsSnapshot(
-            enabled: danmakuEnabled,
-            opacity: danmakuOpacity,
-            displayArea: danmakuDisplayArea,
-            blockTop: danmakuBlockTop,
-            blockBottom: danmakuBlockBottom,
-            blockScroll: danmakuBlockScroll,
-            mergeDuplicates: danmakuMergeDuplicates,
-            allowStacking: danmakuAllowStacking,
-            globalOffsetSeconds: danmakuGlobalOffsetSeconds)
+        let danmakuPrefs = danmakuPrefsSnapshot()
         let engineID = ObjectIdentifier(engine)
         Self.engineOpenQueue.async { [weak self] in
             var openError: Error?
@@ -738,7 +729,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     /// 弹幕偏好快照（主线程采集，open 队列闭包里应用到引擎）。
-    private struct DanmakuPrefsSnapshot {
+    /// 这是**唯一的**偏好→引擎映射；实例路径（`applyDanmakuPreferences`）
+    /// 也走它，不再各写一份字段对应表。
+    struct DanmakuPrefsSnapshot {
         var enabled: Bool
         var opacity: Double
         var displayArea: Double
@@ -750,8 +743,22 @@ final class PlaybackController: DanmakuPlaybackHosting {
         var globalOffsetSeconds: Double
     }
 
-    /// 队列闭包内用：把主线程采集的弹幕偏好应用到引擎（与 applyDanmakuPreferences 同语义）。
-    private static func applyDanmakuPrefs(_ prefs: DanmakuPrefsSnapshot, to engine: any PlaybackEngine) throws {
+    /// 主线程采集当前偏好为快照。
+    func danmakuPrefsSnapshot() -> DanmakuPrefsSnapshot {
+        DanmakuPrefsSnapshot(
+            enabled: danmakuEnabled,
+            opacity: danmakuOpacity,
+            displayArea: danmakuDisplayArea,
+            blockTop: danmakuBlockTop,
+            blockBottom: danmakuBlockBottom,
+            blockScroll: danmakuBlockScroll,
+            mergeDuplicates: danmakuMergeDuplicates,
+            allowStacking: danmakuAllowStacking,
+            globalOffsetSeconds: danmakuGlobalOffsetSeconds)
+    }
+
+    /// 弹幕偏好 → 引擎的唯一映射（open 队列闭包与实例路径共用）。
+    static func applyDanmakuPrefs(_ prefs: DanmakuPrefsSnapshot, to engine: any PlaybackEngine) throws {
         var config = try engine.danmakuConfig()
         config.enabled = prefs.enabled
         config.opacity = Float(prefs.opacity)
