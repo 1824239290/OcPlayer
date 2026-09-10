@@ -345,11 +345,18 @@ struct PlayerScreen: View {
                 PlayerWindowFitter.fit(videoWidth: params.width, videoHeight: params.height)
             }
         }
+        // 光标跟 HUD 同步：自动隐藏时藏起，鼠标一动系统自动还回。
+        // 不用 NSCursor.hide()/unhide() 配平——漏一次 unhide 光标就永久没了。
+        .onChange(of: hudVisibility.isVisible, initial: true) { _, visible in
+            syncCursorWithHUD(visible: visible)
+        }
         .onDisappear {
             playerLog.info("PlayerScreen onDisappear")
             PlaybackLog.append("PlayerScreen onDisappear")
             PlayerWindowFitter.restore()
             uninstallKeyMonitor()
+            // 退出播放器无条件还回光标：避免在「隐藏直到移动」状态下关掉覆盖层。
+            NSCursor.unhide()
         }
         #endif
     }
@@ -644,6 +651,20 @@ struct PlayerScreen: View {
             && !isSelectingDanmaku
             && !isVoiceOverEnabled
     }
+
+    #if os(macOS)
+    /// 光标与 HUD 显隐对齐：HUD 藏起时交给系统「隐藏到下次鼠标移动」，
+    /// 鼠标一动自动恢复；HUD 唤出 / 退出播放器时强制 unhide 兜底。
+    /// 暂停 / 缓冲 / VoiceOver 时 HUD 不走自动隐藏（见 `canAutoHideControls`），
+    /// 光标因此保持可见。
+    private func syncCursorWithHUD(visible: Bool) {
+        if visible {
+            NSCursor.unhide()
+        } else {
+            NSCursor.setHiddenUntilMouseMoves(true)
+        }
+    }
+    #endif
 
     private func closePlayer() {
         playerLog.info("closePlayer（ESC / ×）")
