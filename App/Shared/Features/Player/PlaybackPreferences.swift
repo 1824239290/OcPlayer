@@ -16,7 +16,7 @@ enum PlaybackPreferences {
     private static let danmakuMergeDuplicatesKey = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
     private static let danmakuAllowStackingKey = "dev.jumusu.ocplayer.danmaku.allowStacking"
     private static let danmakuFontSizeKey = "dev.jumusu.ocplayer.danmaku.fontSize"
-    private static let danmakuDiagnosticsKey = "dev.jumusu.ocplayer.danmaku.diagnostics"
+    private static let danmakuDiagnosticsKey = SettingsKeys.danmakuDiagnostics
 
     static var rate: Double {
         get { storedDouble(forKey: rateKey, range: 0.5...2.0, default: 1.0) }
@@ -88,8 +88,8 @@ enum PlaybackPreferences {
     /// 本 key 已不被读取；保留是为了将来内核修复后恢复「默认内核弹幕、可切 overlay」，
     /// 用户旧选择仍在。恢复时记得同步设置页开关与相关测试。
     static var danmakuUseOverlayRenderer: Bool {
-        get { storedBool(forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer", default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.danmaku.useOverlayRenderer") }
+        get { storedBool(forKey: SettingsKeys.danmakuUseOverlayRenderer, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuUseOverlayRenderer) }
     }
 
     /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
@@ -98,10 +98,10 @@ enum PlaybackPreferences {
     static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
     static var httpReadAheadMiB: Int {
         get {
-            let stored = UserDefaults.standard.integer(forKey: "dev.jumusu.ocplayer.playback.httpReadAheadMiB")
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpReadAheadMiB)
             return readAheadOptionsMiB.contains(stored) ? stored : 0
         }
-        set { UserDefaults.standard.set(newValue, forKey: "dev.jumusu.ocplayer.playback.httpReadAheadMiB") }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.httpReadAheadMiB) }
     }
 
     /// 当前预读偏好换算成字节（0 = 内核默认），供 PlaybackSource 直接使用。

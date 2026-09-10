@@ -170,43 +170,21 @@ public actor BangumiAPIClient {
 
     // MARK: - 请求
 
-    /// 重试退避：指数基础（1s/2s/…）乘 0.5~1.5 抖动，避免多端同拍重试放大
-    /// 服务端压力；429 且服务器给了 Retry-After（秒）时以其为准，封顶 60s
-    /// 防止异常大数把调用挂死。
-    static func backoffDelay(attempt: Int, after error: (any Error)?) -> UInt64 {
-        let base = pow(2.0, Double(max(0, attempt - 1)))
-        var seconds = base * Double.random(in: 0.5...1.5)
-        if let error,
-           case .rateLimited(let retryAfter) = error as? BangumiError,
-           let after = retryAfter, after > 0 {
-            seconds = min(after, 60)
-        }
-        return UInt64((seconds * 1_000_000_000).rounded())
-    }
+    /// 重试策略：3 次尝试、指数退避带抖动、429 的 Retry-After 优先（封顶 60s）。
+    /// 传输与计时日志由共享执行器（DiagnosticsKit.HTTPClient）负责；
+    /// 这里只留 Bangumi 自己的语义：会话选择、401 代次守卫、状态码分类。
+    private static let requestRetryPolicy = RetryPolicy(attempts: 3)
 
     public func request(
         url: URL, method: String, body: BangumiJSONValue? = nil, auth: BangumiAuthMode = .auto
     ) async throws -> Data {
-        let maxRetries = 2
-        var lastError: Error?
-
-        for attempt in 0...maxRetries {
-            if attempt > 0 {
-                // 退避带抖动 + 429 的 Retry-After 优先，见 backoffDelay。
-                let delay = Self.backoffDelay(attempt: attempt, after: lastError)
-                try await Task.sleep(nanoseconds: delay)
-                BangumiNetworkLog.logger.warning(
-                    "重试 \(method) \(url.absoluteString) (尝试 \(attempt + 1)/\(maxRetries + 1))")
-            }
-
-            let start = ContinuousClock.now
+        try await Self.requestRetryPolicy.run {
             var authed: Bool
             switch auth {
             case .auto: authed = isAuthenticated()
             case .required: authed = true
             case .disabled: authed = false
             }
-            BangumiNetworkLog.requestStarted(BangumiNetworkLog.logPath(for: url))
 
             let requestSession: RequestSession
             do {
@@ -216,59 +194,38 @@ public actor BangumiAPIClient {
                 throw BangumiError.requireLogin
             }
 
-            var request = URLRequest(url: url)
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpMethod = method
+            var spec = HTTPRequestSpec(url: url, method: method)
+            spec.headers["Content-Type"] = "application/json"
             if let body {
-                request.httpBody = try JSONEncoder().encode(body)
+                spec.body = try JSONEncoder().encode(body)
             }
 
-            let data: Data
-            let response: URLResponse
+            let exchange: HTTPExchange
             do {
-                (data, response) = try await requestSession.session.data(for: request)
-            } catch let error as NSError where error.domain == NSURLErrorDomain {
-                let duration = start.duration(to: .now)
-                BangumiNetworkLog.requestFailed(
-                    BangumiNetworkLog.logPath(for: url), error: error,
-                    duration: duration.timeInterval)
-                let err = BangumiError(networkError: error)
-                if err.isRetryable && attempt < maxRetries {
-                    lastError = err
-                    continue
+                exchange = try await HTTPClient(
+                    session: requestSession.session, category: "Bangumi"
+                ).exchange(spec)
+            } catch let transport as HTTPTransportError {
+                switch transport {
+                case .url(let urlError):
+                    throw BangumiError(networkError: urlError as NSError)
+                case .nonHTTP:
+                    throw BangumiError(message: "api response nil")
+                case .other(let description):
+                    throw BangumiError(request: description)
+                case .status(let code):
+                    // exchange 不会为状态码抛 .status（只是日志记号）；防御兜底。
+                    throw BangumiError(code: code, response: "", requestID: nil)
                 }
-                throw err
-            } catch {
-                let duration = start.duration(to: .now)
-                BangumiNetworkLog.requestFailed(
-                    BangumiNetworkLog.logPath(for: url), error: error,
-                    duration: duration.timeInterval)
-                throw BangumiError(request: "\(error)")
             }
 
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw BangumiError(message: "api response nil")
-            }
-            let duration = start.duration(to: .now)
+            let httpResponse = exchange.response
             let requestID = httpResponse.allHeaderFields["x-request-id"] as? String
 
             if httpResponse.statusCode < 400 {
-                BangumiNetworkLog.requestSucceeded(
-                    BangumiNetworkLog.logPath(for: url), duration: duration.timeInterval)
-                return data
+                return exchange.data
             } else if httpResponse.statusCode == 429 {
-                // Retry-After 只认秒数写法（HTTP-date 少见且解析收益低），没给就 nil。
-                let retryAfter = httpResponse.value(forHTTPHeaderField: "Retry-After")
-                    .flatMap { Double($0) }
-                let err = BangumiError.rateLimited(retryAfter: retryAfter)
-                BangumiNetworkLog.requestFailed(
-                    BangumiNetworkLog.logPath(for: url), error: err,
-                    duration: duration.timeInterval)
-                if attempt < maxRetries {
-                    lastError = err
-                    continue
-                }
-                throw err
+                throw BangumiError.rateLimited(retryAfter: exchange.retryAfter)
             } else if httpResponse.statusCode == 401 {
                 if let requestAuthGeneration = requestSession.credentialGeneration {
                     guard requestAuthGeneration == authGeneration else {
@@ -280,22 +237,20 @@ public actor BangumiAPIClient {
             } else if httpResponse.statusCode == 403 {
                 throw BangumiError(notice: "请求被拒绝，请检查权限")
             } else {
-                let errorText = String(data: data, encoding: .utf8) ?? ""
-                let err = BangumiError(
-                    code: httpResponse.statusCode, response: errorText, requestID: requestID)
-                BangumiNetworkLog.requestFailed(
-                    BangumiNetworkLog.logPath(for: url), error: err,
-                    duration: duration.timeInterval)
-                if err.isRetryable && attempt < maxRetries {
-                    lastError = err
-                    continue
-                }
-                throw err
+                throw BangumiError(
+                    code: httpResponse.statusCode,
+                    response: exchange.bodyText,
+                    requestID: requestID)
             }
+        } shouldRetry: { error in
+            (error as? BangumiError)?.isRetryable ?? false
+        } retryAfterProvider: { error in
+            if case .rateLimited(let retryAfter) = error as? BangumiError { return retryAfter }
+            return nil
+        } onRetry: { attempt, _ in
+            BangumiNetworkLog.logger.warning(
+                "重试 \(method) \(url.absoluteString) (尝试 \(attempt + 1)/\(Self.requestRetryPolicy.attempts))")
         }
-
-        if let lastError { throw lastError }
-        throw BangumiError(request: "Request failed without an error")
     }
 
     // MARK: - 会话

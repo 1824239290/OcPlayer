@@ -24,7 +24,7 @@ struct DetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     /// 海报氛围背景开关（默认开）：与设置页「界面」分区同一 key。
-    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop")
+    @AppStorage(SettingsKeys.ambientBackdrop)
     private var ambientBackdropEnabled = true
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。

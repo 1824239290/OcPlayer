@@ -27,16 +27,16 @@ struct SettingsView: View {
     /// 预读档位的选中值：直接绑 UserDefaults 的原始 key（@AppStorage 可观察，
     /// 别处改了 Picker 也会刷新）。非法值显示为 0（与 PlaybackPreferences 的
     /// 读取校验一致）；Picker 只写合法档位。
-    @AppStorage("dev.jumusu.ocplayer.playback.httpReadAheadMiB") private var storedReadAheadMiB = 0
+    @AppStorage(SettingsKeys.httpReadAheadMiB) private var storedReadAheadMiB = 0
     private var readAheadMiB: Int {
         PlaybackPreferences.readAheadOptionsMiB.contains(storedReadAheadMiB) ? storedReadAheadMiB : 0
     }
     /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
     /// 同一 key，@AppStorage 双向可观察，改了立即生效。
-    @AppStorage("dev.jumusu.ocplayer.danmaku.diagnostics") private var danmakuDiagnosticsEnabled = false
+    @AppStorage(SettingsKeys.danmakuDiagnostics) private var danmakuDiagnosticsEnabled = false
     /// 海报氛围背景开关（默认开）：DetailView / AmbientBackdropCarousel 读同一 key，
     /// 改了立即生效。
-    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop") private var ambientBackdropEnabled = true
+    @AppStorage(SettingsKeys.ambientBackdrop) private var ambientBackdropEnabled = true
 
     var body: some View {
         Form {

@@ -10,7 +10,7 @@ struct AmbientBackdropCarousel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// 海报氛围背景开关：与设置页 / DetailView 同一 key。关时整体不渲染、
     /// 不发起随机查询（task id 含开关状态，切回开时重新拉池子）。
-    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop")
+    @AppStorage(SettingsKeys.ambientBackdrop)
     private var ambientBackdropEnabled = true
 
     /// 池子大小 × 换片间隔 ≈ 一轮 96s：够「随机感」也不浪费带宽。

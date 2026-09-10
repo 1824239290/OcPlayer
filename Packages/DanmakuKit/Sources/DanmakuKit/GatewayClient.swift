@@ -263,70 +263,68 @@ public struct DanmakuGatewayClient: Sendable {
         method: String,
         body: Data?
     ) async throws -> GatewayResult<T> {
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-Key")
-        request.setValue(configuration.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let body { request.httpBody = body }
+        var spec = HTTPRequestSpec(url: url, method: method)
+        spec.headers = [
+            "X-API-Key": configuration.apiKey,
+            "User-Agent": configuration.userAgent,
+            "Content-Type": "application/json",
+        ]
+        spec.body = body
 
         let logPath = url.path
-        DanmakuNetworkLog.requestStarted(logPath)
+        // 传输与计时日志走共享执行器（DiagnosticsKit.HTTPClient）；这里只留
+        // 网关自己的语义：业务基座判定、401/429 映射、缓存命中日志。
         let start = Date()
-
+        let exchange: HTTPExchange
         do {
-            let (data, response) = try await session.data(for: request)
-            let http = response as? HTTPURLResponse
-            let status = http?.statusCode ?? 0
-            let cache = http?.value(forHTTPHeaderField: "X-Gateway-Cache")
-            let duration = Date().timeIntervalSince(start)
-
-            switch status {
-            case 200..<300:
-                // 单遍解码：match/search 的 T 自带基座字段，解码后直接判 success，
-                // 不再先整包 decode(ResponseBase) 把数 MB 的 comments 解两遍。
-                // T 解码失败时回退基座判定——业务错误载荷（success=false）缺业务
-                // 字段，T 必然解失败，靠这一步保留 businessError 语义。
-                do {
-                    let payload = try JSONDecoder().decode(T.self, from: data)
-                    if let base = payload as? GatewayBaseChecking, !base.success {
-                        let error = DandanplayError.businessError(
-                            code: base.errorCode ?? -1, message: base.errorMessage)
-                        DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
-                        throw error
-                    }
-                    DanmakuNetworkLog.requestSucceeded(logPath, cache: cache, duration: duration)
-                    return GatewayResult(payload: payload, cacheStatus: cache)
-                } catch let error as DandanplayError {
-                    throw error
-                } catch {
-                    if let base = try? JSONDecoder().decode(ResponseBase.self, from: data), !base.success {
-                        let businessError = DandanplayError.businessError(
-                            code: base.errorCode ?? -1, message: base.errorMessage)
-                        DanmakuNetworkLog.requestFailed(logPath, error: businessError, duration: duration)
-                        throw businessError
-                    }
-                    DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
-                    throw DandanplayError.decodingFailed("\(error)")
-                }
-            case 401:
-                DanmakuNetworkLog.requestFailed(logPath, error: DandanplayError.unauthorized, duration: duration)
-                throw DandanplayError.unauthorized
-            case 429:
-                DanmakuNetworkLog.requestFailed(logPath, error: DandanplayError.rateLimited, duration: duration)
-                throw DandanplayError.rateLimited
-            default:
-                DanmakuNetworkLog.requestFailed(logPath, error: DandanplayError.httpStatus(status), duration: duration)
-                throw DandanplayError.httpStatus(status)
+            exchange = try await HTTPClient(session: session, category: "Danmaku").exchange(spec)
+        } catch let transport as HTTPTransportError {
+            switch transport {
+            case .url(let urlError):
+                throw DandanplayError.network(urlError)
+            case .nonHTTP, .status:
+                throw DandanplayError.decodingFailed("非 HTTP 响应")
+            case .other(let description):
+                throw DandanplayError.decodingFailed(description)
             }
-        } catch let error as DandanplayError {
-            throw error
-        } catch let error as URLError {
-            DanmakuNetworkLog.requestFailed(logPath, error: error, duration: Date().timeIntervalSince(start))
-            throw DandanplayError.network(error)
-        } catch {
-            DanmakuNetworkLog.requestFailed(logPath, error: error, duration: Date().timeIntervalSince(start))
-            throw DandanplayError.decodingFailed("\(error)")
+        }
+
+        let duration = Date().timeIntervalSince(start)
+        let cache = exchange.response.value(forHTTPHeaderField: "X-Gateway-Cache")
+        switch exchange.statusCode {
+        case 200..<300:
+            // 单遍解码：match/search 的 T 自带基座字段，解码后直接判 success，
+            // 不再先整包 decode(ResponseBase) 把数 MB 的 comments 解两遍。
+            // T 解码失败时回退基座判定——业务错误载荷（success=false）缺业务
+            // 字段，T 必然解失败，靠这一步保留 businessError 语义。
+            do {
+                let payload = try JSONDecoder().decode(T.self, from: exchange.data)
+                if let base = payload as? GatewayBaseChecking, !base.success {
+                    let error = DandanplayError.businessError(
+                        code: base.errorCode ?? -1, message: base.errorMessage)
+                    DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
+                    throw error
+                }
+                DanmakuNetworkLog.requestSucceeded(logPath, cache: cache, duration: duration)
+                return GatewayResult(payload: payload, cacheStatus: cache)
+            } catch let error as DandanplayError {
+                throw error
+            } catch {
+                if let base = try? JSONDecoder().decode(ResponseBase.self, from: exchange.data), !base.success {
+                    let businessError = DandanplayError.businessError(
+                        code: base.errorCode ?? -1, message: base.errorMessage)
+                    DanmakuNetworkLog.requestFailed(logPath, error: businessError, duration: duration)
+                    throw businessError
+                }
+                DanmakuNetworkLog.requestFailed(logPath, error: error, duration: duration)
+                throw DandanplayError.decodingFailed("\(error)")
+            }
+        case 401:
+            throw DandanplayError.unauthorized
+        case 429:
+            throw DandanplayError.rateLimited
+        default:
+            throw DandanplayError.httpStatus(exchange.statusCode)
         }
     }
 }

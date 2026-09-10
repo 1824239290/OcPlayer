@@ -297,45 +297,36 @@ public actor MoviePilotAPIClient {
     }
 
     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。
+    /// 传输 + 计时日志走共享执行器（DiagnosticsKit.HTTPClient），URL 拼装留在
+    /// `makeURLRequest`（MoviePilot 的 path 规范化是定制逻辑）。
     private func sendOnce(_ request: MPRequest, token: String?) async throws -> Data {
         let urlRequest = try makeURLRequest(request, token: token)
-        let url = urlRequest.url
 
-        let path = MoviePilotNetworkLog.logPath(for: url)
-        MoviePilotNetworkLog.requestStarted(path)
-        let start = ContinuousClock.now
-
-        let data: Data
-        let response: URLResponse
+        let exchange: HTTPExchange
         do {
-            (data, response) = try await session.data(for: urlRequest)
-        } catch let error as NSError where error.domain == NSURLErrorDomain {
-            let duration = start.duration(to: .now).timeInterval
-            MoviePilotNetworkLog.requestFailed(path, error: error, duration: duration)
-            throw MoviePilotError(networkError: error)
-        } catch {
-            let duration = start.duration(to: .now).timeInterval
-            MoviePilotNetworkLog.requestFailed(path, error: error, duration: duration)
-            throw MoviePilotError(request: "\(error)")
+            exchange = try await HTTPClient(session: session, category: "MoviePilot")
+                .exchange(urlRequest: urlRequest)
+        } catch let transport as HTTPTransportError {
+            switch transport {
+            case .url(let urlError):
+                throw MoviePilotError(networkError: urlError as NSError)
+            case .nonHTTP:
+                throw MoviePilotError.generic("服务器响应异常")
+            case .other(let description):
+                throw MoviePilotError(request: description)
+            case .status(let code):
+                // exchange 不为状态码抛 .status（仅日志记号）；防御兜底。
+                throw MoviePilotError(code: code, response: "")
+            }
         }
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw MoviePilotError.generic("服务器响应异常")
+        guard exchange.statusCode < 400 else {
+            throw MoviePilotError(
+                code: exchange.statusCode,
+                response: MoviePilotErrorBody.message(from: exchange.data) ?? exchange.bodyText
+            )
         }
-        let duration = start.duration(to: .now).timeInterval
-
-        guard httpResponse.statusCode >= 400 else {
-            MoviePilotNetworkLog.requestSucceeded(path, duration: duration)
-            return data
-        }
-
-        let bodyText = String(data: data, encoding: .utf8) ?? ""
-        let error = MoviePilotError(
-            code: httpResponse.statusCode,
-            response: MoviePilotErrorBody.message(from: data) ?? bodyText
-        )
-        MoviePilotNetworkLog.requestFailed(path, error: error, duration: duration)
-        throw error
+        return exchange.data
     }
 
     /// URL + URLRequest 组装（普通请求与 SSE 流共用）。

@@ -35,7 +35,7 @@ struct BangumiHomeView: View {
     private static let episodeWindowSize = 50
 
     /// 排序偏好跨启动保留。
-    @AppStorage("dev.jumusu.ocplayer.bangumi.progressSort") private var sortRaw = SortOption.collected.rawValue
+    @AppStorage(SettingsKeys.bangumiProgressSort) private var sortRaw = SortOption.collected.rawValue
 
     // 搜索：远程搜 Bangumi，支持分类筛选与分页
     @State private var searchKeyword = ""
