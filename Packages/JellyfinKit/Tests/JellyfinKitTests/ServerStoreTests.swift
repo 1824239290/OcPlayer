@@ -122,4 +122,75 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(store.profiles[0].kind, .jellyfin)
         XCTAssertNotNil(JellyfinServer(restoringFrom: store), "旧档案必须能静默恢复")
     }
+
+    // MARK: - 启动默认服务器
+
+    func testDefaultServerIDRoundTripsAndClearsWithEmptyString() {
+        XCTAssertNil(store.defaultServerID)
+
+        store.defaultServerID = "srv1:u1"
+        XCTAssertEqual(ServerStore(defaults: defaults).defaultServerID, "srv1:u1")
+
+        store.defaultServerID = ""
+        XCTAssertNil(store.defaultServerID)
+
+        store.defaultServerID = "srv1:u1"
+        store.defaultServerID = nil
+        XCTAssertNil(store.defaultServerID)
+    }
+
+    func testLaunchProfilePrefersDefaultOverCurrent() {
+        store.activate(profile(id: "srv1:u1", name: "primary"), token: "tok-1")
+        store.activate(profile(id: "srv2:u2", name: "secondary"), token: "tok-2")
+        // 当前是 srv2；把启动默认指回 srv1
+        store.defaultServerID = "srv1:u1"
+
+        XCTAssertEqual(store.currentProfile?.id, "srv2:u2")
+        XCTAssertEqual(store.launchProfile?.id, "srv1:u1")
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+    }
+
+    func testLaunchProfileFallsBackToCurrentWhenDefaultMissing() {
+        store.activate(profile(id: "srv1:u1"), token: "tok-1")
+        store.activate(profile(id: "srv2:u2"), token: "tok-2")
+        store.defaultServerID = "srv-ghost:gone"
+
+        XCTAssertEqual(store.launchProfile?.id, store.currentProfile?.id)
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv2:u2")
+    }
+
+    func testRemoveClearsDefaultWhenDeletingThatProfile() {
+        store.activate(profile(id: "srv1:u1"), token: "tok-1")
+        store.activate(profile(id: "srv2:u2"), token: "tok-2")
+        store.defaultServerID = "srv2:u2"
+
+        store.remove(id: "srv2:u2")
+        XCTAssertNil(store.defaultServerID, "删掉默认启动服务器后不应留下悬空 ID")
+        XCTAssertEqual(store.launchProfile?.id, "srv1:u1")
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+    }
+
+    func testRemoveKeepsDefaultWhenDeletingAnotherProfile() {
+        store.activate(profile(id: "srv1:u1"), token: "tok-1")
+        store.activate(profile(id: "srv2:u2"), token: "tok-2")
+        store.defaultServerID = "srv1:u1"
+
+        store.remove(id: "srv2:u2")
+        XCTAssertEqual(store.defaultServerID, "srv1:u1")
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+    }
+
+    /// 默认服务器没有 token（用户单独登出了它）时，启动仍回退到有 token 的档案。
+    func testRestoreSkipsDefaultWithoutTokenAndUsesFirstWithToken() {
+        let defaultNoToken = profile(id: "srv:a", name: "default-a")
+        let otherWithToken = profile(id: "srv:b", name: "other-b")
+        // 手工 save 避免 activate 自动写 current / token
+        store.save(defaultNoToken, makeCurrent: false)
+        store.save(otherWithToken, makeCurrent: false)
+        tokens.save("tok-b", account: "srv:b")
+        store.defaultServerID = "srv:a"
+
+        XCTAssertEqual(store.launchProfile?.id, "srv:a")
+        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv:b")
+    }
 }

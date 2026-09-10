@@ -20,6 +20,9 @@ struct SettingsView: View {
     @State private var presentedRelease: GitHubRelease?
     /// 待确认删除的已保存服务器档案（删除连 token 一起清，不可恢复）。
     @State private var pendingDeleteProfile: ServerProfile?
+    /// 启动默认服务器的本地镜像。`ServerStore` 不是 `@Observable`，
+    /// Picker 需要这份 @State 驱动选中态刷新；持久化仍以 store 为准。
+    @State private var selectedDefaultServerID: String?
     /// 预读档位的选中值：直接绑 UserDefaults 的原始 key（@AppStorage 可观察，
     /// 别处改了 Picker 也会刷新）。非法值显示为 0（与 PlaybackPreferences 的
     /// 读取校验一致）；Picker 只写合法档位。
@@ -41,6 +44,18 @@ struct SettingsView: View {
                 KeyValueRow(label: "地址", value: app.server?.profile.baseURL.absoluteString ?? "—")
                 KeyValueRow(label: "版本", value: app.server?.profile.serverVersion ?? "—")
                 KeyValueRow(label: "用户", value: app.currentUserLabel)
+                if app.store.profiles.count >= 1 {
+                    Picker("启动时默认服务器", selection: defaultServerBinding) {
+                        Text("上次使用的服务器").tag(String?.none)
+                        ForEach(app.store.profiles) { profile in
+                            Text(profile.serverName + " · " + profile.kind.displayName)
+                                .tag(String?.some(profile.id))
+                        }
+                    }
+                    Text("打开 App 时优先连接这台。选「上次使用的服务器」则跟随你最近一次切换的服务器。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
                 // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
                 // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
                 Button {
@@ -178,6 +193,9 @@ struct SettingsView: View {
         }
         .navigationTitle("设置")
         .formStyle(.grouped)
+        .onAppear {
+            selectedDefaultServerID = app.store.defaultServerID
+        }
         .fileImporter(isPresented: $isImporting,
                       allowedContentTypes: Self.playableTypes) { result in
             if case .success(let url) = result { openLocal(url) }
@@ -214,6 +232,8 @@ struct SettingsView: View {
         ) { profile in
             Button("删除「\(profile.serverName)」", role: .destructive) {
                 app.store.remove(id: profile.id)
+                // store.remove 会清掉指向该档案的默认启动服务器，这里同步本地镜像。
+                selectedDefaultServerID = app.store.defaultServerID
                 pendingDeleteProfile = nil
             }
         } message: { _ in
@@ -229,7 +249,7 @@ struct SettingsView: View {
 
     /// 其余已保存档案的快速切换与删除。正在使用的服务器不在列表里（要换走它
     /// 用上面的「连接其它服务器」，要删它先退出登录）。删除连 token 一起清，
-    /// 下次想用这台就得重新输地址登录。
+    /// 下次想用这台就得重新输地址登录。默认启动服务器带星标。
     @ViewBuilder
     private var savedServersRows: some View {
         let others = app.store.profiles.filter { $0.id != app.server?.profile.id }
@@ -250,6 +270,12 @@ struct SettingsView: View {
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
                                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                            if isDefaultServer(profile.id) {
+                                Image(systemName: "star.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.yellow)
+                                    .accessibilityLabel("启动默认")
+                            }
                             if app.store.token(for: profile) == nil {
                                 Text("需重新登录").font(.caption2).foregroundStyle(.tertiary)
                             }
@@ -276,6 +302,22 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// 启动默认服务器的双向绑定：读本地镜像（onAppear 从 store 同步），
+    /// 写回时同时更新镜像与 `ServerStore`。
+    private var defaultServerBinding: Binding<String?> {
+        Binding(
+            get: { selectedDefaultServerID },
+            set: { newValue in
+                selectedDefaultServerID = newValue
+                app.store.defaultServerID = newValue
+            }
+        )
+    }
+
+    private func isDefaultServer(_ id: String) -> Bool {
+        selectedDefaultServerID == id
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。

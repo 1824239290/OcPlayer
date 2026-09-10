@@ -67,6 +67,8 @@ public final class ServerStore: @unchecked Sendable {
 
     private let profilesKey = "dev.jumusu.ocplayer.servers"
     private let currentKey = "dev.jumusu.ocplayer.currentServer"
+    /// 启动时优先使用的服务器档案 ID。nil = 跟随「上次使用的服务器」（`currentKey`）。
+    private let defaultServerKey = "dev.jumusu.ocplayer.defaultServer"
     /// 解码缓存，nil = 尚未读过；受 `lock` 保护（读路径 profilesUnlocked 也在锁内）。
     private var cachedProfiles: [ServerProfile]?
 
@@ -84,6 +86,34 @@ public final class ServerStore: @unchecked Sendable {
     public var currentProfile: ServerProfile? {
         lock.withLock {
             let profiles = profilesUnlocked()
+            guard let id = defaults.string(forKey: currentKey) else { return profiles.first }
+            return profiles.first { $0.id == id } ?? profiles.first
+        }
+    }
+
+    /// 用户指定的启动默认服务器 ID；nil = 未指定，启动跟随上次使用的服务器。
+    public var defaultServerID: String? {
+        get { lock.withLock { defaults.string(forKey: defaultServerKey) } }
+        set {
+            lock.withLock {
+                if let newValue, !newValue.isEmpty {
+                    defaults.set(newValue, forKey: defaultServerKey)
+                } else {
+                    defaults.removeObject(forKey: defaultServerKey)
+                }
+            }
+        }
+    }
+
+    /// 启动恢复时优先尝试的档案：设了默认服务器且档案仍在就用它；否则与 `currentProfile` 一致。
+    /// token 是否可用由调用方（`JellyfinServer(restoringFrom:)`）再判断并回退。
+    public var launchProfile: ServerProfile? {
+        lock.withLock {
+            let profiles = profilesUnlocked()
+            if let id = defaults.string(forKey: defaultServerKey),
+               let preferred = profiles.first(where: { $0.id == id }) {
+                return preferred
+            }
             guard let id = defaults.string(forKey: currentKey) else { return profiles.first }
             return profiles.first { $0.id == id } ?? profiles.first
         }
@@ -109,6 +139,10 @@ public final class ServerStore: @unchecked Sendable {
                 } else {
                     defaults.removeObject(forKey: currentKey)
                 }
+            }
+            // 默认服务器指向被删档案时一并清掉，避免启动时留一个悬空 ID。
+            if defaults.string(forKey: defaultServerKey) == id {
+                defaults.removeObject(forKey: defaultServerKey)
             }
         }
         tokens.delete(account: id)

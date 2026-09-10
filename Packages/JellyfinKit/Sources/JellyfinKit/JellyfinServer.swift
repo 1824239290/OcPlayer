@@ -86,11 +86,12 @@ public struct JellyfinServer: Sendable {
 
     /// 用已保存的档案 + 本地 token 恢复会话。
     ///
-    /// 优先恢复 currentProfile；它没有 token 时回退到列表里第一个有 token 的档案
-    /// （登出 A 后 A 仍是 current，但 B 的 token 还有效——这时应该直接进 B 而不是弹登录页）。
+    /// 优先恢复用户指定的启动默认服务器（`launchProfile`）；它没有 token 时
+    /// 回退到列表里第一个有 token 的档案（登出 A 后 A 仍是 current，但 B 的
+    /// token 还有效——这时应该直接进 B 而不是弹登录页）。
     public init?(restoringFrom store: ServerStore) {
-        let current = store.currentProfile
-        let profile = current.flatMap { store.token(for: $0) != nil ? $0 : nil }
+        let preferred = store.launchProfile
+        let profile = preferred.flatMap { store.token(for: $0) != nil ? $0 : nil }
             ?? store.profiles.first { store.token(for: $0) != nil }
         guard let profile, let token = store.token(for: profile) else { return nil }
         self.init(
