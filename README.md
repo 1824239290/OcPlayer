@@ -4,7 +4,7 @@
 
 ## 功能
 
-- **媒体库**：Jellyfin / Emby 服务器自动识别（登录探活判定类型），Jellyfin 账号密码 + Quick Connect、Emby 账号密码；多服务器记忆与一键切换（登出不再遗忘档案，token 失效自动尝试其它已存服务器）；媒体库分页浏览、电影/剧集详情、季/集选择；每个库页面右上角排序与观看状态筛选（名称 / 最近添加 / 年份 / 评分 / 时长 / 随机 + 升降序 + 全部/没看过/看过，服务端排序过滤、按库类型给候选、每库记忆偏好）；首页继续观看、接下来看、最近添加；海报氛围背景（设置可关）：详情页海报/标题浮在模糊 backdrop 上、首页库内随机轮播，关闭恢复清晰横幅
+- **媒体库**：Jellyfin / Emby 服务器自动识别（登录探活判定类型），Jellyfin 账号密码 + Quick Connect、Emby 账号密码；多服务器记忆与一键切换（登出不再遗忘档案，token 失效自动尝试其它已存服务器；可指定「启动时默认服务器」，打开 App 优先连接选定档案）；媒体库分页浏览、电影/剧集详情、季/集选择；每个库页面右上角排序与观看状态筛选（名称 / 最近添加 / 年份 / 评分 / 时长 / 随机 + 升降序 + 全部/没看过/看过，服务端排序过滤、按库类型给候选、每库记忆偏好）；首页继续观看、接下来看、最近添加；海报氛围背景（设置可关）：详情页海报/标题浮在模糊 backdrop 上、首页库内随机轮播，关闭恢复清晰横幅
 - **播放**：pause / seek / 倍速 / 音轨与字幕切换 / 外挂字幕 / 续播 / 进度上报 / 自动连播下一集 / macOS 键盘快捷键；章节列表跳转；片头片尾识别 + 悬浮「跳过」按钮；网络预读缓冲可调（2 / 8 / 16 / 32 MiB，公网高延迟服务器建议调大）；macOS 走 VideoToolbox 硬解 + IOSurface 零拷贝；HUD 为原生 Liquid Glass——右下角功能按钮融合成玻璃胶囊，点开的按钮液态形变为「行 + 子菜单」式玻璃面板（Infuse 风格）
 - **弹幕**：已有剧集映射直接复用；首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；手动搜索选集、匹配缓存、时间偏移、不透明度、显示区域与类型过滤
 - **Bangumi（番剧追踪）**：OAuth 登录、收藏与在看进度、每日放送日历、条目详情与章节标记、播放结束自动标记本集看过
@@ -32,7 +32,7 @@ Scripts/package-macos.sh v0.1.5  # 本地打包，产出与 CI 相同的 dist/ �
 
 各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。
 
-> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的 `v0.1.7+dolby.3`（在 `v0.1.7+dolby.2` 的杜比视界支持之上修复全屏切换音画失步：Apple Metal surface 启用 `allowsNextDrawableTimeout`——全屏 Space 切换扣住 drawable 池时跳帧而非阻塞渲染 tick 最长 1 秒；播放时钟对音频环样本改按设备活性判定，积压回填后时钟 snap 重锚，不再被距离型 stale 判定永久拒绝；CoreAudio 输出环 1.2s 真门控 + worker 预填同步加深，渲染侧停顿期间音频从积压播出而非断粮。C ABI 无变化）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
+> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的 `v0.1.9+dolby.1`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射；含 0.1.8 的渲染阻塞后音画时钟修复、倍速平滑切换等。C ABI 与 0.1.8+ 一致）。该 release 仅附 macOS arm64 资产，iOS 打包继续钉 `v0.1.7+dolby.3`（最近一次全平台 tag）；`fetch-erika.sh` 在 macOS-only tag 上会复用本地已有 iOS 切片。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 
 > `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑全量测试门禁，语义化版本标签触发 Release 工作流。
 

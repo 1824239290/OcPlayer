@@ -93,6 +93,30 @@ if [[ ! -f "$PINNED" ]]; then
   echo "  固定方法：从 Release 资产下载 sha256，审核后存为 Scripts/erika-$TAG.sha256" >&2
 fi
 
+# 部分 release（如手工打包的 dolby fork）只附 macOS arm64，没有 iOS 资产。
+# 优先看 pin 文件；无 pin 时探测一次 asset 是否存在。
+# 不存在时保留已有 iOS 切片，并在合成/打包阶段明示。
+ios_release_available() {
+  local url code
+  url="https://github.com/$REPO/releases/download/$TAG/$IOS_PKG.zip"
+  code="$(curl --retry 2 -sSIL -o /dev/null -w '%{http_code}' -L "$url" || echo 000)"
+  [[ "$code" == "200" ]]
+}
+
+IOS_AVAILABLE=true
+if [[ -f "$PINNED" ]]; then
+  # pin 只列 release 实际提供的包；没有 iOS 行 = macOS-only tag。
+  if ! awk -v pkg="$IOS_PKG" '$2 == pkg".zip" {found=1} END{exit !found}' "$PINNED"; then
+    IOS_AVAILABLE=false
+  fi
+elif ! ios_release_available; then
+  IOS_AVAILABLE=false
+fi
+if [[ "$IOS_AVAILABLE" == false ]]; then
+  echo "⚠ Erika $TAG 未提供 $IOS_PKG.zip（本 release 仅 macOS）。" >&2
+  echo "  iOS 将复用 Vendor 现有切片；若不存在则只合成 macOS slice。" >&2
+fi
+
 manifest_matches() {
   local manifest="$1"
   local package="$2"
@@ -101,32 +125,38 @@ manifest_matches() {
   [[ "$(awk '$1 == "ref:" {print $2; exit}' "$manifest")" == "$TAG" ]]
 }
 
+# pin 文件里列出的包都要校验；缺列的包（例如 macOS-only release 的 iOS）跳过。
 pinned_archives_verified() {
   [[ -f "$PINNED" ]] || return 0
 
   local package zip expected actual
   for package in "$MAC_PKG" "$IOS_PKG"; do
+    expected="$(awk -v pkg="$package" '$2 == pkg".zip" {print $1}' "$PINNED")"
+    [[ -n "$expected" ]] || continue
     zip="$CACHE/$package-$TAG.zip"
     [[ -f "$zip" ]] || return 1
-    expected="$(awk -v pkg="$package" '$2 == pkg".zip" {print $1}' "$PINNED")"
-    [[ -n "$expected" ]] || return 1
     actual="$(shasum -a 256 "$zip" | awk '{print $1}')"
     [[ "$actual" == "$expected" ]] || return 1
   done
 }
 
+ios_slices_ready() {
+  [[ -f "$OUT/ios-arm64/liberika_capi.a" ]] \
+    && [[ -f "$OUT/ios-arm64_x86_64-simulator/liberika_capi-sim.a" ]]
+}
+
+# macOS-only tag：ready 判定不要求 iOS manifest / 切片，但 macOS 必须齐。
 if [[ -d "$OUT" ]] \
   && [[ -f "$VERSION_MARKER" ]] \
   && [[ "$(<"$VERSION_MARKER")" == "$TAG" ]] \
   && [[ -f "$OUT/$MAC_SLICE/liberika_capi.a" ]] \
-  && [[ -f "$OUT/ios-arm64/liberika_capi.a" ]] \
-  && [[ -f "$OUT/ios-arm64_x86_64-simulator/liberika_capi-sim.a" ]] \
+  && ( [[ "$IOS_AVAILABLE" == false ]] || ios_slices_ready ) \
   && manifest_matches "$MAC_MANIFEST" "$MAC_PKG" \
-  && manifest_matches "$IOS_MANIFEST" "$IOS_PKG" \
+  && ( [[ "$IOS_AVAILABLE" == false ]] || manifest_matches "$IOS_MANIFEST" "$IOS_PKG" ) \
   && [[ -f "$WORK/$MAC_PKG/lib/liberika_capi.a" ]] \
   && [[ -d "$WORK/$MAC_PKG/licenses" ]] \
-  && [[ -f "$WORK/$IOS_PKG/include/erika.h" ]] \
-  && cmp -s "$WORK/$IOS_PKG/include/erika.h" "$SHIM_INCLUDE/erika.h" \
+  && { [[ "$IOS_AVAILABLE" == false ]] || [[ -f "$WORK/$IOS_PKG/include/erika.h" ]]; } \
+  && { [[ "$IOS_AVAILABLE" == false ]] || cmp -s "$WORK/$IOS_PKG/include/erika.h" "$SHIM_INCLUDE/erika.h"; } \
   && pinned_archives_verified; then
   if [[ -f "$PINNED" ]]; then
     echo "· Erika $TAG 缓存归档哈希校验通过"
@@ -161,12 +191,18 @@ fetch() { # $1 = 包名
   if [[ -f "$PINNED" ]]; then
     local expected actual
     expected="$(awk -v pkg="$1" '$2 == pkg".zip" {print $1}' "$PINNED")"
-    actual="$(shasum -a 256 "$zip" | awk '{print $1}')"
     if [[ -z "$expected" ]]; then
-      echo "✗ $PINNED 中缺少 $1.zip 的期望哈希" >&2; exit 1
+      # pin 只列了 release 实际提供的包；macOS-only tag 不含 iOS 行是正常的。
+      if [[ "$1" == "$IOS_PKG" && "$IOS_AVAILABLE" == false ]]; then
+        echo "· 跳过 $1 的哈希校验（$TAG 未提供该资产）" >&2
+      else
+        echo "✗ $PINNED 中缺少 $1.zip 的期望哈希" >&2; exit 1
+      fi
+    else
+      actual="$(shasum -a 256 "$zip" | awk '{print $1}')"
+      [[ "$actual" == "$expected" ]] || { echo "✗ $1.zip 哈希不匹配：期望 $expected，实际 $actual" >&2; exit 1; }
+      echo "· $1.zip 哈希校验通过"
     fi
-    [[ "$actual" == "$expected" ]] || { echo "✗ $1.zip 哈希不匹配：期望 $expected，实际 $actual" >&2; exit 1; }
-    echo "· $1.zip 哈希校验通过"
   fi
   shasum -a 256 "$zip" | awk '{print $1"  '"$1"'.zip"}' >> "$VENDOR/erika-$TAG.sha256.tmp"
   rm -rf "$WORK/$1"
@@ -181,37 +217,76 @@ fetch() { # $1 = 包名
 
 rm -f "$VENDOR/erika-$TAG.sha256.tmp"
 fetch "$MAC_PKG"
-fetch "$IOS_PKG"
+if [[ "$IOS_AVAILABLE" == true ]]; then
+  fetch "$IOS_PKG"
+else
+  echo "· 跳过 $IOS_PKG 下载（$TAG 仅提供 macOS 产物）"
+fi
 sort -o "$VENDOR/erika-$TAG.sha256" "$VENDOR/erika-$TAG.sha256.tmp"
 rm -f "$VENDOR/erika-$TAG.sha256.tmp"
 
 MAC_LIB="$WORK/$MAC_PKG/lib/liberika_capi.a"
 MAC_INC="$WORK/$MAC_PKG/include"
-IOS_XC="$WORK/$IOS_PKG/lib/erika_capi.xcframework"
-IOS_INC="$WORK/$IOS_PKG/include"
-IOS_DEV_LIB="$(ls "$IOS_XC"/ios-arm64/*.a)"
-IOS_SIM_LIB="$(ls "$IOS_XC"/ios-arm64*simulator/*.a)"
 
-for f in "$MAC_LIB" "$MAC_INC/erika.h" "$IOS_DEV_LIB" "$IOS_SIM_LIB"; do
-  [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
-done
+# 先保留旧 iOS 切片（macOS-only release 时复用），再重建 xcframework。
+SAVED_IOS=""
+if [[ -d "$OUT" ]] && ios_slices_ready; then
+  SAVED_IOS="$(mktemp -d)/ios"
+  mkdir -p "$SAVED_IOS"
+  cp -R "$OUT/ios-arm64" "$SAVED_IOS/"
+  cp -R "$OUT/ios-arm64_x86_64-simulator" "$SAVED_IOS/"
+fi
+
+create_args=(
+  -library "$MAC_LIB" -headers "$MAC_INC"
+)
+INC_FOR_HEADER="$MAC_INC"
+
+if [[ "$IOS_AVAILABLE" == true ]]; then
+  IOS_XC="$WORK/$IOS_PKG/lib/erika_capi.xcframework"
+  IOS_INC="$WORK/$IOS_PKG/include"
+  IOS_DEV_LIB="$(ls "$IOS_XC"/ios-arm64/*.a)"
+  IOS_SIM_LIB="$(ls "$IOS_XC"/ios-arm64*simulator/*.a)"
+
+  for f in "$MAC_LIB" "$MAC_INC/erika.h" "$IOS_DEV_LIB" "$IOS_SIM_LIB"; do
+    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+  done
+  create_args+=(-library "$IOS_DEV_LIB" -headers "$IOS_INC")
+  create_args+=(-library "$IOS_SIM_LIB" -headers "$IOS_INC")
+  INC_FOR_HEADER="$IOS_INC"
+elif [[ -n "$SAVED_IOS" ]]; then
+  echo "⚠ 复用已有 iOS 切片（仍为旧版本，未随 $TAG 更新）"
+  for f in "$MAC_LIB" "$MAC_INC/erika.h"; do
+    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+  done
+  # 必须让 Info.plist 登记 iOS 库，否则 SwiftPM binaryTarget 看不见这些切片。
+  IOS_DEV_LIB="$(ls "$SAVED_IOS"/ios-arm64/*.a)"
+  IOS_SIM_LIB="$(ls "$SAVED_IOS"/ios-arm64_x86_64-simulator/*.a 2>/dev/null \
+    || ls "$SAVED_IOS"/ios-arm64*simulator/*.a)"
+  # 头文件跟旧 iOS 二进制走，避免「新头 + 旧库」ABI 错位。
+  IOS_INC="$SAVED_IOS/ios-arm64/Headers"
+  [[ -f "$IOS_INC/erika.h" ]] || IOS_INC="$MAC_INC"
+  create_args+=(-library "$IOS_DEV_LIB" -headers "$IOS_INC")
+  create_args+=(-library "$IOS_SIM_LIB" -headers "$IOS_INC")
+else
+  for f in "$MAC_LIB" "$MAC_INC/erika.h"; do
+    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+  done
+  echo "⚠ $TAG 无 iOS 资产且本地无旧切片：xcframework 将仅含 macOS（iOS 打包会失败）" >&2
+fi
 
 echo "⚙ 合成 xcframework …"
 mkdir -p "$(dirname "$OUT")"
 rm -rf "$OUT"
-xcodebuild -create-xcframework \
-  -library "$MAC_LIB"     -headers "$MAC_INC" \
-  -library "$IOS_DEV_LIB" -headers "$IOS_INC" \
-  -library "$IOS_SIM_LIB" -headers "$IOS_INC" \
-  -output "$OUT" >/dev/null
+xcodebuild -create-xcframework "${create_args[@]}" -output "$OUT" >/dev/null
 printf '%s\n' "$TAG" > "$VERSION_MARKER"
 
 # 供 Swift 侧 import 的 C 头（随 tag 更新，diff 可见）
 mkdir -p "$SHIM_INCLUDE"
-cp "$IOS_INC/erika.h" "$SHIM_INCLUDE/erika.h"
+cp "$INC_FOR_HEADER/erika.h" "$SHIM_INCLUDE/erika.h"
 
 echo "✓ $OUT"
 /usr/libexec/PlistBuddy -c "Print :AvailableLibraries" "$OUT/Info.plist" \
   | grep -E "LibraryIdentifier|SupportedPlatform" | sed 's/^ */  /'
 echo "· tag=$TAG  macOS=$MACOS_ARCH  体积 $(du -sh "$OUT" | cut -f1)"
-echo "· commit $(awk '/^commit:/{print $2}' "$WORK/$IOS_PKG/MANIFEST.txt")"
+echo "· commit $(awk '/^commit:/{print $2}' "$WORK/$MAC_PKG/MANIFEST.txt")"
