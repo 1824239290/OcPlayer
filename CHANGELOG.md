@@ -6,6 +6,16 @@
 
 ### 改动
 
+- **前端组件化重构：设计系统下沉为新包 `AppDesignKit`，卡片/胶囊/分页/空态向共享原语收敛**（`refactor/component-reuse`）。
+  - 动效/尺寸 token、骨架屏、卡片原语、横向滚动、液态玻璃、远程图管道（`ImagePipeline`/`RemoteImage`）从 `App` 移入新包 `Packages/AppDesignKit`——只吃纯值、不依赖任何域模型，新 Feature 直接复用。
+  - 新增模型无关原语：`MediaArtwork`（海报/剧照画幅 + overlay 槽）、`CardProgressTrack`（3pt 胶囊进度细轨）、`PillChip`（分类/印章徽章，三档语义色）、`RatingPill`（评分徽章统一橙）、`EmptyState`、`ErrorNotice`、`PagedListLoader` + `LoadMoreFooter`（分页状态机：代次守卫/追加去重/满页判断，含 `replace`/`remove`/`reportError`）。
+  - 收起重复卡片：Bangumi 的 `CollectionTile`/`ProgressCard`/`CollectionRow`/`SearchResultRow`/`CalendarItemCard` 与 MoviePilot 的 `MoviePilotSubscribeCard`/`MoviePilotMediaGlassCard`/`MoviePilotTorrentGlassCard`，以及 `PosterCard`/`StillCard`，全部落到 `MediaArtwork`/`CardProgressTrack`/`PillChip`/`RatingPill`。
+  - 收起手写分页：Bangumi 首页在播/搜索两套分页 + 收藏列表页改用 `PagedListLoader`。媒体库 `LibraryView` 因分页数据住在 `AppModel.libraryPages` 缓存而有意保留自管状态机，避免再造一个数据源。
+  - 收起错误/空态/胶囊：`BangumiNotice` 并入 `ErrorNotice`；LibraryView/AppShell/Home/Bangumi 收藏列表空态并入 `EmptyState`；展示型标签用 `PillChip`，交互型菜单/状态胶囊按钮保持原生。
+  - 净效果：App 层约 -1000 行；`BangumiHomeView` 999→836、`BangumiCollectionListView` 160→151。新增 `AppDesignKitTests`（12 用例）。纯 UI 重构，无视觉/行为变化，播放器 HUD 零改动。
+
+- **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：
+
 - **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：基于上游 v0.1.9 + libplacebo 风格 Dolby Vision RPU 映射（P5/P8.1 SSIM≈0.995）。相对 `v0.1.7+dolby.3` 带来上游 0.1.8/0.1.9 一系列播放修复——渲染阻塞恢复后的音画时钟重校准、倍速切换平滑过渡、iOS 前台/音频中断恢复、首条音轨解码失败自动回退后续音轨、弹幕跨规划窗口重现跳轨、`ErikaOpenOptions` 预读（本 App 已在用）。C ABI 与 `v0.1.7+dolby.2+` 一致（`ErikaPresenterConfig` 四字段），App 侧无需改代码。**iOS 暂维持 `v0.1.7+dolby.3`**：该 release 仅手工打包了 macOS arm64 资产，`package-ios.sh` / CI iOS job 继续钉最近一次全平台 tag；`fetch-erika.sh` 支持 macOS-only release（无 iOS zip 时复用本地已有切片并在 Info.plist 登记）。下载哈希 pin、脚本与 CI 钉点同步换版。
 
 - **设置页新增「启动时默认服务器」**：多服务器用户可在设置 → 服务器里选定打开 App 时优先连接的档案，不必再被「上次使用的服务器」绑死。选「上次使用的服务器」保持旧行为；选定具体档案后启动静默恢复优先走它，token 失效仍回退到其它有有效会话的档案。默认服务器在已保存列表带星标；删除该档案会自动清掉默认设置，不留悬空 ID。默认与「当前会话」独立：临时切到另一台看片，下次打开仍回到你指定的默认服务器。

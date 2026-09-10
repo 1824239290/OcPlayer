@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import JellyfinKit
 import SwiftUI
@@ -88,15 +89,11 @@ struct LibraryView: View {
             if isLoading && items.isEmpty {
                 skeletonGrid
             } else if let loadError, items.isEmpty {
-                ContentUnavailableView {
-                    Label(UIStrings.loadFailed, systemImage: "wifi.exclamationmark")
-                } description: {
-                    Text(loadError)
-                } actions: {
-                    Button(UIStrings.retry) { Task { await reload() } }
+                EmptyState(failure: loadError, systemImage: "wifi.exclamationmark") {
+                    Task { await reload() }
                 }
             } else if items.isEmpty {
-                ContentUnavailableView("这里还没有内容", systemImage: "tray")
+                EmptyState(empty: "这里还没有内容", systemImage: "tray")
             } else {
                 grid
             }

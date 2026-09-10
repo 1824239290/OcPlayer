@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
@@ -121,26 +122,4 @@ struct BangumiEpisodeCell: View {
 extension BangumiEpisodeCell {
     /// 章节网格的列定义（两页共用，格子宽度一致）。
     static let columns: [GridItem] = [GridItem(.adaptive(minimum: 46), spacing: 6)]
-}
-
-/// 内联提示条：和详情页 `loadErrorNotice` 同一套观感（secondary 色 + 三角图标）。
-/// Bangumi 的写操作以前失败是全静默的，这条用来把话说出来。
-struct BangumiNotice: View {
-    let message: String
-    var systemImage = "exclamationmark.triangle"
-    var onRetry: (() -> Void)?
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: systemImage)
-            Text(message).font(.callout)
-            Spacer(minLength: 0)
-            if let onRetry {
-                Button(UIStrings.retry, action: onRetry)
-                    .buttonStyle(.borderless)
-                    .font(.callout)
-            }
-        }
-        .foregroundStyle(.secondary)
-    }
 }

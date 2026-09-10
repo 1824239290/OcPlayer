@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import SwiftUI
 
@@ -161,7 +162,7 @@ struct AppShellView: View {
                     }
                     .transition(.section)
                 } else {
-                    ContentUnavailableView("媒体库不存在", systemImage: "tray")
+                    EmptyState(empty: "媒体库不存在", systemImage: "tray")
                         .transition(.section)
                 }
             case .settings:
@@ -269,15 +270,11 @@ struct MediaLibraryListView: View {
         Group {
             if app.libraries.isEmpty {
                 if let error = app.librariesError {
-                    ContentUnavailableView {
-                        Label("无法加载媒体库", systemImage: "wifi.exclamationmark")
-                    } description: {
-                        Text(error)
-                    } actions: {
-                        Button(UIStrings.retry) { Task { await app.reloadBrowserData() } }
+                    EmptyState(failure: error, title: "无法加载媒体库", systemImage: "wifi.exclamationmark") {
+                        Task { await app.reloadBrowserData() }
                     }
                 } else {
-                    ContentUnavailableView("还没有媒体库", systemImage: "square.stack")
+                    EmptyState(empty: "还没有媒体库", systemImage: "square.stack")
                 }
             } else {
                 List {

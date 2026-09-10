@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import CoreModel
 import SwiftUI
@@ -83,7 +84,7 @@ struct BangumiSubjectDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.railSpacing) {
                 if let actionError {
-                    BangumiNotice(message: actionError)
+                    ErrorNotice(actionError)
                         .padding(.horizontal, contentLeading)
                 }
 

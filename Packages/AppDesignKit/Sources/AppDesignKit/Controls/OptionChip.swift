@@ -2,11 +2,16 @@ import SwiftUI
 
 /// 选项 chip 的统一外观：选中带对勾 + accent 高亮，未选中淡底细描边。
 /// 筛选候选（MoviePilot）与排序字段（MoviePilot / 媒体库）共用。
-struct OptionChip: View {
-    let title: String
-    let selected: Bool
+public struct OptionChip: View {
+    public let title: String
+    public let selected: Bool
 
-    var body: some View {
+    public init(title: String, selected: Bool) {
+        self.title = title
+        self.selected = selected
+    }
+
+    public var body: some View {
         HStack(spacing: 4) {
             if selected {
                 Image(systemName: "checkmark")

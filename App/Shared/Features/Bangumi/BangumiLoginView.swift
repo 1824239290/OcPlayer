@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
@@ -61,7 +62,7 @@ struct BangumiLoginView: View {
             }
 
             if let authError = bangumi.authError {
-                BangumiNotice(message: authError)
+                ErrorNotice(authError)
                     .frame(maxWidth: 420)
             }
         }

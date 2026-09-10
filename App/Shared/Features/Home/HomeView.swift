@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import SwiftUI
 
@@ -162,12 +163,8 @@ struct HomeView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label("首页加载失败", systemImage: "wifi.exclamationmark")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(UIStrings.retry) { Task { await app.reloadBrowserData() } }
+        EmptyState(failure: message, title: "首页加载失败", systemImage: "wifi.exclamationmark") {
+            Task { await app.reloadBrowserData() }
         }
     }
 }

@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import CoreModel
 import SwiftUI
@@ -99,7 +100,7 @@ struct BangumiChapterSection: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
         } else if let loadError {
-            BangumiNotice(message: loadError) { loadToken += 1 }
+            ErrorNotice(loadError) { loadToken += 1 }
                 .padding(.bottom, 4)
         } else {
             linkPrompt
@@ -179,7 +180,7 @@ struct BangumiChapterSection: View {
     private var episodeContent: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let loadError {
-                BangumiNotice(message: loadError) { loadToken += 1 }
+                ErrorNotice(loadError) { loadToken += 1 }
             }
             if !mainEpisodes.isEmpty {
                 episodeGrid(mainEpisodes)

@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
@@ -261,12 +262,7 @@ struct BangumiCalendarView: View {
                         .foregroundStyle(.primary)
 
                     if day.weekday.id == Self.todayBangumiWeekdayID {
-                        Text("今天")
-                            .font(.caption2.weight(.bold))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.18), in: Capsule())
-                            .foregroundStyle(Color.accentColor)
+                        PillChip("今天", role: .accent, font: .caption2.weight(.bold))
                     }
 
                     Text("(\(day.items.count) 部)")
@@ -433,14 +429,14 @@ private struct CalendarItemCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // 封面海报
-            RemoteImage(url: item.coverURL, authHeader: nil, maxPixelSize: 300)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 68, height: 96)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-                )
+            MediaArtwork(
+                url: item.coverURL,
+                shape: .poster,
+                width: 68,
+                cornerRadius: 6,
+                maxPixelSize: 300,
+                bordered: true
+            )
 
             // 信息列
             VStack(alignment: .leading, spacing: 4) {
@@ -486,12 +482,12 @@ private struct CalendarItemCard: View {
                     }
 
                     if let rank = item.rank, rank > 0 {
-                        Text("#\(rank)")
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color.orange.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
-                            .foregroundStyle(.orange)
+                        PillChip(
+                            "#\(rank)",
+                            role: .custom(.orange),
+                            outline: .stamp(cornerRadius: 3),
+                            font: .system(size: 9, weight: .bold)
+                        )
                     }
                 }
 

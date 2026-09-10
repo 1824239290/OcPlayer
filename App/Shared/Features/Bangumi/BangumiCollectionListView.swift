@@ -1,52 +1,27 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
 /// 完整收藏列表：segmented 切换收藏类型 + 分页行。
+/// 分页状态机走共享的 `PagedListLoader`（代次守卫/追加去重/hasMore 都在里面）。
 struct BangumiCollectionListView: View {
     let subjectType: BangumiSubjectType
 
     @Environment(BangumiCoordinator.self) private var bangumi
     @State private var collectionType: BangumiCollectionType = .collect
     @State private var counts: [BangumiCollectionType: Int] = [:]
-    @State private var subjects: [BangumiSubjectDTO] = []
-    @State private var isLoading = false
-    @State private var loadError: String?
-    @State private var reloader = false
-    /// 列表代次：load() 重置列表时自增，作废在途旧翻页，防止旧类型数据混进新列表。
-    @State private var listGeneration = 0
+    /// 懒建一次；fetch 闭包读的 @State 是存储引用，切类型时读到的是当前值。
+    @State private var loader: PagedListLoader<BangumiSubjectDTO>?
 
-    private let pageSize = 20
+    private static let pageSize = 20
 
     var body: some View {
         Group {
-            if isLoading && subjects.isEmpty {
+            if let loader {
+                content(loader)
+            } else {
                 ProgressView("正在加载…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let loadError, subjects.isEmpty {
-                ContentUnavailableView {
-                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(loadError)
-                } actions: {
-                    Button(UIStrings.retry) {
-                        reloader.toggle()
-                    }
-                }
-            } else {
-                List {
-                    ForEach(subjects) { subject in
-                        NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
-                            CollectionRow(subject: subject)
-                        }
-                        .buttonStyle(.plain)
-                        .onAppear {
-                            if subject.id == subjects.last?.id {
-                                Task { await loadMore() }
-                            }
-                        }
-                    }
-                }
-                .listStyle(.inset)
             }
         }
         .navigationTitle("我的\(subjectType.description)")
@@ -56,8 +31,51 @@ struct BangumiCollectionListView: View {
                 .padding(.vertical, 8)
                 .background(.bar)
         }
-        .task(id: "\(subjectType.rawValue)-\(collectionType.rawValue)-\(reloader)") {
-            await load()
+        .task(id: subjectType.rawValue) {
+            if loader == nil {
+                loader = PagedListLoader(pageSize: Self.pageSize) { offset, limit in
+                    let items = try await bangumi.context.fetchCollectionSubjects(
+                        subjectType: subjectType, collectionType: collectionType,
+                        limit: limit, offset: offset)
+                    return .init(items: items)
+                } errorMessage: { error in
+                    (error as? BangumiError)?.userMessage ?? "\(error)"
+                }
+            }
+            async let countsFetch: () = refreshCounts()
+            await loader?.loadInitial()
+            await countsFetch
+        }
+        .onChange(of: collectionType) { _, _ in
+            // 切收藏类型 = 整份重取；loader 的代次守卫会丢掉在途旧翻页。
+            Task { await loader?.loadInitial() }
+        }
+    }
+
+    @ViewBuilder
+    private func content(_ loader: PagedListLoader<BangumiSubjectDTO>) -> some View {
+        if loader.isLoading && loader.items.isEmpty {
+            ProgressView("正在加载…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let error = loader.loadError, loader.items.isEmpty {
+            EmptyState(failure: error) {
+                Task { await loader.loadInitial() }
+            }
+        } else {
+            List {
+                ForEach(loader.items) { subject in
+                    NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                        CollectionRow(subject: subject)
+                    }
+                    .buttonStyle(.plain)
+                    .onAppear {
+                        if subject.id == loader.items.last?.id {
+                            Task { await loader.loadMore() }
+                        }
+                    }
+                }
+            }
+            .listStyle(.inset)
         }
     }
 
@@ -71,38 +89,8 @@ struct BangumiCollectionListView: View {
         .pickerStyle(.segmented)
     }
 
-    private func load() async {
-        listGeneration += 1
-        let generation = listGeneration
-        isLoading = true
-        loadError = nil
-        defer { isLoading = false }
-        do {
-            counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
-            let firstPage = try await bangumi.context.fetchCollectionSubjects(
-                subjectType: subjectType, collectionType: collectionType,
-                limit: pageSize, offset: 0)
-            guard generation == listGeneration else { return }
-            subjects = firstPage
-        } catch let error as BangumiError {
-            loadError = error.userMessage
-        } catch {
-            loadError = "\(error)"
-        }
-    }
-
-    private func loadMore() async {
-        guard !isLoading else { return }
-        let generation = listGeneration
-        isLoading = true
-        defer { isLoading = false }
-        if let more = try? await bangumi.context.fetchCollectionSubjects(
-            subjectType: subjectType, collectionType: collectionType,
-            limit: pageSize, offset: subjects.count) {
-            // 期间切了收藏类型（generation 已自增）就丢弃，append 会污染新列表。
-            guard generation == listGeneration else { return }
-            subjects.append(contentsOf: more)
-        }
+    private func refreshCounts() async {
+        counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
     }
 }
 
@@ -112,10 +100,13 @@ private struct CollectionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 240)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 48, height: 68)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            MediaArtwork(
+                url: coverURL,
+                shape: .poster,
+                width: 48,
+                cornerRadius: 6,
+                maxPixelSize: 240
+            )
             VStack(alignment: .leading, spacing: 3) {
                 Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                     .font(.body.weight(.medium))

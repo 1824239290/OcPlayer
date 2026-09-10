@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import JellyfinKit
 import SwiftUI

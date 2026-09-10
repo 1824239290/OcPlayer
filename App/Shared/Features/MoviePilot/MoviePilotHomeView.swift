@@ -1,3 +1,4 @@
+import AppDesignKit
 import MoviePilotKit
 import SwiftUI
 
@@ -645,8 +646,7 @@ private struct MoviePilotSubscribeCard: View {
 
                 // 2. 追更进度细轨（有集数的剧集展示进度，没有集数或电影则保持统一间距）
                 if let fraction = progressFraction {
-                    progressTrack(fraction)
-                        .frame(height: 3)
+                    CardProgressTrack(fraction: fraction, tint: .accentColor)
                         .padding(.top, 7)
                 } else {
                     Color.clear
@@ -726,59 +726,52 @@ private struct MoviePilotSubscribeCard: View {
 
     /// 严格 2:3 比例的海报容器，并在内部叠放状态徽章、季数与评分
     private var posterContainer: some View {
-        Color.clear
-            .aspectRatio(2 / 3, contentMode: .fit)
-            .overlay {
-                ZStack(alignment: .bottomLeading) {
-                    // 海报图片
-                    RemoteImage(url: subscribe.posterURL, authHeader: nil, maxPixelSize: 500)
-                        .scaledToFill()
+        MediaArtwork(url: subscribe.posterURL, shape: .poster, width: nil, maxPixelSize: 500) {
+            ZStack(alignment: .bottomLeading) {
+                // 底部暗部渐变
+                LinearGradient(
+                    colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
+                    startPoint: .bottom,
+                    endPoint: .center
+                )
 
-                    // 底部暗部渐变
-                    LinearGradient(
-                        colors: [.black.opacity(0.7), .black.opacity(0.2), .clear],
-                        startPoint: .bottom,
-                        endPoint: .center
-                    )
-
-                    // 底部信息（左侧：季数/分类；右侧：评分）
-                    HStack(alignment: .bottom, spacing: 4) {
-                        if let seasonText = subscribe.seasonText {
-                            badgeText(seasonText, background: .black.opacity(0.7), foreground: .white)
-                        } else if subscribe.isMovie {
-                            badgeText("电影", background: .black.opacity(0.7), foreground: .white)
-                        }
-
-                        Spacer(minLength: 4)
-
-                        if let vote = subscribe.voteAverage, vote > 0 {
-                            HStack(spacing: 2) {
-                                Image(systemName: "star.fill")
-                                    .font(.system(size: 8))
-                                    .foregroundStyle(BangumiStatusColor.rating)
-                                Text(String(format: "%.1f", vote))
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.white)
-                            }
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.7), in: Capsule())
-                        }
+                // 底部信息（左侧：季数/分类；右侧：评分）
+                HStack(alignment: .bottom, spacing: 4) {
+                    if let seasonText = subscribe.seasonText {
+                        badgeText(seasonText, background: .black.opacity(0.7), foreground: .white)
+                    } else if subscribe.isMovie {
+                        badgeText("电影", background: .black.opacity(0.7), foreground: .white)
                     }
-                    .padding(8)
 
-                    // 右上角状态徽章（追更中 / 已完成 / 已暂停）
-                    VStack {
-                        HStack {
-                            Spacer()
-                            statusBadge(subscribe.stateText)
+                    Spacer(minLength: 4)
+
+                    if let vote = subscribe.voteAverage, vote > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 8))
+                                .foregroundStyle(BangumiStatusColor.rating)
+                            Text(String(format: "%.1f", vote))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
                         }
-                        Spacer()
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.black.opacity(0.7), in: Capsule())
                     }
-                    .padding(8)
                 }
+                .padding(8)
+
+                // 状态徽章（追更中 / 已完成 / 已暂停）
+                VStack {
+                    HStack {
+                        Spacer()
+                        statusBadge(subscribe.stateText)
+                    }
+                    Spacer()
+                }
+                .padding(8)
             }
-            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        }
     }
 
     private var progressFraction: Double? {
@@ -787,16 +780,6 @@ private struct MoviePilotSubscribeCard: View {
         }
         let completed = max(total - lack, 0)
         return min(max(Double(completed) / Double(total), 0), 1)
-    }
-
-    private func progressTrack(_ fraction: Double) -> some View {
-        ZStack(alignment: .leading) {
-            Rectangle().fill(Color.primary.opacity(0.12))
-            Rectangle()
-                .fill(Color.accentColor)
-                .scaleEffect(x: max(0, min(1, fraction)), y: 1, anchor: .leading)
-        }
-        .clipShape(Capsule())
     }
 
     private func badgeText(_ text: String, background: Color, foreground: Color) -> some View {
@@ -837,10 +820,16 @@ private struct MoviePilotMediaGlassCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             // 2:3 标准胶片海报
-            RemoteImage(url: media.posterURL, authHeader: nil, maxPixelSize: 360)
-                .frame(width: 76, height: 114)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+            MediaArtwork(
+                url: media.posterURL,
+                shape: .poster,
+                width: 76,
+                cornerRadius: 12,
+                cornerStyle: .continuous,
+                maxPixelSize: 360
+            )
+            // 封面投影比通用原语默认为重，保留原观感。
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
 
             // 媒体主要元信息
             VStack(alignment: .leading, spacing: 6) {
@@ -852,44 +841,23 @@ private struct MoviePilotMediaGlassCard: View {
                 // 标签行（类型 / 年份 / 评分 / 源）
                 HStack(spacing: 6) {
                     if let type = media.type, !type.isEmpty {
-                        Text(type)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2.5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
+                        PillChip(type, font: .caption2.weight(.medium))
                     }
 
                     if let year = media.titleYear ?? media.year, !year.isEmpty {
-                        Text(year)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2.5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
+                        PillChip(year, font: .caption2.monospacedDigit())
                     }
 
                     if let rating = media.voteAverage, rating > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 8.5))
-                                .foregroundStyle(.yellow)
-                            Text(String(format: "%.1f", rating))
-                                .font(.caption2.weight(.bold).monospacedDigit())
-                                .foregroundStyle(.primary)
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2.5)
-                        .background(Color.yellow.opacity(0.12), in: Capsule())
+                        RatingPill(score: Double(rating), style: .capsule)
                     }
 
                     if let source = media.mediaSource, !source.isEmpty {
-                        Text(source.uppercased())
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2.5)
-                            .background(Color.primary.opacity(0.04), in: Capsule())
+                        PillChip(
+                            source.uppercased(),
+                            role: .custom(.secondary),
+                            font: .system(size: 9, weight: .bold)
+                        )
                     }
                 }
 
