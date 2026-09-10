@@ -56,7 +56,7 @@ Scripts/package-macos.sh v0.1.5  # 本地打包，产出与 CI 相同的 dist/ �
 | DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、SwiftUI 适配 |
 | BangumiKit | `Packages/BangumiKit/` | Bangumi OAuth、收藏/章节/搜索/日历 API、GRDB 本地库 |
 | MoviePilotKit | `Packages/MoviePilotKit/` | MoviePilot 登录换 JWT、401 静默重登、订阅/搜索/下载 API |
-| DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志、脱敏、节流、轮转；网络公共工具 |
+| DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志、脱敏、节流、轮转；网络公共工具 + 共享 HTTP 执行层（`HTTPClient`/`RetryPolicy`：传输/计时日志/传输错误映射/退避重试，各域客户端共用） |
 
 ## 弹幕渲染路线
 
