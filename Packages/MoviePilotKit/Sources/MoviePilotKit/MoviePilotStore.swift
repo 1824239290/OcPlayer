@@ -13,6 +13,10 @@ import Foundation
 /// 测试可注入 `UserDefaults`（suiteName 隔离）。
 public final class MoviePilotStore: @unchecked Sendable {
 
+    /// 全局唯一实例：协调器与 APIClient 共用同一份 store（此前两边各 `MoviePilotStore()`，
+    /// 两个实例只靠同一份 UserDefaults 碰巧同步——收敛成单一实例，消除双写时序差）。
+    public static let shared = MoviePilotStore()
+
     private let defaults: UserDefaults
     private let lock = NSLock()
 

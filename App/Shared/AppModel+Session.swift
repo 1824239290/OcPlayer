@@ -8,6 +8,9 @@ extension AppModel {
     /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
     func bootstrap() {
         guard phase == .boot else { return }
+        // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
+        // 从 init 挪到这里：构造 AppModel 不再有副作用，测试拿到的实例是干净的。
+        bangumi.setup()
         if let restored = JellyfinServer(restoringFrom: store) {
             activate(server: restored)
         } else {

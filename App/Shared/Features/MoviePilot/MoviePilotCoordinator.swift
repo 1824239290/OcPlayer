@@ -11,15 +11,14 @@ import Observation
 @Observable
 final class MoviePilotCoordinator {
 
-    let store = MoviePilotStore()
+    /// 与 `MoviePilotAPIClient.shared` 共用同一份 store（原来两边各持一个实例，
+    /// 只靠同一份 UserDefaults 碰巧同步）。
+    let store = MoviePilotStore.shared
 
-    /// 凭证失效通知。转发 MoviePilotKit 的名字 + 载荷解码，根视图不必 import MoviePilotKit。
+    /// 凭证失效通知。转发 MoviePilotKit 的名字，根视图不必 import MoviePilotKit。
+    /// 载荷解码（NSNumber 代次）走共享的 `AuthNotification.credentialGeneration(from:)`。
     static let authenticationRequiredNotification =
         MoviePilotAPIClient.authenticationRequiredNotification
-
-    static func authenticationGeneration(from note: Notification) -> UInt64? {
-        (note.object as? NSNumber)?.uint64Value
-    }
 
     /// 当前用户（登录成功或恢复会话后有值）。
     var profile: MPUser?

@@ -6,6 +6,14 @@
 
 ### 改动
 
+- **状态层重构（阶段 2）**：
+  - `AppModel` 域模型全部改为 init 显式注入（`store/bangumi/moviepilot/danmakuModel`，默认值不变），`bangumi.setup()` 从 init 挪进 `bootstrap()`——构造 AppModel 不再有副作用，测试拿到干净实例。
+  - `BangumiCoordinator` 支持注入 `BangumiContext`（默认 `.shared`）。
+  - **MoviePilot 凭证存储收敛为单实例**：`MoviePilotStore.shared`——此前协调器与 `MoviePilotAPIClient` 各持一个实例、只靠同一份 UserDefaults 碰巧同步。
+  - 401 凭证失效接线收敛：RootView 里 Bangumi/MoviePilot 两段几乎相同的 `onReceive` 合并为共享的 `onAuthenticationRequired` 修饰符 + `AuthNotification` 解码。
+  - **`DetailView` 数据面抽成 `DetailViewModel`**（1342→1083 行，@State 21→6）：详情/季/集/类似的加载、SWR 快照缓存、按季缓存、选中态与智能默认季/集全部进 VM，视图只剩布局与交互编排。详情页行内错误条并入共享 `ErrorNotice`，集列表空态/失败态并入 `EmptyState`。
+  - 决策记录：`AppModel+Playback` 的播放编排**不**再抽独立对象——它要协调导航层/上报/弹幕/Bangumi/首页缓存五方，抽出来只是把同一份耦合换个壳；`@Observable` 本身已按属性粒度隔离重绘。播放侧的真正整改在阶段 4（PlaybackController 职责拆分）。
+
 - **前端组件化重构：设计系统下沉为新包 `AppDesignKit`，卡片/胶囊/分页/空态向共享原语收敛**（`refactor/component-reuse`）。
   - 动效/尺寸 token、骨架屏、卡片原语、横向滚动、液态玻璃、远程图管道（`ImagePipeline`/`RemoteImage`）从 `App` 移入新包 `Packages/AppDesignKit`——只吃纯值、不依赖任何域模型，新 Feature 直接复用。
   - 新增模型无关原语：`MediaArtwork`（海报/剧照画幅 + overlay 槽）、`CardProgressTrack`（3pt 胶囊进度细轨）、`PillChip`（分类/印章徽章，三档语义色）、`RatingPill`（评分徽章统一橙）、`EmptyState`、`ErrorNotice`、`PagedListLoader` + `LoadMoreFooter`（分页状态机：代次守卫/追加去重/满页判断，含 `replace`/`remove`/`reportError`）。

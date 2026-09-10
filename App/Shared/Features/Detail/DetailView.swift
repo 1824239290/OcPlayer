@@ -30,34 +30,23 @@ struct DetailView: View {
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
 
-    @State private var detail: MediaItem?
-    @State private var seasons: [MediaItem] = []
-    @State private var episodes: [MediaItem] = []
-    /// 本次停留在这一页期间已经拉过的季 → 集列表。来回切季不再重新请求、
-    /// 也不再闪一下 loading。`load()`（换条目）时整体清空。
-    @State private var episodesBySeason: [String: [MediaItem]] = [:]
-    /// 每季各自记住用户选中的那一集：切走再切回来选中项还在。
-    @State private var selectedEpisodeBySeason: [String: MediaItem.ID] = [:]
-    @State private var similar: [MediaItem] = []
-    @State private var selectedSeasonID: String?
-    @State private var selectedEpisodeID: MediaItem.ID?
-    /// 横向选集箭头滚动的锚点（可与选中集不同：只滚列表不改选中）。
-    @State private var episodeScrollFocusID: MediaItem.ID?
-    @State private var isLoading = false
-    @State private var loadError: String?
-    @State private var isLoadingEpisodes = false
-    @State private var episodeLoadError: String?
+    /// 数据面（详情/季/集/类似的加载、缓存与选中态）在 `DetailViewModel`。
+    /// 视图只留布局与交互编排。VM 在 `.task` 里 `attach(app)`——SwiftUI 的
+    /// init 拿不到 @Environment，先建 VM 后挂依赖。
+    @State private var model: DetailViewModel
+
     @State private var isUpdatingPlayed = false
-    /// 播放退出后的静默刷新任务：离页时取消。
-    @State private var reloadAfterPlaybackTask: Task<Void, Never>?
     @State private var playedActionError: String?
 
-    private var shown: MediaItem { detail ?? item }
+    init(item: MediaItem) {
+        self.item = item
+        _model = State(initialValue: DetailViewModel(item: item))
+    }
 
     /// 氛围布局是否生效：开关开且条目有 backdrop 图。没图时没有氛围层，
     /// 浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
     private var isAmbientActive: Bool {
-        ambientBackdropEnabled && shown.backdropImageTag != nil && app.server != nil
+        ambientBackdropEnabled && model.shown.backdropImageTag != nil && app.server != nil
     }
 
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
@@ -93,7 +82,7 @@ struct DetailView: View {
 
     var body: some View {
         Group {
-            if isLoading && detail == nil {
+            if model.isLoading && model.detail == nil {
                 skeleton
                     .transition(.section)
             } else {
@@ -113,23 +102,27 @@ struct DetailView: View {
                             banner
                             metadata
                         }
-                        if let loadError {
-                            loadErrorNotice(loadError)
+                        if let loadError = model.loadError {
+                            ErrorNotice(loadError)
+                                .padding(.horizontal, detailHorizontalInset)
+                                .padding(.top, 14)
                         }
                         if let playedActionError {
-                            loadErrorNotice(playedActionError)
+                            ErrorNotice(playedActionError)
+                                .padding(.horizontal, detailHorizontalInset)
+                                .padding(.top, 14)
                         }
-                        if shown.kind == .series {
+                        if model.shown.kind == .series {
                             seasonBar
                             episodeList
                         }
                         BangumiChapterSection(
-                            item: shown,
-                            selectedSeason: seasons.first(where: { $0.id == selectedSeasonID })
+                            item: model.shown,
+                            selectedSeason: model.seasons.first(where: { $0.id == model.selectedSeasonID })
                         )
-                        MoviePilotResourceSection(item: shown)
-                        if !shown.cast.isEmpty { castRail }
-                        if !similar.isEmpty { similarRail }
+                        MoviePilotResourceSection(item: model.shown)
+                        if !model.shown.cast.isEmpty { castRail }
+                        if !model.similar.isEmpty { similarRail }
                     }
                     .padding(.bottom, 48)
                 }
@@ -139,13 +132,13 @@ struct DetailView: View {
             }
         }
         // 骨架 → 内容原位交叉淡入，不再硬切。
-        .motion(Motion.standard, value: isLoading)
-        .navigationTitle(horizontalSizeClass == .compact ? "" : shown.name)
+        .motion(Motion.standard, value: model.isLoading)
+        .navigationTitle(horizontalSizeClass == .compact ? "" : model.shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
-        .sensoryFeedback(.selection, trigger: selectedEpisodeID)
+        .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
         #elseif os(macOS)
         .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
@@ -155,7 +148,7 @@ struct DetailView: View {
         .background {
             if horizontalSizeClass == .compact, isAmbientActive {
                 BackdropAmbienceView(
-                    target: shown.imageTarget(app.server, kind: .backdrop, width: 800),
+                    target: model.shown.imageTarget(app.server, kind: .backdrop, width: 800),
                     scrim: .detail
                 )
             }
@@ -168,19 +161,22 @@ struct DetailView: View {
         .windowAmbience(
             isAmbientActive
                 ? WindowAmbience(
-                    url: shown.imageTarget(app.server, kind: .backdrop, width: 800).url,
-                    authHeader: shown.imageTarget(app.server, kind: .backdrop, width: 800).authHeader
+                    url: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).url,
+                    authHeader: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).authHeader
                 )
                 : nil
         )
-        .task(id: item.id) { await load() }
+        .task(id: item.id) {
+            model.attach(app)
+            await model.load()
+        }
         .onChange(of: app.detailRefreshGeneration) { _, _ in
             // 挂住任务：离页 / 换条目时取消，fire-and-forget 不再跑到旧页面上。
-            reloadAfterPlaybackTask?.cancel()
-            reloadAfterPlaybackTask = Task { await reloadAfterPlayback() }
+            model.reloadAfterPlaybackTask?.cancel()
+            model.reloadAfterPlaybackTask = Task { await model.reloadAfterPlayback() }
         }
         .onDisappear {
-            reloadAfterPlaybackTask?.cancel()
+            model.reloadAfterPlaybackTask?.cancel()
         }
     }
 
@@ -195,7 +191,7 @@ struct DetailView: View {
                 skeletonBanner
                 skeletonMetadata
             }
-            if shown.kind == .series {
+            if model.shown.kind == .series {
                 skeletonSeasonBar
                 SkeletonEpisodeStrip()
             }
@@ -321,7 +317,7 @@ struct DetailView: View {
 
     private var compactHeroBanner: some View {
         ZStack(alignment: .bottom) {
-            let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
+            let target = model.shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             if let url = target.url {
                 RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                     .aspectRatio(contentMode: .fill)
@@ -359,7 +355,7 @@ struct DetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             compactMetaRow
             compactActionSection
-            if let overview = shown.overview, !overview.isEmpty {
+            if let overview = model.shown.overview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .padding(.top, 2)
             }
@@ -371,7 +367,7 @@ struct DetailView: View {
     private var compactMetaRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                if let rating = shown.communityRating {
+                if let rating = model.shown.communityRating {
                     HStack(spacing: 3) {
                         Image(systemName: "star.fill")
                             .font(.system(size: 11, weight: .bold))
@@ -384,7 +380,7 @@ struct DetailView: View {
                     .background(BangumiStatusColor.rating.opacity(0.14), in: Capsule())
                 }
 
-                if let official = shown.officialRating {
+                if let official = model.shown.officialRating {
                     Text(official)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -397,20 +393,20 @@ struct DetailView: View {
                         )
                 }
 
-                if let year = shown.year {
+                if let year = model.shown.year {
                     Text(String(year))
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
 
-                if shown.kind == .series, let count = shown.childCount {
+                if model.shown.kind == .series, let count = model.shown.childCount {
                     Text("·").foregroundStyle(.tertiary)
                     Text("\(count) 季")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
 
-                if let runtime = shown.runtimeSeconds {
+                if let runtime = model.shown.runtimeSeconds {
                     Text("·").foregroundStyle(.tertiary)
                     Text(RuntimeText.format(runtime))
                         .font(.subheadline.weight(.medium))
@@ -418,8 +414,8 @@ struct DetailView: View {
                 }
             }
 
-            if !shown.genres.isEmpty {
-                Text(shown.genres.joined(separator: " · "))
+            if !model.shown.genres.isEmpty {
+                Text(model.shown.genres.joined(separator: " · "))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -478,7 +474,7 @@ struct DetailView: View {
             }
             return "继续播放 · \(resumeClock(playState.positionSeconds))"
         }
-        if shown.kind == .series {
+        if model.shown.kind == .series {
             if let label = playableItem?.episodeLabel {
                 return "播放 \(label)"
             }
@@ -527,7 +523,7 @@ struct DetailView: View {
             // 背景层：fill 的溢出尺寸会参与 ZStack 布局、把渐变层的坐标系一起
             // 撑高，底部渐隐就画到了裁剪窗口之外（视觉上「渐变没了」）。先把
             // 图片层钳回定高、原位裁掉溢出，渐变才对齐可见区域。
-            let target = shown.imageTarget(app.server, kind: .backdrop, width: 1600)
+            let target = model.shown.imageTarget(app.server, kind: .backdrop, width: 1600)
             if let url = target.url {
                 RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
                     .aspectRatio(contentMode: .fill)
@@ -622,8 +618,8 @@ struct DetailView: View {
 
     @ViewBuilder
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
-        if shown.primaryImageTag != nil {
-            let poster = shown.imageTarget(app.server, kind: .primary, width: 300)
+        if model.shown.primaryImageTag != nil {
+            let poster = model.shown.imageTarget(app.server, kind: .primary, width: 300)
             RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: width, height: height)
@@ -633,12 +629,12 @@ struct DetailView: View {
     }
 
     private var bannerTitle: some View {
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28, adaptiveText: true)
+        ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28, adaptiveText: true)
     }
 
     private var compactBannerTitle: some View {
         // 紧凑宽度：艺术字 Logo 或居中文本标题
-        ItemTitleLogoView(item: shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
+        ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
@@ -653,11 +649,11 @@ struct DetailView: View {
                 }
                 Text(part).foregroundStyle(base.opacity(0.78))
             }
-            if let rating = shown.communityRating {
+            if let rating = model.shown.communityRating {
                 Label(String(format: "%.1f", rating), systemImage: "star.fill")
                     .foregroundStyle(BangumiStatusColor.rating)
             }
-            if let official = shown.officialRating {
+            if let official = model.shown.officialRating {
                 Text(official)
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(base.opacity(colorScheme == .light ? 0.08 : 0.2), in: RoundedRectangle(cornerRadius: 4))
@@ -669,10 +665,10 @@ struct DetailView: View {
 
     private var metaParts: [String] {
         var parts: [String] = []
-        if let year = shown.year { parts.append(String(year)) }
-        if !shown.genres.isEmpty { parts.append(shown.genres.prefix(3).joined(separator: " / ")) }
-        if let runtime = shown.runtimeSeconds { parts.append(RuntimeText.format(runtime)) }
-        if shown.kind == .series, let count = shown.childCount {
+        if let year = model.shown.year { parts.append(String(year)) }
+        if !model.shown.genres.isEmpty { parts.append(model.shown.genres.prefix(3).joined(separator: " / ")) }
+        if let runtime = model.shown.runtimeSeconds { parts.append(RuntimeText.format(runtime)) }
+        if model.shown.kind == .series, let count = model.shown.childCount {
             parts.append("\(count) 季")
         }
         return parts
@@ -781,17 +777,17 @@ struct DetailView: View {
 
     /// 电影直接播自身；剧集只播当前横向选集中的选中集。
     private var playableItem: MediaItem? {
-        switch shown.kind {
+        switch model.shown.kind {
         case .series:
             return selectedEpisode
         default:
-            return shown
+            return model.shown
         }
     }
 
     private var selectedEpisode: MediaItem? {
-        guard let selectedEpisodeID else { return nil }
-        return episodes.first { $0.id == selectedEpisodeID }
+        guard let selectedID = model.selectedEpisodeID else { return nil }
+        return model.episodes.first { $0.id == selectedID }
     }
 
     private var resumePlayState: MediaItem.PlayState? {
@@ -833,7 +829,7 @@ struct DetailView: View {
 
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let overview = shown.overview, !overview.isEmpty {
+            if let overview = model.shown.overview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)
             }
@@ -848,13 +844,13 @@ struct DetailView: View {
         HStack(spacing: 14) {
             Text("剧集").font(.title3.weight(.bold))
             Spacer()
-            if seasons.count > 1 {
+            if model.seasons.count > 1 {
                 Menu {
-                    ForEach(seasons) { season in
+                    ForEach(model.seasons) { season in
                         Button {
-                            selectedSeasonID = season.id
+                            model.selectSeason(season.id)
                         } label: {
-                            if season.id == selectedSeasonID {
+                            if season.id == model.selectedSeasonID {
                                 Label(season.name, systemImage: "checkmark")
                             } else {
                                 Text(season.name)
@@ -863,7 +859,7 @@ struct DetailView: View {
                     }
                 } label: {
                     HStack(spacing: 5) {
-                        Text(selectedSeasonName)
+                        Text(model.selectedSeasonName)
                             .font(.subheadline.weight(.medium))
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.caption2)
@@ -878,31 +874,23 @@ struct DetailView: View {
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 26)
         .padding(.bottom, 12)
-        .task(id: selectedSeasonID) { await loadEpisodes() }
-    }
-
-    private var selectedSeasonName: String {
-        seasons.first(where: { $0.id == selectedSeasonID })?.name ?? "选择季"
+        .task(id: model.selectedSeasonID) { await model.loadEpisodes() }
     }
 
     private var episodeList: some View {
         Group {
-            if isLoadingEpisodes {
+            if model.isLoadingEpisodes {
                 skeletonEpisodes
-            } else if let episodeLoadError {
-                ContentUnavailableView {
-                    Label("集列表加载失败", systemImage: "wifi.exclamationmark")
-                } description: {
-                    Text(episodeLoadError)
-                } actions: {
-                    Button(UIStrings.retry) { Task { await loadEpisodes() } }
+            } else if let episodeError = model.episodeLoadError {
+                EmptyState(failure: episodeError, title: "集列表加载失败", systemImage: "wifi.exclamationmark") {
+                    Task { await model.loadEpisodes() }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .padding(.horizontal, detailHorizontalInset)
                 .transition(.section)
-            } else if episodes.isEmpty {
-                ContentUnavailableView("本季暂无剧集", systemImage: "rectangle.stack")
+            } else if model.episodes.isEmpty {
+                EmptyState(empty: "本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .padding(.horizontal, detailHorizontalInset)
@@ -914,8 +902,8 @@ struct DetailView: View {
         }
         // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
         // 两个 value 都绑：loading 翻转和集列表整体替换（count 变化）各自开一次事务。
-        .animation(episodeListMotion, value: isLoadingEpisodes)
-        .animation(episodeListMotion, value: episodes.count)
+        .animation(episodeListMotion, value: model.isLoadingEpisodes)
+        .animation(episodeListMotion, value: model.episodes.count)
     }
 
     /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
@@ -934,32 +922,22 @@ struct DetailView: View {
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
     private var episodePickerRail: some View {
         HoverArrowHScroll(
-            items: episodes,
+            items: model.episodes,
             scrollStep: 4,
             contentLeading: contentLeading,
             edgeReserve: 28,
             verticalPadding: 10,
             // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
             arrowYOffset: -18,
-            scrollToID: selectedEpisodeID
+            scrollToID: model.selectedEpisodeID
         ) { episode in
             EpisodeSelectCard(
                 episode: episode,
                 server: app.server,
-                isSelected: episode.id == selectedEpisodeID,
-                onSelect: {
-                    selectedEpisodeID = episode.id
-                    episodeScrollFocusID = episode.id
-                    if let seasonID = selectedSeasonID {
-                        selectedEpisodeBySeason[seasonID] = episode.id
-                    }
-                },
+                isSelected: episode.id == model.selectedEpisodeID,
+                onSelect: { model.selectEpisode(episode) },
                 onPlay: {
-                    selectedEpisodeID = episode.id
-                    episodeScrollFocusID = episode.id
-                    if let seasonID = selectedSeasonID {
-                        selectedEpisodeBySeason[seasonID] = episode.id
-                    }
+                    model.selectEpisode(episode)
                     app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
                 }
             )
@@ -969,7 +947,7 @@ struct DetailView: View {
     // MARK: - 演员 / 类似
 
     private var castRail: some View {
-        let actors = Array(shown.cast.filter { $0.kind == "Actor" }.prefix(20))
+        let actors = Array(model.shown.cast.filter { $0.kind == "Actor" }.prefix(20))
         let avatarSize: CGFloat = horizontalSizeClass == .compact ? 80 : 108
         return Rail("演员", kind: .flexible, items: actors) { person in
             VStack(spacing: 8) {
@@ -989,7 +967,7 @@ struct DetailView: View {
     }
 
     private var similarRail: some View {
-        Rail("类似推荐", kind: .poster, items: similar) { item in
+        Rail("类似推荐", kind: .poster, items: model.similar) { item in
             PosterCard(item: item, server: app.server) {
                 app.openDetail(item)
             }
@@ -1033,7 +1011,7 @@ struct DetailView: View {
             let state = markAsPlayed
                 ? try await server.markPlayed(itemID: target.id)
                 : try await server.markUnplayed(itemID: target.id)
-            applyPlayState(state, toItemID: target.id)
+            model.applyPlayState(state, toItemID: target.id)
         } catch let error as JellyfinError {
             playedActionError = error.errorDescription
         } catch {
@@ -1041,245 +1019,7 @@ struct DetailView: View {
         }
     }
 
-    private func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) {
-        if var current = detail, current.id == id {
-            current.playState = state
-            detail = current
-        }
-        if let index = episodes.firstIndex(where: { $0.id == id }) {
-            episodes[index].playState = state
-        }
-        // 缓存也要跟着改，否则切走再切回来「已看过」的勾又变回去了。
-        for (seasonID, cached) in episodesBySeason {
-            guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
-            episodesBySeason[seasonID]?[index].playState = state
-        }
-        storeSnapshot()
-    }
-
-    private func load() async {
-        guard let server = app.server else { return }
-        // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
-        // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
-        let snapshot = app.detailSnapshots[item.id]
-        if let snapshot {
-            detail = snapshot.detail
-            seasons = snapshot.seasons
-            similar = snapshot.similar
-            selectedSeasonID = snapshot.selectedSeasonID
-            episodesBySeason = snapshot.episodesBySeason
-            if let seasonID = snapshot.selectedSeasonID,
-               let cached = snapshot.episodesBySeason[seasonID] {
-                episodes = cached
-                let restored = selectedEpisodeBySeason[seasonID]
-                    .flatMap { id in cached.contains { $0.id == id } ? id : nil }
-                    ?? preferredEpisodeID(in: cached, seriesID: snapshot.detail.id)
-                selectedEpisodeID = restored
-                episodeScrollFocusID = restored
-            }
-        }
-
-        isLoading = snapshot == nil
-        if snapshot == nil {
-            loadError = nil
-            detail = nil
-            seasons = []
-            episodes = []
-            episodesBySeason = [:]
-            selectedEpisodeBySeason = [:]
-            selectedSeasonID = nil
-            selectedEpisodeID = nil
-            episodeScrollFocusID = nil
-            episodeLoadError = nil
-        }
-
-        // Similar recommendations are optional and may be unavailable on
-        // servers with that endpoint disabled. Keep the required detail path
-        // independent so a recommendation failure cannot blank the page.
-        async let similarItems = server.similar(itemID: item.id)
-        do {
-            let loadedDetail = try await server.item(item.id)
-            guard !Task.isCancelled else { return }
-            detail = loadedDetail
-
-            if loadedDetail.kind == .series {
-                do {
-                    let loadedSeasons = try await server.seasons(seriesID: item.id)
-                    guard !Task.isCancelled else { return }
-                    seasons = loadedSeasons
-                    selectedSeasonID = preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
-                } catch let e as JellyfinError {
-                    if snapshot == nil { loadError = e.errorDescription }
-                } catch {
-                    if snapshot == nil { loadError = "\(error)" }
-                }
-            }
-        } catch let e as JellyfinError {
-            if snapshot == nil { loadError = e.errorDescription }
-        } catch {
-            if snapshot == nil { loadError = "\(error)" }
-        }
-        isLoading = false
-        similar = (try? await similarItems) ?? similar
-        storeSnapshot()
-    }
-
-    /// 把当前内容写进跨进入快照（SWR 的「stale」来源）。
-    private func storeSnapshot() {
-        guard let detail else { return }
-        app.storeDetailSnapshot(
-            .init(detail: detail, seasons: seasons, similar: similar,
-                  selectedSeasonID: selectedSeasonID, episodesBySeason: episodesBySeason),
-            for: item.id)
-    }
-
-    /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
-    private func reloadAfterPlayback() async {
-        guard let server = app.server else { return }
-        if let loaded = try? await server.item(item.id) {
-            detail = loaded
-        }
-        if shown.kind == .series {
-            // 只回填当前季：其他季的缓存不包含本次播放的那一集，清空整份
-            // episodesBySeason 只会让切季时白拉一遍、闪一下 loading。
-            if let seasonID = selectedSeasonID {
-                if let loaded = try? await server.episodes(seriesID: shown.id, seasonID: seasonID) {
-                    episodesBySeason[seasonID] = loaded
-                    episodes = loaded
-                    if let currentID = selectedEpisodeID, loaded.contains(where: { $0.id == currentID }) {
-                        // 保持选中集，其 playState 已经更新为最新的
-                    } else {
-                        let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
-                        selectedEpisodeID = preferred
-                        episodeScrollFocusID = preferred
-                    }
-                }
-            }
-        }
-        storeSnapshot()
-    }
-
-    private func loadEpisodes() async {
-        guard let server = app.server, shown.kind == .series, let seasonID = selectedSeasonID else {
-            episodes = []
-            selectedEpisodeID = nil
-            episodeScrollFocusID = nil
-            isLoadingEpisodes = false
-            episodeLoadError = nil
-            return
-        }
-        // 这一季已经拉过：同步换上，不清空、不转圈、不发请求。
-        if let cached = episodesBySeason[seasonID] {
-            episodes = cached
-            let restored = selectedEpisodeBySeason[seasonID]
-                .flatMap { id in cached.contains { $0.id == id } ? id : nil }
-                ?? preferredEpisodeID(in: cached, seriesID: shown.id)
-            selectedEpisodeID = restored
-            episodeScrollFocusID = restored
-            isLoadingEpisodes = false
-            episodeLoadError = nil
-            return
-        }
-        episodes = []
-        selectedEpisodeID = nil
-        episodeScrollFocusID = nil
-        isLoadingEpisodes = true
-        episodeLoadError = nil
-        defer {
-            if selectedSeasonID == seasonID {
-                isLoadingEpisodes = false
-            }
-        }
-        do {
-            let loaded = try await server.episodes(seriesID: shown.id, seasonID: seasonID)
-            guard !Task.isCancelled, selectedSeasonID == seasonID else { return }
-            episodesBySeason[seasonID] = loaded
-            episodes = loaded
-            let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
-            selectedEpisodeID = preferred
-            episodeScrollFocusID = preferred
-            storeSnapshot()
-        } catch let e as JellyfinError {
-            guard selectedSeasonID == seasonID else { return }
-            episodeLoadError = e.errorDescription
-        } catch is CancellationError {
-            // 切季/离页的取消不是错误，别闪错误条。
-            return
-        } catch {
-            guard selectedSeasonID == seasonID else { return }
-            episodeLoadError = "\(error)"
-        }
-    }
-
-    // MARK: - 智能默认季 / 集
-
-    /// 首页续播 / 下一集线索：用于默认季与默认选中集。
-    private func preferredEpisodeHint(seriesID: MediaItem.ID) -> MediaItem? {
-        if let resume = app.home.resume.first(where: {
-            $0.seriesID == seriesID
-                && !($0.playState?.played ?? false)
-                && ($0.playState?.positionSeconds ?? 0) >= 30
-        }) {
-            return resume
-        }
-        return app.home.nextUp.first(where: { $0.seriesID == seriesID })
-    }
-
-    /// 默认季：有续播/下一集进度的季优先；否则第一部有未看完的常规季（跳过 SP/特典）；
-    /// 再否则第一部常规季；最后才落到任意季（含仅有 SP 的片）。
-    private func preferredSeasonID(in seasons: [MediaItem], seriesID: MediaItem.ID) -> String? {
-        guard !seasons.isEmpty else { return nil }
-
-        if let hint = preferredEpisodeHint(seriesID: seriesID) {
-            if let sn = hint.seasonNumber,
-               let byNumber = seasons.first(where: { $0.seasonNumber == sn }) {
-                return byNumber.id
-            }
-        }
-
-        let regular = seasons.filter { !isSpecialsSeason($0) }
-        let pool = regular.isEmpty ? seasons : regular
-
-        if let unwatched = pool.first(where: { ($0.playState?.unplayedCount ?? 0) > 0 }) {
-            return unwatched.id
-        }
-        return pool.first?.id ?? seasons.first?.id
-    }
-
-    /// 特典/SP 季：季号 0，或名称像 Specials / 特别篇 / SP（避免默认一进详情就停在 SP）。
-    private func isSpecialsSeason(_ season: MediaItem) -> Bool {
-        if let number = season.seasonNumber, number == 0 { return true }
-        let name = season.name.lowercased()
-        if name.contains("special") { return true }
-        if name.contains("特别") || name.contains("特典") || name.contains("番外") { return true }
-        let compact = name.filter { !$0.isWhitespace }
-        if compact == "sp" || compact.hasPrefix("sp") && compact.count <= 4 { return true }
-        return false
-    }
-
-    /// 当前季列表内的默认选中集：续播 → nextUp → 第一集未看完 → 第一集。
-    private func preferredEpisodeID(in episodes: [MediaItem], seriesID: MediaItem.ID) -> MediaItem.ID? {
-        guard !episodes.isEmpty else { return nil }
-
-        if let hint = preferredEpisodeHint(seriesID: seriesID),
-           episodes.contains(where: { $0.id == hint.id }) {
-            return hint.id
-        }
-
-        return episodes.first(where: { !($0.playState?.played ?? false) })?.id
-            ?? episodes.first?.id
-    }
-
-    private func loadErrorNotice(_ message: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle")
-            Text(message).font(.callout)
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, 14)
-    }
+    // MARK: - 数据已搬入 DetailViewModel（加载/缓存/选中态/智能默认季集）
 }
 
 // MARK: - 可折叠简介

@@ -70,7 +70,7 @@ public actor MoviePilotAPIClient {
     private var reloginExhaustedGeneration: UInt64?
 
     public init(
-        store: MoviePilotStore = MoviePilotStore(),
+        store: MoviePilotStore = .shared,
         sessionConfiguration: URLSessionConfiguration = .default
     ) {
         self.store = store
