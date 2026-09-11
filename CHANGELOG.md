@@ -2,7 +2,7 @@
 
 项目变更记录。未发布内容集中在 `[Unreleased]`，提交前应同步更新用户可见行为和验证入口。
 
-## [Unreleased]
+## [0.1.6] · 2026-09-11 · 前端组件化重构、HUD 液态玻璃与内核 v0.1.9
 
 ### 改动
 
@@ -32,8 +32,15 @@
   - 收起错误/空态/胶囊：`BangumiNotice` 并入 `ErrorNotice`；LibraryView/AppShell/Home/Bangumi 收藏列表空态并入 `EmptyState`；展示型标签用 `PillChip`，交互型菜单/状态胶囊按钮保持原生。
   - 净效果：App 层约 -1000 行；`BangumiHomeView` 999→836、`BangumiCollectionListView` 160→151。新增 `AppDesignKitTests`（12 用例）。纯 UI 重构，无视觉/行为变化，播放器 HUD 零改动。
 
-- **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：
+- **HDR 片首次真出 EDR**：内核在 macOS 不探测屏幕，HDR 输出档位全靠宿主喂 headroom，而 App 从 v0.1.0 起一直传 `Auto + 0`——HDR 片始终被映射成 SDR（播放详情的「映射 SDR」标注只是让它显形）。现在引擎创建时按窗口所在屏的 `maximumPotentialEDR` 传 `edr_headroom`（SDR 屏 = 1.0 行为不变，XDR 屏 ≈8 真出 EDR），`PlaybackEngine` 增 `updateDisplayEDRHeadroom`（默认实现防静态派发坑），PlayerScreen 监听换屏/显示配置变化并首报、引擎重建时补推。非 macOS 不查不推。**限制**：运行时切换要等内核 Metal 后端实现 `set_output_headroom`（当前只在创建时生效，播放中换屏档位不跟手）。
 
+- **关于页与产物可追溯到提交**：构建号与 Git commit 全程注入——`App.xcconfig` 增 `CURRENT_PROJECT_VERSION` 默认值，`Info.plist` 增 `GitCommit` 键（构建时注入，字面量兜底为 nil）；AppVersion 新增 `gitCommit`，关于页显示 `v版本 (Build N · 短哈希)`、启动诊断日志带 commit；构建脚本 Build 号 CI 取 run number、本地取提交总数，dirty 构建带 `-dirty` 后缀，本地产物文件名带 build + commit 后缀，打包脚本语义版本校验前置。补 `AppVersion.displayString` 单测。
+
+- **弹幕匹配成功率提升（模糊候选打分 + 四级降级检索）**：`isMatched == false` 的模糊候选接入 `DanmakuCandidateScorer`（集数 / 季度 / 标题打分）救回有效弹幕；检索引入四级瀑布流降级——Hash 匹配 → TMDB ID 搜索 → 标题+集数精准搜索 → 提纯标题全集匹配（此前每级静默吞错，见「修复」里网关故障误报那条）。新增 `DanmakuFilenameParser`：全角半角转换、中文数字解析、剥离发布组与压制参数噪声；Jellyfin 与单播文件的元数据推断同步优化（解决 `01.mkv` 丢番剧名、单播支持向上回溯父目录）。
+
+- **MoviePilot 与弹幕选择界面重构为液态玻璃 + 多层子菜单**：DesignSystem 增通用 `liquidGlassCard` / `liquidGlassCapsule` 材质修饰器；MoviePilot 媒体搜索结果改通透流式卡片（去掉放大悬浮动效），资源搜索页引入氛围背景、移除 300+ 行实时 glass 着色器与 textSelection、背景启用 Metal 离屏栅格化（此前严重掉帧）；弹幕选择面板重构为「作品 → 选集」两级下钻（平滑层级返回 + 透明液态玻璃背景），播放器为该弹窗配透明背景。
+
+- **播放中 HUD 自动隐藏时一并藏鼠标光标**：用 `NSCursor.setHiddenUntilMouseMoves` 与 HUD 同步显隐，退出播放器强制 unhide 兜底；暂停 / 缓冲 / VoiceOver 时光标保持可见。
 - **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：基于上游 v0.1.9 + libplacebo 风格 Dolby Vision RPU 映射（P5/P8.1 SSIM≈0.995）。相对 `v0.1.7+dolby.3` 带来上游 0.1.8/0.1.9 一系列播放修复——渲染阻塞恢复后的音画时钟重校准、倍速切换平滑过渡、iOS 前台/音频中断恢复、首条音轨解码失败自动回退后续音轨、弹幕跨规划窗口重现跳轨、`ErikaOpenOptions` 预读（本 App 已在用）。C ABI 与 `v0.1.7+dolby.2+` 一致（`ErikaPresenterConfig` 四字段），App 侧无需改代码。**iOS 暂维持 `v0.1.7+dolby.3`**：该 release 仅手工打包了 macOS arm64 资产，`package-ios.sh` / CI iOS job 继续钉最近一次全平台 tag；`fetch-erika.sh` 支持 macOS-only release（无 iOS zip 时复用本地已有切片并在 Info.plist 登记）。下载哈希 pin、脚本与 CI 钉点同步换版。
 
 - **设置页新增「启动时默认服务器」**：多服务器用户可在设置 → 服务器里选定打开 App 时优先连接的档案，不必再被「上次使用的服务器」绑死。选「上次使用的服务器」保持旧行为；选定具体档案后启动静默恢复优先走它，token 失效仍回退到其它有有效会话的档案。默认服务器在已保存列表带星标；删除该档案会自动清掉默认设置，不留悬空 ID。默认与「当前会话」独立：临时切到另一台看片，下次打开仍回到你指定的默认服务器。
@@ -72,6 +79,12 @@
 - **Bangumi 条目瞬时网络抖动下被清出「在看」**：单条目接口 `p1/subjects/{id}` 本就不返回收藏状态，回读路径（详情页加载、播放结束后的进度对齐）靠附加请求补，补失败即 `nil`——而落库把 `interest == nil` 当成「服务端确认没收藏」，把本地 `interest`/`ctype`/`collectedAt` 一并清零：条目从「在看」消失、已看进度与评分归零，直到下次全量同步才回来。现在「按 nil 清空」改成显式参数 `authoritativeInterest`：只有收藏全量同步（每页都带收藏状态）这条权威路径传 `true`，单条回读与进度对齐默认保留本地收藏态、只更新元数据（本地改收藏走专用方法，从不置 nil，不受影响）。新增 2 个库用例（非权威保留 / 权威仍清空）。
 
 - **GitHub CI 修复：fetch-erika.sh 全角逗号粘连变量名 + v0.1.9+dolby.1 资产哈希 pin 过期**：CI 自 09-10 起秒挂，根因两条——(1) 脚本 4 处 `$var，` 全角逗号直接粘在变量名后（203 行 `$expected，`、三处 `$f，`），在 CI runner 的 bash/locale 下被当成变量名一部分，`set -u` 直接报 `expected: unbound variable`（3b39961 修过同款 `$PINNED，`，本次漏网；已全部改 `${var}` 花括号隔离）；(2) v0.1.9+dolby.1 的 macOS 资产在本地下载（09-10 13:21）之后被重新上传，pin 哈希停留在旧资产（98cde716），缓存过期后 CI 首次实拉即哈希不匹配——粘连 bug 又把真实的「哈希不匹配」报错吞成 unbound。pin 已更新为线上资产哈希（7b622c21），本地全流程（实拉→校验→合成 xcframework→缓存复用）验证通过。
+
+- **播放信息面板打开时快捷键操作后 HUD 不再自动收起**：`canAutoHideControls` 此前把 `showInfoPanel` 一并收进「不许自动隐藏」——面板开着时用快捷键调进度/音量唤出的 HUD 被钉死，直到关面板或鼠标移出窗口才消失。信息面板只读、`allowsHitTesting(false)`、且独立于 HUD 挂载（HUD 卸载后它照常每秒刷新），不依赖 HUD 常驻，从规则中移出后两者各自独立显隐。
+
+- **跳过钮被面板压住、且展开动画被打断**：展开面板高度上提到 PlayerScreen 后，跳过钮保持单实例、锚点改为「簇底距 + 按钮高 + 间距 + 面板高度」平滑上移；上一版挂在卡片 overlay 里的副本会因挂载时的 prompt 状态写入打断 `glassEffectID` 液态展开动画（面板直接弹出），副本已移除；面板切子菜单变高变矮时跳过钮跟随移动，`reduceMotion` 生效。
+
+- **HUD 展开面板被撑满 320pt**：`ScrollView` 是贪婪布局、`frame(maxHeight:)` 只封顶不收缩，只有一个选项的子菜单也撑满 320。改为隐藏镜像（`fixedSize` 实测自然高度）驱动分支——内容 ≤320 原生高度贴合，超出才滚动（`ViewThatFits` 方案在 `GlassEffectContainer` 内实测不生效，弃用）。
 
 - **氛围背景不铺侧栏、顶栏露出窗口底色**：页面的氛围图此前挂在详情列 ScrollView 的背景上，而 macOS 26 的 `NavigationSplitView` 里只有**栈根**的背景能铺满全窗（首页轮播正是这样垫到侧栏玻璃底下的），pushed 页被裁在详情列内、导航栈宿主自带不透明底——在列内垫什么都连不到侧栏，侧栏整列（尤其下半截）空玻璃，详情页顶部工具栏区域还会露出一条窗口底色。现在有氛围图的页面出现时经 `windowAmbience(_:)` 向 `AppModel.windowAmbience` 声明、离屏时撤回（MoviePilot 资源搜索页声明海报、详情页声明 backdrop，与「海报氛围背景」开关一致），AppShell 把声明图垫在整块 `NavigationSplitView` 后面——透明的 pushed 页、侧栏玻璃和顶部工具栏透出的都是同一张连续的图，观感与首页完全一致；返回或切到无氛围页自动回落系统玻璃，iPhone 紧凑布局没有整窗层、页面自垫不受影响。实现坑：氛围图的 fill 溢出若作为 ZStack 兄弟参与布局会把 split view 撑出窗口，必须走 layout 隔离的 `.background` 挂载；层必须在调用点显式 `ignoresSafeArea()`——详情页这类自带顶部 ignoresSafeArea 滚动视图的页面会改变层继承到的安全区，让图片被 `.clipped()` 裁到工具栏以下。
 - **iPad 氛围布局海报被顶部导航栏按钮遮挡、上沿发糊**：详情页氛围头部内容整体越过顶部安全区，顶部只留 64pt，而 iPadOS 26 导航栏的玻璃按钮（侧栏开关 + 返回）悬深到 ~76pt、滚动边缘渐进模糊尾部到 ~82pt——海报顶部正好压进两者：上沿一截被系统渐进模糊洗掉，收起侧栏后海报左缘（52pt）正对按钮列，左上角直接被玻璃圆钮盖住（侧栏展开时返回键也压着海报一角）。现在 iOS 上头部顶距抬到 104pt，海报整张落在模糊带与按钮之下；Mac 工具栏浅，维持原深度不变。
