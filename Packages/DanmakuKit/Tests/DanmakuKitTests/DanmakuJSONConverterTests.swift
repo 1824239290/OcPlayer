@@ -3,6 +3,38 @@ import XCTest
 
 final class DanmakuJSONConverterTests: XCTestCase {
 
+    // MARK: - 结构直传（overlay 路线）
+
+    /// 直传结果与 JSON 往返必须一致：同一套判据、同样按时间升序。
+    /// 改动滤镜规则只改了一边时这条会响。
+    func testEntriesMatchJSONRoundTrip() throws {
+        let comments = [
+            DanmakuComment(cid: 1, p: "13.0,5,255,0", m: "顶部弹幕"),
+            DanmakuComment(cid: 2, p: "12.5,1,16777215,0", m: "hello"),
+            DanmakuComment(cid: 3, p: "14.0,4,0,0", m: "底部"),
+            DanmakuComment(cid: 4, p: "15.0,9,0,0", m: "非法模式"),
+            DanmakuComment(cid: 5, p: "bad,1,0,0", m: "非法时间"),
+            DanmakuComment(cid: 6, p: "16.0,1,0,0", m: "   "),
+        ]
+        let entries = try XCTUnwrap(DanmakuJSONConverter.entries(from: comments))
+        let json = try XCTUnwrap(DanmakuJSONConverter.erikaJSON(from: comments))
+        let parsed = try XCTUnwrap(DanmakuJSONParser.parse(json))
+
+        // overlay 的出场指针要求有序（原先由装载侧排序）。
+        XCTAssertEqual(entries.map(\.time), [12.5, 13.0, 14.0])
+        XCTAssertEqual(entries.map(\.mode), [.scroll, .top, .bottom])
+        XCTAssertEqual(entries, parsed.sorted { $0.time < $1.time })
+    }
+
+    /// 没有任何有效条目时与 `erikaJSON` 同口径返回 nil（编排器据此走 clear 而不是装载）。
+    func testEntriesNilWhenNothingValid() {
+        XCTAssertNil(DanmakuJSONConverter.entries(from: nil))
+        XCTAssertNil(DanmakuJSONConverter.entries(from: []))
+        XCTAssertNil(
+            DanmakuJSONConverter.entries(from: [DanmakuComment(cid: 1, p: "1,9,0,0", m: "非法模式")])
+        )
+    }
+
     func testBasicConversion() throws {
         let comments = [
             DanmakuComment(cid: 1, p: "0.5,1,16777215,user1", m: "first"),

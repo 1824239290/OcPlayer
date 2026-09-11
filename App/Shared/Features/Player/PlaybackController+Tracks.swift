@@ -23,9 +23,13 @@ extension PlaybackController {
     }
 
     /// Replace the current source's danmaku only while its generation token is valid.
+    ///
+    /// `entries` 是 overlay 路线的直接输入（`DanmakuService` 在 actor 上转好的结构体，
+    /// 主线程只赋值）；`json` 只给内核轨道路线。见 `DanmakuPlaybackHosting`。
     @discardableResult
     func replaceDanmaku(
-        json: String,
+        entries: [DanmakuJSONParser.Entry],
+        json: String?,
         name: String,
         offset: Duration,
         for source: PlaybackSourceGeneration
@@ -49,11 +53,13 @@ extension PlaybackController {
                         $0.fontSize = danmakuFontSize
                     }
                     danmakuOverlay.replace(
-                        json: json,
+                        entries: entries,
                         trackOffsetSeconds: Double(offset.microseconds) / 1_000_000
                     )
                     return
                 }
+                // 内核路线（当前停用）：需要 Erika JSON 串。
+                guard let json else { return }
                 // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
                 // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
                 // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次

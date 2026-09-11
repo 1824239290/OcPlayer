@@ -671,6 +671,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
 @MainActor
 private final class FakePlaybackHost: DanmakuPlaybackHosting {
     var injectedJSON: String?
+    var injectedEntries: [DanmakuJSONParser.Entry]?
     var injectedOffset: Duration?
     var didClear = false
     /// 记录调用 waitUntilReady 时的 uuid，供断言（必须与请求 id 一致）。
@@ -683,7 +684,14 @@ private final class FakePlaybackHost: DanmakuPlaybackHosting {
         return !readyNeverResolves
     }
 
-    func replaceDanmaku(uuid: UUID, json: String, name: String, offset: Duration) throws -> Bool {
+    func replaceDanmaku(
+        uuid: UUID,
+        entries: [DanmakuJSONParser.Entry],
+        json: String?,
+        name: String,
+        offset: Duration
+    ) throws -> Bool {
+        injectedEntries = entries
         injectedJSON = json
         injectedOffset = offset
         return true

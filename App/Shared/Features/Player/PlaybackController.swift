@@ -1117,9 +1117,17 @@ final class PlaybackController: DanmakuPlaybackHosting {
         await waitUntilSourceReady(for: uuid, timeout: timeout) != nil
     }
 
-    func replaceDanmaku(uuid: UUID, json: String, name: String, offset: Duration) throws -> Bool {
+    func replaceDanmaku(
+        uuid: UUID,
+        entries: [DanmakuJSONParser.Entry],
+        json: String?,
+        name: String,
+        offset: Duration
+    ) throws -> Bool {
         guard let source = currentSourceToken(uuid: uuid) else { return false }
-        return try replaceDanmaku(json: json, name: name, offset: offset, for: source)
+        return try replaceDanmaku(
+            entries: entries, json: json, name: name, offset: offset, for: source
+        )
     }
 
     func clearDanmaku(uuid: UUID) throws -> Bool {

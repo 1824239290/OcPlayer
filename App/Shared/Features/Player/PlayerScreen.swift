@@ -863,15 +863,16 @@ struct PlayerScreen: View {
     }
 
     private func captureNow() {
-        guard let name = controller.captureScreenshot() else {
-            revealControls()
-            return
-        }
-        // 连续截图时旧清除任务不能把新 toast 提前抹掉：用 token 归属判定。
-        let token = UUID()
-        screenshotToastToken = token
-        screenshotToast = "已保存：\(name)"
-        Task { @MainActor in
+        // 截图编码/写盘在后台（captureScreenshot 内部），这里只等结果回来显示 toast。
+        Task {
+            guard let name = await controller.captureScreenshot() else {
+                revealControls()
+                return
+            }
+            // 连续截图时旧清除任务不能把新 toast 提前抹掉：用 token 归属判定。
+            let token = UUID()
+            screenshotToastToken = token
+            screenshotToast = "已保存：\(name)"
             try? await Task.sleep(for: .seconds(2))
             guard screenshotToastToken == token else { return }
             screenshotToast = nil

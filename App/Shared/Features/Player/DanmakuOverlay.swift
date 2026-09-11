@@ -99,19 +99,15 @@ final class DanmakuOverlayController {
 
     // MARK: - 数据
 
-    /// 装载弹幕 JSON（与内核 `addDanmakuTrack(json:)` 同一份输入，解析在 DanmakuKit）。
+    /// 装载弹幕（结构直传版）。
+    ///
+    /// 弹弹play `p` 字段 → Entry 的转换与按时间排序都在 `DanmakuService` 的 actor 上
+    /// 完成（`DanmakuJSONConverter.entries(from:)`），主线程只做一次赋值——此前这里
+    /// 要对几 MB JSON 做解码 + 排序（三万条 = 主线程 100–400ms，正好压在起播窗口）。
+    /// 空数据（没有任何有效条目）由编排器直接走 `clearDanmaku`，不会调到这里。
     /// `trackOffsetSeconds` 是匹配源的 shift，与用户全局偏移叠加生效。
-    func replace(json: String, trackOffsetSeconds: Double) {
-        guard let parsed = DanmakuJSONParser.parse(json) else {
-            // 解析失败原先静默返回空列表——网关响应异常时看起来像「没有弹幕」，
-            // 留一条日志区分「真没有」和「解析挂了」。
-            PlaybackLog.info("弹幕 JSON 解析失败 size=\(json.count)")
-            comments = []
-            self.trackOffsetSeconds = trackOffsetSeconds
-            resync(reason: "replace")
-            return
-        }
-        comments = parsed.sorted { $0.time < $1.time }
+    func replace(entries: [DanmakuJSONParser.Entry], trackOffsetSeconds: Double) {
+        comments = entries
         self.trackOffsetSeconds = trackOffsetSeconds
         PlaybackLog.append("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
         resync(reason: "replace")
@@ -295,36 +291,45 @@ final class DanmakuOverlayController {
 
     private func spawnUpTo(_ mediaSeconds: Double) {
         let threshold = effectiveSeconds(mediaSeconds)
-        // 结构性兜底：正常节奏下两次发射机会之间媒体时间只前进不到一帧，差出
-        // seekJumpSeconds 说明发生了 tick 没看见的跳变（暂停中 seek、内核时间源
-        // 异常等）。积压的是「早已过点」的过期弹幕，补发就是「起播爆一大片」的
-        // 用户观感——清屏重对齐跳过它，而不是喷出来。
-        if let last = lastSpawnThreshold, threshold - last > Self.seekJumpSeconds {
+        // 发射量决策交给纯函数（DanmakuSpawnPlanner，单测覆盖）：
+        // - 积压跳变（两次发射机会之间前进超过 seekJumpSeconds）→ 清屏重对齐，
+        //   不补发过期弹幕（「起播爆一大片」的兜底）；
+        // - 其余情况每拍最多 24 条，超出顺延——阈值内的前向 seek 不再一帧喷几百条。
+        let decision = DanmakuSpawnPlanner.decide(
+            count: comments.count,
+            time: { self.comments[$0].time },
+            pointer: pointer,
+            threshold: threshold,
+            lastThreshold: lastSpawnThreshold,
+            seekJumpSeconds: Self.seekJumpSeconds
+        )
+        switch decision {
+        case .resetBacklog:
             PlaybackLog.warning(
-                "弹幕积压跳变已跳过 last=\(String(format: "%.1f", last))s "
+                "弹幕积压跳变已跳过 last=\(String(format: "%.1f", lastSpawnThreshold ?? 0))s "
                     + "now=\(String(format: "%.1f", threshold))s "
                     + "pointer=\(pointer)/\(comments.count)"
             )
             lastSpawnThreshold = threshold
             resync(reason: "backlog")
-            return
-        }
-        lastSpawnThreshold = threshold
-        let start = pointer
-        while pointer < comments.count, comments[pointer].time <= threshold {
-            view.shoot(danmaku: makeModel(for: comments[pointer]))
-            pointer += 1
-        }
-        let spawned = pointer - start
-        // 单帧发射远超正常节奏 = 时间轴对齐错位导致补发（典型：续播起播对齐到 0），
-        // 与「弹幕时间轴对齐」日志对照即可定位根因。
-        if diagnosticsEnabled, spawned >= Self.burstSpawnThreshold {
-            PlaybackLog.warning(
-                "弹幕爆发发射 spawned=\(spawned) "
-                    + "mediaTime=\(String(format: "%.1f", mediaSeconds))s "
-                    + "pointer=\(pointer)/\(comments.count) "
-                    + "threshold=\(String(format: "%.1f", threshold))s"
-            )
+        case .emit(let advanceTo):
+            lastSpawnThreshold = threshold
+            let start = pointer
+            while pointer < advanceTo {
+                view.shoot(danmaku: makeModel(for: comments[pointer]))
+                pointer += 1
+            }
+            let spawned = pointer - start
+            // 单帧发射远超正常节奏 = 时间轴对齐错位导致补发（典型：续播起播对齐到 0），
+            // 与「弹幕时间轴对齐」日志对照即可定位根因。
+            if diagnosticsEnabled, spawned >= Self.burstSpawnThreshold {
+                PlaybackLog.warning(
+                    "弹幕爆发发射 spawned=\(spawned) "
+                        + "mediaTime=\(String(format: "%.1f", mediaSeconds))s "
+                        + "pointer=\(pointer)/\(comments.count) "
+                        + "threshold=\(String(format: "%.1f", threshold))s"
+                )
+            }
         }
     }
 

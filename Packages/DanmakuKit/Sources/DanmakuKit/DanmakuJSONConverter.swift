@@ -33,6 +33,34 @@ public enum DanmakuJSONConverter {
         }
     }
 
+    /// 直接产出 overlay 渲染输入，跳过 JSON 往返。
+    ///
+    /// 与 `parse(erikaJSON(from:))` 等价（同一套判据、同样按时间升序），但转换发生在
+    /// 调用方的执行器上（`DanmakuService` 是 actor）——overlay 在主线程装载时只是赋值，
+    /// 不再对几 MB JSON 做一遍解码 + 排序（三万条 = 主线程 100–400ms，恰好在起播窗口）。
+    /// 返回 nil 表示没有任何有效条目（与 `erikaJSON` 判据一致）。
+    public static func entries(from comments: [DanmakuComment]?) -> [DanmakuJSONParser.Entry]? {
+        guard let comments, !comments.isEmpty else { return nil }
+        let out = comments.compactMap { comment -> DanmakuJSONParser.Entry? in
+            guard let fields = fields(from: comment) else { return nil }
+            let mode: DanmakuJSONParser.Entry.Mode
+            switch fields.mode {
+            case 5: mode = .top
+            case 4: mode = .bottom
+            default: mode = .scroll
+            }
+            return DanmakuJSONParser.Entry(
+                time: fields.time,
+                mode: mode,
+                color: UInt32(fields.color),
+                text: fields.content
+            )
+        }
+        guard !out.isEmpty else { return nil }
+        // overlay 的出场指针要求按时间升序（原先由装载侧排序，这里一次排完）。
+        return out.sorted { $0.time < $1.time }
+    }
+
     private struct ErikaPayload: Encodable {
         let comments: [ErikaItem]
     }
@@ -45,19 +73,28 @@ public enum DanmakuJSONConverter {
         let content: String
 
         init?(comment: DanmakuComment) {
-            // `p` = "time,mode,color,userId,..."
-            let parts = comment.p.split(separator: ",", omittingEmptySubsequences: false)
-            guard parts.count >= 3 else { return nil }
-            guard let time = Double(parts[0]), time.isFinite, time >= 0 else { return nil }
-            guard let mode = Int(parts[1]), [1, 4, 5].contains(mode) else { return nil }
-            guard let color = Int64(parts[2]), (0...0xFF_FF_FF).contains(color) else { return nil }
-            let text = comment.m.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return nil }
-
-            self.time = time
-            self.type = mode
-            self.color = color
-            self.content = comment.m
+            guard let fields = DanmakuJSONConverter.fields(from: comment) else { return nil }
+            self.time = fields.time
+            self.type = fields.mode
+            self.color = fields.color
+            self.content = fields.content
         }
+    }
+
+    /// `p` 前三段 + 正文的公共校验：JSON 与 Entry 两条产出路径共用一套判据，
+    /// 免得「JSON 里有、overlay 里没有」这类口径漂移。
+    /// 缺段 / 时间非有限或为负 / 非 1·4·5 模式 / 颜色越界 / 正文空白 → nil（跳过该条）。
+    private static func fields(
+        from comment: DanmakuComment
+    ) -> (time: Double, mode: Int, color: Int64, content: String)? {
+        // `p` = "time,mode,color,userId,..."
+        let parts = comment.p.split(separator: ",", omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return nil }
+        guard let time = Double(parts[0]), time.isFinite, time >= 0 else { return nil }
+        guard let mode = Int(parts[1]), [1, 4, 5].contains(mode) else { return nil }
+        guard let color = Int64(parts[2]), (0...0xFF_FF_FF).contains(color) else { return nil }
+        let text = comment.m.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        return (time, mode, color, comment.m)
     }
 }

@@ -1,13 +1,24 @@
 import Foundation
 
 /// A renderer-ready comment payload resolved from the permanent match and TTL cache.
+///
+/// `entries` 是 overlay 渲染器的直接输入（结构直传，装载侧不再解 JSON）；
+/// `json` 只服务内核弹幕轨（`ErikaEngine.addDanmakuTrack`，当前路线停用中）。
+/// 两者判据一致、都由本 actor 产出，主线程不做转换。
 public struct DanmakuPayload: Sendable, Equatable {
     public let match: DanmakuEpisodeMatch
+    public let entries: [DanmakuJSONParser.Entry]?
     public let json: String?
     public let commentCount: Int
 
-    public init(match: DanmakuEpisodeMatch, json: String?, commentCount: Int) {
+    public init(
+        match: DanmakuEpisodeMatch,
+        entries: [DanmakuJSONParser.Entry]?,
+        json: String?,
+        commentCount: Int
+    ) {
         self.match = match
+        self.entries = entries
         self.json = json
         self.commentCount = commentCount
     }
@@ -112,6 +123,7 @@ public actor DanmakuService {
         }
         return DanmakuPayload(
             match: match,
+            entries: DanmakuJSONConverter.entries(from: comments),
             json: DanmakuJSONConverter.erikaJSON(from: comments),
             commentCount: comments.count
         )

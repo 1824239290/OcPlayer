@@ -18,11 +18,15 @@ public enum DanmakuLoadOutcome: Equatable, Sendable {
 public protocol DanmakuPlaybackHosting {
     /// 等待当前播放源就绪（可注入弹幕）。超时或源已切换返回 false。
     func waitUntilReady(uuid: UUID, timeout: Duration) async -> Bool
-    /// 装载弹幕 JSON；返回 false 表示播放源已不在当前代次（调用方应放弃并终止）。
+    /// 装载弹幕；返回 false 表示播放源已不在当前代次（调用方应放弃并终止）。
     /// 返回值为真时，错误由实现方抛出。
+    ///
+    /// `entries` 是 overlay 渲染路线的输入（结构直传，播放器侧零解析）；`json` 只给
+    /// 内核弹幕轨路线用（当前停用）。两者由 `DanmakuService` 在同一执行器上产出。
     func replaceDanmaku(
         uuid: UUID,
-        json: String,
+        entries: [DanmakuJSONParser.Entry],
+        json: String?,
         name: String,
         offset: Duration
     ) throws -> Bool
@@ -383,10 +387,11 @@ public struct DanmakuLoadOrchestrator {
                 return .failed(message: "播放已切换")
             }
             let accepted: Bool
-            if let json = payload.json {
+            if let entries = payload.entries {
                 accepted = try await playback.replaceDanmaku(
                     uuid: uuid,
-                    json: json,
+                    entries: entries,
+                    json: payload.json,
                     name: name,
                     offset: .seconds(Double(match.shiftSeconds))
                 )
@@ -399,7 +404,7 @@ public struct DanmakuLoadOrchestrator {
                 }
                 return .failed(message: "播放已切换")
             }
-            if payload.json == nil {
+            if payload.entries == nil {
                 return .empty(episodeID: match.episodeID, title: name)
             }
             return .loaded(episodeID: match.episodeID, commentCount: payload.commentCount, title: name)
