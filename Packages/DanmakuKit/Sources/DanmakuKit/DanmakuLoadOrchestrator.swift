@@ -43,10 +43,16 @@ public protocol DanmakuPlaybackHosting {
 public struct DanmakuLoadOrchestrator {
     public let service: DanmakuService
     private let session: URLSession
+    private let retryPolicy: RetryPolicy
 
-    public init(service: DanmakuService, session: URLSession = DanmakuNetworking.makeSession()) {
+    public init(
+        service: DanmakuService,
+        session: URLSession = DanmakuNetworking.makeSession(),
+        retryPolicy: RetryPolicy = RetryPolicy()
+    ) {
         self.service = service
         self.session = session
+        self.retryPolicy = retryPolicy
     }
 
     /// 整个自动匹配 + 装载链路。`forceRematch` 跳过缓存并清除已记住的映射。
@@ -57,7 +63,8 @@ public struct DanmakuLoadOrchestrator {
         revision: UInt64,
         forceRematch: Bool = false
     ) async -> DanmakuLoadOutcome {
-        let client = DanmakuGatewayClient(configuration: configuration, session: session)
+        let client = DanmakuGatewayClient(
+            configuration: configuration, session: session, retryPolicy: retryPolicy)
         let cacheKey = matchContext.cacheKey
         do {
             try Task.checkCancellation()
@@ -96,6 +103,10 @@ public struct DanmakuLoadOrchestrator {
             var fingerprintFailed = false
             /// 最近一次降级检索抛出的非取消错误（网关/网络/协议）。
             var tierError: Error?
+            /// 任一降级层命中网关级故障后短路剩余层：请求层已按重试策略把瞬态
+            /// 错误重试耗尽，后续换参数的降级检索打的是同一个网关，再试必败，
+            /// 只会放大请求突发（还可能自触网关限流）。
+            var gatewayDown = false
 
             // Tier 1: 尝试 Hash + 文件名匹配
             var hashValue: String? = nil
@@ -133,11 +144,14 @@ public struct DanmakuLoadOrchestrator {
                     throw CancellationError()
                 } catch {
                     tierError = error
+                    if (error as? DandanplayError)?.isGatewayFailure == true {
+                        gatewayDown = true
+                    }
                 }
             }
 
             // Tier 2: 若未命中且有 TMDB ID，按 TMDB ID 搜索分集
-            if matched == nil, let tmdbID = matchContext.tmdbID {
+            if matched == nil, !gatewayDown, let tmdbID = matchContext.tmdbID {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
                 do {
@@ -150,11 +164,14 @@ public struct DanmakuLoadOrchestrator {
                     throw CancellationError()
                 } catch {
                     tierError = error
+                    if (error as? DandanplayError)?.isGatewayFailure == true {
+                        gatewayDown = true
+                    }
                 }
             }
 
             // Tier 3: 若仍未命中，按动画标题 + 集数搜索分集
-            if matched == nil, let animeTitle = target.animeTitle, !animeTitle.isEmpty {
+            if matched == nil, !gatewayDown, let animeTitle = target.animeTitle, !animeTitle.isEmpty {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
                 do {
@@ -167,11 +184,14 @@ public struct DanmakuLoadOrchestrator {
                     throw CancellationError()
                 } catch {
                     tierError = error
+                    if (error as? DandanplayError)?.isGatewayFailure == true {
+                        gatewayDown = true
+                    }
                 }
             }
 
             // Tier 4: 若仍未命中且解析出的纯化标题不同，用纯化标题再次尝试搜索
-            if matched == nil, let cleanTitle = parsed.title.nilIfEmpty, cleanTitle != target.animeTitle {
+            if matched == nil, !gatewayDown, let cleanTitle = parsed.title.nilIfEmpty, cleanTitle != target.animeTitle {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
                 do {
@@ -184,6 +204,9 @@ public struct DanmakuLoadOrchestrator {
                     throw CancellationError()
                 } catch {
                     tierError = error
+                    if (error as? DandanplayError)?.isGatewayFailure == true {
+                        gatewayDown = true
+                    }
                 }
             }
 
@@ -321,7 +344,8 @@ public struct DanmakuLoadOrchestrator {
         playback: DanmakuPlaybackHosting,
         revision: UInt64
     ) async -> DanmakuLoadOutcome {
-        let client = DanmakuGatewayClient(configuration: configuration, session: session)
+        let client = DanmakuGatewayClient(
+            configuration: configuration, session: session, retryPolicy: retryPolicy)
         await service.remember(match: match, cacheKey: cacheKey, revision: revision)
         return await loadPayload(
             match: match,

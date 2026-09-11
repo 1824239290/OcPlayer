@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **弹幕网关瞬断自动重试**：匹配偶发「弹幕服务暂时不可用」的根因是网关（Cloudflare Workers）冷启动/子请求超时导致的瞬时 502/503/504——该文案是 `httpStatus` 兜底，此前 `GatewayClient` 一次请求即弃、四层降级只是换参数重试。现在接入阶段 3 的共享 `RetryPolicy`（3 次尝试、指数退避带抖动、429 尊重 Retry-After 封顶 60s，判据与 Bangumi 同口径）：网络超时/断网、502/503/504、429 自动重试；任一降级层命中网关级错误即短路剩余层，不再连打必败请求（也避免自触网关限流）；403 拆出独立语义「网关拒绝了请求（API Key 无效或已被限制）」，不再误报「暂时不可用」。匹配/搜索/弹幕正文接口全部幂等只读，重试天然安全；手动搜索与手动选集同享。新增重试用例 8 个（客户端 7 + 编排层短路 1），既有网关失败用例加请求计数断言。
+
 - **macOS 26 全屏顶栏衔接层**：全屏时系统把工具栏搬进独立的 `NSToolbarFullScreenWindow`，顶部画一条与窗口底色同源的不透明硬底条带，氛围图被拦腰截断。新增 `FullscreenTitlebarFade` 衔接层（顶部 52pt 保持窗口底色、再 84pt 渐隐进氛围图），挂在整窗氛围层（`AppShell.windowAmbienceLayer`）与首页轮播两处；**衔接层必须放在氛围层的动画作用域之外**——放进去会被切页/换片时的 `Motion.ambient` 交叉淡入卷着一起动，背景里滑出一条渐变带（全屏专属症状）。工具栏本身不藏：实测 `.windowToolbarFullScreenVisibility(.onHover)` 会在全屏进详情页后留下旧页面残影并吃掉那片点击，AppKit 改 `toolbar.isVisible` 会把窗口踢出全屏——两条藏工具栏路线均已否决并留档。
 
 - **播放器收边（阶段 4）**：弹幕偏好到引擎的映射合并为单一 `DanmakuPrefsSnapshot` 通路（原来 open 队列闭包的静态版与实例版各写一份字段对应表）；Erika 弹幕 JSON 的解析从 App 层（DanmakuOverlay）下移到 DanmakuKit（新增 `DanmakuJSONParser`，与写入侧 `DanmakuJSONConverter` 同包同 schema），App 不再认识内核数据格式；新增解析器测试 5 用例（含 converter↔parser 往返一致）。手势分类纯逻辑此前已抽 `PlayerPanGestureModel`（有测试），PlayerScreen 剩余的触摸编排评估后保留在视图（与控制器/HUD/亮度耦合，换壳无收益）。

@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import XCTest
 @testable import DanmakuKit
 
@@ -24,7 +25,9 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         service = DanmakuService(cache: cache)
         orchestrator = DanmakuLoadOrchestrator(
             service: service,
-            session: TestSupport.mockedSession()
+            session: TestSupport.mockedSession(),
+            // 零等待重试策略：编排层透传给网关客户端，重试用例不空等退避。
+            retryPolicy: RetryPolicy(attempts: 3, base: 0, jitter: 0.0...0.0)
         )
         playback = FakePlaybackHost()
     }
@@ -168,16 +171,22 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
     }
 
     /// 网关全线失败（match + search 都 500）：必须报「失败可重试」，
-    /// 不得谎报「未匹配到剧集」。
+    /// 不得谎报「未匹配到剧集」；500 不在可重试集，且故障后短路剩余降级层。
     func testGatewayErrorsYieldFailedInsteadOfNoMatch() async throws {
         let configuration = makeConfiguration()
         let context = makeContext()
         let fingerprint = makeFingerprintData()
+        let matchRequests = TestSupport.RequestCounter()
+        let searchRequests = TestSupport.RequestCounter()
         MockURLProtocol.handler = { request in
             switch request.url!.path {
             case "/video.mp4":
                 return makeRange206Response(fingerprint, url: request.url!)
+            case "/v1/match":
+                matchRequests.count += 1
+                return TestSupport.response("{\"error\":\"boom\"}", status: 500, url: request.url!)
             default:
+                searchRequests.count += 1
                 return TestSupport.response("{\"error\":\"boom\"}", status: 500, url: request.url!)
             }
         }
@@ -194,6 +203,45 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         }
         XCTAssertEqual(message, "弹幕服务暂时不可用", "httpStatus(500) 应复用既有用户文案")
         XCTAssertNil(playback.injectedJSON, "失败路径不应注入弹幕")
+        XCTAssertEqual(matchRequests.count, 1, "500 不在可重试集，一次即抛")
+        XCTAssertEqual(searchRequests.count, 0, "网关故障应短路剩余降级层")
+    }
+
+    /// 可重试的网关故障（503）：请求层把 match 重试耗尽后短路剩余降级层，
+    /// 不再连打必败的 search 请求。
+    func testRetryableGatewayErrorRetriesThenShortCircuits() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        let fingerprint = makeFingerprintData()
+        let matchRequests = TestSupport.RequestCounter()
+        let searchRequests = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/video.mp4":
+                return makeRange206Response(fingerprint, url: request.url!)
+            case "/v1/match":
+                matchRequests.count += 1
+                return TestSupport.response("{\"error\":\"boom\"}", status: 503, url: request.url!)
+            default:
+                searchRequests.count += 1
+                return TestSupport.response("{\"error\":\"boom\"}", status: 503, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        guard case .failed(let message) = outcome else {
+            return XCTFail("网关错误应报失败，got \(outcome)")
+        }
+        XCTAssertEqual(message, "弹幕服务暂时不可用", "httpStatus(503) 应复用既有用户文案")
+        XCTAssertNil(playback.injectedJSON, "失败路径不应注入弹幕")
+        XCTAssertEqual(matchRequests.count, 3, "503 可重试：请求层耗尽全部尝试")
+        XCTAssertEqual(searchRequests.count, 0, "重试耗尽后短路剩余降级层")
     }
 
     /// 混合结局：tier 1 干净返回无匹配、tier 3 搜索网络断 → 仍应报失败。

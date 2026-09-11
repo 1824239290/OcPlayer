@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import XCTest
 @testable import DanmakuKit
 
@@ -10,11 +11,14 @@ final class GatewayClientTests: XCTestCase {
 
     private func makeClient(
         session: URLSession,
-        baseURL: URL = URL(string: "https://gateway.example.com")!
+        baseURL: URL = URL(string: "https://gateway.example.com")!,
+        // 既有用例默认不重试：mock 恒失败时避免空等退避，行为与接入重试前一致。
+        retryPolicy: RetryPolicy = RetryPolicy(attempts: 1)
     ) -> DanmakuGatewayClient {
         DanmakuGatewayClient(
             configuration: DandanplayConfiguration(baseURL: baseURL, apiKey: apiKey, userAgent: userAgent),
-            session: session
+            session: session,
+            retryPolicy: retryPolicy
         )
     }
 
@@ -350,5 +354,160 @@ final class GatewayClientTests: XCTestCase {
                 XCTAssertEqual(error.userMessage, "参数缺失")
             }
         }
+    }
+
+    // MARK: 重试
+
+    /// 重试用例的统一零等待策略：base 0 且抖动钉 0，重试不 sleep。
+    private func makeRetryingClient() -> DanmakuGatewayClient {
+        makeClient(
+            session: TestSupport.mockedSession(),
+            retryPolicy: RetryPolicy(attempts: 3, base: 0, jitter: 0.0...0.0)
+        )
+    }
+
+    func testRetrySucceedsAfterTransient502() async throws {
+        let client = makeRetryingClient()
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"0.5,1,16777215,100","m":"你好"}]}
+        """
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            if counter.count < 3 {
+                return TestSupport.response("{\"error\":\"boom\"}", status: 502, url: request.url!)
+            }
+            return TestSupport.response(commentsBody, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await client.comments(episodeId: 1)
+        XCTAssertEqual(result.payload.comments?.count, 1)
+        XCTAssertEqual(counter.count, 3, "瞬态 502 应重试至成功")
+    }
+
+    func testRetryExhaustsAttemptsAndThrowsLastError() async throws {
+        let client = makeRetryingClient()
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            return TestSupport.response("{\"error\":\"boom\"}", status: 503, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        do {
+            _ = try await client.comments(episodeId: 1)
+            XCTFail("should throw")
+        } catch DandanplayError.httpStatus(let code) {
+            XCTAssertEqual(code, 503)
+        }
+        XCTAssertEqual(counter.count, 3, "持续 503 应耗尽全部尝试")
+    }
+
+    func testRetrySucceedsAfterTransientTimeout() async throws {
+        let client = makeRetryingClient()
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"0.5,1,16777215,100","m":"你好"}]}
+        """
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            if counter.count < 3 { throw URLError(.timedOut) }
+            return TestSupport.response(commentsBody, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await client.comments(episodeId: 1)
+        XCTAssertEqual(result.payload.comments?.count, 1)
+        XCTAssertEqual(counter.count, 3, "网络超时应重试至成功")
+    }
+
+    func testNonRetryableStatusIsNotRetried() async throws {
+        let client = makeRetryingClient()
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            return TestSupport.response("{}", status: 404, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        do {
+            _ = try await client.comments(episodeId: 1)
+            XCTFail("should throw")
+        } catch DandanplayError.httpStatus(let code) {
+            XCTAssertEqual(code, 404)
+        }
+        XCTAssertEqual(counter.count, 1, "404 不可重试，一次即抛")
+    }
+
+    func testForbiddenMapsToDedicatedErrorWithoutRetry() async throws {
+        let client = makeRetryingClient()
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            return TestSupport.response("{}", status: 403, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        do {
+            _ = try await client.comments(episodeId: 1)
+            XCTFail("should throw")
+        } catch let error as DandanplayError {
+            guard case .forbidden = error else {
+                return XCTFail("expected forbidden, got \(error)")
+            }
+            XCTAssertEqual(error.userMessage, "网关拒绝了请求（API Key 无效或已被限制）")
+        }
+        XCTAssertEqual(counter.count, 1, "403 不可重试")
+    }
+
+    func testRateLimitedRetriesRespectingRetryAfter() async throws {
+        let client = makeRetryingClient()
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"0.5,1,16777215,100","m":"你好"}]}
+        """
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            if counter.count < 3 {
+                // Retry-After 极小值：验证 429 走重试且退避采纳服务端秒数（很快返回）。
+                var headers = ["Content-Type": "application/json"]
+                headers["Retry-After"] = "0.001"
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: 429, httpVersion: nil, headerFields: headers)!
+                return (response, Data("{\"errorCode\":429}".utf8))
+            }
+            return TestSupport.response(commentsBody, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await client.comments(episodeId: 1)
+        XCTAssertEqual(result.payload.comments?.count, 1)
+        XCTAssertEqual(counter.count, 3, "429 应按 Retry-After 重试至成功")
+    }
+
+    func testBusinessErrorIsNotRetried() async throws {
+        let client = makeRetryingClient()
+        let counter = TestSupport.RequestCounter()
+        let body = """
+        {"success":false,"errorCode":1002,"errorMessage":"参数缺失"}
+        """
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            return TestSupport.response(body, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        do {
+            _ = try await client.match(MatchRequest(
+                fileName: "x",
+                fileHash: self.validHash,
+                matchMode: .fileNameOnly
+            ))
+            XCTFail("should throw")
+        } catch DandanplayError.businessError {
+            // expected：网关健康（2xx 业务失败），不消耗重试
+        }
+        XCTAssertEqual(counter.count, 1, "业务错误不应重试")
     }
 }

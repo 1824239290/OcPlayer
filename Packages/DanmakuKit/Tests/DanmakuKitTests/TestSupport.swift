@@ -28,6 +28,12 @@ final class MockURLProtocol: URLProtocol {
 }
 
 enum TestSupport {
+    /// mock handler 在 URLSession 线程执行，用装箱引用计数避免捕获可变局部变量
+    /// （Swift 6 严格并发检查）。
+    final class RequestCounter: @unchecked Sendable {
+        var count = 0
+    }
+
     static func mockedSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]

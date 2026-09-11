@@ -35,6 +35,14 @@ enum DanmakuNetworkLog {
             "请求失败 path=\(path) error=\(error) duration_ms=\(Int(duration * 1000))"
         )
     }
+
+    static func requestRetried(_ path: String, attempt: Int, totalAttempts: Int, error: Error) {
+        NetworkLog.report(
+            category: "Danmaku",
+            level: .debug,
+            "请求重试 path=\(path) 尝试=\(attempt)/\(totalAttempts) error=\(error)"
+        )
+    }
 }
 
 // MARK: - 错误
@@ -45,8 +53,11 @@ public enum DandanplayError: Error, Equatable, Sendable {
     case notConfigured
     /// HTTP 401：API key 无效或缺失。
     case unauthorized
-    /// HTTP 429：每日额度或限流超限。
-    case rateLimited
+    /// HTTP 403：网关拒绝了请求（API Key 无效 / 被限制 / WAF 拦截）。
+    case forbidden
+    /// HTTP 429：每日额度或限流超限。`retryAfter` 取 Retry-After 头（秒），
+    /// 服务端没给就是 nil——对齐 BangumiError.rateLimited 的携带方式。
+    case rateLimited(retryAfter: TimeInterval?)
     /// 弹弹play 业务侧返回 `success=false`（匹配/搜索）。
     case businessError(code: Int, message: String?)
     /// 网关返回了非 JSON 或无法解码的结构。
@@ -62,8 +73,10 @@ public enum DandanplayError: Error, Equatable, Sendable {
         switch (lhs, rhs) {
         case (.notConfigured, .notConfigured),
              (.unauthorized, .unauthorized),
-             (.rateLimited, .rateLimited):
+             (.forbidden, .forbidden):
             return true
+        case let (.rateLimited(l), .rateLimited(r)):
+            return l == r
         case let (.businessError(lc, lm), .businessError(rc, rm)):
             return lc == rc && lm == rm
         case let (.decodingFailed(l), .decodingFailed(r)):
@@ -86,6 +99,7 @@ public extension DandanplayError {
         switch self {
         case .notConfigured: "弹幕网关未配置"
         case .unauthorized: "网关 API Key 无效"
+        case .forbidden: "网关拒绝了请求（API Key 无效或已被限制）"
         case .rateLimited: "弹幕请求额度已用完"
         case .businessError(_, let message): message ?? "弹幕服务返回错误"
         case .decodingFailed: "弹幕服务返回了无法解析的数据"
@@ -93,6 +107,34 @@ public extension DandanplayError {
         case .httpStatus: "弹幕服务暂时不可用"
         case .invalidRequest(let message): message
         }
+    }
+}
+
+extension DandanplayError {
+    /// 瞬态错误判定：请求层重试 + 编排层短路共用同一口径。
+    /// 与 BangumiError.isRetryable 对齐——网络只认超时/断网（排除取消），
+    /// HTTP 只认 502/503/504，429 尊重服务端 Retry-After。
+    var isRetryable: Bool {
+        switch self {
+        case .network(let urlError):
+            switch NetworkErrorClassifier.kind(for: urlError.errorCode) {
+            case .timedOut, .noConnection: true
+            default: false
+            }
+        case .httpStatus(let code):
+            code == 502 || code == 503 || code == 504
+        case .rateLimited:
+            true
+        default:
+            false
+        }
+    }
+
+    /// 网关级故障（非业务错误）：编排层任一降级层命中即短路剩余层。
+    /// businessError 表示网关健康（2xx 业务失败），仍应继续换参数降级。
+    var isGatewayFailure: Bool {
+        if case .businessError = self { return false }
+        return true
     }
 }
 
@@ -125,14 +167,22 @@ public struct DandanplayConfiguration: Sendable, Equatable {
 /// 弹弹play 只读网关客户端。封装 `match` / `search` / `comments` 四个业务接口；
 /// 认证走 `X-API-Key` 头，身份标识走 `User-Agent`，AppSecret 永远不进客户端。
 ///
-/// `URLSession` 可注入（测试用 mock 协议）。
+/// `URLSession` 可注入（测试用 mock 协议）；`retryPolicy` 复用共享层
+/// DiagnosticsKit.RetryPolicy——瞬态错误（超时/断网、502/503/504、429）自动重试，
+/// 判据见 `DandanplayError.isRetryable`，与 Bangumi 同口径。
 public struct DanmakuGatewayClient: Sendable {
     public let configuration: DandanplayConfiguration
     private let session: URLSession
+    private let retryPolicy: RetryPolicy
 
-    public init(configuration: DandanplayConfiguration, session: URLSession? = nil) {
+    public init(
+        configuration: DandanplayConfiguration,
+        session: URLSession? = nil,
+        retryPolicy: RetryPolicy = RetryPolicy()
+    ) {
         self.configuration = configuration
         self.session = session ?? DanmakuNetworking.makeSession()
+        self.retryPolicy = retryPolicy
     }
 
     // MARK: 接口
@@ -272,8 +322,28 @@ public struct DanmakuGatewayClient: Sendable {
         spec.body = body
 
         let logPath = url.path
-        // 传输与计时日志走共享执行器（DiagnosticsKit.HTTPClient）；这里只留
-        // 网关自己的语义：业务基座判定、401/429 映射、缓存命中日志。
+        // 重试只对瞬态错误生效（DandanplayError.isRetryable）；CancellationError 由
+        // 共享层直接上抛不重试，URLError.cancelled 不在重试集里。业务错误与 4xx
+        // 一次性上抛，行为与接入重试前一致。
+        return try await retryPolicy.run {
+            try await self.performExchange(spec: spec, logPath: logPath)
+        } shouldRetry: { error in
+            (error as? DandanplayError)?.isRetryable == true
+        } retryAfterProvider: { error in
+            if case .rateLimited(let retryAfter) = error as? DandanplayError { return retryAfter }
+            return nil
+        } onRetry: { attempt, error in
+            DanmakuNetworkLog.requestRetried(
+                logPath, attempt: attempt + 1, totalAttempts: retryPolicy.attempts, error: error)
+        }
+    }
+
+    /// 单次尝试：传输与计时日志走共享执行器（DiagnosticsKit.HTTPClient）；这里只留
+    /// 网关自己的语义：业务基座判定、401/403/429 映射、缓存命中日志。
+    private func performExchange<T: Decodable & Sendable>(
+        spec: HTTPRequestSpec,
+        logPath: String
+    ) async throws -> GatewayResult<T> {
         let start = Date()
         let exchange: HTTPExchange
         do {
@@ -321,8 +391,10 @@ public struct DanmakuGatewayClient: Sendable {
             }
         case 401:
             throw DandanplayError.unauthorized
+        case 403:
+            throw DandanplayError.forbidden
         case 429:
-            throw DandanplayError.rateLimited
+            throw DandanplayError.rateLimited(retryAfter: exchange.retryAfter)
         default:
             throw DandanplayError.httpStatus(exchange.statusCode)
         }
