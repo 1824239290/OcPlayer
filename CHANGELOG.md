@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **macOS 26 全屏顶栏衔接层**：全屏时系统把工具栏搬进独立的 `NSToolbarFullScreenWindow`，顶部画一条与窗口底色同源的不透明硬底条带，氛围图被拦腰截断。新增 `FullscreenTitlebarFade` 衔接层（顶部 52pt 保持窗口底色、再 84pt 渐隐进氛围图），挂在整窗氛围层（`AppShell.windowAmbienceLayer`）与首页轮播两处；**衔接层必须放在氛围层的动画作用域之外**——放进去会被切页/换片时的 `Motion.ambient` 交叉淡入卷着一起动，背景里滑出一条渐变带（全屏专属症状）。工具栏本身不藏：实测 `.windowToolbarFullScreenVisibility(.onHover)` 会在全屏进详情页后留下旧页面残影并吃掉那片点击，AppKit 改 `toolbar.isVisible` 会把窗口踢出全屏——两条藏工具栏路线均已否决并留档。
+
 - **播放器收边（阶段 4）**：弹幕偏好到引擎的映射合并为单一 `DanmakuPrefsSnapshot` 通路（原来 open 队列闭包的静态版与实例版各写一份字段对应表）；Erika 弹幕 JSON 的解析从 App 层（DanmakuOverlay）下移到 DanmakuKit（新增 `DanmakuJSONParser`，与写入侧 `DanmakuJSONConverter` 同包同 schema），App 不再认识内核数据格式；新增解析器测试 5 用例（含 converter↔parser 往返一致）。手势分类纯逻辑此前已抽 `PlayerPanGestureModel`（有测试），PlayerScreen 剩余的触摸编排评估后保留在视图（与控制器/HUD/亮度耦合，换壳无收益）。
 
 - **网络层收敛（阶段 3）**：共享 HTTP 执行层落到 DiagnosticsKit——`HTTPClient`（请求构造/发送/计时日志/传输错误映射，状态码 ≥400 记失败级）+ `RetryPolicy`（指数退避 + 抖动 + 429 Retry-After，封顶 60s，支持 `sending` 闭包与调用方隔离域继承）。BangumiKit（`BangumiAPIClient.request`）、MoviePilotKit（`sendOnce`）、DanmakuKit（`GatewayClient.send`）三个客户端的手写「组请求/发送/URLError 分类/状态分支」全部替换为共享执行器；各域只保留自己的鉴权与状态语义。新增 `HTTPClientTests`（6 用例钉住退避/重试/取消语义）。新增 `SettingsKeys` 登记表，收编跨文件重复的 UserDefaults key（`ambientBackdrop`、`httpReadAheadMiB` 等曾各写三份）。纯重构，无行为变化。

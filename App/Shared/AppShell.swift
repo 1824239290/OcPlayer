@@ -2,6 +2,10 @@ import AppDesignKit
 import CoreModel
 import SwiftUI
 
+#if os(macOS)
+import AppKit
+#endif
+
 /// 主框架：Mac / iPad 用玻璃侧栏（NavigationSplitView），iPhone 用底部 Tab。
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
 struct AppShellView: View {
@@ -9,12 +13,23 @@ struct AppShellView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    #if os(macOS)
+    /// 原生全屏状态：进全屏时系统把工具栏搬进独立的 NSToolbarFullScreenWindow，
+    /// 顶栏是它画的不透明硬底，窗口态「氛围图透过玻璃顶栏」不再成立——氛围层
+    /// 顶部改向窗口底色渐隐衔接（`FullscreenTitlebarFade`）。
+    @State private var isWindowFullscreen = false
+    #endif
+
     var body: some View {
         layout
             // 横向留白跟**窗口宽度**走，不跟设备型号走：iPad 拖到 1/3 宽时
             // hSizeClass 已经是 compact，而 UIDevice 的 idiom 仍是 .pad
             // （见 `EnvironmentValues.contentLeading` 的注释）。
             .environment(\.contentLeading, contentLeading)
+            #if os(macOS)
+            // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
+            .environment(\.isWindowFullscreen, isWindowFullscreen)
+            #endif
     }
 
     /// nil 视作 regular：macOS 上 `horizontalSizeClass` 常为 nil，窗口再窄也不走紧凑版式。
@@ -52,7 +67,23 @@ struct AppShellView: View {
         // 必须走 layout 隔离的 `.background`：氛围图的 fill 溢出若作为 ZStack
         // 兄弟参与布局，会把 split view 撑出窗口（4e7287e 同款坑）。
         .background { windowAmbienceLayer }
-        .onAppear { app.setCompact(false) }
+        #if os(macOS)
+        // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
+        // 起窗对齐兜底「状态恢复直接以全屏起窗」——那时通知可能早于订阅。
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willEnterFullScreenNotification)) { _ in
+            isWindowFullscreen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+            isWindowFullscreen = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            syncFullscreenFlag()
+        }
+        #endif
+        .onAppear {
+            syncFullscreenFlag()
+            app.setCompact(false)
+        }
     }
 
     private var sidebar: some View {
@@ -198,26 +229,53 @@ struct AppShellView: View {
     /// 当前声明页的整窗氛围层；无声明时整体不渲染，各页自己兜底纯色。
     @ViewBuilder
     private var windowAmbienceLayer: some View {
-        ZStack {
-            if let ambience = app.windowAmbience {
-                BackdropAmbienceView(
-                    target: (url: ambience.url, authHeader: ambience.authHeader),
-                    scrim: ambience.scrim
-                )
-                .drawingGroup()
-                .allowsHitTesting(false)
-                // 顶栏必须由本层盖住：页面自身的 ignoresSafeArea 用法会改变
-                // 层继承到的安全区（详情页 ScrollView 忽略顶部后，层内
-                // BackdropAmbienceView 的内部 ignoresSafeArea 不再生效，
-                // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
-                // 所以在调用点再显式退出一次安全区。
-                .ignoresSafeArea()
-                .id(ambience)
-                .transition(.opacity)
+        ZStack(alignment: .top) {
+            ZStack {
+                if let ambience = app.windowAmbience {
+                    BackdropAmbienceView(
+                        target: (url: ambience.url, authHeader: ambience.authHeader),
+                        scrim: ambience.scrim
+                    )
+                    .drawingGroup()
+                    .allowsHitTesting(false)
+                    // 顶栏必须由本层盖住：页面自身的 ignoresSafeArea 用法会改变
+                    // 层继承到的安全区（详情页 ScrollView 忽略顶部后，层内
+                    // BackdropAmbienceView 的内部 ignoresSafeArea 不再生效，
+                    // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
+                    // 所以在调用点再显式退出一次安全区。
+                    .ignoresSafeArea()
+                    .id(ambience)
+                    .transition(.opacity)
+                }
             }
+            // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
+            .motion(Motion.ambient, value: app.windowAmbience)
+
+            #if os(macOS)
+            // 全屏：顶栏是不透明硬底，顶部向窗口底色渐隐衔接（见
+            // FullscreenTitlebarFade）；窗口态工具栏透玻璃，无需此层。
+            // **必须放在氛围层的动画作用域之外**：放进去会被换页/换图的
+            // 交叉淡入卷着一起动，插进/移出时在背景里滑出一条渐变带
+            // （全屏下肉眼可见）。
+            if isWindowFullscreen, app.windowAmbience != nil {
+                FullscreenTitlebarFade()
+                    .transition(.opacity)
+            }
+            #endif
         }
-        // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
-        .motion(Motion.ambient, value: app.windowAmbience)
+        #if os(macOS)
+        .motion(Motion.standard, value: isWindowFullscreen)
+        #endif
+    }
+
+    /// 对齐一次窗口实际全屏状态（macOS；iOS 恒 no-op）。
+    private func syncFullscreenFlag() {
+        #if os(macOS)
+        let fullscreen = NSApp.windows.contains { $0.styleMask.contains(.fullScreen) }
+        if isWindowFullscreen != fullscreen {
+            isWindowFullscreen = fullscreen
+        }
+        #endif
     }
 
     private var settingsFooter: some View {

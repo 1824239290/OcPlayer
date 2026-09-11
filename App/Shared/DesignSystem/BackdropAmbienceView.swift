@@ -124,3 +124,45 @@ extension View {
         modifier(WindowAmbienceSetter(ambience: ambience))
     }
 }
+
+// MARK: - 全屏顶栏适配（macOS）
+
+/// 窗口是否处于 macOS 原生全屏。全屏时系统把工具栏搬进独立的
+/// `NSToolbarFullScreenWindow`，顶栏是它画的不透明硬底（颜色与窗口底色同源），
+/// 窗口态「氛围图透过玻璃顶栏」不再成立——氛围层据此在全屏渲染
+/// `FullscreenTitlebarFade` 做衔接。iOS 恒 false。
+private struct WindowFullscreenKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isWindowFullscreen: Bool {
+        get { self[WindowFullscreenKey.self] }
+        set { self[WindowFullscreenKey.self] = newValue }
+    }
+}
+
+/// 全屏顶栏衔接层：从窗口顶往下先保持窗口底色实色（52pt 工具栏条带正下方，
+/// 与顶栏硬底无缝相接），再向下渐隐进氛围图——图看起来是从顶栏里「长」出来
+/// 的，而不是被拦腰截断。只在全屏渲染；窗口态工具栏是透明玻璃，图直接透出。
+struct FullscreenTitlebarFade: View {
+    /// macOS 标准工具栏条带高；条带以下再渐隐这段长度。
+    private static let stripHeight: CGFloat = 52
+    private static let fadeLength: CGFloat = 84
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color.pageBackground, location: 0),
+                .init(color: Color.pageBackground, location: Self.stripHeight / (Self.stripHeight + Self.fadeLength)),
+                .init(color: Color.pageBackground.opacity(0), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: Self.stripHeight + Self.fadeLength)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+}
