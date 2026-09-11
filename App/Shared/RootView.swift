@@ -1,6 +1,7 @@
 import AppDesignKit
 import JellyfinKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if os(iOS)
 import UIKit
@@ -100,6 +101,26 @@ struct RootView: View {
                 app.presentLocalFile(url)
             })
         }
+        // 播放入口（本地文件 / 直连链接）挂在根视图：macOS 文件菜单 Cmd+O 在
+        // 任何分区（设置 / Bangumi / MoviePilot…）下都可能触发，挂在某个分区
+        // 页里会够不到；isPresented 直接绑 AppModel 标志，入口只管置 true。
+        .fileImporter(
+            isPresented: Binding(
+                get: { app.isLocalFileImporterPresented },
+                set: { app.isLocalFileImporterPresented = $0 }
+            ),
+            allowedContentTypes: Self.playableTypes
+        ) { result in
+            if case .success(let url) = result { app.presentLocalFile(url) }
+        }
+        .sheet(isPresented: Binding(
+            get: { app.isDirectLinkSheetPresented },
+            set: { app.isDirectLinkSheetPresented = $0 }
+        )) {
+            URLEntrySheet { uri, token in
+                app.presentRequest(PlaybackController.request(uri: uri, jellyfinToken: token))
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 _ = app.playbackDidEnterBackground()
@@ -113,5 +134,46 @@ struct RootView: View {
         .sheet(item: $updateChecker.promptRelease) { release in
             UpdateReleaseSheet(release: release)
         }
+    }
+
+    /// fileImporter 接受的媒体类型。
+    private static var playableTypes: [UTType] {
+        [.audiovisualContent, .movie, .video, .mpeg4Movie, .quickTimeMovie]
+            + [UTType("org.matroska.mkv")].compactMap { $0 }
+    }
+}
+
+/// 直连链接输入弹窗（M0 验证 `open_with_headers` 用）。
+/// 入口：首页工具栏「打开」菜单 / macOS 文件菜单（Cmd+Shift+O）。
+struct URLEntrySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var uri = ""
+    @State private var token = ""
+    let onSubmit: (String, String?) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("打开直连链接").font(.headline)
+            TextField("http://…/Videos/{id}/stream?static=true", text: $uri)
+                .textFieldStyle(.roundedBorder)
+            SecureField("服务器 AccessToken（可留空）", text: $token)
+                .textFieldStyle(.roundedBorder)
+            Text("token 只作为请求头发给内核，不写进 URL、不落日志。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+                Button("播放") {
+                    onSubmit(uri.trimmingCharacters(in: .whitespacesAndNewlines),
+                             token.isEmpty ? nil : token)
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(uri.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
     }
 }

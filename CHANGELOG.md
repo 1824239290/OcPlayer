@@ -6,7 +6,11 @@
 
 ### 改动
 
-- **设置页信息架构重排为六组**：原 10 个 Section 平铺一条龙（服务器/播放/播放内核/界面/弹幕/MoviePilot/关于/存储/诊断/无名登出）重排为 **通用 → 播放（含播放内核）→ 弹幕 → Jellyfin 服务器 → Bangumi → MoviePilot → 关于 → 维护**，并按「说明文字一行为辄」瘦身：「播放内核」删掉构成行、永久禁用的弹幕渲染开关与内核 notes（工程信息归开源许可证页），只留内核信息行与两条异常态提示（选择失效回退、下次播放生效）；「关于」删掉直连策略 / 弹幕来源两条静态文案；弹幕网关的 API Key / 状态行收进配置弹窗语境，区块缩为一行 + 条件提示；MoviePilot 介绍长文删除；存储 + 诊断合并为「维护」。**服务器管理抽成「管理服务器」子页**（新增 `ServersView`）：当前服务器首次进入列表（带「使用中」标），切换 / 删除 / 默认星标都在子页完成，不再需要先「连接其它服务器」才能看到自己的档案；页尾无名 Section 的 Jellyfin「退出登录」并入服务器区块并改名「退出 Jellyfin」，与 MoviePilot 的「退出 MoviePilot」消除同名歧义。播放入口（打开本地文件 / 直连链接）暂留「播放」区块，迁移到首页与文件菜单留待下一阶段。
+- **设置页信息架构重排为六组**：原 10 个 Section 平铺一条龙（服务器/播放/播放内核/界面/弹幕/MoviePilot/关于/存储/诊断/无名登出）重排为 **通用 → 播放（含播放内核）→ 弹幕 → Jellyfin 服务器 → Bangumi → MoviePilot → 关于 → 维护**，并按「说明文字一行为辄」瘦身：「播放内核」删掉构成行、永久禁用的弹幕渲染开关与内核 notes（工程信息归开源许可证页），只留内核信息行与「下次播放生效」提示；「关于」删掉直连策略 / 弹幕来源两条静态文案；弹幕网关的 API Key / 状态行收进配置弹窗语境，区块缩为一行 + 条件提示；MoviePilot 介绍长文删除；存储 + 诊断合并为「维护」。**服务器管理抽成「管理服务器」子页**（新增 `ServersView`）：当前服务器首次进入列表（带「使用中」标），切换 / 删除 / 默认星标都在子页完成，不再需要先「连接其它服务器」才能看到自己的档案；页尾无名 Section 的 Jellyfin「退出登录」并入服务器区块并改名「退出 Jellyfin」，与 MoviePilot 的「退出 MoviePilot」消除同名歧义。
+
+- **播放入口迁出设置页（首页工具栏「打开」菜单 + macOS 文件菜单）**：首页工具栏新增「打开」菜单（本地视频文件 / 直连链接，macOS / iOS 共用）；macOS 补上惯例的文件菜单——`CommandGroup(replacing: .newItem)` 提供「打开本地视频文件…」⌘O、「打开直连链接…」⇧⌘O。`fileImporter` 与 `URLEntrySheet` 上移到 `RootView`（`isPresented` 绑 `AppModel` 的请求标志，工具栏菜单 / 文件菜单只置标志，任何分区下都能触发，⌘O 在设置页按下也有效），`URLEntrySheet` 随迁 RootView；设置页「播放」区块只剩网络预读缓冲。
+
+- **播放内核选择失效自愈**：装配点（`PlaybackEngineAssembly.registerAll`）注册完成后若发现存的选择指向本构建不存在的内核（MPV 实验分支残留的 `mpv-that-does-not-exist`），就地清除回退第一个可用内核并记 PlaybackLog——失效偏好在启动时自愈，不再常驻；设置页「播放内核」的橙色回退告警随之删除，本机 defaults 残留已清。
 
 - **Bangumi / MoviePilot 集成启用开关（设置页）**：不用这两个集成的人可以整体停用——关闭后侧栏 / iPhone Tab 的对应入口消失（停用瞬间正停在该分区则选中回落首页）、详情页的 Bangumi 章节区块与 MoviePilot 资源区块 / Bangumi 条目页「MoviePilot下载」按钮隐藏、播放结束的 Bangumi 自动标记与 MoviePilot profile 校验等后台活动一并停止。默认开（现有行为不变）；关闭只藏 UI 停网络，登录凭据、服务器配置、条目关联与本地缓存全部保留，重新打开即恢复。开关 key 收进 `SettingsKeys`（`bangumi.enabled` / `moviepilot.enabled`），各触点经 `@AppStorage` 读同一登记 key。
 

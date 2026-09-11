@@ -122,6 +122,21 @@ struct OcPlayerApp: App {
                 .frame(minWidth: 960, minHeight: 620)
         }
         .defaultSize(width: 1280, height: 800)
+        // 文件菜单：播放入口（本地文件 / 直连链接）从设置页迁来，补上
+        // macOS 惯例的 Cmd+O。直接引用 App 层的 appModel 置请求标志，
+        // RootView 上的 fileImporter / URLEntrySheet 负责真正呈现。
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("打开本地视频文件…") {
+                    appModel.isLocalFileImporterPresented = true
+                }
+                .keyboardShortcut("o")
+                Button("打开直连链接…") {
+                    appModel.isDirectLinkSheetPresented = true
+                }
+                .keyboardShortcut("o", modifiers: [.command, .shift])
+            }
+        }
         #else
         WindowGroup {
             RootView()

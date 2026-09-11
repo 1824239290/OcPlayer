@@ -5,9 +5,8 @@ import SwiftUI
 /// 设置页的「播放内核」区——现在只注册了一个内核（Erika），显示成一行信息；
 /// `PlaybackEngineAssembly` 里多注册一个之后，这里**自动**变成选择器，不用改 UI。
 ///
-/// 只在出现异常状态时多出说明行：存的内核 id 失效（回退告警）、
-/// 改了选择但正在播放的还是旧内核（下次播放生效提示）。
-/// 内核构成 / 许可证等工程信息在「开源许可证」页，不再这里铺。
+/// 仅有的说明行是「改了选择但正在播放的还是旧内核」的下次播放生效提示；
+/// 失效选择在装配点自愈清除，不再需要回退告警。
 struct PlaybackKernelSection: View {
     @Environment(PlaybackController.self) private var controller
 
@@ -42,16 +41,6 @@ struct PlaybackKernelSection: View {
                 // 装配点漏了才会走到这里；不静默，直接说出来。
                 Label("没有可用的播放内核", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-            }
-
-            if PlaybackEngineRegistry.selectionIsStale,
-               let storedID = PlaybackEngineRegistry.storedSelectionID,
-               let selected {
-                notice(
-                    "上次选择的内核「\(storedID)」在这个版本里已不可用，已回退到 \(selected.displayName)。",
-                    icon: "arrow.uturn.backward.circle.fill",
-                    tint: .orange
-                )
             }
 
             if let pendingSwitch, let selected {

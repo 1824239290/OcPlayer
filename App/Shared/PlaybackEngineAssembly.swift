@@ -23,5 +23,12 @@ enum PlaybackEngineAssembly {
         PlaybackEngineRegistry.register(ErikaEngine.descriptor) {
             try ErikaEngine(edrHeadroom: PlaybackDisplayMetrics.headroomForEngineCreation())
         }
+        // 自愈：存的选择指向本构建不存在的内核（例如已弃用的 MPV 实验分支残留）
+        // 就地清掉，让回退「生效一次后不再存在」，而不是常驻一条回退告警。
+        // 播放本身不受影响——Registry 读取时本就静默回退到第一个可用内核。
+        if PlaybackEngineRegistry.selectionIsStale {
+            PlaybackLog.append("存的内核选择失效（\(PlaybackEngineRegistry.storedSelectionID ?? "?")），清除并回退默认")
+            PlaybackEngineRegistry.clearSelection()
+        }
     }
 }

@@ -218,6 +218,12 @@ final class AppModel {
         }
     }
 
+    /// 「打开本地视频文件」请求标志：首页工具栏菜单 / macOS 文件菜单（Cmd+O）
+    /// 置 true，RootView 的 fileImporter 以它为 isPresented，选择完成或取消自动复位。
+    var isLocalFileImporterPresented = false
+    /// 「打开直连链接」请求标志：同样由 RootView 承载 URLEntrySheet。
+    var isDirectLinkSheetPresented = false
+
     #if os(iOS)
     /// 由 OcPlayerApp 注入：presentedPlayer 变化时通知 AppDelegate 旋转设备。
     var orientationChangeHandler: ((Bool) -> Void)?

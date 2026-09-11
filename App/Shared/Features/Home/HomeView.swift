@@ -32,9 +32,31 @@ struct HomeView: View {
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                openMediaMenu
                 refreshToolbarButton
             }
         }
+    }
+
+    /// 「打开」菜单：本地视频文件 / 直连链接。播放入口从设置页迁来（设置只放
+    /// 设置），置位 AppModel 的请求标志——fileImporter / URLEntrySheet 挂在
+    /// RootView，macOS 文件菜单 Cmd+O / Cmd+Shift+O 走同一对标志。
+    private var openMediaMenu: some View {
+        Menu {
+            Button {
+                app.isLocalFileImporterPresented = true
+            } label: {
+                Label("本地视频文件…", systemImage: "folder")
+            }
+            Button {
+                app.isDirectLinkSheetPresented = true
+            } label: {
+                Label("直连链接…", systemImage: "link")
+            }
+        } label: {
+            Label("打开", systemImage: "folder.badge.plus")
+        }
+        .accessibilityLabel("打开媒体")
     }
 
     /// 右上角刷新按钮：点击等同下拉刷新，重新向服务器请求首页与媒体库数据。

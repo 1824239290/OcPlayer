@@ -3,19 +3,16 @@ import DanmakuKit
 import JellyfinKit
 import DiagnosticsKit
 import SwiftUI
-import UniformTypeIdentifiers
 
 /// 设置页，六组：通用 / 播放（含播放内核）/ 弹幕 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
-/// 原则：这里只放设置——播放入口与工程说明不进设置页，说明文字一行为辄。
-/// 服务器列表的切换 / 删除收在「管理服务器」子页（`ServersView`）。
+/// 原则：这里只放设置——播放入口在首页工具栏与 macOS 文件菜单，工程说明不进设置页，
+/// 说明文字一行为辄。服务器列表的切换 / 删除收在「管理服务器」子页（`ServersView`）。
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(DanmakuModel.self) private var danmakuModel
 
-    @State private var isImporting = false
-    @State private var isEnteringURL = false
     @State private var isEditingDanmakuGateway = false
     @State private var isEditingMoviePilot = false
     /// 单例是引用类型，不需要 @State 的存储语义；let 即可（@Observable 变化照常驱动刷新）。
@@ -61,19 +58,6 @@ struct SettingsView: View {
                     }
                 }
                 Text("公网服务器建议 16 MiB 以上，局域网默认即可。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                Button {
-                    isImporting = true
-                } label: {
-                    Label("打开本地视频文件…", systemImage: "folder")
-                }
-                Button {
-                    isEnteringURL = true
-                } label: {
-                    Label("打开直连链接…", systemImage: "link")
-                }
-                Text("直连 token 只走请求头，不写进 URL。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -217,15 +201,6 @@ struct SettingsView: View {
         .onAppear {
             selectedDefaultServerID = app.store.defaultServerID
         }
-        .fileImporter(isPresented: $isImporting,
-                      allowedContentTypes: Self.playableTypes) { result in
-            if case .success(let url) = result { openLocal(url) }
-        }
-        .sheet(isPresented: $isEnteringURL) {
-            URLEntrySheet { uri, token in
-                openDirect(uri, token: token)
-            }
-        }
         .sheet(isPresented: $isEditingDanmakuGateway) {
             DanmakuGatewayEntrySheet(
                 initialURL: danmakuModel.dandanplayGatewayURLString,
@@ -277,19 +252,6 @@ struct SettingsView: View {
     private var moviePilotActionButtonTitle: String {
         moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
     }
-
-    private func openLocal(_ url: URL) {
-        app.presentLocalFile(url)
-    }
-
-    private func openDirect(_ uri: String, token: String?) {
-        app.presentRequest(PlaybackController.request(uri: uri, jellyfinToken: token))
-    }
-
-    private static var playableTypes: [UTType] {
-        [.audiovisualContent, .movie, .video, .mpeg4Movie, .quickTimeMovie]
-            + [UTType("org.matroska.mkv")].compactMap { $0 }
-    }
 }
 
 private struct ImageCacheSettingsRow: View {
@@ -326,40 +288,6 @@ private struct ImageCacheSettingsRow: View {
 
     private static func format(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-    }
-}
-
-/// 直连链接入口（M0 验证 `open_with_headers` 用，现在挂在设置页和播放页）。
-struct URLEntrySheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var uri = ""
-    @State private var token = ""
-    let onSubmit: (String, String?) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("打开直连链接").font(.headline)
-            TextField("http://…/Videos/{id}/stream?static=true", text: $uri)
-                .textFieldStyle(.roundedBorder)
-            SecureField("服务器 AccessToken（可留空）", text: $token)
-                .textFieldStyle(.roundedBorder)
-            Text("token 只作为请求头发给内核，不写进 URL、不落日志。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("取消") { dismiss() }
-                Button("播放") {
-                    onSubmit(uri.trimmingCharacters(in: .whitespacesAndNewlines),
-                             token.isEmpty ? nil : token)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(uri.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 460)
     }
 }
 
