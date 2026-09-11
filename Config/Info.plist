@@ -39,5 +39,13 @@
 			</array>
 		</dict>
 	</array>
+	<!-- 声明支持的本地化：App 内文案为中文硬编码，这里登记 zh-Hans 让
+	     AppKit/SwiftUI 的标准菜单（文件/编辑/…）与系统面板跟随系统语言（中文）
+	     渲染；配套的 App/Shared/zh-Hans.lproj/Localizable.strings 是声明载体。 -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
 </dict>
 </plist>

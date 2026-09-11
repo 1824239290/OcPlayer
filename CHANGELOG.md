@@ -14,6 +14,8 @@
 
 - **Bangumi / MoviePilot 集成启用开关（设置页）**：不用这两个集成的人可以整体停用——关闭后侧栏 / iPhone Tab 的对应入口消失（停用瞬间正停在该分区则选中回落首页）、详情页的 Bangumi 章节区块与 MoviePilot 资源区块 / Bangumi 条目页「MoviePilot下载」按钮隐藏、播放结束的 Bangumi 自动标记与 MoviePilot profile 校验等后台活动一并停止。默认开（现有行为不变）；关闭只藏 UI 停网络，登录凭据、服务器配置、条目关联与本地缓存全部保留，重新打开即恢复。开关 key 收进 `SettingsKeys`（`bangumi.enabled` / `moviepilot.enabled`），各触点经 `@AppStorage` 读同一登记 key。
 
+- **macOS 菜单栏与系统界面中文化**：App 声明支持简体中文（新增 `App/Shared/zh-Hans.lproj/Localizable.strings` 声明载体 + Info.plist `CFBundleLocalizations` 登记），系统语言为中文时 AppKit/SwiftUI 提供的标准菜单（文件/编辑/显示/窗口/帮助）、菜单项（关闭/全部关闭等）与系统面板按钮（打开/取消）跟随中文渲染——此前整个菜单栏落在开发区域语言（英文）上；App 自有文案本就是中文硬编码不受影响。无障碍树里合并子标签的连接符也随语言变为顿号（如卡片「标题、年份」），VoiceOver 朗读更自然。
+
 ## [0.1.6] · 2026-09-11 · 前端组件化重构、HUD 液态玻璃与内核 v0.1.9
 
 ### 改动
