@@ -200,7 +200,7 @@ fetch() { # $1 = 包名
       fi
     else
       actual="$(shasum -a 256 "$zip" | awk '{print $1}')"
-      [[ "$actual" == "$expected" ]] || { echo "✗ $1.zip 哈希不匹配：期望 $expected，实际 $actual" >&2; exit 1; }
+      [[ "$actual" == "$expected" ]] || { echo "✗ $1.zip 哈希不匹配：期望 ${expected}，实际 $actual" >&2; exit 1; }
       echo "· $1.zip 哈希校验通过"
     fi
   fi
@@ -249,7 +249,7 @@ if [[ "$IOS_AVAILABLE" == true ]]; then
   IOS_SIM_LIB="$(ls "$IOS_XC"/ios-arm64*simulator/*.a)"
 
   for f in "$MAC_LIB" "$MAC_INC/erika.h" "$IOS_DEV_LIB" "$IOS_SIM_LIB"; do
-    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+    [[ -e "$f" ]] || { echo "✗ 缺少 ${f}，release 布局可能变了" >&2; exit 1; }
   done
   create_args+=(-library "$IOS_DEV_LIB" -headers "$IOS_INC")
   create_args+=(-library "$IOS_SIM_LIB" -headers "$IOS_INC")
@@ -257,7 +257,7 @@ if [[ "$IOS_AVAILABLE" == true ]]; then
 elif [[ -n "$SAVED_IOS" ]]; then
   echo "⚠ 复用已有 iOS 切片（仍为旧版本，未随 $TAG 更新）"
   for f in "$MAC_LIB" "$MAC_INC/erika.h"; do
-    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+    [[ -e "$f" ]] || { echo "✗ 缺少 ${f}，release 布局可能变了" >&2; exit 1; }
   done
   # 必须让 Info.plist 登记 iOS 库，否则 SwiftPM binaryTarget 看不见这些切片。
   IOS_DEV_LIB="$(ls "$SAVED_IOS"/ios-arm64/*.a)"
@@ -270,7 +270,7 @@ elif [[ -n "$SAVED_IOS" ]]; then
   create_args+=(-library "$IOS_SIM_LIB" -headers "$IOS_INC")
 else
   for f in "$MAC_LIB" "$MAC_INC/erika.h"; do
-    [[ -e "$f" ]] || { echo "✗ 缺少 $f，release 布局可能变了" >&2; exit 1; }
+    [[ -e "$f" ]] || { echo "✗ 缺少 ${f}，release 布局可能变了" >&2; exit 1; }
   done
   echo "⚠ $TAG 无 iOS 资产且本地无旧切片：xcframework 将仅含 macOS（iOS 打包会失败）" >&2
 fi
