@@ -12,6 +12,10 @@ enum SettingsKeys {
     static let ambientBackdrop = "dev.jumusu.ocplayer.interface.ambientBackdrop"
     /// Bangumi 进度页排序偏好。
     static let bangumiProgressSort = "dev.jumusu.ocplayer.bangumi.progressSort"
+    /// Bangumi 集成启用开关（默认开）。关闭只藏 UI 与停网络活动，登录态/关联/缓存保留。
+    static let bangumiEnabled = "dev.jumusu.ocplayer.bangumi.enabled"
+    /// MoviePilot 集成启用开关（默认开）。关闭只藏 UI 与停网络活动，服务器配置保留。
+    static let moviepilotEnabled = "dev.jumusu.ocplayer.moviepilot.enabled"
     /// 弹幕：走 App 层 overlay 渲染（内核渲染当前被禁）。
     static let danmakuUseOverlayRenderer = "dev.jumusu.ocplayer.danmaku.useOverlayRenderer"
     /// 弹幕诊断日志开关。

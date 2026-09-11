@@ -20,6 +20,10 @@ struct BangumiChapterSection: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(\.contentLeading) private var contentLeading
 
+    /// 集成开关（设置页「启用 Bangumi」，默认开）：关闭时详情页不渲染本区块，
+    /// `.task` 里的自动匹配 / 远端补齐也就不会跑。
+    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
+
     @State private var linkedSubjectID: Int?
     @State private var subject: BangumiSubjectDTO?
     @State private var episodes: [BangumiEpisodeDTO] = []
@@ -51,8 +55,8 @@ struct BangumiChapterSection: View {
     }
 
     var body: some View {
-        // 没登录就整块不出现，别留一个空标题。
-        if bangumi.isAuthenticated {
+        // 集成停用或没登录就整块不出现，别留一个空标题。
+        if bangumiEnabled, bangumi.isAuthenticated {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.top, 26)

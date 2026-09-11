@@ -2,17 +2,12 @@ import AppDesignKit
 import PlaybackKit
 import SwiftUI
 
-/// 设置页的「播放内核」区。
+/// 设置页的「播放内核」区——现在只注册了一个内核（Erika），显示成一行信息；
+/// `PlaybackEngineAssembly` 里多注册一个之后，这里**自动**变成选择器，不用改 UI。
 ///
-/// 现在只注册了一个内核（Erika），所以显示成信息行；`PlaybackEngineAssembly`
-/// 里多注册一个之后，这里**自动**变成选择器，不用改 UI。
-///
-/// 语义要点（footer 里也对用户讲了一遍）：
-/// - 换内核和换弹幕渲染路线都在**下一次播放**生效——两者在
-///   `PlaybackController.prepareEngine()` 里一起锁定，中途翻转会出双份弹幕 / 半挂的画面。
-/// - 播放中改设置时，会显示「当前播放仍在用 X」，避免用户以为没生效。
-/// - 内核弹幕渲染当前版本被禁用（跳轨问题，见下方开关的说明），「用内核渲染弹幕」
-///   开关置灰锁在关位，弹幕一律走 App 层 overlay。
+/// 只在出现异常状态时多出说明行：存的内核 id 失效（回退告警）、
+/// 改了选择但正在播放的还是旧内核（下次播放生效提示）。
+/// 内核构成 / 许可证等工程信息在「开源许可证」页，不再这里铺。
 struct PlaybackKernelSection: View {
     @Environment(PlaybackController.self) private var controller
 
@@ -34,7 +29,7 @@ struct PlaybackKernelSection: View {
     }
 
     var body: some View {
-        Section {
+        Section("播放内核") {
             if available.count > 1 {
                 Picker("内核", selection: kernelBinding) {
                     ForEach(available) { descriptor in
@@ -47,10 +42,6 @@ struct PlaybackKernelSection: View {
                 // 装配点漏了才会走到这里；不静默，直接说出来。
                 Label("没有可用的播放内核", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-            }
-
-            if let selected {
-                KeyValueRow(label: "构成", value: selected.summary)
             }
 
             if PlaybackEngineRegistry.selectionIsStale,
@@ -71,27 +62,6 @@ struct PlaybackKernelSection: View {
                     tint: .blue
                 )
             }
-
-            // 内核自己没有弹幕渲染器时不给这个开关：那种情况下 overlay 是唯一选择，
-            // 摆一个假开关比没有更糟。
-            if selected?.supportsKernelDanmaku == true {
-                Toggle("用内核渲染弹幕", isOn: .constant(false))
-                    .disabled(true)
-                Text("当前版本已禁用内核弹幕：内核在弹幕定位时会导致将完整视频加载进内存引发内存问题，"
-                     + "暂时统一用 App 层渲染（DanmakuRenderKit）。内核修复后恢复。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let notes = selected?.notes {
-                Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        } header: {
-            Text("播放内核")
-        } footer: {
-            Text("内核与弹幕渲染方式在下一次播放时生效，正在播放的内容不受影响。")
         }
         .onAppear {
             selectedKernelID = PlaybackEngineRegistry.selected?.id

@@ -23,6 +23,10 @@ struct BangumiSubjectDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
+    /// MoviePilot 集成开关（设置页「启用 MoviePilot」，默认开）：
+    /// 关闭时头部的「MoviePilot下载」快捷入口一并隐藏。
+    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
+
     @State private var subject: BangumiSubjectDTO?
     @State private var episodes: [BangumiEpisodeDTO] = []
     @State private var isLoading = false
@@ -244,19 +248,21 @@ struct BangumiSubjectDetailView: View {
 
                     Spacer()
 
-                    // MoviePilot 下载快捷入口
-                    Button {
-                        let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
-                        if !query.isEmpty {
-                            app.pendingMoviePilotQuery = query
-                            app.selectedSection = .moviepilot
+                    // MoviePilot 下载快捷入口（集成停用时整块隐藏）
+                    if moviepilotEnabled {
+                        Button {
+                            let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
+                            if !query.isEmpty {
+                                app.pendingMoviePilotQuery = query
+                                app.selectedSection = .moviepilot
+                            }
+                        } label: {
+                            Label("MoviePilot下载", systemImage: "arrow.down.circle")
+                                .font(.callout.weight(.medium))
                         }
-                    } label: {
-                        Label("MoviePilot下载", systemImage: "arrow.down.circle")
-                            .font(.callout.weight(.medium))
+                        .buttonStyle(.bordered)
+                        .help("前往 MoviePilot 搜索本片资源")
                     }
-                    .buttonStyle(.bordered)
-                    .help("前往 MoviePilot 搜索本片资源")
                 }
             }
         }

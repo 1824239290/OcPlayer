@@ -14,6 +14,9 @@ struct MoviePilotResourceSection: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.contentLeading) private var contentLeading
 
+    /// 集成开关（设置页「启用 MoviePilot」，默认开）：关闭时详情页不渲染本区块。
+    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
+
     let item: MediaItem
 
     @State private var fallbackMedia: MPMediaInfo?
@@ -22,7 +25,7 @@ struct MoviePilotResourceSection: View {
     @State private var matchGeneration: UInt64 = 0
 
     var body: some View {
-        if moviepilot.isAuthenticated {
+        if moviepilotEnabled, moviepilot.isAuthenticated {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.top, 26)

@@ -459,6 +459,11 @@ extension AppModel {
     /// ⚠️ 每个提前返回都要留日志：这条链路全是静默 return，出问题时没有
     /// 任何线索（此前整份日志里成功/失败记录都是 0 条）。
     private func markWatchedOnBangumi(for item: MediaItem) {
+        // 集成停用（设置页「启用 Bangumi」关闭）时连日志都不发网络：第一个闸。
+        guard UserDefaults.standard.bool(forKey: SettingsKeys.bangumiEnabled) else {
+            BangumiDiagnostics.log("播放结束未标记：Bangumi 集成已停用")
+            return
+        }
         guard item.kind == .episode, let episodeNumber = item.episodeNumber else {
             let itemID = item.id
             BangumiDiagnostics.log("播放结束未标记：不是单集 item=\(itemID)")

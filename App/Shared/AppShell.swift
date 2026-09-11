@@ -13,6 +13,12 @@ struct AppShellView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后侧栏 / Tab 的对应入口消失，
+    /// 停用瞬间若正停在那个分区，选中回落到首页；详情页与后台活动由各自触点
+    /// 读同一组 key 门控（见 SettingsKeys）。
+    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
+    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
+
     #if os(macOS)
     /// 原生全屏状态：进全屏时系统把工具栏搬进独立的 NSToolbarFullScreenWindow，
     /// 顶栏是它画的不透明硬底，窗口态「氛围图透过玻璃顶栏」不再成立——氛围层
@@ -30,6 +36,18 @@ struct AppShellView: View {
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
+            // 集成停用时把停留在该分区的选中回落到首页——否则侧栏 / Tab 少了
+            // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
+            .onChange(of: bangumiEnabled) { _, enabled in
+                if !enabled, app.selectedSection == .bangumi {
+                    app.selectedSection = .home
+                }
+            }
+            .onChange(of: moviepilotEnabled) { _, enabled in
+                if !enabled, app.selectedSection == .moviepilot {
+                    app.selectedSection = .home
+                }
+            }
     }
 
     /// nil 视作 regular：macOS 上 `horizontalSizeClass` 常为 nil，窗口再窄也不走紧凑版式。
@@ -93,10 +111,14 @@ struct AppShellView: View {
         )) {
             Section {
                 Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
-                Label("MoviePilot", systemImage: "film.stack")
-                    .tag(AppModel.Section.moviepilot)
-                Label("Bangumi", systemImage: "tv.fill")
-                    .tag(AppModel.Section.bangumi)
+                if moviepilotEnabled {
+                    Label("MoviePilot", systemImage: "film.stack")
+                        .tag(AppModel.Section.moviepilot)
+                }
+                if bangumiEnabled {
+                    Label("Bangumi", systemImage: "tv.fill")
+                        .tag(AppModel.Section.bangumi)
+                }
             }
 
             Section("媒体库") {
@@ -128,8 +150,10 @@ struct AppShellView: View {
 
     #if !os(macOS)
 
-    /// iPhone 底部 Tab：首页 / 媒体库 / Bangumi / MoviePilot / 设置（固定 5 个，不触发「更多」）。
-    /// 每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非 sheet——播放器覆盖层不再被遮住。
+    /// iPhone 底部 Tab：首页 / 媒体库 / （Bangumi）/（MoviePilot）/ 设置。
+    /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐，关掉后 Tab 数
+    /// 最少 3 个；每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非 sheet
+    /// ——播放器覆盖层不再被遮住。
     private var compactLayout: some View {
         @Bindable var app = app
         return TabView(selection: Binding(
@@ -150,19 +174,23 @@ struct AppShellView: View {
             .tabItem { Label("媒体库", systemImage: "square.stack") }
             .tag(AppModel.Section.libraries)
 
-            NavigationStack(path: $app.navPaths.bangumi) {
-                BangumiHomeView()
-                    .appRoutes()
+            if bangumiEnabled {
+                NavigationStack(path: $app.navPaths.bangumi) {
+                    BangumiHomeView()
+                        .appRoutes()
+                }
+                .tabItem { Label("Bangumi", systemImage: "tv.fill") }
+                .tag(AppModel.Section.bangumi)
             }
-            .tabItem { Label("Bangumi", systemImage: "tv.fill") }
-            .tag(AppModel.Section.bangumi)
 
-            NavigationStack(path: $app.navPaths.moviepilot) {
-                MoviePilotHomeView()
-                    .appRoutes()
+            if moviepilotEnabled {
+                NavigationStack(path: $app.navPaths.moviepilot) {
+                    MoviePilotHomeView()
+                        .appRoutes()
+                }
+                .tabItem { Label("MoviePilot", systemImage: "film.stack") }
+                .tag(AppModel.Section.moviepilot)
             }
-            .tabItem { Label("MoviePilot", systemImage: "film.stack") }
-            .tag(AppModel.Section.moviepilot)
 
             NavigationStack(path: $app.navPaths.settings) {
                 SettingsView()

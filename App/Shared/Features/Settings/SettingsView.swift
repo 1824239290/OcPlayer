@@ -5,10 +5,12 @@ import DiagnosticsKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 设置页：服务器与账号信息、本地播放入口、弹幕网关、关于信息。
-/// 外观 / 播放细节设置 M4 再进。
+/// 设置页，六组：通用 / 播放（含播放内核）/ 弹幕 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
+/// 原则：这里只放设置——播放入口与工程说明不进设置页，说明文字一行为辄。
+/// 服务器列表的切换 / 删除收在「管理服务器」子页（`ServersView`）。
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
+    @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(DanmakuModel.self) private var danmakuModel
 
@@ -19,8 +21,6 @@ struct SettingsView: View {
     /// 单例是引用类型，不需要 @State 的存储语义；let 即可（@Observable 变化照常驱动刷新）。
     private let updateChecker = AppUpdateChecker.shared
     @State private var presentedRelease: GitHubRelease?
-    /// 待确认删除的已保存服务器档案（删除连 token 一起清，不可恢复）。
-    @State private var pendingDeleteProfile: ServerProfile?
     /// 启动默认服务器的本地镜像。`ServerStore` 不是 `@Observable`，
     /// Picker 需要这份 @State 驱动选中态刷新；持久化仍以 store 为准。
     @State private var selectedDefaultServerID: String?
@@ -37,37 +37,18 @@ struct SettingsView: View {
     /// 海报氛围背景开关（默认开）：DetailView / AmbientBackdropCarousel 读同一 key，
     /// 改了立即生效。
     @AppStorage(SettingsKeys.ambientBackdrop) private var ambientBackdropEnabled = true
+    /// Bangumi / MoviePilot 集成开关（默认开）。关闭后侧栏入口、详情页区块与
+    /// 后台同步一并隐藏/停止，凭据与关联数据保留（见各功能触点的门控）。
+    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
+    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
 
     var body: some View {
         Form {
-            Section("服务器") {
-                KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
-                KeyValueRow(label: "地址", value: app.server?.profile.baseURL.absoluteString ?? "—")
-                KeyValueRow(label: "版本", value: app.server?.profile.serverVersion ?? "—")
-                KeyValueRow(label: "用户", value: app.currentUserLabel)
-                if app.store.profiles.count >= 1 {
-                    Picker("启动时默认服务器", selection: defaultServerBinding) {
-                        Text("上次使用的服务器").tag(String?.none)
-                        ForEach(app.store.profiles) { profile in
-                            Text(profile.serverName + " · " + profile.kind.displayName)
-                                .tag(String?.some(profile.id))
-                        }
-                    }
-                    Text("打开 App 时优先连接这台。选「上次使用的服务器」则跟随你最近一次切换的服务器。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
-                // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
-                Button {
-                    app.reconnectFlow()
-                } label: {
-                    Label(
-                        app.server == nil ? "连接服务器…" : "连接其它服务器…",
-                        systemImage: "arrow.left.arrow.right"
-                    )
-                }
-                savedServersRows
+            Section("通用") {
+                Toggle("海报氛围背景", isOn: $ambientBackdropEnabled)
+                Text("详情页与首页垫模糊海报背景，关闭后恢复清晰横幅。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
             Section("播放") {
@@ -79,7 +60,7 @@ struct SettingsView: View {
                         Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
                     }
                 }
-                Text("播放网络视频时内核提前下载的缓冲窗口。公网服务器（远程 Emby 等）建议 16 MiB 以上，局域网默认即可。对本地文件无效。")
+                Text("公网服务器建议 16 MiB 以上，局域网默认即可。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Button {
@@ -92,19 +73,12 @@ struct SettingsView: View {
                 } label: {
                     Label("打开直连链接…", systemImage: "link")
                 }
-                Text("直连播放 token 只走请求头；本地文件不上传任何信息。")
+                Text("直连 token 只走请求头，不写进 URL。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
 
             PlaybackKernelSection()
-
-            Section("界面") {
-                Toggle("海报氛围背景", isOn: $ambientBackdropEnabled)
-                Text("详情页与首页垫一张模糊的海报背景，首页会从媒体库随机轮播。关闭后详情页恢复清晰横幅、首页无背景。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
 
             Section("弹幕") {
                 Toggle("自动加载弹幕", isOn: Binding(
@@ -114,38 +88,97 @@ struct SettingsView: View {
                 HStack {
                     Text("网关")
                     Spacer()
-                    Text(danmakuModel.dandanplayGatewayURLString)
+                    Text(danmakuModel.dandanplayIsConfigured
+                         ? danmakuModel.dandanplayGatewayURLString : "未配置")
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                     Button("配置") {
                         isEditingDanmakuGateway = true
                     }
                 }
-                LabeledContent("API Key", value: danmakuModel.dandanplayHasAPIKey ? "已设置" : "未设置")
-                LabeledContent("状态", value: danmakuModel.dandanplayIsConfigured ? "已配置" : "未配置")
-                Text("网关地址或 Key 未配置有效时不会请求弹幕，也不会影响视频播放。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !danmakuModel.dandanplayIsConfigured {
+                    Text("未配置网关时不请求网络弹幕，播放不受影响。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Section("Jellyfin 服务器") {
+                KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
+                KeyValueRow(label: "地址", value: app.server?.profile.baseURL.absoluteString ?? "—")
+                if !app.store.profiles.isEmpty {
+                    Picker("启动时默认服务器", selection: defaultServerBinding) {
+                        Text("上次使用的服务器").tag(String?.none)
+                        ForEach(app.store.profiles) { profile in
+                            Text(profile.serverName + " · " + profile.kind.displayName)
+                                .tag(String?.some(profile.id))
+                        }
+                    }
+                    Text("打开 App 时优先连接这台。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
+                // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
+                NavigationLink {
+                    ServersView()
+                } label: {
+                    Label("管理服务器…", systemImage: "list.bullet")
+                }
+                Button {
+                    app.reconnectFlow()
+                } label: {
+                    Label(
+                        app.server == nil ? "连接服务器…" : "连接其它服务器…",
+                        systemImage: "arrow.left.arrow.right"
+                    )
+                }
+                Button(role: .destructive) {
+                    app.signOut()
+                } label: {
+                    Label("退出 Jellyfin", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            }
+
+            Section("Bangumi") {
+                Toggle("启用 Bangumi", isOn: $bangumiEnabled)
+                if bangumiEnabled {
+                    KeyValueRow(label: "账号", value: bangumi.profile?.nickname ?? "未登录")
+                    if !bangumi.isAuthenticated {
+                        Text("登录入口在侧栏的 Bangumi 分区。")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Text("关闭后侧栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             Section("MoviePilot") {
-                KeyValueRow(label: "地址", value: moviepilot.store.serverURLString ?? "—")
-                KeyValueRow(label: "用户", value: moviepilot.profile?.name
-                    ?? (moviepilot.store.username.isEmpty ? "—" : moviepilot.store.username))
-                KeyValueRow(label: "状态", value: moviePilotStatusText)
-                Button(moviePilotActionButtonTitle) {
-                    isEditingMoviePilot = true
-                }
-                if moviepilot.isAuthenticated {
-                    Button(role: .destructive) {
-                        Task { await moviepilot.signOut() }
-                    } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                Toggle("启用 MoviePilot", isOn: $moviepilotEnabled)
+                if moviepilotEnabled {
+                    KeyValueRow(label: "地址", value: moviepilot.store.serverURLString ?? "—")
+                    KeyValueRow(label: "用户", value: moviepilot.profile?.name
+                        ?? (moviepilot.store.username.isEmpty ? "—" : moviepilot.store.username))
+                    KeyValueRow(label: "状态", value: moviePilotStatusText)
+                    Button(moviePilotActionButtonTitle) {
+                        isEditingMoviePilot = true
                     }
+                    if moviepilot.isAuthenticated {
+                        Button(role: .destructive) {
+                            Task { await moviepilot.signOut() }
+                        } label: {
+                            Label("退出 MoviePilot", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    }
+                } else {
+                    Text("关闭后侧栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                 }
-                Text("配置后可在 OcPlayer 里搜索站点资源并添加下载，MoviePilot 自动整理入库到 Jellyfin；下载观看打卡一条龙。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section("关于") {
@@ -156,8 +189,6 @@ struct SettingsView: View {
                         presentedRelease = release
                     }
                 )
-                KeyValueRow(label: "直连策略", value: "优先直连直解（DirectPlay），播放前经 PlaybackInfo 选择媒体源；不支持直连的源回退直连流（DirectStream）")
-                KeyValueRow(label: "弹幕", value: "弹弹play 开放平台（通过 OcPlay 网关接入）")
                 NavigationLink {
                     OpenSourceLicensesView()
                 } label: {
@@ -168,28 +199,17 @@ struct SettingsView: View {
                 }
             }
 
-            Section("存储") {
-                ImageCacheSettingsRow()
-            }
-
             Section {
+                ImageCacheSettingsRow()
                 Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
-                Text("开启后记录弹幕时间轴对齐 / 爆发发射与续播定位日志（写入 diagnostics.jsonl），排查「续播起播弹幕错位」等问题时再开，平时保持关闭。")
+                Text("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                 DiagnosticsSection()
             } header: {
-                Text("诊断")
+                Text("维护")
             } footer: {
                 Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
-            }
-
-            Section {
-                Button(role: .destructive) {
-                    app.signOut()
-                } label: {
-                    Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
-                }
             }
         }
         .navigationTitle("设置")
@@ -223,84 +243,13 @@ struct SettingsView: View {
         .sheet(item: $presentedRelease) { release in
             UpdateReleaseSheet(release: release)
         }
-        .confirmationDialog(
-            "删除服务器？",
-            isPresented: Binding(
-                get: { pendingDeleteProfile != nil },
-                set: { if !$0 { pendingDeleteProfile = nil } }
-            ),
-            presenting: pendingDeleteProfile
-        ) { profile in
-            Button("删除「\(profile.serverName)」", role: .destructive) {
-                app.store.remove(id: profile.id)
-                // store.remove 会清掉指向该档案的默认启动服务器，这里同步本地镜像。
-                selectedDefaultServerID = app.store.defaultServerID
-                pendingDeleteProfile = nil
-            }
-        } message: { _ in
-            Text("服务器地址与登录凭据会一起删除。下次想用这台需要重新输入地址并登录。")
-        }
         .task {
-            moviepilot.refreshProfileIfNeeded()
+            // 停用的集成不做任何启动期网络活动（profile 校验也跳过）。
+            if moviepilotEnabled {
+                moviepilot.refreshProfileIfNeeded()
+            }
             if updateChecker.state == .idle {
                 await updateChecker.checkForUpdates()
-            }
-        }
-    }
-
-    /// 其余已保存档案的快速切换与删除。正在使用的服务器不在列表里（要换走它
-    /// 用上面的「连接其它服务器」，要删它先退出登录）。删除连 token 一起清，
-    /// 下次想用这台就得重新输地址登录。默认启动服务器带星标。
-    @ViewBuilder
-    private var savedServersRows: some View {
-        let others = app.store.profiles.filter { $0.id != app.server?.profile.id }
-        if !others.isEmpty {
-            Text("已保存的服务器")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-            ForEach(others) { profile in
-                HStack(spacing: 10) {
-                    Image(systemName: profile.kind == .emby ? "tv" : "server.rack")
-                        .foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
-                            Text(profile.serverName).font(.callout)
-                            Text(profile.kind.displayName)
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                            if isDefaultServer(profile.id) {
-                                Image(systemName: "star.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(.yellow)
-                                    .accessibilityLabel("启动默认")
-                            }
-                            if app.store.token(for: profile) == nil {
-                                Text("需重新登录").font(.caption2).foregroundStyle(.tertiary)
-                            }
-                        }
-                        Text(profile.baseURL.absoluteString)
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    Spacer()
-                    Button("切换") {
-                        Task { await app.switchToServer(profile) }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    Button(role: .destructive) {
-                        pendingDeleteProfile = profile
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                }
             }
         }
     }
@@ -315,10 +264,6 @@ struct SettingsView: View {
                 app.store.defaultServerID = newValue
             }
         )
-    }
-
-    private func isDefaultServer(_ id: String) -> Bool {
-        selectedDefaultServerID == id
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。
@@ -508,7 +453,7 @@ struct DanmakuGatewayEntrySheet: View {
 
 // MARK: - 诊断
 
-/// 设置页的「诊断」区：日志路径 / 最近记录（可滚动）/ 清空。
+/// 设置页的诊断区：日志路径 / 最近记录（可滚动）/ 清空。
 /// 不出「导出文件」按钮——直接在 Finder 里打开日志目录更直观。
 struct DiagnosticsSection: View {
     @State private var records: [DiagnosticEntry] = []
@@ -668,4 +613,3 @@ private struct UpdateCheckRow: View {
         }
     }
 }
-
