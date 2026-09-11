@@ -32,6 +32,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     public static let descriptor = PlaybackEngineDescriptor(
         id: "erika",
         displayName: "Erika",
+        version: ErikaVersion.tag,
         summary: "Rust · FFmpeg · libass · Metal",
         supportsKernelDanmaku: true,
         // 别在这里重复弹幕开关自己的说明——设置页两行紧挨着，会读成同一句话说两遍。

@@ -18,6 +18,12 @@ struct PlaybackKernelSection: View {
         available.first { $0.id == selectedKernelID } ?? PlaybackEngineRegistry.selected
     }
 
+    /// 内核标题 = 显示名 + 版本 tag（如「Erika v0.1.9+dolby.1」）；无版本的内核只显名字。
+    private func title(_ descriptor: PlaybackEngineDescriptor) -> String {
+        guard let version = descriptor.version else { return descriptor.displayName }
+        return "\(descriptor.displayName) \(version)"
+    }
+
     /// 正在播放的引擎和当前选择不是同一个（说明改了设置但还没换片）。
     private var pendingSwitch: PlaybackEngineDescriptor? {
         guard let active = controller.engine?.descriptor,
@@ -32,11 +38,11 @@ struct PlaybackKernelSection: View {
             if available.count > 1 {
                 Picker("内核", selection: kernelBinding) {
                     ForEach(available) { descriptor in
-                        Text(descriptor.displayName).tag(descriptor.id)
+                        Text(title(descriptor)).tag(descriptor.id)
                     }
                 }
             } else if let selected {
-                KeyValueRow(label: "内核", value: selected.displayName)
+                KeyValueRow(label: "内核", value: title(selected))
             } else {
                 // 装配点漏了才会走到这里；不静默，直接说出来。
                 Label("没有可用的播放内核", systemImage: "exclamationmark.triangle.fill")

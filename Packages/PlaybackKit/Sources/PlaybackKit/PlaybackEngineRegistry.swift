@@ -6,6 +6,9 @@ public struct PlaybackEngineDescriptor: Identifiable, Hashable, Sendable {
     public let id: String
     /// 设置页主标题，如「Erika」。
     public let displayName: String
+    /// 内核 release tag（如 "v0.1.9+dolby.1"），设置页内核行带出；无版本的内核可空。
+    /// 来源见 ErikaKit 的 `ErikaVersion`（fetch 脚本生成，与 vendored 二进制同源）。
+    public let version: String?
     /// 一行技术构成，如「Rust · FFmpeg · libass · Metal」。
     public let summary: String
     /// 是否自带弹幕渲染器。设置页据此决定要不要显示「内核弹幕渲染」开关。
@@ -16,12 +19,14 @@ public struct PlaybackEngineDescriptor: Identifiable, Hashable, Sendable {
     public init(
         id: String,
         displayName: String,
+        version: String? = nil,
         summary: String,
         supportsKernelDanmaku: Bool,
         notes: String? = nil
     ) {
         self.id = id
         self.displayName = displayName
+        self.version = version
         self.summary = summary
         self.supportsKernelDanmaku = supportsKernelDanmaku
         self.notes = notes

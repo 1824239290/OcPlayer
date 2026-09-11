@@ -16,6 +16,8 @@
 
 - **macOS 菜单栏与系统界面中文化**：App 声明支持简体中文（新增 `App/Shared/zh-Hans.lproj/Localizable.strings` 声明载体 + Info.plist `CFBundleLocalizations` 登记），系统语言为中文时 AppKit/SwiftUI 提供的标准菜单（文件/编辑/显示/窗口/帮助）、菜单项（关闭/全部关闭等）与系统面板按钮（打开/取消）跟随中文渲染——此前整个菜单栏落在开发区域语言（英文）上；App 自有文案本就是中文硬编码不受影响。无障碍树里合并子标签的连接符也随语言变为顿号（如卡片「标题、年份」），VoiceOver 朗读更自然。
 
+- **设置页内核行带版本号**：「内核」行显示为「Erika v0.1.9+dolby.1」。`PlaybackEngineDescriptor` 增加可选 `version` 字段（多内核时选择器同样带版本）；版本来源为新增的 `Packages/ErikaKit/Sources/ErikaKit/ErikaVersion.swift`——由 `Scripts/fetch-erika.sh` 在每次拉取内核时重写，与 vendored 二进制保持同源（该文件入库、diff 可见，拉了新内核不提交它会立刻暴露漂移）。
+
 ## [0.1.6] · 2026-09-11 · 前端组件化重构、HUD 液态玻璃与内核 v0.1.9
 
 ### 改动
