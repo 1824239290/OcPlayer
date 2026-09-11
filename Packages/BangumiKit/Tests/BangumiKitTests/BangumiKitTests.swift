@@ -479,6 +479,29 @@ struct BangumiDatabaseTests {
         #expect(!liveResults.data.isEmpty)
     }
 
+    /// 搜索请求体 filter.type 必须是整数数组（{"type":[2]}）——此前编码成
+    /// {"type":{"0":2}} 对象，Bangumi 服务端直接 400（body/filter/type must be array），
+    /// UI 报「请求参数有误」。
+    @Test func searchRequestBodyFilterTypeIsArray() throws {
+        let body = BangumiSubjectService.searchRequestBody(keyword: "公主连结", filter: .anime)
+        let data = try JSONEncoder().encode(body)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["keyword"] as? String == "公主连结")
+        #expect(json["sort"] as? String == "match")
+        let filter = try #require(json["filter"] as? [String: Any])
+        #expect(try #require(filter["type"] as? [Int]) == [BangumiSubjectType.anime.rawValue])
+    }
+
+    /// 不带 filter（或 filter 为「全部」）时请求体不出现 filter 字段。
+    @Test func searchRequestBodyOmitsFilterWhenNone() throws {
+        for filter: BangumiSubjectType? in [nil, .none] {
+            let body = BangumiSubjectService.searchRequestBody(keyword: "x", filter: filter)
+            let data = try JSONEncoder().encode(body)
+            let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(json["filter"] == nil)
+        }
+    }
+
     @Test func calendarDecoding() async throws {
         let json = """
         [

@@ -140,16 +140,26 @@ public enum BangumiSubjectService {
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset)),
         ])
+        let data = try await BangumiAPIClient.shared.request(
+            url: pageURL, method: "POST", body: searchRequestBody(keyword: keyword, filter: filter))
+        return try await BangumiAPIClient.shared.decodeResponse(data)
+    }
+
+    /// 搜索请求体（独立出来便于单测钉住参数形状）。
+    ///
+    /// `filter.type` 必须是整数数组（`{"type":[2]}`）：此前编码成 `{"type":{"0":2}}`
+    /// 对象，Bangumi 服务端直接 400（body/filter/type must be array）。
+    static func searchRequestBody(
+        keyword: String, filter: BangumiSubjectType? = nil
+    ) -> BangumiJSONValue {
         var body: [String: BangumiJSONValue] = [
             "keyword": .string(keyword),
             "sort": .string("match"),
         ]
         if let filter, filter != .none {
-            body["filter"] = .object(["type": .object(["0": .int(filter.rawValue)])])
+            body["filter"] = .object(["type": .array([.int(filter.rawValue)])])
         }
-        let data = try await BangumiAPIClient.shared.request(
-            url: pageURL, method: "POST", body: .object(body))
-        return try await BangumiAPIClient.shared.decodeResponse(data)
+        return .object(body)
     }
 
     /// 拉取条目详情。
