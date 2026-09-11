@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
@@ -6,25 +7,24 @@ import SwiftUI
 /// 与 OcPlayer 设计系统对齐：
 /// - 卡片用 `.background.secondary` + `cardRadius` 圆角（同 PosterCard/StillCard）
 /// - 间距用 `railSpacing` / `contentLeading`（同 HomeView）
-/// - 进度条沿用 StillCard 那条中性细轨，不引入新色相
+/// - 进度条用共享 `CardProgressTrack`（原与 StillCard 各自一份）
 /// - 章节格子是共用组件 `BangumiEpisodeCell`（单击标记，右键切其它状态）
 /// - 搜索走 Bangumi 远程（不再本地筛选闪烁）
+/// - 在播/搜索两套分页共用 `PagedListLoader`（代次守卫/追加去重收在包里）
 struct BangumiHomeView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
 
-    @State private var subjects: [BangumiProgressSubject] = []
-    /// 服务端/本地库里「在看」的总条数。分页要靠它判断还有没有下一页——
-    /// 原来只取第一页 100 条、`total` 拿到手就丢了，攒到 100 条以上就是静默截断。
-    @State private var totalCount = 0
-    @State private var isLoading = false
-    @State private var isLoadingMore = false
+    /// 在播列表分页器。懒建一次；fetch 闭包读的 @State/@AppStorage 都是存储引用，
+    /// 排序切换、登录态变化时读到的是当前值。
+    @State private var progressLoader: PagedListLoader<BangumiProgressSubject>?
+    /// 搜索结果分页器，同上。
+    @State private var searchLoader: PagedListLoader<BangumiSlimSubjectDTO>?
+
     @State private var isRefreshing = false
-    @State private var loadError: String?
     /// 标记章节等写操作的失败文案（以前这些错误是全静默的）。
     @State private var actionError: String?
-    @State private var loadGeneration: UInt64 = 0
     /// 已经自动触发过首次同步，避免反复重试。
     @State private var didAutoSync = false
 
@@ -34,24 +34,13 @@ struct BangumiHomeView: View {
     /// 章节窗口大小。进度卡要把整季的格子铺出来，所以给得比「窗口」这个词大。
     private static let episodeWindowSize = 50
 
-    private var hasMore: Bool { subjects.count < totalCount }
-
     /// 排序偏好跨启动保留。
-    @AppStorage("dev.jumusu.ocplayer.bangumi.progressSort") private var sortRaw = SortOption.collected.rawValue
+    @AppStorage(SettingsKeys.bangumiProgressSort) private var sortRaw = SortOption.collected.rawValue
 
     // 搜索：远程搜 Bangumi，支持分类筛选与分页
     @State private var searchKeyword = ""
     @State private var submittedSearchKeyword = ""
     @State private var searchTypeFilter: BangumiSubjectType = .none
-    @State private var searchResults: [BangumiSlimSubjectDTO] = []
-    @State private var searchTotalCount = 0
-    @State private var isSearching = false
-    @State private var isSearchingMore = false
-    @State private var searchError: String?
-    @State private var searchTask: Task<Void, Never>?
-    @State private var searchGeneration: UInt64 = 0
-
-    private var hasMoreSearchResults: Bool { searchResults.count < searchTotalCount }
 
     private enum SortOption: String, CaseIterable, Identifiable {
         case collected
@@ -96,7 +85,7 @@ struct BangumiHomeView: View {
             let mayChangeMembership = (note.userInfo?["mayChangeProgressMembership"] as? Bool) ?? false
             let subjectID = (note.object as? NSNumber)?.intValue
             if mayChangeMembership || subjectID == nil {
-                Task { await load() }
+                Task { await progressLoader?.loadInitial() }
             } else if let subjectID {
                 Task { await reloadSubject(subjectID) }
             }
@@ -118,30 +107,21 @@ struct BangumiHomeView: View {
         .onSubmit(of: .search) {
             let trimmed = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                submittedSearchKeyword = ""
-                searchResults = []
-                isSearching = false
-                searchError = nil
+                exitSearchMode()
                 return
             }
             submittedSearchKeyword = trimmed
-            searchTask?.cancel()
-            searchTask = Task { await performSearch(trimmed) }
+            Task { await searchLoader?.loadInitial() }
         }
         .onChange(of: searchKeyword) { _, newValue in
             if newValue.isEmpty {
-                submittedSearchKeyword = ""
-                searchResults = []
-                isSearching = false
-                searchError = nil
-                searchTask?.cancel()
+                exitSearchMode()
             }
         }
         .onChange(of: searchTypeFilter) { _, _ in
             let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
-            searchTask?.cancel()
-            searchTask = Task { await performSearch(trimmed) }
+            Task { await searchLoader?.loadInitial() }
         }
         .navigationTitle("Bangumi")
         #if os(macOS)
@@ -150,157 +130,137 @@ struct BangumiHomeView: View {
         .toolbar { toolbar }
     }
 
+    @ViewBuilder
     private var progressView: some View {
-        Group {
-            if isLoading && subjects.isEmpty {
-                skeletonView
-            } else if let loadError, subjects.isEmpty {
-                ContentUnavailableView {
-                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(loadError)
-                } actions: {
-                    Button(UIStrings.retry) { Task { await load() } }
-                }
-            } else if subjects.isEmpty {
-                ContentUnavailableView {
-                    Label("暂无在看条目", systemImage: "play.rectangle")
-                } description: {
-                    Text("在 Bangumi 上标记「在看」的动画会出现在这里。\n点右上角刷新同步你的收藏。")
-                } actions: {
-                    Button("刷新") { Task { await refresh(force: true) } }
-                        .disabled(isRefreshing)
-                }
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: Metrics.railSpacing) {
-                        if let actionError {
-                            BangumiNotice(message: actionError)
-                                .padding(.bottom, 2)
-                        }
-                        ForEach(subjects) { item in
-                            ProgressCard(
-                                item: item,
-                                reload: { await reloadSubject(item.subject.id) },
-                                reportError: { actionError = $0 }
-                            )
-                        }
-                        if hasMore || isLoadingMore {
-                            loadMoreFooter
-                        }
+        if let loader = progressLoader {
+            Group {
+                if loader.isLoading && loader.items.isEmpty {
+                    skeletonView
+                } else if let error = loader.loadError, loader.items.isEmpty {
+                    EmptyState(failure: error) {
+                        Task { await loader.loadInitial() }
                     }
-                    .padding(.horizontal, contentLeading)
-                    .padding(.top, 16)
-                    .padding(.bottom, 48)
+                } else if loader.items.isEmpty {
+                    EmptyState(
+                        empty: "暂无在看条目",
+                        systemImage: "play.rectangle",
+                        message: "在 Bangumi 上标记「在看」的动画会出现在这里。\n点右上角刷新同步你的收藏。",
+                        actionTitle: "刷新"
+                    ) {
+                        Task { await refresh(force: true) }
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: Metrics.railSpacing) {
+                            if let actionError {
+                                ErrorNotice(actionError)
+                                    .padding(.bottom, 2)
+                            }
+                            ForEach(loader.items) { item in
+                                ProgressCard(
+                                    item: item,
+                                    reload: { await reloadSubject(item.subject.id) },
+                                    reportError: { actionError = $0 }
+                                )
+                            }
+                            LoadMoreFooter(loader: loader)
+                        }
+                        .padding(.horizontal, contentLeading)
+                        .padding(.top, 16)
+                        .padding(.bottom, 48)
+                    }
+                    .refreshable { await refresh(force: false) }
                 }
-                .refreshable { await refresh(force: false) }
             }
+        } else {
+            skeletonView
         }
     }
 
     /// macOS 副标题：在看数或搜索结果数。
     private var progressSubtitle: String {
         if !submittedSearchKeyword.isEmpty {
-            if isSearching {
+            if searchLoader?.isLoading == true {
                 return "正在搜索…"
-            } else if searchTotalCount > 0 {
-                return "找到 \(searchTotalCount) 个条目"
+            } else if let total = searchLoader?.totalCount, total > 0 {
+                return "找到 \(total) 个条目"
             }
             return ""
         }
-        guard totalCount > 0 else { return "" }
-        if subjects.count < totalCount {
-            return "在看 \(subjects.count) / \(totalCount)"
+        guard let loader = progressLoader, let total = loader.totalCount, total > 0 else { return "" }
+        if loader.items.count < total {
+            return "在看 \(loader.items.count) / \(total)"
         }
-        return "在看 \(totalCount)"
+        return "在看 \(total)"
     }
 
-    /// 分页尾部：进入可视区自动预取下一页（同 LibraryView）。
-    private var loadMoreFooter: some View {
-        VStack(spacing: 10) {
-            if isLoadingMore {
-                ProgressView().controlSize(.regular)
-            } else {
-                Button(UIStrings.loadMore) { Task { await loadMore() } }
-                    .buttonStyle(.bordered)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 8)
-        .onAppear {
-            guard hasMore, !isLoading, !isLoadingMore else { return }
-            Task { await loadMore() }
-        }
-    }
-
+    @ViewBuilder
     private var searchView: some View {
         VStack(spacing: 0) {
             searchHeader
 
-            Group {
-                if isSearching && searchResults.isEmpty {
-                    searchSkeletonView
-                } else if let searchError, searchResults.isEmpty {
-                    ContentUnavailableView {
-                        Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(searchError)
-                    } actions: {
-                        HStack(spacing: 12) {
-                            Button(UIStrings.retry) {
-                                Task { await performSearch(submittedSearchKeyword.trimmingCharacters(in: .whitespaces)) }
-                            }
-                            .buttonStyle(.borderedProminent)
+            if let loader = searchLoader {
+                Group {
+                    if loader.isLoading && loader.items.isEmpty {
+                        searchSkeletonView
+                    } else if let error = loader.loadError, loader.items.isEmpty {
+                        ContentUnavailableView {
+                            Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
+                        } description: {
+                            Text(error)
+                        } actions: {
+                            HStack(spacing: 12) {
+                                Button(UIStrings.retry) {
+                                    Task { await loader.loadInitial() }
+                                }
+                                .buttonStyle(.borderedProminent)
 
+                                Button("返回在看") {
+                                    exitSearchMode()
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if loader.items.isEmpty {
+                        ContentUnavailableView {
+                            Label("未找到相关条目", systemImage: "magnifyingglass")
+                        } description: {
+                            Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
+                        } actions: {
                             Button("返回在看") {
                                 exitSearchMode()
                             }
                             .buttonStyle(.bordered)
                         }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if searchResults.isEmpty {
-                    ContentUnavailableView {
-                        Label("未找到相关条目", systemImage: "magnifyingglass")
-                    } description: {
-                        Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
-                    } actions: {
-                        Button("返回在看") {
-                            exitSearchMode()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            ForEach(searchResults) { subject in
-                                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id, initialSubject: subject)) {
-                                    SearchResultRow(subject: subject)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 10) {
+                                ForEach(loader.items) { subject in
+                                    NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id, initialSubject: subject)) {
+                                        SearchResultRow(subject: subject)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
+                                LoadMoreFooter(loader: loader)
                             }
-                            if hasMoreSearchResults || isSearchingMore {
-                                searchLoadMoreFooter
-                            }
+                            .padding(.horizontal, contentLeading)
+                            .padding(.top, 4)
+                            .padding(.bottom, 48)
                         }
-                        .padding(.horizontal, contentLeading)
-                        .padding(.top, 4)
-                        .padding(.bottom, 48)
                     }
                 }
+            } else {
+                searchSkeletonView
             }
         }
     }
 
     /// 退出搜索模式的统一清理（原先三处各抄一份，字段清单已经漂移）。
     private func exitSearchMode() {
-        searchTask?.cancel()
         searchKeyword = ""
         submittedSearchKeyword = ""
-        searchResults = []
-        isSearching = false
-        searchError = nil
     }
 
     private var searchHeader: some View {
@@ -394,23 +354,6 @@ struct BangumiHomeView: View {
         .skeletonShimmer()
     }
 
-    private var searchLoadMoreFooter: some View {
-        VStack(spacing: 10) {
-            if isSearchingMore {
-                ProgressView().controlSize(.regular)
-            } else {
-                Button(UIStrings.loadMore) { Task { await searchMore() } }
-                    .buttonStyle(.bordered)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 8)
-        .onAppear {
-            guard hasMoreSearchResults, !isSearching, !isSearchingMore else { return }
-            Task { await searchMore() }
-        }
-    }
-
     @ViewBuilder
     private var skeletonView: some View {
         ScrollView {
@@ -499,71 +442,56 @@ struct BangumiHomeView: View {
     /// 登录 + 建库都就绪才读；首次（从未同步过）自动拉一次，省得让用户先点刷新。
     private func loadIfReady() async {
         guard bangumi.isAuthenticated, bangumi.isDatabaseReady else {
-            subjects = []
-            searchResults = []
             return
+        }
+        if progressLoader == nil {
+            progressLoader = makeProgressLoader()
+        }
+        if searchLoader == nil {
+            searchLoader = makeSearchLoader()
         }
         // 打开这一页才校验登录态（App 启动时不发请求）。
         bangumi.revalidateSessionIfNeeded()
-        await load()
-        guard !didAutoSync, subjects.isEmpty,
+        await progressLoader?.loadInitial()
+        guard !didAutoSync, progressLoader?.items.isEmpty == true,
               bangumi.context.store.collectionsUpdatedAt == 0
         else { return }
         didAutoSync = true
         await refresh(force: false)
     }
 
-    private func load() async {
-        loadGeneration &+= 1
-        let gen = loadGeneration
-        isLoading = true
-        loadError = nil
-        defer { if loadGeneration == gen { isLoading = false } }
-        do {
+    private func makeProgressLoader() -> PagedListLoader<BangumiProgressSubject> {
+        PagedListLoader(pageSize: Self.pageSize) { offset, limit in
             let page = try await bangumi.context.fetchProgressSubjects(
                 tab: .anime, sortMode: sortOption.mode, search: "",
                 episodeWindowSize: Self.episodeWindowSize,
-                limit: Self.pageSize, offset: 0)
-            guard loadGeneration == gen else { return }
-            subjects = page.data
-            totalCount = page.total
-        } catch let e as BangumiError {
-            guard loadGeneration == gen else { return }
-            loadError = e.userMessage
-            BangumiDiagnostics.log("进度页加载失败 error=\(e)")
-        } catch {
-            guard loadGeneration == gen else { return }
-            loadError = "\(error)"
+                limit: limit, offset: offset)
+            return .init(items: page.data, total: page.total)
+        } errorMessage: { error in
             BangumiDiagnostics.log("进度页加载失败 error=\(error)")
+            return (error as? BangumiError)?.userMessage ?? "\(error)"
         }
     }
 
-    /// 追加下一页。`loadGeneration` 不动——它是「整份重取」的代次，
-    /// 翻页只往后接，用它做守卫就够了（中途发生重取会让代次变化，这一页被丢掉）。
-    private func loadMore() async {
-        guard hasMore, !isLoading, !isLoadingMore else { return }
-        let gen = loadGeneration
-        let offset = subjects.count
-        isLoadingMore = true
-        defer { if loadGeneration == gen { isLoadingMore = false } }
-        do {
-            let page = try await bangumi.context.fetchProgressSubjects(
-                tab: .anime, sortMode: sortOption.mode, search: "",
-                episodeWindowSize: Self.episodeWindowSize,
-                limit: Self.pageSize, offset: offset)
-            guard loadGeneration == gen else { return }
-            // 去重追加：本地库在两次分页之间可能被同步改过，同一条目可能重复出现。
-            let existing = Set(subjects.map(\.subject.id))
-            subjects.append(contentsOf: page.data.filter { !existing.contains($0.subject.id) })
-            totalCount = page.total
-        } catch let e as BangumiError {
-            guard loadGeneration == gen else { return }
-            actionError = e.userMessage
-            BangumiDiagnostics.log("进度页翻页失败 offset=\(offset) error=\(e)")
-        } catch {
-            guard loadGeneration == gen else { return }
-            actionError = "\(error)"
-            BangumiDiagnostics.log("进度页翻页失败 offset=\(offset) error=\(error)")
+    private func makeSearchLoader() -> PagedListLoader<BangumiSlimSubjectDTO> {
+        PagedListLoader(pageSize: 30) { offset, limit in
+            let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            let filter = searchTypeFilter == .none ? nil : searchTypeFilter
+            let page = try await BangumiSubjectService.search(
+                keyword: trimmed,
+                filter: filter,
+                limit: limit,
+                offset: offset
+            )
+            return .init(items: page.data, total: page.total)
+        } errorMessage: { error in
+            BangumiDiagnostics.log("搜索条目失败 error=\(error)")
+            return (error as? BangumiError)?.userMessage ?? "搜索失败：\(error.localizedDescription)"
+        } isCancellation: { error in
+            // 请求被新输入取消 / 旧条件作废：不是错误，不占错误位。
+            if error is CancellationError { return true }
+            if let e = error as? BangumiError, case .ignore = e { return true }
+            return (error as NSError).code == NSURLErrorCancelled
         }
     }
 
@@ -574,13 +502,13 @@ struct BangumiHomeView: View {
         do {
             _ = try await bangumi.refreshCollections(force: force)
             actionError = nil
-            await load()
+            await progressLoader?.loadInitial()
         } catch let e as BangumiError {
-            loadError = e.userMessage
+            progressLoader?.reportError(e.userMessage)
             actionError = e.userMessage
             BangumiDiagnostics.log("同步收藏失败 error=\(e)")
         } catch {
-            loadError = "\(error)"
+            progressLoader?.reportError("\(error)")
             actionError = "\(error)"
             BangumiDiagnostics.log("同步收藏失败 error=\(error)")
         }
@@ -589,70 +517,10 @@ struct BangumiHomeView: View {
     private func reloadSubject(_ subjectID: Int) async {
         if let updated = try? await bangumi.context.fetchProgressSubject(
             subjectId: subjectID, episodeWindowSize: Self.episodeWindowSize) {
-            if let idx = subjects.firstIndex(where: { $0.subject.id == subjectID }) {
-                subjects[idx] = updated
-            }
+            progressLoader?.replace(updated)
         } else {
             // 条目已离开「在看」状态，直接从列表移除
-            subjects.removeAll { $0.subject.id == subjectID }
-        }
-    }
-
-    private func performSearch(_ keyword: String) async {
-        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        searchGeneration &+= 1
-        let gen = searchGeneration
-        isSearching = true
-        searchError = nil
-        defer { if searchGeneration == gen { isSearching = false } }
-        do {
-            let filter = searchTypeFilter == .none ? nil : searchTypeFilter
-            let page = try await BangumiSubjectService.search(
-                keyword: trimmed,
-                filter: filter,
-                limit: 30,
-                offset: 0
-            )
-            guard searchGeneration == gen else { return }
-            searchResults = page.data
-            searchTotalCount = page.total
-        } catch let e as BangumiError {
-            guard searchGeneration == gen else { return }
-            if case .ignore = e { return }   // 请求被新输入取消，不是错误
-            searchError = e.userMessage
-            BangumiDiagnostics.log("搜索条目失败 error=\(e)")
-        } catch is CancellationError {
-            // Task 取消时忽略
-        } catch {
-            guard searchGeneration == gen else { return }
-            if (error as NSError).code == NSURLErrorCancelled { return }
-            searchError = "搜索失败：\(error.localizedDescription)"
-            BangumiDiagnostics.log("搜索条目失败 error=\(error)")
-        }
-    }
-
-    private func searchMore() async {
-        guard hasMoreSearchResults, !isSearching, !isSearchingMore else { return }
-        let gen = searchGeneration
-        let offset = searchResults.count
-        isSearchingMore = true
-        defer { if searchGeneration == gen { isSearchingMore = false } }
-        let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        do {
-            let page = try await BangumiSubjectService.search(
-                keyword: trimmed,
-                filter: searchTypeFilter == .none ? nil : searchTypeFilter,
-                limit: 30,
-                offset: offset
-            )
-            guard searchGeneration == gen else { return }
-            let existing = Set(searchResults.map(\.id))
-            searchResults.append(contentsOf: page.data.filter { !existing.contains($0.id) })
-            searchTotalCount = page.total
-        } catch {
-            BangumiDiagnostics.log("搜索翻页失败 offset=\(offset) error=\(error)")
+            progressLoader?.remove(id: subjectID)
         }
     }
 }
@@ -714,10 +582,13 @@ private struct ProgressCard: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
             NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
-                RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
-                    .aspectRatio(2 / 3, contentMode: .fill)
-                    .frame(width: 56, height: 84)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                MediaArtwork(
+                    url: coverURL,
+                    shape: .poster,
+                    width: 56,
+                    cornerRadius: 6,
+                    maxPixelSize: 300
+                )
             }
             .buttonStyle(.plain)
 
@@ -761,7 +632,7 @@ private struct ProgressCard: View {
                 nextAction
             }
             if let fraction = item.progressFraction {
-                progressTrack(fraction)
+                CardProgressTrack(fraction: Double(fraction))
             }
         }
     }
@@ -816,23 +687,6 @@ private struct ProgressCard: View {
             reportError("状态更新失败：\(error)")
             BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(error)")
         }
-    }
-
-    /// 中性细轨，与 StillCard 的进度条同一套（`primary` 透明度，不用色相）。
-    ///
-    /// 这里的 GeometryReader 是**留着的**：宽度是真动态的（卡片剩余宽度取决于
-    /// 封面宽 + 两处 spacing + 卡片 padding + 窗口宽），从那堆常量倒推比测一下更脆。
-    /// 相比之下 `EpisodeSelectCard` / 详情页播放钮的宽度是写死的常量，那两处已改成直接乘。
-    private func progressTrack(_ fraction: Double) -> some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.primary.opacity(0.12))
-                Capsule()
-                    .fill(Color.primary.opacity(0.6))
-                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .frame(height: 3)
     }
 
     @ViewBuilder
@@ -905,15 +759,15 @@ private struct SearchResultRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 58, height: 84)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 1)
+            MediaArtwork(
+                url: coverURL,
+                shape: .poster,
+                width: 58,
+                cornerRadius: 8,
+                maxPixelSize: 300,
+                bordered: true,
+                shadowed: true
+            )
 
             VStack(alignment: .leading, spacing: 6) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -931,34 +785,27 @@ private struct SearchResultRow: View {
                 }
 
                 HStack(spacing: 8) {
-                    typeBadge(subject.type)
+                    PillChip(
+                        subject.type.description,
+                        role: .custom(BangumiStatusColor.subject(subject.type)),
+                        outline: .stamp(cornerRadius: 4),
+                        font: .system(size: 10).weight(.medium)
+                    )
 
                     if let rating = subject.rating, rating.score > 0 {
-                        HStack(spacing: 3) {
-                            Image(systemName: "star.fill")
-                                .font(.caption2)
-                                .foregroundStyle(BangumiStatusColor.rating)
-                            Text(String(format: "%.1f", rating.score))
-                                .font(.caption.weight(.semibold).monospacedDigit())
-                                .foregroundStyle(BangumiStatusColor.rating)
-                        }
-                        if let rank = subject.rating?.rank, rank > 0 {
-                            Text("#\(rank)")
-                                .font(.system(size: 10).weight(.semibold).monospacedDigit())
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(BangumiStatusColor.rating.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
-                                .foregroundStyle(BangumiStatusColor.rating)
-                        }
+                        RatingPill(
+                            score: Double(rating.score),
+                            rank: subject.rating?.rank,
+                            tint: BangumiStatusColor.rating
+                        )
                     }
 
                     if let interest = subject.interest, interest.type != .none {
-                        Text(interest.type.description(subject.type))
-                            .font(.system(size: 10).weight(.medium))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.tint.opacity(0.18), in: Capsule())
-                            .foregroundStyle(.tint)
+                        PillChip(
+                            interest.type.description(subject.type),
+                            role: .accent,
+                            font: .system(size: 10).weight(.medium)
+                        )
                     }
                 }
 
@@ -980,16 +827,6 @@ private struct SearchResultRow: View {
         .padding(12)
         .hoverRowHighlight(active: isHovered)
         .onHover { isHovered = $0 }
-    }
-
-    private func typeBadge(_ type: BangumiSubjectType) -> some View {
-        let color = BangumiStatusColor.subject(type)
-        return Text(type.description)
-            .font(.system(size: 10).weight(.medium))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
-            .foregroundStyle(color)
     }
 
     private var coverURL: URL? {

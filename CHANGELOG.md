@@ -6,6 +6,30 @@
 
 ### 改动
 
+- **macOS 26 全屏顶栏衔接层**：全屏时系统把工具栏搬进独立的 `NSToolbarFullScreenWindow`，顶部画一条与窗口底色同源的不透明硬底条带，氛围图被拦腰截断。新增 `FullscreenTitlebarFade` 衔接层（顶部 52pt 保持窗口底色、再 84pt 渐隐进氛围图），挂在整窗氛围层（`AppShell.windowAmbienceLayer`）与首页轮播两处；**衔接层必须放在氛围层的动画作用域之外**——放进去会被切页/换片时的 `Motion.ambient` 交叉淡入卷着一起动，背景里滑出一条渐变带（全屏专属症状）。工具栏本身不藏：实测 `.windowToolbarFullScreenVisibility(.onHover)` 会在全屏进详情页后留下旧页面残影并吃掉那片点击，AppKit 改 `toolbar.isVisible` 会把窗口踢出全屏——两条藏工具栏路线均已否决并留档。
+
+- **播放器收边（阶段 4）**：弹幕偏好到引擎的映射合并为单一 `DanmakuPrefsSnapshot` 通路（原来 open 队列闭包的静态版与实例版各写一份字段对应表）；Erika 弹幕 JSON 的解析从 App 层（DanmakuOverlay）下移到 DanmakuKit（新增 `DanmakuJSONParser`，与写入侧 `DanmakuJSONConverter` 同包同 schema），App 不再认识内核数据格式；新增解析器测试 5 用例（含 converter↔parser 往返一致）。手势分类纯逻辑此前已抽 `PlayerPanGestureModel`（有测试），PlayerScreen 剩余的触摸编排评估后保留在视图（与控制器/HUD/亮度耦合，换壳无收益）。
+
+- **网络层收敛（阶段 3）**：共享 HTTP 执行层落到 DiagnosticsKit——`HTTPClient`（请求构造/发送/计时日志/传输错误映射，状态码 ≥400 记失败级）+ `RetryPolicy`（指数退避 + 抖动 + 429 Retry-After，封顶 60s，支持 `sending` 闭包与调用方隔离域继承）。BangumiKit（`BangumiAPIClient.request`）、MoviePilotKit（`sendOnce`）、DanmakuKit（`GatewayClient.send`）三个客户端的手写「组请求/发送/URLError 分类/状态分支」全部替换为共享执行器；各域只保留自己的鉴权与状态语义。新增 `HTTPClientTests`（6 用例钉住退避/重试/取消语义）。新增 `SettingsKeys` 登记表，收编跨文件重复的 UserDefaults key（`ambientBackdrop`、`httpReadAheadMiB` 等曾各写三份）。纯重构，无行为变化。
+
+- **状态层重构（阶段 2）**：
+  - `AppModel` 域模型全部改为 init 显式注入（`store/bangumi/moviepilot/danmakuModel`，默认值不变），`bangumi.setup()` 从 init 挪进 `bootstrap()`——构造 AppModel 不再有副作用，测试拿到干净实例。
+  - `BangumiCoordinator` 支持注入 `BangumiContext`（默认 `.shared`）。
+  - **MoviePilot 凭证存储收敛为单实例**：`MoviePilotStore.shared`——此前协调器与 `MoviePilotAPIClient` 各持一个实例、只靠同一份 UserDefaults 碰巧同步。
+  - 401 凭证失效接线收敛：RootView 里 Bangumi/MoviePilot 两段几乎相同的 `onReceive` 合并为共享的 `onAuthenticationRequired` 修饰符 + `AuthNotification` 解码。
+  - **`DetailView` 数据面抽成 `DetailViewModel`**（1342→1083 行，@State 21→6）：详情/季/集/类似的加载、SWR 快照缓存、按季缓存、选中态与智能默认季/集全部进 VM，视图只剩布局与交互编排。详情页行内错误条并入共享 `ErrorNotice`，集列表空态/失败态并入 `EmptyState`。
+  - 决策记录：`AppModel+Playback` 的播放编排**不**再抽独立对象——它要协调导航层/上报/弹幕/Bangumi/首页缓存五方，抽出来只是把同一份耦合换个壳；`@Observable` 本身已按属性粒度隔离重绘。播放侧的真正整改在阶段 4（PlaybackController 职责拆分）。
+
+- **前端组件化重构：设计系统下沉为新包 `AppDesignKit`，卡片/胶囊/分页/空态向共享原语收敛**（`refactor/component-reuse`）。
+  - 动效/尺寸 token、骨架屏、卡片原语、横向滚动、液态玻璃、远程图管道（`ImagePipeline`/`RemoteImage`）从 `App` 移入新包 `Packages/AppDesignKit`——只吃纯值、不依赖任何域模型，新 Feature 直接复用。
+  - 新增模型无关原语：`MediaArtwork`（海报/剧照画幅 + overlay 槽）、`CardProgressTrack`（3pt 胶囊进度细轨）、`PillChip`（分类/印章徽章，三档语义色）、`RatingPill`（评分徽章统一橙）、`EmptyState`、`ErrorNotice`、`PagedListLoader` + `LoadMoreFooter`（分页状态机：代次守卫/追加去重/满页判断，含 `replace`/`remove`/`reportError`）。
+  - 收起重复卡片：Bangumi 的 `CollectionTile`/`ProgressCard`/`CollectionRow`/`SearchResultRow`/`CalendarItemCard` 与 MoviePilot 的 `MoviePilotSubscribeCard`/`MoviePilotMediaGlassCard`/`MoviePilotTorrentGlassCard`，以及 `PosterCard`/`StillCard`，全部落到 `MediaArtwork`/`CardProgressTrack`/`PillChip`/`RatingPill`。
+  - 收起手写分页：Bangumi 首页在播/搜索两套分页 + 收藏列表页改用 `PagedListLoader`。媒体库 `LibraryView` 因分页数据住在 `AppModel.libraryPages` 缓存而有意保留自管状态机，避免再造一个数据源。
+  - 收起错误/空态/胶囊：`BangumiNotice` 并入 `ErrorNotice`；LibraryView/AppShell/Home/Bangumi 收藏列表空态并入 `EmptyState`；展示型标签用 `PillChip`，交互型菜单/状态胶囊按钮保持原生。
+  - 净效果：App 层约 -1000 行；`BangumiHomeView` 999→836、`BangumiCollectionListView` 160→151。新增 `AppDesignKitTests`（12 用例）。纯 UI 重构，无视觉/行为变化，播放器 HUD 零改动。
+
+- **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：
+
 - **播放内核升级到 fork 的 `v0.1.9+dolby.1`（macOS）**：基于上游 v0.1.9 + libplacebo 风格 Dolby Vision RPU 映射（P5/P8.1 SSIM≈0.995）。相对 `v0.1.7+dolby.3` 带来上游 0.1.8/0.1.9 一系列播放修复——渲染阻塞恢复后的音画时钟重校准、倍速切换平滑过渡、iOS 前台/音频中断恢复、首条音轨解码失败自动回退后续音轨、弹幕跨规划窗口重现跳轨、`ErikaOpenOptions` 预读（本 App 已在用）。C ABI 与 `v0.1.7+dolby.2+` 一致（`ErikaPresenterConfig` 四字段），App 侧无需改代码。**iOS 暂维持 `v0.1.7+dolby.3`**：该 release 仅手工打包了 macOS arm64 资产，`package-ios.sh` / CI iOS job 继续钉最近一次全平台 tag；`fetch-erika.sh` 支持 macOS-only release（无 iOS zip 时复用本地已有切片并在 Info.plist 登记）。下载哈希 pin、脚本与 CI 钉点同步换版。
 
 - **设置页新增「启动时默认服务器」**：多服务器用户可在设置 → 服务器里选定打开 App 时优先连接的档案，不必再被「上次使用的服务器」绑死。选「上次使用的服务器」保持旧行为；选定具体档案后启动静默恢复优先走它，token 失效仍回退到其它有有效会话的档案。默认服务器在已保存列表带星标；删除该档案会自动清掉默认设置，不留悬空 ID。默认与「当前会话」独立：临时切到另一台看片，下次打开仍回到你指定的默认服务器。

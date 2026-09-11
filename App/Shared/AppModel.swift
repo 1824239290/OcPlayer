@@ -152,15 +152,15 @@ final class AppModel {
 
     /// 弹幕域模型（协调器 + 网关设置），独立环境注入：播放器 / 设置页里只看弹幕的视图
     /// 不再被 AppModel 的全量观察拖着重绘。AppSecret 永远不进客户端，只留在网关。
-    var danmakuModel = DanmakuModel()
+    var danmakuModel: DanmakuModel
 
     // MARK: - Bangumi（登录 / 进度 / 收藏）
 
-    let bangumi = BangumiCoordinator()
+    let bangumi: BangumiCoordinator
 
     // MARK: - MoviePilot（搜索 / 下载）
 
-    let moviepilot = MoviePilotCoordinator()
+    let moviepilot: MoviePilotCoordinator
 
     // MARK: - 导航
 
@@ -282,10 +282,18 @@ final class AppModel {
 
     // MARK: - 初始化
 
-    init(store: ServerStore = ServerStore()) {
+    /// 域模型全部经 init 注入（默认值保持生产装配不变）；测试可换入隔离实例，
+    /// 不再被「init 里默认构造 + bangumi.setup() 副作用」绑死。
+    init(
+        store: ServerStore = ServerStore(),
+        bangumi: BangumiCoordinator = BangumiCoordinator(),
+        moviepilot: MoviePilotCoordinator = MoviePilotCoordinator(),
+        danmakuModel: DanmakuModel = DanmakuModel()
+    ) {
         self.store = store
-        // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
-        bangumi.setup()
+        self.bangumi = bangumi
+        self.moviepilot = moviepilot
+        self.danmakuModel = danmakuModel
     }
 
     /// 处理 Bangumi OAuth 回调（macOS 浏览器 / iOS ASWebAuthenticationSession 都汇到这里）。

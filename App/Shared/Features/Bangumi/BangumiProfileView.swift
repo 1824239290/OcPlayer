@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import SwiftUI
 
@@ -199,10 +200,13 @@ private struct CollectionTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 300)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 84, height: 126)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+            MediaArtwork(
+                url: coverURL,
+                shape: .poster,
+                width: 84,
+                cornerRadius: 8,
+                maxPixelSize: 300
+            )
             Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                 .font(.caption)
                 .lineLimit(1)

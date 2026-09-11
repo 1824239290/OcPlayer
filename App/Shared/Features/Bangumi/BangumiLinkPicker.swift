@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import CoreModel
 import SwiftUI

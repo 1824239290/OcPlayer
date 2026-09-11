@@ -1,3 +1,4 @@
+import AppDesignKit
 import MoviePilotKit
 import SwiftUI
 
@@ -490,33 +491,24 @@ private struct MoviePilotTorrentGlassCard: View {
                 // 微型发光胶囊标签行
                 HStack(spacing: 6) {
                     if let site = torrent.siteName {
-                        glassBadge(site, tint: .blue)
+                        PillChip(site, role: .custom(.blue), font: .caption2.weight(.semibold), bordered: true)
                     }
                     if torrent.isFree {
-                        glassBadge("免费", tint: .green)
+                        PillChip("免费", role: .custom(.green), font: .caption2.weight(.semibold), bordered: true)
                     }
                     ForEach(torrent.labels.prefix(2), id: \.self) { label in
-                        glassBadge(label, tint: .orange)
+                        PillChip(label, role: .custom(.orange), font: .caption2.weight(.semibold), bordered: true)
                     }
 
-                    Text(torrent.sizeText)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.primary.opacity(0.04), in: Capsule())
+                    PillChip(torrent.sizeText, font: .caption2.monospacedDigit())
 
                     if let seeders = torrent.seeders {
-                        HStack(spacing: 2) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 8, weight: .bold))
-                            Text("\(seeders)")
-                                .font(.caption2.weight(.bold).monospacedDigit())
-                        }
-                        .foregroundStyle(seeders >= 5 ? Color.green : Color.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background((seeders >= 5 ? Color.green : Color.primary).opacity(0.08), in: Capsule())
+                        PillChip(
+                            "\(seeders)",
+                            systemImage: "arrow.up",
+                            role: seeders >= 5 ? .custom(.green) : .neutral,
+                            font: .caption2.weight(.bold).monospacedDigit()
+                        )
                     }
 
                     if let date = torrent.dateElapsed ?? torrent.pubdate {
@@ -563,13 +555,4 @@ private struct MoviePilotTorrentGlassCard: View {
         )
     }
 
-    private func glassBadge(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(tint.opacity(0.12), in: Capsule())
-            .overlay(Capsule().strokeBorder(tint.opacity(0.2), lineWidth: 0.5))
     }
-}

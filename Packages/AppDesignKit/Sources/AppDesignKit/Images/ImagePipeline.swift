@@ -2,18 +2,17 @@ import CoreGraphics
 import DiagnosticsKit
 import Foundation
 import ImageIO
-import CryptoKit
 import SwiftUI
 
 #if canImport(UIKit)
 import UIKit
-typealias PlatformImage = UIImage
+public typealias PlatformImage = UIImage
 #elseif canImport(AppKit)
 import AppKit
-typealias PlatformImage = NSImage
+public typealias PlatformImage = NSImage
 #endif
 
-extension Image {
+public extension Image {
     init(platform image: PlatformImage) {
         #if canImport(UIKit)
         self.init(uiImage: image)
@@ -27,12 +26,15 @@ extension Image {
 ///
 /// 认证走 `Authorization` 头（token 不进 URL）；图片 URL 里带 `tag` query，
 /// 服务端换图 → URL 变 → 缓存自动失效。
-final class ImagePipeline: @unchecked Sendable {
-    static let shared = ImagePipeline()
-    static let diskCapacityBytes = 512 * 1024 * 1024
+public final class ImagePipeline: @unchecked Sendable {
+    public static let shared = ImagePipeline()
+    public static let diskCapacityBytes = 512 * 1024 * 1024
     /// 图片失败日志节流：服务器掉线时一墙海报会瞬间刷出几百条 warning，
     /// 别把 2MB×3 轮转的诊断历史全挤掉。
     private static let failureThrottle = DiagnosticThrottle(key: "image-load-failure", interval: 5)
+    /// 与 App 同 subsystem、独立 category：日志仍落在同一份 diagnostics.jsonl，
+    /// 但包不反向依赖 App 层（AppDiagnostics）。
+    private static let logger = DiagnosticLogger(category: "Image")
     /// 项目统一 UA（对齐 MoviePilot / Jellyfin 客户端的 OcPlay/版本 写法）。
     private static let userAgent: String = {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
@@ -48,7 +50,7 @@ final class ImagePipeline: @unchecked Sendable {
     /// 解码后的图缓存（URLCache 存的是原始 data，这里省掉重复解码）。
     private let memoryCache = NSCache<NSString, PlatformImage>()
 
-    init(cacheDirectory: URL? = nil) {
+    public init(cacheDirectory: URL? = nil) {
         let cache = URLCache(
             memoryCapacity: 32 * 1024 * 1024,
             diskCapacity: Self.diskCapacityBytes,
@@ -80,12 +82,12 @@ final class ImagePipeline: @unchecked Sendable {
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is
     /// enforced by Foundation using its eviction policy, so long-running use is
     /// bounded even before a user requests an explicit clear.
-    var diskUsage: (usedBytes: Int, capacityBytes: Int) {
+    public var diskUsage: (usedBytes: Int, capacityBytes: Int) {
         (cache.currentDiskUsage, cache.diskCapacity)
     }
 
     /// Clears decoded bitmaps from memory.
-    func clearMemoryCache() {
+    public func clearMemoryCache() {
         lock.lock()
         memoryCache.removeAllObjects()
         lock.unlock()
@@ -94,7 +96,7 @@ final class ImagePipeline: @unchecked Sendable {
     /// Clears both encoded response data and decoded bitmaps. URLCache and
     /// NSCache provide their own synchronization, so Settings can call this
     /// directly without reaching into the cache directory.
-    func clearCache() {
+    public func clearCache() {
         lock.lock()
         cacheGeneration &+= 1
         let tasks = inFlight.values.map(\.task)
@@ -106,7 +108,7 @@ final class ImagePipeline: @unchecked Sendable {
     }
 
     /// 同步获取内存缓存中的位图（若存在）；未命中或未解码返回 nil。
-    func memoryCachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) -> PlatformImage? {
+    public func memoryCachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) -> PlatformImage? {
         let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
         return cachedImage(forKey: key)
     }
@@ -116,7 +118,7 @@ final class ImagePipeline: @unchecked Sendable {
     /// 同一 URL 的并发调用共享同一个网络任务（列表滚动反复出现同一张图时不重复拉）；
     /// 共享任务在**最后一个订阅者离开**时被取消（视图消失 / 换 URL / clearCache），
     /// 调用方被取消会抛 `CancellationError`——不要把取消当成失败。
-    func load(_ url: URL, authHeader: String?, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
+    public func load(_ url: URL, authHeader: String?, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
         let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
         if let cached = cachedImage(forKey: key) {
             return cached
@@ -139,7 +141,7 @@ final class ImagePipeline: @unchecked Sendable {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
-                    AppDiagnostics.logWarning("图片加载失败", fields: [
+                    Self.logger.warning("图片加载失败", fields: [
                         "url": .string(url.absoluteString),
                         "error": .string("\(error)"),
                     ], throttle: Self.failureThrottle)
@@ -272,13 +274,13 @@ final class ImagePipeline: @unchecked Sendable {
         // 从这里抛 CancellationError，由调用方区分处理，别当成真正的失败。
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            AppDiagnostics.logWarning("图片请求失败：无 HTTP 响应", fields: [
+            Self.logger.warning("图片请求失败：无 HTTP 响应", fields: [
                 "url": .string(request.url?.absoluteString ?? "")
             ], throttle: Self.failureThrottle)
             return nil
         }
         guard httpResponse.statusCode == 200 else {
-            AppDiagnostics.logWarning("图片请求返回非 200", fields: [
+            Self.logger.warning("图片请求返回非 200", fields: [
                 "url": .string(request.url?.absoluteString ?? ""),
                 "status": .integer(Int64(httpResponse.statusCode)),
             ], throttle: Self.failureThrottle)
@@ -288,7 +290,7 @@ final class ImagePipeline: @unchecked Sendable {
         // 真正的位图解码会拖到主线程首次绘制时才发生——海报墙快速滚动时每张新图
         // 都在主线程解码、掉帧。这里用 ImageIO 强制解码成位图，主线程首绘不再解码。
         guard let image = Self.decode(data, maxPixelSize: maxPixelSize) else {
-            AppDiagnostics.logWarning("图片解码失败", fields: [
+            Self.logger.warning("图片解码失败", fields: [
                 "url": .string(request.url?.absoluteString ?? ""),
                 "data_len": .integer(Int64(data.count)),
             ], throttle: Self.failureThrottle)
@@ -332,101 +334,5 @@ final class ImagePipeline: @unchecked Sendable {
         #endif
         guard let cg else { return 0 }
         return cg.bytesPerRow * cg.height
-    }
-}
-
-/// 远程图视图：加载中 / 失败都有落点，占位色跟主题走。
-struct RemoteImage: View {
-    @State private var image: PlatformImage?
-    @State private var failed = false
-    @State private var loadedKey: String?
-
-    let url: URL?
-    var authHeader: String?
-    /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
-    var maxPixelSize: Int? = nil
-
-    /// 与 .task(id:) 一致的复合加载键：URL + 凭证指纹 + 目标尺寸。
-    ///
-    /// 凭证指纹用 SHA256 截断，不用 `String.hashValue`：hashValue 只保证同进程内
-    /// 同一字符串稳定，且这里比较的是「头字符串是否逐字节一致」——历史教训是
-    /// authHeader 由 Dictionary 拼接、键序会抖，同语义头产生多种字节串、hash
-    /// 随之漂移，.task(id:) 每次漂移都当作「新任务」清图重载，表现为图片反复闪。
-    private static func credentialFingerprint(_ header: String?) -> String {
-        guard let header else { return "none" }
-        let digest = SHA256.hash(data: Data(header.utf8))
-        return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
-    }
-
-    private var loadKey: String {
-        "\(url?.absoluteString ?? "")#\(Self.credentialFingerprint(authHeader))#\(maxPixelSize ?? 0)"
-    }
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        ZStack {
-            // 常驻底层：加载中就是它在当占位，图片到位后从它上面淡入。
-            // 灰度取 `Metrics.placeholderFill`，和骨架块同一个值——否则骨架撤掉、
-            // 真实卡片上位而图还没下载完的那一瞬间，整墙灰会「变深一档」。
-            Rectangle().fill(Metrics.placeholderFill)
-            if let image {
-                Image(platform: image)
-                    .resizable()
-                    .scaledToFill()
-                    // 加载完成在占位层上淡入，不再硬弹出；换 URL 清空旧图时沿同一过渡淡出。
-                    .transition(.section)
-            } else if failed || url == nil {
-                // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
-                // 显示静态占位图标。否则 url 为 nil 时会永远转圈（task 里被 guard 挡掉）。
-                Image(systemName: "photo")
-                    .font(.title3)
-                    .foregroundStyle(.tertiary)
-            }
-            // 加载中不需要额外分支：底层那块灰就是占位（原来这里又画了一块
-            // 一模一样的 Rectangle，视觉上是 no-op，只多一层合成）。
-        }
-        .clipped()
-        .animation(imageFade, value: image != nil)
-        .task(id: loadKey) {
-            // A row can keep its SwiftUI identity while its media value changes
-            // (season switching / refresh). Clear the previous bitmap before
-            // loading the new URL, otherwise the old poster can sit beside the
-            // new title until another redraw.
-            guard let url else {
-                image = nil
-                loadedKey = nil
-                failed = false
-                return
-            }
-            // 只有成功过的组合才跳过重载：失败的不记 loadedKey，
-            // 视图再次出现时还能重试（瞬时断网不该让这张图永远 404 下去）。
-            // 复合键（URL+凭证+目标尺寸）一致才跳过：同 URL 换尺寸/凭证要重载，
-            // 否则会一直显示错误尺寸的旧位图。
-            guard loadedKey != loadKey else { return }
-            image = nil
-            loadedKey = nil
-            failed = false
-            do {
-                let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
-                guard !Task.isCancelled else { return }   // 换 URL / 消失：新任务会接手，别写旧图
-                if let loaded {
-                    image = loaded
-                    loadedKey = loadKey
-                } else {
-                    failed = true
-                }
-            } catch {
-                // 只把真正的失败当失败：任务取消（视图消失 / 换 URL）不算，
-                // 下次出现时 `.task(id:)` 会重新走一遍。
-                guard !Task.isCancelled else { return }
-                failed = true
-            }
-        }
-    }
-
-    /// 图片出现/消失的淡入淡出；减弱动态效果时直接切换，不播动画。
-    private var imageFade: Animation? {
-        reduceMotion ? nil : Motion.standard
     }
 }

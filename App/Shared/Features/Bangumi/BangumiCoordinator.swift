@@ -10,15 +10,17 @@ import Observation
 @Observable
 final class BangumiCoordinator {
 
-    let context = BangumiContext.shared
+    let context: BangumiContext
 
-    /// 凭证失效通知。转发 BangumiKit 的名字 + 载荷解码，这样根视图不必 import BangumiKit。
+    /// 默认取全局共享 context；测试可注入独立实例（`BangumiContext()` + 临时目录建库）。
+    init(context: BangumiContext = .shared) {
+        self.context = context
+    }
+
+    /// 凭证失效通知。转发 BangumiKit 的名字，这样根视图不必 import BangumiKit。
+    /// 载荷解码（NSNumber 代次）走共享的 `AuthNotification.credentialGeneration(from:)`。
     static let authenticationRequiredNotification =
         BangumiAPIClient.authenticationRequiredNotification
-
-    static func authenticationGeneration(from note: Notification) -> UInt64? {
-        (note.object as? NSNumber)?.uint64Value
-    }
 
     var isAuthenticated: Bool { context.isAuthenticated }
     var profile: BangumiProfile? { context.profile }

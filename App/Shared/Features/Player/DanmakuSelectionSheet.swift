@@ -1,3 +1,4 @@
+import AppDesignKit
 import DanmakuKit
 import SwiftUI
 

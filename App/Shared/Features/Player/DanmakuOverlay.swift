@@ -1,3 +1,4 @@
+import DanmakuKit
 import DanmakuRenderKit
 import PlaybackKit
 import SwiftUI
@@ -28,14 +29,9 @@ typealias PlatformFont = UIFont
 /// 一整帧渲染阻塞），以及 playing/buffering 状态由真实事件驱动。换内核时先验这两条。
 @MainActor
 final class DanmakuOverlayController {
-    struct Comment: Equatable {
-        let time: Double
-        let mode: Mode
-        let color: UInt32
-        let text: String
-
-        enum Mode { case scroll, top, bottom }
-    }
+    /// overlay 弹幕模型 = 包的解析输出（Erika JSON 的读写两侧都在 DanmakuKit，
+    /// App 层不再认识内核数据格式）。
+    typealias Comment = DanmakuJSONParser.Entry
 
     /// 渲染偏好（由 PlaybackController 镜像下发，保持与内核路径同一套 UserDefaults）。
     struct Preferences {
@@ -103,10 +99,19 @@ final class DanmakuOverlayController {
 
     // MARK: - 数据
 
-    /// 解析 Erika JSON（与内核 `addDanmakuTrack(json:)` 同一份输入）。
+    /// 装载弹幕 JSON（与内核 `addDanmakuTrack(json:)` 同一份输入，解析在 DanmakuKit）。
     /// `trackOffsetSeconds` 是匹配源的 shift，与用户全局偏移叠加生效。
     func replace(json: String, trackOffsetSeconds: Double) {
-        comments = Self.parse(json).sorted { $0.time < $1.time }
+        guard let parsed = DanmakuJSONParser.parse(json) else {
+            // 解析失败原先静默返回空列表——网关响应异常时看起来像「没有弹幕」，
+            // 留一条日志区分「真没有」和「解析挂了」。
+            PlaybackLog.info("弹幕 JSON 解析失败 size=\(json.count)")
+            comments = []
+            self.trackOffsetSeconds = trackOffsetSeconds
+            resync(reason: "replace")
+            return
+        }
+        comments = parsed.sorted { $0.time < $1.time }
         self.trackOffsetSeconds = trackOffsetSeconds
         PlaybackLog.append("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
         resync(reason: "replace")
@@ -134,38 +139,6 @@ final class DanmakuOverlayController {
     /// 数据在 controller 生命周期里跨这些阶段保留,重新 appear 后 startTimer 继续播。
     func pauseSampling() {
         stopTimer()
-    }
-
-    private static func parse(_ json: String) -> [Comment] {
-        struct Item: Decodable {
-            let time: Double
-            let type: Int
-            let color: Int64?
-            let content: String
-        }
-        struct Payload: Decodable { let comments: [Item]? }
-        guard let data = json.data(using: .utf8),
-              let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
-            // 解析失败原先静默返回空列表——网关响应异常时看起来像「没有弹幕」，
-            // 留一条日志区分「真没有」和「解析挂了」。
-            PlaybackLog.info("弹幕 JSON 解析失败 size=\(json.count)")
-            return []
-        }
-        return (payload.comments ?? []).compactMap { item in
-            guard item.time.isFinite, item.time >= 0, !item.content.isEmpty else { return nil }
-            let mode: Comment.Mode
-            switch item.type {
-            case 5: mode = .top
-            case 4: mode = .bottom
-            default: mode = .scroll
-            }
-            // color 可能是负数（服务端按有符号 int 写 0xFFFFFFFF 类颜色），
-            // UInt32(负数) 会直接 trap，必须先夹进 [0, 0xFFFFFF] 再转。
-            let color = max(0, min(item.color ?? 0xFF_FF_FF, 0xFF_FF_FF))
-            return Comment(time: item.time, mode: mode,
-                           color: UInt32(color) & 0xFF_FF_FF,
-                           text: item.content)
-        }
     }
 
     // MARK: - 偏好

@@ -1,3 +1,4 @@
+import AppDesignKit
 import JellyfinKit
 import SwiftUI
 
@@ -75,18 +76,13 @@ struct RootView: View {
                 app.presentLocalFile(url)
             }
         }
-        // Bangumi 凭证失效：监听放在根视图，因为 401 也可能来自详情页标记章节、
-        // 或者播放结束自动标记——那时 Bangumi 分区的视图未必存在。
-        .onReceive(NotificationCenter.default.publisher(
-            for: BangumiCoordinator.authenticationRequiredNotification)) { note in
-            guard let generation = BangumiCoordinator.authenticationGeneration(from: note) else { return }
-            Task { await app.bangumi.handleAuthenticationRequired(generation: generation) }
+        // Bangumi / MoviePilot 凭证失效：监听放根视图（401 可能来自任何页面，
+        // 那时对应分区的视图未必存在）。解码 + 挂载共用 `onAuthenticationRequired`。
+        .onAuthenticationRequired(BangumiCoordinator.authenticationRequiredNotification) { generation in
+            await app.bangumi.handleAuthenticationRequired(generation: generation)
         }
-        // MoviePilot 同理：401 且静默重登失败（密码改了）时把设置页拉回未登录态。
-        .onReceive(NotificationCenter.default.publisher(
-            for: MoviePilotCoordinator.authenticationRequiredNotification)) { note in
-            guard let generation = MoviePilotCoordinator.authenticationGeneration(from: note) else { return }
-            Task { await moviepilot.handleAuthenticationRequired(generation: generation) }
+        .onAuthenticationRequired(MoviePilotCoordinator.authenticationRequiredNotification) { generation in
+            await moviepilot.handleAuthenticationRequired(generation: generation)
         }
         // Jellyfin token 失效（鉴权 API 401，包内无重登兜底）：清死 token 回登录流程。
         // 包内已在主线程投递且带 profileID，App 侧按会话状态去重。

@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import SwiftUI
 
@@ -7,9 +8,10 @@ import SwiftUI
 struct AmbientBackdropCarousel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isWindowFullscreen) private var isWindowFullscreen
     /// 海报氛围背景开关：与设置页 / DetailView 同一 key。关时整体不渲染、
     /// 不发起随机查询（task id 含开关状态，切回开时重新拉池子）。
-    @AppStorage("dev.jumusu.ocplayer.interface.ambientBackdrop")
+    @AppStorage(SettingsKeys.ambientBackdrop)
     private var ambientBackdropEnabled = true
 
     /// 池子大小 × 换片间隔 ≈ 一轮 96s：够「随机感」也不浪费带宽。
@@ -22,18 +24,30 @@ struct AmbientBackdropCarousel: View {
     @State private var index = 0
 
     var body: some View {
-        ZStack {
-            if ambientBackdropEnabled, !pool.isEmpty {
-                BackdropAmbienceView(
-                    target: pool[index % pool.count]
-                        .imageTarget(app.server, kind: .backdrop, width: Self.imageWidth),
-                    scrim: .home
-                )
-                .id(index)
-                .transition(.section)
+        ZStack(alignment: .top) {
+            ZStack {
+                if ambientBackdropEnabled, !pool.isEmpty {
+                    BackdropAmbienceView(
+                        target: pool[index % pool.count]
+                            .imageTarget(app.server, kind: .backdrop, width: Self.imageWidth),
+                        scrim: .home
+                    )
+                    .id(index)
+                    .transition(.section)
+                }
+            }
+            .animation(Motion.ambient, value: index)
+
+            // 全屏顶栏是不透明硬底（macOS 26 系统行为），顶部向窗口底色渐隐衔接；
+            // 窗口态工具栏透明，图直接透出。见 FullscreenTitlebarFade。
+            // **放在换片动画作用域之外**：放进去换片时会被交叉淡入卷着一起动，
+            // 背景里滑出一条渐变带（全屏下肉眼可见）。
+            if isWindowFullscreen {
+                FullscreenTitlebarFade()
+                    .transition(.opacity)
             }
         }
-        .animation(Motion.ambient, value: index)
+        .animation(Motion.ambient, value: isWindowFullscreen)
         // 开关并进 task id：停留首页时切开关，关→清空退场，开→重新拉池子。
         .task(id: "\(app.sessionGeneration)#\(ambientBackdropEnabled)") {
             await loadPool()
