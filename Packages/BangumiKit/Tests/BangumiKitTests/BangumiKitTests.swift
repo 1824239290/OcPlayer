@@ -407,6 +407,48 @@ struct BangumiDatabaseTests {
         #expect(page.total == 6)
     }
 
+    /// 单条目回读（`p1/subjects/{id}` 不返回 interest，附加拉取失败即 nil）不得把本地
+    /// 收藏态清掉——一次瞬时网络抖动不该让条目从「在看」消失、进度归零。
+    @Test func nonAuthoritativeMissingInterestKeepsLocalCollection() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 1100, eps: 12, epStatus: 5))
+
+        // 回读路径的 DTO：没有 interest 键，元数据是新拉的。
+        var refetched = BangumiSubjectDTO(id: 1100, name: "Refetched", type: .anime)
+        refetched.eps = 12
+        try await db.saveSubject(refetched)
+
+        let stored = try await db.subject(id: 1100)
+        #expect(stored?.name == "Refetched", "元数据照常更新")
+        #expect(stored?.interest?.type == .doing, "收藏态保留")
+        #expect(stored?.interest?.epStatus == 5, "观看进度保留")
+
+        // 进度页按 ctype 过滤：条目必须还在「在看」列表里。
+        let page = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 20, offset: 0)
+        #expect(page.data.contains { $0.id == 1100 })
+    }
+
+    /// 收藏全量同步是权威来源：服务端确认没收藏（DTO 无 interest）时本地跟着清。
+    @Test func authoritativeMissingInterestClearsLocalCollection() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 1200, eps: 12, epStatus: 5))
+
+        try await db.saveSubjects(
+            [BangumiSubjectDTO(id: 1200, name: "Refetched", type: .anime)],
+            authoritativeInterest: true)
+
+        let stored = try await db.subject(id: 1200)
+        #expect(stored?.name == "Refetched")
+        #expect(stored?.interest == nil, "权威路径仍按 nil 清空")
+
+        let page = try await db.fetchProgressSubjects(
+            progressTab: .anime, sortMode: .collectedAt, search: "",
+            episodeWindowSize: 5, limit: 20, offset: 0)
+        #expect(!page.data.contains { $0.id == 1200 })
+    }
+
     /// slim 条目落库时 private 不该被 collectionType 带跑。
     @Test func slimSubjectDoesNotInferPrivateFlag() async throws {
         let db = try BangumiFixture.makeDatabase()

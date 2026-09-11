@@ -461,26 +461,25 @@ struct MoviePilotSubscribeSheet: View {
         dict["year"] = .string(year)
         dict["state"] = .string(state)
 
-        if let tmdb = Int(tmdbIdText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            dict["tmdbid"] = .number(Double(tmdb))
-            dict["tmdb_id"] = .number(Double(tmdb))
-        }
-        if !doubanId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["doubanid"] = .string(doubanId.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        if let bgm = Int(bangumiIdText.trimmingCharacters(in: .whitespacesAndNewlines)) {
-            dict["bangumiid"] = .number(Double(bgm))
-            dict["bangumi_id"] = .number(Double(bgm))
-        }
+        // 可清空字段统一走规则助手：空 = 删键（成对键同进同出），否则用户「清空保存」
+        // 后旧值原样回传服务端依旧生效。
+        MoviePilotSubscribeFieldRules.setOrClearNumber(
+            &dict, text: tmdbIdText, keys: ["tmdbid", "tmdb_id"]
+        )
+        MoviePilotSubscribeFieldRules.setOrClear(
+            &dict, text: doubanId, keys: ["doubanid", "douban_id"]
+        )
+        MoviePilotSubscribeFieldRules.setOrClearNumber(
+            &dict, text: bangumiIdText, keys: ["bangumiid", "bangumi_id"]
+        )
 
-        if !posterURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["poster"] = .string(posterURLString.trimmingCharacters(in: .whitespacesAndNewlines))
-            dict["poster_path"] = .string(posterURLString.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
-        if !overview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["overview"] = .string(overview)
-            dict["description"] = .string(overview)
-        }
+        MoviePilotSubscribeFieldRules.setOrClear(
+            &dict, text: posterURLString, keys: ["poster", "poster_path"]
+        )
+        // 简介写入原值（保留换行），判空仍用 trim 结果。
+        MoviePilotSubscribeFieldRules.setOrClear(
+            &dict, text: overview, keys: ["overview", "description"], keepRawValue: true
+        )
 
         if isTV {
             dict["season"] = .number(Double(season))
@@ -489,33 +488,11 @@ struct MoviePilotSubscribeSheet: View {
             dict["lack_episode"] = .number(Double(lackEpisode))
         }
 
-        if !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["keyword"] = .string(keyword.trimmingCharacters(in: .whitespacesAndNewlines))
-        } else {
-            dict.removeValue(forKey: "keyword")
-        }
-
-        if !include.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["include"] = .string(include.trimmingCharacters(in: .whitespacesAndNewlines))
-        } else {
-            dict.removeValue(forKey: "include")
-        }
-
-        if !exclude.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["exclude"] = .string(exclude.trimmingCharacters(in: .whitespacesAndNewlines))
-        } else {
-            dict.removeValue(forKey: "exclude")
-        }
-
-        if !quality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["quality"] = .string(quality.trimmingCharacters(in: .whitespacesAndNewlines))
-        } else {
-            dict.removeValue(forKey: "quality")
-        }
-
-        if !savePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dict["save_path"] = .string(savePath.trimmingCharacters(in: .whitespacesAndNewlines))
-        }
+        MoviePilotSubscribeFieldRules.setOrClear(&dict, text: keyword, keys: ["keyword"])
+        MoviePilotSubscribeFieldRules.setOrClear(&dict, text: include, keys: ["include"])
+        MoviePilotSubscribeFieldRules.setOrClear(&dict, text: exclude, keys: ["exclude"])
+        MoviePilotSubscribeFieldRules.setOrClear(&dict, text: quality, keys: ["quality"])
+        MoviePilotSubscribeFieldRules.setOrClear(&dict, text: savePath, keys: ["save_path"])
 
         dict["best_version"] = .bool(bestVersion)
 

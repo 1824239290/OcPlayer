@@ -59,6 +59,12 @@
 
 ### 修复
 
+- **MoviePilot「保存并登录」失败会毁掉原本可用的会话**：改密码打错一次（或把地址改到另一台服务器再登录失败），错误凭据已经落盘、旧 token 已被删——点「取消」也救不回来，之前能用的 MoviePilot 会话彻底没了（gate 变「未登录」，后续请求 401 → 静默重登拿着错密码 → 通知登出）。现在登录前先打「服务器地址 / 用户名 / 密码 / token」四键快照，失败把快照原样还原（含旧 token），错误凭据只作尝试不落盘；成功路径不变（换凭据 ⇒ 旧 token 照旧作废）。同批修掉密码被静默 trim：含首尾空格的密码此前被改写、登录永远失败且无提示，现在密码原样存取与发送（地址与用户名仍 trim，判空用 trim 结果）。快照与回滚落在 `MoviePilotStore.credentialSnapshot()` / `restore(_:)`，新增 3 个包用例钉住「失败不动旧值」。
+
+- **MoviePilot 订阅里清空的字段清不掉**：编辑订阅以服务端原始记录起底，「自定义存储路径」「TMDB / Bangumi / 豆瓣 ID」「海报」「简介」这几个字段只做「非空才写」、清空不回删——用户删掉存储路径或 ID 保存后旧值原样回传服务端继续生效（而关键词 / 包含 / 排除 / 画质同表却是会删的，一张表单两套语义）。现在可清空字段统一走 `MoviePilotSubscribeFieldRules`：空 = 从字典删键；成对键（`tmdbid`/`tmdb_id`、`doubanid`/`douban_id`、`bangumiid`/`bangumi_id`、`poster`/`poster_path`、`overview`/`description`）同进同出——只删一个等于没删，读侧是 `raw["tmdbid"] ?? raw["tmdb_id"]`。简介仍写原值（保留换行）、判空用 trim 结果。新增 5 个规则用例。
+
+- **Bangumi 条目瞬时网络抖动下被清出「在看」**：单条目接口 `p1/subjects/{id}` 本就不返回收藏状态，回读路径（详情页加载、播放结束后的进度对齐）靠附加请求补，补失败即 `nil`——而落库把 `interest == nil` 当成「服务端确认没收藏」，把本地 `interest`/`ctype`/`collectedAt` 一并清零：条目从「在看」消失、已看进度与评分归零，直到下次全量同步才回来。现在「按 nil 清空」改成显式参数 `authoritativeInterest`：只有收藏全量同步（每页都带收藏状态）这条权威路径传 `true`，单条回读与进度对齐默认保留本地收藏态、只更新元数据（本地改收藏走专用方法，从不置 nil，不受影响）。新增 2 个库用例（非权威保留 / 权威仍清空）。
+
 - **GitHub CI 修复：fetch-erika.sh 全角逗号粘连变量名 + v0.1.9+dolby.1 资产哈希 pin 过期**：CI 自 09-10 起秒挂，根因两条——(1) 脚本 4 处 `$var，` 全角逗号直接粘在变量名后（203 行 `$expected，`、三处 `$f，`），在 CI runner 的 bash/locale 下被当成变量名一部分，`set -u` 直接报 `expected: unbound variable`（3b39961 修过同款 `$PINNED，`，本次漏网；已全部改 `${var}` 花括号隔离）；(2) v0.1.9+dolby.1 的 macOS 资产在本地下载（09-10 13:21）之后被重新上传，pin 哈希停留在旧资产（98cde716），缓存过期后 CI 首次实拉即哈希不匹配——粘连 bug 又把真实的「哈希不匹配」报错吞成 unbound。pin 已更新为线上资产哈希（7b622c21），本地全流程（实拉→校验→合成 xcframework→缓存复用）验证通过。
 
 - **氛围背景不铺侧栏、顶栏露出窗口底色**：页面的氛围图此前挂在详情列 ScrollView 的背景上，而 macOS 26 的 `NavigationSplitView` 里只有**栈根**的背景能铺满全窗（首页轮播正是这样垫到侧栏玻璃底下的），pushed 页被裁在详情列内、导航栈宿主自带不透明底——在列内垫什么都连不到侧栏，侧栏整列（尤其下半截）空玻璃，详情页顶部工具栏区域还会露出一条窗口底色。现在有氛围图的页面出现时经 `windowAmbience(_:)` 向 `AppModel.windowAmbience` 声明、离屏时撤回（MoviePilot 资源搜索页声明海报、详情页声明 backdrop，与「海报氛围背景」开关一致），AppShell 把声明图垫在整块 `NavigationSplitView` 后面——透明的 pushed 页、侧栏玻璃和顶部工具栏透出的都是同一张连续的图，观感与首页完全一致；返回或切到无氛围页自动回落系统玻璃，iPhone 紧凑布局没有整窗层、页面自垫不受影响。实现坑：氛围图的 fill 溢出若作为 ZStack 兄弟参与布局会把 split view 撑出窗口，必须走 layout 隔离的 `.background` 挂载；层必须在调用点显式 `ignoresSafeArea()`——详情页这类自带顶部 ignoresSafeArea 滚动视图的页面会改变层继承到的安全区，让图片被 `.clipped()` 裁到工具栏以下。

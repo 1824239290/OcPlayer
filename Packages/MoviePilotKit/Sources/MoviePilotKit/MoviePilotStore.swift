@@ -69,6 +69,9 @@ public final class MoviePilotStore: @unchecked Sendable {
     }
 
     /// 明文密码，仅用于 401 后静默重登。退出登录时清除。
+    ///
+    /// 原样存取、**不做 trim**：含首尾空格的密码被 trim 后登录永远失败且无提示
+    /// （用户名/地址可以 trim，密码不是标识符）。判空用原始值。
     public var password: String {
         get {
             lock.lock()
@@ -78,11 +81,10 @@ public final class MoviePilotStore: @unchecked Sendable {
         set {
             lock.lock()
             defer { lock.unlock() }
-            let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if value.isEmpty {
+            if newValue.isEmpty {
                 defaults.removeObject(forKey: Self.passwordKey)
             } else {
-                defaults.set(value, forKey: Self.passwordKey)
+                defaults.set(newValue, forKey: Self.passwordKey)
             }
         }
     }
@@ -125,6 +127,8 @@ public final class MoviePilotStore: @unchecked Sendable {
     // MARK: - 复合操作
 
     /// 设置页保存新凭据：旧 token 必然失效，一并清掉。
+    ///
+    /// 密码原样写入（不 trim，见 `password`）；地址与用户名仍 trim。
     public func updateCredentials(serverURLString: String, username: String, password: String) {
         lock.lock()
         defer { lock.unlock() }
@@ -140,13 +144,68 @@ public final class MoviePilotStore: @unchecked Sendable {
         } else {
             defaults.set(user, forKey: Self.usernameKey)
         }
-        let pass = password.trimmingCharacters(in: .whitespacesAndNewlines)
-        if pass.isEmpty {
+        if password.isEmpty {
             defaults.removeObject(forKey: Self.passwordKey)
         } else {
-            defaults.set(pass, forKey: Self.passwordKey)
+            defaults.set(password, forKey: Self.passwordKey)
         }
         defaults.removeObject(forKey: Self.tokenKey)
+    }
+
+    // MARK: - 凭据快照
+
+    /// 四键原值的快照（`nil` = 该键不存在），用于「先落盘验证、失败回滚」。
+    /// 原样存取：地址与 token 保留「键不存在」语义，密码不做 trim。
+    public struct CredentialSnapshot: Sendable, Equatable {
+        public let serverURLString: String?
+        public let username: String
+        public let password: String
+        public let accessToken: String?
+
+        public init(serverURLString: String?, username: String, password: String, accessToken: String?) {
+            self.serverURLString = serverURLString
+            self.username = username
+            self.password = password
+            self.accessToken = accessToken
+        }
+    }
+
+    /// 读取当前凭据快照（持锁一次性取四键，避免中间态）。
+    public func credentialSnapshot() -> CredentialSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        return CredentialSnapshot(
+            serverURLString: defaults.string(forKey: Self.serverKey),
+            username: defaults.string(forKey: Self.usernameKey) ?? "",
+            password: defaults.string(forKey: Self.passwordKey) ?? "",
+            accessToken: defaults.string(forKey: Self.tokenKey)
+        )
+    }
+
+    /// 按快照回滚四键：`nil` / 空串删键，其余原样写回（不 trim）。
+    public func restore(_ snapshot: CredentialSnapshot) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let server = snapshot.serverURLString, !server.isEmpty {
+            defaults.set(server, forKey: Self.serverKey)
+        } else {
+            defaults.removeObject(forKey: Self.serverKey)
+        }
+        if snapshot.username.isEmpty {
+            defaults.removeObject(forKey: Self.usernameKey)
+        } else {
+            defaults.set(snapshot.username, forKey: Self.usernameKey)
+        }
+        if snapshot.password.isEmpty {
+            defaults.removeObject(forKey: Self.passwordKey)
+        } else {
+            defaults.set(snapshot.password, forKey: Self.passwordKey)
+        }
+        if let token = snapshot.accessToken, !token.isEmpty {
+            defaults.set(token, forKey: Self.tokenKey)
+        } else {
+            defaults.removeObject(forKey: Self.tokenKey)
+        }
     }
 
     /// 退出登录：清 token 和密码，保留地址与用户名方便下次登录。

@@ -39,7 +39,11 @@ final class MoviePilotCoordinator {
 
     // MARK: - 登录 / 登出
 
-    /// 设置页「保存并登录」：先落凭据（顺带作废旧 token），再登录取用户。
+    /// 设置页「保存并登录」：先落凭据（顺带作废旧 token）再登录取用户——
+    /// 但**失败必须回滚**：客户端登录时从 store 读凭据与服务器地址（新地址也
+    /// 必须先落 store 才能被请求用上），所以走不了「先验后存」；改打快照，
+    /// 登录失败把四键（含旧 token）原样还原——否则用户改密码打错一次，
+    /// 原本能用的会话就被毁掉，点「取消」也救不回来。
     /// 返回错误文案（nil = 成功）。
     @discardableResult
     func login(serverURLString: String, username: String, password: String) async -> String? {
@@ -48,12 +52,13 @@ final class MoviePilotCoordinator {
             return authError
         }
         let username = username.trimmingCharacters(in: .whitespacesAndNewlines)
-        let password = password.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !username.isEmpty, !password.isEmpty else {
+        // 密码只 trim 来判空，落盘与发送都用原值（含空格的密码不能被改写）。
+        guard !username.isEmpty, !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             authError = "请填写用户名和密码"
             return authError
         }
 
+        let snapshot = store.credentialSnapshot()
         store.updateCredentials(
             serverURLString: serverURLString, username: username, password: password
         )
@@ -67,8 +72,11 @@ final class MoviePilotCoordinator {
             boundServerID = store.serverURLString
             return nil
         } catch {
+            // 回滚到登录前的凭据与 token：错误凭据只是「尝试」，不该持久化，
+            // 更不能把上一台服务器的可用会话一起带走。
+            store.restore(snapshot)
             let message = (error as? MoviePilotError)?.userMessage ?? "\(error)"
-            MoviePilotNetworkLog.logger.error("MoviePilot 登录失败 error=\(error)")
+            MoviePilotNetworkLog.logger.error("MoviePilot 登录失败（已回滚凭据）error=\(error)")
             authError = message
             return message
         }

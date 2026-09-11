@@ -342,21 +342,36 @@ public actor BangumiDatabaseOperator {
         }
     }
 
+    /// 落库单条目。
+    ///
+    /// - Parameter authoritativeInterest: DTO 不带 interest 时是否按「服务端说没有收藏」
+    ///   处理（清零本地收藏态）。只有收藏全量同步这种「整页覆盖」的路径才该传 true；
+    ///   单条目回读（详情页拉 `p1/subjects/{id}`）与 `reconcileSubject` 的 interest 是
+    ///   附加拉取的，拉取失败即为 nil，传 true 会把条目误清出「在看」。
     @discardableResult
-    public func saveSubject(_ item: BangumiSubjectDTO) throws -> Bool {
+    public func saveSubject(
+        _ item: BangumiSubjectDTO, authoritativeInterest: Bool = false
+    ) throws -> Bool {
         try database.write { db in
-            let (subject, created) = try ensureSubject(item, in: db)
+            let (subject, created) = try ensureSubject(
+                item, in: db, authoritativeInterest: authoritativeInterest
+            )
             try upsertSubject(subject, in: db)
             return created
         }
     }
 
     /// 批量落库（收藏同步用）：一个事务写完整页，别一条一个事务。
-    public func saveSubjects(_ items: [BangumiSubjectDTO]) throws {
+    /// 收藏全量同步每页都带 interest，是权威来源，传 `authoritativeInterest: true`。
+    public func saveSubjects(
+        _ items: [BangumiSubjectDTO], authoritativeInterest: Bool = false
+    ) throws {
         guard !items.isEmpty else { return }
         try database.write { db in
             for item in items {
-                let (subject, _) = try ensureSubject(item, in: db)
+                let (subject, _) = try ensureSubject(
+                    item, in: db, authoritativeInterest: authoritativeInterest
+                )
                 try upsertSubject(subject, in: db)
             }
         }
@@ -653,10 +668,10 @@ public actor BangumiDatabaseOperator {
     }
 
     private func ensureSubject(
-        _ item: BangumiSubjectDTO, in db: Database
+        _ item: BangumiSubjectDTO, in db: Database, authoritativeInterest: Bool = false
     ) throws -> (BangumiSubject, Bool) {
         if let subject = try fetchSubject(in: db, id: item.id) {
-            subject.update(item)
+            subject.update(item, authoritativeInterest: authoritativeInterest)
             return (subject, false)
         }
         return (BangumiSubject(item), true)
@@ -806,7 +821,14 @@ public actor BangumiDatabaseOperator {
 }
 
 extension BangumiSubject {
-    func update(_ item: BangumiSubjectDTO) {
+    /// 用远端 DTO 更新本地条目。
+    ///
+    /// - Parameter authoritativeInterest: DTO.interest == nil 时是否当作「服务端确认没有
+    ///   收藏」并把本地 interest/ctype/collectedAt 清零。默认 **false**（保守）：单条目
+    ///   接口 `p1/subjects/{id}` 本来就不返回 interest，调用方靠附加请求补，补失败即 nil
+    ///   —— 按 nil 清空会让一次瞬时网络抖动把条目清出「在看」、进度/评分归零，直到下次
+    ///   全量同步。只有收藏全量同步这条每页都带 interest 的路径才传 true。
+    func update(_ item: BangumiSubjectDTO, authoritativeInterest: Bool = false) {
         if airtime != item.airtime { airtime = item.airtime }
         if collection != item.collection { collection = item.collection }
         if eps != item.eps { eps = item.eps }
@@ -829,11 +851,12 @@ extension BangumiSubject {
             if ctype != interest.type.rawValue { ctype = interest.type.rawValue }
             if collectedAt != interest.updatedAt { collectedAt = interest.updatedAt }
             if self.interest != interest { self.interest = interest }
-        } else {
+        } else if authoritativeInterest {
             if ctype != 0 { ctype = 0 }
             if collectedAt != 0 { collectedAt = 0 }
             if self.interest != nil { self.interest = nil }
         }
+        // 非权威且 DTO 无 interest：本地收藏态原样保留，只更新元数据。
     }
 
     func update(_ item: BangumiSlimSubjectDTO) {

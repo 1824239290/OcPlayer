@@ -31,7 +31,9 @@ public enum BangumiCollectionRepository {
                 since: since, limit: limit, offset: offset)
             if resp.data.isEmpty { break }
             // 整页一个事务：一条一个事务在上千条收藏时会明显卡。
-            try await db.saveSubjects(resp.data)
+            // 收藏接口每页都带 interest，是收藏态的权威来源——这里才允许按
+            // nil 清空本地收藏（单条回读路径的 nil 只是「没拉到」，见 update 的注释）。
+            try await db.saveSubjects(resp.data, authoritativeInterest: true)
             count += resp.data.count
             offset += limit
             if offset >= resp.total { break }
