@@ -13,8 +13,8 @@ import UIKit
 
 /// 全 App 覆盖式播放器（Infuse 风格悬浮控件）：
 /// - 画面铺满整个窗口 / 屏幕，控件浮在上面
-/// - macOS：鼠标动一下就唤出，播放中 3 秒自动隐藏；iOS：点画面切换显示
-/// - 暂停 / 缓冲 / 出错时控件常驻；顶部「×」或 ESC 关闭
+/// - macOS：鼠标动一下就唤出，播放 / 暂停中 3 秒自动隐藏；iOS：点画面切换显示
+/// - 缓冲 / 出错时控件常驻；顶部「×」或 ESC 关闭
 ///
 /// 音轨 / 字幕菜单是 M2 范围（内核 `select_*_track` 已核实可用），这里先留位。
 struct PlayerScreen: View {
@@ -640,12 +640,12 @@ struct PlayerScreen: View {
         )
     }
 
-    /// 播放、拖动、缓冲和辅助面板都由同一条规则决定 HUD 是否可以自动收起。
+    /// 播放、暂停、拖动、缓冲和辅助面板都由同一条规则决定 HUD 是否可以自动收起。
     /// 播放信息面板**不**放进这条规则：它只读、不拦截任何交互、且独立于 HUD
     /// 挂载（HUD 卸载后照常每秒刷新），收进来的后果是快捷键唤出的 HUD 被钉死，
     /// 直到关掉面板才恢复计时。
     private var canAutoHideControls: Bool {
-        controller.state.state == .playing
+        (controller.state.state == .playing || controller.state.state == .paused)
             && !controller.state.isBuffering
             && controller.setupError == nil
             && !isImportingSubtitle
@@ -656,7 +656,7 @@ struct PlayerScreen: View {
     #if os(macOS)
     /// 光标与 HUD 显隐对齐：HUD 藏起时交给系统「隐藏到下次鼠标移动」，
     /// 鼠标一动自动恢复；HUD 唤出 / 退出播放器时强制 unhide 兜底。
-    /// 暂停 / 缓冲 / VoiceOver 时 HUD 不走自动隐藏（见 `canAutoHideControls`），
+    /// 缓冲 / VoiceOver 时 HUD 不走自动隐藏（见 `canAutoHideControls`），
     /// 光标因此保持可见。
     private func syncCursorWithHUD(visible: Bool) {
         if visible {
