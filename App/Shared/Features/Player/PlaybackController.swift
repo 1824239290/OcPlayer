@@ -972,7 +972,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// - 优先拉 MediaSegments(智能片头 / 片尾识别);失败(老版本 / 禁用)静默回退。
     /// - 章节列表走 `Chapters` field;从 MediaSegments 拿到的 Intro / Outro 优先作为
     ///   `skipMarks`(比名字启发式准),否则用章节列表跑 `ChapterNameHeuristicEvaluator`。
-    /// - 用 `source` 做代次守卫:换片 / 重开自动失效,不会把上一集的章节串进来。
+    /// - 时效守卫只认 `chapterRequestIsCurrent`:本链路与引擎 `open` 并发跑,此时
+    ///   `activeRequest` 尚未就位、同请求的引擎重建也会推 `sourceGeneration`,两者
+    ///   都不能当失效判据(否则守卫必败、章节静默全丢);跨请求换片由
+    ///   `expectedRequestID` 同步更新兜住。
     ///
     /// 在 `@MainActor` 上调用(控制器本身就是 @MainActor)。
     func loadChapters(server: JellyfinKit.JellyfinServer, for request: PlaybackRequest) async {
@@ -980,7 +983,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
             // 本地文件 / 无 item 时没有服务端章节,仅保留 90s 保底条,静默。
             return
         }
-        let source = PlaybackSourceGeneration(requestID: request.id, value: sourceGeneration)
 
         // 章节列表。
         let fetchedChapters: [PlaybackChapter]
@@ -991,7 +993,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("章节拉取失败,仅保底:\(error)")
             fetchedChapters = []
         }
-        guard !Task.isCancelled, currentSourceMatches(source) else { return }
+        guard chapterRequestIsCurrent(request) else {
+            PlaybackLog.append("章节加载作废（已换片）")
+            return
+        }
 
         // 可跳过片段:优先 MediaSegments,回退章节启发式。
         let segmentMarks: [SkipMark]
@@ -1013,7 +1018,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("MediaSegments 拉取失败,回退章节启发式:\(error)")
             segmentMarks = []
         }
-        guard !Task.isCancelled, currentSourceMatches(source) else { return }
+        guard chapterRequestIsCurrent(request) else {
+            PlaybackLog.append("章节加载作废（已换片）")
+            return
+        }
 
         let total = Double(state.duration.microseconds) / 1_000_000
         let skipMarks: [SkipMark]
@@ -1023,7 +1031,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
             skipMarks = ChapterNameHeuristicEvaluator()
                 .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0))
         }
-        guard currentSourceMatches(source) else { return }
+        guard chapterRequestIsCurrent(request) else {
+            PlaybackLog.append("章节加载作废（已换片）")
+            return
+        }
 
         chapterSession.chapters = fetchedChapters
         chapterSession.skipMarks = skipMarks
@@ -1039,11 +1050,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         PlaybackLog.append("章节加载 chapters=\(fetchedChapters.count) skips=\(skipMarks.count)")
     }
 
-    @discardableResult
-    private func currentSourceMatches(_ source: PlaybackSourceGeneration) -> Bool {
-        source.value == sourceGeneration
-            && source.requestID == activeRequest?.id
-            && expectedRequestID == source.requestID
+    /// 章节加载的时效守卫:装配层当前请求是否仍是这条。
+    /// 只防「用户已换片」;与引擎 open / 引擎重建无关(见 loadChapters 头注释)。
+    private func chapterRequestIsCurrent(_ request: PlaybackRequest) -> Bool {
+        expectedRequestID == request.id && !Task.isCancelled
     }
 
     /// 把 Jellyfin 章节(tick→秒)补上结束边界变成 UI 章节列表。

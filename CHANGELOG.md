@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **章节 / MediaSegments 链路静默失效（时序竞态）**：`loadChapters` 与引擎 `open` 并发执行（章节请求 28ms 即回，引擎 open 约半秒），但其时效守卫要求 `activeRequest` 已是当前请求——而 `activeRequest` 恰恰要到 open 完成才赋值，守卫因此**每次必败**，三个 await 检查点静默 return：MediaSegments 请求不发、章节与服务端跳过标记全部丢弃、日志零痕迹（媒体库装了 Intro Skipper 插件也不会生效）。守卫改为只认装配层的 `expectedRequestID`（跨请求换片时同步更新，是这路数据真正的失效判据），与引擎 open / 引擎重建解耦；作废路径补日志，不再无声。修复后 Jellyfin / Emby 的章节列表、章节名启发式与 MediaSegments 片头片尾识别首次真正可用。
+
 ### 改动
 
 - **「跳过片头」接入 AniSkip 社区标注（第四路数据源）**：在弹幕报点推导之上再接 [AniSkip](https://api.aniskip.com/api-docs)（社区提交 + 投票背书的 OP/ED 区间库，浏览器扩展/IINA 跳 OP 脚本同源），优先级变为 **MediaSegments > AniSkip > 弹幕 > 章节启发式**。解析链：Jellyfin ProviderIds 直取 MAL ID（`MediaItem` 新增 `malID`/`anilistID` 透出，`Mal`/`MyAnimeList` 键都兼容）→ 缺失时 AniList GraphQL 换算/标题搜索（本地 24 部真实番实测映射成功率 20/24）→ `AniSkipClient` 按集查询 OP/mixed-op 区间。MAL ID 解析结果永久缓存（`aniskip-ids.json`），标题搜不中记负缓存 7 天过期重试，不重复打 AniList；AniSkip 无数据（404）/网络失败静默降级到弹幕推导，查询放在弹幕注入之后不拖慢弹幕上屏。AniSkip 区间转提示时起点直接用 OP 区间起点——有冷开场/前情回顾的集（如 OP 在 638–728s 的命运石之门）按钮只在 OP 区间内出现，比弹幕的最早报点估计更准；区间长度/绝对值双向合理性钳制防错季脏数据。已知局限记账：AniSkip 只认 MAL ID 且集数按条目内计，长篇连载/标题搜索不分季可能错季（有 episodeLength 过滤 + 钳制兜底）；覆盖与弹幕互补（我的朋友很少/来玩游戏吧/蜂蜜柠檬碳酸水等弹幕零信号的番 AniSkip 有数据，2026 新番两边都还没有）。`DanmakuIntroHint` 增加 `source` 字段（存量缓存解码兼容，缺省弹幕来源），`ChapterSession` 合并按 `SkipMarkSource.rank` 取舍、同级别刷新原位覆盖。DanmakuKit 新增 AniSkip 客户端 5 用例 + ID 解析器 3 用例 + 编排层优先级 2 用例，App 层 1 用例。
