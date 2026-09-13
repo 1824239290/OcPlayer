@@ -71,7 +71,7 @@ struct DanmakuSelectionSheet: View {
         .liquidGlassCard(cornerRadius: 24)
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
         }
         .padding(16)
         .presentationBackground(.clear)
@@ -440,7 +440,7 @@ struct DanmakuSelectionSheet: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .strokeBorder(
-                                    containsMatch ? Color.accentColor.opacity(0.3) : Color.white.opacity(0.06),
+                                    containsMatch ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06),
                                     lineWidth: 0.5
                                 )
                         )
