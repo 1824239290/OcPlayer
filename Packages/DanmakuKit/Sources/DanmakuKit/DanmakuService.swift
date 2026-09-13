@@ -10,17 +10,22 @@ public struct DanmakuPayload: Sendable, Equatable {
     public let entries: [DanmakuJSONParser.Entry]?
     public let json: String?
     public let commentCount: Int
+    /// 弹幕推导的片头提示（缓存优先，缺失时从正文现算并持久化）。
+    /// 弹幕为空时也可能带出历史提示——「跳过片头」不随弹幕正文过期而失效。
+    public let introHint: DanmakuIntroHint?
 
     public init(
         match: DanmakuEpisodeMatch,
         entries: [DanmakuJSONParser.Entry]?,
         json: String?,
-        commentCount: Int
+        commentCount: Int,
+        introHint: DanmakuIntroHint? = nil
     ) {
         self.match = match
         self.entries = entries
         self.json = json
         self.commentCount = commentCount
+        self.introHint = introHint
     }
 }
 
@@ -42,6 +47,11 @@ public actor DanmakuService {
     /// TTL-cached comments for an episode, or nil when absent/expired. Load-only.
     public func cachedComments(for episodeID: Int64) async -> [DanmakuComment]? {
         await cache.comments(for: episodeID)
+    }
+
+    /// 永久缓存的片头提示（`DanmakuIntroDetector` 的产物）。
+    public func cachedIntroHint(for episodeID: Int64) async -> DanmakuIntroHint? {
+        await cache.introHint(for: episodeID)
     }
 
     /// Persist comments directly (test seeding; production goes through `payload`).
@@ -121,12 +131,28 @@ public actor DanmakuService {
             await cache.setComments(fetched, for: match.episodeID)
             comments = fetched
         }
+        let hint = await resolveIntroHint(for: match.episodeID, comments: comments)
         return DanmakuPayload(
             match: match,
             entries: DanmakuJSONConverter.entries(from: comments),
             json: DanmakuJSONConverter.erikaJSON(from: comments),
-            commentCount: comments.count
+            commentCount: comments.count,
+            introHint: hint
         )
+    }
+
+    /// 片头提示解析：永久缓存命中直接用；否则从本次正文现算并持久化。
+    /// 正文为空时算不出提示，但不覆盖/清除已有提示。
+    private func resolveIntroHint(
+        for episodeID: Int64,
+        comments: [DanmakuComment]
+    ) async -> DanmakuIntroHint? {
+        if let cached = await cache.introHint(for: episodeID) {
+            return cached
+        }
+        guard let detected = DanmakuIntroDetector.detect(in: comments) else { return nil }
+        await cache.setIntroHint(detected, for: episodeID)
+        return detected
     }
 
     public func remember(

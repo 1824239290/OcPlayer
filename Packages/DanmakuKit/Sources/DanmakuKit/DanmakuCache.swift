@@ -155,6 +155,53 @@ public actor DanmakuCache {
         let comments: [DanmakuComment]
     }
 
+    // MARK: 片头提示（永久）
+
+    /// 弹幕推导的片头提示（`DanmakuIntroDetector` 的产物），按 episodeID 永久保存。
+    /// 弹幕正文有 TTL 会过期重拉，提示一旦成立就常驻，即使之后网关不可达、
+    /// 弹幕拉不到，「跳过片头」也照常可用。
+    public func introHint(for episodeID: Int64) -> DanmakuIntroHint? {
+        loadIntroHints()?[String(episodeID)]
+    }
+
+    public func setIntroHint(_ hint: DanmakuIntroHint, for episodeID: Int64) {
+        var hints = loadIntroHints() ?? [:]
+        hints[String(episodeID)] = hint
+        saveIntroHints(hints)
+    }
+
+    private func introHintsURL() -> URL {
+        directory.appendingPathComponent("intro-hints.json")
+    }
+
+    /// 提示文件可随时由弹幕正文重新推导，损坏即视为空并允许覆盖
+    /// （与 mapping「读失败阻止写入」的保守策略不同：这里的代价只是重算一遍）。
+    private func loadIntroHints() -> [String: DanmakuIntroHint]? {
+        if introHintsLoaded, let cached = cachedIntroHints { return cached }
+        let url = introHintsURL()
+        guard fileManager.fileExists(atPath: url.path) else {
+            cachedIntroHints = [:]
+            introHintsLoaded = true
+            return [:]
+        }
+        guard let data = try? Data(contentsOf: url),
+              let hints = try? decoder.decode([String: DanmakuIntroHint].self, from: data)
+        else { return nil }
+        cachedIntroHints = hints
+        introHintsLoaded = true
+        return hints
+    }
+
+    private func saveIntroHints(_ hints: [String: DanmakuIntroHint]) {
+        guard let data = try? encoder.encode(hints) else { return }
+        try? data.write(to: introHintsURL(), options: .atomic)
+        cachedIntroHints = hints
+        introHintsLoaded = true
+    }
+
+    private var cachedIntroHints: [String: DanmakuIntroHint]?
+    private var introHintsLoaded = false
+
     // MARK: 测试辅助
 
     /// 清空整个缓存目录（仅供测试与诊断使用）。
@@ -164,6 +211,8 @@ public actor DanmakuCache {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         cachedMapping = nil
         mappingCacheLoaded = false
+        cachedIntroHints = nil
+        introHintsLoaded = false
     }
 }
 

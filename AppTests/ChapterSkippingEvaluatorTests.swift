@@ -122,7 +122,7 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
     // MARK: - 边界
 
     func testSkipMarkContainsAndIdentity() {
-        let mark = SkipMark(id: "opening-0", kind: .opening, startSeconds: 0, endSeconds: 90)
+        let mark = SkipMark(id: "opening-0", source: .chapterHeuristic, kind: .opening, startSeconds: 0, endSeconds: 90)
         XCTAssertTrue(mark.contains(0))
         XCTAssertTrue(mark.contains(89))
         XCTAssertFalse(mark.contains(90))
@@ -172,8 +172,8 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
 
     // MARK: - 跳过提示(ChapterSession.prompt)
 
-    private func mark(_ kind: SkipKind, start: Double, end: Double) -> SkipMark {
-        SkipMark(id: "\(kind.rawValue)-\(Int(start))", kind: kind, startSeconds: start, endSeconds: end)
+    private func mark(_ kind: SkipKind, start: Double, end: Double, source: SkipMarkSource = .chapterHeuristic) -> SkipMark {
+        SkipMark(id: "\(kind.rawValue)-\(Int(start))", source: source, kind: kind, startSeconds: start, endSeconds: end)
     }
 
     func testPromptFiresInsideMarkWhilePlaying() {
@@ -230,5 +230,73 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         // reset 清掉 skipMarks 后,片头不再弹;但 90s 保底与 marks 无关仍会给出片尾提示。
         XCTAssertNil(session.prompt(at: 30, duration: 1200, isPlaying: true), "reset 后无 mark,片头不弹")
         XCTAssertEqual(session.prompt(at: 1150, duration: 1200, isPlaying: true)?.kind, .credits)
+    }
+
+    // MARK: - 弹幕片头提示注入(applyDanmakuIntroHint)
+
+    func testDanmakuHintInjectsOpeningMark() {
+        var session = ChapterSession()
+        let applied = session.applyDanmakuIntroHint(startSeconds: 98, endSeconds: 198)
+        XCTAssertTrue(applied)
+        XCTAssertEqual(session.skipMarks.count, 1)
+        XCTAssertEqual(session.skipMarks.first?.source, .danmaku)
+        XCTAssertEqual(session.skipMarks.first?.kind, .opening)
+        XCTAssertEqual(session.skipMarks.first?.startSeconds, 98)
+        // 提示注入后与普通 mark 一样驱动提示与 seek。
+        XCTAssertEqual(session.prompt(at: 120, duration: 1420, isPlaying: true)?.kind, .opening)
+        session.noteSkipped(session.skipMarks[0])
+        XCTAssertNil(session.prompt(at: 120, duration: 1420, isPlaying: true))
+    }
+
+    func testDanmakuHintWithoutStartFallsBackToZero() {
+        var session = ChapterSession()
+        session.applyDanmakuIntroHint(startSeconds: nil, endSeconds: 95)
+        XCTAssertEqual(session.skipMarks.first?.startSeconds, 0)
+        XCTAssertEqual(session.prompt(at: 30, duration: 1420, isPlaying: true)?.kind, .opening)
+    }
+
+    func testDanmakuHintReplacesHeuristicOpeningButYieldsToMediaSegment() {
+        // 章节启发式的片头让位给弹幕实证。
+        var session = ChapterSession()
+        session.skipMarks = [mark(.opening, start: 0, end: 60)]
+        XCTAssertTrue(session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132))
+        XCTAssertEqual(session.skipMarks.count, 1)
+        XCTAssertEqual(session.skipMarks.first?.source, .danmaku)
+        XCTAssertEqual(session.skipMarks.first?.endSeconds, 132)
+
+        // 服务端智能识别的片头最准,弹幕让位。
+        var segmentSession = ChapterSession()
+        segmentSession.skipMarks = [mark(.opening, start: 40, end: 130, source: .mediaSegment)]
+        XCTAssertFalse(segmentSession.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132))
+        XCTAssertEqual(segmentSession.skipMarks.count, 1)
+        XCTAssertEqual(segmentSession.skipMarks.first?.source, .mediaSegment)
+    }
+
+    func testDanmakuHintKeepsCreditsMarksUntouched() {
+        var session = ChapterSession()
+        session.skipMarks = [mark(.credits, start: 1100, end: 1200)]
+        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132)
+        XCTAssertEqual(session.skipMarks.count, 2)
+        XCTAssertTrue(session.skipMarks.contains { $0.kind == .credits })
+    }
+
+    func testDanmakuHintRejectsNonsensicalRange() {
+        var session = ChapterSession()
+        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 0.5))
+        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 200, endSeconds: 100))
+        XCTAssertTrue(session.skipMarks.isEmpty)
+        // 起点 ≥ 终点 - 1 的退化窗口也拒绝。
+        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 198, endSeconds: 198.5))
+        XCTAssertTrue(session.skipMarks.isEmpty)
+    }
+
+    func testRepeatedDanmakuHintUpdatesSameMarkID() {
+        // 换源重匹配后提示更新时,同一 id 原位替换,skippedIDs 去重不受影响。
+        var session = ChapterSession()
+        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 120)
+        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132)
+        XCTAssertEqual(session.skipMarks.count, 1)
+        XCTAssertEqual(session.skipMarks.first?.endSeconds, 132)
+        XCTAssertEqual(session.skipMarks.first?.id, "danmaku-opening")
     }
 }

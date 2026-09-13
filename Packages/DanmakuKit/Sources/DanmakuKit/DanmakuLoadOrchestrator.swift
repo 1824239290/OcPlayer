@@ -3,10 +3,11 @@ import Foundation
 
 /// 弹幕装载流水线的编排结果。`DanmakuCoordinator`（app 层）把它映射成
 /// HUD 可直接显示的状态；测试用它断言整个 匹配 → 缓存 → 装载 链路的走向。
+/// `introHint` 是弹幕推导的片头提示（`.empty` 也可能带出历史提示）。
 public enum DanmakuLoadOutcome: Equatable, Sendable {
-    case loaded(episodeID: Int64, commentCount: Int, title: String)
+    case loaded(episodeID: Int64, commentCount: Int, title: String, introHint: DanmakuIntroHint?)
     case noMatch
-    case empty(episodeID: Int64, title: String)
+    case empty(episodeID: Int64, title: String, introHint: DanmakuIntroHint?)
     case failed(message: String)
 }
 
@@ -405,9 +406,14 @@ public struct DanmakuLoadOrchestrator {
                 return .failed(message: "播放已切换")
             }
             if payload.entries == nil {
-                return .empty(episodeID: match.episodeID, title: name)
+                return .empty(episodeID: match.episodeID, title: name, introHint: payload.introHint)
             }
-            return .loaded(episodeID: match.episodeID, commentCount: payload.commentCount, title: name)
+            return .loaded(
+                episodeID: match.episodeID,
+                commentCount: payload.commentCount,
+                title: name,
+                introHint: payload.introHint
+            )
         } catch is CancellationError {
             return .failed(message: "已取消")
         } catch {

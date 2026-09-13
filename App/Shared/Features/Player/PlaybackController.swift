@@ -82,6 +82,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var danmakuTracks: [DanmakuTrackInfo] = []
     /// 章节与跳过判定(当前源)。
     var chapterSession = ChapterSession()
+    /// 弹幕推导的片头提示(永久缓存随弹幕匹配下发)。章节与弹幕两条异步链路
+    /// 都可能后到,这里存住提示,谁后到谁负责合并进 `chapterSession.skipMarks`。
+    var danmakuIntroHint: DanmakuKit.DanmakuIntroHint?
     /// 外挂字幕轨道 id → 显示名（Jellyfin 侧车字幕的标题）。内核不带名字，
     /// App 层在下载时记录；换源 / 拆引擎时清空（见 resetEngine）。
     var externalSubtitleNames: [Int64: String] = [:]
@@ -847,6 +850,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         danmakuGlobalOffsetSeconds = 0
         externalSubtitleNames = [:]
         chapterSession.reset()
+        danmakuIntroHint = nil
         // engine 没了就一定不在播，息屏令牌和系统登记立刻还回去（stopPlayback 也经过这里）。
         syncSystemPlaybackState()
         // 注意：这里不要 state.reset()。closePlayer 的调用顺序是
@@ -916,13 +920,32 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine.seek(to: .seconds(max(0, chapter.startSeconds)))
     }
 
+    /// 弹幕匹配完成后由 `DanmakuCoordinator` 调用,下发片头提示。
+    /// requestID 守卫:提示与当前播放请求不匹配(旧代的迟到回调)直接丢弃。
+    func applyDanmakuIntroHint(_ hint: DanmakuKit.DanmakuIntroHint, requestID: PlaybackRequest.ID) {
+        guard activeRequest?.id == requestID else { return }
+        danmakuIntroHint = hint
+        if chapterSession.applyDanmakuIntroHint(startSeconds: hint.startSeconds, endSeconds: hint.endSeconds) {
+            PlaybackLog.append(
+                "弹幕片头提示 start=\(hint.startSeconds.map { String(format: "%.0f", $0) } ?? "0")"
+                    + " end=\(String(format: "%.0f", hint.endSeconds)) evidence=\(hint.evidenceCount)"
+            )
+        }
+    }
+
     /// 处理当前「跳过」提示并跳到段末 / 接近结尾。
     func performSkip() {
         guard let prompt = currentSkipPrompt else { return }
         let target: Double
         switch prompt {
         case .mark(let mark):
-            target = mark.endSeconds
+            // 与 skip(by:) 同一道防线:跳过目标越过片长会触发内核 EOF 错误风暴。
+            var markEnd = mark.endSeconds
+            if state.duration > .zero {
+                let duration = Double(state.duration.microseconds) / 1_000_000
+                markEnd = min(markEnd, max(duration - 0.5, 0))
+            }
+            target = markEnd
             chapterSession.noteSkipped(mark)
             PlaybackLog.append("跳过 \(mark.kind) → \(target)s")
         case .endCredits(let position):
@@ -972,6 +995,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 let skipKind: SkipKind = segment.kind == .intro ? .opening : .credits
                 return SkipMark(
                     id: "\(segment.kind.rawValue)-\(segment.id)",
+                    source: .mediaSegment,
                     kind: skipKind,
                     startSeconds: segment.startSeconds,
                     endSeconds: segment.endSeconds
@@ -997,6 +1021,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
         chapterSession.chapters = fetchedChapters
         chapterSession.skipMarks = skipMarks
+        // 章节链路后到时补合并弹幕提示(章节先到的情况由
+        // applyDanmakuIntroHint 即时注入,两向覆盖)。MediaSegments 已给片头时
+        // 注入内部会让位,无需在此区分。
+        if let hint = danmakuIntroHint {
+            _ = chapterSession.applyDanmakuIntroHint(
+                startSeconds: hint.startSeconds, endSeconds: hint.endSeconds)
+        }
         PlaybackLog.append("章节加载 chapters=\(fetchedChapters.count) skips=\(skipMarks.count)")
     }
 

@@ -42,9 +42,21 @@ enum SkipKind: String, Hashable, Sendable {
     }
 }
 
+/// 片头 / 片尾标记的数据来源。合并多路信号时按可信度取舍：
+/// 服务端智能识别 > 弹幕报点（真实观众行为实证）> 章节启发式猜测。
+enum SkipMarkSource: String, Hashable, Sendable {
+    /// 服务端智能识别(Jellyfin MediaSegments)。
+    case mediaSegment
+    /// 弹幕报点推导(DanmakuIntroDetector)。
+    case danmaku
+    /// 章节名 / 时间位置启发式。
+    case chapterHeuristic
+}
+
 /// 一段可跳过的片头 / 片尾区间,带稳定的身份用于会话内去重。
 struct SkipMark: Identifiable, Hashable, Sendable {
     let id: String
+    let source: SkipMarkSource
     let kind: SkipKind
     let startSeconds: Double
     let endSeconds: Double
@@ -150,6 +162,7 @@ struct ChapterNameHeuristicEvaluator: ChapterSkippingEvaluator {
         guard end - chapter.startSeconds > 0.5 else { return nil }
         return SkipMark(
             id: "\(kind.rawValue)-\(Int(chapter.startSeconds))",
+            source: .chapterHeuristic,
             kind: kind,
             startSeconds: chapter.startSeconds,
             endSeconds: end
@@ -260,5 +273,34 @@ struct ChapterSession {
     /// 记录一次保底片尾跳过,后续不再重复弹「跳过片尾」。
     mutating func noteEndCreditsSkipped() {
         didSkipEndCredits = true
+    }
+
+    /// 注入弹幕推导的片头提示(DanmakuKit 的 DanmakuIntroHint → SkipMark)。
+    ///
+    /// 多路信号按可信度取舍:服务端智能识别(MediaSegments)已在场时让位;
+    /// 章节启发式的片头是名字/位置猜测,弹幕是实证数据,替换它。
+    /// `startSeconds` 为 nil 时从 0 起(无把握不猜冷开场)。返回是否注入。
+    @discardableResult
+    mutating func applyDanmakuIntroHint(startSeconds: Double?, endSeconds: Double) -> Bool {
+        guard endSeconds > 1 else { return false }
+        if skipMarks.contains(where: { $0.kind == .opening && $0.source == .mediaSegment }) {
+            return false
+        }
+        let start = max(0, startSeconds ?? 0)
+        guard start < endSeconds - 1 else { return false }
+        skipMarks.removeAll { $0.kind == .opening && $0.source == .chapterHeuristic }
+        let mark = SkipMark(
+            id: "danmaku-opening",
+            source: .danmaku,
+            kind: .opening,
+            startSeconds: start,
+            endSeconds: endSeconds
+        )
+        if let index = skipMarks.firstIndex(where: { $0.id == mark.id }) {
+            skipMarks[index] = mark
+        } else {
+            skipMarks.append(mark)
+        }
+        return true
     }
 }

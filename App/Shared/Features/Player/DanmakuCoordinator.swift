@@ -231,6 +231,8 @@ final class DanmakuCoordinator {
 
     private(set) var status: DanmakuLoadStatus = .idle
     private(set) var currentMatch: DanmakuEpisodeMatch?
+    /// 弹幕推导的片头提示（已注入当前播放会话）。
+    private(set) var currentIntroHint: DanmakuIntroHint?
     private(set) var isAutoLoadingEnabled: Bool
 
     @ObservationIgnored private let orchestrator: DanmakuLoadOrchestrator
@@ -273,6 +275,7 @@ final class DanmakuCoordinator {
         self.configuration = configuration
         self.playback = playback
         currentMatch = nil
+        currentIntroHint = nil
 
         guard isAutoLoadingEnabled || forceRematch else {
             status = .disabled
@@ -315,6 +318,7 @@ final class DanmakuCoordinator {
         configuration = nil
         playback = nil
         currentMatch = nil
+        currentIntroHint = nil
         if resetStatus { status = .idle }
     }
 
@@ -435,13 +439,14 @@ final class DanmakuCoordinator {
         durationMs: Int64
     ) {
         switch outcome {
-        case .loaded(let episodeID, let commentCount, let title):
+        case .loaded(let episodeID, let commentCount, let title, let introHint):
             currentMatch = DanmakuEpisodeMatch(episodeID: episodeID)
             status = .loaded(DanmakuLoadedSummary(
                 episodeID: episodeID,
                 title: title,
                 commentCount: commentCount
             ))
+            deliverIntroHint(introHint, requestID: context.requestID, episodeID: episodeID)
             AppDiagnostics.logInfo("弹幕装载完成", fields: [
                 "source": .string(context.sourceKind.rawValue),
                 "episodeID": .integer(episodeID),
@@ -454,9 +459,10 @@ final class DanmakuCoordinator {
                 "fileName": .string(context.fileName),
             ])
             status = .noMatch
-        case .empty(let episodeID, let title):
+        case .empty(let episodeID, let title, let introHint):
             currentMatch = DanmakuEpisodeMatch(episodeID: episodeID)
             status = .empty(title: title)
+            deliverIntroHint(introHint, requestID: context.requestID, episodeID: episodeID)
             AppDiagnostics.logInfo("弹幕正文为空", fields: [
                 "episodeID": .integer(episodeID),
                 "durationMs": .integer(durationMs),
@@ -469,6 +475,23 @@ final class DanmakuCoordinator {
                 "error": .string(message),
             ])
         }
+    }
+
+    /// 把片头提示交给当前播放会话（requestID 不匹配的迟到回调由播放器侧丢弃）。
+    private func deliverIntroHint(
+        _ hint: DanmakuIntroHint?,
+        requestID: PlaybackRequest.ID,
+        episodeID: Int64
+    ) {
+        guard let hint else { return }
+        currentIntroHint = hint
+        AppDiagnostics.logInfo("弹幕片头提示", fields: [
+            "episodeID": .integer(episodeID),
+            "endSeconds": .integer(Int64(hint.endSeconds)),
+            "startSeconds": hint.startSeconds.map { .integer(Int64($0)) } ?? .null,
+            "evidence": .integer(Int64(hint.evidenceCount)),
+        ])
+        playback?.applyDanmakuIntroHint(hint, requestID: requestID)
     }
 
     private func matchContext(from context: DanmakuPlaybackContext) -> DanmakuMatchContext {

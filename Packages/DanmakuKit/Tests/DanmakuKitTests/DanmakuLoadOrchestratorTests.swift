@@ -104,7 +104,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 1001, commentCount: 2, title: "葬送的芙莉莲 · 第1话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 1001, commentCount: 2, title: "葬送的芙莉莲 · 第1话", introHint: nil))
         try assertInjectedJSON(commentCount: 2, firstContent: "你好", firstTime: 0.5)
         XCTAssertEqual(playback.injectedOffset, .seconds(2))
         let cached = await service.cachedMatch(for: context.cacheKey)
@@ -136,7 +136,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 2002, commentCount: 1, title: "旧番 · 第2话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 2002, commentCount: 1, title: "旧番 · 第2话", introHint: nil))
     }
 
     func testNoMatchOutcome() async throws {
@@ -344,7 +344,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .empty(episodeID: 4004, title: "弹弹play"))
+        XCTAssertEqual(outcome, .empty(episodeID: 4004, title: "弹弹play", introHint: nil))
     }
 
     func testFingerprintUnavailableFailsWithManualSuggestion() async throws {
@@ -403,7 +403,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 6006, commentCount: 1, title: "透传 · 第6话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 6006, commentCount: 1, title: "透传 · 第6话", introHint: nil))
         XCTAssertEqual(playback.waitedUUIDs.last, context.uuid, "就绪等待与注入必须使用请求的 uuid")
     }
 
@@ -522,7 +522,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 5001, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 5001, commentCount: 1, title: "葬送的芙莉莲 · 第1话", introHint: nil))
     }
 
     func testMatchFallbackToTMDBIdSearch() async throws {
@@ -576,7 +576,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 5002, commentCount: 1, title: "葬送的芙莉莲 · 第2话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 5002, commentCount: 1, title: "葬送的芙莉莲 · 第2话", introHint: nil))
     }
 
     func testCandidateAcceptedWhenIsMatchedIsFalse() async throws {
@@ -608,7 +608,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 5003, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 5003, commentCount: 1, title: "葬送的芙莉莲 · 第1话", introHint: nil))
     }
 
     func testFingerprintUnavailableFallbackToSearchSuccess() async throws {
@@ -648,7 +648,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             playback: playback,
             revision: 1
         )
-        XCTAssertEqual(outcome, .loaded(episodeID: 5004, commentCount: 1, title: "葬送的芙莉莲 · 第1话"))
+        XCTAssertEqual(outcome, .loaded(episodeID: 5004, commentCount: 1, title: "葬送的芙莉莲 · 第1话", introHint: nil))
     }
 
     // MARK: 辅助
