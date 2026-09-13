@@ -908,7 +908,9 @@ struct PlayerSkipPromptView: View {
                         Text(prompt.kind.buttonTitle)
                             .font(.callout.weight(.semibold))
                     }
-                    .foregroundStyle(PlayerHUDPalette.primary)
+                    // 本按钮挂在 HUD 暗幕之外（见 PlayerScreen），玻璃直采原视频：
+                    // 必须用动态色让文字/图标随玻璃明暗变体翻转，写死白在亮场面会消失。
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 11)
                     .contentShape(Capsule())

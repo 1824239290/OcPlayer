@@ -8,6 +8,10 @@ import SwiftUI
 import AppKit
 #endif
 
+/// HUD 专属固定白调色板。**使用前提**：整套 HUD 覆盖在全屏 `PlayerHUDReadabilityScrim`
+/// （黑 0.32）之上，玻璃只采样压暗画面、恒为暗变体，白字对比度因此稳定。
+/// HUD 之外的玻璃内容（如跳过按钮）不满足该前提，一律用 `.primary` 等动态色
+/// 随玻璃明暗变体翻转，禁止从本调色板取色。
 enum PlayerHUDPalette {
     static let primary = Color.white
     static let secondary = Color.white.opacity(0.76)

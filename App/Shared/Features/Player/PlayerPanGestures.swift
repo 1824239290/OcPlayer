@@ -85,25 +85,32 @@ struct PlayerSeekPreviewBar: View {
     var body: some View {
         VStack {
             Spacer(minLength: 0)
-            VStack(spacing: 10) {
-                Text(
-                    "\(playerHUDTimeLabel(.seconds(targetSeconds)))"
-                        + " / \(playerHUDTimeLabel(.seconds(durationSeconds)))"
-                )
-                .font(.callout.monospacedDigit().weight(.semibold))
-                .foregroundStyle(PlayerHUDPalette.primary)
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.25))
-                        Capsule()
-                            .fill(.white)
-                            .frame(width: max(0, min(1, fraction)) * proxy.size.width)
+            // 实底背板（PlayerHUDPanel）：与音量/亮度 OSD 同族。拖动期间 HUD 不唤醒，
+            // 裸压视频的白字白条在亮场面下会失去对比度。
+            PlayerHUDPanel(in: Capsule()) {
+                VStack(spacing: 8) {
+                    Text(
+                        "\(playerHUDTimeLabel(.seconds(targetSeconds)))"
+                            + " / \(playerHUDTimeLabel(.seconds(durationSeconds)))"
+                    )
+                    .font(.callout.monospacedDigit().weight(.semibold))
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(.white.opacity(0.25))
+                            Capsule()
+                                .fill(.white)
+                                .frame(width: max(0, min(1, fraction)) * proxy.size.width)
+                        }
                     }
+                    .frame(height: 4)
                 }
-                .frame(height: 4)
+                // 实底黑面板上用固定白（PlayerHUDPanel 契约），不随系统外观翻转。
+                .foregroundStyle(PlayerHUDPalette.primary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, 36)
-            .padding(.bottom, 64)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 56)
         }
         .allowsHitTesting(false)
         .transition(.section)
