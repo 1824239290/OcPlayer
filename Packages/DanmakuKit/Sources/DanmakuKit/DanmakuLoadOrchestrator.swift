@@ -49,15 +49,26 @@ public struct DanmakuLoadOrchestrator {
     public let service: DanmakuService
     private let session: URLSession
     private let retryPolicy: RetryPolicy
+    /// AniSkip 只读客户端（跳过片头第三数据源，见 `resolveIntroHint`）。
+    private let aniSkipClient: AniSkipClient
+    /// MAL ID 解析器（ProviderIds 直取 → 永久缓存 → AniList 搜索）。
+    private let aniSkipIDResolver: AniSkipIDResolver
 
     public init(
         service: DanmakuService,
         session: URLSession = DanmakuNetworking.makeSession(),
-        retryPolicy: RetryPolicy = RetryPolicy()
+        retryPolicy: RetryPolicy = RetryPolicy(),
+        aniSkipClient: AniSkipClient? = nil,
+        aniSkipIDResolver: AniSkipIDResolver? = nil
     ) {
         self.service = service
         self.session = session
         self.retryPolicy = retryPolicy
+        self.aniSkipClient = aniSkipClient ?? AniSkipClient(session: session)
+        self.aniSkipIDResolver = aniSkipIDResolver ?? AniSkipIDResolver(
+            store: AniSkipIDStore(directory: service.cacheDirectory),
+            session: session
+        )
     }
 
     /// 整个自动匹配 + 装载链路。`forceRematch` 跳过缓存并清除已记住的映射。
@@ -89,7 +100,9 @@ public struct DanmakuLoadOrchestrator {
                     configuration: configuration,
                     playback: playback,
                     revision: revision,
-                    client: client
+                    client: client,
+                    matchContext: matchContext,
+                    forceRematch: forceRematch
                 )
             }
 
@@ -255,7 +268,9 @@ public struct DanmakuLoadOrchestrator {
                 configuration: configuration,
                 playback: playback,
                 revision: revision,
-                client: client
+                client: client,
+                matchContext: matchContext,
+                forceRematch: forceRematch
             )
         } catch is CancellationError {
             return .failed(message: "已取消")
@@ -340,14 +355,16 @@ public struct DanmakuLoadOrchestrator {
         return nil
     }
 
-    /// 用户手动选择某一集后的装载。
+    /// 用户手动选择某一集后的装载。`matchContext` 携带集数/时长/ProviderIds，
+    /// 供 AniSkip 跳过片头解析；手动选集视为显式重解析（无视缓存提示）。
     public func runManual(
         match: DanmakuEpisodeMatch,
         uuid: UUID,
         cacheKey: String,
         configuration: DandanplayConfiguration,
         playback: DanmakuPlaybackHosting,
-        revision: UInt64
+        revision: UInt64,
+        matchContext: DanmakuMatchContext? = nil
     ) async -> DanmakuLoadOutcome {
         let client = DanmakuGatewayClient(
             configuration: configuration, session: session, retryPolicy: retryPolicy)
@@ -359,7 +376,9 @@ public struct DanmakuLoadOrchestrator {
             configuration: configuration,
             playback: playback,
             revision: revision,
-            client: client
+            client: client,
+            matchContext: matchContext,
+            forceRematch: true
         )
     }
 
@@ -370,7 +389,9 @@ public struct DanmakuLoadOrchestrator {
         configuration: DandanplayConfiguration,
         playback: DanmakuPlaybackHosting,
         revision: UInt64,
-        client: DanmakuGatewayClient
+        client: DanmakuGatewayClient,
+        matchContext: DanmakuMatchContext?,
+        forceRematch: Bool
     ) async -> DanmakuLoadOutcome {
         do {
             try Task.checkCancellation()
@@ -405,14 +426,21 @@ public struct DanmakuLoadOrchestrator {
                 }
                 return .failed(message: "播放已切换")
             }
+            // 跳过片头解析放在弹幕注入之后：AniSkip/AniList 的外网查询不得拖慢弹幕上屏。
+            let introHint = await resolveIntroHint(
+                match: match,
+                matchContext: matchContext,
+                detected: payload.detectedIntroHint,
+                forceRematch: forceRematch
+            )
             if payload.entries == nil {
-                return .empty(episodeID: match.episodeID, title: name, introHint: payload.introHint)
+                return .empty(episodeID: match.episodeID, title: name, introHint: introHint)
             }
             return .loaded(
                 episodeID: match.episodeID,
                 commentCount: payload.commentCount,
                 title: name,
-                introHint: payload.introHint
+                introHint: introHint
             )
         } catch is CancellationError {
             return .failed(message: "已取消")
@@ -426,6 +454,70 @@ public struct DanmakuLoadOrchestrator {
         guard !Task.isCancelled else { return false }
         let claimed = await service.claimedRevision(for: cacheKey)
         return revision == claimed
+    }
+
+    // MARK: 跳过片头（AniSkip > 弹幕检测）
+
+    /// 片头提示解析（优先级从高到低）：
+    /// 1. 永久缓存（`forceRematch` 时无视缓存重新解析，与跳过缓存匹配同语义）；
+    /// 2. AniSkip——社区提交 + 投票背书的精确 OP 区间；
+    /// 3. 弹幕报点推导（本次正文现算）。
+    /// 选中的结果持久化；任何一步失败静默降级，只影响这一路数据源的有无。
+    private func resolveIntroHint(
+        match: DanmakuEpisodeMatch,
+        matchContext: DanmakuMatchContext?,
+        detected: DanmakuIntroHint?,
+        forceRematch: Bool
+    ) async -> DanmakuIntroHint? {
+        if !forceRematch, let cached = await service.cachedIntroHint(for: match.episodeID) {
+            return cached
+        }
+        if let hint = await aniSkipHint(match: match, context: matchContext) {
+            await service.persistIntroHint(hint, for: match.episodeID)
+            return hint
+        }
+        if let detected {
+            await service.persistIntroHint(detected, for: match.episodeID)
+            return detected
+        }
+        return nil
+    }
+
+    /// AniSkip 路径：MAL ID（ProviderIds 直取 → AniList 换算/标题搜索）→ 区间查询 → 提示。
+    /// 无集数、无任何身份线索或查询失败都返回 nil（「跳过片头」少一路数据源而已）。
+    private func aniSkipHint(
+        match: DanmakuEpisodeMatch,
+        context: DanmakuMatchContext?
+    ) async -> DanmakuIntroHint? {
+        guard let context, let episodeNumber = context.episodeNumber, episodeNumber >= 1 else {
+            return nil
+        }
+        let identity = AniSkipAnimeIdentity(
+            malID: context.malID,
+            anilistID: context.anilistID,
+            title: (match.animeTitle ?? context.animeTitle)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+            seasonNumber: context.seasonNumber,
+            year: nil
+        )
+        guard identity.malID != nil || identity.anilistID != nil || identity.title?.isEmpty == false
+        else { return nil }
+        guard let malID = await aniSkipIDResolver.malID(for: identity) else { return nil }
+        do {
+            let intervals = try await aniSkipClient.skipTimes(
+                malID: malID,
+                episodeNumber: episodeNumber,
+                episodeLengthSeconds: context.durationSeconds
+            )
+            return intervals.flatMap(DanmakuIntroHint.init(aniskipIntervals:))
+        } catch {
+            NetworkLog.report(
+                category: "AniSkip", level: .debug,
+                "跳过片头查询失败，降级弹幕推导",
+                fields: ["error": .string("\(error)")]
+            )
+            return nil
+        }
     }
 
     private func userMessage(for error: Error) -> String {
@@ -462,6 +554,9 @@ public struct DanmakuMatchContext: Sendable {
     public let seasonNumber: Int?
     public let isFinal: Bool
     public let tmdbID: Int?
+    /// ProviderIds 直取的 MyAnimeList / AniList ID（AniSkip 跳过片头数据源用，可缺省）。
+    public let malID: Int?
+    public let anilistID: Int?
     private let localFileURL: URL?
     private let remoteURL: URL?
     private let remoteHeaders: [String: String]
@@ -480,7 +575,9 @@ public struct DanmakuMatchContext: Sendable {
         episodeNumber: Int? = nil,
         seasonNumber: Int? = nil,
         isFinal: Bool = false,
-        tmdbID: Int? = nil
+        tmdbID: Int? = nil,
+        malID: Int? = nil,
+        anilistID: Int? = nil
     ) {
         self.uuid = uuid
         self.cacheKey = cacheKey
@@ -496,6 +593,8 @@ public struct DanmakuMatchContext: Sendable {
         self.seasonNumber = seasonNumber
         self.isFinal = isFinal
         self.tmdbID = tmdbID
+        self.malID = malID
+        self.anilistID = anilistID
     }
 
     /// 计算媒体指纹：本地文件读前 16 MiB；远程走 Range 请求。都不支持返回 nil。

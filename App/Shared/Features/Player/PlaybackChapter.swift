@@ -42,15 +42,27 @@ enum SkipKind: String, Hashable, Sendable {
     }
 }
 
-/// 片头 / 片尾标记的数据来源。合并多路信号时按可信度取舍：
-/// 服务端智能识别 > 弹幕报点（真实观众行为实证）> 章节启发式猜测。
+/// 片头 / 片尾标记的数据来源。合并多路信号时按可信度取舍（`rank`）：
+/// 服务端智能识别 > AniSkip（社区提交 + 投票）> 弹幕报点（自动推导）> 章节启发式猜测。
 enum SkipMarkSource: String, Hashable, Sendable {
     /// 服务端智能识别(Jellyfin MediaSegments)。
     case mediaSegment
+    /// AniSkip 社区标注区间。
+    case aniskip
     /// 弹幕报点推导(DanmakuIntroDetector)。
     case danmaku
     /// 章节名 / 时间位置启发式。
     case chapterHeuristic
+
+    /// 合并优先级：数值大者胜出。
+    var rank: Int {
+        switch self {
+        case .mediaSegment: 3
+        case .aniskip: 2
+        case .danmaku: 1
+        case .chapterHeuristic: 0
+        }
+    }
 }
 
 /// 一段可跳过的片头 / 片尾区间,带稳定的身份用于会话内去重。
@@ -275,23 +287,30 @@ struct ChapterSession {
         didSkipEndCredits = true
     }
 
-    /// 注入弹幕推导的片头提示(DanmakuKit 的 DanmakuIntroHint → SkipMark)。
+    /// 注入跳过片头提示（DanmakuKit 的 DanmakuIntroHint → SkipMark）。
     ///
-    /// 多路信号按可信度取舍:服务端智能识别(MediaSegments)已在场时让位;
-    /// 章节启发式的片头是名字/位置猜测,弹幕是实证数据,替换它。
-    /// `startSeconds` 为 nil 时从 0 起(无把握不猜冷开场)。返回是否注入。
+    /// 多路信号按 `SkipMarkSource.rank` 取舍：已有同高或更高优先级的片头标记时让位，
+    /// 低优先级的被替换（服务端识别最准；AniSkip 有社区背书，压过自动推导的弹幕
+    /// 与章节猜测）。`startSeconds` 为 nil 时从 0 起（无把握不猜冷开场）。
+    /// 返回是否注入。
     @discardableResult
-    mutating func applyDanmakuIntroHint(startSeconds: Double?, endSeconds: Double) -> Bool {
+    mutating func applySkipTimesHint(
+        startSeconds: Double?,
+        endSeconds: Double,
+        source: SkipMarkSource
+    ) -> Bool {
         guard endSeconds > 1 else { return false }
-        if skipMarks.contains(where: { $0.kind == .opening && $0.source == .mediaSegment }) {
+        // 严格更高优先级才让位；同级别刷新走原位替换（重匹配后用新数据覆盖旧提示）。
+        if let existing = skipMarks.first(where: { $0.kind == .opening }),
+           existing.source.rank > source.rank {
             return false
         }
+        skipMarks.removeAll { $0.kind == .opening }
         let start = max(0, startSeconds ?? 0)
         guard start < endSeconds - 1 else { return false }
-        skipMarks.removeAll { $0.kind == .opening && $0.source == .chapterHeuristic }
         let mark = SkipMark(
-            id: "danmaku-opening",
-            source: .danmaku,
+            id: "skiptimes-opening",
+            source: source,
             kind: .opening,
             startSeconds: start,
             endSeconds: endSeconds

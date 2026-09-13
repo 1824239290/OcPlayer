@@ -152,7 +152,10 @@ extension BaseItemDto {
             backdropImageTag: backdropTag,
             logoImageTag: logoTag,
             parentLogoItemID: parentLogoItemID,
-            tmdbID: providerIDs?["Tmdb"] ?? providerIDs?["tmdb"]
+            tmdbID: providerIDs?["Tmdb"] ?? providerIDs?["tmdb"],
+            // MAL 的 provider key 各版本不统一（Mal / MyAnimeList），多兜几个。
+            malID: providerIDs?["Mal"] ?? providerIDs?["MyAnimeList"] ?? providerIDs?["mal"],
+            anilistID: providerIDs?["AniList"] ?? providerIDs?["anilist"]
         )
     }
 }

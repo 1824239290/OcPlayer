@@ -8,7 +8,9 @@ import Foundation
 ///
 /// 缓存文件按 `mapping.json` 与 `comments-<episodeId>.json` 分离；并发写入由 actor 隔离。
 public actor DanmakuCache {
-    private let directory: URL
+    /// 缓存根目录（`mapping.json` / `comments-*.json` / `intro-hints.json` 等都在这）。
+    /// 不可变值，跨隔离域只读（编排层派生同目录的伴生存储用）。
+    nonisolated public let directory: URL
     private let commentsTTL: TimeInterval
     private let fileManager: FileManager
     private let encoder = JSONEncoder()

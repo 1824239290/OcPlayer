@@ -10,22 +10,22 @@ public struct DanmakuPayload: Sendable, Equatable {
     public let entries: [DanmakuJSONParser.Entry]?
     public let json: String?
     public let commentCount: Int
-    /// 弹幕推导的片头提示（缓存优先，缺失时从正文现算并持久化）。
-    /// 弹幕为空时也可能带出历史提示——「跳过片头」不随弹幕正文过期而失效。
-    public let introHint: DanmakuIntroHint?
+    /// 弹幕正文现算出的片头提示（`DanmakuIntroDetector`，未持久化）。
+    /// 缓存命中 / AniSkip 解析 / 持久化时机由编排层（`DanmakuLoadOrchestrator`）统一决策。
+    public let detectedIntroHint: DanmakuIntroHint?
 
     public init(
         match: DanmakuEpisodeMatch,
         entries: [DanmakuJSONParser.Entry]?,
         json: String?,
         commentCount: Int,
-        introHint: DanmakuIntroHint? = nil
+        detectedIntroHint: DanmakuIntroHint? = nil
     ) {
         self.match = match
         self.entries = entries
         self.json = json
         self.commentCount = commentCount
-        self.introHint = introHint
+        self.detectedIntroHint = detectedIntroHint
     }
 }
 
@@ -33,9 +33,12 @@ public struct DanmakuPayload: Sendable, Equatable {
 /// Playback generation checks and Erika mutations remain in the app layer.
 public actor DanmakuService {
     private let cache: DanmakuCache
+    /// 缓存根目录（与 `cache.directory` 同源；伴生存储派生目录用）。
+    public let cacheDirectory: URL
 
     public init(cache: DanmakuCache) {
         self.cache = cache
+        self.cacheDirectory = cache.directory
     }
 
     /// Returns the permanent media-to-episode mapping without contacting the gateway.
@@ -49,9 +52,14 @@ public actor DanmakuService {
         await cache.comments(for: episodeID)
     }
 
-    /// 永久缓存的片头提示（`DanmakuIntroDetector` 的产物）。
+    /// 永久缓存的片头提示（弹幕报点 / AniSkip 任一来源）。
     public func cachedIntroHint(for episodeID: Int64) async -> DanmakuIntroHint? {
         await cache.introHint(for: episodeID)
+    }
+
+    /// 持久化片头提示（编排层按优先级选出的最终结果）。
+    public func persistIntroHint(_ hint: DanmakuIntroHint, for episodeID: Int64) async {
+        await cache.setIntroHint(hint, for: episodeID)
     }
 
     /// Persist comments directly (test seeding; production goes through `payload`).
@@ -131,28 +139,14 @@ public actor DanmakuService {
             await cache.setComments(fetched, for: match.episodeID)
             comments = fetched
         }
-        let hint = await resolveIntroHint(for: match.episodeID, comments: comments)
+        let detected = DanmakuIntroDetector.detect(in: comments)
         return DanmakuPayload(
             match: match,
             entries: DanmakuJSONConverter.entries(from: comments),
             json: DanmakuJSONConverter.erikaJSON(from: comments),
             commentCount: comments.count,
-            introHint: hint
+            detectedIntroHint: detected
         )
-    }
-
-    /// 片头提示解析：永久缓存命中直接用；否则从本次正文现算并持久化。
-    /// 正文为空时算不出提示，但不覆盖/清除已有提示。
-    private func resolveIntroHint(
-        for episodeID: Int64,
-        comments: [DanmakuComment]
-    ) async -> DanmakuIntroHint? {
-        if let cached = await cache.introHint(for: episodeID) {
-            return cached
-        }
-        guard let detected = DanmakuIntroDetector.detect(in: comments) else { return nil }
-        await cache.setIntroHint(detected, for: episodeID)
-        return detected
     }
 
     public func remember(

@@ -66,6 +66,9 @@ struct DanmakuPlaybackContext {
     let seasonNumber: Int?
     let isFinal: Bool
     let tmdbID: Int?
+    /// ProviderIds 直取的 MyAnimeList / AniList ID（AniSkip 跳过片头用，机会性存在）。
+    let malID: Int?
+    let anilistID: Int?
 
     static func jellyfin(
         item: MediaItem,
@@ -125,7 +128,9 @@ struct DanmakuPlaybackContext {
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
             isFinal: false,
-            tmdbID: tmdbID
+            tmdbID: tmdbID,
+            malID: item.malID.flatMap(Int.init),
+            anilistID: item.anilistID.flatMap(Int.init)
         )
     }
 
@@ -191,7 +196,9 @@ struct DanmakuPlaybackContext {
             episodeNumber: parsed.episodeNumber,
             seasonNumber: parsed.seasonNumber,
             isFinal: parsed.isFinal,
-            tmdbID: nil
+            tmdbID: nil,
+            malID: nil,
+            anilistID: nil
         )
     }
 
@@ -396,7 +403,8 @@ final class DanmakuCoordinator {
                 cacheKey: context.cacheKey,
                 configuration: configuration,
                 playback: playback,
-                revision: generation
+                revision: generation,
+                matchContext: matchContext(from: context)
             )
             guard isCurrent(generation, requestID: requestID) else { return }
             apply(
@@ -487,11 +495,12 @@ final class DanmakuCoordinator {
         currentIntroHint = hint
         AppDiagnostics.logInfo("弹幕片头提示", fields: [
             "episodeID": .integer(episodeID),
+            "source": .string(hint.source.rawValue),
             "endSeconds": .integer(Int64(hint.endSeconds)),
             "startSeconds": hint.startSeconds.map { .integer(Int64($0)) } ?? .null,
             "evidence": .integer(Int64(hint.evidenceCount)),
         ])
-        playback?.applyDanmakuIntroHint(hint, requestID: requestID)
+        playback?.applySkipTimesHint(hint, requestID: requestID)
     }
 
     private func matchContext(from context: DanmakuPlaybackContext) -> DanmakuMatchContext {
@@ -509,7 +518,9 @@ final class DanmakuCoordinator {
             episodeNumber: context.episodeNumber,
             seasonNumber: context.seasonNumber,
             isFinal: context.isFinal,
-            tmdbID: context.tmdbID
+            tmdbID: context.tmdbID,
+            malID: context.malID,
+            anilistID: context.anilistID
         )
     }
 

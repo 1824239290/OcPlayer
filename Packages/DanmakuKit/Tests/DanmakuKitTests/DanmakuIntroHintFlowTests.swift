@@ -1,7 +1,7 @@
 import XCTest
 @testable import DanmakuKit
 
-/// 片头提示的持久化与 payload 带出链路。
+/// 片头提示的数据流：弹幕检测（payload）→ 持久化（编排层决策）→ 存量解码兼容。
 final class DanmakuIntroHintFlowTests: XCTestCase {
 
     // MARK: 缓存层
@@ -46,9 +46,9 @@ final class DanmakuIntroHintFlowTests: XCTestCase {
         XCTAssertEqual(regenerated, hint)
     }
 
-    // MARK: Service 链路
+    // MARK: Service 层
 
-    func testPayloadDetectsAndPersistsIntroHint() async throws {
+    func testPayloadDetectsHintWithoutPersisting() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ocp-intro-hint-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -76,27 +76,19 @@ final class DanmakuIntroHintFlowTests: XCTestCase {
             }
             return TestSupport.response(commentsJSON, url: request.url!)
         }) {
-            let match = DanmakuEpisodeMatch(episodeID: 7)
-            let payload = try await service.payload(for: match, client: client)
-            XCTAssertEqual(payload.introHint?.endSeconds, 133)
+            // 检测归 payload（纯计算）；持久化时机归编排层。
+            let payload = try await service.payload(for: DanmakuEpisodeMatch(episodeID: 7), client: client)
+            XCTAssertEqual(payload.detectedIntroHint?.endSeconds, 133)
+            XCTAssertEqual(payload.detectedIntroHint?.source, .danmaku)
         }
+        let notPersisted = await service.cachedIntroHint(for: 7)
+        XCTAssertNil(notPersisted)
 
-        // 提示已永久落盘；正文 TTL 未过期时连网关都不用回源，提示照常带出
-        // （正文过期重拉后同理，提示不随正文失效）。
-        let reopened = DanmakuService(cache: DanmakuCache(directory: directory))
-        let cached = await reopened.cachedIntroHint(for: 7)
-        XCTAssertEqual(cached?.endSeconds, 133)
-        try await TestSupport.withMock({ request in
-            guard request.url?.path == "/v1/comments/7" else {
-                throw URLError(.unsupportedURL)
-            }
-            return TestSupport.response(#"{"count":0,"comments":[]}"#, url: request.url!)
-        }) {
-            let payload = try await reopened.payload(
-                for: DanmakuEpisodeMatch(episodeID: 7), client: client)
-            XCTAssertEqual(payload.commentCount, 3)
-            XCTAssertEqual(payload.introHint?.endSeconds, 133)
-        }
+        // 编排层显式持久化后可读回。
+        let hint = DanmakuIntroHint(startSeconds: nil, endSeconds: 133, evidenceCount: 3)
+        await service.persistIntroHint(hint, for: 7)
+        let persisted = await service.cachedIntroHint(for: 7)
+        XCTAssertEqual(persisted, hint)
     }
 
     func testPayloadWithoutSignalsCarriesNoHint() async throws {
@@ -124,9 +116,25 @@ final class DanmakuIntroHintFlowTests: XCTestCase {
         }) {
             let payload = try await service.payload(
                 for: DanmakuEpisodeMatch(episodeID: 8), client: client)
-            XCTAssertNil(payload.introHint)
+            XCTAssertNil(payload.detectedIntroHint)
         }
         let nonePersisted = await service.cachedIntroHint(for: 8)
         XCTAssertNil(nonePersisted)
+    }
+
+    // MARK: 来源标注与存量兼容
+
+    func testLegacyHintJSONDecodesWithDanmakuSource() throws {
+        // 89fb9df 的存量 intro-hints.json 没有 source 字段。
+        let legacy = #"{"startSeconds":98,"endSeconds":198,"evidenceCount":12}"#
+        let hint = try JSONDecoder().decode(DanmakuIntroHint.self, from: Data(legacy.utf8))
+        XCTAssertEqual(hint.source, .danmaku)
+        XCTAssertEqual(hint.endSeconds, 198)
+
+        // 新格式往返不丢来源。
+        let aniskip = DanmakuIntroHint(startSeconds: 88, endSeconds: 178, evidenceCount: 1, source: .aniskip)
+        let data = try JSONEncoder().encode(aniskip)
+        let roundtrip = try JSONDecoder().decode(DanmakuIntroHint.self, from: data)
+        XCTAssertEqual(roundtrip, aniskip)
     }
 }

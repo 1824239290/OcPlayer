@@ -236,7 +236,7 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
 
     func testDanmakuHintInjectsOpeningMark() {
         var session = ChapterSession()
-        let applied = session.applyDanmakuIntroHint(startSeconds: 98, endSeconds: 198)
+        let applied = session.applySkipTimesHint(startSeconds: 98, endSeconds: 198, source: .danmaku)
         XCTAssertTrue(applied)
         XCTAssertEqual(session.skipMarks.count, 1)
         XCTAssertEqual(session.skipMarks.first?.source, .danmaku)
@@ -250,7 +250,7 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
 
     func testDanmakuHintWithoutStartFallsBackToZero() {
         var session = ChapterSession()
-        session.applyDanmakuIntroHint(startSeconds: nil, endSeconds: 95)
+        session.applySkipTimesHint(startSeconds: nil, endSeconds: 95, source: .danmaku)
         XCTAssertEqual(session.skipMarks.first?.startSeconds, 0)
         XCTAssertEqual(session.prompt(at: 30, duration: 1420, isPlaying: true)?.kind, .opening)
     }
@@ -259,7 +259,7 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         // 章节启发式的片头让位给弹幕实证。
         var session = ChapterSession()
         session.skipMarks = [mark(.opening, start: 0, end: 60)]
-        XCTAssertTrue(session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132))
+        XCTAssertTrue(session.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku))
         XCTAssertEqual(session.skipMarks.count, 1)
         XCTAssertEqual(session.skipMarks.first?.source, .danmaku)
         XCTAssertEqual(session.skipMarks.first?.endSeconds, 132)
@@ -267,7 +267,7 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         // 服务端智能识别的片头最准,弹幕让位。
         var segmentSession = ChapterSession()
         segmentSession.skipMarks = [mark(.opening, start: 40, end: 130, source: .mediaSegment)]
-        XCTAssertFalse(segmentSession.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132))
+        XCTAssertFalse(segmentSession.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku))
         XCTAssertEqual(segmentSession.skipMarks.count, 1)
         XCTAssertEqual(segmentSession.skipMarks.first?.source, .mediaSegment)
     }
@@ -275,28 +275,42 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
     func testDanmakuHintKeepsCreditsMarksUntouched() {
         var session = ChapterSession()
         session.skipMarks = [mark(.credits, start: 1100, end: 1200)]
-        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132)
+        session.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku)
         XCTAssertEqual(session.skipMarks.count, 2)
         XCTAssertTrue(session.skipMarks.contains { $0.kind == .credits })
     }
 
     func testDanmakuHintRejectsNonsensicalRange() {
         var session = ChapterSession()
-        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 0.5))
-        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 200, endSeconds: 100))
+        XCTAssertFalse(session.applySkipTimesHint(startSeconds: 0, endSeconds: 0.5, source: .danmaku))
+        XCTAssertFalse(session.applySkipTimesHint(startSeconds: 200, endSeconds: 100, source: .danmaku))
         XCTAssertTrue(session.skipMarks.isEmpty)
         // 起点 ≥ 终点 - 1 的退化窗口也拒绝。
-        XCTAssertFalse(session.applyDanmakuIntroHint(startSeconds: 198, endSeconds: 198.5))
+        XCTAssertFalse(session.applySkipTimesHint(startSeconds: 198, endSeconds: 198.5, source: .danmaku))
         XCTAssertTrue(session.skipMarks.isEmpty)
     }
 
     func testRepeatedDanmakuHintUpdatesSameMarkID() {
         // 换源重匹配后提示更新时,同一 id 原位替换,skippedIDs 去重不受影响。
         var session = ChapterSession()
-        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 120)
-        session.applyDanmakuIntroHint(startSeconds: 0, endSeconds: 132)
+        session.applySkipTimesHint(startSeconds: 0, endSeconds: 120, source: .danmaku)
+        session.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku)
         XCTAssertEqual(session.skipMarks.count, 1)
         XCTAssertEqual(session.skipMarks.first?.endSeconds, 132)
-        XCTAssertEqual(session.skipMarks.first?.id, "danmaku-opening")
+        XCTAssertEqual(session.skipMarks.first?.id, "skiptimes-opening")
+    }
+
+    func testAniSkipHintReplacesDanmakuButYieldsToMediaSegment() {
+        // AniSkip 有社区投票背书,同集先弹幕后 AniSkip 时原位升级。
+        var session = ChapterSession()
+        session.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku)
+        XCTAssertTrue(session.applySkipTimesHint(startSeconds: 88, endSeconds: 178, source: .aniskip))
+        XCTAssertEqual(session.skipMarks.count, 1)
+        XCTAssertEqual(session.skipMarks.first?.source, .aniskip)
+        XCTAssertEqual(session.skipMarks.first?.startSeconds, 88)
+
+        // 反向不覆盖:AniSkip 在场时迟到的弹幕提示让位。
+        XCTAssertFalse(session.applySkipTimesHint(startSeconds: 0, endSeconds: 132, source: .danmaku))
+        XCTAssertEqual(session.skipMarks.first?.startSeconds, 88)
     }
 }

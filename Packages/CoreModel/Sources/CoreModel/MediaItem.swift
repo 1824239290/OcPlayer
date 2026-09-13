@@ -80,6 +80,10 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
     /// Jellyfin ProviderIds 里的 Tmdb id（外部服务对接用，如 MoviePilot 资源搜索）。
     public var tmdbID: String?
+    /// ProviderIds 里的 MyAnimeList / AniList id（AniSkip 跳过片头数据源用）。
+    /// 依赖媒体库元数据插件，机会性存在；缺了走标题搜索映射。
+    public var malID: String?
+    public var anilistID: String?
 
     public init(
         id: String,
@@ -105,7 +109,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         backdropImageTag: String? = nil,
         logoImageTag: String? = nil,
         parentLogoItemID: String? = nil,
-        tmdbID: String? = nil
+        tmdbID: String? = nil,
+        malID: String? = nil,
+        anilistID: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -131,6 +137,8 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.logoImageTag = logoImageTag
         self.parentLogoItemID = parentLogoItemID
         self.tmdbID = tmdbID
+        self.malID = malID
+        self.anilistID = anilistID
     }
 
     /// 哈希只取 id + kind + name：合成实现要哈希全部 ~25 个字段（含长文

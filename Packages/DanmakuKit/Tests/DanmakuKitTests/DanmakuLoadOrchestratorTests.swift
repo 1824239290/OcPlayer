@@ -651,6 +651,109 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertEqual(outcome, .loaded(episodeID: 5004, commentCount: 1, title: "葬送的芙莉莲 · 第1话", introHint: nil))
     }
 
+    // MARK: 跳过片头（AniSkip > 弹幕检测）
+
+    func testAniSkipHintWinsOverDanmakuDetectionAndPersists() async throws {
+        let configuration = makeConfiguration()
+        let fingerprint = makeFingerprintData()
+        // 弹幕里有报点（推导出 132s），AniSkip 也有精确区间（728.489s）——后者胜出。
+        let matchBody = """
+        {"success":true,"errorCode":0,"resultCount":1,"isMatched":true,
+         "matches":[{"episodeId":2001,"animeTitle":"命运石之门","episodeTitle":"第1话"}]}
+        """
+        let commentsBody = """
+        {"count":3,"comments":[
+          {"cid":1,"p":"40.5,1,16777215,100","m":"跳伞02:12"},
+          {"cid":2,"p":"44.2,1,16777215,100","m":"跳伞02:13"},
+          {"cid":3,"p":"131.5,1,16777215,100","m":"空降成功"}
+        ]}
+        """
+        let aniskipBody = """
+        {"found":true,"results":[
+          {"interval":{"startTime":638.489,"endTime":728.489},"skipType":"op","skipId":"x"},
+          {"interval":{"startTime":1331.7,"endTime":1421.7},"skipType":"ed","skipId":"y"}
+        ],"statusCode":200}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.host {
+            case "gateway.example.com":
+                switch request.url!.path {
+                case "/v1/match": return TestSupport.response(matchBody, url: request.url!)
+                case "/v1/comments/2001": return TestSupport.response(commentsBody, url: request.url!)
+                default: return TestSupport.response("{}", status: 404, url: request.url!)
+                }
+            case "media.example.com":
+                return makeRange206Response(fingerprint, url: request.url!)
+            case "api.aniskip.com":
+                return TestSupport.response(aniskipBody, url: request.url!)
+            default:
+                return TestSupport.response("{}", status: 404, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "jellyfin:abcdef",
+            allowsCachedMatchReuse: true,
+            fileName: "命运石之门 01",
+            fileSize: 64,
+            durationSeconds: 1424,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            animeTitle: "命运石之门",
+            episodeNumber: 1,
+            malID: 9253
+        )
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(
+            episodeID: 2001, commentCount: 3, title: "命运石之门 · 第1话",
+            introHint: DanmakuIntroHint(startSeconds: 638.489, endSeconds: 728.489, evidenceCount: 1, source: .aniskip)))
+        let persisted = await service.cachedIntroHint(for: 2001)
+        XCTAssertEqual(persisted?.source, .aniskip)
+    }
+
+    func testCachedIntroHintWinsWithoutAniSkipRequest() async throws {
+        let configuration = makeConfiguration()
+        // 预置永久提示：缓存命中后 AniSkip/弹幕都不该被查询。
+        let context = makeContext()
+        let cached = DanmakuIntroHint(startSeconds: 0, endSeconds: 90, evidenceCount: 5)
+        await orchestrator.service.persistIntroHint(cached, for: 3001)
+        // 提示以 episodeID 为键，缓存匹配路径同样生效——预置映射直接命中。
+        await orchestrator.service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 3001), cacheKey: context.cacheKey, revision: 1)
+        await orchestrator.service.claimMatchRevision(cacheKey: context.cacheKey, revision: 1)
+
+        MockURLProtocol.handler = { request in
+            if request.url!.host == "api.aniskip.com" || request.url!.host == "graphql.anilist.co" {
+                XCTFail("缓存命中不应查询 AniSkip/AniList")
+            }
+            switch request.url!.path {
+            case "/v1/comments/3001":
+                return TestSupport.response(
+                    #"{"count":1,"comments":[{"cid":1,"p":"1,1,16777215,100","m":"你好"}]}"#,
+                    url: request.url!)
+            default:
+                return TestSupport.response("{}", status: 404, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .loaded(
+            episodeID: 3001, commentCount: 1, title: "弹弹play",
+            introHint: cached))
+    }
+
     // MARK: 辅助
 
     private func assertInjectedJSON(commentCount: Int, firstContent: String, firstTime: Double) throws {

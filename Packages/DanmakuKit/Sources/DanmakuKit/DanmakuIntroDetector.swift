@@ -1,19 +1,43 @@
 import Foundation
 
+/// 片头提示的数据来源。决定 SkipMark 合并时的优先级：
+/// AniSkip（社区提交 + 投票背书）> 弹幕报点（自动推导）。
+public enum DanmakuIntroHintSource: String, Codable, Sendable, Equatable {
+    case danmaku
+    case aniskip
+}
+
 /// 弹幕推导的片头提示（「跳过片头」的数据源）。
 ///
 /// `endSeconds` 是正片开始时刻（片头结束点）；`startSeconds` 是估计的片头起点，
 /// 有冷开场/前情回顾的集会明显大于 0，无把握时为 nil（消费侧回落到 0）。
-/// `evidenceCount` 是支撑证据条数（报点 + 着陆确认），用于日志与置信展示。
+/// `evidenceCount` 是支撑证据条数（报点 + 着陆确认），用于日志与置信展示；
+/// `source` 标注来源（弹幕报点 / AniSkip），合并与刷新策略按它区分。
 public struct DanmakuIntroHint: Codable, Sendable, Equatable {
     public let startSeconds: Double?
     public let endSeconds: Double
     public let evidenceCount: Int
+    public let source: DanmakuIntroHintSource
 
-    public init(startSeconds: Double?, endSeconds: Double, evidenceCount: Int) {
+    public init(
+        startSeconds: Double?,
+        endSeconds: Double,
+        evidenceCount: Int,
+        source: DanmakuIntroHintSource = .danmaku
+    ) {
         self.startSeconds = startSeconds
         self.endSeconds = endSeconds
         self.evidenceCount = evidenceCount
+        self.source = source
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        startSeconds = try container.decodeIfPresent(Double.self, forKey: .startSeconds)
+        endSeconds = try container.decode(Double.self, forKey: .endSeconds)
+        evidenceCount = try container.decode(Int.self, forKey: .evidenceCount)
+        // 存量缓存（89fb9df）没有 source 字段，缺省为弹幕来源。
+        source = try container.decodeIfPresent(DanmakuIntroHintSource.self, forKey: .source) ?? .danmaku
     }
 }
 
