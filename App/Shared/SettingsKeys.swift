@@ -20,6 +20,11 @@ enum SettingsKeys {
     static let danmakuUseOverlayRenderer = "dev.jumusu.ocplayer.danmaku.useOverlayRenderer"
     /// 弹幕诊断日志开关。
     static let danmakuDiagnostics = "dev.jumusu.ocplayer.danmaku.diagnostics"
+    /// 更新检查：上一次拿到结果的时间（timeIntervalSince1970），自动检查的 24h 节流依据。
+    static let updateLastCheckedAt = "dev.jumusu.ocplayer.update.lastCheckedAt"
+    /// 更新检查：用户选择忽略提醒的版本号。
+    /// 串里的 `OcPlayer` 大小写是历史原样——改掉等于丢用户的忽略记录。
+    static let updateIgnoredVersion = "dev.jumusu.OcPlayer.ignoredVersion"
 }
 
 extension UserDefaults {

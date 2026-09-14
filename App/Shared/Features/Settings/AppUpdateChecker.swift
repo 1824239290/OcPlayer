@@ -147,23 +147,29 @@ public final class AppUpdateChecker {
         }
     }
 
-    private static let ignoredVersionKey = "dev.jumusu.OcPlayer.ignoredVersion"
-
     public static let shared = AppUpdateChecker()
 
     public private(set) var state: State = .idle
-    public private(set) var lastCheckedDate: Date?
+
+    /// 上一次**拿到结果**（含 404 兜底）的时间。持久化：冷启动的自动检查按它节流。
+    public var lastCheckedDate: Date? {
+        guard let stamp = defaults.object(forKey: SettingsKeys.updateLastCheckedAt) as? Double else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: stamp)
+    }
+
     /// 触发弹窗展示的 Release 对象（置空则关闭弹窗）
     public var promptRelease: GitHubRelease?
 
     /// 用户选择忽略提醒的版本号
     public var ignoredVersion: String? {
-        get { UserDefaults.standard.string(forKey: Self.ignoredVersionKey) }
+        get { defaults.string(forKey: SettingsKeys.updateIgnoredVersion) }
         set {
             if let newValue {
-                UserDefaults.standard.set(newValue, forKey: Self.ignoredVersionKey)
+                defaults.set(newValue, forKey: SettingsKeys.updateIgnoredVersion)
             } else {
-                UserDefaults.standard.removeObject(forKey: Self.ignoredVersionKey)
+                defaults.removeObject(forKey: SettingsKeys.updateIgnoredVersion)
             }
         }
     }
@@ -171,11 +177,16 @@ public final class AppUpdateChecker {
     public let repoOwner: String
     public let repoName: String
     private let session: URLSession
+    private let defaults: UserDefaults
+    /// 自动检查（启动 / 进设置页）的最短间隔；用户点「检查」不走节流。
+    private let checkInterval: TimeInterval
 
     public init(
         repoOwner: String? = nil,
         repoName: String? = nil,
-        session: URLSession = .shared
+        session: URLSession = .shared,
+        defaults: UserDefaults = .standard,
+        checkInterval: TimeInterval = 24 * 60 * 60
     ) {
         // 仓库归属从 Info.plist 读（挪窝只改 plist，不动代码）；缺省兜底旧值，
         // 测试可显式注入。
@@ -183,6 +194,8 @@ public final class AppUpdateChecker {
         self.repoOwner = repoOwner ?? configured.owner
         self.repoName = repoName ?? configured.name
         self.session = session
+        self.defaults = defaults
+        self.checkInterval = checkInterval
     }
 
     private static func configuredRepo() -> (owner: String, name: String) {
@@ -209,6 +222,12 @@ public final class AppUpdateChecker {
     /// 检查更新
     /// - Parameter isUserInitiated: 是否为用户主动点击（若是且有新版，无论是否曾被忽略均弹出弹窗）
     public func checkForUpdates(isUserInitiated: Bool = false) async {
+        // 冷启动每次都直打 GitHub API 既没必要也容易撞限流：自动检查按间隔节流。
+        // 用户点按钮永远放行——他明确要看结果，缓存 24h 反而是坏体验。
+        if !isUserInitiated, let last = lastCheckedDate,
+           Date().timeIntervalSince(last) < checkInterval {
+            return
+        }
         state = .checking
         do {
             guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
@@ -240,7 +259,7 @@ public final class AppUpdateChecker {
                         "repo": .string(repoName),
                     ])
                 state = .upToDate(version: AppVersion.currentShortVersion)
-                lastCheckedDate = Date()
+                stampLastChecked()
                 return
             }
 
@@ -257,7 +276,7 @@ public final class AppUpdateChecker {
             decoder.dateDecodingStrategy = .iso8601
             let release = try decoder.decode(GitHubRelease.self, from: data)
 
-            lastCheckedDate = Date()
+            stampLastChecked()
 
             if AppVersion.isNewer(remote: release.tagName) {
                 state = .updateAvailable(release)
@@ -272,6 +291,13 @@ public final class AppUpdateChecker {
                 state = .upToDate(version: release.tagName)
             }
         } catch {
+            // 请求被取消（设置页离页 `.task` 收尾）不是错误：复位 idle 让下次进来能自愈。
+            // 原先落 default 分支写 `网络异常: cancelled`，而重进设置页有 `.idle` 守卫——
+            // 错误态就此钉死，只能靠手动点「重试」。
+            if Self.isCancellation(error) {
+                state = .idle
+                return
+            }
             if let urlError = error as? URLError {
                 switch urlError.code {
                 case .notConnectedToInternet:
@@ -287,5 +313,15 @@ public final class AppUpdateChecker {
                 state = .failed("检查失败: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// 只有「拿到结果」才落时间戳：失败不记，下次冷启动照常重试（本来也只试一次）。
+    private func stampLastChecked() {
+        defaults.set(Date().timeIntervalSince1970, forKey: SettingsKeys.updateLastCheckedAt)
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if Task.isCancelled || error is CancellationError { return true }
+        return (error as NSError).code == NSURLErrorCancelled
     }
 }

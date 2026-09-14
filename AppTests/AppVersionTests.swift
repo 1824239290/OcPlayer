@@ -64,7 +64,11 @@ final class AppVersionTests: XCTestCase {
 
     @MainActor
     func testIgnoreVersion() {
-        let checker = AppUpdateChecker(repoOwner: "test", repoName: "test")
+        // 走独立 suite：以前这个用例直接写 `.standard` 真域，会留脏数据给后续测试/本机。
+        let checker = AppUpdateChecker(
+            repoOwner: "test",
+            repoName: "test",
+            defaults: TestSupport.isolatedDefaults("AppVersionTests.ignoreVersion"))
         checker.clearIgnoredVersion()
         XCTAssertNil(checker.ignoredVersion)
 
