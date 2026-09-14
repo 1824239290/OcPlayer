@@ -257,6 +257,9 @@ public final class BangumiContext {
 
     /// 数据库就绪状态（启动时异步建库）。
     public private(set) var isDatabaseReady = false
+    /// 建库失败原因（nil = 未失败）。失败时 `setupTask` 会被复位，UI 可据此
+    /// 展示错误态并重试（再调 `setupIfNeeded`）。
+    public private(set) var databaseError: String?
 
     private var setupTask: Task<Void, Never>?
 
@@ -282,9 +285,16 @@ public final class BangumiContext {
                 await MainActor.run {
                     self.database = database
                     self.isDatabaseReady = true
+                    self.databaseError = nil
                 }
             } catch {
                 BangumiNetworkLog.logger.error("Bangumi 建库失败 error=\(error)")
+                // 失败必须复位 setupTask：否则 guard setupTask == nil 短路，
+                // 重启前 Bangumi 全功能静默失效且无法重试。
+                await MainActor.run {
+                    self.setupTask = nil
+                    self.databaseError = "数据库初始化失败：\(error)"
+                }
             }
         }
     }

@@ -73,7 +73,29 @@ struct BangumiHomeView: View {
     var body: some View {
         Group {
             if bangumi.isAuthenticated {
-                content
+                if let error = bangumi.databaseError {
+                    // 建库失败：给重试入口，不再是无尽占位 + 全功能静默失效。
+                    VStack(spacing: 12) {
+                        Image(systemName: "externaldrive.badge.exclamationmark")
+                            .font(.system(size: 34))
+                            .foregroundStyle(.secondary)
+                        Text("Bangumi 本地库初始化失败")
+                            .font(.headline)
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 360)
+                        Button("重试") {
+                            bangumi.retryDatabaseSetup()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    content
+                }
             } else {
                 BangumiLoginView()
                     .navigationTitle("Bangumi")

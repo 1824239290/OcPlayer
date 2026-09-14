@@ -25,6 +25,8 @@ final class BangumiCoordinator {
     var isAuthenticated: Bool { context.isAuthenticated }
     var profile: BangumiProfile? { context.profile }
     var isDatabaseReady: Bool { context.isDatabaseReady }
+    /// 建库失败原因（nil = 未失败）；配合 `retryDatabaseSetup()` 给失败态重试入口。
+    var databaseError: String? { context.databaseError }
 
     /// 最近一次登录/授权失败的文案（登录页展示，成功或重试时清空）。
     /// macOS 的 OAuth 回调走系统浏览器 → `onOpenURL`，没有这个字段的话失败就是彻底静默。
@@ -44,6 +46,11 @@ final class BangumiCoordinator {
     /// 这里**不发网络请求**：`AppModel.init` 会调它，单元测试也会走到，
     /// 登录态校验放到真正打开 Bangumi 分区时（`revalidateSessionIfNeeded`）。
     func setup() {
+        context.setupIfNeeded()
+    }
+
+    /// 建库失败后的手动重试（失败时 context 已复位 setupTask，可安全再调）。
+    func retryDatabaseSetup() {
         context.setupIfNeeded()
     }
 

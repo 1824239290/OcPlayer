@@ -633,6 +633,34 @@ struct BangumiDatabaseTests {
         #expect(slim.id == 456080)
         #expect(slim.nameCN == "转学后")
     }
+
+    /// 建库失败必须复位 setupTask + 暴露 databaseError；换正常目录重试应成功。
+    @Test @MainActor func databaseSetupFailureResetsTaskAndAllowsRetry() async throws {
+        let context = BangumiContext()
+        // 把「目录」指向一个普通文件：createDirectory 在文件路径下必败。
+        let blocker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bgm-block-\(UUID().uuidString)")
+        try Data("block".utf8).write(to: blocker)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+
+        context.setupIfNeeded(directory: blocker)
+        for _ in 0..<50 where context.databaseError == nil {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(context.databaseError != nil, "失败必须暴露错误态")
+        #expect(!context.isDatabaseReady)
+
+        // setupTask 已复位：换正常临时目录重试应成功（失败后不再静默短路）。
+        let okDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bgm-ok-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: okDir) }
+        context.setupIfNeeded(directory: okDir)
+        for _ in 0..<50 where !context.isDatabaseReady {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(context.isDatabaseReady, "重试后建库应成功")
+        #expect(context.databaseError == nil)
+    }
 }
 
 // MARK: - 登录态
