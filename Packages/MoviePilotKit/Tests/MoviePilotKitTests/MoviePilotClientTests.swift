@@ -158,6 +158,62 @@ final class MoviePilotClientTests: XCTestCase {
         await fulfillment(of: [notificationExpectation], timeout: 2)
     }
 
+    func testReloginTokenStill401TripsBreakerClearsAndBroadcasts() async throws {
+        // 场景 B：重登换到新 token 但仍被 401（JWT secret 被换 / 账号被停）。
+        // 第一次失败发生在重放层（熔断未触发，token 保留）；第二次再撞 401 时
+        // 入口熔断命中，必须清 token + 广播，且不再发带密码的 login。
+        store.accessToken = "expired-token"
+        let notificationExpectation = expectation(
+            forNotification: MoviePilotAPIClient.authenticationRequiredNotification,
+            object: nil
+        )
+
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            self.receivedPaths.append(url.path)
+            switch url.path {
+            case "/api/v1/user/current":
+                // 新旧 token 一律 401。
+                return MockURLProtocol.response(#"{"detail":"Not authenticated"}"#, status: 401, for: url)
+            case "/api/v1/login/access-token":
+                return MockURLProtocol.response(
+                    #"{"access_token":"jwt-2","token_type":"bearer"}"#, status: 200, for: url)
+            default:
+                XCTFail("意外请求：\(url.path)")
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        do {
+            _ = try await client.currentUser()
+            XCTFail("第一次调用应该抛 requireLogin")
+        } catch let error as MoviePilotError {
+            if case .requireLogin = error {} else {
+                XCTFail("应该是 requireLogin：\(error)")
+            }
+        } catch {
+            XCTFail("应该是 MoviePilotError：\(error)")
+        }
+        XCTAssertEqual(store.accessToken, "jwt-2", "第一次失败在重放层，熔断未触发，刚换的 token 应保留")
+        XCTAssertEqual(receivedPaths.count, 3, "旧 token 401 → 重登 → 新 token 重放 401：\(receivedPaths)")
+
+        do {
+            _ = try await client.currentUser()
+            XCTFail("第二次调用应该抛 requireLogin")
+        } catch let error as MoviePilotError {
+            if case .requireLogin = error {} else {
+                XCTFail("应该是 requireLogin：\(error)")
+            }
+        } catch {
+            XCTFail("应该是 MoviePilotError：\(error)")
+        }
+        XCTAssertNil(store.accessToken, "熔断分支必须清掉作废 token")
+        XCTAssertEqual(receivedPaths.count, 4, "第二次只有一次 401，熔断短路不再重登：\(receivedPaths)")
+        let loginCount = receivedPaths.filter { $0 == "/api/v1/login/access-token" }.count
+        XCTAssertEqual(loginCount, 1, "熔断命中不该再发带密码的 login")
+        await fulfillment(of: [notificationExpectation], timeout: 2)
+    }
+
     func testReloginNetworkErrorKeepsTokenAndThrowsNetwork() async throws {
         store.accessToken = "maybe-still-valid"
         MockURLProtocol.handler = { request in

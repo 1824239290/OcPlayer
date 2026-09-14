@@ -386,7 +386,15 @@ public actor MoviePilotAPIClient {
         // 熔断：当前代际的 token 就是上一次静默重登刚发的（或刚被密码错误拒绝），
         // 再登一次大概率还是同样结果，直接抛 requireLogin 让上层走登录 UI，
         // 不在重试循环里每个 attempt 连发一次带密码的 login。
+        // 与密码错误分支同款补清 token + 广播：否则 UI 停在「已登录」反复报错。
+        // 幂等守卫（token 已清）只广播一次；清空后 requestData 的 token 守卫
+        // 让后续请求直接短路，不再走 401→熔断的线上往返。
         if reloginExhaustedGeneration == authGeneration {
+            if store.accessToken != nil {
+                let generation = authGeneration
+                store.accessToken = nil
+                await notifyAuthenticationRequired(ifCurrent: generation)
+            }
             throw MoviePilotError.requireLogin
         }
         guard !store.username.isEmpty, !store.password.isEmpty else {
