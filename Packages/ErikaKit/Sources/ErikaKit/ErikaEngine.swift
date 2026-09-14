@@ -171,7 +171,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         renderLoop = RenderLoop()
         // 所有存储属性就位之后才能捕获 self；用 weak 断开 engine → renderLoop → engine 的环。
         renderLoop.onTick = { [weak self] time in self?.step(presentationTime: time) }
-        PlaybackLog.append("ErikaEngine init")
+        PlaybackLog.info("ErikaEngine init")
     }
 
     deinit {
@@ -214,7 +214,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
                                        message: "画面挂载失败：\(error)"))
             throw error
         }
-        PlaybackLog.append("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
+        PlaybackLog.info("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
         renderLoop.start(on: view)
     }
 
@@ -247,14 +247,14 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// 全部登记给 open 收尾补做。
     @discardableResult
     func detach() -> Bool {
-        PlaybackLog.append("detach surface")
+        PlaybackLog.info("detach surface")
         if deferSurfaceDuringOpen(.detach, pixelWidth: 0, pixelHeight: 0, scale: 0) {
             return false
         }
         renderLoop.stop()
         do {
             try withLock { try presenter.detachSurface() }
-            PlaybackLog.append("detach surface 成功")
+            PlaybackLog.info("detach surface 成功")
             return true
         } catch {
             PlaybackLog.error("detach surface 失败 error=\(error)")
@@ -346,23 +346,23 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         yieldLock.unlock()
 
         if pendingStop {
-            PlaybackLog.append("open 让位收尾：补 stop")
+            PlaybackLog.info("open 让位收尾：补 stop")
             try? withLock { try presenter.stop() }
         }
         guard let surface else { return }
         switch surface.op {
         case .detach:
-            PlaybackLog.append("open 让位收尾：补 detach")
+            PlaybackLog.info("open 让位收尾：补 detach")
             renderLoop.stop()
             try? withLock { try presenter.detachSurface() }
         case .resize:
-            PlaybackLog.append("open 让位收尾：补 resize \(surface.pixelWidth)x\(surface.pixelHeight)")
+            PlaybackLog.info("open 让位收尾：补 resize \(surface.pixelWidth)x\(surface.pixelHeight)")
             try? withLock {
                 try presenter.resizeSurface(pixelWidth: surface.pixelWidth,
                                             pixelHeight: surface.pixelHeight, scale: surface.scale)
             }
         case .attach(let view, let layerToken):
-            PlaybackLog.append("open 让位收尾：补 attach \(surface.pixelWidth)x\(surface.pixelHeight) scale=\(surface.scale)")
+            PlaybackLog.info("open 让位收尾：补 attach \(surface.pixelWidth)x\(surface.pixelHeight) scale=\(surface.scale)")
             do {
                 try withLock {
                     try presenter.attachMetalLayer(layerToken, pixelWidth: surface.pixelWidth,
@@ -398,7 +398,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     }
 
     public func open(_ source: PlaybackSource) throws {
-        PlaybackLog.append("open() 开始")
+        PlaybackLog.info("open() 开始")
         markOpeningStarted()
         defer { finishOpening() }
         do {
@@ -409,7 +409,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
                 snapshot = captureMemorySnapshotLocked()
             }
             publishMemorySample(snapshot, reason: "open")
-            PlaybackLog.append("open() 成功")
+            PlaybackLog.info("open() 成功")
         } catch {
             PlaybackLog.error("open() 失败 error=\(error)")
             throw error
@@ -420,9 +420,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         if dropControlDuringOpen("play") { return }
         do {
             try withLock { try presenter.play() }
-            PlaybackLog.append("play() 成功")
+            PlaybackLog.info("play() 成功")
         } catch {
-            PlaybackLog.append("play() 失败 error=\(error)")
+            PlaybackLog.warning("play() 失败 error=\(error)")
             throw error
         }
     }
@@ -431,15 +431,15 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         if dropControlDuringOpen("pause") { return }
         do {
             try withLock { try presenter.pause() }
-            PlaybackLog.append("pause() 成功")
+            PlaybackLog.info("pause() 成功")
         } catch {
-            PlaybackLog.append("pause() 失败 error=\(error)")
+            PlaybackLog.warning("pause() 失败 error=\(error)")
             throw error
         }
     }
 
     public func stop() throws {
-        PlaybackLog.append("stop() 开始")
+        PlaybackLog.info("stop() 开始")
         if deferStopDuringOpen() { return }
         do {
             var snapshot: ErikaMemorySnapshot?
@@ -449,9 +449,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
                 snapshot = captureMemorySnapshotLocked()
             }
             publishMemorySample(snapshot, reason: "stop")
-            PlaybackLog.append("stop() 成功")
+            PlaybackLog.info("stop() 成功")
         } catch {
-            PlaybackLog.append("stop() 失败 error=\(error)")
+            PlaybackLog.warning("stop() 失败 error=\(error)")
             throw error
         }
         // stop 后 5s 的进程基线采样：量化「播放结束内存有没有完全归还系统」。
@@ -471,12 +471,12 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// 把一个内核的地雷抽象出来只会让所有内核都带上它。
     /// App 层换片 / 退出一律走 `stop()` + 丢弃引擎重建。
     public func close() throws {
-        PlaybackLog.append("close() 开始")
+        PlaybackLog.info("close() 开始")
         do {
             try withLock { try presenter.close() }
-            PlaybackLog.append("close() 成功")
+            PlaybackLog.info("close() 成功")
         } catch {
-            PlaybackLog.append("close() 失败 error=\(error)")
+            PlaybackLog.warning("close() 失败 error=\(error)")
             throw error
         }
     }
@@ -497,7 +497,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         defer { yieldLock.unlock() }
         guard _isOpening else { return false }
         _pendingStop = true
-        PlaybackLog.append("open 在飞，stop 让位登记")
+        PlaybackLog.info("open 在飞，stop 让位登记")
         return true
     }
 
@@ -522,9 +522,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         let clamped = Float(min(max(headroom, 1.0), 10_000))
         do {
             try withLock { try presenter.setOutputHeadroom(clamped) }
-            PlaybackLog.append(String(format: "displayEDRHeadroom → %.2f", clamped))
+            PlaybackLog.info(String(format: "displayEDRHeadroom → %.2f", clamped))
         } catch {
-            PlaybackLog.append("updateDisplayEDRHeadroom 失败 error=\(error)")
+            PlaybackLog.warning("updateDisplayEDRHeadroom 失败 error=\(error)")
         }
     }
 
