@@ -120,9 +120,10 @@ enum PlaybackPreferences {
         return UserDefaults.standard.double(forKey: key).clamped(range)
     }
 
+    /// 默认值感知的读取统一走 `UserDefaults.bool(forKey:default:)`（见 SettingsKeys）：
+    /// 键不存在时回 fallback，而不是 `bool(forKey:)` 的 false。
     private static func storedBool(forKey key: String, default fallback: Bool) -> Bool {
-        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
-        return UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.bool(forKey: key, default: fallback)
     }
 }
 

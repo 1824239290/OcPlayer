@@ -460,7 +460,10 @@ extension AppModel {
     /// 任何线索（此前整份日志里成功/失败记录都是 0 条）。
     private func markWatchedOnBangumi(for item: MediaItem) {
         // 集成停用（设置页「启用 Bangumi」关闭）时连日志都不发网络：第一个闸。
-        guard UserDefaults.standard.bool(forKey: SettingsKeys.bangumiEnabled) else {
+        // 用带默认值的读取：这个开关的默认值是 true 但从不落盘（Toggle 只写拨过的
+        // 值），`bool(forKey:)` 对从未拨过的人返回 false，会把「默认开」误判成停用
+        // ——全新安装的播放结束自动标记会永久静默关闭（review-20260914 P1-2）。
+        guard UserDefaults.standard.bool(forKey: SettingsKeys.bangumiEnabled, default: true) else {
             BangumiDiagnostics.log("播放结束未标记：Bangumi 集成已停用")
             return
         }

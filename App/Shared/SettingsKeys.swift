@@ -21,3 +21,17 @@ enum SettingsKeys {
     /// 弹幕诊断日志开关。
     static let danmakuDiagnostics = "dev.jumusu.ocplayer.danmaku.diagnostics"
 }
+
+extension UserDefaults {
+    /// 带默认值的 bool 读取。
+    ///
+    /// **别用 `bool(forKey:)` 读「默认开」的开关**：`@AppStorage` / Toggle 只会把
+    /// 用户拨过的值写盘，默认值从不落盘。键不存在时 `bool(forKey:)` 返回 false，
+    /// 于是「默认开」的开关对从未拨过它的人（含全新安装）实际是关的——这个坑
+    /// 让 Bangumi 自动标看过静默失效过一次（review-20260914 P1-2）。
+    /// 本方法在键不存在时回 fallback，语义与 Toggle 的默认值一致。
+    func bool(forKey key: String, default fallback: Bool) -> Bool {
+        guard object(forKey: key) != nil else { return fallback }
+        return bool(forKey: key)
+    }
+}

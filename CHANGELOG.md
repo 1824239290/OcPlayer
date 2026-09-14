@@ -6,6 +6,8 @@
 
 ### 修复
 
+- **弹幕时基混用致偏移非零时弹幕整集不出现（清屏死循环）**：弹幕 overlay 的 seek 跳变检测在 `tick` 里比较**原始媒体时间**，而 `resync`（装载 / seek / 改偏移后对齐）写入的却是**减过偏移的生效时间**——两个时基混用。只要偏移非零（dandanplay 匹配返回的 shift、或 HUD「时间偏移」调出 ±0.5s 以上），对齐后的下一拍算出 `delta ≈ 偏移量 + 1/60s`，越过 seek 阈值被误判成 seek → 再对齐 → **永久循环**：每拍 `view.stop()/play()` 清屏、发射逻辑永不执行，表现为「弹幕一条都不出来」。检测逻辑抽成纯值类型 `DanmakuSeekDetector`（只持原始媒体时间一个时基，类型本身杜绝再次混用），`resync` 的对齐基改回原始时间（积压兜底基维持生效时间同源不改）。修复后「调偏移修对齐」不再把弹幕全部弄没。App 层新增 7 用例：核心回归是「偏移 3s 下对齐后下一拍必须连续」，另覆盖前后向跳变仍被检出、`jumped` 后基准推进、`reset` 回无基准态。
+- **Bangumi 集成开关读取吃掉默认值，全新安装的播放结束自动标记静默关闭**：后台门控用 `UserDefaults.bool(forKey:)` 读「启用 Bangumi」——这个开关默认 `true` 但**默认值从不落盘**（Toggle/`@AppStorage` 只写用户拨过的值），键不存在时 `bool(forKey:)` 返回 `false`，于是对所有从未拨过开关的人（含全新安装）实际是「停用」：播放结束不再自动标记看过，只在诊断日志里留一行「集成已停用」。新增 `UserDefaults.bool(forKey:default:)`（键不存在回 fallback，注释写明这个坑并落在 `SettingsKeys` 便于发现），门控改用它；`PlaybackPreferences.storedBool` 的私有同款实现收敛为委托该方法（行为逐字不变）。App 层新增 3 用例。
 - **章节 / MediaSegments 链路静默失效（时序竞态）**：`loadChapters` 与引擎 `open` 并发执行（章节请求 28ms 即回，引擎 open 约半秒），但其时效守卫要求 `activeRequest` 已是当前请求——而 `activeRequest` 恰恰要到 open 完成才赋值，守卫因此**每次必败**，三个 await 检查点静默 return：MediaSegments 请求不发、章节与服务端跳过标记全部丢弃、日志零痕迹（媒体库装了 Intro Skipper 插件也不会生效）。守卫改为只认装配层的 `expectedRequestID`（跨请求换片时同步更新，是这路数据真正的失效判据），与引擎 open / 引擎重建解耦；作废路径补日志，不再无声。修复后 Jellyfin / Emby 的章节列表、章节名启发式与 MediaSegments 片头片尾识别首次真正可用。
 
 ### 改动
