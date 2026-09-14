@@ -6,18 +6,6 @@ import Foundation
 public enum BangumiNetworkLog {
     public static let logger = NetworkLog.logger(category: "Bangumi")
 
-    static func requestStarted(_ path: String) {
-        NetworkLog.requestStarted(category: "Bangumi", path: path)
-    }
-
-    static func requestSucceeded(_ path: String, duration: TimeInterval) {
-        NetworkLog.requestSucceeded(category: "Bangumi", path: path, duration: duration)
-    }
-
-    static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
-        NetworkLog.requestFailed(category: "Bangumi", path: path, error: error, duration: duration)
-    }
-
     static func logPath(for url: URL?) -> String {
         NetworkLog.logPath(for: url)
     }

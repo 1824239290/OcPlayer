@@ -67,7 +67,7 @@ public enum BangumiCollectionRepository {
             }
         }
         if filled > 0 {
-            BangumiNetworkLog.logger.debug("章节补齐完成 subjects=\(filled)")
+            BangumiNetworkLog.logger.info("章节补齐完成 subjects=\(filled)")
         }
         return filled
     }

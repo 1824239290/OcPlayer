@@ -16,10 +16,6 @@ enum DanmakuNetworkLog {
         ])
     }
 
-    static func requestStarted(_ path: String) {
-        NetworkLog.requestStarted(category: "Danmaku", path: path)
-    }
-
     static func requestSucceeded(_ path: String, cache: String?, duration: TimeInterval) {
         NetworkLog.report(
             category: "Danmaku",

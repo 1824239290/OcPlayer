@@ -37,12 +37,8 @@ enum NetworkLog {
     /// ServerStore 等直接写日志用（共享分类 logger，与请求日志同一实例同一文件）。
     static let logger = DiagnosticsKit.NetworkLog.logger(category: "Jellyfin")
 
-    static func requestStarted(_ path: String) {
-        DiagnosticsKit.NetworkLog.requestStarted(category: category, path: path)
-    }
-
-    static func requestSucceeded(_ path: String, duration: TimeInterval) {
-        DiagnosticsKit.NetworkLog.requestSucceeded(category: category, path: path, duration: duration)
+    static func requestSucceeded(_ path: String, duration: TimeInterval, level: DiagnosticLevel = .debug) {
+        DiagnosticsKit.NetworkLog.requestSucceeded(category: category, path: path, duration: duration, level: level)
     }
 
     static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
@@ -655,7 +651,7 @@ public struct JellyfinServer: Sendable {
                     value = try LooseDecoding.decoder.decode(T.self, from: EmbySanitizer.sanitize(payload))
                 }
             }
-            NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start))
+            NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start), level: .info)
             return value
         } catch {
             NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))

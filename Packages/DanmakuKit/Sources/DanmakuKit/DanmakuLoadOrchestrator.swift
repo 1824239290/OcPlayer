@@ -144,7 +144,7 @@ public struct DanmakuLoadOrchestrator {
             // 标题/TMDB 匹配的首要原因，排查时得能直接看到它到底有没有。
             NetworkLog.report(
                 category: "Danmaku",
-                level: .debug,
+                level: .info,
                 "媒体指纹解析",
                 fields: [
                     "hashPresent": .boolean(hashValue != nil),
@@ -525,7 +525,7 @@ public struct DanmakuLoadOrchestrator {
             return intervals.flatMap(DanmakuIntroHint.init(aniskipIntervals:))
         } catch {
             NetworkLog.report(
-                category: "AniSkip", level: .debug,
+                category: "AniSkip", level: .info,
                 "跳过片头查询失败，降级弹幕推导",
                 fields: ["error": .string("\(error)")]
             )

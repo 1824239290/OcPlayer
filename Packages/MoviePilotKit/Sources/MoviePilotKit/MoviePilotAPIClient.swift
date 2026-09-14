@@ -25,12 +25,8 @@ public enum MoviePilotNetworkLog {
         NetworkLog.requestStarted(category: "MoviePilot", path: path)
     }
 
-    static func requestSucceeded(_ path: String, duration: TimeInterval) {
-        NetworkLog.requestSucceeded(category: "MoviePilot", path: path, duration: duration)
-    }
-
-    static func requestFailed(_ path: String, error: Error, duration: TimeInterval) {
-        NetworkLog.requestFailed(category: "MoviePilot", path: path, error: error, duration: duration)
+    static func requestSucceeded(_ path: String, duration: TimeInterval, level: DiagnosticLevel = .debug) {
+        NetworkLog.requestSucceeded(category: "MoviePilot", path: path, duration: duration, level: level)
     }
 
     static func logPath(for url: URL?) -> String {
@@ -511,6 +507,7 @@ public actor MoviePilotAPIClient {
         )
         let urlRequest = try makeURLRequest(request, token: nil)
         MoviePilotNetworkLog.requestStarted(MoviePilotNetworkLog.logPath(for: urlRequest.url))
+        let searchStart = Date()
 
         let (bytes, response): (URLSession.AsyncBytes, URLResponse)
         do {
@@ -581,7 +578,8 @@ public actor MoviePilotAPIClient {
                 onUpdate?(torrents, progress)
                 MoviePilotNetworkLog.requestSucceeded(
                     "/api/v1/search/title/stream",
-                    duration: 0
+                    duration: Date().timeIntervalSince(searchStart),
+                    level: .info
                 )
                 return torrents
             default:
