@@ -1023,11 +1023,25 @@ final class PlaybackController: DanmakuPlaybackHosting {
             return
         }
 
-        let total = Double(state.duration.microseconds) / 1_000_000
         let skipMarks: [SkipMark]
         if !segmentMarks.isEmpty {
             skipMarks = segmentMarks
         } else {
+            // 启发式按章节名/位置判片头片尾需要片长；本链路与引擎 open 并发，
+            // 呈现瞬间 duration 可能还是 0（totalSeconds=0 直接返回空，标记静默丢）。
+            // 等 duration 到达再算，10s 兜底（超时按原行为回落），换片每拍即退。
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(10))
+            while state.duration <= .zero, clock.now < deadline {
+                guard chapterRequestIsCurrent(request) else { return }
+                if state.state == .error { break }
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+            }
+            let total = Double(state.duration.microseconds) / 1_000_000
             skipMarks = ChapterNameHeuristicEvaluator()
                 .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0))
         }
