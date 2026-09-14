@@ -5,9 +5,10 @@ import AppKit
 #endif
 @testable import DanmakuRenderKit
 
-/// 弹幕渲染层纯逻辑测试：轨道追击判定 / 队列轮询 / 轨道选择 / 复用池。
+/// 弹幕渲染层纯逻辑测试：轨道追击判定 / 队列轮询 / 轨道选择 / 复用池 / 位图 scale。
 /// 全部 macOS 离屏运行，不碰 GPU、网络与 UIKit（GIF 侧是 `#if canImport(UIKit)`，
-/// 本包测试只覆盖 macOS 可测的部分）。
+/// 本包测试只覆盖 macOS 可测的部分）。唯一例外是位图 scale 用例：它要建一个
+/// 不 order front 的 `NSWindow`，验证 scale 跟的是窗口而不是主屏。
 ///
 /// 测试访问依赖两处纯访问级别放宽（见 PROVENANCE.md）：
 /// - `DanmakuView` 的 `private extension` → `extension`（轨道选择/复用池方法 internal）
@@ -179,5 +180,37 @@ final class DanmakuRenderKitCoreTests: XCTestCase {
         XCTAssertEqual(view.pooledCellCount, 0, "clearPool 后池必须为空")
         XCTAssertNil(view.cellFromPool(floatingModel(width: 100, displayTime: 5)),
                      "clearPool 后取 cell 返回 nil")
+    }
+
+    // MARK: - 位图 scale
+
+    /// 位图 scale 跟随**所在窗口的屏幕**（本地修补，见 PROVENANCE.md）。
+    ///
+    /// 上游把 `NSScreen.main` 的 scale 烤死在 init 里：这台开发机上主屏恰恰是
+    /// 非 Retina 的外接屏（1.0），把播放器窗口放回内建视网膜屏（2.0）后弹幕位图
+    /// 就按 1.0 出图。用例挑 scale 最大的那块屏放窗口，断言 layer 跟的是窗口而不是
+    /// 主屏；单屏机器上两者一致，断言自然成立（CI 不依赖多屏）。
+    func testCellScaleFollowsItsWindowScreen() throws {
+        guard let target = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }) else {
+            throw XCTSkip("测试进程拿不到屏幕（无 GUI 会话）")
+        }
+        // 不 order front：只要窗口帧落在某块屏上，window.screen / backingScaleFactor 就有值。
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 100),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.setFrameOrigin(target.frame.origin)
+
+        let view = DanmakuView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        window.contentView = view
+        let cell = DanmakuCell(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
+        view.addSubview(cell)
+
+        XCTAssertEqual(window.screen?.backingScaleFactor, target.backingScaleFactor,
+                       "窗口应落在预期屏幕上（用例前提）")
+        XCTAssertEqual((cell.layer as? DanmakuAsyncLayer)?.contentsScale, target.backingScaleFactor,
+                       "位图 scale 要跟窗口所在的屏幕，不是 NSScreen.main")
     }
 }

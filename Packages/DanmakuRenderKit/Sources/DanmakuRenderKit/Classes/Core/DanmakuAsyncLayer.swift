@@ -42,7 +42,10 @@ public class DanmakuAsyncLayer: CALayer {
     public var didDisplay: ((_ layer: DanmakuAsyncLayer, _ finished: Bool) -> Void)?
     
     /// The number of queues to draw the danmaku.
-    public static var drawDanmakuQueueCount = 16 {
+    /// 6（上游 16）：队列由所有 cell 轮转共用，单次绘制只是往小位图里画一行字，陈旧
+    /// 任务还有 sentinel 作废；16 条 `.userInteractive` 队列在弹幕爆发（seek 补发 /
+    /// 密集段）时抢核，反而拖慢主线程的提交与合成。
+    public static var drawDanmakuQueueCount = 6 {
         didSet {
             guard drawDanmakuQueueCount != oldValue else { return }
             pool = nil
@@ -56,11 +59,9 @@ public class DanmakuAsyncLayer: CALayer {
     
     override init() {
         super.init()
-        #if os(macOS)
-        contentsScale = NSScreen.main?.backingScaleFactor ?? 1.0
-        #else
-        contentsScale = UIScreen.main.scale
-        #endif
+        // 不在这里取 `NSScreen.main` / `UIScreen.main` 的 scale：那是主屏的值，窗口在
+        // 副屏 / 外接屏上会出糊图。改由 DanmakuCell 在挂窗口、背板变化时下发
+        // （见 `DanmakuCell.syncLayerScale`）。
     }
     
     override init(layer: Any) {

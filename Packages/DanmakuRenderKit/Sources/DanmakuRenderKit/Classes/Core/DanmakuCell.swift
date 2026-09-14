@@ -10,6 +10,9 @@ import Foundation
 import QuartzCore
 // Use shared platform typealiases
 // (see PlatformTypes.swift)
+#if canImport(UIKit)
+import UIKit
+#endif
 
 open class DanmakuCell: PlatformView {
 
@@ -38,6 +41,12 @@ open class DanmakuCell: PlatformView {
         super.init(frame: frame)
         #if os(macOS)
         self.wantsLayer = true
+        #else
+        // 外接屏 / Stage Manager 换屏时 displayScale 会变；位图是 DanmakuAsyncLayer
+        // 自己在 display() 里画的，UIKit 不会替我们重绘，得自己跟上。
+        _ = registerForTraitChanges([UITraitDisplayScale.self]) { (cell: DanmakuCell, _) in
+            cell.syncLayerScale()
+        }
         #endif
         setupLayer()
     }
@@ -84,6 +93,26 @@ open class DanmakuCell: PlatformView {
         #endif
     }
     
+    // MARK: - 位图 scale 跟随所在屏幕
+
+    #if os(macOS)
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncLayerScale()
+    }
+
+    /// 窗口被拖到另一块背板（不同 DPI 的副屏 / 外接屏）时触发。
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        syncLayerScale()
+    }
+    #else
+    public override func didMoveToWindow() {
+        super.didMoveToWindow()
+        syncLayerScale()
+    }
+    #endif
+    
 }
 
 extension DanmakuCell {
@@ -112,11 +141,8 @@ extension DanmakuCell {
         // UIColor.white 填充整个背景，在 iOS 上表现为弹幕文字后的白色矩形。
         layer.isOpaque = false
 
-        #if os(macOS)
-        layer.contentsScale = PlatformScreen.main?.backingScaleFactor ?? 1.0
-        #else
-        layer.contentsScale = PlatformScreen.main.scale
-        #endif
+        // 这里不再取 `NSScreen.main` / `UIScreen.main` 的 scale（那是主屏的）：改用
+        // 挂窗口 / 背板变化时下发的真实 scale，见 syncLayerScale()。
         
         layer.willDisplay = { [weak self] _ in
             guard let strongSelf = self else { return }
@@ -132,6 +158,28 @@ extension DanmakuCell {
             guard let strongSelf = self else { return }
             strongSelf.didDisplay(finished)
         }
+    }
+
+    /// 把 layer 的 contentsScale 对齐到**当前所在的窗口屏幕**，并重绘已缓存的位图
+    /// （不重绘的话旧 scale 的位图会一直糊着）。不在窗口里时不动——挂上去时
+    /// `viewDidMoveToWindow` / `didMoveToWindow` 会再同步一次。
+    private func syncLayerScale() {
+        guard let layer = layer as? DanmakuAsyncLayer,
+              let scale = windowScale(),
+              layer.contentsScale != scale
+        else { return }
+        layer.contentsScale = scale
+        redraw()
+    }
+
+    private func windowScale() -> CGFloat? {
+        #if os(macOS)
+        return window?.backingScaleFactor
+        #else
+        guard window != nil else { return nil }
+        let scale = traitCollection.displayScale
+        return scale > 0 ? scale : nil
+        #endif
     }
     
 }

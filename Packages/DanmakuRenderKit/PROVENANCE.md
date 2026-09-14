@@ -35,6 +35,15 @@
   使回收到复用池的 Cell 不再滞留在父视图与 CALayer 树中。
 - `Package.swift`：新增 `DanmakuRenderKitTests` test target（纯 macOS 离屏，
   不碰 GPU / 网络 / UIKit；GIF 侧因 `#if canImport(UIKit)` 不在 macOS 上测试）。
+- `DanmakuCell.swift` + `DanmakuAsyncLayer.swift`：位图 `contentsScale` 改为跟随**所在
+  窗口的屏幕**。上游在 layer init 与 `setupLayer()` 里取 `NSScreen.main` / `UIScreen.main`
+  （= 主屏），窗口在副屏 / 混 DPI 外接屏上按错 scale 出图，且已缓存位图不重绘会一直糊。
+  现在 cell 在 `viewDidMoveToWindow` / `viewDidChangeBackingProperties`（macOS）、
+  `didMoveToWindow` / `UITraitDisplayScale` 变更（iOS）时下发真实 scale 并 `redraw()`；
+  两处主屏取值删掉。单屏行为不变。
+- `DanmakuAsyncLayer.swift`：`drawDanmakuQueueCount` 默认 16 → 6。队列由所有 cell
+  轮转共用、单次绘制极短且 sentinel 会作废陈旧任务，16 条 `.userInteractive` 队列在
+  弹幕爆发时抢核，反而拖慢主线程提交合成。该值仍是 public 可调。
 
 选型背景：替换 Erika 内核 DFM+ 弹幕子系统（滑窗重放非单调导致在屏弹幕跳轨）。
 该库的轨道模型是「入轨时追击判定、入轨后不换轨」，结构上杜绝跳轨。
