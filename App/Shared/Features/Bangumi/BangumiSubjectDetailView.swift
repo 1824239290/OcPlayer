@@ -661,11 +661,11 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
         } catch let e as BangumiError {
             guard loadGeneration == gen else { return }
             loadError = e.userMessage
-            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(e)")
+            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == gen else { return }
             loadError = "\(error)"
-            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(error)")
+            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(error)", level: .warning)
         }
     }
 
@@ -689,10 +689,10 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
             await readLocal()
         } catch let e as BangumiError {
             actionError = e.userMessage
-            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(e)")
+            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             actionError = "状态更新失败：\(error)"
-            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(error)")
+            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(error)", level: .warning)
         }
     }
 
@@ -706,10 +706,10 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
             await readLocal()
         } catch let e as BangumiError {
             actionError = e.userMessage
-            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(e)")
+            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             actionError = "评分更新失败：\(error)"
-            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(error)")
+            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(error)", level: .warning)
         }
     }
 
@@ -728,10 +728,10 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
             await readLocal()
         } catch let e as BangumiError {
             actionError = e.userMessage
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
         } catch {
             actionError = "章节标记失败：\(error)"
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
         }
     }
 }

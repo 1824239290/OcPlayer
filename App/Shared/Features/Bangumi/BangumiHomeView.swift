@@ -490,7 +490,7 @@ struct BangumiHomeView: View {
                 limit: limit, offset: offset)
             return .init(items: page.data, total: page.total)
         } errorMessage: { error in
-            BangumiDiagnostics.log("进度页加载失败 error=\(error)")
+            BangumiDiagnostics.log("进度页加载失败 error=\(error)", level: .warning)
             return (error as? BangumiError)?.userMessage ?? "\(error)"
         }
     }
@@ -507,7 +507,7 @@ struct BangumiHomeView: View {
             )
             return .init(items: page.data, total: page.total)
         } errorMessage: { error in
-            BangumiDiagnostics.log("搜索条目失败 error=\(error)")
+            BangumiDiagnostics.log("搜索条目失败 error=\(error)", level: .warning)
             return (error as? BangumiError)?.userMessage ?? "搜索失败：\(error.localizedDescription)"
         } isCancellation: { error in
             // 请求被新输入取消 / 旧条件作废：不是错误，不占错误位。
@@ -528,11 +528,11 @@ struct BangumiHomeView: View {
         } catch let e as BangumiError {
             progressLoader?.reportError(e.userMessage)
             actionError = e.userMessage
-            BangumiDiagnostics.log("同步收藏失败 error=\(e)")
+            BangumiDiagnostics.log("同步收藏失败 error=\(e)", level: .warning)
         } catch {
             progressLoader?.reportError("\(error)")
             actionError = "\(error)"
-            BangumiDiagnostics.log("同步收藏失败 error=\(error)")
+            BangumiDiagnostics.log("同步收藏失败 error=\(error)", level: .warning)
         }
     }
 
@@ -704,10 +704,10 @@ private struct ProgressCard: View {
                 subjectId: subject.id, type: type)
         } catch let e as BangumiError {
             reportError(e.userMessage)
-            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(e)")
+            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(e)", level: .warning)
         } catch {
             reportError("状态更新失败：\(error)")
-            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(error)")
+            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(error)", level: .warning)
         }
     }
 
@@ -765,10 +765,10 @@ private struct ProgressCard: View {
             await reload()
         } catch let e as BangumiError {
             reportError(e.userMessage)
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
         } catch {
             reportError("\(error)")
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
         }
     }
 }

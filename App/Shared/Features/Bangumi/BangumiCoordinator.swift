@@ -93,7 +93,7 @@ final class BangumiCoordinator {
             return nil
         } catch {
             let message = (error as? BangumiError)?.userMessage ?? "\(error)"
-            BangumiDiagnostics.log("OAuth 换取 token 失败 error=\(error)")
+            BangumiDiagnostics.log("OAuth 换取 token 失败 error=\(error)", level: .warning)
             authError = message
             return message
         }
@@ -124,7 +124,7 @@ final class BangumiCoordinator {
             do {
                 _ = try await BangumiAuthService.refreshProfile()
             } catch {
-                BangumiDiagnostics.log("校验 Bangumi 登录态失败 error=\(error)")
+                BangumiDiagnostics.log("校验 Bangumi 登录态失败 error=\(error)", level: .warning)
             }
         }
     }

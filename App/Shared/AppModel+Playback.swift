@@ -519,7 +519,7 @@ extension AppModel {
                 // 回读对齐并让进度页列表/计数立刻刷新。
                 await self.bangumi.context.refreshSubjectAfterProgressChange(subjectID)
             } catch {
-                BangumiDiagnostics.log("播放结束标记 Bangumi 已看失败 error=\(error)")
+                BangumiDiagnostics.log("播放结束标记 Bangumi 已看失败 error=\(error)", level: .warning)
             }
         }
     }

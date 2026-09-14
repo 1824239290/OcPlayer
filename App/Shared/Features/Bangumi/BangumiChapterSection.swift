@@ -283,11 +283,11 @@ struct BangumiChapterSection: View {
         } catch let e as BangumiError {
             guard loadGeneration == generation else { return }
             loadError = e.userMessage
-            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(e)")
+            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == generation else { return }
             loadError = "\(error)"
-            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(error)")
+            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(error)", level: .warning)
         }
     }
 
@@ -316,10 +316,10 @@ struct BangumiChapterSection: View {
             loadToken += 1
         } catch let e as BangumiError {
             loadError = e.userMessage
-            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(e)")
+            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(e)", level: .warning)
         } catch {
             loadError = "\(error)"
-            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(error)")
+            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(error)", level: .warning)
         }
     }
 
@@ -343,11 +343,11 @@ struct BangumiChapterSection: View {
         } catch let e as BangumiError {
             guard loadGeneration == generation else { return }
             loadError = e.userMessage
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == generation else { return }
             loadError = "\(error)"
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)")
+            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
         }
     }
 }

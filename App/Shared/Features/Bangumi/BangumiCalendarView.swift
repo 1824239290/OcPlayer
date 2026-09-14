@@ -391,11 +391,11 @@ struct BangumiCalendarView: View {
         } catch let e as BangumiError {
             guard loadGeneration == gen else { return }
             loadError = e.userMessage
-            BangumiDiagnostics.log("加载每日放送失败 error=\(e)")
+            BangumiDiagnostics.log("加载每日放送失败 error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == gen else { return }
             loadError = "加载每日放送失败：\(error.localizedDescription)"
-            BangumiDiagnostics.log("加载每日放送失败 error=\(error)")
+            BangumiDiagnostics.log("加载每日放送失败 error=\(error)", level: .warning)
         }
     }
 
