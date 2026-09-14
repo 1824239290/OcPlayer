@@ -537,6 +537,9 @@ final class DanmakuCoordinator {
     private static func matchLogFields(
         for context: DanmakuPlaybackContext
     ) -> [String: DiagnosticValue] {
+        // 不带 hashPresent：这条日志打在指纹计算**之前**，此刻根本不知道有没有指纹
+        // （原先硬编码 true，指纹失败时说谎，排查「为什么降级到文件名匹配」会被带偏）。
+        // 真实值由 orchestrator 算完指纹后自己记一条（见 DanmakuLoadOrchestrator）。
         [
             "source": .string(context.sourceKind.rawValue),
             "fileName": .string(context.fileName),
@@ -544,7 +547,6 @@ final class DanmakuCoordinator {
             "videoDuration": context.durationSeconds
                 .map { DiagnosticValue.integer(Int64($0)) } ?? .null,
             "matchMode": .string(MatchRequest.MatchMode.hashAndFileName.rawValue),
-            "hashPresent": .boolean(true),
         ]
     }
 

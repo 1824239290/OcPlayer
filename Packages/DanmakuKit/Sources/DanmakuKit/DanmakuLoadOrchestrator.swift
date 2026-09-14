@@ -139,6 +139,19 @@ public struct DanmakuLoadOrchestrator {
                 fingerprintFailed = true
             }
 
+            // 指纹的真实结果只在这里才知道：调用方的「自动匹配开始」打在计算之前，
+            // GatewayClient 的「匹配参数」又只在 Tier 1 真发起时才有。指纹是降级到
+            // 标题/TMDB 匹配的首要原因，排查时得能直接看到它到底有没有。
+            NetworkLog.report(
+                category: "Danmaku",
+                level: .debug,
+                "媒体指纹解析",
+                fields: [
+                    "hashPresent": .boolean(hashValue != nil),
+                    "fingerprintFailed": .boolean(fingerprintFailed),
+                ]
+            )
+
             if let hash = hashValue {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
