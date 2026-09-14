@@ -68,7 +68,6 @@ extension PlaybackController {
                     try applyDanmakuPreferences(to: engine)
                 } catch {
                     playerLog.warning("弹幕偏好应用失败，继续装载 error=\(error)")
-                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
                 }
                 try engine.clearDanmaku()
                 _ = try engine.addDanmakuTrack(json: json, name: name, offset: offset)

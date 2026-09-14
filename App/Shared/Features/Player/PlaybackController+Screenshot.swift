@@ -52,7 +52,7 @@ extension PlaybackController {
                 return "截图失败：\(error)"
             }
         }.value
-        PlaybackLog.append(
+        PlaybackLog.info(
             "截图编码写盘 \(width)x\(height) 耗时=\(String(format: "%.0f", Date().timeIntervalSince(now) * 1000))ms"
         )
 

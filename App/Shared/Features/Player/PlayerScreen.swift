@@ -274,7 +274,7 @@ struct PlayerScreen: View {
         }
         #endif
         .onAppear {
-            PlaybackLog.append("PlayerScreen onAppear request=\(request?.title ?? "nil")")
+            PlaybackLog.info("PlayerScreen onAppear request=\(request?.title ?? "nil")")
             #if os(macOS)
             playerLog.info("PlayerScreen onAppear")
             PlayerWindowFitter.saveOriginalIfNeeded()
@@ -303,7 +303,7 @@ struct PlayerScreen: View {
             hudVisibility.unmountDelay = reduceMotion ? .zero : .milliseconds(200)
         }
         .onChange(of: controller.state.state, initial: true) { _, newState in
-            PlaybackLog.append("PlayerState -> \(newState)")
+            PlaybackLog.info("PlayerState -> \(newState)")
             // 只有真在出画面时才压着不让息屏；暂停 / 出错立刻放手。
             // 同一处顺带把系统「正在播放」的播放/暂停状态对齐。
             controller.syncSystemPlaybackState()
@@ -353,7 +353,6 @@ struct PlayerScreen: View {
         }
         .onDisappear {
             playerLog.info("PlayerScreen onDisappear")
-            PlaybackLog.append("PlayerScreen onDisappear")
             PlayerWindowFitter.restore()
             uninstallKeyMonitor()
             // 退出播放器无条件还回光标：避免在「隐藏直到移动」状态下关掉覆盖层。
@@ -669,7 +668,6 @@ struct PlayerScreen: View {
 
     private func closePlayer() {
         playerLog.info("closePlayer（ESC / ×）")
-        PlaybackLog.append("closePlayer（ESC / ×）")
         guard !isClosing else { return }
         isClosing = true
         // 缩窗期间 HUD 立即淡出卸载；hide() 自带 userHidden 锁，

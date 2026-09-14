@@ -267,14 +267,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
             if let headroom = lastDisplayEDRHeadroom {
                 engine.updateDisplayEDRHeadroom(headroom)
             }
-            PlaybackLog.append(
+            PlaybackLog.info(
                 "PlaybackController prepareEngine 成功 kernel=\(engine.descriptor.id) "
                     + "danmaku=\(usesOverlayDanmakuRenderer ? "overlay" : "kernel")"
             )
             return engine
         } catch {
             setupError = "\(error)"
-            PlaybackLog.append("PlaybackController prepareEngine 失败 error=\(error)")
             return nil
         }
     }
@@ -402,7 +401,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("openIfNeeded 跳过（open 在飞） title=\(request.title)")
             return
         }
-        PlaybackLog.append("openIfNeeded title=\(request.title)")
         openPreparedRequest(request)
     }
 
@@ -426,14 +424,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
         lastRequest = request
         activeRequest = nil
         failedRequestID = nil
-        PlaybackLog.append("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
+        PlaybackLog.info("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
         var headers: [String: String] = [:]
         if let authHeader = request.authHeader {
             headers["Authorization"] = authHeader
         }
         let readAhead = PlaybackPreferences.httpReadAheadBytes
         // 诊断「改了预读档位没生效」：把本次真正传给内核的值打进日志。
-        PlaybackLog.append("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
+        PlaybackLog.info("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
         open(
             PlaybackSource(
                 uri: request.uri,
@@ -532,7 +530,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let generation = sourceGeneration
         if hasLoadedSource || openingRequestID != nil {
             playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
-            PlaybackLog.append("open() 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
             try? engine?.stop()
             hasLoadedSource = false
             currentlyOpenURI = nil
@@ -582,7 +579,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
                     try Self.applyDanmakuPrefs(danmakuPrefs, to: engine)
                 } catch {
                     playerLog.warning("弹幕偏好应用失败，继续播放 error=\(error)")
-                    PlaybackLog.append("danmaku preferences skipped error=\(error)")
                 }
                 try? engine.play()
             }
@@ -623,7 +619,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
               ObjectIdentifier(currentEngine) == engineID
         else {
             // 期间已换片/取消：孤儿引擎在队列上补 stop（防幽灵音频），作用域即刻释放。
-            PlaybackLog.append("open() 成功但已过期，孤儿引擎补 stop title=\(request.title)")
+            PlaybackLog.info("open() 成功但已过期，孤儿引擎补 stop title=\(request.title)")
             Self.engineOpenQueue.async { try? engine.stop() }
             if acquiredScope {
                 securityScopedURL?.stopAccessingSecurityScopedResource()
@@ -646,8 +642,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         activeSecurityScopedURL = acquiredScope ? securityScopedURL : nil
         activeSecurityScope = acquiredScope
         engineIsActive = true
-        playerLog.info("open 成功")
-        PlaybackLog.append("open() 成功 title=\(currentTitle ?? "?")")
+        playerLog.info("open 成功 title=\(currentTitle ?? "?")")
     }
 
     /// open 失败（主线程）：过期时只释放作用域；当前代次走完整失败路径
@@ -677,8 +672,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         resetEngine()
         failedRequestID = request.id
         setupError = error
-        playerLog.error("open 失败 \(error)")
-        PlaybackLog.append("open() 失败 error=\(error) title=\(request.title)")
+        playerLog.error("open 失败 error=\(error) title=\(request.title)")
     }
 
     /// open 成功但成果已被让位（open 期间用户取消/换片，收尾已补 stop）：释放作用域即可。
@@ -692,10 +686,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if acquiredScope {
             securityScopedURL?.stopAccessingSecurityScopedResource()
         }
-        PlaybackLog.append("open() 成果已让位（收尾已 stop）title=\(request.title)")
+        PlaybackLog.info("open() 成果已让位（收尾已 stop）title=\(request.title)")
         guard sourceGeneration == generation else { return }
         // 同代次却被让位：代次没动说明没有换片/取消落地，理论上到不了；记日志留痕。
-        PlaybackLog.append("open() 让位但代次未变（异常路径）title=\(request.title)")
+        PlaybackLog.info("open() 让位但代次未变（异常路径）title=\(request.title)")
     }
 
     private func clearOpeningState(request: PlaybackRequest) {
@@ -724,7 +718,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             guard self.openingRequestID == request.id,
                   self.expectedRequestID == request.id,
                   self.sourceGeneration == generation else { return }
-            PlaybackLog.append("open 看门狗触发（60s）title=\(request.title)")
+            PlaybackLog.info("open 看门狗触发（60s）title=\(request.title)")
             self.finishOpenFailure(request: request, generation: generation,
                                    securityScopedURL: securityScopedURL,
                                    acquiredScope: acquiredScope,
@@ -777,8 +771,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     func stopPlayback() {
-        playerLog.info("stopPlayback")
-        PlaybackLog.append("stopPlayback() hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        playerLog.info("stopPlayback hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
         // open 在飞时的收口：看门狗与在飞标记全部清掉。在飞引擎的让位登记
         // （下面的 stop()）由其 open 收尾补做，完成回调按过期代次落空。
         openingWatchdogTask?.cancel()
@@ -813,7 +806,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // 引擎析构后 malloc 仍攥着空闲页不还系统（phys_footprint 高位横盘）：
         // 2s / 25s 两拍 pressure relief（第二拍等内核 demux 线程尾巴退出）。
         MallocPressureRelief.scheduleAfterStop()
-        PlaybackLog.append("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
+        PlaybackLog.info("stopPlayback() 完成 hasLoadedSource=\(hasLoadedSource)")
     }
 
     func playbackReportSnapshot(for requestID: PlaybackRequest.ID) -> PlaybackReportSnapshot? {
@@ -858,7 +851,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
         // 等下次 open 时自然会 reset。
         setupError = nil
-        PlaybackLog.append("resetEngine 完成")
     }
 
     func releaseSecurityScopedResource() {
@@ -931,7 +923,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             endSeconds: hint.endSeconds,
             source: SkipMarkSource(rawValue: hint.source.rawValue) ?? .danmaku
         ) {
-            PlaybackLog.append(
+            PlaybackLog.info(
                 "跳过片头提示 source=\(hint.source.rawValue)"
                     + " start=\(hint.startSeconds.map { String(format: "%.0f", $0) } ?? "0")"
                     + " end=\(String(format: "%.0f", hint.endSeconds)) evidence=\(hint.evidenceCount)"
@@ -953,13 +945,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
             }
             target = markEnd
             chapterSession.noteSkipped(mark)
-            PlaybackLog.append("跳过 \(mark.kind) → \(target)s")
+            PlaybackLog.info("跳过 \(mark.kind) → \(target)s")
         case .endCredits(let position):
             let duration = Double(state.duration.microseconds) / 1_000_000
             // 跳到片尾结束前 20 秒,保留一点尾声画面。
             target = max(duration - 20, position)
             chapterSession.noteEndCreditsSkipped()
-            PlaybackLog.append("保底跳过片尾 → \(target)s")
+            PlaybackLog.info("保底跳过片尾 → \(target)s")
         }
         try? engine?.seek(to: .seconds(max(0, target)))
     }
@@ -990,7 +982,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             let raw = try await server.chapters(itemID: itemID)
             fetchedChapters = buildChapters(from: raw)  // tick→秒,补 end
         } catch {
-            PlaybackLog.append("章节拉取失败,仅保底:\(error)")
+            PlaybackLog.info("章节拉取失败,仅保底:\(error)")
             fetchedChapters = []
         }
         guard chapterRequestIsCurrent(request) else {
@@ -1014,12 +1006,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
             }
         } catch {
             // Emby 老版本 / 未装 Intro 插件没有这个端点，静默回退可；但其余失败
-            // （网络 / 鉴权）无线索就没法排查「为什么没跳片头」，落一条 debug。
-            PlaybackLog.append("MediaSegments 拉取失败,回退章节启发式:\(error)")
+            // （网络 / 鉴权）无线索就没法排查「为什么没跳片头」，落一条 info（默认档可见）。
+            PlaybackLog.info("MediaSegments 拉取失败,回退章节启发式:\(error)")
             segmentMarks = []
         }
         guard chapterRequestIsCurrent(request) else {
-            PlaybackLog.append("章节加载作废（已换片）")
             return
         }
 
@@ -1046,7 +1037,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0))
         }
         guard chapterRequestIsCurrent(request) else {
-            PlaybackLog.append("章节加载作废（已换片）")
             return
         }
 
@@ -1061,7 +1051,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 source: SkipMarkSource(rawValue: hint.source.rawValue) ?? .danmaku
             )
         }
-        PlaybackLog.append("章节加载 chapters=\(fetchedChapters.count) skips=\(skipMarks.count)")
+        PlaybackLog.info("章节加载 chapters=\(fetchedChapters.count) skips=\(skipMarks.count)")
     }
 
     /// 章节加载的时效守卫:装配层当前请求是否仍是这条。
@@ -1159,7 +1149,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 出错后重试：用最近的请求重新打开。
     func retryLast() {
         guard let request = lastRequest else {
-            PlaybackLog.append("retryLast 没有 lastRequest")
+            PlaybackLog.info("retryLast 没有 lastRequest")
             return
         }
         PlaybackLog.append("retryLast title=\(request.title)")

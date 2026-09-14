@@ -110,7 +110,7 @@ final class DanmakuOverlayController {
     func replace(entries: [DanmakuJSONParser.Entry], trackOffsetSeconds: Double) {
         comments = entries
         self.trackOffsetSeconds = trackOffsetSeconds
-        PlaybackLog.append("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
+        PlaybackLog.info("danmaku overlay 装载 \(comments.count) 条 trackOffset=\(trackOffsetSeconds)s")
         resync(reason: "replace")
     }
 
