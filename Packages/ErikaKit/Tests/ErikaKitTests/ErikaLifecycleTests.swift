@@ -4,7 +4,7 @@ import Testing
 import PlaybackKit
 @testable import ErikaKit
 
-/// 播放生命周期回归（REVIEW_TODO 1.3）。
+/// 播放生命周期回归。
 /// 内核 `close()` 是终态——同一 presenter `close()` 后再 `open()` 必抛 PlayerError；
 /// `stop()` 不是。App 层退出播放与换片都走「stop + 丢弃重建」策略（PlaybackController），
 /// 这里锁定内核侧契约，防止将来有人改回 `close() → open()`。

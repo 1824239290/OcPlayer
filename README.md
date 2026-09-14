@@ -88,4 +88,4 @@ Scripts/package-macos.sh v0.1.6  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 路线
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。M4 打磨进行中：09-07 review 的剩余 P2/P3（浏览侧打磨、凭据入 Keychain）排在后续版本。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。M4 打磨进行中：09-14 全项目 review 的 P1/P2/P3 已全部处置；剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。

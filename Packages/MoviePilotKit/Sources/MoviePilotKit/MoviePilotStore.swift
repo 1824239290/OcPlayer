@@ -2,9 +2,9 @@ import Foundation
 
 /// MoviePilot 服务器与账号设置的本地存取。
 ///
-/// 地址 / 用户名 / 密码 / token 全部存 UserDefaults（项目统一不用 Keychain，
-/// 见 CLAUDE.md「安全约束」；自用 App 的既有取舍）。密码用于 token 过期后
-/// 静默重登（MoviePilot 的 JWT 有效期 8 天且没有刷新端点）。
+/// 地址 / 用户名 / 密码 / token 全部存 UserDefaults：项目统一不用 Keychain
+/// （自用 App 的既有取舍，凭据入 Keychain 排在 README「路线」的 M4 里）。密码用于
+/// token 过期后静默重登（MoviePilot 的 JWT 有效期 8 天且没有刷新端点）。
 ///
 /// 地址以原始字符串保存（设置页可存中间态），读取时再规范化；
 /// 与弹幕网关不同，这里**允许 http**——MoviePilot 极常见于局域网 `http://IP:端口`
