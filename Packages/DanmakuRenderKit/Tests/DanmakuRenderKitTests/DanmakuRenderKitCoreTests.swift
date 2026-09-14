@@ -213,4 +213,40 @@ final class DanmakuRenderKitCoreTests: XCTestCase {
         XCTAssertEqual((cell.layer as? DanmakuAsyncLayer)?.contentsScale, target.backingScaleFactor,
                        "位图 scale 要跟窗口所在的屏幕，不是 NSScreen.main")
     }
+
+    /// 端到端：真出一张位图，断言像素尺寸 = 逻辑尺寸 × 所属屏幕 scale。
+    /// 这是「副屏发虚」的直接判据——scale 错时位图分辨率就矮一截。
+    func testRenderedBitmapUsesWindowScale() throws {
+        guard let target = NSScreen.screens.max(by: { $0.backingScaleFactor < $1.backingScaleFactor }) else {
+            throw XCTSkip("测试进程拿不到屏幕（无 GUI 会话）")
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 100),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        window.setFrameOrigin(target.frame.origin)
+        let view = DanmakuView(frame: NSRect(x: 0, y: 0, width: 400, height: 100))
+        window.contentView = view
+
+        let size = CGSize(width: 100, height: 20)
+        let cell = DanmakuCell(frame: NSRect(origin: .zero, size: size))
+        view.addSubview(cell)
+        let layer = try XCTUnwrap(cell.layer as? DanmakuAsyncLayer)
+        layer.displayAsync = false  // 走同步分支，display() 返回时位图已就位
+        layer.displaying = { context, size, _ in
+            context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+
+        layer.display()
+
+        let contents = try XCTUnwrap(layer.contents, "display() 应产出位图")
+        XCTAssertEqual(CFGetTypeID(contents as CFTypeRef), CGImage.typeID, "contents 应是 CGImage")
+        let bitmap: CGImage = contents as! CGImage
+        let scale = target.backingScaleFactor
+        XCTAssertEqual(bitmap.width, Int(size.width * scale), "位图宽度必须是逻辑宽 × 屏幕 scale")
+        XCTAssertEqual(bitmap.height, Int(size.height * scale), "位图高度必须是逻辑高 × 屏幕 scale")
+    }
 }
