@@ -174,20 +174,39 @@ public enum BangumiSubjectService {
 public enum BangumiCalendarService {
     /// 内存 TTL 缓存：日历是低频变化的数据，每次进分区都全量重拉纯属浪费。
     /// TTL 过后（或拉取失败）下次调用回源；TTL 内直接复用。
+    /// 两个 static 变量可能被并发调用方（分栏视图 / 后台预取）同时读改写，
+    /// 用锁保护——NSLock 不能持锁跨 async 点，临界区收进同步方法。
+    private static let cacheLock = NSLock()
     private nonisolated(unsafe) static var cachedDays: [BangumiCalendarDayDTO]?
     private nonisolated(unsafe) static var cachedAt: Date?
     private static let ttl: TimeInterval = 30 * 60
 
+    /// 缓存快照同步读：TTL 内返回缓存，否则 nil（回源）。
+    private static func cachedSnapshot() -> [BangumiCalendarDayDTO]? {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        guard let cachedDays, let cachedAt,
+              Date().timeIntervalSince(cachedAt) < ttl
+        else { return nil }
+        return cachedDays
+    }
+
+    private static func storeCache(_ days: [BangumiCalendarDayDTO]) {
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        cachedDays = days
+        cachedAt = Date()
+    }
+
     /// 拉取每日放送列表（按周一至周日 7 天分组）。
     public static func getCalendar(force: Bool = false) async throws -> [BangumiCalendarDayDTO] {
-        if !force, let cachedDays, let cachedAt, Date().timeIntervalSince(cachedAt) < ttl {
-            return cachedDays
+        if !force, let days = cachedSnapshot() {
+            return days
         }
         let url = BangumiURL.api(path: "calendar")
         let data = try await BangumiAPIClient.shared.request(url: url, method: "GET", auth: .disabled)
         let days: [BangumiCalendarDayDTO] = try await BangumiAPIClient.shared.decodeResponse(data)
-        cachedDays = days
-        cachedAt = Date()
+        storeCache(days)
         return days
     }
 }
