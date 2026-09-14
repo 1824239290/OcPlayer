@@ -198,3 +198,67 @@ final class AniSkipIDResolverTests: XCTestCase {
         XCTAssertEqual(counter.count, 2)
     }
 }
+
+/// `aniskip-ids.json` 的读缓存语义（review-20260914 P3-9）。
+final class AniSkipIDStoreTests: XCTestCase {
+
+    private func makeDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-aniskip-store-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    func testCorruptedFileReadsAsEmptyAndStaysWritable() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent("aniskip-ids.json")
+        try Data("这不是 JSON".utf8).write(to: file)
+
+        let store = AniSkipIDStore(directory: directory)
+        let key = "s1|e1"
+        let missing = await store.record(for: key)
+        XCTAssertNil(missing, "损坏文件按空处理")
+
+        // 损坏帧之后仍可写穿：整体覆盖成合法内容，新实例读得回来。
+        let record = AniSkipIDRecord(malID: 9253, resolvedAt: Date(timeIntervalSince1970: 1_000_000))
+        await store.setRecord(record, for: key)
+
+        let reopened = AniSkipIDStore(directory: directory)
+        let readBack = await reopened.record(for: key)
+        XCTAssertEqual(readBack, record)
+    }
+
+    func testMissingFileReadsAsEmptyAndStaysWritable() async throws {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = AniSkipIDStore(directory: directory)
+        let key = "s2|e3"
+        let missing = await store.record(for: key)
+        XCTAssertNil(missing)
+
+        let record = AniSkipIDRecord(malID: nil, resolvedAt: Date(timeIntervalSince1970: 2_000_000))
+        await store.setRecord(record, for: key)
+        let readBack = await store.record(for: key)
+        XCTAssertEqual(readBack, record)
+    }
+
+    func testWritesSurviveAcrossInstances() async {
+        let directory = makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let key = "s3|e9"
+
+        let store = AniSkipIDStore(directory: directory)
+        let first = AniSkipIDRecord(malID: 1, resolvedAt: Date(timeIntervalSince1970: 3_000_000))
+        await store.setRecord(first, for: key)
+
+        let second = AniSkipIDRecord(malID: 2, resolvedAt: Date(timeIntervalSince1970: 3_000_100))
+        await store.setRecord(second, for: "s3|e10")
+
+        let reopened = AniSkipIDStore(directory: directory)
+        let readFirst = await reopened.record(for: key)
+        let readSecond = await reopened.record(for: "s3|e10")
+        XCTAssertEqual(readFirst, first, "后写入不能丢掉先前的键")
+        XCTAssertEqual(readSecond, second)
+    }
+}

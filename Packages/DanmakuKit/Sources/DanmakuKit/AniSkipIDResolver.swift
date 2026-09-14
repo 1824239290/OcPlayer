@@ -208,7 +208,7 @@ public actor AniSkipIDStore {
     }
 
     public func setRecord(_ record: AniSkipIDRecord, for key: String) {
-        var map = load() ?? [:]
+        var map = load()
         map[key] = record
         guard let data = try? encoder.encode(map) else { return }
         try? data.write(to: url(), options: .atomic)
@@ -226,7 +226,14 @@ public actor AniSkipIDStore {
         guard fileManager.fileExists(atPath: fileURL.path),
               let data = try? Data(contentsOf: fileURL),
               let map = try? decoder.decode([String: AniSkipIDRecord].self, from: data)
-        else { return [:] }
+        else {
+            // 文件缺失 / 损坏也按「空」定下来并置 loaded：否则每次 record(for:) 都要重碰
+            // 一遍文件系统（fileExists + 读 + 解码）。本文件只有本 actor 会写，损坏就是
+            // 当空用、下次 setRecord 整体覆盖（见类型注释）。
+            cached = [:]
+            loaded = true
+            return [:]
+        }
         cached = map
         loaded = true
         return map
