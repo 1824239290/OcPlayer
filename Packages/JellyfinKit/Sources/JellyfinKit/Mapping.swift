@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import Foundation
 import JellyfinAPI
 
@@ -53,12 +54,14 @@ extension MediaLibrary.CollectionType {
 }
 
 /// Jellyfin tick（100 ns）→ 秒。
-/// 确定性短哈希（缺失 id 的派生用，只要求跨进程稳定，不要求密码学强度）。
+/// 确定性短哈希（缺失 id 的派生用）。**必须跨进程 / 跨启动稳定**：`Hasher()` 每进程
+/// 随机播种，同一个条目的派生 id 每次冷启动都不一样（review-20260914 P3-3）。
+/// FNV-1a 实现共享在 `DiagnosticsKit.FNV1a`，与 MoviePilotKit 的内容哈希同一份。
 private func stableHash(_ part: String?, _ kind: BaseItemKind?) -> String {
-    var hasher = Hasher()
-    hasher.combine(part)
-    hasher.combine(kind?.rawValue)
-    return String(hasher.finalize())
+    var hasher = FNV1a()
+    hasher.feed("part:\(part ?? "")")
+    hasher.feed("kind:\(kind?.rawValue ?? "")")
+    return hasher.finishHex()
 }
 
 func seconds(fromTicks ticks: Int?) -> Double? {
