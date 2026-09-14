@@ -242,6 +242,42 @@ final class MoviePilotClientTests: XCTestCase {
         XCTAssertEqual(store.accessToken, "maybe-still-valid")
     }
 
+    func testReloginRetryableNetworkErrorDoesNotReplayStaleToken() async throws {
+        // 重登本身遇到**可重试**网络错（超时/断网）时，旧 token 已经被拒过了：
+        // 修复前会把重登失败当成请求瞬态失败 `continue`，下一轮又揣着同一个旧 token
+        // 再撞一次 401、再触发一轮带密码的 login。login 的重试预算在 postLogin→send
+        // 内部就已经跑完（3 次），外层不该再替它重试。
+        store.accessToken = "expired-token"
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            self.receivedPaths.append(url.path)
+            switch url.path {
+            case "/api/v1/user/current":
+                return MockURLProtocol.response(#"{"detail":"Not authenticated"}"#, status: 401, for: url)
+            case "/api/v1/login/access-token":
+                throw URLError(.timedOut)
+            default:
+                XCTFail("意外请求：\(url.path)")
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        do {
+            _ = try await client.currentUser()
+            XCTFail("应该抛错")
+        } catch let error as MoviePilotError {
+            guard case .network(let failure, _) = error, failure == .timedOut else {
+                XCTFail("应该是网络超时：\(error)")
+                return
+            }
+        }
+        XCTAssertEqual(store.accessToken, "expired-token", "网络故障不是凭据问题，token 照旧保留")
+        XCTAssertEqual(
+            receivedPaths,
+            ["/api/v1/user/current"] + Array(repeating: "/api/v1/login/access-token", count: 3),
+            "旧 token 只发一次；login 在自己预算内重试 3 次后直接抛：\(receivedPaths)")
+    }
+
     // MARK: - 安全
 
     func testTokenNeverAppearsInURL() async throws {

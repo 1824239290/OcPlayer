@@ -273,10 +273,15 @@ public actor MoviePilotAPIClient {
             do {
                 return try await sendOnce(request, token: currentToken)
             } catch MoviePilotError.requireLogin where request.authorized {
+                // 旧 token 已被拒。重登失败（含可重试网络错）直接抛，不要带着作废 token
+                // 再进一轮外层重试：postLogin 内部已经跑过自己的退避重试，外层 continue
+                // 只会每轮白撞一次 401、再触发一轮带密码的 login。
+                currentToken = try await silentRelogin()
+
                 do {
-                    currentToken = try await silentRelogin()
                     return try await sendOnce(request, token: currentToken)
                 } catch let error as MoviePilotError where error.isRetryable && attempt < maxRetries {
+                    // 换到新 token 后重放失败仍值得重试（502/504/超时是服务端瞬态）。
                     lastError = error
                     continue
                 } catch {
