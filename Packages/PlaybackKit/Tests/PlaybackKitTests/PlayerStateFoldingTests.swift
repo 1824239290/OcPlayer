@@ -1,5 +1,22 @@
 import XCTest
+import Observation
 @testable import PlaybackKit
+
+/// `withObservationTracking` 的 onChange 是 @Sendable，测试计数用引用盒包一层。
+private final class RepublishCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _count = 0
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _count
+    }
+    func bump() {
+        lock.lock()
+        defer { lock.unlock() }
+        _count += 1
+    }
+}
 
 /// `PlayerState` 的折叠语义。以前只能靠真内核间接验证，现在用替身直接钉住。
 @MainActor
@@ -90,6 +107,35 @@ final class PlayerStateFoldingTests: XCTestCase {
 
         engine.emit(.failed(code: 4, message: nil))
         try await waitUntil("回退文案") { state.lastError == "内核错误 code=4" }
+    }
+
+    /// 错误风暴里同一条 `.failed` 逐帧重发：lastError 同值不该再次发布
+    ///（否则 HUD / 进度订阅被无谓连坐失效）。
+    func testSameLastErrorDoesNotRePublish() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.failed(code: 3, message: "HTTP 401"))
+        try await waitUntil("错误落到位") { state.lastError == "HTTP 401" }
+
+        let counter = RepublishCounter()
+        // 单次注册全程追踪：同值 emit 若被抑制，tracking 不会触发也保持存活；
+        // 异值 emit 触发恰好一次。同值没被抑制的话这里会先 +1，最终断言不符。
+        withObservationTracking {
+            _ = state.lastError
+        } onChange: {
+            counter.bump()
+        }
+        engine.emit(.failed(code: 3, message: "HTTP 401"))
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(counter.count, 0, "同值 lastError 不该发布")
+
+        engine.emit(.failed(code: 5, message: "别的错"))
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(counter.count, 1, "异值 lastError 应恰好发布一次")
+        XCTAssertEqual(state.lastError, "别的错")
     }
 
     /// 换引擎后旧消费者不能再改状态：取消本身不够（主 actor 上可能已经排了一条事件），

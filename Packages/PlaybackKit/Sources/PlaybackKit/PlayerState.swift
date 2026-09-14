@@ -169,7 +169,8 @@ public final class PlayerState {
                 lastFailedEventKey = key
             }
             if state != .error { state = .error }
-            lastError = message ?? "内核错误 code=\(code)"
+            let newError = message ?? "内核错误 code=\(code)"
+            if lastError != newError { lastError = newError }
         }
     }
 }
