@@ -63,7 +63,7 @@ public enum PlaybackEngineRegistry {
         } else {
             entries.append(entry)
         }
-        PlaybackLog.append("内核注册 id=\(descriptor.id) name=\(descriptor.displayName)")
+        PlaybackLog.info("内核注册 id=\(descriptor.id) name=\(descriptor.displayName)")
     }
 
     /// 当前构建里可用的内核，按注册顺序。
@@ -97,7 +97,7 @@ public enum PlaybackEngineRegistry {
     /// 记下用户的选择。下一次 `makeSelected()` 生效。
     public static func select(_ id: String) {
         UserDefaults.standard.set(id, forKey: selectionKey)
-        PlaybackLog.append("内核选择 id=\(id)（下次播放生效）")
+        PlaybackLog.info("内核选择 id=\(id)（下次播放生效）")
     }
 
     /// 清掉显式选择，回到默认（第一个可用）。
@@ -110,7 +110,7 @@ public enum PlaybackEngineRegistry {
         guard let entry = resolvedEntry() else {
             throw PlaybackEngineRegistryError.noEngineAvailable
         }
-        PlaybackLog.append("内核实例化 id=\(entry.descriptor.id)")
+        PlaybackLog.info("内核实例化 id=\(entry.descriptor.id)")
         return try entry.make()
     }
 
