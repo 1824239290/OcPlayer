@@ -75,7 +75,8 @@ final class DanmakuOverlayController {
     /// 匹配返回的时间轴校正（dandanplay shift），与 HUD 全局偏移分开工。
     private var trackOffsetSeconds: Double = 0
     private var timer: Timer?
-    private var lastMediaSample: Double?
+    /// seek 跳变检测（只认原始媒体时间，见 DanmakuSeekDetector）。
+    private var seekDetector = DanmakuSeekDetector()
     /// 上次发射机会的 effective 阈值。与本次阈值差 >2s = 媒体时间发生了 tick
     /// 没看见的跳变，spawnUpTo 据此跳过积压（结构性兜底，见其注释）。
     private var lastSpawnThreshold: Double?
@@ -116,7 +117,7 @@ final class DanmakuOverlayController {
     func clear() {
         comments = []
         pointer = 0
-        lastMediaSample = nil
+        seekDetector.reset()
         lastSpawnThreshold = nil
         view.clean()
         // 复用池里的 cell 带着整条已渲染弹幕的模型/测量，不清的话关播放器后
@@ -213,6 +214,8 @@ final class DanmakuOverlayController {
         if timerIsFast != active { armTimer(fast: active) }
 
         guard let engine = engineProvider(), preferences.enabled, !comments.isEmpty else { return }
+        // seek 检测只认原始媒体时间（DanmakuSeekDetector）；下面的出场判定用
+        // effectiveSeconds（减偏移），两个时基不再混用。
         let now = mediaSeconds(engine)
 
         // 暂停/缓冲跟随真实播放状态：暂停时停视图动画，恢复时续播
@@ -225,17 +228,15 @@ final class DanmakuOverlayController {
             }
         }
 
-        guard let last = lastMediaSample else {
-            lastMediaSample = now
+        switch seekDetector.evaluate(rawSeconds: now, jumpSeconds: Self.seekJumpSeconds) {
+        case .firstSample:
             return
-        }
-        lastMediaSample = now
-
-        let delta = now - last
-        if delta < -0.5 || delta > Self.seekJumpSeconds {
+        case .jumped:
             // seek：媒体时间跳变，清屏重同步。
             resync(reason: "seek")
             return
+        case .continuous:
+            break
         }
         if viewPausedBySync { return }
         // 5s 状态采样（诊断内存爬升）：cell 回收/复用是否失衡。
@@ -269,7 +270,8 @@ final class DanmakuOverlayController {
         view.stop()
         view.play()
         viewPausedBySync = false
-        let now = effectiveSeconds(mediaSeconds(engine))
+        let raw = mediaSeconds(engine)
+        let now = effectiveSeconds(raw)
         pointer = comments.firstIndex { $0.time > now } ?? comments.count
         if diagnosticsEnabled {
             // 对齐点即「从此刻起才发射的弹幕时间轴」。续播起播若这里对齐到 ~0
@@ -281,10 +283,13 @@ final class DanmakuOverlayController {
                     + "trackOffset=\(String(format: "%.1f", trackOffsetSeconds))s"
             )
         }
-        // 置为对齐点而非 nil：resync 后首拍 tick 仍要做 seek 跳变检测。置 nil 的话，
+        // seek 检测基对齐到**原始**采样点（与 tick 的 evaluate 同一时基；写 effective
+        // 会让下一拍 delta 凭空多出偏移量、越阈值误判 seek → 清屏死循环）。
+        // 置为对齐点而非 nil：resync 后首拍 tick 仍要做跳变检测。置 nil 的话，
         // 续播 seek 若落在「注入对齐」与首拍之间（日志实证的爆发根因），跳变会被
         // 首拍静默吞掉，第二拍就把 0~续播位 的弹幕一次补发。
-        lastMediaSample = now
+        seekDetector.align(rawSeconds: raw)
+        // 积压兜底基走 effective 时基（与 spawnUpTo 的 threshold 同源），维持原语义。
         lastSpawnThreshold = now
         startTimer()
     }
