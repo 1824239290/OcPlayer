@@ -194,6 +194,13 @@ final class ChapterSkippingEvaluatorTests: XCTestCase {
         var session = ChapterSession()
         let prompt = session.prompt(at: 1150, duration: 1200, isPlaying: true)
         XCTAssertEqual(prompt?.kind, .credits)
+        // 关联值必须是当前位置（不是片长）：performSkip 用 max(片长−20s, 它) 算落点，
+        // 记成片长会往回跳。这个参数名曾经就叫 duration，值却一直是 position。
+        guard case .endCredits(let position) = prompt else {
+            XCTFail("应该是 .endCredits：\(String(describing: prompt))")
+            return
+        }
+        XCTAssertEqual(position, 1150)
     }
 
     func testEndCreditsFallbackRequiresLastMinute30() {
