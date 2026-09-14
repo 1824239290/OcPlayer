@@ -151,11 +151,24 @@ struct URLEntrySheet: View {
     @State private var token = ""
     let onSubmit: (String, String?) -> Void
 
+    private var trimmedURI: String {
+        uri.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isAcceptable: Bool {
+        DirectLinkInput.isAcceptable(uri)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("打开直连链接").font(.headline)
             TextField("http://…/Videos/{id}/stream?static=true", text: $uri)
                 .textFieldStyle(.roundedBorder)
+            if !trimmedURI.isEmpty && !isAcceptable {
+                Text("只支持 http/https 直链，或本地文件绝对路径（/… 或 ~/…）。本地文件也可以直接用 ⌘O 打开。")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             SecureField("服务器 AccessToken（可留空）", text: $token)
                 .textFieldStyle(.roundedBorder)
             Text("token 只作为请求头发给内核，不写进 URL、不落日志。")
@@ -165,12 +178,11 @@ struct URLEntrySheet: View {
                 Spacer()
                 Button("取消") { dismiss() }
                 Button("播放") {
-                    onSubmit(uri.trimmingCharacters(in: .whitespacesAndNewlines),
-                             token.isEmpty ? nil : token)
+                    onSubmit(trimmedURI, token.isEmpty ? nil : token)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(uri.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!isAcceptable)
             }
         }
         .padding(20)
