@@ -49,20 +49,39 @@ final class BangumiCoordinator {
 
     // MARK: - 登录 / 登出
 
-    /// 处理 OAuth 回调 URL（提取 code 并换 token）。返回错误文案（nil = 成功）。
+    /// 处理 OAuth 回调 URL（提取 code + state 并换 token）。返回错误文案（nil = 成功）。
     @discardableResult
     func handleOAuthCallback(url: URL) async -> String? {
-        // 回调形如 ocplayer://oauth/callback?code=xxx：
-        // host 是 "oauth"，path 是 "/callback"，code 在 query 里。
+        // 回调形如 ocplayer://oauth/callback?code=xxx&state=yyy（或 ?error=access_denied）：
+        // host 是 "oauth"，path 是 "/callback"，参数在 query 里。
         guard url.scheme == "ocplayer", url.host == "oauth",
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            authError = "回调地址无效"
+            return authError
+        }
+        let query = components.queryItems ?? []
+        // 用户拒绝授权等失败回跳：授权方带 error 参数，按原因给文案，
+        // 别落进「回调地址无效」误导分支。
+        if let errorCode = query.first(where: { $0.name == "error" })?.value {
+            let message: String
+            switch errorCode {
+            case "access_denied":
+                message = "授权被拒绝"
+            default:
+                message = "授权失败（\(errorCode)）"
+            }
+            authError = message
+            return message
+        }
+        guard let code = query.first(where: { $0.name == "code" })?.value,
+              let state = query.first(where: { $0.name == "state" })?.value
         else {
             authError = "回调地址无效"
             return authError
         }
         do {
-            try await BangumiAuthService.exchangeForAccessToken(code: code)
+            try await BangumiAuthService.exchangeForAccessToken(code: code, state: state)
             authError = nil
             return nil
         } catch {

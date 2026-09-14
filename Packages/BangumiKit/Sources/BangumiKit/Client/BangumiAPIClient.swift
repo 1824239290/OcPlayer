@@ -79,6 +79,10 @@ public actor BangumiAPIClient {
     private var oauthExchangeGeneration: UInt64 = 0
     private var refreshTask: Task<CredentialSnapshot, Error>?
     private var refreshGeneration: UInt64 = 0
+    /// OAuth 授权流的 CSRF 防护：buildOAuthURL 时生成，回调换 token 时校验后清空。
+    /// 放 actor 内存即可（build → 打开 → 回调是瞬时流程）；App 在授权页停留期间
+    /// 被重启会丢 state，校验失败是安全侧失败，符合 OAuth state 语义。
+    private var pendingOAuthState: String?
 
     private static let jsonDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -123,10 +127,13 @@ public actor BangumiAPIClient {
 
     public func buildOAuthURL() -> URL {
         let baseURL = URL(string: "\(oauthBase())/authorize")!
+        // state 防 CSRF：生成后存内存，回调换 token 时校验（见 exchangeForAccessToken）。
+        pendingOAuthState = UUID().uuidString
         return baseURL.appending(queryItems: [
             URLQueryItem(name: "client_id", value: appInfo.clientId),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "redirect_uri", value: appInfo.callbackURL),
+            URLQueryItem(name: "state", value: pendingOAuthState),
         ])
     }
 
@@ -134,7 +141,11 @@ public actor BangumiAPIClient {
         !appInfo.clientId.isEmpty && !appInfo.clientSecret.isEmpty
     }
 
-    public func exchangeForAccessToken(code: String) async throws -> UInt64 {
+    public func exchangeForAccessToken(code: String, state: String) async throws -> UInt64 {
+        defer { pendingOAuthState = nil }
+        guard let expected = pendingOAuthState, state == expected else {
+            throw BangumiError(notice: "授权校验失败，请重新发起登录")
+        }
         let exchangeGeneration = beginOAuthExchange()
         let url = URL(string: "\(oauthBase())/access_token")!
         let body: [String: BangumiJSONValue] = [

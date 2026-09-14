@@ -13,9 +13,9 @@ public enum BangumiAuthService {
     }
 
     /// 换 code 拿 token 并拉取 profile，成功后置为已登录。
-    public static func exchangeForAccessToken(code: String) async throws {
+    public static func exchangeForAccessToken(code: String, state: String) async throws {
         let revision = beginOperation()
-        let credentialGeneration = try await BangumiAPIClient.shared.exchangeForAccessToken(code: code)
+        let credentialGeneration = try await BangumiAPIClient.shared.exchangeForAccessToken(code: code, state: state)
         try ensureCurrentOperation(revision)
         do {
             _ = try await refreshProfile(revision: revision)

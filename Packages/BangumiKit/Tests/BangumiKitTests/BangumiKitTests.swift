@@ -93,6 +93,38 @@ struct BangumiKitTests {
         #expect(try await db.subjectID(ofEpisode: 71) == 7)
         #expect(try await db.subjectID(ofEpisode: 999) == nil)
     }
+
+    // MARK: - OAuth state（CSRF 防护）
+
+    /// 授权 URL 必须带随机 state，且每次授权轮换（防重放）。
+    @Test func oauthURLIncludesStateAndRotates() async {
+        let url1 = await BangumiAPIClient.shared.buildOAuthURL()
+        let url2 = await BangumiAPIClient.shared.buildOAuthURL()
+        func state(of url: URL) -> String? {
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first { $0.name == "state" }?
+                .value
+        }
+        let state1 = state(of: url1)
+        let state2 = state(of: url2)
+        #expect(state1 != nil && !state1!.isEmpty, "授权 URL 必须带 state")
+        #expect(state1 != state2, "每次授权 state 必须轮换：\(state1 ?? "nil") vs \(state2 ?? "nil")")
+    }
+
+    /// state 不匹配的回调必须在发网络请求前被拒绝（CSRF 兜底）。
+    @Test func oauthExchangeRejectsMismatchedState() async {
+        _ = await BangumiAPIClient.shared.buildOAuthURL()
+        do {
+            _ = try await BangumiAPIClient.shared.exchangeForAccessToken(
+                code: "forged-code", state: "forged-state")
+            Issue.record("state 不匹配应该抛错")
+        } catch let error as BangumiError {
+            #expect(error.userMessage.contains("授权校验失败"))
+        } catch {
+            Issue.record("应该是 BangumiError：\(error)")
+        }
+    }
 }
 
 // MARK: - 本地库
