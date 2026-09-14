@@ -402,11 +402,13 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         markOpeningStarted()
         defer { finishOpening() }
         do {
+            var snapshot: ErikaMemorySnapshot?
             try withLock {
                 try presenter.open(source)
                 // 基线快照：open 一结束先采一条，尖峰若发生在打开瞬间也能留下第一现场。
-                sampleMemoryAt(reason: "open")
+                snapshot = captureMemorySnapshotLocked()
             }
+            publishMemorySample(snapshot, reason: "open")
             PlaybackLog.append("open() 成功")
         } catch {
             PlaybackLog.error("open() 失败 error=\(error)")
@@ -440,11 +442,13 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         PlaybackLog.append("stop() 开始")
         if deferStopDuringOpen() { return }
         do {
+            var snapshot: ErikaMemorySnapshot?
             try withLock {
                 try presenter.stop()
                 // 收尾快照：对比 open/停止前各分项，看释放路径该清的是否清干净。
-                sampleMemoryAt(reason: "stop")
+                snapshot = captureMemorySnapshotLocked()
             }
+            publishMemorySample(snapshot, reason: "stop")
             PlaybackLog.append("stop() 成功")
         } catch {
             PlaybackLog.append("stop() 失败 error=\(error)")
@@ -685,28 +689,37 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         return try body()
     }
 
-    /// 采样内核内存分项 + 进程 footprint 并打一条 info 日志。**调用方必须已持有 `lock`**（要摸 presenter）。
-    /// 采样失败只报一次——通常意味着该能力在某版本不可用，不该逐帧刷屏。
-    private func sampleMemoryAt(reason: String) {
+    /// 采样内核内存分项。拆两段：**锁内段**只调 presenter.resourceStatus()
+    /// （摸 presenter 必须持锁），失败记录 memorySampleFailed（只报一次——
+    /// 通常意味着该能力在某版本不可用，不该逐帧刷屏）；footprint / 日志 / 落库
+    /// 在 publishMemorySample 锁外做——纯进程读数 + 字符串拼串，不该拉长主锁持有期。
+    private func captureMemorySnapshotLocked() -> ErikaMemorySnapshot? {
         do {
             let snapshot = ErikaMemorySnapshot(try presenter.resourceStatus())
-            let process = ProcessFootprint.current()
-            statsLock.lock()
-            _latestMemory = snapshot
-            statsLock.unlock()
             memorySampleFailed = false
-            var fields = snapshot.logFields
-            for (key, value) in process.logFields { fields[key] = value }
-            PlaybackLog.info(
-                "内核内存 reason=\(reason) \(snapshot.summaryLine) · \(process.summaryLine)",
-                fields: fields
-            )
+            return snapshot
         } catch {
             if !memorySampleFailed {
                 memorySampleFailed = true
                 PlaybackLog.error("内核内存采样失败 error=\(error)")
             }
+            return nil
         }
+    }
+
+    /// 锁外段：落库 + 进程 footprint + 日志。快照已在手，不碰 presenter，无需主锁。
+    private func publishMemorySample(_ snapshot: ErikaMemorySnapshot?, reason: String) {
+        guard let snapshot else { return }
+        statsLock.lock()
+        _latestMemory = snapshot
+        statsLock.unlock()
+        let process = ProcessFootprint.current()
+        var fields = snapshot.logFields
+        for (key, value) in process.logFields { fields[key] = value }
+        PlaybackLog.info(
+            "内核内存 reason=\(reason) \(snapshot.summaryLine) · \(process.summaryLine)",
+            fields: fields
+        )
     }
 
     /// 播放页调试行：默认帧计数行下追加一行内核内存分项（HUD TimelineView 每秒重读）。
@@ -733,6 +746,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         var pending: [PlayerEvent] = []
 
         lock.lock()
+        var memorySnapshot: ErikaMemorySnapshot?
         do {
             let stats = try presenter.renderTick(at: presentationTime)
             statsLock.lock()
@@ -740,7 +754,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             statsLock.unlock()            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
             if presentationTime - lastMemorySampleAt >= Self.memorySampleIntervalSeconds {
                 lastMemorySampleAt = presentationTime
-                sampleMemoryAt(reason: "tick")
+                memorySnapshot = captureMemorySnapshotLocked()
             }
         } catch let error as ErikaError {
             PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
@@ -773,6 +787,8 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             }
         }
         lock.unlock()
+        // footprint / 日志不在主锁内做（纯进程读数 + 拼串，5s 一次也该让渲染不受扰）。
+        publishMemorySample(memorySnapshot, reason: "tick")
 
         for event in pending {
             // 帧率档位跟随播放状态：paused 降帧 15-30（拖窗口/resize 仍要跟手）；
