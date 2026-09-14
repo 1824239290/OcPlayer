@@ -188,11 +188,15 @@ final class DanmakuOverlayController {
     /// 的轮询，不再每秒空醒主线程 60 次。
     private func armTimer(fast: Bool) {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: fast ? 1.0 / 60.0 : 0.5, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: fast ? 1.0 / 60.0 : 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.tick()
             }
         }
+        // 挂 .common：菜单/右键跟踪跑在 eventTracking mode，只进 .default 的话
+        // 期间 timer 停摆，合上首拍 delta 超阈值被误判 seek 清屏。
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
         timerIsFast = fast
     }
 
