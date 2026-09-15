@@ -153,6 +153,22 @@ public final class DiagnosticLogger: @unchecked Sendable {
         processMinimumLevel.withLock { $0 = level }
     }
 
+    /// 进程级会话标识：一次启动一个，写进该进程产出的所有记录。
+    /// 排障时要问「这几条是不是同一次运行」「弹幕注入与 seek 谁先」，靠它对时间线。
+    /// 8 位十六进制：够 grep、也够区分，不需要全局唯一。
+    public static let sessionID: String = String(
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+
+    /// 记录序号：进程内单调递增，保证 `DiagnosticEntry.id` 唯一。
+    private static let sequenceCounter = OSAllocatedUnfairLock(initialState: UInt64(0))
+
+    private static func nextSequence() -> UInt64 {
+        sequenceCounter.withLock {
+            $0 &+= 1
+            return $0
+        }
+    }
+
     private let subsystem: String
     private let category: String
     private let osLogger: Logger
@@ -339,7 +355,9 @@ public final class DiagnosticLogger: @unchecked Sendable {
                                      subsystem: DiagnosticRedactor.redact(subsystem),
                                      category: DiagnosticRedactor.redact(category),
                                      message: message,
-                                     fields: fields)
+                                     fields: fields,
+                                     session: Self.sessionID,
+                                     sequence: Self.nextSequence())
         if suppressed > 0 { record.suppressed = suppressed }
 
         var suffix = ""
@@ -417,9 +435,15 @@ public struct DiagnosticEntry: Codable, Sendable, Identifiable, Equatable {
     public let message: String
     public let fields: [String: DiagnosticValue]
     public var suppressed: UInt64?
+    /// 进程级会话标识（一次启动一个）：跨模块对齐「同一次运行」的记录。
+    /// 旧文件里没有这个字段，解码为 nil。
+    public var session: String?
+    /// 进程内单调递增序号：`id` 唯一性的后盾（毫秒时间戳下同文案仍可能相撞）。
+    public var sequence: UInt64?
 
     public init(timestamp: Date, level: String, subsystem: String, category: String,
-                message: String, fields: [String: DiagnosticValue], suppressed: UInt64? = nil) {
+                message: String, fields: [String: DiagnosticValue], suppressed: UInt64? = nil,
+                session: String? = nil, sequence: UInt64? = nil) {
         self.timestamp = timestamp
         self.level = level
         self.subsystem = subsystem
@@ -427,9 +451,15 @@ public struct DiagnosticEntry: Codable, Sendable, Identifiable, Equatable {
         self.message = message
         self.fields = fields
         self.suppressed = suppressed
+        self.session = session
+        self.sequence = sequence
     }
 
-    public var id: String { "\(timestamp.timeIntervalSince1970)-\(category)-\(message)" }
+    /// 列表身份：新记录用「时间戳-序号」（同毫秒也不撞）；旧记录退回「时间戳-分类-文案」。
+    public var id: String {
+        if let sequence { return "\(timestamp.timeIntervalSince1970)-\(sequence)" }
+        return "\(timestamp.timeIntervalSince1970)-\(category)-\(message)"
+    }
 
     public var diagnosticLevel: DiagnosticLevel? { DiagnosticLevel(rawValue: level) }
 }
@@ -443,6 +473,22 @@ public struct DiagnosticSummary: Sendable, Equatable {
         self.fileSizeBytes = fileSizeBytes
         self.recordCount = recordCount
     }
+}
+
+/// 时间戳格式化器持有者：`ISO8601DateFormatter` 不是 `Sendable`（静态存储被 Swift 6 拒绝），
+/// 但格式化/解析本身线程安全——与 `DiagnosticRedactor.SensitivePatterns` 同一处理方式。
+private final class TimestampFormatters: @unchecked Sendable {
+    static let shared = TimestampFormatters()
+
+    /// 带小数秒（毫秒）：写盘用。
+    let millis: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// 秒级：历史记录是这么写的，解码兜底用。
+    let seconds = ISO8601DateFormatter()
 }
 
 private final class DiagnosticBackend: @unchecked Sendable {
@@ -481,11 +527,34 @@ private final class DiagnosticBackend: @unchecked Sendable {
         self.maintenanceInterval = maintenanceInterval.isFinite ? max(0, maintenanceInterval) : 0
         self.now = now
         self.fileURL = directory.appendingPathComponent("diagnostics.jsonl")
-        self.encoder = JSONEncoder()
-        self.encoder.dateEncodingStrategy = .iso8601
-        self.encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        self.encoder = Self.makeEncoder()
         self.sinkLogger = Logger(subsystem: "dev.jumusu.OcPlayer", category: "DiagnosticsKit.FileSink")
         self.emitToOSLog = emitToOSLog
+    }
+
+    /// 时间戳格式：写盘带毫秒（秒级精度下同秒事件的先后无法判定），
+    /// 解码同时接受带/不带小数秒——旧文件照读。
+    private static func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(TimestampFormatters.shared.millis.string(from: date))
+        }
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return encoder
+    }
+
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let text = try decoder.singleValueContainer().decode(String.self)
+            if let date = TimestampFormatters.shared.millis.date(from: text) { return date }
+            if let date = TimestampFormatters.shared.seconds.date(from: text) { return date }
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "无法解析诊断记录时间戳：\(text)"))
+        }
+        return decoder
     }
 
     func append(_ record: DiagnosticEntry) {
@@ -499,7 +568,9 @@ private final class DiagnosticBackend: @unchecked Sendable {
                         subsystem: record.subsystem,
                         category: record.category,
                         message: "Diagnostic entry omitted because it exceeded the file size limit",
-                        fields: ["encoded_bytes": .integer(Int64(data.count))]
+                        fields: ["encoded_bytes": .integer(Int64(data.count))],
+                        session: record.session,
+                        sequence: record.sequence
                     )
                     data = try encoder.encode(replacement) + Data([0x0A])
                     guard data.count <= maxFileBytes else { return }
@@ -524,8 +595,7 @@ private final class DiagnosticBackend: @unchecked Sendable {
                   let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe)
             else { return [] }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = Self.makeDecoder()
             return Self.lastLines(in: data, count: limit).compactMap { line in
                 try? decoder.decode(DiagnosticEntry.self, from: line)
             }
