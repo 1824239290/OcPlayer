@@ -252,6 +252,41 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertTrue(text.hasPrefix("# 头部\n版本: 1.0\n\n"), "头部说明行原样在前，空行分隔")
         XCTAssertTrue(text.contains("\"message\":\"hello\""), "记录本体是 JSONL")
     }
+
+    /// 回归（2026-09-15 实测到 116 行残缺记录）：同一份日志可能被多个进程共写
+    /// （App 与测试宿主、双开实例）。旧实现「seek 到末尾 + 各自记偏移」，对方写入后
+    /// 本 sink 的下一条会落在**旧偏移**上，把两条记录拦腰撕碎。
+    /// sink 改 O_APPEND 后，每条记录都追加到真实末尾。
+    func testAppendLandsAtRealEndWhenAnotherWriterIntervenes() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024 * 1024, emitToOSLog: false
+        )
+        log.info("first")
+        log.flush()
+
+        // 另一个写入者，模拟另一个进程/实例往同一文件追加。
+        let intruder = try FileHandle(forWritingTo: log.fileURL)
+        try intruder.seekToEnd()
+        try intruder.write(contentsOf: Data("INTRUDER\n".utf8))
+        try intruder.close()
+
+        log.info("third")
+        log.flush()
+
+        let text = try String(contentsOf: log.fileURL, encoding: .utf8)
+        let lines = text.split(separator: "\n").filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 3, "三条都要在，且不该互相覆盖")
+        XCTAssertTrue(text.contains("INTRUDER"), "对方写入的内容不该被本 sink 覆盖")
+        XCTAssertTrue(lines.last?.contains("\"third\"") == true, "新记录落在真实末尾")
+        for line in lines where line != "INTRUDER" {
+            XCTAssertNotNil(try? JSONSerialization.jsonObject(with: Data(line.utf8)),
+                            "记录本体不该被撕碎: \(line)")
+        }
+    }
 }
 
 private extension DiagnosticValue {

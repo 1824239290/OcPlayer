@@ -651,7 +651,16 @@ private final class DiagnosticBackend: @unchecked Sendable {
                 FileManager.default.createFile(atPath: fileURL.path, contents: nil)
             }
             handle = try FileHandle(forWritingTo: fileURL)
-            try handle?.seekToEnd()
+            // **O_APPEND**：同一份日志可能被多个进程共写（App 与测试宿主、双开实例）。
+            // 默认的「seek 到末尾 + 各自记偏移」在跨进程下会交错写，把两条记录撕碎
+            // ——2026-09-15 实测到 116 行残缺记录（记录被拦腰截断后互相插入）。
+            // 追加模式下每次 write 由内核原子落位到真实末尾，单条记录不会再被撕开。
+            if let descriptor = handle?.fileDescriptor {
+                let flags = fcntl(descriptor, F_GETFL)
+                if flags >= 0 {
+                    _ = fcntl(descriptor, F_SETFL, flags | O_APPEND)
+                }
+            }
             currentBytes = fileSize(at: fileURL)
         }
         try handle?.write(contentsOf: data)
