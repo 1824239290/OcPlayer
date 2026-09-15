@@ -39,4 +39,16 @@ public enum PlaybackLog {
                              throttle: DiagnosticThrottle? = nil) {
         logger.error(message(), fields: fields, throttle: throttle)
     }
+
+    /// 记一条播放生命周期事件（名字与字段约定见 `PlaybackEvent`）。
+    ///
+    /// message 固定 `播放事件 <name>`，字段必带 `event=<name>`；排障时按
+    /// `"event":"buffer.start"` 直接过滤，就能把一次播放的时间线拉直。
+    public static func event(_ event: PlaybackEvent,
+                             fields: [String: DiagnosticValue] = [:],
+                             level: DiagnosticLevel = .info) {
+        var payload = fields
+        payload["event"] = .string(event.rawValue)
+        logger.log(level: level, "播放事件 \(event.rawValue)", fields: payload)
+    }
 }

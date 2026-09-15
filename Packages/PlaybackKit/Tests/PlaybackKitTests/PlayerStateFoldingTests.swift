@@ -199,6 +199,85 @@ final class PlayerStateFoldingTests: XCTestCase {
         XCTAssertTrue(state.hasSurface, "surface 归 surface：视图一直挂着，reset 不该动它")
     }
 
+    // MARK: - 会话统计与播放事件（阶段4）
+
+    /// 缓冲轮次要能数出来：issue #2（「三十秒闪一次」）就是缓冲周期在驱动 UI，此前零记录。
+    func testBufferingTogglesFoldIntoSessionStats() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        XCTAssertEqual(state.sessionStats.bufferCount, 0)
+
+        engine.emit(.bufferingChanged(true))
+        try await waitUntil("进缓冲") { state.isBuffering }
+        XCTAssertEqual(state.sessionStats.bufferCount, 1)
+
+        engine.emit(.bufferingChanged(false))
+        try await waitUntil("缓冲结束") { !state.isBuffering }
+        XCTAssertEqual(state.sessionStats.bufferCount, 1, "一轮起止只算一次")
+        XCTAssertGreaterThanOrEqual(state.sessionStats.bufferedSeconds, 0)
+
+        engine.emit(.bufferingChanged(true))
+        try await waitUntil("第二轮缓冲") { state.isBuffering }
+        XCTAssertEqual(state.sessionStats.bufferCount, 2)
+    }
+
+    /// 同一条内核错误逐帧重发只计一次（与错误日志的去重口径一致）。
+    func testDistinctErrorsAreCountedOnceEach() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.failed(code: 3, message: "HTTP 401"))
+        try await waitUntil("第一条错误") { state.sessionStats.errorCount == 1 }
+        engine.emit(.failed(code: 3, message: "HTTP 401"))   // 重发
+        engine.emit(.failed(code: 7, message: "别的"))        // 新的
+        try await waitUntil("第二条错误") { state.sessionStats.errorCount == 2 }
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(state.sessionStats.errorCount, 2)
+    }
+
+    /// 会话汇总只出一次，且没开过源时不写噪音记录。
+    func testFinishSessionIsSingleShot() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+
+        XCTAssertNil(state.finishSession(reason: "user"), "还没开过源：不该产出 session.end")
+
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+        engine.emit(.bufferingChanged(true))
+        try await waitUntil("进缓冲") { state.isBuffering }
+
+        let first = state.finishSession(reason: "user")
+        XCTAssertEqual(first?.bufferCount, 1, "汇总里要带上这轮缓冲")
+        XCTAssertNil(state.finishSession(reason: "user"), "同一次会话只结一次账")
+    }
+
+    /// 宿主侧看门狗上报的卡死次数要进汇总。
+    func testNoteStallFeedsSessionStats() {
+        let state = PlayerState()
+        state.noteStall()
+        state.noteStall()
+        XCTAssertEqual(state.sessionStats.stallCount, 2)
+    }
+
+    func testResetClearsSessionStats() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.bufferingChanged(true))
+        try await waitUntil("进缓冲") { state.sessionStats.bufferCount == 1 }
+
+        state.reset()
+        XCTAssertEqual(state.sessionStats, PlaybackSessionStats(), "reset 按源清零")
+    }
+
     func testDisplayTitleFallsBackToLanguageAndCodec() {
         let named = TrackInfo.stub(id: 1, kind: .audio, title: "导演评论")
         XCTAssertEqual(named.displayTitle, "导演评论")

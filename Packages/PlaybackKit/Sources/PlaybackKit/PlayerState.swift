@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 import Observation
 
@@ -58,6 +59,17 @@ public final class PlayerTimeline {
     }
 }
 
+/// 一次播放会话的累计统计。`PlayerState` 每次 open 重建，所以天然按「源」清零。
+/// `stallCount` 由宿主侧看门狗通过 `noteStall()` 上报（PlaybackKit 不知道宿主怎么检测）。
+public struct PlaybackSessionStats: Sendable, Equatable {
+    public var bufferCount = 0
+    public var bufferedSeconds: TimeInterval = 0
+    public var errorCount = 0
+    public var stallCount = 0
+    /// 处于 `.playing` 的累计时长（不含缓冲与暂停）。
+    public var playedSeconds: TimeInterval = 0
+}
+
 /// UI 只读的播放快照。事件流在 `start()` 里被独占消费，逐条折叠成属性。
 @MainActor
 @Observable
@@ -72,6 +84,15 @@ public final class PlayerState {
     public private(set) var subtitleTracks: [TrackInfo] = []
     /// 最近一条内核错误，UI 可以显示后自行清掉。
     public private(set) var lastError: String?
+
+    /// 本次会话的累计统计（缓冲次数/时长、错误数、卡死数、播放时长）。
+    public private(set) var sessionStats = PlaybackSessionStats()
+
+    /// 会话是否已经开过（`start(consuming:)` 置位）：没开过源时不写 session.end 噪音。
+    @ObservationIgnored private var sessionStarted = false
+    @ObservationIgnored private var bufferingStartedAt: Date?
+    @ObservationIgnored private var playStartedAt: Date?
+    @ObservationIgnored private var hasEmittedFirstFrame = false
 
     /// 连续重复的内核错误去重键。内核卡进坏状态（如 EOF stall）会逐帧重发同一条
     /// `.failed`，不去重的话主线程和诊断日志会被错误风暴刷爆（实测 6302 条）。
@@ -97,6 +118,7 @@ public final class PlayerState {
     public func start(consuming engine: any PlaybackEngine) -> Task<Void, Never> {
         consumptionGeneration &+= 1
         let generation = consumptionGeneration
+        sessionStarted = true
         return Task { [weak self] in
             for await event in engine.events {
                 guard !Task.isCancelled, let self,
@@ -135,6 +157,11 @@ public final class PlayerState {
         subtitleTracks = []
         lastError = nil
         lastFailedEventKey = nil
+        sessionStats = PlaybackSessionStats()
+        sessionStarted = false
+        bufferingStartedAt = nil
+        playStartedAt = nil
+        hasEmittedFirstFrame = false
     }
 
     func apply(_ event: PlayerEvent) {
@@ -143,13 +170,19 @@ public final class PlayerState {
             // 内核卡进坏状态时会逐帧重发同一事件；@Observable 的写入即使同值
             // 也会触发观察者，同值直接丢（上次错误风暴被 .failed 去重救场，
             // 这里把其余事件类型一并防住）。
-            if state != value { state = value }
+            if state != value {
+                state = value
+                recordStateTransition(value)
+            }
         case .positionChanged(let value):
             timeline.setPosition(value)
         case .durationChanged(let value):
             timeline.setDuration(value)
         case .bufferingChanged(let value):
-            if isBuffering != value { isBuffering = value }
+            if isBuffering != value {
+                isBuffering = value
+                recordBufferingChange(value)
+            }
         case .videoParamsChanged(let value):
             if videoParams != value { videoParams = value }
         case .tracksChanged(let value):
@@ -165,12 +198,84 @@ public final class PlayerState {
             // EOF stall 刷了 6302 条日志、主线程被事件轰炸到假死。
             let key = "\(code)|\(message ?? "")"
             if key != lastFailedEventKey {
-                PlaybackLog.error("内核错误事件 code=\(code) message=\(message ?? "nil")")
                 lastFailedEventKey = key
+                sessionStats.errorCount += 1
+                PlaybackLog.error("内核错误事件 code=\(code) message=\(message ?? "nil")")
+                // 结构化事件行：与人类可读的错误行互补，脚本按 event/code 直接消费。
+                PlaybackLog.event(.error, fields: [
+                    "code": .integer(Int64(code)),
+                    "message": .string(message ?? "nil"),
+                    "position_ms": .integer(timeline.position.microseconds / 1000),
+                ], level: .error)
             }
             if state != .error { state = .error }
             let newError = message ?? "内核错误 code=\(code)"
             if lastError != newError { lastError = newError }
         }
+    }
+
+    /// 状态迁移的副作用：首帧近似点 + 播放时长累计。
+    private func recordStateTransition(_ newState: PlaybackState) {
+        if newState == .playing {
+            if !hasEmittedFirstFrame {
+                hasEmittedFirstFrame = true
+                // 内核没有独立的「首帧已渲染」事件，状态进 playing 是宿主能给的最接近的点；
+                // 与 `open.start`/`open.done` 的时间戳（毫秒精度）相减即得「open 到出画面」。
+                PlaybackLog.event(.firstFrame, fields: [
+                    "position_ms": .integer(timeline.position.microseconds / 1000),
+                ])
+            }
+            if playStartedAt == nil { playStartedAt = Date() }
+        } else if let started = playStartedAt {
+            sessionStats.playedSeconds += Date().timeIntervalSince(started)
+            playStartedAt = nil
+        }
+    }
+
+    /// 缓冲起止事件：issue #2（「三十秒闪一次」）在日志里查不到东西，正是因为
+    /// 此前缓冲周期完全不落日志，只有 UI 状态在悄悄翻。
+    private func recordBufferingChange(_ buffering: Bool) {
+        let positionMs = timeline.position.microseconds / 1000
+        if buffering {
+            bufferingStartedAt = Date()
+            sessionStats.bufferCount += 1
+            PlaybackLog.event(.bufferStart, fields: ["position_ms": .integer(positionMs)])
+        } else {
+            let buffered = bufferingStartedAt.map { Date().timeIntervalSince($0) } ?? 0
+            bufferingStartedAt = nil
+            sessionStats.bufferedSeconds += buffered
+            PlaybackLog.event(.bufferEnd, fields: [
+                "position_ms": .integer(positionMs),
+                "duration_ms": .integer(Int64(buffered * 1000)),
+            ])
+        }
+    }
+
+    /// 宿主侧卡死看门狗上报一次（检测逻辑在 App 层：内核不报缓冲 ≠ 没卡）。
+    public func noteStall() {
+        sessionStats.stallCount += 1
+    }
+
+    /// 结束本会话并产出汇总（`reason` 由宿主给：user / superseded / failed）。
+    /// 只放行一次；没开过源直接返回 nil，不制造噪音记录。
+    @discardableResult
+    public func finishSession(reason: String) -> PlaybackSessionStats? {
+        guard sessionStarted else { return nil }
+        sessionStarted = false
+        var stats = sessionStats
+        if let started = playStartedAt {
+            stats.playedSeconds += Date().timeIntervalSince(started)
+            playStartedAt = nil
+        }
+        // 逐项赋值而不是一个大字典字面量：6 个混合类型的条目会让类型检查器超时
+        //（"unable to type-check this expression in reasonable time"）。
+        var fields: [String: DiagnosticValue] = ["reason": .string(reason)]
+        fields["played_ms"] = .integer(Int64(stats.playedSeconds * 1000))
+        fields["buffer_count"] = .integer(Int64(stats.bufferCount))
+        fields["buffered_ms"] = .integer(Int64(stats.bufferedSeconds * 1000))
+        fields["error_count"] = .integer(Int64(stats.errorCount))
+        fields["stall_count"] = .integer(Int64(stats.stallCount))
+        PlaybackLog.event(.sessionEnd, fields: fields)
+        return stats
     }
 }

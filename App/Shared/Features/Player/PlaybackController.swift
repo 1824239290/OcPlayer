@@ -39,6 +39,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 换片重建引擎不丢显示状态。
     private var lastDisplayEDRHeadroom: Double?
 
+    /// 本次 open 的起点（`open.done` 的 elapsed_ms 用）。
+    @ObservationIgnored private var openStartedAt: Date?
+    /// 卡死看门狗：在播、位置不动、内核又**没**报缓冲 = demux/解码卡住的信号。
+    @ObservationIgnored private var stallWatchdogTask: Task<Void, Never>?
+    @ObservationIgnored private var lastStallCheckPosition: Duration = .zero
+    @ObservationIgnored private var frozenSeconds: Double = 0
+    @ObservationIgnored private var stallReported = false
+
     var rate: Double = PlaybackPreferences.rate {
         didSet {
             guard rate != oldValue else { return }
@@ -425,6 +433,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         activeRequest = nil
         failedRequestID = nil
         PlaybackLog.info("PlaybackController open(request) title=\(request.title) hasLoadedSource=\(hasLoadedSource)")
+        openStartedAt = Date()
         var headers: [String: String] = [:]
         if let authHeader = request.authHeader {
             headers["Authorization"] = authHeader
@@ -432,6 +441,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let readAhead = PlaybackPreferences.httpReadAheadBytes
         // 诊断「改了预读档位没生效」：把本次真正传给内核的值打进日志。
         PlaybackLog.info("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
+        PlaybackLog.event(.openStart, fields: [
+            "source": .string(Self.sourceKind(for: request.uri)),
+            "read_ahead_bytes": readAhead.map { .integer(Int64($0)) } ?? .null,
+            "has_resume": .boolean(request.resumeSeconds != nil),
+        ])
         open(
             PlaybackSource(
                 uri: request.uri,
@@ -496,6 +510,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                     )
                 }
                 do {
+                    recordSeek(toSeconds: target, kind: "resume")
                     try engine.seek(to: .seconds(target))
                 } catch {
                     setupError = "续播定位失败：\(error)"
@@ -529,6 +544,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func open(_ source: PlaybackSource, securityScopedURL: URL? = nil, request: PlaybackRequest) {
         let generation = sourceGeneration
         if hasLoadedSource || openingRequestID != nil {
+            // 换片：先把上一段会话的账结掉（播放时长/缓冲次数/卡死次数），再退役旧引擎。
+            state.finishSession(reason: "superseded")
             playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
             try? engine?.stop()
             hasLoadedSource = false
@@ -643,6 +660,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
         activeSecurityScope = acquiredScope
         engineIsActive = true
         playerLog.info("open 成功 title=\(currentTitle ?? "?")")
+        // 结构化结果行：`elapsed_ms` 就是 issue 里「open 花了 16/36/18 秒」那个数。
+        PlaybackLog.event(.openDone, fields: [
+            "ok": .boolean(true),
+            "elapsed_ms": .integer(openElapsedMilliseconds()),
+        ])
+        startStallWatchdog()
     }
 
     /// open 失败（主线程）：过期时只释放作用域；当前代次走完整失败路径
@@ -673,6 +696,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
         failedRequestID = request.id
         setupError = error
         playerLog.error("open 失败 error=\(error) title=\(request.title)")
+        PlaybackLog.event(.openDone, fields: [
+            "ok": .boolean(false),
+            "elapsed_ms": .integer(openElapsedMilliseconds()),
+            "error": .string(error),
+        ], level: .error)
     }
 
     /// open 成功但成果已被让位（open 期间用户取消/换片，收尾已补 stop）：释放作用域即可。
@@ -772,6 +800,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func stopPlayback() {
         playerLog.info("stopPlayback hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        state.finishSession(reason: "user")
         // open 在飞时的收口：看门狗与在飞标记全部清掉。在飞引擎的让位登记
         // （下面的 stop()）由其 open 收尾补做，完成回调按过期代次落空。
         openingWatchdogTask?.cancel()
@@ -831,6 +860,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     func resetEngine() {
+        stopStallWatchdog()
         resumeTask?.cancel()
         resumeTask = nil
         eventTask?.cancel()
@@ -860,6 +890,76 @@ final class PlaybackController: DanmakuPlaybackHosting {
         activeSecurityScope = false
     }
 
+    // MARK: - 播放事件与卡死看门狗
+
+    private static func sourceKind(for uri: String) -> String {
+        if uri.hasPrefix("http://") || uri.hasPrefix("https://") { return "network" }
+        if uri.hasPrefix("/") || uri.hasPrefix("file://") { return "local" }
+        return "other"
+    }
+
+    /// 距本次 open 起点多少毫秒（没记起点时给 0，不编数）。
+    private func openElapsedMilliseconds() -> Int64 {
+        guard let openStartedAt else { return 0 }
+        return Int64(Date().timeIntervalSince(openStartedAt) * 1000)
+    }
+
+    /// 每 2s 查一次：**在播且不在缓冲**，位置却连续 5s 不动 —— 这正是「播到一半就停」
+    /// 的形态（demux 线程死掉/事件断供，连 buffering 事件都没有，UI 上看不出在等什么）。
+    /// 触发时记 warning 级 stall（recovered=false），位置恢复后补一条 info（recovered=true），
+    /// 两条的 `frozen_ms` 相减即这轮卡死时长；`stall_count` 会进 `session.end` 汇总。
+    private func startStallWatchdog() {
+        stallWatchdogTask?.cancel()
+        lastStallCheckPosition = state.position
+        frozenSeconds = 0
+        stallReported = false
+        stallWatchdogTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !Task.isCancelled else { return }
+                self.checkStall()
+            }
+        }
+    }
+
+    private func stopStallWatchdog() {
+        stallWatchdogTask?.cancel()
+        stallWatchdogTask = nil
+    }
+
+    private func checkStall() {
+        // 暂停 / 缓冲 / 已停都不算卡死：缓冲有自己的 buffer.* 事件记账。
+        guard state.state == .playing, !state.isBuffering else {
+            lastStallCheckPosition = state.position
+            frozenSeconds = 0
+            stallReported = false
+            return
+        }
+        if state.position == lastStallCheckPosition {
+            frozenSeconds += 2
+            if frozenSeconds >= 5, !stallReported {
+                stallReported = true
+                state.noteStall()
+                PlaybackLog.event(.stall, fields: [
+                    "recovered": .boolean(false),
+                    "frozen_ms": .integer(Int64(frozenSeconds * 1000)),
+                    "position_ms": .integer(state.position.microseconds / 1000),
+                ], level: .warning)
+            }
+        } else {
+            if stallReported {
+                PlaybackLog.event(.stall, fields: [
+                    "recovered": .boolean(true),
+                    "frozen_ms": .integer(Int64(frozenSeconds * 1000)),
+                    "position_ms": .integer(state.position.microseconds / 1000),
+                ])
+            }
+            frozenSeconds = 0
+            stallReported = false
+            lastStallCheckPosition = state.position
+        }
+    }
+
     // MARK: - 控制
 
     func togglePlayPause() {
@@ -882,6 +982,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func seek(toFraction fraction: Double) {
         guard let engine, state.duration > .zero else { return }
         let micros = Double(state.duration.microseconds) * min(max(fraction, 0), 1)
+        recordSeek(toSeconds: micros / 1_000_000, kind: "scrub")
         try? engine.seek(to: .microseconds(Int64(micros)))
     }
 
@@ -893,7 +994,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if state.duration > .zero {
             target = min(target, Double(state.duration.microseconds) - 500_000)
         }
+        recordSeek(toSeconds: max(0, target) / 1_000_000, kind: "skip")
         try? engine.seek(to: .microseconds(Int64(max(0, target))))
+    }
+
+    /// 记一条 seek 事件（来源区分见 `PlaybackEvent.seek`）。在真正调内核之前记，
+    /// 这样即使 seek 本身失败，日志里也有「用户想跳去哪」这一笔。
+    private func recordSeek(toSeconds target: Double, kind: String) {
+        PlaybackLog.event(.seek, fields: [
+            "from_ms": .integer(state.position.microseconds / 1000),
+            "to_ms": .integer(Int64(target * 1000)),
+            "kind": .string(kind),
+        ])
     }
 
     // MARK: - 章节 / 跳过片头片尾
@@ -910,6 +1022,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 跳到某个章节起点。
     func seek(toChapter chapter: PlaybackChapter) {
         guard let engine else { return }
+        recordSeek(toSeconds: max(0, chapter.startSeconds), kind: "chapter")
         try? engine.seek(to: .seconds(max(0, chapter.startSeconds)))
     }
 
@@ -951,8 +1064,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
             // 跳到片尾结束前 20 秒,保留一点尾声画面。
             target = max(duration - 20, position)
             chapterSession.noteEndCreditsSkipped()
-            PlaybackLog.info("保底跳过片尾 → \(target)s")
+            PlaybackLog.append("保底跳过片尾 → \(target)s")
         }
+        recordSeek(toSeconds: max(0, target), kind: "auto")
         try? engine?.seek(to: .seconds(max(0, target)))
     }
 
