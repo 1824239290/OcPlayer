@@ -89,12 +89,17 @@ struct OcPlayerApp: App {
     #endif
 
     init() {
+        // 先把设置里的日志级别落到管线上，再动别的东西——第一条日志的级别要先对。
+        // trace 文件按会话清一次（它们无上限增长，不清就跨次累积）。
+        DiagnosticsSettings.apply()
+        KernelTraceSwitches.prepareForLaunch(
+            logDirectory: AppDiagnostics.fileURL.deletingLastPathComponent())
+        // 接住内核 stderr（`ErikaHDR` / 内核 trace 的 stderr 回声）：GUI 启动时 fd 2
+        // 归 launchd，不接就永远看不到；必须在第一次内核调用（播放时的引擎创建）之前启动。
+        KernelStderrPump.shared.start()
         // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         PlaybackEngineAssembly.registerAll()
-        // 先把设置里的日志级别落到管线上，再写第一条日志（recordLaunch 往往是
-        // 本次进程的第一条记录，级别要先对）。
-        DiagnosticsSettings.apply()
         AppDiagnostics.recordLaunch()
         Task { @MainActor in
             await AppUpdateChecker.shared.checkForUpdates()
