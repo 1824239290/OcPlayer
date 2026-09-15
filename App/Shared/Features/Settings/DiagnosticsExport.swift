@@ -10,7 +10,16 @@ import UniformTypeIdentifiers
 enum DiagnosticsExport {
 
     static func makeText() throws -> String {
-        try AppDiagnostics.logger.exportText(headerLines: headerLines())
+        var text = try AppDiagnostics.logger.exportText(headerLines: headerLines())
+        // 详细档的内核 trace（HTTP 逐请求 / demux 读失败）是独立文件，附在后面：
+        // 「一个文件说明一切」比让用户分别找两个 jsonl 靠谱。
+        let directory = AppDiagnostics.fileURL.deletingLastPathComponent()
+        for name in KernelTraceSwitches.traceFileNames {
+            let url = directory.appendingPathComponent(name)
+            guard let body = try? String(contentsOf: url, encoding: .utf8), !body.isEmpty else { continue }
+            text += "\n\n# 内核 trace：\(name)\n" + body
+        }
+        return text
     }
 
     /// 文件名（不含扩展名）：`OcPlayer-诊断-<yyyyMMdd-HHmm>`，扩展名由 fileExporter 补。

@@ -400,7 +400,8 @@ struct DiagnosticsSection: View {
                 DiagnosticsSettings.apply()
             }
 
-        Text("打开后记录 debug 级链路细节（守卫拒绝、中间态），排查问题用；"
+        Text("打开后记录 debug 级链路细节（守卫拒绝、中间态）并打开内核 trace"
+            + "（HTTP 逐请求 / 播放读失败 / HDR 调试，**下一次播放生效**）；"
             + "关闭时只记状态迁移与失败。")
             .font(.caption)
             .foregroundStyle(.secondary)

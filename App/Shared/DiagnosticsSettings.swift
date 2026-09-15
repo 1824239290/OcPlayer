@@ -15,7 +15,14 @@ enum DiagnosticsSettings {
     }
 
     /// 把当前开关应用到日志管线。启动时与开关变化时各调一次。
-    static func apply(in defaults: UserDefaults = .standard) {
-        DiagnosticLogger.setMinimumLevel(isVerboseLoggingEnabled(in: defaults) ? .debug : .info)
+    ///
+    /// 一并处理内核开关（`ERIKA_*` trace / 诊断）：它们由内核在**引擎创建时**读取，
+    /// 所以改动在下一次播放（重建引擎）后生效——设置页文案按这个口径写。
+    /// `logDirectory` 只给测试注入临时目录用（避免动到真实日志目录里的 trace 文件）。
+    static func apply(in defaults: UserDefaults = .standard, logDirectory: URL? = nil) {
+        let verbose = isVerboseLoggingEnabled(in: defaults)
+        DiagnosticLogger.setMinimumLevel(verbose ? .debug : .info)
+        let directory = logDirectory ?? AppDiagnostics.fileURL.deletingLastPathComponent()
+        KernelTraceSwitches.apply(verbose: verbose, into: directory)
     }
 }
