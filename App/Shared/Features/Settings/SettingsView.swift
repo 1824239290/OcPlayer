@@ -381,14 +381,30 @@ struct DanmakuGatewayEntrySheet: View {
 
 // MARK: - 诊断
 
-/// 设置页的诊断区：日志路径 / 最近记录（可滚动）/ 清空。
-/// 不出「导出文件」按钮——直接在 Finder 里打开日志目录更直观。
+/// 设置页的诊断区：详细日志开关 / 导出诊断包 / 日志路径 / 最近记录（可滚动）/ 清空。
+/// 导出的是**单个 .txt**（头部说明 + 全部 JSONL 记录），报告问题时直接附件。
 struct DiagnosticsSection: View {
+    /// 详细（debug）档开关：只影响日志管线的最低落盘级别，与播放/弹幕开关无关。
+    @AppStorage(SettingsKeys.diagnosticsVerbose) private var verboseLogging = false
     @State private var records: [DiagnosticEntry] = []
     @State private var summaryText = "—"
     @State private var revealPath = false
+    @State private var exportDocument: DiagnosticExportDocument?
+    @State private var isExporting = false
+    @State private var exportFailure: String?
 
     var body: some View {
+        Toggle("详细日志", isOn: $verboseLogging)
+            .onChange(of: verboseLogging) { _, _ in
+                // 立即生效：改的是日志管线的进程级最低级别，不需要重启。
+                DiagnosticsSettings.apply()
+            }
+
+        Text("打开后记录 debug 级链路细节（守卫拒绝、中间态），排查问题用；"
+            + "关闭时只记状态迁移与失败。")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
         Button {
             revealPath.toggle()
         } label: {
@@ -427,11 +443,49 @@ struct DiagnosticsSection: View {
         }
         .font(.caption)
 
+        Button {
+            export()
+        } label: {
+            Label("导出诊断包…", systemImage: "square.and.arrow.up")
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .plainText,
+            defaultFilename: DiagnosticsExport.suggestedFileName()
+        ) { result in
+            if case .failure(let error) = result {
+                exportFailure = "导出失败：\(error.localizedDescription)"
+            }
+        }
+        if let exportFailure {
+            Text(exportFailure)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+
         Button(role: .destructive) {
             try? AppDiagnostics.logger.clear()
             Task { await refresh() }
         } label: {
             Label("清空日志", systemImage: "trash")
+        }
+    }
+
+    /// 导出内容要读整份日志（可能几 MB），挪出主线程再回来开面板（同 refresh 的做法）。
+    private func export() {
+        Task {
+            let result: (text: String?, failure: String?) = await Task.detached {
+                do { return (try DiagnosticsExport.makeText(), nil) }
+                catch { return (nil, error.localizedDescription) }
+            }.value
+            if let text = result.text {
+                exportDocument = DiagnosticExportDocument(text: text)
+                exportFailure = nil
+                isExporting = true
+            } else {
+                exportFailure = "导出失败：\(result.failure ?? "未知错误")"
+            }
         }
     }
 

@@ -20,6 +20,9 @@ enum SettingsKeys {
     static let danmakuUseOverlayRenderer = "dev.jumusu.ocplayer.danmaku.useOverlayRenderer"
     /// 弹幕诊断日志开关。
     static let danmakuDiagnostics = "dev.jumusu.ocplayer.danmaku.diagnostics"
+    /// 诊断日志：详细（debug）档开关。关（默认）= 只落 info 及以上（状态迁移 / 失败）；
+    /// 开 = 连守卫与中间态一起落盘，排障用。见 `DiagnosticsSettings`。
+    static let diagnosticsVerbose = "dev.jumusu.ocplayer.diagnostics.verbose"
     /// 更新检查：上一次拿到结果的时间（timeIntervalSince1970），自动检查的 24h 节流依据。
     static let updateLastCheckedAt = "dev.jumusu.ocplayer.update.lastCheckedAt"
     /// 更新检查：用户选择忽略提醒的版本号。

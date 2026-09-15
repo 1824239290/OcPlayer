@@ -92,6 +92,9 @@ struct OcPlayerApp: App {
         // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         PlaybackEngineAssembly.registerAll()
+        // 先把设置里的日志级别落到管线上，再写第一条日志（recordLaunch 往往是
+        // 本次进程的第一条记录，级别要先对）。
+        DiagnosticsSettings.apply()
         AppDiagnostics.recordLaunch()
         Task { @MainActor in
             await AppUpdateChecker.shared.checkForUpdates()
