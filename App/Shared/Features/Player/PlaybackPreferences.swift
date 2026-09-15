@@ -93,8 +93,12 @@ enum PlaybackPreferences {
     }
 
     /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
-    /// 公网高延迟服务器（远程 Emby 等）建议 16 MiB（约 16 秒 @8Mbps），
-    /// 局域网默认即可。设置页「网络预读缓冲」读写此值。
+    ///
+    /// ⚠️ 不是「越大越好」：内核当前会把整个窗口作为**一次** HTTP 请求拉取，而单次请求
+    /// 有 15 秒响应上限 —— 等于每 1 MiB 约需 0.55 Mbps 持续带宽（8 MiB≈4 Mbps、
+    /// 16 MiB≈9 Mbps、32 MiB≈18 Mbps）。带宽吃紧的远程服务器反而要调小，否则一抖动
+    /// 就是连续失败（播到一半停 / 周期性缓冲）。内核改成按块拉取后门槛会降到 ~2 Mbps，
+    /// 届时同步改这里的口径与设置页文案。
     static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
     static var httpReadAheadMiB: Int {
         get {

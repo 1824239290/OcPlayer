@@ -57,7 +57,10 @@ struct SettingsView: View {
                         Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
                     }
                 }
-                Text("公网服务器建议 16 MiB 以上，局域网默认即可。")
+                // 档位越大，内核单次拉取的数据越多，对服务器**持续带宽**的要求越高：
+                // 单次请求的响应上限是 15 秒，等于每 1 MiB 约需 0.55 Mbps。
+                // 内核改成按块拉取（单请求封顶）后各档门槛会一起降到 ~2 Mbps，届时同步改文案。
+                Text("数值越大对服务器带宽要求越高：每 1 MiB 约需 0.55 Mbps 持续带宽（8 MiB≈4 Mbps、32 MiB≈18 Mbps）。带宽吃紧的远程服务器反而要调小，局域网默认即可。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

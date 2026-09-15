@@ -6,6 +6,8 @@
 
 ### 修复
 
+- **缓冲不再强弹 HUD（issue #2「三十秒闪一次」的可见症状）**：HUD 的显隐判据此前只有一个 `canAutoHideControls`（`(playing||paused) && !isBuffering && 无遮挡`），且「变化即唤出」——于是每轮缓冲起止都强制唤出一次 HUD，跟着弹出来的是全屏压暗遮罩（`PlayerHUDReadabilityScrim`，32% 黑）＋转圈＋弹幕冻结，网络抖动下就是用户看到的「画面暗一下亮一下」。判据拆成 `PlayerHUDGates` 的两个值：`revealTrigger`（该不该唤出：暂停 / 错误 / 字幕导入 / 弹幕选择 / 辅助功能 / 播放起止）与 `canAutoHide`（能不能自动收起，缓冲期间为 false）；`PlayerHUDVisibilityCoordinator` 新增 `refreshAutoHide(canAutoHide:)`——缓冲只续期、不计显隐：HUD 在屏上就留住，已收起则不会被弹出来。App 层新增 6 用例（含「缓冲只改收起资格」「不弹已收起的 HUD」两条回归）。
+- **UI 缓冲态加迟滞，单帧饿数据不再闪动控件**：`PlayerState` 新增 `isBufferingSustained`——进缓冲要**连续持续 300ms** 才置位，恢复时补足 500ms 最短可见时长再收回（期间再进缓冲不重计、不收回）。转圈、HUD 状态行「缓冲中」、弹幕冻结/续播、HUD 收起计时全部改用它；诊断真值 `isBuffering`（`buffer.start/end` 事件、卡死看门狗）不受影响——埋点里不留迟滞。PlaybackKit 新增 4 用例（单帧饿数据完全不惊动 UI / 上沿与最短可见 / 收回前再进不闪 / reset 取消在飞计时）。
 - **日志跨进程共写把记录撕碎（116 行残缺）**：`diagnostics.jsonl` 用 `FileHandle(forWritingTo:)` + `seekToEnd()` 打开、各进程各记文件偏移，"App 进程 + 测试宿主进程"共写同一文件时，后写者的 write 落在旧偏移上覆盖对方——实测三份文件共 116 行残缺（两条记录互相插入、或一条被拦腰截断，样本里能看到测试假内核名混进真实日志）。改为打开后置 `O_APPEND`（每次 write 由内核原子追加到真实末尾），补回归用例 `testAppendLandsAtRealEndWhenAnotherWriterIntervenes`，A/B 验证有牙齿：禁用 `O_APPEND` 时该用例必挂（对方写入被覆盖，3 行变 2 行）。历史残缺行仍在旧归档里，未清理。
 - **维护会把「正在写的」日志文件删掉**：保留策略要跳过当前会话文件，但 `contentsOfDirectory` 返回的 URL 会把 `/var` 解析成 `/private/var`，直接比 URL 恒不相等 → 当前文件被判成淘汰候选。改成解析符号链接后比路径。由新写的「按数量淘汰最旧、当前文件永不删」用例抓出（实测确认 URL 字符串差异）。
 - **测试宿主污染真实日志目录**：`xcodebuild test` 注入的 App 进程跑真实代码，一次全量 AppTests 会在 `~/Library/Logs/OcPlayer/` 留下 6 个会话文件（也是上面那 116 行残缺的另一半来源）。测试宿主现在改写临时目录（`XCTestConfigurationFilePath` 判定），跑完真实目录文件数不变。
@@ -14,6 +16,9 @@
 - **章节 / MediaSegments 链路静默失效（时序竞态）**：`loadChapters` 与引擎 `open` 并发执行（章节请求 28ms 即回，引擎 open 约半秒），但其时效守卫要求 `activeRequest` 已是当前请求——而 `activeRequest` 恰恰要到 open 完成才赋值，守卫因此**每次必败**，三个 await 检查点静默 return：MediaSegments 请求不发、章节与服务端跳过标记全部丢弃、日志零痕迹（媒体库装了 Intro Skipper 插件也不会生效）。守卫改为只认装配层的 `expectedRequestID`（跨请求换片时同步更新，是这路数据真正的失效判据），与引擎 open / 引擎重建解耦；作废路径补日志，不再无声。修复后 Jellyfin / Emby 的章节列表、章节名启发式与 MediaSegments 片头片尾识别首次真正可用。
 
 ### 改动
+
+- **设置页「网络预读缓冲」文案改成按带宽取舍**：原文案「公网服务器建议 16 MiB 以上」方向是反的——内核把整个窗口作为**一次** HTTP 请求拉取，单次请求有 15 秒响应上限，等于每 1 MiB 约需 0.55 Mbps 持续带宽（8 MiB≈4 Mbps、16 MiB≈9 Mbps、32 MiB≈18 Mbps）。带宽吃紧的远程服务器调大反而会周期性失败（现场表现：播到一半停 / 每半分钟一次缓冲）。`PlaybackPreferences` 的档位注释、设置页说明与 README 同步改成「数值越大要求越高，带宽吃紧反而要调小」并给出各档门槛；内核改成按块拉取（单请求封顶）后这几档门槛会一起降到 ~2 Mbps，届时同步回落文案。
+- **内存 tick 记录补 `output_mode_switches`**：输出模式切换计数此前只参与「这次 tick 要不要记」的判定，日志里看不到值。现在进字段（每次记到的 tick 都带），配合内核 `ERIKA_HDR_DEBUG` 的 `ErikaHDR: … output mode=…` 行，现场就能分辨「显示器侧真的切了 HDR / 刷新率」还是 UI 自己闪（issue #2）。ErikaKit 新增 1 用例。
 
 - **日志系统重整：默认档精简 + 一键诊断包 + 播放事件行 + 内核 stderr 接入**（issue #1/#2 排障暴露的缺口，完整清单见提交历史与 `Docs/LOGGING.md`）。四件事：
   1. **级别口径重定 + 默认 `info` 档**：全仓 119 处 debug 调用点逐条定级（升 info 约 63、升 warning 27、留 debug 18、合并删除 25，另删 6 个无调用方的网络日志死包装）——「一次操作的结果」「状态迁移」必须在默认档可见，守卫与中间态留 debug。管线加了进程级最低级别（默认 info）与实例覆盖，过滤放在**消息求值、脱敏、节流之前**（`@autoclosure` 消息因此不求值；被压掉的记录不污染节流计数）。
