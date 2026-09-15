@@ -143,6 +143,16 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     private static let memorySampleIntervalSeconds: Double = 5
     /// 只被渲染线程写；初始 `-.infinity` 让第一帧 tick 先采一条当基线。
     private var lastMemorySampleAt = -Double.infinity
+
+    /// 上次真正下发的 EDR headroom：屏参通知风暴（一次播放实测 3155 条同值记录）
+    /// 里同值重复下发既白刷日志也白调内核，这里直接挡掉。
+    private var lastPushedEDRHeadroom: Float?
+
+    /// tick 内存采样的降噪基准：只有关键分项有实质变化才写日志
+    /// （播放中每 5s 一条 = 1 小时片子多 ~700 行噪声，而真正要看的是趋势拐点）。
+    private var lastLoggedTickMemory: ErikaMemorySnapshot?
+    private static let memoryLogThresholdBytes: UInt64 = 8 * 1024 * 1024
+    private static let memoryLogThresholdRatio: Double = 0.10
     /// 采样失败只报一次，避免逐帧刷屏。
     private var memorySampleFailed = false
 
@@ -520,8 +530,10 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     public func updateDisplayEDRHeadroom(_ headroom: Double) {
         if dropControlDuringOpen("updateDisplayEDRHeadroom") { return }
         let clamped = Float(min(max(headroom, 1.0), 10_000))
+        guard clamped != lastPushedEDRHeadroom else { return }
         do {
             try withLock { try presenter.setOutputHeadroom(clamped) }
+            lastPushedEDRHeadroom = clamped
             PlaybackLog.info(String(format: "displayEDRHeadroom → %.2f", clamped))
         } catch {
             PlaybackLog.warning("updateDisplayEDRHeadroom 失败 error=\(error)")
@@ -708,11 +720,13 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     }
 
     /// 锁外段：落库 + 进程 footprint + 日志。快照已在手，不碰 presenter，无需主锁。
+    /// tick 采样走「变化才记」（见 `shouldLogMemorySample`），open/stop 基线始终记。
     private func publishMemorySample(_ snapshot: ErikaMemorySnapshot?, reason: String) {
         guard let snapshot else { return }
         statsLock.lock()
         _latestMemory = snapshot
         statsLock.unlock()
+        guard shouldLogMemorySample(snapshot, reason: reason) else { return }
         let process = ProcessFootprint.current()
         var fields = snapshot.logFields
         for (key, value) in process.logFields { fields[key] = value }
@@ -720,6 +734,41 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             "内核内存 reason=\(reason) \(snapshot.summaryLine) · \(process.summaryLine)",
             fields: fields
         )
+    }
+
+    /// tick 采样只在「与上次记录相比有实质变化」时写日志：关键分项变化 ≥8 MiB
+    /// 或 ≥10%，或 drawable 数 / 输出模式切换计数变了（后者正是显示器侧切 HDR /
+    /// 刷新率的证据，issue #2 要用）。open/stop 的基线永远写——那是一段播放的头尾锚点。
+    private func shouldLogMemorySample(_ snapshot: ErikaMemorySnapshot, reason: String) -> Bool {
+        guard reason == "tick" else { return true }
+        statsLock.lock()
+        defer { statsLock.unlock() }
+        guard let previous = lastLoggedTickMemory else {
+            lastLoggedTickMemory = snapshot
+            return true
+        }
+        guard Self.isMemoryMeaningfullyChanged(from: previous, to: snapshot) else { return false }
+        lastLoggedTickMemory = snapshot
+        return true
+    }
+
+    private static func isMemoryMeaningfullyChanged(
+        from old: ErikaMemorySnapshot, to new: ErikaMemorySnapshot
+    ) -> Bool {
+        if old.drawableCount != new.drawableCount { return true }
+        if old.outputModeSwitches != new.outputModeSwitches { return true }
+        let pairs: [(UInt64, UInt64)] = [
+            (old.rendererTrackedBytes, new.rendererTrackedBytes),
+            (old.videoFrameBytes, new.videoFrameBytes),
+            (old.danmakuAtlasBytes, new.danmakuAtlasBytes),
+            (old.deviceCurrentAllocatedBytes, new.deviceCurrentAllocatedBytes),
+        ]
+        for (before, after) in pairs {
+            let delta = UInt64(abs(Int64(after) - Int64(before)))
+            if delta >= memoryLogThresholdBytes { return true }
+            if before > 0, Double(delta) / Double(before) >= memoryLogThresholdRatio { return true }
+        }
+        return false
     }
 
     /// 播放页调试行：默认帧计数行下追加一行内核内存分项（HUD TimelineView 每秒重读）。
