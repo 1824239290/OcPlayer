@@ -66,6 +66,22 @@ final class PlayerHUDGatesTests: XCTestCase {
 
     // MARK: - 协调器：只续期，不弹窗
 
+    /// 轮询等待计时落地（CI 上调度抖动可能让「睡够固定时长」不成立）。
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 3,
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                XCTFail("等待超时：\(description)")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     /// 缓冲期间取消待收起；恢复后按正常延时重新计时。
     func testRefreshAutoHideHoldsVisibleThenResumes() async throws {
         let hud = PlayerHUDVisibilityCoordinator(autoHideDelay: .milliseconds(40))
@@ -73,11 +89,10 @@ final class PlayerHUDGatesTests: XCTestCase {
 
         hud.refreshAutoHide(canAutoHide: false)      // 进缓冲：只取消收起
         try await Task.sleep(for: .milliseconds(120))
-        XCTAssertTrue(hud.isVisible, "缓冲期间不自动收起")
+        XCTAssertTrue(hud.isVisible, "缓冲期间不自动收起（取消是幂等的，等多久都不该收）")
 
         hud.refreshAutoHide(canAutoHide: true)       // 缓冲结束：恢复计时
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertFalse(hud.isVisible, "恢复后按正常延时收起")
+        try await waitUntil("恢复后按延时收起") { !hud.isVisible }
     }
 
     /// 已经收起的 HUD 不会因为缓冲起止被弹出来（issue #2 的直接回归）。

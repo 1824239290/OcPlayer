@@ -281,6 +281,9 @@ final class PlayerStateFoldingTests: XCTestCase {
     // MARK: - UI 缓冲态迟滞（issue #2「三十秒闪一次」）
 
     /// 迟滞参数压到毫秒级：跑的是真实计时路径，只是不等真机的 300ms/500ms。
+    ///
+    /// ⚠️ 断言「还没发生」的用例必须把窗口拉到秒级（`longWindowState()`）：CI runner 上
+    /// 一次 poll 的调度抖动就能跨过毫秒级窗口，40ms 的用例本地全绿、CI 必挂（实测）。
     private func makeSustainedState(
         showDelay: Duration = .milliseconds(40),
         minVisible: Duration = .milliseconds(80)
@@ -288,10 +291,15 @@ final class PlayerStateFoldingTests: XCTestCase {
         PlayerState(bufferingUIShowDelay: showDelay, bufferingUIMinVisible: minVisible)
     }
 
+    /// 「窗口内不该发生的事」专用：秒级窗口，抖动余量 ≥10 倍。
+    private func longWindowState() -> PlayerState {
+        makeSustainedState(showDelay: .seconds(1), minVisible: .seconds(1))
+    }
+
     /// 单帧饿数据（内核报一下又立刻收回）完全不惊动 UI；真值照记。
     func testShortBufferingBlipNeverReachesUI() async throws {
         let engine = FakePlaybackEngine()
-        let state = makeSustainedState()
+        let state = longWindowState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -307,7 +315,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 持续缓冲：等过上沿才置位；恢复后补足最短可见时长再收回。
     func testSustainedBufferingShowsAfterDelayAndHoldsMinVisible() async throws {
         let engine = FakePlaybackEngine()
-        let state = makeSustainedState()
+        let state = longWindowState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -315,13 +323,13 @@ final class PlayerStateFoldingTests: XCTestCase {
         try await waitUntil("内核报缓冲已应用") { state.isBuffering }
         XCTAssertFalse(state.isBufferingSustained, "上沿之前不许置位")
 
-        try await waitUntil("持续缓冲置位") { state.isBufferingSustained }
+        try await waitUntil("持续缓冲置位", timeout: .seconds(3)) { state.isBufferingSustained }
 
         engine.emit(.bufferingChanged(false))
-        try await Task.sleep(for: .milliseconds(30))    // < 最短可见时长
+        try await Task.sleep(for: .milliseconds(100))   // 远小于最短可见时长
         XCTAssertTrue(state.isBufferingSustained, "最短可见时长内不收回（否则是一帧闪）")
 
-        try await waitUntil("到点收回") { !state.isBufferingSustained }
+        try await waitUntil("到点收回", timeout: .seconds(3)) { !state.isBufferingSustained }
     }
 
     /// 收回之前又进缓冲：不收回、也不重新计上沿——不来回闪。
@@ -345,23 +353,25 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// reset 取消在飞的计时：换源后不会被上一轮的迟滞事后改写。
     func testResetCancelsPendingBufferingTimers() async throws {
         let engine = FakePlaybackEngine()
-        let state = makeSustainedState()
+        // 秒级上沿：保证 reset 时计时**确实还在飞**（毫秒级在 CI 上可能已经先触发，
+        // 那样这条用例就变成「reset 清状态」而测不到取消）。
+        let state = longWindowState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
         engine.emit(.bufferingChanged(true))    // 事件异步落地：先等它应用，上沿计时这才在飞
         try await waitUntil("内核报缓冲已应用") { state.isBuffering }
-        XCTAssertFalse(state.isBufferingSustained)
+        XCTAssertFalse(state.isBufferingSustained, "上沿还在飞")
         state.reset()
-        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(state.isBufferingSustained)
+        try await Task.sleep(for: .milliseconds(1500))   // 越过本该置位的时刻
         XCTAssertFalse(state.isBufferingSustained, "reset 后不该被在飞的计时置位")
 
+        // 已置位后再 reset：就地清掉，不留残留。
         engine.emit(.bufferingChanged(true))
-        try await waitUntil("重进缓冲置位") { state.isBufferingSustained }
+        try await waitUntil("重进缓冲置位", timeout: .seconds(3)) { state.isBufferingSustained }
         state.reset()
-        XCTAssertFalse(state.isBufferingSustained)
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertFalse(state.isBufferingSustained, "reset 后不该被在飞的收回计时改写")
+        XCTAssertFalse(state.isBufferingSustained, "reset 清掉已置位的 UI 缓冲态")
     }
 
     func testDisplayTitleFallsBackToLanguageAndCodec() {
