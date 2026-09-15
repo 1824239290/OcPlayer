@@ -46,6 +46,12 @@ enum AppDiagnostics {
         logger.flush()
     }
 
+    /// 有界等待版 flush：进程终止路径用它，别为了最后几条日志把退出流程吊住。
+    @discardableResult
+    static func flush(timeout: TimeInterval) -> Bool {
+        logger.flush(timeout: timeout)
+    }
+
     /// 每次启动留一条会话记录：版本 + 平台 + 构建，排查「哪个版本出的问题」。
     static func recordLaunch() {
         AppStorageMaintenance.shared.start()

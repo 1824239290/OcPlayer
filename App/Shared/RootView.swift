@@ -129,6 +129,9 @@ struct RootView: View {
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)) { _ in
             _ = app.playbackWillTerminate()
+            // iOS 退出前也要把排队的 JSONL 落盘（此前只收播放上报，最后几条日志会随进程丢）；
+            // 有界等待，别在 willTerminate 里吊住系统。
+            AppDiagnostics.flush(timeout: 1)
         }
         #endif
         .sheet(item: $updateChecker.promptRelease) { release in

@@ -121,7 +121,8 @@ struct OcPlayerApp: App {
                 .onAppear {
                     appDelegate.terminationHandler = {
                         let task = appModel.playbackWillTerminate()
-                        AppDiagnostics.flush()
+                        // 有界等待：2 秒内没落完就放行退出（别吊住用户关窗口）。
+                        AppDiagnostics.flush(timeout: 2)
                         return task
                     }
                 }
