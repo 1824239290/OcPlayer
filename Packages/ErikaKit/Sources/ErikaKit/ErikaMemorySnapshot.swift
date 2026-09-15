@@ -63,6 +63,9 @@ public struct ErikaMemorySnapshot: Sendable, Equatable {
             "renderer_tracked_bytes": .unsignedInteger(rendererTrackedBytes),
             "cpu_danmaku_atlas_bytes": .unsignedInteger(presenterCPUDanmakuAtlasBytes),
             "drawable_count": .unsignedInteger(UInt64(drawableCount)),
+            // 输出模式切换计数：显示器侧切 HDR / 刷新率的证据，诊断 issue #2（闪屏）
+            // 时与内核 stderr 的 `ErikaHDR: … output mode=…` 行互相印证。
+            "output_mode_switches": .unsignedInteger(outputModeSwitches),
         ]
     }
 

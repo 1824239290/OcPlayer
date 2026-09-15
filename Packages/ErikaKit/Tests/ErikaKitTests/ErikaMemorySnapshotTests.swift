@@ -52,6 +52,17 @@ struct ErikaMemorySnapshotTests {
         _ = raw
     }
 
+    /// 输出模式切换计数要**进日志字段**：issue #2（闪屏 / 周期性变暗）要靠它在现场
+    /// 分辨「显示器侧真的切了 HDR / 刷新率」还是 UI 自己闪。此前它只参与「这次 tick
+    /// 要不要记」的判定，日志里看不到值。
+    @Test("输出模式切换计数进日志字段")
+    func outputModeSwitchesAreLogged() {
+        var raw = ErikaPresenterResourceStatus()
+        raw.output_mode_switches = 7
+        let fields = ErikaMemorySnapshot(raw).logFields
+        #expect(fields["output_mode_switches"] == .unsignedInteger(7))
+    }
+
     @Test("进程内存读数可达且物理内存非零")
     func processFootprintIsReadable() {
         let fp = ProcessFootprint.current()
