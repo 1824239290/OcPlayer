@@ -117,12 +117,22 @@ struct PlayerScreen: View {
             }
             playerGestureLayer
 
-            // 迟滞后的 UI 缓冲态：单帧饿数据不闪转圈（真值见 state.isBuffering）。
-            if controller.state.isBufferingSustained && controller.state.state == .playing {
+            // 缓冲指示：判据是迟滞后的 UI 缓冲态（单帧饿数据不闪转圈，真值见 state.isBuffering）。
+            // **自带暗底、不挂 HUD**：HUD 收起时没有全屏暗幕托底，白转圈直接压在亮画面上
+            // 会看不见——这是「缓冲不再强弹 HUD」之后才暴露的对比度问题（见 PlayerHUDGates）。
+            // 常挂载 + `.opacity` 淡入淡出：HUD 收起期间没有容器动画托底，`if` 挂载会是硬闪。
+            PlayerHUDPanel(in: Circle()) {
                 ProgressView()
                     .controlSize(.large)
-                    .tint(.white)
+                    .tint(PlayerHUDPalette.primary)
+                    .padding(16)
             }
+            .opacity(showsBufferingIndicator ? 1 : 0)
+            .motionAnimation(Motion.standard, value: showsBufferingIndicator, reduceMotion: reduceMotion)
+            .allowsHitTesting(false)
+            .accessibilityHidden(!showsBufferingIndicator)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("缓冲中")
 
             if controller.state.state == .error || controller.setupError != nil {
                 PlayerPlaybackErrorBadge()
@@ -652,6 +662,11 @@ struct PlayerScreen: View {
     /// 判据本身住 `PlayerHUDGates`（唯一来源）：这里只取「自动收起」那一半，
     /// 「该不该唤出」由 `revealTrigger` 单独观察，缓冲不参与唤出（issue #2）。
     private var canAutoHideControls: Bool { hudGates.canAutoHide }
+
+    /// 中央缓冲指示（自带暗底的白转圈）是否可见。
+    private var showsBufferingIndicator: Bool {
+        controller.state.isBufferingSustained && controller.state.state == .playing
+    }
 
     private var hudGates: PlayerHUDGates {
         PlayerHUDGates(
