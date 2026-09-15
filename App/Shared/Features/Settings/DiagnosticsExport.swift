@@ -13,8 +13,9 @@ enum DiagnosticsExport {
         try AppDiagnostics.logger.exportText(headerLines: headerLines())
     }
 
+    /// 文件名（不含扩展名）：`OcPlayer-诊断-<yyyyMMdd-HHmm>`，扩展名由 fileExporter 补。
     static func suggestedFileName(now: Date = Date()) -> String {
-        formatter.string(from: now)
+        "OcPlayer-诊断-" + formatter.string(from: now)
     }
 
     private static func headerLines() -> [String] {
