@@ -41,6 +41,9 @@ Scripts/package-macos.sh v0.1.6  # 本地打包，产出与 CI 相同的 dist/ �
 - 支持 Jellyfin（10.x）与 Emby（4.x），登录时显式选择 HTTP/HTTPS；Emby 没有 Quick Connect，只显示账号密码表单
 - 弹幕开箱即用：内置公共 OcPlay 网关（Cloudflare Workers 部署，持有弹弹play AppSecret）签发的 API Key；如需自建网关 / 自有 Key，在 设置 → 弹幕 中修改
 - 内核弹幕渲染当前因内存问题被禁用，运行时固定走 App 层 overlay 渲染，详见下文「弹幕渲染路线」
+- 遇到问题先「设置 → 维护 → 导出诊断包…」：一个 `.txt` 装下版本/设备/全部日志/内核 trace，
+  报障直接附件；要更细的记录就在同一处打开「详细日志」（含内核 trace，下一次播放生效）。
+  字段口径与排障流程见 [`Docs/LOGGING.md`](Docs/LOGGING.md) / [`Docs/TROUBLESHOOTING.md`](Docs/TROUBLESHOOTING.md)
 
 ## 项目结构
 
@@ -56,7 +59,7 @@ Scripts/package-macos.sh v0.1.6  # 本地打包，产出与 CI 相同的 dist/ �
 | DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、SwiftUI 适配 |
 | BangumiKit | `Packages/BangumiKit/` | Bangumi OAuth、收藏/章节/搜索/日历 API、GRDB 本地库 |
 | MoviePilotKit | `Packages/MoviePilotKit/` | MoviePilot 登录换 JWT、401 静默重登、订阅/搜索/下载 API |
-| DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志、脱敏、节流、轮转；网络公共工具 + 共享 HTTP 执行层（`HTTPClient`/`RetryPolicy`：传输/计时日志/传输错误映射/退避重试，各域客户端共用） |
+| DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志：会话文件（一次启动一个）+ 级别阈值 + 脱敏 + 节流 + 诊断包导出；网络公共工具 + 共享 HTTP 执行层（`HTTPClient`/`RetryPolicy`：传输/计时日志/传输错误映射/退避重试，各域客户端共用）。口径与排障见 [`Docs/LOGGING.md`](Docs/LOGGING.md) |
 
 ## 弹幕渲染路线
 
@@ -85,6 +88,8 @@ Scripts/package-macos.sh v0.1.6  # 本地打包，产出与 CI 相同的 dist/ �
 ## 文档
 
 - 更新日志：`CHANGELOG.md`
+- 日志与诊断（级别规范 / 字段口径 / 内核 trace / 不记什么）：[`Docs/LOGGING.md`](Docs/LOGGING.md)
+- 排障手册（症状 → 看哪几行 → 常用命令）：[`Docs/TROUBLESHOOTING.md`](Docs/TROUBLESHOOTING.md)
 
 ## 路线
 
