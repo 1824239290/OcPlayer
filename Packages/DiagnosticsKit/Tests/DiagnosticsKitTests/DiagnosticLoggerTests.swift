@@ -92,15 +92,14 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertTrue(records[0].message.contains("Suppressed repeated diagnostic events"))
     }
 
-    func testRotationAndExportKeepAllRecords() throws {
+    func testSessionFileContinuesAndExportKeepsAllRecords() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        // 每条消息约 150 字节；把单文件上限压到 1500 强制触发多次轮转，
-        // 同时 retainedArchives 给足，验证 export 能找回全部记录。
+        // 每条消息约 150 字节；把单文件上限压到 1500 强制续编多次，验证内容一段不丢。
         let log = DiagnosticLogger(
             subsystem: "test", category: "cat", directory: directory,
-            maxFileBytes: 1500, retainedArchives: 10, emitToOSLog: false
+            maxFileBytes: 1500, maxRetainedFiles: 10, emitToOSLog: false
         )
         for index in 0..<30 {
             log.info("message number \(index) padding padding padding")
@@ -109,6 +108,9 @@ final class DiagnosticLoggerTests: XCTestCase {
 
         let exported = try log.exportData()
         XCTAssertEqual(exported.split(separator: 0x0A).count, 30)
+        XCTAssertGreaterThan(
+            log.fileURL.lastPathComponent.contains("-2") ? 2 : 1, 0,
+            "写满应续编到 -2 文件")
     }
 
     func testMaintenanceRemovesExpiredFilesAndKeepsFreshFiles() throws {
@@ -118,22 +120,19 @@ final class DiagnosticLoggerTests: XCTestCase {
 
         let log = DiagnosticLogger(
             subsystem: "test", category: "cat", directory: directory,
-            maxFileBytes: 1024, retainedArchives: 3,
+            maxFileBytes: 1024, maxRetainedFiles: 10,
             maxFileAge: 60, maintenanceInterval: 3600,
             now: { clock.now() }, emitToOSLog: false
         )
-        let stale = log.fileURL.appendingPathExtension("1")
-        let fresh = log.fileURL.appendingPathExtension("2")
+        // 上一轮会话留下的文件（同目录、不同会话名）。
+        let stale = directory.appendingPathComponent("diagnostics-20200101-000000-deadbeef.jsonl")
+        let fresh = directory.appendingPathComponent("diagnostics-20200101-000001-feedface.jsonl")
         try Data("stale\n".utf8).write(to: stale)
         try Data("fresh\n".utf8).write(to: fresh)
         try FileManager.default.setAttributes(
-            [.modificationDate: clock.now().addingTimeInterval(-61)],
-            ofItemAtPath: stale.path
-        )
+            [.modificationDate: clock.now().addingTimeInterval(-61)], ofItemAtPath: stale.path)
         try FileManager.default.setAttributes(
-            [.modificationDate: clock.now()],
-            ofItemAtPath: fresh.path
-        )
+            [.modificationDate: clock.now()], ofItemAtPath: fresh.path)
 
         log.performMaintenance()
 
@@ -141,65 +140,70 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fresh.path))
     }
 
-    func testOversizedEntryCannotExceedFileLimit() throws {
+    /// 超长记录**截断保留现场**（旧行为是整条换成一条 warning，等于把内容丢了）。
+    func testOversizedEntryIsTruncatedNotReplaced() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let log = DiagnosticLogger(
             subsystem: "test", category: "cat", directory: directory,
-            maxFileBytes: 1024, retainedArchives: 0, emitToOSLog: false
+            maxFileBytes: 1024 * 1024, emitToOSLog: false
         )
-        log.error(String(repeating: "x", count: 8_192))
+        log.error(String(repeating: "x", count: 200_000))
         log.flush()
 
-        let attributes = try FileManager.default.attributesOfItem(atPath: log.fileURL.path)
-        let size = try XCTUnwrap((attributes[.size] as? NSNumber)?.intValue)
-        XCTAssertLessThanOrEqual(size, 1024)
-        XCTAssertEqual(
-            try log.readRecords().first?.message,
-            "Diagnostic entry omitted because it exceeded the file size limit"
-        )
+        let record = try XCTUnwrap(try log.readRecords().first)
+        XCTAssertTrue(record.message.hasPrefix("xxx"), "头部内容要留下")
+        XCTAssertTrue(record.message.contains("超长截断"), "要标注被截断")
+        XCTAssertEqual(record.diagnosticLevel, .error, "级别不变")
+        let size = try XCTUnwrap(
+            (try FileManager.default.attributesOfItem(atPath: log.fileURL.path)[.size] as? NSNumber)?.intValue)
+        XCTAssertLessThan(size, 70_000, "单条不该撑爆文件")
     }
 
-    func testExistingLiveFileSizeParticipatesInRotation() throws {
+    /// 保留策略按数量淘汰最旧的会话文件，当前文件永不删。
+    func testRetentionKeepsNewestFilesAndNeverDeletesCurrent() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = TestClock()
 
         let log = DiagnosticLogger(
             subsystem: "test", category: "cat", directory: directory,
-            maxFileBytes: 1024, retainedArchives: 1, emitToOSLog: false
+            maxFileBytes: 1024 * 1024, maxRetainedFiles: 3, maxTotalBytes: 1024 * 1024,
+            maxFileAge: 30 * 24 * 60 * 60, maintenanceInterval: 0,
+            now: { clock.now() }, emitToOSLog: false, sessionID: "current1"
         )
-        try Data(repeating: 0x78, count: 980).write(to: log.fileURL)
-
-        log.info("this record should rotate the existing file")
+        // 造 4 个更旧的会话文件（保留 3 个的名额里当前文件占一个 → 只该剩 2 个旧的）。
+        for index in 0..<4 {
+            let url = directory.appendingPathComponent("diagnostics-2020010\(index)-000000-old\(index).jsonl")
+            try Data("old \(index)\n".utf8).write(to: url)
+            try FileManager.default.setAttributes(
+                [.modificationDate: clock.now().addingTimeInterval(TimeInterval(-100 + index))],
+                ofItemAtPath: url.path)
+        }
+        log.info("current session record")
         log.flush()
+        log.performMaintenance()
 
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: log.fileURL.appendingPathExtension("1").path
-        ))
-        XCTAssertEqual(try log.readRecords().count, 1)
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        XCTAssertTrue(names.contains(log.fileURL.lastPathComponent), "当前会话文件必须在")
+        XCTAssertEqual(names.count, 3, "当前文件 + 最新 2 个旧的，共 3 个")
+        XCTAssertFalse(names.contains { $0.contains("old0") }, "最旧的先被淘汰")
     }
 
-    func testOversizedExistingFileIsNotRetainedAsArchive() throws {
+    /// 会话文件名带时间戳与会话标识——排障时按名字就能认出「哪次启动」。
+    func testSessionFileNameCarriesStampAndSession() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let log = DiagnosticLogger(
             subsystem: "test", category: "cat", directory: directory,
-            maxFileBytes: 1024, retainedArchives: 1, emitToOSLog: false
+            maxFileBytes: 1024 * 1024, emitToOSLog: false, sessionID: "abc12345"
         )
-        try Data(repeating: 0x78, count: 2_048).write(to: log.fileURL)
-
-        log.info("fresh record")
-        log.flush()
-
-        XCTAssertFalse(FileManager.default.fileExists(
-            atPath: log.fileURL.appendingPathExtension("1").path
-        ))
-        let attributes = try FileManager.default.attributesOfItem(atPath: log.fileURL.path)
-        let size = try XCTUnwrap((attributes[.size] as? NSNumber)?.intValue)
-        XCTAssertLessThanOrEqual(size, 1024)
-        XCTAssertEqual(try log.readRecords().map(\.message), ["fresh record"])
+        let name = log.fileURL.lastPathComponent
+        XCTAssertTrue(name.hasPrefix("diagnostics-"), name)
+        XCTAssertTrue(name.hasSuffix("-abc12345.jsonl"), name)
+        XCTAssertNotNil(name.range(of: #"diagnostics-\d{8}-\d{6}-"#, options: .regularExpression), name)
     }
 
     func testClearRemovesEverything() throws {

@@ -132,8 +132,9 @@ public struct DiagnosticThrottle: Hashable, Sendable {
 public final class DiagnosticLogger: @unchecked Sendable {
     private static let defaultBackend = DiagnosticBackend(
         directory: DiagnosticBackend.defaultDirectory,
-        maxFileBytes: 2 * 1024 * 1024,
-        retainedArchives: 3,
+        maxFileBytes: 20 * 1024 * 1024,
+        maxRetainedFiles: 10,
+        maxTotalBytes: 50 * 1024 * 1024,
         maxFileAge: 30 * 24 * 60 * 60,
         maintenanceInterval: 24 * 60 * 60
     )
@@ -198,20 +199,24 @@ public final class DiagnosticLogger: @unchecked Sendable {
          category: String,
          directory: URL,
          maxFileBytes: Int,
-         retainedArchives: Int = 3,
+         maxRetainedFiles: Int = 10,
+         maxTotalBytes: Int = 50 * 1024 * 1024,
          maxFileAge: TimeInterval = 30 * 24 * 60 * 60,
          maintenanceInterval: TimeInterval = 24 * 60 * 60,
          now: @escaping @Sendable () -> Date = Date.init,
          emitToOSLog: Bool = false,
-         minimumLevel: DiagnosticLevel? = nil) {
+         minimumLevel: DiagnosticLevel? = nil,
+         sessionID: String = DiagnosticLogger.sessionID) {
         self.init(subsystem: subsystem, category: category,
                   backend: DiagnosticBackend(directory: directory,
                                              maxFileBytes: maxFileBytes,
-                                             retainedArchives: retainedArchives,
+                                             maxRetainedFiles: maxRetainedFiles,
+                                             maxTotalBytes: maxTotalBytes,
                                              maxFileAge: maxFileAge,
                                              maintenanceInterval: maintenanceInterval,
                                              now: now,
-                                             emitToOSLog: emitToOSLog),
+                                             emitToOSLog: emitToOSLog,
+                                             sessionID: sessionID),
                   now: now,
                   minimumLevel: minimumLevel)
     }
@@ -301,6 +306,14 @@ public final class DiagnosticLogger: @unchecked Sendable {
     public func flush() {
         emitPendingSuppressionSummaries()
         backend.flush()
+    }
+
+    /// 有界等待版 flush（进程终止路径用）：`timeout` 内没落完就返回 false，
+    /// 别为了最后几条日志把退出流程吊住。
+    @discardableResult
+    public func flush(timeout: TimeInterval) -> Bool {
+        emitPendingSuppressionSummaries()
+        return backend.flush(timeout: timeout)
     }
 
     /// Export all retained archives followed by the current JSONL file.
@@ -489,19 +502,39 @@ private final class TimestampFormatters: @unchecked Sendable {
 
     /// 秒级：历史记录是这么写的，解码兜底用。
     let seconds = ISO8601DateFormatter()
+
+    /// 会话文件名里的时间戳（本地时区、人读友好；排序不依赖它——排序看 mtime）。
+    let fileStamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return formatter
+    }()
 }
 
 private final class DiagnosticBackend: @unchecked Sendable {
     static let defaultDirectory: URL = {
+        // 测试宿主（`xcodebuild test` 注入 App 进程）跑的是真实代码：让它写到临时目录。
+        // 实测一次全量 AppTests 会在真实日志目录留下 6 个会话文件，还会混进用户报障时
+        // 要发的诊断包；早先那 116 行残缺记录也是「测试宿主 + App」共写同一文件留下的。
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    "OcPlayerTests-Logs-\(ProcessInfo.processInfo.processIdentifier)",
+                    isDirectory: true)
+        }
         let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("Logs/OcPlayer", isDirectory: true)
     }()
 
-    let fileURL: URL
+    /// 当前正在写的**会话文件**（写满会续编成 `…-2.jsonl`，见 `continueInNewFile`）。
+    private(set) var fileURL: URL
     private let directory: URL
+    private let sessionFileBaseName: String
     private let maxFileBytes: Int
-    private let retainedArchives: Int
+    private let maxRetainedFiles: Int
+    private let maxTotalBytes: Int
     private let maxFileAge: TimeInterval
     private let maintenanceInterval: TimeInterval
     private let now: @Sendable () -> Date
@@ -510,32 +543,68 @@ private final class DiagnosticBackend: @unchecked Sendable {
     private let sinkLogger: Logger
     private var handle: FileHandle?
     private var currentBytes = 0
+    private var fileIndex = 1
     private var lastMaintenanceDate: Date?
     private let emitToOSLog: Bool
 
+    /// 单条记录上限：一条超长记录（内核 dump、巨型错误串）不该顶掉整个文件。
+    private static let maxRecordBytes = 64 * 1024
+
     init(directory: URL,
          maxFileBytes: Int,
-         retainedArchives: Int,
+         maxRetainedFiles: Int,
+         maxTotalBytes: Int,
          maxFileAge: TimeInterval = 30 * 24 * 60 * 60,
          maintenanceInterval: TimeInterval = 24 * 60 * 60,
          now: @escaping @Sendable () -> Date = Date.init,
-         emitToOSLog: Bool = true) {
+         emitToOSLog: Bool = true,
+         sessionID: String = DiagnosticLogger.sessionID) {
         self.directory = directory
         self.maxFileBytes = max(1, maxFileBytes)
-        self.retainedArchives = max(0, retainedArchives)
+        self.maxRetainedFiles = max(1, maxRetainedFiles)
+        self.maxTotalBytes = max(1, maxTotalBytes)
         self.maxFileAge = maxFileAge.isFinite ? max(0, maxFileAge) : 0
         self.maintenanceInterval = maintenanceInterval.isFinite ? max(0, maintenanceInterval) : 0
         self.now = now
-        self.fileURL = directory.appendingPathComponent("diagnostics.jsonl")
+        // 会话文件：一次启动一个，名字里带时间戳与会话标识——排障时「给发生问题那次
+        // 启动的那个文件」，不用跨会话猜哪几行是这次跑的。
+        let stamp = TimestampFormatters.shared.fileStamp.string(from: now())
+        self.sessionFileBaseName = "diagnostics-\(stamp)-\(sessionID)"
+        self.fileURL = Self.sessionFileURL(
+            directory: directory, base: sessionFileBaseName, index: 1)
         self.encoder = Self.makeEncoder()
         self.sinkLogger = Logger(subsystem: "dev.jumusu.OcPlayer", category: "DiagnosticsKit.FileSink")
         self.emitToOSLog = emitToOSLog
     }
 
+    private static func sessionFileURL(directory: URL, base: String, index: Int) -> URL {
+        let name = index <= 1 ? "\(base).jsonl" : "\(base)-\(index).jsonl"
+        return directory.appendingPathComponent(name)
+    }
+
+    /// 目录里的全部诊断文件（含旧版 `diagnostics.jsonl*`，好让它们被同一套保留策略
+    /// 自然淘汰），按修改时间从旧到新——写盘追加会让 mtime 单调前进。
+    private func existingLogFiles() -> [(url: URL, size: Int, modified: Date)] {
+        let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: keys)) ?? []
+        return contents.compactMap { url -> (URL, Int, Date)? in
+            let name = url.lastPathComponent
+            let isLog = name == "diagnostics.jsonl"
+                || name.hasPrefix("diagnostics-") && name.hasSuffix(".jsonl")
+                || name.hasPrefix("diagnostics.jsonl.") && !name.hasSuffix(".lock")
+            guard isLog else { return nil }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            let size = values?.fileSize ?? 0
+            let modified = values?.contentModificationDate ?? .distantPast
+            return (url, size, modified)
+        }
+        .sorted { $0.2 == $1.2 ? $0.0.lastPathComponent < $1.0.lastPathComponent : $0.2 < $1.2 }
+    }
+
     /// 时间戳格式：写盘带毫秒（秒级精度下同秒事件的先后无法判定），
     /// 解码同时接受带/不带小数秒——旧文件照读。
-    private static func makeEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
+    private static func makeEncoder() -> JSONEncoder {        let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
             try container.encode(TimestampFormatters.shared.millis.string(from: date))
@@ -561,25 +630,35 @@ private final class DiagnosticBackend: @unchecked Sendable {
         queue.async { [self] in
             do {
                 var data = try encoder.encode(record) + Data([0x0A])
-                if data.count > maxFileBytes {
-                    let replacement = DiagnosticEntry(
-                        timestamp: record.timestamp,
-                        level: DiagnosticLevel.warning.rawValue,
-                        subsystem: record.subsystem,
-                        category: record.category,
-                        message: "Diagnostic entry omitted because it exceeded the file size limit",
-                        fields: ["encoded_bytes": .integer(Int64(data.count))],
-                        session: record.session,
-                        sequence: record.sequence
-                    )
-                    data = try encoder.encode(replacement) + Data([0x0A])
-                    guard data.count <= maxFileBytes else { return }
+                if data.count > Self.maxRecordBytes {
+                    data = try truncatedEncoding(of: record, originalBytes: data.count)
+                    guard !data.isEmpty else { return }
                 }
                 try write(data)
             } catch {
                 report(error)
             }
         }
+    }
+
+    /// 超长记录的编码：**截断保留现场**（原先整条换成一条 warning，等于把内容丢了）。
+    /// 先留消息头部 + 标注被截字节数；还超就把字段也丢（膨胀元凶常常是它）；
+    /// 都放不下才放弃整条。
+    private func truncatedEncoding(of record: DiagnosticEntry, originalBytes: Int) throws -> Data {
+        let marker = "…[超长截断，原 \(originalBytes) 字节]"
+        let head = String(record.message.prefix(1024)) + marker
+        func encode(fields: [String: DiagnosticValue]) throws -> Data {
+            let entry = DiagnosticEntry(
+                timestamp: record.timestamp, level: record.level,
+                subsystem: record.subsystem, category: record.category,
+                message: head, fields: fields,
+                suppressed: record.suppressed, session: record.session, sequence: record.sequence)
+            return try encoder.encode(entry) + Data([0x0A])
+        }
+        let withFields = try encode(fields: record.fields)
+        if withFields.count <= Self.maxRecordBytes { return withFields }
+        let bare = try encode(fields: [:])
+        return bare.count <= Self.maxRecordBytes ? bare : Data()
     }
 
     /// Snapshot the live file: newest entries first, capped at `limit`.
@@ -670,20 +749,32 @@ private final class DiagnosticBackend: @unchecked Sendable {
         }
     }
 
+    /// 有界等待版 flush：`timeout` 内没落完就返回 false。
+    /// 进程终止路径用它——别为了最后几条日志把退出流程吊住。
+    func flush(timeout: TimeInterval) -> Bool {
+        let semaphore = DispatchSemaphore(value: 0)
+        queue.async { [self] in
+            do { try handle?.synchronize() }
+            catch { report(error) }
+            semaphore.signal()
+        }
+        return semaphore.wait(timeout: .now() + max(0, timeout)) == .success
+    }
+
     func performMaintenance() {
         queue.sync {
-            do { try removeExpiredFiles(referenceDate: now(), force: true) }
+            do { try enforceRetention(referenceDate: now(), force: true) }
             catch { report(error) }
         }
     }
 
+    /// 导出=目录里所有保留文件按时间从旧到新拼接（含当前会话文件与旧版文件）。
     func exportData() throws -> Data {
         try queue.sync {
             try handle?.synchronize()
             var output = Data()
-            let urls = Array(retainedArchiveURLs.reversed()) + [fileURL]
-            for url in urls where FileManager.default.fileExists(atPath: url.path) {
-                output.append(try Data(contentsOf: url))
+            for file in existingLogFiles() {
+                output.append(try Data(contentsOf: file.url))
             }
             return output
         }
@@ -694,27 +785,23 @@ private final class DiagnosticBackend: @unchecked Sendable {
             try handle?.close()
             handle = nil
             currentBytes = 0
-            let urls = [fileURL] + retainedArchiveURLs
-            for url in urls where FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+            fileIndex = 1
+            fileURL = Self.sessionFileURL(
+                directory: directory, base: sessionFileBaseName, index: 1)
+            for file in existingLogFiles() {
+                try FileManager.default.removeItem(at: file.url)
             }
         }
     }
 
     private func write(_ data: Data) throws {
         try ensureDirectory()
-        try removeExpiredFiles(referenceDate: now(), force: false)
+        try enforceRetention(referenceDate: now(), force: false)
         if handle == nil {
             currentBytes = fileSize(at: fileURL)
         }
-        if currentBytes > maxFileBytes {
-            try handle?.close()
-            handle = nil
-            try? FileManager.default.removeItem(at: fileURL)
-            currentBytes = 0
-        }
         if currentBytes > 0, currentBytes + data.count > maxFileBytes {
-            try rotate()
+            try continueInNewFile()
         }
         if handle == nil {
             if !FileManager.default.fileExists(atPath: fileURL.path) {
@@ -737,25 +824,16 @@ private final class DiagnosticBackend: @unchecked Sendable {
         currentBytes += data.count
     }
 
-    private func rotate() throws {
+    /// 写满就**续编**（`…-2.jsonl`、`…-3.jsonl`）。旧实现是滚动归档 + 删最旧，
+    /// 于是「触发上限的那一刻」会直接毁掉一段历史；现在内容整段留给保留策略，
+    /// 由它按数量/总量从最旧淘汰。
+    private func continueInNewFile() throws {
         try handle?.synchronize()
         try handle?.close()
         handle = nil
-        guard retainedArchives > 0 else {
-            try? FileManager.default.removeItem(at: fileURL)
-            currentBytes = 0
-            return
-        }
-        for index in stride(from: retainedArchives, through: 1, by: -1) {
-            let source = index == 1 ? fileURL : archiveURL(index - 1)
-            let destination = archiveURL(index)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            if FileManager.default.fileExists(atPath: source.path) {
-                try FileManager.default.moveItem(at: source, to: destination)
-            }
-        }
+        fileIndex += 1
+        fileURL = Self.sessionFileURL(
+            directory: directory, base: sessionFileBaseName, index: fileIndex)
         currentBytes = 0
     }
 
@@ -763,7 +841,18 @@ private final class DiagnosticBackend: @unchecked Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    private func removeExpiredFiles(referenceDate: Date, force: Bool) throws {
+    /// 当前（正在写的）文件判定。
+    ///
+    /// `contentsOfDirectory` 返回的 URL 会把 `/var` 解析成 `/private/var`，直接比 URL
+    /// 会把当前文件也当成可淘汰候选——维护一跑就把正在写的现场删掉（实测踩到）。
+    private func isCurrentFile(_ url: URL) -> Bool {
+        url.resolvingSymlinksInPath().standardizedFileURL
+            == fileURL.resolvingSymlinksInPath().standardizedFileURL
+    }
+
+    /// 保留策略：最新 `maxRetainedFiles` 个文件、总量 ≤ `maxTotalBytes`、不超过 `maxFileAge`。
+    /// **当前会话文件永不删**——删它等于把现场毁掉；宁可短时超限。
+    private func enforceRetention(referenceDate: Date, force: Bool) throws {
         if !force, let lastMaintenanceDate,
            referenceDate.timeIntervalSince(lastMaintenanceDate) < maintenanceInterval {
             return
@@ -771,34 +860,25 @@ private final class DiagnosticBackend: @unchecked Sendable {
         lastMaintenanceDate = referenceDate
 
         let cutoff = referenceDate.addingTimeInterval(-maxFileAge)
-        let urls = [fileURL] + retainedArchiveURLs
-        for url in urls where FileManager.default.fileExists(atPath: url.path) {
-            let values = try url.resourceValues(forKeys: [.contentModificationDateKey])
-            let isExpired = maxFileAge == 0
-                || values.contentModificationDate.map { $0 < cutoff } == true
-            let isOversized = fileSize(at: url) > maxFileBytes
-            guard isExpired || isOversized else { continue }
-            if url == fileURL {
-                try handle?.close()
-                handle = nil
-                currentBytes = 0
-            }
-            try FileManager.default.removeItem(at: url)
+        for file in existingLogFiles() where !isCurrentFile(file.url) {
+            let expired = maxFileAge == 0 || file.modified < cutoff
+            if expired { try? FileManager.default.removeItem(at: file.url) }
         }
-    }
 
-    private func archiveURL(_ index: Int) -> URL {
-        fileURL.appendingPathExtension(String(index))
+        var candidates = existingLogFiles().filter { !isCurrentFile($0.url) }
+        var total = candidates.reduce(0) { $0 + $1.size } + fileSize(at: fileURL)
+        // 当前文件占一个名额。
+        let keepOthers = max(0, maxRetainedFiles - 1)
+        while !candidates.isEmpty, candidates.count > keepOthers || total > maxTotalBytes {
+            let victim = candidates.removeFirst()
+            try? FileManager.default.removeItem(at: victim.url)
+            total -= victim.size
+        }
     }
 
     private func fileSize(at url: URL) -> Int {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
         return (attributes?[.size] as? NSNumber)?.intValue ?? 0
-    }
-
-    private var retainedArchiveURLs: [URL] {
-        guard retainedArchives > 0 else { return [] }
-        return (1...retainedArchives).map(archiveURL)
     }
 
     private func report(_ error: Error) {
