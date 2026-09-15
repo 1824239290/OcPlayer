@@ -45,3 +45,6 @@ Reports/
 
 # 会话工具产物,不入库
 .reasonix/
+
+# CodeGraph 本地索引库，不入库
+.codegraph/
