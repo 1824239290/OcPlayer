@@ -174,7 +174,8 @@ struct PlayerHUDInfoPanel: View {
     private var stateValue: String {
         var value = stateLabel
         // 与 PlayerScreen 的缓冲圈同一判定，避免「转圈但状态行不动」。
-        if controller.state.isBuffering && controller.state.state == .playing {
+        // 用迟滞后的 UI 态：单帧饿数据不该让状态行闪一下「缓冲中」（issue #2）。
+        if controller.state.isBufferingSustained && controller.state.state == .playing {
             value += " · 缓冲中"
         }
         return value

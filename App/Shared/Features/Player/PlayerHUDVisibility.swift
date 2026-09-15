@@ -185,6 +185,19 @@ final class PlayerHUDVisibilityCoordinator {
         userHidden = false
     }
 
+    /// 只重新评估自动收起计时，**不动当前显隐**。
+    ///
+    /// 缓冲起/止这类「不该唤出 HUD」的变化走这里：资格为 false 时取消待收起
+    /// （HUD 已经在屏上就留住），恢复后按正常延时重新计时；已经收起时不会
+    /// 因此被弹出来。
+    func refreshAutoHide(canAutoHide: Bool) {
+        guard canAutoHide, isVisible else {
+            cancelScheduledHide()
+            return
+        }
+        scheduleHide(after: autoHideDelay, canAutoHide: canAutoHide)
+    }
+
     private func scheduleHide(after delay: Duration, canAutoHide: Bool) {
         guard canAutoHide, activeInteractions.isEmpty else {
             cancelScheduledHide()

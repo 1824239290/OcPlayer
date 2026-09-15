@@ -117,7 +117,8 @@ struct PlayerScreen: View {
             }
             playerGestureLayer
 
-            if controller.state.isBuffering && controller.state.state == .playing {
+            // 迟滞后的 UI 缓冲态：单帧饿数据不闪转圈（真值见 state.isBuffering）。
+            if controller.state.isBufferingSustained && controller.state.state == .playing {
                 ProgressView()
                     .controlSize(.large)
                     .tint(.white)
@@ -318,10 +319,14 @@ struct PlayerScreen: View {
             _, titles in
             controller.updateNowPlayingMetadata(title: titles.title, subtitle: titles.kicker)
         }
-        // 暂停、缓冲、错误、菜单面板和辅助功能统一走同一条显隐资格规则，
-        // 避免新增一个阻止自动隐藏的状态时漏掉对应监听。
-        .onChange(of: canAutoHideControls, initial: true) {
+        // 显隐触发只看「用户是否需要控件」（`PlayerHUDGates.revealTrigger`，不含缓冲）：
+        // 缓冲起/止也唤出 HUD 的话，全屏压暗遮罩会跟着画面暗一下亮一下（issue #2）。
+        .onChange(of: hudGates.revealTrigger, initial: true) {
             revealControls()
+        }
+        // 缓冲只改自动收起资格：已经在屏上的 HUD 留住，但不主动唤出来。
+        .onChange(of: hudGates.canAutoHide) { _, canAutoHide in
+            hudVisibility.refreshAutoHide(canAutoHide: canAutoHide)
         }
         .onDisappear {
             hudVisibility.cancel()
@@ -643,13 +648,21 @@ struct PlayerScreen: View {
     /// 播放信息面板**不**放进这条规则：它只读、不拦截任何交互、且独立于 HUD
     /// 挂载（HUD 卸载后照常每秒刷新），收进来的后果是快捷键唤出的 HUD 被钉死，
     /// 直到关掉面板才恢复计时。
-    private var canAutoHideControls: Bool {
-        (controller.state.state == .playing || controller.state.state == .paused)
-            && !controller.state.isBuffering
-            && controller.setupError == nil
-            && !isImportingSubtitle
-            && !isSelectingDanmaku
-            && !isVoiceOverEnabled
+    ///
+    /// 判据本身住 `PlayerHUDGates`（唯一来源）：这里只取「自动收起」那一半，
+    /// 「该不该唤出」由 `revealTrigger` 单独观察，缓冲不参与唤出（issue #2）。
+    private var canAutoHideControls: Bool { hudGates.canAutoHide }
+
+    private var hudGates: PlayerHUDGates {
+        PlayerHUDGates(
+            state: controller.state.state,
+            // 迟滞后的 UI 态：单帧饿数据不该让 HUD 的收起计时跟着抖。
+            isBuffering: controller.state.isBufferingSustained,
+            setupError: controller.setupError,
+            isImportingSubtitle: isImportingSubtitle,
+            isSelectingDanmaku: isSelectingDanmaku,
+            isVoiceOverEnabled: isVoiceOverEnabled
+        )
     }
 
     #if os(macOS)

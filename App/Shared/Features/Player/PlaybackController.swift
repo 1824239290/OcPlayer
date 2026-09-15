@@ -141,7 +141,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         danmakuOverlay.engineProvider = { [weak self] in self?.engine }
         danmakuOverlay.playbackStateProvider = { [weak self] in
             guard let self else { return nil }
-            return (self.state.state == .playing, self.state.isBuffering)
+            // 冻结/续播的判据用迟滞后的 UI 态：单帧饿数据不该让弹幕顿一下（issue #2）。
+            return (self.state.state == .playing, self.state.isBufferingSustained)
         }
         danmakuOverlay.update {
             $0.enabled = danmakuEnabled
@@ -929,6 +930,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     private func checkStall() {
         // 暂停 / 缓冲 / 已停都不算卡死：缓冲有自己的 buffer.* 事件记账。
+        // 这里刻意用**原始**缓冲态（不是 `isBufferingSustained`）：卡死看门狗是诊断真值，
+        // 不能被 UI 侧的迟滞挡住。
         guard state.state == .playing, !state.isBuffering else {
             lastStallCheckPosition = state.position
             frozenSeconds = 0

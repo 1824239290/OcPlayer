@@ -76,6 +76,13 @@ public struct PlaybackSessionStats: Sendable, Equatable {
 public final class PlayerState {
     public private(set) var state: PlaybackState = .idle
     public private(set) var isBuffering = false
+    /// UI 展示用的缓冲态：`isBuffering` **持续** `bufferingUIShowDelay` 才置位，
+    /// 恢复时立刻跟随（显示满 `bufferingUIMinVisible` 之前不收回）。
+    ///
+    /// 单帧饿数据不该让整块 UI 动起来：转圈浮现、弹幕冻结、HUD 亮起（含全屏暗幕）
+    /// 都跟着它走，抖一下就是用户眼里的「闪」（issue #2）。诊断事件行一律用原始
+    /// `isBuffering`——别把迟滞掺进真值。
+    public private(set) var isBufferingSustained = false
     public private(set) var videoParams: VideoParams?
     public private(set) var trackCounts = TrackCounts(video: 0, audio: 0, subtitle: 0)
     public private(set) var hasSurface = false
@@ -94,6 +101,16 @@ public final class PlayerState {
     @ObservationIgnored private var playStartedAt: Date?
     @ObservationIgnored private var hasEmittedFirstFrame = false
 
+    /// UI 缓冲态的上沿迟滞：内核报缓冲要连续持续这么久，UI 才跟着动。
+    @ObservationIgnored private let bufferingUIShowDelay: Duration
+    /// UI 缓冲态的最短可见时长：上沿挡住「一闪而过」，这条挡住「刚显示就恢复」
+    /// 留下的那一帧闪动（两者一起才对得上一句「在极端的时间内画面闪动」）。
+    @ObservationIgnored private let bufferingUIMinVisible: Duration
+    @ObservationIgnored private let clock = ContinuousClock()
+    @ObservationIgnored private var bufferingUIShowTask: Task<Void, Never>?
+    @ObservationIgnored private var bufferingUIHideTask: Task<Void, Never>?
+    @ObservationIgnored private var sustainedBufferingShownAt: ContinuousClock.Instant?
+
     /// 连续重复的内核错误去重键。内核卡进坏状态（如 EOF stall）会逐帧重发同一条
     /// `.failed`，不去重的话主线程和诊断日志会被错误风暴刷爆（实测 6302 条）。
     private var lastFailedEventKey: String?
@@ -111,7 +128,14 @@ public final class PlayerState {
     /// enough to prevent it from mutating the state for a newer engine.
     @ObservationIgnored private var consumptionGeneration = 0
 
-    public init() {}
+    /// 迟滞参数可注入：默认值是面向真机观感的，测试用小值跑真实计时路径。
+    public init(
+        bufferingUIShowDelay: Duration = .milliseconds(300),
+        bufferingUIMinVisible: Duration = .milliseconds(500)
+    ) {
+        self.bufferingUIShowDelay = bufferingUIShowDelay
+        self.bufferingUIMinVisible = bufferingUIMinVisible
+    }
 
     /// 开始消费某个引擎的事件流。调用方持有返回的 `Task` 决定生命周期。
     @discardableResult
@@ -162,6 +186,7 @@ public final class PlayerState {
         bufferingStartedAt = nil
         playStartedAt = nil
         hasEmittedFirstFrame = false
+        cancelSustainedBuffering()
     }
 
     func apply(_ event: PlayerEvent) {
@@ -182,6 +207,7 @@ public final class PlayerState {
             if isBuffering != value {
                 isBuffering = value
                 recordBufferingChange(value)
+                updateSustainedBuffering(value)
             }
         case .videoParamsChanged(let value):
             if videoParams != value { videoParams = value }
@@ -254,6 +280,58 @@ public final class PlayerState {
     /// 宿主侧卡死看门狗上报一次（检测逻辑在 App 层：内核不报缓冲 ≠ 没卡）。
     public func noteStall() {
         sessionStats.stallCount += 1
+    }
+
+    /// UI 缓冲态的两侧迟滞（真值 `isBuffering` 不动）：
+    /// - 进：连续持续 `bufferingUIShowDelay` 才置位——单帧饿数据完全不惊动 UI；
+    /// - 出：立刻跟随，但补足 `bufferingUIMinVisible` 的最短可见时长——刚显示就恢复
+    ///   不留一帧闪动；期间再次进缓冲则直接取消收回，不来回闪。
+    private func updateSustainedBuffering(_ buffering: Bool) {
+        if buffering {
+            bufferingUIHideTask?.cancel()
+            bufferingUIHideTask = nil
+            guard !isBufferingSustained, bufferingUIShowTask == nil else { return }
+            bufferingUIShowTask = Task { [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(for: self.bufferingUIShowDelay)
+                guard !Task.isCancelled, self.isBuffering else { return }
+                self.bufferingUIShowTask = nil
+                self.sustainedBufferingShownAt = self.clock.now
+                self.isBufferingSustained = true
+            }
+            return
+        }
+
+        bufferingUIShowTask?.cancel()
+        bufferingUIShowTask = nil
+        guard isBufferingSustained else { return }
+        let shownFor = sustainedBufferingShownAt.map { clock.now - $0 } ?? .zero
+        let remaining = bufferingUIMinVisible - shownFor
+        guard remaining > .zero else {
+            hideSustainedBuffering()
+            return
+        }
+        bufferingUIHideTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: remaining)
+            guard !Task.isCancelled, !self.isBuffering else { return }
+            self.hideSustainedBuffering()
+        }
+    }
+
+    private func hideSustainedBuffering() {
+        bufferingUIHideTask = nil
+        sustainedBufferingShownAt = nil
+        isBufferingSustained = false
+    }
+
+    private func cancelSustainedBuffering() {
+        bufferingUIShowTask?.cancel()
+        bufferingUIShowTask = nil
+        bufferingUIHideTask?.cancel()
+        bufferingUIHideTask = nil
+        sustainedBufferingShownAt = nil
+        isBufferingSustained = false
     }
 
     /// 结束本会话并产出汇总（`reason` 由宿主给：user / superseded / failed）。
