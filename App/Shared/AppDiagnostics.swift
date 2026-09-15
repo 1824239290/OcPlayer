@@ -17,19 +17,29 @@ enum AppDiagnostics {
         (try? logger.readRecords(limit: 40)) ?? []
     }
 
-    static func logInfo(_ message: String, fields: [String: DiagnosticValue] = [:],
-                        throttle: DiagnosticThrottle? = nil) {
-        logger.info(message, fields: fields, throttle: throttle)
-    }
-
-    static func logWarning(_ message: String, fields: [String: DiagnosticValue] = [:],
-                           throttle: DiagnosticThrottle? = nil) {
-        logger.warning(message, fields: fields, throttle: throttle)
-    }
-
-    static func logError(_ message: String, fields: [String: DiagnosticValue] = [:],
+    /// 消息一律 `@autoclosure`：低于最低落盘级别时整条不求值（含字符串插值）。
+    static func logDebug(_ message: @autoclosure () -> String,
+                         fields: [String: DiagnosticValue] = [:],
                          throttle: DiagnosticThrottle? = nil) {
-        logger.error(message, fields: fields, throttle: throttle)
+        logger.debug(message(), fields: fields, throttle: throttle)
+    }
+
+    static func logInfo(_ message: @autoclosure () -> String,
+                        fields: [String: DiagnosticValue] = [:],
+                        throttle: DiagnosticThrottle? = nil) {
+        logger.info(message(), fields: fields, throttle: throttle)
+    }
+
+    static func logWarning(_ message: @autoclosure () -> String,
+                           fields: [String: DiagnosticValue] = [:],
+                           throttle: DiagnosticThrottle? = nil) {
+        logger.warning(message(), fields: fields, throttle: throttle)
+    }
+
+    static func logError(_ message: @autoclosure () -> String,
+                         fields: [String: DiagnosticValue] = [:],
+                         throttle: DiagnosticThrottle? = nil) {
+        logger.error(message(), fields: fields, throttle: throttle)
     }
 
     static func flush() {

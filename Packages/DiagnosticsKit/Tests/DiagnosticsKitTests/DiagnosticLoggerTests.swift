@@ -236,6 +236,22 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertEqual(summary.recordCount, 2)
         XCTAssertGreaterThan(summary.fileSizeBytes, 0)
     }
+
+    func testExportTextPrependsHeaderLines() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let log = DiagnosticLogger(
+            subsystem: "test", category: "cat", directory: directory,
+            maxFileBytes: 1024 * 1024, emitToOSLog: false
+        )
+        log.info("hello")
+        log.flush()
+
+        let text = try log.exportText(headerLines: ["# 头部", "版本: 1.0"])
+        XCTAssertTrue(text.hasPrefix("# 头部\n版本: 1.0\n\n"), "头部说明行原样在前，空行分隔")
+        XCTAssertTrue(text.contains("\"message\":\"hello\""), "记录本体是 JSONL")
+    }
 }
 
 private extension DiagnosticValue {

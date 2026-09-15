@@ -17,25 +17,26 @@ public enum PlaybackLog {
         logger.flush()
     }
 
-    /// 追加一条 debug 级链路日志。
-    public static func append(_ message: String) {
-        logger.debug(message)
+    /// 追加一条 debug 级链路日志（守卫拒绝、中间态；默认档被最低级别过滤，
+    /// 排障时在设置页打开「详细日志」可见）。
+    public static func append(_ message: @autoclosure () -> String) {
+        logger.debug(message())
     }
 
-    /// 追加一条 info 级日志（定时采样这类有意义但非链路的记录）。
-    public static func info(_ message: String, fields: [String: DiagnosticValue] = [:]) {
-        logger.info(message, fields: fields)
+    /// 追加一条 info 级日志（状态迁移 / 一次操作的结果这类默认档必须可见的记录）。
+    public static func info(_ message: @autoclosure () -> String, fields: [String: DiagnosticValue] = [:]) {
+        logger.info(message(), fields: fields)
     }
 
     /// 追加一条 warning 级日志（值得注意但非致命，如弹幕爆发补发、续播定位失败）。
-    public static func warning(_ message: String, fields: [String: DiagnosticValue] = [:]) {
-        logger.warning(message, fields: fields)
+    public static func warning(_ message: @autoclosure () -> String, fields: [String: DiagnosticValue] = [:]) {
+        logger.warning(message(), fields: fields)
     }
 
     /// 追加一条 error 级日志（渲染线程 / 内核错误事件这类真正要捞出来的）。
-    public static func error(_ message: String,
+    public static func error(_ message: @autoclosure () -> String,
                              fields: [String: DiagnosticValue] = [:],
                              throttle: DiagnosticThrottle? = nil) {
-        logger.error(message, fields: fields, throttle: throttle)
+        logger.error(message(), fields: fields, throttle: throttle)
     }
 }

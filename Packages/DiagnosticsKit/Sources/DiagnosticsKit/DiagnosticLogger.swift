@@ -1,14 +1,31 @@
 import Foundation
 import OSLog
+import os
 
 /// The severity written to both the system log and the JSONL file.
-public enum DiagnosticLevel: String, Codable, CaseIterable, Sendable {
+public enum DiagnosticLevel: String, Codable, CaseIterable, Sendable, Comparable {
     case debug
     case info
     case notice
     case warning
     case error
     case critical
+
+    /// 严重度（声明顺序即从小到大），用于与最低落盘级别比较。
+    public var severity: Int {
+        switch self {
+        case .debug: return 0
+        case .info: return 1
+        case .notice: return 2
+        case .warning: return 3
+        case .error: return 4
+        case .critical: return 5
+        }
+    }
+
+    public static func < (lhs: DiagnosticLevel, rhs: DiagnosticLevel) -> Bool {
+        lhs.severity < rhs.severity
+    }
 
     fileprivate var osLogType: OSLogType {
         switch self {
@@ -121,11 +138,28 @@ public final class DiagnosticLogger: @unchecked Sendable {
         maintenanceInterval: 24 * 60 * 60
     )
 
+    /// 进程级最低落盘级别（默认 `info`）。
+    ///
+    /// 低于它的记录在**消息求值、脱敏、节流判定之前**就返回：`@autoclosure` 的消息
+    /// 因此不求值，热点日志在被过滤时零成本。App 启动与设置开关经
+    /// `DiagnosticsSettings.apply()` 设置；`debug` 档用于排障（设置页「详细日志」）。
+    private static let processMinimumLevel = OSAllocatedUnfairLock(initialState: DiagnosticLevel.info)
+
+    public static var minimumLevel: DiagnosticLevel {
+        processMinimumLevel.withLock { $0 }
+    }
+
+    public static func setMinimumLevel(_ level: DiagnosticLevel) {
+        processMinimumLevel.withLock { $0 = level }
+    }
+
     private let subsystem: String
     private let category: String
     private let osLogger: Logger
     private let backend: DiagnosticBackend
     private let clock: @Sendable () -> Date
+    /// 实例级覆盖（隔离 sink 的测试用）；nil = 跟随进程级阈值。
+    private let minimumLevelOverride: DiagnosticLevel?
     private let throttleLock = NSLock()
     private var throttles: [String: ThrottleState] = [:]
 
@@ -137,10 +171,13 @@ public final class DiagnosticLogger: @unchecked Sendable {
 
     public convenience init(subsystem: String = "dev.jumusu.OcPlayer", category: String) {
         self.init(subsystem: subsystem, category: category,
-                  backend: Self.defaultBackend, now: Date.init)
+                  backend: Self.defaultBackend, now: Date.init, minimumLevel: nil)
     }
 
     /// Internal initializer used by tests and by host applications that need an isolated sink.
+    ///
+    /// - Parameter minimumLevel: 实例级阈值覆盖；`nil`（默认）跟随进程级
+    ///   `DiagnosticLogger.minimumLevel`。测试要观察 debug 级记录时传 `.debug`。
     convenience init(subsystem: String,
          category: String,
          directory: URL,
@@ -149,7 +186,8 @@ public final class DiagnosticLogger: @unchecked Sendable {
          maxFileAge: TimeInterval = 30 * 24 * 60 * 60,
          maintenanceInterval: TimeInterval = 24 * 60 * 60,
          now: @escaping @Sendable () -> Date = Date.init,
-         emitToOSLog: Bool = false) {
+         emitToOSLog: Bool = false,
+         minimumLevel: DiagnosticLevel? = nil) {
         self.init(subsystem: subsystem, category: category,
                   backend: DiagnosticBackend(directory: directory,
                                              maxFileBytes: maxFileBytes,
@@ -158,71 +196,89 @@ public final class DiagnosticLogger: @unchecked Sendable {
                                              maintenanceInterval: maintenanceInterval,
                                              now: now,
                                              emitToOSLog: emitToOSLog),
-                  now: now)
+                  now: now,
+                  minimumLevel: minimumLevel)
     }
 
     private init(subsystem: String,
                  category: String,
                  backend: DiagnosticBackend,
-                 now: @escaping @Sendable () -> Date) {
+                 now: @escaping @Sendable () -> Date,
+                 minimumLevel: DiagnosticLevel?) {
         self.subsystem = subsystem
         self.category = category
         self.backend = backend
         self.clock = now
+        self.minimumLevelOverride = minimumLevel
         self.osLogger = Logger(subsystem: subsystem, category: category)
     }
 
     public var fileURL: URL { backend.fileURL }
 
+    /// 当前阈值下该级别是否会落盘。消息本身已是 `@autoclosure`（被过滤时天然不求值），
+    /// 只有调用方还要为 `fields` 付构造成本时才需要先问一句。
+    public func isEnabled(_ level: DiagnosticLevel) -> Bool {
+        level >= (minimumLevelOverride ?? Self.minimumLevel)
+    }
+
     public func log(level: DiagnosticLevel,
                     _ message: @autoclosure () -> String,
                     fields: [String: DiagnosticValue] = [:],
                     throttle: DiagnosticThrottle? = nil) {
+        record(level: level, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func debug(_ message: @autoclosure () -> String,
+                      fields: [String: DiagnosticValue] = [:],
+                      throttle: DiagnosticThrottle? = nil) {
+        record(level: .debug, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func info(_ message: @autoclosure () -> String,
+                     fields: [String: DiagnosticValue] = [:],
+                     throttle: DiagnosticThrottle? = nil) {
+        record(level: .info, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func notice(_ message: @autoclosure () -> String,
+                       fields: [String: DiagnosticValue] = [:],
+                       throttle: DiagnosticThrottle? = nil) {
+        record(level: .notice, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func warning(_ message: @autoclosure () -> String,
+                        fields: [String: DiagnosticValue] = [:],
+                        throttle: DiagnosticThrottle? = nil) {
+        record(level: .warning, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func error(_ message: @autoclosure () -> String,
+                      fields: [String: DiagnosticValue] = [:],
+                      throttle: DiagnosticThrottle? = nil) {
+        record(level: .error, message: message, fields: fields, throttle: throttle)
+    }
+
+    public func critical(_ message: @autoclosure () -> String,
+                         fields: [String: DiagnosticValue] = [:],
+                         throttle: DiagnosticThrottle? = nil) {
+        record(level: .critical, message: message, fields: fields, throttle: throttle)
+    }
+
+    /// 所有级别的唯一落点，顺序即成本顺序：
+    /// ① 判级别（被过滤时消息**不求值**、节流状态**不受污染**）→ ② 判节流 →
+    /// ③ 求值消息并脱敏 → ④ 落两个出口。
+    private func record(level: DiagnosticLevel,
+                        message: () -> String,
+                        fields: [String: DiagnosticValue],
+                        throttle: DiagnosticThrottle?) {
+        guard isEnabled(level) else { return }
         let now = clock()
-        // 先判节流再脱敏：被节流压掉的热点日志不该照付 5 趟正则的全量成本；
-        // message 是 @autoclosure，天然支持推迟到节流判定之后求值。
         let suppressed = takeThrottleDecision(throttle, level: level, now: now)
         guard let suppressed else { return }
         let safeMessage = DiagnosticRedactor.redact(message())
         let safeFields = DiagnosticRedactor.redact(fields)
         submit(level: level, message: safeMessage, fields: safeFields,
                suppressed: suppressed, date: now)
-    }
-
-    public func debug(_ message: @autoclosure () -> String,
-                      fields: [String: DiagnosticValue] = [:],
-                      throttle: DiagnosticThrottle? = nil) {
-        log(level: .debug, message(), fields: fields, throttle: throttle)
-    }
-
-    public func info(_ message: @autoclosure () -> String,
-                     fields: [String: DiagnosticValue] = [:],
-                     throttle: DiagnosticThrottle? = nil) {
-        log(level: .info, message(), fields: fields, throttle: throttle)
-    }
-
-    public func notice(_ message: @autoclosure () -> String,
-                       fields: [String: DiagnosticValue] = [:],
-                       throttle: DiagnosticThrottle? = nil) {
-        log(level: .notice, message(), fields: fields, throttle: throttle)
-    }
-
-    public func warning(_ message: @autoclosure () -> String,
-                        fields: [String: DiagnosticValue] = [:],
-                        throttle: DiagnosticThrottle? = nil) {
-        log(level: .warning, message(), fields: fields, throttle: throttle)
-    }
-
-    public func error(_ message: @autoclosure () -> String,
-                      fields: [String: DiagnosticValue] = [:],
-                      throttle: DiagnosticThrottle? = nil) {
-        log(level: .error, message(), fields: fields, throttle: throttle)
-    }
-
-    public func critical(_ message: @autoclosure () -> String,
-                         fields: [String: DiagnosticValue] = [:],
-                         throttle: DiagnosticThrottle? = nil) {
-        log(level: .critical, message(), fields: fields, throttle: throttle)
     }
 
     /// Wait until all queued JSONL writes have completed and the current file is synchronized.
@@ -235,6 +291,16 @@ public final class DiagnosticLogger: @unchecked Sendable {
     public func exportData() throws -> Data {
         emitPendingSuppressionSummaries()
         return try backend.exportData()
+    }
+
+    /// 导出为**单个文本文件**：头部说明行 + 全部保留记录（归档在前、当前文件在后）。
+    ///
+    /// 单文件而非 zip：iOS 起不了 `ditto` 进程，双端行为一致，GitHub issue 也能直接附件。
+    /// `headerLines` 由宿主提供（版本 / 平台 / 设备这类宿主知识），本包不猜。
+    public func exportText(headerLines: [String]) throws -> String {
+        emitPendingSuppressionSummaries()
+        let body = String(decoding: try backend.exportData(), as: UTF8.self)
+        return headerLines.joined(separator: "\n") + "\n\n" + body
     }
 
     /// Read back the most recent entries from the current JSONL file.
