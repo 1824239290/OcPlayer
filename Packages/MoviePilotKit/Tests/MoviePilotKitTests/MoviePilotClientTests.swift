@@ -278,6 +278,103 @@ final class MoviePilotClientTests: XCTestCase {
             "旧 token 只发一次；login 在自己预算内重试 3 次后直接抛：\(receivedPaths)")
     }
 
+    // MARK: - 403 过期 token（信封错误体）
+
+    func testExpiredToken403WithEnvelopeTriggersSilentReloginAndReplay() async throws {
+        // MoviePilot 对过期 JWT 回的是 403 + 自家信封（不是 401，也不是 FastAPI
+        // 的 {"detail":...}）：必须与 401 同口径走静默重登自愈，而不是把原始
+        // JSON 当 forbidden 抛给 UI 反复无效重试。
+        store.accessToken = "expired-token"
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            self.receivedPaths.append(url.path)
+            switch url.path {
+            case "/api/v1/user/current":
+                if request.value(forHTTPHeaderField: "Authorization") == "Bearer expired-token" {
+                    return MockURLProtocol.response(
+                        #"{"success":false,"message":"token 校验不通过","data":null}"#, status: 403, for: url)
+                }
+                return MockURLProtocol.response(#"{"id":1,"name":"admin"}"#, status: 200, for: url)
+            case "/api/v1/login/access-token":
+                return MockURLProtocol.response(
+                    #"{"access_token":"jwt-2","token_type":"bearer"}"#, status: 200, for: url)
+            default:
+                XCTFail("意外请求：\(url.path)")
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let user = try await client.currentUser()
+        XCTAssertEqual(user.name, "admin")
+        XCTAssertEqual(store.accessToken, "jwt-2")
+        XCTAssertEqual(
+            receivedPaths,
+            ["/api/v1/user/current", "/api/v1/login/access-token", "/api/v1/user/current"],
+            "403 过期 token → 静默重登 → 新 token 重放：\(receivedPaths)")
+    }
+
+    func test403WithoutTokenMessageStaysForbiddenWithoutRelogin() async throws {
+        // 站点权限类的普通 403 不能被误伤成 requireLogin 触发重登。
+        store.accessToken = "jwt-valid"
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            self.receivedPaths.append(url.path)
+            return MockURLProtocol.response(
+                #"{"success":false,"message":"没有权限执行此操作","data":null}"#, status: 403, for: url)
+        }
+
+        do {
+            _ = try await client.currentUser()
+            XCTFail("应该抛错")
+        } catch let error as MoviePilotError {
+            guard case .forbidden(let message) = error else {
+                XCTFail("应该是 forbidden：\(error)")
+                return
+            }
+            XCTAssertEqual(message, "没有权限执行此操作")
+        }
+        XCTAssertEqual(store.accessToken, "jwt-valid", "普通 403 不动 token")
+        XCTAssertEqual(receivedPaths.count, 1, "普通 403 不触发重登")
+    }
+
+    func testEnvelopeErrorMessageExtractedInsteadOfRawJSON() async throws {
+        // 错误文案取信封的 message，不再把整包 JSON 甩给 UI。
+        store.accessToken = "jwt-valid"
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            return MockURLProtocol.response(
+                #"{"success":false,"message":"订阅不存在","data":null}"#, status: 400, for: url)
+        }
+
+        do {
+            _ = try await client.currentUser()
+            XCTFail("应该抛错")
+        } catch let error as MoviePilotError {
+            XCTAssertEqual(error.userMessage, "订阅不存在")
+        }
+    }
+
+    func testTokenFailureClassificationContract() {
+        // 分类纯函数的契约：token 措辞命中，权限/密码措辞不命中；裸信封文本
+        // （detail 解不出时的 bodyText 兜底路径）也能命中。
+        XCTAssertTrue(MoviePilotError.isTokenVerificationMessage("token 校验不通过"))
+        XCTAssertTrue(MoviePilotError.isTokenVerificationMessage("token校验不通过"))
+        XCTAssertTrue(MoviePilotError.isTokenVerificationMessage("Token 已过期"))
+        XCTAssertTrue(
+            MoviePilotError.isTokenVerificationMessage(
+                #"{"success":false,"message":"token 校验不通过","data":null}"#))
+        XCTAssertFalse(MoviePilotError.isTokenVerificationMessage("没有权限执行此操作"))
+        XCTAssertFalse(MoviePilotError.isTokenVerificationMessage("用户名或密码不正确"))
+
+        // 403 + token 文案 → requireLogin；普通 403 仍是 forbidden。
+        if case .requireLogin = MoviePilotError(code: 403, response: "token 校验不通过") {} else {
+            XCTFail("403 + token 文案应该归为 requireLogin")
+        }
+        if case .forbidden = MoviePilotError(code: 403, response: "没有权限") {} else {
+            XCTFail("普通 403 应该是 forbidden")
+        }
+    }
+
     // MARK: - 安全
 
     func testTokenNeverAppearsInURL() async throws {

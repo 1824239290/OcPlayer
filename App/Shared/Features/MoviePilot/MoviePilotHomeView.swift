@@ -19,19 +19,22 @@ struct MoviePilotHomeView: View {
     // MARK: - 订阅状态
     @State private var subscribes: [MPSubscribe] = []
     @State private var isLoadingSubscribes = false
-    @State private var subscribesError: String?
+    /// 保留错误本体而不是文案：登录失效类错误要把「重试」换成「重新登录」。
+    @State private var subscribesError: MoviePilotError?
     @State private var selectedCategory: SubscribeCategory = .all
     @State private var pendingDeleteSubscribe: MPSubscribe?
     @State private var editingSubscribe: MPSubscribe?
     @State private var isPresentingAddSheet = false
     @State private var sheetMedia: MPMediaInfo?
+    /// 登录失效时直弹 MoviePilot 登录窗（门控按钮与错误态按钮共用）。
+    @State private var isPresentingReloginSheet = false
 
     // MARK: - 搜索状态
     @State private var keyword = ""
     @State private var submittedKeyword = ""
     @State private var isSearching = false
     @State private var results: [MPMediaInfo] = []
-    @State private var searchError: String?
+    @State private var searchError: MoviePilotError?
     @State private var searchGeneration = 0
     @State private var searchTask: Task<Void, Never>?
     @State private var subscribingMediaIDs: Set<String> = []
@@ -86,7 +89,8 @@ struct MoviePilotHomeView: View {
                 gate(
                     "未登录",
                     icon: "person.crop.circle.badge.exclamationmark",
-                    hint: "在 设置 → MoviePilot 登录后即可管理订阅与下载"
+                    hint: "MoviePilot 登录状态已失效或尚未登录，重新登录后即可管理订阅与下载",
+                    allowsRelogin: true
                 )
             } else {
                 mainContent
@@ -96,6 +100,23 @@ struct MoviePilotHomeView: View {
         #if os(macOS)
         .navigationSubtitle(navigationSubtitleText)
         #endif
+        // 登录失效的两个入口（门控按钮 / 错误态按钮）都直弹登录窗：预填地址与
+        // 账号，用户只补密码，不必绕道设置页。挂在 Group 上——token 被清后
+        // mainContent 会整个切到门控态，sheet 必须在门控外层才弹得出来。
+        .sheet(isPresented: $isPresentingReloginSheet) {
+            MoviePilotServerSheet(
+                initialURL: moviepilot.store.serverURLString ?? "",
+                initialUsername: moviepilot.store.username
+            )
+        }
+        .onChange(of: isPresentingReloginSheet) { _, isPresented in
+            // 同一台服务器重登成功不会变 boundServerID（task(id:) 不重跑）；
+            // 从失效错误态登录回来时顺手重拉，别让人停在旧错误上。
+            if !isPresented, subscribesError?.isAuthenticationFailure == true,
+               moviepilot.isAuthenticated {
+                Task { await loadSubscribes() }
+            }
+        }
     }
 
     private var navigationSubtitleText: String {
@@ -107,14 +128,23 @@ struct MoviePilotHomeView: View {
 
     // MARK: - 门控
 
-    private func gate(_ title: String, icon: String, hint: String) -> some View {
+    private func gate(
+        _ title: String, icon: String, hint: String, allowsRelogin: Bool = false
+    ) -> some View {
         ContentUnavailableView {
             Label(title, systemImage: icon)
         } description: {
             Text(hint)
         } actions: {
-            Button("去设置") { app.selectedSection = .settings }
-                .buttonStyle(.borderedProminent)
+            if allowsRelogin {
+                Button("重新登录") { isPresentingReloginSheet = true }
+                    .buttonStyle(.borderedProminent)
+                Button("去设置") { app.selectedSection = .settings }
+                    .buttonStyle(.bordered)
+            } else {
+                Button("去设置") { app.selectedSection = .settings }
+                    .buttonStyle(.borderedProminent)
+            }
         }
     }
 
@@ -257,13 +287,8 @@ struct MoviePilotHomeView: View {
                 if isLoadingSubscribes && subscribes.isEmpty {
                     skeletonGrid
                 } else if let subscribesError, subscribes.isEmpty {
-                    ContentUnavailableView {
-                        Label("加载订阅失败", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(subscribesError)
-                    } actions: {
-                        Button(UIStrings.retry) { Task { await loadSubscribes() } }
-                            .buttonStyle(.bordered)
+                    mpErrorView(subscribesError, failedTitle: "加载订阅失败") {
+                        Task { await loadSubscribes() }
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)
@@ -387,13 +412,8 @@ struct MoviePilotHomeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError, results.isEmpty {
-                ContentUnavailableView {
-                    Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(searchError)
-                } actions: {
-                    Button(UIStrings.retry, action: search)
-                        .buttonStyle(.borderedProminent)
+                mpErrorView(searchError, failedTitle: UIStrings.searchFailed) {
+                    search()
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if results.isEmpty {
@@ -416,7 +436,7 @@ struct MoviePilotHomeView: View {
                             }
                             .padding(.vertical, 4)
                         } else if let searchError {
-                            Text(searchError)
+                            Text(searchError.userMessage)
                                 .foregroundStyle(.red)
                                 .font(.callout)
                                 .padding(.vertical, 4)
@@ -489,6 +509,38 @@ struct MoviePilotHomeView: View {
             .padding(.vertical, 4)
     }
 
+    /// MoviePilot 请求失败的错误态：登录失效（token 过期且静默重登也被拒）时
+    /// 重试没有意义，标题与按钮换成「登录状态已失效 / 重新登录」，直弹登录窗；
+    /// 其余错误维持原文案 + 重试。
+    private func mpErrorView(
+        _ error: MoviePilotError,
+        failedTitle: String,
+        retry: @escaping () -> Void
+    ) -> some View {
+        let isAuthFailure = error.isAuthenticationFailure
+        return ContentUnavailableView {
+            Label(
+                isAuthFailure ? "登录状态已失效" : failedTitle,
+                systemImage: isAuthFailure
+                    ? "person.crop.circle.badge.exclamationmark" : "exclamationmark.triangle"
+            )
+        } description: {
+            Text(
+                isAuthFailure
+                    ? "MoviePilot 的登录凭证已过期或被服务端拒绝，重新登录后即可继续。"
+                    : error.userMessage
+            )
+        } actions: {
+            if isAuthFailure {
+                Button("重新登录") { isPresentingReloginSheet = true }
+                    .buttonStyle(.borderedProminent)
+            } else {
+                Button(UIStrings.retry, action: retry)
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
     // MARK: - 数据流与操作
 
     private var displayedSubscribes: [MPSubscribe] {
@@ -522,7 +574,7 @@ struct MoviePilotHomeView: View {
             let list = try await MoviePilotAPIClient.shared.subscribes()
             subscribes = list
         } catch {
-            subscribesError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            subscribesError = (error as? MoviePilotError) ?? .generic("\(error)")
         }
         isLoadingSubscribes = false
     }
@@ -543,7 +595,7 @@ struct MoviePilotHomeView: View {
                 results = found
             } catch {
                 guard generation == searchGeneration else { return }
-                searchError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+                searchError = (error as? MoviePilotError) ?? .generic("\(error)")
             }
             if generation == searchGeneration {
                 isSearching = false

@@ -59,6 +59,13 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
             self = .badRequest(response)
         case 401:
             self = .requireLogin
+        // MoviePilot 对**过期 JWT** 回的也是 403：jwt.ExpiredSignatureError 落在
+        // verify_token 的 InvalidTokenError 分支（403 "token校验不通过"），只有缺
+        // token / 解不出 payload 才是 401。403 带 token 措辞必须同样按登录态失效
+        // 处理——否则整条「静默重登自愈 / 失败广播重新登录」链路被绕过，死 token
+        // 留在原地，UI 只能对着裸错误体无效重试。
+        case 403 where Self.isTokenVerificationMessage(response):
+            self = .requireLogin
         case 403:
             self = .forbidden(response)
         case 404:
@@ -66,6 +73,15 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
         default:
             self = .http(statusCode: code, response: response)
         }
+    }
+
+    /// 响应文案是否为 token 校验失败（「token 校验不通过」「token 已过期」等）。
+    /// 只认 token 相关措辞，站点权限等其他 403 不受影响；大小写不敏感。
+    static func isTokenVerificationMessage(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        guard lowered.contains("token") else { return false }
+        return ["校验", "不通过", "过期", "无效", "非法", "invalid", "expired", "verify"]
+            .contains { lowered.contains($0) }
     }
 
     public var userMessage: String {
@@ -116,6 +132,13 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
         userMessage
     }
 
+    /// 鉴权失效类错误（`.requireLogin`，含 401/403-token 的归并结果）：UI 据此
+    /// 把「重试」换成「重新登录」。
+    public var isAuthenticationFailure: Bool {
+        if case .requireLogin = self { return true }
+        return false
+    }
+
     public var isRetryable: Bool {
         switch self {
         case .network(let failure, _):
@@ -128,9 +151,16 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
     }
 }
 
-/// FastAPI 的默认错误体 `{"detail": "..."}`，取出来拼进错误文案。
+/// 错误响应体的可读文案提取，两类形状都要认：
+/// - FastAPI 默认错误体 `{"detail": "..."}`（422 校验错误的 detail 是数组，取不到文案）；
+/// - MoviePilot 自家 HttpException 处理器包的信封 `{"success":false,"message":"...","data":null}`。
+///
+/// 取不到可读文案返回 nil，调用方落回原始 body 文本——信封形状漏认时整包
+/// JSON 会被当文案甩给 UI，正是「加载订阅失败」页甩原始 JSON 的来源。
 struct MoviePilotErrorBody: Decodable {
     let detail: String?
+    let success: Bool?
+    let message: String?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -140,13 +170,22 @@ struct MoviePilotErrorBody: Decodable {
         } else {
             detail = nil
         }
+        success = try? container.decode(Bool.self, forKey: .success)
+        message = try? container.decodeIfPresent(String.self, forKey: .message)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case detail
+        case detail, success, message
     }
 
+    /// 信封（success:false 且 message 非空）优先，`detail` 兜底。
     static func message(from data: Data) -> String? {
-        (try? JSONDecoder().decode(Self.self, from: data))?.detail
+        guard let body = try? JSONDecoder().decode(Self.self, from: data) else { return nil }
+        if body.success == false,
+           let text = body.message?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        return body.detail
     }
 }

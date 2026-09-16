@@ -519,9 +519,13 @@ public actor MoviePilotAPIClient {
             throw MoviePilotError.generic("服务器响应异常")
         }
         guard httpResponse.statusCode < 400 else {
-            // 流式接口的 401 是 resource cookie 过期，统一按 requireLogin 抛，
-            // 由上层走静默重登重试。
-            throw MoviePilotError(code: httpResponse.statusCode, response: "SSE 搜索鉴权失败")
+            // 流式接口的鉴权靠登录种下的 resource cookie：JWT 过期时 401/403 都
+            // 会出现（服务端对过期签名抛 403，见 MoviePilotError 的分类注释），
+            // 统一按 requireLogin 抛，由上层走静默重登重试；其余状态走通用分支。
+            if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                throw MoviePilotError.requireLogin
+            }
+            throw MoviePilotError(code: httpResponse.statusCode, response: "SSE 搜索失败")
         }
 
         // SSE：一行一个 `data: {json}`（MP 的事件 JSON 不换行），空行分隔事件。
