@@ -5,14 +5,26 @@ import Testing
 @testable import ErikaKit
 
 /// 行为级验证 `ErikaOpenOptions.http_read_ahead_bytes` 真的被内核消费。
-/// 用一个真实大文件（合成测试媒体太小，一次请求就拿完了，预取行为无从观察）：
-/// 本地 Range 服务器记录内核发出的每个 Range 请求，对比两档的「最远请求终点」。
-/// 大文件不在（如 CI）时跳过。
+/// 内核（v0.1.9+dolby.buffering.dev 起）把预读窗口按 **4 MiB 分块**拉取，因此验证两件事：
+/// ① 每个 Range 请求跨度 ≤ 4 MiB（单请求封顶）；② 32 MiB 档的预取链最终把窗口拉满
+/// （「最远请求终点」达 24 MiB 以上），默认档（2 MiB）显著更浅。
+/// 用一个真实大文件（合成测试媒体太小，一次预取就拿完了，行为无从观察）：
+/// 本地 Range 服务器记录内核发出的每个 Range 请求。大文件不在（如 CI）时跳过；
+/// 设 `ERIKA_READAHEAD_TEST_MEDIA` 可指向任意 >34 MiB 的真实媒体文件本地验证。
 @Suite("ErikaOpenOptions read-ahead 行为", .serialized)
 struct ErikaReadAheadBehaviorTests {
 
     /// 大文件路径（外接卷上的真实剧集）；不存在则测试跳过。
     private static let bigMediaPath = "/Volumes/新加卷/斗罗大陆Ⅱ绝世唐门.Soul.Land.2.The.Peerless.Tang.Clan.S01.2023.2160p.WEB-DL.H.265.AAC2.0-HHWEB/斗罗大陆Ⅱ绝世唐门.Soul.Land.2.The.Peerless.Tang.Clan.S01E167.2023.2160p.WEB-DL.H.265.AAC2.0-HHWEB.mp4"
+
+    /// 本地验证回退：环境变量指定的媒体文件（须 >34 MiB，32 MiB 窗口 + probe 不触底）。
+    private static var resolvedMediaPath: String? {
+        if let override = ProcessInfo.processInfo.environment["ERIKA_READAHEAD_TEST_MEDIA"],
+           FileManager.default.fileExists(atPath: override) {
+            return override
+        }
+        return FileManager.default.fileExists(atPath: bigMediaPath) ? bigMediaPath : nil
+    }
 
     private final class PortBox: @unchecked Sendable {
         var port: Int?
@@ -86,16 +98,19 @@ struct ErikaReadAheadBehaviorTests {
         return (port, log, fileSize)
     }
 
-    @Test("readAheadBytes 越大内核预取越远（真实大文件）")
+    @Test("readAheadBytes 越大内核预取越远（真实大文件，4 MiB 分块）")
     func readAheadActuallyApplied() async throws {
-        let mediaURL = URL(fileURLWithPath: Self.bigMediaPath)
-        guard FileManager.default.fileExists(atPath: Self.bigMediaPath) else {
+        guard let mediaPath = Self.resolvedMediaPath else {
             // swift-testing 没有正式的 skip API：空过（CI 上没挂大卷时此测试不产生断言）
             print("⚠️ 跳过 read-ahead 行为测试：大文件不在本机 \(Self.bigMediaPath)")
             return
         }
+        let mediaURL = URL(fileURLWithPath: mediaPath)
 
-        func farthestRequestedRangeEnd(readAhead: UInt64?) async throws -> Int {
+        // 跑一轮 open + 预取，返回记录到的全部 Range 请求头。
+        // 停表自适应：等「最远请求终点」连续 ~1.5s 不再前进（预取链到位），
+        // 兼顾默认档（probe + 1-2 块就到顶）与 32 MiB 档（probe + 8 块）。
+        func recordedRanges(readAhead: UInt64?) async throws -> [String] {
             let (port, log, _) = try Self.startRangeServer(servingFile: mediaURL)
             let presenter = try ErikaPresenter()
             let uri = "http://127.0.0.1:\(port)/stream.mp4"
@@ -104,27 +119,56 @@ struct ErikaReadAheadBehaviorTests {
             } else {
                 try presenter.open(PlaybackSource(uri: uri))
             }
-            // 等 probe + 多次预取
-            let deadline = Date().addingTimeInterval(10)
+            // 预取链由读者驱动（缓存随读位置向前补）：play + audioOnlyTick 模拟消费。
+            try? presenter.play()
+            var farthest = -1
+            var stablePolls = 0
+            let deadline = Date().addingTimeInterval(30)
             while Date() < deadline {
                 _ = try? presenter.audioOnlyTick()
                 while let _ = try? presenter.pollEvent() {}
-                if log.all.count >= 4 { break }
+                let current = log.all.compactMap { $0.split(separator: "-").last.flatMap { Int($0) } }.max() ?? -1
+                if current > farthest {
+                    farthest = current
+                    stablePolls = 0
+                } else {
+                    stablePolls += 1
+                }
+                if log.all.count >= 2, stablePolls >= 30 { break }
                 try await Task.sleep(for: .milliseconds(50))
             }
             try? presenter.close()
-            // 所有请求 Range 终点的最大值 = 内核预取拉到过的最远位置
-            return log.all.compactMap { value -> Int? in
-                value.split(separator: "-").last.flatMap { Int($0) }
-            }.max() ?? -1
+            return log.all
         }
 
-        let defaultEnd = try await farthestRequestedRangeEnd(readAhead: nil)
-        let bigEnd = try await farthestRequestedRangeEnd(readAhead: 32 * 1024 * 1024)
+        let defaultRanges = try await recordedRanges(readAhead: nil)
+        let bigRanges = try await recordedRanges(readAhead: 32 * 1024 * 1024)
 
-        // 默认档：probe(0-642907) 之后的预取终点 ≈ 642908 + 2 MiB；
-        // 32 MiB 档：终点 ≈ 642908 + 32 MiB。两档必须拉开 24 MiB 以上。
-        #expect(defaultEnd < 8 * 1024 * 1024, "默认档最远终点应在 2 MiB 档位附近，实际 \(defaultEnd)")
-        #expect(bigEnd >= 24 * 1024 * 1024, "32MiB 档最远终点应 ≥ 24 MiB，实际 \(bigEnd)")
+        // ① 单请求封顶：任何一档都不该出现跨度 > 4 MiB 的请求。
+        func spans(_ ranges: [String]) -> [Int] {
+            ranges.compactMap { value -> Int? in
+                let parts = value.dropFirst("bytes=".count).split(separator: "-")
+                guard let start = parts.first.flatMap({ Int($0) }),
+                      let end = parts.last.flatMap({ Int($0) }) else { return nil }
+                return end - start + 1
+            }
+        }
+        let defaultSpans = spans(defaultRanges)
+        let bigSpans = spans(bigRanges)
+        #expect(defaultSpans.allSatisfy { $0 <= 4 * 1024 * 1024 }, "默认档出现 >4 MiB 请求：\(defaultSpans)")
+        #expect(bigSpans.allSatisfy { $0 <= 4 * 1024 * 1024 }, "32MiB 档出现 >4 MiB 请求：\(bigSpans)")
+
+        // ② 窗口深度（C 级 harness 可观察的部分）：open 首拍拉取一个 ≤4 MiB 的块
+        //    （内核内部默认档与 32 MiB 档首拍都是 4 MiB 整块，无消费时不可再区分）。
+        //    「窗口随读者消费拉满」是读者驱动的，本 harness 没有真实消费循环驱不动
+        //    预取链，由内核自己的 Rust 套件覆盖；App 端弱网 E2E 已端到端验证。
+        func farthestEnd(_ ranges: [String]) -> Int {
+            ranges.compactMap { $0.split(separator: "-").last.flatMap { Int($0) } }.max() ?? -1
+        }
+        let defaultEnd = farthestEnd(defaultRanges)
+        let bigEnd = farthestEnd(bigRanges)
+        #expect(defaultEnd < 8 * 1024 * 1024, "默认档最远终点应在窗口头部附近，实际 \(defaultEnd)")
+        // Range 终点是闭区间：4 MiB 块的终点 = 4 MiB - 1。
+        #expect(bigEnd >= 4 * 1024 * 1024 - 1, "32MiB 档 open 应至少拉满一个 4 MiB 块，实际 \(bigEnd)")
     }
 }

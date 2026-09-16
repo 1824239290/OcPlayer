@@ -2,10 +2,11 @@
 
 项目变更记录。未发布内容集中在 `[Unreleased]`，提交前应同步更新用户可见行为和验证入口。
 
-## [Unreleased]
+## [0.1.7] · 2026-09-16 · 弱网播放修复（issue #1）、日志系统重整与设置页重组
 
 ### 修复
 
+- **播到一半就停（issue #1）：内核换装 `v0.1.9+dolby.buffering.dev`，弱网只缓冲不再中断**：根因是内核把整个预读窗口作为**一次** HTTP 请求拉取，而单请求有 15 秒响应上限——32 MiB 档等于要求 ≈18 Mbps 持续带宽，低于门槛两次超时后 demux 直接把播放判死，只能手点「重试」。新内核（fork 合流版 commit 122be55：dolby.1 杜比管线 + 上游 PR #137）改为 **4 MiB 分块拉取**——单请求封顶、超时续传、预取失败降级同步读（不再判死）、保留 16 MiB 已播尾巴供回退命中（实测回退 10 秒零网络请求）、媒体源原始错误透传到 demux 错误。节流压测（3 Mbps 测试片 + 32 MiB 档）：700 KB/s 下 2 倍速播放（需求 750 KB/s 超过供给）全程只缓冲、干净播到片尾；250 KB/s（需求 3 倍于供给，旧内核 open 阶段即死）约 3 分钟拖完整片，0 播放错误。该 release 附全平台资产，macOS / iOS 首次同内核。C ABI 无变化，App 侧零适配。ErikaReadAheadBehaviorTests 断言适配分块语义（单请求 ≤4 MiB 封顶为回归守卫，另支持 `ERIKA_READAHEAD_TEST_MEDIA` 指定本地大文件验证）。
 - **MoviePilot token 过期后不再甩原始 JSON、不再挂着无效的「重试」**：服务端对**过期 JWT** 回的是 403 + 自家信封 `{"success":false,"message":"token 校验不通过","data":null}`（只有缺 token / 解不出 payload 才是 401，jwt 过期签名落在 `verify_token` 的 `InvalidTokenError` → 403 分支），而客户端此前只把 401 当登录失效——403 落进 forbidden，信封里又取不到 FastAPI 的 `detail`，整包原始 JSON 直接当文案甩给 UI，且完全绕过「401 → 静默重登 → 失败才广播」的自愈链路：token 死了页面还显示已登录，「重试」永远失败。三层修复：错误体解析兼容 MP 信封（文案取 `message`，`detail` 兜底）；401/403 带 token 校验措辞一律归为 `requireLogin` 走静默重登——密码没改就无感自愈（订阅/搜索/下载全链路受益），密码改了或登录不上才清 token 广播通知把 UI 拉回未登录态；SSE 流式搜索的 401/403 同口径归一。订阅页与搜索页的错误态区分登录失效：标题「登录状态已失效」，按钮从「重试」换成「重新登录」直弹 MoviePilot 登录窗（预填地址与账号，只补密码）；「未登录」门控同样补了直弹登录窗入口。MoviePilotKit 新增 4 用例（403 信封自愈重放 / 普通 403 不误伤 / 信封文案提取 / 分类契约）。
 - **缓冲不再强弹 HUD（issue #2「三十秒闪一次」的可见症状）**：HUD 的显隐判据此前只有一个 `canAutoHideControls`（`(playing||paused) && !isBuffering && 无遮挡`），且「变化即唤出」——于是每轮缓冲起止都强制唤出一次 HUD，跟着弹出来的是全屏压暗遮罩（`PlayerHUDReadabilityScrim`，32% 黑）＋转圈＋弹幕冻结，网络抖动下就是用户看到的「画面暗一下亮一下」。判据拆成 `PlayerHUDGates` 的两个值：`revealTrigger`（该不该唤出：暂停 / 错误 / 字幕导入 / 弹幕选择 / 辅助功能 / 播放起止）与 `canAutoHide`（能不能自动收起，缓冲期间为 false）；`PlayerHUDVisibilityCoordinator` 新增 `refreshAutoHide(canAutoHide:)`——缓冲只续期、不计显隐：HUD 在屏上就留住，已收起则不会被弹出来。**顺带修掉因此暴露的转圈对比度问题**：中央缓冲指示以前靠 HUD 的全屏暗幕托底，HUD 不再强弹后白转圈直接压在亮画面上几乎看不见，改成套 `PlayerHUDPanel` 暗底（与错误徽章 / 2 倍速徽章同族）并常挂载 + `.opacity` 淡入淡出（HUD 收起期间没有容器动画托底，`if` 挂载会是硬闪）。App 层新增 6 用例（含「缓冲只改收起资格」「不弹已收起的 HUD」两条回归）。
 - **UI 缓冲态加迟滞，单帧饿数据不再闪动控件**：`PlayerState` 新增 `isBufferingSustained`——进缓冲要**连续持续 300ms** 才置位，恢复时补足 500ms 最短可见时长再收回（期间再进缓冲不重计、不收回）。转圈、HUD 状态行「缓冲中」、弹幕冻结/续播、HUD 收起计时全部改用它；诊断真值 `isBuffering`（`buffer.start/end` 事件、卡死看门狗）不受影响——埋点里不留迟滞。PlaybackKit 新增 4 用例（单帧饿数据完全不惊动 UI / 上沿与最短可见 / 收回前再进不闪 / reset 取消在飞计时）。
@@ -18,7 +19,7 @@
 
 ### 改动
 
-- **设置页「网络预读缓冲」文案改成按带宽取舍**：原文案「公网服务器建议 16 MiB 以上」方向是反的——内核把整个窗口作为**一次** HTTP 请求拉取，单次请求有 15 秒响应上限，等于每 1 MiB 约需 0.55 Mbps 持续带宽（8 MiB≈4 Mbps、16 MiB≈9 Mbps、32 MiB≈18 Mbps）。带宽吃紧的远程服务器调大反而会周期性失败（现场表现：播到一半停 / 每半分钟一次缓冲）。`PlaybackPreferences` 的档位注释、设置页说明与 README 同步改成「数值越大要求越高，带宽吃紧反而要调小」并给出各档门槛；内核改成按块拉取（单请求封顶）后这几档门槛会一起降到 ~2 Mbps，届时同步回落文案。
+- **设置页「网络预读缓冲」文案随新内核回落**：内核按 4 MiB 分块拉取后，档位不再对应成比例的带宽门槛（约 2 Mbps 即可稳定拉取），文案改为「数值越大越能抗带宽抖动，内存占用相应增加；弱网下无需刻意调小，回退播放有 16 MiB 缓存兜底」——`PlaybackPreferences` 档位注释、设置页说明与 README 同口径。
 - **内存 tick 记录补 `output_mode_switches`**：输出模式切换计数此前只参与「这次 tick 要不要记」的判定，日志里看不到值。现在进字段（每次记到的 tick 都带），配合内核 `ERIKA_HDR_DEBUG` 的 `ErikaHDR: … output mode=…` 行，现场就能分辨「显示器侧真的切了 HDR / 刷新率」还是 UI 自己闪（issue #2）。ErikaKit 新增 1 用例。
 
 - **日志系统重整：默认档精简 + 一键诊断包 + 播放事件行 + 内核 stderr 接入**（issue #1/#2 排障暴露的缺口，完整清单见提交历史与 `Docs/LOGGING.md`）。四件事：

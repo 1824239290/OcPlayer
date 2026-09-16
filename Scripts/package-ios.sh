@@ -27,8 +27,7 @@ else
     RELEASE_TAG="$1"
 fi
 
-# v0.1.9+dolby.buffering.dev 暂未附 iOS 资产（fork 仅 macOS arm64 手工包）。
-# iOS 打包继续钉在最近一次带全平台产物的 tag；等 fork 补齐 iOS 后再一起升。
+# 该 fork release 附全平台资产（含 erika-capi-ios.zip），macOS / iOS 用同一内核。
 ERIKA_VERSION="${ERIKA_VERSION:-v0.1.9+dolby.buffering.dev}"
 # 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
 export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
