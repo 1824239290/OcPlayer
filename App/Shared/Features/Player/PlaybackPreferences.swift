@@ -113,6 +113,36 @@ enum PlaybackPreferences {
         return UInt64(mib) * 1024 * 1024
     }
 
+    /// 跳过片头开关。关闭后播放中不弹「跳过片头」——章节标记与弹幕/AniSkip 提示
+    /// 一并静默（门控在 `PlaybackController.currentSkipPrompt`，改动即播即生效）。
+    static var skipIntroEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.skipIntro, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.skipIntro) }
+    }
+    /// 跳过片尾开关。关闭后不弹「跳过片尾」——片尾标记与末 90 秒保底一并静默。
+    static var skipOutroEnabled: Bool {
+        get { storedBool(forKey: SettingsKeys.skipOutro, default: true) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.skipOutro) }
+    }
+
+    /// 保底跳过片尾的保留档位（秒）。0 = 不保留，直接跳到片尾尽头。
+    static let outroRetentionOptionsSeconds: [Int] = [0, 5, 10, 15, 20, 30]
+    /// 保底跳过片尾的保留秒数：落点 = 片长 − 该值，默认 10（原 20 过长，会错过
+    /// 下一集自动接续的黄金窗口且拖到黑屏；存量用户没有旧值需要兼容——20 从未落盘）。
+    /// 只作用于「末 90 秒保底」；服务端 MediaSegments / 章节启发式给出的片尾标记
+    /// 有精确区间终点，按标记终点跳，不吃这个设置。
+    static var outroRetentionSeconds: Int {
+        get {
+            // 不能学 httpReadAheadMiB 用 integer() 兜 0 再校验档位——0 在这里是
+            // 合法档位（不保留），键缺失会被读成 0 而非默认 10，必须先探存在性。
+            guard UserDefaults.standard.object(forKey: SettingsKeys.outroRetentionSeconds) != nil
+            else { return 10 }
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.outroRetentionSeconds)
+            return outroRetentionOptionsSeconds.contains(stored) ? stored : 10
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.outroRetentionSeconds) }
+    }
+
     private static func storedDouble(
         forKey key: String,
         range: ClosedRange<Double>,

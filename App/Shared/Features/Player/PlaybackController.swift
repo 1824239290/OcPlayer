@@ -1014,12 +1014,45 @@ final class PlaybackController: DanmakuPlaybackHosting {
     // MARK: - 章节 / 跳过片头片尾
 
     /// 当前应展示的「跳过」提示(由 UI 在 position 变化时读取)。
+    /// 设置里的跳过片头/片尾开关在这里门控——关闭对应类别的提示直接静默,
+    /// 播放中改动即时生效(SkipPromptView 每拍进度都会重读本属性)。
     var currentSkipPrompt: SkipPrompt? {
-        chapterSession.prompt(
+        guard let prompt = chapterSession.prompt(
             at: Double(state.position.microseconds) / 1_000_000,
             duration: Double(state.duration.microseconds) / 1_000_000,
             isPlaying: state.state == .playing
+        ) else { return nil }
+        return Self.promptGatedByPreferences(
+            prompt,
+            skipIntro: PlaybackPreferences.skipIntroEnabled,
+            skipOutro: PlaybackPreferences.skipOutroEnabled
         )
+    }
+
+    /// 跳过偏好门控（纯函数便于单测）：两个开关各自静默对应类别的提示。
+    static func promptGatedByPreferences(
+        _ prompt: SkipPrompt,
+        skipIntro: Bool,
+        skipOutro: Bool
+    ) -> SkipPrompt? {
+        switch prompt.kind {
+        case .opening:
+            return skipIntro ? prompt : nil
+        case .credits:
+            return skipOutro ? prompt : nil
+        }
+    }
+
+    /// 保底片尾跳过落点（纯函数便于单测）：片长 − 保留秒数（设置可选 0–30s，
+    /// 默认 10），不小于当前位置（不往回跳）；保留 0 时落点贴 EOF，钳到
+    /// 片长 − 0.5s，与 skip(by:) 同一道防线防内核 EOF 错误风暴。
+    static func endCreditsSkipTarget(
+        position: Double,
+        duration: Double,
+        retentionSeconds: Int
+    ) -> Double {
+        let retention = Double(retentionSeconds)
+        return max(min(duration - retention, duration - 0.5), position)
     }
 
     /// 跳到某个章节起点。
@@ -1064,10 +1097,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.info("跳过 \(mark.kind) → \(target)s")
         case .endCredits(let position):
             let duration = Double(state.duration.microseconds) / 1_000_000
-            // 跳到片尾结束前 20 秒,保留一点尾声画面。
-            target = max(duration - 20, position)
+            target = Self.endCreditsSkipTarget(
+                position: position,
+                duration: duration,
+                retentionSeconds: PlaybackPreferences.outroRetentionSeconds
+            )
             chapterSession.noteEndCreditsSkipped()
-            PlaybackLog.append("保底跳过片尾 → \(target)s")
+            PlaybackLog.append("保底跳过片尾 → \(target)s 保留=\(PlaybackPreferences.outroRetentionSeconds)s")
         }
         recordSeek(toSeconds: max(0, target), kind: "auto")
         try? engine?.seek(to: .seconds(max(0, target)))

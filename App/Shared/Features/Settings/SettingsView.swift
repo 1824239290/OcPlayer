@@ -38,6 +38,15 @@ struct SettingsView: View {
     /// 后台同步一并隐藏/停止，凭据与关联数据保留（见各功能触点的门控）。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
     @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
+    /// 跳过片头/片尾开关（默认开）与保底片尾保留秒数（默认 10）。与
+    /// PlaybackPreferences 同 key，播放中改动即生效（提示按钮每拍进度重读）。
+    @AppStorage(SettingsKeys.skipIntro) private var skipIntroEnabled = true
+    @AppStorage(SettingsKeys.skipOutro) private var skipOutroEnabled = true
+    @AppStorage(SettingsKeys.outroRetentionSeconds) private var storedOutroRetention = 10
+    private var outroRetentionSeconds: Int {
+        PlaybackPreferences.outroRetentionOptionsSeconds.contains(storedOutroRetention)
+            ? storedOutroRetention : 10
+    }
 
     var body: some View {
         Form {
@@ -60,6 +69,21 @@ struct SettingsView: View {
                 // 内核按块拉取（单请求封顶 4 MiB），档位不再对应成比例的带宽门槛：
                 // 深度只影响内存占用与抗卡顿能力，弱网下无需刻意调小。
                 Text("数值越大越能抗带宽抖动，内存占用相应增加。内核按块拉取（单请求 4 MiB 封顶），弱网下无需刻意调小；回退播放有 16 MiB 缓存兜底。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Toggle("跳过片头", isOn: $skipIntroEnabled)
+                Toggle("跳过片尾", isOn: $skipOutroEnabled)
+                Picker("片尾保留", selection: Binding(
+                    get: { outroRetentionSeconds },
+                    set: { storedOutroRetention = $0 }
+                )) {
+                    ForEach(PlaybackPreferences.outroRetentionOptionsSeconds, id: \.self) { seconds in
+                        Text(seconds == 0 ? "不保留" : "\(seconds) 秒").tag(seconds)
+                    }
+                }
+                .disabled(!skipOutroEnabled)
+                Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留则直接跳到片尾尽头。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

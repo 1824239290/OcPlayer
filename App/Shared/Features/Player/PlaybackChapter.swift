@@ -86,7 +86,7 @@ struct SkipMark: Identifiable, Hashable, Sendable {
 /// - `.mark(mark)`:`position` 落在一个已识别的片头 / 片尾区间内。
 /// - `.endCredits(position:)`(保底规则):未命中任何片尾区间,但 `position` 已进入
 ///   片长最后一分三十秒,仍给一个「跳过片尾」跳到接近结尾。关联值就是当前播放位置
-///   （不是片长——`performSkip` 拿它和「片长 − 20s」取大值，避免往回跳）。
+///   （不是片长——`performSkip` 拿它和「片长 − 保留秒数」取大值，避免往回跳）。
 enum SkipPrompt: Equatable, Sendable {
     case mark(SkipMark)
     case endCredits(position: Double)
@@ -236,7 +236,7 @@ struct ChapterSession {
     var skipMarks: [SkipMark] = []
     /// 已跳过的标记 id(会话内去重)。
     private(set) var skippedIDs: Set<String> = []
-    /// 保底片尾是否已跳过(会话内只兜一次)。不记的话跳到「片尾前 20s」仍在
+    /// 保底片尾是否已跳过(会话内只兜一次)。不记的话跳到「片尾前保留秒数处」仍在
     /// 90s 窗口内，提示立刻重现、按钮原地循环。
     private(set) var didSkipEndCredits = false
 
