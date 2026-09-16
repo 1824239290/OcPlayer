@@ -78,11 +78,12 @@ Scripts/package-macos.sh v0.1.6  # 本地打包，产出与 CI 相同的 dist/ �
 
 本项目依赖以下开源项目与服务（完整清单见应用 设置 → 关于 → 开源许可证）：
 
-- [Erika](https://github.com/AimesSoft/Erika)（FFmpeg / libass）
+- [Erika](https://github.com/AimesSoft/Erika)（FFmpeg / libass；当前使用 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的内核，杜比视界映射与 HTTP 分块预读在 fork 上先行）
 - [DanmakuKit](https://github.com/qyz777/DanmakuKit)
-- [jellyfin-sdk-swift](https://github.com/jellyfin/jellyfin-sdk-swift) / [Jellyfin](https://jellyfin.org/)
+- [jellyfin-sdk-swift](https://github.com/jellyfin/jellyfin-sdk-swift) / [Jellyfin](https://jellyfin.org/) / [Emby](https://emby.media/)
 - [GRDB.swift](https://github.com/groue/GRDB.swift) / [Get](https://github.com/kean/Get)
-- [弹弹play](https://www.dandanplay.com/)（经 OcPlay 网关接入）
+- [弹弹play](https://www.dandanplay.com/)（弹幕数据，经 OcPlay 网关接入）
+- [AniSkip](https://api.aniskip.com/) / [AniList](https://anilist.co/)（社区片头标注与 ID 映射）
 - [Bangumi](https://bgm.tv/) / [MoviePilot](https://github.com/jxxghp/MoviePilot)
 
 ## 文档

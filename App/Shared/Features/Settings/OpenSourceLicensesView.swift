@@ -93,6 +93,75 @@ enum OpenSourceLicenseCatalog {
             ]
         ),
         OpenSourceComponentGroup(
+            id: "community",
+            title: "社区数据与服务",
+            components: [
+                component(
+                    id: "jellyfin-server",
+                    name: "Jellyfin",
+                    license: "GPL-2.0（服务端）",
+                    purpose: "开源媒体服务器。直连播放、媒体库、章节与 MediaSegments 片头识别等能力的数据来源。",
+                    homepage: "https://jellyfin.org",
+                    licenseURL: "https://github.com/jellyfin/jellyfin/blob/master/LICENSE",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "emby-server",
+                    name: "Emby",
+                    license: "专有（开放 API）",
+                    purpose: "媒体服务器。登录探活自动识别 Emby 后走同套直连播放链路。",
+                    homepage: "https://emby.media",
+                    licenseURL: "https://dev.emby.media/",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "dandanplay",
+                    name: "弹弹play",
+                    license: "社区弹幕数据",
+                    purpose: "弹幕数据源：番剧匹配（文件哈希 + 章节定位）与弹幕正文，经 OcPlay 网关接入。",
+                    homepage: "https://www.dandanplay.com",
+                    licenseURL: "https://github.com/kaedei/dandanplay-libraryindex",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "aniskip",
+                    name: "AniSkip",
+                    license: "社区贡献数据",
+                    purpose: "社区提交并投票背书的片头/片尾区间标注（v0.1.7 起接入，为「跳过片头」的第二优先级识别源）。",
+                    homepage: "https://api.aniskip.com/api-docs",
+                    licenseURL: "https://api.aniskip.com/api-docs",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "anilist",
+                    name: "AniList",
+                    license: "社区 API",
+                    purpose: "GraphQL API，用于 Jellyfin 条目到 MAL/AniList ID 的换算与标题搜索（AniSkip 只认 MAL ID，缺映射时经此补齐）。",
+                    homepage: "https://anilist.co",
+                    licenseURL: "https://docs.anilist.co",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "bangumi",
+                    name: "Bangumi (bgm.tv)",
+                    license: "社区 API",
+                    purpose: "番剧条目、收藏与观看进度同步。",
+                    homepage: "https://bgm.tv",
+                    licenseURL: "https://github.com/bangumi/api",
+                    bundledLicensePaths: []
+                ),
+                component(
+                    id: "moviepilot",
+                    name: "MoviePilot",
+                    license: "GPL-3.0（服务端）",
+                    purpose: "自建影视自动化服务端：订阅、搜索与资源下载编排（v3 API）。",
+                    homepage: "https://github.com/jxxghp/MoviePilot",
+                    licenseURL: "https://github.com/jxxghp/MoviePilot/blob/main/LICENSE",
+                    bundledLicensePaths: []
+                ),
+            ]
+        ),
+        OpenSourceComponentGroup(
             id: "swift-runtime",
             title: "SwiftPM 依赖",
             components: [
@@ -312,7 +381,7 @@ struct OpenSourceLicensesView: View {
     var body: some View {
         List {
             Section {
-                Text("OcPlayer 使用以下开源项目。发布包同时附带对应许可证文本与 Erika 原生依赖通知。")
+                Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 Erika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
                     .foregroundStyle(.secondary)
             }
 
