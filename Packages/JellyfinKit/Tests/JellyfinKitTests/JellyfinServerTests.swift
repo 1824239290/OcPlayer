@@ -1,4 +1,5 @@
 import CoreModel
+import JellyfinAPI
 import XCTest
 @testable import JellyfinKit
 
@@ -1148,4 +1149,165 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(chapters.first?.name, "章一")
         }
     }
+
+    // MARK: - Emby 枚举值域洗白（issue #3）
+
+    /// 把原始 JSON 过一遍洗白层，再用宽松解码器解成 SDK DTO。
+    /// 这正是 `JellyfinServer.send` 对 Emby profile 走的路径。
+    private func decoded<T: Decodable>(_ json: String, as type: T.Type) throws -> T {
+        let sanitized = EmbySanitizer.sanitize(Data(json.utf8))
+        return try LooseDecoding.decoder.decode(T.self, from: sanitized)
+    }
+
+    /// issue #3：Emby 把杜比视界写进 `VideoRange`（"DolbyVision"），而
+    /// jellyfin-sdk-swift 的 `VideoRange` 只有 Unknown/SDR/HDR —— 强类型解码
+    /// 整包炸掉，`/Items/{id}/PlaybackInfo` 失败后回退直连（日志里 7 次），
+    /// 杜比片源从此拿不到服务端协商的播放会话。
+    ///
+    /// 洗白把 `VideoRange` 归一成 "HDR"（杜比本质上属于 HDR 范畴），
+    /// **关键是 `VideoRangeType` 必须原样透传** —— App 的杜比判定
+    /// （`PlaybackSessionContext.isDolbyVision`）只看它的 DOVI 前缀，动了就丢检测。
+    func testSanitizerNormalizesEmbyDolbyVisionVideoRange() throws {
+        let json = """
+        {"Id":"ms-term","Name":"终结者","Container":"mkv",
+         "MediaStreams":[
+           {"Type":"Video","Index":0,"Codec":"hevc",
+            "VideoRange":"DolbyVision","VideoRangeType":"DOVIWithEL"},
+           {"Type":"Audio","Index":1,"Codec":"truehd"}
+         ]}
+        """
+
+        // 修复前这里直接抛
+        // "Cannot initialize VideoRange from invalid String value DolbyVision"。
+        let source = try decoded(json, as: MediaSourceInfo.self)
+        let streams = try XCTUnwrap(source.mediaStreams)
+
+        // VideoRange 归一成 SDK 认的值。
+        let video = try XCTUnwrap(streams.first { $0.type == .video })
+        XCTAssertEqual(video.videoRange, .hdr, "Emby 的 DolbyVision 应归一成 HDR")
+
+        // 真实值域必须保住：VideoRangeType 原样透传，杜比判定仍然成立。
+        XCTAssertEqual(video.videoRangeType, .doviWithEL, "VideoRangeType 不能被洗白改动")
+
+        let context = PlaybackInfo(playSessionID: "ps-1",
+                                   mediaSources: [PlaybackMediaSource(source, fallbackID: "fb")])
+            .sessionContext(itemID: "852122",
+                            selectedSource: PlaybackMediaSource(source, fallbackID: "fb"))
+        XCTAssertTrue(context.isDolbyVision, "杜比判定不能因洗白失效")
+    }
+
+    /// issue #3：Emby 给 MKV 内嵌字体报 `MediaStreams[].Type = "Attachment"`，
+    /// SDK `MediaStreamType` 没有这个 case —— PlaybackInfo 整包炸（日志里 4 次，
+    /// 波及《少女终末旅行》整季）。洗成 SDK 已有的 "Data"（非音视频的非媒体流）。
+    ///
+    /// 这里同时是「同名不同义」的回归：`Type` 在顶层是 BaseItemKind、
+    /// 在 MediaSources[] 是 MediaSourceType、在 MediaStreams[] 才是
+    /// MediaStreamType —— 三者必须各自正确，不能互相污染。
+    func testSanitizerNormalizesEmbyAttachmentStreamType() throws {
+        // 形状照抄生产日志的真实失败路径：MediaSources[0].MediaStreams[2].Type。
+        // 顶层 Type 同时放 "Episode"，验证同名字段互不污染。
+        let json = """
+        {"Id":"item-yuru","Name":"少女终末旅行 S01E06.mkv","Type":"Episode",
+         "MediaSources":[
+           {"Id":"ms-yuru","Name":"少女终末旅行 S01E06.mkv","Type":"Default",
+            "Container":"mkv",
+            "MediaStreams":[
+              {"Type":"Video","Index":0,"Codec":"h264"},
+              {"Type":"Audio","Index":1,"Codec":"aac"},
+              {"Type":"Attachment","Index":2,"Codec":"ttf","FileName":"FOT-Rodin.ttf"}
+            ]}
+         ]}
+        """
+
+        // 修复前：Cannot initialize MediaStreamType from invalid String value Attachment
+        let item = try decoded(json, as: BaseItemDto.self)
+        let source = try XCTUnwrap(item.mediaSources?.first)
+        let streams = try XCTUnwrap(source.mediaStreams)
+
+        // 顶层仍是 Episode（没被 MediaSource/MediaStream 规则误洗）。
+        XCTAssertEqual(item.type, .episode, "顶层 BaseItemKind 不应被 MediaStreams 规则污染")
+        XCTAssertEqual(streams.count, 3, "附件流不应被丢弃，只做类型归一")
+
+        let attachment = try XCTUnwrap(streams.first { $0.index == 2 })
+        XCTAssertEqual(attachment.type, .data, "Emby 的 Attachment 应归一成 Data")
+
+        // 同名字段互不污染：音视频流仍是原值。
+        XCTAssertEqual(streams.first { $0.index == 0 }?.type, .video)
+        XCTAssertEqual(streams.first { $0.index == 1 }?.type, .audio)
+    }
+
+    /// issue #3：Emby 的 `LockedFields` 会带 "SortName"，SDK `MetadataField` 没有
+    /// 这个 case —— 而它在 `/Items` 列表响应里，一条脏值就把**整个媒体库列表**
+    /// 炸成「媒体库列表加载失败」（日志里 1 次）。
+    /// 该字段 App 侧目前无消费方，剔除未知项的信息损失为零。
+    func testSanitizerDropsEmbyUnknownLockedField() throws {
+        let json = """
+        {"Id":"m-1","Name":"电影一","Type":"Movie",
+         "LockedFields":["SortName","Overview"]}
+        """
+
+        // 修复前：Cannot initialize MetadataField from invalid String value SortName
+        // → 整包炸成「媒体库列表加载失败」。
+        let item = try decoded(json, as: BaseItemDto.self)
+        let locked = try XCTUnwrap(item.lockedFields)
+        XCTAssertEqual(locked.map(\.rawValue), ["Overview"], "SortName 剔除，Overview 保留")
+    }
+
+    /// 洗白必须对标准 Jellyfin 零影响：合法值原样透传，不经任何改动。
+    func testSanitizerLeavesStandardJellyfinValuesUntouched() throws {
+        let json = """
+        {"Id":"ms-jf","Name":"标准","Container":"mp4",
+         "MediaStreams":[
+           {"Type":"Video","Index":0,"VideoRange":"HDR","VideoRangeType":"DOVIWithHDR10"},
+           {"Type":"Data","Index":1}
+         ]}
+        """
+
+        let source = try decoded(json, as: MediaSourceInfo.self)
+        let streams = try XCTUnwrap(source.mediaStreams)
+
+        XCTAssertEqual(streams.first?.videoRange, .hdr, "标准 Jellyfin 的 HDR 必须原样")
+        XCTAssertEqual(streams.first?.videoRangeType, .doviWithHDR10)
+        XCTAssertEqual(streams.last?.type, .data, "SDK 本就认识的 Data 不受影响")
+    }
+
+    /// 洗白必须幂等。这不是理论要求：`JellyfinServer.send` 对非 Emby profile 是
+    /// 「先直接解码，失败再 sanitize 重试」，而 MediaSources 子树本身还有
+    /// 「按 key 精确处理 + 外层 mapValues 递归再过一遍」的双路径 ——
+    /// 同一个响应被洗两次是真实存在的执行路径，第二次不能把已洗好的值再改坏
+    /// （尤其 LockedFields 是数组过滤，必须经得起重入）。
+    func testSanitizerIsIdempotentOnEmbyPayloads() throws {
+        let json = """
+        {"Id":"item-1","Name":"末日时","Type":"Episode",
+         "LockedFields":["SortName","Overview"],
+         "MediaSources":[
+           {"Id":"ms-1","Name":"E01.mkv","Type":"Folder",
+            "MediaStreams":[
+              {"Type":"Video","Index":0,"VideoRange":"DolbyVision","VideoRangeType":"DOVIWithEL"},
+              {"Type":"Attachment","Index":1,"Codec":"ttf"}
+            ]}
+         ]}
+        """
+
+        let once = EmbySanitizer.sanitize(Data(json.utf8))
+        let twice = EmbySanitizer.sanitize(once)
+
+        // 比较语义而非字节：Foundation 的 JSONSerialization 不保证键序，
+        // 逐字节相等是过强的断言（实测两次长度相同、键序不同）。
+        // 真正要保证的是「值不再被改动」，所以解出 JSON 对象比对。
+        let onceObject = try XCTUnwrap(JSONSerialization.jsonObject(with: once) as? [String: Any])
+        let twiceObject = try XCTUnwrap(JSONSerialization.jsonObject(with: twice) as? [String: Any])
+        XCTAssertTrue(NSDictionary(dictionary: onceObject).isEqual(to: twiceObject),
+                      "洗白两次的语义结果必须与一次相同")
+
+        // 两次都还能正常解码。
+        let item = try LooseDecoding.decoder.decode(BaseItemDto.self, from: twice)
+        XCTAssertEqual(item.type, .episode)
+        XCTAssertEqual(item.lockedFields?.map(\.rawValue), ["Overview"])
+        let streams = try XCTUnwrap(item.mediaSources?.first?.mediaStreams)
+        XCTAssertEqual(streams.first { $0.index == 0 }?.videoRange, .hdr)
+        XCTAssertEqual(streams.first { $0.index == 0 }?.videoRangeType, .doviWithEL)
+        XCTAssertEqual(streams.first { $0.index == 1 }?.type, .data)
+    }
 }
+

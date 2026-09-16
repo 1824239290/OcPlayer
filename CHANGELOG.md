@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **Emby 上杜比视界片源拿不到服务端播放会话、整个媒体库列表可能加载失败（issue #3 的枚举解码问题）**：Emby 兼容层有几个字段的值域比 jellyfin-sdk-swift 的枚举更宽，强类型解码整包炸掉。诊断日志（issue #3 附件）里共 45 次解码失败，三种值：`VideoRange` 报 "DolbyVision"（SDK 只有 Unknown/SDR/HDR，40 次）——`/Items/{id}/PlaybackInfo` 因此失败、调用方「回退直连」（日志里 7 次），杜比片源丢失 `mediaSourceID` / `playSessionID` 与服务端协商，只能裸 `?Static=true` 拉流；`MediaStreams[].Type` 报 "Attachment"（MKV 内嵌字体，SDK `MediaStreamType` 无此 case，4 次）——同样炸 PlaybackInfo，实测波及《少女终末旅行》整季；`LockedFields` 报 "SortName"（SDK `MetadataField` 无此 case，1 次）——它在 `/Items` 列表响应里，一条脏值就把**整个媒体库列表**炸成「媒体库列表加载失败」。修复都在既有的 `EmbySanitizer` 洗白层，对标准 Jellyfin 是无害透传：`VideoRange` 的未知值归一成 "HDR"（**与上游 Jellyfin 语义一致**——其 `MediaStream.GetVideoColorRange()` 对杜比视界返回的就是 `(VideoRange.HDR, VideoRangeType.DOVI*)`，Emby 只是把粗粒度字段写细了）；`MediaStreams[].Type` 的未知值归一成 SDK 已有的 "Data"（附件流保留、只修类型值）；`LockedFields` 按数组元素过滤，剔除 SDK 不认识的项（该字段 App 侧无消费方，信息损失为零）。**关键约束是只洗 `VideoRange` 而不碰 `VideoRangeType`**：App 的杜比判定（`PlaybackSessionContext.isDolbyVision`）只看后者的 DOVI 前缀，而 SDK 的 `VideoRangeType` 有完整 DOVI 系列 case、原样透传即可——洗粗粒度救解码，靠细粒度保真值域。三处规则都按 key 精确限定子树（`Type` 在顶层是 BaseItemKind、在 MediaSources[] 是 MediaSourceType、在 MediaStreams[] 才是 MediaStreamType，同名不同义不能互相污染），并保证幂等（`JellyfinServer.send` 对非 Emby 档案是「先直接解码、失败再 sanitize 重试」，同一响应被洗两次是真实路径）。JellyfinKit 新增 5 用例（三处值域各一条、标准 Jellyfin 零影响一条、幂等一条——幂等用例比对语义而非字节，因 Foundation 的 JSONSerialization 不保证键序）。
+
 ### 改动
 
 - **跳过片头/片尾加入设置开关，保底片尾保留时长从 20 秒改为默认 10 秒且可选**：设置页「播放」组新增「跳过片头」「跳过片尾」两个开关（默认开，关闭后播放中不再弹对应类别的「跳过」按钮，改动即播即生效）与「片尾保留」档位（不保留 / 5 / 10 / 15 / 20 / 30 秒，默认 10——原硬编码 20s 会拖到黑屏、错过自动连播窗口）。保留时长只作用于「末 90 秒保底跳过片尾」的落点（片长 − 保留秒数，不往回跳；不保留时钳在片长 − 0.5s 防内核 EOF 错误风暴）；服务端 MediaSegments / 章节启发式给出的片尾标记有精确区间终点，仍按终点跳。App 层新增 11 用例（门控、落点钳制、默认值与非法存量回落、控制器 seek 实测）。

@@ -45,6 +45,37 @@ enum EmbySanitizer {
         "default", "grouping", "placeholder",
     ]
 
+    /// SDK `VideoRange` 认的值（Unknown/SDR/HDR）。Emby 兼容层会把杜比视界直接
+    /// 写进 `VideoRange`（"DolbyVision"），SDK 解不了 —— `/Items/{id}/PlaybackInfo`
+    /// 整包炸，调用方只能回退直连（issue #3：日志里 7 次），杜比片源拿不到
+    /// 服务端协商的播放会话。
+    ///
+    /// 归一成 "HDR"：**这不是我们的发明，而是 Jellyfin 官方的既定语义**。
+    /// 上游 `MediaStream.GetVideoColorRange()` 对杜比视界返回的就是
+    /// `(VideoRange.HDR, VideoRangeType.DOVI*)` —— 粗粒度归 HDR、细粒度放
+    /// VideoRangeType（如 DOVIWithEL 走 `(HDR, DOVIWithEL)`、DOVIWithSDR 走
+    /// `(SDR, DOVIWithSDR)`）。Emby 只是把粗粒度字段写成了更细的 "DolbyVision"，
+    /// 这里把它还原成上游语义。
+    ///
+    /// **关键约束**：这只洗 `VideoRange`，绝不能连带动 `VideoRangeType` ——
+    /// App 的杜比判定（`PlaybackSessionContext.isDolbyVision`）只看
+    /// `VideoRangeType` 的 DOVI 前缀，而 SDK 的 `VideoRangeType` 有完整 DOVI
+    /// 系列 case，"DOVIWithEL" 等值本来就能解、原样透传即可。洗 `VideoRange`
+    /// 救解码，靠 `VideoRangeType` 保真值域，两者分工不能混。
+    private static let knownVideoRanges: Set<String> = ["unknown", "sdr", "hdr"]
+
+    /// SDK `MetadataField` 认的值（`/Items` 列表响应里 `LockedFields` 的元素）。
+    /// Emby 会给出 "SortName" 这类 SDK 枚举外的字段名 —— 它在 `/Items` 里，
+    /// 一条脏值就让**整个媒体库列表**解码失败（issue #3：日志里 1 次
+    /// "媒体库列表加载失败"）。
+    ///
+    /// 该字段表示「哪些元数据字段被锁定不允许刷新」，App 侧目前无消费方，
+    /// 因此未知项直接剔除：信息损失为零，却救回整个列表。
+    private static let knownMetadataFields: Set<String> = [
+        "cast", "genres", "productionlocations", "studios", "tags",
+        "name", "overview", "runtime", "officialrating",
+    ]
+
     /// 对根为对象（QueryResult 信封）或数组（/Items/Latest 裸数组）的响应做递归洗白。
     static func sanitize(_ data: Data) -> Data {
         guard var object = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
@@ -76,6 +107,31 @@ enum EmbySanitizer {
                dict["Id"] != nil, dict["Name"] != nil {
                 cleaned["Type"] = "Folder"
             }
+            // VideoRange：Emby 报 "DolbyVision" 而 SDK 只认 Unknown/SDR/HDR。
+            // 这个键名在 MediaStream 里是独占的（不像 Type 那样被多结构共用），
+            // 所以按 key 全局处理是安全的，不必限定子树。
+            // **只洗 VideoRange，绝不碰 VideoRangeType** —— 后者是杜比判定的
+            // 唯一输入，且 SDK 的 VideoRangeType 有完整 DOVI 系列 case，本就能解。
+            if let range = cleaned["VideoRange"] as? String {
+                switch range.lowercased() {
+                case "sdr": cleaned["VideoRange"] = "SDR"
+                case "hdr": cleaned["VideoRange"] = "HDR"
+                case "unknown": cleaned["VideoRange"] = "Unknown"
+                // 未知值（DolbyVision / DolbyVisionWithHDR …）一律按 HDR 处理：
+                // 与 HDR 同族，语义最接近，也避免误报 SDR。幂等。
+                default: cleaned["VideoRange"] = "HDR"
+                }
+            }
+            // LockedFields：Emby 会带 SDK `MetadataField` 枚举外的字段名
+            // （如 "SortName"），它在 /Items 列表响应里，一条脏值炸整个列表。
+            // 这是**数组元素过滤**（不是替换）：剔除未知项、保留认识的。
+            // 幂等：过滤后元素全在 knownMetadataFields 里，再跑一遍无变化。
+            if let locked = cleaned["LockedFields"] as? [Any] {
+                cleaned["LockedFields"] = locked.filter { value in
+                    guard let name = value as? String else { return false }
+                    return knownMetadataFields.contains(name.lowercased())
+                }
+            }
             if var userData = cleaned["UserData"] as? [String: Any] {
                 // SDK 的 UserItemDataDto.Key 是 required decode；Emby 的 UserData
                 // 可能不带 Key。存在但缺 Key 时补占位；整个 UserData 缺失则合法
@@ -93,12 +149,31 @@ enum EmbySanitizer {
             // Movie 等 BaseItemKind）误洗成 "Default"，SDK 没有这个 case，
             // 整个详情解码炸成 "Cannot initialize BaseItemKind from Default"，
             // 章节列表 / 条目详情全挂。这里按 key 精确处理子树。
+            //
+            // 同一子树里还要洗 MediaStreams[].Type（MediaStreamType）：Emby 给
+            // MKV 内嵌字体（附件）报 "Attachment"，SDK 的 MediaStreamType 没有
+            // 这个 case —— PlaybackInfo 整包炸（issue #3：日志里 4 次，整季不可播）。
+            // 归一成 SDK 已有的 "Data"（非音视频的非媒体流），附件流本身保留，
+            // 只修类型值。同理按 key 精确限定，不碰顶层 Type。
             if var sources = cleaned["MediaSources"] as? [Any] {
                 for index in sources.indices {
                     guard var source = sources[index] as? [String: Any] else { continue }
                     if let type = source["Type"] as? String,
                        type != "Default", type != "Grouping", type != "Placeholder" {
                         source["Type"] = "Default"
+                    }
+                    if var streams = source["MediaStreams"] as? [Any] {
+                        for streamIndex in streams.indices {
+                            guard var stream = streams[streamIndex] as? [String: Any] else { continue }
+                            // 只在值不是 SDK 认的 MediaStreamType 时才动手；
+                            // "Data" 幂等（再跑一遍仍是 Data）。
+                            if let streamType = stream["Type"] as? String,
+                               !knownNonItemTypeValues.contains(streamType.lowercased()) {
+                                stream["Type"] = "Data"
+                            }
+                            streams[streamIndex] = stream
+                        }
+                        source["MediaStreams"] = streams
                     }
                     sources[index] = source
                 }
