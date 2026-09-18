@@ -58,6 +58,13 @@ final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
 
     override init() {
         super.init()
+        // 监听 AppModel 的播放覆盖层开合广播。⚠️ 不用「AppModel 持闭包 + App.init
+        // 装配」的模式：SwiftUI 会多次创建 App 值，App.init 经 @State 访问到的
+        // appModel 与实际存储/注入的不是同一实例，装配会静默丢失（issue #5 排查实录）。
+        // delegate 自身 init 在 app 启动最早阶段执行，这里注册观察者无时序依赖。
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(playerPresentationDidChange),
+            name: AppModel.playerPresentationDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(
             self, selector: #selector(sceneDidActivate),
             name: UIScene.didActivateNotification, object: nil)
@@ -68,8 +75,14 @@ final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
         playerIsActive ? .landscape : browsingMask
     }
 
-    /// 由 AppModel.presentedPlayer 的 didSet 回调调用：切换方向约束 + 主动旋转。
-    func setPlayerActive(_ active: Bool) {
+    /// 收到播放覆盖层开合广播：切换方向约束 + 主动旋转。
+    @objc private func playerPresentationDidChange(_ notification: Notification) {
+        let active = (notification.userInfo?["active"] as? Bool) ?? false
+        setPlayerActive(active)
+    }
+
+    /// 切换方向约束 + 主动旋转（幂等）。
+    private func setPlayerActive(_ active: Bool) {
         guard active != playerIsActive else { return }
         playerIsActive = active
         pendingOrientationRefresh = true
@@ -91,7 +104,7 @@ final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
             .rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
 
-    /// scene 首次连接 / 激活：补发启动即播时攒下的方向请求。
+    /// scene 首次连接 / 激活：补发攒下的方向请求（启动即播路径）。
     @objc private func sceneDidActivate(_ notification: Notification) {
         applyPendingOrientationRefresh()
     }
@@ -123,15 +136,6 @@ struct OcPlayerApp: App {
         // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         PlaybackEngineAssembly.registerAll()
-        #if os(iOS)
-        // 方向回调必须在**任何播放可能发生之前**装配：启动即播的自检路径在
-        // RootView.task 里同步 present，装配若放在 WindowGroup.onAppear 会晚于
-        // 首次 presentedPlayer 赋值，setPlayerActive 永远不会被调用，
-        // 播放中的横屏锁整个失效。
-        appModel.orientationChangeHandler = { [weak iosAppDelegate] active in
-            iosAppDelegate?.setPlayerActive(active)
-        }
-        #endif
         AppDiagnostics.recordLaunch()
         Task { @MainActor in
             await AppUpdateChecker.shared.checkForUpdates()
