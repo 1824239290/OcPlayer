@@ -35,14 +35,14 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
 /// 同一个 `GlassEffectContainer` 内共享取样区域（玻璃不能取样玻璃）。
 struct PlayerHUDActionCluster: View {
     @Binding var expandedTab: PlayerHUDActionTab?
-    // 面板内容自然高度（卡片内实测回传），供 PlayerScreen 把跳过钮抬到面板上方。
-    @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
+    /// 面板内容高度上限（PlayerScreen 按 HUD 可用高折算；nil = 卡片兜底 320）。
+    let maxContentHeight: CGFloat?
     let isFullscreen: Bool
     let onToggleFullscreen: () -> Void
     let onCapture: () -> Void
@@ -67,7 +67,6 @@ struct PlayerHUDActionCluster: View {
                 if let tab = expandedTab {
                     PlayerHUDExpandedActionCard(
                         tab: tab,
-                        panelContentHeight: $panelContentHeight,
                         isImportingSubtitle: $isImportingSubtitle,
                         isSelectingDanmaku: $isSelectingDanmaku,
                         showInfoPanel: $showInfoPanel,
@@ -76,7 +75,8 @@ struct PlayerHUDActionCluster: View {
                         onToggleFullscreen: onToggleFullscreen,
                         onCapture: onCapture,
                         onShare: onShare,
-                        onUserInteraction: onUserInteraction
+                        onUserInteraction: onUserInteraction,
+                        maxContentHeight: maxContentHeight
                     )
                     .playerHUDGlassCard(cornerRadius: 22)
                     .glassEffectID(tab.id, in: glassNamespace)
@@ -192,9 +192,12 @@ struct PlayerHUDExpandedActionCard: View {
 
     let tab: PlayerHUDActionTab
 
-    // 面板内容自然高度（本视图内实测）。Binding 归 PlayerScreen 所有：
-    // 跳过按钮层用它计算「面板上方空位」的锚点。
-    @Binding var panelContentHeight: CGFloat
+    // 面板内容自然高度（本视图内实测，只在本视图内消费）。
+    // ⚠️ 不能作为 Binding 传给外层再喂回布局（issue #5 教训）：跳过按钮层曾按它
+    // 动态抬升，把整个 ZStack 撑出屏幕，视频 surface 跟着 resize 被拉伸（画面缩放），
+    // 回写又反向影响测量值，形成每帧震荡的布局循环（主线程打满 = 整个 HUD 卡死）。
+    // 面板超限时收进滚动即可，让位由「面板打开时跳过层整层淡出」承担。
+    @State private var naturalContentHeight: CGFloat = .zero
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
@@ -207,9 +210,14 @@ struct PlayerHUDExpandedActionCard: View {
     let onShare: () -> Void
     let onUserInteraction: () -> Void
 
+    /// 面板内容高度上限，由调用方按 HUD 实际可用高折算传入；nil = 还没量到，兜底 320。
+    /// iPhone 横屏只有 ~375–430pt，固定 320 的弹幕面板加按钮行和簇底距必然撑出屏幕：
+    /// 溢出的簇被 ZStack 居中后，面板顶被切出画面（issue #5）。
+    var maxContentHeight: CGFloat? = nil
+
     @State private var submenu: PlayerHUDPanelSubmenu?
 
-    private var maxPanelContentHeight: CGFloat { 320 }
+    private var maxPanelContentHeight: CGFloat { maxContentHeight ?? 320 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -234,17 +242,19 @@ struct PlayerHUDExpandedActionCard: View {
         .onChange(of: tab) { submenu = nil }
     }
 
-    /// 面板主体高度随内容收缩：放得下就原生高度，超过 320 才滚动。
+    /// 面板主体高度随内容收缩：放得下就原生高度，超过上限（HUD 可用高折算）才滚动。
     /// 不能只给 ScrollView 套 `frame(maxHeight:)`——ScrollView 是贪婪布局，
     /// 两三行的小面板也会被撑满。这里用隐藏镜像（fixedSize 实测自然高度）
     /// 驱动分支，不依赖 ViewThatFits 在 GlassEffectContainer 内的提案表现。
+    /// 镜像值只写本视图私有 state：测量→布局→测量的环收敛在本视图内（初值 0 →
+    /// 首帧走原生分支 → 测得自然高 → 若超限切滚动后值不再变），不外溢。
     @ViewBuilder
     private func panelBody(_ content: some View) -> some View {
         let padded = content
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
         Group {
-            if panelContentHeight > maxPanelContentHeight {
+            if naturalContentHeight > maxPanelContentHeight {
                 ScrollView(.vertical, showsIndicators: false) {
                     padded
                 }
@@ -258,7 +268,7 @@ struct PlayerHUDExpandedActionCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .hidden()
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
-                    panelContentHeight = $0
+                    naturalContentHeight = $0
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)

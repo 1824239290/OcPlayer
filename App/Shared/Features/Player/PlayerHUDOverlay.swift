@@ -16,16 +16,16 @@ struct PlayerHUDOverlay: View {
     let title: String
     let kicker: String
 
-    // 状态归 PlayerScreen：跳过按钮层要据它让位（面板打开时跳过钮浮到面板上方）。
+    // 状态归 PlayerScreen（跳过按钮层随它显隐）。
     @Binding var expandedTab: PlayerHUDActionTab?
-    // 面板内容自然高度（簇内卡片实测），透传给 PlayerScreen 计算跳过钮锚点。
-    @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
+    /// 面板内容高度上限（PlayerScreen 按 HUD 可用高折算；nil = 卡片兜底 320）。
+    let maxContentHeight: CGFloat?
     let isFullscreen: Bool
     let onClose: () -> Void
     let onToggleFullscreen: () -> Void
@@ -85,11 +85,11 @@ struct PlayerHUDOverlay: View {
                     Spacer(minLength: 0)
                     PlayerHUDActionCluster(
                         expandedTab: $expandedTab,
-                        panelContentHeight: $panelContentHeight,
                         isImportingSubtitle: $isImportingSubtitle,
                         isSelectingDanmaku: $isSelectingDanmaku,
                         showInfoPanel: $showInfoPanel,
                         shareURL: shareURL,
+                        maxContentHeight: maxContentHeight,
                         isFullscreen: isFullscreen,
                         onToggleFullscreen: onToggleFullscreen,
                         onCapture: onCapture,

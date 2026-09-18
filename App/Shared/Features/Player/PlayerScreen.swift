@@ -32,11 +32,13 @@ struct PlayerScreen: View {
     @State private var showInfoPanel = false
     @State private var isImportingSubtitle = false
     @State private var isSelectingDanmaku = false
-    // 右下角功能面板当前展开的 Tab（nil = 收起）。跳过按钮层据此让位：
-    // 面板打开时跳过钮由 HUD 簇浮动到面板上方，这里的独立实例隐藏。
+    // 右下角功能面板当前展开的 Tab（nil = 收起）。面板打开时跳过按钮层整层淡出：
+    // 面板占据该屏幕区域，且动态让位（按面板高抬升 padding）会把跳过层撑出屏幕、
+    // 连带拖歪整个 ZStack 布局（issue #5 的画面缩放 + 布局循环卡死，见 skip 层注释）。
     @State private var expandedActionTab: PlayerHUDActionTab?
-    // 展开面板内容的自然高度（面板内实测回传），面板打开时跳过钮抬到其上方。
-    @State private var panelContentHeight: CGFloat = .zero
+    // HUD 可用高（PlayerHUDOverlay 根部 greedy frame 实测 = 安全区内全部空间）：
+    // 面板内容上限按它折算，iPhone 横屏上固定 320 的面板会撑出屏幕（issue #5）。
+    @State private var hudHeight: CGFloat = .zero
     @State private var screenshotToast: String?
     @State private var screenshotToastToken: UUID?
     // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
@@ -94,6 +96,17 @@ struct PlayerScreen: View {
     }
     #endif
 
+    /// 面板内容高度上限：HUD 可用高减去簇底距、按钮行、行间距和卡片内边距（8×2）。
+    /// nil = 还没量到（首帧），卡片自己兜底 320。iPhone 横屏高度只有 ~375–430pt，
+    /// 固定 320 的弹幕面板会把动作簇撑出屏幕（issue #5），所以超限时收进滚动。
+    /// 注意：只允许「测量 → 面板滚动高度」单向流动；任何把测量值再喂回
+    /// 跳过层/外层布局的用法都会重新引发布局循环（见 skip 层注释）。
+    private var panelHeightCap: CGFloat? {
+        guard hudHeight > 0 else { return nil }
+        let reserved: CGFloat = (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + 16
+        return max(200.0, hudHeight - reserved)
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -149,11 +162,11 @@ struct PlayerScreen: View {
                     title: mainTitle,
                     kicker: titleKicker,
                     expandedTab: $expandedActionTab,
-                    panelContentHeight: $panelContentHeight,
                     isImportingSubtitle: $isImportingSubtitle,
                     isSelectingDanmaku: $isSelectingDanmaku,
                     showInfoPanel: $showInfoPanel,
                     shareURL: cachedShareURL,
+                    maxContentHeight: panelHeightCap,
                     isFullscreen: hudIsFullscreen,
                     onClose: closePlayer,
                     onToggleFullscreen: toggleFullscreenFromHUD,
@@ -165,30 +178,34 @@ struct PlayerScreen: View {
                 .opacity(hudVisibility.isVisible ? 1 : 0)
                 .allowsHitTesting(hudVisibility.isVisible)
                 .accessibilityHidden(!hudVisibility.isVisible)
+                // HUD 可用高实测（根部 greedy frame = 安全区内的全部空间）。
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hudHeight = $0 }
             }
 
             if showInfoPanel {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
             // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
-            // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）：
-            // 功能面板打开时改用「簇底距 + 按钮高 + 间距 + 面板实测高度」抬到面板上方空位。
+            // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）。
+            // ⚠️ 面板打开时必须**整层淡出**而不是动态让位（按面板高抬 padding 曾是旧做法）：
+            // 让位会把本层 VStack 撑到超过屏幕高度（面板自然高 ~320 + 底距/按钮行/间距
+            // ≈ 482 > iPhone 横屏 375–430），ZStack 被子层撑大后视频 surface 跟着 resize、
+            // 画面被 CA 拉伸（issue #5 的「画面缩放异常」），且 padding↔测量互相回写形成
+            // 每帧震荡的布局循环，主线程被布局打满（点开面板整个 HUD 卡死）。
+            // 淡出只动 opacity，布局尺寸恒定，两个症状一并消除。
             let isActionPanelOpen = expandedActionTab != nil
-            let skipBottomPadding: CGFloat = isActionPanelOpen
-                ? (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + panelContentHeight + 12
-                : (isNarrow ? 150 : 168)
             VStack {
                 Spacer(minLength: 0)
                 HStack {
                     Spacer(minLength: 0)
                     PlayerSkipPromptView()
                         .padding(.trailing, isNarrow ? 16 : 28)
-                        .padding(.bottom, skipBottomPadding)
+                        .padding(.bottom, isNarrow ? 150 : 168)
                 }
             }
-            .allowsHitTesting(true)
+            .opacity(isActionPanelOpen ? 0 : 1)
+            .allowsHitTesting(!isActionPanelOpen)
             .motionAnimation(Motion.glass, value: expandedActionTab, reduceMotion: reduceMotion)
-            .motionAnimation(Motion.glass, value: panelContentHeight, reduceMotion: reduceMotion)
 
             // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
             VStack(spacing: 0) {
