@@ -5,6 +5,16 @@ import JellyfinAPI
 /// 服务器据此记录 `UserData.PlaybackPositionTicks`，换设备续播靠它。
 ///
 /// 上报是尽力而为：失败不影响播放（本地文件 / 离线时静默跳过）。
+///
+/// **Emby 会话 id 兜底**：`/Sessions/Playing` 与 `/Sessions/Playing/Progress`
+/// 在 body 缺 `PlaySessionId` 时必拒 400（`Value cannot be null.
+/// (Parameter 'key')`，plezy 实测 Emby 4.9.5；OhMyCine 记录了同病症），
+/// `/Sessions/Playing/Stopped` 容忍缺失；Jellyfin 三个端点都接受缺失。
+/// 回退直连等拿不到协商会话的场景（`PlaybackInfo` 失败 → 裸 URL 播放）
+/// 以前在这台服务器上 100% 400——续播位置全部丢失。所以只对 Emby 档案、
+/// 且没有协商会话时按 `itemId` 合成一个**确定性** id：同一 item 的
+/// start/progress/stopped 三段落在服务端同一会话行（照 plezy 的
+/// `_resolvePlaySessionId` 模式）。Jellyfin 档案一字不动。
 extension JellyfinServer {
 
     /// 秒 → Jellyfin tick（1 tick = 100 ns）。
@@ -12,18 +22,31 @@ extension JellyfinServer {
         Int(seconds * 10_000_000)
     }
 
+    /// 上报 body 的会话 id：协商过用协商值；Emby 档案没协商过则合成；
+    /// Jellyfin 档案没协商过保持 nil（SDK `encodeIfPresent` 会把 nil 整键省略）。
+    ///
+    /// 合成必须确定性（itemId 派生）而非随机：随机 id 会让同一片源的
+    /// start / progress / stopped 在服务端散成三条孤儿会话。
+    func resolvedPlaySessionID(_ context: PlaybackSessionContext) -> String? {
+        if let session = context.playSessionID { return session }
+        guard profile.kind == .emby else { return nil }
+        return "ocplayer-\(context.itemID)"
+    }
+
     /// 开始播放。
     public func reportPlaybackStart(
         context: PlaybackSessionContext,
         positionSeconds: Double
     ) async {
+        let session = resolvedPlaySessionID(context)
         let body = PlaybackStateInfo(
             canSeek: true,
             itemID: context.itemID,
             mediaSourceID: context.mediaSourceID,
             playMethod: context.deliveryMethod.jellyfinValue,
-            playSessionID: context.playSessionID,
-            positionTicks: Self.ticks(positionSeconds)
+            playSessionID: session,
+            positionTicks: Self.ticks(positionSeconds),
+            sessionID: session
         )
         do {
             _ = try await client.send(Paths.reportPlaybackStart(body))
@@ -46,14 +69,16 @@ extension JellyfinServer {
         positionSeconds: Double,
         isPaused: Bool
     ) async {
+        let session = resolvedPlaySessionID(context)
         let body = PlaybackStateInfo(
             canSeek: true,
             isPaused: isPaused,
             itemID: context.itemID,
             mediaSourceID: context.mediaSourceID,
             playMethod: context.deliveryMethod.jellyfinValue,
-            playSessionID: context.playSessionID,
-            positionTicks: Self.ticks(positionSeconds)
+            playSessionID: session,
+            positionTicks: Self.ticks(positionSeconds),
+            sessionID: session
         )
         do {
             _ = try await client.send(Paths.reportPlaybackProgress(body))
@@ -83,7 +108,7 @@ extension JellyfinServer {
         let body = PlaybackStopInfo(
             itemID: context.itemID,
             mediaSourceID: context.mediaSourceID,
-            playSessionID: context.playSessionID,
+            playSessionID: resolvedPlaySessionID(context),
             positionTicks: Self.ticks(positionSeconds)
         )
         do {

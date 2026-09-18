@@ -71,10 +71,103 @@ final class PlaybackReportingTests: XCTestCase {
         }
     }
 
-    private static func mockServer() -> JellyfinServer {
+    // MARK: - Emby 缺 PlaySessionId 必 400：回退直连时合成会话 id
+
+    func testEmbyFallbackReportsSynthesizePlaySessionID() async throws {
+        // 回退直连（PlaybackInfo 失败 → 裸 URL 播放）的 context 没有
+        // playSessionID；Emby 的 Playing/Progress 缺它必 400、续播位置全丢。
+        let bodies = LockedBodies()
+        let paths = LockedRequests()
+        try await TestSupport.withMock { request in
+            bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
+            paths.append((request.httpMethod ?? "?", request.url?.path ?? "?"))
+            return MockURLProtocol.ok("{}", for: request.url!)
+        } with: {
+            let server = Self.mockServer(kind: .emby)
+            let context = PlaybackSessionContext(itemID: "item-9")
+
+            await server.reportPlaybackStart(context: context, positionSeconds: 1)
+            await server.reportPlaybackProgress(context: context, positionSeconds: 2, isPaused: false)
+            await server.reportPlaybackStopped(context: context, positionSeconds: 3)
+        }
+
+        let jsonBodies = try bodies.items.map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: $0) as? [String: Any])
+        }
+        XCTAssertEqual(jsonBodies.count, 3)
+        // 确定性 id：同一 item 三段上报落在服务端同一会话行。SessionId 只在
+        // Start / Progress（PlaybackStateInfo）上与 PlaySessionId 同值填入
+        // （Swiftfin 同款）；Stopped（PlaybackStopInfo）只带 PlaySessionId。
+        for (index, body) in jsonBodies.enumerated() {
+            let where_ = paths.items[index].1
+            XCTAssertEqual(body["PlaySessionId"] as? String, "ocplayer-item-9", where_)
+            if index < 2 {
+                XCTAssertEqual(body["SessionId"] as? String, "ocplayer-item-9", where_)
+            } else {
+                XCTAssertNil(body["SessionId"], where_)
+            }
+        }
+    }
+
+    func testJellyfinFallbackReportsOmitPlaySessionID() async throws {
+        // Jellyfin 三个端点都接受缺失；档案不是 Emby 就不合成，行为一字不动。
+        let bodies = LockedBodies()
+        try await TestSupport.withMock { request in
+            bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
+            return MockURLProtocol.ok("{}", for: request.url!)
+        } with: {
+            let server = Self.mockServer(kind: .jellyfin)
+            let context = PlaybackSessionContext(itemID: "item-9")
+
+            await server.reportPlaybackStart(context: context, positionSeconds: 1)
+            await server.reportPlaybackProgress(context: context, positionSeconds: 2, isPaused: false)
+            await server.reportPlaybackStopped(context: context, positionSeconds: 3)
+        }
+
+        let jsonBodies = try bodies.items.map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: $0) as? [String: Any])
+        }
+        for body in jsonBodies {
+            XCTAssertNil(body["PlaySessionId"], "SDK encodeIfPresent：没协商过就整键省略")
+            XCTAssertNil(body["SessionId"])
+        }
+    }
+
+    func testEmbyNegotiatedSessionPassesThroughUnchanged() async throws {
+        // 主路径（PlaybackInfo 成功）：协商会话原样透传，绝不被合成值覆盖。
+        let bodies = LockedBodies()
+        try await TestSupport.withMock { request in
+            bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
+            return MockURLProtocol.ok("{}", for: request.url!)
+        } with: {
+            let server = Self.mockServer(kind: .emby)
+            let context = PlaybackSessionContext(itemID: "item-9", playSessionID: "negotiated-1")
+
+            await server.reportPlaybackStart(context: context, positionSeconds: 1)
+        }
+
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodies.items[0]) as? [String: Any])
+        XCTAssertEqual(body["PlaySessionId"] as? String, "negotiated-1")
+    }
+
+    func testSynthesizedSessionIDIsDeterministic() {
+        let server = Self.mockServer(kind: .emby)
+        let context = PlaybackSessionContext(itemID: "item-9")
+        XCTAssertEqual(server.resolvedPlaySessionID(context),
+                       server.resolvedPlaySessionID(context))
+        // 不同 item 不同 id，避免服务端会话互相串。
+        XCTAssertNotEqual(server.resolvedPlaySessionID(context),
+                          server.resolvedPlaySessionID(PlaybackSessionContext(itemID: "item-10")))
+        // 协商过的值优先，且不经手合成格式。
+        XCTAssertEqual(server.resolvedPlaySessionID(
+            PlaybackSessionContext(itemID: "item-9", playSessionID: "abc")), "abc")
+    }
+
+    private static func mockServer(kind: ServerKind = .jellyfin) -> JellyfinServer {
         let profile = ServerProfile(id: "srv:user", serverName: "nas",
                                     baseURL: URL(string: "http://nas.local:8096")!,
-                                    userID: "user", userName: nil, serverVersion: nil)
+                                    userID: "user", userName: nil, serverVersion: nil,
+                                    kind: kind)
         let client = JellyfinServer.makeClient(baseURL: profile.baseURL, token: "tok",
                                                sessionConfiguration: TestSupport.mockedSessionConfiguration())
         return JellyfinServer(profile: profile, client: client)
