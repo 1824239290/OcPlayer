@@ -152,10 +152,13 @@ struct PlayerHUDTopBar: View {
     private var topPadding: CGFloat {
         #if os(macOS)
         // 窗口模式的标题栏是系统拖动区。HUD 覆盖 safe area 后若把 Slider 放进去，
-        // macOS 会优先移动窗口；顶栏整体下移到标题栏之外，全屏则保持原布局。
-        if !isFullscreen { return 58 }
-        #endif
+        // macOS 会优先移动窗口；顶栏整体下移到标题栏之外。全屏没有标题栏，但系统
+        // 工具栏条带（NSToolbarFullScreenWindow，高 52pt）悬在主窗之上：压进条带的
+        // 按钮悬停/点击会被条带窗口截走（issue #4），同样整体让到条带之下。
+        return isFullscreen ? 56 : 58
+        #else
         return isNarrow ? 14 : 22
+        #endif
     }
 
     private var leadingControls: some View {

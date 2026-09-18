@@ -740,12 +740,15 @@ struct PlayerScreen: View {
         #endif
     }
 
-    /// 2x 徽章的顶部间距：窗口模式避开系统标题栏拖动区（与 HUD 顶栏同一挡位），全屏贴顶。
+    /// 2x 徽章的顶部间距：窗口模式避开系统标题栏拖动区、全屏让出工具栏条带
+    /// （与 HUD 顶栏 PlayerHUDTopBar.topPadding 同一口径）。
     private var holdBadgeTopPadding: CGFloat {
         #if os(macOS)
-        if !hudIsFullscreen { return 58 }
-        #endif
+        if hudIsFullscreen { return 56 }
+        return 58
+        #else
         return isNarrow ? 14 : 22
+        #endif
     }
 
     private func toggleFullscreenFromHUD() {
@@ -987,6 +990,12 @@ private struct PlayerMouseTrackingView: NSViewRepresentable {
         }
 
         override func mouseExited(with event: NSEvent) {
+            // 误报过滤（issue #4）：全屏时系统把工具栏条带（NSToolbarFullScreenWindow，
+            // 高 52pt，见 FullscreenTitlebarFade）等独立窗口盖在主窗之上，指针滑进条带
+            // 会让本视图收到 mouseExited，但指针并没有真的离开窗口——全屏 HUD 顶栏
+            // 按钮正压在条带里，不过滤就「一碰按钮 HUD 就收走」（顶缘唤出菜单栏同理）。
+            // 用屏幕全局坐标复核：仍在窗口矩形内就不算移出。
+            if let window, window.frame.contains(NSEvent.mouseLocation) { return }
             onExited?()
         }
     }
