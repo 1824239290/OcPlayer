@@ -89,22 +89,24 @@ struct PlayerHUDActionCluster: View {
 
                 HStack(spacing: 8) {
                     ForEach(PlayerHUDActionTab.allCases) { tab in
-                        // 展开中的 Tab 整体移出布局，其玻璃形由同 ID 的面板接管
-                        if expandedTab != tab {
-                            Button {
-                                withAnimation(reduceMotion ? nil : Motion.glass) {
-                                    expandedTab = tab
-                                }
-                                onInteractionChanged(.menuTracking, true)
-                                onUserInteraction()
-                            } label: {
-                                PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
+                        // ⚠️ 按钮簇**永远 5 颗齐全、不重排**：点按钮时只有上方浮层出现/切换，
+                        // 按钮自身布局分毫不动——「展开中按钮移出布局→簇重排」的动画就是
+                        // 「HUD 先收缩再恢复」的观感来源（issue #5 真机复验实录，去形变/
+                        // 换过渡都盖不住）。点已展开的按钮 = 收起面板（toggle），点面板外
+                        // 也收起，行为与 Infuse 一致。
+                        Button {
+                            withAnimation(reduceMotion ? nil : Motion.standard) {
+                                expandedTab = (expandedTab == tab) ? nil : tab
                             }
-                            .buttonStyle(PlayerHUDInteractiveButtonStyle())
-                            .playerHUDGlassButton()
-                            .help(tab.rawValue)
-                            .accessibilityLabel(tab.rawValue)
+                            onInteractionChanged(.menuTracking, expandedTab != nil)
+                            onUserInteraction()
+                        } label: {
+                            PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
                         }
+                        .buttonStyle(PlayerHUDInteractiveButtonStyle())
+                        .playerHUDGlassButton()
+                        .help(tab.rawValue)
+                        .accessibilityLabel(tab.rawValue)
                     }
                 }
                 .frame(height: controlSide)
