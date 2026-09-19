@@ -28,6 +28,11 @@ struct SettingsView: View {
     private var readAheadMiB: Int {
         PlaybackPreferences.readAheadOptionsMiB.contains(storedReadAheadMiB) ? storedReadAheadMiB : 0
     }
+    /// 回退缓冲档位：同预读档位的 @AppStorage 套路。
+    @AppStorage(SettingsKeys.httpBackBufferMiB) private var storedBackBufferMiB = 0
+    private var backBufferMiB: Int {
+        PlaybackPreferences.backBufferOptionsMiB.contains(storedBackBufferMiB) ? storedBackBufferMiB : 0
+    }
     /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
     /// 同一 key，@AppStorage 双向可观察，改了立即生效。
     @AppStorage(SettingsKeys.danmakuDiagnostics) private var danmakuDiagnosticsEnabled = false
@@ -66,9 +71,23 @@ struct SettingsView: View {
                         Text(mib == 0 ? "默认（2 MiB）" : "\(mib) MiB").tag(mib)
                     }
                 }
-                // 内核按块拉取（单请求封顶 4 MiB），档位不再对应成比例的带宽门槛：
-                // 深度只影响内存占用与抗卡顿能力，弱网下无需刻意调小。
-                Text("数值越大越能抗带宽抖动，内存占用相应增加。内核按块拉取（单请求 4 MiB 封顶），弱网下无需刻意调小；回退播放有 16 MiB 缓存兜底。")
+                // 内核用持久流预取（开放式 GET 长连接，背压就是 TCP），档位不再
+                // 对应带宽门槛：深度只影响内存占用与抗卡顿能力，弱网下无需刻意调小。
+                Text("数值越大越能抗带宽抖动，内存占用相应增加。内核用持久流预取，弱网下无需刻意调小。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                Picker("回退缓冲", selection: Binding(
+                    get: { backBufferMiB },
+                    set: { storedBackBufferMiB = $0 }
+                )) {
+                    ForEach(PlaybackPreferences.backBufferOptionsMiB, id: \.self) { mib in
+                        Text(mib == 0 ? "默认（16 MiB）" : "\(mib) MiB").tag(mib)
+                    }
+                }
+                // 回退预算与码率挂钩：16 MiB 在 71 Mbps 下只够 -1.8 秒，
+                // 高码率片源想随意回退 10 秒需要 ~89 MB。低码率番剧默认档已够数分钟。
+                Text("已播内容保留在缓存里，回退落在这段内不发网络请求。高码率片源建议调大（16 MiB 在 70 Mbps 下只够回退约 2 秒）。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 

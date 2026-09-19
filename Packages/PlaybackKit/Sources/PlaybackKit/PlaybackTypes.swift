@@ -70,15 +70,25 @@ public enum PlayerEvent: Sendable {
 /// （Erika `open_with_headers`），
 /// Jellyfin 的 token 走这里，**不进 URL**（日志不泄露）。
 /// `readAheadBytes` 是 HTTP 源的前向预取窗口（仅当前内核生效；nil = 内核默认（2 MiB）。
+/// `backBufferBytes` 是 HTTP 源的回退预算——已播数据保留多少在缓存里，
+/// 回退落在这段内就不发网络请求（nil = 内核默认 16 MiB；高码率片源建议按
+/// 码率 × 期望回退时长放大）。
 public struct PlaybackSource: Sendable, Hashable {
     public let uri: String
     public let headers: [String: String]
     public let readAheadBytes: UInt64?
+    public let backBufferBytes: UInt64?
 
-    public init(uri: String, headers: [String: String] = [:], readAheadBytes: UInt64? = nil) {
+    public init(
+        uri: String,
+        headers: [String: String] = [:],
+        readAheadBytes: UInt64? = nil,
+        backBufferBytes: UInt64? = nil
+    ) {
         self.uri = uri
         self.headers = headers
         self.readAheadBytes = readAheadBytes
+        self.backBufferBytes = backBufferBytes
     }
 
     public init(fileURL: URL, headers: [String: String] = [:]) {

@@ -57,10 +57,11 @@ public final class ErikaPresenter {
 
     // MARK: - 媒体
 
-    /// 打开媒体源。`headers` 非空或 `readAheadBytes` 非空时走 `open_with_options`
-    /// （`readAheadBytes` 仅影响 HTTP(S) 源，0/nil = 内核默认 2 MiB）。
+    /// 打开媒体源。`headers` 非空或 `readAheadBytes`/`backBufferBytes` 非空时走
+    /// `open_with_options`（两个字段都只影响 HTTP(S) 源：`readAheadBytes` 是前向
+    /// 预取窗口、`backBufferBytes` 是回退预算，0/nil = 内核默认）。
     public func open(_ source: PlaybackSource) throws {
-        guard !source.headers.isEmpty || source.readAheadBytes != nil else {
+        guard !source.headers.isEmpty || source.readAheadBytes != nil || source.backBufferBytes != nil else {
             try ErikaError.check(erika_presenter_open(handle, source.uri))
             return
         }
@@ -79,7 +80,8 @@ public final class ErikaPresenter {
                 headers: buffer.baseAddress,
                 header_count: UInt(buffer.count),
                 http_read_ahead_bytes: source.readAheadBytes ?? 0,
-                reserved: (0, 0, 0)
+                http_back_buffer_bytes: source.backBufferBytes ?? 0,
+                reserved: (0, 0)
             )
             try withUnsafePointer(to: &options) { optionsPtr in
                 try ErikaError.check(

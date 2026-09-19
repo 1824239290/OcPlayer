@@ -56,12 +56,17 @@ typedef struct ErikaHttpHeader {
  * erika_presenter_open_with_options. Pass zero for fields you do not use;
  * reserved must be zero. http_read_ahead_bytes overrides the HTTP(S)
  * read-ahead window (in bytes); 0 uses ERIKA_HTTP_READAHEAD_BYTES when set,
- * otherwise the 2 MiB default. */
+ * otherwise the 2 MiB default. http_back_buffer_bytes overrides the HTTP(S)
+ * rewind budget (in bytes): how much already-played data stays cached so a
+ * rewind inside it is served without a network request; 0 uses the 16 MiB
+ * default (a -10 s skip at 71 Mbps covers ~89 MB, so hosts playing
+ * high-bitrate media should size this from the bitrate). */
 typedef struct ErikaOpenOptions {
   const ErikaHttpHeader *headers;
   uintptr_t header_count;
   uint64_t http_read_ahead_bytes;
-  uint64_t reserved[3];
+  uint64_t http_back_buffer_bytes;
+  uint64_t reserved[2];
 } ErikaOpenOptions;
 
 typedef enum ErikaStatus {

@@ -94,9 +94,10 @@ enum PlaybackPreferences {
 
     /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
     ///
-    /// 内核按块拉取（单请求封顶 4 MiB、超时续传），窗口大小不再对应成比例的带宽门槛
-    /// （约 2 Mbps 即可稳定拉取）。档位主要影响内存占用与抗卡顿深度：越大越能扛
-    /// 带宽抖动，弱网下也无需刻意调小；回退播放另有 16 MiB 尾部缓存兜底。
+    /// 内核（v0.1.9+stream.prefetch.dev 起）用**持久流预取**：两个 worker 持有
+    /// 开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次，背压就是 TCP
+    /// 本身——替代了旧版每 4 MiB 付一次请求延迟的分块链。档位决定预读深度：
+    /// 越大越能扛带宽抖动，弱网下也无需刻意调小。
     static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
     static var httpReadAheadMiB: Int {
         get {
@@ -109,6 +110,28 @@ enum PlaybackPreferences {
     /// 当前预读偏好换算成字节（0 = 内核默认），供 PlaybackSource 直接使用。
     static var httpReadAheadBytes: UInt64? {
         let mib = httpReadAheadMiB
+        guard mib > 0 else { return nil }
+        return UInt64(mib) * 1024 * 1024
+    }
+
+    /// HTTP 源回退预算（MiB）——已播数据保留多少在内核缓存里，回退落在其中
+    /// 就不发网络请求。仅 Erika 内核生效；0 = 内核默认 16 MiB。
+    ///
+    /// 内核给的参考：16 MiB 在 71 Mbps 下只够 -1.8 秒（-10 秒 ≈ 89 MB），所以
+    /// 高码率片源（原盘 remux / 4K 高码流）建议按「码率 × 期望回退时长」放大；
+    /// 低码率番剧用默认档已覆盖数分钟。
+    static let backBufferOptionsMiB: [Int] = [0, 32, 64, 128]
+    static var httpBackBufferMiB: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpBackBufferMiB)
+            return backBufferOptionsMiB.contains(stored) ? stored : 0
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.httpBackBufferMiB) }
+    }
+
+    /// 当前回退预算换算成字节（0 = 内核默认 16 MiB），供 PlaybackSource 直接使用。
+    static var httpBackBufferBytes: UInt64? {
+        let mib = httpBackBufferMiB
         guard mib > 0 else { return nil }
         return UInt64(mib) * 1024 * 1024
     }

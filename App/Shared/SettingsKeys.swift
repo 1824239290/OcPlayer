@@ -8,6 +8,8 @@ import Foundation
 enum SettingsKeys {
     /// 播放内核 HTTP 预读窗口（MiB；0 = 内核默认）。设置页 ↔ PlaybackPreferences ↔ 装配。
     static let httpReadAheadMiB = "dev.jumusu.ocplayer.playback.httpReadAheadMiB"
+    /// 播放内核 HTTP 回退预算（MiB；0 = 内核默认 16 MiB）。设置页 ↔ PlaybackPreferences ↔ 装配。
+    static let httpBackBufferMiB = "dev.jumusu.ocplayer.playback.httpBackBufferMiB"
     /// 跳过片头开关（默认开）。设置页 ↔ PlaybackPreferences ↔ PlaybackController 门控。
     static let skipIntro = "dev.jumusu.ocplayer.playback.skipIntro"
     /// 跳过片尾开关（默认开）。片尾标记与末 90 秒保底提示一并受控。

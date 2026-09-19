@@ -50,14 +50,14 @@ grep -h '"event":"open' $L | jq -c '{t:.timestamp, e:.fields.event, ms:.fields.e
 ```
 
 看点：`open.done ok=false` 的 `error` 是直接原因；`elapsed_ms` 很大（几秒以上）说明卡在连接/探测，
-配合 `read_ahead_bytes` 与 `source` 判断是不是弱网 + 预读窗口过大。
+配合 `read_ahead_bytes` / `back_buffer_bytes` 与 `source` 判断是不是弱网 + 预读窗口过大。
 
 ### 卡顿、缓冲频繁
 
 ```bash
 grep -h '"event":"buffer.start"' $L | wc -l          # 缓冲次数
 grep -h '"event":"buffer.end"' $L | jq '[.fields.duration_ms] | add / 1000'   # 总缓冲秒数
-grep -h 'readAhead' $L | tail -3                     # 实际生效的预读窗口
+grep -h 'readAhead' $L | tail -3                     # 实际生效的预读窗口 / 回退预算
 ```
 
 ### 弹幕不出来 / 时间轴错

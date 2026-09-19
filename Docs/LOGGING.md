@@ -75,7 +75,7 @@
 
 | 事件 | 关键字段 |
 |---|---|
-| `open.start` | `source`(network/local)、`read_ahead_bytes`、`has_resume` |
+| `open.start` | `source`(network/local)、`read_ahead_bytes`、`back_buffer_bytes`（回退预算，null = 内核默认 16 MiB）、`has_resume` |
 | `open.done` | `ok`、`elapsed_ms`、失败时 `error` |
 | `first_frame` | `position_ms`（宿主近似点：状态进 playing；内核没有独立首帧事件） |
 | `buffer.start` / `buffer.end` | `position_ms`；结束带 `duration_ms`（这轮缓冲多久） |

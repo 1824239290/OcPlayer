@@ -440,11 +440,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
             headers["Authorization"] = authHeader
         }
         let readAhead = PlaybackPreferences.httpReadAheadBytes
-        // 诊断「改了预读档位没生效」：把本次真正传给内核的值打进日志。
-        PlaybackLog.info("openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")")
+        let backBuffer = PlaybackPreferences.httpBackBufferBytes
+        // 诊断「改了预读/回退档位没生效」：把本次真正传给内核的值打进日志。
+        PlaybackLog.info(
+            "openPreparedRequest readAhead=\(readAhead.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(2 MiB)")"
+            + " backBuffer=\(backBuffer.map { "\($0 / 1024 / 1024) MiB" } ?? "默认(16 MiB)")"
+        )
         PlaybackLog.event(.openStart, fields: [
             "source": .string(Self.sourceKind(for: request.uri)),
             "read_ahead_bytes": readAhead.map { .integer(Int64($0)) } ?? .null,
+            "back_buffer_bytes": backBuffer.map { .integer(Int64($0)) } ?? .null,
             "has_resume": .boolean(request.resumeSeconds != nil),
         ])
         open(
@@ -452,7 +457,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 uri: request.uri,
                 headers: headers,
                 // 本地文件路径没有预取语义，内核会忽略；统一带上无妨。
-                readAheadBytes: readAhead
+                readAheadBytes: readAhead,
+                backBufferBytes: backBuffer
             ),
             securityScopedURL: request.securityScopedURL,
             request: request
