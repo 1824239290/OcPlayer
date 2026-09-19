@@ -31,8 +31,10 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
 // MARK: - Action Cluster (Bottom-Trailing Overlay)
 
 /// 右下角动作簇：静息态 5 颗按钮在容器内融合成一颗胶囊；点开的 Tab 按钮条件移除、
-/// 以同一 `glassEffectID` 液态形变为面板，其余按钮回流成短胶囊。全部玻璃元素收在
+/// 面板以微缩放+淡入过渡出现（.pop），其余按钮回流成短胶囊。全部玻璃元素收在
 /// 同一个 `GlassEffectContainer` 内共享取样区域（玻璃不能取样玻璃）。
+/// ⚠️ 不做 glassEffectTransition(.matchedGeometry) 液态形变：真机上形变动画表现为
+/// 「整个 HUD 先收缩再恢复」（issue #5 真机复验实录），面板出现改用 .pop 过渡。
 struct PlayerHUDActionCluster: View {
     @Binding var expandedTab: PlayerHUDActionTab?
 
@@ -50,7 +52,6 @@ struct PlayerHUDActionCluster: View {
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
 
-    @Namespace private var glassNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var controlSide: CGFloat {
@@ -79,9 +80,11 @@ struct PlayerHUDActionCluster: View {
                         maxContentHeight: maxContentHeight
                     )
                     .playerHUDGlassCard(cornerRadius: 22)
-                    .glassEffectID(tab.id, in: glassNamespace)
-                    // 面板与按钮行间距(12)超出容器 spacing(10)，显式声明借用邻近按钮几何做形变
-                    .glassEffectTransition(.matchedGeometry)
+                    // ⚠️ 不用 glassEffectTransition(.matchedGeometry) 液态形变：
+                    // 真机上点按钮时形变动画表现为「整个 HUD 先收缩再恢复」（issue #5
+                    // 真机复验实录，模拟器渲染的是简化版看不出差异）。面板改用普通
+                    // 微缩放+淡入过渡（.pop），玻璃质感与功能不变。
+                    .transition(.pop)
                 }
 
                 HStack(spacing: 8) {
@@ -99,7 +102,6 @@ struct PlayerHUDActionCluster: View {
                             }
                             .buttonStyle(PlayerHUDInteractiveButtonStyle())
                             .playerHUDGlassButton()
-                            .glassEffectID(tab.id, in: glassNamespace)
                             .help(tab.rawValue)
                             .accessibilityLabel(tab.rawValue)
                         }
@@ -951,7 +953,7 @@ struct PlayerSkipButtonStyle: ButtonStyle {
 // MARK: - Liquid Glass View Modifiers
 
 extension View {
-    /// 面板玻璃：圆角矩形取样。形变配对（glassEffectID）由调用方在 `GlassEffectContainer` 内施加。
+    /// 面板玻璃：圆角矩形取样（不做形变配对，见 PlayerHUDActionCluster 注释）。
     func playerHUDGlassCard(cornerRadius: CGFloat = 22) -> some View {
         glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
     }
