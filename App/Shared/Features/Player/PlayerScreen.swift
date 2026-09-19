@@ -158,11 +158,18 @@ struct PlayerScreen: View {
             if controller.state.state == .error || controller.setupError != nil {
                 PlayerPlaybackErrorBadge()
             }
+        }
+        // ⚠️ HUD / 信息面板 / 跳过层 / 徽章 / toast 一律挂 .overlay 而不是 ZStack 子视图：
+        // overlay 内容的布局溢出**不会撑大 base**——面板/跳过层无论多高（iPhone 横屏
+        // 屏高只有 375–430pt），视频 surface 的布局永远稳定；ZStack 子视图溢出则会
+        // 把 ZStack 撑大、surface 跟着 resize（issue #5「画面先收缩再恢复」）。
+        // 顺序 = 链式叠加顺序：HUD → 信息面板 → 跳过层 → 2x 徽章 → pan 反馈 → toast。
 
-            // 两阶段显隐：`isMounted` 控制 `if` 卸载（隐藏时动画跑完才真正卸载，
-            // 卸载期间 HUD 不再随播放 tick 重排）；`isVisible` 控制 `.opacity`
-            // 驱动淡入淡出——macOS 上 `.transition` 的 removal 不被动画化，
-            // 所以淡出必须用 `.opacity` 属性动画（协调器 setVisible 里两拍错开）。
+        // 两阶段显隐：`isMounted` 控制 `if` 卸载（隐藏时动画跑完才真正卸载，
+        // 卸载期间 HUD 不再随播放 tick 重排）；`isVisible` 控制 `.opacity`
+        // 驱动淡入淡出——macOS 上 `.transition` 的 removal 不被动画化，
+        // 所以淡出必须用 `.opacity` 属性动画（协调器 setVisible 里两拍错开）。
+        .overlay {
             if hudVisibility.isMounted {
                 PlayerHUDOverlay(
                     isNarrow: isNarrow,
@@ -186,19 +193,22 @@ struct PlayerScreen: View {
                 .opacity(hudVisibility.isVisible ? 1 : 0)
                 .allowsHitTesting(hudVisibility.isVisible)
                 .accessibilityHidden(!hudVisibility.isVisible)
+                // HUD 显隐动画：`.opacity` 属性动画两个方向都渐变（macOS 上
+                // transition removal 不生效，见协调器注释）。
+                .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
             }
-
+        }
+        .overlay {
             if showInfoPanel {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
-            // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
-            // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）。
-            // ⚠️ 面板打开时必须**整层淡出**而不是动态让位（按面板高抬 padding 曾是旧做法）：
-            // 让位会把本层 VStack 撑到超过屏幕高度（面板自然高 ~320 + 底距/按钮行/间距
-            // ≈ 482 > iPhone 横屏 375–430），ZStack 被子层撑大后视频 surface 跟着 resize、
-            // 画面被 CA 拉伸（issue #5 的「画面缩放异常」），且 padding↔测量互相回写形成
-            // 每帧震荡的布局循环，主线程被布局打满（点开面板整个 HUD 卡死）。
-            // 淡出只动 opacity，布局尺寸恒定，两个症状一并消除。
+        }
+        // 浮动跳过片头/片尾按钮:放在 HUD 之上,提高位置避免被底栏遮挡。
+        // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）。
+        // ⚠️ 面板打开时**整层淡出**而不是动态让位（按面板高抬 padding 曾是旧做法）：
+        // 让位曾把本层撑出屏幕并连同测量回写形成布局循环（issue #5）。
+        // 淡出只动 opacity，布局尺寸恒定。又因挂 .overlay，即使布局异常也波及不到视频层。
+        .overlay {
             let isActionPanelOpen = expandedActionTab != nil
             VStack {
                 Spacer(minLength: 0)
@@ -212,26 +222,26 @@ struct PlayerScreen: View {
             .opacity(isActionPanelOpen ? 0 : 1)
             .allowsHitTesting(!isActionPanelOpen)
             .motionAnimation(Motion.glass, value: expandedActionTab, reduceMotion: reduceMotion)
-
-            // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
+        }
+        // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
+        .overlay {
             VStack(spacing: 0) {
                 PlayerHoldFastForwardBadge()
                     .padding(.top, holdBadgeTopPadding)
                 Spacer(minLength: 0)
             }
             .allowsHitTesting(false)
-
-            #if os(iOS)
-            // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
-            // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
+        }
+        #if os(iOS)
+        // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
+        // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
+        .overlay {
             PlayerPanFeedbackOverlay(feedback: panFeedback)
-            #endif
-
+        }
+        #endif
+        .overlay {
             PlayerScreenshotToast(message: screenshotToast)
         }
-        // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
-        // 两个方向都渐变（macOS 上 transition removal 不生效，见上方注释）。
-        .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
         .motionAnimation(Motion.standard, value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
