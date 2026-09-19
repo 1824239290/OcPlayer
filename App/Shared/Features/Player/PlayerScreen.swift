@@ -11,6 +11,25 @@ import Combine
 import UIKit
 #endif
 
+/// 层级尺寸夹紧：让一层向父层报告的尺寸恒等于**父层给的提案**，
+/// 内容再大也不外传（内容照常绘制，只是不参与父层定尺寸）。
+///
+/// 用在「按别处实测值算内边距」的层（如浮动跳过按钮层：底距吃面板实测高度）：
+/// 那种层的理想高度可能超过屏幕，而它是播放器根 `ZStack` 的子视图，
+/// `ZStack` 尺寸 = max(子视图) → 溢出会把视频 surface 的 frame 一起撑大
+/// （内核 resize + CoreAnimation 把旧 drawable 拉伸 = 画面被撑大）。
+/// `GeometryReader` 是贪婪容器：按提案尺寸报告自己，是这层最省事的夹紧件。
+struct PlayerLayoutClamp<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            content
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+}
+
 /// 全 App 覆盖式播放器（Infuse 风格悬浮控件）：
 /// - 画面铺满整个窗口 / 屏幕，控件浮在上面
 /// - macOS：鼠标动一下就唤出，播放 / 暂停中 3 秒自动隐藏；iOS：点画面切换显示
@@ -173,17 +192,25 @@ struct PlayerScreen: View {
             // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
             // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）：
             // 功能面板打开时改用「簇底距 + 按钮高 + 间距 + 面板实测高度」抬到面板上方空位。
+            //
+            // ⚠️ 本层的理想高度可能超过屏幕（底距吃面板实测高度，横屏上面板 320 上限
+            // 时整层 ≈ 540pt > 屏高），而它是根 ZStack 的子视图——溢出会把视频 surface
+            // 的 frame 一起撑大（画面被撑大，issue #5 的另一条传播路径）。套
+            // `PlayerLayoutClamp`：本层向父层报告的尺寸恒为提案（= 屏幕），溢出照常
+            // 绘制但不参与父层定尺寸；层内 Spacer 布局与按钮位置分毫不变。
             let isActionPanelOpen = expandedActionTab != nil
             let skipBottomPadding: CGFloat = isActionPanelOpen
                 ? (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + panelContentHeight + 12
                 : (isNarrow ? 150 : 168)
-            VStack {
-                Spacer(minLength: 0)
-                HStack {
+            PlayerLayoutClamp {
+                VStack {
                     Spacer(minLength: 0)
-                    PlayerSkipPromptView()
-                        .padding(.trailing, isNarrow ? 16 : 28)
-                        .padding(.bottom, skipBottomPadding)
+                    HStack {
+                        Spacer(minLength: 0)
+                        PlayerSkipPromptView()
+                            .padding(.trailing, isNarrow ? 16 : 28)
+                            .padding(.bottom, skipBottomPadding)
+                    }
                 }
             }
             .allowsHitTesting(true)

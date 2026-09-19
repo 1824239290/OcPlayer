@@ -28,6 +28,35 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+// MARK: - 面板几何预算（单一事实源）
+
+/// 展开面板与动作簇共用的几何预算。
+///
+/// **为什么要单一事实源**：簇的「固定承载高度」必须 ≥ 卡片上限 + 按钮行 + 间距，
+/// 两处各写一份常量一定会漂移，而漂移的后果就是面板重新撑出承载框。
+enum PlayerHUDPanelMetrics {
+    /// 卡片与按钮行之间的间距（簇内 VStack spacing）。
+    static let panelSpacing: CGFloat = 12
+
+    /// 子菜单头部（返回键 28 + 上 12 + 下 6）。
+    static let submenuHeaderHeight: CGFloat = 46
+
+    /// 面板**卡片**高度上限。
+    ///
+    /// 横屏 iPhone（`verticalSizeClass == .compact`）屏高只有 375–430pt，
+    /// 按最保守 375pt 推导可用高度：375 − 簇底距 106 − 按钮行 44 − 间距 12 = 213。
+    /// 其余档位（竖屏 / iPad / macOS）沿用 320。**静态档位，不做任何测量推导**——
+    /// 「实测高度回写 → 再喂回布局」在这个视图层级会形成每帧震荡的布局循环。
+    static func cardMaxHeight(verticalCompact: Bool) -> CGFloat {
+        verticalCompact ? 213 : 320
+    }
+
+    /// 簇的固定承载高度：按钮行 + 间距 + 卡片上限。
+    static func clusterHeight(controlSide: CGFloat, verticalCompact: Bool) -> CGFloat {
+        controlSide + panelSpacing + cardMaxHeight(verticalCompact: verticalCompact)
+    }
+}
+
 // MARK: - Action Cluster (Bottom-Trailing Overlay)
 
 /// 右下角动作簇：静息态 5 颗按钮在容器内融合成一颗胶囊；点开的 Tab 按钮条件移除、
@@ -52,6 +81,8 @@ struct PlayerHUDActionCluster: View {
 
     @Namespace private var glassNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// 面板卡片上限按这个档位取（横屏 iPhone = compact）。macOS 恒为 regular。
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private var controlSide: CGFloat {
         #if os(iOS)
@@ -61,9 +92,20 @@ struct PlayerHUDActionCluster: View {
         #endif
     }
 
+    /// 面板宽度（卡片自身 `frame(width: 320)` 定的，簇承载框对齐同宽）。
+    private static let clusterWidth: CGFloat = 320
+
+    /// 固定承载高度：按钮行 + 间距 + 卡片上限。静态值，不随面板开合变化。
+    private var clusterHeight: CGFloat {
+        PlayerHUDPanelMetrics.clusterHeight(
+            controlSide: controlSide,
+            verticalCompact: verticalSizeClass == .compact
+        )
+    }
+
     var body: some View {
         GlassEffectContainer(spacing: 10) {
-            VStack(alignment: .trailing, spacing: 12) {
+            VStack(alignment: .trailing, spacing: PlayerHUDPanelMetrics.panelSpacing) {
                 if let tab = expandedTab {
                     PlayerHUDExpandedActionCard(
                         tab: tab,
@@ -108,6 +150,19 @@ struct PlayerHUDActionCluster: View {
                 .frame(height: controlSide)
             }
         }
+        // ⚠️ 固定承载框（issue #5：面板开合不得改变簇向父层报告的尺寸）。
+        //
+        // 面板是这颗簇的子视图，它的高度会沿 `GlassEffectContainer` → HUD 根 ZStack
+        // → 播放器根 ZStack 一路把尺寸撑大：根 ZStack 尺寸 = max(子视图)，而视频
+        // surface 是贪婪子视图，frame 跟着长 → 内核 resize + CoreAnimation 把旧
+        // drawable 拉伸 = 横屏点开弹幕/播放速度面板时「画面被撑大 / 缩放」。
+        //
+        // 给外层一个**固定尺寸**的 frame：它向父层报告的高度恒为
+        // 「按钮行 + 间距 + 卡片上限」，与面板开合、面板内部怎么测量都无关
+        // （显式 frame 的报告值就是给定值，子视图再大也只溢出绘制，不外传）。
+        // 观感不变：`bottomTrailing` 对齐让按钮行留在原位、面板照旧从按钮行上方
+        // 向上展开，`GlassEffectContainer` / `glassEffectID` / 液态形变全部原样。
+        .frame(width: Self.clusterWidth, height: clusterHeight, alignment: .bottomTrailing)
     }
 }
 
@@ -189,6 +244,8 @@ enum PlayerHUDPanelSubmenu: Hashable {
 struct PlayerHUDExpandedActionCard: View {
     @Environment(PlaybackController.self) private var controller
     @Environment(DanmakuModel.self) private var danmakuModel
+    /// 卡片高度上限按这个档位取（横屏 iPhone = compact：卡片必须装进簇的承载框）。
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     let tab: PlayerHUDActionTab
 
@@ -209,7 +266,19 @@ struct PlayerHUDExpandedActionCard: View {
 
     @State private var submenu: PlayerHUDPanelSubmenu?
 
-    private var maxPanelContentHeight: CGFloat { 320 }
+    /// 面板**卡片**的高度上限（含子菜单头部）：与簇的承载框共用同一份预算
+    /// （`PlayerHUDPanelMetrics`），保证卡片永远装得进承载框。
+    ///
+    /// ⚠️ 静态档位，绝不能用「实测 HUD/屏幕高度回写 @State」推导：测量值喂回布局后，
+    /// 面板高度变化又反过来改变测量值，形成每帧震荡的布局反馈循环（横屏实测不收敛）。
+    private var maxCardHeight: CGFloat {
+        PlayerHUDPanelMetrics.cardMaxHeight(verticalCompact: verticalSizeClass == .compact)
+    }
+
+    /// 面板内容（行列表）的高度上限：卡片预算扣掉子菜单头部（根层没有头部）。
+    private var maxPanelContentHeight: CGFloat {
+        submenu == nil ? maxCardHeight : maxCardHeight - PlayerHUDPanelMetrics.submenuHeaderHeight
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -234,7 +303,7 @@ struct PlayerHUDExpandedActionCard: View {
         .onChange(of: tab) { submenu = nil }
     }
 
-    /// 面板主体高度随内容收缩：放得下就原生高度，超过 320 才滚动。
+    /// 面板主体高度随内容收缩：放得下就原生高度，超过上限才滚动。
     /// 不能只给 ScrollView 套 `frame(maxHeight:)`——ScrollView 是贪婪布局，
     /// 两三行的小面板也会被撑满。这里用隐藏镜像（fixedSize 实测自然高度）
     /// 驱动分支，不依赖 ViewThatFits 在 GlassEffectContainer 内的提案表现。
