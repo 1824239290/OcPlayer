@@ -53,13 +53,6 @@ enum LaunchOptions {
         return ProcessInfo.processInfo.environment["OCPLAYER_SELFTEST_CONTROLS"] == "1"
     }
 
-    /// `OCPLAYER_SELFTEST_PANEL=1` 时，播放稳定后自动展开 HUD 弹幕面板——脚本化验收
-    /// 面板布局（如 issue #5 的横屏面板场景），不依赖 UI 自动化点击。
-    static var autoOpenPanel: Bool {
-        guard providedTokenMatches else { return false }
-        return ProcessInfo.processInfo.environment["OCPLAYER_SELFTEST_PANEL"] == "1"
-    }
-
     /// 自检日志落盘路径。经 `open -a` 启动时进程的 stdout 不归终端，只能写文件。
     private static var logFile: URL? {
         ProcessInfo.processInfo.environment["OCPLAYER_SELFTEST_LOG"].map { URL(fileURLWithPath: $0) }

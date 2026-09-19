@@ -24,10 +24,6 @@ struct PlayerScreen: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var isVoiceOverEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    #if os(iOS)
-    /// iPhone 横屏 = compact：面板高度上限只在压缩竖向空间时收进滚动（见 panelHeightCap）。
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
-    #endif
 
     /// 覆盖层出现时要打开的源；nil = 空画面（引擎失败等极端情况）。
     let request: PlaybackRequest?
@@ -36,10 +32,11 @@ struct PlayerScreen: View {
     @State private var showInfoPanel = false
     @State private var isImportingSubtitle = false
     @State private var isSelectingDanmaku = false
-    // 右下角功能面板当前展开的 Tab（nil = 收起）。面板打开时跳过按钮层整层淡出：
-    // 面板占据该屏幕区域，且动态让位（按面板高抬升 padding）会把跳过层撑出屏幕、
-    // 连带拖歪整个 ZStack 布局（issue #5 的画面缩放 + 布局循环卡死，见 skip 层注释）。
+    // 右下角功能面板当前展开的 Tab（nil = 收起）。跳过按钮层据此让位：
+    // 面板打开时跳过钮由 HUD 簇浮动到面板上方，这里的独立实例隐藏。
     @State private var expandedActionTab: PlayerHUDActionTab?
+    // 展开面板内容的自然高度（面板内实测回传），面板打开时跳过钮抬到其上方。
+    @State private var panelContentHeight: CGFloat = .zero
     @State private var screenshotToast: String?
     @State private var screenshotToastToken: UUID?
     // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
@@ -97,24 +94,6 @@ struct PlayerScreen: View {
     }
     #endif
 
-    /// 面板内容高度上限。nil = 不设限（竖屏 / iPad / macOS 放得下，卡片兜底 320）。
-    ///
-    /// ⚠️ 绝不能用「实测 HUD 高度 → 回写 @State → 推导面板高度」的方式：
-    /// 测量值回写布局后，面板/HUD 的高度变化又反过来改变测量值，形成每帧震荡
-    /// 的布局反馈循环——iPhone 横屏实测 9000+ 条不收敛，主线程被布局打满
-    /// （点开面板画面变形 + 整个播放器卡死，issue #5）。这里只用
-    /// `verticalSizeClass` 档位 + 静态值：iPhone 横屏（compact）屏高范围
-    /// 375–440pt，按最保守的 375 推导（减簇底距/按钮行/间距/卡片内边距），
-    /// 输入不随面板布局变化，从根上无环。
-    private var panelHeightCap: CGFloat? {
-        #if os(iOS)
-        guard verticalSizeClass == .compact else { return nil }
-        return max(200.0, 375 - 162)  // = 213
-        #else
-        return nil  // macOS 窗口最小 620pt，面板永远放得下
-        #endif
-    }
-
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -158,18 +137,11 @@ struct PlayerScreen: View {
             if controller.state.state == .error || controller.setupError != nil {
                 PlayerPlaybackErrorBadge()
             }
-        }
-        // ⚠️ HUD / 信息面板 / 跳过层 / 徽章 / toast 一律挂 .overlay 而不是 ZStack 子视图：
-        // overlay 内容的布局溢出**不会撑大 base**——面板/跳过层无论多高（iPhone 横屏
-        // 屏高只有 375–430pt），视频 surface 的布局永远稳定；ZStack 子视图溢出则会
-        // 把 ZStack 撑大、surface 跟着 resize（issue #5「画面先收缩再恢复」）。
-        // 顺序 = 链式叠加顺序：HUD → 信息面板 → 跳过层 → 2x 徽章 → pan 反馈 → toast。
 
-        // 两阶段显隐：`isMounted` 控制 `if` 卸载（隐藏时动画跑完才真正卸载，
-        // 卸载期间 HUD 不再随播放 tick 重排）；`isVisible` 控制 `.opacity`
-        // 驱动淡入淡出——macOS 上 `.transition` 的 removal 不被动画化，
-        // 所以淡出必须用 `.opacity` 属性动画（协调器 setVisible 里两拍错开）。
-        .overlay {
+            // 两阶段显隐：`isMounted` 控制 `if` 卸载（隐藏时动画跑完才真正卸载，
+            // 卸载期间 HUD 不再随播放 tick 重排）；`isVisible` 控制 `.opacity`
+            // 驱动淡入淡出——macOS 上 `.transition` 的 removal 不被动画化，
+            // 所以淡出必须用 `.opacity` 属性动画（协调器 setVisible 里两拍错开）。
             if hudVisibility.isMounted {
                 PlayerHUDOverlay(
                     isNarrow: isNarrow,
@@ -177,11 +149,11 @@ struct PlayerScreen: View {
                     title: mainTitle,
                     kicker: titleKicker,
                     expandedTab: $expandedActionTab,
+                    panelContentHeight: $panelContentHeight,
                     isImportingSubtitle: $isImportingSubtitle,
                     isSelectingDanmaku: $isSelectingDanmaku,
                     showInfoPanel: $showInfoPanel,
                     shareURL: cachedShareURL,
-                    maxContentHeight: panelHeightCap,
                     isFullscreen: hudIsFullscreen,
                     onClose: closePlayer,
                     onToggleFullscreen: toggleFullscreenFromHUD,
@@ -193,55 +165,50 @@ struct PlayerScreen: View {
                 .opacity(hudVisibility.isVisible ? 1 : 0)
                 .allowsHitTesting(hudVisibility.isVisible)
                 .accessibilityHidden(!hudVisibility.isVisible)
-                // HUD 显隐动画：`.opacity` 属性动画两个方向都渐变（macOS 上
-                // transition removal 不生效，见协调器注释）。
-                .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
             }
-        }
-        .overlay {
+
             if showInfoPanel {
                 PlayerHUDInfoPanel(title: mainTitle, kicker: titleKicker, isNarrow: isNarrow)
             }
-        }
-        // 浮动跳过片头/片尾按钮:放在 HUD 之上,提高位置避免被底栏遮挡。
-        // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）。
-        // ⚠️ 面板打开时**整层淡出**而不是动态让位（按面板高抬 padding 曾是旧做法）：
-        // 让位曾把本层撑出屏幕并连同测量回写形成布局循环（issue #5）。
-        // 淡出只动 opacity，布局尺寸恒定。又因挂 .overlay，即使布局异常也波及不到视频层。
-        .overlay {
+            // 浮动跳过片头/片尾按钮:放在 ZStack 最上方(HUD 之上),提高位置避免被底栏遮挡。
+            // 单实例常驻（不在玻璃容器内挂副本——那会打断面板的液态展开动画）：
+            // 功能面板打开时改用「簇底距 + 按钮高 + 间距 + 面板实测高度」抬到面板上方空位。
             let isActionPanelOpen = expandedActionTab != nil
+            let skipBottomPadding: CGFloat = isActionPanelOpen
+                ? (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + panelContentHeight + 12
+                : (isNarrow ? 150 : 168)
             VStack {
                 Spacer(minLength: 0)
                 HStack {
                     Spacer(minLength: 0)
                     PlayerSkipPromptView()
                         .padding(.trailing, isNarrow ? 16 : 28)
-                        .padding(.bottom, isNarrow ? 150 : 168)
+                        .padding(.bottom, skipBottomPadding)
                 }
             }
-            .opacity(isActionPanelOpen ? 0 : 1)
-            .allowsHitTesting(!isActionPanelOpen)
+            .allowsHitTesting(true)
             .motionAnimation(Motion.glass, value: expandedActionTab, reduceMotion: reduceMotion)
-        }
-        // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
-        .overlay {
+            .motionAnimation(Motion.glass, value: panelContentHeight, reduceMotion: reduceMotion)
+
+            // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
             VStack(spacing: 0) {
                 PlayerHoldFastForwardBadge()
                     .padding(.top, holdBadgeTopPadding)
                 Spacer(minLength: 0)
             }
             .allowsHitTesting(false)
-        }
-        #if os(iOS)
-        // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
-        // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
-        .overlay {
+
+            #if os(iOS)
+            // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
+            // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
             PlayerPanFeedbackOverlay(feedback: panFeedback)
-        }
-        #endif
-        .overlay {
+            #endif
+
             PlayerScreenshotToast(message: screenshotToast)
         }
+        // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
+        // 两个方向都渐变（macOS 上 transition removal 不生效，见上方注释）。
+        .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
         .motionAnimation(Motion.standard, value: controller.state.state, reduceMotion: reduceMotion)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
@@ -336,19 +303,6 @@ struct PlayerScreen: View {
             controller.openIfNeeded(request)
             guard !Task.isCancelled else { return }
             revealControls()
-            // 自检脚本：等横屏旋转与 HUD 首轮显隐稳定后自动展开弹幕面板，
-            // 验收面板布局（issue #5 横屏场景），不依赖 UI 自动化点击。
-            // revealControls 唤出 HUD、menuTracking 置位保活——脚本赋值不走按钮
-            // action，这两步原本由按钮 action 承担，缺一面板会随 HUD 隐藏被卸载。
-            if LaunchOptions.autoOpenPanel {
-                try? await Task.sleep(for: .seconds(6))
-                guard !Task.isCancelled else { return }
-                revealControls()
-                withAnimation(reduceMotion ? nil : Motion.glass) {
-                    expandedActionTab = .danmaku
-                }
-                handleHUDInteraction(.menuTracking, true)
-            }
         }
         .onChange(of: request?.id) {
             isSelectingDanmaku = false

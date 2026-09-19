@@ -47,27 +47,10 @@ import UIKit
 final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
     /// 播放器覆盖层打开时锁横屏；退出后按设备类型解锁。
     private(set) var playerIsActive = false
-    /// setPlayerActive 时 scene 尚未连接（启动即播的自检路径）：把方向刷新攒下来，
-    /// 等 scene 激活通知到达后补发——否则这次旋转请求会被整个丢掉，播放中横屏锁失效。
-    private var pendingOrientationRefresh = false
 
     /// 浏览态允许的方向：iPhone 竖屏，iPad 四方向跟重力。
     private var browsingMask: UIInterfaceOrientationMask {
         UIDevice.current.userInterfaceIdiom == .pad ? .all : .portrait
-    }
-
-    override init() {
-        super.init()
-        // 监听 AppModel 的播放覆盖层开合广播。⚠️ 不用「AppModel 持闭包 + App.init
-        // 装配」的模式：SwiftUI 会多次创建 App 值，App.init 经 @State 访问到的
-        // appModel 与实际存储/注入的不是同一实例，装配会静默丢失（issue #5 排查实录）。
-        // delegate 自身 init 在 app 启动最早阶段执行，这里注册观察者无时序依赖。
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(playerPresentationDidChange),
-            name: AppModel.playerPresentationDidChangeNotification, object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(sceneDidActivate),
-            name: UIScene.didActivateNotification, object: nil)
     }
 
     func application(_ application: UIApplication,
@@ -75,38 +58,19 @@ final class IOSApplicationDelegate: NSObject, UIApplicationDelegate {
         playerIsActive ? .landscape : browsingMask
     }
 
-    /// 收到播放覆盖层开合广播：切换方向约束 + 主动旋转。
-    @objc private func playerPresentationDidChange(_ notification: Notification) {
-        let active = (notification.userInfo?["active"] as? Bool) ?? false
-        setPlayerActive(active)
-    }
-
-    /// 切换方向约束 + 主动旋转（幂等）。
-    private func setPlayerActive(_ active: Bool) {
+    /// 由 AppModel.presentedPlayer 的 didSet 回调调用：切换方向约束 + 主动旋转。
+    func setPlayerActive(_ active: Bool) {
         guard active != playerIsActive else { return }
         playerIsActive = active
-        pendingOrientationRefresh = true
-        applyPendingOrientationRefresh()
-    }
-
-    /// 启动极早期 connectedScenes 可能为空，找不到 scene 就攒着；
-    /// 有了 scene 就把当前 playerIsActive 对应的方向请求落下去。
-    private func applyPendingOrientationRefresh() {
-        guard pendingOrientationRefresh else { return }
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        guard let scene = scenes.first(where: { $0.activationState == .foregroundActive })
-            ?? scenes.first(where: { $0.activationState == .foregroundInactive })
-            ?? scenes.first
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
         else { return }
-        pendingOrientationRefresh = false
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: playerIsActive ? .landscape : browsingMask))
+        // 退出播放时 iPad 请求 .all 不强转姿态，系统按设备当前朝向落位；
+        // iPhone 仍是 .portrait，行为同旧行（退出即回竖屏）。
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: active ? .landscape : browsingMask))
         scene.windows.first(where: \.isKeyWindow)?
             .rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-    }
-
-    /// scene 首次连接 / 激活：补发攒下的方向请求（启动即播路径）。
-    @objc private func sceneDidActivate(_ notification: Notification) {
-        applyPendingOrientationRefresh()
     }
 }
 #endif
@@ -190,6 +154,12 @@ struct OcPlayerApp: App {
                 .environment(appModel.bangumi)
                 .environment(appModel.moviepilot)
                 .environment(appModel.danmakuModel)
+                .onAppear {
+                    // presentedPlayer 变化时通知 AppDelegate 旋转设备（不依赖 SwiftUI .onChange）
+                    appModel.orientationChangeHandler = { [weak iosAppDelegate] active in
+                        iosAppDelegate?.setPlayerActive(active)
+                    }
+                }
         }
         #endif
     }

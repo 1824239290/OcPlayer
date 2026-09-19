@@ -31,20 +31,18 @@ enum PlayerHUDActionTab: String, CaseIterable, Identifiable, Sendable {
 // MARK: - Action Cluster (Bottom-Trailing Overlay)
 
 /// 右下角动作簇：静息态 5 颗按钮在容器内融合成一颗胶囊；点开的 Tab 按钮条件移除、
-/// 面板以微缩放+淡入过渡出现（.pop），其余按钮回流成短胶囊。全部玻璃元素收在
+/// 以同一 `glassEffectID` 液态形变为面板，其余按钮回流成短胶囊。全部玻璃元素收在
 /// 同一个 `GlassEffectContainer` 内共享取样区域（玻璃不能取样玻璃）。
-/// ⚠️ 不做 glassEffectTransition(.matchedGeometry) 液态形变：真机上形变动画表现为
-/// 「整个 HUD 先收缩再恢复」（issue #5 真机复验实录），面板出现改用 .pop 过渡。
 struct PlayerHUDActionCluster: View {
     @Binding var expandedTab: PlayerHUDActionTab?
+    // 面板内容自然高度（卡片内实测回传），供 PlayerScreen 把跳过钮抬到面板上方。
+    @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
     @Binding var showInfoPanel: Bool
 
     let shareURL: URL?
-    /// 面板内容高度上限（PlayerScreen 按 HUD 可用高折算；nil = 卡片兜底 320）。
-    let maxContentHeight: CGFloat?
     let isFullscreen: Bool
     let onToggleFullscreen: () -> Void
     let onCapture: () -> Void
@@ -52,6 +50,7 @@ struct PlayerHUDActionCluster: View {
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
 
+    @Namespace private var glassNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var controlSide: CGFloat {
@@ -68,6 +67,7 @@ struct PlayerHUDActionCluster: View {
                 if let tab = expandedTab {
                     PlayerHUDExpandedActionCard(
                         tab: tab,
+                        panelContentHeight: $panelContentHeight,
                         isImportingSubtitle: $isImportingSubtitle,
                         isSelectingDanmaku: $isSelectingDanmaku,
                         showInfoPanel: $showInfoPanel,
@@ -76,37 +76,33 @@ struct PlayerHUDActionCluster: View {
                         onToggleFullscreen: onToggleFullscreen,
                         onCapture: onCapture,
                         onShare: onShare,
-                        onUserInteraction: onUserInteraction,
-                        maxContentHeight: maxContentHeight
+                        onUserInteraction: onUserInteraction
                     )
                     .playerHUDGlassCard(cornerRadius: 22)
-                    // ⚠️ 不用 glassEffectTransition(.matchedGeometry) 液态形变：
-                    // 真机上点按钮时形变动画表现为「整个 HUD 先收缩再恢复」（issue #5
-                    // 真机复验实录，模拟器渲染的是简化版看不出差异）。面板改用普通
-                    // 微缩放+淡入过渡（.pop），玻璃质感与功能不变。
-                    .transition(.pop)
+                    .glassEffectID(tab.id, in: glassNamespace)
+                    // 面板与按钮行间距(12)超出容器 spacing(10)，显式声明借用邻近按钮几何做形变
+                    .glassEffectTransition(.matchedGeometry)
                 }
 
                 HStack(spacing: 8) {
                     ForEach(PlayerHUDActionTab.allCases) { tab in
-                        // ⚠️ 按钮簇**永远 5 颗齐全、不重排**：点按钮时只有上方浮层出现/切换，
-                        // 按钮自身布局分毫不动——「展开中按钮移出布局→簇重排」的动画就是
-                        // 「HUD 先收缩再恢复」的观感来源（issue #5 真机复验实录，去形变/
-                        // 换过渡都盖不住）。点已展开的按钮 = 收起面板（toggle），点面板外
-                        // 也收起，行为与 Infuse 一致。
-                        Button {
-                            withAnimation(reduceMotion ? nil : Motion.standard) {
-                                expandedTab = (expandedTab == tab) ? nil : tab
+                        // 展开中的 Tab 整体移出布局，其玻璃形由同 ID 的面板接管
+                        if expandedTab != tab {
+                            Button {
+                                withAnimation(reduceMotion ? nil : Motion.glass) {
+                                    expandedTab = tab
+                                }
+                                onInteractionChanged(.menuTracking, true)
+                                onUserInteraction()
+                            } label: {
+                                PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
                             }
-                            onInteractionChanged(.menuTracking, expandedTab != nil)
-                            onUserInteraction()
-                        } label: {
-                            PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
+                            .buttonStyle(PlayerHUDInteractiveButtonStyle())
+                            .playerHUDGlassButton()
+                            .glassEffectID(tab.id, in: glassNamespace)
+                            .help(tab.rawValue)
+                            .accessibilityLabel(tab.rawValue)
                         }
-                        .buttonStyle(PlayerHUDInteractiveButtonStyle())
-                        .playerHUDGlassButton()
-                        .help(tab.rawValue)
-                        .accessibilityLabel(tab.rawValue)
                     }
                 }
                 .frame(height: controlSide)
@@ -196,12 +192,9 @@ struct PlayerHUDExpandedActionCard: View {
 
     let tab: PlayerHUDActionTab
 
-    // 面板内容自然高度（本视图内实测，只在本视图内消费）。
-    // ⚠️ 不能作为 Binding 传给外层再喂回布局（issue #5 教训）：跳过按钮层曾按它
-    // 动态抬升，把整个 ZStack 撑出屏幕，视频 surface 跟着 resize 被拉伸（画面缩放），
-    // 回写又反向影响测量值，形成每帧震荡的布局循环（主线程打满 = 整个 HUD 卡死）。
-    // 面板超限时收进滚动即可，让位由「面板打开时跳过层整层淡出」承担。
-    @State private var naturalContentHeight: CGFloat = .zero
+    // 面板内容自然高度（本视图内实测）。Binding 归 PlayerScreen 所有：
+    // 跳过按钮层用它计算「面板上方空位」的锚点。
+    @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
     @Binding var isSelectingDanmaku: Bool
@@ -214,14 +207,9 @@ struct PlayerHUDExpandedActionCard: View {
     let onShare: () -> Void
     let onUserInteraction: () -> Void
 
-    /// 面板内容高度上限，由调用方按 HUD 实际可用高折算传入；nil = 还没量到，兜底 320。
-    /// iPhone 横屏只有 ~375–430pt，固定 320 的弹幕面板加按钮行和簇底距必然撑出屏幕：
-    /// 溢出的簇被 ZStack 居中后，面板顶被切出画面（issue #5）。
-    var maxContentHeight: CGFloat? = nil
-
     @State private var submenu: PlayerHUDPanelSubmenu?
 
-    private var maxPanelContentHeight: CGFloat { maxContentHeight ?? 320 }
+    private var maxPanelContentHeight: CGFloat { 320 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -246,19 +234,17 @@ struct PlayerHUDExpandedActionCard: View {
         .onChange(of: tab) { submenu = nil }
     }
 
-    /// 面板主体高度随内容收缩：放得下就原生高度，超过上限（HUD 可用高折算）才滚动。
+    /// 面板主体高度随内容收缩：放得下就原生高度，超过 320 才滚动。
     /// 不能只给 ScrollView 套 `frame(maxHeight:)`——ScrollView 是贪婪布局，
     /// 两三行的小面板也会被撑满。这里用隐藏镜像（fixedSize 实测自然高度）
     /// 驱动分支，不依赖 ViewThatFits 在 GlassEffectContainer 内的提案表现。
-    /// 镜像值只写本视图私有 state：测量→布局→测量的环收敛在本视图内（初值 0 →
-    /// 首帧走原生分支 → 测得自然高 → 若超限切滚动后值不再变），不外溢。
     @ViewBuilder
     private func panelBody(_ content: some View) -> some View {
         let padded = content
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
         Group {
-            if naturalContentHeight > maxPanelContentHeight {
+            if panelContentHeight > maxPanelContentHeight {
                 ScrollView(.vertical, showsIndicators: false) {
                     padded
                 }
@@ -272,7 +258,7 @@ struct PlayerHUDExpandedActionCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .hidden()
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
-                    naturalContentHeight = $0
+                    panelContentHeight = $0
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
@@ -955,7 +941,7 @@ struct PlayerSkipButtonStyle: ButtonStyle {
 // MARK: - Liquid Glass View Modifiers
 
 extension View {
-    /// 面板玻璃：圆角矩形取样（不做形变配对，见 PlayerHUDActionCluster 注释）。
+    /// 面板玻璃：圆角矩形取样。形变配对（glassEffectID）由调用方在 `GlassEffectContainer` 内施加。
     func playerHUDGlassCard(cornerRadius: CGFloat = 22) -> some View {
         glassEffect(.regular, in: .rect(cornerRadius: cornerRadius, style: .continuous))
     }

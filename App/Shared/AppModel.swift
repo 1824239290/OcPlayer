@@ -213,30 +213,21 @@ final class AppModel {
         didSet {
             guard oldValue?.id != presentedPlayer?.id else { return }
             #if os(iOS)
-            // ⚠️ 不能用「外部装配闭包」回调方向切换（issue #5 排查实录）：SwiftUI
-            // 会多次创建 App 值，App.init 里经 @State 访问到的 appModel 实例和
-            // SwiftUI 实际存储/注入的是**不同对象**（ObjectIdentifier 实测
-            // 0x8000 vs 0xb200），闭包装配静默丢失、横屏锁整个失效。
-            // 改为广播通知：AppDelegate 在自身 init（最早时机）监听，无装配时序问题。
-            NotificationCenter.default.post(
-                name: Self.playerPresentationDidChangeNotification,
-                object: nil,
-                userInfo: ["active": presentedPlayer != nil])
+            orientationChangeHandler?(presentedPlayer != nil)
             #endif
         }
     }
-
-    #if os(iOS)
-    /// presentedPlayer 开合广播（AppModel → IOSApplicationDelegate 切方向锁）。
-    static let playerPresentationDidChangeNotification =
-        Notification.Name("OcPlayer.playerPresentationDidChange")
-    #endif
 
     /// 「打开本地视频文件」请求标志：首页工具栏菜单 / macOS 文件菜单（Cmd+O）
     /// 置 true，RootView 的 fileImporter 以它为 isPresented，选择完成或取消自动复位。
     var isLocalFileImporterPresented = false
     /// 「打开直连链接」请求标志：同样由 RootView 承载 URLEntrySheet。
     var isDirectLinkSheetPresented = false
+
+    #if os(iOS)
+    /// 由 OcPlayerApp 注入：presentedPlayer 变化时通知 AppDelegate 旋转设备。
+    var orientationChangeHandler: ((Bool) -> Void)?
+    #endif
 
     /// 播放结束/退出后自增，驱动打开中的详情页拉取最新 playState。
     var detailRefreshGeneration: UInt64 = 0
