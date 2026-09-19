@@ -24,6 +24,10 @@ struct PlayerScreen: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var isVoiceOverEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    #if os(iOS)
+    /// iPhone 横屏 = compact：面板高度上限只在压缩竖向空间时收进滚动（见 panelHeightCap）。
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     /// 覆盖层出现时要打开的源；nil = 空画面（引擎失败等极端情况）。
     let request: PlaybackRequest?
@@ -36,9 +40,6 @@ struct PlayerScreen: View {
     // 面板占据该屏幕区域，且动态让位（按面板高抬升 padding）会把跳过层撑出屏幕、
     // 连带拖歪整个 ZStack 布局（issue #5 的画面缩放 + 布局循环卡死，见 skip 层注释）。
     @State private var expandedActionTab: PlayerHUDActionTab?
-    // HUD 可用高（PlayerHUDOverlay 根部 greedy frame 实测 = 安全区内全部空间）：
-    // 面板内容上限按它折算，iPhone 横屏上固定 320 的面板会撑出屏幕（issue #5）。
-    @State private var hudHeight: CGFloat = .zero
     @State private var screenshotToast: String?
     @State private var screenshotToastToken: UUID?
     // shareURL 的缓存值（含 FileManager.stat），request 变化时重算一次。
@@ -96,15 +97,22 @@ struct PlayerScreen: View {
     }
     #endif
 
-    /// 面板内容高度上限：HUD 可用高减去簇底距、按钮行、行间距和卡片内边距（8×2）。
-    /// nil = 还没量到（首帧），卡片自己兜底 320。iPhone 横屏高度只有 ~375–430pt，
-    /// 固定 320 的弹幕面板会把动作簇撑出屏幕（issue #5），所以超限时收进滚动。
-    /// 注意：只允许「测量 → 面板滚动高度」单向流动；任何把测量值再喂回
-    /// 跳过层/外层布局的用法都会重新引发布局循环（见 skip 层注释）。
+    /// 面板内容高度上限。nil = 不设限（竖屏 / iPad / macOS 放得下，卡片兜底 320）。
+    ///
+    /// ⚠️ 绝不能用「实测 HUD 高度 → 回写 @State → 推导面板高度」的方式：
+    /// 测量值回写布局后，面板/HUD 的高度变化又反过来改变测量值，形成每帧震荡
+    /// 的布局反馈循环——iPhone 横屏实测 9000+ 条不收敛，主线程被布局打满
+    /// （点开面板画面变形 + 整个播放器卡死，issue #5）。这里只用
+    /// `verticalSizeClass` 档位 + 静态值：iPhone 横屏（compact）屏高范围
+    /// 375–440pt，按最保守的 375 推导（减簇底距/按钮行/间距/卡片内边距），
+    /// 输入不随面板布局变化，从根上无环。
     private var panelHeightCap: CGFloat? {
-        guard hudHeight > 0 else { return nil }
-        let reserved: CGFloat = (isNarrow ? 90 : 106) + (isNarrow ? 44 : 40) + 12 + 16
-        return max(200.0, hudHeight - reserved)
+        #if os(iOS)
+        guard verticalSizeClass == .compact else { return nil }
+        return max(200.0, 375 - 162)  // = 213
+        #else
+        return nil  // macOS 窗口最小 620pt，面板永远放得下
+        #endif
     }
 
     var body: some View {
@@ -178,8 +186,6 @@ struct PlayerScreen: View {
                 .opacity(hudVisibility.isVisible ? 1 : 0)
                 .allowsHitTesting(hudVisibility.isVisible)
                 .accessibilityHidden(!hudVisibility.isVisible)
-                // HUD 可用高实测（根部 greedy frame = 安全区内的全部空间）。
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hudHeight = $0 }
             }
 
             if showInfoPanel {
@@ -320,6 +326,19 @@ struct PlayerScreen: View {
             controller.openIfNeeded(request)
             guard !Task.isCancelled else { return }
             revealControls()
+            // 自检脚本：等横屏旋转与 HUD 首轮显隐稳定后自动展开弹幕面板，
+            // 验收面板布局（issue #5 横屏场景），不依赖 UI 自动化点击。
+            // revealControls 唤出 HUD、menuTracking 置位保活——脚本赋值不走按钮
+            // action，这两步原本由按钮 action 承担，缺一面板会随 HUD 隐藏被卸载。
+            if LaunchOptions.autoOpenPanel {
+                try? await Task.sleep(for: .seconds(6))
+                guard !Task.isCancelled else { return }
+                revealControls()
+                withAnimation(reduceMotion ? nil : Motion.glass) {
+                    expandedActionTab = .danmaku
+                }
+                handleHUDInteraction(.menuTracking, true)
+            }
         }
         .onChange(of: request?.id) {
             isSelectingDanmaku = false
