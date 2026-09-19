@@ -20,6 +20,7 @@ struct BangumiSubjectDetailView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
@@ -156,10 +157,11 @@ struct BangumiSubjectDetailView: View {
 
     private var headerBanner: some View {
         HStack(alignment: .top, spacing: 20) {
-            // 海报封面
+            // 海报封面（iPhone 紧凑宽度略缩，给信息列留宽度）
             RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 600)
                 .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: 130, height: 195)
+                .frame(width: sizeClass == .compact ? 100 : 130,
+                       height: sizeClass == .compact ? 150 : 195)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 .overlay(
                     RoundedRectangle(cornerRadius: Metrics.cardRadius)
@@ -184,8 +186,8 @@ struct BangumiSubjectDetailView: View {
                     }
                 }
 
-                // 标签属性徽章行
-                HStack(spacing: 6) {
+                // 标签属性徽章行：iPhone 紧凑宽度下不换行会横向溢出，统一走 FlowLayout 自动换行
+                FlowLayout(spacing: 6) {
                     let type = subject?.type ?? initialSubject?.type ?? .none
                     if type != .none {
                         badgeView(text: type.description, icon: type.icon)
@@ -232,36 +234,42 @@ struct BangumiSubjectDetailView: View {
 
                 Spacer(minLength: 4)
 
-                // 操作行：收藏状态 + 我的评分 + MoviePilot 下载
-                HStack(spacing: 10) {
-                    statusSelectorMenu
-
-                    ratingMenu
-
-                    if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none {
-                        if interest.epStatus > 0 {
-                            Text("已看 \(interest.epStatus)/\(subject?.eps ?? 0) 话")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                // 操作行：收藏状态 + 我的评分 + MoviePilot 下载。
+                // iPhone 紧凑宽度下四个元素挤一行必溢出，拆成两行：
+                // 第一行放两个胶囊菜单 + 进度文字，第二行放 MoviePilot 按钮。
+                if sizeClass == .compact {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            statusSelectorMenu
+                            ratingMenu
+                            if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none,
+                               interest.epStatus > 0 {
+                                Text("已看 \(interest.epStatus)/\(subject?.eps ?? 0) 话")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        if moviepilotEnabled {
+                            moviePilotButton
                         }
                     }
-
-                    Spacer()
-
-                    // MoviePilot 下载快捷入口（集成停用时整块隐藏）
-                    if moviepilotEnabled {
-                        Button {
-                            let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
-                            if !query.isEmpty {
-                                app.pendingMoviePilotQuery = query
-                                app.selectedSection = .moviepilot
+                } else {
+                    HStack(spacing: 10) {
+                        statusSelectorMenu
+                        ratingMenu
+                        if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none {
+                            if interest.epStatus > 0 {
+                                Text("已看 \(interest.epStatus)/\(subject?.eps ?? 0) 话")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
                             }
-                        } label: {
-                            Label("MoviePilot下载", systemImage: "arrow.down.circle")
-                                .font(.callout.weight(.medium))
                         }
-                        .buttonStyle(.bordered)
-                        .help("前往 MoviePilot 搜索本片资源")
+                        Spacer()
+                        if moviepilotEnabled {
+                            moviePilotButton
+                        }
                     }
                 }
             }
@@ -283,6 +291,22 @@ struct BangumiSubjectDetailView: View {
         .padding(.vertical, 3)
         .background(Color.primary.opacity(0.06), in: Capsule())
         .foregroundStyle(.secondary)
+    }
+
+    /// MoviePilot 下载快捷入口（集成停用时整块隐藏）。
+    private var moviePilotButton: some View {
+        Button {
+            let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
+            if !query.isEmpty {
+                app.pendingMoviePilotQuery = query
+                app.selectedSection = .moviepilot
+            }
+        } label: {
+            Label("MoviePilot下载", systemImage: "arrow.down.circle")
+                .font(.callout.weight(.medium))
+        }
+        .buttonStyle(.bordered)
+        .help("前往 MoviePilot 搜索本片资源")
     }
 
     // MARK: - 收藏状态菜单
@@ -451,10 +475,12 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 Text("章节列表")
                     .font(.headline)
 
-                if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none {
+                if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none,
+                   sizeClass != .compact {
                     Text("单击标记已看，右键/长按批量标记")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
@@ -579,7 +605,9 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
             Text("全站收藏概况")
                 .font(.headline)
 
-            HStack(spacing: 12) {
+            // iPhone 紧凑宽度下 5 张卡挤一行过窄，改自适应网格自动换行
+            let statColumns = [GridItem(.adaptive(minimum: 80), spacing: 8)]
+            LazyVGrid(columns: statColumns, alignment: .leading, spacing: 8) {
                 statCard(title: "想看", count: collection.wish, color: BangumiStatusColor.collection(.wish))
                 statCard(title: "在看", count: collection.doing, color: BangumiStatusColor.collection(.doing))
                 statCard(title: "看过", count: collection.collect, color: BangumiStatusColor.collection(.collect))

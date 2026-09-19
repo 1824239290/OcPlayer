@@ -10,6 +10,7 @@ struct BangumiLinkPicker: View {
     var onSelect: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var keyword: String
     @State private var results: [BangumiSlimSubjectDTO] = []
     @State private var isSearching = false
@@ -106,7 +107,9 @@ struct BangumiLinkPicker: View {
                 .listStyle(.inset)
             }
         }
-        .frame(minWidth: 480, minHeight: 420)
+        // iPhone sheet 宽度不足 480，写死 minWidth 会把两侧内容裁出可视区；
+        // 最小宽度只约束常规宽度的窗口/分栏。
+        .frame(minWidth: sizeClass == .compact ? nil : 480, minHeight: 420)
         .task {
             if results.isEmpty && !keyword.trimmingCharacters(in: .whitespaces).isEmpty {
                 await search()
