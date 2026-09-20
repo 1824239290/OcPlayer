@@ -38,6 +38,9 @@ struct DetailView: View {
     @State private var isUpdatingPlayed = false
     @State private var playedActionError: String?
 
+    /// 选集排序偏好跨启动保留：长剧倒序从最新一集看起，不用从头翻。
+    @AppStorage(SettingsKeys.episodeSortAscending) private var episodesAscending = true
+
     init(item: MediaItem) {
         self.item = item
         _model = State(initialValue: DetailViewModel(item: item))
@@ -849,6 +852,23 @@ struct DetailView: View {
         HStack(spacing: 14) {
             Text("剧集").font(.title3.weight(.bold))
             Spacer()
+            if model.episodes.count > 1 {
+                Button {
+                    episodesAscending.toggle()
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(episodesAscending ? "正序" : "倒序")
+                            .font(.subheadline.weight(.medium))
+                        Image(systemName: "arrow.up.arrow.down")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.tint)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.tint.opacity(0.12), in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
             if model.seasons.count > 1 {
                 Menu {
                     ForEach(model.seasons) { season in
@@ -924,10 +944,15 @@ struct DetailView: View {
             .transition(.section)
     }
 
+    /// 选集展示顺序：排序只影响横向条，不动 `model.episodes` 与选中态。
+    private var displayedEpisodes: [MediaItem] {
+        episodesAscending ? model.episodes : Array(model.episodes.reversed())
+    }
+
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
     private var episodePickerRail: some View {
         HoverArrowHScroll(
-            items: model.episodes,
+            items: displayedEpisodes,
             scrollStep: 4,
             contentLeading: contentLeading,
             edgeReserve: 28,

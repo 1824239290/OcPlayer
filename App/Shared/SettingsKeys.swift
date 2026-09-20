@@ -18,6 +18,8 @@ enum SettingsKeys {
     static let outroRetentionSeconds = "dev.jumusu.ocplayer.playback.outroRetentionSeconds"
     /// 海报氛围背景开关。设置页 ↔ 详情页 ↔ 首页轮播。
     static let ambientBackdrop = "dev.jumusu.ocplayer.interface.ambientBackdrop"
+    /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
+    static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
     /// Bangumi 进度页排序偏好。
     static let bangumiProgressSort = "dev.jumusu.ocplayer.bangumi.progressSort"
     /// Bangumi 集成启用开关（默认开）。关闭只藏 UI 与停网络活动，登录态/关联/缓存保留。
