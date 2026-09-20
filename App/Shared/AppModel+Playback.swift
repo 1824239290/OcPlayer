@@ -109,9 +109,7 @@ extension AppModel {
         }
         do {
             let info = try await server.playbackInfo(itemID: playableItem.id)
-            let source = info.mediaSources.first { $0.supportsDirectPlay == true }
-                ?? info.mediaSources.first { $0.supportsDirectStream == true }
-                ?? info.mediaSources.first
+            let source = info.preferredSource
             let context = info.sessionContext(itemID: playableItem.id, selectedSource: source)
             let uri = try server.streamURL(
                 itemID: playableItem.id,

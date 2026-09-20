@@ -122,6 +122,11 @@ struct DetailView: View {
                         )
                         MoviePilotResourceSection(item: model.shown)
                         if !model.shown.cast.isEmpty { castRail }
+                        // 当前选中集（电影为自身）的文件级媒体信息。
+                        DetailMediaInfoSection(
+                            item: playableItem,
+                            horizontalInset: detailHorizontalInset
+                        )
                         if !model.similar.isEmpty { similarRail }
                     }
                     .padding(.bottom, 48)

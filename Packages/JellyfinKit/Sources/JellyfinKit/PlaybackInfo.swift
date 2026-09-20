@@ -88,6 +88,22 @@ public struct PlaybackSessionContext: Hashable, Sendable {
     }
 }
 
+/// 多版本条目的选源规则，播放协商与浏览期媒体信息共用一份，
+/// 免得两边各写一遍后悄悄跑偏（详情页展示的文件必须就是开播会用的那份）。
+public enum MediaSourceSelection {
+    /// 能直连的优先 → 可直推的其次 → 第一条兜底。空列表返回 nil。
+    public static func preferredIndex(
+        count: Int,
+        supportsDirectPlay: (Int) -> Bool,
+        supportsDirectStream: (Int) -> Bool
+    ) -> Int? {
+        guard count > 0 else { return nil }
+        if let index = (0..<count).first(where: supportsDirectPlay) { return index }
+        if let index = (0..<count).first(where: supportsDirectStream) { return index }
+        return 0
+    }
+}
+
 /// `/Items/{id}/PlaybackInfo` 的收口结果，避免 JellyfinAPI 类型漏到 App 层。
 public struct PlaybackInfo: Hashable, Sendable {
     public let playSessionID: String?
@@ -96,6 +112,16 @@ public struct PlaybackInfo: Hashable, Sendable {
     init(playSessionID: String?, mediaSources: [PlaybackMediaSource]) {
         self.playSessionID = playSessionID
         self.mediaSources = mediaSources
+    }
+
+    /// 开播实际会用的那一份媒体源（见 `MediaSourceSelection`）。
+    public var preferredSource: PlaybackMediaSource? {
+        guard let index = MediaSourceSelection.preferredIndex(
+            count: mediaSources.count,
+            supportsDirectPlay: { mediaSources[$0].supportsDirectPlay == true },
+            supportsDirectStream: { mediaSources[$0].supportsDirectStream == true }
+        ) else { return nil }
+        return mediaSources[index]
     }
 
     public func sessionContext(
