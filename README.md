@@ -30,11 +30,11 @@ Scripts/build-macos.sh release   # Release 构建
 Scripts/package-macos.sh v0.1.8  # 本地打包，产出与 CI 相同的 dist/ 产物
 ```
 
-各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。**XCTest 包（除 BangumiKit 用 swift-testing 外都要加）务必带 `--disable-swift-testing`**，否则会「0 tests in 0 suites」静默通过。
+各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。**BangumiKit 与 ErikaKit 用 swift-testing，别对这两个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾那行「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。ErikaKit 里实例化 `ErikaPresenter` 的套件要 Metal 与真内核，无 GPU 的机器上会直接 hang 而不是报错，`--skip` 清单见 `.github/workflows/test.yml`。
 
-> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的预发布 `v0.1.9+dolby.streaming.dev`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射 + **持久流预取**：worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求；含杜比管线与 #137 request-cap/resume/rewind-cache 工作。公网慢源 A/B（三重跳转、单请求延迟 1–5 秒且约一半请求中途挂死）：开播 13.2 秒成功（旧版 60 秒看门狗超时、整场播不起来）、78.3 秒播放零卡顿（`buffered_ms: 0`、`stall_count: 0`）。该 release 附全平台资产，macOS / iOS 用同一内核）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
+> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的预发布 `v0.1.9+dolby.streaming.dev`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射 + **持久流预取**：worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求；含杜比管线与 #137 request-cap/resume/rewind-cache 工作。公网慢源 A/B（三重跳转、单请求延迟 1–5 秒且约一半请求中途挂死）：开播 13.2 秒成功（旧版 60 秒看门狗超时、整场播不起来）、78.3 秒播放零卡顿（`buffered_ms: 0`、`stall_count: 0`）。该 release 附全平台资产，macOS / iOS 用同一内核）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` / `package-ios.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 
-> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑全量测试门禁，语义化版本标签触发 Release 工作流。
+> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 的 `OcPlayerTests` 加 8 个 SPM 包（AppDesignKit 未纳入，ErikaKit 只跑不依赖 GPU 的套件）；语义化版本标签触发 Release 工作流。
 
 ## 使用建议
 
@@ -56,7 +56,7 @@ Scripts/package-macos.sh v0.1.8  # 本地打包，产出与 CI 相同的 dist/ �
 | ErikaKit | `Packages/ErikaKit/` | 播放内核封装：引擎、事件流、画面承载、播放状态 |
 | JellyfinKit | `Packages/JellyfinKit/` | Jellyfin / Emby 薄封装：登录探活识别服务器类型、媒体库、PlaybackInfo、进度上报；Emby 走 `/emby` 前缀与老式路由适配 |
 | DanmakuKit | `Packages/DanmakuKit/` | 弹弹play 网关客户端：match/search/comments、JSON 转换、缓存、16MiB 哈希 |
-| DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、SwiftUI 适配 |
+| DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、异步绘制图层（`DanmakuAsyncLayer`） |
 | BangumiKit | `Packages/BangumiKit/` | Bangumi OAuth、收藏/章节/搜索/日历 API、GRDB 本地库 |
 | MoviePilotKit | `Packages/MoviePilotKit/` | MoviePilot 登录换 JWT、401 静默重登、订阅/搜索/下载 API |
 | DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志：会话文件（一次启动一个）+ 级别阈值 + 脱敏 + 节流 + 诊断包导出；网络公共工具 + 共享 HTTP 执行层（`HTTPClient`/`RetryPolicy`：传输/计时日志/传输错误映射/退避重试，各域客户端共用）。口径与排障见 [`Docs/LOGGING.md`](Docs/LOGGING.md) |
