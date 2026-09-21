@@ -27,12 +27,12 @@ Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板
 Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 753 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
-Scripts/package-macos.sh v0.1.8  # 本地打包，产出与 CI 相同的 dist/ 产物
+Scripts/package-macos.sh v0.1.9  # 本地打包，产出与 CI 相同的 dist/ 产物
 ```
 
 各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。**BangumiKit 与 ErikaKit 用 swift-testing，别对这两个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾那行「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。ErikaKit 里实例化 `ErikaPresenter` 的套件要 Metal 与真内核，无 GPU 的机器上会直接 hang 而不是报错，`--skip` 清单见 `.github/workflows/test.yml`。
 
-> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的预发布 `v0.1.9+dolby.streaming.dev`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射 + **持久流预取**：worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求；含杜比管线与 #137 request-cap/resume/rewind-cache 工作。公网慢源 A/B（三重跳转、单请求延迟 1–5 秒且约一半请求中途挂死）：开播 13.2 秒成功（旧版 60 秒看门狗超时、整场播不起来）、78.3 秒播放零卡顿（`buffered_ms: 0`、`stall_count: 0`）。该 release 附全平台资产，macOS / iOS 用同一内核）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` / `package-ios.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
+> 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的预发布 `v0.1.9+dolby.streaming.fix.dev`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射 + **持久流预取**：worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；**预取窗口封顶**（本版新增）：worker 原先只从 reader 的 `paused` 标志得知「窗口满了」，而 reader 在包队列满时就不再刷新该标志，于是快源会把整个资源预取完（927 MB 片源实测缓存到 659 MB），现在每个 worker 按自己的生产偏移对绝对边界自我节流；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求；含杜比管线与 #137 request-cap/resume/rewind-cache 工作。公网慢源 A/B（三重跳转、单请求延迟 1–5 秒且约一半请求中途挂死）：开播 13.2 秒成功（旧版 60 秒看门狗超时、整场播不起来）、78.3 秒播放零卡顿（`buffered_ms: 0`、`stall_count: 0`）。该 release 附全平台资产，macOS / iOS 用同一内核）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` / `package-ios.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 
 > `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 的 `OcPlayerTests` 加 8 个 SPM 包（AppDesignKit 未纳入，ErikaKit 只跑不依赖 GPU 的套件）；语义化版本标签触发 Release 工作流。
 
@@ -94,4 +94,4 @@ Scripts/package-macos.sh v0.1.8  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 路线
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。0.1.7 完成日志系统重整（默认档精简、诊断包一键导出、会话化文件）与弱网播放修复（内核 4 MiB 分块预读 + 回退缓存，播到一半就停问题根治）。0.1.8 完成 Emby 全链路加固（解码契约与 Jellyfin 分家、片头片尾从章节 marker 翻译、4.10「接下来看」兜底、上报会话与 401 兜底）、内核换装持久流预取（公网慢源上「播不动 / 卡死」解决）、详情页「媒体信息」区块与跳过片头/片尾设置开关，并修掉播放器 HUD 的 issue #4 / #5。M4 打磨进行中：09-14 全项目 review 的 P1/P2/P3 已全部处置；剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。0.1.7 完成日志系统重整（默认档精简、诊断包一键导出、会话化文件）与弱网播放修复（内核 4 MiB 分块预读 + 回退缓存，播到一半就停问题根治）。0.1.8 完成 Emby 全链路加固（解码契约与 Jellyfin 分家、片头片尾从章节 marker 翻译、4.10「接下来看」兜底、上报会话与 401 兜底）、内核换装持久流预取（公网慢源上「播不动 / 卡死」解决）、详情页「媒体信息」区块与跳过片头/片尾设置开关，并修掉播放器 HUD 的 issue #4 / #5。0.1.9 换装内核 `v0.1.9+dolby.streaming.fix.dev`——**预取窗口封顶**，修掉播放期间进程内存随预取窗口增长（0.1.8 里记的待跟进项）。M4 打磨进行中：09-14 全项目 review 的 P1/P2/P3 已全部处置；剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。

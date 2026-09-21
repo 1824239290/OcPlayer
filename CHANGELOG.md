@@ -2,6 +2,16 @@
 
 项目变更记录。未发布内容集中在 `[Unreleased]`，提交前应同步更新用户可见行为和验证入口。
 
+## [0.1.9] · 2026-09-22 · 内核换装 v0.1.9+dolby.streaming.fix.dev——预取窗口封顶，播放期间内存不再随窗口增长
+
+### 改动
+
+- **内核换装 `v0.1.9+dolby.streaming.fix.dev`：持久流预取的窗口不再无界**。这是 0.1.8 里记的待跟进项②——上一版内核下播放期间进程内存会随预取窗口增长（1.6 GB 片源实测峰值 RSS 1415 MB，而 App 传的预读 / 回退各 32 MiB，疑似开放式 GET 的前向窗口没起封顶作用；macOS 无碍，iOS / tvOS 上有 jetsam 风险）。内核侧根因（fork commit 85a9738）：worker 原先只从 reader 的 `paused` 标志得知「窗口满了」，而 reader 在包队列满时就不再刷新该标志——快源上这个背压信号因此失效，整个资源被预取完（927 MB 片源实测缓存到 659 MB）；现在每个 worker 按自己的生产偏移对绝对边界自我节流，不再依赖 reader 的刷新节奏。**C ABI 无变化**：`erika.h` 与上一版逐字节相同，`ErikaOpenOptions` 布局未动，App 侧零适配。钉点同步换到 `Scripts/build-macos.sh` / `package-macos.sh` / `package-ios.sh` / `release.yml` / `test.yml`，并新增 `Scripts/erika-v0.1.9+dolby.streaming.fix.dev.sha256`（哈希与 release 自带的 `SHA256SUMS` 逐字节核对一致）。杜比视界 RPU 映射与持久流预取本体未动，0.1.8 的慢源 A/B 口径（开播 13.2 秒、78.3 秒零卡顿）仍然成立。
+
+### 文档
+
+- **README 的构建与测试口径对齐现状**：`--disable-swift-testing` 只对纯 XCTest 包安全——BangumiKit 与 ErikaKit 用的是 swift-testing，照旧文案加这个开关会把它们的套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）；末尾那行「0 tests in 0 suites」只是 swift-testing runner 空跑，不代表 XCTest 没跑。CI 的实际范围也写明：macOS scheme 的 `OcPlayerTests` 加 8 个 SPM 包，AppDesignKit 未纳入循环，ErikaKit 只跑不依赖 GPU 的套件。另修 DanmakuRenderKit 的描述（`DanmakuViewAdapter` 已在 bffe2b7 删除，现为异步绘制图层）与 `SKIP_ERIKA_FETCH` 的脚本清单（补 `package-ios.sh`）。
+
 ## [0.1.8] · 2026-09-21 · Emby 全链路加固、公网慢源播放修复与详情页媒体信息
 
 ### 重构
