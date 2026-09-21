@@ -614,12 +614,18 @@ struct DetailView: View {
     }
 
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
+    ///
+    /// 标题占**和 `compactHeroBanner` 同一个竖直位置**——同一个 `compactBannerHeight`
+    /// 英雄带、同样底对齐 + 8pt 内边距，只是这里没有图片层。所以「海报氛围背景」
+    /// 开关来回切时标题不会上下跳，正文区起点两边也都是 `compactBannerHeight`。
+    /// 顶边贴屏那版（`padding(.top, 52)`）会让艺术字 Logo 压进状态栏、离灵动岛只剩
+    /// 几个点，底对齐后 Logo 顶边恒定落在 198pt 以下，离状态栏自然有余量。
     private var ambientCompactHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
             compactBannerTitle
                 .padding(.horizontal, detailHorizontalInset)
-                .padding(.top, 52)
-                .padding(.bottom, 10)
+                .padding(.bottom, 8)
+                .frame(height: compactBannerHeight, alignment: .bottom)
             compactContentStack
         }
     }
