@@ -94,7 +94,7 @@ enum PlaybackPreferences {
 
     /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
     ///
-    /// 内核（v0.1.9+stream.prefetch.dev 起）用**持久流预取**：两个 worker 持有
+    /// 内核（v0.1.9+dolby.streaming.dev）用**持久流预取**：两个 worker 持有
     /// 开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次，背压就是 TCP
     /// 本身——替代了旧版每 4 MiB 付一次请求延迟的分块链。档位决定预读深度：
     /// 越大越能扛带宽抖动，弱网下也无需刻意调小。

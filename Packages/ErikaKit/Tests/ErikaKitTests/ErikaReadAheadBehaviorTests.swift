@@ -5,7 +5,7 @@ import Testing
 @testable import ErikaKit
 
 /// 行为级验证 `ErikaOpenOptions` 的 HTTP 窗口参数真的被内核消费。
-/// 内核（v0.1.9+stream.prefetch.dev 起）用**持久流预取**：两个 worker 各持一条
+/// 内核（v0.1.9+dolby.streaming.dev）用**持久流预取**：两个 worker 各持一条
 /// 开放式 GET（`bytes=锚点-`），按 4 MiB stripe 交付、TCP 背压限速，预读窗口
 /// 由流**主动**灌满（不再等读者驱动）；已播数据按回退预算（`http_back_buffer_bytes`，
 /// 默认 16 MiB）保留，预算内回退是纯缓存命中。据此验证三件事：
