@@ -75,8 +75,24 @@ enum DiagnosticRedactor {
 }
 
 private final class SensitivePatterns: @unchecked Sendable {
+    /// 本机家目录前缀。
+    ///
+    /// **不能写成 `/(?:Users|home)/…` 的泛匹配**：`/Users/` 同时也是 Jellyfin / Emby
+    /// 的 API 路由前缀（`/Users/{userId}/Items/Resume`），泛匹配会把网络日志里最需要
+    /// 的那一列——请求路径——整段抹成 `<user-path>`，排障时看不出是哪个端点慢。
+    /// 锚定到本机用户名，既只抹真正要抹的东西，也不误伤 API 路径。
+    ///
+    /// 取舍：同机上**别的**用户的家目录路径不再被抹。App 只写自己的容器和用户显式
+    /// 选中的文件，不会去读别人的家目录，所以这个面很小。
     let userPath = try! NSRegularExpression(
-        pattern: #"(?i)(?:file://)?/(?:Users|home)/[^\s"'<>]+"#)
+        pattern: "(?i)(?:file://)?(?:\(SensitivePatterns.homeRoots))(?:/[^\\s\"'<>]*)?")
+
+    /// `/Users/<name>` 与 `/home/<name>`，用户名按正则字面量转义。
+    private static var homeRoots: String {
+        let name = NSRegularExpression.escapedPattern(for: NSUserName())
+        return "/Users/\(name)|/home/\(name)"
+    }
+
     let appContainerPath = try! NSRegularExpression(
         pattern: #"(?i)/(?:var/mobile|private/var/mobile)/Containers/[^\s"'<>]+"#)
     let url = try! NSRegularExpression(

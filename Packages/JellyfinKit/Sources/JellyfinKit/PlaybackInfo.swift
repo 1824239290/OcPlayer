@@ -19,21 +19,39 @@ public struct PlaybackMediaSource: Hashable, Sendable {
     /// 存原始字符串而非 SDK 枚举，兼容 Emby 兼容层的任意取值；nil 表示未知。
     public let videoRangeType: String?
 
+    init(id: String, name: String?, path: String?, size: Int?, container: String?,
+         supportsDirectPlay: Bool?, supportsDirectStream: Bool?, supportsTranscoding: Bool?,
+         bitrate: Int?, runTimeSeconds: Double?, videoRangeType: String?) {
+        self.id = id
+        self.name = name
+        self.path = path
+        self.size = size
+        self.container = container
+        self.supportsDirectPlay = supportsDirectPlay
+        self.supportsDirectStream = supportsDirectStream
+        self.supportsTranscoding = supportsTranscoding
+        self.bitrate = bitrate
+        self.runTimeSeconds = runTimeSeconds
+        self.videoRangeType = videoRangeType
+    }
+
     init(_ source: MediaSourceInfo, fallbackID: String) {
-        self.id = source.id ?? fallbackID
-        self.name = source.name
-        self.path = source.path
-        self.size = source.size
-        self.container = source.container
-        self.supportsDirectPlay = source.isSupportsDirectPlay
-        self.supportsDirectStream = source.isSupportsDirectStream
-        self.supportsTranscoding = source.isSupportsTranscoding
-        self.bitrate = source.bitrate
-        self.runTimeSeconds = source.runTimeTicks.map { Double($0) / 10_000_000 }
-        self.videoRangeType = source.mediaStreams?
-            .first(where: { $0.type == .video })?
-            .videoRangeType?
-            .rawValue
+        self.init(
+            id: source.id ?? fallbackID,
+            name: source.name,
+            path: source.path,
+            size: source.size,
+            container: source.container,
+            supportsDirectPlay: source.isSupportsDirectPlay,
+            supportsDirectStream: source.isSupportsDirectStream,
+            supportsTranscoding: source.isSupportsTranscoding,
+            bitrate: source.bitrate,
+            runTimeSeconds: seconds(fromTicks: source.runTimeTicks),
+            videoRangeType: source.mediaStreams?
+                .first(where: { $0.type == .video })?
+                .videoRangeType?
+                .rawValue
+        )
     }
 }
 

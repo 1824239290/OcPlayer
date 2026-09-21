@@ -1129,7 +1129,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     ///   `expectedRequestID` 同步更新兜住。
     ///
     /// 在 `@MainActor` 上调用(控制器本身就是 @MainActor)。
-    func loadChapters(server: JellyfinKit.JellyfinServer, for request: PlaybackRequest) async {
+    func loadChapters(server: any JellyfinKit.MediaServer, for request: PlaybackRequest) async {
         guard let itemID = request.sessionContext?.itemID else {
             // 本地文件 / 无 item 时没有服务端章节,仅保留 90s 保底条,静默。
             return

@@ -25,7 +25,7 @@ final class ServerStoreTests: XCTestCase {
 
     func testEmptyStoreHasNoCurrentProfile() {
         XCTAssertNil(store.currentProfile)
-        XCTAssertNil(JellyfinServer(restoringFrom: store))
+        XCTAssertNil(MediaServerFactory.restore(from: store))
     }
 
     func testActivatePersistsProfileTokenAndCurrent() {
@@ -41,9 +41,10 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(store.token(for: store.currentProfile!), "tok-2b")
 
         // 恢复会话
-        let server = JellyfinServer(restoringFrom: store)
+        let server = MediaServerFactory.restore(from: store)
         XCTAssertEqual(server?.profile.id, "srv2:u2")
-        XCTAssertEqual(server?.accessToken, "tok-2b")
+        // accessToken 是 JellyfinServer 的实现细节，协议不暴露；铸型后验证 token 确实进了会话。
+        XCTAssertEqual((server as? JellyfinServer)?.accessToken, "tok-2b")
     }
 
     func testRemoveDeletesTokenAndFallsBackToOtherProfile() {
@@ -62,7 +63,7 @@ final class ServerStoreTests: XCTestCase {
 
         XCTAssertEqual(store.profiles.count, 1, "登出不删档案，下次一键重连")
         XCTAssertNil(store.token(for: store.profiles[0]))
-        XCTAssertNil(JellyfinServer(restoringFrom: store), "没有 token 就无法静默恢复")
+        XCTAssertNil(MediaServerFactory.restore(from: store), "没有 token 就无法静默恢复")
     }
 
     func testDefaultTokenStorePersistsLocallyAcrossInstances() {
@@ -72,7 +73,7 @@ final class ServerStoreTests: XCTestCase {
 
         let restoredStore = ServerStore(defaults: defaults)
         XCTAssertEqual(restoredStore.token(for: profile), "tok-local")
-        XCTAssertEqual(JellyfinServer(restoringFrom: restoredStore)?.accessToken, "tok-local")
+        XCTAssertEqual((MediaServerFactory.restore(from: restoredStore) as? JellyfinServer)?.accessToken, "tok-local")
 
         restoredStore.signOut(id: profile.id)
         XCTAssertNil(ServerStore(defaults: defaults).token(for: profile))
@@ -120,7 +121,7 @@ final class ServerStoreTests: XCTestCase {
 
         XCTAssertEqual(store.profiles.count, 1)
         XCTAssertEqual(store.profiles[0].kind, .jellyfin)
-        XCTAssertNotNil(JellyfinServer(restoringFrom: store), "旧档案必须能静默恢复")
+        XCTAssertNotNil(MediaServerFactory.restore(from: store), "旧档案必须能静默恢复")
     }
 
     // MARK: - 启动默认服务器
@@ -147,7 +148,7 @@ final class ServerStoreTests: XCTestCase {
 
         XCTAssertEqual(store.currentProfile?.id, "srv2:u2")
         XCTAssertEqual(store.launchProfile?.id, "srv1:u1")
-        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+        XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv1:u1")
     }
 
     func testLaunchProfileFallsBackToCurrentWhenDefaultMissing() {
@@ -156,7 +157,7 @@ final class ServerStoreTests: XCTestCase {
         store.defaultServerID = "srv-ghost:gone"
 
         XCTAssertEqual(store.launchProfile?.id, store.currentProfile?.id)
-        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv2:u2")
+        XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv2:u2")
     }
 
     func testRemoveClearsDefaultWhenDeletingThatProfile() {
@@ -167,7 +168,7 @@ final class ServerStoreTests: XCTestCase {
         store.remove(id: "srv2:u2")
         XCTAssertNil(store.defaultServerID, "删掉默认启动服务器后不应留下悬空 ID")
         XCTAssertEqual(store.launchProfile?.id, "srv1:u1")
-        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+        XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv1:u1")
     }
 
     func testRemoveKeepsDefaultWhenDeletingAnotherProfile() {
@@ -177,7 +178,7 @@ final class ServerStoreTests: XCTestCase {
 
         store.remove(id: "srv2:u2")
         XCTAssertEqual(store.defaultServerID, "srv1:u1")
-        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv1:u1")
+        XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv1:u1")
     }
 
     /// 默认服务器没有 token（用户单独登出了它）时，启动仍回退到有 token 的档案。
@@ -191,6 +192,6 @@ final class ServerStoreTests: XCTestCase {
         store.defaultServerID = "srv:a"
 
         XCTAssertEqual(store.launchProfile?.id, "srv:a")
-        XCTAssertEqual(JellyfinServer(restoringFrom: store)?.profile.id, "srv:b")
+        XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv:b")
     }
 }

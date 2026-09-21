@@ -1,26 +1,9 @@
 import Foundation
 import JellyfinKit
 
-@MainActor
-protocol PlaybackReporting: Sendable {
-    func reportPlaybackStart(
-        context: PlaybackSessionContext,
-        positionSeconds: Double
-    ) async
-
-    func reportPlaybackProgress(
-        context: PlaybackSessionContext,
-        positionSeconds: Double,
-        isPaused: Bool
-    ) async
-
-    func reportPlaybackStopped(
-        context: PlaybackSessionContext,
-        positionSeconds: Double
-    ) async
-}
-
-extension JellyfinServer: PlaybackReporting {}
+// 上报协议 `PlaybackReporting` 由 JellyfinKit 提供（只有那 3 条方法）：
+// 协调器只依赖它需要的契约，测试替身不必实现整个 `MediaServer`。
+// 生产侧 `JellyfinServer` / `EmbyServer` 都经 `MediaServer` 满足它。
 
 struct PlaybackReportSnapshot: Equatable {
     enum State: Equatable {

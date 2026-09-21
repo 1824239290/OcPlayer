@@ -981,7 +981,7 @@ struct DetailView: View {
 
     private func personImageTarget(_ person: MediaItem.Person) -> (url: URL?, authHeader: String?) {
         guard let server = app.server,
-              let url = try? server.imageURL(itemID: person.id, type: .primary, maxWidth: 240)
+              let url = try? server.imageURL(itemID: person.id, type: .primary, maxWidth: 240, tag: nil)
         else { return (nil, nil) }
         return (url, server.authorizationHeader)
     }

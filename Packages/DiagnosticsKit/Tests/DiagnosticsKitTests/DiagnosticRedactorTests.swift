@@ -5,9 +5,28 @@ import XCTest
 final class DiagnosticRedactorTests: XCTestCase {
 
     func testRedactsUserHomePaths() {
-        let output = DiagnosticRedactor.redact("播放文件 /Users/jumusu/Movies/a.mkv 失败")
+        // 按当前用户名构造，测试才不依赖跑测试的机器是谁。
+        let home = "/Users/\(NSUserName())/Movies/a.mkv"
+        let output = DiagnosticRedactor.redact("播放文件 \(home) 失败")
         XCTAssertTrue(output.contains("<user-path>"))
-        XCTAssertFalse(output.contains("/Users/jumusu"))
+        XCTAssertFalse(output.contains(NSUserName()))
+        // 裸家目录（没有后续路径段）也要抹掉。
+        let bare = DiagnosticRedactor.redact("工作目录 /Users/\(NSUserName()) 不可写")
+        XCTAssertTrue(bare.contains("<user-path>"))
+    }
+
+    /// 回归：脱敏正则曾写成 `/(?:Users|home)/…` 的泛匹配，而 `/Users/` 同时是
+    /// Jellyfin / Emby 的 API 路由前缀 —— 于是网络日志里最需要的请求路径整段变成
+    /// `<user-path>`，排障时看不出是哪个端点慢。锚定本机用户名后不再误伤。
+    func testKeepsServerAPIRoutesIntact() {
+        for path in ["/Users/user-e/Views",
+                     "/Users/user-e/Items/Resume",
+                     "/Users/user-e/Items/Latest",
+                     "/Users/user-e/PlayedItems/ep-9",
+                     "/Users/abc123/Items/abc"] {
+            let output = DiagnosticRedactor.redact("请求成功 path=\(path) duration_ms=382")
+            XCTAssertTrue(output.contains(path), "API 路径不该被脱敏：\(path) → \(output)")
+        }
     }
 
     func testRedactsAppContainerPaths() {

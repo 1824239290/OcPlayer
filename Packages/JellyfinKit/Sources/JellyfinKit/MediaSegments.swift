@@ -19,6 +19,15 @@ public struct JellyfinMediaSegment: Hashable, Sendable {
     /// 媒体时间终点(秒)。
     public let endSeconds: Double
 
+    /// 直接构造（Emby 侧由章节 marker 翻译出同形的 segment）。
+    public init(id: String, itemID: String, kind: Kind, startSeconds: Double, endSeconds: Double) {
+        self.id = id
+        self.itemID = itemID
+        self.kind = kind
+        self.startSeconds = startSeconds
+        self.endSeconds = endSeconds
+    }
+
     public init(_ dto: MediaSegmentDto, fallbackItemID: String) {
         self.id = dto.id ?? UUID().uuidString
         self.itemID = dto.itemID ?? fallbackItemID
@@ -33,11 +42,10 @@ extension JellyfinServer {
     /// 拉取 Jellyfin `/MediaSegments/{id}` 的 Intro / Outro 片段。
     ///
     /// 这是 Jellyfin 的**智能识别**(片头 / 片尾),比章节名启发式准,有就优先用。
-    /// 该接口是 Jellyfin 插件生态（intro skipper 等）提供的，Emby 上不存在——
-    /// Emby 直接返回空,调用方回退到章节启发式,也省掉每集一条 404 错误日志。
+    /// 该接口是 Jellyfin 插件生态（intro skipper 等）提供的；Emby 没有这个端点，
+    /// 由 `EmbyServer` 从章节 marker 翻译出同形的 segment。
     /// Jellyfin 较老版本可能 404 / 被禁用,调用方应捕获失败并回退到章节启发式。
     public func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment] {
-        guard profile.kind == .jellyfin else { return [] }
         let result = try await send(
             Paths.getItemSegments(
                 itemID: itemID,
@@ -64,6 +72,11 @@ public struct JellyfinChapter: Hashable, Sendable {
     public let name: String
     /// 起点(秒)(纯媒体时间映射)。
     public let startSeconds: Double
+
+    public init(name: String, startSeconds: Double) {
+        self.name = name
+        self.startSeconds = startSeconds
+    }
 
     init(_ info: JellyfinAPI.ChapterInfo, index: Int) {
         self.name = info.name ?? "章节 \(index + 1)"

@@ -233,48 +233,6 @@ final class MediaFileInfoTests: XCTestCase {
         }
     }
 
-    /// Emby 兼容：脏枚举值（VideoRange "DolbyVision"、MediaStream.Type "Attachment"）
-    /// 经既有洗白层后仍能解出媒体信息，杜比判定不受影响。
-    func testEmbySanitizedPayloadStillParses() async throws {
-        let embyProfile = ServerProfile(id: "emby-1:user-e", serverName: "emby-nas",
-                                        baseURL: URL(string: "http://emby.local:8096")!,
-                                        userID: "user-e", userName: nil, serverVersion: nil,
-                                        kind: .emby)
-        let client = JellyfinServer.makeClient(baseURL: embyProfile.baseURL, token: "tok",
-                                               sessionConfiguration: TestSupport.mockedSessionConfiguration())
-        let server = JellyfinServer(profile: embyProfile, client: client)
-
-        try await TestSupport.withMock { request in
-            MockURLProtocol.ok(
-                """
-                {
-                  "Items": [{
-                    "Id": "emby-ep",
-                    "MediaSources": [{
-                      "Id": "ms-e", "Container": "mkv", "SupportsDirectPlay": true,
-                      "MediaStreams": [
-                        {"Index": 0, "Type": "Video", "Codec": "hevc",
-                         "Width": 3840, "Height": 2160,
-                         "VideoRange": "DolbyVision", "VideoRangeType": "DOVIWithEL"},
-                        {"Index": 1, "Type": "Attachment", "Codec": "font"}
-                      ]
-                    }]
-                  }]
-                }
-                """,
-                for: request.url!
-            )
-        } with: {
-            let loaded = try await server.mediaFileInfo(itemID: "emby-ep")
-            let info = try XCTUnwrap(loaded)
-            XCTAssertEqual(info.video?.videoRangeType, "DOVIWithEL")
-            XCTAssertEqual(info.video?.width, 3840)
-            // 附件流（内嵌字体）不是视频/音频/字幕，不该混进任何一栏。
-            XCTAssertTrue(info.audioTracks.isEmpty)
-            XCTAssertTrue(info.subtitleTracks.isEmpty)
-        }
-    }
-
     private static func server() -> JellyfinServer {
         let profile = ServerProfile(id: "srv:user", serverName: "nas",
                                     baseURL: URL(string: "http://nas.local:8096")!,

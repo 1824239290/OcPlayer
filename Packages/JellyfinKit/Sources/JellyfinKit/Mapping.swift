@@ -1,29 +1,35 @@
 import CoreModel
-import DiagnosticsKit
 import Foundation
 import JellyfinAPI
 
 // MARK: - BaseItemDto → MediaItem
 
 extension MediaItem.Kind {
-    init(_ kind: BaseItemKind?) {
-        switch kind {
-        case .movie: self = .movie
-        case .series: self = .series
-        case .season: self = .season
-        case .episode: self = .episode
-        case .boxSet: self = .boxSet
-        case .musicAlbum: self = .musicAlbum
-        case .musicArtist: self = .musicArtist
-        case .audio: self = .audio
-        case .book: self = .book
-        case .photo: self = .photo
-        case .playlist: self = .playlist
-        case .folder, .collectionFolder, .aggregateFolder,
-             .basePluginFolder, .manualPlaylistsFolder, .playlistsFolder:
+    /// 服务端 `Type` 串 → 域模型。Jellyfin 的 `BaseItemKind.rawValue` 与 Emby 的
+    /// wire 串是同一套值，所以两家共用这一张表（避免两份会各自漂移的映射）。
+    /// **认不出的一律 `.other`** —— Emby 会多出 CollectionFolder 等 Jellyfin 没有的值。
+    init(serverTypeString raw: String?) {
+        switch raw {
+        case "Movie": self = .movie
+        case "Series": self = .series
+        case "Season": self = .season
+        case "Episode": self = .episode
+        case "BoxSet": self = .boxSet
+        case "MusicAlbum": self = .musicAlbum
+        case "MusicArtist": self = .musicArtist
+        case "Audio": self = .audio
+        case "Book": self = .book
+        case "Photo": self = .photo
+        case "Playlist": self = .playlist
+        case "Folder", "CollectionFolder", "AggregateFolder", "BasePluginFolder",
+             "ManualPlaylistsFolder", "PlaylistsFolder":
             self = .folder
         default: self = .other
         }
+    }
+
+    init(_ kind: BaseItemKind?) {
+        self.init(serverTypeString: kind?.rawValue)
     }
 }
 
@@ -48,31 +54,22 @@ extension BaseItemKind {
 }
 
 extension MediaLibrary.CollectionType {
+    /// 服务端 `CollectionType` 串 → 域模型。**大小写不敏感**：Emby 会发
+    /// "BoxSets" 这类大小写变体，Jellyfin 发全小写。认不出的落到 `.unknown`
+    /// （浏览层会据此过滤掉，如 Emby 的 "mixed"）。
     init(_ raw: String?) {
-        self = raw.flatMap { Self(rawValue: $0) } ?? .unknown
+        self = raw.flatMap { Self(rawValue: $0.lowercased()) } ?? .unknown
     }
 }
 
-/// Jellyfin tick（100 ns）→ 秒。
-/// 确定性短哈希（缺失 id 的派生用）。**必须跨进程 / 跨启动稳定**：`Hasher()` 每进程
-/// 随机播种，同一个条目的派生 id 每次冷启动都不一样（review-20260914 P3-3）。
-/// FNV-1a 实现共享在 `DiagnosticsKit.FNV1a`，与 MoviePilotKit 的内容哈希同一份。
-private func stableHash(_ part: String?, _ kind: BaseItemKind?) -> String {
-    var hasher = FNV1a()
-    hasher.feed("part:\(part ?? "")")
-    hasher.feed("kind:\(kind?.rawValue ?? "")")
-    return hasher.finishHex()
-}
-
-func seconds(fromTicks ticks: Int?) -> Double? {
-    ticks.map { Double($0) / 10_000_000 }
-}
-
-extension UserItemDataDto {
-    /// 标记已看/取消已看等接口返回的用户数据 → 域模型播放状态。
-    var domainPlayState: MediaItem.PlayState {
-        MediaItem.PlayState(
-            played: isPlayed ?? false,
+extension MediaItem.PlayState {
+    /// 两家服务端的 `UserData` 字段同名同义（`IsPlayed` / `PlayedPercentage` /
+    /// `PlaybackPositionTicks` / `UnplayedItemCount`），换算规则只写这一处 ——
+    /// 百分数 ÷100 这条口径重复一份就是下一个 bug 要打两遍。
+    init(played: Bool?, playedPercentage: Double?, playbackPositionTicks: Int?, unplayedItemCount: Int?) {
+        self.init(
+            played: played ?? false,
+            // PlayedPercentage 是 0–100 的百分数；域模型统一存 0–1 比例。
             percentage: (playedPercentage ?? 0) / 100,
             positionSeconds: seconds(fromTicks: playbackPositionTicks) ?? 0,
             unplayedCount: unplayedItemCount
@@ -80,85 +77,60 @@ extension UserItemDataDto {
     }
 }
 
-extension BaseItemDto {
-    var domainItem: MediaItem {
-        // 首图 / 背景图的 tag：进 URL 让「图片换了 → URL 变了 → 缓存自动失效」。
-        // SeriesPrimaryImageTag / AlbumPrimaryImageTag 是父级回退图，不能写进
-        // 分集自己的 primary tag，否则每一集都会把同一张父级海报当成自己的图。
-        let primaryTag: String?
-        if type == .episode {
-            primaryTag = imageTags?["Primary"]
-        } else {
-            primaryTag = imageTags?["Primary"] ?? albumPrimaryImageTag ?? seriesPrimaryImageTag
-        }
-        let thumbTag = imageTags?["Thumb"]
-        let backdropTag = backdropImageTags?.first
-        let logoTag = imageTags?["Logo"] ?? parentLogoImageTag
-
-        // Episode：parentIndexNumber = 季号，indexNumber = 集号。
-        // Season：indexNumber = 季号（0 多为特典/SP），parentIndexNumber 一般是剧 id 侧字段，不能当季号。
-        let mappedSeasonNumber: Int?
-        let mappedEpisodeNumber: Int?
-        switch type {
-        case .season:
-            mappedSeasonNumber = indexNumber
-            mappedEpisodeNumber = nil
-        case .episode:
-            mappedSeasonNumber = parentIndexNumber
-            mappedEpisodeNumber = indexNumber
-        default:
-            mappedSeasonNumber = parentIndexNumber
-            mappedEpisodeNumber = indexNumber
-        }
-
-        // id 缺失时兜底 UUID() 每次解析都会生成新 id——同一个条目两次拉取
-        // 身份不同，SwiftUI 当成不同条目闪烁重排。改用「确定性派生 id」：
-        // 名称+类型哈希，同一缺失条目跨拉取稳定（服务器本不该漏 id，这是兜底）。
-        let resolvedID = id ?? "missing-\(stableHash(name ?? "unnamed", type))"
-        return MediaItem(
-            id: resolvedID,
-            name: name ?? "未命名",
-            kind: MediaItem.Kind(type),
-            overview: overview,
-            year: productionYear,
-            runtimeSeconds: seconds(fromTicks: runTimeTicks),
-            genres: genres ?? [],
-            communityRating: communityRating.map(Double.init),
-            officialRating: officialRating,
-            seriesID: seriesID,
-            seriesName: seriesName,
-            seasonID: type == .season ? resolvedID : seasonID,
-            seasonName: type == .season ? name : seasonName,
-            seasonNumber: mappedSeasonNumber,
-            episodeNumber: mappedEpisodeNumber,
-            playState: userData.map {
-                MediaItem.PlayState(
-                    played: $0.isPlayed ?? false,
-                    // Jellyfin 的 PlayedPercentage 是 0–100 的百分数；域模型统一存 0–1 比例。
-                    percentage: ($0.playedPercentage ?? 0) / 100,
-                    positionSeconds: seconds(fromTicks: $0.playbackPositionTicks) ?? 0,
-                    unplayedCount: $0.unplayedItemCount
-                )
-            },
-            cast: (people ?? []).compactMap { person in
-                guard let id = person.id, let name = person.name else { return nil }
-                return MediaItem.Person(
-                    id: id,
-                    name: name,
-                    role: person.role,
-                    kind: person.type?.rawValue ?? "Actor"
-                )
-            },
-            childCount: childCount,
-            primaryImageTag: primaryTag,
-            thumbImageTag: thumbTag,
-            backdropImageTag: backdropTag,
-            logoImageTag: logoTag,
-            parentLogoItemID: parentLogoItemID,
-            tmdbID: providerIDs?["Tmdb"] ?? providerIDs?["tmdb"],
-            // MAL 的 provider key 各版本不统一（Mal / MyAnimeList），多兜几个。
-            malID: providerIDs?["Mal"] ?? providerIDs?["MyAnimeList"] ?? providerIDs?["mal"],
-            anilistID: providerIDs?["AniList"] ?? providerIDs?["anilist"]
+extension UserItemDataDto {
+    /// 标记已看/取消已看等接口返回的用户数据 → 域模型播放状态。
+    /// 列表响应里的 `UserData` 也走这一份（字段与语义完全相同）。
+    var domainPlayState: MediaItem.PlayState {
+        MediaItem.PlayState(
+            played: isPlayed,
+            playedPercentage: playedPercentage,
+            playbackPositionTicks: playbackPositionTicks,
+            unplayedItemCount: unplayedItemCount
         )
     }
+}
+
+extension BaseItemDto {
+    /// Jellyfin SDK DTO → 共享中间表示。Emby 侧由 `EmbyItemDTO` 填同一份结构，
+    /// 映射逻辑（季/集号、父级图回退、缺 id 派生）只存在于 `ServerItemFields`。
+    var serverFields: ServerItemFields {
+        var fields = ServerItemFields()
+        fields.kindTag = type?.rawValue
+        fields.id = id
+        fields.name = name
+        fields.kind = MediaItem.Kind(type)
+        fields.overview = overview
+        fields.productionYear = productionYear
+        fields.runtimeTicks = runTimeTicks
+        fields.genres = genres ?? []
+        fields.communityRating = communityRating.map(Double.init)
+        fields.officialRating = officialRating
+        fields.seriesID = seriesID
+        fields.seriesName = seriesName
+        fields.seasonID = seasonID
+        fields.seasonName = seasonName
+        fields.parentIndexNumber = parentIndexNumber
+        fields.indexNumber = indexNumber
+        fields.playState = userData?.domainPlayState
+        fields.cast = (people ?? []).compactMap { person in
+            guard let id = person.id, let name = person.name else { return nil }
+            return MediaItem.Person(
+                id: id,
+                name: name,
+                role: person.role,
+                kind: person.type?.rawValue ?? "Actor"
+            )
+        }
+        fields.childCount = childCount
+        fields.imageTags = imageTags ?? [:]
+        fields.backdropImageTags = backdropImageTags ?? []
+        fields.albumPrimaryImageTag = albumPrimaryImageTag
+        fields.seriesPrimaryImageTag = seriesPrimaryImageTag
+        fields.parentLogoImageTag = parentLogoImageTag
+        fields.parentLogoItemID = parentLogoItemID
+        fields.providerIDs = providerIDs ?? [:]
+        return fields
+    }
+
+    var domainItem: MediaItem { serverFields.domainItem }
 }

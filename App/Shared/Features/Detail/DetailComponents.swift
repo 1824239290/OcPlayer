@@ -66,7 +66,7 @@ private struct PointingHandCursor: ViewModifier {
 /// 详情页剧集横向选集：剧照 + 集号/标题 + 进度；点击更新选中态，双击直接播放。
 struct EpisodeSelectCard: View {
     let episode: MediaItem
-    let server: JellyfinServer?
+    let server: (any MediaServer)?
     let isSelected: Bool
     var onSelect: () -> Void
     var onPlay: (() -> Void)? = nil

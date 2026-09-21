@@ -109,7 +109,7 @@ final class DetailViewModel {
         // Similar recommendations are optional and may be unavailable on
         // servers with that endpoint disabled. Keep the required detail path
         // independent so a recommendation failure cannot blank the page.
-        async let similarItems = server.similar(itemID: item.id)
+        async let similarItems = server.similar(itemID: item.id, limit: 12)
         do {
             let loadedDetail = try await server.item(item.id)
             guard !Task.isCancelled else { return }
