@@ -133,8 +133,25 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
+      - name: Free disk space for packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          # macOS runner 镜像里模拟器运行时能占几个 GB，而两个打包 job 都是
+          # `generic/platform=` 设备构建，用不上它——dmg 阶段的 ENOSPC 就出在这里。
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/* || true
+          rm -rf ~/Library/Developer/CoreSimulator/Caches/* || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+          # 内核已由 setup-erika 拉取并校验，打包阶段用 SKIP_ERIKA_FETCH 复用它，
+          # 下载缓存（每个平台约 100–200 MB）没有留着的必要。
+          rm -f Vendor/downloads/*.zip
+          df -h /
+
       - name: Build release packages
         shell: bash
+        env:
+          SKIP_ERIKA_FETCH: "1"
         run: Scripts/package-macos.sh "$RELEASE_TAG"
 
       - name: Upload workflow artifacts
@@ -208,8 +225,23 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
+      - name: Free disk space for packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          df -h /
+          # 同 macOS job：模拟器运行时用不上（设备构建），内核下载缓存已由
+          # setup-erika 校验过，打包阶段直接复用现成的 xcframework。
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/* || true
+          rm -rf ~/Library/Developer/CoreSimulator/Caches/* || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+          rm -f Vendor/downloads/*.zip
+          df -h /
+
       - name: Build release package
         shell: bash
+        env:
+          SKIP_ERIKA_FETCH: "1"
         run: Scripts/package-ios.sh "$RELEASE_TAG"
 
       - name: Upload workflow artifacts
