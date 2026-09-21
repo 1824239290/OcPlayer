@@ -99,21 +99,12 @@ enum SkipPrompt: Equatable, Sendable {
     }
 }
 
-/// 从章节列表里识别「片头 / 片尾」的可跳过段落。
-///
-/// 设计成协议,是给未来接真正的 `/MediaSegments` 识别器留的口子:
-/// 现在只有名字 + 时间位置的启发式识别;将来换 / 叠加一个新的实现即可,UI 不感知。
-protocol ChapterSkippingEvaluator {
-    /// 给定章节与片长,产出可跳过的片头 / 片尾段落(不一定命中,可能为空)。
-    func skipMarks(chapters: [PlaybackChapter], totalSeconds: Double) -> [SkipMark]
-}
-
 /// 默认评估器:
 /// 1. 章节名命中关键词(OP / 片头 / Opening;ED / 片尾 / Ending / Credits)直接判定;
 /// 2. 命名没命中时,用时间位置兜底——片头在前部且短,片尾在尾部且短。
 ///
 /// 每类只保留命中最早的一条,避免同一视频出多个「跳过片头」按钮。
-struct ChapterNameHeuristicEvaluator: ChapterSkippingEvaluator {
+struct ChapterNameHeuristicEvaluator {
     /// 「前部可作片头」的窗口上限(片长的比例)。
     private static let openingLeadingFraction = 0.12
     /// 「尾部可作片尾」的窗口起点(片长的比例)。

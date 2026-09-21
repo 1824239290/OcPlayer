@@ -12,97 +12,6 @@ import AppKit
 import UIKit
 #endif
 
-public protocol DanmakuViewDelegate: AnyObject {
-    
-    /// A  danmaku is about to be reused and cellModel is set for you before calling this method.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku: danmaku
-    func danmakuView(_ danmakuView: DanmakuView, dequeueReusable danmaku: DanmakuCell)
-    
-    ///  This method is called when the danmaku has no space to display.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cellModel of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, noSpaceShoot danmaku: DanmakuCellModel)
-    
-    ///  This method is called when the danmaku is about to be displayed.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  danmaku
-    func danmakuView(_ danmakuView: DanmakuView, willDisplay danmaku: DanmakuCell)
-    
-    /// This method is called when the danmaku is about to end.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku: danmaku
-    func danmakuView(_ danmakuView: DanmakuView, didEndDisplaying danmaku: DanmakuCell)
-    
-    /// This method is called when danmaku is tapped.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku: danmaku
-    func danmakuView(_ danmakuView: DanmakuView, didTapped danmaku: DanmakuCell)
-    
-    ///  This method is called when the danmaku has no space to sync display.
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cellModel of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, noSpaceSync danmaku: DanmakuCellModel)
-    
-#if os(macOS)
-
-    /// This method is called when the danmaku hovered in macOS
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cell of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, didHovered danmaku: DanmakuCell)
-
-    /// This method is called when the danmaku stop hovered in macOS
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cell of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, stopHovered danmaku: DanmakuCell)
-
-#endif
-
-    /// This method is called when the danmaku is toggled by tap
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cell of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, didToggled danmaku: DanmakuCell)
-
-    /// This method is called when the danmaku stop toggled
-    /// - Parameters:
-    ///   - danmakuView: view of the danmaku
-    ///   - danmaku:  cell of danmaku
-    func danmakuView(_ danmakuView: DanmakuView, stopToggled danmaku: DanmakuCell)
-}
-
-public extension DanmakuViewDelegate {
-    
-    func danmakuView(_ danmakuView: DanmakuView, dequeueReusable danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, noSpaceShoot danmaku: DanmakuCellModel) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, willDisplay danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, didEndDisplaying danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, didTapped danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, noSpaceSync danmaku: DanmakuCellModel) {}
-#if os(macOS)
-    func danmakuView(_ danmakuView: DanmakuView, didHovered danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, stopHovered danmaku: DanmakuCell) {}
-#endif
-    func danmakuView(_ danmakuView: DanmakuView, didToggled danmaku: DanmakuCell) {}
-    
-    func danmakuView(_ danmakuView: DanmakuView, stopToggled danmaku: DanmakuCell) {}
-    
-}
-
 public enum DanmakuStatus {
     case play
     case pause
@@ -110,10 +19,8 @@ public enum DanmakuStatus {
 }
 
 public class DanmakuView: PlatformView {
-    
-    public weak var delegate: DanmakuViewDelegate?
-    
-    /// If this property is false, the danmaku will not be reused and danmakuView(_:dequeueReusable danmaku:) methods will not be called.
+
+    /// If this property is false, the danmaku will not be reused.
     public var enableCellReusable = false
     
     /// Each danmaku is in one track and the number of tracks in the view depends on the height of the track.
@@ -374,13 +281,9 @@ public class DanmakuView: PlatformView {
         guard cell !== hoveredCell else { return }
         stopCurrentHovered()
         hoveredCell = cell
-        delegate?.danmakuView(self, didHovered: cell)
     }
-    
+
     private func stopCurrentHovered() {
-        if let old = hoveredCell {
-            delegate?.danmakuView(self, stopHovered: old)
-        }
         hoveredCell = nil
     }
     
@@ -405,16 +308,11 @@ public class DanmakuView: PlatformView {
         guard cell !== toggledCell else { return }
         stopCurrentToggled()
         toggledCell = cell
-        delegate?.danmakuView(self, didToggled: cell)
     }
-    
+
     private func stopCurrentToggled() {
-        if let old = toggledCell {
-            delegate?.danmakuView(self, stopToggled: old)
-        }
         toggledCell = nil
     }
-    
 }
 
 public extension DanmakuView {
@@ -440,7 +338,6 @@ public extension DanmakuView {
             shootTrack = findLeastNumberDanmakuTrack(for: danmaku)
         } else {
             guard let t = findSuitableTrack(for: danmaku) else {
-                delegate?.danmakuView(self, noSpaceShoot: danmaku)
                 if enableCellReusable {
                     appendCellToPool(cell)
                 }
@@ -448,11 +345,10 @@ public extension DanmakuView {
             }
             shootTrack = t
         }
-        
+
         if cell.superview == nil {
             addSubview(cell)
         }
-        delegate?.danmakuView(self, willDisplay: cell)
         cell.redraw()
         shootTrack.shoot(danmaku: cell)
     }
@@ -589,16 +485,14 @@ public extension DanmakuView {
             syncTrack = findLeastNumberDanmakuTrack(for: danmaku)
         } else {
             guard let t = findSuitableSyncTrack(for: danmaku, at: progress) else {
-                delegate?.danmakuView(self, noSpaceSync: danmaku)
                 return
             }
             syncTrack = t
         }
-        
+
         if cell.superview == nil {
             addSubview(cell)
         }
-        delegate?.danmakuView(self, willDisplay: cell)
         cell.redraw()
         if status == .play {
             syncTrack.syncAndPlay(cell, at: progress)
@@ -834,7 +728,6 @@ extension DanmakuView {
         } else {
             cell?.frame = frame
             cell?.model = danmaku
-            delegate?.danmakuView(self, dequeueReusable: cell!)
         }
         return cell
     }
@@ -854,7 +747,6 @@ extension DanmakuView {
     private func containerDidClick(_ gesture: NSClickGestureRecognizer) {
         let p = gesture.location(in: self)
         if let cell = locateDanmakuCell(at: p) {
-            delegate?.danmakuView(self, didTapped: cell)
             switchCurrentToggled(cell)
         } else {
             // Click on empty space → clear toggled cell
@@ -911,7 +803,6 @@ extension DanmakuView {
         }
         // Match DanmuKitMac behavior: always remove from superview when a danmaku ends,
         // then optionally append to pool for reuse to avoid lingering views.
-        delegate?.danmakuView(self, didEndDisplaying: cell)
         cell.removeFromSuperview()
         if enableCellReusable {
             self.appendCellToPool(cell)
@@ -923,7 +814,6 @@ extension DanmakuView {
     func danmakuDidTap(_ tap: UITapGestureRecognizer) {
         let p = tap.location(in: self)
         if let cell = locateDanmakuCell(at: p) {
-            delegate?.danmakuView(self, didTapped: cell)
             switchCurrentToggled(cell)
         } else {
             stopCurrentToggled()

@@ -167,8 +167,6 @@ public final class PlayerState {
         subtitleTracks = all.filter { $0.kind == .subtitle }
     }
 
-    public func clearError() { lastError = nil }
-
     /// 换源时复位快照，避免旧内容的 position / duration / 轨道 / 错误残留到新源。
     /// surface 归 surface（视图一直挂着），这里只管媒体相关的状态。
     public func reset() {

@@ -94,8 +94,6 @@ final class PlayerStateFoldingTests: XCTestCase {
         try await waitUntil("错误落到 state") {
             state.state == .error && state.lastError == "HTTP 401"
         }
-        state.clearError()
-        XCTAssertNil(state.lastError)
     }
 
     /// 内核没给文案时也要有个能显示的东西，别给 UI 一个 nil。
