@@ -93,6 +93,13 @@ public enum ClientIdentity {
     /// （并发/多次调用会产出键序不同的字符串）。语义等价的头若字节不同，
     /// 上层以其哈希做缓存键时（如 RemoteImage 的凭证指纹）会误判「凭证变了」。
     public static func mediaBrowserAuthorizationHeader(token: String? = nil) -> String {
+        authorizationHeader(scheme: "MediaBrowser", token: token)
+    }
+
+    /// 按产品分叉的认证头。**scheme 是两家唯一的分叉点**：Jellyfin 用
+    /// `MediaBrowser`，Emby 用自己的 `Emby`（Emby 客户端一贯的写法）。
+    /// 其余字段与拼接顺序完全一致，缓存键语义不受影响。
+    public static func authorizationHeader(scheme: String, token: String? = nil) -> String {
         var fields: [(String, String)] = [
             ("Client", clientName),
             ("Device", deviceName),
@@ -102,6 +109,6 @@ public enum ClientIdentity {
         if let token, !token.isEmpty {
             fields.append(("Token", token))
         }
-        return "MediaBrowser " + fields.map { "\($0.0)=\"\($0.1)\"" }.joined(separator: ", ")
+        return scheme + " " + fields.map { "\($0.0)=\"\($0.1)\"" }.joined(separator: ", ")
     }
 }

@@ -12,7 +12,7 @@ import UIKit
 //
 // 纯 UI 的 token / 骨架 / 控件 / 布局 / 远程图管道已下沉到 `AppDesignKit` 包
 // （只吃纯值，不碰域模型）。本文件只留**绑 Jellyfin/Bangumi 域模型**的薄适配：
-// PosterCard / StillCard（MediaItem + JellyfinServer）、ItemTitleLogoView、
+// PosterCard / StillCard（MediaItem + MediaServer）、ItemTitleLogoView、
 // BangumiStatusColor。新 Feature 的卡片请用 AppDesignKit 的原语拼，不要抄这里的
 // 域绑定实现另起炉灶。
 //
@@ -68,7 +68,7 @@ extension MediaItem {
     }
 
     /// 带 `tag` 的图片地址（tag 让磁盘缓存自动失效）；`authHeader` 给 `RemoteImage` 用。
-    func imageTarget(_ server: JellyfinServer?, kind: CardImage, width: Int)
+    func imageTarget(_ server: (any MediaServer)?, kind: CardImage, width: Int)
         -> (url: URL?, authHeader: String?) {
         guard let server else { return (nil, nil) }
         let tag: String?
@@ -90,7 +90,7 @@ extension MediaItem {
 
     /// 分集缩略图：优先使用集自己的 Thumb / Primary 图。
     /// 没有分集图时保留中性占位，避免把剧集海报误认成某一集的剧照。
-    func episodeThumbTarget(_ server: JellyfinServer?, width: Int)
+    func episodeThumbTarget(_ server: (any MediaServer)?, width: Int)
         -> (url: URL?, authHeader: String?) {
         // Prefer the episode's own still. The parent series poster is deliberately
         // not used here: showing it beside an episode title looks like a wrong match.
@@ -109,7 +109,7 @@ extension MediaItem {
 /// 条目标题 Logo / 文本标题视图：优先展示透明艺术字 ClearLogo，未配置或加载失败时优雅回退为文字标题。
 struct ItemTitleLogoView: View {
     let item: MediaItem
-    let server: JellyfinServer?
+    let server: (any MediaServer)?
     var maxHeight: CGFloat = 80
     var maxWidth: CGFloat = 420
     var fontSize: CGFloat = 28
@@ -127,7 +127,7 @@ struct ItemTitleLogoView: View {
 
     init(
         item: MediaItem,
-        server: JellyfinServer?,
+        server: (any MediaServer)?,
         maxHeight: CGFloat = 80,
         maxWidth: CGFloat = 420,
         fontSize: CGFloat = 28,
@@ -238,7 +238,7 @@ struct ItemTitleLogoView: View {
 /// 海报卡（最近添加 / 媒体库网格）：2:3 + 标题行 + 年份。
 struct PosterCard: View {
     let item: MediaItem
-    let server: JellyfinServer?
+    let server: (any MediaServer)?
     var width: CGFloat? = Metrics.posterWidth
     var onTap: () -> Void
 
@@ -284,7 +284,7 @@ struct PosterCard: View {
 /// 继续观看卡：16:9 剧照 + 进度点 + 进度条 + 「还剩 xx」副标题。
 struct StillCard: View {
     let item: MediaItem
-    let server: JellyfinServer?
+    let server: (any MediaServer)?
     let actionIcon: String
     let actionAccessibilityLabel: String?
     var width: CGFloat = Metrics.stillWidth
@@ -295,7 +295,7 @@ struct StillCard: View {
 
     init(
         item: MediaItem,
-        server: JellyfinServer?,
+        server: (any MediaServer)?,
         actionIcon: String = "play.fill",
         actionAccessibilityLabel: String? = nil,
         width: CGFloat = Metrics.stillWidth,

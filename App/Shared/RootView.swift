@@ -88,9 +88,9 @@ struct RootView: View {
         // Jellyfin token 失效（鉴权 API 401，包内无重登兜底）：清死 token 回登录流程。
         // 包内已在主线程投递且带 profileID，App 侧按会话状态去重。
         .onReceive(NotificationCenter.default.publisher(
-            for: JellyfinAuthentication.authenticationRequired)) { note in
+            for: MediaServerAuthentication.authenticationRequired)) { note in
             guard let profileID = note.object as? String else { return }
-            app.handleJellyfinAuthenticationRequired(profileID: profileID)
+            app.handleAuthenticationRequired(profileID: profileID)
         }
         .task {
             app.playback = controller

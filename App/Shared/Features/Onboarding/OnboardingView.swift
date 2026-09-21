@@ -12,7 +12,7 @@ struct OnboardingView: View {
 
     @State private var serverAddress = ""
     /// 协议选择:HTTP / HTTPS。控制服务器 baseURL 的 scheme。
-    @State private var serverScheme: JellyfinServerScheme = .http
+    @State private var serverScheme: ServerScheme = .http
     @State private var username = ""
     @State private var password = ""
 
@@ -97,8 +97,8 @@ struct OnboardingView: View {
             // 协议选择:选哪个,服务器所有请求(API / 图片 / 播放流)统一走哪个。
             // 手动输入 http:// 或 https:// 前缀会覆盖这里的选择。
             Picker("协议", selection: $serverScheme) {
-                Text("HTTP").tag(JellyfinServerScheme.http)
-                Text("HTTPS").tag(JellyfinServerScheme.https)
+                Text("HTTP").tag(ServerScheme.http)
+                Text("HTTPS").tag(ServerScheme.https)
             }
             .pickerStyle(.segmented)
             HStack {

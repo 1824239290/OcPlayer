@@ -11,7 +11,7 @@ extension AppModel {
         // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
         // 从 init 挪到这里：构造 AppModel 不再有副作用，测试拿到的实例是干净的。
         bangumi.setup()
-        if let restored = JellyfinServer(restoringFrom: store) {
+        if let restored = MediaServerFactory.restore(from: store) {
             activate(server: restored)
         } else {
             phase = .onboarding
@@ -21,7 +21,7 @@ extension AppModel {
     // MARK: - 登录流程
 
     /// Onboarding 第一步：验证服务器地址。
-    func connectServer(_ rawURL: String, scheme: JellyfinServerScheme? = nil) async {
+    func connectServer(_ rawURL: String, scheme: ServerScheme? = nil) async {
         loginAttemptGeneration &+= 1
         let attempt = loginAttemptGeneration
         isProbingServer = true
@@ -32,7 +32,7 @@ extension AppModel {
             }
         }
         do {
-            let session = try await JellyfinServer.startLogin(urlString: rawURL, preferredScheme: scheme)
+            let session = try await MediaServerLogin.start(urlString: rawURL, preferredScheme: scheme)
             guard loginAttemptGeneration == attempt, phase == .onboarding else { return }
             loginSession = session
             // Emby 没有 Quick Connect 端点，直接进密码登录，不开轮询。
@@ -206,7 +206,7 @@ extension AppModel {
         // 播放与浏览态属于旧会话，先停掉，别让用户看到旧服务器的数据闪一下。
         stopPlaybackForSessionChange()
 
-        if let server = JellyfinServer.resume(profile: profile, from: store) {
+        if let server = MediaServerFactory.resume(profile: profile, from: store) {
             if self.server?.profile.id != server.profile.id {
                 resetBrowseState()
             }
@@ -239,10 +239,10 @@ extension AppModel {
         phase = .onboarding
     }
 
-    /// Jellyfin 401 通知（token 失效且包内无重登兜底）：停播、清死 token、
+    /// 服务器 401 通知（token 失效且包内无重登兜底）：停播、清死 token、
     /// 拉回登录流程——与 switchToServer 死 token 分支同口径。
     /// profileID 不匹配（换服后迟到的旧 401）或已不在会话中则忽略，天然去重。
-    func handleJellyfinAuthenticationRequired(profileID: String) {
+    func handleAuthenticationRequired(profileID: String) {
         guard phase == .ready, server?.profile.id == profileID else { return }
         stopPlaybackForSessionChange()
         store.signOut(id: profileID)

@@ -18,7 +18,7 @@ enum PlaybackPreparation: Equatable {
 
 /// 应用的中枢状态机：登录 → 浏览 → 播放串联。
 ///
-/// UI 只读这个类的属性、调它的方法；Jellyfin 细节被挡在 `JellyfinServer` 后面，
+/// UI 只读这个类的属性、调它的方法；服务器细节被挡在 `MediaServer` 后面，
 /// 内核细节被挡在 `PlaybackController` 后面。
 ///
 /// 实现按职责拆到 `AppModel+Session` / `+Browser` / `+Playback`；
@@ -40,7 +40,7 @@ final class AppModel {
     var phase: Phase = .boot
 
     let store: ServerStore
-    var server: JellyfinServer?
+    var server: (any MediaServer)?
 
     /// Every authenticated session gets a new generation. Async responses keep
     /// their generation and may only mutate state while it is still current.
@@ -50,7 +50,7 @@ final class AppModel {
     // MARK: - Onboarding 中间态
 
     /// `startLogin` 成功后非 nil（已探明这是台 Jellyfin，等用户选登录方式）。
-    var loginSession: LoginSession?
+    var loginSession: (any ServerLoginSession)?
     var isProbingServer = false
     var isAuthenticating = false
     /// Quick Connect 轮询期间展示的配对码。

@@ -82,11 +82,17 @@ public struct JellyfinError: Error, LocalizedError {
     private static func wrapAPI(_ error: APIError) -> JellyfinError {
         switch error {
         case let .unacceptableStatusCode(status):
-            switch status {
-            case 401: JellyfinError(.unauthorized, underlying: error)
-            case 403: JellyfinError(.forbidden, underlying: error)
-            default: JellyfinError(.http(status: status), underlying: error)
-            }
+            JellyfinError.status(status, underlying: error)
+        }
+    }
+
+    /// HTTP 状态码 → 错误种类。SDK 层（`wrapAPI`）与 Emby 的裸传输层共用同一张
+    /// 表，避免两处对 401/403 的解释跑偏。
+    static func status(_ code: Int, underlying: (any Error)? = nil) -> JellyfinError {
+        switch code {
+        case 401: JellyfinError(.unauthorized, underlying: underlying)
+        case 403: JellyfinError(.forbidden, underlying: underlying)
+        default: JellyfinError(.http(status: code), underlying: underlying)
         }
     }
 

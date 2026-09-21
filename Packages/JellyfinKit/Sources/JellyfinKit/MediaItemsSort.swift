@@ -1,5 +1,3 @@
-import JellyfinAPI
-
 /// 媒体库网格的排序字段（传输层口径；UI 文案与按库类型的候选集在 App 层）。
 /// 值域刻意收窄到 Emby / Jellyfin 两家服务端都稳定支持的 sortBy。
 public enum MediaItemsSortField: String, Sendable, Equatable, CaseIterable {
@@ -30,21 +28,24 @@ public struct MediaItemsSort: Sendable, Equatable {
 
     /// 换算成 items API 的 sortBy / sortOrder（两个数组按下标一一配对）。
     /// 主键之外固定挂「名称升序」副键，同值不打架；随机只有单键，方向只是占位。
-    func serverKeysAndOrders() -> ([ItemSortBy], [SortOrder]) {
-        let primary: SortOrder = ascending ? .ascending : .descending
+    ///
+    /// 返回**原始串**而不是 SDK 枚举：Emby 走裸传输层直接用，Jellyfin 侧再转回
+    /// `ItemSortBy` / `SortOrder`。一张表两家用，避免两份映射各自漂移。
+    func rawKeysAndOrders() -> ([String], [String]) {
+        let primary = ascending ? "Ascending" : "Descending"
         switch field {
         case .name:
-            return ([.sortName], [primary])
+            return (["SortName"], [primary])
         case .dateAdded:
-            return ([.dateCreated, .sortName], [primary, .ascending])
+            return (["DateCreated", "SortName"], [primary, "Ascending"])
         case .year:
-            return ([.productionYear, .sortName], [primary, .ascending])
+            return (["ProductionYear", "SortName"], [primary, "Ascending"])
         case .rating:
-            return ([.communityRating, .sortName], [primary, .ascending])
+            return (["CommunityRating", "SortName"], [primary, "Ascending"])
         case .runtime:
-            return ([.runtime, .sortName], [primary, .ascending])
+            return (["Runtime", "SortName"], [primary, "Ascending"])
         case .random:
-            return ([.random], [primary])
+            return (["Random"], [primary])
         }
     }
 }

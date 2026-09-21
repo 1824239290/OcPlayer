@@ -52,7 +52,7 @@ extension AppModel {
         return nextUp.filter { !resumeIDs.contains($0.id) }
     }
 
-    func activate(server: JellyfinServer) {
+    func activate(server: any MediaServer) {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
         self.server = server
@@ -65,11 +65,11 @@ extension AppModel {
         }
     }
 
-    func sessionIsCurrent(_ generation: Int, server: JellyfinServer) -> Bool {
+    func sessionIsCurrent(_ generation: Int, server: any MediaServer) -> Bool {
         sessionGeneration == generation && self.server?.profile.id == server.profile.id
     }
 
-    func loadInitialData(server: JellyfinServer, generation: Int) async {
+    func loadInitialData(server: any MediaServer, generation: Int) async {
         await reloadBrowserData(server: server, generation: generation)
     }
 
@@ -79,13 +79,13 @@ extension AppModel {
         await reloadBrowserData(server: server, generation: sessionGeneration)
     }
 
-    func reloadBrowserData(server: JellyfinServer, generation: Int) async {
+    func reloadBrowserData(server: any MediaServer, generation: Int) async {
         async let libs: Void = loadLibraries(server: server, generation: generation)
         async let home: Void = loadHome(server: server, generation: generation)
         _ = await (libs, home)
     }
 
-    func loadLibraries(server: JellyfinServer, generation: Int) async {
+    func loadLibraries(server: any MediaServer, generation: Int) async {
         do {
             let loaded = try await server.userViews()
             guard sessionIsCurrent(generation, server: server) else { return }
@@ -110,7 +110,7 @@ extension AppModel {
         await loadHome(server: server, generation: sessionGeneration)
     }
 
-    func loadHome(server: JellyfinServer, generation: Int) async {
+    func loadHome(server: any MediaServer, generation: Int) async {
         guard sessionIsCurrent(generation, server: server) else { return }
         homeLoadGeneration &+= 1
         let loadGeneration = homeLoadGeneration
@@ -122,42 +122,68 @@ extension AppModel {
                 home.isLoading = false
             }
         }
+        // 三条 rail 各自独立成败。以前这里是 `try await (a, b, c)` 一个元组收口，
+        // **任何一条失败就把三条全丢**、整页白屏——而实测一台公网中转服务器
+        // 中位 370ms、长尾到 22s、偶尔整条挂掉，另外两条其实已经拿到内容了。
+        async let resume = RailResult.load { try await server.resumeItems() }
+        async let nextUp = RailResult.load { try await server.nextUp() }
+        async let latest = RailResult.load { try await server.latestItems(limit: 24) }
+        let (resumeRail, nextUpRail, latestRail) = await (resume, nextUp, latest)
+
+        guard sessionIsCurrent(generation, server: server),
+              homeLoadGeneration == loadGeneration
+        else { return }
+
+        // 成功的 rail 覆盖；失败的保留上一次的内容，不清空。
+        if let items = resumeRail.value { home.resume = items }
+        if let items = nextUpRail.value {
+            home.nextUp = Self.deduplicatedNextUp(items, resume: home.resume)
+        }
+        if let items = latestRail.value { home.latest = items }
+
+        let rails = [resumeRail, nextUpRail, latestRail]
+        // 三条**全**挂才算这一页失败。`HomeView` 本来也只在 latest 为空时展示
+        // 整页错误态，所以部分失败时这里置 error 只会白白遮住已经拿到的内容。
+        if rails.allSatisfy({ $0.value == nil && $0.failureDescription != nil }) {
+            home.error = rails.compactMap(\.failureDescription).first
+        }
+        for (name, failure) in zip(["继续观看", "接下来看", "最近添加"], rails) {
+            guard let failure = failure.failureDescription else { continue }
+            AppDiagnostics.logWarning("首页 rail 加载失败 rail=\(name)", fields: ["error": .string(failure)])
+        }
+
+        // 记下这次的 Rail 组成，供下次首屏骨架决定铺几条。
+        let presence = HomeRailPresence(
+            resume: !home.resume.isEmpty,
+            nextUp: !home.nextUp.isEmpty,
+            latest: !home.latest.isEmpty
+        )
+        let changed = home.railPresence != presence
+        home.railPresence = presence
+        // 低频变化的三位布尔掩码，只在翻转时写盘（原先每次加载成功都同步写）。
+        if changed {
+            presence.persist()
+        }
+    }
+}
+
+/// 一条 rail 的加载结果：成功带内容，失败带文案。
+///
+/// **不抛**：首页三条 rail 是并列的三份数据，一条挂掉不该把另外两条一起丢掉。
+/// 取消不算失败（值与被判定文案都为空），避免换会话时把过期请求的取消报成错误。
+private struct RailResult {
+    var value: [MediaItem]?
+    var failureDescription: String?
+
+    static func load(_ work: () async throws -> [MediaItem]) async -> RailResult {
         do {
-            async let resume = server.resumeItems()
-            async let nextUp = server.nextUp()
-            async let latest = server.latestItems()
-            let (resumeItems, nextUpItems, latestItems) = try await (resume, nextUp, latest)
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            let visibleNextUp = Self.deduplicatedNextUp(nextUpItems, resume: resumeItems)
-            home.resume = resumeItems
-            home.nextUp = visibleNextUp
-            home.latest = latestItems
-            // 记下这次的 Rail 组成，供下次首屏骨架决定铺几条。
-            let presence = HomeRailPresence(
-                resume: !resumeItems.isEmpty,
-                nextUp: !visibleNextUp.isEmpty,
-                latest: !latestItems.isEmpty
-            )
-            let changed = home.railPresence != presence
-            home.railPresence = presence
-            // 低频变化的三位布尔掩码，只在翻转时写盘（原先每次加载成功都同步写）。
-            if changed {
-                presence.persist()
-            }
+            return RailResult(value: try await work(), failureDescription: nil)
+        } catch is CancellationError {
+            return RailResult(value: nil, failureDescription: nil)
         } catch let error as JellyfinError {
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            home.error = error.errorDescription
-            AppDiagnostics.logWarning("首页加载失败", fields: ["error": .string(error.errorDescription ?? "\(error)")])
+            return RailResult(value: nil, failureDescription: error.errorDescription)
         } catch {
-            guard sessionIsCurrent(generation, server: server),
-                  homeLoadGeneration == loadGeneration
-            else { return }
-            home.error = "\(error)"
-            AppDiagnostics.logWarning("首页加载异常", fields: ["error": .string("\(error)")])
+            return RailResult(value: nil, failureDescription: "\(error)")
         }
     }
 }

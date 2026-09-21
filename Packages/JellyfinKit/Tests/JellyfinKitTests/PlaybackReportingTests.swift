@@ -10,11 +10,12 @@ final class PlaybackReportingTests: XCTestCase {
             requests.append((request.httpMethod ?? "?", request.url?.path ?? "?"))
             return MockURLProtocol.ok("{}", for: request.url!)
         } with: {
-            let server = Self.mockServer()
+            let server = Self.mockJellyfinServer()
+            let context = PlaybackSessionContext(itemID: "item-1")
 
-            await server.reportPlaybackStart(itemID: "item-1", positionSeconds: 90)
-            await server.reportPlaybackProgress(itemID: "item-1", positionSeconds: 100.5, isPaused: true)
-            await server.reportPlaybackStopped(itemID: "item-1", positionSeconds: 110)
+            await server.reportPlaybackStart(context: context, positionSeconds: 90)
+            await server.reportPlaybackProgress(context: context, positionSeconds: 100.5, isPaused: true)
+            await server.reportPlaybackStopped(context: context, positionSeconds: 110)
         }
 
         XCTAssertEqual(requests.items.map(\.0), ["POST", "POST", "POST"])
@@ -28,7 +29,7 @@ final class PlaybackReportingTests: XCTestCase {
             bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
             return MockURLProtocol.ok("{}", for: request.url!)
         } with: {
-            let server = Self.mockServer()
+            let server = Self.mockJellyfinServer()
             let context = PlaybackSessionContext(
                 itemID: "item-1",
                 playSessionID: "session-1",
@@ -59,6 +60,8 @@ final class PlaybackReportingTests: XCTestCase {
         XCTAssertEqual(JellyfinServer.ticks(1.0), 10_000_000)
         XCTAssertEqual(JellyfinServer.ticks(92.5), 925_000_000)
         XCTAssertEqual(JellyfinServer.ticks(0), 0)
+        // 两家共用同一套 tick 口径（1 tick = 100 ns）。
+        XCTAssertEqual(EmbyServer.ticks(92.5), 925_000_000)
     }
 
     func testReportFailureIsSilentlyIgnored() async throws {
@@ -66,7 +69,11 @@ final class PlaybackReportingTests: XCTestCase {
         try await TestSupport.withMock { _ in
             throw URLError(.notConnectedToInternet)
         } with: {
-            await Self.mockServer().reportPlaybackProgress(itemID: "x", positionSeconds: 1, isPaused: false)
+            let context = PlaybackSessionContext(itemID: "x")
+            await Self.mockJellyfinServer().reportPlaybackProgress(
+                context: context, positionSeconds: 1, isPaused: false)
+            await Self.mockEmbyServer().reportPlaybackProgress(
+                context: context, positionSeconds: 1, isPaused: false)
             // 走到这就是没炸
         }
     }
@@ -83,7 +90,7 @@ final class PlaybackReportingTests: XCTestCase {
             paths.append((request.httpMethod ?? "?", request.url?.path ?? "?"))
             return MockURLProtocol.ok("{}", for: request.url!)
         } with: {
-            let server = Self.mockServer(kind: .emby)
+            let server = Self.mockEmbyServer()
             let context = PlaybackSessionContext(itemID: "item-9")
 
             await server.reportPlaybackStart(context: context, positionSeconds: 1)
@@ -96,8 +103,8 @@ final class PlaybackReportingTests: XCTestCase {
         }
         XCTAssertEqual(jsonBodies.count, 3)
         // 确定性 id：同一 item 三段上报落在服务端同一会话行。SessionId 只在
-        // Start / Progress（PlaybackStateInfo）上与 PlaySessionId 同值填入
-        // （Swiftfin 同款）；Stopped（PlaybackStopInfo）只带 PlaySessionId。
+        // Start / Progress 上与 PlaySessionId 同值填入（Swiftfin 同款）；
+        // Stopped 只带 PlaySessionId。
         for (index, body) in jsonBodies.enumerated() {
             let where_ = paths.items[index].1
             XCTAssertEqual(body["PlaySessionId"] as? String, "ocplayer-item-9", where_)
@@ -110,13 +117,13 @@ final class PlaybackReportingTests: XCTestCase {
     }
 
     func testJellyfinFallbackReportsOmitPlaySessionID() async throws {
-        // Jellyfin 三个端点都接受缺失；档案不是 Emby 就不合成，行为一字不动。
+        // Jellyfin 三个端点都接受缺失；Emby 才合成，Jellyfin 行为一字不动。
         let bodies = LockedBodies()
         try await TestSupport.withMock { request in
             bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
             return MockURLProtocol.ok("{}", for: request.url!)
         } with: {
-            let server = Self.mockServer(kind: .jellyfin)
+            let server = Self.mockJellyfinServer()
             let context = PlaybackSessionContext(itemID: "item-9")
 
             await server.reportPlaybackStart(context: context, positionSeconds: 1)
@@ -140,7 +147,7 @@ final class PlaybackReportingTests: XCTestCase {
             bodies.append(try XCTUnwrap(TestSupport.body(of: request)))
             return MockURLProtocol.ok("{}", for: request.url!)
         } with: {
-            let server = Self.mockServer(kind: .emby)
+            let server = Self.mockEmbyServer()
             let context = PlaybackSessionContext(itemID: "item-9", playSessionID: "negotiated-1")
 
             await server.reportPlaybackStart(context: context, positionSeconds: 1)
@@ -151,7 +158,7 @@ final class PlaybackReportingTests: XCTestCase {
     }
 
     func testSynthesizedSessionIDIsDeterministic() {
-        let server = Self.mockServer(kind: .emby)
+        let server = Self.mockEmbyServer()
         let context = PlaybackSessionContext(itemID: "item-9")
         XCTAssertEqual(server.resolvedPlaySessionID(context),
                        server.resolvedPlaySessionID(context))
@@ -163,14 +170,42 @@ final class PlaybackReportingTests: XCTestCase {
             PlaybackSessionContext(itemID: "item-9", playSessionID: "abc")), "abc")
     }
 
-    private static func mockServer(kind: ServerKind = .jellyfin) -> JellyfinServer {
-        let profile = ServerProfile(id: "srv:user", serverName: "nas",
-                                    baseURL: URL(string: "http://nas.local:8096")!,
-                                    userID: "user", userName: nil, serverVersion: nil,
-                                    kind: kind)
-        let client = JellyfinServer.makeClient(baseURL: profile.baseURL, token: "tok",
-                                               sessionConfiguration: TestSupport.mockedSessionConfiguration())
-        return JellyfinServer(profile: profile, client: client)
+    private static func profile(kind: ServerKind) -> ServerProfile {
+        let path = kind == .emby ? "/emby" : ""
+        return ServerProfile(
+            id: "srv:user",
+            serverName: "nas",
+            baseURL: URL(string: "http://nas.local:8096\(path)")!,
+            userID: "user",
+            userName: nil,
+            serverVersion: nil,
+            kind: kind
+        )
+    }
+
+    private static func mockJellyfinServer() -> JellyfinServer {
+        let profile = profile(kind: .jellyfin)
+        return JellyfinServer(
+            profile: profile,
+            client: JellyfinServer.makeClient(
+                baseURL: profile.baseURL,
+                token: "tok",
+                sessionConfiguration: TestSupport.mockedSessionConfiguration()
+            )
+        )
+    }
+
+    private static func mockEmbyServer() -> EmbyServer {
+        let profile = profile(kind: .emby)
+        return EmbyServer(
+            profile: profile,
+            session: EmbySession(
+                baseURL: profile.baseURL,
+                accessToken: "tok",
+                profileID: profile.id,
+                sessionConfiguration: TestSupport.mockedSessionConfiguration()
+            )
+        )
     }
 }
 

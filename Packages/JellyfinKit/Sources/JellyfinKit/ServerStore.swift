@@ -106,7 +106,7 @@ public final class ServerStore: @unchecked Sendable {
     }
 
     /// 启动恢复时优先尝试的档案：设了默认服务器且档案仍在就用它；否则与 `currentProfile` 一致。
-    /// token 是否可用由调用方（`JellyfinServer(restoringFrom:)`）再判断并回退。
+    /// token 是否可用由调用方（`MediaServerFactory.restore(from:)`）再判断并回退。
     public var launchProfile: ServerProfile? {
         lock.withLock {
             let profiles = profilesUnlocked()

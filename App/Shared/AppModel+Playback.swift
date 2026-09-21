@@ -127,7 +127,7 @@ extension AppModel {
                 "item": .string(playableItem.name),
                 "error": .string("\(error)"),
             ])
-            if let uri = try? server.streamURL(itemID: playableItem.id) {
+            if let uri = try? server.streamURL(itemID: playableItem.id, mediaSourceID: nil, playSessionID: nil) {
                 presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
                                 resumeSeconds: effectiveResume, item: playableItem,
                                 sessionContext: PlaybackSessionContext(
@@ -147,7 +147,7 @@ extension AppModel {
     /// 把浏览层条目归一化为可直接播放的叶子条目。
     /// 电影 / 集数 / 音频等已经是叶子，剧集则优先复用首页 nextUp / resume，避免额外请求。
     /// （半集会从「接下来看」去重进「继续观看」，所以 resume 也是该集的落点。）
-    func resolvePlayableItem(for item: MediaItem, server: JellyfinServer) async throws -> MediaItem? {
+    func resolvePlayableItem(for item: MediaItem, server: any MediaServer) async throws -> MediaItem? {
         guard item.kind == .series else { return item }
 
         if let next = home.nextUp.first(where: { $0.seriesID == item.id })
