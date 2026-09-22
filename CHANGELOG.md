@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 改动
+
+- **Bangumi 登录改走 OcPlay 网关，客户端不再持有 OAuth 应用密钥**。授权地址由 `GET /v1/bangumi/oauth/authorize?state=` 拼（`client_id` / `redirect_uri` 在网关侧），换 token 与刷新走 `POST /v1/bangumi/oauth/token` / `/refresh`，业务 API（收藏、章节、搜索）仍直连 `api.bgm.tv`。`Secrets.xcconfig` / `Info.plist` 里的 `BANGUMI_APP_ID` / `BANGUMI_APP_SECRET` 随之删除——旧 secret 已进过构建产物，应在 bgm.tv 轮换。登录前置条件变成「网关地址 + 带 `bgm:oauth` 权限的 API Key」，与弹幕共用同一份设置（`AppModel.bootstrap` 与网关设置变更时推给 BangumiKit）；未配置时登录页给引导文案，网关错误码映射为对应提示（`SCOPE_REQUIRED` / `GATEWAY_NOT_CONFIGURED` / `OCPLAY_USER_AGENT_REQUIRED`，`BANGUMI_OAUTH_REJECTED` 清凭证回未登录）。`refresh_token` 仅在 Bangumi 轮换时返回，响应缺该字段时沿用旧值；`expires_in` 缺省时按一周兜底。BangumiKit 新增 5 用例（state 每次授权轮换且与请求一致、state 不匹配不发网络请求、换 token 只带 code 且请求带 `X-API-Key` + `OcPlay/` UA、网关 403 各错误码各自文案、refresh 未轮换时沿用旧 refresh_token），用按 host 分派的 mock URLProtocol 离线跑。对生产网关做过一轮真网络冒烟（跑完即删）：authorize 返回真 bgm.tv 地址、错误 code 与错误 refresh_token 都被 Bangumi 拒绝并正确落到「重新登录」。
+
+- **修 `BangumiAPIClient` 的 403 分支丢掉响应体**（真网关冒烟测出来的）：403 曾直接抛 `notice("请求被拒绝，请检查权限")`，body 被丢弃，于是网关的 `SCOPE_REQUIRED` / `OCPLAY_USER_AGENT_REQUIRED` / `GATEWAY_NOT_CONFIGURED` 全都退化成同一句笼统文案。现在 403 走标准映射（`.forbidden(body)`，面向用户的文案与旧行为逐字相同），网关错误码才解析得出来。
+
+
 ### 待跟进（内核侧，fork Erika）
 
 - **开播 HEAD 探测约 3.8 秒**：0.1.8 记账的待跟进项①。内核 open 先发 HEAD 探测、失败再回退一字节 range；部分源站对 HEAD 恒回 403（如三重跳转的 strm 源），这段探测纯属浪费。修复在内核（fork Erika），本仓只记账；核心里能省掉「HEAD 失败再 range」的往返即可。

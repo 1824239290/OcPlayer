@@ -8,8 +8,14 @@ import Foundation
 public enum BangumiAuthService {
     private static var operationRevision: UInt64 = 0
 
-    public static func buildOAuthURL() async -> URL {
-        await BangumiAPIClient.shared.buildOAuthURL()
+    /// 注入网关配置（启动时 + 网关设置变更时）。OAuth 授权、换 token、刷新都走网关，
+    /// 客户端不持有 `client_secret`。
+    public static func configureGateway(_ configuration: BangumiGatewayConfiguration?) async {
+        await BangumiAPIClient.shared.configureGateway(configuration)
+    }
+
+    public static func buildOAuthURL() async throws -> URL {
+        try await BangumiAPIClient.shared.buildOAuthURL()
     }
 
     /// 换 code 拿 token 并拉取 profile，成功后置为已登录。

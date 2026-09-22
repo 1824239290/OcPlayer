@@ -251,7 +251,7 @@ struct SettingsView: View {
                 initialURL: danmakuModel.dandanplayGatewayURLString,
                 initialKey: danmakuModel.dandanplayAPIKey
             ) { url, key in
-                app.updateDanmakuGateway(urlString: url, apiKey: key)
+                Task { await app.updateDanmakuGateway(urlString: url, apiKey: key) }
             }
         }
         .sheet(isPresented: $isEditingMoviePilot) {

@@ -8,10 +8,13 @@ import JellyfinKit
 extension AppModel {
     // MARK: - 弹幕设置（弹弹play 网关）
 
-    func updateDanmakuGateway(urlString: String, apiKey: String) {
+    func updateDanmakuGateway(urlString: String, apiKey: String) async {
         // Commit both values before restarting. This avoids ever pairing a new
         // gateway host with the previously saved credential.
         danmakuModel.updateGateway(urlString: urlString, apiKey: apiKey)
+        // Bangumi 登录与弹幕共用同一个网关：设置变了要同步给 BangumiKit，
+        // 否则换 Key 之后 Bangumi 授权还在用旧 Key。
+        await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)
         restartDanmakuForCurrentPlayback()
     }
 
@@ -336,6 +339,15 @@ extension AppModel {
             apiKey: danmakuModel.dandanplayStore.apiKey,
             userAgent: Self.dandanplayUserAgent
         )
+    }
+
+    /// Bangumi OAuth 走同一个网关与同一把 Key（需含 `bgm:oauth` scope）。
+    var bangumiGatewayConfiguration: BangumiGatewayConfiguration? {
+        guard let configuration = dandanplayConfiguration else { return nil }
+        return BangumiGatewayConfiguration(
+            baseURL: configuration.baseURL,
+            apiKey: configuration.apiKey,
+            userAgent: configuration.userAgent)
     }
 
     static var dandanplayUserAgent: String {

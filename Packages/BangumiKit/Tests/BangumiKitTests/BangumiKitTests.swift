@@ -96,10 +96,13 @@ struct BangumiKitTests {
 
     // MARK: - OAuth state（CSRF 防护）
 
-    /// 授权 URL 必须带随机 state，且每次授权轮换（防重放）。
-    @Test func oauthURLIncludesStateAndRotates() async {
-        let url1 = await BangumiAPIClient.shared.buildOAuthURL()
-        let url2 = await BangumiAPIClient.shared.buildOAuthURL()
+    /// 授权 URL 由网关拼，客户端只传 state：必须随机且每次授权轮换（防重放）。
+    @Test func oauthURLIncludesStateAndRotates() async throws {
+        let log = OAuthRequestLog()
+        let client = BangumiGatewayFixture.client(log: log)
+        let url1 = try await client.buildOAuthURL()
+        let url2 = try await client.buildOAuthURL()
+
         func state(of url: URL) -> String? {
             URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?
@@ -110,13 +113,19 @@ struct BangumiKitTests {
         let state2 = state(of: url2)
         #expect(state1 != nil && !state1!.isEmpty, "授权 URL 必须带 state")
         #expect(state1 != state2, "每次授权 state 必须轮换：\(state1 ?? "nil") vs \(state2 ?? "nil")")
+        // 发给网关的 state 必须与授权 URL 里的一致（网关原样回填）。
+        #expect(log.requests.compactMap(\.stateQuery) == [state1, state2])
+        #expect(log.requests.allSatisfy { $0.path == "/v1/bangumi/oauth/authorize" })
     }
 
     /// state 不匹配的回调必须在发网络请求前被拒绝（CSRF 兜底）。
-    @Test func oauthExchangeRejectsMismatchedState() async {
-        _ = await BangumiAPIClient.shared.buildOAuthURL()
+    @Test func oauthExchangeRejectsMismatchedState() async throws {
+        let log = OAuthRequestLog()
+        let client = BangumiGatewayFixture.client(log: log)
+        _ = try await client.buildOAuthURL()
+        let requestsBeforeExchange = log.requests.count
         do {
-            _ = try await BangumiAPIClient.shared.exchangeForAccessToken(
+            _ = try await client.exchangeForAccessToken(
                 code: "forged-code", state: "forged-state")
             Issue.record("state 不匹配应该抛错")
         } catch let error as BangumiError {
@@ -124,6 +133,77 @@ struct BangumiKitTests {
         } catch {
             Issue.record("应该是 BangumiError：\(error)")
         }
+        #expect(log.requests.count == requestsBeforeExchange, "state 不匹配不该发出换 token 请求")
+    }
+
+    /// 换 token 只发 code：`client_secret` 只在网关侧，客户端请求里不得出现。
+    @Test func oauthExchangeSendsCodeOnlyAndStoresCredentials() async throws {
+        let log = OAuthRequestLog()
+        let suite = "BangumiGatewayTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = BangumiStore(defaults: defaults)
+        let client = BangumiGatewayFixture.client(log: log, store: store)
+        let url = try await client.buildOAuthURL()
+        let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "state" }?.value
+
+        _ = try await client.exchangeForAccessToken(code: "auth-code", state: state ?? "")
+
+        let exchange = try #require(log.requests.last)
+        #expect(exchange.path == "/v1/bangumi/oauth/token")
+        #expect(exchange.bodyKeys == ["code"], "换 token 只带 code，实测：\(exchange.bodyKeys)")
+        #expect(exchange.apiKey == BangumiGatewayFixture.apiKey)
+        #expect(exchange.userAgent?.hasPrefix("OcPlay/") == true, "网关要求 OcPlay/ 前缀 UA")
+        #expect(store.auth?.accessToken == "access-1")
+        #expect(store.auth?.refreshToken == "refresh-1")
+    }
+
+    /// 网关的 403 靠 `error.code` 区分原因：`request()` 曾经在 403 分支丢掉响应体，
+    /// 于是 SCOPE_REQUIRED / UA 缺失都退化成笼统的「请求被拒绝」。
+    @Test func gatewayForbiddenCodesMapToTheirOwnMessages() async throws {
+        for (code, expected) in [
+            ("SCOPE_REQUIRED", "bgm:oauth"),
+            ("OCPLAY_USER_AGENT_REQUIRED", "请求标识"),
+            ("GATEWAY_NOT_CONFIGURED", "尚未配置 Bangumi 登录"),
+        ] {
+            let client = BangumiGatewayFixture.client(
+                log: OAuthRequestLog(),
+                responder: { _ in
+                    (403, #"{"success":false,"error":{"code":"\#(code)","message":"x"}}"#)
+                })
+            do {
+                _ = try await client.buildOAuthURL()
+                Issue.record("\(code) 不该成功")
+            } catch let error as BangumiError {
+                #expect(error.userMessage.contains(expected), "\(code) → \(error.userMessage)")
+            }
+        }
+
+        // 非网关信封的 403（bgm.tv 自己的 403）仍走笼统文案，别把 body 当原因解析。
+        let client = BangumiGatewayFixture.client(
+            log: OAuthRequestLog(), responder: { _ in (403, "<html>Forbidden</html>") })
+        do {
+            _ = try await client.buildOAuthURL()
+            Issue.record("403 不该成功")
+        } catch let error as BangumiError {
+            #expect(error.userMessage == "请求被拒绝，请检查权限")
+        }
+    }
+
+    /// 网关透传 Bangumi 的 refresh 响应：没带新 refresh_token 时沿用旧值
+    /// （Bangumi 只在轮换时返回），别把凭证存成空串。
+    @Test func tokenResponseWithoutRefreshTokenKeepsPrevious() {
+        let rotated = BangumiAuth(
+            response: BangumiTokenResponse(
+                accessToken: "a1", expiresIn: 3600, refreshToken: "r1"))
+        let reused = BangumiAuth(
+            response: BangumiTokenResponse(accessToken: "a2"),
+            fallbackRefreshToken: rotated.refreshToken)
+        #expect(reused.refreshToken == "r1")
+        #expect(reused.accessToken == "a2")
+        // 上游没给 expires_in 时按默认有效期兜底，不能当成「立刻过期」。
+        #expect(reused.isExpired() == false)
     }
 }
 
@@ -710,6 +790,157 @@ struct BangumiStoreTests {
         var expired = fresh
         expired.expiresAt = Date().addingTimeInterval(-1)
         #expect(expired.isExpired())
+    }
+}
+
+// MARK: - 网关 OAuth 素材
+
+/// 拦截 URLSession 请求，按 host 分派 mock 响应。
+///
+/// 按 host 而不是全局单例：swift-testing 并行跑测试，全局 handler 会互相串。
+final class OAuthMockURLProtocol: URLProtocol {
+    nonisolated(unsafe) private static var handlers: [String: (URLRequest) throws -> (HTTPURLResponse, Data)] = [:]
+    private static let lock = NSLock()
+
+    static func register(
+        host: String, handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)
+    ) {
+        lock.lock()
+        defer { lock.unlock() }
+        handlers[host] = handler
+    }
+
+    private static func handler(for host: String?) -> ((URLRequest) throws -> (HTTPURLResponse, Data))? {
+        lock.lock()
+        defer { lock.unlock() }
+        return host.flatMap { handlers[$0] }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.handler(for: request.url?.host) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+/// 已发出的网关请求（URLSession 线程写入，测试线程读）。
+struct OAuthRequest {
+    let path: String
+    let apiKey: String?
+    let userAgent: String?
+    let stateQuery: String?
+    let bodyKeys: [String]
+}
+
+final class OAuthRequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [OAuthRequest] = []
+
+    var requests: [OAuthRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ request: OAuthRequest) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(request)
+    }
+}
+
+enum BangumiGatewayFixture {
+    static let apiKey = "ocp_test_key"
+
+    /// 造一个走 mock 网关的客户端。每次调用用独立 host，测试之间互不干扰。
+    /// `responder` 返回 (HTTP 状态, 响应体)，默认是三个 OAuth 端点的正常响应。
+    static func client(
+        log: OAuthRequestLog,
+        store: BangumiStore? = nil,
+        responder: (@Sendable (URLRequest) -> (Int, String))? = nil
+    ) -> BangumiAPIClient {
+        let host = "gateway-\(UUID().uuidString).test"
+        OAuthMockURLProtocol.register(host: host) { request in
+            let url = request.url!
+            log.append(
+                OAuthRequest(
+                    path: url.path,
+                    apiKey: request.value(forHTTPHeaderField: "X-API-Key"),
+                    userAgent: request.value(forHTTPHeaderField: "User-Agent"),
+                    stateQuery: URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                        .queryItems?.first { $0.name == "state" }?.value,
+                    bodyKeys: bodyKeys(of: request)))
+
+            let (status, json) = responder?(request) ?? defaultResponse(for: url)
+            let response = HTTPURLResponse(
+                url: url, statusCode: status, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"])!
+            return (response, Data(json.utf8))
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OAuthMockURLProtocol.self]
+        return BangumiAPIClient(
+            store: store ?? .shared,
+            gateway: BangumiGatewayConfiguration(
+                baseURL: URL(string: "https://\(host)")!,
+                apiKey: apiKey,
+                userAgent: "OcPlay/0.0.0-test (macOS; arm64)"),
+            sessionFactory: { _ in URLSession(configuration: configuration) })
+    }
+
+    private static func defaultResponse(for url: URL) -> (Int, String) {
+        switch url.path {
+        case "/v1/bangumi/oauth/authorize":
+            let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "state" }?.value ?? ""
+            return (200, """
+                {"authorize_url":"https://bgm.tv/oauth/authorize?client_id=bgm-test&response_type=code&redirect_uri=ocplayer%3A%2F%2Foauth%2Fcallback&state=\(state)",
+                 "client_id":"bgm-test","redirect_uri":"ocplayer://oauth/callback","state":"\(state)"}
+                """)
+        case "/v1/bangumi/oauth/token":
+            return (200, """
+                {"access_token":"access-1","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-1"}
+                """)
+        default:
+            return (404, #"{"success":false,"error":{"code":"ROUTE_NOT_FOUND","message":"unknown"}}"#)
+        }
+    }
+
+    private static func bodyKeys(of request: URLRequest) -> [String] {
+        // URLSession 交给 URLProtocol 时常常把 httpBody 转成 httpBodyStream，两条都要看。
+        var body = request.httpBody
+        if body == nil, let stream = request.httpBodyStream {
+            stream.open()
+            defer { stream.close() }
+            var data = Data()
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+            defer { buffer.deallocate() }
+            while stream.hasBytesAvailable {
+                let read = stream.read(buffer, maxLength: 4096)
+                if read <= 0 { break }
+                data.append(buffer, count: read)
+            }
+            body = data
+        }
+        guard let body,
+              let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+        else { return [] }
+        return object.keys.sorted()
     }
 }
 

@@ -37,8 +37,15 @@ private enum SessionError: Error {
     case authenticationRequired(credentialGeneration: UInt64)
 }
 
-private struct OAuthErrorResponse: Decodable {
-    let error: String
+/// 网关统一错误信封：`{"success": false, "error": {"code", "message"}}`。
+private struct GatewayErrorEnvelope: Decodable {
+    struct Payload: Decodable {
+        let code: String
+        let message: String?
+    }
+
+    let success: Bool
+    let error: Payload?
 }
 
 /// Bangumi 底层 HTTP 客户端：只负责 OAuth 凭证生命周期和 HTTP 请求。
@@ -54,9 +61,12 @@ public actor BangumiAPIClient {
         "BangumiAPIClientAuthenticationRequired")
 
     private let store: BangumiStore
-    private let appInfo: BangumiAppInfo
     private let userAgent: String
-    private let authDomain: BangumiURL.AuthDomain
+    /// 网关 OAuth 配置。由 App 层在启动 / 网关设置变更时注入（`configureGateway`）：
+    /// token 交换与刷新都要经网关，凭证不进客户端。
+    private var gateway: BangumiGatewayConfiguration?
+    /// 测试注入的 URLSession 构造（mock 协议）；nil 用生产配置。
+    private let sessionFactory: (@Sendable (String?) -> URLSession)?
 
     private var auth: BangumiAuth?
     private var anonymousSession: URLSession?
@@ -80,27 +90,19 @@ public actor BangumiAPIClient {
 
     public init(
         store: BangumiStore = .shared,
-        appInfo: BangumiAppInfo? = nil,
+        gateway: BangumiGatewayConfiguration? = nil,
         userAgent: String = "OcPlayer/0.1 (BangumiKit)",
-        authDomain: BangumiURL.AuthDomain = .origin
+        sessionFactory: (@Sendable (String?) -> URLSession)? = nil
     ) {
         self.store = store
-        self.appInfo = appInfo ?? Self.readAppInfoFromBundle()
+        self.gateway = gateway
         self.userAgent = userAgent
-        self.authDomain = authDomain
+        self.sessionFactory = sessionFactory
     }
 
-    /// 从 Info.plist 读取 OAuth 凭证（BANGUMI_APP_ID / BANGUMI_APP_SECRET），
-    /// 缺失时返回空凭证（登录不可用但请求匿名接口不受影响）。
-    private static func readAppInfoFromBundle() -> BangumiAppInfo {
-        guard let info = Bundle.main.infoDictionary,
-              let clientId = info["BANGUMI_APP_ID"] as? String, !clientId.isEmpty,
-              let clientSecret = info["BANGUMI_APP_SECRET"] as? String, !clientSecret.isEmpty
-        else {
-            return BangumiAppInfo(clientId: "", clientSecret: "", callbackURL: "")
-        }
-        let callback = info["BANGUMI_OAUTH_CALLBACK"] as? String ?? "ocplayer://oauth/callback"
-        return BangumiAppInfo(clientId: clientId, clientSecret: clientSecret, callbackURL: callback)
+    /// App 层注入网关配置（启动时 + 设置变更时各推一次）。
+    public func configureGateway(_ configuration: BangumiGatewayConfiguration?) {
+        gateway = configuration
     }
 
     // MARK: - 公开接口
@@ -109,24 +111,19 @@ public actor BangumiAPIClient {
         store.isAuthenticated
     }
 
-    public func oauthBase() -> String {
-        BangumiURL.auth(path: "/oauth", authDomain: authDomain).absoluteString
-    }
-
-    public func buildOAuthURL() -> URL {
-        let baseURL = URL(string: "\(oauthBase())/authorize")!
+    /// 向网关要授权地址。`client_id` / `redirect_uri` 都在网关侧，
+    /// 客户端只生成 state 并暂存，回调换 token 时校验。
+    public func buildOAuthURL() async throws -> URL {
         // state 防 CSRF：生成后存内存，回调换 token 时校验（见 exchangeForAccessToken）。
-        pendingOAuthState = UUID().uuidString
-        return baseURL.appending(queryItems: [
-            URLQueryItem(name: "client_id", value: appInfo.clientId),
-            URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "redirect_uri", value: appInfo.callbackURL),
-            URLQueryItem(name: "state", value: pendingOAuthState),
-        ])
-    }
-
-    public func hasValidAppInfo() -> Bool {
-        !appInfo.clientId.isEmpty && !appInfo.clientSecret.isEmpty
+        let state = UUID().uuidString
+        pendingOAuthState = state
+        let data = try await gatewayRequest(
+            path: "/v1/bangumi/oauth/authorize", method: "GET", query: [("state", state)])
+        let payload: BangumiAuthorizeResponse = try decodeResponse(data)
+        guard let url = URL(string: payload.authorizeUrl), !payload.authorizeUrl.isEmpty else {
+            throw BangumiError(notice: "网关返回的授权地址无效")
+        }
+        return url
     }
 
     public func exchangeForAccessToken(code: String, state: String) async throws -> UInt64 {
@@ -135,15 +132,9 @@ public actor BangumiAPIClient {
             throw BangumiError(notice: "授权校验失败，请重新发起登录")
         }
         let exchangeGeneration = beginOAuthExchange()
-        let url = URL(string: "\(oauthBase())/access_token")!
-        let body: [String: BangumiJSONValue] = [
-            "grant_type": .string("authorization_code"),
-            "client_id": .string(appInfo.clientId),
-            "client_secret": .string(appInfo.clientSecret),
-            "code": .string(code),
-            "redirect_uri": .string(appInfo.callbackURL),
-        ]
-        let data = try await request(url: url, method: "POST", body: .object(body), auth: .disabled)
+        let data = try await gatewayRequest(
+            path: "/v1/bangumi/oauth/token", method: "POST",
+            body: .object(["code": .string(code)]))
         let credentials = try saveAuthResponse(
             data: data, commit: .oauth(exchangeGeneration: exchangeGeneration))
         return credentials.generation
@@ -175,7 +166,8 @@ public actor BangumiAPIClient {
     private static let requestRetryPolicy = RetryPolicy(attempts: 3)
 
     public func request(
-        url: URL, method: String, body: BangumiJSONValue? = nil, auth: BangumiAuthMode = .auto
+        url: URL, method: String, body: BangumiJSONValue? = nil, auth: BangumiAuthMode = .auto,
+        headers: [String: String] = [:]
     ) async throws -> Data {
         try await Self.requestRetryPolicy.run {
             var authed: Bool
@@ -195,6 +187,9 @@ public actor BangumiAPIClient {
 
             var spec = HTTPRequestSpec(url: url, method: method)
             spec.headers["Content-Type"] = "application/json"
+            for (field, value) in headers {
+                spec.headers[field] = value
+            }
             if let body {
                 spec.body = try JSONEncoder().encode(body)
             }
@@ -234,7 +229,10 @@ public actor BangumiAPIClient {
                 }
                 throw BangumiError.requireLogin
             } else if httpResponse.statusCode == 403 {
-                throw BangumiError(notice: "请求被拒绝，请检查权限")
+                // 保留响应体：网关的 403 靠 `error.code` 区分原因（SCOPE_REQUIRED /
+                // OCPLAY_USER_AGENT_REQUIRED），丢了 body 就只剩笼统文案。
+                // 面向用户的文案与旧行为一致（`.forbidden` 的 userMessage 同字面）。
+                throw BangumiError(code: 403, response: exchange.bodyText, requestID: requestID)
             } else {
                 throw BangumiError(
                     code: httpResponse.statusCode,
@@ -252,6 +250,61 @@ public actor BangumiAPIClient {
         }
     }
 
+    // MARK: - 网关 OAuth
+
+    /// 网关 OAuth 请求：认证走 `X-API-Key`，身份标识走 `OcPlay/` User-Agent
+    /// （会话默认的 Bangumi UA 被逐请求覆盖），不带本地 access token。
+    /// 网关错误信封里的业务码在这里转成语义化错误，调用方不必认识网关码。
+    private func gatewayRequest(
+        path: String, method: String, query: [(String, String)] = [], body: BangumiJSONValue? = nil
+    ) async throws -> Data {
+        guard let gateway else {
+            throw BangumiError(notice: "尚未配置弹幕网关，无法登录 Bangumi")
+        }
+        guard var components = URLComponents(url: gateway.baseURL, resolvingAgainstBaseURL: false)
+        else { throw BangumiError(notice: "网关地址无效") }
+        components.path = path
+        if !query.isEmpty {
+            components.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
+        }
+        guard let url = components.url else { throw BangumiError(notice: "网关地址无效") }
+
+        do {
+            return try await request(
+                url: url, method: method, body: body, auth: .disabled,
+                headers: ["X-API-Key": gateway.apiKey, "User-Agent": gateway.userAgent])
+        } catch let error as BangumiError {
+            throw Self.mapGatewayOAuthError(error)
+        }
+    }
+
+    private static func mapGatewayOAuthError(_ error: BangumiError) -> BangumiError {
+        // 401 是「网关 API Key 无效」，不是 Bangumi 登录态失效，别报成「请重新登录」。
+        if case .requireLogin = error {
+            return .notice("网关 API Key 无效，请检查设置")
+        }
+        guard let body = error.responseBody,
+              let envelope = try? JSONDecoder().decode(
+                GatewayErrorEnvelope.self, from: Data(body.utf8)),
+              let code = envelope.error?.code
+        else { return error }
+
+        switch code {
+        case "BANGUMI_OAUTH_REJECTED":
+            // 授权码过期/已用、refresh token 失效：本地凭证已废，清掉重新登录。
+            return .requireLogin
+        case "SCOPE_REQUIRED":
+            return .notice("网关 API Key 缺少 bgm:oauth 权限")
+        case "OCPLAY_USER_AGENT_REQUIRED":
+            return .notice("网关拒绝了请求标识，请更新 App 后重试")
+        case "GATEWAY_NOT_CONFIGURED":
+            return .notice("网关尚未配置 Bangumi 登录")
+        default:
+            // 429 / 502 等保持原样：重试与退避语义由 BangumiError.isRetryable 决定。
+            return error
+        }
+    }
+
     // MARK: - 会话
 
     private func getSession(authorized: Bool) async throws -> RequestSession {
@@ -263,7 +316,7 @@ public actor BangumiAPIClient {
 
     private func getAnonymousSession() throws -> URLSession {
         if let session = anonymousSession { return session }
-        let session = URLSession(configuration: buildSessionConfig(accessToken: nil))
+        let session = makeSession(accessToken: nil)
         anonymousSession = session
         return session
     }
@@ -290,14 +343,18 @@ public actor BangumiAPIClient {
                authorizedSessionGeneration == credentials.generation {
                 return RequestSession(session: session, credentialGeneration: credentials.generation)
             }
-            let session = URLSession(
-                configuration: buildSessionConfig(accessToken: credentials.auth.accessToken))
+            let session = makeSession(accessToken: credentials.auth.accessToken)
             authorizedSession = session
             authorizedSessionGeneration = credentials.generation
             return RequestSession(session: session, credentialGeneration: credentials.generation)
         }
 
         throw BangumiError(ignore: "Credentials changed while building an authorized session")
+    }
+
+    private func makeSession(accessToken: String?) -> URLSession {
+        if let sessionFactory { return sessionFactory(accessToken) }
+        return URLSession(configuration: buildSessionConfig(accessToken: accessToken))
     }
 
     private func buildSessionConfig(accessToken: String?) -> URLSessionConfiguration {
@@ -379,31 +436,20 @@ public actor BangumiAPIClient {
     private func refreshAccessToken(
         auth: BangumiAuth, expectedGeneration: UInt64
     ) async throws -> CredentialSnapshot {
-        let url = URL(string: "\(oauthBase())/access_token")!
-        let body: [String: BangumiJSONValue] = [
-            "grant_type": .string("refresh_token"),
-            "client_id": .string(appInfo.clientId),
-            "client_secret": .string(appInfo.clientSecret),
-            "refresh_token": .string(auth.refreshToken),
-            "redirect_uri": .string(appInfo.callbackURL),
-        ]
         let data: Data
         do {
-            data = try await request(url: url, method: "POST", body: .object(body), auth: .disabled)
+            data = try await gatewayRequest(
+                path: "/v1/bangumi/oauth/refresh", method: "POST",
+                body: .object(["refresh_token": .string(auth.refreshToken)]))
         } catch let error as BangumiError {
-            if case .badRequest(let response) = error,
-               let responseData = response.data(using: .utf8),
-               let oauthError = try? JSONDecoder().decode(OAuthErrorResponse.self, from: responseData),
-               oauthError.error == "invalid_grant" {
-                throw BangumiError.requireLogin
-            }
             if case .ignore = error, Task.isCancelled {
                 throw CancellationError()
             }
             throw error
         }
         return try saveAuthResponse(
-            data: data, commit: .refresh(credentialGeneration: expectedGeneration))
+            data: data, commit: .refresh(credentialGeneration: expectedGeneration),
+            fallbackRefreshToken: auth.refreshToken)
     }
 
     // MARK: - 凭证生命周期
@@ -413,9 +459,11 @@ public actor BangumiAPIClient {
         return oauthExchangeGeneration
     }
 
-    private func saveAuthResponse(data: Data, commit: CredentialCommit) throws -> CredentialSnapshot {
+    private func saveAuthResponse(
+        data: Data, commit: CredentialCommit, fallbackRefreshToken: String? = nil
+    ) throws -> CredentialSnapshot {
         let response: BangumiTokenResponse = try decodeResponse(data)
-        let auth = BangumiAuth(response: response)
+        let auth = BangumiAuth(response: response, fallbackRefreshToken: fallbackRefreshToken)
         let encoded = try JSONEncoder().encode(auth)
         try Task.checkCancellation()
         guard let credentials = storeCredentials(auth, encodedData: encoded, commit: commit) else {

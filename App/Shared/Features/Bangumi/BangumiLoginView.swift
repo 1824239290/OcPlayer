@@ -14,6 +14,8 @@ import UIKit
 /// 回来，换 token 失败发生在这个视图之外，只有存在协调器上才显示得出来。
 struct BangumiLoginView: View {
     @Environment(BangumiCoordinator.self) private var bangumi
+    /// 网关设置（地址 + API Key）是登录的前置条件，与弹幕共用同一份配置。
+    @Environment(DanmakuModel.self) private var danmakuModel
 
     @State private var pendingAuthURL: URL?
     #if os(iOS)
@@ -35,11 +37,11 @@ struct BangumiLoginView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
 
-            if !bangumi.hasCredentials {
+            if !danmakuModel.dandanplayIsConfigured {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("尚未配置 Bangumi OAuth 凭证", systemImage: "key.slash")
+                    Label("尚未配置弹幕网关", systemImage: "key.slash")
                         .font(.callout.weight(.medium))
-                    Text("在 bgm.tv 的个人设置里创建 OAuth 应用（回调地址填 ocplayer://oauth/callback），然后把 client_id / client_secret 填进 Secrets.xcconfig。")
+                    Text("Bangumi 登录经网关换取令牌，需要先在「设置 → 弹幕」里填好网关地址与 API Key（Key 需带 bgm:oauth 权限）。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -76,7 +78,11 @@ struct BangumiLoginView: View {
 
     private func startOAuth() async {
         bangumi.authError = nil
-        pendingAuthURL = await BangumiAuthService.buildOAuthURL()
+        do {
+            pendingAuthURL = try await BangumiAuthService.buildOAuthURL()
+        } catch {
+            bangumi.authError = (error as? BangumiError)?.userMessage ?? "\(error)"
+        }
     }
 
     #if os(macOS)

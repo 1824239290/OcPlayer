@@ -101,13 +101,8 @@ public struct BangumiDomains: Hashable, Sendable {
     }
 }
 
-/// URL 构建入口。OAuth 域名由 `authDomain` 决定（origin → bgm.tv，next → next.bgm.tv）。
+/// URL 构建入口。
 public enum BangumiURL {
-    public enum AuthDomain: String, Sendable {
-        case origin
-        case next
-    }
-
     public static nonisolated var domains: BangumiDomains {
         BangumiDomains(mirrorRootDomain: mirrorRootDomain)
     }
@@ -126,13 +121,6 @@ public enum BangumiURL {
 
     public static nonisolated func next(path: String = "") -> URL {
         domains.nextURL(path: path)
-    }
-
-    public static nonisolated func auth(path: String = "", authDomain: AuthDomain) -> URL {
-        switch authDomain {
-        case .origin: return main(path: path)
-        case .next: return next(path: path)
-        }
     }
 
     /// 把 lain.bgm.tv 的图床地址重写到当前镜像的图片域名（仅当 host 匹配 CDN 时），并强制使用 HTTPS。

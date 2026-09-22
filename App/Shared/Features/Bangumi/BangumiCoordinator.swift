@@ -32,13 +32,10 @@ final class BangumiCoordinator {
     /// macOS 的 OAuth 回调走系统浏览器 → `onOpenURL`，没有这个字段的话失败就是彻底静默。
     var authError: String?
 
-    /// 是否配置了 OAuth 凭证（未配置时登录按钮显示引导文案）。
-    var hasCredentials: Bool {
-        // Bundle 里已注入的凭证非空才算可用。
-        let info = Bundle.main.infoDictionary
-        let clientID = info?["BANGUMI_APP_ID"] as? String ?? ""
-        let secret = info?["BANGUMI_APP_SECRET"] as? String ?? ""
-        return !clientID.isEmpty && !secret.isEmpty
+    /// 把网关地址 + API Key 同步给 BangumiKit：OAuth 授权、换 token、刷新都走网关，
+    /// 客户端不再持有 OAuth 应用密钥。启动时与网关设置变更时各推一次。
+    func applyGatewayConfiguration(_ configuration: BangumiGatewayConfiguration?) async {
+        await BangumiAuthService.configureGateway(configuration)
     }
 
     /// 启动时调用一次：异步建库。

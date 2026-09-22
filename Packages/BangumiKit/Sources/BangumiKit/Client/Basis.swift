@@ -1,27 +1,42 @@
 import Foundation
 
-/// Bangumi OAuth 应用凭证，登录/刷新 token 都需要。
-/// 通过 xcconfig 注入 Info.plist（BANGUMI_APP_ID / BANGUMI_APP_SECRET）读取。
-public struct BangumiAppInfo: Codable, Sendable {
-    public var clientId: String
-    public var clientSecret: String
-    public var callbackURL: String
+/// Bangumi OAuth 网关配置：授权、换 token、刷新全部经 OcPlay 网关，
+/// `client_secret` 只在网关侧，客户端不再持有任何 OAuth 应用密钥。
+public struct BangumiGatewayConfiguration: Sendable, Equatable {
+    public let baseURL: URL
+    public let apiKey: String
+    /// 必须以 `OcPlay/` 开头（网关强制校验）。
+    public let userAgent: String
 
-    public init(clientId: String, clientSecret: String, callbackURL: String) {
-        self.clientId = clientId
-        self.clientSecret = clientSecret
-        self.callbackURL = callbackURL
+    public init(baseURL: URL, apiKey: String, userAgent: String) {
+        self.baseURL = baseURL
+        self.apiKey = apiKey
+        self.userAgent = userAgent
     }
 }
 
-/// OAuth token 交换接口的响应体（snake_case 由解码器转换）。
+/// 网关 authorize 接口的响应体（snake_case 由解码器转换）。
+/// 客户端只用 `authorizeUrl`，其余字段是网关的回显。
+public struct BangumiAuthorizeResponse: Codable, Sendable {
+    public var authorizeUrl: String
+    public var clientId: String?
+    public var redirectUri: String?
+    public var state: String?
+}
+
+/// OAuth token 接口的响应体（snake_case 由解码器转换）。
+/// `expiresIn` 与 `refreshToken` 可缺省：Bangumi 只在轮换时返回新的 refresh_token，
+/// 网关照原样透传（不补默认值）。
 public struct BangumiTokenResponse: Codable, Sendable {
     public var accessToken: String
-    public var expiresIn: UInt
-    public var tokenType: String
-    public var refreshToken: String
+    public var expiresIn: UInt?
+    public var tokenType: String?
+    public var refreshToken: String?
 
-    public init(accessToken: String, expiresIn: UInt, tokenType: String, refreshToken: String) {
+    public init(
+        accessToken: String, expiresIn: UInt? = nil, tokenType: String? = nil,
+        refreshToken: String? = nil
+    ) {
         self.accessToken = accessToken
         self.expiresIn = expiresIn
         self.tokenType = tokenType
@@ -35,11 +50,17 @@ public struct BangumiAuth: Codable, Sendable {
     public var expiresAt: Date
     public var refreshToken: String
 
-    public init(response: BangumiTokenResponse) {
+    public init(response: BangumiTokenResponse, fallbackRefreshToken: String? = nil) {
         self.accessToken = response.accessToken
-        self.expiresAt = Date().addingTimeInterval(TimeInterval(response.expiresIn))
-        self.refreshToken = response.refreshToken
+        // 网关在 upstream 没给 expires_in 时会省略该字段：按 Bangumi 常规有效期兜底，
+        // 猜错也只是提前/滞后走一次刷新，不会让请求带着失效 token 白跑。
+        self.expiresAt = Date().addingTimeInterval(
+            TimeInterval(response.expiresIn ?? Self.defaultExpiresIn))
+        self.refreshToken = response.refreshToken ?? fallbackRefreshToken ?? ""
     }
+
+    /// 上游缺 `expires_in` 时的兜底有效期（Bangumi 默认一周）。
+    static let defaultExpiresIn: UInt = 604800
 
     public func isExpired() -> Bool {
         // 60s leeway：本机时钟略慢于服务器时，卡着过期点发出的请求会带着

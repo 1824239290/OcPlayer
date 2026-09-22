@@ -71,6 +71,20 @@ public enum BangumiError: Error, CustomStringConvertible, LocalizedError, Sendab
         }
     }
 
+    /// 错误响应体（解析网关错误信封用）；不带响应体的错误返回 nil。
+    var responseBody: String? {
+        switch self {
+        case .badRequest(let body), .forbidden(let body), .notFound(let body), .conflict(let body):
+            return body
+        case .http(_, let response, _):
+            return response
+        case .request(let message):
+            return message
+        default:
+            return nil
+        }
+    }
+
     public var userMessage: String {
         switch self {
         case .requireLogin:

@@ -1,3 +1,4 @@
+import BangumiKit
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
@@ -6,11 +7,13 @@ extension AppModel {
     // MARK: - 初始化 / 登录流程
 
     /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
-    func bootstrap() {
+    func bootstrap() async {
         guard phase == .boot else { return }
         // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
         // 从 init 挪到这里：构造 AppModel 不再有副作用，测试拿到的实例是干净的。
         bangumi.setup()
+        // Bangumi OAuth 与弹幕共用网关：配置要在任何登录/刷新之前注入。
+        await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)
         if let restored = MediaServerFactory.restore(from: store) {
             activate(server: restored)
         } else {

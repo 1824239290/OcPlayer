@@ -12,14 +12,9 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<!-- Bangumi OAuth：凭证从 Secrets.xcconfig 注入（BANGUMI_APP_ID / BANGUMI_APP_SECRET）。
-	     回调 scheme 固定为 ocplayer，App 处理 bangumi OAuth 回调。 -->
-	<key>BANGUMI_APP_ID</key>
-	<string>$(BANGUMI_APP_ID)</string>
-	<key>BANGUMI_APP_SECRET</key>
-	<string>$(BANGUMI_APP_SECRET)</string>
-	<key>BANGUMI_OAUTH_CALLBACK</key>
-	<string>ocplayer://oauth/callback</string>
+	<!-- Bangumi OAuth：client_id / client_secret 只在 OcPlay 网关，客户端不持有；
+	     授权回调 scheme 固定为 ocplayer（见下方 CFBundleURLTypes），
+	     网关换 token 后 App 处理 ocplayer://oauth/callback 回调。 -->
 	<!-- 更新检查的 GitHub 仓库：仓库挪窝只改这里，AppUpdateChecker 从 Bundle 读取。 -->
 	<key>GitHubRepoOwner</key>
 	<string>1824239290</string>
