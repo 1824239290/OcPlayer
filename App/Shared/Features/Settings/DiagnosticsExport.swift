@@ -9,15 +9,18 @@ import UniformTypeIdentifiers
 /// 记录本体是 JSONL（每行一条），头部是给人看的说明，工具解析照样从第一行 `{` 开始。
 enum DiagnosticsExport {
 
-    static func makeText() throws -> String {
+    static func makeText(
+        directory: URL = AppDiagnostics.fileURL.deletingLastPathComponent()
+    ) throws -> String {
         var text = try AppDiagnostics.logger.exportText(headerLines: headerLines())
         // 详细档的内核 trace（HTTP 逐请求 / demux 读失败）是独立文件，附在后面：
         // 「一个文件说明一切」比让用户分别找两个 jsonl 靠谱。
-        let directory = AppDiagnostics.fileURL.deletingLastPathComponent()
+        // trace 由内核**直接写盘**、不经 App 日志管线，所以这里显式过一遍脱敏：
+        // 逐请求记录里带完整 URI，用户直连的带签名 query 的 URL 会原样落进去。
         for name in KernelTraceSwitches.traceFileNames {
             let url = directory.appendingPathComponent(name)
             guard let body = try? String(contentsOf: url, encoding: .utf8), !body.isEmpty else { continue }
-            text += "\n\n# 内核 trace：\(name)\n" + body
+            text += "\n\n# 内核 trace：\(name)\n" + DiagnosticSanitizer.redact(body)
         }
         return text
     }
@@ -45,6 +48,7 @@ enum DiagnosticsExport {
         lines.append("详细日志: \(DiagnosticsSettings.isVerboseLoggingEnabled() ? "开（debug 档）" : "关（info 档）")")
         lines.append("时间: \(ISO8601DateFormatter().string(from: Date()))")
         lines.append("说明: 凭据 / 用户路径 / URL query 已在写盘前脱敏为 <redacted> 等占位；"
+            + "内核 trace 段同样已过脱敏。"
             + "以下每行是一条 JSONL 记录，按时间升序（归档在前、当前文件在后）。")
         return lines
     }

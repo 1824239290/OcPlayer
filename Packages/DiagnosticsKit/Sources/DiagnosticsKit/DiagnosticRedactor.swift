@@ -113,3 +113,15 @@ private final class SensitivePatterns: @unchecked Sendable {
             || normalized.contains("secret") || normalized.contains("authorization")
     }
 }
+
+/// 把**非日志管线来源**的文本过一遍同一套脱敏规则。
+///
+/// 管线内的记录由 `DiagnosticLogger` 在写盘前自动脱敏，不需要调用这里；
+/// 这个入口是给宿主准备的——典型场景是内核自己直接写盘的 trace 文件
+/// （`erika_http_trace.jsonl` 等，记录了逐请求 URI），导出诊断包前必须显式
+/// 过一遍，否则用户直连的带签名 query 的 URL 会裸着进导出包。
+public enum DiagnosticSanitizer {
+    public static func redact(_ text: String) -> String {
+        DiagnosticRedactor.redact(text)
+    }
+}

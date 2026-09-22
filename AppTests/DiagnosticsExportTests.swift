@@ -34,6 +34,25 @@ final class DiagnosticsExportTests: XCTestCase {
             "绝大多数行应是合法 JSONL（可解析 \(parsable)/\(lines.count)）")
     }
 
+    /// 内核 trace 由内核直接写盘、不经 App 日志管线，导出前必须显式过脱敏。
+    /// 直连 URL 的签名 query 是最现实的泄露面。
+    func testExportRedactsKernelTraceQuery() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("diag-export-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let secret = "supersecretvalue"
+        let traceURL = directory.appendingPathComponent(KernelTraceSwitches.traceFileNames[0])
+        let body = "[erika-http-trace] stage=head_request uri=https://cdn.example.com/movie.mkv?token=\(secret)\n"
+        try body.write(to: traceURL, atomically: true, encoding: .utf8)
+
+        let text = try DiagnosticsExport.makeText(directory: directory)
+        XCTAssertTrue(text.contains("# 内核 trace："), "trace 段应被带上")
+        XCTAssertFalse(text.contains(secret), "trace 里的 query 凭据必须被脱敏")
+        XCTAssertTrue(text.contains("?<redacted>"), "URL query 应替换为占位符")
+    }
+
     func testSuggestedFileNameIsTimestampedAndHasNoColon() {
         let name = DiagnosticsExport.suggestedFileName()
         XCTAssertTrue(name.hasPrefix("OcPlayer-诊断-"), name)
