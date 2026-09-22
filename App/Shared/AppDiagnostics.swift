@@ -3,8 +3,9 @@ import Foundation
 
 /// App 全局诊断日志入口。
 ///
-/// 单一 `DiagnosticLogger`，所有模块共用同一个 JSONL 文件
-/// （`~/Library/Logs/OcPlayer/diagnostics.jsonl`，2 MB 轮转保留 3 份），
+/// 单一 `DiagnosticLogger`，所有模块共用同一目录下的按会话 JSONL 文件
+/// （`~/Library/Logs/OcPlayer/diagnostics-<时间戳>-<会话id>.jsonl`，一次启动一个；
+/// 保留最新 10 个 / 总量 ≤50MB / 不超过 30 天，当前会话文件永不删），
 /// 同时镜像到 OSLog（Console.app 按 subsystem `dev.jumusu.OcPlayer` 过滤）。
 /// 敏感字段（token / Authorization 头 / 用户路径）由红actor 在写盘前统一脱敏。
 enum AppDiagnostics {

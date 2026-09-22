@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   macos:
-    name: macOS tests (AppTests + SwiftPM packages)
+    name: macOS + iOS tests (AppTests + SwiftPM packages)
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       # 内核改动未合并上游前，用 fork 上的预发布版（tag 对应 fork Release 资产）
       ERIKA_VERSION: v0.1.9+dolby.streaming.fix.dev
@@ -56,11 +56,35 @@ jobs:
             -derivedDataPath .local-build/ci-test \
             test
 
+      # iOS 与 macOS 共用同一份 OcPlayerTests 源码（OcPlayerTests-iOS target +
+      # OcPlayer-iOS.xcscheme 早已存在），此前 CI 只跑 macOS destination，iOS 独有
+      # 路径（方向锁、文件选择器生命周期）无回归。runner 可用机型随镜像变化，
+      # 用 simctl 动态取第一个可用 iPhone，不写死机型名。
+      - name: Run App tests (iOS simulator)
+        shell: bash
+        run: |
+          set -euo pipefail
+          device="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].name')"
+          if [[ -z "$device" || "$device" == "null" ]]; then
+            echo "No iPhone simulator available on this runner" >&2
+            exit 1
+          fi
+          echo "==> iOS simulator: $device"
+          xcodebuild \
+            -project OcPlayer.xcodeproj \
+            -scheme OcPlayer-iOS \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=$device" \
+            -derivedDataPath .local-build/ci-test-ios \
+            test
+
       - name: Run SwiftPM package tests
         shell: bash
         run: |
           set -euo pipefail
           for pkg in \
+              Packages/AppDesignKit \
               Packages/CoreModel \
               Packages/DiagnosticsKit \
               Packages/PlaybackKit \

@@ -34,7 +34,7 @@ Scripts/package-macos.sh v0.1.9  # 本地打包，产出与 CI 相同的 dist/ �
 
 > 内核当前取自 fork [1824239290/Erika](https://github.com/1824239290/Erika) 的预发布 `v0.1.9+dolby.streaming.fix.dev`（上游 v0.1.9 + libplacebo 风格杜比视界 RPU 映射 + **持久流预取**：worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；**预取窗口封顶**（本版新增）：worker 原先只从 reader 的 `paused` 标志得知「窗口满了」，而 reader 在包队列满时就不再刷新该标志，于是快源会把整个资源预取完（927 MB 片源实测缓存到 659 MB），现在每个 worker 按自己的生产偏移对绝对边界自我节流；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求；含杜比管线与 #137 request-cap/resume/rewind-cache 工作。公网慢源 A/B（三重跳转、单请求延迟 1–5 秒且约一半请求中途挂死）：开播 13.2 秒成功（旧版 60 秒看门狗超时、整场播不起来）、78.3 秒播放零卡顿（`buffered_ms: 0`、`stall_count: 0`）。该 release 附全平台资产，macOS / iOS 用同一内核）。CI 与本地脚本默认都指向 fork；上游合并后用 `ERIKA_VERSION=latest`（可省）+ `ERIKA_REPO` 不设即可切回官方。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` / `package-ios.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 
-> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 的 `OcPlayerTests` 加 8 个 SPM 包（AppDesignKit 未纳入，ErikaKit 只跑不依赖 GPU 的套件）；语义化版本标签触发 Release 工作流。
+> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 9 个 SPM 包（含 AppDesignKit；ErikaKit 只跑不依赖 GPU 的套件）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
 
 ## 使用建议
 
