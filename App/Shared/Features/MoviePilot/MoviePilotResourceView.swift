@@ -111,13 +111,21 @@ struct MoviePilotResourceView: View {
                 MoviePilotDownloadsView()
             }
         }
-        // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
-        // 页面保持透明；够不着时（iOS）或紧凑布局没有整窗层，页面自己垫。
+        // 氛围背景：与详情页同一套——整窗层够得着屏幕时（macOS 常规布局）由 AppShell
+        // 垫声明图，页面保持透明；够不着时（iOS）或紧凑布局没有整窗层，页面自己垫。
+        //
+        // 这里**不能**加 `.drawingGroup()`：它把子树栅格化进离屏纹理，纹理边界取的是
+        // 扩展前的 frame，会把末尾的 `.ignoresSafeArea()` 截断——图就出不了内容区，
+        // 到不了侧栏玻璃底下（iPadOS 上详情列是跨满整窗的，侧栏宽度是它的左安全区，
+        // 靠 `ignoresSafeArea` 才铺得过去）。没海报时兜底纯色，别落在 split view 的底上。
         .background {
-            if drawsOwnAmbience {
+            if drawsOwnAmbience, media.posterURL != nil {
                 BackdropAmbienceView(target: (url: media.posterURL, authHeader: nil), scrim: .detail)
-                    .drawingGroup()
-                    .allowsHitTesting(false)
+            }
+        }
+        .background {
+            if drawsOwnAmbience || media.posterURL == nil {
+                Color.pageBackground.ignoresSafeArea()
             }
         }
         .windowAmbience(
