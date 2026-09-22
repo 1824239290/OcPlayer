@@ -52,6 +52,14 @@ struct DetailView: View {
         ambientBackdropEnabled && model.shown.backdropImageTag != nil && app.server != nil
     }
 
+    /// 页面是否自己垫氛围层。整窗层够得着屏幕时（macOS）常规布局靠它，页面
+    /// 保持透明才能和侧栏连成一张图；够不着时（iOS，见
+    /// `WindowAmbience.reachesScreen`）常规布局也得自垫。紧凑布局没有整窗层，
+    /// 一律自垫。
+    private var drawsOwnAmbience: Bool {
+        !WindowAmbience.reachesScreen || horizontalSizeClass == .compact
+    }
+
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
@@ -150,11 +158,11 @@ struct DetailView: View {
         #elseif os(macOS)
         .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
-        // 氛围背景：常规布局（Mac/iPad 分栏）由 AppShell 的整窗层垫声明图——
-        // 页面不能垫不透明底，否则内容列和侧栏断成两截；氛围未生效或紧凑
-        // 布局（无整窗层）时页面自己垫氛围 + 兜底纯色。
+        // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
+        // 页面必须保持透明才能和侧栏连成一张图；够不着时（iOS）或紧凑布局没有
+        // 整窗层，页面自己垫氛围 + 兜底纯色。
         .background {
-            if horizontalSizeClass == .compact, isAmbientActive {
+            if drawsOwnAmbience, isAmbientActive {
                 BackdropAmbienceView(
                     target: model.shown.imageTarget(app.server, kind: .backdrop, width: 800),
                     scrim: .detail
@@ -162,12 +170,12 @@ struct DetailView: View {
             }
         }
         .background {
-            if horizontalSizeClass == .compact || !isAmbientActive {
+            if drawsOwnAmbience || !isAmbientActive {
                 Color.pageBackground.ignoresSafeArea()
             }
         }
         .windowAmbience(
-            isAmbientActive
+            WindowAmbience.reachesScreen && isAmbientActive
                 ? WindowAmbience(
                     url: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).url,
                     authHeader: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).authHeader

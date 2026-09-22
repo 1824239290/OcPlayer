@@ -93,6 +93,19 @@ struct WindowAmbience: Hashable {
     var url: URL?
     var authHeader: String?
     var scrim: BackdropAmbienceView.Scrim = .detail
+
+    /// 整窗层是否够得着屏幕。macOS 的 `NavigationSplitView` 是透明的，垫在它
+    /// **后面**的层能透出来，所以页面必须保持透明才能和侧栏连成一张连续的图；
+    /// iOS 的 `UISplitViewController` 自带不透明底，垫在后面的层到不了屏幕——
+    /// iOS 上声明氛围的页面得自己把同一张图垫在页面里（`windowAmbience(_:)`
+    /// 的各调用点据此分叉），否则页面直接落在 split view 的黑底上。
+    static let reachesScreen: Bool = {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }()
 }
 
 private struct WindowAmbienceSetter: ViewModifier {

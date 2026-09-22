@@ -45,6 +45,13 @@ struct MoviePilotResourceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
 
+    /// 页面是否自己垫氛围层：iOS 上整窗层到不了屏幕（见
+    /// `WindowAmbience.reachesScreen`），常规布局也得自垫；macOS 常规布局靠
+    /// 整窗层保持与侧栏连续，只有紧凑布局自垫。
+    private var drawsOwnAmbience: Bool {
+        !WindowAmbience.reachesScreen || sizeClass == .compact
+    }
+
     /// 懒加载窗口步长：触底一次续载这么多条。
     private static let displayPageSize = 60
 
@@ -104,16 +111,20 @@ struct MoviePilotResourceView: View {
                 MoviePilotDownloadsView()
             }
         }
-        // 氛围背景：常规布局（Mac/iPad 分栏）由 AppShell 的整窗层垫声明图——
-        // 页面保持透明，窗口里才是同一张连续的图；紧凑布局没有整窗层，自己垫。
+        // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
+        // 页面保持透明；够不着时（iOS）或紧凑布局没有整窗层，页面自己垫。
         .background {
-            if sizeClass == .compact {
+            if drawsOwnAmbience {
                 BackdropAmbienceView(target: (url: media.posterURL, authHeader: nil), scrim: .detail)
                     .drawingGroup()
                     .allowsHitTesting(false)
             }
         }
-        .windowAmbience(WindowAmbience(url: media.posterURL, authHeader: nil))
+        .windowAmbience(
+            WindowAmbience.reachesScreen
+                ? WindowAmbience(url: media.posterURL, authHeader: nil)
+                : nil
+        )
     }
 
     // MARK: - 头部英雄卡片
