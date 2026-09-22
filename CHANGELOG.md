@@ -11,6 +11,12 @@
 - **修 `BangumiAPIClient` 的 403 分支丢掉响应体**（真网关冒烟测出来的）：403 曾直接抛 `notice("请求被拒绝，请检查权限")`，body 被丢弃，于是网关的 `SCOPE_REQUIRED` / `OCPLAY_USER_AGENT_REQUIRED` / `GATEWAY_NOT_CONFIGURED` 全都退化成同一句笼统文案。现在 403 走标准映射（`.forbidden(body)`，面向用户的文案与旧行为逐字相同），网关错误码才解析得出来。
 
 
+### 修复
+
+- **iPad 详情页氛围背景落黑底**：详情页在常规布局下靠 AppShell 垫在整块 `NavigationSplitView` 后面的整窗层出氛围图——macOS 的 split view 是透明的，垫在后面能透出来；iOS 的 `UISplitViewController` 自带不透明底，垫在后面的层到不了屏幕，而页面自身又不垫任何底，于是整页落在 split view 的底上（深色外观下与纯黑无异：实测正文、顶栏条带、左缘全为 `(0,0,0)`）。新增 `WindowAmbience.reachesScreen` 判据（macOS true / iOS false），详情页与 MoviePilot 资源页按它分叉：够不着屏幕时常规布局也自己垫 `BackdropAmbienceView`，并补 `Color.pageBackground` 兜底（详情页原有兜底的条件同步放宽）；`windowAmbience(_:)` 声明仍只在够得着屏幕的平台发——iOS 上没人消费它，省掉一次窗口大小的离屏渲染。修复后实测正文 `(85,77,67)`、顶栏 `(153,140,102)` 都有图；macOS 上 `reachesScreen` 为 true、`drawsOwnAmbience` 退化成原来的 `horizontalSizeClass == .compact`，行为不变。
+
+- **MoviePilot 资源页侧栏玻璃底下没有氛围图**（iPad；macOS 正常）：该页的氛围图多挂了一句 `.drawingGroup()`，它把子树栅格化进离屏纹理、纹理边界取扩展前的 frame，于是把链尾的 `.ignoresSafeArea()` 截断——图出不了内容区。iPadOS 上详情列本身跨满整窗、侧栏宽度是它的左安全区，全靠那一步 `ignoresSafeArea` 才铺到侧栏玻璃底下（详情页没有这句，所以它的背景能铺满整窗、侧栏能透出来，实测左缘 `(79,20,14)`）。去掉它与 `.allowsHitTesting(false)`（`.background` 本就在内容之下，不吃点击），和详情页写法对齐；顺带补上「没海报时兜底 `Color.pageBackground`」。修复前侧栏内部 `(21,21,20)` 中性灰、左缘 `(0,0,0)` 纯黑；修复后 `(31,35,30)` / `(27,47,41)`，与内容列 `(64,68,49)` 同族、侧栏右缘横切平滑过渡，内容列像素不变。注意 `drawingGroup()` 当初是为「资源搜索页掉帧」加的，但那批同时删掉了 300 多行实时玻璃着色器；滚动资源列表若有掉帧再单独议。
+
 ### 待跟进（内核侧，fork Erika）
 
 - **开播 HEAD 探测约 3.8 秒**：0.1.8 记账的待跟进项①。内核 open 先发 HEAD 探测、失败再回退一字节 range；部分源站对 HEAD 恒回 403（如三重跳转的 strm 源），这段探测纯属浪费。修复在内核（fork Erika），本仓只记账；核心里能省掉「HEAD 失败再 range」的往返即可。
