@@ -79,6 +79,7 @@ struct PlayerScreen: View {
     /// 拖动中每个 onChanged（60-120Hz）只让读它的预览条/OSD 子树重算，
     /// 不再让整棵 PlayerScreen body（含整套 Glass 树）逐帧跟着跑。
     @State private var panFeedback = PlayerPanFeedback()
+    @State private var systemVolume = SystemVolumeState()
     /// 一次触摸的起点（nil = 手指不在屏上）。单击/双击/长按全靠它计时判定。
     @State private var touchStart: TouchStart?
     /// 本触摸最近一次位移；长按定时器到点时判断「手指是否还停在原地」用。
@@ -226,6 +227,8 @@ struct PlayerScreen: View {
             .allowsHitTesting(false)
 
             #if os(iOS)
+            SystemVolumeControl(state: systemVolume)
+
             // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
             // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
             PlayerPanFeedbackOverlay(feedback: panFeedback)
@@ -509,8 +512,8 @@ struct PlayerScreen: View {
             session.verticalStart = currentScreenBrightness()
             session.verticalValue = session.verticalStart
         case .volume:
-            session.verticalStart = controller.volume
-            session.verticalValue = controller.volume
+            session.verticalStart = systemVolume.volume
+            session.verticalValue = systemVolume.volume
         }
         panFeedback.session = session
         updatePan(translation: translation)
@@ -541,7 +544,7 @@ struct PlayerScreen: View {
                 extent: panAreaSize.height
             )
             session.verticalValue = value
-            controller.applyVolume(value)
+            systemVolume.volume = value
         }
         panFeedback.session = session
     }
@@ -1057,11 +1060,10 @@ private struct PlayerPanFeedbackOverlay: View {
                     durationSeconds: session.durationSeconds
                 )
             }
-            if let session = feedback.session, session.mode != .seek {
+            if let session = feedback.session, session.mode == .brightness {
                 VStack(spacing: 0) {
                     PlayerAdjustOSDBadge(
-                        systemImage: session.mode == .brightness
-                            ? "sun.max.fill" : "speaker.wave.2.fill",
+                        systemImage: "sun.max.fill",
                         value: session.verticalValue
                     )
                     .padding(.top, 14)
