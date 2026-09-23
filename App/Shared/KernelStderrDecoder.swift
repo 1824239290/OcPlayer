@@ -48,6 +48,10 @@ struct KernelStderrDecoder {
         if remainder.count > maxLineBytes {
             remainder = remainder.prefix(maxLineBytes)
         }
+        // `remainder[a...]` 是共享底层存储的切片：已消费前缀留在存储里，下次 append 沿偏移
+        // realloc 时把它们一并保住，缓冲随累计 stderr 无限涨（实测一条会话残留 60MB+）。
+        // 消费完把残行拷到全新右尺寸存储，让旧存储随切片离开被释放。残行 ≤ maxLineBytes，拷贝可忽略。
+        remainder = Data(remainder)
         return out
     }
 

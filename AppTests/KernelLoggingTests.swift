@@ -1,4 +1,5 @@
 import DiagnosticsKit
+import MachO
 import XCTest
 @testable import OcPlayer
 
@@ -78,6 +79,35 @@ final class KernelLoggingTests: XCTestCase {
         let later = start.addingTimeInterval(1)
         XCTAssertEqual(decoder.ingest(Data("ErikaHDR again\n".utf8), now: later).count, 1)
         XCTAssertNil(decoder.takeDroppedSummary(now: later), "没有丢弃就不该有汇总")
+    }
+
+    /// 防回归：`remainder = remainder[idx...]` 切出的是共享底层存储的切片，已消费字节会
+    /// 留在存储里被 append 一路 realloc 保住（实测一条播放会话残留 60MB+）。消费完必须压实。
+    func testDecoderDoesNotRetainConsumedBytes() {
+        var decoder = KernelStderrDecoder()
+        // 与内核 http_cache_hit 一行相仿的长度。
+        let line = Data("{\"event\":\"http_cache_hit\",\"start\":74486,\"length\":172041}\n".utf8)
+        let before = Self.mallocInUseBytes()
+        for _ in 0..<200_000 { _ = decoder.ingest(line) }
+        let grown = Self.mallocInUseBytes() - before
+        // ~12MB 字节流过；压实后活内存不该跟着涨。留 2MB 余量挡分配器噪声。
+        XCTAssertLessThan(grown, 2 * 1024 * 1024, "已消费字节被 remainder 存储留住了 \(grown) 字节")
+    }
+
+    private static func mallocInUseBytes() -> UInt64 {
+        var total: UInt64 = 0
+        var zones: UnsafeMutablePointer<vm_address_t>?
+        var count: UInt32 = 0
+        malloc_get_all_zones(mach_task_self_, nil, &zones, &count)
+        for index in 0..<Int(count) {
+            guard let raw = zones?[index],
+                  let zone = UnsafeMutableRawPointer(bitPattern: raw)?
+                    .assumingMemoryBound(to: malloc_zone_t.self) else { continue }
+            var stats = malloc_statistics_t()
+            malloc_zone_statistics(zone, &stats)
+            total += UInt64(stats.size_in_use)
+        }
+        return total
     }
 
     // MARK: - KernelTraceSwitches
