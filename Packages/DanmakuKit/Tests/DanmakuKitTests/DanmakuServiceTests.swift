@@ -58,6 +58,39 @@ final class DanmakuServiceTests: XCTestCase {
         XCTAssertEqual(storedComments?.first?.m, "hi")
     }
 
+    func testPayloadBuildsOnlyTheRequestedRepresentation() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-danmaku-payload-format-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let service = DanmakuService(cache: DanmakuCache(directory: directory))
+        await service.persistComments(
+            [DanmakuComment(cid: 1, p: "1,1,16777215,100", m: "hello")],
+            for: 12
+        )
+        let client = DanmakuGatewayClient(
+            configuration: DandanplayConfiguration(
+                baseURL: URL(string: "https://gateway.example.com")!,
+                apiKey: "key",
+                userAgent: "OcPlay/0.1.3 (macOS; arm64)"
+            ),
+            session: TestSupport.mockedSession()
+        )
+        let match = DanmakuEpisodeMatch(episodeID: 12, animeTitle: "作品", episodeTitle: "第 1 话")
+
+        let overlay = try await service.payload(for: match, client: client, format: .overlay)
+        XCTAssertEqual(overlay.entries?.count, 1)
+        XCTAssertNil(overlay.json)
+
+        let kernel = try await service.payload(for: match, client: client, format: .kernelTrack)
+        XCTAssertNil(kernel.entries)
+        XCTAssertNotNil(kernel.json)
+
+        let both = try await service.payload(for: match, client: client)
+        XCTAssertEqual(both.entries?.count, 1)
+        XCTAssertNotNil(both.json)
+    }
+
     func testAutomaticMatchCanDeferPersistenceUntilCallerConfirmsGeneration() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ocp-danmaku-service-\(UUID().uuidString)", isDirectory: true)

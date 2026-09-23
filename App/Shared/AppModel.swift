@@ -85,6 +85,8 @@ final class AppModel {
     struct LibraryPage: Equatable {
         var items: [MediaItem] = []
         var totalCount: Int?
+        var nextStartIndex = 0
+        var lastPageWasFull = false
     }
 
     var libraryPages: [MediaLibrary.ID: LibraryPage] = [:]

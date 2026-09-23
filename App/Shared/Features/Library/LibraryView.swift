@@ -23,8 +23,6 @@ struct LibraryView: View {
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var loadError: String?
-    /// 最近一次拉取是否为服务端满页（hasMore 在总数未知时的判据）。
-    @State private var lastPageFull = false
     @State private var activeLoadID: UUID?
 
     /// 每库独立记忆的排序字段与方向（key 带库 id，各库互不干扰）。
@@ -51,6 +49,8 @@ struct LibraryView: View {
     /// 侧栏切走再切回来时不用从第一页重拉（见 `AppModel.LibraryPage`）。
     private var items: [MediaItem] { app.libraryPages[library.id]?.items ?? [] }
     private var totalCount: Int? { app.libraryPages[library.id]?.totalCount }
+    private var nextStartIndex: Int { app.libraryPages[library.id]?.nextStartIndex ?? 0 }
+    private var lastPageWasFull: Bool { app.libraryPages[library.id]?.lastPageWasFull ?? false }
 
     private var isCompact: Bool {
         horizontalSizeClass == .compact
@@ -77,11 +77,11 @@ struct LibraryView: View {
     private var hasMore: Bool {
         guard items.count < Self.maxCachedItems else { return false }
         if let totalCount {
-            return items.count < totalCount
+            return nextStartIndex < totalCount
         }
         // 总数未知时：上一页是服务端满页才允许再试。按本地条数取模的启发式
         // 会被去重/过滤干扰（100 条里去重掉 3 条就误判「没有更多了」）。
-        return lastPageFull
+        return lastPageWasFull
     }
 
     var body: some View {
@@ -322,7 +322,7 @@ struct LibraryView: View {
 
         let libraryID = library.id
         let kinds = itemKinds
-        let startIndex = reset ? 0 : items.count
+        let startIndex = reset ? 0 : nextStartIndex
 
         if reset {
             isLoading = true
@@ -352,14 +352,14 @@ struct LibraryView: View {
             var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())
             if reset {
                 cached.items = page.items
-                lastPageFull = false
             } else {
                 // 防御服务端重复页：按 id 去重追加。
-                let existing = Set(cached.items.map(\.id))
-                cached.items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
+                var existing = Set(cached.items.map(\.id))
+                cached.items.append(contentsOf: page.items.filter { existing.insert($0.id).inserted })
             }
             cached.totalCount = page.totalRecordCount
-            lastPageFull = page.items.count == Self.pageSize
+            cached.nextStartIndex = startIndex + page.items.count
+            cached.lastPageWasFull = page.items.count >= Self.pageSize
             app.cacheLibraryPage(cached, for: libraryID)
             loadError = nil
         } catch is CancellationError {

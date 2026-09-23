@@ -139,6 +139,68 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertEqual(outcome, .loaded(episodeID: 2002, commentCount: 1, title: "旧番 · 第2话", introHint: nil))
     }
 
+    func testOverlayRouteDoesNotBuildKernelJSON() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        await service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 2012, shiftSeconds: 0, animeTitle: "旧番", episodeTitle: "第 1 话"),
+            cacheKey: context.cacheKey,
+            revision: 0
+        )
+        await service.persistComments(
+            [DanmakuComment(cid: 1, p: "1,1,16777215,1", m: "overlay")],
+            for: 2012
+        )
+        playback.danmakuPayloadFormat = .overlay
+        MockURLProtocol.handler = { _ in
+            XCTFail("缓存命中不应请求网络")
+            throw URLError(.badServerResponse)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+
+        XCTAssertEqual(outcome, .loaded(episodeID: 2012, commentCount: 1, title: "旧番 · 第 1 话", introHint: nil))
+        XCTAssertEqual(playback.injectedEntries?.count, 1)
+        XCTAssertNil(playback.injectedJSON)
+    }
+
+    func testKernelTrackRouteInjectsJSONWithoutOverlayEntries() async throws {
+        let configuration = makeConfiguration()
+        let context = makeContext()
+        await service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 2022, shiftSeconds: 0, animeTitle: "旧番", episodeTitle: "第 1 话"),
+            cacheKey: context.cacheKey,
+            revision: 0
+        )
+        await service.persistComments(
+            [DanmakuComment(cid: 1, p: "1,1,16777215,1", m: "kernel")],
+            for: 2022
+        )
+        playback.danmakuPayloadFormat = .kernelTrack
+        MockURLProtocol.handler = { _ in
+            XCTFail("缓存命中不应请求网络")
+            throw URLError(.badServerResponse)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+
+        XCTAssertEqual(outcome, .loaded(episodeID: 2022, commentCount: 1, title: "旧番 · 第 1 话", introHint: nil))
+        XCTAssertEqual(playback.injectedEntries, [])
+        XCTAssertNotNil(playback.injectedJSON)
+    }
+
     func testNoMatchOutcome() async throws {
         let configuration = makeConfiguration()
         let context = makeContext()
@@ -773,6 +835,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
 /// 假播放器：记录注入内容与调用序列，并把每个动作当作「当前代次有效」。
 @MainActor
 private final class FakePlaybackHost: DanmakuPlaybackHosting {
+    var danmakuPayloadFormat: DanmakuPayloadFormat = .both
     var injectedJSON: String?
     var injectedEntries: [DanmakuJSONParser.Entry]?
     var injectedOffset: Duration?

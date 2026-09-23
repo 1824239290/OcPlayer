@@ -79,4 +79,33 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertNil(app.retryPlaybackItem)
         XCTAssertNil(app.nextEpisode)
     }
+
+    func testLibraryPageCursorIsRetainedPerLibrary() {
+        let app = AppModel()
+        let firstLibrary = MediaLibrary(id: "movies", name: "电影", collectionType: .movies)
+        let secondLibrary = MediaLibrary(id: "shows", name: "剧集", collectionType: .tvshows)
+        let firstPage = AppModel.LibraryPage(
+            items: [MediaItem(id: "movie-1", name: "电影1", kind: .movie)],
+            totalCount: 500,
+            nextStartIndex: 200,
+            lastPageWasFull: true
+        )
+        let secondPage = AppModel.LibraryPage(
+            items: [MediaItem(id: "show-1", name: "剧集1", kind: .series)],
+            totalCount: 300,
+            nextStartIndex: 100,
+            lastPageWasFull: true
+        )
+
+        app.cacheLibraryPage(firstPage, for: firstLibrary.id)
+        app.cacheLibraryPage(secondPage, for: secondLibrary.id)
+
+        XCTAssertEqual(app.libraryPages[firstLibrary.id]?.nextStartIndex, 200)
+        XCTAssertEqual(app.libraryPages[secondLibrary.id]?.nextStartIndex, 100)
+
+        app.clearLibraryPage(for: firstLibrary.id)
+
+        XCTAssertNil(app.libraryPages[firstLibrary.id])
+        XCTAssertEqual(app.libraryPages[secondLibrary.id]?.nextStartIndex, 100)
+    }
 }

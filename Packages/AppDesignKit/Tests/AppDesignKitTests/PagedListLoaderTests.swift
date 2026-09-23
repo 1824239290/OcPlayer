@@ -97,6 +97,55 @@ private final class PagedListLoaderTests: XCTestCase {
         XCTAssertEqual(stub.calls, [0, 2])
     }
 
+    func testCursorAdvancesByRawRowsAcrossOverlappingAndDuplicatePages() async {
+        let stub = Stub()
+        stub.pages = [
+            [Row(id: 1), Row(id: 2), Row(id: 2)],
+            [Row(id: 2), Row(id: 3), Row(id: 3)],
+            [Row(id: 4), Row(id: 5)],
+        ]
+        stub.totals = [8, 8, 8]
+        let loader = makeLoader(stub, pageSize: 3)
+
+        await loader.loadInitial()
+        await loader.loadMore()
+        await loader.loadMore()
+
+        XCTAssertEqual(loader.items, [Row(id: 1), Row(id: 2), Row(id: 3), Row(id: 4), Row(id: 5)])
+        XCTAssertFalse(loader.hasMore)
+        XCTAssertEqual(stub.calls, [0, 3, 6])
+    }
+
+    func testRemovingLocalItemDoesNotMoveServerCursor() async {
+        let stub = Stub()
+        stub.pages = [[Row(id: 1), Row(id: 2)], [Row(id: 3), Row(id: 4)]]
+        stub.totals = [4, 4]
+        let loader = makeLoader(stub)
+
+        await loader.loadInitial()
+        loader.remove(id: 2)
+        await loader.loadMore()
+
+        XCTAssertEqual(loader.items, [Row(id: 1), Row(id: 3), Row(id: 4)])
+        XCTAssertEqual(stub.calls, [0, 2])
+    }
+
+    func testFailedInitialReloadPreservesCursorForNextPage() async {
+        let stub = Stub()
+        stub.pages = [[Row(id: 1), Row(id: 2)], [Row(id: 3), Row(id: 4)]]
+        stub.totals = [4, 4]
+        let loader = makeLoader(stub)
+
+        await loader.loadInitial()
+        stub.error = SampleError()
+        await loader.loadInitial()
+        stub.error = nil
+        await loader.loadMore()
+
+        XCTAssertEqual(loader.items, [Row(id: 1), Row(id: 2), Row(id: 3), Row(id: 4)])
+        XCTAssertEqual(stub.calls, [0, 0, 2])
+    }
+
     func testHasMoreWithoutTotalFallsBackToFullPageHeuristic() async {
         let stub = Stub()
         stub.pages = [[Row(id: 1), Row(id: 2)], [Row(id: 3)]]  // 第二页不满 → 没有更多了

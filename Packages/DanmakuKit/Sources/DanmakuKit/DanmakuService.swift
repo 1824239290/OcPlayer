@@ -1,5 +1,11 @@
 import Foundation
 
+public enum DanmakuPayloadFormat: Sendable, Equatable {
+    case overlay
+    case kernelTrack
+    case both
+}
+
 /// A renderer-ready comment payload resolved from the permanent match and TTL cache.
 ///
 /// `entries` 是 overlay 渲染器的直接输入（结构直传，装载侧不再解 JSON）；
@@ -129,7 +135,8 @@ public actor DanmakuService {
 
     public func payload(
         for match: DanmakuEpisodeMatch,
-        client: DanmakuGatewayClient
+        client: DanmakuGatewayClient,
+        format: DanmakuPayloadFormat = .both
     ) async throws -> DanmakuPayload {
         let comments: [DanmakuComment]
         if let cached = await cache.comments(for: match.episodeID) {
@@ -142,8 +149,8 @@ public actor DanmakuService {
         let detected = DanmakuIntroDetector.detect(in: comments)
         return DanmakuPayload(
             match: match,
-            entries: DanmakuJSONConverter.entries(from: comments),
-            json: DanmakuJSONConverter.erikaJSON(from: comments),
+            entries: format == .kernelTrack ? nil : DanmakuJSONConverter.entries(from: comments),
+            json: format == .overlay ? nil : DanmakuJSONConverter.erikaJSON(from: comments),
             commentCount: comments.count,
             detectedIntroHint: detected
         )

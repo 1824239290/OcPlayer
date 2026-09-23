@@ -59,6 +59,8 @@ public final class PagedListLoader<Item: Identifiable> {
     private var generation: UInt64 = 0
     /// 最后一页是否满页（服务端不返 total 时的 hasMore 依据）。
     private var lastPageWasFull = true
+    /// 服务端游标由原始返回条数推进，不能从去重后或被本地删除的 items 推导。
+    private var nextOffset = 0
 
     public let pageSize: Int
     private let fetch: @MainActor (Int, Int) async throws -> Page
@@ -84,8 +86,8 @@ public final class PagedListLoader<Item: Identifiable> {
     }
 
     public var hasMore: Bool {
-        if let totalCount { return items.count < totalCount }
-        return lastPageWasFull && !items.isEmpty
+        if let totalCount { return nextOffset < totalCount }
+        return lastPageWasFull && nextOffset > 0
     }
 
     /// 首载 / 整份重取。进行中的翻页结果随后会被代次守卫丢弃。
@@ -101,6 +103,7 @@ public final class PagedListLoader<Item: Identifiable> {
             guard generation == gen else { return }
             items = Self.deduped(page.items)
             totalCount = page.total
+            nextOffset = page.items.count
             lastPageWasFull = page.items.count >= pageSize
         } catch {
             guard generation == gen, !isCancellation(error) else { return }
@@ -115,11 +118,12 @@ public final class PagedListLoader<Item: Identifiable> {
         isLoadingMore = true
         defer { if generation == gen { isLoadingMore = false } }
         do {
-            let page = try await fetch(items.count, pageSize)
+            let page = try await fetch(nextOffset, pageSize)
             guard generation == gen else { return }
-            let existing = Set(items.map(\.id))
-            items.append(contentsOf: page.items.filter { !existing.contains($0.id) })
+            var existing = Set(items.map(\.id))
+            items.append(contentsOf: page.items.filter { existing.insert($0.id).inserted })
             totalCount = page.total ?? totalCount
+            nextOffset += page.items.count
             lastPageWasFull = page.items.count >= pageSize
         } catch {
             // 翻页失败不覆盖整页错误位——列表内容还在，错误留给下一次滚动触发重试。

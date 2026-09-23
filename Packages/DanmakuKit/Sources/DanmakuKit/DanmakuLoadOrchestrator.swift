@@ -17,6 +17,8 @@ public enum DanmakuLoadOutcome: Equatable, Sendable {
 /// 编排器在 async 上下文调用时会隐式 hop 到主线程。
 @MainActor
 public protocol DanmakuPlaybackHosting {
+    var danmakuPayloadFormat: DanmakuPayloadFormat { get }
+
     /// 等待当前播放源就绪（可注入弹幕）。超时或源已切换返回 false。
     func waitUntilReady(uuid: UUID, timeout: Duration) async -> Bool
     /// 装载弹幕；返回 false 表示播放源已不在当前代次（调用方应放弃并终止）。
@@ -33,6 +35,10 @@ public protocol DanmakuPlaybackHosting {
     ) throws -> Bool
     /// 清空当前源上的弹幕；返回 false 语义同上。
     func clearDanmaku(uuid: UUID) throws -> Bool
+}
+
+public extension DanmakuPlaybackHosting {
+    var danmakuPayloadFormat: DanmakuPayloadFormat { .both }
 }
 
 /// 把 自动匹配 → 弹幕正文缓存 → 装载到播放器 串成可测的流水线。
@@ -410,7 +416,8 @@ public struct DanmakuLoadOrchestrator {
             try Task.checkCancellation()
             let payload = try await service.payload(
                 for: match,
-                client: client
+                client: client,
+                format: playback.danmakuPayloadFormat
             )
             try Task.checkCancellation()
             let name = Self.matchTitle(match)
@@ -422,10 +429,10 @@ public struct DanmakuLoadOrchestrator {
                 return .failed(message: "播放已切换")
             }
             let accepted: Bool
-            if let entries = payload.entries {
+            if payload.entries != nil || payload.json != nil {
                 accepted = try await playback.replaceDanmaku(
                     uuid: uuid,
-                    entries: entries,
+                    entries: payload.entries ?? [],
                     json: payload.json,
                     name: name,
                     offset: .seconds(Double(match.shiftSeconds))
@@ -446,7 +453,7 @@ public struct DanmakuLoadOrchestrator {
                 detected: payload.detectedIntroHint,
                 forceRematch: forceRematch
             )
-            if payload.entries == nil {
+            if payload.entries == nil, payload.json == nil {
                 return .empty(episodeID: match.episodeID, title: name, introHint: introHint)
             }
             return .loaded(
