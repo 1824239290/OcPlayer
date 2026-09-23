@@ -15,6 +15,7 @@ struct PlayerHUDOverlay: View {
     let playbackID: String
     let title: String
     let kicker: String
+    let panFeedback: PlayerPanFeedback
 
     // 状态归 PlayerScreen：跳过按钮层要据它让位（面板打开时跳过钮浮到面板上方）。
     @Binding var expandedTab: PlayerHUDActionTab?
@@ -63,6 +64,7 @@ struct PlayerHUDOverlay: View {
                     playbackID: playbackID,
                     title: title,
                     kicker: kicker,
+                    panFeedback: panFeedback,
                     onInteractionChanged: onInteractionChanged
                 )
             }
@@ -278,19 +280,21 @@ struct PlayerHUDTransportControls: View {
     let isNarrow: Bool
 
     var body: some View {
-        HStack(spacing: isNarrow ? 38 : 58) {
-            transportButton("gobackward.10", label: "后退 10 秒", primary: false) {
-                controller.skip(by: -10)
-            }
-            transportButton(
-                controller.state.state == .playing ? "pause.fill" : "play.fill",
-                label: controller.state.state == .playing ? "暂停" : "播放",
-                primary: true,
-                symbolTransition: true,
-                action: controller.togglePlayPause
-            )
-            transportButton("goforward.10", label: "前进 10 秒", primary: false) {
-                controller.skip(by: 10)
+        GlassEffectContainer(spacing: isNarrow ? 38 : 58) {
+            HStack(spacing: isNarrow ? 38 : 58) {
+                transportButton("gobackward.10", label: "后退 10 秒", primary: false) {
+                    controller.skip(by: -10)
+                }
+                transportButton(
+                    controller.state.state == .playing ? "pause.fill" : "play.fill",
+                    label: controller.state.state == .playing ? "暂停" : "播放",
+                    primary: true,
+                    symbolTransition: true,
+                    action: controller.togglePlayPause
+                )
+                transportButton("goforward.10", label: "前进 10 秒", primary: false) {
+                    controller.skip(by: 10)
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -318,6 +322,7 @@ struct PlayerHUDTransportControls: View {
                 .contentTransition(symbolTransition ? .symbolEffect(.replace) : .identity)
         }
         .buttonStyle(PlayerHUDTransportButtonStyle())
+        .glassEffect(.regular.interactive(), in: Circle())
         .help(label)
         .accessibilityLabel(label)
     }
@@ -331,4 +336,3 @@ struct PlayerHUDTransportButtonStyle: ButtonStyle {
             .motion(Motion.fast, value: configuration.isPressed)
     }
 }
-

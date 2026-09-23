@@ -76,47 +76,6 @@ struct PlayerPanSession: Equatable {
 }
 
 #if os(iOS)
-/// 横滑 seek 的独立进度条：拖动期间单独浮在底部，HUD 保持原显隐（bilibili 式）。
-struct PlayerSeekPreviewBar: View {
-    let fraction: Double
-    let targetSeconds: Double
-    let durationSeconds: Double
-
-    var body: some View {
-        VStack {
-            Spacer(minLength: 0)
-            // 实底背板（PlayerHUDPanel）：与音量/亮度 OSD 同族。拖动期间 HUD 不唤醒，
-            // 裸压视频的白字白条在亮场面下会失去对比度。
-            PlayerHUDPanel(in: Capsule()) {
-                VStack(spacing: 8) {
-                    Text(
-                        "\(playerHUDTimeLabel(.seconds(targetSeconds)))"
-                            + " / \(playerHUDTimeLabel(.seconds(durationSeconds)))"
-                    )
-                    .font(.callout.monospacedDigit().weight(.semibold))
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(.white.opacity(0.25))
-                            Capsule()
-                                .fill(.white)
-                                .frame(width: max(0, min(1, fraction)) * proxy.size.width)
-                        }
-                    }
-                    .frame(height: 4)
-                }
-                // 实底黑面板上用固定白（PlayerHUDPanel 契约），不随系统外观翻转。
-                .foregroundStyle(PlayerHUDPalette.primary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 56)
-        }
-        .allowsHitTesting(false)
-        .transition(.section)
-    }
-}
-
 /// 亮度 / 音量纵滑的 OSD 徽章：顶部居中，拖动期间实时反映当前值。
 struct PlayerAdjustOSDBadge: View {
     let systemImage: String

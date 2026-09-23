@@ -53,7 +53,7 @@ struct PlayerLoadingLayer: View {
                                 Label(UIStrings.retry, systemImage: "arrow.clockwise")
                                     .font(.callout.weight(.semibold))
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .tint(.red)
                         }
                     }
@@ -68,14 +68,13 @@ struct PlayerLoadingLayer: View {
 private struct PlayerGlassCancelButton: View {
     let action: () -> Void
     var body: some View {
-        PlayerHUDGlassSurface(in: Capsule()) {
-            Button("取消", action: action)
-                .buttonStyle(.plain)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
-        }
+        Button("取消", action: action)
+            .buttonStyle(.plain)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .glassEffect(.regular.interactive(), in: Capsule())
     }
 }
 
@@ -124,22 +123,24 @@ struct PlayerPlaybackErrorBadge: View {
     var body: some View {
         VStack {
             Spacer()
-            PlayerHUDPanel(in: RoundedRectangle(cornerRadius: 18)) {
-                HStack(spacing: 14) {
-                    Label(controller.state.lastError ?? controller.setupError ?? "播放出错",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(PlayerHUDPalette.primary, Color.red)
-                    Button(action: app.retryPlayback) {
-                        Label(UIStrings.retry, systemImage: "arrow.clockwise")
-                            .font(.callout.weight(.semibold))
-                            .padding(.horizontal, 4)
+            GlassEffectContainer(spacing: 14) {
+                PlayerHUDPanel(in: RoundedRectangle(cornerRadius: 18)) {
+                    HStack(spacing: 14) {
+                        Label(controller.state.lastError ?? controller.setupError ?? "播放出错",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout)
+                            .foregroundStyle(PlayerHUDPalette.primary, Color.red)
+                        Button(action: app.retryPlayback) {
+                            Label(UIStrings.retry, systemImage: "arrow.clockwise")
+                                .font(.callout.weight(.semibold))
+                                .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .tint(.red)
+                        .disabled(controller.lastRequest == nil || app.playbackPreparation != nil)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .disabled(controller.lastRequest == nil || app.playbackPreparation != nil)
+                    .padding(12)
                 }
-                .padding(12)
             }
             .padding(.bottom, 140)
         }

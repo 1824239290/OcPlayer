@@ -66,6 +66,8 @@ struct PlayerScreen: View {
     @State private var isClosing = false
     /// 只存布局档位，不存逐像素宽度，窗口缩放时不会让整套 HUD 每像素重建。
     @State private var isNarrow = false
+    /// iOS 横滑 seek 时只显示底部时间轴，其余 HUD 暂时隐藏。
+    @State private var panFeedback = PlayerPanFeedback()
     #if os(macOS)
     @State private var isFullscreen = false
     /// 键盘监听器引用（安装后持有，退出播放器时移除）。用 NSEvent local monitor 而不是
@@ -75,11 +77,8 @@ struct PlayerScreen: View {
     #if os(iOS)
     /// 画面手势层尺寸（左右半屏分界、纵滑量程都按它折算）。
     @State private var panAreaSize: CGSize = .zero
-    /// 活动中的滑动手势反馈；nil = 手指不在屏上。@Observable 引用类型：
-    /// 拖动中每个 onChanged（60-120Hz）只让读它的预览条/OSD 子树重算，
-    /// 不再让整棵 PlayerScreen body（含整套 Glass 树）逐帧跟着跑。
-    @State private var panFeedback = PlayerPanFeedback()
     @State private var systemVolume = SystemVolumeState()
+    @State private var shouldRestoreHUDAfterSeek = false
     /// 一次触摸的起点（nil = 手指不在屏上）。单击/双击/长按全靠它计时判定。
     @State private var touchStart: TouchStart?
     /// 本触摸最近一次位移；长按定时器到点时判断「手指是否还停在原地」用。
@@ -138,8 +137,8 @@ struct PlayerScreen: View {
             playerGestureLayer
 
             // 缓冲指示：判据是迟滞后的 UI 缓冲态（单帧饿数据不闪转圈，真值见 state.isBuffering）。
-            // **自带暗底、不挂 HUD**：HUD 收起时没有全屏暗幕托底，白转圈直接压在亮画面上
-            // 会看不见——这是「缓冲不再强弹 HUD」之后才暴露的对比度问题（见 PlayerHUDGates）。
+            // **自带玻璃底、不挂 HUD**：HUD 收起时不必为了白转圈压暗整幅画面；
+            // 独立底板维持亮场面上的可读性（见 PlayerHUDGates）。
             // 常挂载 + `.opacity` 淡入淡出：HUD 收起期间没有容器动画托底，`if` 挂载会是硬闪。
             PlayerHUDPanel(in: Circle()) {
                 ProgressView()
@@ -168,6 +167,7 @@ struct PlayerScreen: View {
                     playbackID: request?.id.uuidString ?? "",
                     title: mainTitle,
                     kicker: titleKicker,
+                    panFeedback: panFeedback,
                     expandedTab: $expandedActionTab,
                     panelContentHeight: $panelContentHeight,
                     isImportingSubtitle: $isImportingSubtitle,
@@ -229,9 +229,14 @@ struct PlayerScreen: View {
             #if os(iOS)
             SystemVolumeControl(state: systemVolume)
 
-            // 滑动手势的独立反馈层：进度条 / OSD 单独显示，不唤醒整套 HUD。
+            // 横滑期间只显示底部时间轴；亮度 OSD 独立显示，不唤醒整套 HUD。
             // 只把 @Observable 的 feedback 引用传下去，逐帧更新只重算这个子树。
-            PlayerPanFeedbackOverlay(feedback: panFeedback)
+            PlayerPanFeedbackOverlay(
+                feedback: panFeedback,
+                isNarrow: isNarrow,
+                playbackID: request?.id.uuidString ?? "",
+                onInteractionChanged: handleHUDInteraction
+            )
             #endif
 
             PlayerScreenshotToast(message: screenshotToast)
@@ -458,8 +463,7 @@ struct PlayerScreen: View {
         // （多指强制结束）之后紧接着落下的第二根手指」——取消那个提交。
         // 真松手后 80ms 内就重开新拖动的场景几乎不存在，且后果只是这次拖动
         // 不落盘，手指还在屏上、重拖成本≈0。
-        pendingPanCommit?.cancel()
-        pendingPanCommit = nil
+        cancelPendingPanCommit()
         touchStart = TouchStart(date: Date(), location: value.startLocation)
         touchTranslation = value.translation
         scheduleHoldDetection()
@@ -516,6 +520,12 @@ struct PlayerScreen: View {
             session.verticalValue = systemVolume.volume
         }
         panFeedback.session = session
+        if mode == .seek {
+            shouldRestoreHUDAfterSeek = hudVisibility.isVisible
+            if shouldRestoreHUDAfterSeek {
+                hudVisibility.hide()
+            }
+        }
         updatePan(translation: translation)
     }
 
@@ -556,8 +566,7 @@ struct PlayerScreen: View {
         holdTask = nil
         singleTapTask?.cancel()
         singleTapTask = nil
-        pendingPanCommit?.cancel()
-        pendingPanCommit = nil
+        cancelPendingPanCommit()
         lastTapDate = nil
         touchStart = nil
         touchTranslation = .zero
@@ -581,8 +590,11 @@ struct PlayerScreen: View {
         }
         // 滑动中抬指：seek 落盘（拖动中只出预览，松手才跳）；亮度音量已实时生效。
         if let session = panFeedback.session {
-            panFeedback.session = nil
-            schedulePanCommit(session)
+            if session.mode == .seek {
+                schedulePanCommit(session)
+            } else {
+                panFeedback.session = nil
+            }
             return
         }
         // 轻点判定：时间短、位移小。
@@ -607,7 +619,24 @@ struct PlayerScreen: View {
             guard !Task.isCancelled else { return }
             pendingPanCommit = nil
             commitPan(session)
+            guard panFeedback.session == session else { return }
+            panFeedback.session = nil
+            restoreHUDAfterSeekIfNeeded()
         }
+    }
+
+    private func cancelPendingPanCommit() {
+        pendingPanCommit?.cancel()
+        pendingPanCommit = nil
+        guard panFeedback.session?.mode == .seek else { return }
+        panFeedback.session = nil
+        restoreHUDAfterSeekIfNeeded()
+    }
+
+    private func restoreHUDAfterSeekIfNeeded() {
+        guard shouldRestoreHUDAfterSeek else { return }
+        shouldRestoreHUDAfterSeek = false
+        revealControls()
     }
 
     /// 单击 / 双击分流：第二击落到窗口内立即切播放暂停；单击延迟到窗口过期才切 HUD。
@@ -1042,23 +1071,31 @@ final class PlayerPanFeedback {
 }
 
 #if os(iOS)
-/// 滑动手势的独立反馈层（iOS）：进度条 / OSD 单独显示，不唤醒整套 HUD。
+/// 滑动手势的独立反馈层（iOS）：HUD 隐藏时显示时间轴，亮度调整显示 OSD。
 /// 逐帧值只有这个子树在读；出现/消失过渡也挂在这里（模式切换很稀疏）。
 private struct PlayerPanFeedbackOverlay: View {
     let feedback: PlayerPanFeedback
+    let isNarrow: Bool
+    let playbackID: String
+    let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             if let session = feedback.session, session.mode == .seek {
-                PlayerSeekPreviewBar(
-                    fraction: PlayerPanGestureModel.fraction(
-                        seconds: session.previewSeconds,
-                        duration: session.durationSeconds
-                    ),
-                    targetSeconds: session.previewSeconds,
-                    durationSeconds: session.durationSeconds
-                )
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    PlayerHUDTimeline(
+                        playbackID: playbackID,
+                        panFeedback: feedback,
+                        onInteractionChanged: onInteractionChanged
+                    )
+                    .padding(.horizontal, isNarrow ? 16 : 28)
+                    .padding(.bottom, isNarrow ? 16 : 28)
+                }
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+                .transition(.section)
             }
             if let session = feedback.session, session.mode == .brightness {
                 VStack(spacing: 0) {

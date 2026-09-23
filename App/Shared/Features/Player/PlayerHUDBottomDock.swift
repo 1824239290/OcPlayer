@@ -12,6 +12,7 @@ struct PlayerHUDBottomDock: View {
     let playbackID: String
     let title: String
     let kicker: String
+    let panFeedback: PlayerPanFeedback
 
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
 
@@ -21,6 +22,7 @@ struct PlayerHUDBottomDock: View {
 
             PlayerHUDTimeline(
                 playbackID: playbackID,
+                panFeedback: panFeedback,
                 onInteractionChanged: onInteractionChanged
             )
         }
@@ -59,6 +61,7 @@ struct PlayerHUDTimeline: View {
     @Environment(PlaybackController.self) private var controller
 
     let playbackID: String
+    let panFeedback: PlayerPanFeedback
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
 
     @State private var draftFraction: Double?
@@ -109,16 +112,32 @@ struct PlayerHUDTimeline: View {
 
     private var progressBinding: Binding<Double> {
         Binding(
-            get: { draftFraction ?? timeline.progress },
+            get: { draftFraction ?? seekPreviewFraction ?? timeline.progress },
             set: { draftFraction = min(max($0, 0), 1) }
         )
     }
 
     private var displayedPosition: Duration {
-        guard let draftFraction, timeline.duration > .zero else {
-            return timeline.displayPosition
+        if let draftFraction, timeline.duration > .zero {
+            return .microseconds(Int64(Double(timeline.duration.microseconds) * draftFraction))
         }
-        return .microseconds(Int64(Double(timeline.duration.microseconds) * draftFraction))
+        if let session = seekPreview {
+            return .seconds(session.previewSeconds)
+        }
+        return timeline.displayPosition
+    }
+
+    private var seekPreview: PlayerPanSession? {
+        guard let session = panFeedback.session, session.mode == .seek else { return nil }
+        return session
+    }
+
+    private var seekPreviewFraction: Double? {
+        guard let session = seekPreview else { return nil }
+        return PlayerPanGestureModel.fraction(
+            seconds: session.previewSeconds,
+            duration: session.durationSeconds
+        )
     }
 
     private func beginScrubbing() {
@@ -140,4 +159,3 @@ struct PlayerHUDTimeline: View {
         onInteractionChanged(.timelineDrag, false)
     }
 }
-

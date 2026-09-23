@@ -8,16 +8,12 @@ import SwiftUI
 import AppKit
 #endif
 
-/// HUD 专属固定白调色板。**使用前提**：整套 HUD 覆盖在全屏 `PlayerHUDReadabilityScrim`
-/// （黑 0.32）之上，玻璃只采样压暗画面、恒为暗变体，白字对比度因此稳定。
-/// HUD 之外的玻璃内容（如跳过按钮）不满足该前提，一律用 `.primary` 等动态色
-/// 随玻璃明暗变体翻转，禁止从本调色板取色。
+/// 播放器浮层专属白调色板。播放器子树使用深色外观，HUD 之外的玻璃内容
+/// （如跳过按钮）一律用 `.primary` 等动态色，禁止从本调色板取色。
 enum PlayerHUDPalette {
     static let primary = Color.white
     static let secondary = Color.white.opacity(0.76)
     static let tertiary = Color.white.opacity(0.5)
-    static let panelBackground = Color.black.opacity(0.72)
-    static let outline = Color.white.opacity(0.16)
 }
 
 /// 静态 Glass 承载层：没有固定不透明底色，统一从已经压暗的画面取样。
@@ -70,7 +66,7 @@ struct PlayerHUDGlassIconButton: View {
     }
 }
 
-/// 信息、错误和调试内容需要绝对稳定的对比度，不参与视频取样。
+/// 播放器内的消息、状态和预览面板统一使用静态 Regular Liquid Glass。
 struct PlayerHUDPanel<SurfaceShape: Shape, Content: View>: View {
     let shape: SurfaceShape
     let content: Content
@@ -81,11 +77,9 @@ struct PlayerHUDPanel<SurfaceShape: Shape, Content: View>: View {
     }
 
     var body: some View {
-        content
-            .background(PlayerHUDPalette.panelBackground, in: shape)
-            .overlay {
-                shape.stroke(PlayerHUDPalette.outline, lineWidth: 0.75)
-            }
+        PlayerHUDGlassSurface(in: shape) {
+            content
+        }
     }
 }
 
