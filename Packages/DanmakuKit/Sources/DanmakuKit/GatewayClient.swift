@@ -108,17 +108,19 @@ public extension DandanplayError {
 
 extension DandanplayError {
     /// 瞬态错误判定：请求层重试 + 编排层短路共用同一口径。
-    /// 与 BangumiError.isRetryable 对齐——网络只认超时/断网（排除取消），
-    /// HTTP 只认 502/503/504，429 尊重服务端 Retry-After。
+    /// 500 与 TLS/连接类错误也在集内：生产网关（CF Worker）偶发未捕获异常被 CF
+    /// 包成 500，本机到网关的链路还有 TLS 握手被重置的抖动——实测同一请求秒级
+    /// 重试即成功。接口全是幂等只读，重试安全；取消（-999）不在集内，换源
+    /// 取消不会被当故障重跑。429 尊重服务端 Retry-After。
     var isRetryable: Bool {
         switch self {
         case .network(let urlError):
             switch NetworkErrorClassifier.kind(for: urlError.errorCode) {
-            case .timedOut, .noConnection: true
+            case .timedOut, .noConnection, .cannotConnect, .secureConnectionFailed: true
             default: false
             }
         case .httpStatus(let code):
-            code == 502 || code == 503 || code == 504
+            code == 500 || code == 502 || code == 503 || code == 504
         case .rateLimited:
             true
         default:

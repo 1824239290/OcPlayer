@@ -422,6 +422,47 @@ final class GatewayClientTests: XCTestCase {
         XCTAssertEqual(counter.count, 3, "网络超时应重试至成功")
     }
 
+    /// 生产网关偶发被 CF 包成 500 的 Worker 异常：同一请求秒级重试即成功。
+    func testRetrySucceedsAfterTransient500() async throws {
+        let client = makeRetryingClient()
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"0.5,1,16777215,100","m":"你好"}]}
+        """
+        let counter = TestSupport.RequestCounter()
+        MockURLProtocol.handler = { request in
+            counter.count += 1
+            if counter.count < 3 {
+                return TestSupport.response("{\"error\":\"boom\"}", status: 500, url: request.url!)
+            }
+            return TestSupport.response(commentsBody, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let result = try await client.comments(episodeId: 1)
+        XCTAssertEqual(result.payload.comments?.count, 1)
+        XCTAssertEqual(counter.count, 3, "瞬态 500 应重试至成功")
+    }
+
+    /// 本机到网关的链路有 TLS 握手被重置的抖动（-1200 / -1005），两类都应进重试集。
+    func testConnectionLevelErrorsAreRetried() async throws {
+        let client = makeRetryingClient()
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"0.5,1,16777215,100","m":"你好"}]}
+        """
+        for code: URLError.Code in [.secureConnectionFailed, .networkConnectionLost] {
+            let counter = TestSupport.RequestCounter()
+            MockURLProtocol.handler = { request in
+                counter.count += 1
+                if counter.count < 2 { throw URLError(code) }
+                return TestSupport.response(commentsBody, url: request.url!)
+            }
+            let result = try await client.comments(episodeId: 1)
+            XCTAssertEqual(result.payload.comments?.count, 1)
+            XCTAssertEqual(counter.count, 2, "\(code.rawValue) 应重试至成功")
+        }
+        MockURLProtocol.handler = nil
+    }
+
     func testNonRetryableStatusIsNotRetried() async throws {
         let client = makeRetryingClient()
         let counter = TestSupport.RequestCounter()
