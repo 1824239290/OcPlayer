@@ -89,9 +89,24 @@ final class KernelLoggingTests: XCTestCase {
         let line = Data("{\"event\":\"http_cache_hit\",\"start\":74486,\"length\":172041}\n".utf8)
         let before = Self.mallocInUseBytes()
         for _ in 0..<200_000 { _ = decoder.ingest(line) }
-        let grown = Self.mallocInUseBytes() - before
-        // ~12MB 字节流过；压实后活内存不该跟着涨。留 2MB 余量挡分配器噪声。
-        XCTAssertLessThan(grown, 2 * 1024 * 1024, "已消费字节被 remainder 存储留住了 \(grown) 字节")
+        // `malloc_zone_statistics` 是**进程级**统计，循环里既分配也释放，`after`
+        // 完全可能小于 `before`。两个 `UInt64` 直接相减会算术溢出、当场 SIGTRAP
+        // 把测试进程打崩——表象是「0.000 秒失败、无断言文案」，实为崩溃型 flaky
+        // （崩溃报告 OcPlayer-*.ips：EXC_BREAKPOINT / SIGTRAP，栈顶
+        // `Swift runtime failure: arithmetic overflow`）。改用有符号差值：
+        // 负值即「没涨」，断言照常通过。
+        let grown = Int64(Self.mallocInUseBytes()) - Int64(before)
+        // 阈值 8 MiB（原为 2 MiB）：量的是**进程级** `malloc_zone_statistics`，含
+        // XCTest 自身的分配与分配器记账抖动，与解码器无关——实测同一份代码的 grown
+        // 跨四个数量级（n=18：272 B / 1.0 KB / 1.4 KB / 2.6 KB / 2.8 KB / 6.4 KB /
+        // 176 KB，多轮为负；最高两轮 2.23 MB 冲破 2 MiB 阈值 → 约 11% 假失败）。
+        //
+        // **别靠加迭代数压噪声**：噪声与分配次数近似成正比，把迭代数从 20 万提到
+        // 100 万，噪声跟着涨到 14.2 MB（n=6：2.2 KB / 7.4 KB / 11.9 KB / 2.9 MB /
+        // 2.9 MB / 14.2 MB），信噪比没有改善。所以维持 20 万次、阈值 8 MiB：对实测
+        // 噪声最高值有 3.6× 余量，同时能接住「把整条流留住」的回归
+        // （200k × 60 B ≈ 12 MB；生产实测单会话残留 60 MB+）。
+        XCTAssertLessThan(grown, Int64(8 * 1024 * 1024), "已消费字节被 remainder 存储留住了 \(grown) 字节")
     }
 
     private static func mallocInUseBytes() -> UInt64 {
