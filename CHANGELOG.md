@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **内核换装上游官方 `v0.2.0`，fork 阶段收尾**。Erika 上游把 fork 上先行的改动全部合入：v0.2.0 带入杜比视界 RPU 映射 / HDR tone-mapping / 感知色域映射管线（#136）、headless GIF 导出 `erika_export_gif`（#138，App 暂未接入）、HTTP(S) 持久流式预取（#139）。实测新 release 的 `erika.h` 与上一版 fork 内核（`v0.1.9+dolby.streaming.fix.dev`）**逐字节相同**——C ABI 无变化，App 侧零适配，持久流预取 / 预取窗口封顶 / 回退预算（`http_back_buffer_bytes`）语义与 0.1.9 记账一致，0.1.8 的慢源 A/B 口径（开播 13.2 秒、78.3 秒零卡顿）沿用。钉点切回官方：`Scripts/build-macos.sh` / `package-macos.sh` / `package-ios.sh` / `release.yml` / `test.yml` 删除 `ERIKA_REPO=fork` 默认值（`fetch-erika.sh` 默认上游即生效），`ERIKA_VERSION` 默认 `v0.2.0`，新增 `Scripts/erika-v0.2.0.sha256`（哈希取自 release 自带 `SHA256SUMS`，下载实校通过）。回归：ErikaKit 30 用例全绿（含真跑内核的离屏渲染与预读行为套件）。README 内核说明与 `PlaybackPreferences` / 预读行为测试的版本注释同步更新。
+
 - **弹幕匹配精准度：规范名合成 + 集号 token 打分 + 类型硬门槛 + 手动搜索别名合并**。四件事都有生产/实测背书（对生产网关与官方 schema 逐条核对过）。①**合成文件名**：Jellyfin 源文件名是裸数字（`01.mkv`）时，旧实现合成 `番剧名 第N季 E05 01.mkv`——实测这种「E 标记与尾巴数字冲突」的形态会让弹弹play 的模糊匹配锁到「第1话」；现在统一走 `DanmakuFilenameParser.canonicalMatchName`（原名含番剧名就原样保留、只剥扩展名，否则合成规范名且不拼回原名），standalone 同修；缓存身份改用**原始**文件名，以后调合成规则不再让已记住的映射失效。②**集号 token 与特典**：弹弹play 把特典/OP-ED 放在同一作品下的 `S`/`C`/`O` 命名空间（实测 `episode=S2` 返回「S2 …」特典），旧实现的宽松兜底会把 `S5 聖地巡礼` 当成第 5 话——新增 `DanmakuEpisodeToken`（正片数字 / 特典命名空间+序号），season-0 条目按文件名关键词判定命名空间，特典候选对正片目标不再以集数命中；**特典目标不再拿 Jellyfin 序号发 `episode=S<n>`**（实测与弹弹play 的 S 序号不同源，序号 29 会唯一命中同 IP 剧场版的 S29），改走全集搜索让打分器选。③**类型硬门槛**：剧场版与剧集是不同作品，类型不匹配直接出局——用户实报的错匹配（中二病 S00E29 特典被同 IP 剧场版的 S29 抢走；旧打分在模糊与检索两条路径分别命中无关日剧第29话 1548 / 综艺第29话 1550）实测修复为 noMatch 手动选。④**手动搜索别名合并**：弹弹play 搜索认不得「另一个中文译名」（实测搜「虽然我是不完美恶女～雏宫蝶鼠替换传～」返回的全是无关作品），手动选弹幕时并发用 Bangumi 的 nameCN 换库内标题再搜一次、按 animeId 去重合并（Bangumi 首条实测即正确标题；解析结果永久缓存、负缓存 7 天，失败静默）。自动路径的 tier-1 文件名模糊对这类译名本来就有效（实测 rank 0 命中，新旧打分同分 2898）。**特典自动匹配的边界**：hash 未命中且本地元数据无身份信息（如「第 29 集」这种泛化名）时落 noMatch 手动选——元数据里没有的信息不该靠猜。测试：DanmakuKit 156 用例、AppTests 全绿；打分器用生产真实候选集离线复验（错匹配三路径全灭、正确 case 保持命中）。
 
 - **Bangumi 登录改走 OcPlay 网关，客户端不再持有 OAuth 应用密钥**。授权地址由 `GET /v1/bangumi/oauth/authorize?state=` 拼（`client_id` / `redirect_uri` 在网关侧），换 token 与刷新走 `POST /v1/bangumi/oauth/token` / `/refresh`，业务 API（收藏、章节、搜索）仍直连 `api.bgm.tv`。`Secrets.xcconfig` / `Info.plist` 里的 `BANGUMI_APP_ID` / `BANGUMI_APP_SECRET` 随之删除——旧 secret 已进过构建产物，应在 bgm.tv 轮换。登录前置条件变成「网关地址 + 带 `bgm:oauth` 权限的 API Key」，与弹幕共用同一份设置（`AppModel.bootstrap` 与网关设置变更时推给 BangumiKit）；未配置时登录页给引导文案，网关错误码映射为对应提示（`SCOPE_REQUIRED` / `GATEWAY_NOT_CONFIGURED` / `OCPLAY_USER_AGENT_REQUIRED`，`BANGUMI_OAUTH_REJECTED` 清凭证回未登录）。`refresh_token` 仅在 Bangumi 轮换时返回，响应缺该字段时沿用旧值；`expires_in` 缺省时按一周兜底。BangumiKit 新增 5 用例（state 每次授权轮换且与请求一致、state 不匹配不发网络请求、换 token 只带 code 且请求带 `X-API-Key` + `OcPlay/` UA、网关 403 各错误码各自文案、refresh 未轮换时沿用旧 refresh_token），用按 host 分派的 mock URLProtocol 离线跑。对生产网关做过一轮真网络冒烟（跑完即删）：authorize 返回真 bgm.tv 地址、错误 code 与错误 refresh_token 都被 Bangumi 拒绝并正确落到「重新登录」。
@@ -23,9 +25,9 @@
 
 - **MoviePilot 资源页侧栏玻璃底下没有氛围图**（iPad；macOS 正常）：该页的氛围图多挂了一句 `.drawingGroup()`，它把子树栅格化进离屏纹理、纹理边界取扩展前的 frame，于是把链尾的 `.ignoresSafeArea()` 截断——图出不了内容区。iPadOS 上详情列本身跨满整窗、侧栏宽度是它的左安全区，全靠那一步 `ignoresSafeArea` 才铺到侧栏玻璃底下（详情页没有这句，所以它的背景能铺满整窗、侧栏能透出来，实测左缘 `(79,20,14)`）。去掉它与 `.allowsHitTesting(false)`（`.background` 本就在内容之下，不吃点击），和详情页写法对齐；顺带补上「没海报时兜底 `Color.pageBackground`」。修复前侧栏内部 `(21,21,20)` 中性灰、左缘 `(0,0,0)` 纯黑；修复后 `(31,35,30)` / `(27,47,41)`，与内容列 `(64,68,49)` 同族、侧栏右缘横切平滑过渡，内容列像素不变。注意 `drawingGroup()` 当初是为「资源搜索页掉帧」加的，但那批同时删掉了 300 多行实时玻璃着色器；滚动资源列表若有掉帧再单独议。
 
-### 待跟进（内核侧，fork Erika）
+### 待跟进（内核侧，上游 Erika）
 
-- **开播 HEAD 探测约 3.8 秒**：0.1.8 记账的待跟进项①。内核 open 先发 HEAD 探测、失败再回退一字节 range；部分源站对 HEAD 恒回 403（如三重跳转的 strm 源），这段探测纯属浪费。修复在内核（fork Erika），本仓只记账；核心里能省掉「HEAD 失败再 range」的往返即可。
+- **开播 HEAD 探测约 3.8 秒**：0.1.8 记账的待跟进项①。内核 open 先发 HEAD 探测、失败再回退一字节 range；部分源站对 HEAD 恒回 403（如三重跳转的 strm 源），这段探测纯属浪费。修复在内核（上游 Erika），本仓只记账；核心里能省掉「HEAD 失败再 range」的往返即可。v0.2.0 的 release 说明与 CHANGELOG 均未见此修复，继续记账。
 
 ## [0.1.9] · 2026-09-22 · 内核换装 v0.1.9+dolby.streaming.fix.dev——预取窗口封顶，播放期间内存不再随窗口增长
 

@@ -27,10 +27,8 @@ else
     RELEASE_TAG="$1"
 fi
 
-# 该 fork release 附全平台资产（含 erika-capi-ios.zip），macOS / iOS 用同一内核。
-ERIKA_VERSION="${ERIKA_VERSION:-v0.1.9+dolby.streaming.fix.dev}"
-# 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
-export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
+# 官方 release 附全平台资产（含 erika-capi-ios.zip），macOS / iOS 用同一内核。
+ERIKA_VERSION="${ERIKA_VERSION:-v0.2.0}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release-ios}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 APP_NAME="OcPlayer"

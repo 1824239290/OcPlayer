@@ -18,9 +18,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      # 内核改动未合并上游前，用 fork 上的预发布版（tag 对应 fork Release 资产）
-      ERIKA_VERSION: v0.1.9+dolby.streaming.fix.dev
-      ERIKA_REPO: 1824239290/Erika
+      ERIKA_VERSION: v0.2.0
 
     steps:
       - name: Check out source

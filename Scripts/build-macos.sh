@@ -7,11 +7,7 @@ PROJECT="$ROOT/OcPlayer.xcodeproj"
 SCHEME="OcPlayer-macOS"
 BUILD_DIR="$ROOT/.local-build/current"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
-# 默认拉 fork 上的预编译内核：与 Vendor 现有产物同版本，fetch 直接命中缓存，
-# 不会像旧的 latest 那样去上游下载官方内核覆盖本地自编译产物。
-# 内核改动合并上游后，这里与 CI 两个 workflow 一起切回官方 latest。
-export ERIKA_VERSION="${ERIKA_VERSION:-v0.1.9+dolby.streaming.fix.dev}"
-export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
+export ERIKA_VERSION="${ERIKA_VERSION:-v0.2.0}"
 
 usage() {
     echo "Usage: Scripts/build-macos.sh [debug|release]" >&2

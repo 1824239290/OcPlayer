@@ -27,9 +27,7 @@ else
     RELEASE_TAG="$1"
 fi
 
-ERIKA_VERSION="${ERIKA_VERSION:-v0.1.9+dolby.streaming.fix.dev}"
-# 必须 export：fetch-erika.sh 是子进程，普通变量它读不到，会静默回落上游仓库。
-export ERIKA_REPO="${ERIKA_REPO:-1824239290/Erika}"
+ERIKA_VERSION="${ERIKA_VERSION:-v0.2.0}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 APP_NAME="OcPlayer"
