@@ -23,9 +23,6 @@ struct DetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
-    /// 海报氛围背景开关（默认开）：与设置页「界面」分区同一 key。
-    @AppStorage(SettingsKeys.ambientBackdrop)
-    private var ambientBackdropEnabled = true
 
     /// 列表页带来的初版数据（立即可渲染），网络刷新后覆盖。
     let item: MediaItem
@@ -46,10 +43,10 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(item: item))
     }
 
-    /// 氛围布局是否生效：开关开且条目有 backdrop 图。没图时没有氛围层，
+    /// 氛围布局是否生效：条目有 backdrop 图。没图时没有氛围层，
     /// 浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
     private var isAmbientActive: Bool {
-        ambientBackdropEnabled && model.shown.backdropImageTag != nil && app.server != nil
+        model.shown.backdropImageTag != nil && app.server != nil
     }
 
     /// 页面是否自己垫氛围层。整窗层够得着屏幕时（macOS）常规布局靠它，页面
@@ -598,7 +595,7 @@ struct DetailView: View {
     }
 
     @ViewBuilder
-    // MARK: - 氛围布局头部（开关开且条目有 backdrop 时替代横幅）
+    // MARK: - 氛围布局头部（条目有 backdrop 时替代横幅）
 
     /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
     /// 内容与老横幅的 overlay 完全同套组件（同为外观自适应色），
@@ -624,8 +621,8 @@ struct DetailView: View {
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
     ///
     /// 标题占**和 `compactHeroBanner` 同一个竖直位置**——同一个 `compactBannerHeight`
-    /// 英雄带、同样底对齐 + 8pt 内边距，只是这里没有图片层。所以「海报氛围背景」
-    /// 开关来回切时标题不会上下跳，正文区起点两边也都是 `compactBannerHeight`。
+    /// 英雄带、同样底对齐 + 8pt 内边距，只是这里没有图片层。所以「有图 / 无图」
+    /// 两条头部的标题落在同一竖直位置，正文区起点两边也都是 `compactBannerHeight`。
     /// 顶边贴屏那版（`padding(.top, 52)`）会让艺术字 Logo 压进状态栏、离灵动岛只剩
     /// 几个点，底对齐后 Logo 顶边恒定落在 198pt 以下，离状态栏自然有余量。
     private var ambientCompactHeader: some View {

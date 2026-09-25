@@ -5,15 +5,14 @@ import SwiftUI
 /// 首页氛围背景：从库里随机取一批带 backdrop 的电影 / 剧集（`randomBackdropItems`），
 /// 复用 `BackdropAmbienceView` 铺成模糊+雾化的固定底，每 12 秒淡入淡出换一张。
 /// 纯装饰：查询失败或库里没有带 backdrop 的条目就整体不出现，页面回退纯色底。
+///
+/// 氛围图**常开**：设置页原有的「海报氛围背景」开关与 `SettingsKeys.ambientBackdrop`
+/// 已一并移除，首页与详情页一律铺氛围底。旧偏好键不再有任何读取点——老用户盘上
+/// 残留的 `false` 是死键，升级后氛围图照常出（见 CHANGELOG）。
 struct AmbientBackdropCarousel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isWindowFullscreen) private var isWindowFullscreen
-    /// 海报氛围背景开关：与设置页 / DetailView 同一 key。关时整体不渲染、
-    /// 不发起随机查询（task id 含开关状态，切回开时重新拉池子）。
-    @AppStorage(SettingsKeys.ambientBackdrop)
-    private var ambientBackdropEnabled = true
-
     /// 池子大小 × 换片间隔 ≈ 一轮 96s：够「随机感」也不浪费带宽。
     private static let poolSize = 8
     private static let swapInterval: Duration = .seconds(12)
@@ -26,7 +25,7 @@ struct AmbientBackdropCarousel: View {
     var body: some View {
         ZStack(alignment: .top) {
             ZStack {
-                if ambientBackdropEnabled, !pool.isEmpty {
+                if !pool.isEmpty {
                     BackdropAmbienceView(
                         target: pool[index % pool.count]
                             .imageTarget(app.server, kind: .backdrop, width: Self.imageWidth),
@@ -48,8 +47,8 @@ struct AmbientBackdropCarousel: View {
             }
         }
         .animation(Motion.ambient, value: isWindowFullscreen)
-        // 开关并进 task id：停留首页时切开关，关→清空退场，开→重新拉池子。
-        .task(id: "\(app.sessionGeneration)#\(ambientBackdropEnabled)") {
+        // 会话代次并进 task id：换服务器 / 重新登录时重拉池子。
+        .task(id: app.sessionGeneration) {
             await loadPool()
             await warmUpAndRotate()
         }
@@ -59,7 +58,7 @@ struct AmbientBackdropCarousel: View {
     private func loadPool() async {
         pool = []
         index = 0
-        guard ambientBackdropEnabled, let server = app.server else { return }
+        guard let server = app.server else { return }
 
         var fetched = (try? await server.randomBackdropItems(limit: 24)) ?? []
         if fetched.isEmpty {

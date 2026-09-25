@@ -4,7 +4,7 @@ import JellyfinKit
 import DiagnosticsKit
 import SwiftUI
 
-/// 设置页，六组：通用 / 播放（含播放内核）/ 弹幕 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
+/// 设置页，五组：播放（含播放内核）/ 弹幕 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
 /// 原则：这里只放设置——播放入口在首页工具栏与 macOS 文件菜单，工程说明不进设置页，
 /// 说明文字一行为辄。服务器列表的切换 / 删除收在「管理服务器」子页（`ServersView`）。
 struct SettingsView: View {
@@ -36,9 +36,6 @@ struct SettingsView: View {
     /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
     /// 同一 key，@AppStorage 双向可观察，改了立即生效。
     @AppStorage(SettingsKeys.danmakuDiagnostics) private var danmakuDiagnosticsEnabled = false
-    /// 海报氛围背景开关（默认开）：DetailView / AmbientBackdropCarousel 读同一 key，
-    /// 改了立即生效。
-    @AppStorage(SettingsKeys.ambientBackdrop) private var ambientBackdropEnabled = true
     /// Bangumi / MoviePilot 集成开关（默认开）。关闭后侧栏入口、详情页区块与
     /// 后台同步一并隐藏/停止，凭据与关联数据保留（见各功能触点的门控）。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
@@ -55,13 +52,6 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("通用") {
-                Toggle("海报氛围背景", isOn: $ambientBackdropEnabled)
-                Text("详情页与首页垫模糊海报背景，关闭后恢复清晰横幅。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
             Section("播放") {
                 Picker("网络预读缓冲", selection: Binding(
                     get: { readAheadMiB },
