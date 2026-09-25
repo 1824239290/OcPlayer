@@ -1,4 +1,5 @@
 import Foundation
+import JellyfinKit
 import XCTest
 
 /// 把 SDK 的 URLSession 请求全部拦下来，离线测登录 / 浏览。
@@ -72,6 +73,37 @@ enum TestSupport {
                          with body: () async throws -> Void) async rethrows -> Void {
         MockURLProtocol.handler = handler
         defer { MockURLProtocol.handler = nil }
+        try await body()
+    }
+
+    /// 临时设置自定义 UA，退出作用域还原旧值。
+    ///
+    /// 生产代码的 `ClientIdentity.customUserAgent` 直接读 `UserDefaults.standard`
+    /// （没有可注入的 suite），所以这里只能存旧值还原——不能无条件 remove，否则
+    /// 会清掉真实偏好或前一个用例留下的值。
+    ///
+    /// **依赖用例串行**：改的是全局 `UserDefaults.standard`，且 `ClientIdentityTests`
+    /// / `EmbyServerTests` / `JellyfinServerTests` 三个类共用同一个键。当前
+    /// `swift test` 默认串行，安全；将来若开并行测试，得先把偏好改成可注入的
+    /// suite，否则这些用例会互相踩。
+    static func withCustomUserAgent(
+        _ value: String?,
+        _ body: () async throws -> Void
+    ) async rethrows -> Void {
+        let key = ClientIdentity.customUserAgentKey
+        let previous = UserDefaults.standard.string(forKey: key)
+        if let value {
+            UserDefaults.standard.set(value, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        defer {
+            if let previous {
+                UserDefaults.standard.set(previous, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
         try await body()
     }
 }

@@ -380,6 +380,21 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    func testRequestsCarryCustomUserAgent() async throws {
+        try await TestSupport.withCustomUserAgent("SenPlayer/2.1") {
+            try await TestSupport.withMock { request in
+                XCTAssertEqual(
+                    request.value(forHTTPHeaderField: "User-Agent"),
+                    "SenPlayer/2.1",
+                    "设置的自定义 UA 必须逐请求携带（白名单服务器按它放行拉流）"
+                )
+                return MockURLProtocol.ok(#"{"Items":[],"TotalRecordCount":0}"#, for: request.url!)
+            } with: {
+                _ = try await makeServer().itemsPage(parentID: "lib-1", limit: 10)
+            }
+        }
+    }
+
     // MARK: - URL 与认证头
 
     func testStreamURLHasNoToken() throws {

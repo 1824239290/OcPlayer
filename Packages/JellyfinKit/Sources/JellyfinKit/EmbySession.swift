@@ -34,6 +34,15 @@ final class EmbySession: @unchecked Sendable {
         let configuration = sessionConfiguration.copy() as! URLSessionConfiguration
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 300
+        // 登录 / 探活阶段的 UA（会话创建时刻的偏好值）；已登录会话的每条请求在
+        // `data()` 里按**当时**的偏好重设，设置里改完即时生效。
+        // 合并而不是整体赋值：调用方传进来的 sessionConfiguration 可能自带
+        // 额外的 httpAdditionalHeaders，直接赋值会静默吃掉它们。
+        if let userAgent = ClientIdentity.customUserAgent {
+            var additionalHeaders = configuration.httpAdditionalHeaders ?? [:]
+            additionalHeaders["User-Agent"] = userAgent
+            configuration.httpAdditionalHeaders = additionalHeaders
+        }
         self.session = URLSession(configuration: configuration)
 
         let decoder = JSONDecoder()
@@ -140,6 +149,9 @@ final class EmbySession: @unchecked Sendable {
         if let timeout { request.timeoutInterval = timeout }
         request.setValue(authorizationHeader, forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let userAgent = ClientIdentity.customUserAgent {
+            request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        }
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

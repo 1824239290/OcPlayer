@@ -22,6 +22,28 @@ public enum ClientIdentity {
     private static let deviceIDKey = "dev.jumusu.ocplayer.deviceId"
     private static let deviceNameKey = "dev.jumusu.ocplayer.deviceName"
 
+    /// 用户自定义 User-Agent（设置页填写；nil = 用系统默认）。**全局生效**，
+    /// 不区分服务器档案（设置页「网络」分组，对所有服务器一视同仁）。
+    ///
+    /// 部分媒体服开了播放器白名单，按 UA 拒绝非白名单客户端的拉流请求；用户把
+    /// UA 改成白名单内的播放器即可通过。在**每次请求时**读取（不缓存进会话），
+    /// 设置里改完立即生效，不需要重连。API 请求、播放拉流三条发送口
+    /// （`EmbySession.data` / `JellyfinServer.send` / `PlaybackController` 的
+    /// `open_with_headers`）共用这一个取值。
+    public static let customUserAgentKey = "dev.jumusu.ocplayer.customUserAgent"
+
+    public static var customUserAgent: String? {
+        let raw = UserDefaults.standard.string(forKey: customUserAgentKey) ?? ""
+        // 头值里不能有控制字符（换行、制表…）：`URLRequest.setValue` 遇到这种值
+        // 会把**整条头**静默丢掉，不报错——用户以为生效了，其实发的是系统默认。
+        // 在唯一的读取口统一剔除，三条发送路径一并覆盖。
+        let cleaned = raw
+            .components(separatedBy: .controlCharacters)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     static func version(in bundle: Bundle) -> String {
         let shortVersion = nonEmptyInfoValue(
             bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")

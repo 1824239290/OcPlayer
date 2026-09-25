@@ -481,6 +481,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if let authHeader = request.authHeader {
             headers["Authorization"] = authHeader
         }
+        // 自定义 UA（播放器白名单服按 UA 拒流）：每次开播读取，设置里改完下一播生效。
+        if let userAgent = ClientIdentity.customUserAgent {
+            headers["User-Agent"] = userAgent
+        }
         let readAhead = PlaybackPreferences.httpReadAheadBytes
         let backBuffer = PlaybackPreferences.httpBackBufferBytes
         // 诊断「改了预读/回退档位没生效」：把本次真正传给内核的值打进日志。

@@ -4,7 +4,7 @@ import JellyfinKit
 import DiagnosticsKit
 import SwiftUI
 
-/// 设置页，五组：播放（含播放内核）/ 弹幕 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
+/// 设置页，六组：播放（含播放内核）/ 弹幕 / 网络 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
 /// 原则：这里只放设置——播放入口在首页工具栏与 macOS 文件菜单，工程说明不进设置页，
 /// 说明文字一行为辄。服务器列表的切换 / 删除收在「管理服务器」子页（`ServersView`）。
 struct SettingsView: View {
@@ -45,6 +45,10 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.skipIntro) private var skipIntroEnabled = true
     @AppStorage(SettingsKeys.skipOutro) private var skipOutroEnabled = true
     @AppStorage(SettingsKeys.outroRetentionSeconds) private var storedOutroRetention = 10
+    /// 自定义 User-Agent（空 = 系统默认）。与 `ClientIdentity`（JellyfinKit）同 key，
+    /// 三条请求发送口每条即时读取，改完不需要重连。**全局**，不按服务器档案分——
+    /// 所以 UI 放在「网络」分组，不塞进某一台服务器的分组里。
+    @AppStorage(ClientIdentity.customUserAgentKey) private var customUserAgent = ""
     private var outroRetentionSeconds: Int {
         PlaybackPreferences.outroRetentionOptionsSeconds.contains(storedOutroRetention)
             ? storedOutroRetention : 10
@@ -52,6 +56,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+
             Section("播放") {
                 Picker("网络预读缓冲", selection: Binding(
                     get: { readAheadMiB },
@@ -121,6 +126,14 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+            }
+
+            Section("网络") {
+                TextField("自定义 User-Agent（可选）", text: $customUserAgent, prompt: Text("留空使用默认"))
+                    .textFieldStyle(.roundedBorder)
+                Text("部分服务器开了播放器白名单，会把非白名单客户端的请求拒之门外；填入白名单内的播放器 UA（如 SenPlayer 的）即可通过。对所有服务器生效，浏览与拉流即时生效、无需重连；控制字符会被剔除。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
             Section("Jellyfin 服务器") {

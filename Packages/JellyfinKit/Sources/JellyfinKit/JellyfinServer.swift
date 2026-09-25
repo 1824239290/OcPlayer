@@ -97,6 +97,15 @@ public struct JellyfinServer: MediaServer {
         let configuration = sessionConfiguration.copy() as! URLSessionConfiguration
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 300
+        // 登录 / 探活阶段的 UA（会话创建时刻的偏好值）；已登录会话的每条请求在
+        // `send` 里按**当时**的偏好重设，设置里改完即时生效。
+        // 合并而不是整体赋值：调用方传进来的 sessionConfiguration 可能自带
+        // 额外的 httpAdditionalHeaders，直接赋值会静默吃掉它们。
+        if let userAgent = ClientIdentity.customUserAgent {
+            var additionalHeaders = configuration.httpAdditionalHeaders ?? [:]
+            additionalHeaders["User-Agent"] = userAgent
+            configuration.httpAdditionalHeaders = additionalHeaders
+        }
         return JellyfinClient(
             configuration: .init(
                 url: baseURL,
@@ -450,6 +459,10 @@ public struct JellyfinServer: MediaServer {
     /// 失败。Emby 不经过这里 —— 它的响应值域超出 SDK 枚举，由 `EmbyServer` 的
     /// 裸传输层自己宽松解码（见 `MediaServer` 的文档注释）。
     func send<T: Decodable & Sendable>(_ request: Request<T>) async throws -> T {
+        var request = request
+        if let userAgent = ClientIdentity.customUserAgent {
+            request.headers = (request.headers ?? [:]).merging(["User-Agent": userAgent]) { _, new in new }
+        }
         let path = NetworkLog.logPath(for: request.url)
         let start = Date()
         do {

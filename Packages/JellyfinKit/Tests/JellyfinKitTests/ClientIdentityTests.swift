@@ -43,6 +43,27 @@ final class ClientIdentityTests: XCTestCase {
         XCTAssertFalse(emptyToken.contains("Token="))
     }
 
+    func testCustomUserAgentStripsControlCharacters() async throws {
+        // 头值里带控制字符时 `URLRequest.setValue` 会把**整条头**静默丢掉：
+        // 用户以为白名单 UA 生效了，实际发出去的是系统默认 UA，且不报错。
+        // 粘贴 UA 常带尾随换行，所以是剔除而不是整值作废（作废会静默退回默认）。
+        await TestSupport.withCustomUserAgent("SenPlayer/2.1\r\nX-Injected: 1") {
+            XCTAssertEqual(ClientIdentity.customUserAgent, "SenPlayer/2.1X-Injected: 1")
+        }
+        await TestSupport.withCustomUserAgent("  SenPlayer/2.1\n") {
+            XCTAssertEqual(ClientIdentity.customUserAgent, "SenPlayer/2.1")
+        }
+    }
+
+    func testCustomUserAgentIsNilWhenBlank() async throws {
+        await TestSupport.withCustomUserAgent("   \n\t ") {
+            XCTAssertNil(ClientIdentity.customUserAgent, "空白值等于没设置，走系统默认")
+        }
+        await TestSupport.withCustomUserAgent(nil) {
+            XCTAssertNil(ClientIdentity.customUserAgent)
+        }
+    }
+
     private func makeBundle(shortVersion: String?, build: String?) throws -> Bundle {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "ClientIdentityTests-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
