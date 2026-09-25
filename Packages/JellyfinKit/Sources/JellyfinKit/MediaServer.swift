@@ -115,7 +115,8 @@ public protocol MediaServer: PlaybackReporting {
     func item(_ id: String) async throws -> MediaItem
     /// 条目的章节列表。
     func chapters(itemID: String) async throws -> [JellyfinChapter]
-    /// 媒体库单页浏览。
+    /// 媒体库单页浏览。`searchTerm` 非空时为服务端标题搜索（Emby/Jellyfin 的
+    /// `/Items?searchTerm=`），结果仍受父库 / 类型 / 排序 / 观看状态约束。
     func itemsPage(
         parentID: String?,
         kinds: [MediaItem.Kind]?,
@@ -123,7 +124,8 @@ public protocol MediaServer: PlaybackReporting {
         startIndex: Int,
         limit: Int,
         sort: MediaItemsSort?,
-        watchState: MediaItemsWatchState?
+        watchState: MediaItemsWatchState?,
+        searchTerm: String?
     ) async throws -> MediaItemsPage
     /// 媒体库网格浏览（拉全部分页）。
     func items(

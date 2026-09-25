@@ -298,7 +298,8 @@ public struct EmbyServer: MediaServer {
         startIndex: Int,
         limit: Int,
         sort: MediaItemsSort?,
-        watchState: MediaItemsWatchState?
+        watchState: MediaItemsWatchState?,
+        searchTerm: String? = nil
     ) async throws -> MediaItemsPage {
         let pageSize = max(limit, 1)
         let pageStart = max(startIndex, 0)
@@ -314,6 +315,10 @@ public struct EmbyServer: MediaServer {
             ("enableImageTypes", "Primary,Backdrop,Logo"),
             ("enableTotalRecordCount", "true"),
         ]
+        if let searchTerm {
+            let trimmed = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { query.append(("searchTerm", trimmed)) }
+        }
         if let parentID { query.append(("parentId", parentID)) }
         if let kinds {
             let wire = kinds.compactMap(Self.wireKind).map(\.self)

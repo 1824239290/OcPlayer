@@ -370,6 +370,16 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    func testItemsPagePassesSearchTerm() async throws {
+        try await TestSupport.withMock { request in
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["searchTerm"], "沙丘")
+            return MockURLProtocol.ok(#"{"Items":[],"TotalRecordCount":0}"#, for: request.url!)
+        } with: {
+            _ = try await makeServer().itemsPage(parentID: "lib-1", limit: 100, searchTerm: " 沙丘 ")
+        }
+    }
+
     // MARK: - URL 与认证头
 
     func testStreamURLHasNoToken() throws {

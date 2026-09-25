@@ -68,7 +68,8 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         startIndex: Int,
         limit: Int,
         sort: MediaItemsSort?,
-        watchState: MediaItemsWatchState?
+        watchState: MediaItemsWatchState?,
+        searchTerm: String?
     ) async throws -> MediaItemsPage {
         MediaItemsPage(items: [], startIndex: startIndex, totalRecordCount: 0)
     }

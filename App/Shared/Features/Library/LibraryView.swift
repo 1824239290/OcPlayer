@@ -24,6 +24,22 @@ struct LibraryView: View {
     @State private var isLoadingMore = false
     @State private var loadError: String?
     @State private var activeLoadID: UUID?
+    /// 库内搜索词（`.searchable` 输入，防抖后触发服务端 `searchTerm` 查询）。
+    /// 视图实例跨库复用，切库时在 `task(id:)` 里清空——注意只在**真的换库**时清
+    /// （见 `lastLibraryID`）。
+    @State private var searchText = ""
+    @State private var searchDebounce: Task<Void, Never>?
+    /// 上一次 `task(id:)` 见过的库 id。`.task(id:)` 不只在 id 变化时重跑，视图每次
+    /// appear 都会重跑（push 详情再返回也算），所以必须比对 id 才能区分「换库」和
+    /// 「同一个库重新出现」——否则搜索结果点进详情再返回，搜索词和滚动位置全丢。
+    @State private var lastLibraryID: String?
+    /// 当前**取页用的**搜索词（`AppModel.LibraryPageKey` 的搜索维）。
+    ///
+    /// 为什么不直接用 `searchText`：它是防抖的，改词后要 350 ms 才更新缓存，
+    /// 而「切库时清词」与「回浏览页」都需要**同步**生效——`searchText` 同为 ""
+    /// 时 `onChange(of: searchText)` 根本不触发，光靠它切不回浏览页。所以这里
+    /// 显式跟着走：onChange 与 `task(id:)` 各同步一次。
+    @State private var currentPageSearchTerm = ""
 
     /// 每库独立记忆的排序字段与方向（key 带库 id，各库互不干扰）。
     /// 动态 key 的 @AppStorage 只能在 init 里注入，存 rawValue 字符串。
@@ -47,10 +63,17 @@ struct LibraryView: View {
 
     /// 分页数据住在 `AppModel.libraryPages`，不在视图 `@State` 里：
     /// 侧栏切走再切回来时不用从第一页重拉（见 `AppModel.LibraryPage`）。
-    private var items: [MediaItem] { app.libraryPages[library.id]?.items ?? [] }
-    private var totalCount: Int? { app.libraryPages[library.id]?.totalCount }
-    private var nextStartIndex: Int { app.libraryPages[library.id]?.nextStartIndex ?? 0 }
-    private var lastPageWasFull: Bool { app.libraryPages[library.id]?.lastPageWasFull ?? false }
+    /// 键 = 库 + 搜索词：浏览页与搜索页各占一格，否则两者会互相顶掉
+    /// （搜完点进详情再回首页，回来会只剩搜索结果、搜索框却是空的）。
+    private var pageKey: AppModel.LibraryPageKey {
+        AppModel.LibraryPageKey(libraryID: library.id, searchTerm: currentPageSearchTerm)
+    }
+
+    private var currentPage: AppModel.LibraryPage? { app.libraryPages[pageKey] }
+    private var items: [MediaItem] { currentPage?.items ?? [] }
+    private var totalCount: Int? { currentPage?.totalCount }
+    private var nextStartIndex: Int { currentPage?.nextStartIndex ?? 0 }
+    private var lastPageWasFull: Bool { currentPage?.lastPageWasFull ?? false }
 
     private var isCompact: Bool {
         horizontalSizeClass == .compact
@@ -93,9 +116,37 @@ struct LibraryView: View {
                     Task { await reload() }
                 }
             } else if items.isEmpty {
-                EmptyState(empty: "这里还没有内容", systemImage: "tray")
+                let term = searchText.trimmingCharacters(in: .whitespaces)
+                EmptyState(
+                    empty: isSearching
+                        ? (term.count < 2 ? "「\(term)」没有匹配" : "没有匹配「\(term)」的结果")
+                        : "这里还没有内容",
+                    systemImage: isSearching ? "magnifyingglass" : "tray",
+                    message: searchEmptyMessage(term: term)
+                )
             } else {
                 grid
+            }
+        }
+        .searchable(text: $searchText, prompt: Text("搜索本库"))
+        .onChange(of: searchText) { _, _ in
+            searchDebounce?.cancel()
+            // 立刻把取页键切到新词：不切的话这 350 ms 里网格会继续读旧词的格子，
+            // 出现「框里是新词、内容还是上一个词的结果」。
+            currentPageSearchTerm = searchText
+            // 切键的同时进入加载态。新词那一格必然是空的，而请求要等 350 ms 防抖
+            // 加网络往返；这段窗口里若不置位，body 会落到 `items.isEmpty` 分支、
+            // 满屏渲染「没有匹配」——打字时每敲一个字闪一次空结果页。置位后同一
+            // 窗口渲染骨架屏，等真实结果（或真的没结果）落地再切过去。
+            isLoading = true
+            isLoadingMore = false
+            loadError = nil
+            searchDebounce = Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !Task.isCancelled else { return }
+                // await 而不是同步入口：这样 `searchDebounce?.cancel()` 能把取消
+                // 一路传到 URLSession，慢速连续输入不会并发堆请求。
+                await reloadFromFirstPageCancellable()
             }
         }
         .navigationTitle(library.name)
@@ -107,7 +158,36 @@ struct LibraryView: View {
                 sortToolbarButton
             }
         }
-        .task(id: library.id) { await loadIfNeeded() }
+        .task(id: library.id) {
+            // 视图实例跨库复用，上一库的搜索词不能带进新库（清空会经 onChange
+            // 触发一次防抖重载，与 loadIfNeeded 的加载落账互不干扰）。
+            // 只在 id 真的变了时清：`.task(id:)` 每次 appear 都会重跑，不比对
+            // 的话「搜索结果 → 进详情 → 返回」会把搜索词连滚动位置一起清掉。
+            if lastLibraryID != library.id {
+                lastLibraryID = library.id
+                // 切库一定会重新进来（此刻不在导航栈里），浏览页就是落脚点。
+                currentPageSearchTerm = ""
+                // searchText 是 `@State`：侧栏切到首页时视图可能整个被销毁，回来
+                // 它是干净的；但 push 详情再返回时视图还在、搜索词必须留着（搜索结果
+                // 里点进条目再返回，不该把搜索词和滚动位置清掉）。所以这里只在词确实
+                // 非空时清，onChange 会顺带把取页键切回浏览页。
+                if !searchText.isEmpty { searchText = "" }
+            }
+            await loadIfNeeded()
+        }
+    }
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 搜索空态的副文案。单字：服务端 `searchTerm` 的分词不匹配单字（实测两字以上
+    /// 的子串才命中），给「多输入几个字」的引导；剧集库：说明检索粒度是剧集条目
+    /// 本身，单集标题搜不到（分集搜索是刻意不做的）。
+    private func searchEmptyMessage(term: String) -> String? {
+        guard isSearching else { return nil }
+        if term.count < 2 { return "搜索至少要两个字，多输入几个字试试。" }
+        return library.collectionType == .tvshows ? "只匹配剧集条目，单集标题不参与检索。" : nil
     }
 
     /// 首屏骨架：一墙和真实网格同列宽/同卡片尺寸的灰色海报卡，加载完原位替换。
@@ -138,20 +218,24 @@ struct LibraryView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
-                ForEach(items) { item in
-                    PosterCard(item: item, server: app.server, width: cardWidth) {
-                        app.openDetail(item)
+            // footer 必须待在 lazy 容器里：`onAppear` 在非 lazy 的 ScrollView 内容
+            // 里只在加入视图树时触发一次，那样第 3 页起就不会再自动预取。
+            LazyVStack(spacing: 0) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
+                    ForEach(items) { item in
+                        PosterCard(item: item, server: app.server, width: cardWidth) {
+                            app.openDetail(item)
+                        }
+                        .transition(reduceMotion ? .identity : .opacity)
                     }
-                    .transition(reduceMotion ? .identity : .opacity)
                 }
-            }
-            .padding(.horizontal, contentLeading)
-            .padding(.vertical, 28)
+                .padding(.horizontal, contentLeading)
+                .padding(.vertical, 28)
 
-            if hasMore || isLoadingMore {
-                loadMoreFooter
-                    .padding(.bottom, 28)
+                if hasMore || isLoadingMore {
+                    loadMoreFooter
+                        .padding(.bottom, 28)
+                }
             }
         }
         .scrollBounceBehavior(.basedOnSize)
@@ -183,7 +267,8 @@ struct LibraryView: View {
             }
         }
         .frame(maxWidth: .infinity)
-        // footer 进入可视区即预取下一页，不用手动点。
+        // footer 进入可视区即预取下一页，不用手动点。前提是它待在 lazy 容器里
+        // （见 grid 的 LazyVStack），否则只在加入视图树时触发一次。
         .onAppear {
             guard hasMore, !isLoading, !isLoadingMore else { return }
             Task { await loadMore() }
@@ -283,9 +368,38 @@ struct LibraryView: View {
 
     /// 排序或观看状态变了，旧分页在新条件下是错序 / 多余数据：作废缓存从第一页重取。
     /// `activeLoadID` 会让在途的旧请求落账前自行作废，不会写回过期页。
+    /// 同步入口，不关心在途请求（下拉刷新 / 排序这类用户动作本来就该重来一次）。
     private func reloadFromFirstPage() {
-        app.clearLibraryPage(for: library.id)
+        prepareFirstPageReload()
         Task { await load(reset: true) }
+    }
+
+    /// 搜索词变了：在防抖 Task 里直接 `await`，`searchDebounce?.cancel()` 才能把
+    /// 取消传到 URLSession。同步入口新起的是游离 Task，取消不到。
+    private func reloadFromFirstPageCancellable() async {
+        // 清空搜索框回到浏览页时，浏览页那一格本来就有缓存——它是「切走再回来」的
+        // 落脚点，不会被搜索作废。此时若照常清缓存重拉，网格会先空一帧、再进骨架屏，
+        // 白闪一次；直接用现成的。搜索词**之间**的切换没有这个性质（旧词的格子随新
+        // 词作废丢弃），照常清掉重拉。
+        if let cached = currentPage, !cached.items.isEmpty {
+            isLoading = false
+            isLoadingMore = false
+            loadError = nil
+            return
+        }
+        prepareFirstPageReload()
+        await load(reset: true)
+    }
+
+    /// 作废本库缓存并进入首屏加载态。
+    ///
+    /// `isLoading` 必须在 `clearLibraryPage` **之前**置位：清缓存那一拍 items 已经
+    /// 变空、isLoading 还是 false，body 会命中 `items.isEmpty` 分支闪一帧空态
+    /// （搜索时就是闪一帧「没有匹配」）。
+    private func prepareFirstPageReload() {
+        isLoading = true
+        isLoadingMore = false
+        app.clearLibraryPage(for: library.id, searchTerm: currentPageSearchTerm)
     }
 
     /// 切到这个库时：缓存里已经有内容就直接用，不重新请求。
@@ -321,6 +435,10 @@ struct LibraryView: View {
         activeLoadID = loadID
 
         let libraryID = library.id
+        // 只信启动这次请求时还生效的那个词：防抖窗口里用户又改了词的话，这个请求
+        // 的结果属于旧词，不能写进（已经切到新词的）当前格。
+        let term = currentPageSearchTerm
+        let key = AppModel.LibraryPageKey(libraryID: libraryID, searchTerm: term)
         let kinds = itemKinds
         let startIndex = reset ? 0 : nextStartIndex
 
@@ -332,7 +450,14 @@ struct LibraryView: View {
             loadError = nil
         }
         defer {
-            if activeLoadID == loadID {
+            // 取消 = 调用方（搜索防抖）马上会用新条件重来一次，这里不能把加载态
+            // 落下去：缓存已在 prepareFirstPageReload 里清空，「非加载态 + 空 items」
+            // 会闪一帧空态（搜索时就是闪「没有匹配」）。翻页取消没有这个语义，照常落。
+            //
+            // 用户已经切到别的词时（`term != currentPageSearchTerm`）也不再落：那个
+            // 词自己的请求正在跑，它会负责收尾，这里落下去只会把它的加载态提前抹掉。
+            if activeLoadID == loadID, !(reset && Task.isCancelled),
+               term == currentPageSearchTerm {
                 isLoading = false
                 isLoadingMore = false
             }
@@ -346,10 +471,13 @@ struct LibraryView: View {
                 startIndex: startIndex,
                 limit: Self.pageSize,
                 sort: MediaItemsSort(field: sortField, ascending: sortAscending),
-                watchState: watchState
+                watchState: watchState,
+                // 用启动时的 `term` 而不是 `isSearching ? searchText : nil`：后者会在
+                // await 期间被改词影响，让「第一个词的结果」落到「第二个词的格子」里。
+                searchTerm: term.isEmpty ? nil : term
             )
             guard !Task.isCancelled, activeLoadID == loadID else { return }
-            var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[libraryID] ?? .init())
+            var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[key] ?? .init())
             if reset {
                 cached.items = page.items
             } else {
@@ -360,7 +488,7 @@ struct LibraryView: View {
             cached.totalCount = page.totalRecordCount
             cached.nextStartIndex = startIndex + page.items.count
             cached.lastPageWasFull = page.items.count >= Self.pageSize
-            app.cacheLibraryPage(cached, for: libraryID)
+            app.cacheLibraryPage(cached, for: libraryID, searchTerm: term)
             loadError = nil
         } catch is CancellationError {
             return

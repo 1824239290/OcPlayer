@@ -522,6 +522,25 @@ final class EmbyServerTests: XCTestCase {
         }
     }
 
+    func testItemsPagePassesSearchTerm() async throws {
+        try await TestSupport.withMock { request in
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["searchTerm"], "沙丘")
+            return MockURLProtocol.ok(#"{"Items":[],"TotalRecordCount":0}"#, for: request.url!)
+        } with: {
+            _ = try await makeServer().itemsPage(
+                parentID: "lib-1",
+                kinds: [.movie],
+                recursive: true,
+                startIndex: 0,
+                limit: 100,
+                sort: nil,
+                watchState: nil,
+                searchTerm: " 沙丘 "
+            )
+        }
+    }
+
     func testStreamAndImageURLsCarryNoToken() throws {
         let server = makeServer()
         let stream = try server.streamURL(itemID: "mv-1", mediaSourceID: "src-1", playSessionID: "ps-1")

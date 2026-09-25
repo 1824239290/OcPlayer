@@ -76,7 +76,20 @@ final class AppModel {
     /// MoviePilot 首页出现后取走并清空（视图不重建就不会丢）。
     var pendingMoviePilotQuery: String?
 
-    /// 媒体库网格的分页缓存，按 libraryID 存。
+    /// 媒体库网格分页缓存的键：**库 + 搜索词**（空串 = 浏览页）。
+    ///
+    /// 库内搜索是把结果**原地**写进该库分页缓存的，所以键上必须带搜索词。曾经只
+    /// 用 libraryID：浏览页与搜索页共用一格——库内搜「败犬女主」→ 点进详情 → 回
+    /// 首页 → 再点该库，缓存里还是那几条搜索结果，而 `LibraryView.searchText` 是
+    /// `@State`、视图重建后已空 → **搜索框空着、网格却只剩当初那几条**，且没有
+    /// 任何入口能切回浏览页（只能重新搜一次再清空）。带词分键后浏览页与当前搜索词
+    /// 各占一格，切走再回来各自还原。
+    struct LibraryPageKey: Hashable {
+        var libraryID: MediaLibrary.ID
+        var searchTerm: String = ""
+    }
+
+    /// 媒体库网格的分页缓存，按 `LibraryPageKey` 存。
     ///
     /// 原来 items / totalCount 是 `LibraryView` 的 `@State`：侧栏切走再切回来，
     /// `.task(id:)` 重跑一次就从 startIndex 0 重新拉——深翻过十几页的大库回来时
@@ -89,7 +102,7 @@ final class AppModel {
         var lastPageWasFull = false
     }
 
-    var libraryPages: [MediaLibrary.ID: LibraryPage] = [:]
+    var libraryPages: [LibraryPageKey: LibraryPage] = [:]
 
     /// 分页缓存条目总量上限：超大服务器深翻多个库时无上限增长会吃掉几百 MB
     /// （每条 MediaItem 带长 overview）。超限就整份清空、只回填当前正在浏览的
@@ -97,18 +110,25 @@ final class AppModel {
     /// 不值得为它维护 LRU 结构。
     static let libraryPagesItemLimit = 20_000
 
-    func cacheLibraryPage(_ page: LibraryPage, for id: MediaLibrary.ID) {
-        libraryPages[id] = page
+    func cacheLibraryPage(_ page: LibraryPage, for libraryID: MediaLibrary.ID, searchTerm: String = "") {
+        let key = LibraryPageKey(libraryID: libraryID, searchTerm: searchTerm)
+        libraryPages[key] = page
+        // 搜索页同时可达的只有一个：搜索框一次只装一个词，切库还会把它清空
+        // （见 LibraryView 的 lastLibraryID）。旧搜索词的格子再也读不到，直接丢，
+        // 免得它们在字典里无界累积；浏览页（空词）是切走再回来的落脚点，全部保留。
+        if !searchTerm.isEmpty {
+            libraryPages = libraryPages.filter { $0.key.searchTerm.isEmpty || $0.key == key }
+        }
         let totalItems = libraryPages.values.reduce(0) { $0 + $1.items.count }
         if totalItems > Self.libraryPagesItemLimit {
-            libraryPages = [id: page]
+            libraryPages = [key: page]
         }
     }
 
-    /// 作废某库的分页缓存。换排序时旧页在新顺序下是错序数据，直接清掉重取；
+    /// 作废某库某搜索词的分页缓存。换排序时旧页在新顺序下是错序数据，直接清掉重取；
     /// 分页缓存只是「回库不重拉」的加速器，清空的代价是下次进库从第一页翻。
-    func clearLibraryPage(for id: MediaLibrary.ID) {
-        libraryPages[id] = nil
+    func clearLibraryPage(for libraryID: MediaLibrary.ID, searchTerm: String = "") {
+        libraryPages[LibraryPageKey(libraryID: libraryID, searchTerm: searchTerm)] = nil
     }
 
     // MARK: - 详情页快照缓存（stale-while-revalidate）

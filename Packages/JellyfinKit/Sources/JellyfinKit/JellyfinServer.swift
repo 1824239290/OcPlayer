@@ -257,7 +257,8 @@ public struct JellyfinServer: MediaServer {
         startIndex: Int = 0,
         limit: Int = 100,
         sort: MediaItemsSort? = nil,
-        watchState: MediaItemsWatchState? = nil
+        watchState: MediaItemsWatchState? = nil,
+        searchTerm: String? = nil
     ) async throws -> MediaItemsPage {
         let pageSize = max(limit, 1)
         let pageStart = max(startIndex, 0)
@@ -268,12 +269,14 @@ public struct JellyfinServer: MediaServer {
         case .unwatched: itemFilters = [.isUnplayed]
         case .all, nil: itemFilters = nil
         }
+        let trimmedSearch = searchTerm?.trimmingCharacters(in: .whitespacesAndNewlines)
         let result = try await send(
             Paths.getItems(parameters: .init(
                 userID: profile.userID,
                 startIndex: pageStart,
                 limit: pageSize,
                 isRecursive: recursive,
+                searchTerm: (trimmedSearch?.isEmpty == false) ? trimmedSearch : nil,
                 sortOrder: sortOrders.compactMap(SortOrder.init(rawValue:)),
                 parentID: parentID,
                 includeItemTypes: kinds.map { kinds in
