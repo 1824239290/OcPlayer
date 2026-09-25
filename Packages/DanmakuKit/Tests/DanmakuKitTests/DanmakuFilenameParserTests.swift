@@ -79,4 +79,71 @@ final class DanmakuFilenameParserTests: XCTestCase {
         XCTAssertEqual(r.title, "葬送的芙莉莲")
         XCTAssertEqual(r.episodeNumber, 1)
     }
+
+    // MARK: 规范匹配名（送弹弹play 的 fileName）
+
+    /// 回归：裸文件名 + 番剧名必须合成规范名，**不得拼回原始文件名**。
+    /// 实测 `葬送的芙莉莲 第1季 E05 01.mkv` 会让弹弹play 的模糊匹配锁到「第1话」，
+    /// 而规范名正确落到「第5话」。
+    func testCanonicalMatchNameReplacesBareNumericFileName() {
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "葬送的芙莉莲", season: 1,
+                episode: .number(5), rawFileName: "01.mkv"),
+            "葬送的芙莉莲 第05话"
+        )
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "葬送的芙莉莲", season: 2,
+                episode: .number(5), rawFileName: "S02E05.mkv"),
+            "葬送的芙莉莲 第2季 第05话"
+        )
+    }
+
+    /// 原始文件名自带番剧名（任意语言）时原样使用，只剥扩展名。
+    func testCanonicalMatchNameKeepsInformativeRawName() {
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "葬送的芙莉莲", season: 1,
+                episode: .number(5), rawFileName: "[NC-Raws] 葬送的芙莉莲 - 05 [1080p].mkv"),
+            "[NC-Raws] 葬送的芙莉莲 - 05 [1080p]"
+        )
+        // 罗马音原名不含中文番剧名 → 合成规范名（弹弹play 的标题是中文，中文名检索更稳）。
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "葬送的芙莉莲", season: 1,
+                episode: .number(5), rawFileName: "[SubGroup] Sousou no Frieren - 05.mkv"),
+            "葬送的芙莉莲 第05话"
+        )
+    }
+
+    /// 特典：规范名带命名空间 token（`SP2` / `C1`），与弹弹play 自己的特典标题形态一致。
+    func testCanonicalMatchNameForSpecials() {
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "来玩游戏吧", season: 0,
+                episode: .special(kind: .special, index: 2), rawFileName: "SP02.mkv"),
+            "来玩游戏吧 SP2"
+        )
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "碧蓝之海", season: 0,
+                episode: .special(kind: .extra, index: 1), rawFileName: "NCOP.mkv"),
+            "碧蓝之海 C1"
+        )
+    }
+
+    /// 没有番剧名可合成时退回原始文件名（剥扩展名）。
+    func testCanonicalMatchNameFallsBackToRawName() {
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: "", season: nil, episode: nil, rawFileName: "01.mkv"),
+            "01"
+        )
+        XCTAssertEqual(
+            DanmakuFilenameParser.canonicalMatchName(
+                seriesTitle: nil, season: 3, episode: .number(4), rawFileName: "ep04.mkv"),
+            "ep04"
+        )
+    }
 }

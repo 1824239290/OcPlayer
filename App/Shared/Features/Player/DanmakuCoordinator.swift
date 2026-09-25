@@ -69,6 +69,10 @@ struct DanmakuPlaybackContext {
     /// ProviderIds 直取的 MyAnimeList / AniList ID（AniSkip 跳过片头用，机会性存在）。
     let malID: Int?
     let anilistID: Int?
+    /// 目标是剧场版/电影（`MediaItem.kind == .movie`）。
+    let isMovie: Bool
+    /// 目标是特典（Jellyfin season 0 / 文件名关键词命中），序号即特典编号。
+    let special: DanmakuSpecialTarget?
 
     static func jellyfin(
         item: MediaItem,
@@ -85,29 +89,26 @@ struct DanmakuPlaybackContext {
         let seasonNumber = item.seasonNumber
         let episodeNumber = item.episodeNumber
         let tmdbID = item.tmdbID.flatMap(Int.init)
+        let special = jellyfinSpecialTarget(
+            seasonNumber: seasonNumber,
+            episodeNumber: episodeNumber,
+            keywordText: [rawFileName, request.title, item.name].joined(separator: " ")
+        )
 
-        // 智能文件名合成：若源文件名不包含番剧名（常见如 01.mkv, S01E01.mkv），合成完整的番剧名与季度/集数
-        let fileName: String
-        let rawLower = rawFileName.lowercased()
-        let seriesLower = seriesName.lowercased()
-        if !seriesLower.isEmpty && !rawLower.contains(seriesLower) {
-            var prefix = seriesName
-            if let season = seasonNumber, season > 1 {
-                prefix += " 第\(season)季"
-            }
-            if let ep = episodeNumber {
-                prefix += " E\(String(format: "%02d", ep))"
-            }
-            fileName = "\(prefix) \(rawFileName)"
-        } else {
-            fileName = rawFileName
-        }
+        // 文件名：含番剧名就原样用，否则合成规范名（剥扩展名、不拼回原始文件名——
+        // 尾部裸数字会把弹弹play 的模糊匹配带偏，见 canonicalMatchName 注释）。
+        let fileName = DanmakuFilenameParser.canonicalMatchName(
+            seriesTitle: seriesName,
+            season: seasonNumber,
+            episode: matchEpisodeToken(number: episodeNumber, special: special),
+            rawFileName: rawFileName
+        )
 
         let sourceID = source?.mediaSourceID ?? "default"
         let fileSize = source?.mediaSourceSize.map(Int64.init)
         let durationSeconds = roundedSeconds(source?.durationSeconds ?? item.runtimeSeconds)
         let cacheIdentity = [
-            serverProfileID, item.id, sourceID, fileName,
+            serverProfileID, item.id, sourceID, rawFileName,
             fileSize.map(String.init) ?? "unknown-size",
             durationSeconds.map(String.init) ?? "unknown-duration",
         ].joined(separator: "\n")
@@ -130,7 +131,9 @@ struct DanmakuPlaybackContext {
             isFinal: false,
             tmdbID: tmdbID,
             malID: item.malID.flatMap(Int.init),
-            anilistID: item.anilistID.flatMap(Int.init)
+            anilistID: item.anilistID.flatMap(Int.init),
+            isMovie: item.kind == .movie,
+            special: special
         )
     }
 
@@ -178,13 +181,20 @@ struct DanmakuPlaybackContext {
 
         let suggestedAnime = effectiveAnimeTitle.isEmpty ? rawFileName : effectiveAnimeTitle
         let suggestedEpisode = parsed.episodeNumber.map(String.init) ?? ""
+        let special = standaloneSpecialTarget(parsed: parsed, rawFileName: rawFileName)
+        let fileName = DanmakuFilenameParser.canonicalMatchName(
+            seriesTitle: effectiveAnimeTitle,
+            season: parsed.seasonNumber,
+            episode: matchEpisodeToken(number: parsed.episodeNumber, special: special),
+            rawFileName: rawFileName
+        )
 
         return DanmakuPlaybackContext(
             requestID: request.id,
             cacheKey: "standalone:\(sha256(identity))",
             allowsCachedMatchReuse: allowsCachedMatchReuse,
             sourceKind: localURL == nil ? .remoteURL : .localFile,
-            fileName: rawFileName,
+            fileName: fileName,
             fileSize: fileSize,
             durationSeconds: nil,
             localFileURL: localURL,
@@ -198,8 +208,42 @@ struct DanmakuPlaybackContext {
             isFinal: parsed.isFinal,
             tmdbID: nil,
             malID: nil,
-            anilistID: nil
+            anilistID: nil,
+            isMovie: false,
+            special: special
         )
+    }
+
+    /// 特典判定（Jellyfin 源）：season 0 是唯一可靠信号——season 1 里编号靠后的 OVA
+    /// 在弹弹play 常被编成正片「第 N 话」，猜成特典反而扣分。命名空间按文件名关键词猜，
+    /// 猜不出交给 `fallbackOrder`（S→C→O）依次试。
+    private static func jellyfinSpecialTarget(
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        keywordText: String
+    ) -> DanmakuSpecialTarget? {
+        guard seasonNumber == 0, let index = episodeNumber, index >= 1 else { return nil }
+        let kinds = DanmakuSpecialKeyword.kind(in: keywordText).map { [$0] }
+            ?? DanmakuSpecialKind.fallbackOrder
+        return DanmakuSpecialTarget(index: index, kinds: kinds)
+    }
+
+    /// 特典判定（本地文件）：文件名是唯一线索，序号缺失时按第 1 集处理。
+    private static func standaloneSpecialTarget(
+        parsed: ParsedAnimeInfo,
+        rawFileName: String
+    ) -> DanmakuSpecialTarget? {
+        guard let kind = DanmakuSpecialKeyword.kind(in: rawFileName) else { return nil }
+        return DanmakuSpecialTarget(index: parsed.episodeNumber ?? 1, kinds: [kind])
+    }
+
+    /// 匹配用集号：特典走命名空间 token（`S2`/`C1`），正片走集数。
+    private static func matchEpisodeToken(
+        number: Int?,
+        special: DanmakuSpecialTarget?
+    ) -> DanmakuEpisodeToken? {
+        if let special { return .special(kind: special.kinds[0], index: special.index) }
+        return number.map { .number($0) }
     }
 
     private static func normalizedFileName(_ candidates: String?...) -> String {
@@ -247,6 +291,7 @@ final class DanmakuCoordinator {
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var loadGeneration: UInt64 = 0
     @ObservationIgnored private var context: DanmakuPlaybackContext?
+    @ObservationIgnored private let titleAliasResolver: DanmakuTitleAliasResolver
     @ObservationIgnored private var configuration: DandanplayConfiguration?
     @ObservationIgnored private weak var playback: PlaybackController?
 
@@ -257,6 +302,12 @@ final class DanmakuCoordinator {
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
         let service = DanmakuService(cache: DanmakuCache(directory: directory))
+        // 别名桥（手动搜索合并用）：弹弹play 搜索认不得「另一个中文译名」，Bangumi 的
+        // nameCN 能把本地译名换到弹弹play 库里的标题（永久缓存，负缓存 7 天）。
+        titleAliasResolver = DanmakuTitleAliasResolver(
+            store: DanmakuTitleAliasStore(directory: directory),
+            provider: BangumiTitleAliasProvider()
+        )
         orchestrator = DanmakuLoadOrchestrator(service: service, session: session)
         self.session = session
     }
@@ -350,15 +401,32 @@ final class DanmakuCoordinator {
         ])
         let client = DanmakuGatewayClient(configuration: configuration, session: session)
         do {
-            let result = try await client.searchEpisodes(
+            var result = try await client.searchEpisodes(
                 anime: anime,
                 episode: episode.isEmpty ? nil : episode
             ).payload.animes
+
+            // 别名合并：弹弹play 搜索认不得「另一个中文译名」（实测搜「虽然我是不完美恶女
+            // ～雏宫蝶鼠替换传～」返回的全是无关作品），Bangumi 的 nameCN 能换到库内标题。
+            // 主检索与别名检索都跑，按 animeId 去重合并——主检索命中正确作品时这一步零成本。
+            var aliasHit = false
+            for alias in await titleAliasResolver.aliases(for: anime) where alias != anime {
+                guard let aliasResult = try? await client.searchEpisodes(
+                    anime: alias,
+                    episode: episode.isEmpty ? nil : episode
+                ).payload.animes, !aliasResult.isEmpty else { continue }
+                let known = Set(result.map(\.animeId))
+                result += aliasResult.filter { !known.contains($0.animeId) }
+                aliasHit = true
+                break
+            }
+
             AppDiagnostics.logInfo("弹幕手动搜索完成", fields: [
                 "anime": .string(anime),
                 "episode": episode.isEmpty ? .null : .string(episode),
                 "animeCount": .integer(Int64(result.count)),
                 "episodeCount": .integer(Int64(result.reduce(0) { $0 + $1.episodes.count })),
+                "aliasHit": .boolean(aliasHit),
             ])
             return result
         } catch {
@@ -520,7 +588,9 @@ final class DanmakuCoordinator {
             isFinal: context.isFinal,
             tmdbID: context.tmdbID,
             malID: context.malID,
-            anilistID: context.anilistID
+            anilistID: context.anilistID,
+            isMovie: context.isMovie,
+            special: context.special
         )
     }
 

@@ -136,6 +136,63 @@ public enum DanmakuFilenameParser {
         return nil
     }
 
+    /// 送给弹弹play 的匹配文件名。
+    ///
+    /// 原始文件名若已含番剧名（任意语言）就原样用——它自带检索线索。否则按
+    /// 「番剧名 + 第N季 + 集数」合成规范名，**不再拼回原始文件名**：实测
+    /// `葬送的芙莉莲 第1季 E05 01.mkv` 会让弹弹play 的模糊匹配锁到「第1话」
+    /// （尾部裸数字干扰），而 `葬送的芙莉莲 第1季 第05话` 正确落到「第5话」。
+    /// 官方契约要求 fileName 不含扩展名，这里统一剥掉。
+    ///
+    /// `seriesTitle` 为空时无从合成，退回原始文件名。
+    public static func canonicalMatchName(
+        seriesTitle: String?,
+        season: Int?,
+        episode: DanmakuEpisodeToken?,
+        rawFileName: String
+    ) -> String {
+        let normalized = normalizeFullWidth(rawFileName)
+            .replacingOccurrences(of: "\\", with: "/")
+        let lastComponent = normalized.split(separator: "/").last.map(String.init) ?? normalized
+        let withoutExtension = (lastComponent as NSString).deletingPathExtension
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = withoutExtension.isEmpty ? lastComponent : withoutExtension
+
+        let series = seriesTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !series.isEmpty else { return fallback }
+
+        let comparableSeries = comparableTitle(series)
+        if !comparableSeries.isEmpty,
+           comparableTitle(fallback).contains(comparableSeries) {
+            return fallback
+        }
+
+        var name = series
+        if let season, season > 1 {
+            name += " 第\(season)季"
+        }
+        switch episode {
+        case .number(let value):
+            name += " 第\(String(format: "%02d", value))话"
+        case .special(let kind, let index):
+            name += " \(kind.keyword)\(index)"
+        case nil:
+            break
+        }
+        return name
+    }
+
+    /// 标题比较用的归一形态：全角转半角、小写、只留字母与数字。
+    /// 打分器与规范名判重共用（`Re：从零…` 与 `Re 从零…` 视为同一标题）。
+    public static func comparableTitle(_ title: String) -> String {
+        let normalized = normalizeFullWidth(title).lowercased()
+        var cleaned = ""
+        for ch in normalized where ch.isLetter || ch.isNumber {
+            cleaned.append(ch)
+        }
+        return cleaned
+    }
+
     /// 解析文件名。
     public static func parse(_ raw: String) -> ParsedAnimeInfo {
         let normalized = normalizeFullWidth(raw)

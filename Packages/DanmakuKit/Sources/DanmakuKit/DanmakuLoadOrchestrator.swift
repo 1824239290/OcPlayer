@@ -114,11 +114,14 @@ public struct DanmakuLoadOrchestrator {
 
             // 1. 构建目标识别基准（优先外部传入，否则由文件名解析补全）
             let parsed = DanmakuFilenameParser.parse(matchContext.fileName)
+            let localTitle = matchContext.animeTitle?.nilIfEmpty ?? parsed.title.nilIfEmpty
             let target = DanmakuCandidateScorer.TargetContext(
-                animeTitle: matchContext.animeTitle?.nilIfEmpty ?? parsed.title.nilIfEmpty,
+                animeTitle: localTitle,
                 episodeNumber: matchContext.episodeNumber ?? parsed.episodeNumber,
                 seasonNumber: matchContext.seasonNumber ?? parsed.seasonNumber,
-                isFinal: matchContext.isFinal || parsed.isFinal
+                isFinal: matchContext.isFinal || parsed.isFinal,
+                special: matchContext.special,
+                kind: matchContext.isMovie ? .movie : .episode
             )
 
             // 2. 多级智能匹配。每级显式 do/catch：取消照抛；其余错误记入 tierError
@@ -227,7 +230,7 @@ public struct DanmakuLoadOrchestrator {
                 }
             }
 
-            // Tier 4: 若仍未命中且解析出的纯化标题不同，用纯化标题再次尝试搜索
+            // Tier 4: 若仍未命中且解析出的纯化标题不同，用纯化标题再次尝试搜索。
             if matched == nil, !gatewayDown, let cleanTitle = parsed.title.nilIfEmpty, cleanTitle != target.animeTitle {
                 try Task.checkCancellation()
                 guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
@@ -299,14 +302,25 @@ public struct DanmakuLoadOrchestrator {
         }
     }
 
+    /// 搜索参数序列：正片先精确集数再全集兜底。**特典只发全集搜索**——Jellyfin 的
+    /// season-0 序号与弹弹play 的 S/C/O 命名空间不同源（实测拿序号 29 发 `episode=S29`
+    /// 会唯一命中同 IP 剧场版的 S29），靠打分器在全量分集里选才不引入错误候选。
+    static func episodeQueries(for target: DanmakuCandidateScorer.TargetContext) -> [String?] {
+        if target.special != nil { return [nil] }
+        if let episode = target.episodeNumber {
+            return [String(episode), nil]
+        }
+        return [nil]
+    }
+
     private func searchByTMDB(
         tmdbID: Int,
         target: DanmakuCandidateScorer.TargetContext,
         client: DanmakuGatewayClient
     ) async throws -> DanmakuEpisodeMatch? {
-        let episodeQuery = target.episodeNumber.map(String.init)
         // 错误直接上抛给 tier 的 do/catch（不再内部 try? 吞掉）：
         // 网关挂了要能让最终结果落「失败可重试」而不是「未匹配」。
+        let episodeQuery = Self.episodeQueries(for: target).first ?? nil
         let episodeScoped = try await client.searchEpisodes(
             tmdbId: tmdbID,
             tmdbIdType: 0,
@@ -316,7 +330,7 @@ public struct DanmakuLoadOrchestrator {
            let best = DanmakuCandidateScorer.pickBestEpisode(from: episodeScoped, target: target) {
             return best.match
         }
-        if target.episodeNumber != nil {
+        if target.episodeNumber != nil && target.special == nil {
             let all = try await client.searchEpisodes(
                 tmdbId: tmdbID,
                 tmdbIdType: 0,
@@ -347,30 +361,18 @@ public struct DanmakuLoadOrchestrator {
         let trimmedTitle = animeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return nil }
 
-        let episodeQuery = target.episodeNumber.map(String.init)
-
-        // 1. 精准搜索：动画名 + 集数（错误上抛给 tier 的 do/catch）
-        if let ep = episodeQuery {
+        // 1. 依次尝试：正片集数 / 特典命名空间（S→C→O）；错误上抛给 tier 的 do/catch。
+        // 2. 全集搜索：不带 episode，在返回的所有分集里按 token 打分挑。
+        for query in Self.episodeQueries(for: target) {
             let scoped = try await client.searchEpisodes(
                 anime: trimmedTitle,
-                episode: ep
+                episode: query
             ).payload.animes
             if !scoped.isEmpty,
                let best = DanmakuCandidateScorer.pickBestEpisode(from: scoped, target: target) {
                 return best.match
             }
         }
-
-        // 2. 全集搜索：仅传动画名，在返回的所有分集中匹配集数与季度
-        let all = try await client.searchEpisodes(
-            anime: trimmedTitle,
-            episode: nil
-        ).payload.animes
-        if !all.isEmpty,
-           let best = DanmakuCandidateScorer.pickBestEpisode(from: all, target: target) {
-            return best.match
-        }
-
         return nil
     }
 
@@ -577,6 +579,10 @@ public struct DanmakuMatchContext: Sendable {
     /// ProviderIds 直取的 MyAnimeList / AniList ID（AniSkip 跳过片头数据源用，可缺省）。
     public let malID: Int?
     public let anilistID: Int?
+    /// 目标是剧场版/电影（`MediaItem.kind == .movie`）。剧场版与剧集互斥。
+    public let isMovie: Bool
+    /// 目标是特典（Jellyfin season 0 / 文件名关键词命中）；`index` 是特典序号。
+    public let special: DanmakuSpecialTarget?
     private let localFileURL: URL?
     private let remoteURL: URL?
     private let remoteHeaders: [String: String]
@@ -597,7 +603,9 @@ public struct DanmakuMatchContext: Sendable {
         isFinal: Bool = false,
         tmdbID: Int? = nil,
         malID: Int? = nil,
-        anilistID: Int? = nil
+        anilistID: Int? = nil,
+        isMovie: Bool = false,
+        special: DanmakuSpecialTarget? = nil
     ) {
         self.uuid = uuid
         self.cacheKey = cacheKey
@@ -615,6 +623,8 @@ public struct DanmakuMatchContext: Sendable {
         self.tmdbID = tmdbID
         self.malID = malID
         self.anilistID = anilistID
+        self.isMovie = isMovie
+        self.special = special
     }
 
     /// 计算媒体指纹：本地文件读前 16 MiB；远程走 Range 请求。都不支持返回 nil。

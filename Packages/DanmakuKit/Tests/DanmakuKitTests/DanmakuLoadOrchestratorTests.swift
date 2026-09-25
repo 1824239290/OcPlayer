@@ -816,6 +816,60 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
             introHint: cached))
     }
 
+    // MARK: 类型硬门槛 / 特典目标
+
+    /// 回归（用户实报）：中二病 S00E29 特典，弹弹play 的模糊/搜索候选里有同 IP 剧场版的
+    /// S29 特典（「映画公開記念! 暗黒謝肉祭!」，弹幕为空）。剧场版与剧集是不同作品，
+    /// 类型硬门槛必须让它出局——落到 noMatch 手动选，而不是错匹配。
+    func testMovieCandidatesAreExcludedForSpecialTarget() async throws {
+        let configuration = makeConfiguration()
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "jellyfin:special-movie-gate",
+            allowsCachedMatchReuse: true,
+            fileName: "中二病也要谈恋爱! - S00E29 - 第 29 集",
+            fileSize: 64,
+            durationSeconds: 1417,
+            localFileURL: nil,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            remoteHeaders: [:],
+            animeTitle: "中二病也要谈恋爱!",
+            episodeNumber: 29,
+            seasonNumber: 0,
+            special: DanmakuSpecialTarget(index: 29, kinds: DanmakuSpecialKind.fallbackOrder)
+        )
+        let fingerprint = makeFingerprintData()
+        let noMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":0,"isMatched":false,"matches":[]}
+        """
+        // 真实候选形态：剧场版第1话 + 同 IP 剧场版的 S29（打分本可以靠序号命中 +2000）
+        let searchBody = """
+        {"success":true,"errorCode":0,"animes":[
+          {"animeId":13176,"animeTitle":"剧场版 中二病也要谈恋爱！ -Take On Me- ","type":"movie","typeDescription":"剧场版","episodes":[
+            {"episodeId":131760001,"episodeTitle":"第1话 剧场版 中二病也要谈恋爱！ -Take On Me- "},
+            {"episodeId":131769029,"episodeTitle":"S29 映画公開記念! 暗黒謝肉祭!"}]}]}
+        """
+        MockURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/v1/match":
+                return TestSupport.response(noMatchBody, url: request.url!)
+            case "/v1/search/episodes":
+                return TestSupport.response(searchBody, url: request.url!)
+            default:
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(outcome, .noMatch, "剧场版候选应被类型硬门槛排除，落 noMatch 而非错匹配")
+    }
+
     // MARK: 辅助
 
     private func assertInjectedJSON(commentCount: Int, firstContent: String, firstTime: Double) throws {
