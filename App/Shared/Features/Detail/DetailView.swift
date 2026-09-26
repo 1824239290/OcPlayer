@@ -35,6 +35,11 @@ struct DetailView: View {
     @State private var isUpdatingPlayed = false
     @State private var playedActionError: String?
 
+    /// 进场动画：push 落位后内容整体淡入 + 轻微上移。系统 push 在 macOS 上
+    /// 会被同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面自己
+    /// 保证有一段可见、统一的入场过渡；reduceMotion 下 .motion 自动直切。
+    @State private var appeared = false
+
     /// 选集排序偏好跨启动保留：长剧倒序从最新一集看起，不用从头翻。
     @AppStorage(SettingsKeys.episodeSortAscending) private var episodesAscending = true
 
@@ -92,17 +97,30 @@ struct DetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if horizontalSizeClass == .compact {
-                    if isAmbientActive {
-                        ambientCompactHeader
-                    } else {
-                        compactHeaderView
+                    ZStack(alignment: .top) {
+                        if isAmbientActive {
+                            ambientCompactHeader
+                                .transition(.opacity)
+                        } else {
+                            compactHeaderView
+                                .transition(.opacity)
+                        }
                     }
-                } else if isAmbientActive {
-                    // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
-                    ambientHeader
-                    metadata
+                    .motion(Motion.standard, value: isAmbientActive)
                 } else {
-                    banner
+                    ZStack(alignment: .top) {
+                        if isAmbientActive {
+                            // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
+                            ambientHeader
+                                .transition(.opacity)
+                        } else {
+                            banner
+                                .transition(.opacity)
+                        }
+                    }
+                    // 详情数据落地时 backdrop tag 可能从无到有，头部在横幅与
+                    // 氛围两版之间切换——交叉淡入 + 高度过渡，不再硬切跳变。
+                    .motion(Motion.standard, value: isAmbientActive)
                     metadata
                 }
                 if let loadError = model.loadError {
@@ -133,13 +151,17 @@ struct DetailView: View {
                 if !model.similar.isEmpty { similarRail }
             }
             .padding(.bottom, 48)
+            // 进场：内容淡入 + 上移落位（见 appeared 注释）。加载中的骨架块
+            // （海报 / 头像 / 标题 Logo）与 RemoteImage 的原位淡入承担
+            // 「加载过渡」，不再做整页透明度脉冲——那会在每次进入时可见地
+            // 变暗又提亮一次（「闪一下」）。
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 12)
+            .motion(Motion.standard, value: appeared)
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .ignoresSafeArea(edges: .top)
-        // 详情数据落地时让当前设计的真实内容整体提亮，图片资源则由
-        // RemoteImage 在原位淡入；加载失败也会在 isLoading 结束后恢复正常亮度。
-        .opacity(model.isLoading ? 0.86 : 1)
-        .motion(Motion.standard, value: model.isLoading)
+        .onAppear { appeared = true }
         .navigationTitle(horizontalSizeClass == .compact ? "" : model.shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -151,9 +173,10 @@ struct DetailView: View {
         #endif
         // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
         // 页面必须保持透明才能和侧栏连成一张图；够不着时（iOS）或紧凑布局没有
-        // 整窗层，页面自己垫氛围 + 兜底纯色。
+        // 整窗层，页面自己垫氛围 + 兜底纯色。声明在底图预热完成后才发出：
+        // 氛围层淡入时图已就绪，不会先灰一块、图到位再可见地补加载。
         .background {
-            if drawsOwnAmbience, isAmbientActive {
+            if drawsOwnAmbience, isAmbientActive, model.isAmbienceReady {
                 BackdropAmbienceView(
                     target: model.shown.imageTarget(app.server, kind: .backdrop, width: 800),
                     scrim: .detail
@@ -166,7 +189,7 @@ struct DetailView: View {
             }
         }
         .windowAmbience(
-            WindowAmbience.reachesScreen && isAmbientActive
+            WindowAmbience.reachesScreen && isAmbientActive && model.isAmbienceReady
                 ? WindowAmbience(
                     url: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).url,
                     authHeader: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).authHeader

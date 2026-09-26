@@ -54,16 +54,9 @@ public struct RemoteImage: View {
             // 常驻底层：加载中就是它在当占位，图片到位后从它上面淡入。
             // 灰度取 `Metrics.placeholderFill`，和骨架块同一个值——否则骨架撤掉、
             // 真实卡片上位而图还没下载完的那一瞬间，整墙灰会「变深一档」。
+            // 它也是**唯一的布局锚点**：容器大小只由它（即外部提议）决定。
             Rectangle().fill(Metrics.placeholderFill)
-            if let image {
-                Image(platform: image)
-                    .resizable()
-                    .scaledToFill()
-                    .id(loadedKey)
-                    // 加载完成在占位层上淡入，不再硬弹出；背景图保留旧帧时，
-                    // 新图也沿同一过渡交叉淡入。
-                    .transition(.section)
-            } else if failed || url == nil {
+            if image == nil, failed || url == nil {
                 // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
                 // 显示静态占位图标。否则 url 为 nil 时会永远转圈（task 里被 guard 挡掉）。
                 Image(systemName: "photo")
@@ -72,6 +65,22 @@ public struct RemoteImage: View {
             }
             // 加载中不需要额外分支：底层那块灰就是占位（原来这里又画了一块
             // 一模一样的 Rectangle，视觉上是 no-op，只多一层合成）。
+        }
+        // 位图画在 overlay：成败与否都**不反哺布局**。此前位图直接当 ZStack
+        // 子层，scaledToFill 的覆盖尺寸会参与布局——位图到位瞬间容器理想尺寸
+        // 从「无比例」跳到「图片比例」，挂在容器上的长动画（氛围层 1.6s）会把它
+        // 当几何变化播出来：整窗背景「闪一下变大再沉降」。overlay 不影响宿主
+        // 尺寸，图到位只剩纯淡入。
+        .overlay {
+            if let image {
+                Image(platform: image)
+                    .resizable()
+                    .scaledToFill()
+                    .id(loadedKey)
+                    // 加载完成在占位层上淡入，不再硬弹出；背景图保留旧帧时，
+                    // 新图也沿同一过渡交叉淡入。
+                    .transition(.section)
+            }
         }
         .clipped()
         .animation(imageFade, value: loadedKey)

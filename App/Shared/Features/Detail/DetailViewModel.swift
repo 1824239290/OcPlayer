@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import JellyfinKit
 import SwiftUI
@@ -38,6 +39,13 @@ final class DetailViewModel {
     /// 播放退出后的静默刷新任务：离页时由视图取消。
     var reloadAfterPlaybackTask: Task<Void, Never>?
 
+    /// 氛围底图（800 宽 backdrop + 512 解码）是否已进 pipeline 缓存。
+    /// 视图只在就绪后才声明整窗/页内氛围——氛围层不再以灰占位淡入、
+    /// 图片到位时也无需可见地补加载。取图失败保持 false（回退纯色底）。
+    private(set) var isAmbienceReady = false
+    private var ambiencePrewarmTask: Task<Void, Never>?
+    private var prewarmedAmbienceURL: URL?
+
     var shown: MediaItem { detail ?? item }
 
     init(item: MediaItem) {
@@ -72,6 +80,7 @@ final class DetailViewModel {
 
     func load() async {
         guard let app, let server = app.server else { return }
+        prewarmAmbience()
         // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
         // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
         let snapshot = app.detailSnapshots[item.id]
@@ -114,6 +123,8 @@ final class DetailViewModel {
             let loadedDetail = try await server.item(item.id)
             guard !Task.isCancelled else { return }
             detail = loadedDetail
+            // 完整详情的图 tag 可能与列表页快照不同：换图重预热（同 URL 时直接命中短路）。
+            prewarmAmbience()
 
             if loadedDetail.kind == .series {
                 do {
@@ -135,6 +146,28 @@ final class DetailViewModel {
         isLoading = false
         similar = (try? await similarItems) ?? similar
         storeSnapshot()
+    }
+
+    /// 预热当前条目的氛围底图：与 `BackdropAmbienceView` / 整窗层完全同参
+    /// （800 宽 URL + 512 解码），保证视图层的 `RemoteImage` 首帧命中缓存。
+    /// 同一 URL 只预热一次；换条目 / 详情落地换 tag 时重跑。
+    private func prewarmAmbience() {
+        guard let server = app?.server else { return }
+        let target = shown.imageTarget(server, kind: .backdrop, width: 800)
+        guard let url = target.url else { return }
+        guard url != prewarmedAmbienceURL else { return }
+        prewarmedAmbienceURL = url
+        let authHeader = target.authHeader
+        ambiencePrewarmTask?.cancel()
+        ambiencePrewarmTask = Task {
+            if ImagePipeline.shared.memoryCachedImage(url: url, authHeader: authHeader, maxPixelSize: 512) != nil {
+                isAmbienceReady = true
+                return
+            }
+            let loaded = try? await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: 512)
+            guard !Task.isCancelled else { return }
+            isAmbienceReady = (loaded != nil)
+        }
     }
 
     func loadEpisodes() async {
