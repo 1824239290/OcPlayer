@@ -204,7 +204,7 @@ struct HomeView: View {
                     ContentUnavailableView {
                         Label("媒体库暂无可展示内容", systemImage: "sparkles")
                     } description: {
-                        Text("媒体库可能正在建立索引或没有未看项目。可在侧栏或下方切换媒体库浏览。")
+                        Text("媒体库可能正在建立索引或没有未看项目。可从顶栏的「媒体库」按钮切换媒体库浏览。")
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)

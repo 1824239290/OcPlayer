@@ -36,7 +36,7 @@ struct SettingsView: View {
     /// 弹幕诊断日志开关（默认关闭）：与 PlaybackPreferences.danmakuDiagnosticsEnabled
     /// 同一 key，@AppStorage 双向可观察，改了立即生效。
     @AppStorage(SettingsKeys.danmakuDiagnostics) private var danmakuDiagnosticsEnabled = false
-    /// Bangumi / MoviePilot 集成开关（默认开）。关闭后侧栏入口、详情页区块与
+    /// Bangumi / MoviePilot 集成开关（默认开）。关闭后顶栏入口、详情页区块与
     /// 后台同步一并隐藏/停止，凭据与关联数据保留（见各功能触点的门控）。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
     @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
@@ -178,12 +178,12 @@ struct SettingsView: View {
                 if bangumiEnabled {
                     KeyValueRow(label: "账号", value: bangumi.profile?.nickname ?? "未登录")
                     if !bangumi.isAuthenticated {
-                        Text("登录入口在侧栏的 Bangumi 分区。")
+                        Text("登录入口在顶栏的 Bangumi 分区。")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
                 } else {
-                    Text("关闭后侧栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
+                    Text("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -207,7 +207,7 @@ struct SettingsView: View {
                         }
                     }
                 } else {
-                    Text("关闭后侧栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
+                    Text("关闭后顶栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

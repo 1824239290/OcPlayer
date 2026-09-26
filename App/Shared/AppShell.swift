@@ -6,14 +6,17 @@ import SwiftUI
 import AppKit
 #endif
 
-/// 主框架：Mac / iPad 用玻璃侧栏（NavigationSplitView），iPhone 用底部 Tab。
+/// 主框架：Mac / iPad 用顶栏液态玻璃药丸（分区）+「媒体库」按钮，iPhone 用底部 Tab。
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
+///
+/// 侧栏（`NavigationSplitView`）已撤：分区入口收进顶栏药丸，媒体库改由单独的
+/// 「媒体库」按钮弹出选择（见 `AppShellChrome.swift`），整列宽度让给内容。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后侧栏 / Tab 的对应入口消失，
+    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后顶栏药丸 / Tab 的对应入口消失，
     /// 停用瞬间若正停在那个分区，选中回落到首页；详情页与后台活动由各自触点
     /// 读同一组 key 门控（见 SettingsKeys）。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
@@ -36,7 +39,7 @@ struct AppShellView: View {
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
-            // 集成停用时把停留在该分区的选中回落到首页——否则侧栏 / Tab 少了
+            // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
             // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
             .onChange(of: bangumiEnabled) { _, enabled in
                 if !enabled, app.selectedSection == .bangumi {
@@ -68,22 +71,25 @@ struct AppShellView: View {
         #endif
     }
 
-    // MARK: - Mac / iPad：侧栏
+    // MARK: - Mac / iPad：顶栏导航组（无侧栏）
 
     private var splitLayout: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 212, max: 260)
-        } detail: {
-            detailColumn
-        }
-        // 整窗氛围底（页面经 windowAmbience(_:) 声明）：垫在整块 split view
-        // **后面**。macOS 26 上只有栈根的背景能铺满全窗（首页轮播就是这么垫到
-        // 侧栏玻璃底下的），pushed 页被裁在详情列里、导航栈宿主自带不透明底，
-        // 页面自己在列内垫什么都连不到侧栏——垫在这里，透明的 pushed 页和
-        // 侧栏玻璃透出的才是同一张连续的图。
+        detailColumn
+            #if os(macOS)
+            // 顶栏导航条挂在**窗口工具栏**上，不挂在某个导航栈的根内容上：工具栏
+            // 属于窗口，push 进详情页后这组按钮与媒体库按钮照样在（换页不必先返回）。
+            // iPad 的导航栏由栈自己提供，见 `stack(content:)` 里的 `appShellChrome()`。
+            .toolbar {
+                AppShellNavigationToolbarContent()
+            }
+            #endif
+        // 整窗氛围底（页面经 windowAmbience(_:) 声明）：垫在导航栈**后面**。
+        // macOS 26 上只有栈根的背景能铺满全窗（首页轮播就是这么垫到工具栏玻璃
+        // 底下的），pushed 页被裁在栈内、导航栈宿主自带不透明底，页面自己在栈内
+        // 垫什么都连不到工具栏——垫在这里，透明的 pushed 页和工具栏玻璃透出的
+        // 才是同一张连续的图。
         // 必须走 layout 隔离的 `.background`：氛围图的 fill 溢出若作为 ZStack
-        // 兄弟参与布局，会把 split view 撑出窗口（4e7287e 同款坑）。
+        // 兄弟参与布局，会把导航栈撑出窗口（4e7287e 同款坑）。
         .background { windowAmbienceLayer }
         #if os(macOS)
         // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
@@ -104,48 +110,17 @@ struct AppShellView: View {
         }
     }
 
-    private var sidebar: some View {
-        List(selection: Binding(
-            get: { app.selectedSection },
-            set: { app.selectedSection = $0 ?? .home }
-        )) {
-            Section {
-                Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
-                if moviepilotEnabled {
-                    Label("MoviePilot", systemImage: "film.stack")
-                        .tag(AppModel.Section.moviepilot)
-                }
-                if bangumiEnabled {
-                    Label("Bangumi", systemImage: "tv.fill")
-                        .tag(AppModel.Section.bangumi)
-                }
-            }
-
-            Section("媒体库") {
-                if app.libraries.isEmpty, let librariesError = app.librariesError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(librariesError)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button(UIStrings.retry) {
-                            Task { await app.reloadBrowserData() }
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding(.vertical, 4)
-                } else {
-                    ForEach(app.libraries) { library in
-                        Label(library.name, systemImage: Self.icon(for: library.collectionType))
-                            .tag(AppModel.Section.library(library.id))
-                    }
-                }
-            }
+    /// 常规布局的导航栈：Mac / iPad 共用一个 `app.path`（切换分区清栈，见
+    /// `AppModel.selectedSection`）。顶栏导航条由 `appShellChrome()` 挂载——
+    /// iOS 挂在根内容上（导航栏由栈提供），macOS 是空操作（挂窗口工具栏）。
+    private func stack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        @Bindable var app = app
+        return NavigationStack(path: $app.path) {
+            content()
+                .appRoutes()
+                .appShellChrome()
         }
-        .safeAreaInset(edge: .bottom) {
-            settingsFooter
-        }
-        .listStyle(.sidebar)
+        .transition(.section)
     }
 
     #if !os(macOS)
@@ -204,51 +179,26 @@ struct AppShellView: View {
     #endif
 
     private var detailColumn: some View {
-        @Bindable var app = app
-        return Group {
+        Group {
             switch app.selectedSection {
             case .home:
-                NavigationStack(path: $app.path) {
-                    HomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                stack { HomeView() }
             case .library(let id):
                 if let library = app.libraries.first(where: { $0.id == id }) {
-                    NavigationStack(path: $app.path) {
-                        LibraryView(library: library)
-                            .appRoutes()
-                    }
-                    .transition(.section)
+                    stack { LibraryView(library: library) }
                 } else {
                     EmptyState(empty: "媒体库不存在", systemImage: "tray")
                         .transition(.section)
                 }
             case .settings:
-                NavigationStack(path: $app.path) {
-                    SettingsView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                stack { SettingsView() }
             case .bangumi:
-                NavigationStack(path: $app.path) {
-                    BangumiHomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                stack { BangumiHomeView() }
             case .moviepilot:
-                NavigationStack(path: $app.path) {
-                    MoviePilotHomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                stack { MoviePilotHomeView() }
             case .libraries:
                 // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
-                NavigationStack(path: $app.path) {
-                    MediaLibraryListView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                stack { MediaLibraryListView() }
             }
         }
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
@@ -304,28 +254,6 @@ struct AppShellView: View {
             isWindowFullscreen = fullscreen
         }
         #endif
-    }
-
-    private var settingsFooter: some View {
-        Button {
-            app.selectedSection = .settings
-        } label: {
-            Label("设置", systemImage: "gearshape")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(
-                    app.selectedSection == .settings
-                        ? AnyShapeStyle(.tint.opacity(0.18))
-                        : AnyShapeStyle(.clear),
-                    in: .rect(cornerRadius: 6)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(app.selectedSection == .settings ? .isSelected : [])
-        .padding(8)
-        .background(.ultraThinMaterial)
     }
 
     static func icon(for type: MediaLibrary.CollectionType) -> String {

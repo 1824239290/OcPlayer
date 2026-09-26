@@ -69,7 +69,7 @@ final class AppModel {
     // MARK: - 浏览
 
     var libraries: [MediaLibrary] = []
-    /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
+    /// 「媒体库」选择面板加载失败时展示；成功加载后清空。
     var librariesError: String?
 
     /// Bangumi 详情页「MoviePilot下载」待消费的搜索词。详情页只放词 + 切分区，

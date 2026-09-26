@@ -169,7 +169,8 @@ struct OcPlayerApp: App {
                     }
                 }
                 // 首页英雄区需要保留标题两侧边距和操作按钮；低于这个宽度时，
-                // macOS 的 NavigationSplitView 会把详情列压到不可读，窗口不再继续缩窄。
+                // 顶栏（分区药丸 + 媒体库按钮 + 标题 + 搜索框）会挤到系统把条目
+                // 收进溢出菜单，窗口不再继续缩窄。
                 .frame(minWidth: 960, minHeight: 620)
         }
         .defaultSize(width: 1280, height: 800)

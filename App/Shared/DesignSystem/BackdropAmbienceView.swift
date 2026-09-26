@@ -86,19 +86,19 @@ struct BackdropAmbienceView: View {
 // MARK: - 整窗氛围声明
 
 /// 页面向 AppShell 声明的整窗氛围底。macOS 26 的导航栈**栈根**宿主是全窗的
-/// （首页的轮播背景能垫到侧栏玻璃底下），但 push 进来的页面被裁在详情列里、
-/// 栈根被推走后侧栏底下就空了——所以氛围图必须渲染在导航栈之外的层级，
+/// （首页的轮播背景能垫到顶栏玻璃底下），但 push 进来的页面被裁在栈内、
+/// 栈根被推走后顶栏底下就空了——所以氛围图必须渲染在导航栈之外的层级，
 /// 由页面声明、AppShell 统一垫底。页面出现时声明、离屏时撤回。
 struct WindowAmbience: Hashable {
     var url: URL?
     var authHeader: String?
     var scrim: BackdropAmbienceView.Scrim = .detail
 
-    /// 整窗层是否够得着屏幕。macOS 的 `NavigationSplitView` 是透明的，垫在它
-    /// **后面**的层能透出来，所以页面必须保持透明才能和侧栏连成一张连续的图；
-    /// iOS 的 `UISplitViewController` 自带不透明底，垫在后面的层到不了屏幕——
-    /// iOS 上声明氛围的页面得自己把同一张图垫在页面里（`windowAmbience(_:)`
-    /// 的各调用点据此分叉），否则页面直接落在 split view 的黑底上。
+    /// 整窗层是否够得着屏幕。macOS 的导航栈宿主是透明的，垫在它**后面**的层能
+    /// 透出来，所以页面必须保持透明才能和顶栏连成一张连续的图；iOS 的
+    /// `UISplitViewController` 自带不透明底，垫在后面的层到不了屏幕——iOS 上
+    /// 声明氛围的页面得自己把同一张图垫在页面里（`windowAmbience(_:)` 的各调用点
+    /// 据此分叉），否则页面直接落在 split view 的黑底上。
     static let reachesScreen: Bool = {
         #if os(macOS)
         true
