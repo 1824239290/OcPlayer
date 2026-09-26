@@ -29,32 +29,22 @@ struct AppShellNavigationBar: View {
 
 #if os(macOS)
 
-/// macOS 工具栏内容：让每个入口直接成为系统工具栏按钮，和右侧的打开、刷新、搜索
-/// 使用同一套原生 Liquid Glass 适配，而不是把多个按钮再包进一层自绘玻璃。
+/// macOS 窗口工具栏内容：分区图标组 + 媒体库按钮，同处一条系统共享胶囊。
+///
+/// **挂载在导航栈根内容上**（`appShellChrome()`，不是窗口级 `.toolbar`）：
+/// push 进详情页后这两样随根页一起撤下，只留系统返回键——返回键独享一颗
+/// 原生胶囊，不会和分区组画成一条。之前挂在窗口级 `.toolbar` 上时它们属于
+/// 窗口、push 后照样在；而且 `ToolbarContent` 不随 `app.path` 变化重算，
+/// `if path.isEmpty` 门控从未生效。
+///
+/// 分区组与媒体库按钮**有意共处一条胶囊**（用户确认过的外观）：媒体库的
+/// 「在哪个库」状态靠强调色底区分，不拆独立胶囊。
 struct AppShellNavigationToolbarContent: ToolbarContent {
-    @Environment(AppModel.self) private var app
-    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
-    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
-
     var body: some ToolbarContent {
-        ForEach(AppShellSectionGroup.makeSegments(
-            bangumiEnabled: bangumiEnabled,
-            moviepilotEnabled: moviepilotEnabled
-        )) { segment in
-            ToolbarItem(placement: .navigation) {
-                let isSelected = app.selectedSection == segment.section
-                Button {
-                    guard !isSelected else { return }
-                    app.selectedSection = segment.section
-                } label: {
-                    Image(systemName: segment.icon)
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                }
-                .help(segment.title)
-                .accessibilityLabel(segment.title)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-            }
+        ToolbarItem(placement: .navigation) {
+            AppShellSectionGroup()
         }
+
         ToolbarItem(placement: .navigation) {
             AppShellLibraryButton()
         }
@@ -153,8 +143,11 @@ struct AppShellSectionGroup: View {
     }
 
     private func segmentBackground(isSelected: Bool, isHovering: Bool) -> AnyShapeStyle {
-        if isSelected { return AnyShapeStyle(Color.accentColor.opacity(0.32)) }
-        if isHovering { return AnyShapeStyle(Color.primary.opacity(0.08)) }
+        // macOS 工具栏的 Liquid Glass 会把低 alpha 的内容填充当「背景」吃掉
+        // （实测 accent 0.32 / primary 0.08 全部不可见），这两个档位按玻璃上
+        // 可见的下限取，比 iPad 内容层（0.32 / 0.08）浓一档。
+        if isSelected { return AnyShapeStyle(Color.accentColor.opacity(0.55)) }
+        if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
         return AnyShapeStyle(.clear)
     }
 }
@@ -187,7 +180,9 @@ struct AppShellLibraryButton: View {
                     .foregroundStyle(.tertiary)
             }
             .foregroundStyle(currentLibrary == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-            #if !os(macOS)
+            // 尺寸 / hover / 选中底两个平台一致：系统共享胶囊不给组内按钮画底，
+            // 「在哪个库」的强调色状态必须落在内容层（iPad 上一直有；macOS
+            // 之前写在 `#if !os(macOS)` 里，进了库也看不出来）。
             .padding(.horizontal, 6)
             .frame(height: 24)
             .contentShape(.rect(cornerRadius: 6))
@@ -197,10 +192,13 @@ struct AppShellLibraryButton: View {
             )
             .motion(Motion.fast, value: currentLibrary?.id)
             .motion(Motion.fast, value: isHovering)
-            #endif
         }
-        #if !os(macOS)
+        // macOS 也显式 `.plain`：默认工具栏按钮样式会自己再画一层 hover / 按下
+        // 玻璃，叠在系统的共享胶囊上就是双份。
         .buttonStyle(.plain)
+        #if !os(macOS)
+        // iOS 的 principal 位没有系统胶囊，按钮自己出一颗；macOS 与分区组共处
+        // 系统共享胶囊（见 `AppShellNavigationToolbarContent`），不再自画。
         .padding(2)
         .glassEffect(.regular, in: .rect(cornerRadius: 9, style: .continuous))
         #endif
@@ -213,8 +211,10 @@ struct AppShellLibraryButton: View {
     }
 
     private var background: AnyShapeStyle {
-        if currentLibrary != nil { return AnyShapeStyle(Color.accentColor.opacity(0.32)) }
-        if isHovering { return AnyShapeStyle(Color.primary.opacity(0.08)) }
+        // 与 `AppShellSectionGroup.segmentBackground` 同档：玻璃上低 alpha 填充
+        // 会被 Liquid Glass 吃掉（见那边的注释）。
+        if currentLibrary != nil { return AnyShapeStyle(Color.accentColor.opacity(0.55)) }
+        if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
         return AnyShapeStyle(.clear)
     }
 }
@@ -313,12 +313,16 @@ struct AppShellLibraryPicker: View {
 extension View {
     /// 把顶栏导航条挂到导航栈的根内容上（iOS 的导航栏由栈自己提供）。
     ///
-    /// macOS 是空操作：那边挂在 `AppShellView` 根的**窗口工具栏**上，工具栏属于
-    /// 窗口而不属于某个栈，push 进详情页后这组按钮照样在（换页不必先返回）。
+    /// macOS：分区图标组 + 媒体库按钮挂在这里（`placement: .navigation`）——挂在
+    /// **栈根内容**上，push 进详情页后随根页一起撤下，返回键独享一颗系统胶囊；
+    /// 之前挂在窗口级 `.toolbar` 上时它们属于窗口、push 后照样在，还因为
+    /// `ToolbarContent` 不随 `app.path` 变化重算，`if path.isEmpty` 门控从未生效。
     @ViewBuilder
     func appShellChrome() -> some View {
         #if os(macOS)
-        self
+        toolbar {
+            AppShellNavigationToolbarContent()
+        }
         #else
         toolbar {
             ToolbarItem(placement: .principal) {

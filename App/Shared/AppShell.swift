@@ -77,14 +77,6 @@ struct AppShellView: View {
 
     private var splitLayout: some View {
         detailColumn
-            #if os(macOS)
-            // 顶栏导航条挂在**窗口工具栏**上，不挂在某个导航栈的根内容上：工具栏
-            // 属于窗口，push 进详情页后这组按钮与媒体库按钮照样在（换页不必先返回）。
-            // iPad 的导航栏由栈自己提供，见 `stack(content:)` 里的 `appShellChrome()`。
-            .toolbar {
-                AppShellNavigationToolbarContent()
-            }
-            #endif
         #if os(macOS)
         // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
         // 起窗对齐兜底「状态恢复直接以全屏起窗」——那时通知可能早于订阅。
@@ -104,17 +96,15 @@ struct AppShellView: View {
         }
     }
 
-    /// 常规布局的导航栈：Mac / iPad 共用一个 `app.path`（切换分区清栈，见
-    /// `AppModel.selectedSection`）。顶栏导航条由 `appShellChrome()` 挂载——
-    /// iOS 挂在根内容上（导航栏由栈提供），macOS 是空操作（挂窗口工具栏）。
-    private func stack<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    /// Mac / iPad 共用一个导航栈；切分区只替换栈内根页面，避免系统宿主层
+    /// 跟着整栈淡入，短暂盖住常驻的背景。
+    private var detailColumn: some View {
         @Bindable var app = app
         return NavigationStack(path: $app.path) {
-            content()
+            sectionContent
                 .appRoutes()
                 .appShellChrome()
         }
-        .transition(.section)
     }
 
     #if !os(macOS)
@@ -127,7 +117,15 @@ struct AppShellView: View {
         @Bindable var app = app
         return TabView(selection: Binding(
             get: { app.selectedSection },
-            set: { app.selectedSection = $0 }
+            set: { newSection in
+                if reduceMotion {
+                    app.selectedSection = newSection
+                } else {
+                    withAnimation(Motion.slide) {
+                        app.selectedSection = newSection
+                    }
+                }
+            }
         )) {
             NavigationStack(path: $app.navPaths.home) {
                 HomeView()
@@ -168,33 +166,35 @@ struct AppShellView: View {
             .tabItem { Label("设置", systemImage: "gearshape") }
             .tag(AppModel.Section.settings)
         }
+        .motion(Motion.slide, value: app.selectedSection)
         .onAppear { app.setCompact(true) }
     }
     #endif
 
-    private var detailColumn: some View {
+    @ViewBuilder
+    private var sectionContent: some View {
         Group {
             switch app.selectedSection {
             case .home:
-                stack { HomeView() }
+                HomeView()
             case .library(let id):
                 if let library = app.libraries.first(where: { $0.id == id }) {
-                    stack { LibraryView(library: library) }
+                    LibraryView(library: library)
                 } else {
                     EmptyState(empty: "媒体库不存在", systemImage: "tray")
-                        .transition(.section)
                 }
             case .settings:
-                stack { SettingsView() }
+                SettingsView()
             case .bangumi:
-                stack { BangumiHomeView() }
+                BangumiHomeView()
             case .moviepilot:
-                stack { MoviePilotHomeView() }
+                MoviePilotHomeView()
             case .libraries:
                 // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
-                stack { MediaLibraryListView() }
+                MediaLibraryListView()
             }
         }
+        .transition(.section)
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
     }
 
@@ -307,22 +307,27 @@ extension View {
     /// 不然季选择器 / 集列表这些 @State 会带着上一部片的值。
     func appRoutes() -> some View {
         navigationDestination(for: AppModel.Route.self) { route in
-            switch route {
-            case .detail(let item):
-                DetailView(item: item)
-                    .id(item.id)
-            case .library(let library):
-                LibraryView(library: library)
-            case .bangumiProfile:
-                BangumiProfileView()
-            case .bangumiCollectionList(let type):
-                BangumiCollectionListView(subjectType: type)
-            case .bangumiSubject(let subjectID, let initialSubject):
-                BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
-                    .id(subjectID)
-            case .bangumiCalendar:
-                BangumiCalendarView()
-            }
+            appRouteView(route)
+        }
+    }
+
+    @ViewBuilder
+    private func appRouteView(_ route: AppModel.Route) -> some View {
+        switch route {
+        case .detail(let item):
+            DetailView(item: item)
+                .id(item.id)
+        case .library(let library):
+            LibraryView(library: library)
+        case .bangumiProfile:
+            BangumiProfileView()
+        case .bangumiCollectionList(let type):
+            BangumiCollectionListView(subjectType: type)
+        case .bangumiSubject(let subjectID, let initialSubject):
+            BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
+                .id(subjectID)
+        case .bangumiCalendar:
+            BangumiCalendarView()
         }
     }
 }
