@@ -6,14 +6,17 @@ import SwiftUI
 import AppKit
 #endif
 
-/// 主框架：Mac / iPad 用玻璃侧栏（NavigationSplitView），iPhone 用底部 Tab。
+/// 主框架：Mac / iPad 用顶栏液态玻璃药丸（分区），iPhone 用底部 Tab。
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
+///
+/// 侧栏（`NavigationSplitView`）已撤：分区入口收进顶栏药丸，媒体库入口在首页
+/// 「媒体库」栏（iPhone 是「媒体库」Tab），整列宽度让给内容。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后侧栏 / Tab 的对应入口消失，
+    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后顶栏药丸 / Tab 的对应入口消失，
     /// 停用瞬间若正停在那个分区，选中回落到首页；详情页与后台活动由各自触点
     /// 读同一组 key 门控（见 SettingsKeys）。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
@@ -36,7 +39,9 @@ struct AppShellView: View {
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
-            // 集成停用时把停留在该分区的选中回落到首页——否则侧栏 / Tab 少了
+            // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
+            .background { windowAmbienceLayer }
+            // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
             // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
             .onChange(of: bangumiEnabled) { _, enabled in
                 if !enabled, app.selectedSection == .bangumi {
@@ -68,23 +73,10 @@ struct AppShellView: View {
         #endif
     }
 
-    // MARK: - Mac / iPad：侧栏
+    // MARK: - Mac / iPad：顶栏导航组（无侧栏）
 
     private var splitLayout: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 212, max: 260)
-        } detail: {
-            detailColumn
-        }
-        // 整窗氛围底（页面经 windowAmbience(_:) 声明）：垫在整块 split view
-        // **后面**。macOS 26 上只有栈根的背景能铺满全窗（首页轮播就是这么垫到
-        // 侧栏玻璃底下的），pushed 页被裁在详情列里、导航栈宿主自带不透明底，
-        // 页面自己在列内垫什么都连不到侧栏——垫在这里，透明的 pushed 页和
-        // 侧栏玻璃透出的才是同一张连续的图。
-        // 必须走 layout 隔离的 `.background`：氛围图的 fill 溢出若作为 ZStack
-        // 兄弟参与布局，会把 split view 撑出窗口（4e7287e 同款坑）。
-        .background { windowAmbienceLayer }
+        detailColumn
         #if os(macOS)
         // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
         // 起窗对齐兜底「状态恢复直接以全屏起窗」——那时通知可能早于订阅。
@@ -104,48 +96,15 @@ struct AppShellView: View {
         }
     }
 
-    private var sidebar: some View {
-        List(selection: Binding(
-            get: { app.selectedSection },
-            set: { app.selectedSection = $0 ?? .home }
-        )) {
-            Section {
-                Label("首页", systemImage: "house.fill").tag(AppModel.Section.home)
-                if moviepilotEnabled {
-                    Label("MoviePilot", systemImage: "film.stack")
-                        .tag(AppModel.Section.moviepilot)
-                }
-                if bangumiEnabled {
-                    Label("Bangumi", systemImage: "tv.fill")
-                        .tag(AppModel.Section.bangumi)
-                }
-            }
-
-            Section("媒体库") {
-                if app.libraries.isEmpty, let librariesError = app.librariesError {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(librariesError)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button(UIStrings.retry) {
-                            Task { await app.reloadBrowserData() }
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding(.vertical, 4)
-                } else {
-                    ForEach(app.libraries) { library in
-                        Label(library.name, systemImage: Self.icon(for: library.collectionType))
-                            .tag(AppModel.Section.library(library.id))
-                    }
-                }
-            }
+    /// Mac / iPad 共用一个导航栈；切分区只替换栈内根页面，避免系统宿主层
+    /// 跟着整栈淡入，短暂盖住常驻的背景。
+    private var detailColumn: some View {
+        @Bindable var app = app
+        return NavigationStack(path: $app.path) {
+            sectionContent
+                .appRoutes()
+                .appShellChrome()
         }
-        .safeAreaInset(edge: .bottom) {
-            settingsFooter
-        }
-        .listStyle(.sidebar)
     }
 
     #if !os(macOS)
@@ -158,7 +117,15 @@ struct AppShellView: View {
         @Bindable var app = app
         return TabView(selection: Binding(
             get: { app.selectedSection },
-            set: { app.selectedSection = $0 }
+            set: { newSection in
+                if reduceMotion {
+                    app.selectedSection = newSection
+                } else {
+                    withAnimation(Motion.slide) {
+                        app.selectedSection = newSection
+                    }
+                }
+            }
         )) {
             NavigationStack(path: $app.navPaths.home) {
                 HomeView()
@@ -179,7 +146,7 @@ struct AppShellView: View {
                     BangumiHomeView()
                         .appRoutes()
                 }
-                .tabItem { Label("Bangumi", systemImage: "tv.fill") }
+                .tabItem { Label("Bangumi", image: "bangumi-logo") }
                 .tag(AppModel.Section.bangumi)
             }
 
@@ -188,7 +155,7 @@ struct AppShellView: View {
                     MoviePilotHomeView()
                         .appRoutes()
                 }
-                .tabItem { Label("MoviePilot", systemImage: "film.stack") }
+                .tabItem { Label("MoviePilot", image: "moviepilot-logo") }
                 .tag(AppModel.Section.moviepilot)
             }
 
@@ -199,65 +166,38 @@ struct AppShellView: View {
             .tabItem { Label("设置", systemImage: "gearshape") }
             .tag(AppModel.Section.settings)
         }
+        .motion(Motion.slide, value: app.selectedSection)
         .onAppear { app.setCompact(true) }
     }
     #endif
 
-    private var detailColumn: some View {
-        @Bindable var app = app
-        return Group {
+    @ViewBuilder
+    private var sectionContent: some View {
+        Group {
             switch app.selectedSection {
             case .home:
-                NavigationStack(path: $app.path) {
-                    HomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
-            case .library(let id):
-                if let library = app.libraries.first(where: { $0.id == id }) {
-                    NavigationStack(path: $app.path) {
-                        LibraryView(library: library)
-                            .appRoutes()
-                    }
-                    .transition(.section)
-                } else {
-                    EmptyState(empty: "媒体库不存在", systemImage: "tray")
-                        .transition(.section)
-                }
+                HomeView()
             case .settings:
-                NavigationStack(path: $app.path) {
-                    SettingsView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                SettingsView()
             case .bangumi:
-                NavigationStack(path: $app.path) {
-                    BangumiHomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                BangumiHomeView()
             case .moviepilot:
-                NavigationStack(path: $app.path) {
-                    MoviePilotHomeView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                MoviePilotHomeView()
             case .libraries:
-                // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
-                NavigationStack(path: $app.path) {
-                    MediaLibraryListView()
-                        .appRoutes()
-                }
-                .transition(.section)
+                // 仅 iPhone 紧凑布局使用；常规布局不会到达此分支。
+                MediaLibraryListView()
             }
         }
+        .transition(.section)
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
     }
 
-    /// 当前声明页的整窗氛围层；无声明时整体不渲染，各页自己兜底纯色。
+    /// 首页轮播常驻底层；详情页声明的背景只在它上面覆盖。
     @ViewBuilder
     private var windowAmbienceLayer: some View {
         ZStack(alignment: .top) {
+            AmbientBackdropCarousel()
+
             ZStack {
                 if let ambience = app.windowAmbience {
                     BackdropAmbienceView(
@@ -272,11 +212,10 @@ struct AppShellView: View {
                     // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
                     // 所以在调用点再显式退出一次安全区。
                     .ignoresSafeArea()
-                    .id(ambience)
                     .transition(.opacity)
                 }
             }
-            // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
+            // 只动画专属背景，底下的首页轮播始终留在视图树里。
             .motion(Motion.ambient, value: app.windowAmbience)
 
             #if os(macOS)
@@ -304,28 +243,6 @@ struct AppShellView: View {
             isWindowFullscreen = fullscreen
         }
         #endif
-    }
-
-    private var settingsFooter: some View {
-        Button {
-            app.selectedSection = .settings
-        } label: {
-            Label("设置", systemImage: "gearshape")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(.rect)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(
-                    app.selectedSection == .settings
-                        ? AnyShapeStyle(.tint.opacity(0.18))
-                        : AnyShapeStyle(.clear),
-                    in: .rect(cornerRadius: 6)
-                )
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(app.selectedSection == .settings ? .isSelected : [])
-        .padding(8)
-        .background(.ultraThinMaterial)
     }
 
     static func icon(for type: MediaLibrary.CollectionType) -> String {
@@ -384,22 +301,27 @@ extension View {
     /// 不然季选择器 / 集列表这些 @State 会带着上一部片的值。
     func appRoutes() -> some View {
         navigationDestination(for: AppModel.Route.self) { route in
-            switch route {
-            case .detail(let item):
-                DetailView(item: item)
-                    .id(item.id)
-            case .library(let library):
-                LibraryView(library: library)
-            case .bangumiProfile:
-                BangumiProfileView()
-            case .bangumiCollectionList(let type):
-                BangumiCollectionListView(subjectType: type)
-            case .bangumiSubject(let subjectID, let initialSubject):
-                BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
-                    .id(subjectID)
-            case .bangumiCalendar:
-                BangumiCalendarView()
-            }
+            appRouteView(route)
+        }
+    }
+
+    @ViewBuilder
+    private func appRouteView(_ route: AppModel.Route) -> some View {
+        switch route {
+        case .detail(let item):
+            DetailView(item: item)
+                .id(item.id)
+        case .library(let library):
+            LibraryView(library: library)
+        case .bangumiProfile:
+            BangumiProfileView()
+        case .bangumiCollectionList(let type):
+            BangumiCollectionListView(subjectType: type)
+        case .bangumiSubject(let subjectID, let initialSubject):
+            BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
+                .id(subjectID)
+        case .bangumiCalendar:
+            BangumiCalendarView()
         }
     }
 }

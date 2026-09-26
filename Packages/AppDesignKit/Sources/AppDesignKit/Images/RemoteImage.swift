@@ -12,11 +12,23 @@ public struct RemoteImage: View {
     public var authHeader: String?
     /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
     public var maxPixelSize: Int? = nil
+    /// 换图时是否保留当前位图，直到新图加载完成。适合背景图等需要连续画面的场景。
+    public var preserveCurrentImageOnReload = false
+    /// 图片替换时使用的淡入节奏；未指定时使用标准短淡入。
+    public var fadeAnimation: Animation? = nil
 
-    public init(url: URL?, authHeader: String? = nil, maxPixelSize: Int? = nil) {
+    public init(
+        url: URL?,
+        authHeader: String? = nil,
+        maxPixelSize: Int? = nil,
+        preserveCurrentImageOnReload: Bool = false,
+        fadeAnimation: Animation? = nil
+    ) {
         self.url = url
         self.authHeader = authHeader
         self.maxPixelSize = maxPixelSize
+        self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
+        self.fadeAnimation = fadeAnimation
     }
 
     /// 与 .task(id:) 一致的复合加载键：URL + 凭证指纹 + 目标尺寸。
@@ -47,7 +59,9 @@ public struct RemoteImage: View {
                 Image(platform: image)
                     .resizable()
                     .scaledToFill()
-                    // 加载完成在占位层上淡入，不再硬弹出；换 URL 清空旧图时沿同一过渡淡出。
+                    .id(loadedKey)
+                    // 加载完成在占位层上淡入，不再硬弹出；背景图保留旧帧时，
+                    // 新图也沿同一过渡交叉淡入。
                     .transition(.section)
             } else if failed || url == nil {
                 // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
@@ -60,12 +74,11 @@ public struct RemoteImage: View {
             // 一模一样的 Rectangle，视觉上是 no-op，只多一层合成）。
         }
         .clipped()
-        .animation(imageFade, value: image != nil)
+        .animation(imageFade, value: loadedKey)
         .task(id: loadKey) {
             // A row can keep its SwiftUI identity while its media value changes
-            // (season switching / refresh). Clear the previous bitmap before
-            // loading the new URL, otherwise the old poster can sit beside the
-            // new title until another redraw.
+            // (season switching / refresh). Ordinary content clears the previous
+            // bitmap; background content keeps it until the replacement is ready.
             guard let url else {
                 image = nil
                 loadedKey = nil
@@ -77,8 +90,12 @@ public struct RemoteImage: View {
             // 复合键（URL+凭证+目标尺寸）一致才跳过：同 URL 换尺寸/凭证要重载，
             // 否则会一直显示错误尺寸的旧位图。
             guard loadedKey != loadKey else { return }
-            image = nil
-            loadedKey = nil
+            // 普通内容先清空，避免复用行时旧海报贴在新标题旁边；背景图则保留
+            // 当前帧，直到新图加载完成，避免切换时闪灰色占位。
+            if !preserveCurrentImageOnReload {
+                image = nil
+                loadedKey = nil
+            }
             failed = false
             do {
                 let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
@@ -100,6 +117,6 @@ public struct RemoteImage: View {
 
     /// 图片出现/消失的淡入淡出；减弱动态效果时直接切换，不播动画。
     private var imageFade: Animation? {
-        reduceMotion ? nil : Motion.standard
+        reduceMotion ? nil : (fadeAnimation ?? Motion.standard)
     }
 }

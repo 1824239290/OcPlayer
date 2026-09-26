@@ -58,7 +58,8 @@ public struct EmbyServer: MediaServer {
                 MediaLibrary(
                     id: $0.id ?? UUID().uuidString,
                     name: $0.name ?? "",
-                    collectionType: MediaLibrary.CollectionType($0.collectionType)
+                    collectionType: MediaLibrary.CollectionType($0.collectionType),
+                    primaryImageTag: $0.imageTags?["Primary"]
                 )
             }
             .filter { $0.collectionType != .unknown && $0.collectionType != .folders }

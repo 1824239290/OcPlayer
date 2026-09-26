@@ -139,8 +139,12 @@ private struct CollectionSection: View {
                     }
                     .padding(.vertical, 2)
                 }
+                .id(selected)
+                .transition(.opacity)
             }
         }
+        .motion(Motion.standard, value: selected)
+        .animation(Motion.standard, value: subjects.count)
         .task(id: "\(subjectType.rawValue)-\(selected.rawValue)") {
             await load()
         }

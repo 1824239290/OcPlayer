@@ -19,6 +19,9 @@ enum SettingsKeys {
     static let outroRetentionSeconds = "dev.jumusu.ocplayer.playback.outroRetentionSeconds"
     /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
     static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
+    /// 首页栏目顺序与显隐：逗号分隔的 `HomeSection.rawValue` 串（缺省 = 隐藏）。
+    /// 设置页 ↔ HomeView 渲染，见 `HomeSectionPreference`。
+    static let homeSections = "dev.jumusu.ocplayer.home.sections"
     /// Bangumi 进度页排序偏好。
     static let bangumiProgressSort = "dev.jumusu.ocplayer.bangumi.progressSort"
     /// Bangumi 集成启用开关（默认开）。关闭只藏 UI 与停网络活动，登录态/关联/缓存保留。

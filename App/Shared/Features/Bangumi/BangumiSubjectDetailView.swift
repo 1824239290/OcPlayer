@@ -509,31 +509,36 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 }
             }()
 
-            if currentList.isEmpty {
-                if isLoading {
-                    ProgressView("正在加载章节…")
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 16)
+            Group {
+                if currentList.isEmpty {
+                    if isLoading {
+                        ProgressView("正在加载章节…")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 16)
+                    } else {
+                        Text("暂无此分类章节")
+                            .font(.footnote)
+                            .foregroundStyle(.tertiary)
+                            .padding(.vertical, 8)
+                    }
                 } else {
-                    Text("暂无此分类章节")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                        .padding(.vertical, 8)
-                }
-            } else {
-                LazyVGrid(columns: BangumiEpisodeCell.columns, alignment: .leading, spacing: 6) {
-                    ForEach(currentList) { episode in
-                        BangumiEpisodeCell(
-                            episode: episode,
-                            isBusy: updatingEpisodeID == episode.id
-                        ) { action in
-                            await performEpisodeAction(action, on: episode)
+                    LazyVGrid(columns: BangumiEpisodeCell.columns, alignment: .leading, spacing: 6) {
+                        ForEach(currentList) { episode in
+                            BangumiEpisodeCell(
+                                episode: episode,
+                                isBusy: updatingEpisodeID == episode.id
+                            ) { action in
+                                await performEpisodeAction(action, on: episode)
+                            }
                         }
                     }
+                    .padding(12)
+                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 }
-                .padding(12)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
             }
+            .id(selectedEpisodeTab)
+            .transition(.opacity)
+            .motion(Motion.standard, value: selectedEpisodeTab)
         }
     }
 

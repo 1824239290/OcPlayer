@@ -125,6 +125,7 @@ struct BangumiHomeView: View {
                 progressView
             }
         }
+        .motion(Motion.slide, value: submittedSearchKeyword.isEmpty)
         .searchable(text: $searchKeyword, prompt: "搜索 Bangumi 条目")
         .onSubmit(of: .search) {
             let trimmed = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 import UIKit
 #endif
 
-/// 根视图：有会话 → 主框架（侧栏 / Tab）；没有 → 登录流程。
+/// 根视图：有会话 → 主框架（顶栏药丸 / Tab）；没有 → 登录流程。
 /// 播放器是盖在这一切之上的**全 App 覆盖层**（`presentedPlayer` 非 nil 时）。
 struct RootView: View {
     @Environment(AppModel.self) private var app

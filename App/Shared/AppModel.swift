@@ -69,7 +69,7 @@ final class AppModel {
     // MARK: - 浏览
 
     var libraries: [MediaLibrary] = []
-    /// 侧栏媒体库列表加载失败时展示；成功加载后清空。
+    /// 「媒体库」选择面板加载失败时展示；成功加载后清空。
     var librariesError: String?
 
     /// Bangumi 详情页「MoviePilot下载」待消费的搜索词。详情页只放词 + 切分区，
@@ -191,7 +191,6 @@ final class AppModel {
         case settings
         case bangumi
         case moviepilot
-        case library(MediaLibrary.ID)
         /// iPhone 合并的媒体库列表 Tab（所有库类型从这里进，不占多个 Tab 位）。
         case libraries
     }
@@ -353,6 +352,15 @@ final class AppModel {
         }
     }
 
+    /// 首页「媒体库」栏入口：push 到当前栈（`.library` 路由已在 `appRoutes()` 注册）。
+    func openLibrary(_ library: MediaLibrary) {
+        if isCompact {
+            compactPath.append(.library(library))
+        } else {
+            path.append(.library(library))
+        }
+    }
+
     func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil) {
         if isCompact {
             navPaths.bangumi.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
@@ -370,13 +378,12 @@ final class AppModel {
             case .bangumi: navPaths.bangumi
             case .moviepilot: navPaths.moviepilot
             case .settings: navPaths.settings
-            case .library: navPaths.libraries
             }
         }
         set {
             switch selectedSection {
             case .home: navPaths.home = newValue
-            case .libraries, .library: navPaths.libraries = newValue
+            case .libraries: navPaths.libraries = newValue
             case .bangumi: navPaths.bangumi = newValue
             case .moviepilot: navPaths.moviepilot = newValue
             case .settings: navPaths.settings = newValue

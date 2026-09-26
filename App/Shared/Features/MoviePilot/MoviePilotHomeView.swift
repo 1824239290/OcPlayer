@@ -162,6 +162,7 @@ struct MoviePilotHomeView: View {
                 subscriptionsView
             }
         }
+        .motion(Motion.slide, value: isSearchingMode)
         .searchable(text: $keyword, prompt: Text("搜索电影、电视剧、番剧…"))
         .onSubmit(of: .search) {
             let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -301,6 +302,7 @@ struct MoviePilotHomeView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .motion(Motion.standard, value: selectedCategory)
         }
         .contentMargins(.horizontal, 0, for: .scrollContent)
         .scrollBounceBehavior(.basedOnSize)
