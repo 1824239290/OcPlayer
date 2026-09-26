@@ -6,11 +6,11 @@ import SwiftUI
 import AppKit
 #endif
 
-/// 主框架：Mac / iPad 用顶栏液态玻璃药丸（分区）+「媒体库」按钮，iPhone 用底部 Tab。
+/// 主框架：Mac / iPad 用顶栏液态玻璃药丸（分区），iPhone 用底部 Tab。
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
 ///
-/// 侧栏（`NavigationSplitView`）已撤：分区入口收进顶栏药丸，媒体库改由单独的
-/// 「媒体库」按钮弹出选择（见 `AppShellChrome.swift`），整列宽度让给内容。
+/// 侧栏（`NavigationSplitView`）已撤：分区入口收进顶栏药丸，媒体库入口在首页
+/// 「媒体库」栏（iPhone 是「媒体库」Tab），整列宽度让给内容。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -177,12 +177,6 @@ struct AppShellView: View {
             switch app.selectedSection {
             case .home:
                 HomeView()
-            case .library(let id):
-                if let library = app.libraries.first(where: { $0.id == id }) {
-                    LibraryView(library: library)
-                } else {
-                    EmptyState(empty: "媒体库不存在", systemImage: "tray")
-                }
             case .settings:
                 SettingsView()
             case .bangumi:
@@ -190,7 +184,7 @@ struct AppShellView: View {
             case .moviepilot:
                 MoviePilotHomeView()
             case .libraries:
-                // 仅 iPhone 紧凑布局使用；常规布局走 `.library(id)`，不会到达此分支。
+                // 仅 iPhone 紧凑布局使用；常规布局不会到达此分支。
                 MediaLibraryListView()
             }
         }

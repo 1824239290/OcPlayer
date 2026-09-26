@@ -2,7 +2,7 @@ import AppDesignKit
 import CoreModel
 import SwiftUI
 
-/// 首页：继续观看 + 接下来看 + 最近添加。
+/// 首页：按设置「首页栏目」的顺序渲染 继续观看 / 接下来看 / 最近添加 / 媒体库。
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -11,6 +11,10 @@ struct HomeView: View {
     private var isCompact: Bool { sizeClass == .compact }
     private var stillWidth: CGFloat { isCompact ? Metrics.compactStillWidth : Metrics.stillWidth }
     private var posterWidth: CGFloat? { isCompact ? Metrics.compactPosterWidth : nil }
+
+    /// 首页栏目顺序与显隐（设置页「首页栏目」可调；缺省 = 隐藏）。
+    @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
+    private var homeSections: [HomeSection] { HomeSectionPreference.decode(homeSectionsRaw) }
 
     /// 全库搜索（`.searchable`，防抖后走服务端 `searchTerm`，不带 parentId 即全部库）。
     /// 结果是瞬态数据，只住本视图 `@State`，不进 AppModel 的分页缓存——回到首页
@@ -152,50 +156,15 @@ struct HomeView: View {
         // 宽度由 Rail 内 `.frame(maxWidth: .infinity)` + 卡片固定宽约束。
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if !app.home.resume.isEmpty {
-                    Rail("继续观看", kind: .still, items: app.home.resume) { item in
-                        StillCard(
-                            item: item,
-                            server: app.server,
-                            actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
-                            width: stillWidth
-                        ) {
-                            app.openSeriesDetail(for: item)
-                        }
-                    }
-                    .transition(.section)
+                ForEach(homeSections) { section in
+                    sectionRail(section)
                 }
 
-                if !app.home.nextUp.isEmpty {
-                    Rail("接下来看", kind: .still, items: app.home.nextUp) { item in
-                        StillCard(
-                            item: item,
-                            server: app.server,
-                            actionIcon: "chevron.right",
-                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
-                            width: stillWidth
-                        ) {
-                            app.openSeriesDetail(for: item)
-                        }
-                    }
-                    .transition(.section)
-                }
-
-                if !app.home.latest.isEmpty {
-                    Rail("最近添加", kind: .poster, items: app.home.latest) { item in
-                        PosterCard(item: item, server: app.server, width: posterWidth) {
-                            app.openDetail(item)
-                        }
-                    }
-                    .transition(.section)
-                }
-
-                if app.home.resume.isEmpty && app.home.nextUp.isEmpty && app.home.latest.isEmpty {
+                if allConfiguredSectionsEmpty {
                     ContentUnavailableView {
                         Label("媒体库暂无可展示内容", systemImage: "sparkles")
                     } description: {
-                        Text("媒体库可能正在建立索引或没有未看项目。可从顶栏的「媒体库」按钮切换媒体库浏览。")
+                        Text("服务器上还没有可展示的内容，媒体库可能正在建立索引。")
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)
@@ -208,31 +177,131 @@ struct HomeView: View {
         .scrollBounceBehavior(.basedOnSize)
         .contentMargins(.horizontal, 0, for: .scrollContent)
         .refreshable { await app.reloadBrowserData() }
-        // 下拉刷新会先清空再填充三条 Rail 的数组，count 变化触发整体 crossfade。
+        // 下拉刷新会先清空再填充各 Rail 的数组，count 变化触发整体 crossfade。
         .motionAnimation(Motion.slide, value: app.home.resume.count, reduceMotion: reduceMotion)
         .motionAnimation(Motion.slide, value: app.home.nextUp.count, reduceMotion: reduceMotion)
         .motionAnimation(Motion.slide, value: app.home.latest.count, reduceMotion: reduceMotion)
+        .motionAnimation(Motion.slide, value: app.libraries.count, reduceMotion: reduceMotion)
+    }
+
+    /// 启用的栏目里是否一条内容都没有（空态的判定只看启用栏目）。
+    private var allConfiguredSectionsEmpty: Bool {
+        homeSections.allSatisfy { section in
+            switch section {
+            case .resume: app.home.resume.isEmpty
+            case .nextUp: app.home.nextUp.isEmpty
+            case .latest: app.home.latest.isEmpty
+            case .libraries: app.libraries.isEmpty
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionRail(_ section: HomeSection) -> some View {
+        switch section {
+        case .resume:
+            if !app.home.resume.isEmpty {
+                Rail("继续观看", kind: .still, items: app.home.resume) { item in
+                    StillCard(
+                        item: item,
+                        server: app.server,
+                        actionIcon: "chevron.right",
+                        actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
+                        width: stillWidth
+                    ) {
+                        app.openSeriesDetail(for: item)
+                    }
+                }
+                .transition(.section)
+            }
+        case .nextUp:
+            if !app.home.nextUp.isEmpty {
+                Rail("接下来看", kind: .still, items: app.home.nextUp) { item in
+                    StillCard(
+                        item: item,
+                        server: app.server,
+                        actionIcon: "chevron.right",
+                        actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
+                        width: stillWidth
+                    ) {
+                        app.openSeriesDetail(for: item)
+                    }
+                }
+                .transition(.section)
+            }
+        case .latest:
+            if !app.home.latest.isEmpty {
+                Rail("最近添加", kind: .poster, items: app.home.latest) { item in
+                    PosterCard(item: item, server: app.server, width: posterWidth) {
+                        app.openDetail(item)
+                    }
+                }
+                .transition(.section)
+            }
+        case .libraries:
+            if !app.libraries.isEmpty {
+                Rail("媒体库", kind: .still, items: app.libraries) { library in
+                    LibraryCard(library: library, server: app.server, width: stillWidth) {
+                        app.openLibrary(library)
+                    }
+                }
+                .transition(.section)
+            } else if let error = app.librariesError {
+                // 顶栏「媒体库」按钮撤掉后，常规布局下库列表加载失败的唯一出口。
+                // 版式对齐 Rail（标题 + 14pt 间距 + 内容行），只是内容换成错误行。
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("媒体库")
+                        .font(.title3.weight(.bold))
+                        .padding(.horizontal, contentLeading)
+                    HStack {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Button(UIStrings.retry) {
+                            Task { await app.reloadBrowserData() }
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.horizontal, contentLeading)
+                }
+                .padding(.top, 24)
+                .transition(.section)
+            }
+        }
     }
 
     private var loadingState: some View {
-        // 骨架屏：铺和真实布局同尺寸的 Rail（继续观看 / 接下来看 = 剧照卡，
-        // 最近添加 = 海报卡），数据加载完原位替换。
+        // 骨架屏：按设置里启用的栏目铺和真实布局同结构的 Rail（继续观看 /
+        // 接下来看 = 剧照卡，最近添加 = 海报卡，媒体库 = 剧照卡），数据加载完
+        // 原位替换。
         //
-        // 铺几条按上一次成功加载的结论走（`home.railPresence`，跨启动保留）——
-        // 写死三条的话，没有「继续观看」的服务器上骨架撤掉时会塌掉几百 pt。
+        // 内容型栏目铺几条按上一次成功加载的结论走（`home.railPresence`，跨启动
+        // 保留）——写死的话，没有「继续观看」的服务器上骨架撤掉时会塌掉几百 pt。
+        // 媒体库栏是导航入口，不占 presence 位：可达的服务器几乎必有可见库。
         let presence = app.home.railPresence
-        // 上一次三条全空（空库 / 全新服务器）：还是铺一条，全空的加载页看着像卡死。
+        // 上一次内容栏目全空（空库 / 全新服务器）：还是铺「最近添加」，全空的
+        // 加载页看着像卡死。
         let showsLatest = presence.latest || presence.railCount == 0
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if presence.resume {
-                    SkeletonRail(title: "继续观看", kind: .still)
-                }
-                if presence.nextUp {
-                    SkeletonRail(title: "接下来看", kind: .still)
-                }
-                if showsLatest {
-                    SkeletonRail(title: "最近添加", kind: .poster)
+                ForEach(homeSections) { section in
+                    switch section {
+                    case .resume:
+                        if presence.resume {
+                            SkeletonRail(title: "继续观看", kind: .still)
+                        }
+                    case .nextUp:
+                        if presence.nextUp {
+                            SkeletonRail(title: "接下来看", kind: .still)
+                        }
+                    case .latest:
+                        if showsLatest {
+                            SkeletonRail(title: "最近添加", kind: .poster)
+                        }
+                    case .libraries:
+                        SkeletonRail(title: "媒体库", kind: .still)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

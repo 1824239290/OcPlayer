@@ -49,6 +49,10 @@ struct SettingsView: View {
     /// 三条请求发送口每条即时读取，改完不需要重连。**全局**，不按服务器档案分——
     /// 所以 UI 放在「网络」分组，不塞进某一台服务器的分组里。
     @AppStorage(ClientIdentity.customUserAgentKey) private var customUserAgent = ""
+    /// 首页栏目顺序与显隐。原始串经 `HomeSectionPreference` 编解码；
+    /// @AppStorage 可观察，改完首页即时生效。
+    @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
+    private var homeSections: [HomeSection] { HomeSectionPreference.decode(homeSectionsRaw) }
     private var outroRetentionSeconds: Int {
         PlaybackPreferences.outroRetentionOptionsSeconds.contains(storedOutroRetention)
             ? storedOutroRetention : 10
@@ -56,6 +60,15 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+
+            Section("首页栏目") {
+                ForEach(homeSections) { section in
+                    homeSectionRow(section)
+                }
+                Text("拖动条目或用上下按钮调整顺序，开关控制显示与隐藏。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
 
             Section("播放") {
                 Picker("网络预读缓冲", selection: Binding(
@@ -288,6 +301,78 @@ struct SettingsView: View {
                 app.store.defaultServerID = newValue
             }
         )
+    }
+
+    // MARK: - 首页栏目
+
+    /// 一行：栏目名 + 上移/下移 + 显隐开关。用按钮排序而不是 List.onMove：
+    /// grouped Form 里 onMove 要 iOS 的编辑态，macOS 没有对应入口，按钮双端一致。
+    private func homeSectionRow(_ section: HomeSection) -> some View {
+        let index = homeSections.firstIndex(of: section)
+        return HStack(spacing: 14) {
+            Label(section.title, systemImage: Self.sectionIcon(section))
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 2) {
+                Button {
+                    moveHomeSection(section, offset: -1)
+                } label: {
+                    Image(systemName: "chevron.up")
+                }
+                .disabled(index == 0)
+                .accessibilityLabel("上移\(section.title)")
+
+                Button {
+                    moveHomeSection(section, offset: 1)
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .disabled(index == homeSections.count - 1)
+                .accessibilityLabel("下移\(section.title)")
+            }
+            .buttonStyle(.borderless)
+
+            Toggle("", isOn: sectionEnabledBinding(section))
+                .labelsHidden()
+                .accessibilityLabel("显示\(section.title)")
+        }
+    }
+
+    private func moveHomeSection(_ section: HomeSection, offset: Int) {
+        var sections = homeSections
+        guard let index = sections.firstIndex(of: section) else { return }
+        let target = index + offset
+        guard sections.indices.contains(target) else { return }
+        sections.swapAt(index, target)
+        homeSectionsRaw = HomeSectionPreference.encode(sections)
+    }
+
+    /// 显隐开关：开启 = 追加到列表末尾（用上下按钮再挪位置），关闭 = 移出列表。
+    private func sectionEnabledBinding(_ section: HomeSection) -> Binding<Bool> {
+        Binding(
+            get: { homeSections.contains(section) },
+            set: { on in
+                var sections = homeSections
+                if on {
+                    guard !sections.contains(section) else { return }
+                    sections.append(section)
+                } else {
+                    // 全关掉首页只剩空态，是用户的明确选择，不拦。
+                    sections.removeAll { $0 == section }
+                }
+                homeSectionsRaw = HomeSectionPreference.encode(sections)
+            }
+        )
+    }
+
+    private static func sectionIcon(_ section: HomeSection) -> String {
+        switch section {
+        case .resume: "play.circle"
+        case .nextUp: "arrow.right.circle"
+        case .latest: "clock"
+        case .libraries: "square.stack"
+        }
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。

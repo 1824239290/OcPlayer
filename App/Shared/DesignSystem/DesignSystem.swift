@@ -281,6 +281,76 @@ struct PosterCard: View {
     }
 }
 
+/// 媒体库类型的中文名。
+extension MediaLibrary.CollectionType {
+    var displayName: String {
+        switch self {
+        case .movies: "电影"
+        case .tvshows: "剧集"
+        case .music: "音乐"
+        case .musicvideos: "MV"
+        case .homevideos: "家庭视频"
+        case .boxsets: "合集"
+        case .books: "书籍"
+        case .photos: "照片"
+        case .playlists: "播放列表"
+        case .livetv: "直播电视"
+        case .folders, .unknown: "混合内容"
+        }
+    }
+}
+
+/// 媒体库卡（首页媒体库栏）：16:9 库封面 + 标题行 + 类型副标题。
+/// 布局对齐 `StillCard`（封面取 Jellyfin/Emby UserView 自己的 Primary 图，
+/// 带 tag 供缓存失效），Rail 走 `.still` 档高度。
+struct LibraryCard: View {
+    let library: MediaLibrary
+    let server: (any MediaServer)?
+    var width: CGFloat = Metrics.stillWidth
+    var onTap: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    private var coverTarget: (url: URL?, authHeader: String?) {
+        guard let server else { return (nil, nil) }
+        let url = try? server.imageURL(
+            itemID: library.id, type: .primary, maxWidth: 720, tag: library.primaryImageTag)
+        return (url, server.authorizationHeader)
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 0) {
+                let target = coverTarget
+                MediaArtwork(
+                    url: target.url,
+                    authHeader: target.authHeader,
+                    shape: .still,
+                    width: width,
+                    maxPixelSize: 720
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(library.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    Text(library.collectionType.displayName)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.top, 10)
+            }
+            .frame(width: width)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("打开媒体库 \(library.name)")
+        .hoverLift(active: hovering, reduceMotion: reduceMotion)
+        .onHover { hovering = $0 }
+    }
+}
+
 /// 继续观看卡：16:9 剧照 + 进度点 + 进度条 + 「还剩 xx」副标题。
 struct StillCard: View {
     let item: MediaItem

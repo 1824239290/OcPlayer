@@ -175,10 +175,13 @@ public struct MediaLibrary: Identifiable, Hashable, Sendable {
     public var id: String
     public var name: String
     public var collectionType: CollectionType
+    /// Primary 封面图 tag；拼图片 URL 时带上，图更新后磁盘缓存自然失效。
+    public var primaryImageTag: String?
 
-    public init(id: String, name: String, collectionType: CollectionType) {
+    public init(id: String, name: String, collectionType: CollectionType, primaryImageTag: String? = nil) {
         self.id = id
         self.name = name
         self.collectionType = collectionType
+        self.primaryImageTag = primaryImageTag
     }
 }

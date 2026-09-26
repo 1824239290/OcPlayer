@@ -125,7 +125,14 @@ public struct JellyfinServer: MediaServer {
     public func userViews() async throws -> [MediaLibrary] {
         let result = try await send(Paths.getUserViews(parameters: .init(userID: profile.userID)))
         return (result.items ?? [])
-            .map { MediaLibrary(id: $0.id ?? UUID().uuidString, name: $0.name ?? "", collectionType: .init($0.collectionType?.rawValue)) }
+            .map {
+                MediaLibrary(
+                    id: $0.id ?? UUID().uuidString,
+                    name: $0.name ?? "",
+                    collectionType: .init($0.collectionType?.rawValue),
+                    primaryImageTag: $0.imageTags?["Primary"]
+                )
+            }
             .filter { $0.collectionType != .unknown && $0.collectionType != .folders }
     }
 
