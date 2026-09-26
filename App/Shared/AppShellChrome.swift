@@ -18,36 +18,50 @@ import SwiftUI
 // 只有原来文字版的三分之一宽，标题与搜索框不用再抢位置。
 
 /// 顶栏导航条：分区图标组 + 媒体库按钮。
+///
+/// macOS：两者共处**一条自绘玻璃胶囊**（工具栏项退出系统共享胶囊后系统不再
+/// 给底，见 `AppShellNavigationToolbarContent`）。胶囊内边距 / 图标节距 /
+/// 选中底尺寸全部自绘控制——系统共享胶囊的内边距偏大且不可调。
 struct AppShellNavigationBar: View {
     var body: some View {
+        #if os(macOS)
+        // 内容高 24pt + 上下各 6 → 胶囊 36pt。左右各留 8：首个图标离胶囊边缘
+        // 太近会显得挤（视觉呼吸位），尾部箭头同理。
+        HStack(spacing: 2) {
+            AppShellSectionGroup()
+            AppShellLibraryButton()
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: Capsule())
+        #else
         HStack(spacing: 10) {
             AppShellSectionGroup()
             AppShellLibraryButton()
         }
+        #endif
     }
 }
 
 #if os(macOS)
 
-/// macOS 窗口工具栏内容：分区图标组 + 媒体库按钮，同处一条系统共享胶囊。
+/// macOS 窗口工具栏内容：分区图标组 + 媒体库按钮一条胶囊（`AppShellNavigationBar`）。
 ///
 /// **挂载在导航栈根内容上**（`appShellChrome()`，不是窗口级 `.toolbar`）：
-/// push 进详情页后这两样随根页一起撤下，只留系统返回键——返回键独享一颗
-/// 原生胶囊，不会和分区组画成一条。之前挂在窗口级 `.toolbar` 上时它们属于
-/// 窗口、push 后照样在；而且 `ToolbarContent` 不随 `app.path` 变化重算，
-/// `if path.isEmpty` 门控从未生效。
+/// push 进详情页后随根页一起撤下，只留系统返回键——返回键独享一颗原生胶囊，
+/// 不会和分区组画成一条。之前挂在窗口级 `.toolbar` 上时它们属于窗口、push 后
+/// 照样在；而且 `ToolbarContent` 不随 `app.path` 变化重算，`if path.isEmpty`
+/// 门控从未生效。
 ///
-/// 分区组与媒体库按钮**有意共处一条胶囊**（用户确认过的外观）：媒体库的
-/// 「在哪个库」状态靠强调色底区分，不拆独立胶囊。
+/// 整条是一个工具栏项 + `.sharedBackgroundVisibility(.hidden)`：系统不再给
+/// 共享胶囊（内边距偏大、且会把项间间距算进去），胶囊由内容层自绘，几何可
+/// 精确对齐设计稿。
 struct AppShellNavigationToolbarContent: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            AppShellSectionGroup()
+            AppShellNavigationBar()
         }
-
-        ToolbarItem(placement: .navigation) {
-            AppShellLibraryButton()
-        }
+        .sharedBackgroundVisibility(.hidden)
     }
 }
 
@@ -127,10 +141,15 @@ struct AppShellSectionGroup: View {
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .frame(width: 28, height: 24)
                 .contentShape(.rect(cornerRadius: 6))
-                .background(
-                    segmentBackground(isSelected: isSelected, isHovering: isHovering),
-                    in: .rect(cornerRadius: 6)
-                )
+                // 选中/hover 底内缩成 27×21 的小圆角块（槽位 28×24 各收
+                // 0.5 / 1.5）——撑满槽位会让胶囊显得臃肿，内缩后图标与底
+                // 的视觉间距才均匀。
+                .background {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(segmentBackground(isSelected: isSelected, isHovering: isHovering))
+                        .padding(.horizontal, 0.5)
+                        .padding(.vertical, 1.5)
+                }
                 // 选中/hover 切换走短淡变，不做位移——组本身是静态几何。
                 .motion(Motion.fast, value: isSelected)
                 .motion(Motion.fast, value: isHovering)
@@ -143,10 +162,10 @@ struct AppShellSectionGroup: View {
     }
 
     private func segmentBackground(isSelected: Bool, isHovering: Bool) -> AnyShapeStyle {
+        // 选中态只靠前景色亮暗区分（选中 .primary / 未选中 .secondary），不画
+        // 背景底——用户确认过不要蓝色的选中底。hover 保留浅色底。
         // macOS 工具栏的 Liquid Glass 会把低 alpha 的内容填充当「背景」吃掉
-        // （实测 accent 0.32 / primary 0.08 全部不可见），这两个档位按玻璃上
-        // 可见的下限取，比 iPad 内容层（0.32 / 0.08）浓一档。
-        if isSelected { return AnyShapeStyle(Color.accentColor.opacity(0.55)) }
+        // （实测 primary 0.08 不可见），hover 档按玻璃上可见的下限取。
         if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
         return AnyShapeStyle(.clear)
     }
@@ -171,34 +190,35 @@ struct AppShellLibraryButton: View {
         Button {
             isPickerPresented = true
         } label: {
-            HStack(spacing: 2) {
+            // 图标与箭头之间留 5pt：太近箭头会贴着图标，显得是一个「双层」
+            // 图标而不是「库 + 可展开」。
+            HStack(spacing: 5) {
                 Image(systemName: currentLibrary.map { AppShellView.icon(for: $0.collectionType) } ?? "square.stack")
                     .font(.system(size: 13, weight: .semibold))
                 // 与 Safari 的「历史记录」按钮同一处理：带小箭头表示点开是列表。
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.tertiary)
             }
             .foregroundStyle(currentLibrary == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-            // 尺寸 / hover / 选中底两个平台一致：系统共享胶囊不给组内按钮画底，
-            // 「在哪个库」的强调色状态必须落在内容层（iPad 上一直有；macOS
-            // 之前写在 `#if !os(macOS)` 里，进了库也看不出来）。
-            .padding(.horizontal, 6)
+            // hover 底与分区图标同规则内缩（见 `segmentButton`）。
+            .padding(.horizontal, 2)
             .frame(height: 24)
             .contentShape(.rect(cornerRadius: 6))
-            .background(
-                background,
-                in: .rect(cornerRadius: 6)
-            )
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(background)
+                    .padding(.vertical, 1.5)
+            }
             .motion(Motion.fast, value: currentLibrary?.id)
             .motion(Motion.fast, value: isHovering)
         }
         // macOS 也显式 `.plain`：默认工具栏按钮样式会自己再画一层 hover / 按下
-        // 玻璃，叠在系统的共享胶囊上就是双份。
+        // 玻璃，叠在外面自绘的胶囊上就是双份。
         .buttonStyle(.plain)
         #if !os(macOS)
-        // iOS 的 principal 位没有系统胶囊，按钮自己出一颗；macOS 与分区组共处
-        // 系统共享胶囊（见 `AppShellNavigationToolbarContent`），不再自画。
+        // iOS 的 principal 位没有系统胶囊，按钮自己出一颗；macOS 的胶囊在
+        // `AppShellNavigationBar` 整组外面（见 `AppShellNavigationToolbarContent`）。
         .padding(2)
         .glassEffect(.regular, in: .rect(cornerRadius: 9, style: .continuous))
         #endif
@@ -211,9 +231,9 @@ struct AppShellLibraryButton: View {
     }
 
     private var background: AnyShapeStyle {
-        // 与 `AppShellSectionGroup.segmentBackground` 同档：玻璃上低 alpha 填充
-        // 会被 Liquid Glass 吃掉（见那边的注释）。
-        if currentLibrary != nil { return AnyShapeStyle(Color.accentColor.opacity(0.55)) }
+        // 与分区图标组同规则：不画「在哪个库」的强调色底，状态靠图标类型 +
+        // 前景色表达；hover 浅色底保留（玻璃上低 alpha 会被吃掉，见
+        // `AppShellSectionGroup.segmentBackground`）。
         if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
         return AnyShapeStyle(.clear)
     }
