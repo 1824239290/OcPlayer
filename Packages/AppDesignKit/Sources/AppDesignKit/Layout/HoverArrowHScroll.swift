@@ -25,6 +25,7 @@ public struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovering = false
     @State private var focusID: Item.ID?
+    @State private var contentOverflows = false
 
     public init(
         items: [Item],
@@ -65,6 +66,12 @@ public struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                // 内容没超出视口就滚不动，整组箭头直接不出现（1pt 容差防浮点抖动）。
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentSize.width > geometry.containerSize.width + 1
+                } action: { _, overflows in
+                    contentOverflows = overflows
+                }
 
                 if showsArrowChrome {
                     HStack {
@@ -115,7 +122,8 @@ public struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
         }
     }
 
-    private var showsArrowChrome: Bool { items.count > 1 }
+    /// 只有真能滚动（内容宽 > 视口宽）才挂箭头，条数多但排得下也不挂。
+    private var showsArrowChrome: Bool { contentOverflows }
 
     /// 集合身份摘要，给 `onChange` 当比较值用。
     /// 原来写的是 `items.map(\.id)`：每次 body 重算（悬停进出就会重算）都新分配一个
