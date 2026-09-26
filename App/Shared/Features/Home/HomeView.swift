@@ -47,16 +47,6 @@ struct HomeView: View {
                 content
             }
         }
-        // 氛围背景垫在最底层：骨架 / 错误 / 空态都盖着它（未连服务器时
-        // 轮播自己拿不到图，整体不渲染）。
-        //
-        // `.background` 的背景尺寸跟随被包内容：哪个分支不撑满整页，全页
-        // 背景就塌成那个分支的内容小块（搜索空态曾这样闪——打字瞬间先进
-        // 空态，背景塌掉，结果回来又撑开）。所以这里每个分支都必须满页：
-        // ScrollView 天然满页，空态 / 错误态各自 frame 撑满（见 searchContent
-        // 与 errorState）。别改成 ZStack 兄弟节点——背景的 ignoresSafeArea
-        // 会把根布局撑到全窗宽，内容列铺进侧栏底下。
-        .background { AmbientBackdropCarousel() }
         .navigationTitle("首页")
         #if os(macOS)
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)

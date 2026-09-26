@@ -31,7 +31,6 @@ struct AmbientBackdropCarousel: View {
                             .imageTarget(app.server, kind: .backdrop, width: Self.imageWidth),
                         scrim: .home
                     )
-                    .id(index)
                     .transition(.section)
                 }
             }

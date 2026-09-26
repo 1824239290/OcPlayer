@@ -26,7 +26,13 @@ struct BackdropAmbienceView: View {
 
     var body: some View {
         if let url = target.url {
-            RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 512)
+            RemoteImage(
+                url: url,
+                authHeader: target.authHeader,
+                maxPixelSize: 512,
+                preserveCurrentImageOnReload: true,
+                fadeAnimation: Motion.ambient
+            )
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // 4e7287e 的教训：fill 的溢出尺寸会参与布局、撑高兄弟图层，

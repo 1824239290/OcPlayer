@@ -39,6 +39,8 @@ struct AppShellView: View {
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
+            // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
+            .background { windowAmbienceLayer }
             // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
             // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
             .onChange(of: bangumiEnabled) { _, enabled in
@@ -83,14 +85,6 @@ struct AppShellView: View {
                 AppShellNavigationToolbarContent()
             }
             #endif
-        // 整窗氛围底（页面经 windowAmbience(_:) 声明）：垫在导航栈**后面**。
-        // macOS 26 上只有栈根的背景能铺满全窗（首页轮播就是这么垫到工具栏玻璃
-        // 底下的），pushed 页被裁在栈内、导航栈宿主自带不透明底，页面自己在栈内
-        // 垫什么都连不到工具栏——垫在这里，透明的 pushed 页和工具栏玻璃透出的
-        // 才是同一张连续的图。
-        // 必须走 layout 隔离的 `.background`：氛围图的 fill 溢出若作为 ZStack
-        // 兄弟参与布局，会把导航栈撑出窗口（4e7287e 同款坑）。
-        .background { windowAmbienceLayer }
         #if os(macOS)
         // 全屏跟踪：willEnter 先行（衔接层赶在硬底亮相前就位），didExit 收尾；
         // 起窗对齐兜底「状态恢复直接以全屏起窗」——那时通知可能早于订阅。
@@ -204,10 +198,12 @@ struct AppShellView: View {
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
     }
 
-    /// 当前声明页的整窗氛围层；无声明时整体不渲染，各页自己兜底纯色。
+    /// 首页轮播常驻底层；详情页声明的背景只在它上面覆盖。
     @ViewBuilder
     private var windowAmbienceLayer: some View {
         ZStack(alignment: .top) {
+            AmbientBackdropCarousel()
+
             ZStack {
                 if let ambience = app.windowAmbience {
                     BackdropAmbienceView(
@@ -222,11 +218,10 @@ struct AppShellView: View {
                     // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
                     // 所以在调用点再显式退出一次安全区。
                     .ignoresSafeArea()
-                    .id(ambience)
                     .transition(.opacity)
                 }
             }
-            // 换页换图走氛围档慢淡变；减弱动态效果时 .motion 自动降级直切。
+            // 只动画专属背景，底下的首页轮播始终留在视图树里。
             .motion(Motion.ambient, value: app.windowAmbience)
 
             #if os(macOS)
