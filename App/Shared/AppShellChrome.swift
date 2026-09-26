@@ -85,23 +85,31 @@ struct AppShellSectionGroup: View {
 
     /// 组里的一颗按钮。`id` 取 section，方便 ForEach 稳定复用。
     struct Segment: Identifiable {
+        /// 图标来源：SF Symbol 或品牌矢量图（Assets.xcassets imageset）。
+        enum Icon {
+            case symbol(String)
+            /// `side`：品牌图渲染边长（pt）。各 SVG 在 viewBox 里的留白不同，
+            /// 统一边长会显得一大一小，按图逐个标定。
+            case brand(String, side: CGFloat)
+        }
+
         let section: AppModel.Section
         let title: String
-        let icon: String
+        let icon: Icon
 
         var id: AppModel.Section { section }
     }
 
     /// 顺序沿用侧栏：首页 → MoviePilot → Bangumi → 设置。
     static func makeSegments(bangumiEnabled: Bool, moviepilotEnabled: Bool) -> [Segment] {
-        var segments: [Segment] = [Segment(section: .home, title: "首页", icon: "house.fill")]
+        var segments: [Segment] = [Segment(section: .home, title: "首页", icon: .symbol("house.fill"))]
         if moviepilotEnabled {
-            segments.append(Segment(section: .moviepilot, title: "MoviePilot", icon: "film.stack"))
+            segments.append(Segment(section: .moviepilot, title: "MoviePilot", icon: .brand("moviepilot-logo", side: 18)))
         }
         if bangumiEnabled {
-            segments.append(Segment(section: .bangumi, title: "Bangumi", icon: "tv.fill"))
+            segments.append(Segment(section: .bangumi, title: "Bangumi", icon: .brand("bangumi-logo", side: 20)))
         }
-        segments.append(Segment(section: .settings, title: "设置", icon: "gearshape"))
+        segments.append(Segment(section: .settings, title: "设置", icon: .symbol("gearshape")))
         return segments
     }
 
@@ -136,8 +144,7 @@ struct AppShellSectionGroup: View {
             guard !isSelected else { return }
             app.selectedSection = segment.section
         } label: {
-            Image(systemName: segment.icon)
-                .font(.system(size: 13, weight: .semibold))
+            segmentIcon(segment.icon)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .frame(width: 28, height: 24)
                 .contentShape(.rect(cornerRadius: 6))
@@ -159,6 +166,23 @@ struct AppShellSectionGroup: View {
         .help(segment.title)
         .accessibilityLabel(segment.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// SF Symbol 走字体渲染；品牌图是矢量 imageset，按标定边长缩放对齐
+    /// 13pt Symbol 的视觉体量。两个 logo 均为模板渲染（见 imageset），
+    /// 与 SF Symbol 一样跟随 primary/secondary 前景色。
+    @ViewBuilder
+    private func segmentIcon(_ icon: Segment.Icon) -> some View {
+        switch icon {
+        case .symbol(let name):
+            Image(systemName: name)
+                .font(.system(size: 13, weight: .semibold))
+        case .brand(let name, let side):
+            Image(name)
+                .resizable()
+                .scaledToFit()
+                .frame(width: side, height: side)
+        }
     }
 
     private func segmentBackground(isSelected: Bool, isHovering: Bool) -> AnyShapeStyle {

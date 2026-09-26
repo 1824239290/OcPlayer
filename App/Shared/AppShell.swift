@@ -146,7 +146,7 @@ struct AppShellView: View {
                     BangumiHomeView()
                         .appRoutes()
                 }
-                .tabItem { Label("Bangumi", systemImage: "tv.fill") }
+                .tabItem { Label("Bangumi", image: "bangumi-logo") }
                 .tag(AppModel.Section.bangumi)
             }
 
@@ -155,7 +155,7 @@ struct AppShellView: View {
                     MoviePilotHomeView()
                         .appRoutes()
                 }
-                .tabItem { Label("MoviePilot", systemImage: "film.stack") }
+                .tabItem { Label("MoviePilot", image: "moviepilot-logo") }
                 .tag(AppModel.Section.moviepilot)
             }
 
