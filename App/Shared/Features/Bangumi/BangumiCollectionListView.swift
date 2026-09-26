@@ -8,6 +8,7 @@ struct BangumiCollectionListView: View {
     let subjectType: BangumiSubjectType
 
     @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var collectionType: BangumiCollectionType = .collect
     @State private var counts: [BangumiCollectionType: Int] = [:]
     /// 懒建一次；fetch 闭包读的 @State 是存储引用，切类型时读到的是当前值。
@@ -19,6 +20,9 @@ struct BangumiCollectionListView: View {
         Group {
             if let loader {
                 content(loader)
+                    .id(collectionType)
+                    .transition(.opacity)
+                    .motion(Motion.standard, value: collectionType)
             } else {
                 ProgressView("正在加载…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,6 +80,7 @@ struct BangumiCollectionListView: View {
                 }
             }
             .listStyle(.inset)
+            .animation(reduceMotion ? nil : Motion.standard, value: loader.items.count)
         }
     }
 

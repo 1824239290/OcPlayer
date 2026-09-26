@@ -17,6 +17,7 @@ struct BangumiCalendarView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var days: [BangumiCalendarDayDTO] = []
     @State private var selectedWeekdayID: Int = todayBangumiWeekdayID
@@ -139,6 +140,7 @@ struct BangumiCalendarView: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         ForEach(displayDays) { day in
                             daySection(day: day)
+                                .transition(reduceMotion ? .identity : .opacity)
                         }
                     }
                     .padding(.horizontal, contentLeading)
@@ -147,6 +149,8 @@ struct BangumiCalendarView: View {
                 }
             }
         }
+        .motion(Motion.standard, value: selectedWeekdayID)
+        .motion(Motion.standard, value: showAllDays)
         .refreshable { await loadCalendar(force: true) }
     }
 
@@ -248,6 +252,7 @@ struct BangumiCalendarView: View {
             .foregroundStyle(isSelected ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
+        .motion(Motion.fast, value: isSelected)
     }
 
     // MARK: - 单日分组区块

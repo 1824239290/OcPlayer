@@ -244,6 +244,7 @@ struct SettingsView: View {
                 Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
             }
         }
+        .scrollContentBackground(.hidden)
         .navigationTitle("设置")
         .formStyle(.grouped)
         .onAppear {

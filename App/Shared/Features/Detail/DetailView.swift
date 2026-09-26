@@ -89,62 +89,56 @@ struct DetailView: View {
     }
 
     var body: some View {
-        Group {
-            if model.isLoading && model.detail == nil {
-                skeleton
-                    .transition(.section)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if horizontalSizeClass == .compact {
-                            if isAmbientActive {
-                                ambientCompactHeader
-                            } else {
-                                compactHeaderView
-                            }
-                        } else if isAmbientActive {
-                            // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
-                            ambientHeader
-                            metadata
-                        } else {
-                            banner
-                            metadata
-                        }
-                        if let loadError = model.loadError {
-                            ErrorNotice(loadError)
-                                .padding(.horizontal, detailHorizontalInset)
-                                .padding(.top, 14)
-                        }
-                        if let playedActionError {
-                            ErrorNotice(playedActionError)
-                                .padding(.horizontal, detailHorizontalInset)
-                                .padding(.top, 14)
-                        }
-                        if model.shown.kind == .series {
-                            seasonBar
-                            episodeList
-                        }
-                        BangumiChapterSection(
-                            item: model.shown,
-                            selectedSeason: model.seasons.first(where: { $0.id == model.selectedSeasonID })
-                        )
-                        MoviePilotResourceSection(item: model.shown)
-                        if !model.shown.cast.isEmpty { castRail }
-                        // 当前选中集（电影为自身）的文件级媒体信息。
-                        DetailMediaInfoSection(
-                            item: playableItem,
-                            horizontalInset: detailHorizontalInset
-                        )
-                        if !model.similar.isEmpty { similarRail }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if horizontalSizeClass == .compact {
+                    if isAmbientActive {
+                        ambientCompactHeader
+                    } else {
+                        compactHeaderView
                     }
-                    .padding(.bottom, 48)
+                } else if isAmbientActive {
+                    // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
+                    ambientHeader
+                    metadata
+                } else {
+                    banner
+                    metadata
                 }
-                .contentMargins(.top, 0, for: .scrollContent)
-                .ignoresSafeArea(edges: .top)
-                .transition(.section)
+                if let loadError = model.loadError {
+                    ErrorNotice(loadError)
+                        .padding(.horizontal, detailHorizontalInset)
+                        .padding(.top, 14)
+                }
+                if let playedActionError {
+                    ErrorNotice(playedActionError)
+                        .padding(.horizontal, detailHorizontalInset)
+                        .padding(.top, 14)
+                }
+                if model.shown.kind == .series {
+                    seasonBar
+                    episodeList
+                }
+                BangumiChapterSection(
+                    item: model.shown,
+                    selectedSeason: model.seasons.first(where: { $0.id == model.selectedSeasonID })
+                )
+                MoviePilotResourceSection(item: model.shown)
+                if !model.shown.cast.isEmpty { castRail }
+                // 当前选中集（电影为自身）的文件级媒体信息。
+                DetailMediaInfoSection(
+                    item: playableItem,
+                    horizontalInset: detailHorizontalInset
+                )
+                if !model.similar.isEmpty { similarRail }
             }
+            .padding(.bottom, 48)
         }
-        // 骨架 → 内容原位交叉淡入，不再硬切。
+        .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(edges: .top)
+        // 详情数据落地时让当前设计的真实内容整体提亮，图片资源则由
+        // RemoteImage 在原位淡入；加载失败也会在 isLoading 结束后恢复正常亮度。
+        .opacity(model.isLoading ? 0.86 : 1)
         .motion(Motion.standard, value: model.isLoading)
         .navigationTitle(horizontalSizeClass == .compact ? "" : model.shown.name)
         #if os(iOS)
@@ -191,132 +185,6 @@ struct DetailView: View {
         .onDisappear {
             model.reloadAfterPlaybackTask?.cancel()
         }
-    }
-
-    /// 详情页骨架：**和真实内容同结构**——banner（含左下海报 + 标题/元数据/播放钮）
-    /// → metadata 区 →（仅剧集）季选择行 + 选集占位。数据加载完原位替换。
-    private var skeleton: some View {
-        VStack(spacing: 0) {
-            if horizontalSizeClass == .compact {
-                skeletonCompactHero
-                skeletonCompactInfo
-            } else {
-                skeletonBanner
-                skeletonMetadata
-            }
-            if model.shown.kind == .series {
-                skeletonSeasonBar
-                SkeletonEpisodeStrip()
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .skeletonShimmer()
-    }
-
-    private var skeletonCompactHero: some View {
-        ZStack(alignment: .bottom) {
-            SkeletonBlock(cornerRadius: 0)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            LinearGradient(
-                colors: [Color.pageBackground.opacity(0.7), Color.pageBackground.opacity(0.2), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-            LinearGradient(
-                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            SkeletonBlock(cornerRadius: 6)
-                .frame(width: 220, height: 36)
-                .padding(.bottom, 16)
-        }
-        .frame(height: 290)
-        .clipped()
-    }
-
-    private var skeletonCompactInfo: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                SkeletonBlock(cornerRadius: 12).frame(width: 54, height: 24)
-                SkeletonBlock(cornerRadius: 4).frame(width: 44, height: 22)
-                SkeletonBlock(cornerRadius: 4).frame(width: 140, height: 16)
-            }
-            HStack(spacing: 12) {
-                SkeletonBlock(cornerRadius: 24)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                SkeletonBlock(cornerRadius: 24)
-                    .frame(width: 48, height: 48)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                SkeletonBlock(cornerRadius: 4).frame(maxWidth: .infinity).frame(height: 14)
-                SkeletonBlock(cornerRadius: 4).frame(width: 260, height: 14)
-            }
-        }
-        .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, 16)
-    }
-
-    /// 横幅：和 `banner` 同高，左下是海报位 + 标题/元数据/按钮条。
-    private var skeletonBanner: some View {
-        ZStack(alignment: .bottomLeading) {
-            SkeletonBlock(cornerRadius: 0)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            LinearGradient(
-                colors: [Color.pageBackground.opacity(0.8), Color.pageBackground.opacity(0.3), .clear],
-                startPoint: .top,
-                endPoint: .center
-            )
-            LinearGradient(
-                colors: [.clear, Color.pageBackground.opacity(0.35), Color.pageBackground],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            HStack(alignment: .bottom, spacing: 24) {
-                SkeletonBlock()
-                    .frame(width: 120, height: 180)
-                VStack(alignment: .leading, spacing: 8) {
-                    SkeletonBlock(cornerRadius: 4)
-                        .frame(width: 220, height: 26)
-                    SkeletonBlock(cornerRadius: 4)
-                        .frame(width: 140, height: 14)
-                    SkeletonBlock(cornerRadius: 4)
-                        .frame(width: 90, height: 14)
-                    SkeletonBlock(cornerRadius: Metrics.bannerActionHeight / 2)
-                        .frame(width: playButtonWidth, height: Metrics.bannerActionHeight)
-                }
-            }
-            .padding(.horizontal, detailHorizontalInset)
-            .padding(.bottom, 28)
-        }
-        .frame(height: bannerHeight)
-        .clipped()
-    }
-
-    /// 简介区：和真实 `metadata` 同 padding（top 20）。
-    private var skeletonMetadata: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SkeletonBlock(cornerRadius: 4).frame(width: 420, height: 14)
-            SkeletonBlock(cornerRadius: 4).frame(width: 340, height: 14)
-            SkeletonBlock(cornerRadius: 4).frame(width: 380, height: 14)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, 20)
-    }
-
-    /// 「剧集 + 季选择器」行：和真实 `seasonBar` 同 padding（top 26 + bottom 12）。
-    private var skeletonSeasonBar: some View {
-        HStack {
-            SkeletonBlock(cornerRadius: 4).frame(width: 60, height: 20)
-            Spacer()
-            SkeletonBlock(cornerRadius: 6).frame(width: 110, height: 26)
-        }
-        .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, 26)
-        .padding(.bottom, 12)
     }
 
     // MARK: - 移动端（紧凑端）沉浸式头部与内容区
@@ -916,7 +784,10 @@ struct DetailView: View {
     private var episodeList: some View {
         Group {
             if model.isLoadingEpisodes {
-                skeletonEpisodes
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .transition(.opacity)
             } else if let episodeError = model.episodeLoadError {
                 EmptyState(failure: episodeError, title: "集列表加载失败", systemImage: "wifi.exclamationmark") {
                     Task { await model.loadEpisodes() }
@@ -945,14 +816,6 @@ struct DetailView: View {
     /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
     private var episodeListMotion: Animation? {
         reduceMotion ? nil : Motion.standard
-    }
-
-    /// 选集加载骨架：一排和 `EpisodeSelectCard` 同尺寸的占位卡，切季时不闪不跳。
-    /// 和首屏骨架共用 `SkeletonEpisodeStrip`（原来是复制粘贴的两份）。
-    private var skeletonEpisodes: some View {
-        SkeletonEpisodeStrip()
-            .skeletonShimmer()
-            .transition(.section)
     }
 
     /// 选集展示顺序：排序只影响横向条，不动 `model.episodes` 与选中态。

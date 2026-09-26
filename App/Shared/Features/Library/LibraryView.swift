@@ -128,6 +128,7 @@ struct LibraryView: View {
                 grid
             }
         }
+        .motion(Motion.standard, value: isLoading)
         .searchable(text: $searchText, prompt: Text("搜索本库"))
         .onChange(of: searchText) { _, _ in
             searchDebounce?.cancel()

@@ -75,8 +75,10 @@ struct DetailMediaInfoSection: View {
             content(info)
                 .transition(.section)
         } else if isLoading {
-            skeleton
-                .transition(.section)
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+                .transition(.opacity)
         } else if let message = errorMessage(for: item) {
             ErrorNotice(message) {
                 Task { await load(item, force: true) }
@@ -244,20 +246,6 @@ struct DetailMediaInfoSection: View {
             rows.append(("文件", fileName))
         }
         return rows
-    }
-
-    // MARK: - 骨架
-
-    private var skeleton: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(0..<3, id: \.self) { _ in
-                SkeletonBlock(cornerRadius: 6)
-                    .frame(height: 44)
-            }
-        }
-        .padding(12)
-        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
-        .skeletonShimmer()
     }
 
     // MARK: - 数据
