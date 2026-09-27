@@ -281,7 +281,9 @@ struct BangumiCalendarView: View {
 
             LazyVGrid(columns: gridColumns, spacing: 10) {
                 ForEach(day.items) { item in
-                    NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: item.id, initialSubject: item.toSlimSubject())) {
+                    Button {
+                        app.openBangumiSubject(id: item.id, initialSubject: item.toSlimSubject())
+                    } label: {
                         CalendarItemCard(
                             item: item,
                             localInterest: localInterests[item.id]

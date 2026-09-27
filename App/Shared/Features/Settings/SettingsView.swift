@@ -18,6 +18,10 @@ struct SettingsView: View {
     /// 单例是引用类型，不需要 @State 的存储语义；let 即可（@Observable 变化照常驱动刷新）。
     private let updateChecker = AppUpdateChecker.shared
     @State private var presentedRelease: GitHubRelease?
+
+    /// pushPresented 两段式的落地标志（管理服务器 / 开源许可证）。
+    @State private var showServers = false
+    @State private var showLicenses = false
     /// 启动默认服务器的本地镜像。`ServerStore` 不是 `@Observable`，
     /// Picker 需要这份 @State 驱动选中态刷新；持久化仍以 store 为准。
     @State private var selectedDefaultServerID: String?
@@ -166,11 +170,12 @@ struct SettingsView: View {
                 }
                 // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
                 // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
-                NavigationLink {
-                    ServersView()
+                Button {
+                    app.pushPresented { showServers = true }
                 } label: {
                     Label("管理服务器…", systemImage: "list.bullet")
                 }
+                .buttonStyle(.plain)
                 Button {
                     app.reconnectFlow()
                 } label: {
@@ -234,14 +239,15 @@ struct SettingsView: View {
                         presentedRelease = release
                     }
                 )
-                NavigationLink {
-                    OpenSourceLicensesView()
+                Button {
+                    app.pushPresented { showLicenses = true }
                 } label: {
                     LabeledContent(
                         "开源许可证",
                         value: "\(OpenSourceLicenseCatalog.componentCount) 个项目"
                     )
                 }
+                .buttonStyle(.plain)
             }
 
             Section {
@@ -260,6 +266,17 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("设置")
         .formStyle(.grouped)
+        // view-destination 页面走 pushPresented 两段式（淡出后落地），与路由页一致。
+        .navigationDestination(isPresented: $showServers) {
+            ServersView()
+                .appShellBackChrome(title: "管理服务器")
+                .pageEntrance()
+        }
+        .navigationDestination(isPresented: $showLicenses) {
+            OpenSourceLicensesView()
+                .appShellBackChrome(title: "开源许可证")
+                .pageEntrance()
+        }
         .onAppear {
             selectedDefaultServerID = app.store.defaultServerID
         }

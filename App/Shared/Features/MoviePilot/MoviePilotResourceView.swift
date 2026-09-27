@@ -109,6 +109,7 @@ struct MoviePilotResourceView: View {
             .refreshable { await search().value }
             .navigationDestination(isPresented: $navigateToDownloads) {
                 MoviePilotDownloadsView()
+                    .pageEntrance()
             }
         }
         // 氛围背景：与详情页同一套——整窗层够得着屏幕时（macOS 常规布局）由 AppShell

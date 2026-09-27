@@ -28,6 +28,18 @@ struct MoviePilotHomeView: View {
     @State private var sheetMedia: MPMediaInfo?
     /// 登录失效时直弹 MoviePilot 登录窗（门控按钮与错误态按钮共用）。
     @State private var isPresentingReloginSheet = false
+    /// view-destination 页（下载管理 / 资源搜索）统一走 pushPresented 两段式：
+    /// 点击先淡出当前页，落地后由 pageEntrance 入场，与路由页同一节奏。
+    @State private var showDownloads = false
+    @State private var showResource = false
+    @State private var resourceMedia: MPMediaInfo?
+
+    private func openResource(_ media: MPMediaInfo) {
+        app.pushPresented {
+            resourceMedia = media
+            showResource = true
+        }
+    }
 
     // MARK: - 搜索状态
     @State private var keyword = ""
@@ -195,8 +207,8 @@ struct MoviePilotHomeView: View {
                     Label("添加订阅", systemImage: "plus")
                 }
 
-                NavigationLink {
-                    MoviePilotDownloadsView()
+                Button {
+                    app.pushPresented { showDownloads = true }
                 } label: {
                     Label("下载管理", systemImage: "arrow.down.circle")
                 }
@@ -222,6 +234,18 @@ struct MoviePilotHomeView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+            }
+        }
+        .navigationDestination(isPresented: $showDownloads) {
+            MoviePilotDownloadsView()
+                .appShellBackChrome(title: "下载管理")
+                .pageEntrance()
+        }
+        .navigationDestination(isPresented: $showResource) {
+            if let resourceMedia {
+                MoviePilotResourceView(media: resourceMedia)
+                    .appShellBackChrome(title: resourceMedia.title ?? "资源搜索")
+                    .pageEntrance()
             }
         }
         .task(id: moviepilot.boundServerID) {
@@ -394,7 +418,8 @@ struct MoviePilotHomeView: View {
                     subscribe: subscribe,
                     onEdit: { editingSubscribe = subscribe },
                     onDelete: { pendingDeleteSubscribe = subscribe },
-                    onRefresh: { Task { await triggerRefreshSubscribes() } }
+                    onRefresh: { Task { await triggerRefreshSubscribes() } },
+                    onOpenResource: { openResource(subscribe.asMediaInfo) }
                 )
             }
         }
@@ -473,7 +498,8 @@ struct MoviePilotHomeView: View {
                                 onConfigureSubscribe: {
                                     sheetMedia = media
                                     isPresentingAddSheet = true
-                                }
+                                },
+                                onOpenResource: { openResource(media) }
                             )
                         }
                     }
@@ -688,11 +714,11 @@ private struct MoviePilotSubscribeCard: View {
     var onEdit: () -> Void
     var onDelete: () -> Void
     var onRefresh: () -> Void
+    var onOpenResource: () -> Void
 
     var body: some View {
-        NavigationLink {
-            MoviePilotResourceView(media: subscribe.asMediaInfo)
-                .id(subscribe.id)
+        Button {
+            onOpenResource()
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 // 1. 严格 2:3 锁定的海报框体（保证每一个卡片的海报高度与宽度完全一致）
@@ -756,8 +782,8 @@ private struct MoviePilotSubscribeCard: View {
                 Label("编辑订阅设置", systemImage: "pencil")
             }
 
-            NavigationLink {
-                MoviePilotResourceView(media: subscribe.asMediaInfo)
+            Button {
+                onOpenResource()
             } label: {
                 Label("搜索站点资源", systemImage: "magnifyingglass")
             }
@@ -870,6 +896,7 @@ private struct MoviePilotMediaGlassCard: View {
     let isAdding: Bool
     let onQuickSubscribe: () -> Void
     let onConfigureSubscribe: () -> Void
+    var onOpenResource: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -974,8 +1001,8 @@ private struct MoviePilotMediaGlassCard: View {
                     .disabled(isSubscribed || isAdding)
 
                     // 查资源入口
-                    NavigationLink {
-                        MoviePilotResourceView(media: media)
+                    Button {
+                        onOpenResource()
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")

@@ -261,7 +261,9 @@ struct BangumiHomeView: View {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 ForEach(loader.items) { subject in
-                                    NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id, initialSubject: subject)) {
+                                    Button {
+                                        app.openBangumiSubject(id: subject.id, initialSubject: subject)
+                                    } label: {
                                         SearchResultRow(subject: subject)
                                     }
                                     .buttonStyle(.plain)
@@ -557,6 +559,7 @@ private struct ProgressCard: View {
     var reportError: (String?) -> Void
 
     @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(AppModel.self) private var app
     @State private var updatingEpisodeID: Int?
     @State private var updatingStatus = false
 
@@ -604,7 +607,9 @@ private struct ProgressCard: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+            Button {
+                app.openBangumiSubject(id: subject.id)
+            } label: {
                 MediaArtwork(
                     url: coverURL,
                     shape: .poster,
@@ -616,7 +621,9 @@ private struct ProgressCard: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                Button {
+                    app.openBangumiSubject(id: subject.id)
+                } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                             .font(.headline)

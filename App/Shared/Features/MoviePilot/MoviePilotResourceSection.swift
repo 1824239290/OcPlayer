@@ -12,6 +12,7 @@ import SwiftUI
 /// 未登录 MoviePilot 时整块不出现，详情页不弹引导。
 struct MoviePilotResourceSection: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
+    @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
 
     /// 集成开关（设置页「启用 MoviePilot」，默认开）：关闭时详情页不渲染本区块。
@@ -23,6 +24,8 @@ struct MoviePilotResourceSection: View {
     @State private var isMatching = false
     @State private var errorText: String?
     @State private var matchGeneration: UInt64 = 0
+    /// 资源搜索页走 pushPresented 两段式（淡出后落地）。
+    @State private var showResource = false
 
     var body: some View {
         if moviepilotEnabled, moviepilot.isAuthenticated {
@@ -35,6 +38,14 @@ struct MoviePilotResourceSection: View {
             }
             .padding(.horizontal, contentLeading)
             .task(id: item.id) { fallbackMedia = nil; errorText = nil }
+            .navigationDestination(isPresented: $showResource) {
+                if let media = resolvedMedia {
+                    MoviePilotResourceView(media: media)
+                        .id(media.id)
+                        .appShellBackChrome(title: media.title ?? "资源搜索")
+                        .pageEntrance()
+                }
+            }
         }
     }
 
@@ -80,9 +91,8 @@ struct MoviePilotResourceSection: View {
     @ViewBuilder
     private var sectionBody: some View {
         if let media = resolvedMedia {
-            NavigationLink {
-                MoviePilotResourceView(media: media)
-                    .id(media.id)
+            Button {
+                app.pushPresented { showResource = true }
             } label: {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {

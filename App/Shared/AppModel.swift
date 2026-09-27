@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import CoreModel
 import DanmakuKit
@@ -6,6 +7,7 @@ import Foundation
 import JellyfinKit
 import MoviePilotKit
 import Observation
+import SwiftUI
 
 /// 播放准备态：点击播放后、引擎真正 open 之前的阶段。单一真相——
 /// loading 覆盖层、重试/取消入口都读它，替代散落的标志位。
@@ -264,6 +266,15 @@ final class AppModel {
 
     var isCompact = false
 
+    /// 两段式换页进行中：当前页淡出、落地（push 或 pop）未发生。期间新的
+    /// 换页请求被忽略（防连点）；AppShell 的 `RouteExitFader` 读它画淡出，
+    /// 落地后的回弹淡入就是落点页的入场。
+    var routeExiting = false
+
+    /// `accessibilityReduceMotion` 的副本（AppShell 注入）：开启时换页直切，
+    /// 不做淡出等待。
+    var reduceMotion = false
+
     /// 整窗氛围底声明（常规布局 Mac/iPad）：有氛围图的页面经 `windowAmbience(_:)`
     /// 出现时声明、离屏时撤回，AppShell 据此在导航栈之外垫同一张模糊图——
     /// macOS 26 只有栈根宿主是全窗的，pushed 页自己够不到侧栏底下。
@@ -345,27 +356,84 @@ final class AppModel {
     }
 
     func openDetail(_ item: MediaItem) {
-        if isCompact {
-            compactPath.append(.detail(item))
-        } else {
-            path.append(.detail(item))
-        }
+        push(.detail(item))
     }
 
     /// 首页「媒体库」栏入口：push 到当前栈（`.library` 路由已在 `appRoutes()` 注册）。
     func openLibrary(_ library: MediaLibrary) {
-        if isCompact {
-            compactPath.append(.library(library))
-        } else {
-            path.append(.library(library))
-        }
+        push(.library(library))
     }
 
     func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil) {
-        if isCompact {
-            navPaths.bangumi.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
-        } else {
-            path.append(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+        push(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+    }
+
+    /// 程序化呈现（`navigationDestination(isPresented:)` / view-destination 页面）
+    /// 与 push 共用同一套两段式。
+    func pushPresented(_ present: @escaping @MainActor () -> Void) {
+        beginRouteExit(land: present)
+    }
+
+    /// 分区切换（顶栏药丸）：常规布局走与 push 相同的两段式——当前页淡出后
+    /// 再换分区；compact（iPhone Tab）系统自带切换动画，直切。
+    func switchSection(_ section: Section) {
+        if isCompact || reduceMotion || section == selectedSection {
+            selectedSection = section
+            return
+        }
+        beginRouteExit { [weak self] in
+            self?.selectedSection = section
+        }
+    }
+
+    private func push(_ route: Route) {
+        beginRouteExit { [weak self] in
+            guard let self else { return }
+            if isCompact {
+                compactPath.append(route)
+            } else {
+                path.append(route)
+            }
+        }
+    }
+
+    /// 返回上一层（自绘返回键）：与 push 对称的两段式——当前页淡出后再弹栈。
+    /// 系统返回键的 pop 是系统级滑出、不经 binding 拦不住，所以常规布局的
+    /// 返回键自绘（见 AppShellBackButton）；弹栈用禁动画 transaction 落地。
+    func back() {
+        guard !path.isEmpty else { return }
+        // 弹栈的过渡期间离场页还挂在树里，立即恢复 routeExiting 会让它
+        // 边滑边显形——等过渡走完（离场页真正移除）再恢复，落点页独自淡入。
+        beginRouteExit(land: { [weak self] in
+            guard let self else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { self.path.removeLast() }
+        }, restoreDelay: Motion.exitSeconds)
+    }
+
+    /// 两段式换页（push / pop / 分区切换共用）：点击后当前页先淡出
+    /// （`Motion.exit`），淡出完成再执行 `land` 落地，落点/新页由淡出层回弹
+    /// 淡入（push 页另有 `pageEntrance` 接力）。compact（iPhone）系统动画
+    /// 本来就在，reduceMotion 直切，都不等待。pop 侧由自绘返回键调用。
+    func beginRouteExit(land: @escaping @MainActor () -> Void, restoreDelay: Double = 0) {
+        if isCompact || reduceMotion {
+            land()
+            return
+        }
+        guard !routeExiting else { return }
+        routeExiting = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(Motion.exitSeconds))
+            land()
+            // 恢复前留出前置拍：新页（push 落地新建的视图）必须先以隐藏态
+            // 提交一帧，routeExiting 复位的淡入才有 from-state；pop 侧还要
+            // 加上 restoreDelay 等系统弹栈过渡走完（离场页真正移除）。
+            try? await Task.sleep(for: .seconds(Motion.restoreDelay))
+            if restoreDelay > 0 {
+                try? await Task.sleep(for: .seconds(restoreDelay))
+            }
+            routeExiting = false
         }
     }
 

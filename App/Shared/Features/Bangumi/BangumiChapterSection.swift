@@ -118,7 +118,9 @@ struct BangumiChapterSection: View {
             Text("Bangumi")
                 .font(.title3.weight(.bold))
             if let subject {
-                NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                Button {
+                    app.openBangumiSubject(id: subject.id)
+                } label: {
                     HStack(spacing: 4) {
                         Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                             .font(.footnote)

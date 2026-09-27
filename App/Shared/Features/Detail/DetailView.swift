@@ -35,11 +35,6 @@ struct DetailView: View {
     @State private var isUpdatingPlayed = false
     @State private var playedActionError: String?
 
-    /// 进场动画：push 落位后内容整体淡入 + 轻微上移。系统 push 在 macOS 上
-    /// 会被同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面自己
-    /// 保证有一段可见、统一的入场过渡；reduceMotion 下 .motion 自动直切。
-    @State private var appeared = false
-
     /// 选集排序偏好跨启动保留：长剧倒序从最新一集看起，不用从头翻。
     @AppStorage(SettingsKeys.episodeSortAscending) private var episodesAscending = true
 
@@ -151,17 +146,13 @@ struct DetailView: View {
                 if !model.similar.isEmpty { similarRail }
             }
             .padding(.bottom, 48)
-            // 进场：内容淡入 + 上移落位（见 appeared 注释）。加载中的骨架块
-            // （海报 / 头像 / 标题 Logo）与 RemoteImage 的原位淡入承担
-            // 「加载过渡」，不再做整页透明度脉冲——那会在每次进入时可见地
-            // 变暗又提亮一次（「闪一下」）。
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 12)
-            .motion(Motion.standard, value: appeared)
+            // 入场过渡由路由出口的 .pageEntrance() 统一承担（淡入 + 上移落位）；
+            // 加载中的骨架块（海报 / 头像 / 标题 Logo）与 RemoteImage 的原位
+            // 淡入承担「加载过渡」，不做整页透明度脉冲——那会在每次进入时
+            // 可见地变暗又提亮一次（「闪一下」）。
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .ignoresSafeArea(edges: .top)
-        .onAppear { appeared = true }
         .navigationTitle(horizontalSizeClass == .compact ? "" : model.shown.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

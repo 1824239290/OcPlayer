@@ -131,7 +131,9 @@ private struct CollectionSection: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
                         ForEach(subjects) { subject in
-                            NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                            Button {
+                                app.openBangumiSubject(id: subject.id)
+                            } label: {
                                 CollectionTile(subject: subject)
                             }
                             .buttonStyle(.plain)

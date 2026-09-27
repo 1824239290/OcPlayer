@@ -12,6 +12,14 @@ public enum Motion {
     public static let standard = Animation.easeInOut(duration: 0.2)
     /// 稍长的切换：大区间 / Tab 切换 / 全屏进出。
     public static let slide = Animation.easeInOut(duration: 0.25)
+    /// 换页退场：点击后当前页淡出，淡出完成再落地 push（两段式转场第一段，
+    /// 第二段是新页 `pageEntrance` 入场）。落地延迟用 `exitSeconds`。
+    public static let exit = Animation.easeInOut(duration: 0.45)
+    /// 与 `exit` 同节奏的 push 落地延迟秒数（淡出完成 → 落地）。
+    public static let exitSeconds: Double = 0.45
+    /// 落地后的恢复前置拍：新页必须先以「隐藏态」提交至少一帧，透明度恢复
+    /// 才有 from-state 可动画（同帧出生即恢复 = 硬切无动画）。
+    public static let restoreDelay: Double = 0.05
     /// 沉浸/氛围：仅氛围层（首页轮播），交互不用。
     public static let ambient = Animation.easeInOut(duration: 1.6)
     /// 外观/主题切换（深浅色）的柔和短淡变。
@@ -49,6 +57,46 @@ public extension View {
         reduceMotion: Bool
     ) -> some View {
         self.animation(reduceMotion ? nil : animation, value: value)
+    }
+}
+
+// MARK: - 页面入场
+
+private struct PageEntranceModifier: ViewModifier {
+    @State private var appeared: Bool
+
+    /// 路由页默认 `false`：初始隐藏，push 落位即播入场。栈根传 `true`：
+    /// 初始可见（启动不播动画），仅被上层页覆盖后重新露出（pop 返回）时重放。
+    init(initiallyVisible: Bool = false) {
+        _appeared = State(initialValue: initiallyVisible)
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .motion(Motion.standard, value: appeared)
+            // 首帧锚定：先让 opacity-0 的首帧提交再翻 appeared——onAppear 直接
+            // 翻会跟初始渲染合并成同一帧，动画被吞成硬切。
+            .onAppear {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(Motion.restoreDelay))
+                    appeared = true
+                }
+            }
+            // 被覆盖即复位：系统 pop 与 push 同样被吞，「退出过渡」由落点页
+            // 重放入场承担（拦截系统返回键换自定义 pop 会丢 iOS 侧滑，不值得）。
+            .onDisappear { appeared = false }
+    }
+}
+
+public extension View {
+    /// push 页面的统一入场：内容纯淡入。macOS 的系统 push 会被
+    /// 同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面层自保证
+    /// 一段可见、统一的过渡；reduceMotion 下 `.motion` 自动直切。
+    /// 挂在导航出口（`appRouteView`）或个别直推页面上，整页一份，别叠加两层。
+    /// pop 返回时落点页重放入场（栈根用 `initiallyVisible: true`，路由页默认值）。
+    func pageEntrance(initiallyVisible: Bool = false) -> some View {
+        modifier(PageEntranceModifier(initiallyVisible: initiallyVisible))
     }
 }
 

@@ -8,6 +8,7 @@ struct BangumiCollectionListView: View {
     let subjectType: BangumiSubjectType
 
     @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var collectionType: BangumiCollectionType = .collect
     @State private var counts: [BangumiCollectionType: Int] = [:]
@@ -68,7 +69,9 @@ struct BangumiCollectionListView: View {
         } else {
             List {
                 ForEach(loader.items) { subject in
-                    NavigationLink(value: AppModel.Route.bangumiSubject(subjectID: subject.id)) {
+                    Button {
+                        app.openBangumiSubject(id: subject.id)
+                    } label: {
                         CollectionRow(subject: subject)
                     }
                     .buttonStyle(.plain)

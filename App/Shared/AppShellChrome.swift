@@ -132,7 +132,8 @@ struct AppShellSectionGroup: View {
         let isHovering = hovering == segment.section
         return Button {
             guard !isSelected else { return }
-            app.selectedSection = segment.section
+            // 常规布局走两段式（当前页淡出后再换分区），compact 由 AppModel 直切。
+            app.switchSection(segment.section)
         } label: {
             segmentIcon(segment.icon)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))

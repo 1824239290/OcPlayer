@@ -53,6 +53,9 @@ struct AppShellView: View {
                     app.selectedSection = .home
                 }
             }
+            // 两段式换页要读 reduceMotion 决定是否直切，AppModel 无环境，注入副本。
+            .onAppear { app.reduceMotion = reduceMotion }
+            .onChange(of: reduceMotion) { _, newValue in app.reduceMotion = newValue }
     }
 
     /// nil 视作 regular：macOS 上 `horizontalSizeClass` 常为 nil，窗口再窄也不走紧凑版式。
@@ -99,8 +102,20 @@ struct AppShellView: View {
     /// Mac / iPad 共用一个导航栈；切分区只替换栈内根页面，避免系统宿主层
     /// 跟着整栈淡入，短暂盖住常驻的背景。
     private var detailColumn: some View {
-        @Bindable var app = app
-        return NavigationStack(path: $app.path) {
+        // pop 拦截：系统返回键 / 手势都是把变短的 path 写回 binding——先不落地，
+        // 让当前页走与 push 对称的两段式（淡出 → 再出现上一层，见
+        // AppModel.beginRouteExit），返回不再是硬切。
+        let path = Binding(
+            get: { app.path },
+            set: { newValue in
+                if newValue.count < app.path.count {
+                    app.beginRouteExit { app.path = newValue }
+                } else {
+                    app.path = newValue
+                }
+            }
+        )
+        return NavigationStack(path: path) {
             sectionContent
                 .appRoutes()
                 .appShellChrome()
@@ -190,6 +205,12 @@ struct AppShellView: View {
         }
         .transition(.section)
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
+        // 两段式转场第一段：进入点击后本页淡出，淡出完成才落地 push，新页由
+        // pageEntrance 接力入场（见 AppModel.beginRouteExit）。
+        .routeExitFade()
+        // 栈根是 pop 的落点：push 时被覆盖复位，pop 返回重放入场，不然从详情页
+        // 返回首页仍是硬切。initiallyVisible 保证启动瞬间不播动画。
+        .pageEntrance(initiallyVisible: true)
     }
 
     /// 首页轮播常驻底层；详情页声明的背景只在它上面覆盖。
@@ -282,14 +303,120 @@ struct MediaLibraryListView: View {
             } else {
                 List {
                     ForEach(app.libraries) { library in
-                        NavigationLink(value: AppModel.Route.library(library)) {
-                            Label(library.name, systemImage: AppShellView.icon(for: library.collectionType))
+                        Button {
+                            app.openLibrary(library)
+                        } label: {
+                            HStack {
+                                Label(library.name, systemImage: AppShellView.icon(for: library.collectionType))
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
         }
         .navigationTitle("媒体库")
+    }
+}
+
+// MARK: - 两段式换页：退场淡出
+
+/// 读 `app.routeExiting` 给当前页/工具栏按钮画换页过渡：两段式的第一段——
+/// 离场页淡出（`Motion.exit`），落地后回弹淡入就是落点页/新按钮的入场
+/// （新视图隐藏态出生，复位时正好有 from-state）。页面与工具栏按钮都挂它；
+/// 淡出期间顺便禁点击，防止点中已透明的按钮。
+struct RouteExitFader: ViewModifier {
+    @Environment(AppModel.self) private var app
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(app.routeExiting ? 0 : 1)
+            .motion(Motion.exit, value: app.routeExiting)
+            .allowsHitTesting(!app.routeExiting)
+    }
+}
+
+extension View {
+    /// 页面与工具栏按钮共用的两段式换页淡出层。
+    func routeExitFade() -> some View {
+        modifier(RouteExitFader())
+    }
+}
+
+// MARK: - 自绘返回键（常规布局）
+
+/// 常规布局的返回键：系统返回键的 pop 点击即系统级滑出（不经 binding、
+/// 拦不住），换自绘键走 `AppModel.back()` 两段式（淡出 → 弹栈 → 落点淡入）。
+/// 正圆玻璃钮（36×36，与分区药丸同高）；系统共享底要隐藏，否则系统圆角
+/// 矩形底和自绘圆叠两层。
+struct AppShellBackButton: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Button {
+            app.back()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: 36, height: 36)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: Circle())
+        .help("返回")
+        .accessibilityLabel("返回")
+    }
+}
+
+/// push 页的返回键 + 可选顶栏标题。compact（iPhone）保留系统返回键与标题。
+/// 常规布局：系统渲染的标题文字无法参与两段式淡入淡出——`title` 非空时
+/// 隐藏系统标题，与返回键放**同一个工具栏项**自绘（保证 [返回键, 标题] 顺序），
+/// 随 routeExiting 整体淡出 / 淡入。
+private struct RegularBackChrome: ViewModifier {
+    @Environment(AppModel.self) private var app
+    let title: String?
+
+    func body(content: Content) -> some View {
+        Group {
+            if app.isCompact {
+                content
+            } else if title != nil {
+                content
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar(removing: .title)
+                    .toolbar { toolbarItem }
+            } else {
+                content
+                    .navigationBarBackButtonHidden(true)
+                    .toolbar { toolbarItem }
+            }
+        }
+    }
+
+    private var toolbarItem: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            HStack(spacing: 10) {
+                AppShellBackButton()
+                if let title, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .sharedBackgroundVisibility(.hidden)
+    }
+}
+
+extension View {
+    /// push 页返回键 + 可选顶栏标题（常规布局自绘，compact 原样）。
+    func appShellBackChrome(title: String? = nil) -> some View {
+        modifier(RegularBackChrome(title: title))
     }
 }
 
@@ -307,21 +434,36 @@ extension View {
 
     @ViewBuilder
     private func appRouteView(_ route: AppModel.Route) -> some View {
-        switch route {
-        case .detail(let item):
-            DetailView(item: item)
-                .id(item.id)
-        case .library(let library):
-            LibraryView(library: library)
-        case .bangumiProfile:
-            BangumiProfileView()
-        case .bangumiCollectionList(let type):
-            BangumiCollectionListView(subjectType: type)
-        case .bangumiSubject(let subjectID, let initialSubject):
-            BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
-                .id(subjectID)
-        case .bangumiCalendar:
-            BangumiCalendarView()
+        Group {
+            switch route {
+            case .detail(let item):
+                DetailView(item: item)
+                    .id(item.id)
+                    .appShellBackChrome(title: item.name)
+            case .library(let library):
+                LibraryView(library: library)
+                    .appShellBackChrome(title: library.name)
+            case .bangumiProfile:
+                BangumiProfileView()
+                    .appShellBackChrome(title: "我的")
+            case .bangumiCollectionList(let type):
+                BangumiCollectionListView(subjectType: type)
+                    .appShellBackChrome(title: "我的\(type.description)")
+            case .bangumiSubject(let subjectID, let initialSubject):
+                BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
+                    .id(subjectID)
+                    // 无 initialSubject 时名称要异步加载，标题交给系统渲染。
+                    .appShellBackChrome(
+                        title: initialSubject.map { $0.nameCN.isEmpty ? $0.name : $0.nameCN }
+                    )
+            case .bangumiCalendar:
+                BangumiCalendarView()
+                    .appShellBackChrome(title: "每日放送")
+            }
         }
+        // macOS 系统 push 被吞（见 pageEntrance 注释），所有路由页统一自带入场；
+        // 两段式换页时由本页自己淡出（routeExitFade）。
+        .routeExitFade()
+        .pageEntrance()
     }
 }
