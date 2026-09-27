@@ -63,13 +63,7 @@ public extension View {
 // MARK: - 页面入场
 
 private struct PageEntranceModifier: ViewModifier {
-    @State private var appeared: Bool
-
-    /// 路由页默认 `false`：初始隐藏，push 落位即播入场。栈根传 `true`：
-    /// 初始可见（启动不播动画），仅被上层页覆盖后重新露出（pop 返回）时重放。
-    init(initiallyVisible: Bool = false) {
-        _appeared = State(initialValue: initiallyVisible)
-    }
+    @State private var appeared = false
 
     func body(content: Content) -> some View {
         content
@@ -94,9 +88,8 @@ public extension View {
     /// 同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面层自保证
     /// 一段可见、统一的过渡；reduceMotion 下 `.motion` 自动直切。
     /// 挂在导航出口（`appRouteView`）或个别直推页面上，整页一份，别叠加两层。
-    /// pop 返回时落点页重放入场（栈根用 `initiallyVisible: true`，路由页默认值）。
-    func pageEntrance(initiallyVisible: Bool = false) -> some View {
-        modifier(PageEntranceModifier(initiallyVisible: initiallyVisible))
+    func pageEntrance() -> some View {
+        modifier(PageEntranceModifier())
     }
 }
 

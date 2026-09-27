@@ -208,9 +208,12 @@ struct AppShellView: View {
         // 两段式转场第一段：进入点击后本页淡出，淡出完成才落地 push，新页由
         // pageEntrance 接力入场（见 AppModel.beginRouteExit）。
         .routeExitFade()
-        // 栈根是 pop 的落点：push 时被覆盖复位，pop 返回重放入场，不然从详情页
-        // 返回首页仍是硬切。initiallyVisible 保证启动瞬间不播动画。
-        .pageEntrance(initiallyVisible: true)
+        // 栈根在 push 期间必须保持隐藏：页面是透明的（氛围层透显设计），栈根
+        // 漏出来会透过详情页显示。用 **path 驱动**而不是 onAppear/onDisappear
+        // 生命周期——播放器开合翻转窗口工具栏可见性会重放生命周期，播放结束
+        // 后栈根会被亮回来（首页透过透明详情页漏出 + 氛围声明被清成「背景丢失」）。
+        .opacity(app.path.isEmpty ? 1 : 0)
+        .motion(Motion.standard, value: app.path.isEmpty)
     }
 
     /// 首页轮播常驻底层；详情页声明的背景只在它上面覆盖。
