@@ -158,6 +158,16 @@ struct AppShellView: View {
                 NavigationStack(path: $app.navPaths.bangumi) {
                     BangumiHomeView()
                         .appRoutes()
+                        // 与首页同一张轮播图（Carousel 声明到 homeAmbience）：跨 Tab
+                        // 背景连续，也不多拉一次图。macOS 靠整窗层给非声明页垫底，
+                        // iOS 的宿主不透明，只能各 Tab 自己垫。
+                        .background {
+                            BackdropAmbienceView(
+                                target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
+                                scrim: .home
+                            )
+                            .ignoresSafeArea()
+                        }
                 }
             }
         }
@@ -167,6 +177,13 @@ struct AppShellView: View {
                 NavigationStack(path: $app.navPaths.moviepilot) {
                     MoviePilotHomeView()
                         .appRoutes()
+                        .background {
+                            BackdropAmbienceView(
+                                target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
+                                scrim: .home
+                            )
+                            .ignoresSafeArea()
+                        }
                 }
             }
         }
@@ -175,6 +192,13 @@ struct AppShellView: View {
             NavigationStack(path: $app.navPaths.settings) {
                 SettingsView()
                     .appRoutes()
+                    .background {
+                        BackdropAmbienceView(
+                            target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
+                            scrim: .home
+                        )
+                        .ignoresSafeArea()
+                    }
             }
         }
 
