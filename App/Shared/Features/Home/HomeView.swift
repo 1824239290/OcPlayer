@@ -16,10 +16,20 @@ struct HomeView: View {
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
     private var homeSections: [HomeSection] { HomeSectionPreference.decode(homeSectionsRaw) }
 
+    /// macOS 导航栏搜索框的词（顶栏药丸右侧）；iOS 没有这一层——搜索入口是
+    /// 底部的放大镜 Tab（见 `HomeSearchView`），这里恒为空、分支不生效。
+    @State private var searchText = ""
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         Group {
             if app.server == nil {
                 noServerState
+            } else if isSearching {
+                HomeSearchContent(query: $searchText)
             } else if app.home.isLoading && app.home.latest.isEmpty {
                 loadingState
             } else if let error = app.home.error, app.home.latest.isEmpty {
@@ -28,9 +38,12 @@ struct HomeView: View {
                 content
             }
         }
+        .motion(Motion.slide, value: isSearching)
         .navigationTitle("首页")
         #if os(macOS)
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
+        // 常规布局的搜索入口：窗口工具栏搜索框。iOS 走底部放大镜 Tab。
+        .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -264,14 +277,50 @@ struct HomeView: View {
         .scrollBounceBehavior(.basedOnSize)
     }
 }
-// MARK: - 全库搜索 Tab
+// MARK: - 全库搜索（搜索 Tab / 导航栏搜索框，两端共用）
 
-/// 放大镜 Tab（iOS `Tab(role: .search)`）的落点页：搜索词、结果与分页状态只住
-/// 本视图 `@State`，离开 Tab 随视图释放。原来挂在首页 `.searchable` 上——
-/// iOS 26/27 实测「minimize 搜索 + 导航栏存在工具栏项」时点 X 收起会被系统
-/// 重新展开（导航栏搜索的宿主互扰，与按钮分合无关），挪到搜索 Tab 彻底脱离
-/// 导航栏。
+/// iOS 放大镜 Tab（`Tab(role: .search)`）的落点页：只管入口形态（常驻搜索框 +
+/// 未输入时的提示），结果与分页交给共用的 `HomeSearchContent`。搜索原先挂在
+/// 首页 `.searchable` 上——iOS 26/27 实测「minimize 搜索 + 导航栏存在工具栏项」
+/// 时点 X 收起会被系统重新展开（导航栏搜索的宿主互扰，与按钮分合无关），
+/// 挪到搜索 Tab 彻底脱离导航栏。
 struct HomeSearchView: View {
+    @Environment(AppModel.self) private var app
+    @State private var searchText = ""
+
+    var body: some View {
+        Group {
+            if app.server == nil {
+                SearchEmptyState {
+                    EmptyState(empty: "先连接服务器再搜索", systemImage: "wifi.exclamationmark")
+                }
+            } else if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                SearchEmptyState {
+                    EmptyState(
+                        empty: "搜索全部媒体库",
+                        systemImage: "magnifyingglass",
+                        message: "电影与剧集条目都会检索，结果以海报墙呈现。"
+                    )
+                }
+            } else {
+                HomeSearchContent(query: $searchText)
+            }
+        }
+        .navigationTitle("搜索")
+        #if os(iOS)
+        // inline 大小：`.searchable` 字段常驻导航栏（大标题模式下 iPhone 会把
+        // 字段藏进下拉，搜索页就没了入口）。
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
+    }
+}
+
+/// 搜索结果区（iOS 搜索 Tab 与 macOS 首页导航栏搜索框共用）：词由调用方经
+/// `query` 传入，加载 / 分页 / 作废逻辑都住在这里。防抖与「词变了作废在途
+/// 请求」由 `.task(id: query)` 承担——比手写 debounce Task 少一层状态。
+struct HomeSearchContent: View {
+    @Binding var query: String
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.contentLeading) private var contentLeading
@@ -279,9 +328,7 @@ struct HomeSearchView: View {
     private var isCompact: Bool { sizeClass == .compact }
 
     /// 结果是瞬态数据，只住本视图 `@State`，不进 AppModel 的分页缓存——离开
-    /// 搜索 Tab 就该回到初始态，库页「切回来不重拉」的缓存语义对搜索不成立。
-    @State private var searchText = ""
-    @State private var searchDebounce: Task<Void, Never>?
+    /// 搜索就该回到初始态，库页「切回来不重拉」的缓存语义对搜索不成立。
     @State private var searchResults: [MediaItem] = []
     @State private var searchTotalCount: Int?
     @State private var searchNextStartIndex = 0
@@ -299,64 +346,36 @@ struct HomeSearchView: View {
     private static let searchPageSize = 100
 
     var body: some View {
-        Group {
-            if app.server == nil {
-                searchEmptyState {
-                    EmptyState(empty: "先连接服务器再搜索", systemImage: "wifi.exclamationmark")
-                }
-            } else if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchEmptyState {
-                    EmptyState(
-                        empty: "搜索全部媒体库",
-                        systemImage: "magnifyingglass",
-                        message: "电影与剧集条目都会检索，结果以海报墙呈现。"
-                    )
-                }
-            } else {
-                searchContent
-            }
-        }
-        .navigationTitle("搜索")
-        #if os(iOS)
-        // inline 大小：`.searchable` 字段常驻导航栏（大标题模式下 iPhone 会把
-        // 字段藏进下拉，搜索页就没了入口）。
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
-        .onChange(of: searchText) { _, _ in
-            searchDebounce?.cancel()
-            // 作废在途请求：防抖的 cancel 管不到已经 await 出去的 URLSession
-            // 请求——置 nil 后旧词的翻页回来会在自己的 `activeSearchID == loadID`
-            // 守卫处自行作废，不会把旧词的一页追加进新词结果、也不会覆盖
-            // `searchNextStartIndex`。加载态一并清掉（那个请求的 defer 随之失效）。
-            activeSearchID = nil
-            isSearchLoading = false
-            isSearchLoadingMore = false
-            // 词变了，上一轮的结论作废。注意这里**不**把 body 挡回初始态：
-            // 手上还有旧结果就继续显示旧结果，没有旧结果则 searchContent 进
-            // 骨架屏（见 searchLanded 与 searchContent 的第一支）。
-            searchLanded = false
-            // 旧词的失败文案不能留到新词：`searchError` 只在 `runSearch` 里重置，
-            // 那是 350ms 防抖之后——不清的话这段窗口里 footer 会一边显示新结果、
-            // 一边挂着旧词的报错。
-            searchError = nil
-            guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                // 输入清空：退出结果态，作废旧结果防下次进入闪旧数据。
-                searchResults = []
-                searchTotalCount = nil
-                searchNextStartIndex = 0
-                searchLastPageWasFull = false
-                return
-            }
-            searchDebounce = Task {
-                try? await Task.sleep(for: .milliseconds(350))
-                guard !Task.isCancelled else { return }
-                await runSearch(reset: true)
-            }
-        }
+        searchContent
+            .task(id: query) { await queryChanged() }
     }
 
-
+    /// 词变了：作废旧请求的落账资格（防抖 cancel 管不到已经 await 出去的
+    /// URLSession 请求——置 nil 后旧词翻页回来会在自己的 `activeSearchID ==
+    /// loadID` 守卫处自行作废，不会追加进新词结果、也不会覆盖翻页游标），
+    /// 清旧结论，防抖 350ms 后重取。**不**把 body 挡回初始态：手上还有旧结果
+    /// 就继续显示旧结果，没有旧结果才进骨架屏（见 `searchLanded`）。
+    private func queryChanged() async {
+        activeSearchID = nil
+        isSearchLoading = false
+        isSearchLoadingMore = false
+        searchLanded = false
+        // 旧词的失败文案不能留到新词：`searchError` 只在 `runSearch` 里重置，
+        // 那是防抖之后——不清的话这段窗口里 footer 会一边显示新结果、一边挂着
+        // 旧词的报错。
+        searchError = nil
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            // 输入清空：退出结果态，作废旧结果防下次进入闪旧数据。
+            searchResults = []
+            searchTotalCount = nil
+            searchNextStartIndex = 0
+            searchLastPageWasFull = false
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(350))
+        guard !Task.isCancelled else { return }
+        await runSearch(reset: true)
+    }
 
     private var hasMoreSearchResults: Bool {
         if let searchTotalCount { return searchNextStartIndex < searchTotalCount }
@@ -373,19 +392,6 @@ struct HomeSearchView: View {
 
     private var searchCardWidth: CGFloat? { isCompact ? nil : Metrics.posterWidth }
 
-    /// 搜索空态 / 失败态的载体：必须包在 ScrollView 里。`.background` 的氛围
-    /// 背景尺寸跟随被包内容，而只有 ScrollView 的 frame 会自然铺到工具栏 /
-    /// 侧栏玻璃底下——裸 EmptyState 会把背景塌成本分支的小块、顶栏变纯白
-    /// （frame + ignoresSafeArea 都救不回来，实测像素 (249,249,249)）。
-    /// `containerRelativeFrame` 让空态内容在可视区内垂直居中。
-    private func searchEmptyState<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            content()
-                .frame(maxWidth: .infinity)
-                .containerRelativeFrame(.vertical)
-        }
-        .scrollBounceBehavior(.basedOnSize)
-    }
 
     private var searchContent: some View {
         Group {
@@ -405,7 +411,7 @@ struct HomeSearchView: View {
                 .scrollDisabled(true)
                 .skeletonShimmer()
             } else if let searchError, searchResults.isEmpty {
-                searchEmptyState {
+                SearchEmptyState {
                     EmptyState(failure: searchError, systemImage: "wifi.exclamationmark") {
                         Task { await runSearch(reset: true) }
                     }
@@ -414,8 +420,8 @@ struct HomeSearchView: View {
                 // 服务端 searchTerm 对单字不匹配（Jellyfin/Emby 的分词行为，
                 // 实测两字以上的子串才命中），单字无结果时给引导而不是让它
                 // 看起来像坏了。
-                let term = searchText.trimmingCharacters(in: .whitespaces)
-                searchEmptyState {
+                let term = query.trimmingCharacters(in: .whitespaces)
+                SearchEmptyState {
                     EmptyState(
                         empty: term.count < 2
                             ? "「\(term)」没有匹配"
@@ -487,7 +493,7 @@ struct HomeSearchView: View {
     /// 全库搜索一页（电影 + 剧集，与首页卡片粒度一致）。
     private func runSearch(reset: Bool) async {
         guard let server = app.server else { return }
-        let term = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !term.isEmpty else { return }
         // 会话代次：搜索在途时切了服务器，旧服务器的结果不能落进新会话。
         let generation = app.sessionGeneration
@@ -522,7 +528,7 @@ struct HomeSearchView: View {
             // 会话已换（搜索在途时切了服务器）：本词结果作废。清空搜索词回到
             // rails——留着词的话 searchLanded 永远是 false，会一直卡在骨架屏。
             guard app.sessionIsCurrent(generation, server: server) else {
-                searchText = ""
+                query = ""
                 return
             }
             if reset {
@@ -546,5 +552,23 @@ struct HomeSearchView: View {
             searchError = error.localizedDescription
             searchLanded = true
         }
+    }
+}
+
+/// 搜索空态 / 失败态的载体：必须包在 ScrollView 里。`.background` 的氛围背景
+/// 尺寸跟随被包内容，而只有 ScrollView 的 frame 会自然铺到工具栏玻璃底下——
+/// 裸 EmptyState 会把背景塌成本分支的小块、顶栏变纯白（frame + ignoresSafeArea
+/// 都救不回来，实测像素 (249,249,249)）。`containerRelativeFrame` 让空态内容在
+/// 可视区内垂直居中。搜索 Tab 的提示态与结果态的空/失败态共用。
+private struct SearchEmptyState<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            content
+                .frame(maxWidth: .infinity)
+                .containerRelativeFrame(.vertical)
+        }
+        .scrollBounceBehavior(.basedOnSize)
     }
 }

@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **macOS 搜索入口修复 + 搜索实现两端共用**。上一条把搜索整体搬到 iOS 搜索 Tab 时，macOS 的搜索框（原挂 `HomeView.searchable`，窗口工具栏里那个）失去消费方，一并消失——本次补回：搜索结果区抽成两端共用的 `HomeSearchContent(query:)`（词由外部 `.searchable` 经 binding 传入，防抖与「词变了作废在途请求」改由 `.task(id:)` 承担，少一层手工 debounce 状态），iOS `HomeSearchView`（搜索 Tab）与 macOS `HomeView`（`#if os(macOS)` 的工具栏搜索框）各自提供入口与未输入提示，空态载体提为文件级 `SearchEmptyState`。两个平台各自实测：macOS 导航栏搜索框输入「朋友」命中并渲染海报墙（氛围背景正常）；iOS 测试全绿。结论同时明确：**Tab 化导航与搜索 Tab 都是 iOS 形态**——macOS 的分区入口是窗口工具栏玻璃药丸（Safari 式），`Tab(role: .search)` 在 macOS 上无对应呈现，继续保持两套外壳、共用业务实现。
+
 - **修 iPhone 搜索点 X 收起后被系统重新展开（循环关不掉）**。上一条给首页补的 `.searchToolbarBehavior(.minimize)` 触发系统宿主互扰：iOS 27 模拟器逐帧复现——点 X 收起 0.4s 后搜索框自动弹回（文字保留）；二分实验（去掉 `.toolbar` 按钮组 → 不再重开；按钮组合/分拆无关）确认触发条件是「导航栏里存在任何 primaryAction 工具栏项 + minimize 搜索」，属导航栏搜索的宿主行为，应用侧绕不开。改用 Apple 规范化做法 **`Tab(role: .search)` 搜索 Tab**：搜索词 / 结果 / 分页状态整体从 `HomeView` 迁到新 `HomeSearchView`（同文件），`AppModel` 增 `Section.search` 与 `navPaths.search`，`compactLayout` 的 TabView 迁到 `Tab` API（`Tab(role:)` 要求全量 Tab 语法，不能与 `.tabItem` 混用）。搜索页 `navigationBarTitleDisplayMode(.inline)` 让字段常驻（大标题模式下 iPhone 会藏进下拉）。验证：模拟器驱动完整路径——搜索 Tab 进入 → 输入 → 点 ⊗ 清除（字段保持）→ 点 X 收起（0.5s/1.2s/2.5s 三帧均保持收起）→ 切回首页正常；搜索请求与空态渲染正常；OcPlayerTests iOS 全绿；macOS 构建通过（常规布局的搜索入口未动）。
 
 - **iPhone 首页补常驻搜索钮**。`.searchable` 在 iPhone 上默认收进下拉，顶部工具组里没有放大镜（iPad 常规宽度本就渲染成搜索钮）；`.searchToolbarBehavior(.minimize)` 后两端一致——顶部玻璃组 = 打开 / 刷新 / 搜索。验证：iOS 27 双端模拟器截图确认。
