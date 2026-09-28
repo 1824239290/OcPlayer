@@ -311,8 +311,19 @@ struct HomeSearchView: View {
         // inline 大小：`.searchable` 字段常驻导航栏（大标题模式下 iPhone 会把
         // 字段藏进下拉，搜索页就没了入口）。
         .navigationBarTitleDisplayMode(.inline)
-        #endif
+        // `displayMode: .always` 是必需的，不能用默认 placement：搜索页正文不是
+        // ScrollView（空态）就是可滚动列表（结果），而 iOS 26/27 的导航栏搜索框
+        // 默认「随滚动收起」——正文里有 ScrollView 时，**切走再切回搜索 Tab**
+        // 输入框会被系统收掉且不再恢复（实测：正文换成纯文本才留得住，加
+        // `.scrollDisabled(true)` 也没用）。.always 让字段常驻，不随滚动收起。
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: Text("搜索全部媒体库")
+        )
+        #else
         .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
+        #endif
     }
 }
 
