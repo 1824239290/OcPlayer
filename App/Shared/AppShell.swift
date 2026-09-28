@@ -6,11 +6,14 @@ import SwiftUI
 import AppKit
 #endif
 
-/// 主框架：Mac / iPad 用顶栏液态玻璃药丸（分区），iPhone 用底部 Tab。
+/// 主框架：macOS 用顶栏液态玻璃药丸（分区），iPhone / iPad 统一用底部 Tab。
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
 ///
-/// 侧栏（`NavigationSplitView`）已撤：分区入口收进顶栏药丸，媒体库入口在首页
-/// 「媒体库」栏（iPhone 是「媒体库」Tab），整列宽度让给内容。
+/// 侧栏（`NavigationSplitView`）已撤：macOS 的分区入口收进顶栏药丸，iOS 两端
+/// 用 Tab；媒体库入口在首页「媒体库」栏（iOS 是「媒体库」Tab），整列宽度让给内容。
+/// iPad 曾试过与 macOS 同款顶栏药丸：iOS 的导航栏自带白底玻璃条、氛围层垫在
+/// 导航栈外到不了屏幕（见 `WindowAmbience.reachesScreen`），顶栏既不是悬浮
+/// 药丸、首页背景也出不来——iPad 回归 Tab 方案，内容列宽仍跟随常规宽度。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -40,7 +43,11 @@ struct AppShellView: View {
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
             // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
+            // 仅 macOS：iOS 的 TabView / 导航栈宿主自带不透明底，垫在后面的层
+            // 到不了屏幕——iOS 的首页轮播挂在首页 Tab 栈内（见 compactLayout）。
+            #if os(macOS)
             .background { windowAmbienceLayer }
+            #endif
             // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
             // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
             .onChange(of: bangumiEnabled) { _, enabled in
@@ -68,11 +75,7 @@ struct AppShellView: View {
         #if os(macOS)
         splitLayout
         #else
-        if sizeClass == .regular {
-            splitLayout
-        } else {
-            compactLayout
-        }
+        compactLayout
         #endif
     }
 
@@ -145,6 +148,15 @@ struct AppShellView: View {
             NavigationStack(path: $app.navPaths.home) {
                 HomeView()
                     .appRoutes()
+                    // iOS 的 UIKit 宿主不透明，AppShell 根节点垫的整窗层到不了
+                    // 屏幕——首页氛围轮播改垫在页面背景层（macOS 仍走整窗层）。
+                    // 必须走 `.background`（布局隔离）：轮播做 ZStack 兄弟节点时
+                    // 其 ignoresSafeArea 会把根布局撑到全窗宽，内容列被顶出屏幕
+                    // （macOS 侧栏时代实测过同一坑）。
+                    .background {
+                        AmbientBackdropCarousel()
+                            .ignoresSafeArea()
+                    }
             }
             .tabItem { Label("首页", systemImage: "house.fill") }
             .tag(AppModel.Section.home)
