@@ -25,12 +25,12 @@ final class AppModelLifecycleTests: XCTestCase {
     func testReconnectFlowClearsNavPaths() {
         let app = AppModel()
         app.phase = .ready
-        app.navPaths.libraries = [.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))]
+        app.navPaths.bangumi = [.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))]
         app.path = [.detail(MediaItem(id: "m2", name: "电影2", kind: .movie))]
 
         app.reconnectFlow()
 
-        XCTAssertTrue(app.navPaths.libraries.isEmpty)
+        XCTAssertTrue(app.navPaths.bangumi.isEmpty)
         XCTAssertTrue(app.path.isEmpty)
         XCTAssertEqual(app.phase, .onboarding)
         XCTAssertEqual(app.selectedSection, .home)

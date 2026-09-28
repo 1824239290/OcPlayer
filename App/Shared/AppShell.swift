@@ -10,10 +10,10 @@ import AppKit
 /// 播放器不在导航体系里 —— `RootView` 层的覆盖层负责（见 `AppModel.presentedPlayer`）。
 ///
 /// 侧栏（`NavigationSplitView`）已撤：macOS 的分区入口收进顶栏药丸，iOS 两端
-/// 用 Tab；媒体库入口在首页「媒体库」栏（iOS 是「媒体库」Tab），整列宽度让给内容。
-/// iPad 曾试过与 macOS 同款顶栏药丸：iOS 的导航栏自带白底玻璃条、氛围层垫在
-/// 导航栈外到不了屏幕（见 `WindowAmbience.reachesScreen`），顶栏既不是悬浮
-/// 药丸、首页背景也出不来——iPad 回归 Tab 方案，内容列宽仍跟随常规宽度。
+/// 用 Tab；媒体库入口在首页「媒体库」栏，整列宽度让给内容。iPad 曾试过与
+/// macOS 同款顶栏药丸：iOS 的导航栏自带白底玻璃条、氛围层垫在导航栈外到不了
+/// 屏幕（见 `WindowAmbience.reachesScreen`），顶栏既不是悬浮药丸、首页背景也
+/// 出不来——iPad 回归 Tab 方案，内容列宽仍跟随常规宽度。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -127,10 +127,10 @@ struct AppShellView: View {
 
     #if !os(macOS)
 
-    /// iPhone 底部 Tab：首页 / 媒体库 / （Bangumi）/（MoviePilot）/ 设置。
-    /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐，关掉后 Tab 数
-    /// 最少 3 个；每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非 sheet
-    /// ——播放器覆盖层不再被遮住。
+    /// iPhone 底部 Tab：首页 / （Bangumi）/（MoviePilot）/ 设置。
+    /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐；媒体库入口在
+    /// 首页「媒体库」栏（不再单独占 Tab）。每个 Tab 有独立导航栈
+    /// （`navPaths`），详情页走 push 而非 sheet——播放器覆盖层不再被遮住。
     private var compactLayout: some View {
         @Bindable var app = app
         return TabView(selection: Binding(
@@ -160,13 +160,6 @@ struct AppShellView: View {
             }
             .tabItem { Label("首页", systemImage: "house.fill") }
             .tag(AppModel.Section.home)
-
-            NavigationStack(path: $app.navPaths.libraries) {
-                MediaLibraryListView()
-                    .appRoutes()
-            }
-            .tabItem { Label("媒体库", systemImage: "square.stack") }
-            .tag(AppModel.Section.libraries)
 
             if bangumiEnabled {
                 NavigationStack(path: $app.navPaths.bangumi) {
@@ -210,9 +203,6 @@ struct AppShellView: View {
                 BangumiHomeView()
             case .moviepilot:
                 MoviePilotHomeView()
-            case .libraries:
-                // 仅 iPhone 紧凑布局使用；常规布局不会到达此分支。
-                MediaLibraryListView()
             }
         }
         .transition(.section)
@@ -279,62 +269,6 @@ struct AppShellView: View {
             isWindowFullscreen = fullscreen
         }
         #endif
-    }
-
-    static func icon(for type: MediaLibrary.CollectionType) -> String {
-        switch type {
-        case .movies: "film"
-        case .tvshows: "tv"
-        case .music, .musicvideos: "music.note"
-        case .books: "book"
-        case .photos: "photo"
-        case .boxsets: "square.stack"
-        case .playlists: "list.bullet"
-        case .livetv: "antenna.radiowaves.left.and.right"
-        case .homevideos: "video"
-        case .folders, .unknown: "folder"
-        }
-    }
-}
-
-// MARK: - 媒体库列表页（iPhone 合并 Tab）
-
-/// iPhone 上所有媒体库的入口列表。每个库一行，点进去是 `LibraryView`。
-/// 之前每个库占一个 Tab，库多了会把 Bangumi/MoviePilot 挤进系统「更多」；
-/// 合并成一个 Tab 后 Tab 总数固定 5 个。
-struct MediaLibraryListView: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        Group {
-            if app.libraries.isEmpty {
-                if let error = app.librariesError {
-                    EmptyState(failure: error, title: "无法加载媒体库", systemImage: "wifi.exclamationmark") {
-                        Task { await app.reloadBrowserData() }
-                    }
-                } else {
-                    EmptyState(empty: "还没有媒体库", systemImage: "square.stack")
-                }
-            } else {
-                List {
-                    ForEach(app.libraries) { library in
-                        Button {
-                            app.openLibrary(library)
-                        } label: {
-                            HStack {
-                                Label(library.name, systemImage: AppShellView.icon(for: library.collectionType))
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-        .navigationTitle("媒体库")
     }
 }
 

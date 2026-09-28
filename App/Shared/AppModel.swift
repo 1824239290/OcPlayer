@@ -193,13 +193,11 @@ final class AppModel {
         case settings
         case bangumi
         case moviepilot
-        /// iPhone 合并的媒体库列表 Tab（所有库类型从这里进，不占多个 Tab 位）。
-        case libraries
     }
 
     enum Route: Hashable {
         case detail(MediaItem)
-        /// iPhone 媒体库列表 → 单库网格页的 push 路由。
+        /// 首页「媒体库」栏 → 单库网格页的 push 路由。
         case library(MediaLibrary)
         case bangumiProfile
         case bangumiCollectionList(BangumiSubjectType)
@@ -207,10 +205,9 @@ final class AppModel {
         case bangumiCalendar
     }
 
-    /// iPhone 各 Tab 的独立导航栈。每 Tab 一个路径数组，互不串。
+    /// iOS 各 Tab 的独立导航栈。每 Tab 一个路径数组，互不串。
     struct NavigationPaths {
         var home: [Route] = []
-        var libraries: [Route] = []
         var bangumi: [Route] = []
         var moviepilot: [Route] = []
         var settings: [Route] = []
@@ -437,12 +434,11 @@ final class AppModel {
         }
     }
 
-    /// 紧凑布局下当前选中 Tab 对应的导航路径数组。
+    /// iOS 端当前选中 Tab 对应的导航路径数组。
     private var compactPath: [Route] {
         get {
             switch selectedSection {
             case .home: navPaths.home
-            case .libraries: navPaths.libraries
             case .bangumi: navPaths.bangumi
             case .moviepilot: navPaths.moviepilot
             case .settings: navPaths.settings
@@ -451,7 +447,6 @@ final class AppModel {
         set {
             switch selectedSection {
             case .home: navPaths.home = newValue
-            case .libraries: navPaths.libraries = newValue
             case .bangumi: navPaths.bangumi = newValue
             case .moviepilot: navPaths.moviepilot = newValue
             case .settings: navPaths.settings = newValue
