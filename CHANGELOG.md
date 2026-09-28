@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **iPhone 首页补常驻搜索钮**。`.searchable` 在 iPhone 上默认收进下拉，顶部工具组里没有放大镜（iPad 常规宽度本就渲染成搜索钮）；`.searchToolbarBehavior(.minimize)` 后两端一致——顶部玻璃组 = 打开 / 刷新 / 搜索。验证：iOS 27 双端模拟器截图确认。
+
 - **iOS 撤掉底部「媒体库」Tab**。首页「媒体库」栏（`1112b78` 新增）已经是媒体库的唯一入口，Tab 是重复出口；`Section.libraries`、`navPaths.libraries` 与 `MediaLibraryListView` 一并摘除（`Route.library` 保留，首页栏仍走它 push 单库页），`AppModelLifecycleTests` 的清栈断言改指 `navPaths.bangumi`。验证：iOS 27 iPad Pro 13″ / iPhone 17 Pro 模拟器截图确认 Tab 只剩 首页 / Bangumi / MoviePilot / 设置、首页媒体库栏照常进库；OcPlayerTests iOS 全绿；macOS 构建通过。
 
 - **iPad 撤顶栏药丸，分区切换改用 iPhone 同款 Tab；顺带修 iOS 首页氛围背景不显示**。顶栏药丸方案在 iPad 上从未真机验证过（当时仅编译验证），实测两处都坏：iOS 导航栏自带白底玻璃条，`.principal` 里的自绘玻璃组既不是悬浮药丸也不是 Mac 观感；氛围轮播垫在导航栈外的 AppShell 根节点 `.background` 里，被 iOS 不透明的 UIKit 宿主挡住整层到不了屏幕（iPhone 首页同病——`dd15527` 把轮播上移出页面时在 iOS 上就已不可见，`WindowAmbience.reachesScreen == false` 的判据早就写明 iOS 宿主不透明）。修法：①`AppShellView.layout` 收敛为 macOS 走顶栏药丸（`splitLayout`）、iOS 一律走 `compactLayout`（TabView）——iPad 分区切换、返回键、详情页顶栏全部回归 iPhone 同款系统行为，内容列宽仍按常规宽度取值；②AppShell 根节点的整窗氛围层改为 macOS 独占，iOS 首页轮播垫回首页 Tab 栈内页面 `.background`（布局隔离挂载——做成 ZStack 兄弟节点会复现 macOS 侧栏时代「ignoresSafeArea 撑大根布局、内容列顶出屏幕」的坑，本次实测复现后改 `.background` 消除）。AppShellChrome 的 iOS 顶栏分支随之不再可达，暂留待方案稳定后清理。验证：iOS 27 iPad Pro 13″ / iPhone 17 Pro 模拟器截图——iPad 顶部悬浮玻璃 Tab 胶囊 + 氛围背景满窗透出（含 Tab 栏玻璃下）、首页内容列边距恢复，iPhone 首页背景回归；macOS 构建通过（顶栏药丸路径未动）。

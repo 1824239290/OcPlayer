@@ -57,6 +57,9 @@ struct HomeView: View {
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
         #endif
         .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
+        // iPhone 上把搜索收成 Tab 栏常驻放大镜钮（iPad 常规宽度本就渲染
+        // 成导航栏搜索钮，不受影响）；不下拉也能一键唤出搜索框。
+        .searchToolbarBehavior(.minimize)
         .onChange(of: searchText) { _, _ in
             searchDebounce?.cancel()
             // 作废在途请求：防抖的 cancel 管不到已经 await 出去的 URLSession
