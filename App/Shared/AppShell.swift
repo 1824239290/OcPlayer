@@ -127,10 +127,65 @@ struct AppShellView: View {
 
     #if !os(macOS)
 
-    /// iPhone 底部 Tab：首页 / （Bangumi）/（MoviePilot）/ 设置。
+    /// iPhone / iPad 底部 Tab：首页 /（Bangumi）/（MoviePilot）/ 设置 / 搜索。
     /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐；媒体库入口在
-    /// 首页「媒体库」栏（不再单独占 Tab）。每个 Tab 有独立导航栈
-    /// （`navPaths`），详情页走 push 而非 sheet——播放器覆盖层不再被遮住。
+    /// 首页「媒体库」栏（不占 Tab）。搜索走 `Tab(role: .search)` 放大镜 Tab
+    /// ——不挂首页 `.searchable`：iOS 26/27 实测「minimize 搜索 + 导航栏存在
+    /// 工具栏项」点 X 收起会被系统重新展开（循环无法关闭），搜索 Tab 彻底
+    /// 脱离导航栏。每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非
+    /// sheet——播放器覆盖层不再被遮住。
+    @TabContentBuilder<AppModel.Section>
+    private var compactTabs: some TabContent<AppModel.Section> {
+        @Bindable var app = app
+        Tab("首页", systemImage: "house.fill", value: AppModel.Section.home) {
+            NavigationStack(path: $app.navPaths.home) {
+                HomeView()
+                    .appRoutes()
+                    // iOS 的 UIKit 宿主不透明，AppShell 根节点垫的整窗层到不了
+                    // 屏幕——首页氛围轮播改垫在页面背景层（macOS 仍走整窗层）。
+                    // 必须走 `.background`（布局隔离）：轮播做 ZStack 兄弟节点时
+                    // 其 ignoresSafeArea 会把根布局撑到全窗宽，内容列被顶出屏幕
+                    // （macOS 侧栏时代实测过同一坑）。
+                    .background {
+                        AmbientBackdropCarousel()
+                            .ignoresSafeArea()
+                    }
+            }
+        }
+
+        if bangumiEnabled {
+            Tab("Bangumi", image: "bangumi-logo", value: AppModel.Section.bangumi) {
+                NavigationStack(path: $app.navPaths.bangumi) {
+                    BangumiHomeView()
+                        .appRoutes()
+                }
+            }
+        }
+
+        if moviepilotEnabled {
+            Tab("MoviePilot", image: "moviepilot-logo", value: AppModel.Section.moviepilot) {
+                NavigationStack(path: $app.navPaths.moviepilot) {
+                    MoviePilotHomeView()
+                        .appRoutes()
+                }
+            }
+        }
+
+        Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
+            NavigationStack(path: $app.navPaths.settings) {
+                SettingsView()
+                    .appRoutes()
+            }
+        }
+
+        Tab("搜索", systemImage: "magnifyingglass", value: AppModel.Section.search, role: .search) {
+            NavigationStack(path: $app.navPaths.search) {
+                HomeSearchView()
+                    .appRoutes()
+            }
+        }
+    }
+
     private var compactLayout: some View {
         @Bindable var app = app
         return TabView(selection: Binding(
@@ -145,46 +200,7 @@ struct AppShellView: View {
                 }
             }
         )) {
-            NavigationStack(path: $app.navPaths.home) {
-                HomeView()
-                    .appRoutes()
-                    // iOS 的 UIKit 宿主不透明，AppShell 根节点垫的整窗层到不了
-                    // 屏幕——首页氛围轮播改垫在页面背景层（macOS 仍走整窗层）。
-                    // 必须走 `.background`（布局隔离）：轮播做 ZStack 兄弟节点时
-                    // 其 ignoresSafeArea 会把根布局撑到全窗宽，内容列被顶出屏幕
-                    // （macOS 侧栏时代实测过同一坑）。
-                    .background {
-                        AmbientBackdropCarousel()
-                            .ignoresSafeArea()
-                    }
-            }
-            .tabItem { Label("首页", systemImage: "house.fill") }
-            .tag(AppModel.Section.home)
-
-            if bangumiEnabled {
-                NavigationStack(path: $app.navPaths.bangumi) {
-                    BangumiHomeView()
-                        .appRoutes()
-                }
-                .tabItem { Label("Bangumi", image: "bangumi-logo") }
-                .tag(AppModel.Section.bangumi)
-            }
-
-            if moviepilotEnabled {
-                NavigationStack(path: $app.navPaths.moviepilot) {
-                    MoviePilotHomeView()
-                        .appRoutes()
-                }
-                .tabItem { Label("MoviePilot", image: "moviepilot-logo") }
-                .tag(AppModel.Section.moviepilot)
-            }
-
-            NavigationStack(path: $app.navPaths.settings) {
-                SettingsView()
-                    .appRoutes()
-            }
-            .tabItem { Label("设置", systemImage: "gearshape") }
-            .tag(AppModel.Section.settings)
+            compactTabs
         }
         .motion(Motion.slide, value: app.selectedSection)
         .onAppear { app.setCompact(true) }
@@ -203,6 +219,9 @@ struct AppShellView: View {
                 BangumiHomeView()
             case .moviepilot:
                 MoviePilotHomeView()
+            case .search:
+                // 仅 iOS 放大镜 Tab 使用；常规布局不会到达此分支。
+                EmptyView()
             }
         }
         .transition(.section)

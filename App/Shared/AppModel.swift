@@ -193,6 +193,8 @@ final class AppModel {
         case settings
         case bangumi
         case moviepilot
+        /// iOS 放大镜 Tab（`Tab(role: .search)`）；常规布局（macOS 顶栏）不会到达。
+        case search
     }
 
     enum Route: Hashable {
@@ -211,6 +213,7 @@ final class AppModel {
         var bangumi: [Route] = []
         var moviepilot: [Route] = []
         var settings: [Route] = []
+        var search: [Route] = []
     }
 
     var selectedSection: Section = .home {
@@ -442,6 +445,7 @@ final class AppModel {
             case .bangumi: navPaths.bangumi
             case .moviepilot: navPaths.moviepilot
             case .settings: navPaths.settings
+            case .search: navPaths.search
             }
         }
         set {
@@ -450,6 +454,7 @@ final class AppModel {
             case .bangumi: navPaths.bangumi = newValue
             case .moviepilot: navPaths.moviepilot = newValue
             case .settings: navPaths.settings = newValue
+            case .search: navPaths.search = newValue
             }
         }
     }

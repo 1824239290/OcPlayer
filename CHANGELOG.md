@@ -6,6 +6,8 @@
 
 ### 改动
 
+- **修 iPhone 搜索点 X 收起后被系统重新展开（循环关不掉）**。上一条给首页补的 `.searchToolbarBehavior(.minimize)` 触发系统宿主互扰：iOS 27 模拟器逐帧复现——点 X 收起 0.4s 后搜索框自动弹回（文字保留）；二分实验（去掉 `.toolbar` 按钮组 → 不再重开；按钮组合/分拆无关）确认触发条件是「导航栏里存在任何 primaryAction 工具栏项 + minimize 搜索」，属导航栏搜索的宿主行为，应用侧绕不开。改用 Apple 规范化做法 **`Tab(role: .search)` 搜索 Tab**：搜索词 / 结果 / 分页状态整体从 `HomeView` 迁到新 `HomeSearchView`（同文件），`AppModel` 增 `Section.search` 与 `navPaths.search`，`compactLayout` 的 TabView 迁到 `Tab` API（`Tab(role:)` 要求全量 Tab 语法，不能与 `.tabItem` 混用）。搜索页 `navigationBarTitleDisplayMode(.inline)` 让字段常驻（大标题模式下 iPhone 会藏进下拉）。验证：模拟器驱动完整路径——搜索 Tab 进入 → 输入 → 点 ⊗ 清除（字段保持）→ 点 X 收起（0.5s/1.2s/2.5s 三帧均保持收起）→ 切回首页正常；搜索请求与空态渲染正常；OcPlayerTests iOS 全绿；macOS 构建通过（常规布局的搜索入口未动）。
+
 - **iPhone 首页补常驻搜索钮**。`.searchable` 在 iPhone 上默认收进下拉，顶部工具组里没有放大镜（iPad 常规宽度本就渲染成搜索钮）；`.searchToolbarBehavior(.minimize)` 后两端一致——顶部玻璃组 = 打开 / 刷新 / 搜索。验证：iOS 27 双端模拟器截图确认。
 
 - **iOS 撤掉底部「媒体库」Tab**。首页「媒体库」栏（`1112b78` 新增）已经是媒体库的唯一入口，Tab 是重复出口；`Section.libraries`、`navPaths.libraries` 与 `MediaLibraryListView` 一并摘除（`Route.library` 保留，首页栏仍走它 push 单库页），`AppModelLifecycleTests` 的清栈断言改指 `navPaths.bangumi`。验证：iOS 27 iPad Pro 13″ / iPhone 17 Pro 模拟器截图确认 Tab 只剩 首页 / Bangumi / MoviePilot / 设置、首页媒体库栏照常进库；OcPlayerTests iOS 全绿；macOS 构建通过。
