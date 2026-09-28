@@ -29,6 +29,16 @@ public struct RemoteImage: View {
         self.maxPixelSize = maxPixelSize
         self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
         self.fadeAnimation = fadeAnimation
+        // 内存缓存命中就**同步**出图：首帧即有位图，不再经历「先占位、异步命中
+        // 再淡入」。否则哪怕图早已在缓存里（详情页背景拿首页轮播那张顶底），推页
+        // 那零点几秒里背景仍是页面底色——夜间闪黑、日间闪白。
+        if let url,
+           let cached = ImagePipeline.shared.memoryCachedImage(
+            url: url, authHeader: authHeader, maxPixelSize: maxPixelSize
+           ) {
+            _image = State(initialValue: cached)
+            _loadedKey = State(initialValue: Self.loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize))
+        }
     }
 
     /// 与 .task(id:) 一致的复合加载键：URL + 凭证指纹 + 目标尺寸。
@@ -43,8 +53,12 @@ public struct RemoteImage: View {
         return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 
+    private static func loadKey(url: URL?, authHeader: String?, maxPixelSize: Int?) -> String {
+        "\(url?.absoluteString ?? "")#\(credentialFingerprint(authHeader))#\(maxPixelSize ?? 0)"
+    }
+
     private var loadKey: String {
-        "\(url?.absoluteString ?? "")#\(Self.credentialFingerprint(authHeader))#\(maxPixelSize ?? 0)"
+        Self.loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

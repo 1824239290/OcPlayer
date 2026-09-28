@@ -341,18 +341,33 @@ struct AppShellBackButton: View {
     }
 }
 
-/// push 页的返回键 + 可选顶栏标题。compact（iPhone）保留系统返回键与标题。
-/// 常规布局：系统渲染的标题文字无法参与两段式淡入淡出——`title` 非空时
-/// 隐藏系统标题，与返回键放**同一个工具栏项**自绘（保证 [返回键, 标题] 顺序），
-/// 随 routeExiting 整体淡出 / 淡入。
+/// push 页的返回键 + 可选顶栏标题。
+/// - compact（iPhone）：系统返回键 + 标题，保持原样。
+/// - iPad（常规宽度、Tab 外壳）：顶栏已有胶囊 + 返回键，标题去掉——页面头部
+///   自己有名字（详情页 Logo / 库页网格），再放一个只会和胶囊挤在一起；inline
+///   + removing: .title 双保险，大标题与栏内标题都不出。
+/// - macOS 常规布局：系统渲染的标题文字无法参与两段式淡入淡出——`title` 非空时
+///   隐藏系统标题，与返回键放**同一个工具栏项**自绘（保证 [返回键, 标题] 顺序），
+///   随 routeExiting 整体淡出 / 淡入。
 private struct RegularBackChrome: ViewModifier {
     @Environment(AppModel.self) private var app
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let title: String?
 
     func body(content: Content) -> some View {
         Group {
             if app.isCompact {
+                #if os(iOS)
+                if sizeClass == .regular {
+                    content
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar(removing: .title)
+                } else {
+                    content
+                }
+                #else
                 content
+                #endif
             } else if title != nil {
                 content
                     .navigationBarBackButtonHidden(true)
@@ -430,7 +445,8 @@ extension View {
             }
         }
         // macOS 系统 push 被吞（见 pageEntrance 注释），所有路由页统一自带入场；
-        // 两段式换页时由本页自己淡出（routeExitFade）。
+        // 两段式换页时由本页自己淡出（routeExitFade）。两者在 iOS 上都空转：
+        // 系统自带 push / pop 滑动，routeExiting 也不会被置起。
         .routeExitFade()
         .pageEntrance()
     }

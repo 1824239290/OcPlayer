@@ -21,6 +21,11 @@ struct BackdropAmbienceView: View {
     /// 下采样就够——反正要糊掉，别为氛围图拉原画。
     let target: (url: URL?, authHeader: String?)
     var scrim: Scrim = .detail
+    /// 图片出现时的淡入节奏。默认 `Motion.ambient`（1.6s）：换片、或从别处切到
+    /// 本图，要「缓慢渐变」。**首次出现且图已在缓存里**的场景（详情页拿首页那张
+    /// 顶底）必须传短淡入——1.6s 在推页那 0.35s 里只走到 ~25% 不透明度，观感
+    /// 等于没兜住，还是先黑一下。
+    var fade: Animation? = Motion.ambient
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -31,7 +36,7 @@ struct BackdropAmbienceView: View {
                 authHeader: target.authHeader,
                 maxPixelSize: 512,
                 preserveCurrentImageOnReload: true,
-                fadeAnimation: Motion.ambient
+                fadeAnimation: fade
             )
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -280,6 +280,12 @@ final class AppModel {
     /// macOS 26 只有栈根宿主是全窗的，pushed 页自己够不到侧栏底下。
     var windowAmbience: WindowAmbience?
 
+    /// 首页氛围轮播当前那张图，由 `AmbientBackdropCarousel` 声明。iOS 的详情页在
+    /// 自身底图就绪前拿它顶底：导航栈宿主不透明、栈后垫层到不了屏幕（实测），
+    /// 「背景从首页延续进详情页」只能在页面内做——先画这张（与首页同 URL、同档
+    /// 解码，内存缓存直接命中），自己的底图到位后再淡入替换。
+    var homeAmbience: WindowAmbience?
+
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。
     weak var playback: PlaybackController? {
         didSet {

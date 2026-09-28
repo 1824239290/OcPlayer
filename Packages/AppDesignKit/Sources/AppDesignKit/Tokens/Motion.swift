@@ -66,6 +66,7 @@ private struct PageEntranceModifier: ViewModifier {
     @State private var appeared = false
 
     func body(content: Content) -> some View {
+        #if os(macOS)
         content
             .opacity(appeared ? 1 : 0)
             .motion(Motion.standard, value: appeared)
@@ -78,15 +79,22 @@ private struct PageEntranceModifier: ViewModifier {
                 }
             }
             // 被覆盖即复位：系统 pop 与 push 同样被吞，「退出过渡」由落点页
-            // 重放入场承担（拦截系统返回键换自定义 pop 会丢 iOS 侧滑，不值得）。
+            // 重放入场承担。
             .onDisappear { appeared = false }
+        #else
+        // iOS 系统自带 push / pop 滑动，再叠一层「页面不可见」只会让转场中间
+        // 多出几帧黑（实测 iPad 进详情页：暗色模式下亮度掉到落地页的一半，
+        // 约 0.4s 才回来）。这里直通，入场交给系统动画。
+        content
+        #endif
     }
 }
 
 public extension View {
-    /// push 页面的统一入场：内容纯淡入。macOS 的系统 push 会被
-    /// 同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面层自保证
-    /// 一段可见、统一的过渡；reduceMotion 下 `.motion` 自动直切。
+    /// push 页面的统一入场：内容纯淡入。**仅 macOS 有效**——macOS 的系统 push
+    /// 会被同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面层自保证
+    /// 一段可见、统一的过渡；reduceMotion 下 `.motion` 自动直切。iOS 上是
+    /// no-op（系统滑动已经在做这件事，叠加反而露出底层黑底）。
     /// 挂在导航出口（`appRouteView`）或个别直推页面上，整页一份，别叠加两层。
     func pageEntrance() -> some View {
         modifier(PageEntranceModifier())

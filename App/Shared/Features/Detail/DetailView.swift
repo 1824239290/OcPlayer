@@ -57,6 +57,17 @@ struct DetailView: View {
         !WindowAmbience.reachesScreen || horizontalSizeClass == .compact
     }
 
+    /// 背景底图。整窗声明与页内氛围层共用一份，别再各拼一次 URL。
+    private var backdropTarget: (url: URL?, authHeader: String?) {
+        model.shown.imageTarget(app.server, kind: .backdrop, width: 800)
+    }
+
+    /// 底图未就绪时的兜底图：首页轮播当前那张（`AppModel.homeAmbience`）。
+    /// 与首页用的是同一个 URL、同一档解码，内存缓存直接命中，页面一出生就能画。
+    private var homeAmbienceTarget: (url: URL?, authHeader: String?) {
+        (app.homeAmbience?.url, app.homeAmbience?.authHeader)
+    }
+
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
@@ -164,13 +175,21 @@ struct DetailView: View {
         #endif
         // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
         // 页面必须保持透明才能和侧栏连成一张图；够不着时（iOS）或紧凑布局没有
-        // 整窗层，页面自己垫氛围 + 兜底纯色。声明在底图预热完成后才发出：
-        // 氛围层淡入时图已就绪，不会先灰一块、图到位再可见地补加载。
+        // 整窗层，页面自己垫氛围 + 兜底纯色。macOS 的整窗声明在底图预热完成后
+        // 才发出：氛围层淡入时图已就绪，不会先灰一块、图到位再可见地补加载。
         .background {
-            if drawsOwnAmbience, isAmbientActive, model.isAmbienceReady {
+            if drawsOwnAmbience, isAmbientActive {
+                // 自身底图（backdrop@800）冷启必走一次网络。iOS 的导航栈宿主不透明
+                // （栈后面垫层到不了屏幕，实测），「背景延续」只能在页面内做：先画
+                // 首页轮播当前那张——同一个 URL 已在内存缓存里，瞬时可画、观感与
+                // 首页连续；自己的底图到位后由 `RemoteImage`
+                // （preserveCurrentImageOnReload）原位缓慢淡入替换，全程不露黑底。
                 BackdropAmbienceView(
-                    target: model.shown.imageTarget(app.server, kind: .backdrop, width: 800),
-                    scrim: .detail
+                    target: model.isAmbienceReady ? backdropTarget : homeAmbienceTarget,
+                    scrim: .detail,
+                    // 兜底那张是内存缓存命中、首帧就能画，用短淡入（1.6s 会拖成「先黑
+                    // 一下」）；换成自己那张时仍走默认的缓慢渐变。
+                    fade: model.isAmbienceReady ? Motion.ambient : Motion.fast
                 )
             }
         }
@@ -181,10 +200,7 @@ struct DetailView: View {
         }
         .windowAmbience(
             WindowAmbience.reachesScreen && isAmbientActive && model.isAmbienceReady
-                ? WindowAmbience(
-                    url: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).url,
-                    authHeader: model.shown.imageTarget(app.server, kind: .backdrop, width: 800).authHeader
-                )
+                ? WindowAmbience(url: backdropTarget.url, authHeader: backdropTarget.authHeader)
                 : nil
         )
         .task(id: item.id) {

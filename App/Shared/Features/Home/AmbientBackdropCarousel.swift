@@ -51,6 +51,19 @@ struct AmbientBackdropCarousel: View {
             await loadPool()
             await warmUpAndRotate()
         }
+        // 把当前这张声明给 AppModel：详情页在自身底图就绪前拿它顶底（见
+        // `AppModel.homeAmbience`）。
+        .onChange(of: index) { _, _ in publishCurrent() }
+        .onChange(of: pool) { _, _ in publishCurrent() }
+    }
+
+    private func publishCurrent() {
+        guard !pool.isEmpty else { return }
+        let target = pool[index % pool.count]
+            .imageTarget(app.server, kind: .backdrop, width: Self.imageWidth)
+        app.homeAmbience = target.url.map {
+            WindowAmbience(url: $0, authHeader: target.authHeader, scrim: .home)
+        }
     }
 
     /// 查询 → 去重洗牌 → 首图进缓存后才亮相，避免首页一进来先闪一块灰占位。
