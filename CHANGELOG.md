@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **修测试宿主被「stderr → os_log → stderr」自激循环拖死（iOS 测试步骤在 CI 上从未绿过的根因）**。`KernelStderrPump`（GUI 启动时劫持 fd 2 接内核 stderr 进诊断管线）在测试宿主里也照常启动，而 iOS 模拟器的测试宿主会把进程 os_log 回声到 stderr（Xcode 控制台显示 os_log 就靠这条通路）——`record()` 把读到的行写进 os_log，回声落回 fd 2 被泵再读、再写 os_log：无限自激，每圈包一层时间戳前缀（此前测试日志里看到的嵌套行就是它）。后果：①CI 的 iOS 模拟器测试步骤自 9/22 加入起一次都没跑完过——宿主启动后零输出，挂满作业超时被取消；②本机表现为测试跑到一半宿主被静默带走，xcodebuild 假报 TEST SUCCEEDED（实际只执行了 102/229、129/229 等）；③logd 被灌爆的时段系统守护进程连环崩（与「每次测试都弹」的 WidgetRenderer/chronod 崩溃弹窗时间强相关）。修法：测试宿主（`XCTestConfigurationFilePath` 判定，与日志目录改写同款）不装泵——测试要的是解码器本身（`KernelLoggingTests` 直接喂 `KernelStderrDecoder`），不需要劫持 fd 2。修后 iOS 套件 229 用例一次跑完全绿、回声嵌套归零；macOS 套件 228 用例全绿不受影响。
+
 ## [0.2.0] · 2026-09-29 · 双端导航外壳重做与氛围背景贯通、弹幕匹配精准度、内核换装官方 v0.2.0
 
 ### 改动

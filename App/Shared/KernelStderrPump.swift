@@ -22,10 +22,21 @@ final class KernelStderrPump: @unchecked Sendable {
     private var loggers: [String: DiagnosticLogger] = [:]
 
     /// 抢在第一次内核调用之前启动（`OcPlayerApp.init`）。重复调用无副作用。
+    ///
+    /// **测试宿主里不装**：iOS 模拟器的测试宿主会把进程 os_log 回声到 stderr
+    /// （Xcode 控制台显示 os_log 就靠它），而 `record()` 恰好把读到的行写进
+    /// os_log——回声落回 fd 2 被泵再读，形成无限自激：每圈包一层时间戳前缀，
+    /// logd 被灌到背压，主线程 os_log 跟着卡死，app 启动完不成 → XCTest 一个
+    /// 用例都起不来（CI 上实测挂满 48 分钟作业超时；本机则表现为测试跑到一半
+    /// 宿主被静默带走、xcodebuild 假报成功）。测试要的是解码器本身
+    /// （KernelLoggingTests 直接喂 `KernelStderrDecoder`），不需要劫持 fd 2。
     func start() {
         lock.lock()
         defer { lock.unlock() }
         guard !started else { return }
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+            return
+        }
 
         var fds: [Int32] = [-1, -1]
         guard pipe(&fds) == 0 else { return }
