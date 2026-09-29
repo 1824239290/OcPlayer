@@ -58,6 +58,7 @@ struct PlaybackKernelSection: View {
                 )
             }
         }
+        .settingsRowBackground()
         .onAppear {
             selectedKernelID = PlaybackEngineRegistry.selected?.id
         }

@@ -39,18 +39,20 @@ public extension View {
 ///
 /// 和 `hoverLift`（放大 + 投影，给海报/剧照网格卡用）区分开：
 /// 行式卡片放大 1.055 会撑出列表边界、和邻居重叠，不适合。
-/// 这里只做背景填充提亮 + accentColor 描边，轻量但明确。
+/// 底用 `.ultraThinMaterial`（同 MoviePilotResourceView 的氛围页卡片）：
+/// 透出整窗氛围图，与设置页 Form 分组底的半透明观感一致；
+/// 悬停在其上做填充提亮 + accentColor 描边。
 private struct HoverRowHighlight: ViewModifier {
     let active: Bool
 
     func body(content: Content) -> some View {
-        content
-            .background(
-                active ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.background.secondary),
-                in: RoundedRectangle(cornerRadius: Metrics.cardRadius)
-            )
+        let shape = RoundedRectangle(cornerRadius: Metrics.cardRadius)
+        return content
+            // 提亮填充要叠在磨砂底**之上**、内容之下：background 链先声明的更贴内容。
+            .background(active ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear), in: shape)
+            .background(.ultraThinMaterial, in: shape)
             .overlay(
-                RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                shape
                     .strokeBorder(
                         active ? Color.accentColor.opacity(0.3) : Color.clear,
                         lineWidth: 1

@@ -332,7 +332,7 @@ struct BangumiCalendarView: View {
                             Spacer()
                         }
                         .padding(10)
-                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
                     }
                 }
                 .padding(.horizontal, contentLeading)

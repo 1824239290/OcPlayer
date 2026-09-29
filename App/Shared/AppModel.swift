@@ -347,6 +347,17 @@ final class AppModel {
         self.bangumi = bangumi
         self.moviepilot = moviepilot
         self.danmakuModel = danmakuModel
+        if let section = LaunchOptions.initialSection {
+            if let delay = LaunchOptions.sectionSwitchSeconds {
+                // 先留首页让轮播跑起来（homeAmbience 就位），到点再切目标分区。
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(delay))
+                    selectedSection = section
+                }
+            } else {
+                selectedSection = section
+            }
+        }
     }
 
     /// 处理 Bangumi OAuth 回调（macOS 浏览器 / iOS ASWebAuthenticationSession 都汇到这里）。

@@ -29,6 +29,26 @@ enum LaunchOptions {
     /// （Swift 源码内联——不是用来对攻击者保密的，是防止误触发 + 给脚本一个能改的钩子。）
     private static let expectedToken = "ocp-selftest-v1"
 
+    /// `OCPLAYER_START_SECTION=home|bangumi|moviepilot|settings`：启动直落某分区。
+    /// 模拟器无头跑（本机没有 Simulator.app）没法点按导航，自动化截图靠它进场。
+    static var initialSection: AppModel.Section? {
+        switch ProcessInfo.processInfo.environment["OCPLAYER_START_SECTION"] {
+        case "bangumi": .bangumi
+        case "moviepilot": .moviepilot
+        case "settings": .settings
+        case "home": .home
+        default: nil
+        }
+    }
+
+    /// `OCPLAYER_SECTION_SWITCH_SECONDS=<秒>`：配合上面的变量，先留首页跑轮播
+    /// （homeAmbience 要轮播加载后才非 nil），到点再切到目标分区。
+    static var sectionSwitchSeconds: Double? {
+        guard initialSection != nil else { return nil }
+        return ProcessInfo.processInfo.environment["OCPLAYER_SECTION_SWITCH_SECONDS"]
+            .flatMap(Double.init)
+    }
+
     private static var providedTokenMatches: Bool {
         ProcessInfo.processInfo.environment["OCPLAYER_SELFTEST_TOKEN"] == expectedToken
     }

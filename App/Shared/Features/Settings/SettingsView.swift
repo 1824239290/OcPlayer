@@ -73,6 +73,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .settingsRowBackground()
 
             Section("播放") {
                 Picker("网络预读缓冲", selection: Binding(
@@ -118,6 +119,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .settingsRowBackground()
 
             PlaybackKernelSection()
 
@@ -144,6 +146,7 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .settingsRowBackground()
 
             Section("网络") {
                 TextField("自定义 User-Agent（可选）", text: $customUserAgent, prompt: Text("留空使用默认"))
@@ -152,6 +155,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .settingsRowBackground()
 
             Section("Jellyfin 服务器") {
                 KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
@@ -190,6 +194,7 @@ struct SettingsView: View {
                     Label("退出 Jellyfin", systemImage: "rectangle.portrait.and.arrow.right")
                 }
             }
+            .settingsRowBackground()
 
             Section("Bangumi") {
                 Toggle("启用 Bangumi", isOn: $bangumiEnabled)
@@ -206,6 +211,7 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .settingsRowBackground()
 
             Section("MoviePilot") {
                 Toggle("启用 MoviePilot", isOn: $moviepilotEnabled)
@@ -230,6 +236,7 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .settingsRowBackground()
 
             Section("关于") {
                 KeyValueRow(label: "版本", value: AppVersion.displayString)
@@ -249,6 +256,7 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .settingsRowBackground()
 
             Section {
                 ImageCacheSettingsRow()
@@ -262,6 +270,7 @@ struct SettingsView: View {
             } footer: {
                 Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
             }
+            .settingsRowBackground()
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("设置")
@@ -745,5 +754,25 @@ private struct UpdateCheckRow: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 分组行底（iOS）
+
+extension View {
+    /// 清空 Form 分组的行底。**iOS 专用**：iOS 的 grouped Form 行底是系统不透明白
+    /// （`scrollContentBackground(.hidden)` 只管列表底，管不到行底），会把垫在页面里的
+    /// 氛围图挡死；macOS 的分组玻璃本来就近乎零填充、观感正确，直通不动。
+    ///
+    /// 注意必须挂在**每个 Section** 上：挂在 Form 上不生效（行底是逐行的 trait，
+    /// Form 自己是容器，写在它外面的值传不到行）。材质 / glassEffect / 调透明度都试过，
+    /// 都自带一层模式色纱，跟 `.home` 遮罩叠出来还是「死白」，所以直接全透：
+    /// 分组结构交给 Section 标题与分隔线表达，行浮在氛围图上（同 macOS 观感）。
+    func settingsRowBackground() -> some View {
+        #if os(iOS)
+        listRowBackground(Color.clear)
+        #else
+        self
+        #endif
     }
 }

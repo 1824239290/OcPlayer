@@ -275,7 +275,7 @@ struct BangumiSubjectDetailView: View {
             }
         }
         .padding(16)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius + 4))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius + 4))
     }
 
     private func badgeView(text: String, icon: String? = nil) -> some View {
@@ -462,7 +462,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
             }
         }
     }
@@ -533,7 +533,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                         }
                     }
                     .padding(12)
-                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 }
             }
             .id(selectedEpisodeTab)
@@ -570,7 +570,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                         }
                         .padding(8)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
                     }
                 }
             }
@@ -633,7 +633,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
     }
 
     // MARK: - 工具栏
