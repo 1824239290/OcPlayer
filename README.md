@@ -27,7 +27,7 @@ Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板
 Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 753 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
-Scripts/package-macos.sh v0.1.9  # 本地打包，产出与 CI 相同的 dist/ 产物
+Scripts/package-macos.sh v0.2.0  # 本地打包，产出与 CI 相同的 dist/ 产物
 ```
 
 各 SPM 包测试（全部离线，不碰真实网络）：`swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>`。**BangumiKit 与 ErikaKit 用 swift-testing，别对这两个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾那行「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。ErikaKit 里实例化 `ErikaPresenter` 的套件要 Metal 与真内核，无 GPU 的机器上会直接 hang 而不是报错，`--skip` 清单见 `.github/workflows/test.yml`。
@@ -94,4 +94,4 @@ Scripts/package-macos.sh v0.1.9  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 路线
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。0.1.7 完成日志系统重整（默认档精简、诊断包一键导出、会话化文件）与弱网播放修复（内核 4 MiB 分块预读 + 回退缓存，播到一半就停问题根治）。0.1.8 完成 Emby 全链路加固（解码契约与 Jellyfin 分家、片头片尾从章节 marker 翻译、4.10「接下来看」兜底、上报会话与 401 兜底）、内核换装持久流预取（公网慢源上「播不动 / 卡死」解决）、详情页「媒体信息」区块与跳过片头/片尾设置开关，并修掉播放器 HUD 的 issue #4 / #5。0.1.9 换装内核 `v0.1.9+dolby.streaming.fix.dev`——**预取窗口封顶**，修掉播放期间进程内存随预取窗口增长（0.1.8 里记的待跟进项）。M4 打磨进行中：09-14 全项目 review 的 P1/P2/P3 已全部处置；剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；Emby 适配（登录探活自动识别、老式路由全链路）已真机验证随 0.1.5 发出。0.1.6 完成前端组件化重构（设计系统下沉 `AppDesignKit`、卡片/分页/空态收敛到共享原语）、播放器 HUD 原生液态玻璃化、整窗氛围背景与 macOS 26 全屏顶栏衔接层、macOS 内核升到 `v0.1.9+dolby.1`（HDR 片真出 EDR）。0.1.7 完成日志系统重整（默认档精简、诊断包一键导出、会话化文件）与弱网播放修复（内核 4 MiB 分块预读 + 回退缓存，播到一半就停问题根治）。0.1.8 完成 Emby 全链路加固（解码契约与 Jellyfin 分家、片头片尾从章节 marker 翻译、4.10「接下来看」兜底、上报会话与 401 兜底）、内核换装持久流预取（公网慢源上「播不动 / 卡死」解决）、详情页「媒体信息」区块与跳过片头/片尾设置开关，并修掉播放器 HUD 的 issue #4 / #5。0.1.9 换装内核 `v0.1.9+dolby.streaming.fix.dev`——**预取窗口封顶**，修掉播放期间进程内存随预取窗口增长（0.1.8 里记的待跟进项）。0.2.0 完成双端导航外壳重做（macOS 撤侧栏改顶栏玻璃药丸 + 媒体库按钮、iPad 改 Tab 切换、iPhone 新增搜索 Tab 与首页媒体库栏）、换页两段式转场、氛围背景贯通双端（轮播常驻、卡片半透明）、媒体库站内搜索与首页全库搜索、弹幕匹配精准度（规范名合成 / 集号 token / 类型硬门槛 / 手动别名合并）、自定义 User-Agent（播放器白名单服放行）、Bangumi 登录改走 OcPlay 网关（客户端不再持 OAuth 密钥），内核换装上游官方 `v0.2.0`，并修掉内核 stderr 缓冲无限增长（播放越久内存越涨、关掉也不回落）。M4 打磨进行中：09-14 全项目 review 的 P1/P2/P3 已全部处置；剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。

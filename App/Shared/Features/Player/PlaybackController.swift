@@ -212,6 +212,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
         label: "dev.jumusu.OcPlayer.engine-open", qos: .userInitiated, attributes: .concurrent)
     private static let maximumConcurrentOpenAttempts = 2
     private static var activeOpenAttempts = 0
+    #if DEBUG
+    /// 测试观察口：进程级在飞 open 计数。完成回调要经主线程 Task 才把计数减回去，
+    /// 测试在用例间排水（见 PlaybackControllerOpenTests.setUp），避免上个用例未
+    /// 落地的回调把下一个用例的 open 顶进「任务已满」失败分支。
+    static var activeOpenAttemptsForTesting: Int { activeOpenAttempts }
+    #endif
     /// open 看门狗时长。默认 60s；测试注入缩短。
     static var openWatchdogTimeout: Duration = .seconds(60)
     /// Changes as soon as a new request is presented, before its engine opens.
