@@ -65,6 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           for pkg in \
+              Packages/AppDesignKit \
               Packages/CoreModel \
               Packages/DiagnosticsKit \
               Packages/PlaybackKit \
