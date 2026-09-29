@@ -21,6 +21,10 @@ struct AmbientBackdropCarousel: View {
 
     @State private var pool: [MediaItem] = []
     @State private var index = 0
+    /// 已装载池子的会话代次。iOS 上轮播垫在首页 Tab 栈内，`.task` 随 Tab 离屏被
+    /// 取消、回到首页重启——同代次不重拉重洗，否则每次回首页背景都换成新一批
+    /// 随机图，其他 Tab 垫的 `homeAmbience` 也跟着闪换成「首页刚刷出来的那张」。
+    @State private var loadedGeneration: Int?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -48,7 +52,11 @@ struct AmbientBackdropCarousel: View {
         .animation(Motion.ambient, value: isWindowFullscreen)
         // 会话代次并进 task id：换服务器 / 重新登录时重拉池子。
         .task(id: app.sessionGeneration) {
-            await loadPool()
+            if loadedGeneration != app.sessionGeneration {
+                await loadPool()
+                // 拉取失败不记账：下次回到首页还能重试。
+                if !pool.isEmpty { loadedGeneration = app.sessionGeneration }
+            }
             await warmUpAndRotate()
         }
         // 把当前这张声明给 AppModel：详情页在自身底图就绪前拿它顶底（见
