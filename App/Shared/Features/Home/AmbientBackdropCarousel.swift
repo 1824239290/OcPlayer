@@ -119,14 +119,26 @@ struct AmbientBackdropCarousel: View {
         index = 0
         guard let server = app.server else { return }
 
+        // 全程留痕（info 级，默认档可见）。氛围底"没出来"是个用户能一眼看到、
+        // 但我们此前**完全没有证据**的现象——排查时只能靠截图猜它卡在哪一步。
+        // 冷启动抢跑（网络未就绪）正是它最常出现的时机，而那又是最难看出来的。
+        var source = "random"
         var fetched = (try? await server.randomBackdropItems(limit: 24)) ?? []
         if fetched.isEmpty {
             // 服务器不支持随机查询 / 拉取失败：回退到首页已经拿到的条目。
+            source = "home"
             fetched = app.home.latest + app.home.resume + app.home.nextUp
         }
         var seen = Set<String>()
         let candidates = fetched.filter { $0.backdropImageTag != nil && seen.insert($0.id).inserted }
-        guard !candidates.isEmpty else { return }
+        guard !candidates.isEmpty else {
+            // 关键诊断点：两个来源同时为空 = 冷启动抢跑。此时不记账（调用方
+            // `loadedGeneration` 不推进），等触发键变化后会再试一次。
+            AppDiagnostics.logInfo(
+                "氛围池为空，等首页数据到位后重试 source=\(source) fetched=\(fetched.count)",
+                fields: ["source": .string(source), "fetched": .integer(Int64(fetched.count))])
+            return
+        }
 
         let picked = Array(candidates.shuffled().prefix(Self.poolSize))
         if let first = picked.first {
@@ -139,6 +151,9 @@ struct AmbientBackdropCarousel: View {
         }
         if Task.isCancelled { return }
         pool = picked
+        AppDiagnostics.logInfo(
+            "氛围池已装载 count=\(picked.count) source=\(source)",
+            fields: ["count": .integer(Int64(picked.count)), "source": .string(source)])
     }
 
     /// 剩余图片预热进 ImagePipeline（之后每次切换都命中内存缓存），再进入换片循环。

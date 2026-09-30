@@ -495,7 +495,11 @@ public struct JellyfinServer: MediaServer {
                 lastError = wrapped
                 guard attempt < policy.attempts, Self.isRetryable(wrapped) else { break }
                 let delay = policy.backoffNanoseconds(attempt: attempt)
-                NetworkLog.logger.debug(
+                // ⚠️ 用 `.info` 而不是 `.debug`：默认档只落 info 及以上（见
+                // `DiagnosticsSettings.apply`），而「重试发生了」恰恰是排查
+                // 「首页转圈 / 背景不出来」时唯一能证明瞬态失败已自愈的证据。
+                // 用 debug 的话，用户报障时导出的诊断包里根本看不到它。
+                NetworkLog.logger.info(
                     "重试 \(request.method.rawValue) \(path)（第 \(attempt + 1)/\(policy.attempts) 次）",
                     fields: ["attempt": .integer(Int64(attempt + 1))])
                 try? await Task.sleep(nanoseconds: delay)
