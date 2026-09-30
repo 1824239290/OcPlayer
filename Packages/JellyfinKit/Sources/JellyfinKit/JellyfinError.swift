@@ -7,8 +7,15 @@ public struct JellyfinError: Error, LocalizedError {
     public enum Kind: Sendable {
         /// URL 填得没法解析。
         case badServerURL
-        /// 服务器没响应 / 不是 Jellyfin（`/System/Info/Public` 失败）。
+        /// 服务器没响应 / 不是 Jellyfin（`/System/Info/Public` 失败）：
+        /// 名字解析不了、或被拒绝连接。**多半是地址 / 端口的问题**。
         case serverUnreachable
+        /// 本机当前没有网络路径（`NSURLErrorNotConnectedToInternet`）。
+        ///
+        /// 与 `serverUnreachable` 分开的理由是两者的**处置方式完全相反**：
+        /// 这个去检查地址是白费力气（地址没错），而它是可重试的瞬态
+        /// （冷启动时网络常常还没就绪，实测网络就绪后同样的请求立刻成功）。
+        case noNetwork
         /// 401：账号密码错 / token 过期。
         case unauthorized
         /// 403：权限不足 / 账号被禁用。
@@ -67,13 +74,20 @@ public struct JellyfinError: Error, LocalizedError {
 
     /// 连不上（DNS / 拒绝连接 / 断网）给出可操作的「检查地址」提示；
     /// 超时、连接中断等其它传输错误带具体细节，方便区分「地址写错」和「网络抽风」。
+    /// ⚠️ `NSURLErrorNotConnectedToInternet` **单独归为 `.noNetwork`**，不并进
+    /// `.serverUnreachable`。此前四码同归一类，两个后果都是实机日志暴露的：
+    /// 1. 文案误导——本机根本没网时提示「确认地址没打错」，用户会去改一个没错的地址；
+    /// 2. 重试判定错——它落进"地址问题 → 不重试"那一档，而"启动瞬间网络还没就绪"
+    ///    恰恰是最典型的瞬态失败（实测冷启动时 Jellyfin 五个请求全 -1009，
+    ///    网络就绪后同样的请求 85–583 ms 全部成功）。
     private static func wrapTransport(_ ns: NSError) -> JellyfinError {
         switch ns.code {
         case NSURLErrorCannotFindHost,
              NSURLErrorCannotConnectToHost,
-             NSURLErrorDNSLookupFailed,
-             NSURLErrorNotConnectedToInternet:
+             NSURLErrorDNSLookupFailed:
             JellyfinError(.serverUnreachable, underlying: ns)
+        case NSURLErrorNotConnectedToInternet:
+            JellyfinError(.noNetwork, underlying: ns)
         default:
             JellyfinError(.transport(ns.localizedDescription), underlying: ns)
         }
@@ -102,6 +116,8 @@ public struct JellyfinError: Error, LocalizedError {
             "服务器地址看起来不对，试试「http://192.168.1.10:8096」这样的。"
         case .serverUnreachable:
             "连不上服务器：确认地址没打错、这台机器能访问到它。"
+        case .noNetwork:
+            "这台机器当前没有网络连接：检查 Wi-Fi / 网线后重试。"
         case .unauthorized:
             "认证失败：密码不对，或登录已过期需要重新登录。"
         case .forbidden:

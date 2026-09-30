@@ -509,9 +509,12 @@ public struct JellyfinServer: MediaServer {
 
     /// 浏览类请求的重试预算：3 次（含首发）足以扛过 502/503 与瞬时断连。
     /// 再加只会让用户等更久——底层单次超时本身已是 30 秒级。
-    static let browseRetryPolicy = RetryPolicy(attempts: 3)
+    ///
+    /// 用 `static var`（而非 `let`）只为让测试能换成「预算 2 + 退避近零」的版本，
+    /// 从而在不必真等几秒的前提下验证「重试确实发生了」。生产路径只读不写。
+    nonisolated(unsafe) static var browseRetryPolicy = RetryPolicy(attempts: 3)
     /// 写操作用它，也就是"不重试"。
-    static let noRetryPolicy = RetryPolicy(attempts: 1)
+    nonisolated(unsafe) static var noRetryPolicy = RetryPolicy(attempts: 1)
 
     /// 幂等判定：按 HTTP 语义（与 MoviePilotKit 的 `MPRequest.isIdempotent` 同口径）。
     static func isIdempotent(_ method: HTTPMethod) -> Bool {
@@ -528,18 +531,43 @@ public struct JellyfinServer: MediaServer {
     ///
     /// 入参是 `any Error`（`wrapPreservingCancellation` 保留取消原样抛出的类型），
     /// 非 `JellyfinError` 一律不重试。
+    ///
+    /// ⚠️ 判据是「**名字解析不了 = 永久，解析得到但连不上 = 瞬态**」。
+    /// 这里的教训来自实机日志：`.serverUnreachable` 原先把 `-1009 本机没网`
+    /// 和"地址写错"混在一起，于是冷启动时（网络还没就绪）五个请求全部不重试、
+    /// 直接失败；而网络就绪后同样的请求 85–583 ms 全部成功。
+    /// 现在 `-1009` 单独归 `.noNetwork` 且可重试。
     static func isRetryable(_ error: any Error) -> Bool {
         guard let error = error as? JellyfinError else { return false }
         switch error.kind {
         case .transport:
+            // 超时 / 连接中断等：典型瞬态。
+            return true
+        case .noNetwork:
+            // 本机没网：等网络就绪就可能成功，是最该重试的一类。
             return true
         case .http(let status):
             return status == 429 || (500..<600).contains(status)
-        case .badServerURL, .serverUnreachable, .unauthorized, .forbidden,
+        case .serverUnreachable:
+            // 分类里仍有"名字解析失败"（多半是地址打错，重试无意义）与
+            // "解析到了但连不上"（服务在重启、端口暂时没起来）两种，
+            // 用底层错误码区分，避免把后者也一并放弃。
+            return isTransientUnreachable(error.underlying)
+        case .badServerURL, .unauthorized, .forbidden,
              .quickConnectDisabled, .quickConnectTimeout, .other:
-            // `serverUnreachable` 归在这里是刻意的：它表示"配置的地址根本连不上"
-            // （DNS 不存在 / 端口拒绝），重试三次只是让用户多等几秒。
-            // 瞬时断连走的是 `.transport`，那条会重试。
+            return false
+        }
+    }
+
+    /// 「解析得到但连不上」= 瞬态（值得重试）；「解析不了」= 永久（重试无意义）。
+    static func isTransientUnreachable(_ underlying: (any Error)?) -> Bool {
+        guard let ns = underlying as NSError?, ns.domain == NSURLErrorDomain else { return false }
+        switch ns.code {
+        case NSURLErrorCannotConnectToHost,   // -1004 服务没起来 / 端口拒绝
+             NSURLErrorNetworkConnectionLost: // -1005 中途断连
+            return true
+        default:
+            // -1003 cannotFindHost / -1006 DNS 失败：名字就是错的。
             return false
         }
     }

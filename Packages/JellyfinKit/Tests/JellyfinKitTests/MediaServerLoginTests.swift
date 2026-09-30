@@ -95,10 +95,13 @@ final class MediaServerLoginTests: XCTestCase {
         }
     }
 
-    /// 连不上类错误（DNS / 拒绝连接 / 断网）给「检查地址」话术；超时等其它传输错误带细节。
+    /// 连不上类错误（DNS / 拒绝连接）给「检查地址」话术；超时等其它传输错误带细节。
+    ///
+    /// ⚠️ `notConnectedToInternet` **不在**这里：它归 `.noNetwork`，因为对"本机没网"
+    /// 提示「确认地址没打错」会把用户引向错误的排查方向（见下面的专项用例）。
     func testTransportErrorClassification() {
         let unreachable: [URLError.Code] = [
-            .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .notConnectedToInternet,
+            .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
         ]
         for code in unreachable {
             guard case .serverUnreachable = JellyfinError.wrap(URLError(code)).kind else {
@@ -111,6 +114,22 @@ final class MediaServerLoginTests: XCTestCase {
         guard case .transport = JellyfinError.wrap(URLError(.networkConnectionLost)).kind else {
             return XCTFail("networkConnectionLost 应归为 transport")
         }
+    }
+
+    /// 回归（实机日志发现）：`-1009 本机没网` 曾与"地址写错"同归 `.serverUnreachable`，
+    /// 于是 ①提示用户「确认地址没打错」（地址其实没错）②被重试策略判为不可重试。
+    /// 冷启动网络未就绪时五个请求全部因此直接失败，而网络就绪后同样的请求立刻成功。
+    func testNotConnectedToInternetIsItsOwnKindWithActionableMessage() {
+        let error = JellyfinError.wrap(URLError(.notConnectedToInternet))
+
+        guard case .noNetwork = error.kind else {
+            return XCTFail("notConnectedToInternet 应归为 noNetwork，实际 \(error.kind)")
+        }
+        let message = error.errorDescription ?? ""
+        XCTAssertTrue(message.contains("网络"), "文案应指向本机网络：\(message)")
+        XCTAssertFalse(
+            message.contains("地址"),
+            "本机没网时不该让用户去查服务器地址（会把人引向错误的排查方向）：\(message)")
     }
 
     // MARK: - 账号密码登录

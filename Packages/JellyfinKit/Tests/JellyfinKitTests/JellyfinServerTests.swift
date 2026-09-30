@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import Get
 import JellyfinAPI
 import XCTest
@@ -623,10 +624,35 @@ final class JellyfinRetryPolicyTests: XCTestCase {
         XCTAssertTrue(JellyfinServer.isRetryable(JellyfinError(.http(status: 500))))
     }
 
-    /// 「地址写错」不该重试：连不上就是连不上，重试只是让用户多等几秒。
-    /// （瞬时断连走 `.transport`，那条会重试。）
-    func testUnreachableServerIsNotRetryable() {
-        XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.serverUnreachable)))
+    /// 判据是「**名字解析不了 = 永久，解析得到但连不上 = 瞬态**」。
+    ///
+    /// 这条最初被我写反过：把 `.serverUnreachable` 一律当成"地址写错、不重试"。
+    /// 实机日志证明那是错的——冷启动时网络未就绪，Jellyfin 五个请求（-1009）
+    /// 全部不重试直接失败，而网络就绪后同样的请求 85–583 ms 全部成功。
+    func testNameResolutionFailuresAreNotRetryable() {
+        // -1003 / -1006：名字就是错的，重试无意义。
+        XCTAssertFalse(JellyfinServer.isRetryable(
+            JellyfinError(.serverUnreachable, underlying: URLError(.cannotFindHost))))
+        XCTAssertFalse(JellyfinServer.isRetryable(
+            JellyfinError(.serverUnreachable, underlying: URLError(.dnsLookupFailed))))
+    }
+
+    func testConnectLevelFailuresAreRetryable() {
+        // -1004 / -1005：解析得到但连不上 → 服务在重启 / 中途断连，值得重试。
+        XCTAssertTrue(JellyfinServer.isRetryable(
+            JellyfinError(.serverUnreachable, underlying: URLError(.cannotConnectToHost))))
+        XCTAssertTrue(JellyfinServer.isRetryable(
+            JellyfinError(.serverUnreachable, underlying: URLError(.networkConnectionLost))))
+    }
+
+    /// 本机没网是最该重试的一类（等网络就绪就可能成功）。
+    func testNoNetworkIsRetryable() {
+        XCTAssertTrue(JellyfinServer.isRetryable(
+            JellyfinError(.noNetwork, underlying: URLError(.notConnectedToInternet))))
+    }
+
+    /// 地址写错 / 未鉴权不重试。
+    func testPermanentErrorsAreNotRetryable() {
         XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.badServerURL)))
         XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.unauthorized)))
     }
@@ -643,4 +669,127 @@ final class JellyfinRetryPolicyTests: XCTestCase {
         XCTAssertEqual(JellyfinServer.browseRetryPolicy.attempts, 3)
         XCTAssertEqual(JellyfinServer.noRetryPolicy.attempts, 1, "写操作 = 不重试")
     }
+}
+
+/// `send()` 的**端到端**重试行为（不只是 `isRetryable` 的判定）。
+///
+/// 关注点：`-1009 本机没网` 曾因归错类别而不重试，导致冷启动抢跑时首页与氛围背景
+/// 的请求全部直接失败（实机日志 2026-09-30 五个请求同一毫秒全挂）。
+/// 这里验证「失败一次后确实又发了一次，并且成功返回」。
+final class JellyfinRetryBehaviourTests: XCTestCase {
+
+    private var savedBrowse: RetryPolicy!
+    private var savedNoRetry: RetryPolicy!
+
+    override func setUp() {
+        super.setUp()
+        savedBrowse = JellyfinServer.browseRetryPolicy
+        savedNoRetry = JellyfinServer.noRetryPolicy
+        // 预算 2 + 退避近零：验证"重试发生了"而不必真等 0.5–1.5 秒。
+        // ⚠️ `RetryPolicy` 第 1 次重试的等待是 `pow(base, 0) * jitter` = jitter，
+        // **与 base 无关** —— 要缩的是 jitter，不是 base。
+        JellyfinServer.browseRetryPolicy = RetryPolicy(attempts: 2, jitter: 0.001...0.002)
+    }
+
+    override func tearDown() {
+        JellyfinServer.browseRetryPolicy = savedBrowse
+        JellyfinServer.noRetryPolicy = savedNoRetry
+        super.tearDown()
+    }
+
+    private func makeServer() -> JellyfinServer {
+        let profile = ServerProfile(id: "srv:user", serverName: "home-nas",
+                                    baseURL: URL(string: "http://nas.local:8096")!,
+                                    userID: "user-9", userName: "jumusu", serverVersion: "10.9.11")
+        let client = JellyfinServer.makeClient(
+            baseURL: profile.baseURL, token: "tok-123",
+            sessionConfiguration: TestSupport.mockedSessionConfiguration())
+        return JellyfinServer(profile: profile, client: client)
+    }
+
+    /// 冷启动抢跑的真实形态：第一次 `-1009`，网络就绪后第二次成功。
+    /// 修复前 `.serverUnreachable` 不可重试 → 第一次失败就直接抛给 UI。
+    func testTransientNoNetworkIsRetriedAndThenSucceeds() async throws {
+        let attempts = LockedCounter()
+        try await TestSupport.withMock { request in
+            if attempts.increment() == 1 {
+                throw URLError(.notConnectedToInternet)
+            }
+            return MockURLProtocol.ok("[]", for: request.url!)
+        } with: {
+            let items = try await makeServer().latestItems(limit: 5)
+            XCTAssertTrue(items.isEmpty)
+        }
+        XCTAssertEqual(attempts.value, 2, "第一次失败后应再发一次")
+    }
+
+    /// 5xx 同样重试（服务器重启 / 网关抽风）。
+    func testServerErrorIsRetriedAndThenSucceeds() async throws {
+        let attempts = LockedCounter()
+        try await TestSupport.withMock { request in
+            if attempts.increment() == 1 {
+                let response = HTTPURLResponse(
+                    url: request.url!, statusCode: 502, httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"])!
+                return (response, Data(#"{"detail":"Bad Gateway"}"#.utf8))
+            }
+            return MockURLProtocol.ok("[]", for: request.url!)
+        } with: {
+            _ = try await makeServer().latestItems(limit: 5)
+        }
+        XCTAssertEqual(attempts.value, 2)
+    }
+
+    /// 「名字解析不了」是永久错误：不该白撞第二次。
+    func testNameResolutionFailureIsNotRetried() async throws {
+        let attempts = LockedCounter()
+        try await TestSupport.withMock { _ in
+            _ = attempts.increment()
+            throw URLError(.cannotFindHost)
+        } with: {
+            do {
+                _ = try await makeServer().latestItems(limit: 5)
+                XCTFail("应抛错")
+            } catch let error as JellyfinError {
+                guard case .serverUnreachable = error.kind else {
+                    return XCTFail("应归 serverUnreachable，实际 \(error.kind)")
+                }
+            }
+        }
+        XCTAssertEqual(attempts.value, 1, "地址解析不了时重试只是让用户多等")
+    }
+
+    /// 预算是有限度的：一直失败不会无限重试。
+    func testRetryStopsAtTheBudget() async throws {
+        let attempts = LockedCounter()
+        try await TestSupport.withMock { _ in
+            _ = attempts.increment()
+            throw URLError(.notConnectedToInternet)
+        } with: {
+            do {
+                _ = try await makeServer().latestItems(limit: 5)
+                XCTFail("应抛错")
+            } catch let error as JellyfinError {
+                guard case .noNetwork = error.kind else {
+                    return XCTFail("应归 noNetwork，实际 \(error.kind)")
+                }
+            }
+        }
+        XCTAssertEqual(attempts.value, 2, "预算 2 = 首发 + 1 次重试")
+    }
+}
+
+/// `@Sendable` mock 回调里记数用的锁盒子（Swift 6 不许捕获可变局部变量）。
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func increment() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
+
+    var value: Int { lock.withLock { count } }
 }
