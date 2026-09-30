@@ -628,9 +628,11 @@ struct BangumiDatabaseTests {
         #expect(paged.total == 112)
         #expect(paged.data.first?.nameCN == "败犬女主太多了！")
 
-        let liveResults = try await BangumiSubjectService.search(keyword: "败犬女主太多了", limit: 10, offset: 0)
-        #expect(liveResults.total > 0)
-        #expect(!liveResults.data.isEmpty)
+        // 这里曾有两条 `BangumiSubjectService.search` 的 live 断言（total > 0 /
+        // 结果非空）。那会真的打 api.bgm.tv：违反 CLAUDE.md「全部离线、不碰真实
+        // 网络」的约束，让 CI 依赖外网可达性，而且开发机已登录 Bangumi 时还会带上
+        // 真实 Bearer、可能触发 token 刷新写回真实 UserDefaults。搜索链路的参数形状
+        // 由下面的 searchRequestBody 用例钉住，解码由上面的断言钉住，够用了。
     }
 
     /// 搜索请求体 filter.type 必须是整数数组（{"type":[2]}）——此前编码成
