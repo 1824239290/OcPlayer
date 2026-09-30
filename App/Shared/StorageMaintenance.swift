@@ -1,3 +1,4 @@
+import DanmakuKit
 import DiagnosticsKit
 import Foundation
 
@@ -66,8 +67,14 @@ final class AppStorageMaintenance: @unchecked Sendable {
             allowedExtensions: ["json"],
             maxFileCount: 300,
             maxTotalBytes: 256 * 1024 * 1024,
-            // mapping.json 是永久性的剧集映射，被当普通缓存删掉会让同一集反复回源网关。
-            preservedFileNames: ["mapping.json"]
+            // 第二道保险，并把「哪些是永久的」这份清单留在数据归属方（DanmakuKit）。
+            preservedFileNames: DanmakuCache.permanentFileNames,
+            // 白名单：本目录里**只有弹幕正文**是可重下的缓存，其余（映射 / 片头提示 /
+            // 别名 / AniSkip 的 MAL ID）都是永久数据。用白名单而不是逐个排除，是因为
+            // 淘汰按 mtime **最旧优先**，而永久文件恰恰最少被写 —— 原实现只排除了
+            // mapping.json，另外三个一直在被优先删除（表现为别名与 AniSkip 反复回源、
+            // 离线「跳过片头」失效）。白名单 fail-safe：将来新增永久文件天然安全。
+            prunableFileNamePrefixes: [DanmakuCache.commentsFilePrefix]
         )
 
         let removedCount = subtitleResult.removedCount + screenshotResult.removedCount + danmakuResult.removedCount

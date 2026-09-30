@@ -8,6 +8,25 @@ import Foundation
 ///
 /// 缓存文件按 `mapping.json` 与 `comments-<episodeId>.json` 分离；并发写入由 actor 隔离。
 public actor DanmakuCache {
+    // MARK: - 落盘文件名（与 App 的定期清理共享的单一事实源）
+
+    /// 弹幕**正文缓存**的文件名前缀：本目录里**唯一**该被定期清理淘汰的东西。
+    ///
+    /// `StorageMaintenance` 用它做白名单。为什么是白名单而不是"排除永久文件"：
+    /// 淘汰按修改时间最旧优先，而永久数据写得最少、mtime 最旧 —— 于是会被**最先删掉**。
+    /// 何况本目录 5 个文件里 4 个是永久的，只有 `comments-*` 是缓存：白名单更简短，
+    /// 且将来新增永久文件天然安全。
+    nonisolated public static let commentsFilePrefix = "comments-"
+
+    /// 本目录下的**永久性**文件（丢了没法重建，或会持续回源）。
+    /// 既给清理逻辑做第二道保险，也把「哪些文件是永久的」集中在一处。
+    nonisolated public static let permanentFileNames: Set<String> = [
+        "mapping.json",        // 剧集 ↔ 弹幕库映射
+        "intro-hints.json",    // 片头落点提示（跳过片头用）
+        "title-aliases.json",  // 手动别名合并
+        "aniskip-ids.json",    // MAL ID 解析结果
+    ]
+
     /// 缓存根目录（`mapping.json` / `comments-*.json` / `intro-hints.json` 等都在这）。
     /// 不可变值，跨隔离域只读（编排层派生同目录的伴生存储用）。
     nonisolated public let directory: URL
