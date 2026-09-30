@@ -1,7 +1,5 @@
-import CoreGraphics
 import DiagnosticsKit
 import Foundation
-import ImageIO
 import SwiftUI
 
 #if canImport(UIKit)
@@ -49,8 +47,12 @@ public final class ImagePipeline: @unchecked Sendable {
     private var inFlight: [String: InFlightRequest] = [:]
     /// 解码后的图缓存（URLCache 存的是原始 data，这里省掉重复解码）。
     private let memoryCache = NSCache<NSString, PlatformImage>()
+    /// 位图解码执行器（专用队列 + 并发上限）。见 `ImageDecoder`：解码不能就地同步做，
+    /// 否则会占住 Swift 协作线程池的线程，拖慢全进程的 async 工作。
+    private let decoder: ImageDecoder
 
-    public init(cacheDirectory: URL? = nil) {
+    public init(cacheDirectory: URL? = nil, decoder: ImageDecoder = .shared) {
+        self.decoder = decoder
         let cache = URLCache(
             memoryCapacity: 32 * 1024 * 1024,
             diskCapacity: Self.diskCapacityBytes,
@@ -289,7 +291,12 @@ public final class ImagePipeline: @unchecked Sendable {
         // 在 URLSession 的协程线程池上立即解码：`PlatformImage(data:)` 是懒解码，
         // 真正的位图解码会拖到主线程首次绘制时才发生——海报墙快速滚动时每张新图
         // 都在主线程解码、掉帧。这里用 ImageIO 强制解码成位图，主线程首绘不再解码。
-        guard let image = Self.decode(data, maxPixelSize: maxPixelSize) else {
+        //
+        // ⚠️ 解码**必须走 `ImageDecoder`**（专用队列 + 并发上限），不能就地同步调：
+        // 立即解码一张 50–200ms，在这里直接做会占住 Swift 协作线程池的线程，
+        // 而协作池线程数≈活跃核数——海报墙并发十几张就能把全进程的 async 工作拖慢。
+        // `Task.detached` 解决不了（它同样跑在协作池上），只有专用队列才行。
+        guard let image = try await decoder.decode(data, maxPixelSize: maxPixelSize) else {
             Self.logger.warning("图片解码失败", fields: [
                 "url": .string(request.url?.absoluteString ?? ""),
                 "data_len": .integer(Int64(data.count)),
@@ -297,32 +304,6 @@ public final class ImagePipeline: @unchecked Sendable {
             return nil
         }
         return image
-    }
-
-    /// ImageIO 立即解码（`kCGImageSourceShouldCacheImmediately` 把位图留在内存）。
-    /// 指定 `maxPixelSize` 时通过缩略图模式下采样，大幅降低外部高清图内存占用。
-    private static func decode(_ data: Data, maxPixelSize: Int? = nil) -> PlatformImage? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
-        let cgImage: CGImage?
-        if let maxPixelSize, maxPixelSize > 0 {
-            let options: [CFString: Any] = [
-                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceShouldCacheImmediately: true,
-            ]
-            cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        } else {
-            let options: [CFString: Any] = [
-                kCGImageSourceShouldCacheImmediately: true,
-            ]
-            cgImage = CGImageSourceCreateImageAtIndex(source, 0, options as CFDictionary)
-        }
-        guard let cgImage else { return nil }
-        #if canImport(UIKit)
-        return UIImage(cgImage: cgImage)
-        #else
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        #endif
     }
 
     /// 位图近似内存占用（字节）。NSCache 用 cost 做总上限淘汰。
@@ -334,5 +315,26 @@ public final class ImagePipeline: @unchecked Sendable {
         #endif
         guard let cg else { return 0 }
         return cg.bytesPerRow * cg.height
+    }
+}
+
+// MARK: - 注入点
+
+private struct ImagePipelineKey: EnvironmentKey {
+    static let defaultValue = ImagePipeline.shared
+}
+
+public extension EnvironmentValues {
+    /// 图片管道，供 `RemoteImage` / `MediaArtwork` 取用。
+    ///
+    /// 存在的理由是**可测性**：这两个类型此前硬编码 `ImagePipeline.shared`，
+    /// 于是包内最复杂的组件（去重、订阅计数、代次作废、缓存淘汰）一个用例都写不了 ——
+    /// 测试没法替换缓存/会话，也没法为自己的用法写回归。有了注入点，
+    /// 测试可以塞一个挂了 `MockURLProtocol` 的实例进来。
+    ///
+    /// 装配侧不必改：默认值就是 `.shared`，14 个调用点零改动即拿到生产行为。
+    var imagePipeline: ImagePipeline {
+        get { self[ImagePipelineKey.self] }
+        set { self[ImagePipelineKey.self] = newValue }
     }
 }

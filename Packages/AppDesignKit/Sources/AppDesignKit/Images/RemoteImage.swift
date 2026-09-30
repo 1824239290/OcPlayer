@@ -16,24 +16,39 @@ public struct RemoteImage: View {
     public var preserveCurrentImageOnReload = false
     /// 图片替换时使用的淡入节奏；未指定时使用标准短淡入。
     public var fadeAnimation: Animation? = nil
+    /// 显式指定图片管道；nil = 取环境的 `imagePipeline`（默认 `.shared`）。
+    ///
+    /// 之所以同时留参数与环境值：环境值让 14 个调用点零改动就能被测试整体替换，
+    /// 参数让个别用法可以钉死自己的管道（例如预览里塞一个空缓存实例）。
+    public var pipeline: ImagePipeline? = nil
+
+    @Environment(\.imagePipeline) private var environmentPipeline
+    private var effectivePipeline: ImagePipeline { pipeline ?? environmentPipeline }
 
     public init(
         url: URL?,
         authHeader: String? = nil,
         maxPixelSize: Int? = nil,
         preserveCurrentImageOnReload: Bool = false,
-        fadeAnimation: Animation? = nil
+        fadeAnimation: Animation? = nil,
+        pipeline: ImagePipeline? = nil
     ) {
         self.url = url
         self.authHeader = authHeader
         self.maxPixelSize = maxPixelSize
         self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
         self.fadeAnimation = fadeAnimation
+        self.pipeline = pipeline
         // 内存缓存命中就**同步**出图：首帧即有位图，不再经历「先占位、异步命中
         // 再淡入」。否则哪怕图早已在缓存里（详情页背景拿首页轮播那张顶底），推页
         // 那零点几秒里背景仍是页面底色——夜间闪黑、日间闪白。
+        //
+        // 注意 `init` 拿不到环境值（SwiftUI 的环境只在 body 期可读），所以这里只能
+        // 用显式传入的管道或 `.shared`。仅通过环境注入时，这个同步命中会退化为
+        // 异步加载的第一次命中——图仍会出，只是少了"首帧即有位图"的优化。
+        let syncPipeline = pipeline ?? .shared
         if let url,
-           let cached = ImagePipeline.shared.memoryCachedImage(
+           let cached = syncPipeline.memoryCachedImage(
             url: url, authHeader: authHeader, maxPixelSize: maxPixelSize
            ) {
             _image = State(initialValue: cached)
@@ -121,7 +136,7 @@ public struct RemoteImage: View {
             }
             failed = false
             do {
-                let loaded = try await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+                let loaded = try await effectivePipeline.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
                 guard !Task.isCancelled else { return }   // 换 URL / 消失：新任务会接手，别写旧图
                 if let loaded {
                     image = loaded
