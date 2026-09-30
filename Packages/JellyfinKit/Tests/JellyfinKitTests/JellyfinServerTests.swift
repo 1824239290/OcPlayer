@@ -1,4 +1,5 @@
 import CoreModel
+import Get
 import JellyfinAPI
 import XCTest
 @testable import JellyfinKit
@@ -572,3 +573,74 @@ final class JellyfinServerTests: XCTestCase {
 
 }
 
+
+/// 浏览类请求的重试策略：此前 JellyfinKit **完全没有重试**，服务器半死（502/503）
+/// 时用户只能看着首页转圈到超时。共享的 `RetryPolicy` 早就在 DiagnosticsKit 里。
+final class JellyfinRetryPolicyTests: XCTestCase {
+
+    // MARK: - 幂等判定
+
+    /// 写操作**不得**重试：`markPlayed` / `markUnplayed` 重放会把一次用户操作变成两次。
+    func testOnlyIdempotentMethodsAreRetried() {
+        XCTAssertTrue(JellyfinServer.isIdempotent(.get))
+        XCTAssertTrue(JellyfinServer.isIdempotent(.head))
+        XCTAssertTrue(JellyfinServer.isIdempotent(.put))
+        XCTAssertTrue(JellyfinServer.isIdempotent(.delete))
+        XCTAssertFalse(JellyfinServer.isIdempotent(.post), "POST 通常是创建语义")
+        XCTAssertFalse(JellyfinServer.isIdempotent(.patch))
+        // 大小写不该影响判定（HTTPMethod 是字符串包装）。
+        XCTAssertTrue(JellyfinServer.isIdempotent(HTTPMethod(rawValue: "get")))
+    }
+
+    // MARK: - 可重试判定
+
+    func testTransportFailuresAreRetryable() {
+        XCTAssertTrue(JellyfinServer.isRetryable(JellyfinError(.transport("连接中断"))))
+        XCTAssertTrue(JellyfinServer.isRetryable(JellyfinError(.transport("超时"))))
+    }
+
+    func testServerErrorsAndRateLimitAreRetryable() {
+        for status in [500, 502, 503, 504] {
+            XCTAssertTrue(
+                JellyfinServer.isRetryable(JellyfinError(.http(status: status))),
+                "\(status) 应可重试")
+        }
+        XCTAssertTrue(JellyfinServer.isRetryable(JellyfinError(.http(status: 429))), "限流可重试")
+    }
+
+    /// 4xx（429 除外）是请求本身的问题，重试只会白撞三次。
+    func testClientErrorsAreNotRetryable() {
+        for status in [400, 401, 403, 404, 422] {
+            XCTAssertFalse(
+                JellyfinServer.isRetryable(JellyfinError(.http(status: status))),
+                "\(status) 不该重试")
+        }
+    }
+
+    /// 边界：499 不重试、500 重试。
+    func testBoundaryBetweenClientAndServerErrors() {
+        XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.http(status: 499))))
+        XCTAssertTrue(JellyfinServer.isRetryable(JellyfinError(.http(status: 500))))
+    }
+
+    /// 「地址写错」不该重试：连不上就是连不上，重试只是让用户多等几秒。
+    /// （瞬时断连走 `.transport`，那条会重试。）
+    func testUnreachableServerIsNotRetryable() {
+        XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.serverUnreachable)))
+        XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.badServerURL)))
+        XCTAssertFalse(JellyfinServer.isRetryable(JellyfinError(.unauthorized)))
+    }
+
+    /// 非 JellyfinError（例如裸 CancellationError）一律不重试。
+    func testNonJellyfinErrorsAreNotRetryable() {
+        XCTAssertFalse(JellyfinServer.isRetryable(CancellationError()))
+        XCTAssertFalse(JellyfinServer.isRetryable(URLError(.timedOut)))
+    }
+
+    // MARK: - 预算
+
+    func testRetryBudgets() {
+        XCTAssertEqual(JellyfinServer.browseRetryPolicy.attempts, 3)
+        XCTAssertEqual(JellyfinServer.noRetryPolicy.attempts, 1, "写操作 = 不重试")
+    }
+}

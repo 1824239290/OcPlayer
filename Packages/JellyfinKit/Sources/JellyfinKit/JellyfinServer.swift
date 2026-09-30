@@ -472,15 +472,75 @@ public struct JellyfinServer: MediaServer {
         }
         let path = NetworkLog.logPath(for: request.url)
         let start = Date()
-        do {
-            let value = try await client.send(request).value
-            NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start), level: .info)
-            return value
-        } catch {
-            NetworkLog.requestFailed(path, error: error, duration: Date().timeIntervalSince(start))
-            let wrapped = JellyfinError.wrapPreservingCancellation(error)
-            await notifyIfTokenExpired(wrapped)
-            throw wrapped
+        // 幂等的浏览类请求（GET）做退避重试，写操作不重试。
+        //
+        // 此前本包**完全没有重试**：服务器半死（回 502/503 或连接被掐）时，用户只能
+        // 看着首页转圈到超时。共享的 `RetryPolicy` 在 DiagnosticsKit 里早就有
+        // （Bangumi / MoviePilot 都在用），这边只是没接上。
+        //
+        // 只对幂等请求生效是刻意的：浏览 / 详情 / 章节 / 上报会话都是 GET（重放安全），
+        // 而 `markPlayed` / `markUnplayed` 不是——重放会把一次用户操作变成两次。
+        // 与 MoviePilotKit 那条「非幂等不重试」是同一条规则。
+        let policy = Self.isIdempotent(request.method) ? Self.browseRetryPolicy : Self.noRetryPolicy
+        var lastError: (any Error)?
+        for attempt in 1...policy.attempts {
+            do {
+                let value = try await client.send(request).value
+                NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start), level: .info)
+                return value
+            } catch {
+                let wrapped = JellyfinError.wrapPreservingCancellation(error)
+                // 取消照抛：那是"调用方不要了"，不是可重试的失败。
+                if JellyfinError.isCancellation(error) { throw wrapped }
+                lastError = wrapped
+                guard attempt < policy.attempts, Self.isRetryable(wrapped) else { break }
+                let delay = policy.backoffNanoseconds(attempt: attempt)
+                NetworkLog.logger.debug(
+                    "重试 \(request.method.rawValue) \(path)（第 \(attempt + 1)/\(policy.attempts) 次）",
+                    fields: ["attempt": .integer(Int64(attempt + 1))])
+                try? await Task.sleep(nanoseconds: delay)
+            }
+        }
+        let finalError = lastError ?? JellyfinError(.other("请求失败"))
+        NetworkLog.requestFailed(path, error: finalError, duration: Date().timeIntervalSince(start))
+        await notifyIfTokenExpired(finalError)
+        throw finalError
+    }
+
+    /// 浏览类请求的重试预算：3 次（含首发）足以扛过 502/503 与瞬时断连。
+    /// 再加只会让用户等更久——底层单次超时本身已是 30 秒级。
+    static let browseRetryPolicy = RetryPolicy(attempts: 3)
+    /// 写操作用它，也就是"不重试"。
+    static let noRetryPolicy = RetryPolicy(attempts: 1)
+
+    /// 幂等判定：按 HTTP 语义（与 MoviePilotKit 的 `MPRequest.isIdempotent` 同口径）。
+    static func isIdempotent(_ method: HTTPMethod) -> Bool {
+        switch method.rawValue.uppercased() {
+        case "GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 值得重试的错误：传输层瞬态（超时 / 断连）与 5xx、429。
+    /// 4xx（除 429）是请求本身的问题，重试只会白撞。
+    ///
+    /// 入参是 `any Error`（`wrapPreservingCancellation` 保留取消原样抛出的类型），
+    /// 非 `JellyfinError` 一律不重试。
+    static func isRetryable(_ error: any Error) -> Bool {
+        guard let error = error as? JellyfinError else { return false }
+        switch error.kind {
+        case .transport:
+            return true
+        case .http(let status):
+            return status == 429 || (500..<600).contains(status)
+        case .badServerURL, .serverUnreachable, .unauthorized, .forbidden,
+             .quickConnectDisabled, .quickConnectTimeout, .other:
+            // `serverUnreachable` 归在这里是刻意的：它表示"配置的地址根本连不上"
+            // （DNS 不存在 / 端口拒绝），重试三次只是让用户多等几秒。
+            // 瞬时断连走的是 `.transport`，那条会重试。
+            return false
         }
     }
 
