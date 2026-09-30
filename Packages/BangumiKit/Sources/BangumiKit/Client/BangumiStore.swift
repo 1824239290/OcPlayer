@@ -1,9 +1,16 @@
+import DiagnosticsKit
 import Foundation
 
-/// Bangumi 登录态与关联映射的 UserDefaults 持久化。
+/// Bangumi 登录态与关联映射的持久化。
 ///
 /// 与 JellyfinKit 的 `ServerStore` 同风格：class + 锁 + 显式 save。
-/// token 存 UserDefaults 而不是 Keychain（发行包统一 ad-hoc 签名，与现有 Jellyfin token 一致）。
+///
+/// **OAuth 凭证（access / refresh token）存 `CredentialFileStore`**（排除备份的文件），
+/// 不存 UserDefaults、也不用 Keychain：UserDefaults 会被 iCloud / iTunes 备份带走，
+/// 而 Keychain 在本项目的 ad-hoc 签名下会带来开发期授权弹框、CI 无人应答、
+/// 以及重签名后凭据读不出来——详见 `CredentialFileStore` 的类型注释。
+///
+/// 其余非机密状态（登录标记、用户资料、条目关联、同步时间戳）仍留在 UserDefaults。
 public final class BangumiStore: @unchecked Sendable {
     /// 全局共用实例。同一份 UserDefaults 被多个 store 实例读写时，每个实例各有一把锁
     /// 等于没锁，所以除测试注入自定义 defaults 外都用这一个。
@@ -11,15 +18,21 @@ public final class BangumiStore: @unchecked Sendable {
 
     private let lock = NSLock()
     private let defaults: UserDefaults
+    private let credentials: CredentialFileStore
 
     private let isAuthenticatedKey = "dev.jumusu.ocplayer.bangumi.isAuthenticated"
     private let profileKey = "dev.jumusu.ocplayer.bangumi.profile"
-    private let authKey = "dev.jumusu.ocplayer.bangumi.auth"
+    /// 凭据文件内的键名。
+    private let authKey = "bangumi.auth"
+    /// 旧键：老版本把凭证 Data 放在 UserDefaults。仅迁移用。
+    private let legacyAuthKey = "dev.jumusu.ocplayer.bangumi.auth"
     private let linkPrefix = "dev.jumusu.ocplayer.bangumi.link."
     private let collectionsUpdatedAtKey = "dev.jumusu.ocplayer.bangumi.collectionsUpdatedAt"
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, credentialsDirectory: URL? = nil) {
         self.defaults = defaults
+        // 生产用全局单例（多个域包共用一个文件）；测试传临时目录拿到隔离实例。
+        self.credentials = credentialsDirectory.map { CredentialFileStore(directory: $0) } ?? .shared
     }
 
     /// 是否已登录（UI 的唯一门控信号）。
@@ -28,7 +41,7 @@ public final class BangumiStore: @unchecked Sendable {
     /// UI 会永远停在「已登录」而每次操作静默失败。
     public var isAuthenticated: Bool {
         lock.withLock {
-            defaults.bool(forKey: isAuthenticatedKey) && defaults.data(forKey: authKey) != nil
+            defaults.bool(forKey: isAuthenticatedKey) && authUnlocked() != nil
         }
     }
 
@@ -54,23 +67,40 @@ public final class BangumiStore: @unchecked Sendable {
         }
     }
 
-    /// OAuth 凭证（JSON 编码的 BangumiAuth）。
+    /// OAuth 凭证（JSON 编码的 BangumiAuth）。存凭据文件，排除备份。
     public var auth: BangumiAuth? {
         get {
             lock.withLock {
-                guard let data = defaults.data(forKey: authKey) else { return nil }
+                guard let data = authUnlocked() else { return nil }
                 return try? JSONDecoder().decode(BangumiAuth.self, from: data)
             }
         }
         set {
             lock.withLock {
-                if let newValue, let data = try? JSONEncoder().encode(newValue) {
-                    defaults.set(data, forKey: authKey)
-                } else {
-                    defaults.removeObject(forKey: authKey)
+                // 「主动清空」与「编码失败」分开处理：原实现把两者并进同一个 else，
+                // 编码失败会顺手把凭证删掉 —— 等于一次编码异常就把用户静默登出。
+                // 编码失败保留旧凭证，只在显式传 nil 时删除。
+                guard let newValue else {
+                    credentials.removeValue(forKey: authKey)
+                    defaults.removeObject(forKey: legacyAuthKey)
+                    return
                 }
+                guard let data = try? JSONEncoder().encode(newValue) else { return }
+                credentials.setData(data, forKey: authKey)
+                defaults.removeObject(forKey: legacyAuthKey)
             }
         }
+    }
+
+    /// 读凭证（**必须在 `lock` 内调用**）：优先凭据文件；没有则从旧 UserDefaults 键
+    /// 一次性迁移——搬到文件后立刻删掉旧键，否则明文副本会继续留在会进备份的
+    /// UserDefaults 里，迁移的收益就等于零。
+    private func authUnlocked() -> Data? {
+        if let data = credentials.data(forKey: authKey) { return data }
+        guard let legacy = defaults.data(forKey: legacyAuthKey) else { return nil }
+        credentials.setData(legacy, forKey: authKey)
+        defaults.removeObject(forKey: legacyAuthKey)
+        return legacy
     }
 
     /// 收藏增量同步的时间戳（秒）。0 表示从未同步过（下次全量拉取）。
@@ -110,8 +140,10 @@ public final class BangumiStore: @unchecked Sendable {
         lock.withLock {
             defaults.removeObject(forKey: isAuthenticatedKey)
             defaults.removeObject(forKey: profileKey)
-            defaults.removeObject(forKey: authKey)
             defaults.removeObject(forKey: collectionsUpdatedAtKey)
+            // 凭证在文件里，两个键都要清（旧键可能还没被迁移过）。
+            credentials.removeValue(forKey: authKey)
+            defaults.removeObject(forKey: legacyAuthKey)
         }
     }
 }

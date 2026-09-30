@@ -9,13 +9,28 @@ final class ServerStoreTests: XCTestCase {
     private var store: ServerStore!
     private var tokens: InMemoryTokenStore!
 
+    /// 每个用例独立的凭据目录。**必须用**：不注入时 `LocalTokenStore` 会落到
+    /// `CredentialFileStore.shared`，也就是开发机/CI 上**真实的**凭据文件。
+    private var credentialsDirectory: URL!
+
+
     override func setUp() {
         super.setUp()
         let suiteName = "ServerStoreTests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
         tokens = InMemoryTokenStore()
-        store = ServerStore(defaults: defaults, tokens: tokens)
+        credentialsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("jellyfin-cred-\(UUID().uuidString)")
+        store = ServerStore(defaults: defaults, tokens: tokens,
+                            credentialsDirectory: credentialsDirectory)
+    }
+
+    override func tearDown() {
+        if let credentialsDirectory {
+            try? FileManager.default.removeItem(at: credentialsDirectory)
+        }
+        super.tearDown()
     }
 
     private func profile(id: String, name: String = "home-nas") -> ServerProfile {
@@ -68,15 +83,35 @@ final class ServerStoreTests: XCTestCase {
 
     func testDefaultTokenStorePersistsLocallyAcrossInstances() {
         let profile = profile(id: "srv1:u1")
-        let firstStore = ServerStore(defaults: defaults)
+        let firstStore = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
         firstStore.activate(profile, token: "tok-local")
 
-        let restoredStore = ServerStore(defaults: defaults)
+        let restoredStore = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
         XCTAssertEqual(restoredStore.token(for: profile), "tok-local")
         XCTAssertEqual((MediaServerFactory.restore(from: restoredStore) as? JellyfinServer)?.accessToken, "tok-local")
 
         restoredStore.signOut(id: profile.id)
-        XCTAssertNil(ServerStore(defaults: defaults).token(for: profile))
+        XCTAssertNil(ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory).token(for: profile))
+    }
+
+    /// 回归（老版本升级）：token 曾存在 UserDefaults 里，现在搬到凭据文件。
+    /// 升级用户第一次读到旧值时必须**既拿到值、又把旧键清掉**——
+    /// 只搬不删的话，明文 token 会一直留在仍会进备份的 UserDefaults 里，
+    /// 这次迁移的收益就等于零。
+    func testLegacyUserDefaultsTokenIsMigratedAndRemoved() {
+        let profile = profile(id: "srv9:u9")
+        let legacyKey = "dev.jumusu.ocplayer.token.\(profile.id)"
+        defaults.set("tok-legacy", forKey: legacyKey)
+
+        // 读一次即触发迁移。
+        let migrated = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
+        XCTAssertEqual(migrated.token(for: profile), "tok-legacy", "旧值必须仍可用")
+
+        XCTAssertNil(defaults.string(forKey: legacyKey), "迁移后必须删掉 UserDefaults 里的明文副本")
+
+        // 再开一个实例：值应来自凭据文件，而不是 UserDefaults。
+        let fresh = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
+        XCTAssertEqual(fresh.token(for: profile), "tok-legacy")
     }
 
     func testConcurrentSavesDoNotLoseProfiles() {
@@ -130,7 +165,7 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertNil(store.defaultServerID)
 
         store.defaultServerID = "srv1:u1"
-        XCTAssertEqual(ServerStore(defaults: defaults).defaultServerID, "srv1:u1")
+        XCTAssertEqual(ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory).defaultServerID, "srv1:u1")
 
         store.defaultServerID = ""
         XCTAssertNil(store.defaultServerID)

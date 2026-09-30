@@ -142,7 +142,7 @@ struct BangumiKitTests {
         let suite = "BangumiGatewayTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = BangumiStore(defaults: defaults)
+        let store = BangumiStore(defaults: defaults, credentialsDirectory: IsolatedCredentials.makeDirectory())
         let client = BangumiGatewayFixture.client(log: log, store: store)
         let url = try await client.buildOAuthURL()
         let state = URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -754,7 +754,7 @@ struct BangumiStoreTests {
         let suite = "BangumiStoreTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = BangumiStore(defaults: defaults)
+        let store = BangumiStore(defaults: defaults, credentialsDirectory: IsolatedCredentials.makeDirectory())
 
         #expect(store.isAuthenticated == false)
 
@@ -770,11 +770,58 @@ struct BangumiStoreTests {
         #expect(store.isAuthenticated == false, "凭证被 401 清掉后不能再算登录")
     }
 
+    /// 回归（老版本升级）：OAuth 凭证曾以 Data 存在 UserDefaults，现在搬到凭据文件
+    /// （排除备份）。第一次读到旧值时必须**既拿到凭证、又删掉旧键**——只搬不删，
+    /// 明文 token 会继续留在会进备份的 UserDefaults 里，迁移等于没做。
+    @Test func legacyUserDefaultsAuthIsMigratedAndRemoved() throws {
+        let suite = "BangumiAuthMigration-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let legacyKey = "dev.jumusu.ocplayer.bangumi.auth"
+        let credential = BangumiAuth(
+            response: BangumiTokenResponse(
+                accessToken: "legacy-access", expiresIn: 3600,
+                tokenType: "Bearer", refreshToken: "legacy-refresh"))
+        defaults.set(try JSONEncoder().encode(credential), forKey: legacyKey)
+
+        let directory = IsolatedCredentials.makeDirectory()
+        let store = BangumiStore(defaults: defaults, credentialsDirectory: directory)
+
+        #expect(store.auth?.accessToken == "legacy-access", "旧凭证必须仍可用")
+        #expect(defaults.data(forKey: legacyKey) == nil, "迁移后必须删掉 UserDefaults 里的副本")
+
+        // 新实例从凭据文件读，与 UserDefaults 无关。
+        let fresh = BangumiStore(defaults: defaults, credentialsDirectory: directory)
+        #expect(fresh.auth?.refreshToken == "legacy-refresh")
+    }
+
+    /// 登出要把凭据文件里的条目也清掉（不只是 UserDefaults 标记位）。
+    @Test func clearAccountStateWipesCredentialFileEntry() throws {
+        let suite = "BangumiClearState-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let directory = IsolatedCredentials.makeDirectory()
+        let store = BangumiStore(defaults: defaults, credentialsDirectory: directory)
+        store.setAuthenticated(true)
+        store.auth = BangumiAuth(
+            response: BangumiTokenResponse(
+                accessToken: "a", expiresIn: 3600, tokenType: "Bearer", refreshToken: "r"))
+
+        store.clearAccountState()
+
+        #expect(store.auth == nil)
+        #expect(store.isAuthenticated == false)
+        let fresh = BangumiStore(defaults: defaults, credentialsDirectory: directory)
+        #expect(fresh.auth == nil, "登出后新实例也不该再读到凭证")
+    }
+
     @Test func linkRoundTrip() throws {
         let suite = "BangumiLinkTests-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let store = BangumiStore(defaults: defaults)
+        let store = BangumiStore(defaults: defaults, credentialsDirectory: IsolatedCredentials.makeDirectory())
 
         #expect(store.bangumiSubjectID(forJellyfinItemID: "abc") == nil)
         store.setBangumiSubjectID(1234, forJellyfinItemID: "abc")
@@ -1003,5 +1050,18 @@ enum BangumiFixture {
             comment: 0,
             disc: 0,
             collection: BangumiEpisodeCollectionStatus(status: status.rawValue, updatedAt: nil))
+    }
+}
+
+/// 测试用隔离凭据目录。
+///
+/// **必须用**：不注入时 `BangumiStore` 会落到 `CredentialFileStore.shared`，
+/// 也就是开发机 / CI 上**真实的**凭据文件——测试会读走或覆盖真登录态。
+enum IsolatedCredentials {
+    static func makeDirectory() -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bangumi-cred-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 }

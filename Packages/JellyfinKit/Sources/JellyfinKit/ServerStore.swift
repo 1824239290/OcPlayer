@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 
 /// 媒体服务器类型。Emby 是 Jellyfin 的前身（3.5.2 fork），两者 API 高度同源，
@@ -72,9 +73,13 @@ public final class ServerStore: @unchecked Sendable {
     /// 解码缓存，nil = 尚未读过；受 `lock` 保护（读路径 profilesUnlocked 也在锁内）。
     private var cachedProfiles: [ServerProfile]?
 
-    public init(defaults: UserDefaults = .standard, tokens: TokenStoring? = nil) {
+    public init(
+        defaults: UserDefaults = .standard,
+        tokens: TokenStoring? = nil,
+        credentialsDirectory: URL? = nil
+    ) {
         self.defaults = defaults
-        self.tokens = tokens ?? LocalTokenStore(defaults: defaults)
+        self.tokens = tokens ?? LocalTokenStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
     }
 
     // MARK: - 档案
@@ -224,28 +229,61 @@ public final class InMemoryTokenStore: TokenStoring, @unchecked Sendable {
     }
 }
 
-/// 本地 token 仓库。使用与服务器档案相同的 UserDefaults，不访问系统钥匙串。
+/// 本地 token 仓库。凭据存 `CredentialFileStore`（排除备份的文件），不访问系统钥匙串。
+///
+/// **为什么从 UserDefaults 搬走**：UserDefaults 落在 App 容器里、会被 iCloud / iTunes
+/// 备份原样带走，而它无法单独排除备份。换成可 `isExcludedFromBackup` 的文件后，
+/// 访问令牌不再随备份离开设备。Keychain 不是选项：本包 ad-hoc 签名，每次构建
+/// cdhash 都变，会带来「开发时每次运行都弹授权框」「重签名后凭据读不出来」
+/// 与「CI 无人应答授权」三个问题（详见 `CredentialFileStore` 的类型注释）。
 public final class LocalTokenStore: TokenStoring, @unchecked Sendable {
     private let lock = NSLock()
-    private let defaults: UserDefaults
+    private let store: CredentialFileStore
+    /// 只用于**一次性迁移**旧值；迁移完成即与旧键无关。
+    private let legacyDefaults: UserDefaults
 
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    public init(
+        defaults: UserDefaults = .standard,
+        credentialsDirectory: URL? = nil
+    ) {
+        self.legacyDefaults = defaults
+        // 生产用全局单例（多个域包共用一个文件）；测试传临时目录拿到隔离实例。
+        self.store = credentialsDirectory.map { CredentialFileStore(directory: $0) } ?? .shared
     }
 
+    /// 新键（文件内）。不再带 `dev.jumusu.ocplayer.` 前缀——它已经不是 UserDefaults 键了。
     private func key(_ account: String) -> String {
+        "jellyfin.token.\(account)"
+    }
+
+    /// 旧键（UserDefaults），仅迁移用。
+    private func legacyKey(_ account: String) -> String {
         "dev.jumusu.ocplayer.token.\(account)"
     }
 
     public func read(account: String) -> String? {
-        lock.withLock { defaults.string(forKey: key(account)) }
+        lock.withLock {
+            if let token = store.string(forKey: key(account)) { return token }
+            // 迁移：老版本把 token 放在 UserDefaults。读到就搬到文件并删旧键，
+            // 使凭据从下一次备份起就不再出现（已经进过备份的历史无法追回）。
+            guard let legacy = legacyDefaults.string(forKey: legacyKey(account)) else { return nil }
+            store.setString(legacy, forKey: key(account))
+            legacyDefaults.removeObject(forKey: legacyKey(account))
+            return legacy
+        }
     }
 
     public func save(_ token: String, account: String) {
-        lock.withLock { defaults.set(token, forKey: key(account)) }
+        lock.withLock {
+            store.setString(token, forKey: key(account))
+            legacyDefaults.removeObject(forKey: legacyKey(account))
+        }
     }
 
     public func delete(account: String) {
-        lock.withLock { defaults.removeObject(forKey: key(account)) }
+        lock.withLock {
+            store.removeValue(forKey: key(account))
+            legacyDefaults.removeObject(forKey: legacyKey(account))
+        }
     }
 }
