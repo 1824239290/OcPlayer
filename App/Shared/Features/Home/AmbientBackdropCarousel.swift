@@ -2,6 +2,30 @@ import AppDesignKit
 import CoreModel
 import SwiftUI
 
+/// 何时尝试装载氛围池。
+///
+/// 抽成纯值是为了可测：这里的判断错一次，后果是**整个会话都停在纯色底**
+/// —— 而它恰恰只在冷启动抢跑时才出错，平时看不出来。
+///
+/// 实机日志（2026-09-30）就是这个场景：启动瞬间网络还没就绪，五个请求全部
+/// `-1009`，其中氛围池的 `randomBackdropItems` 与它的回退源（`home.latest` /
+/// `resume` / `nextUp`）**同时为空** → 池子装不上；而 `.task(id:)` 只认
+/// `sessionGeneration`，它没变 → 这个会话再也不会重试，背景灰到关 App。
+/// 下次启动网络恰好就绪，于是"自己好了"——这种偶发性正是它难被发现的原因。
+struct BackdropCarouselTrigger: Hashable {
+    let session: Int
+    /// 是否值得再试一次。
+    let shouldRetry: Bool
+
+    init(sessionGeneration: Int, poolIsEmpty: Bool, hasHomeFallback: Bool) {
+        self.session = sessionGeneration
+        // 池子空着 + 首页数据已到位 = 一次值得重试的机会。
+        // 池子装好后 `shouldRetry` 恒为 false，触发键稳定在 session 上，
+        // 不会因为首页后续刷新（isLoading 翻转等）反复重启换片循环。
+        self.shouldRetry = poolIsEmpty && hasHomeFallback
+    }
+}
+
 /// 首页氛围背景：从库里随机取一批带 backdrop 的电影 / 剧集（`randomBackdropItems`），
 /// 复用 `BackdropAmbienceView` 铺成模糊+雾化的固定底，每 12 秒淡入淡出换一张。
 /// 纯装饰：查询失败或库里没有带 backdrop 的条目就整体不出现，页面回退纯色底。
@@ -25,6 +49,19 @@ struct AmbientBackdropCarousel: View {
     /// 取消、回到首页重启——同代次不重拉重洗，否则每次回首页背景都换成新一批
     /// 随机图，其他 Tab 垫的 `homeAmbience` 也跟着闪换成「首页刚刷出来的那张」。
     @State private var loadedGeneration: Int?
+
+    /// 首页是否已有可作回退的条目（`loadPool` 在随机查询失败时用它们兜底）。
+    private var hasHomeFallback: Bool {
+        !(app.home.latest.isEmpty && app.home.resume.isEmpty && app.home.nextUp.isEmpty)
+    }
+
+    /// 装载触发键：会话代次 + 「池子空着但已有回退源」这个补救机会。
+    private var loadTrigger: BackdropCarouselTrigger {
+        BackdropCarouselTrigger(
+            sessionGeneration: app.sessionGeneration,
+            poolIsEmpty: pool.isEmpty,
+            hasHomeFallback: hasHomeFallback)
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -51,10 +88,12 @@ struct AmbientBackdropCarousel: View {
         }
         .animation(Motion.ambient, value: isWindowFullscreen)
         // 会话代次并进 task id：换服务器 / 重新登录时重拉池子。
-        .task(id: app.sessionGeneration) {
+        // 另外并进 `shouldRetry`：冷启动抢跑导致池子空着时，等首页数据到位再试一次
+        // （见 `BackdropCarouselTrigger` 的注释——不加这个，那个会话就一直是纯色底）。
+        .task(id: loadTrigger) {
             if loadedGeneration != app.sessionGeneration {
                 await loadPool()
-                // 拉取失败不记账：下次回到首页还能重试。
+                // 拉取失败不记账：下次触发还能重试。
                 if !pool.isEmpty { loadedGeneration = app.sessionGeneration }
             }
             await warmUpAndRotate()
