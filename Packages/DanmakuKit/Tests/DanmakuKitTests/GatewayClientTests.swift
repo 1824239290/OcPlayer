@@ -552,3 +552,45 @@ final class GatewayClientTests: XCTestCase {
         XCTAssertEqual(counter.count, 1, "业务错误不应重试")
     }
 }
+
+/// `DandanplayError.isGatewayFailure` 的判定：决定编排层降级链是否短路。
+///
+/// 回归背景：此前写成「只要不是 businessError 就算网关故障」，于是
+/// `.invalidRequest` / `.decodingFailed` / `.httpStatus(4xx)` 也一并短路 ——
+/// 而这三个恰恰是**换一层参数就能救回来**的情况（降级链各层请求参数不同），
+/// 短路会让本可匹配上的剧集直接判失败。
+final class GatewayFailureClassificationTests: XCTestCase {
+
+    private func isGatewayFailure(_ error: DandanplayError) -> Bool {
+        error.isGatewayFailure
+    }
+
+    /// 网关健康 / 本次请求的问题 → 不该短路，继续换参数降级。
+    func testRequestScopedFailuresDoNotShortCircuit() {
+        XCTAssertFalse(isGatewayFailure(.businessError(code: 4001, message: "参数错")))
+        XCTAssertFalse(isGatewayFailure(.invalidRequest("episode 必填")))
+        XCTAssertFalse(isGatewayFailure(.decodingFailed("缺少 comments 字段")))
+        XCTAssertFalse(isGatewayFailure(.httpStatus(400)), "4xx 是本次请求的问题")
+        XCTAssertFalse(isGatewayFailure(.httpStatus(404)))
+        XCTAssertFalse(isGatewayFailure(.httpStatus(499)))
+    }
+
+    /// 网关级故障 → 换参数无用，短路省掉白撞。
+    func testGatewayLevelFailuresShortCircuit() {
+        XCTAssertTrue(isGatewayFailure(.network(URLError(.notConnectedToInternet))))
+        XCTAssertTrue(isGatewayFailure(.network(URLError(.timedOut))))
+        XCTAssertTrue(isGatewayFailure(.rateLimited(retryAfter: 30)), "被限流时重试只会更糟")
+        XCTAssertTrue(isGatewayFailure(.notConfigured))
+        XCTAssertTrue(isGatewayFailure(.unauthorized), "凭据无效时换参数也一样失败")
+        XCTAssertTrue(isGatewayFailure(.forbidden))
+        XCTAssertTrue(isGatewayFailure(.httpStatus(500)))
+        XCTAssertTrue(isGatewayFailure(.httpStatus(502)))
+        XCTAssertTrue(isGatewayFailure(.httpStatus(503)))
+    }
+
+    /// 5xx 与 4xx 的分界必须在 500 上（不是"大于等于 400 就短路"）。
+    func testBoundaryBetweenClientAndServerErrors() {
+        XCTAssertFalse(isGatewayFailure(.httpStatus(499)))
+        XCTAssertTrue(isGatewayFailure(.httpStatus(500)))
+    }
+}

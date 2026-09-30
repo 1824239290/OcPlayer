@@ -128,11 +128,25 @@ extension DandanplayError {
         }
     }
 
-    /// 网关级故障（非业务错误）：编排层任一降级层命中即短路剩余层。
-    /// businessError 表示网关健康（2xx 业务失败），仍应继续换参数降级。
+    /// 网关级故障：编排层任一降级层命中即短路剩余层。
+    ///
+    /// **必须是白名单**。此前写成「只要不是 businessError 就算网关故障」，于是
+    /// `.invalidRequest`（本次请求参数不对）、`.decodingFailed`（本次响应形状不符）、
+    /// `.httpStatus(4xx)` 也一并短路 —— 而这三种恰恰是**换一层参数就能救回来**的情况：
+    /// 降级链是「哈希 → TMDB → 标题 → 纯化标题」，各层请求参数不同，一层参数写错
+    /// 不代表后面几层也没救。短路它们会让本可匹配上的剧集直接判失败。
     var isGatewayFailure: Bool {
-        if case .businessError = self { return false }
-        return true
+        switch self {
+        case .businessError, .invalidRequest, .decodingFailed:
+            // 网关是健康的，问题出在这一次请求上 → 继续换参数降级。
+            return false
+        case .httpStatus(let code) where (400..<500).contains(code):
+            // 4xx 同理：参数 / 路径问题，别的层用不同参数仍可能成功。
+            return false
+        case .network, .rateLimited, .notConfigured, .unauthorized, .forbidden, .httpStatus:
+            // 连不上 / 被限流 / 未配置 / 凭据无效 / 5xx：换参数无用，短路省掉几次白撞。
+            return true
+        }
     }
 }
 
