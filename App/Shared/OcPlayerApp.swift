@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import SwiftUI
 
 #if os(macOS)
@@ -138,11 +139,19 @@ struct OcPlayerApp: App {
             logDirectory: AppDiagnostics.fileURL.deletingLastPathComponent())
         // 接住内核 stderr（`ErikaHDR` / 内核 trace 的 stderr 回声）：GUI 启动时 fd 2
         // 归 launchd，不接就永远看不到；必须在第一次内核调用（播放时的引擎创建）之前启动。
+        // （`KernelStderrPump` 自己在测试宿主下不装泵——见它的注释。）
         KernelStderrPump.shared.start()
         // 内核注册必须在任何播放之前：PlaybackController.prepareEngine() 会从
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
+        // 测试也依赖它（`PlaybackControllerOpenTests.tearDown` 用真实注册表复位）。
         PlaybackEngineAssembly.registerAll()
         AppDiagnostics.recordLaunch()
+        // ⚠️ 测试宿主跑在与生产**同一个二进制**里（`TEST_HOST = OcPlayer.app`），
+        // 所以这段启动路径在跑测试时也会执行。**更新检查必须跳过**：那是真实的
+        // GitHub 请求，会让测试依赖外网，并在开发者机器上产生真实网络活动。
+        // 其余几项各有自己的守卫：日志目录与 trace 清理看 `RuntimeEnvironment`，
+        // stderr 泵看 `KernelStderrPump`。
+        guard !RuntimeEnvironment.isRunningTests else { return }
         Task { @MainActor in
             await AppUpdateChecker.shared.checkForUpdates()
         }

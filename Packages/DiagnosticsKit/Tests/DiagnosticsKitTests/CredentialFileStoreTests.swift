@@ -117,3 +117,17 @@ final class CredentialFileStoreTests: XCTestCase {
         XCTAssertNil(CredentialFileStore(directory: directory).string(forKey: "k"))
     }
 }
+
+/// `RuntimeEnvironment` 的存在理由：测试宿主（`TEST_HOST`）跑的是**真实 App 二进制**，
+/// 所以启动路径上的真实副作用必须有一个统一的判定点。
+final class RuntimeEnvironmentTests: XCTestCase {
+
+    /// 在测试进程里，这个判定必须是 true —— 否则所有依赖它的守卫都是摆设，
+    /// 测试会开始读真实凭据、拉真实网络、写真实日志目录。
+    func testDetectsTestHostInThisProcess() {
+        XCTAssertTrue(
+            RuntimeEnvironment.isRunningTests,
+            "测试进程里必须判定为 true；若为 false，说明环境变量名变了或注入方式变了，"
+                + "所有基于它的守卫会静默失效")
+    }
+}

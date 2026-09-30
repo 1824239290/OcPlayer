@@ -517,7 +517,8 @@ private final class DiagnosticBackend: @unchecked Sendable {
         // 测试宿主（`xcodebuild test` 注入 App 进程）跑的是真实代码：让它写到临时目录。
         // 实测一次全量 AppTests 会在真实日志目录留下 6 个会话文件，还会混进用户报障时
         // 要发的诊断包；早先那 116 行残缺记录也是「测试宿主 + App」共写同一文件留下的。
-        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+        // 判定收在 `RuntimeEnvironment`，别在这里再写一遍字符串比较。
+        if RuntimeEnvironment.isRunningTests {
             return FileManager.default.temporaryDirectory
                 .appendingPathComponent(
                     "OcPlayerTests-Logs-\(ProcessInfo.processInfo.processIdentifier)",

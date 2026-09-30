@@ -9,6 +9,18 @@ extension AppModel {
     /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
     func bootstrap() async {
         guard phase == .boot else { return }
+        // ⚠️ 测试宿主跑的是真实 App（`TEST_HOST = OcPlayer.app`），`RootView.task` 会照常
+        // 调到这里。而 `MediaServerFactory.restore` 会读**真实**的服务器档案与令牌：
+        // 于是跑一次测试就可能恢复出开发者本机的真实会话、连真实服务器，并因读取令牌
+        // 触发凭据迁移（实测：一次全量 AppTests 就在真实 Application Support 里建出了
+        // `credentials.json`）。测试进程不该动用户数据，所以这一整段在测试下不跑。
+        //
+        // 测试全都直接构造 `AppModel` 并手动设 `phase` / `server` 驱动（无一处依赖
+        // `bootstrap`），跳过它不影响任何既有用例的覆盖。
+        guard !RuntimeEnvironment.isRunningTests else {
+            phase = .onboarding
+            return
+        }
         // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
         // 从 init 挪到这里：构造 AppModel 不再有副作用，测试拿到的实例是干净的。
         bangumi.setup()

@@ -34,7 +34,7 @@ final class KernelStderrPump: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard !started else { return }
-        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else {
+        guard !RuntimeEnvironment.isRunningTests else {
             return
         }
 
