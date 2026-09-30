@@ -171,6 +171,10 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     private let mediaTimeLock = NSLock()
     private var _latestMediaTimeMicros: Int64 = 0
 
+    /// `positionChanged` 的发布闸门。**只由渲染线程访问**（`step` 是唯一消费者），
+    /// 因此不加锁。见 `PositionPublishGate` 的类型注释。
+    private var positionGate = PositionPublishGate()
+
     public init(outputMode: ErikaPresenterOutputMode = ErikaPresenterOutputMode_Auto,
                 edrHeadroom: Float = 0,
                 upscaler: ErikaLumaUpscalerMode = ErikaLumaUpscalerMode_Off) throws {
@@ -846,6 +850,12 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             // runloop 线程上安全改动。
             if case .stateChanged(let value) = event {
                 renderLoop.setTier(Self.tier(for: value))
+            }
+            // 高频 position 过闸；控制事件（状态/轨道/错误）即时发布，永不被丢。
+            // 见 PositionPublishGate：不然 256 的缓冲会被 position 灌满，
+            // `.bufferingNewest` 丢掉最旧的——可能正好是 stopped / failed。
+            if case .positionChanged = event, !positionGate.shouldPublish() {
+                continue
             }
             continuation.yield(event)
         }
