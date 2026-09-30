@@ -35,6 +35,8 @@ private final class PlaybackOpenAttempt: @unchecked Sendable {
     let scopeLease: PlaybackSecurityScopeLease?
     private let lock = NSLock()
     private var isCancelled = false
+    private var isSlotReleased = false
+    private var isAbandoned = false
 
     init(scopeLease: PlaybackSecurityScopeLease?) {
         self.scopeLease = scopeLease
@@ -45,6 +47,38 @@ private final class PlaybackOpenAttempt: @unchecked Sendable {
     func cancel() {
         lock.withLock { isCancelled = true }
     }
+
+    /// 看门狗放弃这次尝试：**同时**把它从「在飞」记为「已放弃」。
+    ///
+    /// 为什么必须记账而不是只 cancel：内核的 `open` 没有 DNS 超时，弱网下可以
+    /// 无限挂（见 `scheduleOpenWatchdog` 注释）。旧实现只在 open 返回后才减「在飞」
+    /// 计数，看门狗不碰它 —— 于是两次挂起的 open 就把进程级的 2 个槽位永久占死，
+    /// 之后**任何**片子都打不开（错误是「后台媒体打开任务已满…请稍后重试」），
+    /// 只能重启 App。这里让看门狗也归还槽位，App 保持可用。
+    ///
+    /// 但放弃 ≠ 那些 native open 已经退出：线程与引擎仍被内核持有，资源是要还的。
+    /// 所以归还到「已放弃」额度（另有上限），待它真正返回时再销账。
+    /// 返回 true = 本次是首次释放。
+    func abandonSlotOnce() -> Bool {
+        lock.withLock {
+            guard !isSlotReleased else { return false }
+            isSlotReleased = true
+            isAbandoned = true
+            return true
+        }
+    }
+
+    /// 正常收尾释放槽位。返回 true = 本次是首次释放。
+    func releaseSlotOnce() -> Bool {
+        lock.withLock {
+            guard !isSlotReleased else { return false }
+            isSlotReleased = true
+            return true
+        }
+    }
+
+    /// 是否已被看门狗放弃式释放（收尾时要归还「已放弃」额度而不是「在飞」额度）。
+    var abandonedByWatchdog: Bool { lock.withLock { isAbandoned } }
 }
 
 /// PlaybackCoordinator：拿到源 → 喂内核 → 暴露状态给 UI。
@@ -211,13 +245,42 @@ final class PlaybackController: DanmakuPlaybackHosting {
     private static let engineOpenQueue = DispatchQueue(
         label: "dev.jumusu.OcPlayer.engine-open", qos: .userInitiated, attributes: .concurrent)
     private static let maximumConcurrentOpenAttempts = 2
+    /// 已被看门狗放弃、但内核侧 native open 仍未返回的尝试数上限。
+    ///
+    /// 放弃的 open **没有真的消失**：内核 DNS 无超时，它可能一直挂着，那台引擎与
+    /// 线程都还被持有。所以归还槽位不等于可以无限派发，给「已放弃」单独一个额度。
+    /// 超过就拒绝新 open 并明确报错（比默默把 App 拖垮好）。
+    private static let maximumAbandonedOpenAttempts = 4
     private static var activeOpenAttempts = 0
+    private static var abandonedOpenAttempts = 0
     #if DEBUG
     /// 测试观察口：进程级在飞 open 计数。完成回调要经主线程 Task 才把计数减回去，
     /// 测试在用例间排水（见 PlaybackControllerOpenTests.setUp），避免上个用例未
     /// 落地的回调把下一个用例的 open 顶进「任务已满」失败分支。
     static var activeOpenAttemptsForTesting: Int { activeOpenAttempts }
+    /// 测试观察口：看门狗已放弃、native open 仍未返回的计数。
+    static var abandonedOpenAttemptsForTesting: Int { abandonedOpenAttempts }
+
+    /// 测试专用：清零两个槽位计数。
+    ///
+    /// 「已放弃」只能等 native open 真正返回才销账，而测试里闸门常常不放——
+    /// 进程级计数会跨用例残留，所以给测试一个显式复位口。
+    static func resetOpenAttemptCountersForTesting() {
+        activeOpenAttempts = 0
+        abandonedOpenAttempts = 0
+    }
     #endif
+
+    /// 槽位销账的唯一出口：看门狗放弃时算「已放弃」，正常收尾算「在飞」。
+    /// 幂等——同一个 attempt 重复调用只有第一次生效，不会把计数减成负数。
+    private static func settleOpenSlot(_ attempt: PlaybackOpenAttempt) {
+        if attempt.abandonedByWatchdog {
+            // 看门狗当时已把它从「在飞」挪进「已放弃」，这里归还「已放弃」额度。
+            abandonedOpenAttempts = max(0, abandonedOpenAttempts - 1)
+        } else if attempt.releaseSlotOnce() {
+            activeOpenAttempts = max(0, activeOpenAttempts - 1)
+        }
+    }
     /// open 看门狗时长。默认 60s；测试注入缩短。
     static var openWatchdogTimeout: Duration = .seconds(60)
     /// Changes as soon as a new request is presented, before its engine opens.
@@ -636,12 +699,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
                               error: setupError ?? "内核创建失败")
             return
         }
-        guard Self.activeOpenAttempts < Self.maximumConcurrentOpenAttempts else {
+        guard Self.activeOpenAttempts < Self.maximumConcurrentOpenAttempts,
+              Self.abandonedOpenAttempts < Self.maximumAbandonedOpenAttempts else {
             finishOpenFailure(
                 request: request,
                 generation: generation,
                 attempt: nil,
-                error: "后台媒体打开任务已满（可能有超时请求仍未退出），请稍后重试"
+                error: "后台媒体打开任务已满（在飞 \(Self.activeOpenAttempts)、"
+                    + "已放弃 \(Self.abandonedOpenAttempts)），请稍后重试"
             )
             return
         }
@@ -697,7 +762,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
             }
             let error = openError
             Task { @MainActor [weak self] in
-                defer { Self.activeOpenAttempts -= 1 }
+                // 槽位销账走统一出口（幂等）：看门狗可能已经放弃式释放过了。
+                defer { Self.settleOpenSlot(attempt) }
                 guard let self else {
                     try? engine.stop()
                     attempt.scopeLease?.releaseOnce()
@@ -837,6 +903,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.info("open 看门狗触发（60s）title=\(request.title)")
             attempt.cancel()
             try? self.engine?.stop()
+            // 归还槽位：这次 open 不会再有「完成回调」来销账（内核可能永远不返回），
+            // 槽位不还就是永久占死（见 abandonSlotOnce 注释）。挪进「已放弃」额度等它
+            // 真正返回时再销账。
+            if attempt.abandonSlotOnce() {
+                Self.activeOpenAttempts = max(0, Self.activeOpenAttempts - 1)
+                Self.abandonedOpenAttempts += 1
+                PlaybackLog.warning(
+                    "open 看门狗收回槽位（内核 open 未返回，已放弃 \(Self.abandonedOpenAttempts)/"
+                        + "\(Self.maximumAbandonedOpenAttempts)）title=\(request.title)")
+            }
             self.finishOpenFailure(request: request, generation: generation,
                                    attempt: attempt,
                                    releaseScope: false,
