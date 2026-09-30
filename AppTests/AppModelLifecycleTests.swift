@@ -36,6 +36,45 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertEqual(app.selectedSection, .home)
     }
 
+    /// 回归：快照超限曾整份 `removeAll()`，连刚写入的那条一起丢——第 41 次进入
+    /// 详情页立刻退回冷骨架屏，SWR 的收益变成随机的。现在只淘汰最旧的。
+    func testDetailSnapshotEvictionKeepsTheJustStoredEntry() {
+        let app = AppModel()
+        let limit = AppModel.detailSnapshotLimit
+
+        for index in 0...limit {   // 写 limit+1 条，必定触发一次淘汰
+            let id = "subject-\(index)"
+            app.storeDetailSnapshot(
+                AppModel.DetailSnapshot(detail: MediaItem(id: id, name: "条目\(index)", kind: .series),
+                                        seasons: [], similar: [], selectedSeasonID: nil,
+                                        episodesBySeason: [:]),
+                for: id)
+        }
+
+        XCTAssertNotNil(app.detailSnapshot(for: "subject-\(limit)"), "刚写入的快照不得被本次淘汰带走")
+        XCTAssertNil(app.detailSnapshot(for: "subject-0"), "最旧的应被淘汰")
+        XCTAssertLessThanOrEqual(app.detailSnapshots.count, limit)
+    }
+
+    /// 读快照要刷新使用顺序，否则「刚看过的页」会被后续新页挤掉（与 LRU 相反）。
+    func testDetailSnapshotReadRefreshesRecency() {
+        let app = AppModel()
+        let limit = AppModel.detailSnapshotLimit
+
+        func snapshot(_ id: String) -> AppModel.DetailSnapshot {
+            AppModel.DetailSnapshot(detail: MediaItem(id: id, name: id, kind: .series),
+                                    seasons: [], similar: [], selectedSeasonID: nil,
+                                    episodesBySeason: [:])
+        }
+
+        for index in 0..<limit { app.storeDetailSnapshot(snapshot("s\(index)"), for: "s\(index)") }
+        _ = app.detailSnapshot(for: "s0")                     // 重新「看过」最旧的那条
+        app.storeDetailSnapshot(snapshot("new"), for: "new")  // 触发一次淘汰
+
+        XCTAssertNotNil(app.detailSnapshot(for: "s0"), "刚读过的条目应被保留")
+        XCTAssertNil(app.detailSnapshot(for: "s1"), "应淘汰此后最旧的条目")
+    }
+
     func testPresentLocalFileSetsPreparationWithoutTouchingHomeError() {
         let app = AppModel()
         app.phase = .onboarding

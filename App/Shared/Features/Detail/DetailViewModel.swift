@@ -83,7 +83,7 @@ final class DetailViewModel {
         prewarmAmbience()
         // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
         // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
-        let snapshot = app.detailSnapshots[item.id]
+        let snapshot = app.detailSnapshot(for: item.id)
         if let snapshot {
             detail = snapshot.detail
             seasons = snapshot.seasons

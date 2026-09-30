@@ -148,12 +148,41 @@ final class AppModel {
 
     static let detailSnapshotLimit = 40
     var detailSnapshots: [MediaItem.ID: DetailSnapshot] = [:]
+    /// 快照的最近使用顺序（末尾最新）。淘汰时按它丢**最旧**的，而不是整份清空。
+    private var detailSnapshotRecency: [MediaItem.ID] = []
 
     func storeDetailSnapshot(_ snapshot: DetailSnapshot, for id: MediaItem.ID) {
         detailSnapshots[id] = snapshot
-        if detailSnapshots.count > Self.detailSnapshotLimit {
-            detailSnapshots.removeAll()
+        noteSnapshotUse(id)
+        // 超限只淘汰最旧的那些，**必须保留刚写入的这条**：整份 `removeAll()` 会把
+        // 为了提高"再次进入即时有内容"而刚存下的快照一起丢掉，于是第 41 次进入
+        // 详情页立刻退回冷骨架屏——SWR 的收益变成随机的。删到限额为止即可。
+        while detailSnapshots.count > Self.detailSnapshotLimit {
+            guard let oldest = detailSnapshotRecency.first else { break }
+            detailSnapshotRecency.removeFirst()
+            if oldest != id { detailSnapshots[oldest] = nil }
         }
+    }
+
+    /// 读快照顺手刷新使用顺序：不刷新的话"最近看过的页"会被后续新页挤掉，
+    /// 与我们想要的 LRU 语义相反。
+    func detailSnapshot(for id: MediaItem.ID) -> DetailSnapshot? {
+        guard let snapshot = detailSnapshots[id] else { return nil }
+        noteSnapshotUse(id)
+        return snapshot
+    }
+
+    /// 顺序表的自愈：`detailSnapshots` 可能在别处被整体清掉（换会话），此时把
+    /// 悬空 id 一并剔除，避免淘汰时对着不存在的键空转。
+    private func noteSnapshotUse(_ id: MediaItem.ID) {
+        detailSnapshotRecency.removeAll { $0 == id || detailSnapshots[$0] == nil }
+        detailSnapshotRecency.append(id)
+    }
+
+    /// 会话边界用：快照与它的顺序表必须一起清，否则顺序表会留下悬空 id。
+    func clearDetailSnapshots() {
+        detailSnapshots = [:]
+        detailSnapshotRecency = []
     }
 
     struct HomeData: Equatable {

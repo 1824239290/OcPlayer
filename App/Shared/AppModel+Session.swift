@@ -163,6 +163,10 @@ extension AppModel {
         librariesError = nil
         libraryPages = [:]
         home = HomeData()
+        // 详情快照按 item id 索引，而 id 只在原服务器里有意义——两台同库的服务器
+        // 可能撞 id，留着会让新会话的详情页显示旧服务器的剧集。快照连同它的
+        // 最近使用顺序表一起清。
+        clearDetailSnapshots()
         clearNavigationStacks()
         presentedPlayer = nil
         selectedSection = .home
