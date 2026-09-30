@@ -606,7 +606,17 @@ final class PlaybackController: DanmakuPlaybackHosting {
             openingAttempt.cancel()
             clearOpeningState(attempt: openingAttempt)
         }
-        if hasLoadedSource || hadOpeningAttempt {
+        // 三个"该换片"的信号，缺一不可：
+        // - `engine != nil`：让位路径（`finishOpenSuperseded`）刻意**不** reset 引擎，
+        //   于是存在「engine 还在、hasLoadedSource 为 false、openingAttempt 已清空」
+        //   的组合。此时那台引擎已被 stop：内核 stop 之后 play 是合法重播，但它的
+        //   事件流随旧 `eventTask` 的取消已经结束。复用它会得到一个**僵尸播放会话**
+        //   —— 引擎真在出声出画，而下面新建的 `state` 永远收不到任何事件，
+        //   `isSourceReady` 恒 false → 续播 seek / 章节 / 外挂字幕 / 弹幕注入全部
+        //   静默失效，HUD 进度与轨道恒空。只在本次会话内坏（下次 open 会自愈），
+        //   所以表现为"偶发、重启就好"，正是最难查的一类。
+        // - `hasLoadedSource` / `hadOpeningAttempt`：正常换片。
+        if engine != nil || hasLoadedSource || hadOpeningAttempt {
             // 换片：先把上一段会话的账结掉（播放时长/缓冲次数/卡死次数），再退役旧引擎。
             state.finishSession(reason: "superseded")
             playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
