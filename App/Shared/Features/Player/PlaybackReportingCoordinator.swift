@@ -107,19 +107,59 @@ final class PlaybackReportingCoordinator {
         ))
     }
 
+    /// 上报超时时长（可注入：测试用短的）。
+    nonisolated(unsafe) static var reportTimeout: Duration = .seconds(5)
+
+    /// 带**真超时**地执行一次上报。
+    ///
+    /// 原实现是「到点 `task.cancel()`，然后仍然 `await task.value`」—— 那等的是任务
+    /// **完成**而不是取消，所以只要 `PlaybackReporting` 的实现不响应取消，这个"超时"
+    /// 就形同虚设。后果不只是慢一下：上报是一条串行链（`await precedingStop?.value`
+    /// → `await startTask.value` → …），一个卡住的上报会把后面所有上报堵死，
+    /// 表现为「上报静默失效」，而日志上看只是"网络慢"。
+    ///
+    /// 这里改成真正的竞速：谁先到点谁放行，**不等**落败方收尾。
+    ///
+    /// 取舍：`PlaybackReporting` 只承诺三个 `async` 方法、没有取消语义契约，所以被
+    /// 放弃的那次上报只能"请求取消"、无法真正终止——它可能继续跑完。但上报链不再被
+    /// 它阻塞，这是关键（宁可漏一次上报，也不要整条链停摆）。两个生产实现都走
+    /// URLSession、天然响应取消。
     private static func performWithTimeout(
-        duration: Duration = .seconds(5),
+        duration: Duration? = nil,
         operation: @escaping @MainActor @Sendable () async -> Void
     ) async {
-        let task = Task { @MainActor in
-            await operation()
+        let timeout = duration ?? reportTimeout
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let gate = ResumeOnce(continuation)
+            let work = Task { @MainActor in
+                await operation()
+                gate.resume()
+            }
+            Task {
+                try? await Task.sleep(for: timeout)
+                // 先请求取消（合作方会立刻退出），再无条件放行——不等它。
+                work.cancel()
+                gate.resume()
+            }
         }
-        let timeoutTask = Task {
-            try? await Task.sleep(for: duration)
-            task.cancel()
+    }
+
+    /// 保证 continuation 只被恢复一次（操作先完成、或超时先到点）。
+    private final class ResumeOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        init(_ continuation: CheckedContinuation<Void, Never>) {
+            self.continuation = continuation
         }
-        await task.value
-        timeoutTask.cancel()
+
+        func resume() {
+            let pending = lock.withLock { () -> CheckedContinuation<Void, Never>? in
+                defer { continuation = nil }
+                return continuation
+            }
+            pending?.resume()
+        }
     }
 
     func start(

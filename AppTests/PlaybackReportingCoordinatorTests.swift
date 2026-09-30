@@ -3,6 +3,21 @@ import JellyfinKit
 import XCTest
 
 final class PlaybackReportingCoordinatorTests: XCTestCase {
+
+    /// `reportTimeout` 是进程级静态：用例改过它必须还原，否则会串到后面的用例
+    /// （表现为"某条上报莫名没发出去"这种极难定位的失败）。
+    private var savedReportTimeout: Duration = .seconds(5)
+
+    override func setUp() {
+        super.setUp()
+        savedReportTimeout = PlaybackReportingCoordinator.reportTimeout
+    }
+
+    override func tearDown() {
+        PlaybackReportingCoordinator.reportTimeout = savedReportTimeout
+        super.tearDown()
+    }
+
     @MainActor
     func testBackgroundProgressAndStopStayOrdered() async {
         let source = TestPlaybackStateSource(snapshot: .active(position: 12))
@@ -332,6 +347,76 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
             reporter.events.first(where: \.isProgress),
             .progress(itemID: "episode-heartbeat", position: 10, isPaused: false)
         )
+    }
+
+    // MARK: - 上报超时
+
+    /// 回归：「超时」此前**不生效**。原实现是「到点 `task.cancel()`，然后仍
+    /// `await task.value`」—— 等的是任务**完成**而不是取消，所以只要上报实现不响应
+    /// 取消，调用方就会一直挂着。
+    ///
+    /// 后果不只是慢：上报是一条串行链（`await precedingStop?.value` →
+    /// `await startTask.value` → …），一个卡住的上报会把后面**所有**上报堵死，
+    /// 表现为「上报静默失效」，而日志上看只是"网络慢"。
+    ///
+    /// `TestPlaybackReporter.shouldSuspendStop` 用 `withCheckedContinuation` 挂起、
+    /// 天然不响应取消 —— 正好是这里要覆盖的非合作实现。
+    @MainActor
+    func testNonCooperativeReportDoesNotBlockTheChain() async {
+        PlaybackReportingCoordinator.reportTimeout = .milliseconds(80)
+        let source = TestPlaybackStateSource(snapshot: .stopped(position: 50, duration: 100))
+        let reporter = TestPlaybackReporter()
+        reporter.shouldSuspendStop = true   // 这次 stopped 上报永远不会自己返回
+        // 短心跳：`.stopped` 快照要靠心跳才触发终报（默认 1s 会撞上 waitUntil 上限）。
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source, heartbeatInterval: .milliseconds(1))
+        let requestID = UUID()
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-stuck"),
+            requestID: requestID,
+            resumeSeconds: nil,
+            onTerminal: { _ in }
+        )
+        await waitUntil { reporter.isStopSuspended }
+
+        let stopTask = coordinator.stop()
+        let start = Date()
+        await stopTask?.value
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertLessThan(
+            elapsed, 1.0,
+            "上报不响应取消时，调用方也必须在超时后返回（实测耗时 \(elapsed)s）；"
+                + "原实现在这里会一直挂住")
+        // 被放弃的那次上报仍跑在后台，收尾一下避免影响后续断言。
+        reporter.resumeStoppedReport()
+    }
+
+    /// 合作的上报（正常返回）不该等满超时。
+    @MainActor
+    func testCooperativeReportReturnsImmediately() async {
+        PlaybackReportingCoordinator.reportTimeout = .seconds(10)
+        let source = TestPlaybackStateSource(snapshot: .stopped(position: 50, duration: 100))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source, heartbeatInterval: .milliseconds(1))
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-fast"),
+            requestID: UUID(),
+            resumeSeconds: nil,
+            onTerminal: { _ in }
+        )
+        await waitUntil { reporter.events.contains(where: \.isStopped) }
+
+        let start = Date()
+        await coordinator.stop()?.value
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertLessThan(elapsed, 1.0, "正常返回的上报不该等满 10s 超时")
     }
 
     @MainActor
