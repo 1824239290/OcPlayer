@@ -345,11 +345,22 @@ final class AppModel {
     /// 落地后的回弹淡入就是落点页的入场。
     var routeExiting = false
 
+    /// 换页落地代次。会话重置时自增，使在飞的「淡出 → 落地」闭包作废
+    /// （见 `beginRouteExit` 与 `invalidatePendingRouteExit`）。
+    private(set) var routeExitGeneration: UInt64 = 0
+
     /// 清空全部导航栈（`path` 与 `navPaths` 是 `private(set)`，写入口集中在本文件）。
     /// 会话边界（登出 / 换服 / 401）用。
     func clearNavigationStacks() {
         path = []
         navPaths = NavigationPaths()
+    }
+
+    /// 作废在飞的「淡出 → 落地」闭包：换页意图属于旧会话，不能再落到新会话的栈上。
+    /// 顺带复位 `routeExiting`，否则新会话的第一下点击会被防连点守卫吞掉。
+    func invalidatePendingRouteExit() {
+        routeExitGeneration &+= 1
+        routeExiting = false
     }
 
     /// `accessibilityReduceMotion` 的副本（AppShell 注入）：开启时换页直切，
@@ -537,8 +548,14 @@ final class AppModel {
         }
         guard !routeExiting else { return }
         routeExiting = true
+        // 会话代次快照：淡出期间若发生登出/换服/401（`resetBrowseState` 会自增），
+        // 这次换页的意图属于**旧会话**，落地必须作废——否则旧服务器的
+        // `.detail(item)` 会被 append 进新会话的空栈，表现为"刚登录就弹出一个
+        // 不存在于这台服务器的详情页"。`routeExiting` 由重置清掉，不会卡住。
+        let generation = routeExitGeneration
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(Motion.exitSeconds))
+            guard generation == routeExitGeneration else { return }
             land()
             // 恢复前留出前置拍：新页（push 落地新建的视图）必须先以隐藏态
             // 提交一帧，routeExiting 复位的淡入才有 from-state；pop 侧还要

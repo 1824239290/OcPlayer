@@ -36,6 +36,39 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertEqual(app.selectedSection, .home)
     }
 
+    /// 回归（僵尸 server）：401 之后磁盘 token 已删、内存 `server` 实例却还活着。
+    /// `reconnectFlow` 必须走**完整**会话重置，否则用户点「先不登录」进 `.ready`
+    /// 时首页会因为 `server != nil` 渲染旧服务器的数据，随即被下一个 401 再拉回
+    /// 登录页——进不去「本地播放」。
+    func testReconnectFlowDropsServerAndSessionScopedCaches() {
+        let app = AppModel()
+        app.phase = .ready
+        app.server = StubMediaServer()
+        app.libraries = [MediaLibrary(id: "lib-1", name: "电影", collectionType: .movies)]
+        app.home = AppModel.HomeData(resume: [MediaItem(id: "ep-1", name: "第一集", kind: .episode)])
+        app.cacheLibraryPage(
+            AppModel.LibraryPage(items: [MediaItem(id: "m1", name: "电影", kind: .movie)], totalCount: 1),
+            for: "lib-1")
+        app.storeDetailSnapshot(
+            AppModel.DetailSnapshot(detail: MediaItem(id: "s1", name: "剧", kind: .series),
+                                    seasons: [], similar: [], selectedSeasonID: nil,
+                                    episodesBySeason: [:]),
+            for: "s1")
+        app.windowAmbience = WindowAmbience(
+            url: URL(string: "https://old.example/a.jpg"), authHeader: "Bearer old")
+        app.pendingMoviePilotQuery = "旧服务器的搜索词"
+
+        app.reconnectFlow()
+
+        XCTAssertNil(app.server, "内存里的 server 必须一起丢掉，否则会渲染旧服务器首页")
+        XCTAssertTrue(app.libraries.isEmpty)
+        XCTAssertTrue(app.home.resume.isEmpty)
+        XCTAssertNil(app.detailSnapshot(for: "s1"), "详情快照按 item id 索引，跨服务器会撞 id")
+        XCTAssertNil(app.windowAmbience, "氛围图带着旧服务器的 authHeader")
+        XCTAssertNil(app.pendingMoviePilotQuery)
+        XCTAssertEqual(app.phase, .onboarding)
+    }
+
     /// 回归：快照超限曾整份 `removeAll()`，连刚写入的那条一起丢——第 41 次进入
     /// 详情页立刻退回冷骨架屏，SWR 的收益变成随机的。现在只淘汰最旧的。
     func testDetailSnapshotEvictionKeepsTheJustStoredEntry() {

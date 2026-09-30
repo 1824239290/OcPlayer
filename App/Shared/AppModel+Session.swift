@@ -146,10 +146,13 @@ extension AppModel {
         playback?.stopPlayback()
     }
 
-    /// 清空随旧会话走的浏览数据与会话任务（媒体库 / 首页 / 导航栈）。
+    /// 清空随旧会话走的浏览数据与会话任务（媒体库 / 首页 / 导航栈 / 快照 / 氛围）。
     /// 服务器数据按 profile 隔离，条目 id 只在原服务器里有意义，不能跨会话复用。
     /// 播放侧的清理由调用方按需配 `stopPlaybackForSessionChange()`。
     /// signOut 曾有第二份几乎相同的手工清单，两处已各自漂移——现在只有这一份。
+    ///
+    /// **这里是唯一的会话边界**：凡是"只对当前服务器成立"的状态都必须列在里面，
+    /// 否则就会出现「401 之后还拿着旧 server / 旧快照 / 旧氛围图」这类僵尸会话。
     func resetBrowseState() {
         initialDataTask?.cancel()
         initialDataTask = nil
@@ -167,6 +170,15 @@ extension AppModel {
         // 可能撞 id，留着会让新会话的详情页显示旧服务器的剧集。快照连同它的
         // 最近使用顺序表一起清。
         clearDetailSnapshots()
+        // 氛围图的 URL 里带着**旧服务器的 authHeader**：不清掉，新会话首屏会拿
+        // 旧凭据去请求图片（既拿不到图，也把旧凭据用在了新会话上）。
+        windowAmbience = nil
+        homeAmbience = nil
+        pendingMoviePilotQuery = nil
+        // 在飞的「淡出 → 落地」闭包属于旧会话，代次自增使其作废（见 beginRouteExit）。
+        invalidatePendingRouteExit()
+        isLocalFileImporterPresented = false
+        isDirectLinkSheetPresented = false
         clearNavigationStacks()
         presentedPlayer = nil
         selectedSection = .home
@@ -237,9 +249,16 @@ extension AppModel {
     }
 
     /// 未连接状态下首页的「去连接」：回登录流程。
+    ///
+    /// **必须走完整重置**（此前只清 path/navPaths/section + phase）：401 路径经
+    /// `handleAuthenticationRequired` → 这里，而磁盘 token 已被 `store.signOut` 删掉、
+    /// 内存里的 `server` 实例却还持着旧 token。只清导航的话，用户点「先不登录」进
+    /// `.ready` 后，首页会因为 `app.server != nil` 直接渲染**旧服务器的数据**，随即
+    /// 被下一个请求的 401 再拉回登录页——等于进不去「本地播放」。注释曾自称与
+    /// `switchToServer` 的死 token 分支同口径，而那条路一直调的是 `resetBrowseState`，
+    /// 两条路行为并不一致；现在统一。
     func reconnectFlow() {
-        clearNavigationStacks()
-        selectedSection = .home
+        resetBrowseState()
         resetOnboarding()
         phase = .onboarding
     }
