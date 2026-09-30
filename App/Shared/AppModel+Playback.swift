@@ -494,12 +494,19 @@ extension AppModel {
             BangumiDiagnostics.log("播放结束未标记：条目未关联 jellyfin=\(desc)")
             return
         }
+        // 会话代次快照：这里是**唯一**没有守卫的异步写（对照 startReporting /
+        // resolveNextEpisode 都带 generation）。不加的话，换服务器 / 登出之后这条
+        // 迟到的任务仍会往**旧服务器**的 Bangumi 条目上 PATCH「看过」——用户看到的
+        // 是"没播过的番莫名其妙被标了"。每个 await 之后都要重新确认。
+        let generation = sessionGeneration
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 // 关联过但从没打开过详情页时本地是空的，先补齐再匹配。
                 try await self.bangumi.context.ensureSubjectLoaded(subjectID)
+                guard generation == self.sessionGeneration else { return }
                 let episodes = try await self.bangumi.context.fetchEpisodes(subjectId: subjectID)
+                guard generation == self.sessionGeneration else { return }
                 // 精确匹配主篇集号。sort 是 Float（特典可能是 12.5），只认整数集号相等的，
                 // 匹配不上就不动——宁可不标，也不要标错集。
                 let targetSort = Float(episodeNumber)
@@ -525,6 +532,7 @@ extension AppModel {
                 let episodeID = episode.id
                 BangumiDiagnostics.log(
                     "播放结束已标记 Bangumi subject=\(subjectID) episode=\(episodeID)")
+                guard generation == self.sessionGeneration else { return }
                 // 服务端对条目状态的连带推进（看完最后一集 → 在看变看过）本地猜不了，
                 // 回读对齐并让进度页列表/计数立刻刷新。
                 await self.bangumi.context.refreshSubjectAfterProgressChange(subjectID)
