@@ -21,9 +21,19 @@ import AppKit
 /// 窗口根本不会被创建（AppKit 把它当一次打不开的「打开文档」请求，进程活着但空转）。
 /// 平常双击运行时这些变量都不存在，行为与没有这段代码完全一致。
 ///
-/// 🔒 任意一个 `OCPLAYER_SELFTEST_*` 触发都必须同时设置 `OCPLAYER_SELFTEST_TOKEN` 且与
-/// 内置 `expectedToken` 常量相等；不等则静默按「无自检」处理，避免外部环境变量意外启用。
+/// 🔒 **整条通道只在 `OCPLAYER_SELFTEST` 编译条件下存在**（Debug 配置定义它，
+/// Release 不定义）。此前它无条件编进 Release，而这条通道能做两件危险的事：
+/// 按 `OCPLAYER_SELFTEST_LOG` 向任意可写路径追加内容、跑完 `exit(0)`。同用户的
+/// 任何进程都能用 `launchctl setenv` 给 GUI 应用铺环境变量，于是「用户下次从
+/// Finder 打开 App」就可能变成「5 秒后自己退出」。内置 token 硬编码在开源源码里，
+/// 只能防误触发，防不住有意为之——所以正确的边界是**不分发这段代码**，
+/// 而不是指望 token。
+///
+/// 需要验证 Release 构建的显示链时，给该配置临时加上 `OCPLAYER_SELFTEST`
+/// 编译条件即可（`SWIFT_ACTIVE_COMPILATION_CONDITIONS`），不必改代码。
 enum LaunchOptions {
+
+#if OCPLAYER_SELFTEST
 
     /// 公开源码后仍能跑自检的内部口令。改 token 等同吊销旧脚本的资格。
     /// （Swift 源码内联——不是用来对攻击者保密的，是防止误触发 + 给脚本一个能改的钩子。）
@@ -155,4 +165,27 @@ enum LaunchOptions {
         window.setContentSize(NSSize(width: 900, height: 700))
         #endif
     }
+
+#else
+
+    // MARK: - Release：整条通道惰性化
+    //
+    // 保持与上面**完全相同的 API**，让调用点（AppModel.init / RootView.task）一行都不用改，
+    // 同时保证 Release 里：
+    //   - 不读任何环境变量（外部无从影响启动行为）；
+    //   - 不向任何路径写文件；
+    //   - 不存在 exit(0) 路径。
+    // 编译器会把这里的空实现优化掉，Release 产物里不再有这套机器。
+
+    static var initialSection: AppModel.Section? { nil }
+
+    static var sectionSwitchSeconds: Double? { nil }
+
+    @MainActor
+    static func run(
+        with controller: PlaybackController,
+        presentPlayer: (@MainActor (URL) -> Void)? = nil
+    ) async {}
+
+#endif
 }
