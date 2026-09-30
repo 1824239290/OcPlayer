@@ -68,4 +68,53 @@ final class DiagnosticRedactorTests: XCTestCase {
         XCTAssertEqual(redacted["password"], .string("<redacted>"))
         XCTAssertEqual(redacted["user_name"], .string("ok"))
     }
+
+    /// 回归：`sensitiveAssignment` 曾要求 key 后**紧跟** `\s*[:=]`，于是 JSON 形态
+    /// （`"key":"value"`，分隔符前隔着 key 的收尾引号）整类漏网，凭据原文落盘。
+    /// 触发面是真实存在的：`BangumiError.description` 对 4xx 直接回原始响应体，
+    /// 而错误文本会以 `\(error)` 插进日志消息，再随诊断包发给别人。
+    func testRedactsJSONWrappedCredentials() {
+        let cases: [(input: String, secret: String)] = [
+            (#"{"api_key":"sk-live-abc123"}"#, "sk-live-abc123"),
+            (#"{"access_token":"abcdef123456ghijkl"}"#, "abcdef123456ghijkl"),
+            (#"{"refresh_token":"rt-9f8e7d6c5b4a"}"#, "rt-9f8e7d6c5b4a"),
+            (#"播放失败 error=HTTP 400: {"AccessToken":"zzz999"}"#, "zzz999"),
+            (#"{"token": "sekret-value"}"#, "sekret-value"),
+            (#"{"client_secret":"cs-abcdef123456"}"#, "cs-abcdef123456"),
+            (#"{"password":"hunter2"}"#, "hunter2"),
+            (#"headers=["X-Emby-Token": "abc123secret"]"#, "abc123secret"),
+            (#"headers=["X-Api-Key": "xyz789key"]"#, "xyz789key"),
+        ]
+        for (input, secret) in cases {
+            let output = DiagnosticRedactor.redact(input)
+            XCTAssertFalse(output.contains(secret), "JSON 形态凭据漏网：\(input) → \(output)")
+            XCTAssertTrue(output.contains("<redacted>"), "没打脱敏标记：\(input) → \(output)")
+        }
+    }
+
+    /// 反向用例：脱敏不能把正常日志吃掉——Jellyfin 的 `/Users/{id}/Items` 路由、
+    /// 普通字段名与裸数字都不该变成 `<redacted>`。
+    func testKeepsOrdinaryJSONFieldsIntact() {
+        for input in [
+            #"{"Name":"败犬女主太多了","Type":"Series"}"#,
+            #"{"tokenCount":12}"#,
+            #"{"apiVersion":"10.9.0"}"#,
+        ] {
+            let output = DiagnosticRedactor.redact(input)
+            XCTAssertEqual(output, input, "不该误伤：\(input) → \(output)")
+        }
+    }
+
+    /// `isSensitiveKey` 走的是结构化字段那条路（可靠路径）：带前缀的头名也要命中，
+    /// 否则各包把 `X-Emby-Token` 当字段名时会漏。
+    func testRedactsPrefixedHeaderFieldKeys() {
+        let redacted = DiagnosticRedactor.redact([
+            "X-Emby-Token": .string("abc123secret"),
+            "X-Api-Key": .string("xyz789key"),
+            "api_key": .string("sk-live-abc123"),
+        ])
+        XCTAssertEqual(redacted["X-Emby-Token"], .string("<redacted>"))
+        XCTAssertEqual(redacted["X-Api-Key"], .string("<redacted>"))
+        XCTAssertEqual(redacted["api_key"], .string("<redacted>"))
+    }
 }

@@ -8,7 +8,8 @@ enum DiagnosticRedactor {
         result = replace(result, using: patterns.appContainerPath, with: "<app-container-path>")
         result = redactURLs(result)
         result = replace(result, using: patterns.authorization, with: "$1 <redacted>")
-        result = replace(result, using: patterns.sensitiveAssignment, with: "$1$2<redacted>")
+        // $1..$4 = 开引号 / key / 闭引号 / 分隔符；只换值，保留周边形态。
+        result = replace(result, using: patterns.sensitiveAssignment, with: "$1$2$3$4<redacted>")
         result = replace(result, using: patterns.jwt, with: "<redacted-token>")
         return result
     }
@@ -100,8 +101,20 @@ private final class SensitivePatterns: @unchecked Sendable {
         options: [.caseInsensitive])
     let authorization = try! NSRegularExpression(
         pattern: #"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+"#)
+    /// key 两侧可能是引号（JSON：`{"api_key":"…"}`、头字典：`["X-Emby-Token": "…"]`），
+    /// 所以 key 与分隔符**两侧都要允许引号**。
+    ///
+    /// 早期版本要求 key 后紧跟 `\s*[:=]\s*`，于是**所有 JSON 形态的凭据都原样落盘**：
+    /// 分隔符前面隔着 key 的收尾引号，正则必然不匹配。这不是理论缺口——`BangumiError
+    /// .description` 对 4xx 直接回原始响应体，而错误文本会被插进日志消息（`\(error)`），
+    /// 所以服务端只要在错误体里回显请求 JSON，凭据就原文进 `diagnostics.jsonl`，
+    /// 再原文进用户附件到公开 issue 的导出包。
+    ///
+    /// 关键词补了 `accesstoken` / `x-emby-token` / `x-api-key` / `api-key` / `apikey` /
+    /// `client_secret`：Emby 用 `X-Emby-Token` 头，OAuth 用 `client_secret`，都不含
+    /// 裸 `token` 之外的既有关键词形态。
     let sensitiveAssignment = try! NSRegularExpression(
-        pattern: #"(?i)\b(access[_-]?token|refresh[_-]?token|token|authorization|password|passwd|secret|api[_-]?key|cookie|set-cookie)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,\s;&]+)"#)
+        pattern: #"(?i)("|')?\b(access[_-]?token|refresh[_-]?token|accesstoken|token|authorization|password|passwd|secret|api[_-]?key|apikey|api-key|x-emby-token|x-api-key|client[_-]?secret|cookie|set-cookie)\b("|')?(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,\s;&}\]]+)"#)
     let jwt = try! NSRegularExpression(pattern: #"\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b"#)
 
     func isSensitiveKey(_ key: String) -> Bool {
@@ -111,6 +124,9 @@ private final class SensitivePatterns: @unchecked Sendable {
                 "credentials", "private_key", "client_secret"].contains(normalized)
             || normalized.contains("token") || normalized.contains("password")
             || normalized.contains("secret") || normalized.contains("authorization")
+            // `x_api_key` / `x_emby_token` 这类带前缀的头名：前缀让上面的等值比较
+            // 失效，而它们既不含 "token" 也不含 "secret"，必须显式补。
+            || normalized.contains("api_key") || normalized.contains("apikey")
     }
 }
 
