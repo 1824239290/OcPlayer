@@ -3,11 +3,22 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# 内核版本唯一事实源：Config/Erika.version（见该文件注释）。
+# 环境变量 ERIKA_VERSION 仍可覆盖，用于临时试版本。
+erika_version_from_config() {
+    local file="$ROOT/Config/Erika.version"
+    [[ -f "$file" ]] || { echo "✗ 缺少 $file（内核版本唯一事实源）" >&2; exit 3; }
+    local value
+    value="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' "$file")"
+    [[ -n "$value" ]] || { echo "✗ $file 里没有 ERIKA_VERSION=" >&2; exit 3; }
+    printf '%s\n' "$value"
+}
 PROJECT="$ROOT/OcPlayer.xcodeproj"
 SCHEME="OcPlayer-macOS"
 BUILD_DIR="$ROOT/.local-build/current"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
-export ERIKA_VERSION="${ERIKA_VERSION:-v0.2.0}"
+export ERIKA_VERSION="${ERIKA_VERSION:-$(erika_version_from_config)}"
 
 usage() {
     echo "Usage: Scripts/build-macos.sh [debug|release]" >&2

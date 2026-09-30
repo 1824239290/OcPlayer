@@ -1,0 +1,13 @@
+# Erika 内核版本钉点 —— 唯一事实源。
+#
+# 改这里就够了：三个构建/打包脚本（build-macos.sh / package-macos.sh /
+# package-ios.sh）source 本文件，CI 的三个 job 也从这里读。
+#
+# 背景：这个值此前硬编码在 6 处（3 个脚本 + test.yml + release.yml 两处），而
+# release.yml 的注释明确依赖「release 产物构建在测试过的内核上」——那只在六处
+# 同时改对时成立，改漏一处就是「发出去的包换了个内核，而门禁没测过它」。
+#
+# 切版本时**必须**同时在 Scripts/erika-<tag>.sha256 存入该 tag 的官方 sha256：
+# fetch-erika.sh 在 pin 缺失时默认直接失败（见该脚本的 ERIKA_REQUIRE_PIN），
+# 不再静默退化成「HTTPS + 是个合法 zip」。
+ERIKA_VERSION=v0.2.0

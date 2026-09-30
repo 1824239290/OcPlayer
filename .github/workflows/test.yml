@@ -17,12 +17,22 @@ jobs:
     name: macOS + iOS tests (AppTests + SwiftPM packages)
     runs-on: macos-26
     timeout-minutes: 60
-    env:
-      ERIKA_VERSION: v0.2.0
-
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
 
       - name: Set up Erika kernel
         uses: ./.github/actions/setup-erika

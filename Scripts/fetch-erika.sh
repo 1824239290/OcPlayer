@@ -87,10 +87,22 @@ IOS_MANIFEST="$WORK/$IOS_PKG/MANIFEST.txt"
 VERSION_MARKER="$OUT/.erika-version"
 # 与 tag 同名的 sha256 文件用于固定 release 资产；latest 指向未来版本时
 # 无法预先入库对应哈希，因此每次使用都明确提示当前校验边界。
+#
+# **默认 fail-closed**：pin 缺失即失败，而不是打条警告继续。此前是「警告 +
+# 跳过哈希校验」，于是新增一个 ERIKA_VERSION 而忘记入库 pin 时，供应链校验会
+# 静默退化成「HTTPS 下载 + 是个合法 zip」——没有 sha256 就等于没有钉点。
+# 确实要评估一个未固定的新版本时，显式 `ERIKA_ALLOW_UNPINNED=1`。
 PINNED="$ROOT/Scripts/erika-$TAG.sha256"
 if [[ ! -f "$PINNED" ]]; then
-  echo "⚠ Erika $TAG 没有仓库内固定哈希；本次仅校验 HTTPS 下载与 zip 完整性" >&2
-  echo "  固定方法：从 Release 资产下载 sha256，审核后存为 Scripts/erika-$TAG.sha256" >&2
+  if [[ "${ERIKA_ALLOW_UNPINNED:-0}" == "1" ]]; then
+    echo "⚠ Erika $TAG 没有仓库内固定哈希；ERIKA_ALLOW_UNPINNED=1 已显式放行，" >&2
+    echo "  本次仅校验 HTTPS 下载与 zip 完整性。" >&2
+  else
+    echo "✗ Erika $TAG 缺少仓库内固定哈希，拒绝继续（供应链校验不能静默退化）。" >&2
+    echo "  固定方法：从 Release 资产取 sha256，审核后存为 Scripts/erika-$TAG.sha256。" >&2
+    echo "  仅评估新版本时可显式放行：ERIKA_ALLOW_UNPINNED=1 Scripts/fetch-erika.sh $TAG" >&2
+    exit 3
+  fi
 fi
 
 # 部分 release（如手工打包的 dolby fork）只附 macOS arm64，没有 iOS 资产。

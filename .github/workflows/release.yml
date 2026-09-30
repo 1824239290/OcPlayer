@@ -26,11 +26,40 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     env:
-      ERIKA_VERSION: v0.2.0
-
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 门禁必须测**要发布的那个 commit**：此前这里只 checkout 默认 ref（分支
+      # HEAD），而打包 job checkout 的是 tag。内核版本从 Config/Erika.version 读之后
+      # 这个差异会变成实质风险——HEAD 与 tag 的钉点一旦不同，就会「测的内核 ≠ 发的
+      # 内核」，正是本文件注释要防的那件事。
+      - name: Check out release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
+            exit 2
+          fi
+          git checkout "$RELEASE_TAG"
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
 
       - name: Set up Erika kernel
         uses: ./.github/actions/setup-erika
@@ -58,6 +87,29 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS' \
             -derivedDataPath .local-build/ci-release-test \
+            test
+
+      # 与 test.yml 对齐：发版门禁此前只跑 macOS，iOS 测试 target 在
+      # workflow_dispatch（直接打 tag 发版）这条路径上**从未跑过**——于是发版门禁
+      # 比 PR 门禁还弱，而 iOS 恰恰是 0.2.0 出过导航死按钮的那一端。机型用 simctl
+      # 动态取，不写死。
+      - name: Run App tests (iOS simulator)
+        shell: bash
+        run: |
+          set -euo pipefail
+          device="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].name')"
+          if [[ -z "$device" || "$device" == "null" ]]; then
+            echo "No iPhone simulator available on this runner" >&2
+            exit 1
+          fi
+          echo "==> iOS simulator: $device"
+          xcodebuild \
+            -project OcPlayer.xcodeproj \
+            -scheme OcPlayer-iOS \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=$device" \
+            -derivedDataPath .local-build/ci-release-test-ios \
             test
 
       - name: Run SwiftPM package tests
@@ -89,8 +141,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      # 与 test.yml 保持同一内核来源：release 产物必须构建在测试过的内核上。
-      ERIKA_VERSION: v0.2.0
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
@@ -125,6 +175,19 @@ jobs:
             echo "OcPlayer requires the macOS 26 SDK; runner has $sdk_version" >&2
             exit 1
           fi
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
 
       - name: Set up Erika kernel
         uses: ./.github/actions/setup-erika
@@ -183,9 +246,6 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     env:
-      # 与 test.yml 保持同一内核来源：release 产物必须构建在测试过的内核上。
-      # 官方 release 附全平台资产（含 iOS），iOS 与 macOS 用同一内核。
-      ERIKA_VERSION: v0.2.0
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
@@ -216,6 +276,19 @@ jobs:
             echo "OcPlayer requires the iOS 26 SDK; runner has $sdk_version" >&2
             exit 1
           fi
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
 
       - name: Set up Erika kernel
         uses: ./.github/actions/setup-erika

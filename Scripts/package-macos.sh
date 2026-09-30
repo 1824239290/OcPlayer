@@ -3,6 +3,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# 内核版本唯一事实源：Config/Erika.version（见该文件注释）。
+# 环境变量 ERIKA_VERSION 仍可覆盖，用于临时试版本。
+erika_version_from_config() {
+    local file="$ROOT/Config/Erika.version"
+    [[ -f "$file" ]] || { echo "✗ 缺少 $file（内核版本唯一事实源）" >&2; exit 3; }
+    local value
+    value="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' "$file")"
+    [[ -n "$value" ]] || { echo "✗ $file 里没有 ERIKA_VERSION=" >&2; exit 3; }
+    printf '%s\n' "$value"
+}
 # 不带参数时从 App.xcconfig 读版本号（唯一事实源），避免脚本里再硬编码一份漂移。
 XCCONFIG_VERSION="$(sed -n 's/^MARKETING_VERSION *= *//p' "$ROOT/Config/App.xcconfig" | head -1 | tr -d '[:space:]')"
 
@@ -27,7 +38,7 @@ else
     RELEASE_TAG="$1"
 fi
 
-ERIKA_VERSION="${ERIKA_VERSION:-v0.2.0}"
+ERIKA_VERSION="${ERIKA_VERSION:-$(erika_version_from_config)}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.local-build/release}"
 DIST_DIR="${DIST_DIR:-$ROOT/dist}"
 APP_NAME="OcPlayer"
