@@ -151,10 +151,10 @@ struct MoviePilotHomeView: View {
             if allowsRelogin {
                 Button("重新登录") { isPresentingReloginSheet = true }
                     .buttonStyle(.borderedProminent)
-                Button("去设置") { app.selectedSection = .settings }
+                Button("去设置") { app.switchSection(.settings) }
                     .buttonStyle(.bordered)
             } else {
-                Button("去设置") { app.selectedSection = .settings }
+                Button("去设置") { app.switchSection(.settings) }
                     .buttonStyle(.borderedProminent)
             }
         }

@@ -299,7 +299,7 @@ struct BangumiSubjectDetailView: View {
             let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
             if !query.isEmpty {
                 app.pendingMoviePilotQuery = query
-                app.selectedSection = .moviepilot
+                app.switchSection(.moviepilot)
             }
         } label: {
             Label("MoviePilot下载", systemImage: "arrow.down.circle")

@@ -163,8 +163,7 @@ extension AppModel {
         librariesError = nil
         libraryPages = [:]
         home = HomeData()
-        path = []
-        navPaths = NavigationPaths()
+        clearNavigationStacks()
         presentedPlayer = nil
         selectedSection = .home
     }
@@ -235,8 +234,7 @@ extension AppModel {
 
     /// 未连接状态下首页的「去连接」：回登录流程。
     func reconnectFlow() {
-        path = []
-        navPaths = NavigationPaths()
+        clearNavigationStacks()
         selectedSection = .home
         resetOnboarding()
         phase = .onboarding

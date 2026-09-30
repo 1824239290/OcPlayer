@@ -419,7 +419,7 @@ struct BangumiHomeView: View {
                 ProgressView().controlSize(.small)
             }
             Button {
-                app.path.append(.bangumiCalendar)
+                app.openBangumiCalendar()
             } label: {
                 Image(systemName: "calendar")
             }
@@ -441,7 +441,7 @@ struct BangumiHomeView: View {
             .accessibilityValue(sortOption.title)
 
             Button {
-                app.path.append(.bangumiProfile)
+                app.openBangumiProfile()
             } label: {
                 Image(systemName: "person.crop.circle")
             }

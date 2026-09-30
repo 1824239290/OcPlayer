@@ -106,23 +106,25 @@ struct AppShellView: View {
     /// 跟着整栈淡入，短暂盖住常驻的背景。
     private var detailColumn: some View {
         // pop 拦截：系统返回键 / 手势都是把变短的 path 写回 binding——先不落地，
-        // 让当前页走与 push 对称的两段式（淡出 → 再出现上一层，见
-        // AppModel.beginRouteExit），返回不再是硬切。
-        let path = Binding(
+        // 让当前页走与 push 对称的两段式（淡出 → 再出现上一层）。拦截逻辑收在
+        // `AppModel.handleStackPathChange`，栈的写入口只有模型那一个。
+        NavigationStack(path: Binding(
             get: { app.path },
-            set: { newValue in
-                if newValue.count < app.path.count {
-                    app.beginRouteExit { app.path = newValue }
-                } else {
-                    app.path = newValue
-                }
-            }
-        )
-        return NavigationStack(path: path) {
+            set: { app.handleStackPathChange($0) }
+        )) {
             sectionContent
                 .appRoutes()
                 .appShellChrome()
         }
+    }
+
+    /// 某个 Tab 的独立栈 binding。写入口同样收在 AppModel（`navPaths` 是
+    /// `private(set)`），视图只拿 binding、拿不到数组。
+    private func navPathBinding(_ section: AppModel.Section) -> Binding<[AppModel.Route]> {
+        Binding(
+            get: { app.navPath(for: section) },
+            set: { app.setNavPath($0, for: section) }
+        )
     }
 
     #if !os(macOS)
@@ -136,9 +138,8 @@ struct AppShellView: View {
     /// sheet——播放器覆盖层不再被遮住。
     @TabContentBuilder<AppModel.Section>
     private var compactTabs: some TabContent<AppModel.Section> {
-        @Bindable var app = app
         Tab("首页", systemImage: "house.fill", value: AppModel.Section.home) {
-            NavigationStack(path: $app.navPaths.home) {
+            NavigationStack(path: navPathBinding(.home)) {
                 HomeView()
                     .appRoutes()
                     // iOS 的 UIKit 宿主不透明，AppShell 根节点垫的整窗层到不了
@@ -155,7 +156,7 @@ struct AppShellView: View {
 
         if bangumiEnabled {
             Tab("Bangumi", image: "bangumi-logo", value: AppModel.Section.bangumi) {
-                NavigationStack(path: $app.navPaths.bangumi) {
+                NavigationStack(path: navPathBinding(.bangumi)) {
                     BangumiHomeView()
                         .appRoutes()
                         // 与首页同一张轮播图（Carousel 声明到 homeAmbience）：跨 Tab
@@ -174,7 +175,7 @@ struct AppShellView: View {
 
         if moviepilotEnabled {
             Tab("MoviePilot", image: "moviepilot-logo", value: AppModel.Section.moviepilot) {
-                NavigationStack(path: $app.navPaths.moviepilot) {
+                NavigationStack(path: navPathBinding(.moviepilot)) {
                     MoviePilotHomeView()
                         .appRoutes()
                         .background {
@@ -189,7 +190,7 @@ struct AppShellView: View {
         }
 
         Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
-            NavigationStack(path: $app.navPaths.settings) {
+            NavigationStack(path: navPathBinding(.settings)) {
                 SettingsView()
                     .appRoutes()
                     .background {
@@ -203,7 +204,7 @@ struct AppShellView: View {
         }
 
         Tab("搜索", systemImage: "magnifyingglass", value: AppModel.Section.search, role: .search) {
-            NavigationStack(path: $app.navPaths.search) {
+            NavigationStack(path: navPathBinding(.search)) {
                 HomeSearchView()
                     .appRoutes()
             }
@@ -211,7 +212,6 @@ struct AppShellView: View {
     }
 
     private var compactLayout: some View {
-        @Bindable var app = app
         return TabView(selection: Binding(
             get: { app.selectedSection },
             set: { newSection in

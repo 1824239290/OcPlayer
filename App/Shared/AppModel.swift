@@ -223,13 +223,58 @@ final class AppModel {
         }
     }
 
-    /// Mac / iPad 的共享 push 栈。紧凑布局不用它（各 Tab 独立栈，见 `navPaths`）。
-    var path: [Route] = []
+    /// Mac / iPad 的共享 push 栈。**外部只读**：写入口只有 `push` / `back` /
+    /// `handleStackPathChange` 三个。
+    ///
+    /// 这里踩过坑：`path` 与 `navPaths` 是两个真源（常规布局用前者、compact 各 Tab
+    /// 用后者），而 `push()` 会按 `isCompact` 分派到正确的那个。视图一旦绕过
+    /// `push()` 直接 `app.path.append(...)`，在 iOS 上就是**点了没反应**——`path`
+    /// 在 compact 布局下只被写、从不被读（Bangumi 的「每日放送 / 个人主页 / 收藏
+    /// 列表」三个入口就是这么坏的）。`private(set)` 把这类错误从"运行时静默失效"
+    /// 变成"编译期报错"。
+    private(set) var path: [Route] = []
 
     /// iPhone 各 Tab 独立的导航路径——每个 Tab 一个栈，互不串。
     /// 之前 iPhone 走 `.sheet` 弹详情是因为多 Tab 共享一个 `path` 会互相踩；
     /// 现在分栈后详情页走 push，播放器覆盖层不再被 sheet 遮住。
-    var navPaths = NavigationPaths()
+    /// 同样 **外部只读**，视图经 `navPath(for:)` 取 binding。
+    private(set) var navPaths = NavigationPaths()
+
+    /// 某个 Tab 的独立栈（compact 布局的 `NavigationStack` 绑定读取侧）。
+    func navPath(for section: Section) -> [Route] {
+        switch section {
+        case .home: navPaths.home
+        case .bangumi: navPaths.bangumi
+        case .moviepilot: navPaths.moviepilot
+        case .settings: navPaths.settings
+        case .search: navPaths.search
+        }
+    }
+
+    /// 某个 Tab 的独立栈（系统 push / pop 写回 binding 的入口）。
+    func setNavPath(_ newValue: [Route], for section: Section) {
+        switch section {
+        case .home: navPaths.home = newValue
+        case .bangumi: navPaths.bangumi = newValue
+        case .moviepilot: navPaths.moviepilot = newValue
+        case .settings: navPaths.settings = newValue
+        case .search: navPaths.search = newValue
+        }
+    }
+
+    /// 常规布局共享栈的写回入口：系统返回键 / 边缘滑动手势都会把**变短的** path
+    /// 写回 binding。这里统一拦成与 push 对称的两段式（淡出 → 弹栈 → 落点淡入），
+    /// 变长（程序化 push）直接落地。
+    ///
+    /// 收进模型而不是留在视图的 Binding setter 里：栈的写入口只要多于一个，
+    /// 就一定会漂（见 `path` 的注释）。
+    func handleStackPathChange(_ newValue: [Route]) {
+        guard newValue.count < path.count else {
+            path = newValue
+            return
+        }
+        beginRouteExit { [weak self] in self?.path = newValue }
+    }
 
     /// 播放覆盖层：非 nil 时播放器盖住整个 App（双端同一套，见 RootView）。
     var presentedPlayer: PlaybackRequest? {
@@ -270,6 +315,13 @@ final class AppModel {
     /// 换页请求被忽略（防连点）；AppShell 的 `RouteExitFader` 读它画淡出，
     /// 落地后的回弹淡入就是落点页的入场。
     var routeExiting = false
+
+    /// 清空全部导航栈（`path` 与 `navPaths` 是 `private(set)`，写入口集中在本文件）。
+    /// 会话边界（登出 / 换服 / 401）用。
+    func clearNavigationStacks() {
+        path = []
+        navPaths = NavigationPaths()
+    }
 
     /// `accessibilityReduceMotion` 的副本（AppShell 注入）：开启时换页直切，
     /// 不做淡出等待。
@@ -385,6 +437,22 @@ final class AppModel {
         push(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
     }
 
+    /// Bangumi 个人主页。**必须走 push**（不能由视图直接改栈）：compact 布局下
+    /// 栈是 `navPaths.<tab>`，写 `path` 等于点了没反应。
+    func openBangumiProfile() {
+        push(.bangumiProfile)
+    }
+
+    /// Bangumi 每日放送日历。同上。
+    func openBangumiCalendar() {
+        push(.bangumiCalendar)
+    }
+
+    /// Bangumi 某个收藏类型的完整列表。同上。
+    func openBangumiCollectionList(_ subjectType: BangumiSubjectType) {
+        push(.bangumiCollectionList(subjectType))
+    }
+
     /// 程序化呈现（`navigationDestination(isPresented:)` / view-destination 页面）
     /// 与 push 共用同一套两段式。
     func pushPresented(_ present: @escaping @MainActor () -> Void) {
@@ -456,24 +524,8 @@ final class AppModel {
 
     /// iOS 端当前选中 Tab 对应的导航路径数组。
     private var compactPath: [Route] {
-        get {
-            switch selectedSection {
-            case .home: navPaths.home
-            case .bangumi: navPaths.bangumi
-            case .moviepilot: navPaths.moviepilot
-            case .settings: navPaths.settings
-            case .search: navPaths.search
-            }
-        }
-        set {
-            switch selectedSection {
-            case .home: navPaths.home = newValue
-            case .bangumi: navPaths.bangumi = newValue
-            case .moviepilot: navPaths.moviepilot = newValue
-            case .settings: navPaths.settings = newValue
-            case .search: navPaths.search = newValue
-            }
-        }
+        get { navPath(for: selectedSection) }
+        set { setNavPath(newValue, for: selectedSection) }
     }
 
     /// 首页的续播条目通常是 Episode；详情入口应落到所属电视剧，而不是单集。

@@ -7,14 +7,14 @@ final class AppModelLifecycleTests: XCTestCase {
     func testSignOutClearsNavPathsAndPlayerSession() {
         let app = AppModel()
         app.phase = .ready
-        app.navPaths.home = [.detail(MediaItem(id: "series-1", name: "测试剧", kind: .series))]
+        app.setNavPath([.detail(MediaItem(id: "series-1", name: "测试剧", kind: .series))], for: .home)
         app.presentedPlayer = PlaybackRequest(title: "ep", uri: "/tmp/a.mkv")
         app.playbackPreparation = .loading(title: "ep")
-        app.path = [.detail(MediaItem(id: "m1", name: "电影", kind: .movie))]
+        app.handleStackPathChange([.detail(MediaItem(id: "m1", name: "电影", kind: .movie))])
 
         app.signOut()
 
-        XCTAssertTrue(app.navPaths.home.isEmpty)
+        XCTAssertTrue(app.navPath(for: .home).isEmpty)
         XCTAssertNil(app.presentedPlayer)
         XCTAssertNil(app.playbackPreparation)
         XCTAssertTrue(app.path.isEmpty)
@@ -25,12 +25,12 @@ final class AppModelLifecycleTests: XCTestCase {
     func testReconnectFlowClearsNavPaths() {
         let app = AppModel()
         app.phase = .ready
-        app.navPaths.bangumi = [.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))]
-        app.path = [.detail(MediaItem(id: "m2", name: "电影2", kind: .movie))]
+        app.setNavPath([.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))], for: .bangumi)
+        app.handleStackPathChange([.detail(MediaItem(id: "m2", name: "电影2", kind: .movie))])
 
         app.reconnectFlow()
 
-        XCTAssertTrue(app.navPaths.bangumi.isEmpty)
+        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
         XCTAssertTrue(app.path.isEmpty)
         XCTAssertEqual(app.phase, .onboarding)
         XCTAssertEqual(app.selectedSection, .home)

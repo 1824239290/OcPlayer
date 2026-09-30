@@ -90,7 +90,7 @@ private struct CollectionSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                app.path.append(.bangumiCollectionList(subjectType))
+                app.openBangumiCollectionList(subjectType)
             } label: {
                 HStack {
                     Text("我的\(subjectType.description)")
