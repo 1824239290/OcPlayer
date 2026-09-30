@@ -15,9 +15,18 @@ final class MediaInfoLabelTests: XCTestCase {
         XCTAssertNil(MediaInfoLabel.bitrate(-1))
     }
 
+    /// `ByteCountFormatter` 会按当前格式化区域挑「数字与单位之间」的分隔符：同一个
+    /// 字符串在不同系统/语言下可能是普通空格、U+00A0 或 U+202F，肉眼完全一样。
+    /// 断言直接比字面量会在特定区域设置下失败（本机 macOS 26 + zh-Hans 实测如此，
+    /// 与 `ByteCountFormatter` 的输出字符有关，与代码逻辑无关）。比较前把所有
+    /// Unicode 空白归一成普通空格，只钉「数字 + 单位」这个真正有语义的部分。
+    private func normalized(_ value: String?) -> String? {
+        value?.map { $0.isWhitespace ? " " : String($0) }.joined()
+    }
+
     func testSize() {
-        XCTAssertEqual(MediaInfoLabel.size(12_345_678_900), "12.35 GB")
-        XCTAssertEqual(MediaInfoLabel.size(1_073_741_824), "1.07 GB")
+        XCTAssertEqual(normalized(MediaInfoLabel.size(12_345_678_900)), "12.35 GB")
+        XCTAssertEqual(normalized(MediaInfoLabel.size(1_073_741_824)), "1.07 GB")
         XCTAssertNil(MediaInfoLabel.size(nil))
         XCTAssertNil(MediaInfoLabel.size(0))
     }
