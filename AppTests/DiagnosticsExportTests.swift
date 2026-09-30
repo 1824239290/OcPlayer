@@ -53,6 +53,50 @@ final class DiagnosticsExportTests: XCTestCase {
         XCTAssertTrue(text.contains("?<redacted>"), "URL query 应替换为占位符")
     }
 
+    /// 内核 trace 无大小上限也没有轮转（播放 trace 实测约 120 KB/s，1 小时 ~430MB）。
+    /// 导出只取尾部，且**必须按行对齐**——否则第一行会是被切一半的记录。
+    func testExportTruncatesOversizedKernelTrace() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("diag-export-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let traceURL = directory.appendingPathComponent(KernelTraceSwitches.traceFileNames[0])
+        // 每行都是完整记录；只有最后几行应进入导出。
+        let lines = (1...400).map { "[erika-playback-trace] seq=\($0) payload=\(String(repeating: "x", count: 40))" }
+        try (lines.joined(separator: "\n") + "\n").write(to: traceURL, atomically: true, encoding: .utf8)
+
+        // 用小上限，避免在测试里造 4MB 文件。
+        let text = try DiagnosticsExport.makeText(directory: directory, traceTailBytes: 512)
+
+        XCTAssertTrue(text.contains("已截断"), "截断要在头部明确标注，别让读者以为拿到了全量")
+        XCTAssertTrue(text.contains("seq=400"), "尾部最新记录必须在")
+        XCTAssertFalse(text.contains("seq=1 "), "最老的记录应被切掉")
+
+        let tail = try XCTUnwrap(text.components(separatedBy: "# 内核 trace：").last)
+        let traceLines = tail.split(separator: "\n").dropFirst()   // 首行是标题
+        XCTAssertFalse(traceLines.isEmpty)
+        XCTAssertTrue(
+            traceLines.allSatisfy { $0.hasPrefix("[erika-playback-trace] seq=") },
+            "每一行都应是完整记录（起点不能被切在行中间）")
+    }
+
+    /// 小文件不截断、也不该多出「已截断」的标注。
+    func testExportKeepsSmallKernelTraceWhole() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("diag-export-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let traceURL = directory.appendingPathComponent(KernelTraceSwitches.traceFileNames[0])
+        try "[erika-http-trace] stage=head_request uri=https://cdn.example.com/a.mkv\n"
+            .write(to: traceURL, atomically: true, encoding: .utf8)
+
+        let text = try DiagnosticsExport.makeText(directory: directory)
+        XCTAssertFalse(text.contains("已截断"))
+        XCTAssertTrue(text.contains("stage=head_request"))
+    }
+
     func testSuggestedFileNameIsTimestampedAndHasNoColon() {
         let name = DiagnosticsExport.suggestedFileName()
         XCTAssertTrue(name.hasPrefix("OcPlayer-诊断-"), name)
