@@ -52,6 +52,18 @@ enum TestSupport {
         return defaults
     }
 
+    /// 每个 test 独立的**凭据目录**。
+    ///
+    /// **必须与 `isolatedDefaults` 一起用**：不注入时 `MoviePilotStore` 会落到
+    /// `CredentialFileStore.shared`，也就是开发机 / CI 上**真实的**凭据文件——
+    /// 测试会读走、覆盖甚至删掉真账号的令牌与密码。
+    static func isolatedCredentialsDirectory(_ name: String = #function) -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("moviepilot-cred-\(name)-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
     /// URLProtocol 拦到的请求 body 可能在 httpBodyStream 里，两边都读。
     static func body(of request: URLRequest) -> Data? {
         if let body = request.httpBody { return body }

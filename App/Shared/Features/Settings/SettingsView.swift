@@ -223,6 +223,16 @@ struct SettingsView: View {
                     Button(moviePilotActionButtonTitle) {
                         isEditingMoviePilot = true
                     }
+                    // 默认关：密码不落盘。打开后存进凭据文件（已排除备份），
+                    // 换来 JWT 8 天过期后的静默重登。
+                    Toggle("记住密码（令牌过期后免重输）", isOn: Binding(
+                        get: { moviepilot.rememberPassword },
+                        set: { moviepilot.rememberPassword = $0 }))
+                    Text("MoviePilot 的登录令牌 8 天过期且无法刷新。默认不保存密码："
+                        + "到期后需要重新输入一次。打开此项会把密码存到本机凭据文件"
+                        + "（已排除 iCloud / Time Machine 备份）。")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                     if moviepilot.isAuthenticated {
                         Button(role: .destructive) {
                             Task { await moviepilot.signOut() }

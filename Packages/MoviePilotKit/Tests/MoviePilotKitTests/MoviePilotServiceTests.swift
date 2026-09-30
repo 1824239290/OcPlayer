@@ -10,7 +10,8 @@ final class MoviePilotServiceTests: XCTestCase {
     override func setUp() {
         super.setUp()
         Self.streamAttempts = 0
-        store = MoviePilotStore(defaults: TestSupport.isolatedDefaults())
+        store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+                        credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
         client = MoviePilotAPIClient(
             store: store,
             sessionConfiguration: TestSupport.mockedSessionConfiguration()

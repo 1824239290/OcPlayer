@@ -37,6 +37,16 @@ final class MoviePilotCoordinator {
 
     var isConfigured: Bool { store.isConfigured }
 
+    /// 「记住密码」开关（默认关）。设置页直接绑定。
+    ///
+    /// 关掉时 `MoviePilotStore` 会立即删掉已落盘的密码——默认不保存密码是本项目的
+    /// 明确取舍：MoviePilot 的 JWT 有效期 8 天且没有刷新端点，「保存密码」换来的
+    /// 只是到期后的静默重登，而密码是这堆凭据里唯一不可更换的一个。
+    var rememberPassword: Bool {
+        get { store.rememberPassword }
+        set { store.rememberPassword = newValue }
+    }
+
     // MARK: - 登录 / 登出
 
     /// 设置页「保存并登录」：先落凭据（顺带作废旧 token）再登录取用户——

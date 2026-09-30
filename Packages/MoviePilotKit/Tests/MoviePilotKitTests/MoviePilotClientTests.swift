@@ -12,7 +12,8 @@ final class MoviePilotClientTests: XCTestCase {
     override func setUp() {
         super.setUp()
         receivedPaths = []
-        store = MoviePilotStore(defaults: TestSupport.isolatedDefaults())
+        store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+                        credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
         client = MoviePilotAPIClient(
             store: store,
             sessionConfiguration: TestSupport.mockedSessionConfiguration()
@@ -82,7 +83,8 @@ final class MoviePilotClientTests: XCTestCase {
     }
 
     func testNotConfiguredWithoutServer() async throws {
-        let emptyStore = MoviePilotStore(defaults: TestSupport.isolatedDefaults())
+        let emptyStore = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+                        credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
         let emptyClient = MoviePilotAPIClient(
             store: emptyStore,
             sessionConfiguration: TestSupport.mockedSessionConfiguration()
