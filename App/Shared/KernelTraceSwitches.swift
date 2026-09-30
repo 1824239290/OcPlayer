@@ -40,7 +40,7 @@ enum KernelTraceSwitches {
     /// - `ERIKA_FFMPEG_DEBUG`：实测 1500+ 行/秒（逐帧 NAL 日志）；
     /// - `ERIKA_SUBTITLE_DIAG`：逐帧字幕 overlay 几何（`[erika-subtitle-diag]`，
     ///   约 100 行/秒，且没有文件 sink）；
-    /// 两个都会把 2MB 的轮转窗口连同 App 自己的记录一起冲掉，所以不进默认集合——
+    /// 两个都会把单文件 20MB 的保留窗口连同 App 自己的记录一起冲掉，所以不进默认集合——
     /// 需要时手动 `ERIKA_SUBTITLE_DIAG=1 …` 启动（见 Docs/LOGGING.md）。
     ///
     /// 保留的三项都是低频或另有文件 sink 的：HTTP 逐请求 trace（文件）、

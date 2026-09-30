@@ -30,7 +30,7 @@ public final class ImagePipeline: @unchecked Sendable {
     public static let shared = ImagePipeline()
     public static let diskCapacityBytes = 512 * 1024 * 1024
     /// 图片失败日志节流：服务器掉线时一墙海报会瞬间刷出几百条 warning，
-    /// 别把 2MB×3 轮转的诊断历史全挤掉。
+    /// 别把单文件 20MB / 总量 50MB 的诊断保留窗口全挤掉。
     private static let failureThrottle = DiagnosticThrottle(key: "image-load-failure", interval: 5)
     /// 与 App 同 subsystem、独立 category：日志仍落在同一份 diagnostics.jsonl，
     /// 但包不反向依赖 App 层（AppDiagnostics）。

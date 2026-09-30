@@ -34,13 +34,13 @@ Scripts/package-macos.sh v0.2.0  # 本地打包，产出与 CI 相同的 dist/ �
 
 > 内核取自上游 [AimesSoft/Erika](https://github.com/AimesSoft/Erika) 官方 release `v0.2.0`：libplacebo 风格杜比视界 RPU 映射 + **持久流预取**（worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；预取窗口按 worker 生产偏移对绝对边界自我节流，不随播放时长增长；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求）。这些改动此前先落在 fork [1824239290/Erika](https://github.com/1824239290/Erika) 上先行，已随 v0.2.0 全部合入上游，钉点已切回官方（公网慢源 A/B 口径不变：开播 13.2 秒、78.3 秒播放零卡顿）。`SKIP_ERIKA_FETCH=1` 可让 `build-macos.sh` / `package-macos.sh` / `package-ios.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 
-> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 9 个 SPM 包（含 AppDesignKit；ErikaKit 只跑不依赖 GPU 的套件）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
+> `fetch-erika.sh` 等脚本默认解析 GitHub 最新正式版，已有同版本完整产物会复用；可重复构建时将 `ERIKA_VERSION` 钉到具体 tag。macOS 构建必须用 `-scheme`，架构钉死 arm64。CI（`.github/workflows/`）在 push/PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 10 个 SPM 包（9 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
 
 ## 使用建议
 
 - 支持 Jellyfin（10.x）与 Emby（4.x），登录时显式选择 HTTP/HTTPS；Emby 没有 Quick Connect，只显示账号密码表单
 - 弹幕开箱即用：内置公共 OcPlay 网关（Cloudflare Workers 部署，持有弹弹play AppSecret）签发的 API Key；如需自建网关 / 自有 Key，在 设置 → 弹幕 中修改
-- 内核弹幕渲染当前因内存问题被禁用，运行时固定走 App 层 overlay 渲染，详见下文「弹幕渲染路线」
+- 内核弹幕渲染当前因滑窗重排会让在屏弹幕跳轨而被禁用，运行时固定走 App 层 overlay 渲染，详见下文「弹幕渲染路线」
 - 遇到问题先「设置 → 维护 → 导出诊断包…」：一个 `.txt` 装下版本/设备/全部日志/内核 trace，
   报障直接附件；要更细的记录就在同一处打开「详细日志」（含内核 trace，下一次播放生效）。
   字段口径与排障流程见 [`Docs/LOGGING.md`](Docs/LOGGING.md) / [`Docs/TROUBLESHOOTING.md`](Docs/TROUBLESHOOTING.md)
@@ -63,7 +63,7 @@ Scripts/package-macos.sh v0.2.0  # 本地打包，产出与 CI 相同的 dist/ �
 
 ## 弹幕渲染路线
 
-弹幕统一走 **App 层 overlay**（`DanmakuRenderKit`）：App 在视频画面上方独立绘制，与内核解码/合成解耦，截图不带弹幕。内核内置弹幕渲染器（Erika DFM+）当前版本因弹幕定位导致内核将完整视频加载进内存而被禁用，运行时强制 overlay；等内核修复后恢复「用内核渲染弹幕」开关即可切回。
+弹幕统一走 **App 层 overlay**（`DanmakuRenderKit`）：App 在视频画面上方独立绘制，与内核解码/合成解耦，截图不带弹幕。内核内置弹幕渲染器（Erika DFM+）当前版本因滑窗重排（DFM+ 的轨道重算）会让在屏弹幕跳轨而被禁用，运行时强制 overlay（`PlaybackController.resolveOverlayDanmakuRoute()` 恒 true，设置页开关同步置灰）。注：早期的「弹幕定位导致内核把完整视频读进内存」是另一个问题，已随内核 0.1.9 修掉，与此处的禁用无关。等内核修好跳轨后把该判定改回读用户偏好即可切回。
 
 网关侧持有弹弹play 官方 `AppSecret` 并生成签名，客户端只持 API Key（`X-API-Key` 头），地址必须为 HTTPS origin；不要在日志或界面输出 Key 等凭据。
 

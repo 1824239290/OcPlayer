@@ -663,7 +663,7 @@ private final class DiagnosticBackend: @unchecked Sendable {
 
     /// Snapshot the live file: newest entries first, capped at `limit`.
     ///
-    /// 只解码文件**尾部**的 `limit` 行：日志单文件上限 2 MB，为了留下最后 40 条
+    /// 只解码文件**尾部**的 `limit` 行：日志单文件上限 20 MB，为了留下最后 40 条
     /// 而把几千行全解一遍纯属白烧——设置页打开时调用方还在等这个结果。
     func readEntries(limit: Int) throws -> [DiagnosticEntry] {
         let limit = max(0, limit)
@@ -703,7 +703,7 @@ private final class DiagnosticBackend: @unchecked Sendable {
     }
 
     func summary() -> DiagnosticSummary? {
-        // summary() 由设置页在主线程调用，2MB 逐字节扫描别占主线程 CPU：
+        // summary() 由设置页在主线程调用，20MB 逐字节扫描别占主线程 CPU：
         // 扫描投到自己的串行队列上跑，调用方只阻塞等结果（等待不烧 CPU）。
         // 队列串行 → 扫描与写入天然互斥，读到的计数与文件一致。
         let box = SummaryBox()

@@ -317,10 +317,14 @@ struct AppShellView: View {
 
 // MARK: - 两段式换页：退场淡出
 
-/// 读 `app.routeExiting` 给当前页/工具栏按钮画换页过渡：两段式的第一段——
-/// 离场页淡出（`Motion.exit`），落地后回弹淡入就是落点页/新按钮的入场
-/// （新视图隐藏态出生，复位时正好有 from-state）。页面与工具栏按钮都挂它；
-/// 淡出期间顺便禁点击，防止点中已透明的按钮。
+/// 读 `app.routeExiting` 给当前页画换页过渡：两段式的第一段——离场页淡出
+/// （`Motion.exit`），落地后回弹淡入就是落点页的入场（新视图隐藏态出生，
+/// 复位时正好有 from-state）。淡出期间顺便禁点击，防止点中已透明的按钮。
+///
+/// **当前只有两处挂载**：栈根 `sectionContent` 与路由出口 `appRouteView`。
+/// 分区药丸按钮**没挂**（它挂在工具栏里、退出系统共享胶囊后几何自绘，挂上淡出会
+/// 在工具栏里闪一下），所以换分区时内容淡出、按钮硬切。要改就来这里加。
+/// 「换页进行中忽略新请求」是 `AppModel.beginRouteExit` 的语义，不在这一层。
 struct RouteExitFader: ViewModifier {
     @Environment(AppModel.self) private var app
 

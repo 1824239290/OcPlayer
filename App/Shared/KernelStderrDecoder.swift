@@ -67,7 +67,7 @@ struct KernelStderrDecoder {
     /// 内核 trace 的 stderr 回声（`[erika-*-trace] …`）：同样的内容已经落在
     /// `erika_playback_trace.jsonl` / `erika_http_trace.jsonl` 里，再抄一份进
     /// diagnostics.jsonl 只会把文件冲掉——实测逐帧 trace（playback/clock/render/
-    /// presenter/audio/capi 六族）合计 200+ 行/秒，16 秒就把 2MB 的轮转窗口填满，
+    /// presenter/audio/capi 六族）合计 200+ 行/秒，几十秒就能把单文件 20MB 的保留窗口填满，
     /// 还把 App 自己的记录挤出窗口。所以回声一律丢，trace 数据只从 trace 文件读。
     static func isTraceEcho(_ line: String) -> Bool {
         guard line.hasPrefix("[erika-"), let close = line.firstIndex(of: "]") else { return false }
