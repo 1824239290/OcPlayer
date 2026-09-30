@@ -173,6 +173,8 @@ public actor MoviePilotAPIClient {
         public var formBody: [String: String]?
         public var authorized: Bool
         public var timeout: TimeInterval?
+        /// 显式覆盖幂等性；nil = 按 `method` 推断。
+        public var idempotentOverride: Bool?
 
         public init(
             path: String,
@@ -181,7 +183,8 @@ public actor MoviePilotAPIClient {
             jsonBody: (any Sendable & Encodable)? = nil,
             formBody: [String: String]? = nil,
             authorized: Bool = true,
-            timeout: TimeInterval? = nil
+            timeout: TimeInterval? = nil,
+            idempotent: Bool? = nil
         ) {
             self.path = path
             self.method = method
@@ -190,6 +193,28 @@ public actor MoviePilotAPIClient {
             self.formBody = formBody
             self.authorized = authorized
             self.timeout = timeout
+            self.idempotentOverride = idempotent
+        }
+
+        /// 该请求是否幂等 —— 决定瞬态错误（超时 / 502 / 503 / 504）能否安全重放。
+        ///
+        /// 按 HTTP 语义判定：`GET` / `HEAD` / `PUT` / `DELETE` 幂等；`POST` / `PATCH`
+        /// 不幂等。本包的写接口正好落在两侧：`PUT /api/v1/subscribe/` 传的是**全量**
+        /// 订阅对象（重放 = 同一结果），`DELETE` 按 id / hash 删（重放 = 已删），而
+        /// `POST /api/v1/download/`、`POST /api/v1/subscribe/` 是**创建**语义。
+        ///
+        /// 需要例外时在调用点传 `idempotent:`（例如「POST 但带幂等键」）。
+        public var isIdempotent: Bool {
+            idempotentOverride ?? Self.isIdempotentMethod(method)
+        }
+
+        static func isIdempotentMethod(_ method: String) -> Bool {
+            switch method.uppercased() {
+            case "GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE":
+                return true
+            default:
+                return false
+            }
         }
     }
 
@@ -237,7 +262,11 @@ public actor MoviePilotAPIClient {
             path: "/api/v1/login/access-token",
             method: "POST",
             formBody: ["username": username, "password": password],
-            authorized: false
+            authorized: false,
+            // 登录虽然是 POST，但重放是**安全**的：它不创建业务对象，只是签发 token，
+            // 多签一个的副作用仅是服务端多一条会话记录，客户端用最后一个。
+            // 弱网下重登失败会让整个 MoviePilot 集成不可用，所以这里保留退避重试。
+            idempotent: true
         )
         let data = try await send(request, token: nil)
         do {
@@ -258,12 +287,20 @@ public actor MoviePilotAPIClient {
         var currentToken = token
         var lastError: Error?
 
-        for attempt in 0...maxRetries {
+        // 幂等性决定「瞬态错误能否重放」。非幂等的创建类请求（POST）一旦重试，就可能
+        // 在服务端落下**重复的下载任务 / 订阅**：请求其实已经到达并生效，只是响应
+        // 超时或网关回了 502，客户端并不知道。这类请求只发一次，失败就把错误交给用户。
+        //
+        // 401 的重登重放**不受此限**：鉴权失败意味着请求没有被执行，重放是安全的，
+        // 所以下面 requireLogin 分支的重放照旧。
+        let retries = request.isIdempotent ? maxRetries : 0
+
+        for attempt in 0...retries {
             if attempt > 0 {
                 // 指数退避乘 0.5~1.5 抖动：避免多端同拍重试放大服务端压力。
                 let delay = UInt64((pow(2.0, Double(attempt - 1)) * Double.random(in: 0.5...1.5)) * 1_000_000_000)
                 try await Task.sleep(nanoseconds: delay)
-                MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(self.maxRetries + 1))")
+                MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(retries + 1))")
             }
 
             do {
@@ -276,14 +313,14 @@ public actor MoviePilotAPIClient {
 
                 do {
                     return try await sendOnce(request, token: currentToken)
-                } catch let error as MoviePilotError where error.isRetryable && attempt < maxRetries {
+                } catch let error as MoviePilotError where error.isRetryable && attempt < retries {
                     // 换到新 token 后重放失败仍值得重试（502/504/超时是服务端瞬态）。
                     lastError = error
                     continue
                 } catch {
                     throw error
                 }
-            } catch let error as MoviePilotError where error.isRetryable && attempt < maxRetries {
+            } catch let error as MoviePilotError where error.isRetryable && attempt < retries {
                 lastError = error
                 continue
             } catch {

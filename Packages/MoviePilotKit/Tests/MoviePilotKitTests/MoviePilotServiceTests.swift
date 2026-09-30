@@ -476,4 +476,75 @@ final class MoviePilotServiceTests: XCTestCase {
 
         try await client.updateSubscribe(subscribe: subscribe)
     }
+
+    // MARK: - 重试按幂等性分档
+
+    /// `MPRequest.isIdempotent` 的判定：按 HTTP 语义，PUT/DELETE 幂等、POST 不幂等；
+    /// 允许调用点显式覆盖（登录就是这个例外）。
+    func testIdempotencyClassification() {
+        func idempotent(_ method: String, override: Bool? = nil) -> Bool {
+            MoviePilotAPIClient.MPRequest(path: "/x", method: method, idempotent: override).isIdempotent
+        }
+        XCTAssertTrue(idempotent("GET"))
+        XCTAssertTrue(idempotent("PUT"))
+        XCTAssertTrue(idempotent("DELETE"))
+        XCTAssertTrue(idempotent("get"), "方法名大小写不该影响判定")
+        XCTAssertFalse(idempotent("POST"))
+        XCTAssertFalse(idempotent("PATCH"))
+        XCTAssertTrue(idempotent("POST", override: true), "显式覆盖要生效")
+        XCTAssertFalse(idempotent("PUT", override: false))
+    }
+
+    /// 非幂等的创建类请求**不得**重试：`POST /api/v1/subscribe/` 可能已经到达服务端
+    /// 并生效，只是响应超时或网关回了 502 —— 重放会落下重复订阅。
+    func testNonIdempotentPostIsNotRetried() async throws {
+        var attempts = 0
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            attempts += 1
+            return MockURLProtocol.response(#"{"detail":"Bad Gateway"}"#, status: 502, for: url)
+        }
+
+        do {
+            try await client.addSubscribe(subscribe: MPSubscribe(raw: ["name": .string("葬送的芙莉莲")]))
+            XCTFail("502 应抛错")
+        } catch {
+            XCTAssertTrue(error is MoviePilotError, "应是 MoviePilotError，实际 \(error)")
+        }
+        XCTAssertEqual(attempts, 1, "非幂等的 POST 只能发一次，否则可能重复创建订阅")
+    }
+
+    /// 幂等的 PUT 仍要重试：它传的是全量对象，重放等于同一结果，而弱网下不重试
+    /// 会让「改订阅」这种操作莫名失败。
+    func testIdempotentPutIsRetried() async throws {
+        var attempts = 0
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            attempts += 1
+            if attempts == 1 {
+                return MockURLProtocol.response(#"{"detail":"Bad Gateway"}"#, status: 502, for: url)
+            }
+            return MockURLProtocol.response(
+                #"{"success":true,"message":"更新成功"}"#, status: 200, for: url)
+        }
+
+        try await client.updateSubscribe(subscribe: MPSubscribe(raw: ["id": .number(101)]))
+        XCTAssertEqual(attempts, 2, "幂等的 PUT 应重试一次后成功")
+    }
+
+    /// 幂等的 DELETE 同理（按 id 删，重放 = 已删）。
+    func testIdempotentDeleteIsRetried() async throws {
+        var attempts = 0
+        MockURLProtocol.handler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            attempts += 1
+            if attempts == 1 {
+                return MockURLProtocol.response(#"{"detail":"Bad Gateway"}"#, status: 502, for: url)
+            }
+            return MockURLProtocol.response(#"{"success":true}"#, status: 200, for: url)
+        }
+
+        try await client.deleteSubscribe(id: 101)
+        XCTAssertEqual(attempts, 2, "幂等的 DELETE 应重试一次后成功")
+    }
 }
