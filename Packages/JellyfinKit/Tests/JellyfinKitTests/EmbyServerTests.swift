@@ -129,6 +129,31 @@ final class EmbyServerTests: XCTestCase {
         XCTAssertEqual(methods.items, ["POST", "DELETE"])
     }
 
+    /// 回归：标记接口返回 200 但 body 非预期时（反向代理改写 / 非 JSON 错误页），
+    /// 兜底快照曾把 `played` 写死成 `false` —— 而两个方法共用它，于是「标记已看」
+    /// 的返回值让 UI 立刻显示未看、进度百分比也被清零（调用方
+    /// `DetailViewModel.applyPlayState` 会把整个 PlayState 覆盖进详情与选集缓存）。
+    /// 兜底必须体现「已按请求生效」，而不是一个固定的 false。
+    func testMarkPlayedFallbackDoesNotReportUnplayed() async throws {
+        try await TestSupport.withMock { request in
+            // 200 + 非 JSON body：宽松 DTO 也解不出来。
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "text/html"])!
+            return (response, Data("<html>502 from reverse proxy</html>".utf8))
+        } with: {
+            let server = makeServer()
+
+            let played = try await server.markPlayed(itemID: "ep-9")
+            XCTAssertTrue(played.played, "标记已看成功后，兜底快照不能反过来报未看")
+            XCTAssertEqual(played.percentage, 1.0, "兜底应体现「已按请求生效」")
+
+            let unplayed = try await server.markUnplayed(itemID: "ep-9")
+            XCTAssertFalse(unplayed.played, "取消已看的兜底仍是未看")
+            XCTAssertEqual(unplayed.percentage, 0)
+        }
+    }
+
     // MARK: - 宽松值域：脏枚举不影响解码
 
     /// Emby 把杜比视界写进粗粒度 `VideoRange`（"DolbyVision"），细粒度

@@ -244,7 +244,7 @@ public struct EmbyServer: MediaServer {
             "/Users/\(userID)/PlayedItems/\(itemID)",
             query: [("userId", userID)]
         )
-        return try playState(from: data)
+        return playState(from: data, expectedPlayed: true)
     }
 
     public func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
@@ -252,14 +252,25 @@ public struct EmbyServer: MediaServer {
             "/Users/\(userID)/PlayedItems/\(itemID)",
             query: [("userId", userID)]
         )
-        return try playState(from: data)
+        return playState(from: data, expectedPlayed: false)
     }
 
     /// 标记接口返回服务端最新的播放状态快照；解不出来时退回「已按请求生效」的
     /// 最小快照，而不是把一次成功的写入报成失败。
-    private func playState(from data: Data) -> MediaItem.PlayState {
+    ///
+    /// `expectedPlayed` **必须由调用方传入**：兜底值不能写死 `played: false` —— 那
+    /// 对 markUnplayed 成立，对 markPlayed 恰好相反。而调用方拿到返回值会把整个
+    /// `PlayState` 覆盖进详情 / 选集 / 每季缓存（`DetailViewModel.applyPlayState`），
+    /// 所以 Emby 返回 200 但 body 非预期时（反向代理改写、非 JSON 错误页），用户点
+    /// 「标记已看」会看到**立刻变回未看、进度百分比清零**——一次成功的写入被显示成
+    /// 了反向结果。
+    private func playState(from data: Data, expectedPlayed: Bool) -> MediaItem.PlayState {
         guard let dto = try? session.decode(EmbyUserDataDTO.self, from: data) else {
-            return MediaItem.PlayState(played: false, percentage: 0, positionSeconds: 0)
+            return MediaItem.PlayState(
+                played: expectedPlayed,
+                percentage: expectedPlayed ? 1 : 0,
+                positionSeconds: 0
+            )
         }
         return dto.domainPlayState
     }
