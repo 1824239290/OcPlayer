@@ -305,7 +305,7 @@ extension AppModel {
                   self.presentedPlayer?.id == request.id,
                   !Task.isCancelled
             else { return }
-            await playback.loadChapters(server: server, for: request)
+            await playback.loadChapters(server: server, for: request, isMovie: item.kind == .movie)
         }
     }
 

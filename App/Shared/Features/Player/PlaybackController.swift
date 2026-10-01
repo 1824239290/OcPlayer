@@ -1288,7 +1288,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     ///   `expectedRequestID` 同步更新兜住。
     ///
     /// 在 `@MainActor` 上调用(控制器本身就是 @MainActor)。
-    func loadChapters(server: any JellyfinKit.MediaServer, for request: PlaybackRequest) async {
+    /// - Parameter isMovie: 电影片尾可比剧集长一倍,章节启发式的片尾时长上限随之放宽。
+    func loadChapters(server: any JellyfinKit.MediaServer, for request: PlaybackRequest, isMovie: Bool = false) async {
         guard let itemID = request.sessionContext?.itemID else {
             // 本地文件 / 无 item 时没有服务端章节,仅保留 90s 保底条,静默。
             return
@@ -1352,7 +1353,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             }
             let total = Double(state.duration.microseconds) / 1_000_000
             skipMarks = ChapterNameHeuristicEvaluator()
-                .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0))
+                .skipMarks(chapters: fetchedChapters, totalSeconds: max(total, 0), isMovie: isMovie)
         }
         guard chapterRequestIsCurrent(request) else {
             return
