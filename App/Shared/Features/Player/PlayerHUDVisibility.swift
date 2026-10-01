@@ -40,6 +40,10 @@ final class PlayerHUDVisibilityCoordinator {
     /// 显隐过渡任务：淡出后卸载、或挂载后淡入，都用这一个槽位互斥持有。
     /// 任何新的显隐意图先取消它，避免竞态（例如淡入前又触发隐藏）。
     @ObservationIgnored private var transitionTask: Task<Void, Never>?
+    /// 过渡任务的方向：true = 已挂载、还没亮（pending 淡入）；false = 已淡出、还没卸载
+    /// （pending 卸载）。两者表面状态一样（isVisible=false、isMounted=true），隐藏路径
+    /// 要区分对待，见 setVisible 开头的分支。
+    @ObservationIgnored private var transitionShowsHUD = false
 
     @ObservationIgnored private var activeInteractions: Set<PlayerHUDInteraction> = []
     @ObservationIgnored private var trackedMenus: Set<ObjectIdentifier> = []
@@ -79,6 +83,18 @@ final class PlayerHUDVisibilityCoordinator {
     /// - 隐藏：先淡出（isVisible 变 false），动画跑完（unmountDelay）再卸载；
     ///   无动画（unmountDelay 为 0）时直接卸载。
     private func setVisible(_ visible: Bool) {
+        if !visible, !isVisible, isMounted, transitionShowsHUD {
+            // 淡入尚未亮起就被隐藏：取消 pending 淡入任务并直接卸载（HUD 从未可见，
+            // 无需淡出动画）。这段必须抢在下面的 `isVisible != visible` 守卫之前——
+            // 此状态两者同为 false，守卫会把这次隐藏整个吞掉，pending 的淡入稍后
+            // 照样把 HUD 亮起来；而隐藏计时已被清掉、鼠标又不在窗口内，HUD 就此
+            // 永久常显。触发路径：窗口失焦时 AppKit 重估跟踪区合成的 mouseEntered
+            // 先唤出、几十毫秒后的 mouseExited 再隐藏，两步正好踩进 16ms 挂载窗口。
+            transitionTask?.cancel()
+            transitionTask = nil
+            isMounted = false
+            return
+        }
         guard isVisible != visible else { return }
         if visible {
             transitionTask?.cancel()
@@ -91,8 +107,15 @@ final class PlayerHUDVisibilityCoordinator {
                 // SwiftUI 看不到中间态。槽位互斥：若淡入前又触发隐藏，
                 // transitionTask 会被取消，不会误亮。
                 isMounted = true
+                transitionShowsHUD = true
                 transitionTask = Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .milliseconds(16))
+                    do {
+                        try await Task.sleep(for: .milliseconds(16))
+                    } catch {
+                        // 被新的显隐意图取消：立即退出。不能用 try?——吞掉取消
+                        // 错误后任务会继续往下跑，把本该被拦下的 HUD 亮起来。
+                        return
+                    }
                     guard let self, self.isVisible == false else { return }
                     self.isVisible = true
                     self.transitionTask = nil
@@ -101,8 +124,14 @@ final class PlayerHUDVisibilityCoordinator {
         } else {
             isVisible = false
             transitionTask?.cancel()
+            transitionShowsHUD = false
             transitionTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: self?.unmountDelay ?? .zero)
+                do {
+                    try await Task.sleep(for: self?.unmountDelay ?? .zero)
+                } catch {
+                    // 同上：取消即退出，不执行后半段的卸载。
+                    return
+                }
                 guard let self, self.isVisible == false else { return }
                 self.isMounted = false
                 self.transitionTask = nil
