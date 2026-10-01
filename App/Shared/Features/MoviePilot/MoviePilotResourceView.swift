@@ -109,6 +109,9 @@ struct MoviePilotResourceView: View {
             .refreshable { await search().value }
             .navigationDestination(isPresented: $navigateToDownloads) {
                 MoviePilotDownloadsView()
+                    // 与 MoviePilot 首页那个入口同款顶栏（此前只有系统返回键，
+                    // 常规布局下与其它页不一致）。
+                    .appShellBackChrome(title: "下载管理", presented: $navigateToDownloads)
                     .pageEntrance()
             }
         }

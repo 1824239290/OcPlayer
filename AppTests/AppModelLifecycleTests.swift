@@ -69,6 +69,25 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertEqual(app.phase, .onboarding)
     }
 
+    /// 回归：呈现式页面（`navigationDestination(isPresented:)`，如下载管理 /
+    /// 管理服务器）**不在 `path` 上**，返回键若调 `back()` 会被 `guard !path.isEmpty`
+    /// 整个吞掉——常规布局下就是「点了没反应」。这类页面必须走对称的 `popPresented`。
+    func testPopPresentedDismissesWhileBackIsNoOpOnEmptyStack() {
+        let app = AppModel()
+        // 直切落地，省掉 0.45s 淡出等待（两段式的时序由 Motion token 保证）。
+        app.reduceMotion = true
+        app.phase = .ready
+
+        app.back()
+        XCTAssertTrue(app.path.isEmpty, "空栈上 back() 是空操作——正是呈现式页面踩的坑")
+
+        var dismissed = false
+        app.popPresented { dismissed = true }
+
+        XCTAssertTrue(dismissed, "呈现式页面的返回必须真的关掉落地开关")
+        XCTAssertFalse(app.routeExiting, "落地后不得留着退场态，否则整页卡在半透明")
+    }
+
     /// 回归：快照超限曾整份 `removeAll()`，连刚写入的那条一起丢——第 41 次进入
     /// 详情页立刻退回冷骨架屏，SWR 的收益变成随机的。现在只淘汰最旧的。
     func testDetailSnapshotEvictionKeepsTheJustStoredEntry() {

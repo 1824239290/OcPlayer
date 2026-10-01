@@ -499,6 +499,20 @@ final class AppModel {
         beginRouteExit(land: present)
     }
 
+    /// 关闭呈现式页面：`pushPresented` 的对称出口。
+    ///
+    /// 这类页面不在 `path` 上（`isPresented` 是另一套呈现机制，栈里看不见它），
+    /// 走 `back()` 会被 `guard !path.isEmpty` 挡掉——自绘返回键点下去毫无反应
+    /// （下载管理 / 资源搜索 / 管理服务器 / 开源许可证都踩过）。所以呈现式页面
+    /// 的返回键必须显式把自己的落地开关交进来（见
+    /// `appShellBackChrome(title:presented:)`），不能走 `back()`。
+    ///
+    /// `restoreDelay` 与 `back()` 同理：系统关闭动画期间离场页还挂在树里，
+    /// 立即复位 `routeExiting` 会让它边滑边显形。
+    func popPresented(_ dismiss: @escaping @MainActor () -> Void) {
+        beginRouteExit(land: dismiss, restoreDelay: Motion.exitSeconds)
+    }
+
     /// 分区切换（顶栏药丸）：常规布局走与 push 相同的两段式——当前页淡出后
     /// 再换分区；compact（iPhone Tab）系统自带切换动画，直切。
     func switchSection(_ section: Section) {
@@ -525,6 +539,9 @@ final class AppModel {
     /// 返回上一层（自绘返回键）：与 push 对称的两段式——当前页淡出后再弹栈。
     /// 系统返回键的 pop 是系统级滑出、不经 binding 拦不住，所以常规布局的
     /// 返回键自绘（见 AppShellBackButton）；弹栈用禁动画 transaction 落地。
+    ///
+    /// **只管栈上的路由页**：呈现式页面（`navigationDestination(isPresented:)`）
+    /// 不在 `path` 里，`path` 为空时的返回是空操作——那种页面走 `popPresented`。
     func back() {
         guard !path.isEmpty else { return }
         // 弹栈的过渡期间离场页还挂在树里，立即恢复 routeExiting 会让它

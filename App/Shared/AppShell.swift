@@ -321,7 +321,9 @@ struct AppShellView: View {
 /// （`Motion.exit`），落地后回弹淡入就是落点页的入场（新视图隐藏态出生，
 /// 复位时正好有 from-state）。淡出期间顺便禁点击，防止点中已透明的按钮。
 ///
-/// **当前只有两处挂载**：栈根 `sectionContent` 与路由出口 `appRouteView`。
+/// **当前只有三处挂载**：栈根 `sectionContent`、路由出口 `appRouteView`，
+/// 以及呈现式页面（`appShellBackChrome(title:presented:)` 里按 `presented` 非空补挂，
+/// 这类页面不在路由出口上）。
 /// 分区药丸按钮**没挂**（它挂在工具栏里、退出系统共享胶囊后几何自绘，挂上淡出会
 /// 在工具栏里闪一下），所以换分区时内容淡出、按钮硬切。要改就来这里加。
 /// 「换页进行中忽略新请求」是 `AppModel.beginRouteExit` 的语义，不在这一层。
@@ -349,12 +351,21 @@ extension View {
 /// 拦不住），换自绘键走 `AppModel.back()` 两段式（淡出 → 弹栈 → 落点淡入）。
 /// 正圆玻璃钮（36×36，与分区药丸同高）；系统共享底要隐藏，否则系统圆角
 /// 矩形底和自绘圆叠两层。
+///
+/// `presented` 是呈现式页面（`navigationDestination(isPresented:)`）的落地开关：
+/// 这类页面不在 `path` 上，`back()` 的弹栈守卫会把它整个吞掉（点返回毫无反应），
+/// 必须改走对称的 `popPresented`。
 struct AppShellBackButton: View {
     @Environment(AppModel.self) private var app
+    var presented: Binding<Bool>?
 
     var body: some View {
         Button {
-            app.back()
+            if let presented {
+                app.popPresented { presented.wrappedValue = false }
+            } else {
+                app.back()
+            }
         } label: {
             Image(systemName: "chevron.left")
                 .font(.system(size: 13, weight: .semibold))
@@ -381,6 +392,9 @@ private struct RegularBackChrome: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
     let title: String?
+    /// 非 nil 表示本页由 `navigationDestination(isPresented:)` 呈现：返回键改走
+    /// `popPresented`，并由本层补挂离场淡出（路由页的淡出在 `appRouteView`）。
+    let presented: Binding<Bool>?
 
     func body(content: Content) -> some View {
         Group {
@@ -397,22 +411,34 @@ private struct RegularBackChrome: ViewModifier {
                 content
                 #endif
             } else if title != nil {
-                content
+                exitFaded(content)
                     .navigationBarBackButtonHidden(true)
                     .toolbar(removing: .title)
                     .toolbar { toolbarItem }
             } else {
-                content
+                exitFaded(content)
                     .navigationBarBackButtonHidden(true)
                     .toolbar { toolbarItem }
             }
         }
     }
 
+    /// 呈现式页面自己画离场淡出：它不在路由出口（`appRouteView`）上，没人替它挂
+    /// 就只剩「等 0.45s 再硬关」。路由页传 nil（淡出由 `appRouteView` 那份负责，
+    /// 同一层不挂两份）。
+    @ViewBuilder
+    private func exitFaded(_ content: Content) -> some View {
+        if presented != nil {
+            content.routeExitFade()
+        } else {
+            content
+        }
+    }
+
     private var toolbarItem: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 10) {
-                AppShellBackButton()
+                AppShellBackButton(presented: presented)
                 if let title, !title.isEmpty {
                     Text(title)
                         .font(.system(size: 15, weight: .medium))
@@ -427,7 +453,16 @@ private struct RegularBackChrome: ViewModifier {
 extension View {
     /// push 页返回键 + 可选顶栏标题（常规布局自绘，compact 原样）。
     func appShellBackChrome(title: String? = nil) -> some View {
-        modifier(RegularBackChrome(title: title))
+        modifier(RegularBackChrome(title: title, presented: nil))
+    }
+
+    /// 呈现式页面（`navigationDestination(isPresented:)`）的返回键 + 标题。
+    ///
+    /// 与上一个重载的唯一区别是把页面自己的落地开关交进自绘返回键：这类页面
+    /// 不在 `path` 上，`back()` 弹不动（常规布局下返回键点了没反应），得走
+    /// `AppModel.popPresented`；顺带由本层补挂离场淡出。
+    func appShellBackChrome(title: String? = nil, presented: Binding<Bool>) -> some View {
+        modifier(RegularBackChrome(title: title, presented: presented))
     }
 }
 

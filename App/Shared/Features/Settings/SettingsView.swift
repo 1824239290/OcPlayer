@@ -285,15 +285,17 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle("设置")
         .formStyle(.grouped)
-        // view-destination 页面走 pushPresented 两段式（淡出后落地），与路由页一致。
+        // view-destination 页面走 pushPresented 两段式（淡出后落地），与路由页一致；
+        // `presented:` 把落地开关交给自绘返回键——这类页面不在 `path` 上，
+        // 不交就只有「点返回没反应」（见 AppModel.popPresented）。
         .navigationDestination(isPresented: $showServers) {
             ServersView()
-                .appShellBackChrome(title: "管理服务器")
+                .appShellBackChrome(title: "管理服务器", presented: $showServers)
                 .pageEntrance()
         }
         .navigationDestination(isPresented: $showLicenses) {
             OpenSourceLicensesView()
-                .appShellBackChrome(title: "开源许可证")
+                .appShellBackChrome(title: "开源许可证", presented: $showLicenses)
                 .pageEntrance()
         }
         .onAppear {

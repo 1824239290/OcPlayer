@@ -238,13 +238,15 @@ struct MoviePilotHomeView: View {
         }
         .navigationDestination(isPresented: $showDownloads) {
             MoviePilotDownloadsView()
-                .appShellBackChrome(title: "下载管理")
+                .appShellBackChrome(title: "下载管理", presented: $showDownloads)
                 .pageEntrance()
         }
         .navigationDestination(isPresented: $showResource) {
             if let resourceMedia {
                 MoviePilotResourceView(media: resourceMedia)
-                    .appShellBackChrome(title: resourceMedia.title ?? "资源搜索")
+                    .appShellBackChrome(
+                        title: resourceMedia.title ?? "资源搜索", presented: $showResource
+                    )
                     .pageEntrance()
             }
         }

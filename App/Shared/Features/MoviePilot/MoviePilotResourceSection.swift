@@ -42,7 +42,11 @@ struct MoviePilotResourceSection: View {
                 if let media = resolvedMedia {
                     MoviePilotResourceView(media: media)
                         .id(media.id)
-                        .appShellBackChrome(title: media.title ?? "资源搜索")
+                        // `presented:`：呈现式页面不在 `path` 上，返回键得自己关
+                        // presentation（见 AppModel.popPresented）。
+                        .appShellBackChrome(
+                            title: media.title ?? "资源搜索", presented: $showResource
+                        )
                         .pageEntrance()
                 }
             }
