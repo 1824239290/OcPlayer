@@ -98,6 +98,7 @@ extension BaseItemDto {
         fields.kindTag = type?.rawValue
         fields.id = id
         fields.name = name
+        fields.originalTitle = originalTitle
         fields.kind = MediaItem.Kind(type)
         fields.overview = overview
         fields.productionYear = productionYear

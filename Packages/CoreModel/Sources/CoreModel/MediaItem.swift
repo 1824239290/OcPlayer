@@ -44,6 +44,9 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
     public var id: String
     public var name: String
+    /// 服务端元数据里的原生标题（Jellyfin OriginalTitle；番剧库多为日文原名）。
+    /// AniSkip 的 MAL ID 解析等标题搜索用它补中文标题搜不中的坑。
+    public var originalTitle: String?
     public var kind: Kind
     public var overview: String?
     public var year: Int?
@@ -88,6 +91,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public init(
         id: String,
         name: String,
+        originalTitle: String? = nil,
         kind: Kind,
         overview: String? = nil,
         year: Int? = nil,
@@ -115,6 +119,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.originalTitle = originalTitle
         self.kind = kind
         self.overview = overview
         self.year = year

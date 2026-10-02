@@ -62,6 +62,9 @@ struct DanmakuPlaybackContext {
     let suggestedAnime: String
     let suggestedEpisode: String
     let animeTitle: String?
+    /// 媒体库的原生标题（Jellyfin OriginalTitle，番剧库多为日文原名）。
+    /// AniSkip 的 MAL ID 解析候选：dandanplay 的中文标题在 AniList 常搜不中。
+    let originalTitle: String?
     let episodeNumber: Int?
     let seasonNumber: Int?
     let isFinal: Bool
@@ -86,6 +89,10 @@ struct DanmakuPlaybackContext {
             request.title
         )
         let seriesName = (item.seriesName ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        // 原生标题在集条目上一般继承剧集值；空串按缺失处理。
+        let originalTitle = item.originalTitle.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.flatMap { $0.isEmpty ? nil : $0 }
         let seasonNumber = item.seasonNumber
         let episodeNumber = item.episodeNumber
         let tmdbID = item.tmdbID.flatMap(Int.init)
@@ -126,6 +133,7 @@ struct DanmakuPlaybackContext {
             suggestedAnime: seriesName,
             suggestedEpisode: episodeNumber.map(String.init) ?? "",
             animeTitle: seriesName.isEmpty ? nil : seriesName,
+            originalTitle: originalTitle,
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
             isFinal: false,
@@ -203,6 +211,7 @@ struct DanmakuPlaybackContext {
             suggestedAnime: suggestedAnime,
             suggestedEpisode: suggestedEpisode,
             animeTitle: effectiveAnimeTitle.isEmpty ? nil : effectiveAnimeTitle,
+            originalTitle: nil,
             episodeNumber: parsed.episodeNumber,
             seasonNumber: parsed.seasonNumber,
             isFinal: parsed.isFinal,
@@ -308,7 +317,11 @@ final class DanmakuCoordinator {
             store: DanmakuTitleAliasStore(directory: directory),
             provider: BangumiTitleAliasProvider()
         )
-        orchestrator = DanmakuLoadOrchestrator(service: service, session: session)
+        orchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: session,
+            titleAliases: titleAliasResolver
+        )
         self.session = session
     }
 
@@ -583,6 +596,7 @@ final class DanmakuCoordinator {
             remoteURL: context.remoteURL,
             remoteHeaders: context.remoteHeaders,
             animeTitle: context.animeTitle,
+            originalTitle: context.originalTitle,
             episodeNumber: context.episodeNumber,
             seasonNumber: context.seasonNumber,
             isFinal: context.isFinal,

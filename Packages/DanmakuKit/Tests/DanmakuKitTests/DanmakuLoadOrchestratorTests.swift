@@ -779,8 +779,152 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertEqual(persisted?.source, .aniskip)
     }
 
-    func testCachedIntroHintWinsWithoutAniSkipRequest() async throws {
+    /// 2026 夏番实测场景：dandanplay 中文标题在 AniList 零召回，原生标题命中。
+    /// 验证 originalTitle 进了候选、多候选搜索生效、最终拿到 AniSkip 提示。
+    func testAniSkipResolutionFallsBackToOriginalTitle() async throws {
         let configuration = makeConfiguration()
+        let fingerprint = makeFingerprintData()
+        let matchBody = """
+        {"success":true,"errorCode":0,"resultCount":1,"isMatched":true,
+         "matches":[{"episodeId":5001,"animeTitle":"二十世纪电气目录","episodeTitle":"第9话 分别时刻"}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"30.0,1,16777215,100","m":"日常"}]}
+        """
+        let aniskipBody = """
+        {"found":true,"results":[
+          {"interval":{"startTime":52.241,"endTime":142.241},"skipType":"op","skipId":"x"}
+        ],"statusCode":200}
+        """
+        let searches = SearchRecorder()
+        MockURLProtocol.handler = { request in
+            switch request.url!.host {
+            case "gateway.example.com":
+                switch request.url!.path {
+                case "/v1/match": return TestSupport.response(matchBody, url: request.url!)
+                case "/v1/comments/5001": return TestSupport.response(commentsBody, url: request.url!)
+                default: return TestSupport.response("{}", status: 404, url: request.url!)
+                }
+            case "media.example.com":
+                return makeRange206Response(fingerprint, url: request.url!)
+            case "graphql.anilist.co":
+                if let search = GraphQLRequestBody.searchVariable(of: request) {
+                    searches.list.append(search)
+                }
+                if searches.list.count == 1 {
+                    return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+                }
+                return TestSupport.response(
+                    #"{"data":{"Page":{"media":[{"id":103303,"idMal":62856,"title":{"native":"二十世紀電氣目録 -ユーレカ・エヴリカ-"}}]}}}"#,
+                    url: request.url!)
+            case "api.aniskip.com":
+                return TestSupport.response(aniskipBody, url: request.url!)
+            default:
+                return TestSupport.response("{}", status: 404, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "jellyfin:original-title-fallback",
+            allowsCachedMatchReuse: true,
+            fileName: "二十世纪电气目录 - S01E09 - 第 9 集",
+            fileSize: 64,
+            durationSeconds: 1529,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            animeTitle: "二十世纪电气目录",
+            originalTitle: "二十世紀電氣目録 -ユーレカ・エヴリカ-",
+            episodeNumber: 9
+        )
+        let outcome = await orchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(searches.list, ["二十世纪电气目录", "二十世紀電氣目録 -ユーレカ・エヴリカ-"])
+        XCTAssertEqual(outcome, .loaded(
+            episodeID: 5001, commentCount: 1, title: "二十世纪电气目录 · 第9话 分别时刻",
+            introHint: DanmakuIntroHint(startSeconds: 52.241, endSeconds: 142.241, evidenceCount: 1, source: .aniskip)))
+        let persisted = await service.cachedIntroHint(for: 5001)
+        XCTAssertEqual(persisted?.source, .aniskip)
+    }
+
+    /// 别名桥（Bangumi 日文原名）作为第三路候选注入 AniSkip 解析。
+    func testAniSkipResolutionMergesAliasProviderTitles() async throws {
+        let configuration = makeConfiguration()
+        let fingerprint = makeFingerprintData()
+        let matchBody = """
+        {"success":true,"errorCode":0,"resultCount":1,"isMatched":true,
+         "matches":[{"episodeId":5002,"animeTitle":"与你相恋到生命尽头","episodeTitle":"第13话 会いたい"}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"30.0,1,16777215,100","m":"日常"}]}
+        """
+        let aniskipBody = """
+        {"found":true,"results":[
+          {"interval":{"startTime":48.0,"endTime":138.0},"skipType":"op","skipId":"x"}
+        ],"statusCode":200}
+        """
+        let searches = SearchRecorder()
+        MockURLProtocol.handler = { request in
+            switch request.url!.host {
+            case "gateway.example.com":
+                switch request.url!.path {
+                case "/v1/match": return TestSupport.response(matchBody, url: request.url!)
+                case "/v1/comments/5002": return TestSupport.response(commentsBody, url: request.url!)
+                default: return TestSupport.response("{}", status: 404, url: request.url!)
+                }
+            case "media.example.com":
+                return makeRange206Response(fingerprint, url: request.url!)
+            case "graphql.anilist.co":
+                if let search = GraphQLRequestBody.searchVariable(of: request) {
+                    searches.list.append(search)
+                }
+                if searches.list.count == 1 {
+                    return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+                }
+                return TestSupport.response(
+                    #"{"data":{"Page":{"media":[{"id":187260,"idMal":61126,"title":{"native":"きみが死ぬまで恋をしたい"}}]}}}"#,
+                    url: request.url!)
+            case "api.aniskip.com":
+                return TestSupport.response(aniskipBody, url: request.url!)
+            default:
+                return TestSupport.response("{}", status: 404, url: request.url!)
+            }
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let aliasOrchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: TestSupport.mockedSession(),
+            titleAliases: FakeTitleAliasProvider(aliases: ["きみが死ぬまで恋をしたい"])
+        )
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "jellyfin:alias-merge",
+            allowsCachedMatchReuse: true,
+            fileName: "与你相恋到生命尽头 - S01E13 - 第 13 集",
+            fileSize: 64,
+            durationSeconds: 1420,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            animeTitle: "与你相恋到生命尽头",
+            episodeNumber: 13
+        )
+        let outcome = await aliasOrchestrator.runAutomatic(
+            matchContext: context,
+            configuration: configuration,
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertEqual(searches.list, ["与你相恋到生命尽头", "きみが死ぬまで恋をしたい"])
+        XCTAssertEqual(outcome, .loaded(
+            episodeID: 5002, commentCount: 1, title: "与你相恋到生命尽头 · 第13话 会いたい",
+            introHint: DanmakuIntroHint(startSeconds: 48.0, endSeconds: 138.0, evidenceCount: 1, source: .aniskip)))
+    }
+
+    func testCachedIntroHintWinsWithoutAniSkipRequest() async throws {        let configuration = makeConfiguration()
         // 预置永久提示：缓存命中后 AniSkip/弹幕都不该被查询。
         let context = makeContext()
         let cached = DanmakuIntroHint(startSeconds: 0, endSeconds: 90, evidenceCount: 5)
@@ -937,4 +1081,10 @@ private func makeRange206Response(_ data: Data, url: URL) -> (HTTPURLResponse, D
     ]
     let response = HTTPURLResponse(url: url, statusCode: 206, httpVersion: nil, headerFields: headers)!
     return (response, data)
+}
+
+/// AniSkip 候选标题增强测试用的别名桥替身（Bangumi 日文原名模拟）。
+private struct FakeTitleAliasProvider: DanmakuTitleAliasProviding {
+    var aliases: [String]
+    func aliases(for title: String) async -> [String] { aliases }
 }

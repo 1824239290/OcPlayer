@@ -13,6 +13,7 @@ struct ServerItemFields {
     var kindTag: String?
     var id: String?
     var name: String?
+    var originalTitle: String?
     var kind: MediaItem.Kind = .other
     var overview: String?
     var productionYear: Int?
@@ -71,6 +72,7 @@ struct ServerItemFields {
         return MediaItem(
             id: resolvedID,
             name: name ?? "未命名",
+            originalTitle: originalTitle,
             kind: kind,
             overview: overview,
             year: productionYear,

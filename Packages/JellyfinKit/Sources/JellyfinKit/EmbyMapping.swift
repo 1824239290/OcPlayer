@@ -21,6 +21,7 @@ extension EmbyItemDTO {
         fields.kindTag = type
         fields.id = id
         fields.name = name
+        fields.originalTitle = originalTitle
         fields.kind = MediaItem.Kind(serverTypeString: type)
         fields.overview = overview
         fields.productionYear = productionYear

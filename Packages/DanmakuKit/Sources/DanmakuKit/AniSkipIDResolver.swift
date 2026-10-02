@@ -8,19 +8,47 @@ public struct AniSkipAnimeIdentity: Sendable, Equatable {
     public let malID: Int?
     /// ProviderIds 里的 AniList ID（一次 GraphQL 换算成 MAL）。
     public let anilistID: Int?
-    /// 标题搜索兜底（优先弹幕匹配出的 dandanplay 标题——常带季标记，搜索命中率高）。
+    /// 主标题（优先弹幕匹配出的 dandanplay 标题——与弹幕库同一套命名）。
     public let title: String?
+    /// 备选标题（媒体库原生标题、Bangumi 日文名等），主标题搜不中时依次尝试。
+    /// dandanplay 的简体中文标题在 AniList 上常常零召回（原生标题用字不同，
+    /// 实测「二十世纪电气目录」搜「二十世紀電氣目録 -ユーレカ・エヴリカ-」条目
+    /// 返回空），单一中文标题会把整条 AniSkip 路径卡死在 ID 解析上。
+    public let alternativeTitles: [String]
     /// 季数 / 年份：进缓存键做区分（不同季是不同 MAL 条目），搜索暂不用于消歧。
     public let seasonNumber: Int?
     public let year: Int?
 
-    public init(malID: Int? = nil, anilistID: Int? = nil, title: String? = nil,
-                seasonNumber: Int? = nil, year: Int? = nil) {
+    public init(
+        malID: Int? = nil,
+        anilistID: Int? = nil,
+        title: String? = nil,
+        alternativeTitles: [String] = [],
+        seasonNumber: Int? = nil,
+        year: Int? = nil
+    ) {
         self.malID = malID
         self.anilistID = anilistID
         self.title = title
+        self.alternativeTitles = alternativeTitles
         self.seasonNumber = seasonNumber
         self.year = year
+    }
+
+    /// AniList 搜索候选：主标题在前，按归一形态去重滤空（全半角/大小写/标点
+    /// 视为同一标题，避免同一标题搜两遍白耗限流额度）。
+    var searchTitles: [String] {
+        var seen = Set<String>()
+        var titles: [String] = []
+        for candidate in [title] + alternativeTitles {
+            let trimmed = (candidate ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let normalized = DanmakuFilenameParser.comparableTitle(trimmed)
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            titles.append(trimmed)
+        }
+        return titles
     }
 }
 
@@ -40,30 +68,176 @@ public struct AniSkipIDRecord: Codable, Sendable, Equatable {
 struct AniListClient: Sendable {
     let session: URLSession
 
+    /// 搜索响应里的一条候选条目。字段全可缺（GraphQL 只返回所请求的字段，
+    /// 测试响应可以只带 idMal）。
+    struct SearchMedia: Sendable {
+        let idMal: Int?
+        let native: String?
+        let romaji: String?
+        let english: String?
+        let synonyms: [String]
+
+        var allTitles: [String] {
+            [native, romaji, english].compactMap { $0 } + synonyms
+        }
+    }
+
+    /// 命中规则（进日志，排查「为什么认成了这一条」）。
+    enum MatchRule: String, Sendable {
+        /// 归一化后与标题/别名完全一致。
+        case exact
+        /// 归一化后被候选标题包含（原生标题带副标题装饰的集，如
+        /// 「二十世紀電氣目録」⊂「二十世紀電氣目録ユーレカエヴリカ」）。
+        case contained
+        /// 兜底：第一个带 idMal 的条目（信任 AniList 搜索的相关性排序）。
+        case firstWithID
+    }
+
     /// 标题/AniList ID → MAL ID。搜不到或网络失败返回 nil（调用方降级，不抛错：
     /// 映射失败只意味着跳片头少一路数据源，不该打断弹幕装载）。
-    func malID(anilistID: Int?, searchTitle: String?) async -> Int? {
-        let query: String
-        let variables: [String: String]
+    ///
+    /// AniList 的 `search` 是模糊匹配、无精确模式（官方文档明说标题不唯一），
+    /// 因此按官方推荐做客户端过滤：先在候选里找归一化相等/包含的条目，全部
+    /// 落空再退到「第一个带 idMal」的旧行为。多候选标题按序尝试，任一命中短路。
+    func malID(anilistID: Int?, searchTitles: [String]) async -> Int? {
         if let anilistID {
-            query = "query ($id: Int) { Media(id: $id) { id idMal } }"
-            variables = ["id": String(anilistID)]
-        } else if let searchTitle, !searchTitle.isEmpty {
-            query = """
-            query ($search: String) { Page(perPage: 5) { media(search: $search, type: ANIME) { id idMal } } }
-            """
-            variables = ["search": searchTitle]
-        } else {
-            return nil
+            return await malIDByLookup(anilistID)
         }
+        var firstFallback: (idMal: Int, title: String)?
+        for title in searchTitles {
+            guard let media = await searchMedia(title: title) else { continue }
+            if let hit = Self.bestMatch(in: media, for: title) {
+                NetworkLog.report(
+                    category: "AniList", level: .info,
+                    "AniList 搜索命中 MAL ID",
+                    fields: [
+                        "title": .string(title),
+                        "malID": .integer(Int64(hit.idMal)),
+                        "rule": .string(hit.rule.rawValue),
+                    ])
+                return hit.idMal
+            }
+            // 兜底候选按标题优先级取第一个：精确匹配优先于兜底，所以不能
+            // 在这里直接 return——后面的标题可能给出更可靠的精确命中。
+            if firstFallback == nil,
+               let idMal = media.first(where: { $0.idMal != nil })?.idMal {
+                firstFallback = (idMal, title)
+            }
+        }
+        guard let fallback = firstFallback else { return nil }
+        NetworkLog.report(
+            category: "AniList", level: .info,
+            "AniList 搜索无精确匹配，取首个带 idMal 的条目",
+            fields: [
+                "title": .string(fallback.title),
+                "malID": .integer(Int64(fallback.idMal)),
+                "rule": .string(MatchRule.firstWithID.rawValue),
+            ])
+        return fallback.idMal
+    }
 
+    /// 客户端标题匹配：归一化相等 > 归一化包含 > nil。只在 idMal 非空的条目里选。
+    static func bestMatch(
+        in media: [SearchMedia], for title: String
+    ) -> (idMal: Int, rule: MatchRule)? {
+        let query = DanmakuFilenameParser.comparableTitle(title)
+        guard !query.isEmpty else { return nil }
+        var containedID: Int?
+        for candidate in media {
+            guard let idMal = candidate.idMal else { continue }
+            for name in candidate.allTitles {
+                let normalized = DanmakuFilenameParser.comparableTitle(name)
+                if normalized.isEmpty { continue }
+                if normalized == query {
+                    return (idMal, .exact)
+                }
+                // 包含匹配要求查询词 ≥6 个字母/数字：「Re」这类短词会命中所有候选。
+                if containedID == nil, query.count >= 6, normalized.contains(query) {
+                    containedID = idMal
+                }
+            }
+        }
+        guard let containedID else { return nil }
+        return (containedID, .contained)
+    }
+
+    // MARK: 内部
+
+    /// AniList ID 直查（一次 GraphQL 换算）。
+    private func malIDByLookup(_ anilistID: Int) async -> Int? {
+        struct Response: Decodable {
+            struct Media: Decodable { let idMal: Int? }
+            struct DataPayload: Decodable {
+                let media: Media?
+                enum CodingKeys: String, CodingKey { case media = "Media" }
+            }
+            let data: DataPayload?
+        }
+        guard let decoded: Response = await exchange(
+            query: "query ($id: Int) { Media(id: $id) { id idMal } }",
+            variables: ["id": String(anilistID)],
+            as: Response.self
+        ) else { return nil }
+        return decoded.data?.media?.idMal
+    }
+
+    /// 单标题搜索。nil = 网络/协议层失败（已记日志）；空数组 = 搜索无结果。
+    private func searchMedia(title: String) async -> [SearchMedia]? {
+        struct Response: Decodable {
+            struct Media: Decodable {
+                let idMal: Int?
+                let title: Title?
+                let synonyms: [String]?
+                struct Title: Decodable {
+                    let native: String?
+                    let romaji: String?
+                    let english: String?
+                }
+            }
+            struct Page: Decodable { let media: [Media]? }
+            struct DataPayload: Decodable {
+                let page: Page?
+                enum CodingKeys: String, CodingKey { case page = "Page" }
+            }
+            let data: DataPayload?
+        }
+        guard let decoded: Response = await exchange(
+            query: """
+            query ($search: String) { Page(perPage: 10) { media(search: $search, type: ANIME) \
+            { id idMal title { native romaji english } synonyms } } }
+            """,
+            variables: ["search": title],
+            as: Response.self
+        ) else { return nil }
+        let media = (decoded.data?.page?.media ?? []).map { item in
+            SearchMedia(
+                idMal: item.idMal,
+                native: item.title?.native,
+                romaji: item.title?.romaji,
+                english: item.title?.english,
+                synonyms: item.synonyms ?? []
+            )
+        }
+        if media.isEmpty {
+            NetworkLog.report(
+                category: "AniList", level: .debug,
+                "AniList 搜索无结果",
+                fields: ["title": .string(title)])
+        }
+        return media
+    }
+
+    /// POST 一个 GraphQL 请求并解码。非 2xx / 传输失败 / 解码失败都记 warning 后
+    /// 返回 nil——映射失败只降级这一路数据源，调用方不抛错。
+    private func exchange<Response: Decodable>(
+        query: String,
+        variables: [String: String],
+        as type: Response.Type
+    ) async -> Response? {
         let body: Data
         do {
-            struct GraphQLRequest: Encodable {
-                let query: String
-                let variables: [String: String]
-            }
-            body = try JSONEncoder().encode(GraphQLRequest(query: query, variables: variables))
+            body = try JSONEncoder().encode(
+                GraphQLRequestBody(query: query, variables: variables))
         } catch {
             NetworkLog.report(category: "AniList", level: .warning, "GraphQL 请求体编码失败: \(error)")
             return nil
@@ -92,33 +266,8 @@ struct AniListClient: Sendable {
                 "GraphQL HTTP \(exchange.statusCode) body=\(exchange.bodyText.prefix(160))")
             return nil
         }
-
-        struct Response: Decodable {
-            // GraphQL 字段名按查询原样返回：Media(id:) 顶层是 "Media"，搜索顶层是 "Page"。
-            struct Media: Decodable { let idMal: Int? }
-            struct Page: Decodable { let media: [Media]? }
-            struct DataPayload: Decodable {
-                let media: Media?
-                let page: Page?
-                enum CodingKeys: String, CodingKey {
-                    case media = "Media"
-                    case page = "Page"
-                }
-            }
-            let data: DataPayload?
-        }
         do {
-            let decoded = try JSONDecoder().decode(Response.self, from: exchange.data)
-            if let media = decoded.data?.media {
-                return media.idMal
-            }
-            // 搜索取首个带 idMal 的条目。已知局限：标题搜索不分季，长篇/同多季
-            // 同名番可能命中别的季；OP 时长在季间通常一致，错季代价可接受，
-            // 详见接入设计（episodeLength 过滤 + 区间合理性钳制兜底）。
-            if let page = decoded.data?.page {
-                return page.media?.compactMap(\.idMal).first
-            }
-            return nil
+            return try JSONDecoder().decode(Response.self, from: exchange.data)
         } catch {
             NetworkLog.report(category: "AniList", level: .warning, "GraphQL 解码失败: \(error)")
             return nil
@@ -126,7 +275,13 @@ struct AniListClient: Sendable {
     }
 }
 
-/// MAL ID 解析器：ProviderIds 直取 → 缓存 → AniList（按 ID 换算 / 标题搜索）。
+/// AniList GraphQL 请求体。
+private struct GraphQLRequestBody: Encodable {
+    let query: String
+    let variables: [String: String]
+}
+
+/// MAL ID 解析器：ProviderIds 直取 → 缓存 → AniList（按 ID 换算 / 多候选标题搜索）。
 ///
 /// 结果永久缓存（`AniSkipIDStore`），负缓存 7 天过期重试。解析器只做「番剧 → MAL ID」
 /// 这一件事，AniSkip 区间查询由 `AniSkipClient` 负责。
@@ -153,36 +308,63 @@ public actor AniSkipIDResolver {
     static let negativeCacheLifetime: TimeInterval = 7 * 24 * 3600
 
     /// 解析 MAL ID。无任何线索或解析失败返回 nil。
-    public func malID(for identity: AniSkipAnimeIdentity) async -> Int? {
+    ///
+    /// `forceRefresh` 绕过正/负缓存全新解析（「重新匹配」的语义：用户显式要求
+    /// 重来——旧正缓存可能本身就是错季错番；AniList 限流 90 req/min，多花
+    /// 1-3 个请求无压力）。
+    public func malID(for identity: AniSkipAnimeIdentity, forceRefresh: Bool = false) async -> Int? {
         // 直取路径零成本，不走缓存。
         if let malID = identity.malID, malID >= 1 {
             return malID
         }
+        let titles = identity.searchTitles
+        guard identity.anilistID != nil || !titles.isEmpty else {
+            NetworkLog.report(
+                category: "AniSkip", level: .debug,
+                "MAL ID 解析无线索（无 ID、无标题），跳过")
+            return nil
+        }
         let key = Self.cacheKey(for: identity)
-        if let record = await store.record(for: key) {
+        if !forceRefresh, let record = await store.record(for: key) {
             if let malID = record.malID {
                 return malID
             }
             if now().timeIntervalSince(record.resolvedAt) < Self.negativeCacheLifetime {
+                NetworkLog.report(
+                    category: "AniSkip", level: .debug,
+                    "MAL ID 负缓存命中，7 天内不重试 AniList")
                 return nil
             }
         }
-        let resolved = await client.malID(
-            anilistID: identity.anilistID,
-            searchTitle: identity.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+        let resolved = await client.malID(anilistID: identity.anilistID, searchTitles: titles)
         await store.setRecord(AniSkipIDRecord(malID: resolved, resolvedAt: now()), for: key)
+        if let malID = resolved {
+            NetworkLog.report(
+                category: "AniSkip", level: .info,
+                "MAL ID 解析成功",
+                fields: ["malID": .integer(Int64(malID))])
+        } else {
+            NetworkLog.report(
+                category: "AniSkip", level: .info,
+                "MAL ID 解析失败（全部候选落空），负缓存 7 天后重试",
+                fields: ["candidateCount": .integer(Int64(titles.count))])
+        }
         return resolved
     }
 
     /// 缓存键：身份线索的规范化拼接。直取的 malID 不入缓存，故键里不含它。
+    ///
+    /// `v2|` 前缀：v1 时代单一中文标题搜空就写负缓存，曾把几部 2026 夏番整季
+    /// 挡在 AniSkip 之外；多候选实现后键升版，旧负缓存（含错录）整体作废，
+    /// 不做迁移——文件可随时重建。
     static func cacheKey(for identity: AniSkipAnimeIdentity) -> String {
-        let raw = [
+        let parts = [
             identity.anilistID.map(String.init) ?? "-",
             (identity.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
             identity.seasonNumber.map(String.init) ?? "-",
             identity.year.map(String.init) ?? "-",
-        ].joined(separator: "|")
+        ]
+        let raw = "v2|" + parts.joined(separator: "|")
         return SHA256.hash(data: Data(raw.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }

@@ -19,6 +19,7 @@ import Foundation
 struct EmbyItemDTO: Decodable, Sendable {
     var id: String?
     var name: String?
+    var originalTitle: String?
     /// 条目类型。Emby 会多出 CollectionFolder 等 Jellyfin 没有的值。
     var type: String?
     /// 媒体库的集合类型（只在 UserView / CollectionFolder 上有意义）。

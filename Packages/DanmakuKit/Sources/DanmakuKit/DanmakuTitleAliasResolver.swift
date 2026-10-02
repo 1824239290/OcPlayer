@@ -28,7 +28,10 @@ public struct DanmakuTitleAliasRecord: Codable, Sendable, Equatable {
 /// 存在的理由：弹弹play 库里的 `animeTitle` 固定是简体中文，且日文名召回不稳
 /// （实测 `負けヒロインが多すぎる` 搜不到、中文名命中第一）。本地标题是日文/罗马音时，
 /// 先换成中文名再搜、再打分，召回与标题相似度两条路一起修。
-public actor DanmakuTitleAliasResolver {
+///
+/// 同时实现 `DanmakuTitleAliasProviding` 供 AniSkip 候选标题组装复用：别名里的
+/// 日文原名往往就是 AniList 的原生标题（中文标题搜不中时的生路）。
+public actor DanmakuTitleAliasResolver: DanmakuTitleAliasProviding {
     private let store: DanmakuTitleAliasStore
     private let provider: DanmakuTitleAliasProviding
     /// 时间注入（测试负缓存过期用）。

@@ -65,13 +65,17 @@ public struct DanmakuLoadOrchestrator {
     private let aniSkipClient: AniSkipClient
     /// MAL ID 解析器（ProviderIds 直取 → 永久缓存 → AniList 搜索）。
     private let aniSkipIDResolver: AniSkipIDResolver
+    /// 标题别名桥（AniSkip 候选标题增强用，可缺省）：dandanplay 的中文标题在
+    /// AniList 常搜不中，别名里的日文原名往往是原生标题。可空——注入失败只降级。
+    private let titleAliases: DanmakuTitleAliasProviding?
 
     public init(
         service: DanmakuService,
         session: URLSession = DanmakuNetworking.makeSession(),
         retryPolicy: RetryPolicy = RetryPolicy(),
         aniSkipClient: AniSkipClient? = nil,
-        aniSkipIDResolver: AniSkipIDResolver? = nil
+        aniSkipIDResolver: AniSkipIDResolver? = nil,
+        titleAliases: DanmakuTitleAliasProviding? = nil
     ) {
         self.service = service
         self.session = session
@@ -81,6 +85,7 @@ public struct DanmakuLoadOrchestrator {
             store: AniSkipIDStore(directory: service.cacheDirectory),
             session: session
         )
+        self.titleAliases = titleAliases
     }
 
     /// 整个自动匹配 + 装载链路。`forceRematch` 跳过缓存并清除已记住的映射。
@@ -500,7 +505,7 @@ public struct DanmakuLoadOrchestrator {
         if !forceRematch, let cached = await service.cachedIntroHint(for: match.episodeID) {
             return cached
         }
-        if let hint = await aniSkipHint(match: match, context: matchContext) {
+        if let hint = await aniSkipHint(match: match, context: matchContext, forceRematch: forceRematch) {
             await service.persistIntroHint(hint, for: match.episodeID)
             return hint
         }
@@ -511,26 +516,47 @@ public struct DanmakuLoadOrchestrator {
         return nil
     }
 
-    /// AniSkip 路径：MAL ID（ProviderIds 直取 → AniList 换算/标题搜索）→ 区间查询 → 提示。
+    /// AniSkip 路径：MAL ID（ProviderIds 直取 → AniList 多候选搜索）→ 区间查询 → 提示。
     /// 无集数、无任何身份线索或查询失败都返回 nil（「跳过片头」少一路数据源而已）。
+    ///
+    /// `forceRematch` 透传给 ID 解析器：显式重匹配时绕过正/负缓存全新解析。
     private func aniSkipHint(
         match: DanmakuEpisodeMatch,
-        context: DanmakuMatchContext?
+        context: DanmakuMatchContext?,
+        forceRematch: Bool
     ) async -> DanmakuIntroHint? {
         guard let context, let episodeNumber = context.episodeNumber, episodeNumber >= 1 else {
+            NetworkLog.report(
+                category: "AniSkip", level: .debug,
+                "跳过片头缺集数上下文，AniSkip 不查")
             return nil
+        }
+        // 候选标题：弹幕匹配标题 → 媒体库原生标题（Jellyfin OriginalTitle，多为
+        // 日文原名）→ Bangumi 别名。dandanplay 的简体中文标题在 AniList 常常零召回，
+        // 多候选是 ID 解析的生路；去重滤空由 identity.searchTitles 统一做。
+        var candidates: [String] = []
+        if let matched = (match.animeTitle ?? context.animeTitle)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !matched.isEmpty {
+            candidates.append(matched)
+        }
+        if let original = context.originalTitle?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !original.isEmpty {
+            candidates.append(original)
+        }
+        // 别名按主标题查一次（自带永久缓存 + 负缓存，重复播放零成本）。
+        if let primary = candidates.first {
+            candidates += await titleAliases?.aliases(for: primary) ?? []
         }
         let identity = AniSkipAnimeIdentity(
             malID: context.malID,
             anilistID: context.anilistID,
-            title: (match.animeTitle ?? context.animeTitle)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
+            title: candidates.first,
+            alternativeTitles: Array(candidates.dropFirst()),
             seasonNumber: context.seasonNumber,
             year: nil
         )
-        guard identity.malID != nil || identity.anilistID != nil || identity.title?.isEmpty == false
-        else { return nil }
-        guard let malID = await aniSkipIDResolver.malID(for: identity) else { return nil }
+        guard let malID = await aniSkipIDResolver.malID(
+            for: identity, forceRefresh: forceRematch) else { return nil }
         do {
             let intervals = try await aniSkipClient.skipTimes(
                 malID: malID,
@@ -578,6 +604,9 @@ public struct DanmakuMatchContext: Sendable {
     public let fileSize: Int64?
     public let durationSeconds: Int?
     public let animeTitle: String?
+    /// 媒体库的原生标题（Jellyfin OriginalTitle，番剧库多为日文原名）。
+    /// AniList 搜索候选：dandanplay 的中文标题常常搜不中，这是主要生路之一。
+    public let originalTitle: String?
     public let episodeNumber: Int?
     public let seasonNumber: Int?
     public let isFinal: Bool
@@ -604,6 +633,7 @@ public struct DanmakuMatchContext: Sendable {
         remoteURL: URL? = nil,
         remoteHeaders: [String: String] = [:],
         animeTitle: String? = nil,
+        originalTitle: String? = nil,
         episodeNumber: Int? = nil,
         seasonNumber: Int? = nil,
         isFinal: Bool = false,
@@ -623,6 +653,7 @@ public struct DanmakuMatchContext: Sendable {
         self.remoteURL = remoteURL
         self.remoteHeaders = remoteHeaders
         self.animeTitle = animeTitle
+        self.originalTitle = originalTitle
         self.episodeNumber = episodeNumber
         self.seasonNumber = seasonNumber
         self.isFinal = isFinal
