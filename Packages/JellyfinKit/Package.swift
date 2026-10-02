@@ -10,7 +10,8 @@ let package = Package(
     dependencies: [
         // 官方 SDK（product 名 JellyfinAPI）：登录 / Quick Connect / Items / 图片全在里面，
         // 我们只做薄封装（多服务器 profile、本地会话、DTO → 域模型映射）。
-        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift", from: "3.0.0"),
+        // 3.3.0 按 Jellyfin 12.x 的 OpenAPI 重新生成（12.0 起版本号脱离 10.x 系）。
+        .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift", from: "3.3.0"),
         .package(path: "../CoreModel"),
         .package(path: "../DiagnosticsKit"),
     ],

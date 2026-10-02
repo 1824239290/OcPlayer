@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### 改动
+
+- **jellyfin-sdk-swift 3.0.0 → 3.3.0，Jellyfin 12 兼容**。Jellyfin 12.0 起版本号脱离 10.x 系（10.11 直接跳 12.0），带三项客户端可见的破坏性变更，逐项核对全不沾：①旧式鉴权默认禁用（`X-Emby-Token` 头 / `api_key` 查询参数）——我们全链路只用现代 `Authorization: MediaBrowser …` 头，token 不进 URL；②移除 `/emby/*`、`/mediabrowser/*` 路径别名与 `GET /QuickConnect/Initiate`（只留 POST）——`/emby` 前缀只拼给 Emby 档案，Quick Connect 走 SDK 的 POST；③GetItems 带 `includeItemTypes` 时递归过滤语义变化——我们的查询（`Movie,Series` / `Episode` + `recursive=true`）正是此形态，是本次升级的实际动机。3.3.0 按 Jellyfin 12.1 的 OpenAPI 重新生成，`from: "3.0.0"` 收紧为 `from: "3.3.0"`；封装层（JellyfinKit）零改动编译通过，133 个包测试全绿（请求形状断言不变，说明 SDK 层消费的路由与参数未漂移）。遗留提醒：跳过片头读的 `/MediaSegments` 依赖服务器端 intro-skipper 插件，10.11 时代的插件在 12.0 上不加载，需等插件发 12.0 适配版（服务器侧，非播放器问题）。验证：`swift test --package-path Packages/JellyfinKit` 133 用例全绿；macOS Debug 构建通过（App 层不直接 import SDK，仅消费 JellyfinKit 封装）。真实 12 服务器上的媒体库/剧集列表回归待有环境时补。
+
 ### 修复
 
 - **修「呈现式页面的返回键点了没反应」（下载管理 / 资源搜索 / 管理服务器 / 开源许可证）**。常规布局（macOS / iPad 常规宽度）的顶栏返回键是自绘的 `AppShellBackButton`，它只会调 `AppModel.back()`；而 `back()` 的落地是 `path.removeLast()`，并有 `guard !path.isEmpty else { return }` 守卫。`navigationDestination(isPresented:)` 呈现的页面（下载管理、资源搜索、管理服务器、开源许可证）**根本不在 `path` 上**——`isPresented` 是另一套呈现机制，栈里看不到它，于是守卫直接把这次点击吞掉：淡出都不发生，按钮像没绑事件。修法：新增 `AppModel.popPresented(_:)` 作为 `pushPresented(_:)` 的对称出口（同样走两段式，`restoreDelay` 与 `back()` 取同一档），并给自绘返回键补一个可选的 `presented: Binding<Bool>`——非空时走 `popPresented` 关掉页面自己的落地开关，为空时维持 `back()` 弹栈。六个调用点全部接上（`appShellBackChrome(title:presented:)` 新重载）：MoviePilot 首页的下载管理与资源搜索、详情页 MoviePilot 区块的资源搜索、资源搜索页的「添加下载成功后跳下载管理」、设置页的管理服务器与开源许可证——后两个是同源同病的既有 bug，一并修掉。顺带两处一致性：①呈现式页面此前没有任何离场过渡（不在路由出口 `appRouteView` 上，没人替它挂 `routeExitFade`），返回是「等 0.45s 再硬关」，现在由 `appShellBackChrome(title:presented:)` 按 `presented` 非空补挂，与路由页同一个 `Motion.exit`；②资源搜索页自动跳转的下载管理此前裸用系统返回键（与其它入口的顶栏不一致），现统一为 `appShellBackChrome(title: "下载管理")`。验证：macOS Debug / iOS（模拟器）构建均通过；`OcPlayerTests` macOS 套件 244 用例全绿，含新增回归用例 `testPopPresentedDismissesWhileBackIsNoOpOnEmptyStack`（钉住「空栈上 `back()` 是空操作、`popPresented` 必须真的关掉开关」这一形状）；macOS 实机点按确认下载管理页返回键恢复。
