@@ -52,16 +52,37 @@ public struct AniSkipAnimeIdentity: Sendable, Equatable {
     }
 }
 
-/// `mal-id-mappings.json` 的单条记录。`malID == nil` 是负缓存（搜不中），
-/// 7 天后允许重试——AniList 在长尾番上的收录会变，死缓存会永久错过新数据。
+/// 一次身份解析的结果。`anilistID` 供 anime-skip 这类按 AniList 索引的源复用;
+/// **两者都为 nil 才算解析失败**(负缓存)——AniList 条目可能只有 id 没有 idMal,
+/// 此时 AniSkip 查不了,但 anime-skip 还能用。
+public struct AniSkipResolvedIDs: Sendable, Equatable {
+    public let malID: Int?
+    public let anilistID: Int?
+
+    public init(malID: Int?, anilistID: Int?) {
+        self.malID = malID
+        self.anilistID = anilistID
+    }
+
+    public var isEmpty: Bool { malID == nil && anilistID == nil }
+}
+
+/// `mal-id-mappings.json` 的单条记录。`malID` 与 `anilistID` 都为 nil 是负缓存
+/// (搜不中),7 天后允许重试——AniList 在长尾番上的收录会变,死缓存会永久错过
+/// 新数据。`anilistID` 为旧文件兼容字段(缺 key 解码为 nil)。
 public struct AniSkipIDRecord: Codable, Sendable, Equatable {
     public let malID: Int?
+    public let anilistID: Int?
     public let resolvedAt: Date
 
-    public init(malID: Int?, resolvedAt: Date) {
+    public init(malID: Int?, anilistID: Int? = nil, resolvedAt: Date) {
         self.malID = malID
+        self.anilistID = anilistID
         self.resolvedAt = resolvedAt
     }
+
+    /// 双 ID 全空 = 负缓存记录。
+    var isEmpty: Bool { malID == nil && anilistID == nil }
 }
 
 /// AniList GraphQL 只读客户端（无需鉴权；限流 90 req/min，远低于我们的节奏）。
@@ -71,6 +92,7 @@ struct AniListClient: Sendable {
     /// 搜索响应里的一条候选条目。字段全可缺（GraphQL 只返回所请求的字段，
     /// 测试响应可以只带 idMal）。
     struct SearchMedia: Sendable {
+        let anilistID: Int?
         let idMal: Int?
         let native: String?
         let romaji: String?
@@ -93,80 +115,84 @@ struct AniListClient: Sendable {
         case firstWithID
     }
 
-    /// 标题/AniList ID → MAL ID。搜不到或网络失败返回 nil（调用方降级，不抛错：
+    /// 标题/AniList ID → MAL ID。搜不到或网络失败返回空结果（调用方降级，不抛错：
     /// 映射失败只意味着跳片头少一路数据源，不该打断弹幕装载）。
     ///
     /// AniList 的 `search` 是模糊匹配、无精确模式（官方文档明说标题不唯一），
     /// 因此按官方推荐做客户端过滤：先在候选里找归一化相等/包含的条目，全部
     /// 落空再退到「第一个带 idMal」的旧行为。多候选标题按序尝试，任一命中短路。
-    func malID(anilistID: Int?, searchTitles: [String]) async -> Int? {
+    func resolveIDs(anilistID: Int?, searchTitles: [String]) async -> AniSkipResolvedIDs {
         if let anilistID {
-            return await malIDByLookup(anilistID)
+            return await lookupIDs(anilistID: anilistID)
         }
-        var firstFallback: (idMal: Int, title: String)?
+        var firstFallback: SearchMedia?
         for title in searchTitles {
             guard let media = await searchMedia(title: title) else { continue }
             if let hit = Self.bestMatch(in: media, for: title) {
+                let hitMedia = hit.media
                 NetworkLog.report(
                     category: "AniList", level: .info,
-                    "AniList 搜索命中 MAL ID",
+                    "AniList 搜索命中",
                     fields: [
                         "title": .string(title),
-                        "malID": .integer(Int64(hit.idMal)),
+                        "malID": hitMedia.idMal.map { .integer(Int64($0)) } ?? .null,
+                        "anilistID": hitMedia.anilistID.map { .integer(Int64($0)) } ?? .null,
                         "rule": .string(hit.rule.rawValue),
                     ])
-                return hit.idMal
+                return AniSkipResolvedIDs(malID: hitMedia.idMal, anilistID: hitMedia.anilistID)
             }
             // 兜底候选按标题优先级取第一个：精确匹配优先于兜底，所以不能
             // 在这里直接 return——后面的标题可能给出更可靠的精确命中。
-            if firstFallback == nil,
-               let idMal = media.first(where: { $0.idMal != nil })?.idMal {
-                firstFallback = (idMal, title)
+            if firstFallback == nil, let fallback = media.first(where: { $0.idMal != nil }) {
+                firstFallback = fallback
             }
         }
-        guard let fallback = firstFallback else { return nil }
+        guard let fallback = firstFallback else { return AniSkipResolvedIDs(malID: nil, anilistID: nil) }
         NetworkLog.report(
             category: "AniList", level: .info,
             "AniList 搜索无精确匹配，取首个带 idMal 的条目",
             fields: [
-                "title": .string(fallback.title),
-                "malID": .integer(Int64(fallback.idMal)),
+                "malID": fallback.idMal.map { .integer(Int64($0)) } ?? .null,
+                "anilistID": fallback.anilistID.map { .integer(Int64($0)) } ?? .null,
                 "rule": .string(MatchRule.firstWithID.rawValue),
             ])
-        return fallback.idMal
+        return AniSkipResolvedIDs(malID: fallback.idMal, anilistID: fallback.anilistID)
     }
 
     /// 客户端标题匹配：归一化相等 > 归一化包含 > nil。只在 idMal 非空的条目里选。
     static func bestMatch(
         in media: [SearchMedia], for title: String
-    ) -> (idMal: Int, rule: MatchRule)? {
+    ) -> (media: SearchMedia, rule: MatchRule)? {
         let query = DanmakuFilenameParser.comparableTitle(title)
         guard !query.isEmpty else { return nil }
-        var containedID: Int?
+        var contained: SearchMedia?
         for candidate in media {
-            guard let idMal = candidate.idMal else { continue }
+            guard candidate.idMal != nil else { continue }
             for name in candidate.allTitles {
                 let normalized = DanmakuFilenameParser.comparableTitle(name)
                 if normalized.isEmpty { continue }
                 if normalized == query {
-                    return (idMal, .exact)
+                    return (candidate, .exact)
                 }
                 // 包含匹配要求查询词 ≥6 个字母/数字：「Re」这类短词会命中所有候选。
-                if containedID == nil, query.count >= 6, normalized.contains(query) {
-                    containedID = idMal
+                if contained == nil, query.count >= 6, normalized.contains(query) {
+                    contained = candidate
                 }
             }
         }
-        guard let containedID else { return nil }
-        return (containedID, .contained)
+        guard let contained else { return nil }
+        return (contained, .contained)
     }
 
     // MARK: 内部
 
-    /// AniList ID 直查（一次 GraphQL 换算）。
-    private func malIDByLookup(_ anilistID: Int) async -> Int? {
+    /// AniList ID 直查（一次 GraphQL 换算）。id 与 idMal 都取回。
+    private func lookupIDs(anilistID: Int) async -> AniSkipResolvedIDs {
         struct Response: Decodable {
-            struct Media: Decodable { let idMal: Int? }
+            struct Media: Decodable {
+                let id: Int?
+                let idMal: Int?
+            }
             struct DataPayload: Decodable {
                 let media: Media?
                 enum CodingKeys: String, CodingKey { case media = "Media" }
@@ -177,14 +203,16 @@ struct AniListClient: Sendable {
             query: "query ($id: Int) { Media(id: $id) { id idMal } }",
             variables: ["id": String(anilistID)],
             as: Response.self
-        ) else { return nil }
-        return decoded.data?.media?.idMal
+        ) else { return AniSkipResolvedIDs(malID: nil, anilistID: nil) }
+        // AniList ID 是调用方给的（信任），换算只补 idMal。
+        return AniSkipResolvedIDs(malID: decoded.data?.media?.idMal, anilistID: anilistID)
     }
 
     /// 单标题搜索。nil = 网络/协议层失败（已记日志）；空数组 = 搜索无结果。
     private func searchMedia(title: String) async -> [SearchMedia]? {
         struct Response: Decodable {
             struct Media: Decodable {
+                let id: Int?
                 let idMal: Int?
                 let title: Title?
                 let synonyms: [String]?
@@ -211,6 +239,7 @@ struct AniListClient: Sendable {
         ) else { return nil }
         let media = (decoded.data?.page?.media ?? []).map { item in
             SearchMedia(
+                anilistID: item.id,
                 idMal: item.idMal,
                 native: item.title?.native,
                 romaji: item.title?.romaji,
@@ -307,47 +336,56 @@ public actor AniSkipIDResolver {
     /// 负缓存有效期：搜不中的番 7 天后重试。
     static let negativeCacheLifetime: TimeInterval = 7 * 24 * 3600
 
-    /// 解析 MAL ID。无任何线索或解析失败返回 nil。
+    /// 解析番剧身份。无任何线索或解析失败返回空结果（`isEmpty`）。
     ///
     /// `forceRefresh` 绕过正/负缓存全新解析（「重新匹配」的语义：用户显式要求
     /// 重来——旧正缓存可能本身就是错季错番；AniList 限流 90 req/min，多花
     /// 1-3 个请求无压力）。
-    public func malID(for identity: AniSkipAnimeIdentity, forceRefresh: Bool = false) async -> Int? {
+    public func resolve(
+        for identity: AniSkipAnimeIdentity, forceRefresh: Bool = false
+    ) async -> AniSkipResolvedIDs {
         // 直取路径零成本，不走缓存。
         if let malID = identity.malID, malID >= 1 {
-            return malID
+            return AniSkipResolvedIDs(malID: malID, anilistID: identity.anilistID)
         }
         let titles = identity.searchTitles
         guard identity.anilistID != nil || !titles.isEmpty else {
             NetworkLog.report(
                 category: "AniSkip", level: .debug,
                 "MAL ID 解析无线索（无 ID、无标题），跳过")
-            return nil
+            return AniSkipResolvedIDs(malID: nil, anilistID: nil)
         }
         let key = Self.cacheKey(for: identity)
         if !forceRefresh, let record = await store.record(for: key) {
-            if let malID = record.malID {
-                return malID
+            if !record.isEmpty {
+                return AniSkipResolvedIDs(malID: record.malID, anilistID: record.anilistID)
             }
             if now().timeIntervalSince(record.resolvedAt) < Self.negativeCacheLifetime {
                 NetworkLog.report(
                     category: "AniSkip", level: .debug,
                     "MAL ID 负缓存命中，7 天内不重试 AniList")
-                return nil
+                return AniSkipResolvedIDs(malID: nil, anilistID: nil)
             }
         }
-        let resolved = await client.malID(anilistID: identity.anilistID, searchTitles: titles)
-        await store.setRecord(AniSkipIDRecord(malID: resolved, resolvedAt: now()), for: key)
-        if let malID = resolved {
-            NetworkLog.report(
-                category: "AniSkip", level: .info,
-                "MAL ID 解析成功",
-                fields: ["malID": .integer(Int64(malID))])
-        } else {
+        let resolved = await client.resolveIDs(
+            anilistID: identity.anilistID, searchTitles: titles)
+        await store.setRecord(
+            AniSkipIDRecord(
+                malID: resolved.malID, anilistID: resolved.anilistID, resolvedAt: now()),
+            for: key)
+        if resolved.isEmpty {
             NetworkLog.report(
                 category: "AniSkip", level: .info,
                 "MAL ID 解析失败（全部候选落空），负缓存 7 天后重试",
                 fields: ["candidateCount": .integer(Int64(titles.count))])
+        } else {
+            NetworkLog.report(
+                category: "AniSkip", level: .info,
+                "番剧 ID 解析成功",
+                fields: [
+                    "malID": resolved.malID.map { .integer(Int64($0)) } ?? .null,
+                    "anilistID": resolved.anilistID.map { .integer(Int64($0)) } ?? .null,
+                ])
         }
         return resolved
     }

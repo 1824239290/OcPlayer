@@ -356,8 +356,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
             toggle: { [weak self] in self?.togglePlayPause() },
             skip: { [weak self] seconds in self?.skip(by: seconds) },
             seek: { [weak self] position in
-                guard let self, let engine else { return }
-                try? engine.seek(to: .microseconds(Int64(max(0, position) * 1_000_000)))
+                guard let self else { return }
+                // 走 recordSeek:远程控制台的 seek 也是用户意图,得进日志与片头学习。
+                let target = max(0, position)
+                self.recordSeek(toSeconds: target, kind: "remote")
+                try? self.engine?.seek(to: .microseconds(Int64(target * 1_000_000)))
             }
         ))
     }
@@ -1166,14 +1169,25 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine.seek(to: .microseconds(Int64(max(0, target))))
     }
 
+    /// 视为用户主动意图的 seek 类型（片头学习数据源）。auto（跳过按钮）与
+    /// resume（续播）是程序性动作,不算。
+    private static let userSeekKinds: Set<String> = ["scrub", "skip", "chapter", "remote"]
+
+    /// 用户主动 seek 回调（片头学习数据源;App 层做范围过滤与晋升）。
+    var onUserSeek: (@MainActor (_ fromSeconds: Double, _ toSeconds: Double) -> Void)?
+
     /// 记一条 seek 事件（来源区分见 `PlaybackEvent.seek`）。在真正调内核之前记，
     /// 这样即使 seek 本身失败，日志里也有「用户想跳去哪」这一笔。
+    /// 用户主动类 seek 额外喂给 `onUserSeek`。
     private func recordSeek(toSeconds target: Double, kind: String) {
         PlaybackLog.event(.seek, fields: [
             "from_ms": .integer(state.position.microseconds / 1000),
             "to_ms": .integer(Int64(target * 1000)),
             "kind": .string(kind),
         ])
+        if Self.userSeekKinds.contains(kind) {
+            onUserSeek?(Double(state.position.microseconds / 1_000_000), target)
+        }
     }
 
     // MARK: - 章节 / 跳过片头片尾

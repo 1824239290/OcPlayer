@@ -1,10 +1,16 @@
 import Foundation
 
-/// 片头提示的数据来源。决定 SkipMark 合并时的优先级：
-/// AniSkip（社区提交 + 投票背书）> 弹幕报点（自动推导）。
+/// 片头提示的数据来源。决定 SkipMark 合并时的优先级（App 侧 `SkipMarkSource.rank`）：
+/// AniSkip（社区提交 + 投票背书）> anime-skip > 学习值 > TheIntroDB > 弹幕报点。
 public enum DanmakuIntroHintSource: String, Codable, Sendable, Equatable {
     case danmaku
     case aniskip
+    /// anime-skip 社区时间戳（start-point 链重建,设置填 client ID 后启用）。
+    case animeSkip
+    /// TheIntroDB 社区时间戳（TMDB 索引,免鉴权）。
+    case theIntroDB
+    /// 用户手动跳过行为学习出的值（≥2 集一致或对既有提示的确认）。
+    case learned
 }
 
 /// 弹幕推导的片头提示（「跳过片头」的数据源）。
@@ -61,19 +67,24 @@ public enum DanmakuIntroDetector {
     static let clusterGap: Double = 25
     /// 着陆确认与主簇中位数的最大偏差。
     static let confirmationTolerance: Double = 15
-    /// 主簇需要的最少报点目标数（不同的目标值）。
-    static let minDistinctTargets = 2
     /// 有交叉确认时主簇所需的最少目标数（确认背书可放宽到 2 个目标值）。
     static let minDistinctTargetsWithConfirmation = 2
     /// 无交叉确认时主簇所需的最少目标数（纯报点自证需要更多样本）。
     static let minDistinctTargetsWithoutConfirmation = 3
+    /// 备选证据路径的最少不同报点用户数（须有交叉确认）。
+    /// 2026-10-02 对 22 集本地弹幕的标定：三个人同报 210s（章节真值 209s）曾被
+    /// 「目标值 ≥2」判据拒掉——不同用户的一组一致报点比同一人报多个值更可信。
+    static let minJumpUsers = 2
+    /// 仅着陆确认判定时需要的最少确认条数（须聚在同一落点附近）。
+    static let minLandingOnlyConfirmations = 3
+    /// 仅着陆确认路径所需的最少不同用户数：单用户连发的「正片开始」刷屏
+    /// （实测 12/13 条来自同一 uid）不可作证据。
+    static let minLandingOnlyUsers = 2
     /// 片头起点估计允许的最大片头长度（对齐章节启发式的 240s 上限）。
     static let maxIntroLength: Double = 240
     /// 起点估计有意义的最小片头长度：更短的窗口说明观众看完了大半片头才报点，
     /// 起点没有信息量，回 nil（消费侧回落到 0，按钮窗口反而更完整）。
     static let minIntroLengthForStartEstimate: Double = 20
-    /// 仅靠着陆确认判定时需要的最少确认条数（须聚在同一落点附近）。
-    static let minLandingOnlyConfirmations = 3
     /// 报点关键词后扫描时间戳的窗口长度（「跳伞至3:17」「空降：02：12」都能覆盖）。
     static let targetScanWindow = 12
 
@@ -89,23 +100,27 @@ public enum DanmakuIntroDetector {
 
     /// 从弹幕正文推导片头提示。弹幕不足/噪声过多时返回 nil。
     public static func detect(in comments: [DanmakuComment]) -> DanmakuIntroHint? {
-        var targets: [(postTime: Double, target: Double)] = []
-        var landingTimes: [Double] = []
-        var startTimes: [Double] = []
+        var targets: [(postTime: Double, target: Double, uid: String?)] = []
+        var landingTimes: [(time: Double, uid: String?)] = []
+        var startTimes: [(time: Double, uid: String?)] = []
 
         for comment in comments {
             let time = commentTime(comment.p)
             let text = comment.m
+            let uid = commentUID(comment.p)
             if let time, let target = jumpTarget(in: text) {
-                targets.append((time, target))
+                targets.append((time, target, uid))
             }
             if let time {
-                if containsAny(text, landingKeywords) { landingTimes.append(time) }
-                if containsAny(text, startKeywords) { startTimes.append(time) }
+                if containsAny(text, landingKeywords) { landingTimes.append((time, uid)) }
+                if containsAny(text, startKeywords) { startTimes.append((time, uid)) }
             }
         }
 
-        if let hint = hint(fromTargets: targets, confirmations: landingTimes + startTimes) {
+        if let hint = hint(
+            fromTargets: targets,
+            confirmations: landingTimes + startTimes
+        ) {
             return hint
         }
         return landingOnlyHint(landingTimes)
@@ -114,23 +129,32 @@ public enum DanmakuIntroDetector {
     // MARK: 报点主簇 → 片头结束点
 
     private static func hint(
-        fromTargets targets: [(postTime: Double, target: Double)],
-        confirmations: [Double]
+        fromTargets targets: [(postTime: Double, target: Double, uid: String?)],
+        confirmations: [(time: Double, uid: String?)]
     ) -> DanmakuIntroHint? {
         let inRange = targets.filter { targetRange.contains($0.target) }
-        guard let cluster = largestCluster(of: inRange.map(\.target), gap: clusterGap),
-              cluster.distinctCount >= minDistinctTargets
+        guard let cluster = largestCluster(of: inRange.map(\.target), gap: clusterGap)
         else { return nil }
 
         let end = roundedMedian(cluster.values)
         let nearConfirmations = confirmations.filter {
-            targetRange.upperBound + 60 >= $0 && abs($0 - end) <= confirmationTolerance
+            targetRange.upperBound + 60 >= $0.time && abs($0.time - end) <= confirmationTolerance
         }
         let confirmed = !nearConfirmations.isEmpty
-        let required = confirmed
-            ? minDistinctTargetsWithConfirmation
-            : minDistinctTargetsWithoutConfirmation
-        guard cluster.distinctCount >= required else { return nil }
+
+        // 证据一（原判据）：不同目标值计数。有确认 ≥2、无确认 ≥3。
+        let distinctTargets = cluster.distinctCount
+        let passesByTargets = distinctTargets >= (
+            confirmed ? minDistinctTargetsWithConfirmation : minDistinctTargetsWithoutConfirmation
+        )
+        // 证据二（备选）：确认在场时，同簇 ≥2 个不同用户的一组一致报点即可成立
+        // ——「三个人报同一个值」比「一个人报三个值」更可信（2026-10-02 标定）。
+        let clusterTargets = Set(cluster.values.map(rounded))
+        let clusterUIDs = Set(
+            inRange.filter { clusterTargets.contains(rounded($0.target)) }.compactMap(\.uid)
+        )
+        let passesByUsers = confirmed && clusterUIDs.count >= minJumpUsers
+        guard passesByTargets || passesByUsers else { return nil }
 
         return DanmakuIntroHint(
             startSeconds: estimatedStart(of: inRange, cluster: cluster, end: end),
@@ -143,7 +167,7 @@ public enum DanmakuIntroDetector {
     /// （实测散布在片头区间内），因此最早帖 ≈ 片头起点；有冷开场的集该值明显
     /// 大于 0。估不出（发帖太晚/区间不合理）返回 nil，消费侧回落到 0。
     private static func estimatedStart(
-        of targets: [(postTime: Double, target: Double)],
+        of targets: [(postTime: Double, target: Double, uid: String?)],
         cluster: (values: [Double], distinctCount: Int, count: Int),
         end: Double
     ) -> Double? {
@@ -160,11 +184,17 @@ public enum DanmakuIntroDetector {
 
     /// 没有报点目标时，≥3 条着陆确认聚在一起也能定位片头结束点。
     /// 起点无法估计（着陆帖都发在片头末尾），返回 startSeconds = nil。
-    private static func landingOnlyHint(_ landingTimes: [Double]) -> DanmakuIntroHint? {
-        let candidates = landingTimes.filter { $0 <= targetRange.upperBound + 60 }
-        guard let cluster = largestCluster(of: candidates, gap: clusterGap),
+    /// 2026-10-02 标定：还须 ≥2 个不同用户——单用户连发的确认刷屏不可作证据。
+    private static func landingOnlyHint(_ landingTimes: [(time: Double, uid: String?)]) -> DanmakuIntroHint? {
+        let candidates = landingTimes.filter { $0.time <= targetRange.upperBound + 60 }
+        guard let cluster = largestCluster(of: candidates.map(\.time), gap: clusterGap),
               cluster.count >= minLandingOnlyConfirmations
         else { return nil }
+        let clusterTimes = Set(cluster.values.map(rounded))
+        let uids = Set(
+            candidates.filter { clusterTimes.contains(rounded($0.time)) }.compactMap(\.uid)
+        )
+        guard uids.count >= minLandingOnlyUsers else { return nil }
         let end = roundedMedian(cluster.values)
         guard targetRange.contains(end) else { return nil }
         return DanmakuIntroHint(startSeconds: nil, endSeconds: end, evidenceCount: cluster.count)
@@ -178,6 +208,15 @@ public enum DanmakuIntroDetector {
               let time = Double(raw), time.isFinite, time >= 0
         else { return nil }
         return time
+    }
+
+    /// `p` 第 4 段的用户标识（弹弹play 与合并源均为 hex 串）。缺失/空返回 nil，
+    /// 不参与「不同用户」计数。
+    static func commentUID(_ p: String) -> String? {
+        let segments = p.split(separator: ",")
+        guard segments.count >= 4 else { return nil }
+        let uid = segments[3].trimmingCharacters(in: .whitespaces)
+        return uid.isEmpty ? nil : uid
     }
 
     /// 提取报点落点：关键词之后紧跟的时间戳。无关键词或时间戳不合法定回 nil。

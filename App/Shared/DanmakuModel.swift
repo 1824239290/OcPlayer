@@ -12,6 +12,8 @@ import Observation
 final class DanmakuModel {
     var danmaku: DanmakuCoordinator
     var dandanplayStore: DandanplaySettingsStore
+    /// anime-skip 跳过片头源（client ID 填了才启用）。
+    let animeSkipStore = AnimeSkipSettingsStore()
 
     init(
         danmaku: DanmakuCoordinator? = nil,
@@ -31,6 +33,12 @@ final class DanmakuModel {
     /// 是否已配置就绪（地址有效 + API Key 非空）。播放匹配前据此降级到无弹幕。
     var dandanplayIsConfigured: Bool { dandanplayStore.isConfigured }
     var dandanplayHasAPIKey: Bool { !dandanplayStore.apiKey.isEmpty }
+
+    /// anime-skip client ID（设置页读写;填了才启用该源）。
+    var animeSkipClientID: String {
+        get { animeSkipStore.clientID ?? "" }
+        set { animeSkipStore.clientID = newValue }
+    }
 
     /// 提交网关地址 + Key：先落盘再重启当前播放的弹幕（避免把新地址配旧 Key）
     /// ——重启动作由播放链路（AppModel）在收到更新后触发。

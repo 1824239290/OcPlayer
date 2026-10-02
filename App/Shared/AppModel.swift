@@ -439,6 +439,11 @@ final class AppModel {
         self.bangumi = bangumi
         self.moviepilot = moviepilot
         self.danmakuModel = danmakuModel
+        // TheIntroDB 需要**剧集级** TMDB ID（集条目 ProviderIds 里的 Tmdb 是集级
+        // 的,不能直接用）——按 seriesID 现场换一份。
+        danmakuModel.danmaku.seriesTmdbIDProvider = { [weak self] seriesID in
+            await self?.seriesTmdbID(for: seriesID)
+        }
         if let section = LaunchOptions.initialSection {
             if let delay = LaunchOptions.sectionSwitchSeconds {
                 // 先留首页让轮播跑起来（homeAmbience 就位），到点再切目标分区。

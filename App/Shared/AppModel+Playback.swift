@@ -332,6 +332,13 @@ extension AppModel {
         startDanmaku(for: request, item: nowPlayingItem)
     }
 
+    /// 剧集级 TMDB ID（TheIntroDB 跳过片头源用）。
+    func seriesTmdbID(for seriesID: String) async -> Int? {
+        guard let server else { return nil }
+        guard let item = try? await server.item(seriesID) else { return nil }
+        return item.tmdbID.flatMap(Int.init)
+    }
+
     var dandanplayConfiguration: DandanplayConfiguration? {
         guard danmakuModel.dandanplayStore.isConfigured else { return nil }
         return DandanplayConfiguration(

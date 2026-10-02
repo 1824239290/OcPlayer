@@ -68,6 +68,33 @@ public actor DanmakuService {
         await cache.setIntroHint(hint, for: episodeID)
     }
 
+    /// 同一部番其他集的弹幕推导提示（跨集聚合用,零网络）。
+    /// 仅返回 `.danmaku` 源——`.aniskip`/`.learned` 等更高来源的兄弟集提示
+    /// 不能证明本集的落点（不同集可有冷开场/前情,位置本就会漂移,只聚合
+    /// 同源证据才有「同番 OP 一致」的前提）。
+    public func siblingIntroHints(animeID: Int64, excluding episodeID: Int64) async -> [DanmakuIntroHint] {
+        let siblings = await cache.allEpisodeMatches().compactMap { match -> Int64? in
+            guard match.episodeID != episodeID else { return nil }
+            let id = match.animeID ?? match.derivedAnimeID
+            return id == animeID ? match.episodeID : nil
+        }
+        var hints: [DanmakuIntroHint] = []
+        for id in Set(siblings) {
+            if let hint = await cache.introHint(for: id), hint.source == .danmaku {
+                hints.append(hint)
+            }
+        }
+        return hints
+    }
+
+    /// 同一部番已记住映射的全部集（学习提示推广写入用）。
+    public func episodeIDs(animeID: Int64) async -> [Int64] {
+        await cache.allEpisodeMatches().compactMap { match -> Int64? in
+            let id = match.animeID ?? match.derivedAnimeID
+            return id == animeID ? match.episodeID : nil
+        }
+    }
+
     /// Persist comments directly (test seeding; production goes through `payload`).
     public func persistComments(_ comments: [DanmakuComment], for episodeID: Int64) async {
         await cache.setComments(comments, for: episodeID)
@@ -105,6 +132,7 @@ public actor DanmakuService {
             match = DanmakuEpisodeMatch(
                 episodeID: first.episodeId,
                 shiftSeconds: first.shift ?? 0,
+                animeID: first.animeId.flatMap(Int64.init),
                 animeTitle: first.animeTitle,
                 episodeTitle: first.episodeTitle
             )

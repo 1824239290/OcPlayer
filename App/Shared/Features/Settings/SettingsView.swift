@@ -145,6 +145,13 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                TextField("anime-skip Client ID（可选）", text: Binding(
+                    get: { danmakuModel.animeSkipClientID },
+                    set: { danmakuModel.animeSkipClientID = $0 }
+                ))
+                Text("填入后启用 anime-skip 跳过片头源（在 anime-skip.com 注册获取）。TheIntroDB 免密钥自动启用。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
             .settingsRowBackground()
 

@@ -68,6 +68,13 @@ public struct DanmakuLoadOrchestrator {
     /// 标题别名桥（AniSkip 候选标题增强用，可缺省）：dandanplay 的中文标题在
     /// AniList 常搜不中，别名里的日文原名往往是原生标题。可空——注入失败只降级。
     private let titleAliases: DanmakuTitleAliasProviding?
+    /// anime-skip 客户端惰性获取：client ID 在设置里填了才有值（填了才启用）。
+    /// 闭包形式保证设置改动即时生效。
+    private let animeSkipClientProvider: (@Sendable () -> AnimeSkipClient?)?
+    /// TheIntroDB 客户端（免鉴权;只在 context.seriesTmdbID 存在时才会发请求）。
+    private let theIntroDBClient: TheIntroDBClient?
+    /// 手动跳过学习存储（App 层喂事件;解析链路读晋升结果）。
+    private let introLearningStore: IntroLearningStore?
 
     public init(
         service: DanmakuService,
@@ -75,7 +82,10 @@ public struct DanmakuLoadOrchestrator {
         retryPolicy: RetryPolicy = RetryPolicy(),
         aniSkipClient: AniSkipClient? = nil,
         aniSkipIDResolver: AniSkipIDResolver? = nil,
-        titleAliases: DanmakuTitleAliasProviding? = nil
+        titleAliases: DanmakuTitleAliasProviding? = nil,
+        animeSkipClientProvider: (@Sendable () -> AnimeSkipClient?)? = nil,
+        theIntroDBClient: TheIntroDBClient? = nil,
+        introLearningStore: IntroLearningStore? = nil
     ) {
         self.service = service
         self.session = session
@@ -86,6 +96,9 @@ public struct DanmakuLoadOrchestrator {
             session: session
         )
         self.titleAliases = titleAliases
+        self.animeSkipClientProvider = animeSkipClientProvider
+        self.theIntroDBClient = theIntroDBClient ?? TheIntroDBClient(session: session)
+        self.introLearningStore = introLearningStore
     }
 
     /// 整个自动匹配 + 装载链路。`forceRematch` 跳过缓存并清除已记住的映射。
@@ -493,8 +506,10 @@ public struct DanmakuLoadOrchestrator {
 
     /// 片头提示解析（优先级从高到低）：
     /// 1. 永久缓存（`forceRematch` 时无视缓存重新解析，与跳过缓存匹配同语义）；
-    /// 2. AniSkip——社区提交 + 投票背书的精确 OP 区间；
-    /// 3. 弹幕报点推导（本次正文现算）。
+    /// 2. 多源社区区间（AniSkip ∥ anime-skip ∥ TheIntroDB 并行,±10s 聚簇选优）；
+    /// 3. 用户学习值（手动跳过行为的 anime 级晋升）；
+    /// 4. 兄弟集提示聚合（同番其他集的弹幕推导值,≥2 集一致才采纳）；
+    /// 5. 弹幕报点推导（本次正文现算）。
     /// 选中的结果持久化；任何一步失败静默降级，只影响这一路数据源的有无。
     private func resolveIntroHint(
         match: DanmakuEpisodeMatch,
@@ -505,7 +520,20 @@ public struct DanmakuLoadOrchestrator {
         if !forceRematch, let cached = await service.cachedIntroHint(for: match.episodeID) {
             return cached
         }
-        if let hint = await aniSkipHint(match: match, context: matchContext, forceRematch: forceRematch) {
+        if let hint = await multiSourceHint(match: match, context: matchContext, forceRematch: forceRematch) {
+            await service.persistIntroHint(hint, for: match.episodeID)
+            return hint
+        }
+        // 用户学习值（anime 级）：手动跳过行为跨集晋升/确认升级的产物。
+        if !forceRematch,
+           let introLearningStore,
+           let animeID = match.animeID ?? match.derivedAnimeID,
+           let promoted = await introLearningStore.promotedHint(forAnime: animeID) {
+            await service.persistIntroHint(promoted, for: match.episodeID)
+            return promoted
+        }
+        // 兄弟集提示聚合（零请求）：同番其他集的弹幕推导值,≥2 集一致才采纳。
+        if let hint = await siblingAggregatedHint(match: match) {
             await service.persistIntroHint(hint, for: match.episodeID)
             return hint
         }
@@ -516,11 +544,12 @@ public struct DanmakuLoadOrchestrator {
         return nil
     }
 
-    /// AniSkip 路径：MAL ID（ProviderIds 直取 → AniList 多候选搜索）→ 区间查询 → 提示。
-    /// 无集数、无任何身份线索或查询失败都返回 nil（「跳过片头」少一路数据源而已）。
+    /// 多源社区跳过时间：AniSkip（MAL）∥ anime-skip（AniList）∥ TheIntroDB
+    /// （TMDB 剧集级）并行查询 → ±10s 聚簇选优。无集数、无身份线索或全部落空
+    /// 返回 nil（「跳过片头」少一路数据源而已）。
     ///
     /// `forceRematch` 透传给 ID 解析器：显式重匹配时绕过正/负缓存全新解析。
-    private func aniSkipHint(
+    private func multiSourceHint(
         match: DanmakuEpisodeMatch,
         context: DanmakuMatchContext?,
         forceRematch: Bool
@@ -528,7 +557,7 @@ public struct DanmakuLoadOrchestrator {
         guard let context, let episodeNumber = context.episodeNumber, episodeNumber >= 1 else {
             NetworkLog.report(
                 category: "AniSkip", level: .debug,
-                "跳过片头缺集数上下文，AniSkip 不查")
+                "跳过片头缺集数上下文，社区源不查")
             return nil
         }
         // 候选标题：弹幕匹配标题 → 媒体库原生标题（Jellyfin OriginalTitle，多为
@@ -555,22 +584,199 @@ public struct DanmakuLoadOrchestrator {
             seasonNumber: context.seasonNumber,
             year: nil
         )
-        guard let malID = await aniSkipIDResolver.malID(
-            for: identity, forceRefresh: forceRematch) else { return nil }
-        do {
-            let intervals = try await aniSkipClient.skipTimes(
-                malID: malID,
-                episodeNumber: episodeNumber,
-                episodeLengthSeconds: context.durationSeconds
-            )
-            return intervals.flatMap(DanmakuIntroHint.init(aniskipIntervals:))
-        } catch {
-            NetworkLog.report(
-                category: "AniSkip", level: .info,
-                "跳过片头查询失败，降级弹幕推导",
-                fields: ["error": .string("\(error)")]
-            )
-            return nil
+        let ids = await aniSkipIDResolver.resolve(for: identity, forceRefresh: forceRematch)
+
+        // 并行查询所有可用源。客户端/上下文先落局部常量,@Sendable 闭包不捕获 self。
+        let aniSkipClient = self.aniSkipClient
+        let theIntroDBClient = self.theIntroDBClient
+        let animeSkipClient = animeSkipClientProvider?()
+        let durationSeconds = context.durationSeconds
+        let seasonNumber = context.seasonNumber
+        let seriesTmdbID = context.seriesTmdbID
+
+        var found: [SkipSourceInterval] = []
+        await withTaskGroup(of: SkipSourceInterval?.self) { group in
+            if let malID = ids.malID {
+                group.addTask {
+                    do {
+                        let intervals = try await aniSkipClient.skipTimes(
+                            malID: malID,
+                            episodeNumber: episodeNumber,
+                            episodeLengthSeconds: durationSeconds)
+                        // 复用 AniSkip 的区间钳制（10-1800s、≤400s）。
+                        var hint: DanmakuIntroHint?
+                        if let intervals {
+                            hint = DanmakuIntroHint(aniskipIntervals: intervals)
+                        }
+                        guard let hint else { return nil }
+                        return SkipSourceInterval(
+                            source: .aniskip, start: hint.startSeconds, end: hint.endSeconds)
+                    } catch {
+                        NetworkLog.report(
+                            category: "AniSkip", level: .info,
+                            "AniSkip 跳过片头查询失败",
+                            fields: ["error": .string("\(error)")])
+                        return nil
+                    }
+                }
+            }
+            if let animeSkipClient, let anilistID = ids.anilistID {
+                group.addTask {
+                    do {
+                        guard let interval = try await animeSkipClient.introInterval(
+                            anilistID: anilistID,
+                            seasonNumber: seasonNumber,
+                            episodeNumber: episodeNumber)
+                        else { return nil }
+                        return SkipSourceInterval(
+                            source: .animeSkip,
+                            start: interval.startSeconds, end: interval.endSeconds)
+                    } catch {
+                        NetworkLog.report(
+                            category: "AnimeSkip", level: .info,
+                            "anime-skip 查询失败",
+                            fields: ["error": .string("\(error)")])
+                        return nil
+                    }
+                }
+            }
+            if let theIntroDBClient, let seriesTmdbID {
+                group.addTask {
+                    do {
+                        guard let interval = try await theIntroDBClient.introInterval(
+                            tmdbID: seriesTmdbID,
+                            seasonNumber: seasonNumber,
+                            episodeNumber: episodeNumber)
+                        else { return nil }
+                        return SkipSourceInterval(
+                            source: .theIntroDB,
+                            start: interval.startSeconds, end: interval.endSeconds)
+                    } catch {
+                        // 404（该集无收录）是常态,debug 即可。
+                        NetworkLog.report(
+                            category: "TheIntroDB", level: .debug,
+                            "TheIntroDB 查询无结果或失败",
+                            fields: ["error": .string("\(error)")])
+                        return nil
+                    }
+                }
+            }
+            for await result in group {
+                if let result { found.append(result) }
+            }
+        }
+        NetworkLog.report(
+            category: "AniSkip", level: found.isEmpty ? .debug : .info,
+            "多源跳过时间查询完成",
+            fields: [
+                "sourceCount": .integer(Int64(found.count)),
+                "sources": .string(found.map(\.source.rawValue).joined(separator: ",")),
+            ])
+        guard let best = Self.selectBestInterval(found) else { return nil }
+        return DanmakuIntroHint(
+            startSeconds: best.start,
+            endSeconds: best.end,
+            evidenceCount: best.votes,
+            source: best.source
+        )
+    }
+
+    /// 兄弟集提示聚合（零请求）：同一 animeID 其他集已持久化的 `.danmaku` 提示,
+    /// end ±5s 聚簇,≥2 集一致才采纳中位数。只聚合同源证据——不同集可有冷开场/
+    /// 前情,位置本就会漂移,「同番 OP 一致」的前提只在弹幕推导内部成立。
+    func siblingAggregatedHint(match: DanmakuEpisodeMatch) async -> DanmakuIntroHint? {
+        guard let animeID = match.animeID ?? match.derivedAnimeID else { return nil }
+        let siblings = await service.siblingIntroHints(animeID: animeID, excluding: match.episodeID)
+        guard siblings.count >= 2 else { return nil }
+        let ends = siblings.map(\.endSeconds).sorted()
+        var clusters: [[Double]] = [[ends[0]]]
+        for end in ends.dropFirst() {
+            if end - (clusters[clusters.count - 1].last ?? end) <= 5 {
+                clusters[clusters.count - 1].append(end)
+            } else {
+                clusters.append([end])
+            }
+        }
+        guard let best = clusters.max(by: { $0.count < $1.count }), best.count >= 2 else { return nil }
+        let end = Self.median(best)
+        // 起点:一致集的起点也一致(±5s)才带,否则 nil(消费侧回落到 0)。
+        let starts = siblings
+            .filter { abs($0.endSeconds - end) <= 5 }
+            .compactMap(\.startSeconds)
+            .sorted()
+        let start: Double?
+        if starts.count >= 2, (starts.last ?? 0) - (starts.first ?? 0) <= 5 {
+            start = Self.median(starts)
+        } else {
+            start = nil
+        }
+        return DanmakuIntroHint(
+            startSeconds: start, endSeconds: end, evidenceCount: best.count, source: .danmaku)
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        let mid = sorted.count / 2
+        return sorted.count.isMultiple(of: 2) ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+    }
+
+    /// 一路社区源返回的区间（多源聚合的中间形态）。internal 供测试用。
+    struct SkipSourceInterval: Sendable {
+        let source: DanmakuIntroHintSource
+        let start: Double?
+        let end: Double
+    }
+
+    /// 多源区间选优：end ±10s 聚簇,票多者胜（中位数,来源标簇内优先级最高者）;
+    /// 无一致时取优先级最高的单源。
+    static func selectBestInterval(
+        _ intervals: [SkipSourceInterval]
+    ) -> (start: Double?, end: Double, votes: Int, source: DanmakuIntroHintSource)? {
+        guard !intervals.isEmpty else { return nil }
+        let sorted = intervals.sorted { $0.end < $1.end }
+        var clusters: [[SkipSourceInterval]] = [[sorted[0]]]
+        for interval in sorted.dropFirst() {
+            if interval.end - (clusters[clusters.count - 1].last?.end ?? interval.end) <= 10 {
+                clusters[clusters.count - 1].append(interval)
+            } else {
+                clusters.append([interval])
+            }
+        }
+        // 票数多者优先;并列取来源优先级高的簇（首个元素的来源代表该簇）。
+        let best = clusters.max { a, b in
+            a.count != b.count
+                ? a.count < b.count
+                : Self.sourcePriority(a[0].source) < Self.sourcePriority(b[0].source)
+        } ?? [sorted[0]]
+        if best.count >= 2 {
+            let ends = best.map(\.end).sorted()
+            let mid = ends.count / 2
+            let end = ends.count.isMultiple(of: 2) ? (ends[mid - 1] + ends[mid]) / 2 : ends[mid]
+            let starts = best.compactMap(\.start).sorted()
+            let start: Double?
+            if starts.isEmpty {
+                start = nil
+            } else if starts.count.isMultiple(of: 2) {
+                start = (starts[starts.count / 2 - 1] + starts[starts.count / 2]) / 2
+            } else {
+                start = starts[starts.count / 2]
+            }
+            let source = best.map(\.source).max {
+                Self.sourcePriority($0) < Self.sourcePriority($1)
+            } ?? best[0].source
+            return (start, end, best.count, source)
+        }
+        return (best[0].start, best[0].end, 1, best[0].source)
+    }
+
+    /// 聚合 tie-break 用的来源可信度（与 App 侧 SkipMarkSource.rank 同序）。
+    private static func sourcePriority(_ source: DanmakuIntroHintSource) -> Int {
+        switch source {
+        case .aniskip: 5
+        case .animeSkip: 4
+        case .learned: 3
+        case .theIntroDB: 2
+        case .danmaku: 1
         }
     }
 
@@ -607,6 +813,12 @@ public struct DanmakuMatchContext: Sendable {
     /// 媒体库的原生标题（Jellyfin OriginalTitle，番剧库多为日文原名）。
     /// AniList 搜索候选：dandanplay 的中文标题常常搜不中，这是主要生路之一。
     public let originalTitle: String?
+    /// 剧集条目的 seriesID（Jellyfin）；standalone 为 nil。
+    public let seriesID: String?
+    /// **剧集级** TMDB ID（TheIntroDB 用）。注意 Jellyfin 集条目 ProviderIds 里的
+    /// Tmdb 是**集级** ID，必须由 app 层按 seriesID 换出剧集级 ID 后填到这里。
+    /// 可变：coordinator 在发起解析前回填。
+    public var seriesTmdbID: Int?
     public let episodeNumber: Int?
     public let seasonNumber: Int?
     public let isFinal: Bool
@@ -634,6 +846,8 @@ public struct DanmakuMatchContext: Sendable {
         remoteHeaders: [String: String] = [:],
         animeTitle: String? = nil,
         originalTitle: String? = nil,
+        seriesID: String? = nil,
+        seriesTmdbID: Int? = nil,
         episodeNumber: Int? = nil,
         seasonNumber: Int? = nil,
         isFinal: Bool = false,
@@ -654,6 +868,8 @@ public struct DanmakuMatchContext: Sendable {
         self.remoteHeaders = remoteHeaders
         self.animeTitle = animeTitle
         self.originalTitle = originalTitle
+        self.seriesID = seriesID
+        self.seriesTmdbID = seriesTmdbID
         self.episodeNumber = episodeNumber
         self.seasonNumber = seasonNumber
         self.isFinal = isFinal

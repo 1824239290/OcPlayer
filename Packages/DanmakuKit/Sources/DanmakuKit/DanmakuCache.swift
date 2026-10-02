@@ -21,10 +21,11 @@ public actor DanmakuCache {
     /// 本目录下的**永久性**文件（丢了没法重建，或会持续回源）。
     /// 既给清理逻辑做第二道保险，也把「哪些文件是永久的」集中在一处。
     nonisolated public static let permanentFileNames: Set<String> = [
-        "mapping.json",        // 剧集 ↔ 弹幕库映射
-        "intro-hints.json",    // 片头落点提示（跳过片头用）
-        "title-aliases.json",  // 手动别名合并
-        "aniskip-ids.json",    // MAL ID 解析结果
+        "mapping.json",          // 剧集 ↔ 弹幕库映射
+        "intro-hints.json",      // 片头落点提示（跳过片头用）
+        "title-aliases.json",    // 手动别名合并
+        "aniskip-ids.json",      // MAL ID 解析结果
+        "learned-intros.json",   // 手动跳过学习（anime 级片头落点）
     ]
 
     /// 缓存根目录（`mapping.json` / `comments-*.json` / `intro-hints.json` 等都在这）。
@@ -87,6 +88,11 @@ public actor DanmakuCache {
 
     public func episodeID(for mediaID: String) -> Int64? {
         episodeMatch(for: mediaID)?.episodeID
+    }
+
+    /// 全部已记录的匹配（跨集提示聚合用）。
+    public func allEpisodeMatches() -> [DanmakuEpisodeMatch] {
+        Array((loadMapping() ?? [:]).values)
     }
 
     public func setEpisodeID(_ episodeID: Int64, for mediaID: String) {
@@ -241,18 +247,29 @@ public actor DanmakuCache {
 public struct DanmakuEpisodeMatch: Codable, Sendable, Equatable {
     public let episodeID: Int64
     public let shiftSeconds: Int
+    /// 网关返回的 animeId。旧缓存记录没有该字段（解码为 nil）——跨集提示聚合
+    /// 时回退 `derivedAnimeID` 按位段推导。
+    public let animeID: Int64?
     public let animeTitle: String?
     public let episodeTitle: String?
 
     public init(
         episodeID: Int64,
         shiftSeconds: Int = 0,
+        animeID: Int64? = nil,
         animeTitle: String? = nil,
         episodeTitle: String? = nil
     ) {
         self.episodeID = episodeID
         self.shiftSeconds = shiftSeconds
+        self.animeID = animeID
         self.animeTitle = animeTitle
         self.episodeTitle = episodeTitle
+    }
+
+    /// dandanplay 位段约定：episodeID = animeID × 10000 + 集号（低 4 位）。
+    /// 实测样本全部吻合（8419→84190003、14236→142360009）。位数不足视为不可推导。
+    public var derivedAnimeID: Int64? {
+        episodeID >= 10_000 ? episodeID / 10_000 : nil
     }
 }

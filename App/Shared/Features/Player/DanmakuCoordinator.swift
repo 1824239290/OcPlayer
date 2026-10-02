@@ -65,6 +65,9 @@ struct DanmakuPlaybackContext {
     /// 媒体库的原生标题（Jellyfin OriginalTitle，番剧库多为日文原名）。
     /// AniSkip 的 MAL ID 解析候选：dandanplay 的中文标题在 AniList 常搜不中。
     let originalTitle: String?
+    /// 剧集条目的 seriesID（Jellyfin）；standalone 为 nil。供 TheIntroDB 换取
+    /// 剧集级 TMDB ID 用。
+    let seriesID: String?
     let episodeNumber: Int?
     let seasonNumber: Int?
     let isFinal: Bool
@@ -134,6 +137,7 @@ struct DanmakuPlaybackContext {
             suggestedEpisode: episodeNumber.map(String.init) ?? "",
             animeTitle: seriesName.isEmpty ? nil : seriesName,
             originalTitle: originalTitle,
+            seriesID: item.seriesID,
             episodeNumber: episodeNumber,
             seasonNumber: seasonNumber,
             isFinal: false,
@@ -212,6 +216,7 @@ struct DanmakuPlaybackContext {
             suggestedEpisode: suggestedEpisode,
             animeTitle: effectiveAnimeTitle.isEmpty ? nil : effectiveAnimeTitle,
             originalTitle: nil,
+            seriesID: nil,
             episodeNumber: parsed.episodeNumber,
             seasonNumber: parsed.seasonNumber,
             isFinal: parsed.isFinal,
@@ -301,6 +306,13 @@ final class DanmakuCoordinator {
     @ObservationIgnored private var loadGeneration: UInt64 = 0
     @ObservationIgnored private var context: DanmakuPlaybackContext?
     @ObservationIgnored private let titleAliasResolver: DanmakuTitleAliasResolver
+    @ObservationIgnored private let animeSkipSettings = AnimeSkipSettingsStore()
+    @ObservationIgnored private let introLearningStore: IntroLearningStore
+    /// seriesID → 剧集级 TMDB ID（TheIntroDB 用）。AppModel 注入（有服务器客户端）；
+    /// nil = 不查 TheIntroDB。
+    @ObservationIgnored var seriesTmdbIDProvider: (@Sendable (String) async -> Int?)?
+    /// 本次播放已换出的剧集级 TMDB ID（同一 requestID 只换一次）。
+    @ObservationIgnored private var seriesTmdbIDCache: (requestID: PlaybackRequest.ID, value: Int?)?
     @ObservationIgnored private var configuration: DandanplayConfiguration?
     @ObservationIgnored private weak var playback: PlaybackController?
 
@@ -311,6 +323,7 @@ final class DanmakuCoordinator {
         let directory = URL.applicationSupportDirectory
             .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
         let service = DanmakuService(cache: DanmakuCache(directory: directory))
+        let introLearningStore = IntroLearningStore(directory: directory)
         // 别名桥（手动搜索合并用）：弹弹play 搜索认不得「另一个中文译名」，Bangumi 的
         // nameCN 能把本地译名换到弹弹play 库里的标题（永久缓存，负缓存 7 天）。
         titleAliasResolver = DanmakuTitleAliasResolver(
@@ -320,8 +333,15 @@ final class DanmakuCoordinator {
         orchestrator = DanmakuLoadOrchestrator(
             service: service,
             session: session,
-            titleAliases: titleAliasResolver
+            titleAliases: titleAliasResolver,
+            // anime-skip 填了 client ID 才启用；闭包惰性取值,设置改动即时生效。
+            animeSkipClientProvider: { [animeSkipSettings, session] in
+                animeSkipSettings.clientID.map { AnimeSkipClient(clientID: $0, session: session) }
+            },
+            theIntroDBClient: TheIntroDBClient(session: session),
+            introLearningStore: introLearningStore
         )
+        self.introLearningStore = introLearningStore
         self.session = session
     }
 
@@ -345,6 +365,10 @@ final class DanmakuCoordinator {
         self.context = context
         self.configuration = configuration
         self.playback = playback
+        // 片头学习数据源:用户主动 seek 由播放器侧喂进来(范围过滤见 handleUserSeek)。
+        playback?.onUserSeek = { [weak self] from, to in
+            self?.handleUserSeek(fromSeconds: from, toSeconds: to)
+        }
         currentMatch = nil
         currentIntroHint = nil
 
@@ -485,7 +509,7 @@ final class DanmakuCoordinator {
                 configuration: configuration,
                 playback: playback,
                 revision: generation,
-                matchContext: matchContext(from: context)
+                matchContext: await resolvedMatchContext(for: context)
             )
             guard isCurrent(generation, requestID: requestID) else { return }
             apply(
@@ -508,7 +532,7 @@ final class DanmakuCoordinator {
         let startedAt = Date()
         AppDiagnostics.logInfo("弹幕自动匹配开始", fields: Self.matchLogFields(for: context))
         let outcome = await orchestrator.runAutomatic(
-            matchContext: matchContext(from: context),
+            matchContext: await resolvedMatchContext(for: context),
             configuration: configuration,
             playback: playback,
             revision: generation,
@@ -584,6 +608,66 @@ final class DanmakuCoordinator {
         playback?.applySkipTimesHint(hint, requestID: requestID)
     }
 
+    // MARK: 片头学习
+
+    /// 用户主动 seek → 片头落点学习。过滤:落点 ∈ [30,360]s(片头结束点合理窗)、
+    /// 前跳 ≥5s。两条晋升路径见 `IntroLearningStore`:确认升级(落点贴合当前提示)
+    /// 与跨集共识(≥2 个不同集聚簇)。
+    private func handleUserSeek(fromSeconds from: Double, toSeconds to: Double) {
+        guard let context, let match = currentMatch else { return }
+        guard to >= 30, to <= 360, from < to - 5 else { return }
+        guard let animeID = match.animeID ?? match.derivedAnimeID else { return }
+        let episodeID = match.episodeID
+        let requestID = context.requestID
+        Task { [weak self] in
+            guard let self else { return }
+            // 路径一:确认升级——落点与该集既有提示(弹幕推导)end ±10s,
+            // 用户用行为背书了猜测,提示升级为 .learned(防低来源覆盖)。
+            if let current = await self.orchestrator.service.cachedIntroHint(for: episodeID),
+               current.source == .danmaku,
+               abs(to - current.endSeconds) <= 10 {
+                let upgraded = DanmakuIntroHint(
+                    startSeconds: current.startSeconds,
+                    endSeconds: current.endSeconds,
+                    evidenceCount: current.evidenceCount + 1,
+                    source: .learned)
+                await self.introLearningStore.promote(animeID: animeID, hint: upgraded)
+                await self.orchestrator.service.persistIntroHint(upgraded, for: episodeID)
+                AppDiagnostics.logInfo("片头学习:既有提示获确认升级", fields: [
+                    "episodeID": .integer(episodeID),
+                    "endSeconds": .integer(Int64(current.endSeconds)),
+                ])
+                return
+            }
+            // 路径二:跨集共识——记录落点,≥2 个不同集聚簇(±10s)即晋升推广。
+            await self.introLearningStore.record(
+                animeID: animeID,
+                event: IntroSeekEvent(episodeID: episodeID, position: to, at: Date()))
+            guard let consensus = await self.introLearningStore.consensusHint(forAnime: animeID),
+                  await self.introLearningStore.promotedHint(forAnime: animeID) == nil
+            else { return }
+            await self.introLearningStore.promote(animeID: animeID, hint: consensus)
+            AppDiagnostics.logInfo("片头学习:跨集共识晋升", fields: [
+                "animeID": .integer(animeID),
+                "endSeconds": .integer(Int64(consensus.endSeconds)),
+                "episodes": .integer(Int64(consensus.evidenceCount)),
+            ])
+            // 推广到全番:只写「无提示或弹幕推导」的集,不覆盖更高来源
+            // (.aniskip/.animeSkip/.theIntroDB/.learned)。
+            let episodeIDs = await self.orchestrator.service.episodeIDs(animeID: animeID)
+            for id in episodeIDs {
+                let existing = await self.orchestrator.service.cachedIntroHint(for: id)
+                if existing == nil || existing?.source == .danmaku {
+                    await self.orchestrator.service.persistIntroHint(consensus, for: id)
+                }
+            }
+            // 本集若适用,当场升级会话内提示(rank 门槛在 ChapterSession 里挡)。
+            if episodeIDs.contains(episodeID) {
+                self.playback?.applySkipTimesHint(consensus, requestID: requestID)
+            }
+        }
+    }
+
     private func matchContext(from context: DanmakuPlaybackContext) -> DanmakuMatchContext {
         DanmakuMatchContext(
             uuid: context.requestID,
@@ -597,6 +681,7 @@ final class DanmakuCoordinator {
             remoteHeaders: context.remoteHeaders,
             animeTitle: context.animeTitle,
             originalTitle: context.originalTitle,
+            seriesID: context.seriesID,
             episodeNumber: context.episodeNumber,
             seasonNumber: context.seasonNumber,
             isFinal: context.isFinal,
@@ -606,6 +691,24 @@ final class DanmakuCoordinator {
             isMovie: context.isMovie,
             special: context.special
         )
+    }
+
+    /// 带剧集级 TMDB ID 的匹配上下文（TheIntroDB 源用）。同一播放请求只换一次;
+    /// 无 seriesID / 未注入 provider / 服务器查询失败时 seriesTmdbID 保持 nil,
+    /// 多源解析器自动跳过 TheIntroDB。
+    private func resolvedMatchContext(
+        for context: DanmakuPlaybackContext
+    ) async -> DanmakuMatchContext {
+        var matchContext = matchContext(from: context)
+        guard let seriesID = context.seriesID else { return matchContext }
+        if let cached = seriesTmdbIDCache, cached.requestID == context.requestID {
+            matchContext.seriesTmdbID = cached.value
+            return matchContext
+        }
+        let tmdbID = await seriesTmdbIDProvider?(seriesID) ?? nil
+        seriesTmdbIDCache = (context.requestID, tmdbID)
+        matchContext.seriesTmdbID = tmdbID
+        return matchContext
     }
 
     private func invalidateLoad() {

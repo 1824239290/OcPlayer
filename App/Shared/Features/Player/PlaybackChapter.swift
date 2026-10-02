@@ -43,12 +43,19 @@ enum SkipKind: String, Hashable, Sendable {
 }
 
 /// 片头 / 片尾标记的数据来源。合并多路信号时按可信度取舍（`rank`）：
-/// 服务端智能识别 > AniSkip（社区提交 + 投票）> 弹幕报点（自动推导）> 章节启发式猜测。
+/// 服务端智能识别 > AniSkip（投票背书）> anime-skip > 学习值 > TheIntroDB >
+/// 弹幕报点 > 章节启发式猜测。
 enum SkipMarkSource: String, Hashable, Sendable {
     /// 服务端智能识别(Jellyfin MediaSegments)。
     case mediaSegment
     /// AniSkip 社区标注区间。
     case aniskip
+    /// anime-skip 社区时间戳（设置填 client ID 后启用）。
+    case animeSkip
+    /// 用户手动跳过行为学习出的值。
+    case learned
+    /// TheIntroDB 社区时间戳（TMDB 索引）。
+    case theIntroDB
     /// 弹幕报点推导(DanmakuIntroDetector)。
     case danmaku
     /// 章节名 / 时间位置启发式。
@@ -57,8 +64,11 @@ enum SkipMarkSource: String, Hashable, Sendable {
     /// 合并优先级：数值大者胜出。
     var rank: Int {
         switch self {
-        case .mediaSegment: 3
-        case .aniskip: 2
+        case .mediaSegment: 6
+        case .aniskip: 5
+        case .animeSkip: 4
+        case .learned: 3
+        case .theIntroDB: 2
         case .danmaku: 1
         case .chapterHeuristic: 0
         }

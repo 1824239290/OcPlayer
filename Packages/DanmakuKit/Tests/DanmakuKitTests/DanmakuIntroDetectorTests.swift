@@ -5,8 +5,8 @@ import XCTest
 /// （54 集扫描：报点主簇中位数与「空降成功」着陆确认逐秒吻合）。
 final class DanmakuIntroDetectorTests: XCTestCase {
 
-    private func comment(_ time: Double, _ text: String) -> DanmakuComment {
-        DanmakuComment(cid: nil, p: "\(time),1,16777215,user", m: text)
+    private func comment(_ time: Double, _ text: String, uid: String = "user") -> DanmakuComment {
+        DanmakuComment(cid: nil, p: "\(time),1,16777215,\(uid)", m: text)
     }
 
     // MARK: 真实形态回归
@@ -139,14 +139,67 @@ final class DanmakuIntroDetectorTests: XCTestCase {
 
     func testLandingOnlyPathWithoutJumpTargets() {
         let comments = [
-            comment(94.2, "空降成功"),
-            comment(94.5, "空降完成"),
-            comment(95.0, "感谢指挥部，已空降"),
+            comment(94.2, "空降成功", uid: "u1"),
+            comment(94.5, "空降完成", uid: "u1"),
+            comment(95.0, "感谢指挥部，已空降", uid: "u2"),
             comment(200, "正片好看"),
         ]
         let hint = DanmakuIntroDetector.detect(in: comments)
         XCTAssertEqual(hint?.endSeconds, 95)
         XCTAssertNil(hint?.startSeconds)
+    }
+
+    /// 2026-10-02 标定：我友少 NEXT 的着陆确认 12/13 条来自同一 uid——
+    /// 单用户刷屏不可作证据。
+    func testSingleUserLandingSpamIsRejected() {
+        let comments = [
+            comment(94.2, "空降成功", uid: "spammer"),
+            comment(94.5, "空降完成", uid: "spammer"),
+            comment(95.0, "感谢指挥部，已空降", uid: "spammer"),
+            comment(1403, "正片开始", uid: "spammer"),
+        ]
+        XCTAssertNil(DanmakuIntroDetector.detect(in: comments))
+    }
+
+    /// 败犬 E6 实测场景：三人同报 210s（章节真值 209s）+ 确认在场——
+    /// 目标值只有 1 种,但「不同报点用户 ≥2 + 确认」的备选证据应放行。
+    func testThreeUsersSameTargetWithConfirmationIsAccepted() {
+        let comments = [
+            comment(150, "跳伞03:30", uid: "u1"),
+            comment(152, "跳伞3:30", uid: "u2"),
+            comment(155, "空降03:30", uid: "u3"),
+            comment(207, "空降成功", uid: "u4"),
+            comment(210, "感谢指挥部", uid: "u5"),
+        ]
+        let hint = DanmakuIntroDetector.detect(in: comments)
+        XCTAssertEqual(hint?.endSeconds, 210)
+    }
+
+    /// 无确认时备选证据不放行：同人同值 + 不同人同值混在一起仍需目标值 ≥3。
+    func testSameTargetUsersWithoutConfirmationAreRejected() {
+        let comments = [
+            comment(150, "跳伞03:30", uid: "u1"),
+            comment(152, "跳伞3:30", uid: "u2"),
+        ]
+        XCTAssertNil(DanmakuIntroDetector.detect(in: comments))
+    }
+
+    /// uid 缺失（p 不足 4 段）不计入「不同用户」计数。
+    func testMissingUIDDoesNotCountAsDistinctUser() {
+        // 同目标值 210 ×2 无 uid + 确认在场:目标值 1 种、不同报点用户 0 → 拒。
+        let missing = [
+            DanmakuComment(cid: nil, p: "150,1,16777215", m: "跳伞03:30"),
+            DanmakuComment(cid: nil, p: "152,1,16777215", m: "跳伞3:30"),
+            comment(207, "空降成功", uid: "u9"),
+        ]
+        XCTAssertNil(DanmakuIntroDetector.detect(in: missing))
+        // 对照:同样的结构,报点带 2 个不同 uid → 备选证据成立,取中位 210。
+        let present = [
+            comment(150, "跳伞03:30", uid: "u1"),
+            comment(152, "跳伞3:30", uid: "u2"),
+            comment(207, "空降成功", uid: "u9"),
+        ]
+        XCTAssertEqual(DanmakuIntroDetector.detect(in: present)?.endSeconds, 210)
     }
 
     func testStartEstimateDroppedWhenWindowUnreasonable() {

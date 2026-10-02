@@ -155,8 +155,8 @@ final class AniSkipIDResolverTests: XCTestCase {
                 .appendingPathComponent("ocp-aniskip-\(UUID().uuidString)", isDirectory: true)
         )
         let identity = AniSkipAnimeIdentity(malID: 9253, title: "命运石之门")
-        let malID = await resolver.malID(for: identity)
-        XCTAssertEqual(malID, 9253)
+        let ids = await resolver.resolve(for: identity)
+        XCTAssertEqual(ids.malID, 9253)
     }
 
     func testSearchResolvesFirstResultWithMalID() async throws {
@@ -173,16 +173,16 @@ final class AniSkipIDResolverTests: XCTestCase {
                 url: request.url!)
         }) {
             // 取首个带 idMal 的条目。
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 10719)
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 10719)
         }
         // 同身份再次解析走缓存，不再打网络。
         try await TestSupport.withMock({ _ in
             XCTFail("缓存命中不应发起网络请求")
             throw URLError(.unsupportedURL)
         }) {
-            let cached = await resolver.malID(for: identity)
-            XCTAssertEqual(cached, 10719)
+            let cached = await resolver.resolve(for: identity)
+            XCTAssertEqual(cached.malID, 10719)
         }
     }
 
@@ -200,10 +200,10 @@ final class AniSkipIDResolverTests: XCTestCase {
             counter.count += 1
             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
         }) {
-            let first = await resolver.malID(for: identity)
-            XCTAssertNil(first)
-            let second = await resolver.malID(for: identity)
-            XCTAssertNil(second, "负缓存 7 天内不重试")
+            let first = await resolver.resolve(for: identity)
+            XCTAssertTrue(first.isEmpty)
+            let second = await resolver.resolve(for: identity)
+            XCTAssertTrue(second.isEmpty, "负缓存 7 天内不重试")
         }
         XCTAssertEqual(counter.count, 1)
 
@@ -214,8 +214,8 @@ final class AniSkipIDResolverTests: XCTestCase {
             return TestSupport.response(
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":42}]}}}"#, url: request.url!)
         }) {
-            let retried = await resolver.malID(for: identity)
-            XCTAssertEqual(retried, 42)
+            let retried = await resolver.resolve(for: identity)
+            XCTAssertEqual(retried.malID, 42)
         }
         XCTAssertEqual(counter.count, 2)
     }
@@ -246,8 +246,8 @@ final class AniSkipIDResolverTests: XCTestCase {
                 #"{"data":{"Page":{"media":[{"id":103303,"idMal":62856,"title":{"native":"二十世紀電氣目録 -ユーレカ・エヴリカ-"}}]}}}"#,
                 url: request.url!)
         }) {
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 62856)
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 62856)
         }
         XCTAssertEqual(searches.list, ["二十世纪电气目录", "二十世紀電氣目録 -ユーレカ・エヴリカ-"])
     }
@@ -266,8 +266,8 @@ final class AniSkipIDResolverTests: XCTestCase {
                 url: request.url!)
         }) {
             // idMal 为空的条目不参与匹配；精确命中排在 111 之后也选它。
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 61126)
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 61126)
         }
     }
 
@@ -284,8 +284,8 @@ final class AniSkipIDResolverTests: XCTestCase {
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":null,"title":{"native":"僕は友達が少ない"}},{"id":2,"idMal":10719,"title":{"native":"僕は友達が少ない"},"synonyms":["我的朋友很少"]}]}}}"#,
                 url: request.url!)
         }) {
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 10719)
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 10719)
         }
     }
 
@@ -302,8 +302,8 @@ final class AniSkipIDResolverTests: XCTestCase {
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":62856,"title":{"native":"二十世紀電氣目録 -ユーレカ・エヴリカ-"}}]}}}"#,
                 url: URL(string: "https://graphql.anilist.co")!)
         }) {
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 62856)
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 62856)
         }
     }
 
@@ -324,10 +324,10 @@ final class AniSkipIDResolverTests: XCTestCase {
             counter.count += 1
             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
         }) {
-            let first = await resolver.malID(for: identity)
-            XCTAssertNil(first)
-            let second = await resolver.malID(for: identity)
-            XCTAssertNil(second, "负缓存 7 天内不重试")
+            let first = await resolver.resolve(for: identity)
+            XCTAssertTrue(first.isEmpty)
+            let second = await resolver.resolve(for: identity)
+            XCTAssertTrue(second.isEmpty, "负缓存 7 天内不重试")
         }
         XCTAssertEqual(counter.count, 2, "两个候选各查一次")
     }
@@ -346,10 +346,10 @@ final class AniSkipIDResolverTests: XCTestCase {
             counter.count += 1
             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
         }) {
-            let first = await resolver.malID(for: identity)
-            XCTAssertNil(first)
-            let forced = await resolver.malID(for: identity, forceRefresh: true)
-            XCTAssertNil(forced, "仍然搜不中")
+            let first = await resolver.resolve(for: identity)
+            XCTAssertTrue(first.isEmpty)
+            let forced = await resolver.resolve(for: identity, forceRefresh: true)
+            XCTAssertTrue(forced.isEmpty, "仍然搜不中")
         }
         XCTAssertEqual(counter.count, 2, "forceRefresh 忽略负缓存再次发起搜索")
 
@@ -359,15 +359,15 @@ final class AniSkipIDResolverTests: XCTestCase {
             return TestSupport.response(
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":42}]}}}"#, url: request.url!)
         }) {
-            let retried = await resolver.malID(for: identity, forceRefresh: true)
-            XCTAssertEqual(retried, 42)
+            let retried = await resolver.resolve(for: identity, forceRefresh: true)
+            XCTAssertEqual(retried.malID, 42)
         }
         try await TestSupport.withMock({ _ in
             XCTFail("正缓存命中不应发起网络请求")
             throw URLError(.unsupportedURL)
         }) {
-            let cached = await resolver.malID(for: identity)
-            XCTAssertEqual(cached, 42)
+            let cached = await resolver.resolve(for: identity)
+            XCTAssertEqual(cached.malID, 42)
         }
     }
 
@@ -386,10 +386,10 @@ final class AniSkipIDResolverTests: XCTestCase {
             return TestSupport.response(
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":7}]}}}"#, url: request.url!)
         }) {
-            let first = await resolver.malID(for: identity)
-            XCTAssertEqual(first, 7)
-            let forced = await resolver.malID(for: identity, forceRefresh: true)
-            XCTAssertEqual(forced, 7)
+            let first = await resolver.resolve(for: identity)
+            XCTAssertEqual(first.malID, 7)
+            let forced = await resolver.resolve(for: identity, forceRefresh: true)
+            XCTAssertEqual(forced.malID, 7)
         }
         XCTAssertEqual(counter.count, 2, "forceRefresh 对正缓存也重新解析")
     }
@@ -416,8 +416,8 @@ final class AniSkipIDResolverTests: XCTestCase {
             return TestSupport.response(
                 #"{"data":{"Page":{"media":[{"id":1,"idMal":62856}]}}}"#, url: request.url!)
         }) {
-            let malID = await resolver.malID(for: identity)
-            XCTAssertEqual(malID, 62856, "v1 负缓存不该拦截 v2 解析")
+            let ids = await resolver.resolve(for: identity)
+            XCTAssertEqual(ids.malID, 62856, "v1 负缓存不该拦截 v2 解析")
         }
         XCTAssertEqual(counter.count, 1)
     }
