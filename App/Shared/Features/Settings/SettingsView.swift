@@ -206,8 +206,17 @@ struct SettingsView: View {
             Section("Bangumi") {
                 Toggle("启用 Bangumi", isOn: $bangumiEnabled)
                 if bangumiEnabled {
-                    KeyValueRow(label: "账号", value: bangumi.profile?.nickname ?? "未登录")
-                    if !bangumi.isAuthenticated {
+                    KeyValueRow(label: "账号", value: bangumiAccountText)
+                    if bangumi.isAuthenticated {
+                        // 退出登录原先只有 Bangumi 分区「我的」页顶栏一个出口：要退得先
+                        // 切到那个分区、再进个人页，设置页里找不到——与 Jellyfin /
+                        // MoviePilot 的出口位置对齐，这里补一个。
+                        Button(role: .destructive) {
+                            Task { await bangumi.signOut() }
+                        } label: {
+                            Label("退出 Bangumi", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } else {
                         Text("登录入口在顶栏的 Bangumi 分区。")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
@@ -433,6 +442,14 @@ struct SettingsView: View {
 
     private var moviePilotActionButtonTitle: String {
         moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
+    }
+
+    /// Bangumi 账号行：以 `isAuthenticated` 为准（它是登录的唯一门控信号）。
+    /// 资料还没拉回来时 profile 为 nil，直接读它会显示成「未登录」——而旁边
+    /// 就摆着「退出 Bangumi」，两行互相打架。
+    private var bangumiAccountText: String {
+        if let profile = bangumi.profile { return profile.name }
+        return bangumi.isAuthenticated ? "已登录" : "未登录"
     }
 }
 
