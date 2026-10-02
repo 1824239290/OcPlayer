@@ -88,6 +88,22 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertFalse(app.routeExiting, "落地后不得留着退场态，否则整页卡在半透明")
     }
 
+    /// 回归：compact（iPhone / iPad Tab）布局下 push 必须落到**当前 Tab 的独立栈**
+    /// （`navPaths.<tab>`），落进常规布局的共享 `path` 等于点了没反应——Bangumi
+    /// 「个人主页 / 每日放送」两个 toolbar 按钮是这条链最显性的探针。
+    func testCompactPushLandsInTheSelectedTabsOwnStack() {
+        let app = AppModel()
+        app.reduceMotion = true   // 两段式直切落地，不等 0.45s 淡出
+        app.setCompact(true)
+        app.selectedSection = .bangumi
+
+        app.openBangumiProfile()
+        app.openBangumiCalendar()
+
+        XCTAssertEqual(app.navPath(for: .bangumi).count, 2, "两个入口都必须进 Bangumi Tab 自己的栈")
+        XCTAssertTrue(app.path.isEmpty, "compact 下共享栈不得被写入（只写不读 = 死按钮）")
+    }
+
     /// 回归：快照超限曾整份 `removeAll()`，连刚写入的那条一起丢——第 41 次进入
     /// 详情页立刻退回冷骨架屏，SWR 的收益变成随机的。现在只淘汰最旧的。
     func testDetailSnapshotEvictionKeepsTheJustStoredEntry() {
