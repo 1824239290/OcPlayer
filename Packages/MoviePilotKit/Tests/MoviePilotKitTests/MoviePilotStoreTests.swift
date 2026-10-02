@@ -246,6 +246,64 @@ final class MoviePilotStoreTests: XCTestCase {
         XCTAssertEqual(store.username, "admin", "地址与用户名保留，方便下次登录")
     }
 
+    /// 「登出 / 令牌失效」是**未登录**，不是**未配置**。
+    ///
+    /// 两者都被 `isConfigured` 判成 false（它要求有密码或令牌），所以 UI 的
+    /// 「未配置」档若用它当判据，分区首页就会对着一个地址、用户名都填好、
+    /// 只是没登录的账号显示「未配置 MoviePilot」并把人赶去设置页。
+    /// `integrationState` 必须把它判成 `.loggedOut`，让首页给「重新登录」。
+    func testSignOutReadsAsLoggedOutNotUnconfigured() {
+        let defaults = TestSupport.isolatedDefaults()
+        let directory = TestSupport.isolatedCredentialsDirectory()
+
+        let store = makeStore(defaults: defaults, directory: directory)
+        XCTAssertEqual(store.integrationState, .unconfigured, "从未配过")
+        XCTAssertFalse(store.hasAccount)
+
+        store.updateCredentials(serverURLString: "http://10.0.0.2:3000", username: "admin", password: "secret")
+        store.accessToken = "valid-token"
+        XCTAssertEqual(store.integrationState, .ready)
+
+        store.clearSession()
+        XCTAssertFalse(store.isConfigured, "凭据已交还")
+        XCTAssertTrue(store.hasAccount, "但地址与用户名都还在")
+        XCTAssertEqual(store.integrationState, .loggedOut, "登出后是未登录，不是未配置")
+    }
+
+    /// 令牌过期且没记住密码（默认档）时也是「未登录」：401 只清令牌，
+    /// 地址与用户名不动，用户补一次密码就能回来。
+    func testExpiredTokenWithoutRememberedPasswordReadsAsLoggedOut() {
+        let defaults = TestSupport.isolatedDefaults()
+        let directory = TestSupport.isolatedCredentialsDirectory()
+
+        let store = makeStore(defaults: defaults, directory: directory)
+        store.updateCredentials(serverURLString: "http://10.0.0.2:3000", username: "admin", password: "secret")
+        store.accessToken = "valid-token"
+
+        let restarted = makeStore(defaults: defaults, directory: directory)
+        restarted.accessToken = nil   // 401 → clearSession(ifCurrent:)
+        XCTAssertEqual(restarted.password, "", "密码没记住")
+        XCTAssertEqual(restarted.integrationState, .loggedOut)
+    }
+
+    /// 地址或用户名缺一即「未配置」——地址写错也算，否则会把人送去一个
+    /// 只有「重新登录」而没有「改地址」出口的页面。
+    func testIntegrationStateIsUnconfiguredWithoutUsableAddressAndUsername() {
+        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+                        credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
+
+        store.accessToken = "orphan-token"
+        XCTAssertEqual(store.integrationState, .unconfigured, "只有令牌，没地址没用户名")
+
+        store.updateCredentials(serverURLString: "http://10.0.0.2:3000", username: "", password: "secret")
+        XCTAssertFalse(store.hasAccount, "没用户名")
+        XCTAssertEqual(store.integrationState, .unconfigured)
+
+        store.updateCredentials(serverURLString: "ftp://10.0.0.2:3000", username: "admin", password: "secret")
+        XCTAssertFalse(store.hasAccount, "地址不是 http(s) origin")
+        XCTAssertEqual(store.integrationState, .unconfigured)
+    }
+
     /// 后台线程（actor 上的 `signOut`）清会话时，**不许**在后台动 UserDefaults。
     ///
     /// 钉住的是 2026-10-02「设置 → 退出 MoviePilot」每次必卡死那条环：SwiftUI 给

@@ -35,7 +35,10 @@ final class MoviePilotCoordinator {
     /// 本地有 token 即视为已登录；token 死了会被 401 → 静默重登 → 通知这条链纠正。
     var isAuthenticated: Bool { store.hasToken }
 
-    var isConfigured: Bool { store.isConfigured }
+    /// 分区首页与设置页共用的集成状态判据（未配置 / 未登录 / 可用）。
+    /// 别在视图里自己拼 `isConfigured` + `isAuthenticated`——两处拼法一旦不一致，
+    /// 就会出现「登出后显示未配置」这类自相矛盾的态。
+    var integrationState: MoviePilotStore.IntegrationState { store.integrationState }
 
     /// 「记住密码」开关（默认关）。设置页直接绑定。
     ///

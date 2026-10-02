@@ -91,20 +91,23 @@ struct MoviePilotHomeView: View {
 
     var body: some View {
         Group {
-            if !moviepilot.store.isConfigured {
+            switch moviepilot.integrationState {
+            case .unconfigured:
                 gate(
                     "未配置 MoviePilot",
                     icon: "arrow.down.circle",
                     hint: "在 设置 → MoviePilot 填写服务器地址与账号"
                 )
-            } else if !moviepilot.isAuthenticated {
+            case .loggedOut:
+                // 登出与令牌失效（没记住密码时静默重登失败）都落这里：地址与用户名
+                // 还在，缺的只是登录，所以给的是「重新登录」而不是「去设置」。
                 gate(
                     "未登录",
                     icon: "person.crop.circle.badge.exclamationmark",
-                    hint: "MoviePilot 登录状态已失效或尚未登录，重新登录后即可管理订阅与下载",
+                    hint: "MoviePilot 尚未登录或登录状态已失效，重新登录后即可管理订阅与下载",
                     allowsRelogin: true
                 )
-            } else {
+            case .ready:
                 mainContent
             }
         }

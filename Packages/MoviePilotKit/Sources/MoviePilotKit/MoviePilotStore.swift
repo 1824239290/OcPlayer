@@ -254,18 +254,48 @@ public final class MoviePilotStore: @unchecked Sendable {
         Self.normalizedURL(from: serverURLString ?? "")
     }
 
-    /// 地址有效（http/https origin）且账号可用。
+    /// 地址有效（http/https origin）且用户名非空——**与凭据是否可用无关**。
+    ///
+    /// 和 `isConfigured` 的区别是「这台服务器配过账号」与「这份账号现在能用」：
+    /// 退出登录、以及令牌过期后静默重登失败（没记住密码）都会清掉令牌与密码，
+    /// 此时 `isConfigured` 为 false 而地址与用户名仍在。UI 判断「要不要引导去设置」
+    /// 必须看本属性，否则一个只是没登录的账号会被说成「未配置」。
+    public var hasAccount: Bool {
+        baseURL != nil && !username.isEmpty
+    }
+
+    /// 账号填全且本地有可用凭据（密码或令牌）——「现在就能拿它发请求」。
     ///
     /// 密码**不是**必需项：没打开「记住密码」时，重启后密码是空的，但令牌可能仍有效
-    /// （JWT 8 天）。此时集成显然是配置好的——若这里要求密码非空，
-    /// `MoviePilotHomeView` 会对着一个能正常用的账号显示「未配置」空态。
+    /// （JWT 8 天）——那时它仍为 true，不会把「能正常用的账号」判成没配好。
+    /// 反过来它**不**适合回答「配过没有」：登出与令牌失效都会让它变 false，
+    /// 而地址与用户名一直好着。UI 分档请用 `integrationState` / `hasAccount`。
     public var isConfigured: Bool {
-        baseURL != nil && !username.isEmpty && (!password.isEmpty || hasToken)
+        hasAccount && (!password.isEmpty || hasToken)
     }
 
     /// 本地有 token（可能已过期，过期靠 401 触发静默重登）。
     public var hasToken: Bool {
         !(accessToken ?? "").isEmpty
+    }
+
+    /// 集成状态：分区首页与设置页状态行的**唯一判据**。
+    ///
+    /// 两处此前各自拼判定（首页 `isConfigured`、设置页 `isConfigured` 三目），
+    /// 拼法不一致就会打架——现场是登出 / 令牌失效后首页显示「未配置 MoviePilot」
+    /// 并把人赶去设置页，而地址与用户名其实一直好着，缺的只是登录。
+    public enum IntegrationState: Sendable, Equatable {
+        /// 没填地址或用户名：只能去设置页补。
+        case unconfigured
+        /// 账号在、但没有可用令牌：登出与令牌失效都落在这里，重新登录即可恢复。
+        case loggedOut
+        /// 本地有令牌：直接放行（令牌真失效由 401 → 静默重登 → 通知链纠正）。
+        case ready
+    }
+
+    public var integrationState: IntegrationState {
+        guard hasAccount else { return .unconfigured }
+        return hasToken ? .ready : .loggedOut
     }
 
     // MARK: - 复合操作

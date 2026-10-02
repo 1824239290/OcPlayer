@@ -421,11 +421,14 @@ struct SettingsView: View {
     }
 
     /// 状态行纯展示（点击不弹窗），操作按钮独立放置——与弹幕网关区块同规矩。
+    /// 三态取自 `integrationState`，与分区首页同一判据（此前这里用 `isConfigured`
+    /// 拼「凭据不全」，与首页的「未配置」打架，且默认不保存密码时就会命中）。
     private var moviePilotStatusText: String {
-        let mp = moviepilot
-        if mp.store.serverURLString == nil { return "未配置" }
-        if mp.isAuthenticated { return "已登录" }
-        return mp.store.isConfigured ? "未登录" : "凭据不全"
+        switch moviepilot.integrationState {
+        case .unconfigured: "未配置"
+        case .loggedOut: "未登录"
+        case .ready: "已登录"
+        }
     }
 
     private var moviePilotActionButtonTitle: String {
