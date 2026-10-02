@@ -76,24 +76,27 @@ struct BangumiHomeView: View {
             if bangumi.isAuthenticated {
                 if let error = bangumi.databaseError {
                     // 建库失败：给重试入口，不再是无尽占位 + 全功能静默失效。
-                    VStack(spacing: 12) {
-                        Image(systemName: "externaldrive.badge.exclamationmark")
-                            .font(.system(size: 34))
-                            .foregroundStyle(.secondary)
-                        Text("Bangumi 本地库初始化失败")
-                            .font(.headline)
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 360)
-                        Button("重试") {
-                            bangumi.retryDatabaseSetup()
+                    // 状态视图是「根级」的（本页没有别的内容兜底），必须走
+                    // `PageFillingState` 铺满，否则氛围背景与顶栏一起塌（见该类型注释）。
+                    PageFillingState {
+                        VStack(spacing: 12) {
+                            Image(systemName: "externaldrive.badge.exclamationmark")
+                                .font(.system(size: 34))
+                                .foregroundStyle(.secondary)
+                            Text("Bangumi 本地库初始化失败")
+                                .font(.headline)
+                            Text(error)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 360)
+                            Button("重试") {
+                                bangumi.retryDatabaseSetup()
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .padding(24)
                     }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     content
                 }
@@ -161,17 +164,24 @@ struct BangumiHomeView: View {
                 if loader.isLoading && loader.items.isEmpty {
                     skeletonView
                 } else if let error = loader.loadError, loader.items.isEmpty {
-                    EmptyState(failure: error) {
-                        Task { await loader.loadInitial() }
+                    // 失败 / 空态是**根级**状态视图（本页此时没有列表兜底），
+                    // 裸 `EmptyState` 会把氛围背景与顶栏一起塌掉——统一走
+                    // `PageFillingState`，理由见该类型注释。
+                    PageFillingState {
+                        EmptyState(failure: error) {
+                            Task { await loader.loadInitial() }
+                        }
                     }
                 } else if loader.items.isEmpty {
-                    EmptyState(
-                        empty: "暂无在看条目",
-                        systemImage: "play.rectangle",
-                        message: "在 Bangumi 上标记「在看」的动画会出现在这里。\n点右上角刷新同步你的收藏。",
-                        actionTitle: "刷新"
-                    ) {
-                        Task { await refresh(force: true) }
+                    PageFillingState {
+                        EmptyState(
+                            empty: "暂无在看条目",
+                            systemImage: "play.rectangle",
+                            message: "在 Bangumi 上标记「在看」的动画会出现在这里。\n点右上角刷新同步你的收藏。",
+                            actionTitle: "刷新"
+                        ) {
+                            Task { await refresh(force: true) }
+                        }
                     }
                 } else {
                     ScrollView {
@@ -228,36 +238,40 @@ struct BangumiHomeView: View {
                     if loader.isLoading && loader.items.isEmpty {
                         searchSkeletonView
                     } else if let error = loader.loadError, loader.items.isEmpty {
-                        ContentUnavailableView {
-                            Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(error)
-                        } actions: {
-                            HStack(spacing: 12) {
-                                Button(UIStrings.retry) {
-                                    Task { await loader.loadInitial() }
-                                }
-                                .buttonStyle(.borderedProminent)
+                        // 搜索态同样没有结果列表兜底：这两个状态是搜索页的根级
+                        // 内容（外层只有搜索头那一行），裸状态视图会塌掉整页背景。
+                        PageFillingState {
+                            ContentUnavailableView {
+                                Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
+                            } description: {
+                                Text(error)
+                            } actions: {
+                                HStack(spacing: 12) {
+                                    Button(UIStrings.retry) {
+                                        Task { await loader.loadInitial() }
+                                    }
+                                    .buttonStyle(.borderedProminent)
 
+                                    Button("返回在看") {
+                                        exitSearchMode()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                    } else if loader.items.isEmpty {
+                        PageFillingState {
+                            ContentUnavailableView {
+                                Label("未找到相关条目", systemImage: "magnifyingglass")
+                            } description: {
+                                Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
+                            } actions: {
                                 Button("返回在看") {
                                     exitSearchMode()
                                 }
                                 .buttonStyle(.bordered)
                             }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if loader.items.isEmpty {
-                        ContentUnavailableView {
-                            Label("未找到相关条目", systemImage: "magnifyingglass")
-                        } description: {
-                            Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
-                        } actions: {
-                            Button("返回在看") {
-                                exitSearchMode()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {

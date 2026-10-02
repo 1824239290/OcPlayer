@@ -25,51 +25,58 @@ struct BangumiLoginView: View {
     #endif
 
     var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: 44))
-                .foregroundStyle(.tint)
-            Text("连接 Bangumi")
-                .font(.title2.weight(.semibold))
-            Text("登录后可以在这里管理你的观看进度、收藏和个人主页。\nOcPlayer 会同步你标记的「在看 / 看过」，播放器联动章节进度。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-
-            if !danmakuModel.dandanplayIsConfigured {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("尚未配置弹幕网关", systemImage: "key.slash")
-                        .font(.callout.weight(.medium))
-                    Text("Bangumi 登录经网关换取令牌，需要先在「设置 → 弹幕」里填好网关地址与 API Key（Key 需带 bgm:oauth 权限）。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .frame(maxWidth: 420, alignment: .leading)
-                .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
-            } else {
-                Button {
-                    Task { await startOAuth() }
-                } label: {
-                    if bangumi.isAuthenticated {
-                        Label("已登录，打开 Bangumi", systemImage: "checkmark.circle.fill")
-                    } else {
-                        Label("登录 Bangumi", systemImage: "arrow.right.circle")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }
-
-            if let authError = bangumi.authError {
-                ErrorNotice(authError)
+        // **必须包在 `PageFillingState` 里**：本视图是 Bangumi 分区的根（未登录态的
+        // 门面），而抱紧内容的 `VStack` 理想尺寸与窗口无关——整条尺寸链（根视图 →
+        // 导航栈 → 外壳 → 背景）会跟着塌成中间那一块，macOS 顶栏的玻璃底下没了内容，
+        // 系统改画不透明的窗口底色（实机顶栏条带是一条 sd≈3 的死灰平条，与首页 /
+        // 设置页 / MoviePilot 门控页透过氛围图的玻璃顶栏完全两样）。
+        // 载体理由与实测见 `PageFillingState`（`frame(maxWidth:maxHeight:)` 救不回来）。
+        PageFillingState {
+            VStack(spacing: 18) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 44))
+                    .foregroundStyle(.tint)
+                Text("连接 Bangumi")
+                    .font(.title2.weight(.semibold))
+                Text("登录后可以在这里管理你的观看进度、收藏和个人主页。\nOcPlayer 会同步你标记的「在看 / 看过」，播放器联动章节进度。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
+
+                if !danmakuModel.dandanplayIsConfigured {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("尚未配置弹幕网关", systemImage: "key.slash")
+                            .font(.callout.weight(.medium))
+                        Text("Bangumi 登录经网关换取令牌，需要先在「设置 → 弹幕」里填好网关地址与 API Key（Key 需带 bgm:oauth 权限）。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: 420, alignment: .leading)
+                    .background(.quinary, in: RoundedRectangle(cornerRadius: 12))
+                } else {
+                    Button {
+                        Task { await startOAuth() }
+                    } label: {
+                        if bangumi.isAuthenticated {
+                            Label("已登录，打开 Bangumi", systemImage: "checkmark.circle.fill")
+                        } else {
+                            Label("登录 Bangumi", systemImage: "arrow.right.circle")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+
+                if let authError = bangumi.authError {
+                    ErrorNotice(authError)
+                        .frame(maxWidth: 420)
+                }
             }
+            .padding(32)
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: pendingAuthURL) { _, url in
             guard let url else { return }
             presentAuthSession(url: url)

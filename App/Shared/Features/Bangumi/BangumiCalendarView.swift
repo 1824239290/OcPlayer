@@ -86,21 +86,28 @@ struct BangumiCalendarView: View {
             if isLoading && days.isEmpty {
                 skeletonView
             } else if let loadError, days.isEmpty {
-                ContentUnavailableView {
-                    Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(loadError)
-                } actions: {
-                    Button(UIStrings.retry) { Task { await loadCalendar() } }
-                        .buttonStyle(.borderedProminent)
+                // 失败 / 空态是本页的根级内容（此时没有列表兜底）：必须走
+                // `PageFillingState` 铺满，否则整条尺寸链塌掉、氛围背景与顶栏
+                // 一起失去内容（见该类型注释）。
+                PageFillingState {
+                    ContentUnavailableView {
+                        Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
+                    } description: {
+                        Text(loadError)
+                    } actions: {
+                        Button(UIStrings.retry) { Task { await loadCalendar() } }
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             } else if days.isEmpty {
-                ContentUnavailableView {
-                    Label("暂无放送数据", systemImage: "calendar.badge.exclamationmark")
-                } description: {
-                    Text("未能获取到本季度的每日放送时间表。")
-                } actions: {
-                    Button("刷新") { Task { await loadCalendar(force: true) } }
+                PageFillingState {
+                    ContentUnavailableView {
+                        Label("暂无放送数据", systemImage: "calendar.badge.exclamationmark")
+                    } description: {
+                        Text("未能获取到本季度的每日放送时间表。")
+                    } actions: {
+                        Button("刷新") { Task { await loadCalendar(force: true) } }
+                    }
                 }
             } else {
                 contentView

@@ -25,8 +25,11 @@ struct BangumiCollectionListView: View {
                     .transition(.opacity)
                     .motion(Motion.standard, value: collectionType)
             } else {
-                ProgressView("正在加载…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // 根级状态视图（本页此时还没有 `List` 兜底）走 `PageFillingState`
+                // 铺满，否则尺寸链塌掉、氛围背景与顶栏一起失去内容（见该类型注释）。
+                PageFillingState {
+                    ProgressView("正在加载…")
+                }
             }
         }
         .navigationTitle("我的\(subjectType.description)")
@@ -60,11 +63,14 @@ struct BangumiCollectionListView: View {
     @ViewBuilder
     private func content(_ loader: PagedListLoader<BangumiSubjectDTO>) -> some View {
         if loader.isLoading && loader.items.isEmpty {
-            ProgressView("正在加载…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            PageFillingState {
+                ProgressView("正在加载…")
+            }
         } else if let error = loader.loadError, loader.items.isEmpty {
-            EmptyState(failure: error) {
-                Task { await loader.loadInitial() }
+            PageFillingState {
+                EmptyState(failure: error) {
+                    Task { await loader.loadInitial() }
+                }
             }
         } else {
             List {
