@@ -425,6 +425,14 @@ final class AppModel {
     var nextEpisodeTask: Task<Void, Never>?
     var externalSubtitleTask: Task<Void, Never>?
 
+    /// iOS 前后台往返：离开前台时正在播（回前台要接着播的意图）。
+    /// 内核侧的暂停/恢复在 `PlaybackController.beginSystemSuspension`，
+    /// 这里只记「该不该接回去」——要不要重建内核得 App 层来判（它才知道是哪条会话）。
+    var backgroundResumeIntent = false
+    /// 回前台后的观察窗任务：挂起把内核弄坏时，报错未必在 `play()` 当场落地，
+    /// 可能迟一步（见 `AppModel.watchPlaybackAfterSystemResume`）。
+    var backgroundRecoveryWatch: Task<Void, Never>?
+
     // MARK: - 初始化
 
     /// 域模型全部经 init 注入（默认值保持生产装配不变）；测试可换入隔离实例，

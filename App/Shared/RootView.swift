@@ -122,8 +122,15 @@ struct RootView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
+            switch phase {
+            case .background:
                 _ = app.playbackDidEnterBackground()
+            case .active:
+                // iOS 从挂起里回来：内核的音频出口 / 解码会话未必撑得过来，
+                // 由 AppModel 按离开前的意图续播（或静默重建）。
+                app.playbackDidEnterForeground()
+            default:
+                break
             }
         }
         #if os(iOS)

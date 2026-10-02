@@ -31,6 +31,24 @@ grep -h '"error"' $L | jq -c '{t:.timestamp, f:.fields}'      # 内核错误：c
   一眼看出这次播放一共卡了几回
 - 网络类还要看 `buffer.*`：有 buffer 说明是饿数据，没有才是内核侧断了
 
+### iOS 切后台回来后报错 / 没有接着播
+
+```bash
+grep -h -E "系统进后台|系统回前台|后台往返后自动重建播放" $L | tail -20
+```
+
+看点：
+- 只有带这三行的包是新行为。旧包在 iOS 上切后台不做处理，内核的音频出口（AudioQueue）
+  与 VideoToolbox 解码会话撑不过挂起，回前台第一包数据就报
+  `ffmpeg error … avcodec_send_packet: Unknown error occurred (-1313558101)`，只能手动点重试。
+- 「系统进后台：暂停在播会话」= App 在进程被挂起**之前**拦住了。离开前没在播就没有这一行，
+  属预期：用户自己按的暂停不该被系统接回去。
+- 回来要么「系统回前台：接着播」（内核算健康，原地解开暂停），要么
+  「后台往返后自动重建播放」（内核没撑过挂起，按「重试」那条路静默重建）。后者的 `reason`
+  区分：`foreground`（回来时已经 `.error`）、`post-resume`（`play()` 之后才炸，3 秒观察窗接住的）、
+  `resume-failed`（`play()` 都没调成）。
+- 自动重建只做一次：紧接着还有 `内核错误事件` 就是真失败，落回普通错误徽章，不循环重试。
+
 ### 画面周期性变暗/闪（issue #2 类）
 
 ```bash
@@ -51,6 +69,31 @@ grep -h '"event":"open' $L | jq -c '{t:.timestamp, e:.fields.event, ms:.fields.e
 
 看点：`open.done ok=false` 的 `error` 是直接原因；`elapsed_ms` 很大（几秒以上）说明卡在连接/探测，
 配合 `read_ahead_bytes` / `back_buffer_bytes` 与 `source` 判断是不是弱网 + 预读窗口过大。
+
+### 界面未响应 / 点一下按钮就永久卡死（只能强退）
+
+**卡住时别强退**，当场抓栈（`sample` 对 Debug 包与正式包都可用；采样那几秒界面会更卡，正常）：
+
+```bash
+sample OcPlayer 5 -f /tmp/ocplayer-hang.txt
+grep -n -B2 -A2 "psynch_mutexwait" /tmp/ocplayer-hang.txt   # 互等锁的两条链
+```
+
+看点：
+
+- **「永久卡死、只能强退」几乎总是互等锁（ABBA 死锁），不是性能问题**：两条线程各持着对方
+  要的锁。`sample` 里两条链的顶端都会停在 `__psynch_mutexwait`——把每条链的**上一帧**读出来，
+  就是「谁持有什么、谁在等什么」，环一眼可见。别去猜渲染慢。
+- 2026-10-02「设置 → 退出 MoviePilot」实录：主线程停在 `SettingsView.body` 读
+  `MoviePilotStore.serverURLString` 的 `NSLock` 上，后台 actor 线程停在
+  `MoviePilotStore.clearSession()` → `defaults.removeObject` → SwiftUI `Update.begin()` 上。
+  根因是**后台线程写 `UserDefaults`**：SwiftUI 给 `@AppStorage` 挂的观察者在**发通知的线程**上
+  申请 UI 更新锁（`MovableLock`），而主线程正持着那把锁等 store 的锁。已由
+  `MoviePilotStore.mutateDefaults(_:)` 兜住——同类新代码**不要**在后台线程写 `UserDefaults`。
+- 线索组合很好认：**两端都复现** + **只有某一个按钮必卡** + 与网络/数据量无关，优先怀疑
+  「共享代码 + 特定线程路径」，而不是某端的渲染。
+- 只要日志在卡死前正常写盘，就说明存储动作已完成、卡的是它之后的 UI 更新那一段（本例即如此：
+  重启后登录态确实已是退出状态）。
 
 ### 卡顿、缓冲频繁
 

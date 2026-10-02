@@ -4,6 +4,7 @@ import DanmakuKit
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
+import PlaybackKit
 
 extension AppModel {
     // MARK: - 弹幕设置（弹弹play 网关）
@@ -398,13 +399,147 @@ extension AppModel {
 
     /// Hook this to `scenePhase == .background`. It immediately snapshots the
     /// current position instead of waiting for the next ten-second heartbeat.
+    ///
+    /// iOS 上这一步还要在进程被挂起**之前**把在播的会话停下：冻住再醒来，内核的
+    /// 音频出口（AudioQueue）与 VideoToolbox 解码会话都撑不过来，回前台第一个包
+    /// 喂进 `avcodec_send_packet` 就是 AVERROR_UNKNOWN，播放器被钉在错误态，
+    /// 只能手动重试（用户截图里的那条）。详见 `PlaybackController.beginSystemSuspension`。
     @discardableResult
     func playbackDidEnterBackground() -> Task<Void, Never>? {
+        #if os(iOS)
+        backgroundResumeIntent = playback?.beginSystemSuspension() ?? false
+        #endif
         guard let report = playbackReporting?.reportBackgroundSnapshot() else { return nil }
         if case .terminal = report {
             clearPlaybackSessionState()
         }
         return report.task
+    }
+
+    /// Hook this to the foreground transition（`scenePhase == .active`）。
+    ///
+    /// 按离开前记下的意图把播放接回去：内核算健康就直接解开那次暂停；内核没撑过
+    /// 挂起（`.error` / `setupError`）就走一次**静默重建**——和用户点「重试」是同
+    /// 一条路，只是不用他点。macOS 不挂起进程，这条路径整个是空转。
+    func playbackDidEnterForeground() {
+        #if os(iOS)
+        guard let playback else { return }
+        let action = Self.foregroundResumeAction(
+            intentToResume: backgroundResumeIntent,
+            state: playback.state.state,
+            hasSetupError: playback.setupError != nil
+        )
+        backgroundResumeIntent = false
+        // 三条分支都要经过它：内部把挂起时长记回账（open 看门狗按真正跑过的时长判超时）。
+        let reusable = playback.endSystemSuspension(resumePlaying: action == .resume)
+        switch action {
+        case .none:
+            break
+        case .resume:
+            // 恢复要重建 VT / AudioQueue，报错未必在 play() 当场落地——盯一小段；
+            // 连 play() 都没调成（内核已经不听使唤）就直接重建，不猜。
+            if reusable {
+                watchPlaybackAfterSystemResume()
+            } else {
+                recoverPlaybackAfterBackgroundFailure(reason: "resume-failed")
+            }
+        case .rebuild:
+            recoverPlaybackAfterBackgroundFailure(reason: "foreground")
+        }
+        #endif
+    }
+
+    /// 回前台的动作决策（纯函数，便于单测）。
+    enum ForegroundResumeAction: Equatable {
+        /// 离开前没在播（用户自己按的暂停 / 本来就停在错误页）：什么都不做。
+        case none
+        /// 内核算健康：把离开前那次暂停解开。
+        case resume
+        /// 内核没撑过挂起：按「重试」那条路重建后接着播。
+        case rebuild
+    }
+
+    static func foregroundResumeAction(
+        intentToResume: Bool,
+        state: PlaybackState?,
+        hasSetupError: Bool
+    ) -> ForegroundResumeAction {
+        guard intentToResume, let state else { return .none }
+        if hasSetupError || state == .error { return .rebuild }
+        switch state {
+        case .paused, .ready, .playing:
+            return .resume
+        case .idle, .opening, .stopped, .closed, .error:
+            return .none
+        }
+    }
+
+    /// 回前台观察窗：250ms 一拍、盯 3 秒。
+    private static let backgroundRecoveryWatchTick = Duration.milliseconds(250)
+    private static let backgroundRecoveryWatchTicks = 12
+
+    /// 挂起把内核弄坏的报错未必在 `play()` 当场落地——恢复后的第一包数据喂进
+    /// `avcodec_send_packet` 才炸（用户截图那一刻）。所以在回前台后盯一小段：
+    /// 一旦落进错误态就走一次静默重建，重建后仍然失败就按普通错误交给错误徽章，
+    /// 不循环重试。
+    private func watchPlaybackAfterSystemResume() {
+        guard let requestID = presentedPlayer?.id else { return }
+        backgroundRecoveryWatch?.cancel()
+        backgroundRecoveryWatch = Task { @MainActor [weak self] in
+            for _ in 0..<Self.backgroundRecoveryWatchTicks {
+                do { try await Task.sleep(for: Self.backgroundRecoveryWatchTick) } catch { return }
+                guard let self, !Task.isCancelled else { return }
+                // 观察窗只认这一条请求：期间换片 / 退出播放器后，别人身上的错误与它无关。
+                guard self.presentedPlayer?.id == requestID else { return }
+                guard let playback = self.playback else { return }
+                if playback.state.state == .error || playback.setupError != nil {
+                    self.recoverPlaybackAfterBackgroundFailure(reason: "post-resume")
+                    return
+                }
+            }
+        }
+    }
+
+    /// 挂起往返把内核弄坏了：按用户点「重试」那条路静默重建，从当前位置接着播。
+    ///
+    /// `.error` 的引擎不可复用（内核 close 是终态，见 `PlaybackController.stopPlayback`
+    /// 的注释），两条分支都得重建内核：Jellyfin 条目重走完整 `play()`（PlaybackInfo /
+    /// Start 会话一起重来），本地文件 / 直连重开同一个请求（同一个 request id，
+    /// 走 `open(request:)` 的「重开当前请求」分支换一台新引擎）。
+    ///
+    /// 位置直接取内核当前位置，**不走 `retryPlayback()` 的「≥30s 才算续播点」启发式**
+    /// ——那条是给用户手动重试设计的（怕把刚开的片头当成续播点），系统往返里
+    /// 位置退到 0 重来才是 bug。源没加载过（open 阶段就坏了）时位置不可信，
+    /// 回落到请求上带的续播点。
+    private func recoverPlaybackAfterBackgroundFailure(reason: String) {
+        guard let request = presentedPlayer, let playback else { return }
+        let resumeSeconds = playback.hasLoadedSource
+            ? Double(playback.state.position.microseconds) / 1_000_000
+            : request.resumeSeconds
+        AppDiagnostics.logInfo("后台往返后自动重建播放", fields: [
+            "reason": .string(reason),
+            "title": .string(request.title),
+            "resume_s": .double(resumeSeconds ?? -1),
+        ])
+        if let item = nowPlayingItem ?? retryPlaybackItem {
+            play(item, resumeSeconds: resumeSeconds)
+            return
+        }
+        // 本地 / 直连：盖 loading 层——重建期间不能让旧请求的错误徽章露着。
+        let rebuilt = PlaybackRequest(
+            id: request.id,
+            title: request.title,
+            uri: request.uri,
+            authHeader: request.authHeader,
+            resumeSeconds: resumeSeconds,
+            securityScopedURL: request.securityScopedURL,
+            sessionContext: request.sessionContext
+        )
+        playbackPreparation = .loading(title: request.title)
+        presentedPlayer = rebuilt
+        schedulePreparationDismiss(for: rebuilt)
+        playback.open(request: rebuilt)
+        restartDanmakuForCurrentPlayback()
     }
 
     /// Hook this to the platform's termination callback when available. The

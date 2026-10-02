@@ -298,6 +298,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 供关闭播放器的多条收口路径共用:引擎已被停掉的不再重复 stop。
     var engineIsActive = false
 
+    /// 系统挂起（iOS 进后台被冻住）的累计时长。
+    ///
+    /// 挂起期间墙钟照走、线程全停：任何拿墙钟算的判据都得把这段扣掉，
+    /// 否则「切后台待一会儿回来」会被误判成「跑了很久」（见 `openElapsedMilliseconds`）。
+    @ObservationIgnored private var suspendedSeconds: TimeInterval = 0
+    @ObservationIgnored private var suspendedSince: Date?
+
     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
     @ObservationIgnored private let wakeLock = PlaybackWakeLock()
     /// 系统「正在播放」与媒体键 / 控制中心命令。同样没有 UI 表示。
@@ -890,6 +897,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// open 看门狗：内核对 DNS 解析没有任何超时，弱网下 open 理论上可无限挂。
     /// 60s 仍未完成就强制转失败，给用户确定的错误 + 重试入口；后台 open 继续跑，
     /// 完成时按过期/让位处理，不会串台。
+    ///
+    /// 60s 按**真正跑过**的时长算（`openElapsedMilliseconds` 扣掉挂起时段）：
+    /// 睡满一轮醒来时未必真的等了 60s（用户切后台后进程被冻住，定时器跟着停），
+    /// 没到就补睡剩下的再来判——早判会把一次可能马上成功的 open 掐断。
     private func scheduleOpenWatchdog(
         for request: PlaybackRequest,
         generation: UInt64,
@@ -897,29 +908,38 @@ final class PlaybackController: DanmakuPlaybackHosting {
     ) {
         openingWatchdogTask?.cancel()
         openingWatchdogTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.openWatchdogTimeout)
-            guard let self, !Task.isCancelled else { return }
-            guard self.openingAttempt === attempt,
-                  self.openingRequestID == request.id,
-                  self.expectedRequestID == request.id,
-                  self.sourceGeneration == generation else { return }
-            PlaybackLog.info("open 看门狗触发（60s）title=\(request.title)")
-            attempt.cancel()
-            try? self.engine?.stop()
-            // 归还槽位：这次 open 不会再有「完成回调」来销账（内核可能永远不返回），
-            // 槽位不还就是永久占死（见 abandonSlotOnce 注释）。挪进「已放弃」额度等它
-            // 真正返回时再销账。
-            if attempt.abandonSlotOnce() {
-                Self.activeOpenAttempts = max(0, Self.activeOpenAttempts - 1)
-                Self.abandonedOpenAttempts += 1
-                PlaybackLog.warning(
-                    "open 看门狗收回槽位（内核 open 未返回，已放弃 \(Self.abandonedOpenAttempts)/"
-                        + "\(Self.maximumAbandonedOpenAttempts)）title=\(request.title)")
+            var remainingMs = Self.openWatchdogTimeout.microseconds / 1000
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(max(1, remainingMs)))
+                guard let self, !Task.isCancelled else { return }
+                guard self.openingAttempt === attempt,
+                      self.openingRequestID == request.id,
+                      self.expectedRequestID == request.id,
+                      self.sourceGeneration == generation else { return }
+                // 睡着的这段里被系统冻结过就不算 open 的账（挂起期间墙钟照走、
+                // 线程全停），没到点只补睡差额，别把一次马上要成功的 open 掐断。
+                remainingMs = Self.openWatchdogTimeout.microseconds / 1000
+                    - self.openElapsedMilliseconds()
+                if remainingMs > 0 { continue }
+                PlaybackLog.info("open 看门狗触发（60s）title=\(request.title)")
+                attempt.cancel()
+                try? self.engine?.stop()
+                // 归还槽位：这次 open 不会再有「完成回调」来销账（内核可能永远不返回），
+                // 槽位不还就是永久占死（见 abandonSlotOnce 注释）。挪进「已放弃」额度等它
+                // 真正返回时再销账。
+                if attempt.abandonSlotOnce() {
+                    Self.activeOpenAttempts = max(0, Self.activeOpenAttempts - 1)
+                    Self.abandonedOpenAttempts += 1
+                    PlaybackLog.warning(
+                        "open 看门狗收回槽位（内核 open 未返回，已放弃 \(Self.abandonedOpenAttempts)/"
+                            + "\(Self.maximumAbandonedOpenAttempts)）title=\(request.title)")
+                }
+                self.finishOpenFailure(request: request, generation: generation,
+                                       attempt: attempt,
+                                       releaseScope: false,
+                                       error: "连接媒体服务器超时，请检查网络后重试")
+                return
             }
-            self.finishOpenFailure(request: request, generation: generation,
-                                   attempt: attempt,
-                                   releaseScope: false,
-                                   error: "连接媒体服务器超时，请检查网络后重试")
         }
     }
 
@@ -1068,9 +1088,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     /// 距本次 open 起点多少毫秒（没记起点时给 0，不编数）。
+    /// 扣掉系统挂起时段：iOS 进后台线程被冻住，墙钟在走而 open 并没有在跑，
+    /// 不扣的话「点完播放就切后台待一会儿」回来会被看门狗误判成连接超时。
     private func openElapsedMilliseconds() -> Int64 {
         guard let openStartedAt else { return 0 }
-        return Int64(Date().timeIntervalSince(openStartedAt) * 1000)
+        let elapsed = Date().timeIntervalSince(openStartedAt) - suspendedSeconds
+        return Int64(max(0, elapsed) * 1000)
     }
 
     /// 每 2s 查一次：**在播且不在缓冲**，位置却连续 5s 不动 —— 这正是「播到一半就停」
@@ -1128,6 +1151,68 @@ final class PlaybackController: DanmakuPlaybackHosting {
             frozenSeconds = 0
             stallReported = false
             lastStallCheckPosition = state.position
+        }
+    }
+
+    // MARK: - 系统前后台（iOS 挂起往返）
+
+    /// 进后台：开始记挂起时长；**在播的会话主动暂停**，返回「回前台是否该接着播」。
+    ///
+    /// 为什么不能放着不管：iOS 没给这个 App 后台音频能力（Info.plist 无
+    /// `UIBackgroundModes: audio`，App 层也不配 `AVAudioSession`），进程几百毫秒后
+    /// 就被挂起。内核的音频出口（iOS 上是 AudioQueue）与 VideoToolbox 解码会话
+    /// 撑不过这趟往返：回前台后第一包数据喂进 `avcodec_send_packet` 直接
+    /// AVERROR_UNKNOWN（未知错误 -1313558101），播放器被钉死在 `.error`，
+    /// 只能手动「重试」重建内核才能继续。挂起前先停，内核就不会对着一个正在
+    /// 被系统拆掉的音频出口做恢复动作，回前台那条路也只剩「接着播」。
+    ///
+    /// 已经在别的状态（暂停 / open 在飞 / 已报错）时不动引擎，返回 false——
+    /// 那不是「用户离开时正在看」，前台不做任何自动动作。
+    @discardableResult
+    func beginSystemSuspension() -> Bool {
+        suspendedSince = Date()
+        guard engineIsActive, openingRequestID == nil else { return false }
+        // `.ready` 也要停：那是「open 完了、内核正在自动起播」的窗口，冻在半路
+        // 回前台会停在一个说不清的状态；按暂停处理，回来接上。
+        guard state.state == .playing || state.state == .ready else { return false }
+        do {
+            try engine?.pause()
+            PlaybackLog.append("系统进后台：暂停在播会话，等回前台接着播")
+            return true
+        } catch {
+            // 暂停都失败 = 这条会话已经不健康。照样记「该接着播」：
+            // 回前台由 App 层的重建路径兜（见 AppModel.recoverPlaybackAfterBackgroundFailure）。
+            playerLog.warning("系统进后台暂停失败，回前台按重建处理 error=\(error)")
+            return true
+        }
+    }
+
+    /// 回前台：结束挂起时长记账；`resumePlaying` 为真且状态停在暂停 / 就绪时接着播。
+    ///
+    /// 返回「这条会话能不能接着用」：状态不是暂停（内核在挂起期间死掉 → `.error`，
+    /// 或本次离开前就没在播）返回 false，`play()` 自己抛错也返回 false——两种情况
+    /// 都由 App 层决定要不要重建（它才知道这是哪一条 Jellyfin 会话）。
+    func endSystemSuspension(resumePlaying: Bool) -> Bool {
+        if let since = suspendedSince {
+            suspendedSeconds += Date().timeIntervalSince(since)
+            suspendedSince = nil
+        }
+        guard resumePlaying, engineIsActive else { return false }
+        switch state.state {
+        case .paused, .ready:
+            do {
+                try engine?.play()
+                PlaybackLog.append("系统回前台：接着播")
+                return true
+            } catch {
+                playerLog.warning("系统回前台恢复播放失败，走重建 error=\(error)")
+                return false
+            }
+        case .playing:
+            // 暂停没落下去（或被别处先恢复了）：已经在播，不重复 play。
+            return true
+        default:
+            return false
         }
     }
 
