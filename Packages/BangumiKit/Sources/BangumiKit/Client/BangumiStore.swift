@@ -11,6 +11,21 @@ import Foundation
 /// 以及重签名后凭据读不出来——详见 `CredentialFileStore` 的类型注释。
 ///
 /// 其余非机密状态（登录标记、用户资料、条目关联、同步时间戳）仍留在 UserDefaults。
+///
+/// ## ⚠️ 别在后台线程上写这里（与 MoviePilotStore 同一个坑）
+///
+/// 本类型的 `auth` setter / 迁移读都会**持锁**写 `UserDefaults`，而 `BangumiAPIClient`
+/// 是 actor——`store.auth = …` 与 `authUnlocked()` 的迁移删除都跑在后台线程上。
+/// 后台线程写 `UserDefaults` 会同步通知 SwiftUI 的 `@AppStorage` 观察者，观察者在发通知
+/// 的线程上要申请 UI 更新锁（`Update.begin()`）；主线程此刻若正持着那把锁、又在读本类型
+/// 的某个属性等这把 `lock`，就是 ABBA 互等、App 永久卡死（2026-10-02 在 MoviePilotStore
+/// 上实际发生过，`sample` 有完整记录）。
+///
+/// 现在够不着那条环，只因为**没有任何视图在 body 求值里读本类型**——`BangumiContext`
+/// 把 UI 需要的东西都存成了 @Observable 存储属性（`App/Shared` 里唯一一处
+/// `context.store.…` 读在 async 上下文里）。所以别在 body 里读 `store.*`；真需要读，
+/// 那道锁和后台写入就都成了隐患，届时按 `MoviePilotStore.mutateDefaults(_:)` 的写法
+/// 把写入收回主线程。
 public final class BangumiStore: @unchecked Sendable {
     /// 全局共用实例。同一份 UserDefaults 被多个 store 实例读写时，每个实例各有一把锁
     /// 等于没锁，所以除测试注入自定义 defaults 外都用这一个。

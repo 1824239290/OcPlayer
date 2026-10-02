@@ -23,6 +23,12 @@ import Foundation
 /// 这么取舍的原因：密码是这一堆凭据里**唯一不可更换**的（token 失效能重登，
 /// 密码泄露通常要连带改别处），而它此前是明文躺在 `UserDefaults` 里的。
 ///
+/// ## UserDefaults 的写入只在主线程上做
+///
+/// 后台线程写 `UserDefaults` 会与 SwiftUI 的 `@AppStorage` 观察者互锁、把 App 卡死；
+/// 本类型所有写入都收在 `mutateDefaults(_:)` 里兜住（那里有完整的锁环说明）。
+/// 真值（地址 / 用户名 / 开关）的调用点一律在主线程。
+///
 /// 地址以原始字符串保存（设置页可存中间态），读取时再规范化；
 /// 与弹幕网关不同，这里**允许 http**——MoviePilot 极常见于局域网 `http://IP:端口`
 /// 部署，App 已开 `NSAllowsLocalNetworking` 放行本地明文。
@@ -64,7 +70,48 @@ public final class MoviePilotStore: @unchecked Sendable {
         // 一次性清理：老版本的明文密码**不迁移**（默认关），直接删掉。
         // 它已经在 UserDefaults/备份里躺过，留着只是让暴露继续。
         if !defaults.bool(forKey: Self.rememberPasswordKey) {
-            defaults.removeObject(forKey: Self.legacyPasswordKey)
+            mutateDefaults { $0.removeObject(forKey: Self.legacyPasswordKey) }
+        }
+    }
+
+    // MARK: - UserDefaults 写入（唯一落点）
+
+    /// 写 `UserDefaults` 的唯一落点：**绝不在后台线程上写**。
+    ///
+    /// ## 为什么
+    ///
+    /// `UserDefaults` 的每次写入都会同步发一条变更通知，而 SwiftUI 给 `@AppStorage`
+    /// 挂的 `UserDefaultObserver` 是在**发通知的那个线程**上响应它的——响应体里要
+    /// `Update.begin()`，即申请 SwiftUI 的 UI 更新锁（`MovableLock`）。主线程渲染时
+    /// 正持着那把锁，而同一时刻它完全可能在读本类型的属性、等下面这把 `lock`：
+    /// 后台线程「持 `lock` 等 UI 锁」、主线程「持 UI 锁等 `lock`」，互等即永久卡死
+    /// （不是慢，不会自己恢复）。
+    ///
+    /// 这不是推演。2026-10-02「设置 → 退出 MoviePilot」每次必卡，`sample` 实录：
+    /// 主线程停在 `SettingsView.body` 读 `serverURLString` 的 `NSLock` 上，后台
+    /// `MoviePilotAPIClient.signOut()` 的 actor 线程停在 `clearSession()` 里
+    /// `defaults.removeObject` 触发的 `Update.begin()` 上。**删一个不存在的键也发这条
+    /// 通知**（当时两个 legacy 键都早已不在），所以它无条件必现。
+    ///
+    /// 对照：Bangumi 侧踩不到这个坑——`BangumiContext` 是 `@MainActor`，它的 store
+    /// 写入天然在主线程；本类型的写入要经过 actor（`MoviePilotAPIClient`），必须在
+    /// 这里兜住。改这个方法之前先想清楚上面这条环。
+    ///
+    /// ## 后台调用怎么办
+    ///
+    /// 不阻塞、也不丢弃：投到主线程补做（补做时照常持锁，与主线程上的写入口径一致）。
+    /// 能从后台走到这里的只有「历史残留键清理」这类没有时效要求的写入；**真值**
+    /// （地址 / 用户名 / 密码 / 开关）的调用点都在主线程上（`MoviePilotCoordinator`
+    /// 与设置页），从后台写它们不受支持——真需要时请把调用点收进 `@MainActor`。
+    private func mutateDefaults(_ body: @escaping @Sendable (UserDefaults) -> Void) {
+        if Thread.isMainThread {
+            body(defaults)
+        } else {
+            DispatchQueue.main.async { [self] in
+                lock.lock()
+                defer { lock.unlock() }
+                body(defaults)
+            }
         }
     }
 
@@ -82,9 +129,9 @@ public final class MoviePilotStore: @unchecked Sendable {
             lock.lock()
             defer { lock.unlock() }
             if value.isEmpty {
-                defaults.removeObject(forKey: Self.serverKey)
+                mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
             } else {
-                defaults.set(value, forKey: Self.serverKey)
+                mutateDefaults { $0.set(value, forKey: Self.serverKey) }
             }
         }
     }
@@ -100,9 +147,9 @@ public final class MoviePilotStore: @unchecked Sendable {
             defer { lock.unlock() }
             let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if value.isEmpty {
-                defaults.removeObject(forKey: Self.usernameKey)
+                mutateDefaults { $0.removeObject(forKey: Self.usernameKey) }
             } else {
-                defaults.set(value, forKey: Self.usernameKey)
+                mutateDefaults { $0.set(value, forKey: Self.usernameKey) }
             }
         }
     }
@@ -120,7 +167,7 @@ public final class MoviePilotStore: @unchecked Sendable {
         set {
             lock.lock()
             defer { lock.unlock() }
-            defaults.set(newValue, forKey: Self.rememberPasswordKey)
+            mutateDefaults { $0.set(newValue, forKey: Self.rememberPasswordKey) }
             if !newValue {
                 credentials.removeValue(forKey: Self.passwordKey)
             } else if let sessionPassword, !sessionPassword.isEmpty {
@@ -158,27 +205,45 @@ public final class MoviePilotStore: @unchecked Sendable {
         }
     }
 
+    /// 本会话内明确作废过令牌（登出 / 换凭据 / 清会话）。
+    ///
+    /// 旧 UserDefaults 键的删除走 `mutateDefaults`，在后台线程上会被**推迟**到主线程；
+    /// 这个窗口里若来一次读，凭证已空而旧键还在，迁移分支就会把刚作废的旧令牌搬回
+    /// 凭据文件——等于登出静默失败。这把闩一次性立起、不再复位：此后读路径一律不认
+    /// 旧键（真的重新登录会往凭据文件写新令牌，走的是更前面的早返回）。
+    private var legacyTokenRevoked = false
+
+    /// 清令牌的唯一实现（**必须在 `lock` 内调用**）：凭据文件 + 旧 UserDefaults 键一起清。
+    private func clearTokenUnlocked() {
+        legacyTokenRevoked = true
+        credentials.removeValue(forKey: Self.tokenKey)
+        mutateDefaults { $0.removeObject(forKey: Self.legacyTokenKey) }
+    }
+
+    /// 读取当前令牌（**必须在 `lock` 内调用**）：优先凭据文件；旧 UserDefaults 键只在
+    /// 本会话没作废过令牌时迁移（见 `legacyTokenRevoked`）。
+    private func accessTokenUnlocked() -> String? {
+        if let token = credentials.string(forKey: Self.tokenKey) { return token }
+        guard !legacyTokenRevoked else { return nil }
+        // 迁移：老版本的令牌在 UserDefaults。搬到文件并删旧键，
+        // 使令牌从下一次备份起不再出现（已进过备份的历史无法追回）。
+        guard let legacy = defaults.string(forKey: Self.legacyTokenKey) else { return nil }
+        credentials.setString(legacy, forKey: Self.tokenKey)
+        mutateDefaults { $0.removeObject(forKey: Self.legacyTokenKey) }
+        return legacy
+    }
+
     public var accessToken: String? {
-        get {
-            lock.lock()
-            defer { lock.unlock() }
-            if let token = credentials.string(forKey: Self.tokenKey) { return token }
-            // 迁移：老版本的令牌在 UserDefaults。搬到文件并删旧键，
-            // 使令牌从下一次备份起不再出现（已进过备份的历史无法追回）。
-            guard let legacy = defaults.string(forKey: Self.legacyTokenKey) else { return nil }
-            credentials.setString(legacy, forKey: Self.tokenKey)
-            defaults.removeObject(forKey: Self.legacyTokenKey)
-            return legacy
-        }
+        get { lock.withLock { accessTokenUnlocked() } }
         set {
             lock.lock()
             defer { lock.unlock() }
             if let newValue, !newValue.isEmpty {
                 credentials.setString(newValue, forKey: Self.tokenKey)
+                mutateDefaults { $0.removeObject(forKey: Self.legacyTokenKey) }
             } else {
-                credentials.removeValue(forKey: Self.tokenKey)
+                clearTokenUnlocked()
             }
-            defaults.removeObject(forKey: Self.legacyTokenKey)
         }
     }
 
@@ -213,19 +278,18 @@ public final class MoviePilotStore: @unchecked Sendable {
         defer { lock.unlock() }
         let server = serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         if server.isEmpty {
-            defaults.removeObject(forKey: Self.serverKey)
+            mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
         } else {
-            defaults.set(server, forKey: Self.serverKey)
+            mutateDefaults { $0.set(server, forKey: Self.serverKey) }
         }
         let user = username.trimmingCharacters(in: .whitespacesAndNewlines)
         if user.isEmpty {
-            defaults.removeObject(forKey: Self.usernameKey)
+            mutateDefaults { $0.removeObject(forKey: Self.usernameKey) }
         } else {
-            defaults.set(user, forKey: Self.usernameKey)
+            mutateDefaults { $0.set(user, forKey: Self.usernameKey) }
         }
         setPasswordUnlocked(password)
-        credentials.removeValue(forKey: Self.tokenKey)
-        defaults.removeObject(forKey: Self.legacyTokenKey)
+        clearTokenUnlocked()
     }
 
     /// 密码写入的唯一实现（**必须在 `lock` 内调用**）。
@@ -273,22 +337,22 @@ public final class MoviePilotStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if let server = snapshot.serverURLString, !server.isEmpty {
-            defaults.set(server, forKey: Self.serverKey)
+            mutateDefaults { $0.set(server, forKey: Self.serverKey) }
         } else {
-            defaults.removeObject(forKey: Self.serverKey)
+            mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
         }
         if snapshot.username.isEmpty {
-            defaults.removeObject(forKey: Self.usernameKey)
+            mutateDefaults { $0.removeObject(forKey: Self.usernameKey) }
         } else {
-            defaults.set(snapshot.username, forKey: Self.usernameKey)
+            mutateDefaults { $0.set(snapshot.username, forKey: Self.usernameKey) }
         }
         setPasswordUnlocked(snapshot.password)
         if let token = snapshot.accessToken, !token.isEmpty {
             credentials.setString(token, forKey: Self.tokenKey)
+            mutateDefaults { $0.removeObject(forKey: Self.legacyTokenKey) }
         } else {
-            credentials.removeValue(forKey: Self.tokenKey)
+            clearTokenUnlocked()
         }
-        defaults.removeObject(forKey: Self.legacyTokenKey)
     }
 
     /// 退出登录：清 token 和密码，保留地址与用户名方便下次登录。
@@ -300,9 +364,8 @@ public final class MoviePilotStore: @unchecked Sendable {
         defer { lock.unlock() }
         sessionPassword = nil
         credentials.removeValue(forKey: Self.passwordKey)
-        credentials.removeValue(forKey: Self.tokenKey)
-        defaults.removeObject(forKey: Self.legacyPasswordKey)
-        defaults.removeObject(forKey: Self.legacyTokenKey)
+        clearTokenUnlocked()
+        mutateDefaults { $0.removeObject(forKey: Self.legacyPasswordKey) }
     }
 
     /// 全部清空（卸载式清理）。
@@ -310,12 +373,13 @@ public final class MoviePilotStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         sessionPassword = nil
-        defaults.removeObject(forKey: Self.serverKey)
-        defaults.removeObject(forKey: Self.usernameKey)
-        defaults.removeObject(forKey: Self.legacyPasswordKey)
-        defaults.removeObject(forKey: Self.legacyTokenKey)
+        mutateDefaults {
+            $0.removeObject(forKey: Self.serverKey)
+            $0.removeObject(forKey: Self.usernameKey)
+            $0.removeObject(forKey: Self.legacyPasswordKey)
+        }
         credentials.removeValue(forKey: Self.passwordKey)
-        credentials.removeValue(forKey: Self.tokenKey)
+        clearTokenUnlocked()
     }
 
     // MARK: - 锁内读取（供快照用）
@@ -325,15 +389,6 @@ public final class MoviePilotStore: @unchecked Sendable {
         if let sessionPassword { return sessionPassword }
         guard defaults.bool(forKey: Self.rememberPasswordKey) else { return "" }
         return credentials.string(forKey: Self.passwordKey) ?? ""
-    }
-
-    /// **必须在 `lock` 内调用**（含旧键迁移）。
-    private func accessTokenUnlocked() -> String? {
-        if let token = credentials.string(forKey: Self.tokenKey) { return token }
-        guard let legacy = defaults.string(forKey: Self.legacyTokenKey) else { return nil }
-        credentials.setString(legacy, forKey: Self.tokenKey)
-        defaults.removeObject(forKey: Self.legacyTokenKey)
-        return legacy
     }
 
     // MARK: - 地址规范化
