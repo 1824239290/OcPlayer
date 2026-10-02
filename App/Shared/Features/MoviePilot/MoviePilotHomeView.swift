@@ -143,22 +143,30 @@ struct MoviePilotHomeView: View {
 
     // MARK: - 门控
 
+    /// 未配置 / 未登录的整页引导。
+    ///
+    /// **必须包在 `PageFillingState` 里**：本视图是分区的根，裸 `ContentUnavailableView`
+    /// 的理想尺寸固定（实测 400×400 且不随窗口变），会让 AppShell 根节点的氛围背景
+    /// 一起塌成中间那一小块——整页只剩中间有背景、顶栏玻璃底下变纯灰。
+    /// 详见 `PageFillingState` 的类型注释。
     private func gate(
         _ title: String, icon: String, hint: String, allowsRelogin: Bool = false
     ) -> some View {
-        ContentUnavailableView {
-            Label(title, systemImage: icon)
-        } description: {
-            Text(hint)
-        } actions: {
-            if allowsRelogin {
-                Button("重新登录") { isPresentingReloginSheet = true }
-                    .buttonStyle(.borderedProminent)
-                Button("去设置") { app.switchSection(.settings) }
-                    .buttonStyle(.bordered)
-            } else {
-                Button("去设置") { app.switchSection(.settings) }
-                    .buttonStyle(.borderedProminent)
+        PageFillingState {
+            ContentUnavailableView {
+                Label(title, systemImage: icon)
+            } description: {
+                Text(hint)
+            } actions: {
+                if allowsRelogin {
+                    Button("重新登录") { isPresentingReloginSheet = true }
+                        .buttonStyle(.borderedProminent)
+                    Button("去设置") { app.switchSection(.settings) }
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("去设置") { app.switchSection(.settings) }
+                        .buttonStyle(.borderedProminent)
+                }
             }
         }
     }
@@ -435,22 +443,28 @@ struct MoviePilotHomeView: View {
     private var searchResultsView: some View {
         Group {
             if isSearching && results.isEmpty {
-                VStack(spacing: 14) {
-                    ProgressView()
-                        .controlSize(.regular)
-                    Text("正在搜索媒体…")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                // 这三个分支同样是「根级状态视图」：搜索态下本页没有 ScrollView
+                // 兜底（结果态那个 ScrollView 不在树上），裸视图会让氛围背景跟着
+                // 塌成内容小块。载体理由见 `PageFillingState`。
+                PageFillingState {
+                    VStack(spacing: 14) {
+                        ProgressView()
+                            .controlSize(.regular)
+                        Text("正在搜索媒体…")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError, results.isEmpty {
-                mpErrorView(searchError, failedTitle: UIStrings.searchFailed) {
-                    search()
+                PageFillingState {
+                    mpErrorView(searchError, failedTitle: UIStrings.searchFailed) {
+                        search()
+                    }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if results.isEmpty {
-                ContentUnavailableView.search(text: submittedKeyword)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PageFillingState {
+                    ContentUnavailableView.search(text: submittedKeyword)
+                }
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {

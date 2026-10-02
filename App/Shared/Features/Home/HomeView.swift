@@ -265,16 +265,13 @@ struct HomeView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        // 同 searchEmptyState：必须用 ScrollView 承载，裸 EmptyState 会让
-        // 氛围背景塌成小块、顶栏变纯白。
-        ScrollView {
+        // 载体理由见 `PageFillingState`：裸 EmptyState 会让氛围背景塌成小块、
+        // 顶栏变纯白（实测像素 (249,249,249)）。
+        PageFillingState {
             EmptyState(failure: message, title: "首页加载失败", systemImage: "wifi.exclamationmark") {
                 Task { await app.reloadBrowserData() }
             }
-            .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical)
         }
-        .scrollBounceBehavior(.basedOnSize)
     }
 }
 // MARK: - 全库搜索（搜索 Tab / 导航栏搜索框，两端共用）
@@ -291,11 +288,11 @@ struct HomeSearchView: View {
     var body: some View {
         Group {
             if app.server == nil {
-                SearchEmptyState {
+                PageFillingState {
                     EmptyState(empty: "先连接服务器再搜索", systemImage: "wifi.exclamationmark")
                 }
             } else if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                SearchEmptyState {
+                PageFillingState {
                     EmptyState(
                         empty: "搜索全部媒体库",
                         systemImage: "magnifyingglass",
@@ -422,7 +419,7 @@ struct HomeSearchContent: View {
                 .scrollDisabled(true)
                 .skeletonShimmer()
             } else if let searchError, searchResults.isEmpty {
-                SearchEmptyState {
+                PageFillingState {
                     EmptyState(failure: searchError, systemImage: "wifi.exclamationmark") {
                         Task { await runSearch(reset: true) }
                     }
@@ -432,7 +429,7 @@ struct HomeSearchContent: View {
                 // 实测两字以上的子串才命中），单字无结果时给引导而不是让它
                 // 看起来像坏了。
                 let term = query.trimmingCharacters(in: .whitespaces)
-                SearchEmptyState {
+                PageFillingState {
                     EmptyState(
                         empty: term.count < 2
                             ? "「\(term)」没有匹配"
@@ -563,23 +560,5 @@ struct HomeSearchContent: View {
             searchError = error.localizedDescription
             searchLanded = true
         }
-    }
-}
-
-/// 搜索空态 / 失败态的载体：必须包在 ScrollView 里。`.background` 的氛围背景
-/// 尺寸跟随被包内容，而只有 ScrollView 的 frame 会自然铺到工具栏玻璃底下——
-/// 裸 EmptyState 会把背景塌成本分支的小块、顶栏变纯白（frame + ignoresSafeArea
-/// 都救不回来，实测像素 (249,249,249)）。`containerRelativeFrame` 让空态内容在
-/// 可视区内垂直居中。搜索 Tab 的提示态与结果态的空/失败态共用。
-private struct SearchEmptyState<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        ScrollView {
-            content
-                .frame(maxWidth: .infinity)
-                .containerRelativeFrame(.vertical)
-        }
-        .scrollBounceBehavior(.basedOnSize)
     }
 }
