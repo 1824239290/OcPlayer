@@ -89,6 +89,39 @@ final class EmbyServerTests: XCTestCase {
         }
     }
 
+    func testResumeItemsCarriesParentImagesForHomeStillChain() async throws {
+        // Emby 的父级图字段与 Jellyfin 同名同语义；宽松 DTO 也要保住它们，
+        // 首页剧照卡才能走 Jellyfin Web 同款取图链。
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items/Resume")
+            return MockURLProtocol.ok(
+                """
+                {"Items":[{
+                  "Id":"ep-1","Name":"第 1 集","Type":"Episode",
+                  "SeriesId":"s-100","SeriesName":"进击的巨人",
+                  "ImageTags":{"Primary":"ep-pri"},
+                  "ParentThumbItemId":"s-100","ParentThumbImageTag":"series-thumb",
+                  "ParentBackdropItemId":"s-100","ParentBackdropImageTags":["fanart-1"],
+                  "ParentPrimaryImageItemId":"season-1","ParentPrimaryImageTag":"season-poster",
+                  "SeriesPrimaryImageTag":"series-poster"
+                }],"TotalRecordCount":1}
+                """,
+                for: request.url!
+            )
+        } with: {
+            let items = try await makeServer().resumeItems()
+            let item = items[0]
+            XCTAssertEqual(item.parentThumbImageTag, "series-thumb")
+            XCTAssertEqual(item.parentBackdropImageTag, "fanart-1")
+            XCTAssertEqual(item.parentPrimaryImageTag, "season-poster")
+            XCTAssertEqual(item.seriesPrimaryImageTag, "series-poster")
+            XCTAssertEqual(
+                item.homeStillImageChoice,
+                StillImageChoice(itemID: "s-100", kind: .thumb, tag: "series-thumb")
+            )
+        }
+    }
+
     func testDetailUsesLegacyRouteAndMapsCast() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items/abc")

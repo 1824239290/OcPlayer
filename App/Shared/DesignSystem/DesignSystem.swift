@@ -104,6 +104,24 @@ extension MediaItem {
         // series poster would imply that it belongs to this particular episode.
         return (nil, server?.authorizationHeader)
     }
+
+    /// 首页「继续播放 / 接下来看」剧照卡：Jellyfin Web 同款取图链
+    /// （`MediaItem.homeStillImageChoice`，横版 Thumb/Backdrop 优先）。
+    /// 详情页分集列表仍走 `episodeThumbTarget` —— 那里展示父级图会像串了集。
+    func homeStillImageTarget(_ server: (any MediaServer)?, width: Int)
+        -> (url: URL?, authHeader: String?) {
+        guard let server, let choice = homeStillImageChoice else {
+            return (nil, server?.authorizationHeader)
+        }
+        let type: ItemImageType
+        switch choice.kind {
+        case .primary: type = .primary
+        case .thumb: type = .thumb
+        case .backdrop: type = .backdrop
+        }
+        let url = try? server.imageURL(itemID: choice.itemID, type: type, maxWidth: width, tag: choice.tag)
+        return (url, server.authorizationHeader)
+    }
 }
 
 /// 条目标题 Logo / 文本标题视图：优先展示透明艺术字 ClearLogo，未配置或加载失败时优雅回退为文字标题。
@@ -411,7 +429,7 @@ struct StillCard: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
-                let target = item.episodeThumbTarget(server, width: 720)
+                let target = item.homeStillImageTarget(server, width: 720)
                 MediaArtwork(
                     url: target.url,
                     authHeader: target.authHeader,

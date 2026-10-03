@@ -452,6 +452,50 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    func testItemMappingCarriesParentImagesForHomeStillChain() async throws {
+        // 首页「继续播放 / 接下来看」Jellyfin Web 同款取图链依赖这组父级图
+        // 字段（实测 NextUp/Resume 响应恒带 ParentThumb*）。
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items/ep-1")
+            return MockURLProtocol.ok(
+                """
+                {
+                  "Id":"ep-1",
+                  "Name":"第 1 集",
+                  "Type":"Episode",
+                  "SeriesId":"s-100",
+                  "SeriesName":"进击的巨人",
+                  "ImageTags":{"Primary":"ep-pri"},
+                  "BackdropImageTags":[],
+                  "SeriesThumbImageTag":null,
+                  "ParentThumbItemId":"s-100",
+                  "ParentThumbImageTag":"series-thumb",
+                  "ParentBackdropItemId":"s-100",
+                  "ParentBackdropImageTags":["fanart-1","fanart-2"],
+                  "ParentPrimaryImageItemId":"season-1",
+                  "ParentPrimaryImageTag":"season-poster",
+                  "SeriesPrimaryImageTag":"series-poster"
+                }
+                """,
+                for: request.url!
+            )
+        } with: {
+            let item = try await makeServer().item("ep-1")
+            XCTAssertEqual(item.parentThumbItemID, "s-100")
+            XCTAssertEqual(item.parentThumbImageTag, "series-thumb")
+            XCTAssertEqual(item.parentBackdropItemID, "s-100")
+            XCTAssertEqual(item.parentBackdropImageTag, "fanart-1", "只取第一张 Backdrop")
+            XCTAssertEqual(item.parentPrimaryImageItemID, "season-1")
+            XCTAssertEqual(item.parentPrimaryImageTag, "season-poster")
+            XCTAssertEqual(item.seriesPrimaryImageTag, "series-poster")
+            // 官方默认口径：有父级 Thumb 时分集卡片用剧集横版剧照。
+            XCTAssertEqual(
+                item.homeStillImageChoice,
+                StillImageChoice(itemID: "s-100", kind: .thumb, tag: "series-thumb")
+            )
+        }
+    }
+
     func testAuthorizationHeaderFormat() {
         let header = makeServer().authorizationHeader
         let expected = ClientIdentity.mediaBrowserAuthorizationHeader(token: "tok-123")

@@ -80,6 +80,23 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
     public var logoImageTag: String?
     /// 继承自父级剧集的 Logo 条目 ID（用于季或分集回溯主系列的 Logo）。
     public var parentLogoItemID: String?
+    // 下面这组父级 / 剧集图字段只服务首页「继续播放 / 接下来看」剧照卡的
+    // Jellyfin Web 同款取图链（见 `homeStillImageChoice`）。详情页分集列表
+    // 刻意不用父级图，所以不并入上面四个自身图 tag。
+    /// 剧集条目自己的 Thumb 图 tag（较少见，通常是季/剧才有横版图）。
+    public var seriesThumbImageTag: String?
+    /// 父级（剧集/季）Thumb 横版图的条目 ID 与 tag，两者服务端成对下发。
+    public var parentThumbItemID: String?
+    public var parentThumbImageTag: String?
+    /// 父级 Backdrop 的条目 ID 与 tag（取第一张）。
+    public var parentBackdropItemID: String?
+    public var parentBackdropImageTag: String?
+    /// 父级 Primary 海报的条目 ID 与 tag。
+    public var parentPrimaryImageItemID: String?
+    public var parentPrimaryImageTag: String?
+    /// 所属剧集的 Primary 海报 tag（分集自身 primary 缺图时取图链回溯用；
+    /// 非剧集条目仍在映射层折进自身 primary，这里额外保留一份原值）。
+    public var seriesPrimaryImageTag: String?
 
     /// Jellyfin ProviderIds 里的 Tmdb id（外部服务对接用，如 MoviePilot 资源搜索）。
     public var tmdbID: String?
@@ -113,6 +130,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         backdropImageTag: String? = nil,
         logoImageTag: String? = nil,
         parentLogoItemID: String? = nil,
+        seriesThumbImageTag: String? = nil,
+        parentThumbItemID: String? = nil,
+        parentThumbImageTag: String? = nil,
+        parentBackdropItemID: String? = nil,
+        parentBackdropImageTag: String? = nil,
+        parentPrimaryImageItemID: String? = nil,
+        parentPrimaryImageTag: String? = nil,
+        seriesPrimaryImageTag: String? = nil,
         tmdbID: String? = nil,
         malID: String? = nil,
         anilistID: String? = nil
@@ -141,6 +166,14 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.backdropImageTag = backdropImageTag
         self.logoImageTag = logoImageTag
         self.parentLogoItemID = parentLogoItemID
+        self.seriesThumbImageTag = seriesThumbImageTag
+        self.parentThumbItemID = parentThumbItemID
+        self.parentThumbImageTag = parentThumbImageTag
+        self.parentBackdropItemID = parentBackdropItemID
+        self.parentBackdropImageTag = parentBackdropImageTag
+        self.parentPrimaryImageItemID = parentPrimaryImageItemID
+        self.parentPrimaryImageTag = parentPrimaryImageTag
+        self.seriesPrimaryImageTag = seriesPrimaryImageTag
         self.tmdbID = tmdbID
         self.malID = malID
         self.anilistID = anilistID
@@ -167,6 +200,62 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
             return "S\(seasonNumber)E\(episodeNumber)"
         }
         return "E\(episodeNumber)"
+    }
+
+    /// 首页「继续播放 / 接下来看」剧照卡的取图决策。
+    ///
+    /// 逐步复刻 Jellyfin Web cardBuilder `getImgInfo` 在 `preferThumb: true`、
+    /// `inheritThumb` 默认开启下的回退链（官方这两个板块正是这组参数）：
+    /// Thumb(自己) → Thumb(剧) → Thumb(父) → Backdrop(自己) → Backdrop(父,仅分集)
+    /// → Primary(自己) → Primary(剧) → Primary(父)。横版图优先于海报，因为卡片
+    /// 是 16:9 画幅；没有横版图时官方同样会把海报居中裁成 16:9。
+    /// 实测服务器对分集恒下发 `ParentThumb*`（剧集横版图），所以分集默认展示
+    /// 剧集剧照而非分集截图 —— 与官方默认一致。
+    public var homeStillImageChoice: StillImageChoice? {
+        if let tag = thumbImageTag {
+            return StillImageChoice(itemID: id, kind: .thumb, tag: tag)
+        }
+        if let seriesID, let tag = seriesThumbImageTag {
+            return StillImageChoice(itemID: seriesID, kind: .thumb, tag: tag)
+        }
+        if let tag = parentThumbImageTag, let target = parentThumbItemID ?? seriesID {
+            return StillImageChoice(itemID: target, kind: .thumb, tag: tag)
+        }
+        if let tag = backdropImageTag {
+            return StillImageChoice(itemID: id, kind: .backdrop, tag: tag)
+        }
+        if kind == .episode, let tag = parentBackdropImageTag,
+           let target = parentBackdropItemID ?? seriesID {
+            return StillImageChoice(itemID: target, kind: .backdrop, tag: tag)
+        }
+        if let tag = primaryImageTag {
+            return StillImageChoice(itemID: id, kind: .primary, tag: tag)
+        }
+        if let seriesID, let tag = seriesPrimaryImageTag {
+            return StillImageChoice(itemID: seriesID, kind: .primary, tag: tag)
+        }
+        if let tag = parentPrimaryImageTag, let target = parentPrimaryImageItemID {
+            return StillImageChoice(itemID: target, kind: .primary, tag: tag)
+        }
+        return nil
+    }
+}
+
+/// 首页剧照卡的取图结果：指向哪个条目的哪类图，UI 层据此拼图片 URL。
+public struct StillImageChoice: Hashable, Sendable {
+    public enum ImageKind: Sendable, Hashable {
+        case primary, thumb, backdrop
+    }
+
+    public var itemID: String
+    public var kind: ImageKind
+    /// 图像 tag，进 URL 让「图换了 → URL 变了 → 缓存失效」。
+    public var tag: String
+
+    public init(itemID: String, kind: ImageKind, tag: String) {
+        self.itemID = itemID
+        self.kind = kind
+        self.tag = tag
     }
 }
 

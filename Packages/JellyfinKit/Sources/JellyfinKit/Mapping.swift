@@ -129,6 +129,13 @@ extension BaseItemDto {
         fields.seriesPrimaryImageTag = seriesPrimaryImageTag
         fields.parentLogoImageTag = parentLogoImageTag
         fields.parentLogoItemID = parentLogoItemID
+        fields.seriesThumbImageTag = seriesThumbImageTag
+        fields.parentThumbItemID = parentThumbItemID
+        fields.parentThumbImageTag = parentThumbImageTag
+        fields.parentBackdropItemID = parentBackdropItemID
+        fields.parentBackdropImageTag = parentBackdropImageTags?.first
+        fields.parentPrimaryImageItemID = parentPrimaryImageItemID
+        fields.parentPrimaryImageTag = parentPrimaryImageTag
         fields.providerIDs = providerIDs ?? [:]
         return fields
     }

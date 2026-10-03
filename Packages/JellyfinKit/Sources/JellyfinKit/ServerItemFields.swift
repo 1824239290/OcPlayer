@@ -36,6 +36,15 @@ struct ServerItemFields {
     var seriesPrimaryImageTag: String?
     var parentLogoImageTag: String?
     var parentLogoItemID: String?
+    // 首页剧照卡的 Jellyfin Web 同款取图链用的父级图字段（见
+    // `MediaItem.homeStillImageChoice`）。
+    var seriesThumbImageTag: String?
+    var parentThumbItemID: String?
+    var parentThumbImageTag: String?
+    var parentBackdropItemID: String?
+    var parentBackdropImageTag: String?
+    var parentPrimaryImageItemID: String?
+    var parentPrimaryImageTag: String?
     var providerIDs: [String: String] = [:]
 
     var domainItem: MediaItem {
@@ -94,6 +103,14 @@ struct ServerItemFields {
             backdropImageTag: backdropTag,
             logoImageTag: logoTag,
             parentLogoItemID: parentLogoItemID,
+            seriesThumbImageTag: seriesThumbImageTag,
+            parentThumbItemID: parentThumbItemID,
+            parentThumbImageTag: parentThumbImageTag,
+            parentBackdropItemID: parentBackdropItemID,
+            parentBackdropImageTag: parentBackdropImageTag,
+            parentPrimaryImageItemID: parentPrimaryImageItemID,
+            parentPrimaryImageTag: parentPrimaryImageTag,
+            seriesPrimaryImageTag: seriesPrimaryImageTag,
             tmdbID: providerIDs["Tmdb"] ?? providerIDs["tmdb"],
             // MAL 的 provider key 各版本不统一（Mal / MyAnimeList），多兜几个。
             malID: providerIDs["Mal"] ?? providerIDs["MyAnimeList"] ?? providerIDs["mal"],

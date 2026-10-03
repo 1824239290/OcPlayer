@@ -90,6 +90,8 @@ final class MediaItemTests: XCTestCase {
 
     // MARK: - 默认值
 
+    // MARK: - 默认值
+
     func testInitDefaultsKeepOptionalsNilAndCollectionsEmpty() {
         let item = MediaItem(id: "d1", name: "D", kind: .series)
         XCTAssertNil(item.overview)
@@ -104,5 +106,122 @@ final class MediaItemTests: XCTestCase {
         XCTAssertNil(item.primaryImageTag)
         XCTAssertNil(item.logoImageTag)
         XCTAssertNil(item.tmdbID)
+    }
+
+    // MARK: - homeStillImageChoice（首页剧照卡取图链）
+
+    // 链序对齐 Jellyfin Web cardBuilder getImgInfo（preferThumb + inheritThumb 默认）：
+    // Thumb(自己) → Thumb(剧) → Thumb(父) → Backdrop(自己) → Backdrop(父,仅集)
+    // → Primary(自己) → Primary(剧) → Primary(父)。
+
+    func testHomeStillImageEpisodePrefersParentThumbOverOwnPrimary() {
+        // 官方默认口径：分集卡片显示剧集横版剧照，而非分集自己的截图。
+        let ep = MediaItem(
+            id: "ep", name: "第 1 集", kind: .episode, seriesID: "series",
+            primaryImageTag: "ep-primary",
+            parentThumbItemID: "series", parentThumbImageTag: "series-thumb"
+        )
+        XCTAssertEqual(
+            ep.homeStillImageChoice,
+            StillImageChoice(itemID: "series", kind: .thumb, tag: "series-thumb")
+        )
+    }
+
+    func testHomeStillImageOwnThumbWinsOverParentThumb() {
+        let ep = MediaItem(
+            id: "ep", name: "第 2 集", kind: .episode,
+            thumbImageTag: "own-thumb",
+            parentThumbItemID: "series", parentThumbImageTag: "series-thumb"
+        )
+        XCTAssertEqual(
+            ep.homeStillImageChoice,
+            StillImageChoice(itemID: "ep", kind: .thumb, tag: "own-thumb")
+        )
+    }
+
+    func testHomeStillImageSeriesThumbBeatsParentThumb() {
+        let ep = MediaItem(
+            id: "ep", name: "第 3 集", kind: .episode, seriesID: "series",
+            seriesThumbImageTag: "series-thumb",
+            parentThumbItemID: "season", parentThumbImageTag: "season-thumb"
+        )
+        XCTAssertEqual(
+            ep.homeStillImageChoice,
+            StillImageChoice(itemID: "series", kind: .thumb, tag: "series-thumb")
+        )
+    }
+
+    func testHomeStillImageMovieUsesBackdropWhenNoThumb() {
+        let movie = MediaItem(
+            id: "m", name: "电影", kind: .movie,
+            primaryImageTag: "poster", backdropImageTag: "fanart"
+        )
+        XCTAssertEqual(
+            movie.homeStillImageChoice,
+            StillImageChoice(itemID: "m", kind: .backdrop, tag: "fanart")
+        )
+    }
+
+    func testHomeStillImageMovieIgnoresParentBackdropAndUsesOwnPrimary() {
+        // ParentBackdrop 回退只对分集生效（官方条件 Type === 'Episode'）。
+        let movie = MediaItem(
+            id: "m", name: "电影", kind: .movie,
+            primaryImageTag: "poster",
+            parentBackdropItemID: "box", parentBackdropImageTag: "box-fanart"
+        )
+        XCTAssertEqual(
+            movie.homeStillImageChoice,
+            StillImageChoice(itemID: "m", kind: .primary, tag: "poster")
+        )
+    }
+
+    func testHomeStillImageEpisodeUsesParentBackdropWhenNoThumbs() {
+        let ep = MediaItem(
+            id: "ep", name: "第 4 集", kind: .episode, seriesID: "series",
+            parentBackdropItemID: "series", parentBackdropImageTag: "series-fanart"
+        )
+        XCTAssertEqual(
+            ep.homeStillImageChoice,
+            StillImageChoice(itemID: "series", kind: .backdrop, tag: "series-fanart")
+        )
+    }
+
+    func testHomeStillImageFallsThroughToPrimaryChain() {
+        // 分集自己有截图时优先自己；三张都没有才轮到剧集海报 / 季海报。
+        let ep = MediaItem(
+            id: "ep", name: "第 5 集", kind: .episode, seriesID: "series",
+            primaryImageTag: "ep-primary"
+        )
+        XCTAssertEqual(
+            ep.homeStillImageChoice,
+            StillImageChoice(itemID: "ep", kind: .primary, tag: "ep-primary")
+        )
+
+        let orphan = MediaItem(
+            id: "ep2", name: "第 6 集", kind: .episode, seriesID: "series",
+            seriesPrimaryImageTag: "series-poster"
+        )
+        XCTAssertEqual(
+            orphan.homeStillImageChoice,
+            StillImageChoice(itemID: "series", kind: .primary, tag: "series-poster")
+        )
+
+        let noSeries = MediaItem(
+            id: "ep3", name: "第 7 集", kind: .episode,
+            parentPrimaryImageItemID: "season", parentPrimaryImageTag: "season-poster"
+        )
+        XCTAssertEqual(
+            noSeries.homeStillImageChoice,
+            StillImageChoice(itemID: "season", kind: .primary, tag: "season-poster")
+        )
+    }
+
+    func testHomeStillImageNilWhenNoImagesAtAll() {
+        XCTAssertNil(MediaItem(id: "x", name: "空", kind: .movie).homeStillImageChoice)
+        // 有 tag 但没有可请求的目标 id（如父级 Primary 缺 itemID）时也跳过。
+        XCTAssertNil(
+            MediaItem(id: "y", name: "缺 id", kind: .episode, parentPrimaryImageTag: "season-poster")
+                .homeStillImageChoice
+        )
     }
 }

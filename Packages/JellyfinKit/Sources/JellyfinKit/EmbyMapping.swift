@@ -48,6 +48,13 @@ extension EmbyItemDTO {
         fields.seriesPrimaryImageTag = seriesPrimaryImageTag
         fields.parentLogoImageTag = parentLogoImageTag
         fields.parentLogoItemID = parentLogoItemId
+        fields.seriesThumbImageTag = seriesThumbImageTag
+        fields.parentThumbItemID = parentThumbItemId
+        fields.parentThumbImageTag = parentThumbImageTag
+        fields.parentBackdropItemID = parentBackdropItemId
+        fields.parentBackdropImageTag = parentBackdropImageTags?.first
+        fields.parentPrimaryImageItemID = parentPrimaryImageItemId
+        fields.parentPrimaryImageTag = parentPrimaryImageTag
         fields.providerIDs = providerIds ?? [:]
         return fields
     }

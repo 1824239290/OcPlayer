@@ -44,6 +44,14 @@ struct EmbyItemDTO: Decodable, Sendable {
     var seriesPrimaryImageTag: String?
     var parentLogoImageTag: String?
     var parentLogoItemId: String?
+    // 首页剧照卡取图链的父级图字段（与 Jellyfin 侧同口径）。
+    var seriesThumbImageTag: String?
+    var parentThumbItemId: String?
+    var parentThumbImageTag: String?
+    var parentBackdropItemId: String?
+    var parentBackdropImageTags: [String]?
+    var parentPrimaryImageItemId: String?
+    var parentPrimaryImageTag: String?
     var providerIds: [String: String]?
     var userData: EmbyUserDataDTO?
     var people: [EmbyPersonDTO]?
