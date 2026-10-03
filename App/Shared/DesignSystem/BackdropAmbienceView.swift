@@ -119,9 +119,19 @@ struct WindowAmbience: Hashable {
     }()
 }
 
+/// 整窗氛围声明栈的条目：`id` 是声明页 `WindowAmbienceSetter` 的实例身份，
+/// 存续期间声明变化原位更新、离屏时按 id 摘除。`value` 为 nil ＝ 该页声明
+/// 「无氛围」（如有 backdrop 的详情页盖住无 backdrop 的详情页），照样占一层。
+struct WindowAmbienceEntry {
+    let id: UUID
+    var value: WindowAmbience?
+}
+
 private struct WindowAmbienceSetter: ViewModifier {
     @Environment(AppModel.self) private var app
     let ambience: WindowAmbience?
+    /// 本页声明条目的身份（@State：同一挂载身份只生成一次）。
+    @State private var entryID = UUID()
 
     /// `url` 为空的声明视同无氛围：页面自己同样不渲染氛围层。
     private var effective: WindowAmbience? {
@@ -130,13 +140,15 @@ private struct WindowAmbienceSetter: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onAppear { app.windowAmbience = effective }
+            .onAppear { app.pushWindowAmbience(id: entryID, effective) }
             // 声明可能在页面存续期间晚到（详情页数据加载后才有 backdrop 图）。
-            .onChange(of: effective) { _, newValue in app.windowAmbience = newValue }
+            .onChange(of: effective) { _, newValue in
+                app.updateWindowAmbience(id: entryID, newValue)
+            }
             .onDisappear {
-                // 只撤自己声明的值：push 新页时本页 onDisappear 可能晚于
+                // 按条目摘除自己那份：push 新页时本页 onDisappear 可能晚于
                 // 新页 onAppear，不能把人家刚声明的清掉。
-                if app.windowAmbience == effective { app.windowAmbience = nil }
+                app.removeWindowAmbience(id: entryID)
             }
     }
 }

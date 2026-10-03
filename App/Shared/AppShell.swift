@@ -388,6 +388,45 @@ extension View {
     }
 }
 
+// MARK: - 呈现式页面宿主被盖即隐
+
+/// 呈现式页面（`navigationDestination(isPresented:)`）**宿主**的「被盖即隐」。
+/// 这类页面不在 `app.path` 上，`CoveredPageHider` 的深度比较看不见这层覆盖，
+/// 宿主在呈现落地后依旧「是栈顶」；而呈现族全是透显设计（资源搜索页声明整窗
+/// 氛围、下载管理 / 管理服务器 / 许可证走系统 List·Form 半透底），宿主内容会
+/// 透过它们漏出——与路由页漏出同一族，同样 **绑定驱动**、与生命周期解耦
+/// （macOS 26 上生命周期回调靠不住，见 `CoveredPageHider`）。
+///
+/// 只动 opacity 不摘视图：宿主的氛围声明（若有）要保持活着，供被盖期间
+/// 整窗层继续渲染、落地页直接取用。
+private struct PresentedCoverHider: ViewModifier {
+    let bindings: [Binding<Bool>]
+
+    private var anyPresented: Bool {
+        bindings.contains { $0.wrappedValue }
+    }
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .opacity(anyPresented ? 0 : 1)
+            .motion(Motion.standard, value: anyPresented)
+        #else
+        content
+        #endif
+    }
+}
+
+extension View {
+    /// 宿主页在自己呈现的页面存续期间整页隐去（见 `PresentedCoverHider`）。
+    /// 挂在宿主的 navigationDestination 注册点旁，把**自己的**呈现开关都交进来
+    /// （一个宿主可以呈现多页，如设置页的服务器 / 许可证）。谁呈现谁负责交——
+    /// 新增 `navigationDestination(isPresented:)` 时记得回宿主这里登记。
+    func coveredByPresented(_ bindings: Binding<Bool>...) -> some View {
+        modifier(PresentedCoverHider(bindings: bindings))
+    }
+}
+
 // MARK: - 自绘返回键（常规布局）
 
 /// 常规布局的返回键：系统返回键的 pop 点击即系统级滑出（不经 binding、

@@ -261,6 +261,9 @@ struct MoviePilotHomeView: View {
                     .pageEntrance()
             }
         }
+        // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间
+        // 整页隐去，别透过透显的资源搜索 / 下载管理页漏出（见 coveredByPresented）。
+        .coveredByPresented($showDownloads, $showResource)
         .task(id: moviepilot.boundServerID) {
             // iOS 上 tab 保活：换绑另一台 MP 服务器后本页 @State 不销毁，
             // 旧服务器的订阅/搜索残留。绑定标识变化（登出后重绑、换一台）即整体作废；

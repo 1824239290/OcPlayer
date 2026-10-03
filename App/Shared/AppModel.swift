@@ -370,7 +370,42 @@ final class AppModel {
     /// 整窗氛围底声明（常规布局 Mac/iPad）：有氛围图的页面经 `windowAmbience(_:)`
     /// 出现时声明、离屏时撤回，AppShell 据此在导航栈之外垫同一张模糊图——
     /// macOS 26 只有栈根宿主是全窗的，pushed 页自己够不到侧栏底下。
-    var windowAmbience: WindowAmbience?
+    ///
+    /// **是栈不是单值**：页面嵌套时后声明者覆盖前者（详情页 → 呈现的资源搜索页），
+    /// 单值在覆盖者离屏时只能清成 nil，宿主的声明就丢了（「返回详情页背景丢失」
+    /// 的另一扇门）。栈顶即当前生效值；条目 nil ＝ 该页声明「无氛围」，照样占一层。
+    private var windowAmbienceStack: [WindowAmbienceEntry] = []
+
+    /// 当前生效的整窗氛围底（声明栈栈顶；空栈＝无人声明，整窗层回落到首页轮播）。
+    var windowAmbience: WindowAmbience? {
+        windowAmbienceStack.last?.value ?? nil
+    }
+
+    /// 页面出现时压入自己的整窗氛围声明（`WindowAmbienceSetter.onAppear`）。
+    /// 条目带 id，页面存续期间的声明变化原位更新、离屏时按 id 摘除——
+    /// 天然不会清掉别页刚压入的条目（含 onDisappear 晚于新页 onAppear 的乱序）。
+    func pushWindowAmbience(id: UUID, _ value: WindowAmbience?) {
+        windowAmbienceStack.append(WindowAmbienceEntry(id: id, value: value))
+    }
+
+    /// 页面存续期间声明晚到 / 变化（详情页数据加载后才有 backdrop 图）：原位换新。
+    /// 条目不在栈里（会话重置清过栈的残留页面）就忽略——重置连导航栈一起清了，
+    /// 这种页面马上会销毁，不能再把旧服务器的声明压回新会话。
+    func updateWindowAmbience(id: UUID, _ value: WindowAmbience?) {
+        guard let index = windowAmbienceStack.firstIndex(where: { $0.id == id }) else { return }
+        windowAmbienceStack[index].value = value
+    }
+
+    /// 页面离屏时摘掉自己的声明条目（`WindowAmbienceSetter.onDisappear`）。
+    func removeWindowAmbience(id: UUID) {
+        windowAmbienceStack.removeAll { $0.id == id }
+    }
+
+    /// 会话边界清空整个声明栈（`resetBrowseState`）：条目里的 URL 都带着
+    /// 旧服务器的 authHeader，不能带进新会话。
+    func resetWindowAmbienceStack() {
+        windowAmbienceStack.removeAll()
+    }
 
     /// 首页氛围轮播当前那张图，由 `AmbientBackdropCarousel` 声明。iOS 的详情页在
     /// 自身底图就绪前拿它顶底：导航栈宿主不透明、栈后垫层到不了屏幕（实测），

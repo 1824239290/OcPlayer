@@ -314,6 +314,9 @@ struct SettingsView: View {
                 .appShellBackChrome(title: "开源许可证", presented: $showLicenses)
                 .pageEntrance()
         }
+        // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间
+        // 整页隐去，别透过半透的服务器 / 许可证页漏出（见 coveredByPresented）。
+        .coveredByPresented($showServers, $showLicenses)
         .onAppear {
             selectedDefaultServerID = app.store.defaultServerID
         }

@@ -20,12 +20,14 @@ struct MoviePilotResourceSection: View {
 
     let item: MediaItem
 
+    /// 资源搜索页走 pushPresented 两段式（淡出后落地）。落地开关由详情页持有：
+    /// 呈现期间详情页要整页隐去（`coveredByPresented`），状态必须在宿主身上。
+    @Binding var showResource: Bool
+
     @State private var fallbackMedia: MPMediaInfo?
     @State private var isMatching = false
     @State private var errorText: String?
     @State private var matchGeneration: UInt64 = 0
-    /// 资源搜索页走 pushPresented 两段式（淡出后落地）。
-    @State private var showResource = false
 
     var body: some View {
         if moviepilotEnabled, moviepilot.isAuthenticated {

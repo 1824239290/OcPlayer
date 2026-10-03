@@ -54,8 +54,9 @@ final class AppModelLifecycleTests: XCTestCase {
                                     seasons: [], similar: [], selectedSeasonID: nil,
                                     episodesBySeason: [:]),
             for: "s1")
-        app.windowAmbience = WindowAmbience(
-            url: URL(string: "https://old.example/a.jpg"), authHeader: "Bearer old")
+        app.pushWindowAmbience(
+            id: UUID(),
+            WindowAmbience(url: URL(string: "https://old.example/a.jpg"), authHeader: "Bearer old"))
         app.pendingMoviePilotQuery = "旧服务器的搜索词"
 
         app.reconnectFlow()
@@ -67,6 +68,51 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertNil(app.windowAmbience, "氛围图带着旧服务器的 authHeader")
         XCTAssertNil(app.pendingMoviePilotQuery)
         XCTAssertEqual(app.phase, .onboarding)
+    }
+
+    /// 回归（声明被覆盖丢失）：详情页（声明 D）呈现资源搜索页（声明 R）后返回，
+    /// 单值声明会被 R 的 onDisappear 清成 nil，D 已被覆盖、详情页不会再补发——
+    /// 返回详情页背景照样丢。声明必须按栈恢复：离屏摘掉自己的条目、栈顶回到 D。
+    func testWindowAmbienceStackRestoresCoveredDeclarationAfterPresentedDismiss() {
+        let app = AppModel()
+        let detailEntry = UUID()
+        let resourceEntry = UUID()
+        let detail = WindowAmbience(url: URL(string: "https://srv/detail.jpg"), authHeader: "Bearer a")
+        let resource = WindowAmbience(url: URL(string: "https://srv/resource.jpg"), authHeader: "Bearer a")
+
+        app.pushWindowAmbience(id: detailEntry, detail)
+        XCTAssertEqual(app.windowAmbience, detail)
+        app.pushWindowAmbience(id: resourceEntry, resource)
+        XCTAssertEqual(app.windowAmbience, resource)
+
+        // 资源搜索页返回：摘自己的条目，详情页的声明回到栈顶。
+        app.removeWindowAmbience(id: resourceEntry)
+        XCTAssertEqual(app.windowAmbience, detail)
+
+        // 声明晚到 / 变化（详情页底图就绪才发）：原位换新，不得新增条目。
+        let updated = WindowAmbience(url: URL(string: "https://srv/detail-v2.jpg"), authHeader: "Bearer a")
+        app.updateWindowAmbience(id: detailEntry, updated)
+        XCTAssertEqual(app.windowAmbience, updated)
+
+        // 详情页离屏：栈空，整窗层回落到首页轮播。
+        app.removeWindowAmbience(id: detailEntry)
+        XCTAssertNil(app.windowAmbience)
+    }
+
+    /// 无氛围页（url 为空的声明）也占一层：详情页（有声明的）上呈现无 backdrop
+    /// 的详情页时，整窗层不能漏出前者的氛围；它离屏后声明照常恢复。
+    func testWindowAmbienceNilEntryCoversPreviousDeclaration() {
+        let app = AppModel()
+        let detailEntry = UUID()
+        let detail = WindowAmbience(url: URL(string: "https://srv/d.jpg"), authHeader: nil)
+        app.pushWindowAmbience(id: detailEntry, detail)
+
+        let noBackdropEntry = UUID()
+        app.pushWindowAmbience(id: noBackdropEntry, nil)
+        XCTAssertNil(app.windowAmbience, "无氛围声明要盖住下层的声明")
+
+        app.removeWindowAmbience(id: noBackdropEntry)
+        XCTAssertEqual(app.windowAmbience, detail)
     }
 
     /// 回归：呈现式页面（`navigationDestination(isPresented:)`，如下载管理 /

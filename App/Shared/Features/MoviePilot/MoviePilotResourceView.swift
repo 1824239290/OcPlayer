@@ -114,6 +114,9 @@ struct MoviePilotResourceView: View {
                     .appShellBackChrome(title: "下载管理", presented: $navigateToDownloads)
                     .pageEntrance()
             }
+            // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：下载管理
+            // 落地期间本页（含声明，供整窗层继续渲染）整页隐去（见 coveredByPresented）。
+            .coveredByPresented($navigateToDownloads)
         }
         // 氛围背景：与详情页同一套——整窗层够得着屏幕时（macOS 常规布局）由 AppShell
         // 垫声明图，页面保持透明；够不着时（iOS）或紧凑布局没有整窗层，页面自己垫。

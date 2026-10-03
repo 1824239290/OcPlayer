@@ -184,7 +184,7 @@ extension AppModel {
         clearDetailSnapshots()
         // 氛围图的 URL 里带着**旧服务器的 authHeader**：不清掉，新会话首屏会拿
         // 旧凭据去请求图片（既拿不到图，也把旧凭据用在了新会话上）。
-        windowAmbience = nil
+        resetWindowAmbienceStack()
         homeAmbience = nil
         pendingMoviePilotQuery = nil
         // 在飞的「淡出 → 落地」闭包属于旧会话，代次自增使其作废（见 beginRouteExit）。
