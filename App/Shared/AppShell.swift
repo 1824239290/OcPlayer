@@ -345,6 +345,49 @@ extension View {
     }
 }
 
+// MARK: - 路由页被盖即隐
+
+/// 路由页「被盖住即隐藏」。页面是透明的（氛围层透显设计），栈里被当前页盖住的
+/// **路由页**必须自己隐掉，否则会透过当前页漏出——栈根用的是
+/// `.opacity(app.path.isEmpty)`（c9f728c），路由页同理按栈深度驱动：
+/// onAppear（落地即栈顶）时记下自己的深度，`app.path.count` 与之一致＝
+/// 我在栈顶＝可见。
+///
+/// 为什么不用 onDisappear：实测 macOS 26 的导航栈 push 时**不给被盖页发
+/// onDisappear**（探针证实整个进出播放流程零生命周期事件），pageEntrance
+/// 的「被覆盖即复位」因此从未生效——被盖页一直 opacity 1，只是系统平时不
+/// 合成它；播放器开合翻转窗口工具栏可见性、乃至改一次窗口尺寸，都会让它
+/// 重新参与合成，透过透明详情页漏出（用户报「播放完返回详情页背景丢失」）。
+/// 与栈根同一哲学：**path 驱动、与生命周期解耦**。
+///
+/// 仅 macOS 生效：紧凑布局的导航栈宿主不合成被盖页，且 `app.path` 在
+/// 紧凑布局下恒空，深度无意义（保持直通，语义同 pageEntrance 的分叉）。
+private struct CoveredPageHider: ViewModifier {
+    @Environment(AppModel.self) private var app
+    /// 本页在共享栈里的深度；nil＝尚未落地（落地过渡交给 pageEntrance）。
+    @State private var depth: Int?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        let isTop = depth == app.path.count
+        content
+            .onAppear { depth = app.path.count }
+            .opacity(isTop ? 1 : 0)
+            .motion(Motion.standard, value: isTop)
+        #else
+        content
+        #endif
+    }
+}
+
+extension View {
+    /// 路由页按栈深度自动显隐（见 `CoveredPageHider`）。挂在路由出口上，
+    /// 整页一份，在 `routeExitFade` 之前（退场淡出时本页仍是栈顶）。
+    func coveredPageHidden() -> some View {
+        modifier(CoveredPageHider())
+    }
+}
+
 // MARK: - 自绘返回键（常规布局）
 
 /// 常规布局的返回键：系统返回键的 pop 点击即系统级滑出（不经 binding、
@@ -510,6 +553,8 @@ extension View {
         // macOS 系统 push 被吞（见 pageEntrance 注释），所有路由页统一自带入场；
         // 两段式换页时由本页自己淡出（routeExitFade）。两者在 iOS 上都空转：
         // 系统自带 push / pop 滑动，routeExiting 也不会被置起。
+        // coveredPageHidden：被后推的页盖住时按深度归零透明度（见 CoveredPageHider）。
+        .coveredPageHidden()
         .routeExitFade()
         .pageEntrance()
     }
