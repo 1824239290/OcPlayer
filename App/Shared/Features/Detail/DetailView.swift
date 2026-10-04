@@ -52,7 +52,15 @@ struct DetailView: View {
     /// 氛围布局是否生效：条目有 backdrop 图。没图时没有氛围层，
     /// 浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
     private var isAmbientActive: Bool {
-        model.shown.backdropImageTag != nil && app.server != nil
+        guard app.server != nil else { return false }
+        if model.shown.backdropImageTag != nil { return true }
+        // 初版数据缺 tag 的剧集（「继续播放/接下来看」进来的占位剧集——分集没有
+        // 自己的场布图，借不到 tag）：详情未落地前先按氛围布局渲染，别闪老横幅。
+        // 背景有首页轮播图兜底（homeAmbience，没就绪时 BackdropAmbienceView 整体
+        // 不渲染、落回纯色底，头部文字本就按外观自适应，仍可读），首帧观感与从
+        // 库列表进入完全一致；详情落地后确无场布图的罕见剧集再交叉淡入切老横幅。
+        if model.detail == nil, model.shown.kind == .series { return true }
+        return false
     }
 
     /// 页面是否自己垫氛围层。整窗层够得着屏幕时（macOS）常规布局靠它，页面
@@ -130,8 +138,9 @@ struct DetailView: View {
                                 .transition(.opacity)
                         }
                     }
-                    // 详情数据落地时 backdrop tag 可能从无到有，头部在横幅与
-                    // 氛围两版之间切换——交叉淡入 + 高度过渡，不再硬切跳变。
+                    // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
+                    // 占位条目落地后有图；氛围初版落地后发现确无图）——头部在
+                    // 横幅与氛围两版之间切换时交叉淡入 + 高度过渡，不再硬切跳变。
                     .motion(Motion.standard, value: isAmbientActive)
                     metadata
                 }
