@@ -103,7 +103,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 | `TMDbMatcher` | 匹配与打分（ProviderIds → 搜索），**不碰网络**（搜索入口是注入的闭包） |
 | `MetadataStore+TMDb` | 落库：实体全局共享、对应按租户隔离 |
 | `TMDbEnricher` | 串起来：匹配 → 拉取 → 落库 → 只读叠加 |
-| `TMDbOverlay` / `DisplayMetadata` | 展示策略（文本优先 / 图片只补缺），纯函数 |
+| `TMDbOverlay` / `DisplayMetadata` | 展示策略（文本与图片**默认都 TMDb 优先**，各自可关），纯函数 |
 | `TMDbCoordinator`（App 层） | 设置读写、生命周期、与 `AppModel` 的接线 |
 
 ### 季与分集的展示面

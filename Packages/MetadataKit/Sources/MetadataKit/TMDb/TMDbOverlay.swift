@@ -273,7 +273,7 @@ public struct TMDbImagePolicy: Sendable {
 /// 把 TMDb 数据接到展示层的**纯函数**集合。
 ///
 /// 不做网络、不碰数据库——输入是服务端条目 + 叠加数据，输出是「该显示什么」。
-/// 这样这套策略（文本优先、图片只补缺）可以脱离 App 单独测。
+/// 这样这套策略（文本与图片是否 TMDb 优先）可以脱离 App 单独测。
 public enum DisplayMetadata {
 
     /// 海报 URL：服务端没有、或允许顶替时才用 TMDb。
