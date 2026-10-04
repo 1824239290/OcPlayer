@@ -60,11 +60,42 @@ enum ImageCacheKey {
         return components.url
     }
 
-    /// 认证头的**跨进程稳定**短哈希（16 位十六进制里取前 12 位足够区分，
-    /// 又不至于让键长到难读）。
+    /// 认证身份：**只取与「哪台服务器 + 哪个账号」有关的字段**，绝不含版本。
+    ///
+    /// 客户端身份头长这样：
+    /// ```
+    /// MediaBrowser Client="OcPlayer", Device="…", DeviceId="…",
+    ///               Version="0.2.0 (506)", Token="…"
+    /// ```
+    /// 其中 `Version` 的构建号 = git 提交数（`Scripts/build-macos.sh` 取 `GIT_COUNT`），
+    /// **每次提交/发版都会变**。若把整条头拿去哈希，就等于「每次更新 App 全部图片缓存
+    /// 失效」——实测 Build 505 与 506 的哈希确实不同。Device/Client 同理与资源身份无关。
+    ///
+    /// 所以这里显式挑出 `DeviceId` + `Token`：前者标识安装，后者标识服务器上的账号。
+    /// 换账号 / token 轮换会让缓存失效一次（正确：那是另一份可见范围），
+    /// 而换地址、升级版本**不再**影响。
     static func authIdentity(_ authHeader: String?) -> String {
         guard let authHeader, !authHeader.isEmpty else { return "none" }
-        return String(FNV1a.hex(of: authHeader).prefix(12))
+        var identity = ""
+        for field in ["DeviceId", "Token"] {
+            if let value = headerValue(field, in: authHeader) {
+                identity += "\(field)=\(value);"
+            }
+        }
+        // 一个字段都没解析出来（非 Jellyfin/Emby 头的自定义调用）→ 退回整串哈希，
+        // 宁可保守地少共享，也不要让两份不同凭证误共用缓存。
+        guard !identity.isEmpty else {
+            return String(FNV1a.hex(of: authHeader).prefix(12))
+        }
+        return String(FNV1a.hex(of: identity).prefix(12))
+    }
+
+    /// 从 `Key="value", Key2="value2"` 形态的头里取一个字段。
+    private static func headerValue(_ field: String, in header: String) -> String? {
+        guard let range = header.range(of: "\(field)=\"") else { return nil }
+        let rest = header[range.upperBound...]
+        guard let end = rest.firstIndex(of: "\"") else { return nil }
+        return String(rest[rest.startIndex..<end])
     }
 }
 

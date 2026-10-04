@@ -82,11 +82,47 @@ final class ImageCacheKeyTests: XCTestCase {
     /// 会导致每次启动全部缓存失效。这里直接钉住具体值——它变了就意味着
     /// 所有用户的图片缓存会集体失效一次。
     func testAuthIdentityIsStableAcrossProcesses() {
-        XCTAssertEqual(ImageCacheKey.authIdentity("Token=\"abc\""), "01711d3bb630")
+        XCTAssertEqual(ImageCacheKey.authIdentity("Token=\"abc\""), "cf465eb6b7bc")
         XCTAssertEqual(ImageCacheKey.authIdentity(nil), "none")
         XCTAssertEqual(ImageCacheKey.authIdentity(""), "none")
         // 固定长度，便于阅读
         XCTAssertEqual(ImageCacheKey.authIdentity("Token=\"abc\"").count, 12)
+    }
+
+    // MARK: - 版本无关（防「每次发版丢缓存」）
+
+    /// **认证头里含 App 版本（构建号 = git 提交数），绝不能进缓存键**。
+    /// 实测 Build 505 与 506 的整头哈希不同——用整头哈希当键，等于每次发版把
+    /// 用户全部图片缓存作废。
+    func testAuthIdentityIgnoresAppVersion() {
+        let make = { (version: String) in
+            "MediaBrowser Client=\"OcPlayer\", Device=\"mac\", DeviceId=\"DEV-1\", " +
+            "Version=\"\(version)\", Token=\"TOK\""
+        }
+        let v505 = ImageCacheKey.authIdentity(make("0.2.0 (505)"))
+        let v506 = ImageCacheKey.authIdentity(make("0.2.0 (506)"))
+        let v999 = ImageCacheKey.authIdentity(make("9.9.9 (9999)"))
+        XCTAssertEqual(v505, v506, "换版本不该换键")
+        XCTAssertEqual(v505, v999)
+    }
+
+    /// 换 token / 换设备必须换键（那是另一份可见范围 / 另一次安装）。
+    func testAuthIdentityChangesWithTokenAndDevice() {
+        func header(device: String, token: String) -> String {
+            "MediaBrowser Client=\"OcPlayer\", Device=\"mac\", DeviceId=\"\(device)\", " +
+            "Version=\"0.2.0 (506)\", Token=\"\(token)\""
+        }
+        let base = ImageCacheKey.authIdentity(header(device: "D1", token: "T1"))
+        XCTAssertNotEqual(base, ImageCacheKey.authIdentity(header(device: "D1", token: "T2")))
+        XCTAssertNotEqual(base, ImageCacheKey.authIdentity(header(device: "D2", token: "T1")))
+        XCTAssertEqual(base, ImageCacheKey.authIdentity(header(device: "D1", token: "T1")))
+    }
+
+    /// 解析不出来的头（非 Jellyfin/Emby 形态）退回整串哈希，宁可少共享也不误共享。
+    func testAuthIdentityFallsBackForUnknownHeaderShape() {
+        let weird = ImageCacheKey.authIdentity("Bearer abcdef")
+        XCTAssertNotEqual(weird, ImageCacheKey.authIdentity("Bearer xyz"))
+        XCTAssertEqual(weird.count, 12)
     }
 
     // MARK: - 缓存行为（真 URLCache）
@@ -216,5 +252,97 @@ final class ImageCacheLegacyPurgeTests: XCTestCase {
                                   for: URLRequest(url: url))
         ImagePipeline.purgeLegacyKeysIfNeeded(cache: cache, defaults: defaults, directory: dir)
         XCTAssertNotNil(cache.cachedResponse(for: URLRequest(url: url)), "第二次应跳过，不能再清")
+    }
+}
+
+
+/// 自有字节缓存（离线出图的真正依托）。
+///
+/// 存在的理由见 `ImageBlobStore` 的类型注释：`URLCache` 跨实例读不回来，
+/// 实测（条目在库、storage_policy=0、服务器头可缓存，新实例仍 miss），
+/// 而「断网重启后海报还在」是用户可见功能，不能建在那种机制上。
+final class ImageBlobStoreTests: XCTestCase {
+
+    private func makeStore(maxBytes: Int = 8 * 1024 * 1024) throws -> (ImageBlobStore, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BlobStore-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return (ImageBlobStore(directory: dir, maxBytes: maxBytes), dir)
+    }
+
+    func testStoreThenReadBack() throws {
+        let (store, _) = try makeStore()
+        let payload = Data(repeating: 0x7A, count: 4096)
+        store.store(payload, forKey: "key-a")
+        XCTAssertEqual(store.data(forKey: "key-a"), payload)
+        XCTAssertNil(store.data(forKey: "key-b"), "不同键互不串")
+    }
+
+    /// **键稳定**：同键两次构造的实例必须互相读得到（模拟「重启 App」）。
+    func testSurvivesNewInstance() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BlobStore-persist-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        let payload = Data(repeating: 1, count: 2048)
+
+        ImageBlobStore(directory: dir).store(payload, forKey: "persist")
+        // 全新实例（= 重启）应读得到
+        XCTAssertEqual(ImageBlobStore(directory: dir).data(forKey: "persist"), payload)
+    }
+
+    func testFileNameIsStableAndDistinct() {
+        XCTAssertEqual(ImageBlobStore.fileName(for: "same"), ImageBlobStore.fileName(for: "same"))
+        XCTAssertNotEqual(ImageBlobStore.fileName(for: "a"), ImageBlobStore.fileName(for: "b"))
+        XCTAssertTrue(ImageBlobStore.fileName(for: "x").hasSuffix(".img"))
+    }
+
+    func testEmptyDataIsNotStored() throws {
+        let (store, _) = try makeStore()
+        store.store(Data(), forKey: "empty")
+        XCTAssertNil(store.data(forKey: "empty"))
+    }
+
+    func testRemoveAllClearsEverything() throws {
+        let (store, _) = try makeStore()
+        store.store(Data(repeating: 3, count: 100), forKey: "x")
+        XCTAssertNotNil(store.data(forKey: "x"))
+        store.removeAll()
+        XCTAssertNil(store.data(forKey: "x"))
+        XCTAssertEqual(store.totalBytes, 0)
+    }
+
+    /// 超上限时按最旧优先淘汰。
+    ///
+    /// 直接写文件而不是走 `store(_:forKey:)`：那个入口每次写完都会自己跑一遍淘汰，
+    /// 于是测试**没法在淘汰发生前**把 mtime 拉开——所有文件都是「刚刚」，
+    /// 排序退化成任意顺序（这正是本用例第一版失败的原因）。这里手工铺好带
+    /// 明确先后关系的文件，再只调一次 `store` 触发淘汰，顺序才是确定的。
+    func testPrunesOldestWhenOverLimit() throws {
+        let (store, dir) = try makeStore(maxBytes: 10_000)
+        let chunk = Data(repeating: 9, count: 3_000)
+
+        // 铺 4 条旧的（各 3KB = 12KB，已超 10KB 上限），mtime 依次变新
+        let base = Date().addingTimeInterval(-3600)
+        for i in 0..<4 {
+            let file = dir.appendingPathComponent(ImageBlobStore.fileName(for: "old\(i)"))
+            try chunk.write(to: file)
+            try FileManager.default.setAttributes(
+                [.modificationDate: base.addingTimeInterval(TimeInterval(i))],
+                ofItemAtPath: file.path)
+        }
+
+        // 写一条新的 → 触发淘汰
+        store.store(chunk, forKey: "newest")
+
+        XCTAssertLessThanOrEqual(store.totalBytes, 10_000, "必须已淘汰到上限内")
+        XCTAssertNotNil(store.data(forKey: "newest"), "最新的应留下")
+        XCTAssertNil(store.data(forKey: "old0"), "最旧的应先被删")
+    }
+
+    func testTotalBytesReflectsContent() throws {
+        let (store, _) = try makeStore()
+        XCTAssertEqual(store.totalBytes, 0)
+        store.store(Data(repeating: 2, count: 5000), forKey: "size")
+        XCTAssertGreaterThanOrEqual(store.totalBytes, 5000)
     }
 }

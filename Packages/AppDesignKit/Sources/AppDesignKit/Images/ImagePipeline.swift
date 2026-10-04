@@ -41,6 +41,9 @@ public final class ImagePipeline: @unchecked Sendable {
 
     private let session: URLSession
     private let cache: URLCache
+    /// 图片字节的自有磁盘缓存（离线出图靠它，不靠 `URLCache`——后者跨实例读不回来，
+    /// 见 `ImageBlobStore` 的类型注释）。
+    private let blobStore: ImageBlobStore
     private let lock = NSLock()
     private var cacheGeneration: UInt64 = 0
     /// 同一 URL + 认证头的进行中请求共享一个任务：列表滚动反复出现同一张图时不重复拉。
@@ -63,12 +66,21 @@ public final class ImagePipeline: @unchecked Sendable {
                 ?? OcPlayerStorage.directory("ImageCache")
         )
         self.cache = cache
+        let resolvedCacheDirectory = cacheDirectory ?? OcPlayerStorage.directory("ImageCache")
+        // 字节缓存与 URLCache 同目录下的 Blobs/：两者一起被「清空图片缓存」清掉，
+        // 报体积时也能一起算。
+        self.blobStore = ImageBlobStore(
+            directory: resolvedCacheDirectory.appendingPathComponent("Blobs", isDirectory: true))
         // 生产路径（用默认目录）才做一次性清理：注入目录的都是测试，
         // 不该被这个迁移搅动（也不该写生产 UserDefaults）。
         if cacheDirectory == nil {
-            let directory = OcPlayerStorage.directory("ImageCache")
+            let directory = resolvedCacheDirectory
+            let blobs = blobStore
             Task.detached(priority: .utility) {
                 Self.purgeLegacyKeysIfNeeded(cache: cache, defaults: .standard, directory: directory)
+                // 键从「含服务器地址 + 含 App 版本」改成稳定键后，旧字节也读不到了
+                // （文件名是键的哈希）。同样只在首次清一次，避免每次启动都清。
+                Self.purgeStaleBlobsIfNeeded(store: blobs, defaults: .standard)
             }
         }
         let configuration = URLSessionConfiguration.default
@@ -113,11 +125,22 @@ public final class ImagePipeline: @unchecked Sendable {
         ])
     }
 
+    /// 一次性清理：键从「含服务器地址 + 含 App 版本」换成稳定键后，旧字节的文件名
+    /// （键的哈希）再也命不中，留着只是死数据。与 `purgeLegacyKeysIfNeeded` 同理，
+    /// 只在首次清一次——每次启动都清等于没有缓存。
+    static func purgeStaleBlobsIfNeeded(store: ImageBlobStore, defaults: UserDefaults) {
+        let markerKey = "dev.jumusu.ocplayer.imageCache.stableBlobKeysV1"
+        guard !defaults.bool(forKey: markerKey) else { return }
+        store.removeAll()
+        defaults.set(true, forKey: markerKey)
+        Self.logger.info("图片字节缓存键升级：已清空旧数据")
+    }
+
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is
     /// enforced by Foundation using its eviction policy, so long-running use is
     /// bounded even before a user requests an explicit clear.
     public var diskUsage: (usedBytes: Int, capacityBytes: Int) {
-        (cache.currentDiskUsage, cache.diskCapacity)
+        (cache.currentDiskUsage + blobStore.totalBytes, Self.diskCapacityBytes)
     }
 
     /// Clears decoded bitmaps from memory.
@@ -138,6 +161,7 @@ public final class ImagePipeline: @unchecked Sendable {
         cache.removeAllCachedResponses()
         memoryCache.removeAllObjects()
         lock.unlock()
+        blobStore.removeAll()
         tasks.forEach { $0.cancel() }
     }
 
@@ -165,7 +189,7 @@ public final class ImagePipeline: @unchecked Sendable {
                 guard let self else { return nil }
                 let request = self.makeRequest(url, authHeader: authHeader)
                 do {
-                    let image = try await self.fetch(request, maxPixelSize: maxPixelSize)
+                    let image = try await self.fetch(request, cacheKey: key, maxPixelSize: maxPixelSize)
                     try Task.checkCancellation()
                     guard self.accept(image, forKey: key, generation: generation) else {
                         self.cache.removeCachedResponse(for: request)
@@ -175,6 +199,21 @@ public final class ImagePipeline: @unchecked Sendable {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
+                    // **离线兜底**：网络失败时读自有的字节缓存。
+                    //
+                    // 这一条是用户可见功能的关键——「断网重启后海报还在」。不能只靠
+                    // `URLCache`：实测它跨实例（= 重启）读不回来，条目在库里也白搭。
+                    // 字节缓存由我们写、我们读，键又与服务器地址无关，所以离线必命中。
+                    if let data = self.blobStore.data(forKey: key),
+                       let cached = try? await self.decoder.decode(data, maxPixelSize: maxPixelSize),
+                       self.isCurrentGeneration(generation) {
+                        Self.logger.info("图片走离线缓存", fields: [
+                            "url": .string(url.absoluteString),
+                            "bytes": .integer(Int64(data.count)),
+                        ], throttle: Self.failureThrottle)
+                        _ = self.accept(cached, forKey: key, generation: generation)
+                        return cached
+                    }
                     Self.logger.warning("图片加载失败", fields: [
                         "url": .string(url.absoluteString),
                         "error": .string("\(error)"),
@@ -197,12 +236,23 @@ public final class ImagePipeline: @unchecked Sendable {
 
     // MARK: - 锁保护（NSLock 不能在 async 上下文直接调，临界区收进同步方法）
 
-    /// 请求去重 / 内存缓存的 key。认证头不直接进 key——它可能出现在 SwiftUI 的
-    /// view identity 与诊断输出里——只保留进程内稳定的哈希（同 token 同哈希，
-    /// 换 token 自然换 key，与直接拼完整头的失效语义一致）。
+    /// 请求去重 / 内存缓存 / **磁盘字节缓存**共用的 key。
+    ///
+    /// 两处讲究：
+    ///
+    /// 1. **URL 部分走规范化**（`ImageCacheKey.canonicalURL`）：抹掉服务器地址。
+    ///    否则同一张图在局域网与 Tailscale 下是不同的 key，字节缓存各存一份、
+    ///    换地址后还要重下——这正是本次要修的。媒体服务器图片一律能规范化；
+    ///    公开图床（`image.tmdb.org` 等）返回 nil，退回原始 URL（它们只有一条地址）。
+    /// 2. **认证头只留稳定哈希**：它可能出现在 SwiftUI 的 view identity 与诊断输出里，
+    ///    且用 `String.hashValue` 会**每进程随机化**——那会让磁盘字节缓存每次启动全部
+    ///    失效。这里用 `ImageCacheKey.authIdentity`（只取 DeviceId + Token 的 FNV1a 哈希），
+    ///    跨进程稳定，且不随 App 版本变化（版本号曾在里面，见该方法的说明）。
     private func requestKey(url: URL, authHeader: String?, maxPixelSize: Int?) -> String {
-        let authIdentity = authHeader.map { String($0.hashValue) } ?? "none"
-        return url.absoluteString + "\u{0}" + authIdentity + "\u{0}" + "\(maxPixelSize ?? 0)"
+        let canonical = ImageCacheKey.canonicalURL(for: url, authHeader: authHeader)?.absoluteString
+            ?? url.absoluteString
+        let identity = ImageCacheKey.authIdentity(authHeader)
+        return canonical + "\u{0}" + identity + "\u{0}" + "\(maxPixelSize ?? 0)"
     }
 
     private func cachedImage(forKey key: String) -> PlatformImage? {
@@ -303,7 +353,7 @@ public final class ImagePipeline: @unchecked Sendable {
         return request
     }
 
-    private func fetch(_ request: URLRequest, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
+    private func fetch(_ request: URLRequest, cacheKey: String, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
         // 最后一个订阅者离开（视图消失 / 换 URL）或 clearCache 会取消底层任务，
         // 从这里抛 CancellationError，由调用方区分处理，别当成真正的失败。
         let (data, response) = try await session.data(for: request)
@@ -335,6 +385,9 @@ public final class ImagePipeline: @unchecked Sendable {
             ], throttle: Self.failureThrottle)
             return nil
         }
+        // 存**编码后的字节**（JPEG/PNG 原样）：离线时自己解码就能出图，
+        // 不必依赖 URLCache 的可读性（见 `ImageBlobStore`）。
+        blobStore.store(data, forKey: cacheKey)
         return image
     }
 
