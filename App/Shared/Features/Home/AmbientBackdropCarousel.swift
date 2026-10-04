@@ -16,9 +16,19 @@ struct BackdropCarouselTrigger: Hashable {
     let session: Int
     /// 是否值得再试一次。
     let shouldRetry: Bool
+    /// 当前生效的服务器地址。地址换了（局域网 → Tailscale）时池子里的图片 URL
+    /// 全部指着刚失效的那条，必须重拉一遍 —— 服务器地址是运行时决议的，视图不重建
+    /// 就发现不了（`MediaServer` 的 `profile.baseURL` 不是可观察状态）。
+    let endpoint: String?
 
-    init(sessionGeneration: Int, poolIsEmpty: Bool, hasHomeFallback: Bool) {
+    init(
+        sessionGeneration: Int,
+        poolIsEmpty: Bool,
+        hasHomeFallback: Bool,
+        endpoint: String? = nil
+    ) {
         self.session = sessionGeneration
+        self.endpoint = endpoint
         // 池子空着 + 首页数据已到位 = 一次值得重试的机会。
         // 池子装好后 `shouldRetry` 恒为 false，触发键稳定在 session 上，
         // 不会因为首页后续刷新（isLoading 翻转等）反复重启换片循环。
@@ -49,18 +59,22 @@ struct AmbientBackdropCarousel: View {
     /// 取消、回到首页重启——同代次不重拉重洗，否则每次回首页背景都换成新一批
     /// 随机图，其他 Tab 垫的 `homeAmbience` 也跟着闪换成「首页刚刷出来的那张」。
     @State private var loadedGeneration: Int?
+    /// 装载池子时用的服务器地址。协议决议（局域网 / Tailscale 择优）可能在同一
+    /// 会话内换址，池子里的图片 URL 随之作废，得按新地址重拉一次。
+    @State private var loadedEndpoint: String?
 
     /// 首页是否已有可作回退的条目（`loadPool` 在随机查询失败时用它们兜底）。
     private var hasHomeFallback: Bool {
         !(app.home.latest.isEmpty && app.home.resume.isEmpty && app.home.nextUp.isEmpty)
     }
 
-    /// 装载触发键：会话代次 + 「池子空着但已有回退源」这个补救机会。
+    /// 装载触发键：会话代次 + 当前生效地址 + 「池子空着但已有回退源」这个补救机会。
     private var loadTrigger: BackdropCarouselTrigger {
         BackdropCarouselTrigger(
             sessionGeneration: app.sessionGeneration,
             poolIsEmpty: pool.isEmpty,
-            hasHomeFallback: hasHomeFallback)
+            hasHomeFallback: hasHomeFallback,
+            endpoint: app.serverEndpointURL?.absoluteString)
     }
 
     var body: some View {
@@ -91,10 +105,14 @@ struct AmbientBackdropCarousel: View {
         // 另外并进 `shouldRetry`：冷启动抢跑导致池子空着时，等首页数据到位再试一次
         // （见 `BackdropCarouselTrigger` 的注释——不加这个，那个会话就一直是纯色底）。
         .task(id: loadTrigger) {
-            if loadedGeneration != app.sessionGeneration {
+            let endpoint = app.serverEndpointURL?.absoluteString
+            if loadedGeneration != app.sessionGeneration || loadedEndpoint != endpoint {
                 await loadPool()
                 // 拉取失败不记账：下次触发还能重试。
-                if !pool.isEmpty { loadedGeneration = app.sessionGeneration }
+                if !pool.isEmpty {
+                    loadedGeneration = app.sessionGeneration
+                    loadedEndpoint = endpoint
+                }
             }
             await warmUpAndRotate()
         }

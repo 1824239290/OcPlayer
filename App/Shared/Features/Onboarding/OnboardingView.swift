@@ -295,6 +295,15 @@ struct OnboardingView: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                if !profile.addresses.isEmpty {
+                    // 固定过就说「已固定」：这句是这台服务器连上去之后走哪条地址的
+                    // 唯一提示，写「自动选择」会和实际行为打架。
+                    Text(profile.pinnedURL == nil
+                         ? "共 \(profile.addresses.count + 1) 个地址 · 自动选择"
+                         : "共 \(profile.addresses.count + 1) 个地址 · 已固定")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
             Spacer()
             Button("连接") {

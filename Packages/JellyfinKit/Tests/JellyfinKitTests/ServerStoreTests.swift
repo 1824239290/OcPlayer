@@ -229,4 +229,186 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(store.launchProfile?.id, "srv:a")
         XCTAssertEqual(MediaServerFactory.restore(from: store)?.profile.id, "srv:b")
     }
+
+    // MARK: - 多地址（同一台服务器多个入口）
+
+    private let lanAddress = URL(string: "http://192.168.5.107:8096")!
+    private let tailscaleAddress = URL(string: "http://100.64.1.20:8096")!
+
+    private func multiAddressProfile(
+        baseURL: URL,
+        addresses: [URL] = [],
+        pinned: URL? = nil
+    ) -> ServerProfile {
+        ServerProfile(
+            id: "srv-1:u1", serverName: "home-nas", baseURL: baseURL, userID: "u1",
+            userName: "jumusu", serverVersion: "10.9.11",
+            addresses: addresses.map { ServerAddress(url: $0) },
+            pinnedURL: pinned,
+            serverID: "srv-1")
+    }
+
+    /// 核心场景：在家用局域网地址登录过，出门用 Tailscale 地址再登录一次 ——
+    /// 必须是**同一个服务器**（多一条备选地址），不能变成第二个条目。
+    func testSecondLoginFromAnotherAddressMergesIntoOneServer() {
+        store.activate(multiAddressProfile(baseURL: lanAddress), token: "tok-1")
+        store.activate(multiAddressProfile(baseURL: tailscaleAddress), token: "tok-2")
+
+        XCTAssertEqual(store.profiles.count, 1, "同一台服务器换地址登录不能多出一个服务器")
+        XCTAssertEqual(store.profiles[0].baseURL, tailscaleAddress, "刚登录用的地址成为当前地址")
+        XCTAssertEqual(store.profiles[0].addresses.map(\.url), [lanAddress], "旧地址退成备选，不能丢")
+    }
+
+    func testMergeKeepsExistingAlternatesAndPinnedChoice() {
+        store.activate(
+            multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress],
+                                pinned: tailscaleAddress),
+            token: "tok-1")
+
+        let other = URL(string: "https://nas.example.com")!
+        store.activate(multiAddressProfile(baseURL: other), token: "tok-2")
+
+        let merged = store.profiles[0]
+        XCTAssertEqual(merged.baseURL, other)
+        XCTAssertEqual(Set(merged.addresses.map(\.url)), [lanAddress, tailscaleAddress])
+        XCTAssertEqual(merged.pinnedURL, tailscaleAddress, "固定项由用户决定，登录不该覆盖它")
+    }
+
+    func testMergeFromAlternateAddressDoesNotDuplicateIt() {
+        store.activate(multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress]), token: "tok-1")
+        // 用户从备选地址（Tailscale）重新登录：它成为当前地址，不该同时留在备选里。
+        store.activate(multiAddressProfile(baseURL: tailscaleAddress), token: "tok-2")
+
+        let merged = store.profiles[0]
+        XCTAssertEqual(merged.baseURL, tailscaleAddress)
+        XCTAssertEqual(merged.addresses.map(\.url), [lanAddress])
+    }
+
+    func testAddAddressNormalizesAndRejectsDuplicates() {
+        store.activate(multiAddressProfile(baseURL: lanAddress), token: "tok-1")
+        let id = store.profiles[0].id
+
+        XCTAssertTrue(store.addAddress(tailscaleAddress, to: id))
+        XCTAssertFalse(store.addAddress(URL(string: "http://100.64.1.20:8096/")!, to: id),
+                       "尾斜杠版本是同一个入口，不能再加一条")
+        XCTAssertFalse(store.addAddress(URL(string: "http://192.168.5.107:8096")!, to: id),
+                       "与当前生效地址相同的不进备选列表")
+
+        XCTAssertEqual(store.profiles[0].addresses.map(\.url), [tailscaleAddress])
+    }
+
+    func testRemoveActiveAddressFallsBackToRemainingAlternate() {
+        store.activate(multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress]), token: "tok-1")
+        let id = store.profiles[0].id
+
+        store.removeAddress(lanAddress, from: id)
+
+        XCTAssertEqual(store.profiles[0].baseURL, tailscaleAddress, "删掉当前地址要换一个顶上")
+        XCTAssertTrue(store.profiles[0].addresses.isEmpty)
+    }
+
+    func testRemovingLastAddressIsRefused() {
+        store.activate(multiAddressProfile(baseURL: lanAddress), token: "tok-1")
+        let id = store.profiles[0].id
+
+        store.removeAddress(lanAddress, from: id)
+
+        XCTAssertEqual(store.profiles[0].baseURL, lanAddress, "档案必须至少留一条地址")
+        XCTAssertEqual(store.profiles[0].allAddresses.count, 1)
+    }
+
+    func testRemovingPinnedAddressClearsPin() {
+        store.activate(
+            multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress],
+                                pinned: tailscaleAddress),
+            token: "tok-1")
+        store.removeAddress(tailscaleAddress, from: store.profiles[0].id)
+        XCTAssertNil(store.profiles[0].pinnedURL, "固定地址被删掉后不能留下悬空的固定项")
+    }
+
+    func testMarkActiveURLKeepsPreviousBaseAsAlternate() {
+        store.activate(multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress]), token: "tok-1")
+        let id = store.profiles[0].id
+
+        store.markActiveURL(tailscaleAddress, for: id)
+
+        XCTAssertEqual(store.profiles[0].baseURL, tailscaleAddress)
+        XCTAssertEqual(store.profiles[0].addresses.map(\.url), [lanAddress],
+                       "换过去的地址从备选里摘掉，被换下的地址变成备选")
+    }
+
+    func testSetPinnedAddressOnlyAcceptsKnownCandidates() {
+        store.activate(multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress]), token: "tok-1")
+        let id = store.profiles[0].id
+
+        store.setPinnedAddress(URL(string: "http://10.0.0.9:8096")!, for: id)
+        XCTAssertNil(store.profiles[0].pinnedURL, "没添加过的地址不允许固定")
+
+        store.setPinnedAddress(tailscaleAddress, for: id)
+        XCTAssertEqual(store.profiles[0].pinnedURL, tailscaleAddress)
+
+        store.setPinnedAddress(nil, for: id)
+        XCTAssertNil(store.profiles[0].pinnedURL)
+    }
+
+    func testAddressesPersistAcrossStoreInstances() {
+        store.activate(multiAddressProfile(baseURL: lanAddress, addresses: [tailscaleAddress]), token: "tok-1")
+
+        let reopened = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
+        XCTAssertEqual(reopened.profiles[0].addresses.map(\.url), [tailscaleAddress])
+        XCTAssertEqual(reopened.profiles[0].allAddresses.map(\.url), [lanAddress, tailscaleAddress])
+    }
+
+    /// 0.2.0 及之前落盘的档案没有 addresses / pinnedURL / serverID 三个字段：
+    /// 解码必须成功，且落到「只有一条地址、自动择优」的正常状态。
+    func testLegacyProfileJSONWithoutAddressFieldsDecodes() throws {
+        let legacy = """
+        [{"id":"a1b2c3d4e5f60718293a4b5c6d7e8f90:user-9","serverName":"home-nas",
+          "baseURL":"http:\\/\\/192.168.5.107:8096","userID":"user-9",
+          "userName":"jumusu","serverVersion":"10.9.11","kind":"jellyfin"}]
+        """
+        let profiles = try JSONDecoder().decode([ServerProfile].self, from: Data(legacy.utf8))
+        XCTAssertEqual(profiles.count, 1)
+        XCTAssertTrue(profiles[0].addresses.isEmpty)
+        XCTAssertNil(profiles[0].pinnedURL)
+        XCTAssertNil(profiles[0].serverID)
+        XCTAssertEqual(profiles[0].resolvedServerID, "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+                       "服务器 ID 从档案 id 前缀恢复")
+        XCTAssertEqual(profiles[0].allAddresses.map(\.url),
+                       [URL(string: "http://192.168.5.107:8096")!])
+    }
+
+    /// 老版本在服务器没报 Id 时拿 host / 整个地址串拼过档案 id：那些前缀是主机名 /
+    /// 协议名，不是服务器 Id。**必须一律拒绝** —— 把它们当 Id 用会让每条地址的探活
+    /// 校验都对不上：添加地址误报「另一台服务器」，启动换址则静默失效（全 nil 后
+    /// 回落到 baseURL，连报错都没有）。
+    func testResolvedServerIDRejectsHostFallbackPrefixes() {
+        for host in ["nas", "nas.local", "192.168.5.107", "http", "media.example.com"] {
+            let fallback = ServerProfile(id: "\(host):u1", serverName: "nas",
+                                         baseURL: lanAddress, userID: "u1")
+            XCTAssertNil(fallback.resolvedServerID, "「\(host)」是 host 兜底值，不是服务器 Id")
+        }
+        // 太短的十六进制也不算（真实服务器 Id 是 32 位十六进制）。
+        let short = ServerProfile(id: "a1b2c3d4:u1", serverName: "nas",
+                                  baseURL: lanAddress, userID: "u1")
+        XCTAssertNil(short.resolvedServerID)
+
+        let explicit = ServerProfile(id: "nas.local:u1", serverName: "nas",
+                                     baseURL: lanAddress, userID: "u1", serverID: "deadbeef")
+        XCTAssertEqual(explicit.resolvedServerID, "deadbeef",
+                       "显式字段优先，且不按形状筛（那是服务器自己报的）")
+    }
+
+    func testEndpointDirectoryIsSharedPerProfileAndDroppedWithServer() {
+        store.activate(multiAddressProfile(baseURL: lanAddress), token: "tok-1")
+        let profile = store.profiles[0]
+
+        let first = store.endpointDirectory(for: profile)
+        let second = store.endpointDirectory(for: profile)
+        XCTAssertTrue(first === second, "同一档案的决议结果要在会话重建之间复用")
+
+        store.remove(id: profile.id)
+        let recreated = store.endpointDirectory(for: profile)
+        XCTAssertFalse(first === recreated, "档案删掉后不该留着它的决议状态")
+    }
 }

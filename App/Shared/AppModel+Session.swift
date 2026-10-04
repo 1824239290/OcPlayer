@@ -26,6 +26,8 @@ extension AppModel {
         bangumi.setup()
         // Bangumi OAuth 与弹幕共用网关：配置要在任何登录/刷新之前注入。
         await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)
+        // 网络路径变化 → 地址结论作废（下一个请求重新探活）。
+        startEndpointMonitor()
         if let restored = MediaServerFactory.restore(from: store) {
             activate(server: restored)
         } else {
@@ -174,6 +176,7 @@ extension AppModel {
         externalSubtitleTask = nil
         sessionGeneration &+= 1
         server = nil
+        serverEndpointURL = nil
         libraries = []
         librariesError = nil
         libraryPages = [:]
@@ -257,7 +260,18 @@ extension AppModel {
         }
         resetOnboarding()
         phase = .onboarding
-        await connectServer(profile.baseURL.absoluteString, scheme: profile.baseURL.scheme == "https" ? .https : .http)
+        // 地址不止一条时先探活：`baseURL` 可能是在家落的局域网地址，人已经出门，
+        // 直接拿它进登录流程必然失败 —— 而 Tailscale 那条是通的。并发探活取最快
+        // 可达的一条；都不可达才退回 baseURL，让用户看到真实的连接错误。
+        let candidates = profile.allAddresses.map(\.url)
+        let reachable = candidates.count > 1
+            ? await ServerProbe.firstReachable(
+                of: candidates,
+                authorizationHeader: nil,
+                expectedServerID: profile.resolvedServerID)
+            : nil
+        let target = reachable?.url ?? profile.baseURL
+        await connectServer(target.absoluteString, scheme: target.scheme == "https" ? .https : .http)
     }
 
     /// 未连接状态下首页的「去连接」：回登录流程。

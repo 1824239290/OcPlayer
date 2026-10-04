@@ -102,7 +102,10 @@ extension ServerLoginSession {
             userID: userID,
             userName: userName,
             serverVersion: serverVersion,
-            kind: kind
+            kind: kind,
+            // 显式带上服务器 Id：地址探活时用它确认「换的这条地址还是同一台服务器」。
+            // 服务器没报 Id 时才为 nil（id 前缀会退化成 host，那种值不参与校验）。
+            serverID: serverID
         )
     }
 }

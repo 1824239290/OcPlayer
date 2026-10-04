@@ -44,6 +44,16 @@ final class AppModel {
     let store: ServerStore
     var server: (any MediaServer)?
 
+    /// 当前生效的服务器地址（地址决议器探活择优的结果）。
+    ///
+    /// 一台服务器可以有多个入口（局域网 / Tailscale / 反代域名），决议器选中的
+    /// 那条就是它；既是状态页展示的「现在走哪条」，也是界面重算图片 / 播放流地址
+    /// 的触发点（换地址后视图必须重渲染，否则还举着老地址的图）。
+    var serverEndpointURL: URL?
+
+    /// 网络路径监听（Wi-Fi ↔ 蜂窝 / Tailscale 起停 → 地址结论作废重探）。
+    let endpointMonitor = ServerEndpointMonitor()
+
     /// Every authenticated session gets a new generation. Async responses keep
     /// their generation and may only mutate state while it is still current.
     var sessionGeneration = 0

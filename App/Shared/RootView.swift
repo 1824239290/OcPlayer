@@ -129,6 +129,9 @@ struct RootView: View {
                 // iOS 从挂起里回来：内核的音频出口 / 解码会话未必撑得过来，
                 // 由 AppModel 按离开前的意图续播（或静默重建）。
                 app.playbackDidEnterForeground()
+                // 挂起期间网络可能已经换了（回家 / 出门 / Tailscale 起停）：地址
+                // 结论作废，下一个请求重新探活。macOS 不挂起进程，这条基本空转。
+                app.invalidateServerEndpoints()
             default:
                 break
             }

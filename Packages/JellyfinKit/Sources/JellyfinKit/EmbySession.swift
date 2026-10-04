@@ -8,7 +8,15 @@ import Foundation
 ///
 /// token 走 `Authorization` 头，**不进 URL**（也就不会进诊断日志）。
 final class EmbySession: @unchecked Sendable {
-    let baseURL: URL
+    /// 固定地址（匿名探活 / 登录阶段，以及测试）。有 `directory` 时它只作初始值，
+    /// 真正生效的地址由决议器给。
+    private let fixedBaseURL: URL
+    /// 地址决议器：nil = 固定地址（探活 / 登录阶段还没有档案、也没得选）。
+    private let directory: ServerEndpointDirectory?
+
+    /// 当前生效地址。请求、图片、播放流地址全部从这里派生 —— 换地址对上层透明。
+    var baseURL: URL { directory?.currentURL ?? fixedBaseURL }
+
     let accessToken: String?
 
     /// 已登录档案的 id；nil 表示这是**匿名**会话（探活 / 登录阶段）。
@@ -23,9 +31,11 @@ final class EmbySession: @unchecked Sendable {
         baseURL: URL,
         accessToken: String?,
         profileID: String? = nil,
-        sessionConfiguration: URLSessionConfiguration = .default
+        sessionConfiguration: URLSessionConfiguration = .default,
+        directory: ServerEndpointDirectory? = nil
     ) {
-        self.baseURL = baseURL
+        self.fixedBaseURL = baseURL
+        self.directory = directory
         self.accessToken = accessToken
         self.profileID = profileID
 
@@ -137,12 +147,43 @@ final class EmbySession: @unchecked Sendable {
         return try await data(path, method: method, query: query, body: payload, timeout: timeout)
     }
 
+    /// 发请求。**地址决议与换址重试都在这一层**：它是 Emby 侧唯一的发送口，
+    /// 浏览 / 详情 / 字幕下载全从这走，上层不必知道「地址刚换过」。
     func data(
         _ path: String,
         method: String,
         query: [(String, String)] = [],
         body: Data? = nil,
         timeout: TimeInterval? = nil
+    ) async throws -> Data {
+        // 首启 / 网络变化后这里会等一次探活；平时是同步读缓存。
+        _ = await directory?.resolvedURL()
+        let attemptURL = baseURL
+        do {
+            return try await send(path, method: method, query: query, body: body, timeout: timeout)
+        } catch let failure as JellyfinError {
+            // 传输层失败先怀疑「这条地址现在不通」：重新探活，换了地址就在新地址上
+            // 立刻再试一次（出门那条路：局域网断了 → Tailscale）。
+            // 只重试一次：第二次再失败就如实报错，不做地址轮盘赌。
+            guard failure.isAddressFailure, let directory,
+                  await directory.reportFailure(of: attemptURL) else {
+                throw failure
+            }
+            NetworkLog.logger.info(
+                "地址不可用，换地址后重试 \(method) \(path)",
+                fields: ["from": .string(attemptURL.absoluteString),
+                         "to": .string(baseURL.absoluteString)])
+            return try await send(path, method: method, query: query, body: body, timeout: timeout)
+        }
+    }
+
+    /// 单次发送：拼 URL、注入认证头、校验状态码、记日志。
+    private func send(
+        _ path: String,
+        method: String,
+        query: [(String, String)],
+        body: Data?,
+        timeout: TimeInterval?
     ) async throws -> Data {
         var request = URLRequest(url: try url(path: path, query: query))
         request.httpMethod = method

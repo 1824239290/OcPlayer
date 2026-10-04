@@ -166,7 +166,13 @@ struct SettingsView: View {
 
             Section("Jellyfin 服务器") {
                 KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
-                KeyValueRow(label: "地址", value: app.server?.profile.baseURL.absoluteString ?? "—")
+                KeyValueRow(
+                    label: "地址",
+                    value: (app.serverEndpointURL ?? app.server?.profile.baseURL)?.absoluteString ?? "—"
+                )
+                if let profile = app.server?.profile, !profile.addresses.isEmpty {
+                    serverAddressNote(profile)
+                }
                 if !app.store.profiles.isEmpty {
                     Picker("启动时默认服务器", selection: defaultServerBinding) {
                         Text("上次使用的服务器").tag(String?.none)
@@ -445,6 +451,22 @@ struct SettingsView: View {
 
     private var moviePilotActionButtonTitle: String {
         moviepilot.store.serverURLString == nil ? "设置…" : "修改…"
+    }
+
+    /// 多地址服务器的说明。只有一个入口时没什么可说，有备选地址才提
+    /// 「自动择优 / 已固定」，并指出这些都能在「管理服务器」里改。
+    @ViewBuilder
+    private func serverAddressNote(_ profile: ServerProfile) -> some View {
+        let active = (app.serverEndpointURL ?? profile.baseURL).absoluteString
+        if let pinned = profile.pinnedURL {
+            Text("已固定使用 \(pinned.absoluteString)，不会自动切换。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        } else {
+            Text("共 \(profile.allAddresses.count) 个地址：自动选择最快的（现在用的是 \(active)）；可在「管理服务器」里添加、删除或固定地址。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
     }
 
     /// Bangumi 账号行：以 `isAuthenticated` 为准（它是登录的唯一门控信号）。

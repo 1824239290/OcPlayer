@@ -12,33 +12,47 @@ import Foundation
 /// `/Users/{uid}/Items/{id}`、已看标记 `/Users/{uid}/PlayedItems/{id}`。
 /// 其余路由两家同形。
 public struct EmbyServer: MediaServer {
-    public let profile: ServerProfile
+    /// 档案的基准快照；对外暴露的 `profile.baseURL` 是**当前生效地址**（见下）。
+    private let storedProfile: ServerProfile
 
     private let session: EmbySession
 
     /// Emby 用 `Emby` scheme（Jellyfin 是 `MediaBrowser`）。
     public var authorizationHeader: String { session.authorizationHeader }
 
+    /// 档案的实时视图：`baseURL` 跟着地址决议器走，其余字段是登录时那份。
+    public var profile: ServerProfile {
+        var updated = storedProfile
+        updated.baseURL = session.baseURL
+        return updated
+    }
+
     init(profile: ServerProfile, session: EmbySession) {
-        self.profile = profile
+        self.storedProfile = profile
         self.session = session
     }
 
     /// 按档案恢复会话（多服务器切换 / 启动恢复用）。token 缺失时返回 nil，
     /// 由调用方回落到登录流程。
+    ///
+    /// 会话挂上 store 托管的**地址决议器**：同一台服务器的局域网 / Tailscale
+    /// 地址由它探活择优（与 `JellyfinServer.resume` 同形）。
     public static func resume(
         profile: ServerProfile,
         from store: ServerStore,
         sessionConfiguration: URLSessionConfiguration = .default
     ) -> EmbyServer? {
         guard let token = store.token(for: profile) else { return nil }
+        let directory = store.endpointDirectory(for: profile, sessionConfiguration: sessionConfiguration)
+        directory.setAuthorizationHeader(ClientIdentity.authorizationHeader(scheme: "Emby", token: token))
         return EmbyServer(
             profile: profile,
             session: EmbySession(
                 baseURL: profile.baseURL,
                 accessToken: token,
                 profileID: profile.id,
-                sessionConfiguration: sessionConfiguration
+                sessionConfiguration: sessionConfiguration,
+                directory: directory
             )
         )
     }

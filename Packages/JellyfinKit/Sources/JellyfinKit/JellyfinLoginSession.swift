@@ -96,10 +96,17 @@ public final class JellyfinLoginSession: ServerLoginSession {
     public func finish(_ result: LoginResult, store: ServerStore) throws -> any MediaServer {
         let profile = makeProfile(userID: result.userID, userName: result.userName)
         store.activate(profile, token: result.token)
-        return JellyfinServer(
-            profile: profile,
-            client: JellyfinServer.makeClient(baseURL: baseURL, token: result.token)
-        )
+        // 刻意走 store 重新构造会话，而不是直接用手里这个匿名 client：
+        // ① `activate` 会把档案**合并**（同一台服务器从另一条地址登录时，旧地址
+        //    退成备选、不丢），要拿合并后的档案；
+        // ② 已登录会话必须挂上地址决议器，否则登录后第一个请求还钉在这次输入的
+        //    那条地址上，局域网 / Tailscale 自动切换就白做了。
+        guard let merged = store.profiles.first(where: { $0.id == profile.id }),
+              let server = MediaServerFactory.resume(profile: merged, from: store)
+        else {
+            throw JellyfinError(.other("服务器档案保存失败，请重试"))
+        }
+        return server
     }
 }
 

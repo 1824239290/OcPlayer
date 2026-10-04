@@ -65,27 +65,46 @@ public enum ItemImageType: String, Sendable {
 /// Emby 不走这里：它由 `EmbyServer` 用裸 HTTP 实现同一条 `MediaServer` 契约。
 /// 分家的理由见 `MediaServer` 的文档注释（解码契约不兼容）。
 public struct JellyfinServer: MediaServer {
-    public let profile: ServerProfile
-    public let client: JellyfinClient
+    /// 会话是**引用类型**，而且必须如此：`JellyfinClient` 的 baseURL 钉在它的
+    /// `Configuration` 里（`let`），换地址只能重建客户端，struct 存不下这份
+    /// 「按地址缓存的客户端」状态。
+    let session: JellyfinSession
 
-    public var accessToken: String? { client.accessToken }
-
-    init(profile: ServerProfile, client: JellyfinClient) {
-        self.profile = profile
-        self.client = client
+    init(session: JellyfinSession) {
+        self.session = session
     }
+
+    /// 固定单一客户端的构造口（测试、以及还没有档案的探活阶段）：地址永不切换。
+    init(profile: ServerProfile, client: JellyfinClient) {
+        self.session = JellyfinSession(profile: profile, fixedClient: client)
+    }
+
+    /// 当前生效地址（跟着决议器走，见 `ServerEndpointDirectory`）。
+    public var profile: ServerProfile { session.profile }
+    public var accessToken: String? { session.accessToken }
+    /// 当前生效地址对应的 SDK 客户端。
+    public var client: JellyfinClient { session.client }
 
     /// 按指定档案恢复会话（多服务器快速切换用）。token 缺失 / 会话对象建不出来时返回 nil，
     /// 由调用方决定回落到登录流程。
+    ///
+    /// 会话挂上 store 托管的**地址决议器**：同一台服务器的局域网 / Tailscale 地址
+    /// 由它探活择优，请求层不必知道用的是哪条。
     public static func resume(
         profile: ServerProfile,
         from store: ServerStore,
         sessionConfiguration: URLSessionConfiguration = .default
     ) -> JellyfinServer? {
         guard let token = store.token(for: profile) else { return nil }
+        let directory = store.endpointDirectory(for: profile, sessionConfiguration: sessionConfiguration)
+        directory.setAuthorizationHeader(ClientIdentity.mediaBrowserAuthorizationHeader(token: token))
         return JellyfinServer(
-            profile: profile,
-            client: Self.makeClient(baseURL: profile.baseURL, token: token, sessionConfiguration: sessionConfiguration)
+            session: JellyfinSession(
+                profile: profile,
+                token: token,
+                directory: directory,
+                sessionConfiguration: sessionConfiguration
+            )
         )
     }
 
@@ -428,29 +447,22 @@ public struct JellyfinServer: MediaServer {
 
     /// 直连播放地址（`/Videos/{id}/stream?Static=true`）。认证走请求头交给内核，
     /// 所以 URL 里只有条目 id，没有 token。多 MediaSource 条目可显式带 `mediaSourceId`。
+    ///
+    /// 地址用**当前生效**那条（决议器选的）：内核拿到哪条就走哪条，
+    /// 与浏览 / 图片同源，不会出现「界面在 Tailscale 上、流还指着局域网」。
     public func streamURL(
         itemID: String,
         mediaSourceID: String? = nil,
         playSessionID: String? = nil
     ) throws -> String {
-        guard var components = URLComponents(url: profile.baseURL, resolvingAgainstBaseURL: false) else {
-            throw JellyfinError(.other("播放地址拼接失败"))
-        }
-        var basePath = components.path
-        while basePath.hasSuffix("/") { basePath.removeLast() }
-        components.path = "\(basePath)/Videos/\(itemID)/stream"
-        var queryItems = [URLQueryItem(name: "Static", value: "true")]
-        if let mediaSourceID {
-            queryItems.append(URLQueryItem(name: "mediaSourceId", value: mediaSourceID))
-        }
-        if let playSessionID {
-            queryItems.append(URLQueryItem(name: "playSessionId", value: playSessionID))
-        }
-        components.queryItems = queryItems
-        guard let url = components.url else {
-            throw JellyfinError(.other("播放地址拼接失败"))
-        }
-        return url.absoluteString
+        var query = [("Static", "true")]
+        if let mediaSourceID { query.append(("mediaSourceId", mediaSourceID)) }
+        if let playSessionID { query.append(("playSessionId", playSessionID)) }
+        return try ServerURL.absolute(
+            base: session.activeURL,
+            path: "/Videos/\(itemID)/stream",
+            query: query
+        ).absoluteString
     }
 
     /// 给内核（`open_with_headers`）和图片加载共用的认证头。
@@ -471,7 +483,8 @@ public struct JellyfinServer: MediaServer {
             request.headers = (request.headers ?? [:]).merging(["User-Agent": userAgent]) { _, new in new }
         }
         let path = NetworkLog.logPath(for: request.url)
-        let start = Date()
+        // 首启 / 网络变化后这里会等一次探活（几百毫秒量级）；平时是同步读缓存。
+        _ = await session.resolvedURL()
         // 幂等的浏览类请求（GET）做退避重试，写操作不重试。
         //
         // 此前本包**完全没有重试**：服务器半死（回 502/503 或连接被掐）时，用户只能
@@ -483,7 +496,11 @@ public struct JellyfinServer: MediaServer {
         // 与 MoviePilotKit 那条「非幂等不重试」是同一条规则。
         let policy = Self.isIdempotent(request.method) ? Self.browseRetryPolicy : Self.noRetryPolicy
         var lastError: (any Error)?
+        let overallStart = Date()
         for attempt in 1...policy.attempts {
+            let client = session.client
+            let address = client.configuration.url
+            let start = Date()
             do {
                 let value = try await client.send(request).value
                 NetworkLog.requestSucceeded(path, duration: Date().timeIntervalSince(start), level: .info)
@@ -493,6 +510,24 @@ public struct JellyfinServer: MediaServer {
                 // 取消照抛：那是"调用方不要了"，不是可重试的失败。
                 if JellyfinError.isCancellation(error) { throw wrapped }
                 lastError = wrapped
+                // ⚠️ 换址判断必须排在下面的重试闸门**之前**。
+                //
+                // `.serverUnreachable` 里混着两类底层原因：「解析得到但连不上」
+                // （-1004/-1005，`isRetryable` 为 true）与「名字解析不了」
+                // （-1003/-1006，`isRetryable` 为 false）。而主机名候选
+                // （`nas.local` / 单标签 `nas` / MagicDNS 名 / 反代域名）在换到别的
+                // 网络后报的恰恰是后者 —— 若先过重试闸门，`break` 会把换址一起吃掉：
+                // 一次请求只发一次、不换址、不重试，而且 `resolvedAt` 仍是「新鲜」
+                // 的旧结论，后续请求继续走同一条死地址，最长拖到缓存过期（300s）。
+                // 「出门自动换到 Tailscale」正好就是这一类地址，所以这不是边角。
+                if let jellyfinError = wrapped as? JellyfinError, jellyfinError.isAddressFailure,
+                   attempt < policy.attempts, await session.failover(from: address) {
+                    NetworkLog.logger.info(
+                        "地址不可用，换地址后重试 \(request.method.rawValue) \(path)",
+                        fields: ["from": .string(address.absoluteString),
+                                 "to": .string(session.activeURL.absoluteString)])
+                    continue
+                }
                 guard attempt < policy.attempts, Self.isRetryable(wrapped) else { break }
                 let delay = policy.backoffNanoseconds(attempt: attempt)
                 // ⚠️ 用 `.info` 而不是 `.debug`：默认档只落 info 及以上（见
@@ -506,7 +541,7 @@ public struct JellyfinServer: MediaServer {
             }
         }
         let finalError = lastError ?? JellyfinError(.other("请求失败"))
-        NetworkLog.requestFailed(path, error: finalError, duration: Date().timeIntervalSince(start))
+        NetworkLog.requestFailed(path, error: finalError, duration: Date().timeIntervalSince(overallStart))
         await notifyIfTokenExpired(finalError)
         throw finalError
     }
@@ -590,5 +625,86 @@ public struct JellyfinServer: MediaServer {
                 name: MediaServerAuthentication.authenticationRequired,
                 object: profileID)
         }
+    }
+}
+
+/// Jellyfin 侧会话：档案 + token + 地址决议 + **按地址缓存的 SDK 客户端**。
+///
+/// 为什么需要它（而不是让 `JellyfinServer` 直接持 client）：
+///
+/// - `JellyfinClient.Configuration.url` 是 `let`，换地址只能重建客户端；
+/// - `JellyfinServer` 是 struct，存不下「地址 → 客户端」的缓存；
+/// - 每个请求都要读一次「现在用哪个地址」，所以快路径必须是同步的。
+///
+/// 客户端按**归一化地址**缓存：同一地址来回切的场景（探活抖动、切走再切回）
+/// 不会反复重建 `URLSession`。
+final class JellyfinSession: @unchecked Sendable {
+    private let lock = NSLock()
+    private let baseProfile: ServerProfile
+    let token: String?
+
+    /// SDK 客户端的 token 视图（`send` 之外的调用方只关心有没有凭据）。
+    var accessToken: String? { token }
+    private let sessionConfiguration: URLSessionConfiguration
+    private let directory: ServerEndpointDirectory?
+    private let fixedClient: JellyfinClient?
+    private var clients: [String: JellyfinClient] = [:]
+
+    init(
+        profile: ServerProfile,
+        token: String?,
+        directory: ServerEndpointDirectory?,
+        sessionConfiguration: URLSessionConfiguration
+    ) {
+        self.baseProfile = profile
+        self.token = token
+        self.directory = directory
+        self.sessionConfiguration = sessionConfiguration
+        self.fixedClient = nil
+    }
+
+    /// 固定单一客户端（测试 / 还没有档案的探活阶段）：地址不参与决议。
+    init(profile: ServerProfile, fixedClient: JellyfinClient) {
+        self.baseProfile = profile
+        self.token = fixedClient.accessToken
+        self.directory = nil
+        self.sessionConfiguration = .default
+        self.fixedClient = fixedClient
+    }
+
+    /// 当前生效地址。
+    var activeURL: URL { directory?.currentURL ?? baseProfile.baseURL }
+
+    /// 档案的实时视图：`baseURL` 换成当前生效地址，其余字段原样。
+    var profile: ServerProfile {
+        var updated = baseProfile
+        updated.baseURL = activeURL
+        return updated
+    }
+
+    var client: JellyfinClient { client(for: activeURL) }
+
+    func client(for url: URL) -> JellyfinClient {
+        if let fixedClient { return fixedClient }
+        return lock.withLock {
+            let key = ServerAddress.normalized(url).absoluteString
+            if let cached = clients[key] { return cached }
+            let created = JellyfinServer.makeClient(
+                baseURL: url, token: token, sessionConfiguration: sessionConfiguration)
+            clients[key] = created
+            return created
+        }
+    }
+
+    /// 请求前的地址决议（首启 / 网络变化时等一次探活，平时同步读缓存）。
+    func resolvedURL() async -> URL {
+        guard let directory else { return baseProfile.baseURL }
+        return await directory.resolvedURL()
+    }
+
+    /// 某条地址上的请求失败：重新探活，返回是否换到了别的地址。
+    func failover(from failed: URL) async -> Bool {
+        guard let directory else { return false }
+        return await directory.reportFailure(of: failed)
     }
 }

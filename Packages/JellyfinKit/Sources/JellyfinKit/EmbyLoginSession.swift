@@ -60,9 +60,13 @@ public final class EmbyLoginSession: ServerLoginSession {
     public func finish(_ result: LoginResult, store: ServerStore) throws -> any MediaServer {
         let profile = makeProfile(userID: result.userID, userName: result.userName)
         store.activate(profile, token: result.token)
-        return EmbyServer(
-            profile: profile,
-            session: EmbySession(baseURL: baseURL, accessToken: result.token, profileID: profile.id)
-        )
+        // 与 Jellyfin 侧同口径：走 store 重建会话，拿到**合并后**的档案并挂上
+        // 地址决议器（理由见 `JellyfinLoginSession.finish`）。
+        guard let merged = store.profiles.first(where: { $0.id == profile.id }),
+              let server = MediaServerFactory.resume(profile: merged, from: store)
+        else {
+            throw JellyfinError(.other("服务器档案保存失败，请重试"))
+        }
+        return server
     }
 }

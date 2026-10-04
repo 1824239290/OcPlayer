@@ -135,3 +135,20 @@ public struct JellyfinError: Error, LocalizedError {
         }
     }
 }
+
+extension JellyfinError {
+    /// 这条失败是不是「**地址本身**可能不通」那一类 —— 决定要不要换地址重试。
+    ///
+    /// 只认传输层：连不上、解析不了、连接中断。HTTP 状态码一律不算 —— 服务器
+    /// 已经答了话，说明这条地址是通的（换一条只会把同一个 5xx 再撞一遍）。
+    /// `.noNetwork` 也不算：本机压根没网时换哪条地址都一样，只会白白多一轮探活。
+    var isAddressFailure: Bool {
+        switch kind {
+        case .transport, .serverUnreachable:
+            return true
+        case .badServerURL, .noNetwork, .unauthorized, .forbidden,
+             .quickConnectDisabled, .quickConnectTimeout, .http, .other:
+            return false
+        }
+    }
+}

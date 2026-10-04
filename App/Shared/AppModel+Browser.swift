@@ -56,6 +56,8 @@ extension AppModel {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
         self.server = server
+        // 地址决议接线要跟会话走：决议器选中新地址时把结论写回档案、并刷新界面。
+        attachEndpoints(to: server)
         // 换会话就丢掉上个会话的分页缓存：条目 id 只在那台服务器里有意义。
         libraryPages = [:]
         phase = .ready
