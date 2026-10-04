@@ -117,9 +117,8 @@ struct DetailView: View {
     ///
     /// 头部站点图标与页内 Bangumi 区块都要用它：Bangumi 关联可能挂在季上，
     /// 两处各算一次就会漂（一个是「已选季」，一个是「第 1 季」）。
-    private var selectedSeason: MediaItem? {
-        model.seasons.first { $0.id == model.selectedSeasonID }
-    }
+    /// 直接取 VM 的（同一个判断两处都要用，放在 VM 里可测）。
+    private var selectedSeason: MediaItem? { model.selectedSeason }
 
     var body: some View {
         ScrollView {
@@ -171,7 +170,7 @@ struct DetailView: View {
                     selectedSeason: selectedSeason
                 )
                 MoviePilotResourceSection(item: model.shown, showResource: $isResourcePresented)
-                if !model.shown.cast.isEmpty { castRail }
+                if !model.displayCast.isEmpty { castRail }
                 // 当前选中集（电影为自身）的文件级媒体信息。
                 DetailMediaInfoSection(
                     item: playableItem,
@@ -187,7 +186,7 @@ struct DetailView: View {
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .ignoresSafeArea(edges: .top)
-        .navigationTitle(horizontalSizeClass == .compact ? "" : model.shown.name)
+        .navigationTitle(horizontalSizeClass == .compact ? "" : model.displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -295,7 +294,7 @@ struct DetailView: View {
             if let notice = model.staleNotice {
                 StaleContentBanner(notice: notice)
             }
-            if let overview = model.shown.overview, !overview.isEmpty {
+            if let overview = model.displayOverview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .padding(.top, 2)
             }
@@ -307,7 +306,7 @@ struct DetailView: View {
     private var compactMetaRow: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
-                if let rating = model.shown.communityRating {
+                if let rating = model.displayRating {
                     HStack(spacing: 3) {
                         Image(systemName: "star.fill")
                             .font(.system(size: 11, weight: .bold))
@@ -358,8 +357,8 @@ struct DetailView: View {
             // 放在这一行而不是上面那行，是因为上面那行已经排了评分 / 分级 / 年份 /
             // 季数 / 时长，紧凑宽度下再塞两个图标就要挤压换行了。
             HStack(spacing: 10) {
-                if !model.shown.genres.isEmpty {
-                    Text(model.shown.genres.joined(separator: " · "))
+                if !model.displayGenres.isEmpty {
+                    Text(model.displayGenres.joined(separator: " · "))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -574,8 +573,10 @@ struct DetailView: View {
 
     @ViewBuilder
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
-        if model.shown.primaryImageTag != nil {
-            let poster = model.shown.imageTarget(app.server, kind: .primary, width: 300)
+        // 条件用 `posterTarget` 的结果而不是 `primaryImageTag != nil`：
+        // 服务端没图但 TMDb 有海报时也该显示（TMDb 只补缺，正是这个场景）。
+        let poster = model.posterTarget(width: 300)
+        if poster.url != nil {
             RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
                 .aspectRatio(2 / 3, contentMode: .fill)
                 .frame(width: width, height: height)
@@ -605,7 +606,7 @@ struct DetailView: View {
                 }
                 Text(part).foregroundStyle(base.opacity(0.78))
             }
-            if let rating = model.shown.communityRating {
+            if let rating = model.displayRating {
                 Label(String(format: "%.1f", rating), systemImage: "star.fill")
                     .foregroundStyle(BangumiStatusColor.rating)
             }
@@ -628,7 +629,7 @@ struct DetailView: View {
     private var metaParts: [String] {
         var parts: [String] = []
         if let year = model.shown.year { parts.append(String(year)) }
-        if !model.shown.genres.isEmpty { parts.append(model.shown.genres.prefix(3).joined(separator: " / ")) }
+        if !model.displayGenres.isEmpty { parts.append(model.displayGenres.prefix(3).joined(separator: " / ")) }
         if let runtime = model.shown.runtimeSeconds { parts.append(RuntimeText.format(runtime)) }
         if model.shown.kind == .series, let count = model.shown.childCount {
             parts.append("\(count) 季")
@@ -796,7 +797,7 @@ struct DetailView: View {
             if let notice = model.staleNotice {
                 StaleContentBanner(notice: notice)
             }
-            if let overview = model.shown.overview, !overview.isEmpty {
+            if let overview = model.displayOverview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)
             }
@@ -858,7 +859,12 @@ struct DetailView: View {
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 26)
         .padding(.bottom, 12)
-        .task(id: model.selectedSeasonID) { await model.loadEpisodes() }
+        .task(id: model.selectedSeasonID) {
+            // 集列表与季的 TMDb 数据缓存粒度不同（见 VM 注释），并行取。
+            async let episodes: Void = model.loadEpisodes()
+            async let seasonTMDb: Void = model.loadSeasonOverlay()
+            _ = await (episodes, seasonTMDb)
+        }
     }
 
     private var episodeList: some View {
@@ -918,6 +924,11 @@ struct DetailView: View {
             EpisodeSelectCard(
                 episode: episode,
                 server: app.server,
+                // 标题走 VM：服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
+                displayTitle: model.displayEpisodeTitle(episode),
+                displayOverview: model.displayEpisodeOverview(episode),
+                // 剧照同样按「能用 TMDb 就用」的策略解析（含 still_path）。
+                thumbTarget: model.episodeThumbTarget(for: episode, width: 400),
                 isSelected: episode.id == model.selectedEpisodeID,
                 onSelect: { model.selectEpisode(episode) },
                 onPlay: {
@@ -931,7 +942,7 @@ struct DetailView: View {
     // MARK: - 演员 / 类似
 
     private var castRail: some View {
-        let actors = Array(model.shown.cast.filter { $0.kind == "Actor" }.prefix(20))
+        let actors = Array(model.displayCast.filter { $0.kind == "Actor" }.prefix(20))
         let avatarSize: CGFloat = horizontalSizeClass == .compact ? 80 : 108
         return Rail("演员", kind: .flexible, items: actors) { person in
             VStack(spacing: 8) {
@@ -959,10 +970,8 @@ struct DetailView: View {
     }
 
     private func personImageTarget(_ person: MediaItem.Person) -> (url: URL?, authHeader: String?) {
-        guard let server = app.server,
-              let url = try? server.imageURL(itemID: person.id, type: .primary, maxWidth: 240, tag: nil)
-        else { return (nil, nil) }
-        return (url, server.authorizationHeader)
+        // 交给 VM：TMDb 补的演员要走 TMDb CDN（它的 id 在服务端不存在，直接问会 400）。
+        model.castImageTarget(for: person, width: 240)
     }
 
     // MARK: - 动作

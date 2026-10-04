@@ -39,7 +39,7 @@ public enum TMDbMediaType: String, Sendable, Codable, CaseIterable {
 // MARK: - 详情
 
 /// 一部电影 / 剧集的详情（含 `append_to_response` 带回来的关联块）。
-public struct TMDbEntity: Sendable, Equatable {
+public struct TMDbEntity: Sendable, Equatable, Codable {
     public var id: Int
     public var mediaType: TMDbMediaType
     /// 本地化标题（`title` 或 `name`）。可能为空串——那门语言没有翻译时 TMDb 就这么返回。
@@ -114,7 +114,7 @@ public struct CastMember: Sendable, Equatable, Codable {
 }
 
 /// 剧集详情里的季摘要。
-public struct SeasonSummary: Sendable, Equatable {
+public struct SeasonSummary: Sendable, Equatable, Codable {
     public var seasonNumber: Int
     public var name: String?
     public var overview: String?
@@ -133,7 +133,7 @@ public struct SeasonSummary: Sendable, Equatable {
 
 /// 一季的全部集（`/tv/{id}/season/{n}`）——**一次请求拿一整季**，
 /// 不是每集一次。这是控制配额的关键（见 `TMDbClient.season`）。
-public struct TMDbSeason: Sendable, Equatable {
+public struct TMDbSeason: Sendable, Equatable, Codable {
     public var seasonNumber: Int
     public var name: String?
     public var overview: String?
@@ -150,7 +150,7 @@ public struct TMDbSeason: Sendable, Equatable {
     }
 }
 
-public struct EpisodeEntry: Sendable, Equatable {
+public struct EpisodeEntry: Sendable, Equatable, Codable {
     public var episodeNumber: Int
     public var name: String?
     public var overview: String?
@@ -175,7 +175,7 @@ public struct EpisodeEntry: Sendable, Equatable {
 // MARK: - 搜索结果
 
 /// 标题搜索结果的一项。用于没有 `ProviderIds["Tmdb"]` 时的兜底匹配。
-public struct TMDbSearchResult: Sendable, Equatable {
+public struct TMDbSearchResult: Sendable, Equatable, Codable {
     public var id: Int
     public var mediaType: TMDbMediaType
     public var title: String?
@@ -221,19 +221,6 @@ public enum TMDbImageSize: String, Sendable, CaseIterable {
         case .w1280: 1280
         case .original: nil
         }
-    }
-
-    /// 海报（2:3）与服务端 `maxWidth` 的对应。
-    public static func poster(nearestWidth width: Int) -> TMDbImageSize {
-        nearest(to: width)
-    }
-
-    /// 剧照 / 背景（16:9）与服务端 `maxWidth` 的对应。
-    ///
-    /// 与海报用同一套档位即可——TMDb 的档位是**宽度**，与画幅无关；
-    /// 分开两个入口只是为了调用点读起来自解释。
-    public static func still(nearestWidth width: Int) -> TMDbImageSize {
-        nearest(to: width)
     }
 
     static func nearest(to width: Int) -> TMDbImageSize {

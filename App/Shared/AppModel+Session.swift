@@ -26,6 +26,14 @@ extension AppModel {
         bangumi.setup()
         // 媒体元数据库同样异步建库（与下面的会话恢复并行，不阻塞首屏）。
         metadata.setup()
+        // TMDb 补全服务挂在同一个库上。建库是异步的，所以这里等它完成再装配；
+        // 等待发生在后台任务里，不阻塞首屏（TMDb 只是可选增强）。
+        let metadataCoordinator = metadata
+        let tmdbCoordinator = tmdb
+        Task { @MainActor in
+            _ = await metadataCoordinator.waitUntilReady()
+            tmdbCoordinator.attach(store: metadataCoordinator.activeStore)
+        }
         // 把淘汰挂到每日存储维护上。维护是单例、拿不到 AppModel（也不该拿），
         // 所以注入一个闭包。
         //
@@ -35,9 +43,11 @@ extension AppModel {
         // 不同）——捕获错了对象，维护会对着一个从没 setup 过的协调器空转，
         // 而且**不报任何错**。bootstrap 跑在真实实例上，并天然只在生产路径执行
         // （测试宿主整段跳过），正是这个注入该在的地方。
-        AppStorageMaintenance.shared.setDatabaseMaintenance { [metadata] in
+        AppStorageMaintenance.shared.setDatabaseMaintenance { [metadata, tmdb] in
             await MainActor.run { metadata.refreshSize() }
             await metadata.runMaintenance()
+            // 顺手清掉过期的 TMDb 实体（不是必须，只是把死数据还给用户）。
+            await tmdb.runMaintenance()
         }
         // Bangumi OAuth 与弹幕共用网关：配置要在任何登录/刷新之前注入。
         await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)

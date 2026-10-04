@@ -294,6 +294,13 @@ final class AppModel {
     /// 原样返回服务器，行为与引入缓存之前一致。
     let metadata: MetadataCoordinator
 
+    /// TMDb 元数据补全（可选增强，用户配置 key 后生效）。
+    ///
+    /// 与 `metadata` 分开两个协调器，但**共用同一个 `Media.sqlite`**（TMDb 的表
+    /// 就在那个库里）：缓存层与补全层的生命周期、失败模式都不一样，混成一个类
+    /// 会让「没配 key」与「建库失败」两种降级纠缠在一起。
+    let tmdb: TMDbCoordinator
+
     /// App 级偏好的落盘域（见 `init` 的说明）。
     @ObservationIgnored let preferences: UserDefaults
 
@@ -566,6 +573,7 @@ final class AppModel {
         moviepilot: MoviePilotCoordinator = MoviePilotCoordinator(),
         danmakuModel: DanmakuModel = DanmakuModel(),
         metadata: MetadataCoordinator = MetadataCoordinator(),
+        tmdb: TMDbCoordinator? = nil,
         preferences: UserDefaults = .standard
     ) {
         self.store = store
@@ -573,6 +581,9 @@ final class AppModel {
         self.moviepilot = moviepilot
         self.danmakuModel = danmakuModel
         self.metadata = metadata
+        // 默认用注入的那个 `preferences` 域构造：测试传独立 suite 时，
+        // TMDb 的设置项不该落到 `.standard`（否则会与其他测试进程互相污染）。
+        self.tmdb = tmdb ?? TMDbCoordinator(defaults: preferences)
         self.preferences = preferences
         // 首屏骨架的条数来自注入域（不是 `HomeData` 默认值里的 `.standard`）。
         home.railPresence = HomeRailPresence.restored(from: preferences)

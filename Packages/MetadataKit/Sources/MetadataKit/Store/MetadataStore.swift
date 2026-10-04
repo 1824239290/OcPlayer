@@ -13,7 +13,9 @@ import JellyfinKit
 /// （照 `saveSubjects` 的批处理），别一条一个事务。
 public actor MetadataStore {
 
-    private let database: DatabasePool
+    /// `internal`（不是 `private`）：TMDb 的读写放在 `MetadataStore+TMDb.swift` 扩展里，
+    /// 跨文件访问需要 ≥ internal。对外仍是 `public actor` 封装，不泄露给使用方。
+    let database: DatabasePool
 
     public init(database: DatabasePool) {
         self.database = database

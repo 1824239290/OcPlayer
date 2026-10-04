@@ -86,12 +86,21 @@ public struct TMDbPreferences: @unchecked Sendable {
         nonmutating set { defaults.set(newValue, forKey: Self.preferTMDbTextKey) }
     }
 
-    /// 图片是否允许**顶替**服务端已有的图。默认 false（只补缺）。
+    /// 图片是否允许**顶替**服务端已有的图。**默认 true（TMDb 优先）**。
     ///
-    /// 与文本策略分开：文本可以整份换语言，而「谁的图更好」没有客观答案——
-    /// 用户用刮削器精修过的海报被 TMDb 顶掉是单向损失。
+    /// 定这个默认值的理由（用户口径）：「填了 key 就是想要完整补全，能用 TMDb 就用」。
+    /// 所以默认让 TMDb 的图优先（海报 / 背景 / 分集剧照），而不是只补缺。
+    ///
+    /// 与文本策略分开保留一个开关：文本可以整份换语言，而「谁的图更好」没有客观答案——
+    /// 用户用刮削器精修过的海报被 TMDb 顶掉是单向损失，所以必须留一个关掉的出口。
+    ///
+    /// 用 `object(forKey:)` 判存在而不是 `bool(forKey:)`：后者对「默认开」的开关
+    /// 在键不存在时返回 false，会让默认值静默失效（`preferTMDbText` 同一个坑）。
     public var replaceExistingImages: Bool {
-        get { defaults.bool(forKey: Self.fillMissingImagesKey) }
+        get {
+            guard defaults.object(forKey: Self.fillMissingImagesKey) != nil else { return true }
+            return defaults.bool(forKey: Self.fillMissingImagesKey)
+        }
         nonmutating set { defaults.set(newValue, forKey: Self.fillMissingImagesKey) }
     }
 

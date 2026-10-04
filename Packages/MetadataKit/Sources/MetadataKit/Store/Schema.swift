@@ -95,4 +95,44 @@ enum Schema {
           PRIMARY KEY(tenant_id, item_id)
         );
         """
+
+    /// v2：TMDb 补全。
+    ///
+    /// ## 两张表为什么要分开
+    ///
+    /// `tmdb_entity` 存 **TMDb 侧的数据**，`tmdb_link` 存 **「服务端条目 → TMDb 实体」
+    /// 的对应关系**。两者生命周期完全不同：
+    ///
+    /// - 实体数据是**全局的、与服务器无关**（同一部电影对谁都一样），所以它**不带
+    ///   `tenant_id`** —— 两个服务器档案、两个 Jellyfin 用户共用一份，省一次请求。
+    ///   唯一让它分叉的是**语言**（`zh-CN` 与 `en-US` 的简介不同），所以语言进主键。
+    /// - 对应关系是**每台服务器各自的**（条目 id 是服务端生成的），必须带 `tenant_id`。
+    ///
+    /// 分开的另一个好处：解绑/重匹配只动 link，不必丢掉已经拉下来的实体数据。
+    static let createTMDbTables = """
+        CREATE TABLE tmdb_entity(
+          entity_key      TEXT NOT NULL,
+          language        TEXT NOT NULL,
+          kind            TEXT NOT NULL,
+          tmdb_id         INTEGER NOT NULL,
+          season_number   INTEGER,
+          fetched_at      INTEGER NOT NULL,
+          expires_at      INTEGER NOT NULL,
+          payload_version INTEGER NOT NULL,
+          payload         BLOB NOT NULL,
+          PRIMARY KEY(entity_key, language)
+        );
+        CREATE INDEX tmdb_entity_expiry ON tmdb_entity(expires_at);
+
+        CREATE TABLE tmdb_link(
+          tenant_id   TEXT NOT NULL,
+          item_id     TEXT NOT NULL,
+          entity_key  TEXT NOT NULL,
+          source      TEXT NOT NULL,
+          confidence  REAL NOT NULL,
+          linked_at   INTEGER NOT NULL,
+          PRIMARY KEY(tenant_id, item_id)
+        );
+        CREATE INDEX tmdb_link_entity ON tmdb_link(tenant_id, entity_key);
+        """
 }

@@ -270,6 +270,11 @@ struct SettingsView: View {
             }
             .settingsRowBackground()
 
+            Section("TMDb 元数据补全") {
+                TMDbSettingsSection()
+            }
+            .settingsRowBackground()
+
             Section("关于") {
                 KeyValueRow(label: "版本", value: AppVersion.displayString)
                 UpdateCheckRow(
@@ -889,5 +894,137 @@ extension View {
         #else
         self
         #endif
+    }
+}
+
+// MARK: - TMDb 元数据补全
+
+/// TMDb 补全的设置区块。
+///
+/// 设计上刻意与「媒体元数据缓存」分开两处：
+/// - 那一行是**缓存**（服务端数据的副本，清掉只是重新拉）；
+/// - 这一块是**补全**（用第三方数据增强展示，清掉会丢掉「哪条对应到哪」的判断）。
+///
+/// 合成一项的话，用户点「清除 TMDb 数据」时并不知道自己放弃的是后者。
+private struct TMDbSettingsSection: View {
+    @Environment(AppModel.self) private var app
+    @State private var keyInput = ""
+    @State private var isClearing = false
+    @State private var cleared = false
+
+    private var tmdb: TMDbCoordinator { app.tmdb }
+
+    var body: some View {
+        // 没有「启用」开关：**留空即禁用**（与 anime-skip Client ID 一致）。
+        // 一个「打开」的开关若在 key 为空时什么都不做，用户会以为坏了；
+        // 而「清掉 key」本身就等于停用，不需要第二个状态位。
+        HStack {
+            SecureField("TMDB API Key 或 Read Access Token", text: $keyInput)
+                .textFieldStyle(.roundedBorder)
+            Button(tmdb.isConfigured ? "替换" : "保存") {
+                tmdb.setAPIKey(keyInput)
+                keyInput = ""
+                cleared = false
+            }
+            .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+        // 「已补全条目」与错误提示都要进页面时取一次——原先没有任何地方调它，
+        // 于是那一行**恒显示 0**（看着像功能没生效）。
+        //
+        // 挂在第一个 HStack 上而不是末尾的 `if` 块上：`.onAppear` 直接接在 `if`
+        // 块后面时 Swift 会把 `.` 解析成新语句（报 "cannot be used on type 'View'"）。
+        // 这个 HStack 无条件渲染，挂它上面两条分支都能触发。
+        .onAppear {
+            Task {
+                await app.refreshTMDbLinkCount()
+                await tmdb.refreshLastFailure()
+            }
+        }
+
+        if tmdb.isConfigured {
+            KeyValueRow(label: "当前 Key", value: tmdb.apiKeyDisplay)
+        } else {
+            Text("填入后启用 TMDb 补全：用第三方元数据补充详情页的简介、评分、演员与海报。"
+                 + "留空 = 关闭，不请求、不影响任何现有功能。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        Text("在 themoviedb.org 的账户设置里生成（免费）。v3 API Key 与 v4 Read Access Token 都支持，粘贴哪个都行。")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+        Text("需要能直连 api.themoviedb.org，图片走 image.tmdb.org（国内网络通常需要代理）。")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+
+        if tmdb.isConfigured {
+            Picker("语言", selection: Binding(
+                get: { tmdb.language },
+                set: { tmdb.setLanguage($0) })) {
+                ForEach(TMDbLanguageOption.allCases) { option in
+                    Text(option.displayName).tag(option.rawValue)
+                }
+            }
+            Text("标题与简介按此语言取；该语言缺翻译的字段自动回退到英文。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Toggle("文本以 TMDb 优先", isOn: Binding(
+                get: { tmdb.preferText },
+                set: { tmdb.setPreferText($0) }))
+            Text(tmdb.preferText
+                 ? "标题/简介/类型用 TMDb 的替换服务端的。"
+                 : "只补服务端缺的字段，已有的不动。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Toggle("用 TMDb 图片替换已有的图", isOn: Binding(
+                get: { tmdb.replaceImages },
+                set: { tmdb.setReplaceImages($0) }))
+            Text(tmdb.replaceImages
+                 ? "海报/背景/分集剧照优先用 TMDb 的（服务端已有的图会被顶掉）。"
+                 : "只补服务端没有图的条目；已精修过的海报不会被覆盖。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            LabeledContent("已补全条目", value: "\(tmdb.linkedCount)")
+
+            // 坏 key / 网络不通原先**完全静默**：用户填了 key 却什么都没发生，
+            // 只会以为功能坏了。这里把最近一次失败摆出来。
+            if let failure = tmdb.lastError {
+                Label(failure, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            HStack {
+                Button(role: .destructive) {
+                    clear()
+                } label: {
+                    Label(cleared ? "已清除" : "清除 TMDb 补全数据", systemImage: "trash")
+                }
+                .disabled(isClearing)
+                if cleared {
+                    Text("对应关系与已下载的 TMDb 数据已删除")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Text("缓存上限 \(tmdb.cacheLifetimeDescription)（TMDb 条款要求不超过 \(tmdb.maxCacheDays) 天）。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            // TMDb 的署名要求。完整条款在 OpenSourceLicensesView 的「社区数据与服务」分组。
+            Text("本产品使用 TMDb API，但未获得 TMDb 认可或认证。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+    }
+    private func clear() {
+        isClearing = true
+        Task {
+            await tmdb.clear(tenant: app.currentTenant)
+            cleared = true
+            isClearing = false
+        }
     }
 }

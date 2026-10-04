@@ -67,6 +67,12 @@ private struct PointingHandCursor: ViewModifier {
 struct EpisodeSelectCard: View {
     let episode: MediaItem
     let server: (any MediaServer)?
+    /// 展示用标题（TMDb 优先；占位名会被真标题顶掉）。调用方已解析好。
+    let displayTitle: String
+    /// 展示用简介（tooltip 用）。nil = 没有。
+    let displayOverview: String?
+    /// 已解析好的剧照取图目标（服务端 / TMDb 的 still_path，由调用方按策略定）。
+    let thumbTarget: (url: URL?, authHeader: String?)
     let isSelected: Bool
     var onSelect: () -> Void
     var onPlay: (() -> Void)? = nil
@@ -81,8 +87,7 @@ struct EpisodeSelectCard: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .bottomLeading) {
-                    let target = episode.episodeThumbTarget(server, width: 400)
-                    RemoteImage(url: target.url, authHeader: target.authHeader, maxPixelSize: 400)
+                    RemoteImage(url: thumbTarget.url, authHeader: thumbTarget.authHeader, maxPixelSize: 400)
                         .aspectRatio(16 / 9, contentMode: .fill)
                         .frame(width: cardWidth, height: thumbHeight)
                         .clipped()
@@ -130,7 +135,7 @@ struct EpisodeSelectCard: View {
                             .monospacedDigit()
                             .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     }
-                    Text(episode.name)
+                    Text(displayTitle)
                         .font(.footnote.weight(isSelected ? .semibold : .regular))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
@@ -144,6 +149,9 @@ struct EpisodeSelectCard: View {
             .animation(motion, value: hovering)
         }
         .buttonStyle(.plain)
+        // 分集简介做 tooltip：卡片本身放不下（宽度固定、标题已占两行），
+        // 而简介是用户点开某一集前最想看的信息。macOS 上是悬停提示。
+        .help(displayOverview ?? "")
         .simultaneousGesture(
             TapGesture(count: 2).onEnded {
                 onPlay?()

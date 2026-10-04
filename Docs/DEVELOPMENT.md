@@ -71,6 +71,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 | 内容 | 位置 | 清理 |
 | --- | --- | --- |
 | 媒体元数据缓存 | `Media.sqlite` | 设置 → 维护可清空；每日维护按 3 万条 / 200 MB 淘汰最旧 |
+| TMDb 补全数据 | `Media.sqlite` 的 `tmdb_entity` / `tmdb_link` 两张表 | 设置 → TMDb 区块可单独清除；过期实体随每日维护清 |
 | Bangumi 本地库 | `Bangumi.sqlite` | 登出清账号态；体积随每日维护上报 |
 | 弹幕（正文可弃 / 其余永久） | `Danmaku/` | 白名单淘汰，永久文件见 `DanmakuCache.permanentFileNames` |
 | 图片字节缓存 | `ImageCache/` | 设置 → 维护可清空；512 MiB 上限 |
@@ -78,6 +79,54 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 > 维护清单没登记的目录**等于不存在**（不会被清理、体积也不可见）——`Bangumi.sqlite` 就这么漏了几个月，所以「取路径 + 登记」是两件必须一起做的事。
 
+## TMDb 元数据补全
+
+用户自填 API Key（设置 → TMDb 元数据补全，**留空即禁用**）。v3 API Key 与 v4 Read Access Token 都支持。代码在 `Packages/MetadataKit/TMDb/`。
+
+### 三条必须知道的约束
+
+1. **集与季的 `tmdbID` 不是剧集 id。** 实测本机 Jellyfin 12.1.0（`Fields=ProviderIds` 才返回）：
+   ```
+   剧   ProviderIds["Tmdb"] = 153217      ← 剧集 id，可用于 /tv/{id}
+   季   只有 Tvdb，没有 Tmdb              ← 无 id 可用
+   集   ProviderIds["Tmdb"] = 3384539     ← 单集 id，拿它查 /tv/{id} 会拉到别的剧或 404
+   ```
+   所以季/集一律从**父剧**推导 `tv/{剧id}/season/{季号}`。判断收在 `TMDbEntityKey` 的唯一入口。
+2. **TMDb 不做语言回退。** `language=zh-CN` 时没翻译的字段返回**空串**（不是 nil），判定必须用「非空」。且只补缺、不整包替换。
+3. **缓存期不得超过 6 个月**（TMDb 条款）。`TMDbPreferences.maxCacheDays = 180`，不要调大。
+
+### 分层
+
+| 类型 | 职责 |
+| --- | --- |
+| `TMDbClient` | 纯网络：详情 / 一季 / 搜索，限流 + 重试 |
+| `TMDbMatcher` | 匹配与打分（ProviderIds → 搜索），**不碰网络**（搜索入口是注入的闭包） |
+| `MetadataStore+TMDb` | 落库：实体全局共享、对应按租户隔离 |
+| `TMDbEnricher` | 串起来：匹配 → 拉取 → 落库 → 只读叠加 |
+| `TMDbOverlay` / `DisplayMetadata` | 展示策略（文本优先 / 图片只补缺），纯函数 |
+| `TMDbCoordinator`（App 层） | 设置读写、生命周期、与 `AppModel` 的接线 |
+
+### 季与分集的展示面
+
+**分集/季没有自己的详情页**（首页续播走 `openSeriesDetail(for:)` 解析到所属剧集；搜索只请求 `kinds: [.movie, .series]`），但它们的 TMDb 数据**在剧集页上有展示面**：
+
+| 展示面 | 数据来源 |
+| --- | --- |
+| 分集卡片的标题 | 该季每一集的 TMDb 标题（占位名「第 N 集」会被顶掉） |
+| 分集卡片的剧照 | TMDb 的 `still_path`（默认策略下优先于服务端的图） |
+| 分集卡片的悬停提示 | 该集的 TMDb 简介 |
+| 页面简介 | 选中某季时优先显示**该季简介**，取不到回落剧集简介 |
+
+**图片策略默认「TMDb 优先」**（`TMDbPreferences.replaceExistingImages` 默认 true，用户口径：填了 key 就是想要完整补全）。海报 / 背景 / 分集剧照三处都走 `TMDbImagePolicy`；用户可在设置页关掉。**改这个默认值时务必同时改 `TMDbImagePolicy.init` 的默认**——同一个概念两个默认值会让「生产优先、测试只补缺」，很难查。
+
+所以 `AppModel.refreshTMDb` 只处理电影与剧集（详情页只会收到这两种），而**季数据由 `loadSeasonOverlay()` 单独取**——入口是「父剧的 link + 季号」（季没有自己的对应关系）。
+
+**两个踩过的坑**（都别再踩）：
+1. **季数据不能在 `.task(id: selectedSeasonID)` 里取**：那个 task 在页面初现时就会跑一次，而那一刻 `seasons` 还是空的（实测诊断：与 `/Seasons` 请求同一秒，`selectedSeason` 为 nil），之后 id 变化并没有再触发它。现在由 `load()` 末尾**确定性地**触发（那时 seasons 与 link 都已就位），视图 task 只负责「用户切季」。
+2. **占位集名判定不要用 `\d`**：实测 ICU 的 `\d` 会匹配中文数字（「九」被判为 true），于是「第九集」这种真实标题会被误判成占位名。用 `[0-9]`；且中日文形态只锚**结尾**（服务端还有「剧名 - S01E00 - 第 0 集」这种文件名派生形态）。
+
+**展示路径不发网络**：`overlay(for:)` 只读库，`refresh(item:)` 才发请求。详情页先渲染已有 overlay，再在后台补——合成一个方法就没法离线复用、也没法让调用方控制时机。
+
 ## 后续方向
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**已定方案（`.zcode/plans/` 本地保留）：Phase 1（SQLite 缓存）已落地，Phase 2/3（TMDb 点播式补全 / 批量补全与人工匹配面板）待做。历史变更见 [CHANGELOG](../CHANGELOG.md)。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**：Phase 1（SQLite 缓存）与 Phase 2（点播式补全：客户端 / 匹配器 / 落库 / 叠加层 / 设置页）已落地；Phase 3（批量补全整个库 + 人工匹配面板，低置信度候选已由匹配器返回备用）待做。历史变更见 [CHANGELOG](../CHANGELOG.md)。

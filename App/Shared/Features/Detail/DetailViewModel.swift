@@ -1,6 +1,7 @@
 import AppDesignKit
 import CoreModel
 import JellyfinKit
+import MetadataKit
 import SwiftUI
 
 /// 详情页的数据面视图模型：详情/季/集/类似的加载、缓存与选中态。
@@ -59,6 +60,156 @@ final class DetailViewModel {
     private var prewarmedAmbienceURL: URL?
 
     var shown: MediaItem { detail ?? item }
+
+    /// 当前选中的季。视图与 TMDb 取数都用它（原先只在视图里算，两处需要同一份判断）。
+    var selectedSeason: MediaItem? {
+        seasons.first { $0.id == selectedSeasonID }
+    }
+
+    // MARK: - TMDb 补全
+
+    /// 当前展示的 TMDb 叠加数据。nil = 没有（未配置 / 没匹配上 / 还没拉到）。
+    ///
+    /// 是**独立存储**而不是把 TMDb 字段写进 `detail`：服务端数据是「当前事实」，
+    /// TMDb 是可选增强，混在一起后「关掉 TMDb」就得把改过的字段改回去——而那时
+    /// 已经不知道原值了（见 `TMDbOverlay` 的类型注释）。
+    private(set) var tmdbOverlay: TMDbOverlay?
+
+    /// 当前**选中那一季**的 TMDb 叠加数据（含该季每一集的标题/简介）。
+    ///
+    /// 与 `tmdbOverlay`（剧集级）分开：两者来源不同（剧集级靠剧的对应、季靠
+    /// `tv/{剧id}/season/{季号}`），生命周期也不同——切季就要换，而剧集级不动。
+    private(set) var tmdbSeasonOverlay: TMDbOverlay?
+
+    /// 叠加后的展示值。视图一律走这几个，不直接读 `shown`。
+    ///
+    /// 之所以全部收在 VM 里而不是视图各处自算：策略（文本优先 / 图片只补缺）是
+    /// **可测逻辑**，摊进视图就没法用件测它了。
+    var displayName: String {
+        guard let tmdbOverlay else { return shown.name }
+        return tmdbOverlay.displayTitle(serverValue: shown.name,
+                                        preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    /// 页面简介。
+    ///
+    /// **选中某季时优先显示该季简介**（取不到再回落剧集简介）。用户实测指出：
+    /// 切季之后简介一动不动，而 TMDb 的季简介就在手上。回落是必须的——
+    /// 不少季在 TMDb 上没有简介，若直接替换会让整段文字凭空消失。
+    var displayOverview: String? {
+        let preferTMDb = app?.tmdb.preferText ?? true
+        if let seasonOverview = seasonOverviewText(preferTMDb: preferTMDb) {
+            return seasonOverview
+        }
+        guard let tmdbOverlay else { return shown.overview }
+        return tmdbOverlay.displayOverview(serverValue: shown.overview, preferTMDb: preferTMDb)
+    }
+
+    /// 选中季的简介（TMDb 优先 / 服务端补缺）。nil = 该季没有任何简介可用。
+    private func seasonOverviewText(preferTMDb: Bool) -> String? {
+        guard let season = selectedSeason else { return nil }
+        let server = season.overview
+        if let overlay = tmdbSeasonOverlay {
+            return overlay.displayOverview(serverValue: server, preferTMDb: preferTMDb)
+        }
+        guard let server, !server.isEmpty else { return nil }
+        return server
+    }
+
+    // MARK: - 分集展示值（TMDb 优先）
+
+    /// 分集标题。服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
+    func displayEpisodeTitle(_ episode: MediaItem) -> String {
+        guard let overlay = tmdbSeasonOverlay, let number = episode.episodeNumber else {
+            return episode.name
+        }
+        return overlay.displayEpisodeTitle(number: number, serverValue: episode.name,
+                                           preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    /// 分集简介（分集卡片拿它做 tooltip）。
+    func displayEpisodeOverview(_ episode: MediaItem) -> String? {
+        guard let overlay = tmdbSeasonOverlay, let number = episode.episodeNumber else {
+            return episode.overview
+        }
+        return overlay.displayEpisodeOverview(number: number, serverValue: episode.overview,
+                                              preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    var displayGenres: [String] {
+        guard let tmdbOverlay else { return shown.genres }
+        return tmdbOverlay.displayGenres(serverValue: shown.genres,
+                                         preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    var displayRating: Double? {
+        guard let tmdbOverlay else { return shown.communityRating }
+        return tmdbOverlay.displayRating(serverValue: shown.communityRating,
+                                         preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    var displayCast: [MediaItem.Person] {
+        guard let tmdbOverlay else { return shown.cast }
+        return tmdbOverlay.displayCast(serverValue: shown.cast,
+                                       preferTMDb: app?.tmdb.preferText ?? true)
+    }
+
+    /// 海报取图目标：服务端缺图（或用户允许顶替）时回落到 TMDb。
+    ///
+    /// 走 `MediaItem.imageTarget`（App 层既有的取图链）而不是自己拼 URL：
+    /// 那条链已经处理了「哪张图、带不带 tag」这些 Jellyfin 侧的细节。
+    func posterTarget(width: Int) -> (url: URL?, authHeader: String?) {
+        let policy = app?.tmdbImagePolicy ?? TMDbImagePolicy()
+        let serverTarget = shown.imageTarget(app?.server, kind: .primary, width: width)
+        let url = DisplayMetadata.posterURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
+                                           requestedWidth: width, policy: policy)
+        // TMDb 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
+        return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
+    }
+
+    /// 演员头像取图目标。
+    ///
+    /// TMDb 补的演员**不能**用它的 `Person.id` 去问服务端要图：那个 id 在服务端不存在，
+    /// 实测返回 400，于是每个演员一张破图 + 一次白打的请求（一页最多 20 个）。
+    /// 这里优先走 TMDb CDN（免鉴权），取不到才回落到服务端的演员图。
+    func castImageTarget(for person: MediaItem.Person, width: Int) -> (url: URL?, authHeader: String?) {
+        if let path = tmdbOverlay?.profilePath(forPersonID: person.id),
+           let url = TMDbImageSize.url(path: path, requestedWidth: width) {
+            return (url, nil)
+        }
+        // 回落：服务端的演员图（服务端确实有这个演员 id 时才有效）。
+        guard let server = app?.server,
+              let url = try? server.imageURL(itemID: person.id, type: .primary,
+                                             maxWidth: width, tag: nil)
+        else { return (nil, nil) }
+        return (url, server.authorizationHeader)
+    }
+
+    /// 分集剧照取图目标：**能用 TMDb 的 `still_path` 就用**。
+    ///
+    /// 服务端没有剧照时（新入库、刮削器没跑到）TMDb 能补上；而按当前默认策略
+    /// （TMDb 优先）即便服务端有也以 TMDb 为准。回落链与服务端那条一致：
+    /// 剧照 → 主图 → 占位（不用剧集海报，那会让人以为配错了集）。
+    func episodeThumbTarget(for episode: MediaItem, width: Int) -> (url: URL?, authHeader: String?) {
+        let serverTarget = episode.episodeThumbTarget(app?.server, width: width)
+        let policy = app?.tmdbImagePolicy ?? TMDbImagePolicy()
+        guard policy.replacesExisting || serverTarget.url == nil,
+              let number = episode.episodeNumber,
+              let path = tmdbSeasonOverlay?.episodeStillPath(number: number),
+              let url = TMDbImageSize.url(path: path, requestedWidth: width)
+        else { return serverTarget }
+        // TMDb 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
+        return (url, nil)
+    }
+
+    /// 背景（氛围）取图目标，规则同上。
+    func backdropTarget(width: Int) -> (url: URL?, authHeader: String?) {
+        let policy = app?.tmdbImagePolicy ?? TMDbImagePolicy()
+        let serverTarget = shown.imageTarget(app?.server, kind: .backdrop, width: width)
+        let url = DisplayMetadata.backdropURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
+                                             requestedWidth: width, policy: policy)
+        return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
+    }
 
     init(item: MediaItem) {
         self.item = item
@@ -183,6 +334,41 @@ final class DetailViewModel {
             staleNotice = nil
         }
         storeSnapshot()
+
+        // TMDb 补全：**放在所有服务端路径之后**，且不 await 网络——
+        // 它在后台补齐，补到后只更新 overlay、不动服务端数据。
+        //
+        // 顺序讲究：先读已有 overlay（立即渲染），再触发 refresh。若先 refresh
+        // 再读，离线或慢网络下详情页会白等一次网络才有 TMDb 数据。
+        await loadTMDbOverlay()
+        // 季数据**必须在这里触发**，不能只靠视图上的 `.task(id: selectedSeasonID)`：
+        // 实测那个 task 只在页面初现时跑了一次，而那一刻 `seasons` 还是空的
+        // （诊断日志：与 `/Seasons` 请求同一秒，`selectedSeason` 为 nil），
+        // 之后 id 变化并没有再触发它。放在这里则 `seasons` 与 `selectedSeasonID`
+        // 都已就位，且**晚于 `loadTMDbOverlay`**——季数据要靠父剧的对应来定位，
+        // 而那条对应正是上一步刚建起来的。
+        await loadSeasonOverlay()
+    }
+
+    /// 读已有 TMDb 数据并触发后台补齐。
+    ///
+    /// 失败/未配置一律静默：TMDb 是可选增强，任何问题都不该影响详情页。
+    private func loadTMDbOverlay() async {
+        guard let app else { return }
+        // 立即用已有数据渲染（缓存命中时这里是同步就绪的）。
+        let existing = await app.tmdbOverlay(for: shown)
+        guard !Task.isCancelled else { return }
+        tmdbOverlay = existing
+
+        // 再补：缺数据或已过期时发网络。等它完成后刷新一次 overlay。
+        let didFetch = await app.refreshTMDb(for: shown)
+        guard didFetch, !Task.isCancelled else { return }
+        let refreshed = await app.tmdbOverlay(for: shown)
+        guard !Task.isCancelled else { return }
+        tmdbOverlay = refreshed
+        // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDb」变成另一个 URL，
+        // 重新预热一次氛围层（URL 未变时 `prewarmedAmbienceURL` 会直接短路）。
+        prewarmAmbience()
     }
 
     /// 从磁盘缓存装载详情（冷启动 / 离线时的内容来源）。
@@ -220,8 +406,10 @@ final class DetailViewModel {
     /// （800 宽 URL + 512 解码），保证视图层的 `RemoteImage` 首帧命中缓存。
     /// 同一 URL 只预热一次；换条目 / 详情落地换 tag 时重跑。
     private func prewarmAmbience() {
-        guard let server = app?.server else { return }
-        let target = shown.imageTarget(server, kind: .backdrop, width: 800)
+        guard app?.server != nil else { return }
+        // 走 `backdropTarget` 而不是裸 `imageTarget`：前者在服务端缺背景图时会回落到
+        // TMDb（TMDb 只补缺）。否则「服务端没有背景图」的条目永远没有氛围层。
+        let target = backdropTarget(width: 800)
         guard let url = target.url else { return }
         guard url != prewarmedAmbienceURL else { return }
         prewarmedAmbienceURL = url
@@ -236,6 +424,33 @@ final class DetailViewModel {
             guard !Task.isCancelled else { return }
             isAmbienceReady = (loaded != nil)
         }
+    }
+
+    /// 读当前选中季的 TMDb 数据（先读缓存立即渲染，再后台补）。
+    ///
+    /// 单独一个方法而不是塞进 `loadEpisodes()`：后者在「这一季已拉过」时会提前 return，
+    /// 而季的 TMDb 数据那时同样需要——两件事的缓存粒度不同（集列表 vs 季元数据）。
+    ///
+    /// 失败/未配置一律静默：TMDb 是可选增强，任何问题都不该影响剧集页。
+    func loadSeasonOverlay() async {
+        guard let app, shown.kind == .series,
+              let number = selectedSeason?.seasonNumber,
+              let seriesLink = await app.tmdbSeriesLink(for: shown)
+        else {
+            tmdbSeasonOverlay = nil
+            return
+        }
+        // ① 立即用已有数据渲染（缓存命中时同步就绪）。
+        tmdbSeasonOverlay = await app.tmdbSeasonOverlay(seriesLink: seriesLink,
+                                                       seasonNumber: number)
+        guard !Task.isCancelled else { return }
+
+        // ② 缺数据或已过期时后台补，补到再刷新一次。
+        let didFetch = await app.refreshTMDbSeason(seriesLink: seriesLink, seasonNumber: number)
+        guard didFetch, !Task.isCancelled else { return }
+        let refreshed = await app.tmdbSeasonOverlay(seriesLink: seriesLink, seasonNumber: number)
+        guard !Task.isCancelled else { return }
+        tmdbSeasonOverlay = refreshed
     }
 
     func loadEpisodes() async {

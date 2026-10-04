@@ -159,6 +159,18 @@ enum OpenSourceLicenseCatalog {
                     licenseURL: "https://github.com/jxxghp/MoviePilot/blob/main/LICENSE",
                     bundledLicensePaths: []
                 ),
+                component(
+                    id: "tmdb",
+                    name: "The Movie Database (TMDb)",
+                    license: "TMDb API 使用条款",
+                    // TMDb 的条款要求**明确署名**，并声明未获认可。这段话是条款要求的
+                    // 措辞，不要改写（设置页的 TMDb 区块也有一份简版）。
+                    purpose: "元数据补全数据源：简介、评分、类型、演员与海报/背景图。"
+                        + "本产品使用 TMDb API，但未获得 TMDb 认可或认证。",
+                    homepage: "https://www.themoviedb.org",
+                    licenseURL: "https://www.themoviedb.org/documentation/api/terms-of-use",
+                    bundledLicensePaths: []
+                ),
             ]
         ),
         OpenSourceComponentGroup(
