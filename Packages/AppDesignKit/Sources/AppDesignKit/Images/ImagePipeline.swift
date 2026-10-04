@@ -30,6 +30,13 @@ public final class ImagePipeline: @unchecked Sendable {
     /// 图片失败日志节流：服务器掉线时一墙海报会瞬间刷出几百条 warning，
     /// 别把单文件 20MB / 总量 50MB 的诊断保留窗口全挤掉。
     private static let failureThrottle = DiagnosticThrottle(key: "image-load-failure", interval: 5)
+    /// 磁盘命中的图超过这个年龄才在后台回源一次。默认 7 天。
+    ///
+    /// 为什么可以这么长：图片 URL 通常带 `tag`，服务端换图会改 URL（= 改缓存键），
+    /// 本来就取不到旧图。这个阈值只为兜住**没有 tag 的 URL**，压住「永远不更新」。
+    static let blobStalenessThreshold: TimeInterval = 7 * 24 * 60 * 60
+    /// 同时在途的后台刷新上限。见 `revalidateIfStale` 的三道闸门。
+    static let maxConcurrentRevalidations = 4
     /// 与 App 同 subsystem、独立 category：日志仍落在同一份 diagnostics.jsonl，
     /// 但包不反向依赖 App 层（AppDiagnostics）。
     private static let logger = DiagnosticLogger(category: "Image")
@@ -48,13 +55,24 @@ public final class ImagePipeline: @unchecked Sendable {
     private var cacheGeneration: UInt64 = 0
     /// 同一 URL + 认证头的进行中请求共享一个任务：列表滚动反复出现同一张图时不重复拉。
     private var inFlight: [String: InFlightRequest] = [:]
+    /// 正在后台回源刷新的键（去重 + 并发上限，见 `revalidateIfStale`）。
+    private var revalidatingKeys: Set<String> = []
     /// 解码后的图缓存（URLCache 存的是原始 data，这里省掉重复解码）。
     private let memoryCache = NSCache<NSString, PlatformImage>()
     /// 位图解码执行器（专用队列 + 并发上限）。见 `ImageDecoder`：解码不能就地同步做，
     /// 否则会占住 Swift 协作线程池的线程，拖慢全进程的 async 工作。
     private let decoder: ImageDecoder
 
-    public init(cacheDirectory: URL? = nil, decoder: ImageDecoder = .shared) {
+    /// - Parameter protocolClasses: 额外的 `URLProtocol`（供测试挡掉真实网络）。
+    ///
+    ///   存在的理由是**可测性**：这个类最要紧的行为之一是「缓存命中时不等网络」，
+    ///   而验证它需要一个**永不返回**的网络——只有替换协议类才做得到。
+    ///   生产调用不传，保持默认行为。
+    public init(
+        cacheDirectory: URL? = nil,
+        decoder: ImageDecoder = .shared,
+        protocolClasses: [AnyClass] = []
+    ) {
         self.decoder = decoder
         // `CanonicalImageURLCache` 而不是裸 `URLCache`：把键里的服务器地址抹掉，
         // 否则同一台服务器换入口（局域网 ↔ Tailscale）会把每张图再下一遍。
@@ -87,6 +105,14 @@ public final class ImagePipeline: @unchecked Sendable {
         configuration.urlCache = cache
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         configuration.httpAdditionalHeaders = [:]
+        // 图片请求的超时收短：系统默认 60 秒，而图片是**可替代**资源——
+        // 服务器连不上时，UI 宁可早点显示占位符，也不该让十几张海报各自挂一分钟。
+        // 实测断网时 `-1005` 约 7 秒就返回，所以 15 秒足够覆盖慢速网络下的正常拉取。
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        if !protocolClasses.isEmpty {
+            configuration.protocolClasses = protocolClasses
+        }
         session = URLSession(configuration: configuration)
         // 解码位图缓存有硬上限：长会话反复刷库也不会无限累积内存。
         // cost 按像素字节数计（见 memoryCost），超限时 NSCache 自动淘汰最旧。
@@ -187,6 +213,23 @@ public final class ImagePipeline: @unchecked Sendable {
                 // 不管成败都要从 inFlight 摘掉，否则失败的 URL 会永远卡在「进行中」。
                 defer { self?.finishInFlight(key: key, requestID: requestID) }
                 guard let self else { return nil }
+                // ① **先读磁盘**：命中就直接用，**发起网络之前**。
+                //
+                // 这里曾经把兜底写在 `catch` 里（网络失败再读磁盘），后果是断网时
+                // **每张图都要先等网络超时**——实测每次 `-1005 连接中断` 约 7 秒，
+                // 首页十几张图就是十几秒起步，用户直接问「为什么离线加载要这么久」。
+                // 缓存就在本地，没有任何理由让网络先跑一趟。
+                //
+                // 与 `URLCache` 的 `.returnCacheDataElseLoad` 语义一致（缓存优先、
+                // 不回源校验），所以这不是把「新鲜度」换成了「速度」；额外还做了
+                // 后台刷新（见 `revalidateIfStale`），比原来更不容易陈旧。
+                if let image = try await self.imageFromBlobStore(key: key, maxPixelSize: maxPixelSize) {
+                    _ = self.accept(image, forKey: key, generation: generation)
+                    self.revalidateIfStale(
+                        url: url, authHeader: authHeader, cacheKey: key, maxPixelSize: maxPixelSize)
+                    return image
+                }
+
                 let request = self.makeRequest(url, authHeader: authHeader)
                 do {
                     let image = try await self.fetch(request, cacheKey: key, maxPixelSize: maxPixelSize)
@@ -234,6 +277,69 @@ public final class ImagePipeline: @unchecked Sendable {
         }
     }
 
+    // MARK: - 磁盘字节缓存（离线/冷启动的主路径）
+
+    /// 从字节缓存取图并解码。nil = 没有这条或确实解不出（两种都该走网络）。
+    ///
+    /// 解码**必须**走 `decoder`（专用队列 + 并发上限），理由同 `fetch` 里的长注释：
+    /// 就地同步解码会占住协作线程池的线程，海报墙并发十几张就能拖慢全进程。
+    ///
+    /// **取消与真失败必须分开**（这里踩过一次）：`ImageDecoder.decode` 在**排队期间
+    /// 被取消**时抛 `CancellationError`（视图滚走 / 代次作废，快速滚动时是常态），
+    /// 而字节确实解不出位图时返回 `nil`。用 `try?` 会把两者都收敛成 `nil`，
+    /// 于是「取消」被当成「坏数据」→ **把完好的缓存删掉**，缓存越用越少。
+    /// 所以：取消原样上抛（交给外层当作取消处理），只有真 `nil` 才丢弃。
+    private func imageFromBlobStore(key: String, maxPixelSize: Int?) async throws -> PlatformImage? {
+        guard let data = blobStore.data(forKey: key) else { return nil }
+        guard let image = try await decoder.decode(data, maxPixelSize: maxPixelSize) else {
+            // 真失败（截断 / 格式变化）：删掉它，免得每次启动都白读一遍坏数据。
+            Self.logger.warning("磁盘图片解码失败，已丢弃", fields: [
+                "key": .string(key.suffix(48).description),
+                "bytes": .integer(Int64(data.count)),
+            ], throttle: Self.failureThrottle)
+            blobStore.remove(forKey: key)
+            return nil
+        }
+        return image
+    }
+
+    /// 后台刷新：磁盘命中后，若这条已经旧了就悄悄回源一次。
+    ///
+    /// 为什么需要它：磁盘优先意味着「有就不问网络」。图片 URL 里通常带 `tag`
+    /// （服务端换图 → URL 变 → 键变），所以多数情况不会陈旧；但**没有 tag 的 URL**
+    /// 就永远不会更新。加一层按时间的后台校验，把「可能陈旧」压到可接受范围。
+    ///
+    /// 三道闸门，防住「几百张海报同时回源」：
+    /// 1. **新鲜度阈值**（默认 7 天）：刚下载的不刷。用 `creationDate`（下载时间），
+    ///    不是 mtime——后者读取时会被刷新成「刚刚」。
+    /// 2. **同键去重**：同一张图在途刷新中就不再排第二个。
+    /// 3. **并发上限**（默认 4）：超出就跳过这次刷新（下次启动/再次出现还有机会）。
+    ///    宁可少刷一次，也不要在用户翻页时突然打出上百个请求。
+    private func revalidateIfStale(
+        url: URL,
+        authHeader: String?,
+        cacheKey: String,
+        maxPixelSize: Int?
+    ) {
+        guard let downloadedAt = blobStore.downloadedAt(forKey: cacheKey) else {
+            // 取不到下载时间（条目已被淘汰 / 属性读不出）：当作陈旧，但不主动刷——
+            // 下一次真正需要它时还有机会。这里保守跳过，避免读不到就狂刷。
+            return
+        }
+        guard Date().timeIntervalSince(downloadedAt) >= Self.blobStalenessThreshold else { return }
+
+        guard beginRevalidation(cacheKey: cacheKey) else { return }
+
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            defer { self.endRevalidation(cacheKey: cacheKey) }
+            // 刷新失败（离线）完全静默：图已经在屏幕上，这不是错误。
+            // 也别用它替换内存缓存——那会让用户眼前的图突然跳变。
+            let request = self.makeRequest(url, authHeader: authHeader)
+            _ = try? await self.fetch(request, cacheKey: cacheKey, maxPixelSize: maxPixelSize)
+        }
+    }
+
     // MARK: - 锁保护（NSLock 不能在 async 上下文直接调，临界区收进同步方法）
 
     /// 请求去重 / 内存缓存 / **磁盘字节缓存**共用的 key。
@@ -253,6 +359,25 @@ public final class ImagePipeline: @unchecked Sendable {
             ?? url.absoluteString
         let identity = ImageCacheKey.authIdentity(authHeader)
         return canonical + "\u{0}" + identity + "\u{0}" + "\(maxPixelSize ?? 0)"
+    }
+
+    /// 认领一次后台刷新（同键去重 + 并发上限）。false = 这次不刷。
+    ///
+    /// 收成同步方法是因为 `NSLock` 不能在 async 上下文直接加解锁
+    /// （Swift 6 对此有专门的编译错误，本文件既有约定）。
+    private func beginRevalidation(cacheKey: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !revalidatingKeys.contains(cacheKey) else { return false }
+        guard revalidatingKeys.count < Self.maxConcurrentRevalidations else { return false }
+        revalidatingKeys.insert(cacheKey)
+        return true
+    }
+
+    private func endRevalidation(cacheKey: String) {
+        lock.lock()
+        revalidatingKeys.remove(cacheKey)
+        lock.unlock()
     }
 
     private func cachedImage(forKey key: String) -> PlatformImage? {

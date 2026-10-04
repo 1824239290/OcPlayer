@@ -346,3 +346,175 @@ final class ImageBlobStoreTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(store.totalBytes, 5000)
     }
 }
+
+
+/// **磁盘优先**：缓存命中必须在**网络之前**返回。
+///
+/// 这是一次真实缺陷的回归：兜底原先写在 `catch` 里（网络失败再读磁盘），
+/// 断网时每张图都要先等网络超时——实测每次 `-1005` 约 7 秒，首页十几张图
+/// 就是十几秒起步（用户原话「为什么离线状态下加载缓存图片要这么久」）。
+///
+/// 用例的核心手法：用一个**永不返回**的 URLProtocol 当网络。只要加载能返回，
+/// 就证明它没有等网络。修复前这个用例会挂到超时。
+final class ImagePipelineDiskFirstTests: XCTestCase {
+
+    private func makePipeline(
+        handler: @escaping (URLRequest) -> (Int, Data)
+    ) throws -> (ImagePipeline, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DiskFirst-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        HangingProtocol.handler = handler
+        HangingProtocol.hang = false
+        // 注入协议类把真实网络挡掉：这个用例的关键是网络**永不返回**，
+        // 只有替换 URLProtocol 才做得到。
+        return (ImagePipeline(cacheDirectory: dir, protocolClasses: [HangingProtocol.self]), dir)
+    }
+
+    /// 在**同一目录**上开一个新实例。
+    ///
+    /// 验证「磁盘」路径必须这么做：`load` 先查内存缓存，同一个实例里刚加载过的图
+    /// 会直接命中内存、根本不碰磁盘——第一版用例就是这么被骗过去的。
+    private func freshPipeline(on dir: URL) -> ImagePipeline {
+        ImagePipeline(cacheDirectory: dir, protocolClasses: [HangingProtocol.self])
+    }
+
+    /// 先联网写一次，然后**让网络永久挂起**，看第二次能否立刻返回。
+    func testCacheHitReturnsWithoutWaitingForNetwork() async throws {
+        let (pipeline, dir) = try makePipeline { _ in (200, Self.pngBytes) }
+
+        let url = URL(string: "http://example.test:8096/Items/a/Images/Thumb?maxWidth=720")!
+        let auth = "MediaBrowser DeviceId=\"D\", Token=\"T\""
+
+        // 第一次：走网络并落盘
+        let first = try await pipeline.load(url, authHeader: auth, maxPixelSize: 720)
+        XCTAssertNotNil(first)
+
+        // 之后让网络永久挂起（模拟断网时连接既不成功也不失败）
+        HangingProtocol.hang = true
+
+        // 换一条地址 + 全新实例（模拟「重启 App + 换了入口」）
+        let otherAddress = URL(string: "http://10.9.9.9:8096/Items/a/Images/Thumb?maxWidth=720")!
+        let restarted = ImagePipeline(cacheDirectory: dir, protocolClasses: [HangingProtocol.self])
+
+        let start = Date()
+        let second = try await restarted.load(otherAddress, authHeader: auth, maxPixelSize: 720)
+        let elapsed = Date().timeIntervalSince(start)
+
+        XCTAssertNotNil(second, "缓存命中必须出图")
+        XCTAssertLessThan(elapsed, 1.0,
+            "命中缓存不该等网络（实测耗时 \(String(format: "%.2f", elapsed)) 秒）")
+    }
+
+    /// 缓存未命中时**必须**走网络（别把磁盘优先做成「永远只读磁盘」）。
+    func testCacheMissStillGoesToNetwork() async throws {
+        let (pipeline, _) = try makePipeline { _ in (200, Self.pngBytes) }
+        HangingProtocol.hang = false
+
+        let url = URL(string: "http://example.test:8096/Items/never-cached/Images/Thumb?maxWidth=720")!
+        let image = try await pipeline.load(url, authHeader: nil, maxPixelSize: 720)
+        XCTAssertNotNil(image, "没有缓存时必须真的去拉")
+    }
+
+    /// 盘上字节坏掉时：丢弃并走网络（而不是每次启动都白读一遍坏数据）。
+    func testCorruptBlobFallsBackToNetwork() async throws {
+        let (pipeline, dir) = try makePipeline { _ in (200, Self.pngBytes) }
+        let url = URL(string: "http://example.test:8096/Items/corrupt/Images/Thumb?maxWidth=720")!
+
+        _ = try await pipeline.load(url, authHeader: nil, maxPixelSize: 720)
+        // 把缓存文件内容改成垃圾
+        let blobs = dir.appendingPathComponent("Blobs")
+        let files = try FileManager.default.contentsOfDirectory(atPath: blobs.path)
+        XCTAssertFalse(files.isEmpty, "应有缓存文件")
+        for name in files {
+            try Data("garbage not an image".utf8).write(to: blobs.appendingPathComponent(name))
+        }
+
+        // **新实例**：否则会命中内存缓存，压根不读磁盘（第一版用例就栽在这）
+        HangingProtocol.hang = false
+        let image = try await freshPipeline(on: dir).load(url, authHeader: nil, maxPixelSize: 720)
+        XCTAssertNotNil(image, "坏字节应被丢弃并回源")
+    }
+
+    /// **取消不能删缓存**。
+    ///
+    /// `ImageDecoder.decode` 在排队期间被取消会抛 `CancellationError`，而字节真解不出
+    /// 时才返回 `nil`。用 `try?` 会把两者混成一个 `nil`，于是「取消」（快速滚动时
+    /// 的常态）被当成「坏数据」→ 把完好的缓存删掉，缓存越用越少。
+    func testCancellationDoesNotDeleteCachedBlob() async throws {
+        let (pipeline, dir) = try makePipeline { _ in (200, Self.pngBytes) }
+        let url = URL(string: "http://example.test:8096/Items/cancel/Images/Thumb?maxWidth=720")!
+
+        // 先落盘
+        _ = try await pipeline.load(url, authHeader: nil, maxPixelSize: 720)
+        let blobs = dir.appendingPathComponent("Blobs")
+        let before = try FileManager.default.contentsOfDirectory(atPath: blobs.path)
+        XCTAssertEqual(before.count, 1, "应已缓存一条")
+
+        // 立刻取消一次加载：解码很可能在排队时就被取消
+        let task = Task {
+            try await pipeline.load(url, authHeader: nil, maxPixelSize: 720)
+        }
+        task.cancel()
+        _ = try? await task.value
+
+        // 无论那次取消发生在哪一步，**缓存文件都必须还在**
+        let after = try FileManager.default.contentsOfDirectory(atPath: blobs.path)
+        XCTAssertEqual(after, before, "取消不该删掉完好的缓存")
+    }
+
+    /// 但**真**坏数据必须被丢弃（与上一条配对，避免修成「永不删坏数据」）。
+    func testGenuinelyCorruptBlobIsDeleted() async throws {
+        let (pipeline, dir) = try makePipeline { _ in (200, Self.pngBytes) }
+        let url = URL(string: "http://example.test:8096/Items/garbage/Images/Thumb?maxWidth=720")!
+        _ = try await pipeline.load(url, authHeader: nil, maxPixelSize: 720)
+
+        let blobs = dir.appendingPathComponent("Blobs")
+        for name in try FileManager.default.contentsOfDirectory(atPath: blobs.path) {
+            try Data("definitely not an image".utf8).write(to: blobs.appendingPathComponent(name))
+        }
+
+        HangingProtocol.hang = false
+        _ = try await freshPipeline(on: dir).load(url, authHeader: nil, maxPixelSize: 720)
+
+        // 坏文件应被删（这里网络会重新写入一份好的，所以只断言「不是原来那份坏字节」）
+        let remaining = try FileManager.default.contentsOfDirectory(atPath: blobs.path)
+        for name in remaining {
+            let data = try Data(contentsOf: blobs.appendingPathComponent(name))
+            XCTAssertNotEqual(data, Data("definitely not an image".utf8), "坏数据必须被替换或丢弃")
+        }
+    }
+
+    /// 一张 1x1 的 PNG（合法、可解码）。
+    static let pngBytes = Data(base64Encoded: """
+    iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+    """)!
+}
+
+/// 可控的 URLProtocol：`hang = true` 时**永不回调**（模拟连接挂起）。
+///
+/// 用它而不是 `Task.sleep`：真正的风险是「等待网络返回」这个**顺序**问题，
+/// 挂起能精确暴露它——只要加载返回了，就说明它没在网络那一步等。
+final class HangingProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) -> (Int, Data))?
+    nonisolated(unsafe) static var hang = false
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard !Self.hang else { return }   // 永不回调：请求永远「在途」
+        guard let handler = Self.handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        let (status, data) = handler(request)
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil,
+                                       headerFields: ["Content-Type": "image/png"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}

@@ -45,6 +45,12 @@ final class ImageBlobStore: @unchecked Sendable {
         FNV1a.hex(of: key) + ".img"
     }
 
+    /// 读字节。
+    ///
+    /// **两个时间戳分工**（这里踩过坑，别合并）：
+    /// - `modificationDate` = **最后访问**时间，读取时就刷新 → 淘汰按 LRU。
+    ///   若拿它当「下载时间」，读一次就变成「刚下载」，后台刷新永远不会触发。
+    /// - `creationDate` = **下载**时间，只在 `store` 时写 → 判断该不该回源刷新。
     func data(forKey key: String) -> Data? {
         let url = directory.appendingPathComponent(Self.fileName(for: key))
         // 读取时刷新 mtime：淘汰按「最久未使用」而不是「最早写入」，
@@ -54,11 +60,23 @@ final class ImageBlobStore: @unchecked Sendable {
         return data
     }
 
+    /// 该条目的**下载**时间（不是访问时间）。nil = 没有这条 / 取不到时间。
+    ///
+    /// 取不到时返回 nil，调用方应视为「陈旧」（宁可多刷一次，也别永远不刷）。
+    func downloadedAt(forKey key: String) -> Date? {
+        let url = directory.appendingPathComponent(Self.fileName(for: key))
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        return attrs[.creationDate] as? Date
+    }
+
     func store(_ data: Data, forKey key: String) {
         guard !data.isEmpty else { return }
         let url = directory.appendingPathComponent(Self.fileName(for: key))
         do {
             try data.write(to: url, options: .atomic)
+            // 显式写 creationDate 而不是依赖「原子写生成的临时文件的 birthtime」：
+            // 那个行为依赖文件系统与写入实现，而刷新判断要读它，得是我们自己钉住的语义。
+            try? FileManager.default.setAttributes([.creationDate: Date()], ofItemAtPath: url.path)
             lock.lock()
             cachedBytes = nil          // 让下次统计重新算
             lock.unlock()
@@ -69,6 +87,15 @@ final class ImageBlobStore: @unchecked Sendable {
                 "error": .string("\(error)"),
             ])
         }
+    }
+
+    /// 删单条（盘上字节坏了时用）。
+    func remove(forKey key: String) {
+        let url = directory.appendingPathComponent(Self.fileName(for: key))
+        try? FileManager.default.removeItem(at: url)
+        lock.lock()
+        cachedBytes = nil
+        lock.unlock()
     }
 
     func removeAll() {
