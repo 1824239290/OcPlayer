@@ -39,6 +39,18 @@ final class DetailViewModel {
     /// 播放退出后的静默刷新任务：离页时由视图取消。
     var reloadAfterPlaybackTask: Task<Void, Never>?
 
+    /// 正在展示的内容**没能**被网络确认（离线 / 服务端出错）。
+    ///
+    /// nil = 显示的是刚拉到的或本会话内的数据；非 nil = 刷新失败、页面内容是缓存。
+    /// 详情页据此在简介下方摆一行「离线 · 数据更新于 X 前」。
+    private(set) var staleNotice: StaleContentNotice?
+
+    /// 磁盘快照的写入时间（仅用于文案里的「更新于 X 前」）。
+    private var cachedContentFetchedAt: Date?
+
+    /// 哪些季的集来自磁盘（网络恢复后要重新拉，见 `loadFromDisk`）。
+    private var diskHydratedSeasons: Set<String> = []
+
     /// 氛围底图（800 宽 backdrop + 512 解码）是否已进 pipeline 缓存。
     /// 视图只在就绪后才声明整窗/页内氛围——氛围层不再以灰占位淡入、
     /// 图片到位时也无需可见地补加载。取图失败保持 false（回退纯色底）。
@@ -83,7 +95,12 @@ final class DetailViewModel {
         prewarmAmbience()
         // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
         // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
-        let snapshot = app.detailSnapshot(for: item.id)
+        var snapshot = app.detailSnapshot(for: item.id)
+        // 内存里没有（冷启动 / 首次进这条）就下探磁盘：离线时这是唯一的内容来源。
+        // 放在内存快照之后、网络之前——顺序即优先级：内存最新 → 磁盘次之 → 网络。
+        if snapshot == nil, let cached = await loadFromDisk(server: server) {
+            snapshot = cached
+        }
         if let snapshot {
             detail = snapshot.detail
             seasons = snapshot.seasons
@@ -119,6 +136,7 @@ final class DetailViewModel {
         // servers with that endpoint disabled. Keep the required detail path
         // independent so a recommendation failure cannot blank the page.
         async let similarItems = server.similar(itemID: item.id, limit: 12)
+        var failure: (any Error)?
         do {
             let loadedDetail = try await server.item(item.id)
             guard !Task.isCancelled else { return }
@@ -132,20 +150,70 @@ final class DetailViewModel {
                     guard !Task.isCancelled else { return }
                     seasons = loadedSeasons
                     selectedSeasonID = preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
+                    // 元数据已确认是新的：把来自磁盘的季集缓存作废，让 `loadEpisodes`
+                    // 重新拉一次。不清的话，几天前拉的集列表会一直显示到用户手动切季。
+                    for seasonID in diskHydratedSeasons {
+                        episodesBySeason[seasonID] = nil
+                    }
+                    diskHydratedSeasons = []
                 } catch let e as JellyfinError {
+                    failure = e
                     if snapshot == nil { loadError = e.errorDescription }
                 } catch {
+                    failure = error
                     if snapshot == nil { loadError = "\(error)" }
                 }
             }
         } catch let e as JellyfinError {
+            failure = e
             if snapshot == nil { loadError = e.errorDescription }
         } catch {
+            failure = error
             if snapshot == nil { loadError = "\(error)" }
         }
         isLoading = false
         similar = (try? await similarItems) ?? similar
+        // 有内容 + 刷新失败 = 正在展示缓存。没内容时（snapshot == nil）走的是既有的
+        // 整页错误态，不该再叠一条提示。
+        if let failure, snapshot != nil {
+            staleNotice = StaleContentNotice(
+                fetchedAt: cachedContentFetchedAt,
+                causedByConnectivity: (failure as? JellyfinError)?.isConnectivityFailure ?? false)
+        } else {
+            staleNotice = nil
+        }
         storeSnapshot()
+    }
+
+    /// 从磁盘缓存装载详情（冷启动 / 离线时的内容来源）。
+    ///
+    /// 返回 `AppModel.DetailSnapshot` 而不是包里的类型：后面的渲染路径只认这一种
+    /// 快照，内存与磁盘两条来源在 `load()` 里就合流了，调用方不必区分。
+    ///
+    /// 同时记下**哪些季的集来自磁盘**（`diskHydratedSeasons`）：那些集可能是几天前
+    /// 拉的，网络恢复后要重新拉一次。不记的话，`loadEpisodes` 会因为
+    /// `episodesBySeason` 已有内容而永远不刷新它们。
+    private func loadFromDisk(server: any MediaServer) async -> AppModel.DetailSnapshot? {
+        guard let hydrator = app?.metadata.hydrator(for: server) else { return nil }
+        guard let cached = await hydrator.detail(itemID: item.id) else { return nil }
+
+        diskHydratedSeasons = Set([cached.seasons.first?.id].compactMap { $0 })
+        let preferred = cached.seasons.first { $0.seasonNumber != 0 }?.id ?? cached.seasons.first?.id
+        var episodesBySeason: [String: [MediaItem]] = [:]
+        if let preferred {
+            episodesBySeason[preferred] = cached.episodes
+        }
+        // 离线标识：这是磁盘内容，网络还没确认过。真正决定「显示离线提示」的
+        // 是**网络刷新失败**（见下方 catch），这里只记下它的时间供文案用。
+        cachedContentFetchedAt = cached.fetchedAt
+
+        return AppModel.DetailSnapshot(
+            detail: cached.item,
+            seasons: cached.seasons,
+            // 推荐不缓存（每次不同、价值低），保持内存里的旧值。
+            similar: similar,
+            selectedSeasonID: preferred,
+            episodesBySeason: episodesBySeason)
     }
 
     /// 预热当前条目的氛围底图：与 `BackdropAmbienceView` / 整窗层完全同参

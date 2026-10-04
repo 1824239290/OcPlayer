@@ -24,12 +24,27 @@ extension AppModel {
         // Bangumi 数据库异步建库 + 恢复登录态（不阻塞 Jellyfin 会话恢复）。
         // 从 init 挪到这里：构造 AppModel 不再有副作用，测试拿到的实例是干净的。
         bangumi.setup()
+        // 媒体元数据库同样异步建库（与下面的会话恢复并行，不阻塞首屏）。
+        metadata.setup()
+        // 把淘汰挂到每日存储维护上。维护是单例、拿不到 AppModel（也不该拿），
+        // 所以注入一个闭包。
+        //
+        // **注入点必须在这里，不能在 `OcPlayerApp.init()`**：那个位置经 `@State`
+        // 拿到的 AppModel 未必是 SwiftUI 真正注入环境的那一个（本文件与
+        // `AppModel.presentedPlayer` 的注释都记着这个坑，实测 ObjectIdentifier
+        // 不同）——捕获错了对象，维护会对着一个从没 setup 过的协调器空转，
+        // 而且**不报任何错**。bootstrap 跑在真实实例上，并天然只在生产路径执行
+        // （测试宿主整段跳过），正是这个注入该在的地方。
+        AppStorageMaintenance.shared.setDatabaseMaintenance { [metadata] in
+            await MainActor.run { metadata.refreshSize() }
+            await metadata.runMaintenance()
+        }
         // Bangumi OAuth 与弹幕共用网关：配置要在任何登录/刷新之前注入。
         await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)
         // 网络路径变化 → 地址结论作废（下一个请求重新探活）。
         startEndpointMonitor()
         if let restored = MediaServerFactory.restore(from: store) {
-            activate(server: restored)
+            await activate(server: restored)
         } else {
             phase = .onboarding
         }
@@ -143,7 +158,7 @@ extension AppModel {
             }
             // phase 已切到 ready，首屏数据靠 initialDataTask 异步驱动 home.isLoading
             // 的 loading 态——不阻塞登录 Task，让 Quick Connect 的轮询流尽快结束。
-            activate(server: server)
+            await activate(server: server)
         } catch let error as JellyfinError {
             if loginSession === session { onboardingError = error.errorDescription }
         } catch {
@@ -244,7 +259,7 @@ extension AppModel {
                 resetBrowseState()
             }
             resetOnboarding()
-            activate(server: server)
+            await activate(server: server)
             return
         }
         // token 无效：清掉死 token（保留档案），探活这台服务器后进密码登录第二步。

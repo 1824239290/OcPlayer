@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import Foundation
 
 /// 一台已登录的 Emby 服务器。
@@ -562,8 +563,7 @@ public struct EmbyServer: MediaServer {
 
     public func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL {
         let data = try await session.data(subtitle.remotePath, method: "GET")
-        let directory = URL.applicationSupportDirectory
-            .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
+        let directory = OcPlayerStorage.directory("Subtitles")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let safeID = subtitle.id
             .replacingOccurrences(of: "#", with: "-")

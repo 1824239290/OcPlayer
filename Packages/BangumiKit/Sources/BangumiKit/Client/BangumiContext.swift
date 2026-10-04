@@ -274,11 +274,9 @@ public final class BangumiContext {
         // 直接 Task { } 会让整段建库卡在主 actor 上，启动期掉帧；只在回主 actor
         // 时写结果属性。
         setupTask = Task.detached(priority: .userInitiated) {
-            let base = directory
-                ?? FileManager.default.urls(
-                    for: .applicationSupportDirectory, in: .userDomainMask
-                ).first!
-            let appDir = base.appendingPathComponent("OcPlayer", isDirectory: true)
+            // `directory` 是**根目录**（`Application Support/OcPlayer`）——路径唯一
+            // 事实源在 DiagnosticsKit.OcPlayerStorage，别在这里手拼。
+            let appDir = directory ?? OcPlayerStorage.defaultRoot
             do {
                 let dbQueue = try BangumiDatabaseFactory.makeDatabase(at: appDir)
                 let database = BangumiDatabaseOperator(database: dbQueue)

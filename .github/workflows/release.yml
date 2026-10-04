@@ -125,6 +125,7 @@ jobs:
               Packages/DanmakuRenderKit \
               Packages/JellyfinKit \
               Packages/BangumiKit \
+              Packages/MetadataKit \
               Packages/MoviePilotKit; do
             echo "==> $pkg"
             swift test --package-path "$pkg"

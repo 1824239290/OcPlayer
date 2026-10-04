@@ -6,6 +6,26 @@
 
 ### 改动
 
+- **媒体元数据落 SQLite（`Packages/MetadataKit`），冷启动与离线不再空白**。此前首页/详情/库页的元数据**只活在内存里**，进程一退就全丢，唯一的幸存者是 3 bit 的骨架条数掩码；而 JSON API 连 HTTP 层缓存都没有（会话是裸 `URLSessionConfiguration.default`，`URLCache` 只服务图片）。于是断网冷启就是一张空白错误页，正常冷启则每次都要等一轮网络。现在新增 `Media.sqlite`（GRDB，与 Bangumi 库同目录同款 `DatabasePool`），把**首页三条 rail / 库列表 / 条目详情 / 季与集 / 翻过的库页 / 媒体技术信息**落盘，冷启动先读磁盘（首屏立刻有内容）、网络结果回来原位覆盖。
+  - **装饰器只写不读**（本设计最重要的一条约束）：`CachedMediaServer` 对 `MediaServer` 的 30 条要求逐一转发，**返回值与错误与内层完全一致**，只多做一件事——把响应写盘。朴素做法「网络失败时返回缓存」会让调用方分不清手上是新数据还是旧数据，「离线」在 UI 层就没法表达；而吞错误还会把既有调好的错误路径弄浑（首页 `RailResult` 的逐条成败、详情页 SWR 的静默失败）。职责因此切成三块：写穿（装饰器）、离线读（`MetadataHydrator`）、UI 决策（页面）。选装饰器而非在各调用点加缓存，是因为协议将来新增方法会**编译不过**，而散点写法一定是漏一条就静默不缓存。
+  - **离线提示分两档，不谎报**：新组件 `StaleContentBanner` 在首页与详情页各摆**一行小字**（不挡内容、不加按钮）。文案按失败原因分岔——`noNetwork` / `serverUnreachable` 才说「离线 · 数据更新于 X 前」，5xx / 401 只说「内容可能不是最新 · 刷新失败」，免得把人引去查网络而问题在服务端；时间用相对表述（几分钟前 / 昨天 / N 天前）。**有内容才提示**：没有任何内容时走的是既有整页错误态，不再叠一条自相矛盾的提示。
+  - **进度永不作写权威**：缓存里的播放进度只读，服务端响应一律覆盖（`markPlayed` / `markUnplayed` 直接写回服务端返回的权威值）；进度与元数据**两个独立时间戳**（进度 15 分钟 / 元数据 7 天），因为「进度是 5 分钟前的、简介是 3 天前的」必须在 UI 上可区分。淘汰两条上限**互相独立**（3 万条 / 200 MB，都挂在每日存储维护上）：体积超限时按「当前条数的 10%」删最旧的一批——这里踩过一次，原写法是「删到条数上限的 90%」，而实测每条约 1 KB、3 万条折合才 ≈30 MB，**条数上限永远先于 200 MB 触发**，于是体积那一道在条数未超限时恒为空操作、上限形同虚设；现在与条数解耦，并有用例把体积上限压到 1 字节验证它真会删。设置页「维护」新增一行可见体积与「清空媒体元数据缓存」的出口（与图片缓存**分两行**：清图片只是重下图，清元数据会让下次冷启回到等网络的状态，合成一项用户不知道自己在放弃什么）。
+  - **路径收口 + 修一个既有缺口**：新增 `OcPlayerStorage`（DiagnosticsKit）作为 `Application Support/OcPlayer/*` 的**唯一事实源**。此前这条路径在 6 处各自手拼，而维护清单只看 `AppStorageDirectories` —— `Bangumi.sqlite` 就是这么漏掉的：自引入起从未被清理、被统计、被设上限，体积在 App 内完全查不到。现在两者都登记进维护（只上报体积，不进删除路径），数据库体积上报含 `-wal` / `-shm`（WAL 会随写入增长，不算它长期少报一大截）。
+  - **健壮性**：库损坏 / 迁移失败**删库重建**（缓存可重建，重建代价只是下次多拉一遍；半坏的库会让每条读路径各自出错），重建仍失败才抛错（那说明是磁盘满/权限，不能让调用方以为缓存正常）。payload 用**宽容解码**（缺字段取默认值），于是以后给 `MediaItem` 加字段**不需要迁移**；`payload_version` 只在语义不兼容时作废整条缓存。
+  - 验证：`Packages/MetadataKit` **50 用例**全绿（建库/损坏自愈、round-trip、旧 payload 宽容解码、未知版本当未命中、**租户隔离**、页键与 `LibraryPageKey` 同构、淘汰最旧优先、装饰器 30 条转发不漏·返回值逐字段一致·错误原样抛·失败不留半份缓存、离线读「没缓存」与「缓存为空」的区分）；`OcPlayerTests` **314 用例**全绿（新增 `StaleContentNoticeTests` 12 项、`MetadataCacheIntegrationTests` 9 项、`MetadataCoordinatorTests` 11 项，后两者用临时目录真库端到端钉住「读缓存不发请求」「断网进详情仍有内容且标离线」「换服务器不读上一台缓存」「服务端出错不谎称离线」）；macOS Debug 与 iOS 构建通过。
+- **图片缓存不再按服务器地址分家：同一台服务器换入口（局域网 ↔ Tailscale ↔ 反代）不再重下所有海报**。此前 `URLCache` 拿**完整 URL** 当键，而图片 URL 里含服务器地址：
+  ```
+  http://192.168.5.107:8096/Items/{id}/Images/Thumb?maxWidth=720&tag=…   ← 局域网
+  http://100.127.128.96:8096/Items/{id}/Images/Thumb?maxWidth=720&tag=…  ← Tailscale
+  ```
+  同一张图存成两份，**换地址后全部海报重新下载一遍**——而「一台服务器多条地址、自动择优、换了无缝续用」正是这个 App 明确支持的能力（见 `ServerEndpointDirectory`）。实测用户库 110 MB 图片缓存里相当一部分是这种重复（缓存里同时躺着两个 host 的同一 item）。现在新增 `CanonicalImageURLCache`：键里把 scheme+host 换成占位符 `ocplayer.invalid`、只保留路径与查询，属主身份改由**认证头的跨进程稳定哈希**（`FNV1a`，非 `hashValue`——后者每进程随机播种会让缓存每次启动全失效）承担，于是「同一台服务器 + 同一账号的不同地址」共用一份缓存，而「不同服务器 / 不同账号」仍然隔离。
+  - 只规范化路径含 `/Images/` 的媒体服务器图片；`image.tmdb.org` / `lain.bgm.tv` 等图床只有一条地址，不动（避免不同图床路径相同的理论撞键）。
+  - 键一变旧键就永远命不中，故加**一次性清理**（UserDefaults 标记，只做一次）：把死数据删掉、磁盘还给用户。新键本来就要重下，这次清理**不额外增加任何下载**。实测生效：旧 110 MB → 6.5 MB，19 条新键全部形如 `http://ocplayer.invalid/Items/…`，含具体 IP 的键 **0 条**。
+  - 验证：`Packages/AppDesignKit` **36 用例**全绿（新增 `ImageCacheKeyTests` 12 项：跨地址共键·不同条目/尺寸/tag 不共键·不同账号隔离·图床不改键·auth 哈希跨进程稳定·真 `URLCache` 存取命中·清空后失效·旧键清理只跑一次）。
+  - 排查记录（两条 Foundation 实测，都已写进代码注释）：`removeCachedResponse(for:)` 单条删除在本机 Foundation 上对磁盘缓存**不可靠**（同一个 `URLRequest` 存完再删仍然命中），故不再拿它当断言；`removeAllCachedResponses()` 是**异步**的（清空后立刻查仍命中、约 1 秒后才失效），用例改成轮询等待而非死等，避免慢机器偶发失败。用户可见的「清空图片缓存」走的是后者，实测有效。
+
+  - 排查记录：期间测试宿主连续崩溃（用例 0.000 秒失败 + xcodebuild 反复重启宿主，单轮从 11 秒涨到 162 秒），崩溃报告是 `doesNotRecognizeSelector` 打在 `Dictionary.subscript.modify`——**我自己给测试替身加的调用计数器被三条并发 rail 同时改写**（`loadHome` 用 `async let`），把 Dictionary 结构写坏了。加锁后消失（已在新计数器上写明这段）。同批修掉另一处测试隔离问题：`xcodebuild` 默认并行多进程跑用例，而新用例与 `HomeRailLoadingTests` 共用 `.standard` 里的骨架条数键会互相污染，故给 `AppModel` 加了 `preferences:` 注入点（与 `ServerStore(defaults:)` 同款）。
+
 - **详情页头部补上「去原站看看」的两个品牌图标：Bangumi 与 TMDB**。此前详情页看不到这部作品在外部站点是哪一条：Bangumi 只能在页内区块里点进 App 自己的条目页，TMDB 则连入口都没有（条目上的 `ProviderIds` 早就带着 Tmdb id，只是没地方用）。现在头部元信息行右侧给两个图标（窄屏放在类型行右侧，避免挤压已经排满的评分 / 分级 / 年份 / 季数 / 时长那一行），点开即用系统默认浏览器打开 `bgm.tv/subject/{id}` 与 `themoviedb.org/movie|tv/{id}`。
   - **只显示拼得出确定地址的那些**。电影 → `/movie/{id}`、剧集 → `/tv/{id}`（条目自身的 ProviderIds 就是该粒度的 id）；**季与分集一律不给链接**——它们要的是 `/tv/{id}/season/{n}` 里的**剧集级** id，而分集条目 ProviderIds 里的是集级 id（`TheIntroDB` 那边踩过同一个坑，见 `AppModel.seriesTmdbID`），硬拼会指到别的作品。宁可少一个图标，也不摆一个点进去是别人家片子的地址（`ExternalMetadataLinksTests` 钉住这条）。ProviderIds 是插件写的字符串，空串 / 非数字 / 0 / 前后空白都按「没有」处理（trim 后可用则照用）。
   - **Bangumi 图标与页内区块同一条门槛**：设置里停用 Bangumi 或未登录时整块不出现，不会出现「区块说没登录、头部却挂着 Bangumi 图标」；条目未关联时也不出现（没有可去的地方）。页内第一次自动匹配 / 手动关联成功时，图标**当场**出现——关联的唯一写入口 `BangumiMatcher.setLinkedSubjectID` 发一条 `OcPlayer.bangumiLinkDidChange` 广播，将来新增写点自动带上。

@@ -15,6 +15,7 @@
 | DanmakuKit | `Packages/DanmakuKit/` | 弹弹play 网关客户端：match/search/comments、JSON 转换、缓存、16MiB 哈希 |
 | DanmakuRenderKit | `Packages/DanmakuRenderKit/` | vendored 弹幕渲染层（qyz777/DanmakuKit，MIT，见 `PROVENANCE.md`）：轨道池、cell 复用、异步绘制图层（`DanmakuAsyncLayer`） |
 | BangumiKit | `Packages/BangumiKit/` | Bangumi OAuth、收藏/章节/搜索/日历 API、GRDB 本地库 |
+| MetadataKit | `Packages/MetadataKit/` | 媒体元数据落盘（GRDB）+ `MediaServer` 写穿装饰器 + 离线读。**只写不读**：装饰器把每个响应落盘、返回值与错误与内层完全一致；离线展示由 `MetadataHydrator` 与 UI 层决定（见该包 `CachedMediaServer` 的类型注释） |
 | MoviePilotKit | `Packages/MoviePilotKit/` | MoviePilot 登录换 JWT、401 静默重登、订阅/搜索/下载 API |
 | DiagnosticsKit | `Packages/DiagnosticsKit/` | 统一日志：会话文件（一次启动一个）+ 级别阈值 + 脱敏 + 节流 + 诊断包导出；网络公共工具 + 共享 HTTP 执行层（`HTTPClient`/`RetryPolicy`：传输/计时日志/传输错误映射/退避重试，各域客户端共用）。口径与排障见 [`LOGGING.md`](LOGGING.md) |
 
@@ -39,13 +40,13 @@ Scripts/package-ios.sh           # iOS 打包；不带参数时版本号从 Conf
 各 SPM 包全部离线测试，不碰真实网络：
 
 ```bash
-swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MoviePilotKit>
+swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|PlaybackKit|ErikaKit|JellyfinKit|DanmakuKit|DanmakuRenderKit|BangumiKit|MetadataKit|MoviePilotKit>
 ```
 
-- **BangumiKit 与 ErikaKit 用 swift-testing，别对这两个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。
+- **BangumiKit、MetadataKit 与 ErikaKit 用 swift-testing，别对这三个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。
 - ErikaKit 里实例化 `ErikaPresenter` 的套件要 Metal 与真内核，无 GPU 的机器上会直接 hang 而不是报错，`--skip` 清单见 `.github/workflows/test.yml`。
 
-CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 10 个 SPM 包（9 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
+CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 11 个 SPM 包（10 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
 
 ## Erika 内核
 
@@ -63,6 +64,20 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 首次匹配以本地文件或认证 Range 请求的前 16 MiB MD5 配合文件名、大小和时长识别；「跳过片头」的弹幕报点推导（观众发「跳伞/空降 xx:xx」报出的落点聚类 + 着陆确认弹幕交叉验证）结果永久缓存，弹幕过期 / 网关不可达时跳过按钮仍可用。
 
+## 存储
+
+自有数据都在 `Application Support/OcPlayer/` 下，**路径唯一事实源是 `DiagnosticsKit/OcPlayerStorage`**（新增落盘一律经它取路径，再登记进 `AppStorageDirectories`）。
+
+| 内容 | 位置 | 清理 |
+| --- | --- | --- |
+| 媒体元数据缓存 | `Media.sqlite` | 设置 → 维护可清空；每日维护按 3 万条 / 200 MB 淘汰最旧 |
+| Bangumi 本地库 | `Bangumi.sqlite` | 登出清账号态；体积随每日维护上报 |
+| 弹幕（正文可弃 / 其余永久） | `Danmaku/` | 白名单淘汰，永久文件见 `DanmakuCache.permanentFileNames` |
+| 图片字节缓存 | `ImageCache/` | 设置 → 维护可清空；512 MiB 上限 |
+| 外挂字幕 / 截图 | `Subtitles/` / `~/Pictures/OcPlayer` | 条数与字节双上限 |
+
+> 维护清单没登记的目录**等于不存在**（不会被清理、体积也不可见）——`Bangumi.sqlite` 就这么漏了几个月，所以「取路径 + 登记」是两件必须一起做的事。
+
 ## 后续方向
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。历史变更见 [CHANGELOG](../CHANGELOG.md)。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**已定方案（`.zcode/plans/` 本地保留）：Phase 1（SQLite 缓存）已落地，Phase 2/3（TMDb 点播式补全 / 批量补全与人工匹配面板）待做。历史变更见 [CHANGELOG](../CHANGELOG.md)。

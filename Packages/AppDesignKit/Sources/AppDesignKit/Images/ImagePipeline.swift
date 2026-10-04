@@ -53,13 +53,24 @@ public final class ImagePipeline: @unchecked Sendable {
 
     public init(cacheDirectory: URL? = nil, decoder: ImageDecoder = .shared) {
         self.decoder = decoder
-        let cache = URLCache(
+        // `CanonicalImageURLCache` 而不是裸 `URLCache`：把键里的服务器地址抹掉，
+        // 否则同一台服务器换入口（局域网 ↔ Tailscale）会把每张图再下一遍。
+        // 见 `CanonicalImageURLCache` 的类型注释。
+        let cache = CanonicalImageURLCache(
             memoryCapacity: 32 * 1024 * 1024,
             diskCapacity: Self.diskCapacityBytes,
             directory: cacheDirectory
-                ?? URL.applicationSupportDirectory.appending(path: "OcPlayer/ImageCache", directoryHint: .isDirectory)
+                ?? OcPlayerStorage.directory("ImageCache")
         )
         self.cache = cache
+        // 生产路径（用默认目录）才做一次性清理：注入目录的都是测试，
+        // 不该被这个迁移搅动（也不该写生产 UserDefaults）。
+        if cacheDirectory == nil {
+            let directory = OcPlayerStorage.directory("ImageCache")
+            Task.detached(priority: .utility) {
+                Self.purgeLegacyKeysIfNeeded(cache: cache, defaults: .standard, directory: directory)
+            }
+        }
         let configuration = URLSessionConfiguration.default
         configuration.urlCache = cache
         configuration.requestCachePolicy = .returnCacheDataElseLoad
@@ -79,6 +90,27 @@ public final class ImagePipeline: @unchecked Sendable {
             self?.clearMemoryCache()
         }
         #endif
+    }
+
+    /// 一次性清理：图片缓存键从「完整 URL（含服务器地址）」改成规范化键后，
+    /// **旧键永远命不中**，留着只是一堆谁也读不到的死数据（实测用户库上 110 MB）。
+    /// 新键本来就要重新下载，所以这次清理**不额外增加任何下载**，只是顺手把
+    /// 死数据删掉、把磁盘还给用户。
+    ///
+    /// 标记写进 UserDefaults：只做一次，之后每次启动不再碰缓存
+    /// （否则用户每次开 App 缓存都被清空，等于没有缓存）。
+    static func purgeLegacyKeysIfNeeded(
+        cache: URLCache,
+        defaults: UserDefaults,
+        directory: URL
+    ) {
+        let markerKey = "dev.jumusu.ocplayer.imageCache.canonicalKeysV1"
+        guard !defaults.bool(forKey: markerKey) else { return }
+        cache.removeAllCachedResponses()
+        defaults.set(true, forKey: markerKey)
+        Self.logger.info("图片缓存键升级：已清空旧键缓存", fields: [
+            "directory": .string(directory.lastPathComponent),
+        ])
     }
 
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is

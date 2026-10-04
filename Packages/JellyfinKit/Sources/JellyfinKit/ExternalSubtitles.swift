@@ -1,4 +1,5 @@
 import Foundation
+import DiagnosticsKit
 import Get
 import JellyfinAPI
 
@@ -90,8 +91,7 @@ extension JellyfinServer {
             NetworkLog.reportFailed("DownloadSubtitle \(subtitle.remotePath)", error: error)
             throw JellyfinError.wrapPreservingCancellation(error)
         }
-        let directory = URL.applicationSupportDirectory
-            .appending(path: "OcPlayer/Subtitles", directoryHint: .isDirectory)
+        let directory = OcPlayerStorage.directory("Subtitles")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let safeID = subtitle.id
             .replacingOccurrences(of: "#", with: "-")

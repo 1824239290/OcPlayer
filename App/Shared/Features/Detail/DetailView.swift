@@ -291,6 +291,10 @@ struct DetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             compactMetaRow
             compactActionSection
+            // 与桌面端同一行提示（紧凑端没有 `metadata` 那一块，正文直接排在这里）。
+            if let notice = model.staleNotice {
+                StaleContentBanner(notice: notice)
+            }
             if let overview = model.shown.overview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .padding(.top, 2)
@@ -787,6 +791,11 @@ struct DetailView: View {
 
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // 内容来自缓存（这次刷新失败）时先摆一行轻提示，再是正文。
+            // 放在简介上方：用户先知道「这是旧数据」，再去读内容。
+            if let notice = model.staleNotice {
+                StaleContentBanner(notice: notice)
+            }
             if let overview = model.shown.overview, !overview.isEmpty {
                 ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)

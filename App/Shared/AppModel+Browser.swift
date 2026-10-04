@@ -52,18 +52,26 @@ extension AppModel {
         return nextUp.filter { !resumeIDs.contains($0.id) }
     }
 
-    func activate(server: any MediaServer) {
+    /// 会话落地（登录 / 启动恢复 / 切换服务器）。
+    ///
+    /// `async` 是因为**写穿缓存要在任何请求之前包好**：`metadata.wrap` 先等建库完成
+    /// 再返回装饰器，若这里同步返回、稍后再替换 `server`，首屏那批请求就会漏写缓存。
+    /// 建库失败时 `wrap` 原样返回内层服务器（缓存是可选增强，不该拖垮登录）。
+    func activate(server: any MediaServer) async {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
-        self.server = server
+        // 包装必须在「赋值给 self.server」之前完成：下面立刻就会发首屏请求。
+        let cached = await metadata.wrap(server)
+        self.server = cached
         // 地址决议接线要跟会话走：决议器选中新地址时把结论写回档案、并刷新界面。
-        attachEndpoints(to: server)
+        // 决议器读的是 `profile`，装饰器原样透传，接线不受影响。
+        attachEndpoints(to: cached)
         // 换会话就丢掉上个会话的分页缓存：条目 id 只在那台服务器里有意义。
         libraryPages = [:]
         phase = .ready
         let generation = sessionGeneration
         initialDataTask = Task { [weak self] in
-            await self?.loadInitialData(server: server, generation: generation)
+            await self?.loadInitialData(server: cached, generation: generation)
         }
     }
 
@@ -72,6 +80,8 @@ extension AppModel {
     }
 
     func loadInitialData(server: any MediaServer, generation: Int) async {
+        // 先磁盘、后网络：冷启动 / 离线时首屏立刻有内容，随后网络结果原位覆盖。
+        await hydrateBrowserDataFromCache(server: server, generation: generation)
         await reloadBrowserData(server: server, generation: generation)
     }
 
@@ -85,6 +95,36 @@ extension AppModel {
         async let libs: Void = loadLibraries(server: server, generation: generation)
         async let home: Void = loadHome(server: server, generation: generation)
         _ = await (libs, home)
+    }
+
+    /// 冷启动时先把磁盘上的首页内容填进来（离线也有东西看）。
+    ///
+    /// 在 `activate` 之后、真正发请求之前调：命中的话首屏立刻有内容，随后的网络
+    /// 刷新原位覆盖（与详情页同一套 stale-while-revalidate）。没缓存就什么都不做，
+    /// 保持原有的骨架屏路径。
+    ///
+    /// **只在内存为空时填**：`reloadBrowserData`（下拉刷新 / 重试）也会走到这里，
+    /// 那时内存里已经是内容了，不该被磁盘上的旧版本盖回去。
+    func hydrateBrowserDataFromCache(server: any MediaServer, generation: Int) async {
+        guard sessionIsCurrent(generation, server: server) else { return }
+        guard libraries.isEmpty, home.resume.isEmpty, home.nextUp.isEmpty, home.latest.isEmpty
+        else { return }
+        guard let hydrator = metadata.hydrator(for: server) else { return }
+        guard let cached = await hydrator.home() else { return }
+        guard sessionIsCurrent(generation, server: server) else { return }
+
+        libraries = cached.libraries
+        // 与网络路径同样的去重语义（半集会被 Resume 与 NextUp 同时返回）。
+        home.resume = cached.resume
+        home.nextUp = Self.deduplicatedNextUp(cached.nextUp, resume: cached.resume)
+        home.latest = cached.latest
+        // 记下缓存时间：网络刷新失败时用它渲染「更新于 X 前」。
+        home.cachedFetchedAt = cached.fetchedAt
+        AppDiagnostics.logInfo("首页用磁盘缓存预热", fields: [
+            "resume": .integer(Int64(cached.resume.count)),
+            "nextUp": .integer(Int64(cached.nextUp.count)),
+            "latest": .integer(Int64(cached.latest.count)),
+        ])
     }
 
     func loadLibraries(server: any MediaServer, generation: Int) async {
@@ -144,10 +184,20 @@ extension AppModel {
         if let items = latestRail.value { home.latest = items }
 
         let rails = [resumeRail, nextUpRail, latestRail]
+        let allSucceeded = rails.allSatisfy { $0.value != nil }
+        let anyConnectivityFailure = rails.contains { $0.failureIsConnectivity }
         // 三条**全**挂才算这一页失败。`HomeView` 本来也只在 latest 为空时展示
         // 整页错误态，所以部分失败时这里置 error 只会白白遮住已经拿到的内容。
         if rails.allSatisfy({ $0.value == nil && $0.failureDescription != nil }) {
             home.error = rails.compactMap(\.failureDescription).first
+        }
+        // 只要有一条没刷新成功，页面上的内容就有一半是旧的（三条 rail 是一个整体），
+        // 所以按「有失败就标」处理，而全部成功才清掉缓存标记。
+        if allSucceeded {
+            home.cachedFetchedAt = nil
+            home.refreshFailureWasConnectivity = false
+        } else {
+            home.refreshFailureWasConnectivity = anyConnectivityFailure
         }
         for (name, failure) in zip(["继续观看", "接下来看", "最近添加"], rails) {
             guard let failure = failure.failureDescription else { continue }
@@ -163,8 +213,10 @@ extension AppModel {
         let changed = home.railPresence != presence
         home.railPresence = presence
         // 低频变化的三位布尔掩码，只在翻转时写盘（原先每次加载成功都同步写）。
+        // 写进**注入的**偏好域：测试用隔离 suite，否则并行跑用例时会和别的类
+        // 抢同一个键（见 `AppModel.init` 的说明）。
         if changed {
-            presence.persist()
+            presence.persist(to: preferences)
         }
     }
 }
@@ -176,6 +228,9 @@ extension AppModel {
 private struct RailResult {
     var value: [MediaItem]?
     var failureDescription: String?
+    /// 这次失败是不是「连不上」（决定用户看到的提示说不说「离线」）。
+    var failureIsConnectivity = false
+    /// 取消不算失败（值与被判定文案都为空），避免换会话时把过期请求的取消报成错误。
 
     static func load(_ work: () async throws -> [MediaItem]) async -> RailResult {
         do {
@@ -183,9 +238,24 @@ private struct RailResult {
         } catch is CancellationError {
             return RailResult(value: nil, failureDescription: nil)
         } catch let error as JellyfinError {
-            return RailResult(value: nil, failureDescription: error.errorDescription)
+            return RailResult(value: nil, failureDescription: error.errorDescription,
+                              failureIsConnectivity: error.isConnectivityFailure)
         } catch {
             return RailResult(value: nil, failureDescription: "\(error)")
+        }
+    }
+}
+
+extension JellyfinError {
+    /// 这次失败是否属于「连不上」（断网 / 服务器不可达）。
+    ///
+    /// 文案要靠它区分：断网说「离线」是准确的，而 5xx / 401 说「离线」会把人
+    /// 引去查网络——同样的判断在详情页也有一份（`DetailViewModel`），
+    /// 两处共用这一条口径。
+    var isConnectivityFailure: Bool {
+        switch kind {
+        case .noNetwork, .serverUnreachable: return true
+        default: return false
         }
     }
 }

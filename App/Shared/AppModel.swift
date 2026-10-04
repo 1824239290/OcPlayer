@@ -204,10 +204,73 @@ final class AppModel {
         /// 上一次成功加载时哪几条 Rail 有内容（跨启动保留，见 `HomeRailPresence`）。
         /// 骨架屏据此决定铺几条：写死三条的话，没有「继续观看」的服务器上
         /// 骨架撤掉的瞬间会塌掉几百 pt——那正好是骨架屏本该消掉的跳动。
+        ///
+        /// 初值在 `AppModel.init` 里按注入的 `preferences` 重设（这里给的是
+        /// `.standard` 兜底，保证 `HomeData()` 单独构造时也可用）。
         var railPresence = HomeRailPresence.restored()
+        /// 当前展示的内容来自磁盘缓存时的写入时间（nil = 内容来自本次会话的网络请求）。
+        /// 与 `home.error` 不同：error 表示「什么都没拿到」，这个表示「有内容但没刷新成功」。
+        var cachedFetchedAt: Date?
+        /// 这次刷新失败是否由「连不上」导致（决定提示说不说「离线」）。
+        var refreshFailureWasConnectivity = false
     }
 
     var home = HomeData()
+
+    /// 首页当前该渲染哪一态。
+    ///
+    /// 抽到模型上而不是留在 `HomeView` 的 `if` 链里，是因为**这条判定错过一次**：
+    /// 原来用 `home.latest.isEmpty` 单独一条 rail 当「有没有内容」的判据，而服务器
+    /// 完全可以没有「最近添加」（`railPresence` 就是为这种情况存在的）——那种服务器
+    /// 上 `latest` 恒为空，于是**哪怕缓存里已经有内容，加载期间也一直显示骨架屏**
+    /// （实测离线冷启动：磁盘已读出 3+6 条，界面仍只转骨架）。判定留在视图里就
+    /// 没法为它写回归用例。
+    enum HomePresentation: Equatable {
+        /// 首次加载、且手上没有任何可显示的内容。
+        case loading
+        /// 全局失败、且没有任何可显示的内容（有内容时永远优先显示内容）。
+        case error(String)
+        case content
+    }
+
+    /// 三条 rail 的并集是否至少有一条内容。
+    var hasAnyHomeContent: Bool {
+        !home.resume.isEmpty || !home.nextUp.isEmpty || !home.latest.isEmpty
+    }
+
+    var homePresentation: HomePresentation {
+        // **有内容就先显示内容**，无论是否还在加载、是否有某条 rail 失败：
+        // 这正是「先读磁盘」的目的——离线 / 慢网时用户立刻看到上次的样子，而不是
+        // 对着骨架屏等重试跑完（实测一台不可达服务器要重试 3 次 × 2 个地址，
+        // 73 秒才落地）。
+        if hasAnyHomeContent { return .content }
+        if home.isLoading { return .loading }
+        if let error = home.error { return .error(error) }
+        // 三条 rail 都成功但都是空的（空库 / 新服务器）：走内容分支，由它的
+        // 「暂无可展示内容」空态承接，而不是错误页。
+        return .content
+    }
+
+    /// 首页当前是否在展示「没刷新成功的缓存内容」。
+    ///
+    /// 判定只看**有没有内容**与**这次刷新有没有失败**，刻意**不看 `home.error`**：
+    /// `home.error` 在三条 rail 全挂时置位，而「断网冷启动」正是这个形态——磁盘上
+    /// 有内容、网络全挂、error 被置位。若在这里 guard `error == nil`，离线冷启动就会
+    /// 显示着缓存内容却**一个提示都没有**，用户完全不知道这是旧数据。
+    ///
+    /// 「该不该显示整页错误」是另一回事，由 `homePresentation` 决定：有内容时它
+    /// 总是 `.content`（此时本提示生效），没内容时才轮到错误页。
+    var homeStaleNotice: StaleContentNotice? {
+        // 首次加载中不提示（内容还没落地，提示会闪一下）。
+        guard !home.isLoading else { return nil }
+        // 有内容才有可标的对象。
+        guard !home.resume.isEmpty || !home.nextUp.isEmpty || !home.latest.isEmpty else { return nil }
+        // 这次刷新确实失败过（全部成功时下面两个标记都会被清掉）。
+        guard home.cachedFetchedAt != nil || home.refreshFailureWasConnectivity else { return nil }
+        return StaleContentNotice(
+            fetchedAt: home.cachedFetchedAt,
+            causedByConnectivity: home.refreshFailureWasConnectivity)
+    }
     /// 同一会话内可能同时发生下拉刷新和设置切换；只有最新一次首页请求可以写回。
     var homeLoadGeneration: UInt64 = 0
 
@@ -224,6 +287,15 @@ final class AppModel {
     // MARK: - MoviePilot（搜索 / 下载）
 
     let moviepilot: MoviePilotCoordinator
+
+    // MARK: - 媒体元数据缓存（SQLite）
+
+    /// 元数据落盘 + 写穿缓存。测试下不建库（见 `bootstrap`），此时它的 `wrap`
+    /// 原样返回服务器，行为与引入缓存之前一致。
+    let metadata: MetadataCoordinator
+
+    /// App 级偏好的落盘域（见 `init` 的说明）。
+    @ObservationIgnored let preferences: UserDefaults
 
     // MARK: - 导航
 
@@ -482,16 +554,28 @@ final class AppModel {
 
     /// 域模型全部经 init 注入（默认值保持生产装配不变）；测试可换入隔离实例，
     /// 不再被「init 里默认构造 + bangumi.setup() 副作用」绑死。
+    /// - Parameter preferences: App 级偏好的落盘域（首屏骨架条数等）。
+    ///   与 `ServerStore(defaults:)` / `MoviePilotStore(defaults:)` 同款注入点：
+    ///   测试必须能换成隔离 suite——`xcodebuild` 默认**并行多进程**跑用例，而
+    ///   这些用例共用同一个 bundle id 的 `UserDefaults.standard`，两个类同时写
+    ///   同一个键就会互相污染（实测：新增的集成用例与本文件里的
+    ///   `HomeRailLoadingTests` 抢 `home.railPresence`，后者当场挂）。
     init(
         store: ServerStore = ServerStore(),
         bangumi: BangumiCoordinator = BangumiCoordinator(),
         moviepilot: MoviePilotCoordinator = MoviePilotCoordinator(),
-        danmakuModel: DanmakuModel = DanmakuModel()
+        danmakuModel: DanmakuModel = DanmakuModel(),
+        metadata: MetadataCoordinator = MetadataCoordinator(),
+        preferences: UserDefaults = .standard
     ) {
         self.store = store
         self.bangumi = bangumi
         self.moviepilot = moviepilot
         self.danmakuModel = danmakuModel
+        self.metadata = metadata
+        self.preferences = preferences
+        // 首屏骨架的条数来自注入域（不是 `HomeData` 默认值里的 `.standard`）。
+        home.railPresence = HomeRailPresence.restored(from: preferences)
         // TheIntroDB 需要**剧集级** TMDB ID（集条目 ProviderIds 里的 Tmdb 是集级
         // 的,不能直接用）——按 seriesID 现场换一份。
         danmakuModel.danmaku.seriesTmdbIDProvider = { [weak self] seriesID in

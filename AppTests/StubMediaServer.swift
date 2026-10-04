@@ -21,6 +21,34 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var resumeResult: Result<[MediaItem], any Error> = .success([])
     var nextUpResult: Result<[MediaItem], any Error> = .success([])
     var latestResult: Result<[MediaItem], any Error> = .success([])
+    /// 详情 / 季 / 集：可注入失败。nil = 用默认空结果。
+    var itemResult: Result<MediaItem, any Error>?
+    var seasonsResult: Result<[MediaItem], any Error> = .success([])
+    var episodesResult: Result<[MediaItem], any Error> = .success([])
+
+    /// 调用计数：用来断言「读缓存不该顺带打网络」。
+    ///
+    /// ⚠️ **必须加锁**。`loadHome` 用 `async let` 并发拉三条 rail，三个 `count()`
+    /// 会同时打进来；裸 `[String: Int]` 并发改写在实测中直接把测试宿主打成
+    /// `doesNotRecognizeSelector`（Dictionary 结构被写坏，SIGABRT），表现为
+    /// 「用例 0.000 秒失败 + xcodebuild 反复重启宿主」。
+    ///
+    /// 本类其余可变配置项仍是「用例单线程写入」的约定（`@unchecked Sendable` 的
+    /// 既有取舍）；只有这个计数器要跨并发任务，所以单独保护。
+    private let counterLock = NSLock()
+    private var _callCounts: [String: Int] = [:]
+    var callCounts: [String: Int] {
+        counterLock.lock(); defer { counterLock.unlock() }
+        return _callCounts
+    }
+    func callCount(_ name: String) -> Int {
+        counterLock.lock(); defer { counterLock.unlock() }
+        return _callCounts[name] ?? 0
+    }
+    private func count(_ name: String) {
+        counterLock.lock(); defer { counterLock.unlock() }
+        _callCounts[name, default: 0] += 1
+    }
 
     init(profileID: String = "srv:user", kind: ServerKind = .jellyfin) {
         profile = ServerProfile(
@@ -34,10 +62,10 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
 
     // MARK: - 浏览
 
-    func userViews() async throws -> [MediaLibrary] { try userViewsResult.get() }
-    func resumeItems() async throws -> [MediaItem] { try resumeResult.get() }
-    func nextUp() async throws -> [MediaItem] { try nextUpResult.get() }
-    func latestItems(limit: Int) async throws -> [MediaItem] { try latestResult.get() }
+    func userViews() async throws -> [MediaLibrary] { count("userViews"); return try userViewsResult.get() }
+    func resumeItems() async throws -> [MediaItem] { count("resumeItems"); return try resumeResult.get() }
+    func nextUp() async throws -> [MediaItem] { count("nextUp"); return try nextUpResult.get() }
+    func latestItems(limit: Int) async throws -> [MediaItem] { count("latestItems"); return try latestResult.get() }
     func favoriteItems(limit: Int) async throws -> [MediaItem] { [] }
     func randomBackdropItems(limit: Int) async throws -> [MediaItem] { [] }
 
@@ -52,12 +80,20 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     // MARK: - 详情
 
     func item(_ id: String) async throws -> MediaItem {
-        MediaItem(id: id, name: id, kind: .movie)
+        count("item")
+        if let itemResult { return try itemResult.get() }
+        return MediaItem(id: id, name: id, kind: .movie)
     }
 
     func chapters(itemID: String) async throws -> [JellyfinChapter] { [] }
-    func seasons(seriesID: String) async throws -> [MediaItem] { [] }
-    func episodes(seriesID: String, seasonID: String?) async throws -> [MediaItem] { [] }
+    func seasons(seriesID: String) async throws -> [MediaItem] {
+        count("seasons")
+        return try seasonsResult.get()
+    }
+    func episodes(seriesID: String, seasonID: String?) async throws -> [MediaItem] {
+        count("episodes")
+        return try episodesResult.get()
+    }
     func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] { [] }
     func similar(itemID: String, limit: Int) async throws -> [MediaItem] { [] }
 

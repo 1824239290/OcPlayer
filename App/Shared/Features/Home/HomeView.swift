@@ -30,12 +30,19 @@ struct HomeView: View {
                 noServerState
             } else if isSearching {
                 HomeSearchContent(query: $searchText)
-            } else if app.home.isLoading && app.home.latest.isEmpty {
-                loadingState
-            } else if let error = app.home.error, app.home.latest.isEmpty {
-                errorState(error)
             } else {
-                content
+                // 三态判定收在 `AppModel.homePresentation`（可测）：
+                // **只要手上有内容就显示内容**，加载中 / 部分失败都不回退骨架屏——
+                // 判据是三条 rail 的并集，不是单看 `latest`（服务器可以没有
+                // 「最近添加」，那样会在有缓存时还一直转骨架，实测过）。
+                switch app.homePresentation {
+                case .loading:
+                    loadingState
+                case .error(let message):
+                    errorState(message)
+                case .content:
+                    content
+                }
             }
         }
         .motion(Motion.slide, value: isSearching)
@@ -109,6 +116,13 @@ struct HomeView: View {
         // 宽度由 Rail 内 `.frame(maxWidth: .infinity)` + 卡片固定宽约束。
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // 内容来自缓存（这次刷新没成功）时先摆一行轻提示，再是 rails。
+                // 与详情页同一组件、同一套措辞（见 `StaleContentNotice`）。
+                if let notice = app.homeStaleNotice {
+                    StaleContentBanner(notice: notice)
+                        .padding(.horizontal, contentLeading)
+                        .padding(.top, 12)
+                }
                 ForEach(homeSections) { section in
                     sectionRail(section)
                 }

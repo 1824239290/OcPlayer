@@ -292,6 +292,7 @@ struct SettingsView: View {
 
             Section {
                 ImageCacheSettingsRow()
+                MetadataCacheSettingsRow()
                 Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
                 Text("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
                     .font(.caption)
@@ -512,6 +513,56 @@ private struct ImageCacheSettingsRow: View {
 
     private static func format(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+}
+
+/// 媒体元数据缓存（SQLite）的体积与出口。
+///
+/// 与图片缓存分开两行而不是合并成「缓存」一项：两者的**代价完全不同**——
+/// 清图片缓存只是下次重新下载图（几秒的事），清元数据库会让下次冷启动回到
+/// 「等网络」的状态（离线时尤其明显）。合成一项，用户点之前不知道自己在放弃什么。
+private struct MetadataCacheSettingsRow: View {
+    @Environment(AppModel.self) private var app
+    @State private var isClearing = false
+    @State private var cleared = false
+
+    var body: some View {
+        LabeledContent("媒体元数据缓存", value: usageText)
+            .onAppear { app.metadata.refreshSize() }
+
+        HStack {
+            Button(role: .destructive) {
+                clear()
+            } label: {
+                Label(cleared ? "已清空" : "清空媒体元数据缓存", systemImage: "trash")
+            }
+            .disabled(isClearing)
+            if cleared {
+                Text("下次进首页/详情会重新拉取")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    /// 数据库体积；未建库（启动早期 / 建库失败）时显示占位而不是 0。
+    private var usageText: String {
+        if let error = app.metadata.setupError { return "不可用" }
+        guard app.metadata.isReady else { return "—" }
+        return Self.format(app.metadata.databaseBytes)
+    }
+
+    private func clear() {
+        isClearing = true
+        Task {
+            _ = await app.metadata.clearCurrentTenant()
+            cleared = true
+            isClearing = false
+        }
+    }
+
+    private static func format(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }
 

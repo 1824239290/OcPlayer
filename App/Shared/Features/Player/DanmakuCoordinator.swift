@@ -320,8 +320,7 @@ final class DanmakuCoordinator {
         let defaults = UserDefaults.standard
         isAutoLoadingEnabled = defaults.object(forKey: Self.autoLoadKey) == nil
             ? true : defaults.bool(forKey: Self.autoLoadKey)
-        let directory = URL.applicationSupportDirectory
-            .appending(path: "OcPlayer/Danmaku", directoryHint: .isDirectory)
+        let directory = OcPlayerStorage.directory("Danmaku")
         let service = DanmakuService(cache: DanmakuCache(directory: directory))
         let introLearningStore = IntroLearningStore(directory: directory)
         // 别名桥（手动搜索合并用）：弹弹play 搜索认不得「另一个中文译名」，Bangumi 的
