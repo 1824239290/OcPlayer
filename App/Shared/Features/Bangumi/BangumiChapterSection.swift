@@ -177,7 +177,9 @@ struct BangumiChapterSection: View {
                 .disabled(isMatching)
         }
         .padding(12)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 与 MoviePilot / 媒体信息区块同一档半透明填充，透出海报氛围底
+        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
     }
 
     // MARK: - 已关联内容
