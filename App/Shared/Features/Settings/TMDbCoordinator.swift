@@ -34,6 +34,19 @@ final class TMDbCoordinator {
     /// 由 `refreshLastFailure()` 从补全服务取。**不缓存历史**：它是提示，不是账本。
     private(set) var lastError: String?
 
+    // MARK: - 批量补全状态
+
+    /// 正在跑库级补全。
+    private(set) var isBatching = false
+    /// 批量补全的实时进度（设置页显示进度条与分类计数）。
+    private(set) var batchProgress: TMDbBatchProgress?
+    /// 上一次批量补全的最终结果（设置页显示总结）。
+    private(set) var lastBatchResult: TMDbBatchResult?
+    /// 枚举候选条目时的失败原因（拉不到库列表时告诉用户，而不是「0 条」）。
+    private(set) var batchError: String?
+
+    @ObservationIgnored private var batchTask: Task<Void, Never>?
+
     @ObservationIgnored private let preferences: TMDbPreferences
     @ObservationIgnored private var enricher: TMDbEnricher?
     @ObservationIgnored private var credentials: TMDbCredentialStore
@@ -150,12 +163,6 @@ final class TMDbCoordinator {
         return await enricher.refreshSeason(seriesLink: seriesLink, seasonNumber: seasonNumber)
     }
 
-    /// 某条目的对应关系（集/季需要父剧的对应来推导）。
-    func link(for item: MediaItem, tenant: TenantID, store: MetadataStore?) async -> TMDbLink? {
-        guard let store else { return nil }
-        return try? await store.linkedTMDbEntity(itemID: item.id, tenant: tenant)
-    }
-
     /// 取最近一次失败并转成用户能看懂的文案（设置页出现时调）。
     ///
     /// `notFound` 刻意**不提示**：那是服务端 `ProviderIds` 里的脏数据（id 在 TMDb
@@ -216,6 +223,81 @@ final class TMDbCoordinator {
         if removed > 0 {
             AppDiagnostics.logInfo("TMDb 过期数据清理", fields: ["removed": .integer(Int64(removed))])
         }
+    }
+
+    // MARK: - 批量补全
+
+    /// 开始库级补全。
+    ///
+    /// - Parameter enumerate: 取候选条目（电影/剧）。由 App 层提供——**枚举要碰
+    ///   `MediaServer`，而协调器刻意只依赖 `MetadataKit`**，这样它能脱离服务端单测。
+    ///
+    /// 取消：`cancelBatch()` 取消承载它的 Task，`enrichAll` 内部按 `Task.isCancelled`
+    /// 停下。已处理的条目都已落库，所以「取消 → 再点一次」是安全的续跑。
+    func startBatch(tenant: TenantID?, enumerate: @escaping @Sendable () async -> [MediaItem]) {
+        guard let enricher, let tenant, !isBatching else { return }
+        isBatching = true
+        batchError = nil
+        lastBatchResult = nil
+        batchProgress = TMDbBatchProgress()
+
+        batchTask = Task { [weak self] in
+            let items = await enumerate()
+            if items.isEmpty {
+                await MainActor.run {
+                    self?.isBatching = false
+                    self?.batchError = "没有找到可补全的电影或剧集"
+                }
+                return
+            }
+            let result = await enricher.enrichAll(items: items, tenant: tenant) { progress in
+                await MainActor.run { self?.batchProgress = progress }
+            }
+            await MainActor.run {
+                self?.isBatching = false
+                self?.batchProgress = result.progress
+                self?.lastBatchResult = result
+            }
+            // 补全完刷新计数，让「已补全条目」立刻反映结果。
+            await self?.refreshLinkedCount(tenant: tenant)
+            // 顺带把最近一次失败也取一下：批量跑完正是用户最想知道「有没有出错」的时候。
+            await self?.refreshLastFailure()
+        }
+    }
+
+    /// 取消正在跑的批量补全（已处理的都已落库）。
+    func cancelBatch() {
+        batchTask?.cancel()
+        batchTask = nil
+        isBatching = false
+    }
+
+    // MARK: - 手动匹配
+
+    /// 搜索候选（用户主动发起 → **抛错**，让 UI 区分「没搜到」与「搜索失败」）。
+    func searchCandidates(query: String, mediaType: TMDbMediaType,
+                          year: Int?) async throws -> [TMDbSearchResult] {
+        guard let enricher else { return [] }
+        return try await enricher.searchCandidates(query: query, mediaType: mediaType, year: year)
+    }
+
+    /// 手动绑定并立刻拉数据。
+    @discardableResult
+    func bindManually(itemID: String, entityKey: TMDbEntityKey, tenant: TenantID?) async -> Bool {
+        guard let enricher, let tenant else { return false }
+        return await enricher.bindManually(itemID: itemID, entityKey: entityKey, tenant: tenant)
+    }
+
+    /// 解除对应。
+    func unbind(itemID: String, tenant: TenantID?) async {
+        guard let enricher, let tenant else { return }
+        await enricher.unbind(itemID: itemID, tenant: tenant)
+    }
+
+    /// 某条目的对应（手动面板显示「已匹配到 XXX」）。
+    func link(itemID: String, tenant: TenantID?) async -> TMDbLink? {
+        guard let enricher, let tenant else { return nil }
+        return await enricher.link(for: itemID, tenant: tenant)
     }
 }
 

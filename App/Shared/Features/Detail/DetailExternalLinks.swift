@@ -1,5 +1,6 @@
 import BangumiKit
 import CoreModel
+import MetadataKit
 import SwiftUI
 
 /// 详情页头部的一条外部站点链接。
@@ -39,11 +40,33 @@ enum ExternalMetadataLinks {
     ///   见 `AppModel.seriesTmdbID`）。手上没有剧集级 id 就**不给链接**——
     ///   宁可少一个图标，也不摆一个点进去是别的片子的地址。
     static func tmdbURL(for item: MediaItem) -> URL? {
+        tmdbURL(for: item, linkedEntityKey: nil)
+    }
+
+    /// 同上，但优先用**已建立的对应**（手动匹配 / 自动匹配的结果）。
+    ///
+    /// 为什么需要：服务端没有 `ProviderIds["Tmdb"]` 的条目（正是需要手动匹配的那批）
+    /// 光看 `item.tmdbID` 拼不出地址，于是「刚手动匹配完、图标还是不出现」——
+    /// 用户会以为匹配没生效。
+    static func tmdbURL(for item: MediaItem, linkedEntityKey: TMDbEntityKey?) -> URL? {
+        if let linkedEntityKey, let url = url(for: linkedEntityKey) { return url }
         guard let id = positiveID(item.tmdbID) else { return nil }
         switch item.kind {
         case .movie: return URL(string: "https://www.themoviedb.org/movie/\(id)")
         case .series: return URL(string: "https://www.themoviedb.org/tv/\(id)")
         default: return nil
+        }
+    }
+
+    /// TMDb 实体键 → 站点地址。
+    static func url(for key: TMDbEntityKey) -> URL? {
+        switch key {
+        case .movie(let id):
+            URL(string: "https://www.themoviedb.org/movie/\(id)")
+        case .tv(let id):
+            URL(string: "https://www.themoviedb.org/tv/\(id)")
+        case .season(let tvID, let number):
+            URL(string: "https://www.themoviedb.org/tv/\(tvID)/season/\(number)")
         }
     }
 
@@ -54,7 +77,11 @@ enum ExternalMetadataLinks {
     }
 
     /// 详情页要展示的链接（Bangumi 在前，与页内区块顺序一致）。
-    static func links(item: MediaItem, bangumiSubjectID: Int?) -> [ExternalMetadataLink] {
+    static func links(
+        item: MediaItem,
+        bangumiSubjectID: Int?,
+        linkedEntityKey: TMDbEntityKey? = nil
+    ) -> [ExternalMetadataLink] {
         var links: [ExternalMetadataLink] = []
         if let url = bangumiURL(subjectID: bangumiSubjectID) {
             links.append(ExternalMetadataLink(
@@ -65,7 +92,7 @@ enum ExternalMetadataLinks {
                 size: bangumiLogoSize
             ))
         }
-        if let url = tmdbURL(for: item) {
+        if let url = tmdbURL(for: item, linkedEntityKey: linkedEntityKey) {
             links.append(ExternalMetadataLink(
                 id: "tmdb",
                 title: "在 TMDB 打开",
@@ -98,14 +125,24 @@ struct DetailExternalLinksView: View {
 
     @Environment(\.openURL) private var openURL
     @Environment(BangumiCoordinator.self) private var bangumi
+    @Environment(AppModel.self) private var app
     /// 集成开关（设置页「启用 Bangumi」，默认开）。停用即整块不出现 —— 与
     /// README 的承诺一致：「不用可在设置里停用，入口会全部隐藏」。
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
 
     @State private var bangumiSubjectID: Int?
+    /// 已建立的 TMDb 对应（手动匹配完图标要立刻跟上）。
+    @State private var tmdbLink: TMDbLink?
+    @State private var showingMatchSheet = false
 
     private var links: [ExternalMetadataLink] {
-        ExternalMetadataLinks.links(item: item, bangumiSubjectID: bangumiSubjectID)
+        ExternalMetadataLinks.links(item: item, bangumiSubjectID: bangumiSubjectID,
+                                    linkedEntityKey: tmdbLink?.entityKey)
+    }
+
+    /// 手动匹配入口：已配置 key 且该条目**有 movie/tv 端点**（季/集靠父剧推导）。
+    private var showsMatchButton: Bool {
+        app.tmdb.isReady && (item.kind == .movie || item.kind == .series)
     }
 
     /// 重解触发键：条目 / 季 / 登录态任一变化都要重来一次。
@@ -119,8 +156,13 @@ struct DetailExternalLinksView: View {
         // 没有 Tmdb id」的条目首帧 `links` 为空 → 图标行不存在 → task 从未运行 →
         // 永远解析不出来（自锁）。Group 恒在视图树里，空内容不占位，任务照跑。
         Group {
-            // 一个链接都没有就什么都不画：空占位会在标题行里留下一段看不见的间距。
-            if !links.isEmpty {
+            // 一个链接都没有、也没有匹配入口就什么都不画：空占位会在标题行里留下一段
+            // 看不见的间距。
+            //
+            // 注意条件是「链接空 **且** 没有匹配入口」：服务端既没 Bangumi 关联又没
+            // Tmdb id 的条目恰恰是最需要手动匹配的那批，不能因为「没有链接」就把入口
+            // 一起藏掉。
+            if !links.isEmpty || showsMatchButton {
                 HStack(spacing: 10) {
                     ForEach(links) { link in
                         Button {
@@ -143,15 +185,40 @@ struct DetailExternalLinksView: View {
                         .help(link.title)
                         .accessibilityLabel(link.title)
                     }
+                    if showsMatchButton {
+                        matchButton
+                    }
                 }
             }
         }
-        .task(id: resolveKey) { resolve() }
+        .task(id: resolveKey) { await resolve() }
         // 页内区块刚自动匹配 / 用户刚手动关联完，头部图标要立刻跟上，
         // 不能等到下次进页面才出现。
         .onReceive(NotificationCenter.default.publisher(for: .bangumiLinkDidChange)) { _ in
             resolve()
         }
+        .sheet(isPresented: $showingMatchSheet) {
+            TMDbMatchSheet(item: item)
+                // 面板里绑定完，图标要立刻从「无」变成「有」。
+                .onDisappear { Task { await resolveTMDbLink() } }
+        }
+    }
+
+    /// 手动匹配入口。用系统符号而不是品牌图：它不是一个外部站点链接，
+    /// 混在品牌图标里会让人以为点下去是「打开 TMDb 网站」。
+    private var matchButton: some View {
+        Button {
+            showingMatchSheet = true
+        } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("手动匹配 TMDb 条目")
+        .accessibilityLabel("手动匹配 TMDb 条目")
     }
 
     /// 解析 Bangumi 关联。
@@ -164,8 +231,22 @@ struct DetailExternalLinksView: View {
     private func resolve() {
         guard bangumiEnabled, bangumi.isAuthenticated else {
             bangumiSubjectID = nil
+            Task { await resolveTMDbLink() }
             return
         }
         bangumiSubjectID = BangumiMatcher.linkedSubjectID(for: item, selectedSeason: selectedSeason)
+        Task { await resolveTMDbLink() }
+    }
+
+    /// 取该条目已建立的 TMDb 对应（**不发网络**）。
+    ///
+    /// 与 Bangumi 那边不同，这里**不受 Bangumi 开关影响**：TMDb 图标与手动匹配入口
+    /// 是独立功能，停用 Bangumi 不该把它们一起藏掉。
+    private func resolveTMDbLink() async {
+        guard app.tmdb.isReady else {
+            tmdbLink = nil
+            return
+        }
+        tmdbLink = await app.tmdbLink(for: item)
     }
 }

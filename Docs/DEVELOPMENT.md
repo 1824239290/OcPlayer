@@ -125,6 +125,13 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 1. **季数据不能在 `.task(id: selectedSeasonID)` 里取**：那个 task 在页面初现时就会跑一次，而那一刻 `seasons` 还是空的（实测诊断：与 `/Seasons` 请求同一秒，`selectedSeason` 为 nil），之后 id 变化并没有再触发它。现在由 `load()` 末尾**确定性地**触发（那时 seasons 与 link 都已就位），视图 task 只负责「用户切季」。
 2. **占位集名判定不要用 `\d`**：实测 ICU 的 `\d` 会匹配中文数字（「九」被判为 true），于是「第九集」这种真实标题会被误判成占位名。用 `[0-9]`；且中日文形态只锚**结尾**（服务端还有「剧名 - S01E00 - 第 0 集」这种文件名派生形态）。
 
+### 批量补全与手动匹配（Phase 3）
+
+- **批量补全**：`TMDbEnricher.enrichAll(items:tenant:onProgress:)`。库由 App 层枚举（`AppModel.tmdbBatchCandidates()`）后传入——协调器刻意只依赖 `MetadataKit`，这样它能脱离服务端单测。剧集连季一起拉；进度按**条**汇报（不是按请求，一次库级补全有几百个请求）。
+- **可续性靠数据库本身**：没有断点文件，`performRefresh` 第一步就是「已有对应且未过期 → 跳过」。
+- **手动匹配**：`searchCandidates` / `bindManually` / `unbind`，UI 在 `TMDbMatchSheet`（入口是详情页头部的循环箭头）。手动绑定写 `source: .manual`，`isAuthoritative` 为真，**不会被自动匹配覆盖**。
+- ⚠️ **`/Items` 列表接口默认不返回 `ProviderIds`**（`/Items/{id}` 才默认返回）。库级补全全靠它拿 `tmdbID`，所以两个后端的 `itemsPage` 都显式带了 `fields`。改这里之前先想清楚：去掉它 = 批量补全退化成纯标题搜索。
+
 ### 两条已知取舍（改之前先看这里）
 
 1. **分集剧照两段式**：首次渲染服务端图 → TMDb 到位后替换。要消掉得让季数据先于分集卡片就绪，代价是选集整条晚出现。

@@ -341,6 +341,11 @@ public struct EmbyServer: MediaServer {
             ("sortOrder", sortOrders.joined(separator: ",")),
             ("enableImageTypes", "Primary,Backdrop,Logo"),
             ("enableTotalRecordCount", "true"),
+            // 与 Jellyfin 同理（列表接口默认不返回 ProviderIds），库级 TMDb 批量
+            // 补全要靠它拿 `tmdbID`。`ProviderIds` 与这里已在用的
+            // People / Genres / Overview / Chapters / MediaSources 同属标准
+            // `ItemFields`，Emby 认这个名字；仍过一道 `embySafeFields` 保持一致。
+            ("fields", embySafeFields("ProviderIds") ?? "ProviderIds"),
         ]
         if let searchTerm {
             let trimmed = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)

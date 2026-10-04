@@ -19,9 +19,13 @@ import Foundation
 /// 单独测——而这层最容易出错的正是「匹配到什么」「该不该顶替服务端的值」这类纯逻辑。
 public actor TMDbEnricher {
 
-    private let client: TMDbClient
-    private let store: MetadataStore
-    private let preferences: TMDbPreferences
+    /// `internal`（不是 `private`）：批量补全与手动匹配放在 `TMDbBatch.swift` 的扩展里。
+    let client: TMDbClient
+    /// `internal`（不是 `private`）：批量补全放在 `TMDbBatch.swift` 的扩展里，
+    /// 跨文件访问需要 ≥ internal。对外仍是 `public actor` 封装，不泄露给使用方。
+    let store: MetadataStore
+    /// `internal`：同上（扩展文件要用）。
+    let preferences: TMDbPreferences
     private let logger = NetworkLog.logger(category: "TMDb")
 
     /// 正在拉取的键（同一实体并发请求只打一次——详情页与剧集页可能同时要它）。
@@ -127,19 +131,43 @@ public actor TMDbEnricher {
 
     /// 确保该条目的 TMDb 数据可用（缺失则拉、过期则后台刷）。
     ///
-    /// - Returns: 这次有没有实际发起网络（供调用方判断是否值得重新读一次 overlay）。
+    /// - Returns: 这次有没有**实际拉到数据**（供调用方判断是否值得重新读一次 overlay）。
     ///
     /// 流程：已有对应且未过期 → 什么都不做；否则匹配 → 拉数据 → 落库。
     @discardableResult
     public func refresh(item: MediaItem, tenant: TenantID, seriesLink: TMDbLink? = nil) async -> Bool {
-        guard await client.isConfigured else { return false }
+        await performRefresh(item: item, tenant: tenant, seriesLink: seriesLink) == .fetched
+    }
+
+    /// 一次补全尝试的结局。批量补全据此分类统计（「多少条已是最新 / 拉到 / 匹配不上 /
+    /// 拉取失败」），比只返回一个 Bool 有用得多——那四件事对用户的意义完全不同。
+    enum RefreshOutcome: Sendable, Equatable {
+        /// 已有对应且数据未过期，**没发请求**。
+        case skipped
+        /// 发了请求并成功落库。
+        case fetched
+        /// 匹配不上（没有可信的候选），或已有对应但**确实没有数据**。
+        /// 与 `.failed` 分开：这个不是故障，是「TMDb 上没有 / 认不出来」。
+        case noMatch
+        /// 发了请求但失败（网络 / 401 / 429 / 404…）。
+        case failed
+
+        var didFetch: Bool { self == .fetched }
+    }
+
+    func performRefresh(
+        item: MediaItem,
+        tenant: TenantID,
+        seriesLink: TMDbLink? = nil
+    ) async -> RefreshOutcome {
+        guard await client.isConfigured else { return .noMatch }
         let language = preferences.language
 
         // ① 已有对应且数据够新 → 不动。
         if let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant),
            let cached = try? await store.tmdbPayload(key: link.entityKey, language: language),
            !cached.isExpired() {
-            return false
+            return .skipped
         }
 
         // ② 决定沿用哪条对应。
@@ -166,7 +194,7 @@ public actor TMDbEnricher {
             }
             guard let match = await matcher.match(item: item, seriesLink: seriesLink),
                   match.shouldApplyAutomatically
-            else { return false }   // 匹配不可信 → 不落库，留给 Phase 3 手动面板
+            else { return .noMatch }   // 匹配不可信 → 不落库，留给手动匹配面板
             link = TMDbLink(itemID: item.id, entityKey: match.entityKey, source: match.source,
                             confidence: match.confidence, linkedAt: Date())
             try? await store.saveTMDbLink(itemID: item.id, entityKey: match.entityKey,
@@ -174,10 +202,17 @@ public actor TMDbEnricher {
                                           tenant: tenant)
         }
 
-        return await fetchAndStore(key: link.entityKey, language: language)
+        // 已有对应但库里没有数据（上次拉失败了）：这一次的结果就是成败本身。
+        let hadPayload = (try? await store.tmdbPayload(key: link.entityKey, language: language)) != nil
+        let ok = await fetchAndStore(key: link.entityKey, language: language)
+        if ok { return .fetched }
+        return hadPayload ? .skipped : .failed
     }
 
-    /// 拉取一个实体并落库。返回是否成功。
+    /// 拉取一个实体并落库。
+    ///
+    /// - Returns: 库里现在**有没有**这个实体的数据（成功写入 true；失败且原先也没有
+    ///   false）。批量补全据此统计成功/失败，所以不能再像早先那样恒返回 true。
     @discardableResult
     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
         guard await client.isConfigured else { return false }
@@ -187,21 +222,26 @@ public actor TMDbEnricher {
         // 同一实体的并发请求合并：剧集页与详情页可能同时要它。
         if let running = inFlight[taskKey] {
             await running.value
-            return true
+            return (try? await store.tmdbPayload(key: key, language: language)) != nil
         }
         let task = Task { [weak self] in
             // 显式返回 Void：`await self?.performFetch(...)` 的类型是 `()?`，
             // 直接作为 Task 体得到 `Task<()?, Never>`，与字典声明的 `Task<Void, Never>` 不符。
             guard let self else { return }
-            await self.performFetch(key: key, language: language)
+            _ = await self.performFetch(key: key, language: language)
         }
         inFlight[taskKey] = task
         await task.value
         inFlight[taskKey] = nil
-        return true
+        return (try? await store.tmdbPayload(key: key, language: language)) != nil
     }
 
-    private func performFetch(key: TMDbEntityKey, language: String) async {
+    /// 真正发请求并落库。
+    ///
+    /// - Returns: 数据是否已写进库（批量补全据此统计，所以不能只看「有没有抛错」——
+    ///   有些失败是静默 return 的）。
+    @discardableResult
+    private func performFetch(key: TMDbEntityKey, language: String) async -> Bool {
         do {
             let payload: TMDbEntityPayload
             switch key {
@@ -216,6 +256,7 @@ public actor TMDbEnricher {
             try await store.saveTMDbPayload(payload, key: key, language: language,
                                            lifetime: preferences.cacheLifetime)
             lastFailure = nil
+            return true
         } catch let error as TMDbError {
             lastFailure = error
             // 失败**不删已有数据**：旧数据比没有强（这正是缓存优先的价值）。
@@ -242,6 +283,7 @@ public actor TMDbEnricher {
             lastFailure = .transport("\(error)")
             logger.warning("TMDb 拉取失败 key=\(key.storageKey) error=\(error)")
         }
+        return false
     }
 
     /// 最近一次失败（设置页据此提示）。nil = 最近一次是成功的。

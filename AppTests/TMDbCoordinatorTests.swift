@@ -219,6 +219,44 @@ final class TMDbCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.linkedCount, 0)
     }
 
+    // MARK: - 批量补全状态
+
+    /// 没配置 key 时启动批量补全必须是**空操作**：不该翻库、不该发请求、
+    /// 也不该把 `isBatching` 卡在 true（那会让按钮永远禁用）。
+    func testBatchWithoutKeyIsNoOp() async {
+        let coordinator = TMDbCoordinator(defaults: defaults)
+        XCTAssertFalse(coordinator.isReady)
+
+        let counter = BatchEnumerateCounter()
+        coordinator.startBatch(tenant: TenantID(rawValue: "srv:user")) {
+            await counter.bump()
+            return []
+        }
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        XCTAssertFalse(coordinator.isBatching, "未配置 key 时不该进入补全中")
+        XCTAssertNil(coordinator.batchProgress)
+        // `await` 不能写在 XCTAssert 的 autoclosure 里，先取出来。
+        let enumerateCalls = await counter.value
+        XCTAssertEqual(enumerateCalls, 0, "不该去枚举库")
+    }
+
+    /// `cancelBatch` 要立刻把状态复位（用户点了取消，UI 不能还显示在跑）。
+    func testCancelBatchResetsState() {
+        let coordinator = TMDbCoordinator(defaults: defaults)
+        coordinator.cancelBatch()
+        XCTAssertFalse(coordinator.isBatching)
+    }
+
+    /// 初始状态干净：没有进度、没有结果、没有错误。
+    func testBatchInitialState() {
+        let coordinator = TMDbCoordinator(defaults: defaults)
+        XCTAssertFalse(coordinator.isBatching)
+        XCTAssertNil(coordinator.batchProgress)
+        XCTAssertNil(coordinator.lastBatchResult)
+        XCTAssertNil(coordinator.batchError)
+    }
+
     // MARK: - 失败可见（坏 key 不再静默）
 
     /// 每种失败都要有**用户能看懂**的文案；两种「不该打扰用户」的必须静默。
@@ -281,4 +319,12 @@ final class TMDbCoordinatorTests: XCTestCase {
         app.tmdb.setReplaceImages(false)
         XCTAssertFalse(app.tmdbImagePolicy.replacesExisting)
     }
+}
+
+/// 枚举调用计数（闭包是 `@Sendable`，用锁而非 actor）。
+private final class BatchEnumerateCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    func bump() { lock.lock(); count += 1; lock.unlock() }
 }

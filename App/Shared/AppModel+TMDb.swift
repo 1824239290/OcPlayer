@@ -40,10 +40,8 @@ extension AppModel {
     /// 所以**季与集没有自己的详情页**，也就没有地方展示它们的 TMDb 数据。
     /// 曾经这里写过一条 `.season/.episode` 分支转 `refreshEpisodeOrSeason`，
     /// 实测**永远走不到**——那种「看起来接好了、其实不可达」的代码比不写更危险，
-    /// 所以删掉并把结论写在这里。
-    ///
-    /// `TMDbEnricher.refreshEpisodeOrSeason` **保留**（有用例覆盖）：Phase 3 的批量
-    /// 补全会需要季数据，将来若加分集详情页也直接可用。
+    /// 所以连那个方法一起删掉了（它后来也被 `refreshSeason` 取代）。
+    /// 季数据现在由「打开剧集页」与「库级批量补全」两条路径补齐。
     @discardableResult
     func refreshTMDb(for item: MediaItem) async -> Bool {
         guard let tenant = currentTenant else { return false }
@@ -73,14 +71,65 @@ extension AppModel {
         await tmdb.refreshSeason(seriesLink: seriesLink, seasonNumber: seasonNumber)
     }
 
-    /// 某条目当前的对应关系（诊断/设置页展示用）。
+    /// 某条目当前的对应关系（详情页图标 / 手动匹配面板 / 设置页展示用）。
+    ///
+    /// 走 `tmdb.link(itemID:tenant:)`（内部经补全服务读库），**不用调用方传 store**：
+    /// 早先那条 `link(for:tenant:store:)` 要求调用方自己把 `MetadataStore` 递进来，
+    /// 于是同一个读取有两个入口，其中一个没人用——正是这轮一直在清的那类问题。
     func tmdbLink(for item: MediaItem) async -> TMDbLink? {
-        guard let tenant = currentTenant else { return nil }
-        return await tmdb.link(for: item, tenant: tenant, store: metadata.activeStore)
+        await tmdb.link(itemID: item.id, tenant: currentTenant)
     }
 
     /// 刷新「已补全 N 部」计数。
     func refreshTMDbLinkCount() async {
         await tmdb.refreshLinkedCount(tenant: currentTenant)
+    }
+
+    // MARK: - 库级批量补全
+
+    /// 枚举整库的电影与剧（批量补全的输入）。
+    ///
+    /// `parentID: nil` + `recursive: true` 让服务端跨所有媒体库返回，不用先逐个
+    /// `userViews()` 再分别翻页。
+    ///
+    /// **必须带 `ProviderIds`**：`MediaServer.items` 底层走 `/Items` 列表接口，
+    /// 而它默认不返回 ProviderIds（实测 0/5）。少了 `tmdbID` 的话整库补全就只能
+    /// 靠标题搜索匹配——命中率与请求数都会明显变差。这一条已在 `itemsPage` 里
+    /// 显式加上 `fields=[.providerIDs]`（见那里的注释）。
+    func tmdbBatchCandidates() async -> [MediaItem] {
+        guard let server else { return [] }
+        return (try? await server.items(parentID: nil, kinds: [.movie, .series],
+                                        recursive: true, limit: 200)) ?? []
+    }
+
+    /// 启动库级批量补全（设置页按钮）。进度与结果在 `tmdb` 上。
+    func enrichTMDbLibrary() {
+        tmdb.startBatch(tenant: currentTenant) { [weak self] in
+            await self?.tmdbBatchCandidates() ?? []
+        }
+    }
+
+    // MARK: - 手动匹配
+
+    /// 手动匹配的候选搜索（用户主动发起，失败要让他看到）。
+    func tmdbSearchCandidates(query: String, mediaType: TMDbMediaType,
+                              year: Int?) async throws -> [TMDbSearchResult] {
+        try await tmdb.searchCandidates(query: query, mediaType: mediaType, year: year)
+    }
+
+    /// 手动绑定某条目到指定实体，并立刻拉数据。
+    @discardableResult
+    func tmdbBind(itemID: String, entityKey: TMDbEntityKey) async -> Bool {
+        guard let tenant = currentTenant else { return false }
+        let ok = await tmdb.bindManually(itemID: itemID, entityKey: entityKey, tenant: tenant)
+        await refreshTMDbLinkCount()
+        return ok
+    }
+
+    /// 解除某条目的 TMDb 对应。
+    func tmdbUnbind(itemID: String) async {
+        guard let tenant = currentTenant else { return }
+        await tmdb.unbind(itemID: itemID, tenant: tenant)
+        await refreshTMDbLinkCount()
     }
 }

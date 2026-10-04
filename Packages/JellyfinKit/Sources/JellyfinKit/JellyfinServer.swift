@@ -314,6 +314,15 @@ public struct JellyfinServer: MediaServer {
                 searchTerm: (trimmedSearch?.isEmpty == false) ? trimmedSearch : nil,
                 sortOrder: sortOrders.compactMap(SortOrder.init(rawValue:)),
                 parentID: parentID,
+                // 显式要 `ProviderIds`：**列表接口默认不返回它**（实测本机
+                // Jellyfin 12.1.0：`/Items` 不带 fields 时 0/5 个条目有
+                // `ProviderIds`，而 `/Items/{id}` 默认就有）。缺了它的 `MediaItem`
+                // 没有 `tmdbID`，TMDb 匹配就只能退化成标题搜索——库级批量补全全靠
+                // 这个字段。体积上它只是个小字典。
+                //
+                // 位置有讲究：SDK 的 `init` 要求 `fields` 排在 `includeItemTypes`
+                // **之前**（Swift 实参顺序必须与声明一致）。
+                fields: [.providerIDs],
                 includeItemTypes: kinds.map { kinds in
                     kinds.compactMap { kind in BaseItemKind(kind) }
                 },

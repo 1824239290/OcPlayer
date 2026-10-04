@@ -2,6 +2,7 @@ import AppDesignKit
 import DanmakuKit
 import JellyfinKit
 import DiagnosticsKit
+import MetadataKit
 import SwiftUI
 
 /// 设置页，六组：播放（含播放内核）/ 弹幕 / 网络 / 服务（Jellyfin·Bangumi·MoviePilot）/ 关于 / 维护。
@@ -988,6 +989,9 @@ private struct TMDbSettingsSection: View {
 
             LabeledContent("已补全条目", value: "\(tmdb.linkedCount)")
 
+            // 库级批量补全：不用一个个点开详情页。
+            batchSection
+
             // 坏 key / 网络不通原先**完全静默**：用户填了 key 却什么都没发生，
             // 只会以为功能坏了。这里把最近一次失败摆出来。
             if let failure = tmdb.lastError {
@@ -1026,5 +1030,66 @@ private struct TMDbSettingsSection: View {
             cleared = true
             isClearing = false
         }
+    }
+
+    /// 库级批量补全：一次把整库的电影/剧（连同各季）补齐，不用一个个点开详情页。
+    ///
+    /// 四类计数分开显示（新补 / 跳过 / 匹配不上 / 失败）：混成一个「成功 N 条」的话，
+    /// 用户不知道剩下那些该怎么办——「匹配不上」要他去手动匹配，「失败」要去看网络。
+    @ViewBuilder
+    private var batchSection: some View {
+        if tmdb.isBatching {
+            VStack(alignment: .leading, spacing: 6) {
+                ProgressView(value: tmdb.batchProgress?.fraction ?? 0) {
+                    Text(batchStatusText)
+                        .font(.caption)
+                }
+                if let progress = tmdb.batchProgress {
+                    Text("新补 \(progress.enriched) · 跳过 \(progress.skipped)"
+                         + " · 匹配不上 \(progress.unmatched) · 失败 \(progress.failed)"
+                         + (progress.seasons > 0 ? " · 剧集季 \(progress.seasons)" : ""))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Button("取消补全", role: .cancel) { tmdb.cancelBatch() }
+            }
+        } else {
+            HStack {
+                Button {
+                    app.enrichTMDbLibrary()
+                } label: {
+                    Label("补全整个媒体库", systemImage: "wand.and.stars")
+                }
+                .disabled(!tmdb.isReady)
+                if let result = tmdb.lastBatchResult {
+                    Text(batchSummary(result))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Text("逐条匹配并拉取简介、评分、演员与图片；剧集连同各季一起补（分集标题与剧照需要季数据）。中途取消或退出后再点一次会接着做——已经补好的不会重复请求。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        if let error = tmdb.batchError {
+            Label(error, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
+    private var batchStatusText: String {
+        guard let progress = tmdb.batchProgress else { return "正在准备…" }
+        let head = "正在补全 \(progress.completed)/\(progress.total)"
+        guard let title = progress.currentTitle, !title.isEmpty else { return head }
+        return "\(head)：\(title)"
+    }
+
+    private func batchSummary(_ result: TMDbBatchResult) -> String {
+        if result.wasCancelled {
+            return "已取消（处理了 \(result.processed)/\(result.total) 条）"
+        }
+        return "上次：新补 \(result.enriched) · 跳过 \(result.skipped)"
+            + " · 匹配不上 \(result.unmatched) · 失败 \(result.failed)"
     }
 }

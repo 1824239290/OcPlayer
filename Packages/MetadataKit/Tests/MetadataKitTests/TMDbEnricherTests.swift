@@ -531,7 +531,8 @@ private struct StubEnricherCredential: TMDbCredentialProviding {
 
 
 /// 调用计数。内部锁 + `@unchecked Sendable`：handler 是同步闭包，用不了 actor。
-private final class CallCounter: @unchecked Sendable {
+/// `internal`：同测试模块的 `TMDbBatchTests` 也用。
+final class CallCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
     var value: Int { lock.lock(); defer { lock.unlock() }; return count }

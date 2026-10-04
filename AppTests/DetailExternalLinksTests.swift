@@ -53,6 +53,46 @@ final class DetailExternalLinksTests: XCTestCase {
 
     // MARK: - Bangumi 地址
 
+    // MARK: - 已建立的对应优先于 ProviderIds
+
+    /// 服务端没有 `ProviderIds["Tmdb"]` 的条目（正是需要手动匹配的那批）光看
+    /// `item.tmdbID` 拼不出地址。手动匹配成功后图标必须出现，否则用户会以为
+    /// 匹配没生效。
+    func testLinkedEntityProvidesURLWhenProviderIDMissing() {
+        let item = series(tmdb: nil)
+        XCTAssertNil(ExternalMetadataLinks.tmdbURL(for: item), "没有 providerID 也没有对应 → 无地址")
+
+        let withLink = ExternalMetadataLinks.tmdbURL(for: item, linkedEntityKey: .tv(71785))
+        XCTAssertEqual(withLink?.absoluteString, "https://www.themoviedb.org/tv/71785")
+    }
+
+    /// 已建立的对应**优先于** ProviderIds：两者不一致时（服务端后来改了 id、
+    /// 或用户手动选了别的条目），展示的是我们实际在用的那个。
+    func testLinkedEntityWinsOverProviderID() {
+        let item = series(tmdb: "999")
+        let url = ExternalMetadataLinks.tmdbURL(for: item, linkedEntityKey: .tv(71785))
+        XCTAssertEqual(url?.absoluteString, "https://www.themoviedb.org/tv/71785")
+    }
+
+    /// 三种实体键都能拼出地址（季用 `/tv/{id}/season/{n}`）。
+    func testEntityKeyURLs() {
+        XCTAssertEqual(ExternalMetadataLinks.url(for: .movie(603))?.absoluteString,
+                       "https://www.themoviedb.org/movie/603")
+        XCTAssertEqual(ExternalMetadataLinks.url(for: .tv(1399))?.absoluteString,
+                       "https://www.themoviedb.org/tv/1399")
+        XCTAssertEqual(ExternalMetadataLinks.url(for: .season(tvID: 1399, number: 2))?.absoluteString,
+                       "https://www.themoviedb.org/tv/1399/season/2")
+    }
+
+    /// `links(...)` 也要能靠已建立的对应补出 TMDb 那一条。
+    func testLinksIncludeTMDBFromLinkedEntity() {
+        let item = series(tmdb: nil)
+        let links = ExternalMetadataLinks.links(item: item, bangumiSubjectID: nil,
+                                                linkedEntityKey: .tv(71785))
+        XCTAssertEqual(links.map(\.id), ["tmdb"])
+        XCTAssertEqual(links.first?.title, "在 TMDB 打开")
+    }
+
     func testBangumiURL() {
         XCTAssertEqual(
             ExternalMetadataLinks.bangumiURL(subjectID: 42)?.absoluteString,
