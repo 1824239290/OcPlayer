@@ -113,6 +113,14 @@ struct DetailView: View {
         horizontalSizeClass == .compact ? 20 : contentLeading
     }
 
+    /// 当前选中的季条目（未选 / 无季时为 nil）。
+    ///
+    /// 头部站点图标与页内 Bangumi 区块都要用它：Bangumi 关联可能挂在季上，
+    /// 两处各算一次就会漂（一个是「已选季」，一个是「第 1 季」）。
+    private var selectedSeason: MediaItem? {
+        model.seasons.first { $0.id == model.selectedSeasonID }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -160,7 +168,7 @@ struct DetailView: View {
                 }
                 BangumiChapterSection(
                     item: model.shown,
-                    selectedSeason: model.seasons.first(where: { $0.id == model.selectedSeasonID })
+                    selectedSeason: selectedSeason
                 )
                 MoviePilotResourceSection(item: model.shown, showResource: $isResourcePresented)
                 if !model.shown.cast.isEmpty { castRail }
@@ -342,11 +350,21 @@ struct DetailView: View {
                 }
             }
 
-            if !model.shown.genres.isEmpty {
-                Text(model.shown.genres.joined(separator: " · "))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+            // 类型行：类型文本 + 右侧外部站点图标（Bangumi / TMDB）。
+            // 放在这一行而不是上面那行，是因为上面那行已经排了评分 / 分级 / 年份 /
+            // 季数 / 时长，紧凑宽度下再塞两个图标就要挤压换行了。
+            HStack(spacing: 10) {
+                if !model.shown.genres.isEmpty {
+                    Text(model.shown.genres.joined(separator: " · "))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    // Spacer 只在有类型文本时才需要（把图标推到行尾）。类型为空时
+                    // 不留它：本行可能整行都空（无类型 + 无可跳转站点），一个落单的
+                    // Spacer 是否占高度取决于父级给的提案，是能不赌就不赌的那种。
+                    Spacer(minLength: 8)
+                }
+                DetailExternalLinksView(item: model.shown, selectedSeason: selectedSeason)
             }
         }
     }
@@ -593,6 +611,12 @@ struct DetailView: View {
                     .background(base.opacity(colorScheme == .light ? 0.08 : 0.2), in: RoundedRectangle(cornerRadius: 4))
                     .foregroundStyle(base.opacity(0.9))
             }
+            // 外部站点图标（Bangumi / TMDB）：两个都是品牌彩色图，不受这一行的
+            // 自适应前景色影响（`base` 只管上方那几个文字元素的明暗）。
+            DetailExternalLinksView(
+                item: model.shown,
+                selectedSeason: selectedSeason
+            )
         }
         .font(.subheadline)
     }

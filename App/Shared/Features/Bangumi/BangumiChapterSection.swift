@@ -242,10 +242,9 @@ struct BangumiChapterSection: View {
             episodes = []
             return
         }
-        linkedSubjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: linkItemID)
-        if linkedSubjectID == nil && (selectedSeason == nil || selectedSeason?.seasonNumber == 1) {
-            linkedSubjectID = BangumiMatcher.linkedSubjectID(forJellyfinItemID: item.seriesID ?? item.id)
-        }
+        // 选中的季 → 剧集 → 条目自身的解析链收敛在 BangumiMatcher（详情页头部的
+        // 站点图标读的是同一条，见 `linkedSubjectID(for:selectedSeason:)`）。
+        linkedSubjectID = BangumiMatcher.linkedSubjectID(for: item, selectedSeason: selectedSeason)
 
         // 首次打开未关联条目时，主动尝试一次静默自动匹配
         if linkedSubjectID == nil && !attemptedAutoMatchIDs.contains(linkItemID) {

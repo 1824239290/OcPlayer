@@ -279,6 +279,12 @@ public enum AnimeTitleParser {
     }
 }
 
+extension Notification.Name {
+    /// Bangumi 关联变更（详情页头部的 Bangumi 站点图标据此刷新）。
+    /// object 是发生变更的 Jellyfin 条目 id。
+    static let bangumiLinkDidChange = Notification.Name("OcPlayer.bangumiLinkDidChange")
+}
+
 /// Jellyfin 条目 ↔ Bangumi 条目的智能关联匹配器。
 @MainActor
 public enum BangumiMatcher {
@@ -289,8 +295,29 @@ public enum BangumiMatcher {
     }
 
     /// 设置关联映射。
+    ///
+    /// 全仓关联的**唯一写入口**，变更广播就挂在这里：将来新增调用点自动带上广播，
+    /// 不必各自记得发一次通知（详情页头部的站点图标靠它即时出现 / 消失）。
     public static func setLinkedSubjectID(_ subjectID: Int?, forJellyfinItemID itemID: MediaItem.ID) {
         BangumiStore.shared.setBangumiSubjectID(subjectID, forJellyfinItemID: itemID)
+        NotificationCenter.default.post(name: .bangumiLinkDidChange, object: itemID)
+    }
+
+    /// 详情页共用的关联解析链：选中的季 → 剧集 → 条目自身；第 1 季 / 单季再回落到剧集。
+    ///
+    /// 这条链原来内联在 `BangumiChapterSection.load()` 里，详情页头部的站点图标是
+    /// 第二个读点——收敛到这里，详情页只有一处读法，行为与原来逐字一致。
+    ///
+    /// **播放结束的自动标记不走这里**（`AppModel+Playback`）：那条链拿的是分集条目自己的
+    /// `seasonID`，且没有「第 1 季才回落」这一档，语义不同（它要落的是这一集所属的那一季）。
+    public static func linkedSubjectID(for item: MediaItem, selectedSeason: MediaItem?) -> Int? {
+        let primary = selectedSeason?.id ?? item.seriesID ?? item.id
+        if let linked = linkedSubjectID(forJellyfinItemID: primary) { return linked }
+        // 只有第 1 季 / 单季才回落到剧集：其它季各自关联不同 subject，回落会串季。
+        guard selectedSeason == nil || selectedSeason?.seasonNumber == 1 else { return nil }
+        let fallback = item.seriesID ?? item.id
+        guard fallback != primary else { return nil }
+        return linkedSubjectID(forJellyfinItemID: fallback)
     }
 
     /// 自动匹配：返回命中的 subject（未命中 nil）。命中即持久化关联。
