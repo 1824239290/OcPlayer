@@ -10,4 +10,4 @@
 # 切版本时**必须**同时在 Scripts/erika-<tag>.sha256 存入该 tag 的官方 sha256：
 # fetch-erika.sh 在 pin 缺失时默认直接失败（见该脚本的 ERIKA_REQUIRE_PIN），
 # 不再静默退化成「HTTPS + 是个合法 zip」。
-ERIKA_VERSION=v0.2.0
+ERIKA_VERSION=v0.2.1

@@ -3,5 +3,5 @@
 
 /// 当前 vendored 的 Erika 内核 release tag（如 "$TAG"）。
 public enum ErikaVersion {
-    public static let tag = "v0.2.0"
+    public static let tag = "v0.2.1"
 }

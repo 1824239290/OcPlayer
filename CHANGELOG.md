@@ -6,6 +6,14 @@
 
 ### 改动
 
+- **播放内核升级到上游 `v0.2.1`**（fork/上游 commit `70f12bf`）。上游 release 见「AimesSoft/Erika」v0.2.1，与本 App 相关的变化：
+  - **资源回收**：关闭、切换媒体和 seek 时取消旧的网络读取；销毁播放器时等待后台 worker 退出、释放连接与线程；`stop()` 释放 HTTP 缓存与队列占用（保留从头重播能力）。
+  - **预读窗口**：修复预取跨越条带边界后继续读取的问题，预读窗口按配置生效（`v0.1.9+dolby.streaming.fix` 里「预取窗口无界」那条线的延续）。
+  - **解码**：恢复硬件解码不可用时的软件回退（WMV/WMA、8/10-bit AV1）；修正 P010 插值，保留完整信号精度。
+  - **iOS 弹幕/字幕同步**：内核新增 `erika_presenter_render_tick_with_timing` C API——传入「到显示目标时间的延迟」（如 `CADisplayLink.targetTimestamp - CACurrentMediaTime()`），弹幕、字幕与渲染上下文按同一显示目标采样播放快照，渲染繁忙时同步更稳。**本版本仅升级 vendored 二进制与 `erika.h`，App 侧仍走 `render_tick`，尚未接入新 API**（旧内核缺该符号时上游要求可选解析、回退 `render_tick`，接入时同理做可用性探测）。
+  - **C ABI 纯新增**：`erika.h` diff 仅有新枚举值 `LinuxExtendedLinearScRgb`、新函数 `render_tick_with_timing` 与 Linux 专用的 `copy_flutter_frame_rgba`；`ErikaOpenOptions` / `ErikaPresenterConfig` 布局未动，App 侧零适配。
+  - 钉点：`Config/Erika.version` → v0.2.1，新增 `Scripts/erika-v0.2.1.sha256`（两包哈希与 release 自带 `SHA256SUMS` 一致）。
+  - 验证：`Packages/ErikaKit` 全量 30 测试（离屏渲染 / C ABI 冒烟 / 真文件打开 / HTTP 直连 / 播放生命周期 / 内存快照 / 预读行为，CI 因无 GPU skip 的套件本地全跑）全绿；macOS App 测试全绿；iOS 模拟器 **349** 测试全绿；其余 SPM 包全绿。
 - **设置页重构为「hub 首屏 + 子页」**。原先单页 11 组约 65 行（iPhone 要滚 5~6 屏），TMDb / MoviePilot 配置得越全越长；现在一级页收成 4 组 11 行导航行，每行带**当前值预览**（Jellyfin 服务器名 / Bangumi 账号 / MoviePilot 登录态、播放内核、弹幕加载方式、首页栏目数、TMDb 启用态、版本号），不进子页就能看到现在什么状态；说明文字全部随功能进各自子页。
   - **子页**：播放（含内核）/ 首页栏目 / 弹幕 / 网络 / Jellyfin / Bangumi / MoviePilot / TMDb 元数据补全 / 维护 / 关于。`@AppStorage` 状态随功能迁移到子页（互相不再牵连失效）；更新检查随行进关于页、MoviePilot profile 刷新随行进子页。
   - **hub 子页路由走 `Route.settingsSubpage`（path 驱动）**而不是 `navigationDestination(isPresented:)`：子页还会再推叶子页（Jellyfin 页推「管理服务器」、关于页推「开源许可证」），isPresented 页面不在 path 上，祖先要 `coveredByPresented` **逐层登记**才不会透过半透页面漏底；path 驱动的页面由 `appRouteView` 统一挂 `coveredPageHidden / routeExitFade / pageEntrance`，整条链自动处理。叶子页（不再下推别的页面）保留原 isPresented 模式。
