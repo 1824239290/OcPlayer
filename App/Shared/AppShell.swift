@@ -587,6 +587,8 @@ extension View {
             case .bangumiCalendar:
                 BangumiCalendarView()
                     .appShellBackChrome(title: "每日放送")
+            case .settingsSubpage(let subpage):
+                settingsSubpageView(subpage)
             }
         }
         // macOS 系统 push 被吞（见 pageEntrance 注释），所有路由页统一自带入场；
@@ -596,5 +598,28 @@ extension View {
         .coveredPageHidden()
         .routeExitFade()
         .pageEntrance()
+    }
+
+    /// 设置 hub 的子页（`SettingsSubpage`）。页面自身不设 navigationTitle——
+    /// 统一在这里按子页给定，与 appShellBackChrome 的自绘标题共用一个字符串
+    /// （同 LibraryView 的「navigationTitle + chrome 同名」口径）。
+    @ViewBuilder
+    private func settingsSubpageView(_ subpage: SettingsSubpage) -> some View {
+        Group {
+            switch subpage {
+            case .playback: PlaybackSettingsView()
+            case .homeSections: HomeSectionsSettingsView()
+            case .danmaku: DanmakuSettingsView()
+            case .network: NetworkSettingsView()
+            case .jellyfin: JellyfinSettingsView()
+            case .bangumi: BangumiSettingsView()
+            case .moviepilot: MoviePilotSettingsView()
+            case .tmdb: TMDbSettingsView()
+            case .maintenance: MaintenanceSettingsView()
+            case .about: AboutSettingsView()
+            }
+        }
+        .navigationTitle(subpage.title)
+        .appShellBackChrome(title: subpage.title)
     }
 }

@@ -6,7 +6,12 @@
 
 ### 改动
 
-- 暂无。
+- **设置页重构为「hub 首屏 + 子页」**。原先单页 11 组约 65 行（iPhone 要滚 5~6 屏），TMDb / MoviePilot 配置得越全越长；现在一级页收成 4 组 11 行导航行，每行带**当前值预览**（Jellyfin 服务器名 / Bangumi 账号 / MoviePilot 登录态、播放内核、弹幕加载方式、首页栏目数、TMDb 启用态、版本号），不进子页就能看到现在什么状态；说明文字全部随功能进各自子页。
+  - **子页**：播放（含内核）/ 首页栏目 / 弹幕 / 网络 / Jellyfin / Bangumi / MoviePilot / TMDb 元数据补全 / 维护 / 关于。`@AppStorage` 状态随功能迁移到子页（互相不再牵连失效）；更新检查随行进关于页、MoviePilot profile 刷新随行进子页。
+  - **hub 子页路由走 `Route.settingsSubpage`（path 驱动）**而不是 `navigationDestination(isPresented:)`：子页还会再推叶子页（Jellyfin 页推「管理服务器」、关于页推「开源许可证」），isPresented 页面不在 path 上，祖先要 `coveredByPresented` **逐层登记**才不会透过半透页面漏底；path 驱动的页面由 `appRouteView` 统一挂 `coveredPageHidden / routeExitFade / pageEntrance`，整条链自动处理。叶子页（不再下推别的页面）保留原 isPresented 模式。
+  - **破坏性操作全部补确认**（原先全部点了立即执行）：退出 Jellyfin / Bangumi / MoviePilot、清空图片缓存、清空媒体元数据缓存、清除 TMDb 补全数据、清空日志。
+  - **iPhone 调优**：首页栏目上下移按钮热区 44×44（原先挤在 2pt 间距里误触率高）；TMDb Key 输入改纵排（行内 SecureField + 按钮会被键盘顶住）；`.roundedBorder` 仅 macOS 生效（iOS grouped 行内原生样式是无框）；值预览统一 `.lineLimit(1)` 中间截断。首页栏目排序沿用按钮方案（grouped Form 的 onMove 在 macOS 无入口，双端一致的刻意选择，未改）。
+  - 验证：macOS（`Scripts/build-macos.sh`）与 iOS（`OcPlayer-iOS` scheme）编译通过，`OcPlayerTests` 全绿；iPhone 模拟器装 Debug 构建、真实会话下 `OCPLAYER_START_SECTION=settings` 截图确认 hub 一屏放下、值预览正确、氛围图透明行底保留。
 
 ## [0.2.1] · 2026-10-05 · TMDb 元数据补全（匹配 / 落库 / 展示 / 批量补全 / 手动匹配）
 

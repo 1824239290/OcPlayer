@@ -323,6 +323,8 @@ final class AppModel {
         case bangumiCollectionList(BangumiSubjectType)
         case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil)
         case bangumiCalendar
+        /// 设置 hub → 子页（见 `SettingsSubpage` 为何走 path 路由）。
+        case settingsSubpage(SettingsSubpage)
     }
 
     /// iOS 各 Tab 的独立导航栈。每 Tab 一个路径数组，互不串。
@@ -650,6 +652,11 @@ final class AppModel {
     /// 与 push 共用同一套两段式。
     func pushPresented(_ present: @escaping @MainActor () -> Void) {
         beginRouteExit(land: present)
+    }
+
+    /// 设置 hub → 子页：普通 push（两段式 + path 驱动），载荷见 `SettingsSubpage`。
+    func openSettingsSubpage(_ subpage: SettingsSubpage) {
+        push(.settingsSubpage(subpage))
     }
 
     /// 关闭呈现式页面：`pushPresented` 的对称出口。
