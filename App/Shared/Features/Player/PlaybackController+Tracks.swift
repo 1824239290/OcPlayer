@@ -157,8 +157,17 @@ extension PlaybackController {
         updateDanmakuConfig { $0.allowStacking = enabled }
     }
 
+    /// 弹幕字号 +/-（fraction 为基准字号的比例：+0.1 = 加大 10%，50%…200% 夹紧）。
+    func adjustDanmakuFontSize(by fraction: Double) {
+        setDanmakuFontSize(danmakuFontSize + fraction * PlaybackPreferences.danmakuBaseFontSize)
+    }
+
+    func resetDanmakuFontSize() {
+        setDanmakuFontSize(PlaybackPreferences.danmakuBaseFontSize)
+    }
+
     func setDanmakuFontSize(_ size: Double) {
-        danmakuFontSize = size.clamped(14...36)
+        danmakuFontSize = size.clamped(PlaybackPreferences.danmakuFontSizeRange)
         PlaybackPreferences.danmakuFontSize = danmakuFontSize
         if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.fontSize = danmakuFontSize } }
     }

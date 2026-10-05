@@ -604,12 +604,22 @@ struct PlayerHUDExpandedActionCard: View {
                 select: { controller.setDanmakuDisplayArea($0) }
             )
         case .danmakuFontSize:
-            optionRows(
-                Self.fontSizes.map(\.1),
-                current: controller.danmakuFontSize,
-                title: { fontSizeName($0) },
-                select: { controller.setDanmakuFontSize($0) }
-            )
+            VStack(spacing: 2) {
+                PlayerHUDActionMenuRow(icon: "minus", title: "减小") {
+                    controller.adjustDanmakuFontSize(by: -0.1)
+                    onUserInteraction()
+                }
+                if abs(controller.danmakuFontSize - PlaybackPreferences.danmakuBaseFontSize) > 0.5 {
+                    PlayerHUDActionMenuRow(icon: "arrow.counterclockwise", title: "重置") {
+                        controller.resetDanmakuFontSize()
+                        onUserInteraction()
+                    }
+                }
+                PlayerHUDActionMenuRow(icon: "plus", title: "加大") {
+                    controller.adjustDanmakuFontSize(by: 0.1)
+                    onUserInteraction()
+                }
+            }
         case .danmakuFilters:
             VStack(spacing: 2) {
                 PlayerHUDToggleMenuRow(
@@ -699,7 +709,7 @@ struct PlayerHUDExpandedActionCard: View {
         }
     }
 
-    /// 单选值列表（不透明度 / 显示区域 / 字号 / 倍速共用）：选中行带 checkmark。
+    /// 单选值列表（不透明度 / 显示区域 / 倍速共用）：选中行带 checkmark。
     private func optionRows(
         _ values: [Double],
         current: Double,
@@ -722,12 +732,6 @@ struct PlayerHUDExpandedActionCard: View {
     // MARK: 值文案
 
     private static let rates: [Double] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-    private static let fontSizes: [(String, Double)] = [
-        ("小", 18),
-        ("标准", 22),
-        ("大", 26),
-        ("特大", 30),
-    ]
 
     private var offsetLabel: String {
         let value = controller.danmakuGlobalOffsetSeconds
@@ -736,7 +740,7 @@ struct PlayerHUDExpandedActionCard: View {
     }
 
     private var fontSizeLabel: String {
-        fontSizeName(controller.danmakuFontSize)
+        percentLabel(controller.danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize)
     }
 
     private var currentSubtitleLabel: String {
@@ -750,13 +754,6 @@ struct PlayerHUDExpandedActionCard: View {
         track.source == .external
             ? "\(controller.externalSubtitleDisplayName(for: track))（外挂）"
             : track.displayTitle
-    }
-
-    private func fontSizeName(_ size: Double) -> String {
-        if let match = Self.fontSizes.first(where: { abs($0.1 - size) < 0.01 }) {
-            return match.0
-        }
-        return "\(Int(size))"
     }
 
     private func percentLabel(_ value: Double) -> String {

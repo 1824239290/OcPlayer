@@ -71,8 +71,13 @@ enum PlaybackPreferences {
         get { storedBool(forKey: danmakuAllowStackingKey, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuAllowStackingKey) }
     }
+    /// 弹幕字号百分比调整的基准（100% = 22pt，即原 HUD「标准」档）。
+    static let danmakuBaseFontSize = 22.0
+    /// 弹幕字号可调范围：基准的 50%…200%，边界正好落在 ±10% 步进的整档位上。
+    static let danmakuFontSizeRange =
+        (danmakuBaseFontSize * 0.5)...(danmakuBaseFontSize * 2.0)
     static var danmakuFontSize: Double {
-        get { storedDouble(forKey: danmakuFontSizeKey, range: 14...36, default: 22.0) }
+        get { storedDouble(forKey: danmakuFontSizeKey, range: danmakuFontSizeRange, default: danmakuBaseFontSize) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuFontSizeKey) }
     }
     /// 弹幕诊断日志开关（默认关闭）。开启后弹幕 overlay 记录时间轴对齐点、
