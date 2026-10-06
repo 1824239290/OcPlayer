@@ -6,6 +6,10 @@
 
 ### 改动
 
+## [0.2.1] · 2026-10-06 · 设置页重构为 hub 首屏 + 子页、TMDb 元数据补全、内核换装官方 v0.2.1
+
+### 改动
+
 - **播放内核升级到上游 `v0.2.1`**（fork/上游 commit `70f12bf`）。上游 release 见「AimesSoft/Erika」v0.2.1，与本 App 相关的变化：
   - **资源回收**：关闭、切换媒体和 seek 时取消旧的网络读取；销毁播放器时等待后台 worker 退出、释放连接与线程；`stop()` 释放 HTTP 缓存与队列占用（保留从头重播能力）。
   - **预读窗口**：修复预取跨越条带边界后继续读取的问题，预读窗口按配置生效（`v0.1.9+dolby.streaming.fix` 里「预取窗口无界」那条线的延续）。
@@ -14,17 +18,13 @@
   - **C ABI 纯新增**：`erika.h` diff 仅有新枚举值 `LinuxExtendedLinearScRgb`、新函数 `render_tick_with_timing` 与 Linux 专用的 `copy_flutter_frame_rgba`；`ErikaOpenOptions` / `ErikaPresenterConfig` 布局未动，App 侧零适配。
   - 钉点：`Config/Erika.version` → v0.2.1，新增 `Scripts/erika-v0.2.1.sha256`（两包哈希与 release 自带 `SHA256SUMS` 一致）。
   - 验证：`Packages/ErikaKit` 全量 30 测试（离屏渲染 / C ABI 冒烟 / 真文件打开 / HTTP 直连 / 播放生命周期 / 内存快照 / 预读行为，CI 因无 GPU skip 的套件本地全跑）全绿；macOS App 测试全绿；iOS 模拟器 **349** 测试全绿；其余 SPM 包全绿。
+- **弹幕字号改为百分比调整（±10% 步进）**。HUD 弹幕菜单的「字号」原为 4 档单选（小 / 标准 / 大 / 特大），现改为与字幕「字体大小」一致的**减小 / 重置 / 加大**，根行直接显示百分比（22pt = 100%）；步进取基准的 10%（2.2pt，连加时百分比始终落在整数档），范围放宽到 **50%–200%**（11–44pt，边界正好落在整档位上）。存储键与格式不变（原始像素 Double），旧档位值无需迁移。
 - **设置页重构为「hub 首屏 + 子页」**。原先单页 11 组约 65 行（iPhone 要滚 5~6 屏），TMDb / MoviePilot 配置得越全越长；现在一级页收成 4 组 11 行导航行，每行带**当前值预览**（Jellyfin 服务器名 / Bangumi 账号 / MoviePilot 登录态、播放内核、弹幕加载方式、首页栏目数、TMDb 启用态、版本号），不进子页就能看到现在什么状态；说明文字全部随功能进各自子页。
   - **子页**：播放（含内核）/ 首页栏目 / 弹幕 / 网络 / Jellyfin / Bangumi / MoviePilot / TMDb 元数据补全 / 维护 / 关于。`@AppStorage` 状态随功能迁移到子页（互相不再牵连失效）；更新检查随行进关于页、MoviePilot profile 刷新随行进子页。
   - **hub 子页路由走 `Route.settingsSubpage`（path 驱动）**而不是 `navigationDestination(isPresented:)`：子页还会再推叶子页（Jellyfin 页推「管理服务器」、关于页推「开源许可证」），isPresented 页面不在 path 上，祖先要 `coveredByPresented` **逐层登记**才不会透过半透页面漏底；path 驱动的页面由 `appRouteView` 统一挂 `coveredPageHidden / routeExitFade / pageEntrance`，整条链自动处理。叶子页（不再下推别的页面）保留原 isPresented 模式。
   - **破坏性操作全部补确认**（原先全部点了立即执行）：退出 Jellyfin / Bangumi / MoviePilot、清空图片缓存、清空媒体元数据缓存、清除 TMDb 补全数据、清空日志。
   - **iPhone 调优**：首页栏目上下移按钮热区 44×44（原先挤在 2pt 间距里误触率高）；TMDb Key 输入改纵排（行内 SecureField + 按钮会被键盘顶住）；`.roundedBorder` 仅 macOS 生效（iOS grouped 行内原生样式是无框）；值预览统一 `.lineLimit(1)` 中间截断。首页栏目排序沿用按钮方案（grouped Form 的 onMove 在 macOS 无入口，双端一致的刻意选择，未改）。
   - 验证：macOS（`Scripts/build-macos.sh`）与 iOS（`OcPlayer-iOS` scheme）编译通过，`OcPlayerTests` 全绿；iPhone 模拟器装 Debug 构建、真实会话下 `OCPLAYER_START_SECTION=settings` 截图确认 hub 一屏放下、值预览正确、氛围图透明行底保留。
-
-## [0.2.1] · 2026-10-05 · TMDb 元数据补全（匹配 / 落库 / 展示 / 批量补全 / 手动匹配）
-
-### 改动
-
 - **TMDb 元数据补全（`Packages/MetadataKit/TMDb`）**。用户自填 API Key 后，详情页可用第三方元数据补充**简介、评分、类型、演员与海报/背景图**；未配置 key 时整个功能禁用、不发任何请求、不影响现有行为。
   - **匹配优先级**：服务端 `ProviderIds["Tmdb"]` 直连（置信度 1.0，不搜索）→ 标题+年份搜索兜底。搜索按六档打分，只有 **≥0.85**（标题精确 + 年份相符）才自动落库——**错误的匹配比没有匹配更糟**：用户看到的是别人的剧情简介和海报，而且显示得像真的一样。低置信度的候选只留给手动匹配面板（Phase 3）。
   - **实测查清一个陷阱**（本机 Jellyfin 12.1.0，`Fields=ProviderIds` 才返回）：剧级 `Tmdb=153217` 是**剧集 id**；季级**只有 Tvdb、没有 Tmdb**；集级 `Tmdb=3384539` 是**单集 id**。所以**集与季绝不能拿自己的 `tmdbID` 去查 `/tv/{id}`**——那是单集 id，会拉到另一部剧或 404。二者一律从**父剧**的对应推导为 `tv/{剧id}/season/{季号}`，判断收在 `TMDbEntityKey` 的唯一入口里，并有用例钉住（断言「绝不能拿单集 id 当剧集 id 用」）。父剧对应不存在时（用户直接从「继续观看」点进某一集）会先建起来。
@@ -57,6 +57,7 @@
     5–7. **三处死代码**：`refreshEpisodeOrSeason`（已被 `refreshSeason` 取代，App 层不可达）、`refreshSeason(tvID:seasonNumber:)`、`TMDbImageSize.poster/.still`、`TMDbOverlay.hasText` —— 全部删除。它们都有同一个毛病：**看起来接好了、其实没人调**。
     - 顺带发现并修掉**我自己造成的重复定义**（`seasonOverlay`/`refreshSeason`/`refresh` 在 `TMDbEnricher` 里各存两份）——python 脚本改文件时重复应用了。已做一次全量同名声明自查确认无残留。
     - 验证：`Packages/MetadataKit` **118 用例**（+7）；`OcPlayerTests` 340 全绿；其余包全绿；macOS + iOS 构建通过；实机确认设置页计数与两个开关默认值正确。
+
 ### 库级批量补全与手动匹配
 
   - **库级批量补全**（设置页「补全整个媒体库」）：逐条匹配并拉取，剧集**连同各季一起补**（季数据决定分集标题/剧照/切季简介，只拉剧集本身的话那些展示面在没访问过的剧集上仍是空的）。带进度条与四类分类计数（新补 / 跳过 / 匹配不上 / 失败）——混成一个「成功 N 条」的话，用户不知道剩下那些该怎么办：「匹配不上」要他去手动匹配，「失败」要去看网络。可随时取消。

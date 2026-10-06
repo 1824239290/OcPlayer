@@ -26,7 +26,7 @@ Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板
 Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 750 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
-Scripts/package-macos.sh v0.2.0  # 本地打包，产出与 CI 相同的 dist/ 产物
+Scripts/package-macos.sh v0.2.1  # 本地打包，产出与 CI 相同的 dist/ 产物
 Scripts/package-ios.sh           # iOS 打包；不带参数时版本号从 Config/App.xcconfig 读取
 ```
 
@@ -50,7 +50,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 ## Erika 内核
 
-内核取自上游 [AimesSoft/Erika](https://github.com/AimesSoft/Erika) 官方 release `v0.2.0`：libplacebo 风格杜比视界 RPU 映射 + **持久流预取**（worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；预取窗口按 worker 生产偏移对绝对边界自我节流，不随播放时长增长；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求）。这些改动此前先落在 fork [1824239290/Erika](https://github.com/1824239290/Erika) 上先行，已随 v0.2.0 全部合入上游，钉点已切回官方（公网慢源 A/B 口径不变：开播 13.2 秒、78.3 秒播放零卡顿）。
+内核取自上游 [AimesSoft/Erika](https://github.com/AimesSoft/Erika) 官方 release `v0.2.1`（钉点唯一事实源是 `Config/Erika.version`）：**资源回收**——关闭 / 切换媒体 / seek 时取消旧的网络读取，销毁播放器时等待后台 worker 退出并释放连接与线程，`stop()` 释放 HTTP 缓存与队列占用（保留从头重播能力）；**预读窗口**修复——预取不再跨越条带边界继续读取，窗口按配置生效；**解码**恢复硬件解码不可用时的软件回退（WMV/WMA、8/10-bit AV1）并修正 P010 插值精度；以及供 iOS 弹幕/字幕同步用的新 C API `erika_presenter_render_tick_with_timing`（**本版本只升级 vendored 二进制与 `erika.h`，App 侧仍走 `render_tick`，尚未接入**）。v0.2.0 引入的 **持久流预取**（worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；预取窗口按 worker 生产偏移对绝对边界自我节流，不随播放时长增长；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求）仍是当前播放路径的基础——那批改动先在 fork [1824239290/Erika](https://github.com/1824239290/Erika) 上先行、已随 v0.2.0 全部合入上游，钉点自 v0.2.0 起回到官方（公网慢源 A/B 口径不变：开播 13.2 秒、78.3 秒播放零卡顿）。
 
 ## 弹幕
 
@@ -141,4 +141,4 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 ## 后续方向
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**：Phase 1（SQLite 缓存）与 Phase 2（点播式补全：客户端 / 匹配器 / 落库 / 叠加层 / 设置页）已落地；Phase 3（批量补全整个库 + 人工匹配面板，低置信度候选已由匹配器返回备用）待做。历史变更见 [CHANGELOG](../CHANGELOG.md)。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**：Phase 1（SQLite 缓存）、Phase 2（点播式补全：客户端 / 匹配器 / 落库 / 叠加层 / 设置页）与 Phase 3（库级批量补全 + 人工匹配面板）均已落地（v0.2.1）。历史变更见 [CHANGELOG](../CHANGELOG.md)。
