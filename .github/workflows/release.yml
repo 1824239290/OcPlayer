@@ -37,11 +37,17 @@ jobs:
       # HEAD），而打包 job checkout 的是 tag。内核版本从 Config/Erika.version 读之后
       # 这个差异会变成实质风险——HEAD 与 tag 的钉点一旦不同，就会「测的内核 ≠ 发的
       # 内核」，正是本文件注释要防的那件事。
+      # `--force` 不能省：tag push 触发时 actions/checkout 会把本地 refs/tags/<tag>
+      # **强制改写成 commit**（checkout 日志里的 `t [tag update] <sha> -> v0.2.1`），
+      # 而非强制的 `git fetch --tags` 要把该 ref 换回 annotated tag 对象就会被拒
+      # （`! [rejected] ... (would clobber existing tag)`），`set -e` 下整个门禁 job
+      # 连一条用例都没跑就死。发布 v0.2.1 时实测踩到——本步骤是 daf9e32 新加的，
+      # 此前只在没有它的 v0.2.0 workflow 上发过版，等于从未在 tag push 上验证过。
       - name: Check out release commit
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --tags origin
+          git fetch --tags --force origin
           if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
             echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
             exit 2
@@ -150,12 +156,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # --force 的理由同 tests job 的 checkout：tag push 时该 ref 已被 actions/checkout
+      # 改写成 commit，非强制 fetch 会被拒。
       - name: Check out dispatch tag
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --tags origin
+          git fetch --tags --force origin
           if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
             echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
             exit 2
@@ -255,12 +263,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # --force 的理由同 tests job 的 checkout：tag push 时该 ref 已被 actions/checkout
+      # 改写成 commit，非强制 fetch 会被拒。
       - name: Check out dispatch tag
         if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --tags origin
+          git fetch --tags --force origin
           if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
             echo "Tag $RELEASE_TAG does not exist; push it first or create it on the commit to release" >&2
             exit 2
