@@ -205,7 +205,7 @@ public actor BangumiDatabaseOperator {
                 )
                 // 已看数要数「全部标为看过的本篇」，不能用 rows.count：
                 // 那只是 ≤ 本集的集数，会把用户先前标过的后面几集抹掉。
-                subject.interest?.epStatus = try countCollectedMainEpisodes(in: db, subjectId: subjectId)
+                try refreshEpisodeStatus(in: db, subject: subject, type: .collect)
             } else {
                 episode.status = type.rawValue
                 episode.collectedAt = now
@@ -213,8 +213,7 @@ public actor BangumiDatabaseOperator {
                 if episode.typeEnum == .main {
                     // 同样重新数一遍，而不是在旧值上加减：本地章节要么整份齐（loadEpisodes
                     // 是全量替换）要么没有，数出来的值就是准的，也不会因为漏掉一次事件而漂。
-                    subject.interest?.epStatus = try countCollectedMainEpisodes(
-                        in: db, subjectId: subjectId)
+                    try refreshEpisodeStatus(in: db, subject: subject, type: type)
                 }
             }
             subject.interest?.updatedAt = now
@@ -655,6 +654,26 @@ public actor BangumiDatabaseOperator {
                 BangumiEpisodeCollectionType.collect.rawValue,
             ]
         ) ?? 0
+    }
+
+    /// 标记后重算本地已看数。
+    ///
+    /// **标「看过」只允许把进度往上推，绝不改小**。本地章节表对「看过」条目永远不做
+    /// 补齐（`fetchSubjectIDsMissingEpisodes` 只挑「在看」），表里的观看状态也只在
+    /// 拉章节时更新——计数因此经常低于服务端的权威值（本机实测：255209 / 638497
+    /// 服务端 `ep_status = 13`，本地只数得出 12）。旧实现无条件覆盖，用户在进度页
+    /// 点一集反而把已看数写回 12，看上去就是「已看数据倒退」。
+    ///
+    /// 明确的「取消看过 / 改其它状态」（`type != .collect`）仍允许下调——那是用户
+    /// 自己的撤销动作，必须立刻反映。服务端的权威值由收藏同步与 `reconcileSubject`
+    /// 全量覆盖，单调性只约束「本地推导」这一条路径。
+    private func refreshEpisodeStatus(
+        in db: Database, subject: BangumiSubject, type: BangumiEpisodeCollectionType
+    ) throws {
+        let counted = try countCollectedMainEpisodes(in: db, subjectId: subject.subjectId)
+        let previous = subject.interest?.epStatus ?? 0
+        guard counted >= previous || type != .collect else { return }
+        subject.interest?.epStatus = counted
     }
 
     private func countSubjects(

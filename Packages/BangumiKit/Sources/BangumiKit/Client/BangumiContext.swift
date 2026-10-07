@@ -144,7 +144,9 @@ public enum BangumiEpisodeRepository {
     static func reconcileSubject(_ subjectId: Int) async throws {
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
         var remote = try await BangumiSubjectService.getSubject(subjectId)
-        if let interest = try? await BangumiCollectionService.getSubjectCollection(subjectId) {
+        // 只有真读到收藏态才覆盖：`.unknown`（读不到）保持本地，否则一次瞬时抖动
+        // 就会把条目清出「在看」、进度归零。
+        if case .collected(let interest) = await BangumiContext.shared.lookupSubjectCollection(subjectId) {
             remote.interest = interest
         }
         try await db.saveSubject(remote)
@@ -174,7 +176,7 @@ public enum BangumiEpisodeRepository {
             let allWatched = !mains.isEmpty
                 && mains.allSatisfy { $0.collectionTypeEnum == .collect }
             if allWatched,
-               let interest = try? await BangumiCollectionService.getSubjectCollection(subjectId),
+               case .collected(let interest) = await BangumiContext.shared.lookupSubjectCollection(subjectId),
                interest.type == .doing {
                 try await BangumiCollectionService.updateSubjectCollection(
                     subjectId: subjectId, type: .collect)
@@ -195,24 +197,43 @@ public enum BangumiEpisodeRepository {
     /// 服务端只对「在看」条目可靠推进单集进度：从未收藏/想看/搁置/抛弃要先推成
     /// 「在看」，单集 PATCH 才生效；「在看」不用动；「看过」不回退——完结条目
     /// 不该被重看一集拨回去。纯决策函数，拆出来便于测试。
+    ///
+    /// **`.unknown` 返回 nil**：读不到收藏态时绝不写服务端。这条曾经是事故点——
+    /// 读接口恒定 404 被当成「没收藏」，于是每次标「看过」都把条目打成「在看」。
     nonisolated static func targetWatchingState(
-        for current: BangumiCollectionType?
+        for lookup: BangumiCollectionLookup
     ) -> BangumiCollectionType? {
-        switch current ?? .none {
-        case .doing, .collect:
-            return nil
-        case .none, .wish, .onHold, .dropped:
+        switch lookup {
+        case .collected(let interest):
+            switch interest.type {
+            case .doing, .collect:
+                return nil
+            case .none, .wish, .onHold, .dropped:
+                return .doing
+            }
+        case .notCollected:
             return .doing
+        case .unknown:
+            return nil
         }
     }
 
     /// 播放结束自动标记前确保条目处于「在看」。以远端收藏状态为准（本地可能过期，
     /// 用户可能在网页上改过状态），未收藏时 POST 会直接以「在看」建收藏。
     /// 返回是否发生了推进。
+    ///
+    /// 读不到收藏态（`.unknown`）时跳过推进但**不报错**：单集 PATCH 照常执行
+    /// （用户明确意图优先），只是不动条目收藏状态。
     @discardableResult
-    nonisolated static func ensureSubjectWatching(_ subjectId: Int) async throws -> Bool {
-        let current = try await BangumiCollectionService.getSubjectCollection(subjectId)?.type
-        guard let target = targetWatchingState(for: current) else { return false }
+    static func ensureSubjectWatching(_ subjectId: Int) async throws -> Bool {
+        let lookup = await BangumiContext.shared.lookupSubjectCollection(subjectId)
+        guard let target = targetWatchingState(for: lookup) else {
+            if let reason = lookup.reason {
+                BangumiNetworkLog.logger.warning(
+                    "播放联动：收藏态读不到，跳过在看推进 subject=\(subjectId) reason=\(reason)")
+            }
+            return false
+        }
         try await BangumiCollectionService.updateSubjectCollection(
             subjectId: subjectId, type: target)
         BangumiNetworkLog.logger.info("播放联动：条目推进为在看 subject=\(subjectId)")
@@ -335,6 +356,38 @@ public final class BangumiContext {
         store.setProfile(nil)
         store.setCollectionsUpdatedAt(0)
         syncAuthState()
+    }
+
+    // MARK: - 单条目收藏态
+
+    /// 回读某个条目的服务端收藏态。
+    ///
+    /// 返回三态：`.unknown` = 这次没读到，**不等于没收藏**。所有要写服务端的决策
+    /// （是否推进为「在看」、是否整季转「看过」）都必须拒绝消费 `.unknown`。
+    /// 失败在这里记一条 warning——此前这条链路全是 `try?` 静默，事故期间日志里
+    /// 只有 HTTP 层的 404 警告，没有任何「读收藏态失败」的信号。
+    public func lookupSubjectCollection(_ subjectId: Int) async -> BangumiCollectionLookup {
+        guard let username = currentUsername else {
+            let reason = "缺少账号资料（username / id），无法回读收藏态"
+            BangumiNetworkLog.logger.warning(
+                "收藏态回读跳过 subject=\(subjectId) reason=\(reason)")
+            return .unknown(reason)
+        }
+        let lookup = await BangumiCollectionService.lookupSubjectCollection(
+            subjectId: subjectId, username: username)
+        if let reason = lookup.reason {
+            BangumiNetworkLog.logger.warning(
+                "收藏态回读失败 subject=\(subjectId) reason=\(reason)")
+        }
+        return lookup
+    }
+
+    /// Bangumi 用户名（`GET /v0/users/{username}/…` 需要）。profile 缺 username 时
+    /// 退回数字 id——服务端两种都认。
+    private var currentUsername: String? {
+        guard let profile = store.profile else { return nil }
+        if !profile.username.isEmpty { return profile.username }
+        return profile.id > 0 ? String(profile.id) : nil
     }
 
     // MARK: - 进度
@@ -472,12 +525,19 @@ public final class BangumiContext {
         let since = store.collectionsUpdatedAt
         // 时间戳取「同步开始」而不是结束：同步途中发生的变更下次还能被 since 捞到。
         let startedAt = Int(Date().timeIntervalSince1970)
-        let count = try await BangumiCollectionRepository.refreshCollections(since: since)
+        // 查询留一段回看重叠：服务端按 updated_at > since 过滤，同一秒内的变更
+        // （以及设备时钟偏快时整个偏差窗口）会被永久跳过，多设备下尤其明显。
+        // 重叠区间重复拉到的条目 upsert 幂等，代价只是少量冗余请求。
+        let querySince = since > 0 ? max(0, since - Self.collectionSyncOverlap) : 0
+        let count = try await BangumiCollectionRepository.refreshCollections(since: querySince)
         store.setCollectionsUpdatedAt(startedAt)
         // 收藏接口不带章节，进度页的章节网格靠这一步补。
         await BangumiCollectionRepository.backfillMissingEpisodes()
         return count
     }
+
+    /// 增量同步的回看重叠窗口（秒）。
+    private static let collectionSyncOverlap = 300
 
     public func subject(id: Int) async throws -> BangumiSubjectDTO? {
         guard let db = database else { throw BangumiError.uninitializedDB }

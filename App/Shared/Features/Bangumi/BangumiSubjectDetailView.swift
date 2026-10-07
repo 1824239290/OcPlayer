@@ -669,7 +669,9 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
         do {
             var fetchedSubject = try await BangumiSubjectService.getSubject(subjectID)
             if bangumi.isAuthenticated {
-                if let userInterest = try? await BangumiCollectionService.getSubjectCollection(subjectID) {
+                // 只有真读到收藏态才覆盖：`.unknown`（读不到）保持本地，既不拿陈旧
+                // 副本覆盖、也不当成「没收藏」——`p1/subjects/{id}` 本就不返回 interest。
+                if case .collected(let userInterest) = await bangumi.context.lookupSubjectCollection(subjectID) {
                     fetchedSubject.interest = userInterest
                 }
             }

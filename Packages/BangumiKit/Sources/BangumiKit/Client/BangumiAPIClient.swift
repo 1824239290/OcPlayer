@@ -82,7 +82,10 @@ public actor BangumiAPIClient {
     /// 被重启会丢 state，校验失败是安全侧失败，符合 OAuth state 语义。
     private var pendingOAuthState: String?
 
-    private static let jsonDecoder: JSONDecoder = {
+    /// 全局共享解码器（snake_case → camelCase）。`internal` 而非 `private`：
+    /// 服务层的纯分类函数（`classifyCollectionResponse`）要用同一套键名规则，
+    /// 两处各自 new 一个 decoder 迟早会分叉。
+    static let jsonDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder

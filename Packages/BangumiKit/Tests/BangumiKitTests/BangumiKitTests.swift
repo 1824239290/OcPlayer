@@ -73,14 +73,127 @@ struct BangumiKitTests {
 
     /// 播放结束自动标记前的条目状态推进决策：未收藏/想看/搁置/抛弃推成「在看」，
     /// 「在看」不动，「看过」不回退（完结条目不该被重看一集拨回去）。
-    @Test func targetWatchingStateOnlyAdvancesNonDoing() {
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: nil) == .doing)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .none) == .doing)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .wish) == .doing)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .onHold) == .doing)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .dropped) == .doing)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .doing) == nil)
-        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collect) == nil)
+    ///
+    /// **`.unknown`（收藏态没读到）必须返回 nil**——这一条是 v0.1.5~v0.2.1 跨设备
+    /// 「已看数据倒退」的现场：读取走的是不存在的 `GET /v0/users/-/collections/{id}`
+    /// （恒定 404），404 被当成「没收藏」，于是每次标「看过」都把条目打成「在看」。
+    /// 旧断言写的正是 `targetWatchingState(for: nil) == .doing`，等于把 bug 钉成了契约。
+    @Test func targetWatchingStateOnlyAdvancesConfirmedStates() {
+        func interest(_ type: BangumiCollectionType) -> BangumiSubjectInterest {
+            BangumiSubjectInterest(
+                comment: "", epStatus: 0, volStatus: 0, private: false, rate: 0,
+                tags: [], type: type, updatedAt: 1_700_000_000)
+        }
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .notCollected) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collected(interest(.wish))) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collected(interest(.onHold))) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collected(interest(.dropped))) == .doing)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collected(interest(.doing))) == nil)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .collected(interest(.collect))) == nil)
+        // 读不到就绝不动服务端收藏态（旧实现这里返回 .doing，就是倒退的来源）。
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .unknown("404")) == nil)
+        #expect(BangumiEpisodeRepository.targetWatchingState(for: .unknown("网络超时")) == nil)
+    }
+
+    /// 收藏态读取必须打**存在**的路由：`GET /v0/users/{username}/collections/{id}`。
+    ///
+    /// `-`（当前用户）只注册在 PATCH/POST 上，`GET /v0/users/-/collections/{id}` 会落进
+    /// 公共路由 `/users/:username/collections/:id`（username = `-`）→ 404「用户不存在」。
+    @Test func subjectCollectionURLUsesUsernameRoute() {
+        let url = BangumiCollectionService.subjectCollectionURL(subjectId: 17883, username: "868609")
+        #expect(url.absoluteString == "https://api.bgm.tv/v0/users/868609/collections/17883")
+        #expect(!url.path().contains("/users/-/collections/"), "这个路径在 api.bgm.tv 上不存在")
+        // 用户名里的 `/` 必须转义，否则会拼出多一段路径。
+        let escaped = BangumiCollectionService.subjectCollectionURL(
+            subjectId: 1, username: "a/b")
+        #expect(escaped.path().contains("a%2Fb"))
+    }
+
+    /// 404 有两种含义，只有服务端明确说「没收藏」才算未收藏。
+    ///
+    /// 现场取自 api.bgm.tv 的真实响应体：错路由给的是「用户不存在」，正确路由在条目
+    /// 未收藏时给的是「subject is not collected by user」。
+    @Test func collectionLookupClassifies404ByBody() throws {
+        let userMissing = Data(
+            #"{"title":"Not Found","details":{"path":"/v0/users/-/collections/17883","method":"GET"},"description":"user doesn't exist or has been removed"}"#.utf8)
+        let notCollected = Data(
+            #"{"title":"Not Found","details":{"path":"/v0/users/868609/collections/8"},"description":"subject is not collected by user"}"#.utf8)
+
+        guard case .unknown = BangumiCollectionService.classifyCollectionResponse(
+            status: 404, body: userMissing)
+        else {
+            Issue.record("「user doesn't exist」的 404 是读不到，绝不能当成没收藏")
+            return
+        }
+        #expect(
+            BangumiCollectionService.classifyCollectionResponse(status: 404, body: notCollected) == .notCollected)
+        #expect(
+            BangumiCollectionService.classifyCollectionResponse(status: 401, body: Data(#"{"title":"Unauthorized"}"#.utf8))
+                != .notCollected)
+        #expect(
+            BangumiCollectionService.classifyCollectionResponse(status: 500, body: Data()) != .notCollected)
+        // 空 body 的 404 同样是「读不到」，不能算没收藏。
+        #expect(BangumiCollectionService.classifyCollectionResponse(status: 404, body: Data()) != .notCollected)
+    }
+
+    /// 真实的 200 回包要能解码，且 `updated_at`（ISO8601 字符串）解析成 unix 秒——
+    /// 它是 `collectedAt`（进度页 / 收藏列表的排序键），拿本地 `Date()` 冒充会把
+    /// 条目错顶到列表最前。
+    @Test func collectionLookupDecodesRealResponseAndTimestamp() throws {
+        let body = Data(
+            #"{"type":3,"rate":9,"ep_status":13,"vol_status":0,"private":false,"tags":[],"comment":null,"updated_at":"2026-10-01T21:00:40+08:00","subject_id":17883,"subject_type":2}"#.utf8)
+        let lookup = BangumiCollectionService.classifyCollectionResponse(status: 200, body: body)
+        guard case .collected(let interest) = lookup else {
+            Issue.record("应解出 .collected，实际是 \(lookup)")
+            return
+        }
+        #expect(interest.type == .doing)
+        #expect(interest.rate == 9)
+        #expect(interest.epStatus == 13)
+        #expect(interest.updatedAt == 1_790_859_640, "必须用服务端时间，不是本地 now")
+
+        // 带小数秒的形态也要认。
+        let fractional = Data(
+            #"{"type":2,"updated_at":"2026-10-01T21:00:40.500+08:00"}"#.utf8)
+        guard case .collected(let parsed) = BangumiCollectionService.classifyCollectionResponse(
+            status: 200, body: fractional)
+        else {
+            Issue.record("小数秒形态应解出 .collected")
+            return
+        }
+        #expect(parsed.updatedAt == 1_790_859_640)
+
+        // 时间戳缺失 / 解析不出来 = 读不到，不许拿本地时钟顶替。
+        #expect(
+            BangumiCollectionService.classifyCollectionResponse(
+                status: 200, body: Data(#"{"type":2}"#.utf8)) == .unknown("收藏响应缺少可解析的 updated_at"))
+    }
+
+    /// 标记「看过」不许把本地已看数改小（本地章节表对「看过」条目从不补齐，
+    /// 计数会低于服务端权威值）；明确的「取消」仍允许下调。
+    @Test func localProgressNeverRegressesOnMark() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        // 服务端权威值 13，本地只有 13 集本篇、其中 12 集是看过。
+        try await db.saveSubject(BangumiFixture.subject(id: 1300, eps: 13, epStatus: 13))
+        try await db.saveEpisodes(
+            subjectId: 1300,
+            items: (1...13).map {
+                BangumiFixture.episode(
+                    id: 130_000 + $0, subjectID: 1300, sort: Float($0),
+                    status: $0 <= 12 ? .collect : .none)
+            })
+
+        // 标第 5 集：本地数出来还是 12 < 13，不许覆盖成 12。
+        _ = try await db.updateEpisodeCollection(episodeId: 130_005, type: .collect)
+        #expect(try await db.subject(id: 1300)?.interest?.epStatus == 13, "标看过只能升不能降")
+
+        // 标完本地第 13 集，计数追平到 13。
+        _ = try await db.updateEpisodeCollection(episodeId: 130_013, type: .collect)
+        #expect(try await db.subject(id: 1300)?.interest?.epStatus == 13)
+
+        // 明确的「取消看过」必须立刻下调（12 集已看）。
+        _ = try await db.updateEpisodeCollection(episodeId: 130_001, type: .none)
+        #expect(try await db.subject(id: 1300)?.interest?.epStatus == 12, "取消动作允许下调")
     }
 
     /// 标「看过」前要按单集 id 反查条目 id 做在看推进；本地缺集时返回 nil 不拦截标集。
