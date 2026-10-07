@@ -3,6 +3,8 @@ import CoreModel
 import SwiftUI
 
 /// 首页：按设置「首页栏目」的顺序渲染 继续观看 / 接下来看 / 最近添加 / 媒体库。
+/// 关掉的栏目不渲染（设置页仍保留条目，可随时再打开）；全关时显示空态而不是
+/// 「服务器没有内容」。
 struct HomeView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -12,9 +14,11 @@ struct HomeView: View {
     private var stillWidth: CGFloat { isCompact ? Metrics.compactStillWidth : Metrics.stillWidth }
     private var posterWidth: CGFloat? { isCompact ? Metrics.compactPosterWidth : nil }
 
-    /// 首页栏目顺序与显隐（设置页「首页栏目」可调；缺省 = 隐藏）。
+    /// 首页栏目顺序与显隐（设置页「首页栏目」可调）。布局里含**已关闭**的栏目，
+    /// 首页只渲染 `visible`——关掉的栏目仍在设置页保留，随时可以再打开。
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
-    private var homeSections: [HomeSection] { HomeSectionPreference.decode(homeSectionsRaw) }
+    private var homeLayout: HomeSectionLayout { HomeSectionPreference.decode(homeSectionsRaw) }
+    private var homeSections: [HomeSection] { homeLayout.visible }
 
     /// macOS 导航栏搜索框的词（顶栏药丸右侧）；iOS 没有这一层——搜索入口是
     /// 底部的放大镜 Tab（见 `HomeSearchView`），这里恒为空、分支不生效。
@@ -30,6 +34,10 @@ struct HomeView: View {
                 noServerState
             } else if isSearching {
                 HomeSearchContent(query: $searchText)
+            } else if homeSections.isEmpty {
+                // 栏目全关：不铺骨架、也不说「服务器没有内容」——那两样都会把
+                // 用户的主动选择说成故障。栏目都还在设置页，一键就能回去开。
+                allSectionsClosedState
             } else {
                 // 三态判定收在 `AppModel.homePresentation`（可测）：
                 // **只要手上有内容就显示内容**，加载中 / 部分失败都不回退骨架屏——
@@ -107,6 +115,23 @@ struct HomeView: View {
         } actions: {
             Button("去连接") { app.reconnectFlow() }
                 .buttonStyle(.borderedProminent)
+        }
+    }
+
+    /// 所有栏目都被关掉（与服务器有没有内容无关，是用户自己的选择）。
+    /// 载体理由同 `errorState`：裸 `EmptyState` 会让氛围背景塌成小块。
+    /// 「去设置」走分区切换而非直接 push 子页：常规布局下 `switchSection` 会
+    /// 清空导航栈，先 push 的子页会被这次的清栈带掉（见 `selectedSection` 的
+    /// didSet），落地只剩（settings），再由 hub 的「首页栏目」行进子页。
+    private var allSectionsClosedState: some View {
+        PageFillingState {
+            EmptyState(
+                empty: "首页栏目都已关闭",
+                systemImage: "square.grid.2x2",
+                message: "栏目还在「设置 → 首页栏目」里，打开开关就会回到首页原来的位置。",
+                actionTitle: "去设置",
+                action: { app.switchSection(.settings) }
+            )
         }
     }
 

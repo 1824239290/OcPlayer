@@ -26,9 +26,8 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
     /// 自定义 User-Agent（空 = 系统默认）：只用于值预览，编辑在「网络」子页。
     @AppStorage(ClientIdentity.customUserAgentKey) private var customUserAgent = ""
-    /// 首页栏目：只用于「显示 N 栏」值预览，编辑在「首页栏目」子页。
+    /// 首页栏目：只用于值预览，编辑在「首页栏目」子页。
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
-    private var homeSections: [HomeSection] { HomeSectionPreference.decode(homeSectionsRaw) }
 
     var body: some View {
         Form {
@@ -42,7 +41,7 @@ struct SettingsView: View {
             Section("播放与界面") {
                 hubRow(.playback, icon: "play.circle", value: PlaybackEngineRegistry.selected?.displayName)
                 hubRow(.danmaku, icon: "text.bubble", value: danmakuValue)
-                hubRow(.homeSections, icon: "square.grid.2x2", value: "显示 \(homeSections.count) 栏")
+                hubRow(.homeSections, icon: "square.grid.2x2", value: homeSectionsValue)
             }
             .settingsRowBackground()
 
@@ -89,6 +88,15 @@ struct SettingsView: View {
 
     private var danmakuValue: String {
         danmakuModel.danmaku.isAutoLoadingEnabled ? "自动加载" : "手动加载"
+    }
+
+    /// 首页栏目：全开时只说栏数；有关掉的显示「M/N 栏」——关掉的栏目在设置页
+    /// 仍然列着（可随时再打开），值预览把这件事摆到一级页，免得用户以为丢了。
+    private var homeSectionsValue: String {
+        let layout = HomeSectionPreference.decode(homeSectionsRaw)
+        return layout.hidden.isEmpty
+            ? "显示 \(layout.order.count) 栏"
+            : "显示 \(layout.visible.count)/\(layout.order.count) 栏"
     }
 
     // MARK: - 导航行

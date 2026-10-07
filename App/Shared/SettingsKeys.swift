@@ -22,8 +22,9 @@ enum SettingsKeys {
     static let subtitleLanguagePreference = "dev.jumusu.ocplayer.playback.subtitleLanguage"
     /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
     static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
-    /// 首页栏目顺序与显隐：逗号分隔的 `HomeSection.rawValue` 串（缺省 = 隐藏）。
-    /// 设置页 ↔ HomeView 渲染，见 `HomeSectionPreference`。
+    /// 首页栏目顺序与显隐：逗号分隔 token（`rawValue` = 显示，`-rawValue` = 已关闭），
+    /// 全部栏目都在串里（关掉的不丢位置）；缺项 = 已关闭（旧格式迁移）。
+    /// 设置页 ↔ HomeView 渲染，见 `HomeSectionLayout` / `HomeSectionPreference`。
     static let homeSections = "dev.jumusu.ocplayer.home.sections"
     /// Bangumi 进度页排序偏好。
     static let bangumiProgressSort = "dev.jumusu.ocplayer.bangumi.progressSort"
