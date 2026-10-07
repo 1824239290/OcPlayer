@@ -214,7 +214,16 @@ extension PlaybackController {
     /// `nil` = 关闭字幕。
     func setSubtitle(_ track: TrackInfo?) {
         guard let engine else { return }
-        try? engine.selectSubtitleTrack(track?.id)
+        do {
+            try engine.selectSubtitleTrack(track?.id)
+            // 用户自己拨过 → 本片内不再自动改（见 `userChoseSubtitleForCurrentSource`）。
+            // 只在**真的生效**之后置位：选轨失败（内核报错）时闸门不该跟着关，
+            // 否则用户会卡在「自动校正也不再介入」的状态里。
+            userChoseSubtitleForCurrentSource = true
+        } catch {
+            setupError = "字幕选择失败：\(error)"
+            playerLog.warning("手动选字幕失败 id=\(track?.id.description ?? "关闭") error=\(error)")
+        }
         state.refreshTracks(from: engine)
     }
 
@@ -228,18 +237,9 @@ extension PlaybackController {
             let baseName = fileURL.deletingPathExtension().lastPathComponent
             externalSubtitleNames[id] = baseName
             try engine.selectSubtitleTrack(id)
-            state.refreshTracks(from: engine)
-        } catch {
-            setupError = "字幕加载失败：\(error)"
-        }
-    }
-
-    /// 只加轨道不改变当前选择（Jellyfin 侧车字幕批量装载用）。
-    func addExternalSubtitle(fileURL: URL) {
-        guard let engine else { return }
-        do {
-            let id = try engine.addExternalSubtitle(fileURL.path)
-            externalSubtitleNames[id] = fileURL.deletingPathExtension().lastPathComponent
+            // 用户自己挑的文件就是要看的那条：挡住后续的偏好校正。同样只在
+            // 加载 + 选中都成功之后才置位（坏文件不该连带关掉自动校正）。
+            userChoseSubtitleForCurrentSource = true
             state.refreshTracks(from: engine)
         } catch {
             setupError = "字幕加载失败：\(error)"
@@ -268,44 +268,103 @@ extension PlaybackController {
         }
     }
 
-    /// 当前没有任何字幕被选中时自动挑一条：中文优先，否则第一条。
-    /// （内核对内封字幕有自己的默认选择；这里只兜「全是外挂字幕」的场。）
-    func autoSelectSubtitleIfNone() {
-        guard let engine, !state.subtitleTracks.isEmpty else { return }
-        guard !state.subtitleTracks.contains(where: { $0.selected }) else { return }
+    /// 轨道列表每次刷新后按偏好校正字幕选择（`state.onTracksRefreshed` 的落点）。
+    ///
+    /// 「默认用第一个」的根源在内核：Erika 打开媒体时按 **probe 顺序取第一条字幕轨**
+    /// （不看 disposition、不认语言偏好）；片源里第一条是英字 / 日字时，中文用户每次
+    /// 开片都要手动切。内核只提供「选哪条」的能力，判断留给宿主——这里是那个判断：
+    ///
+    /// - 偏好来自设置页（默认**中文优先·简体优先**），规则是纯函数
+    ///   `SubtitleTrackSelector`，本方法只负责取状态、落动作。
+    /// - 用户已经在菜单里选过（`userChoseSubtitleForCurrentSource`）→ 一律不动。
+    /// - 侧车字幕批量装载期间（`isLoadingExternalSubtitleBatch`）→ 整批结束后再校正：
+    ///   侧车是一条条挂上来的，逐条校正会让「繁體先下完、简体后下完」的片源在开播
+    ///   头几秒连续切两次，而每次切换都是内核级的轨切换（会停/重启音频输出）。
+    /// - 动作 `keep`（绝大多数刷新）时不碰引擎、不刷列表，避免事件自激。
+    ///
+    /// **重入闸门是必需的，不是防御性编程**：方法末尾那次 `refreshTracks` 会同步再
+    /// 触发 `onTracksRefreshed`，而内核的选轨是**异步生效**的（`ErikaTrackTests` 里的
+    /// 真内核验证：选轨命令投给内核 worker，同一次调用里立刻回读 `tracks()` 拿到的
+    /// 仍是旧 `selected`）——于是「判定 → 选轨 → 刷新 → 判定」会一路同步递归下栈。
+    /// 闸门在进门处就抬起、`defer` 落下（判 `keep` 的轮次也不会有嵌套调用，代价为零）；
+    /// 内核随后的 `trackSelectionChanged` 事件会再触发一轮刷新，此时读到新选择即
+    /// 判定 `keep`，收敛。
+    func applySubtitlePreferenceIfNeeded() {
+        guard !isApplyingSubtitlePreference else { return }
+        isApplyingSubtitlePreference = true
+        defer { isApplyingSubtitlePreference = false }
+        guard !userChoseSubtitleForCurrentSource,
+              !isLoadingExternalSubtitleBatch,
+              let engine
+        else { return }
         let tracks = state.subtitleTracks
-        let picked = tracks.first {
-            let lang = $0.language?.lowercased() ?? ""
-            return lang.contains("zh") || lang.contains("chi")
-        } ?? tracks[0]
-        try? engine.selectSubtitleTrack(picked.id)
+        guard !tracks.isEmpty else { return }
+        let current = tracks.first(where: { $0.selected })?.id
+        let action = SubtitleTrackSelector.selection(
+            in: tracks,
+            preference: PlaybackPreferences.subtitleLanguagePreference,
+            current: current,
+            displayNames: externalSubtitleNames
+        )
+        switch action {
+        case .keep:
+            return
+        case .disable:
+            do {
+                try engine.selectSubtitleTrack(nil)
+            } catch {
+                // 自动动作失败只进日志，不弹错误徽章：用户没要求过这次切换
+                // （对照 `applyDanmakuPrefs` 失败只 warning 的口径）。
+                playerLog.warning("按偏好关闭字幕失败 error=\(error)")
+                return
+            }
+            #if DEBUG
+            appliedSubtitlePreferenceCount += 1
+            #endif
+            playerLog.info("按偏好关闭字幕 tracks=\(tracks.count)")
+        case .select(let id):
+            do {
+                try engine.selectSubtitleTrack(id)
+            } catch {
+                playerLog.warning("按偏好选字幕失败 id=\(id) error=\(error)")
+                return
+            }
+            #if DEBUG
+            appliedSubtitlePreferenceCount += 1
+            #endif
+            let picked = tracks.first { $0.id == id }
+            playerLog.info(
+                "按偏好自动选字幕 id=\(id) lang=\(picked?.language ?? "-") "
+                    + "title=\(picked?.title ?? "-") source=\(picked?.source.rawValue ?? "-")"
+            )
+        }
         state.refreshTracks(from: engine)
     }
 
-    @discardableResult
-    func autoSelectSubtitleIfNone(for source: PlaybackSourceGeneration) -> Bool {
-        guard source.value == sourceGeneration,
-              source.requestID == activeRequest?.id,
-              isSourceReady,
-              let engine
-        else { return false }
-        guard !state.subtitleTracks.isEmpty,
-              !state.subtitleTracks.contains(where: { $0.selected })
-        else { return true }
-        let tracks = state.subtitleTracks
-        let picked = tracks.first {
-            let lang = $0.language?.lowercased() ?? ""
-            return lang.contains("zh") || lang.contains("chi")
-        } ?? tracks[0]
-        do {
-            try engine.selectSubtitleTrack(picked.id)
-            state.refreshTracks(from: engine)
-            return true
-        } catch {
-            setupError = "字幕选择失败：\(error)"
-            return false
-        }
+    /// 侧车字幕批量装载开始：期间不做偏好校正（见 `applySubtitlePreferenceIfNeeded`）。
+    func beginExternalSubtitleBatch() {
+        isLoadingExternalSubtitleBatch = true
     }
 
+    /// 侧车字幕批量装载结束：整批只在这里校正一次（代次仍对得上才动）。
+    ///
+    /// 批次的收尾**必须是这个方法**而不是直接调校正：中途取消 / 换片 / 单条失败
+    /// 都会提前 return，只有把「关批次」和「校正」绑在一起才能保证 flag 不残留
+    /// ——flag 残留的后果是这一整片再也不按偏好选字幕。
+    @discardableResult
+    func endExternalSubtitleBatch(for source: PlaybackSourceGeneration) -> Bool {
+        isLoadingExternalSubtitleBatch = false
+        return applySubtitlePreference(for: source)
+    }
 
+    /// 异步资源（Jellyfin 侧车字幕）下载完之后按偏好校正一次：代次仍对得上才动。
+    @discardableResult
+    func applySubtitlePreference(for source: PlaybackSourceGeneration) -> Bool {
+        guard source.value == sourceGeneration,
+              source.requestID == activeRequest?.id,
+              isSourceReady
+        else { return false }
+        applySubtitlePreferenceIfNeeded()
+        return true
+    }
 }

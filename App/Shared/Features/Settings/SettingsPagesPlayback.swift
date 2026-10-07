@@ -25,6 +25,14 @@ struct PlaybackSettingsView: View {
         PlaybackPreferences.outroRetentionOptionsSeconds.contains(storedOutroRetention)
             ? storedOutroRetention : 10
     }
+    /// 默认字幕语言。存 `SubtitleLanguagePreference.rawValue`；旧版本从没写过这个
+    /// key / 值被人手改坏时按默认档（中文优先·简体）显示，与 `PlaybackPreferences`
+    /// 的读取语义保持一致。
+    @AppStorage(SettingsKeys.subtitleLanguagePreference)
+    private var storedSubtitleLanguage = SubtitleLanguagePreference.chineseSimplified.rawValue
+    private var subtitleLanguage: SubtitleLanguagePreference {
+        SubtitleLanguagePreference(rawValue: storedSubtitleLanguage) ?? .chineseSimplified
+    }
 
     var body: some View {
         Form {
@@ -77,9 +85,33 @@ struct PlaybackSettingsView: View {
             }
             .settingsRowBackground()
 
+            Section("字幕") {
+                Picker("默认字幕语言", selection: Binding(
+                    get: { subtitleLanguage },
+                    set: { storedSubtitleLanguage = $0.rawValue }
+                )) {
+                    ForEach(SubtitleLanguagePreference.allCases, id: \.self) { preference in
+                        Text(Self.label(for: preference)).tag(preference)
+                    }
+                }
+                Text("打开新片源时按这里的偏好挑字幕轨：有中文字幕就自动切过去（用不到第一条外语字幕），没有中文则保持片源自带的默认选择。在播放器里自己选过之后，本片不再自动改动。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .settingsRowBackground()
+
             PlaybackKernelSection()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)
+    }
+
+    private static func label(for preference: SubtitleLanguagePreference) -> String {
+        switch preference {
+        case .chineseSimplified: "中文优先（简体）"
+        case .chineseTraditional: "中文优先（繁体）"
+        case .followSource: "跟随文件默认"
+        case .off: "默认关闭"
+        }
     }
 }

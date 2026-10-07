@@ -17,6 +17,9 @@ enum SettingsKeys {
     static let skipOutro = "dev.jumusu.ocplayer.playback.skipOutro"
     /// 保底跳过片尾的保留秒数（片长 − 该值为落点；0 = 不保留，默认 10）。
     static let outroRetentionSeconds = "dev.jumusu.ocplayer.playback.outroRetentionSeconds"
+    /// 默认字幕语言偏好（中文优先·简体为默认）。设置页 ↔ `PlaybackPreferences`
+    /// ↔ 轨道就绪后的自动选轨（`SubtitleTrackSelector`）。
+    static let subtitleLanguagePreference = "dev.jumusu.ocplayer.playback.subtitleLanguage"
     /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
     static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
     /// 首页栏目顺序与显隐：逗号分隔的 `HomeSection.rawValue` 串（缺省 = 隐藏）。

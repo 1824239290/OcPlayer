@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackKit
 
 /// 播放偏好跨启动记忆。弹幕渲染偏好由 HUD 修改后也在此统一保存。
 @MainActor
@@ -33,6 +34,21 @@ enum PlaybackPreferences {
     static var subtitleScale: Double {
         get { storedDouble(forKey: subtitleScaleKey, range: 0.5...3.0, default: 1.0) }
         set { UserDefaults.standard.set(newValue, forKey: subtitleScaleKey) }
+    }
+    /// 默认字幕语言偏好。
+    ///
+    /// 默认 `chineseSimplified`——内核开片时按容器的默认轨选字幕，而中文用户要的
+    /// 是「有中文就上中文」；这条偏好决定轨道就绪后要不要替用户切一次
+    /// （判定见 `SubtitleTrackSelector`）。取值直接存 `rawValue`，读不出来
+    /// （旧版本从没写过 / 被人手改坏）都按默认档处理。
+    static var subtitleLanguagePreference: SubtitleLanguagePreference {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.subtitleLanguagePreference),
+                  let value = SubtitleLanguagePreference(rawValue: raw)
+            else { return .chineseSimplified }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.subtitleLanguagePreference) }
     }
     static var danmakuEnabled: Bool {
         get { storedBool(forKey: danmakuEnabledKey, default: true) }

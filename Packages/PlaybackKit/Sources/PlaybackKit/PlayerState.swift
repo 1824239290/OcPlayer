@@ -160,11 +160,19 @@ public final class PlayerState {
         }
     }
 
+    /// 轨道列表刷新后的回调，每次 `refreshTracks` 拿到新列表都会触发（主 actor 上同步）。
+    ///
+    /// 自动选字幕挂在这里：轨道什么时候齐全是事件流说了算（open 后内封轨道就绪、
+    /// 外挂字幕一条条挂上），控制器自己拿不到「这一次刷新之后列表已经最新」这个点。
+    /// 实现方必须**幂等**——选轨本身会再推一次 `trackSelectionChanged` → 再刷新。
+    @ObservationIgnored public var onTracksRefreshed: (() -> Void)?
+
     /// 换源 / 手动选轨后由 `PlaybackController` 显式调用。
     public func refreshTracks(from engine: any PlaybackEngine) {
         guard let all = try? engine.tracks() else { return }
         audioTracks = all.filter { $0.kind == .audio }
         subtitleTracks = all.filter { $0.kind == .subtitle }
+        onTracksRefreshed?()
     }
 
     /// 换源时复位快照，避免旧内容的 position / duration / 轨道 / 错误残留到新源。

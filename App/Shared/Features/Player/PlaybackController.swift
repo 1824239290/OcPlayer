@@ -166,6 +166,28 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 外挂字幕轨道 id → 显示名（Jellyfin 侧车字幕的标题）。内核不带名字，
     /// App 层在下载时记录；换源 / 拆引擎时清空（见 resetEngine）。
     var externalSubtitleNames: [Int64: String] = [:]
+    /// 用户在本片里手动拨过字幕（选轨 / 关字幕）。
+    ///
+    /// 自动选字幕只负责「打开时按偏好挑一条」；一旦用户自己动过，本片内不再自动
+    /// 覆盖——轨道刷新是持续事件（外挂字幕一条条挂上来），不加这道闸就会出现
+    /// 「用户切到日文字幕，两秒后被自动切回中文」。随 open / 拆引擎复位。
+    /// 纯内部记账：不参与 UI，别让它的写入连带触发 HUD 重绘。
+    @ObservationIgnored var userChoseSubtitleForCurrentSource = false
+    /// 自动选字幕正在下发动作（只在这一段里挡住 `state.onTracksRefreshed` 的重入）。
+    ///
+    /// 方法末尾的 `refreshTracks` 会同步再触发回调，而内核选轨是异步生效的：同一次
+    /// 调用里重读仍是旧选择，闸门缺失就会「判定 → 选轨 → 刷新 → 判定」同步递归。
+    @ObservationIgnored var isApplyingSubtitlePreference = false
+    /// 侧车字幕正在批量装载（`beginExternalSubtitleBatch` / `endExternalSubtitleBatch`）。
+    ///
+    /// 侧车是一条条挂上来的、每条都会刷轨道列表：逐条校正会让「繁體先下完、简体后
+    /// 下完」的片源在开播头几秒连续切换两次字幕轨（每次都是内核级轨切换，会停/重启
+    /// 音频输出）。批次期间挂起校正，整批结束后统一做一次。
+    @ObservationIgnored var isLoadingExternalSubtitleBatch = false
+    #if DEBUG
+    /// 测试观察口：本代次按偏好下发选轨 / 关字幕的次数（幂等与「不重复下发」靠它验）。
+    @ObservationIgnored var appliedSubtitlePreferenceCount = 0
+    #endif
     var danmakuEnabled = PlaybackPreferences.danmakuEnabled
     var danmakuOpacity = PlaybackPreferences.danmakuOpacity
     var danmakuDisplayArea = PlaybackPreferences.danmakuDisplayArea
@@ -435,6 +457,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         do {
             let engine = try PlaybackEngineRegistry.makeSelected()
             eventTask = state.start(consuming: engine)
+            // 轨道就绪 / 变化点：自动选字幕挂这里（见 `applySubtitlePreferenceIfNeeded`）。
+            state.onTracksRefreshed = { [weak self] in
+                self?.applySubtitlePreferenceIfNeeded()
+            }
             self.engine = engine
             setupError = nil
             // 创建 config 里的 headroom 取自工厂时刻的屏幕查询；探针若已报过
@@ -1113,6 +1139,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
         externalSubtitleNames = [:]
+        userChoseSubtitleForCurrentSource = false
+        isLoadingExternalSubtitleBatch = false
+        #if DEBUG
+        appliedSubtitlePreferenceCount = 0
+        #endif
         chapterSession.reset()
         skipTimesHint = nil
         // engine 没了就一定不在播，息屏令牌和系统登记立刻还回去（stopPlayback 也经过这里）。

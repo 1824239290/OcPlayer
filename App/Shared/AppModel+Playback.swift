@@ -753,7 +753,7 @@ extension AppModel {
     }
 
     /// Jellyfin 侧车字幕（`.zh.srt` 这类不在容器里的）：列出 → 逐条下载 → 喂给内核。
-    /// 装载完如果一条字幕都没选，自动挑中文优先的一条。
+    /// 整批装载结束后按偏好校正一次字幕选择（见 `endExternalSubtitleBatch`）。
     func loadExternalSubtitles(
         for item: MediaItem,
         identity: ActivePlaybackIdentity,
@@ -781,6 +781,12 @@ extension AppModel {
                   let playback = self.playback,
                   let source = await playback.waitUntilSourceReady(for: request.id)
             else { return }
+            // 批次闸门：逐条 `addExternalSubtitle` 都会刷轨道列表，实时校正会让
+            // 「繁體先下完、简体后下完」在这里连着切两次字幕轨。整批只校正一次。
+            // 用 `defer` 收尾：循环里有多处提前 return（取消 / 换片 / 单条失败），
+            // 少关一次 flag 就是这一整片再也不按偏好选字幕。
+            playback.beginExternalSubtitleBatch()
+            defer { playback.endExternalSubtitleBatch(for: source) }
             for subtitle in subtitles {
                 guard !Task.isCancelled else { return }
                 let file: URL
@@ -802,7 +808,6 @@ extension AppModel {
                 let name = Self.subtitleDisplayName(for: subtitle)
                 guard playback.addExternalSubtitle(fileURL: file, name: name, for: source) else { return }
             }
-            _ = playback.autoSelectSubtitleIfNone(for: source)
         }
     }
 }

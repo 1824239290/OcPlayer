@@ -59,8 +59,28 @@ final class ErikaTrackTests: XCTestCase {
         XCTAssertEqual(subtitle.source, .external)
         try engine.selectSubtitleTrack(subtitle.id)
 
+        // 4b) 选轨后 `tracks()` 必须把这条报成 selected。
+        //
+        // 这不是内核自娱自乐的细节：App 层的自动选字幕（`SubtitleTrackSelector`）
+        // 靠「当前 selected 就是最优解 → keep」收口，内核若迟迟不更新 selected，
+        // 每次 `trackSelectionChanged` 刷新都会再下发一次同样的选轨，形成抖动。
+        let selectedAfter = try await waitForTracks(engine) {
+            $0.contains { $0.kind == .subtitle && $0.id == subtitle.id && $0.selected }
+        }
+        XCTAssertTrue(
+            selectedAfter.contains { $0.kind == .subtitle && $0.id == subtitle.id && $0.selected },
+            "选中的外挂字幕轨应在 tracks() 里报 selected，否则宿主侧判定无法收敛"
+        )
+
         // 5) 选中后再次「关掉」
         try engine.selectSubtitleTrack(nil)
+        let closed = try await waitForTracks(engine) {
+            !$0.contains { $0.kind == .subtitle && $0.selected }
+        }
+        XCTAssertFalse(
+            closed.contains { $0.kind == .subtitle && $0.selected },
+            "关字幕后不该还有字幕轨报 selected"
+        )
     }
 
     /// 手动 tick 直到轨道条件满足（无头环境内核事件靠 tick 驱动）。
