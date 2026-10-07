@@ -12,6 +12,16 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<!-- iOS 后台播放：内核只推 AudioQueue，不会自己申请后台能力；不声明这一项，
+	     进程进后台几百毫秒就被挂起，音频出口与 VideoToolbox 解码会话一起被拆掉，
+	     回前台第一包数据喂进 avcodec_send_packet 就是 AVERROR_UNKNOWN（-1313558101），
+	     播放器被钉在错误态、只能手动点重试。声明 audio 后进程继续活着，配合宿主侧的
+	     .playback 音频会话（ErikaKit/ErikaAudioSession.swift）锁屏 / 切后台继续出声。
+	     macOS 忽略这一项（该 key 只在 iOS 系生效）。 -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<!-- Bangumi OAuth：client_id / client_secret 只在 OcPlay 网关，客户端不持有；
 	     授权回调 scheme 固定为 ocplayer（见下方 CFBundleURLTypes），
 	     网关换 token 后 App 处理 ocplayer://oauth/callback 回调。 -->

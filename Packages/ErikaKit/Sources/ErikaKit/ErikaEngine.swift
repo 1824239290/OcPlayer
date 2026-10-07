@@ -42,10 +42,52 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     public static let supportsKernelDanmaku = true
 
+    /// 内核内建后台播放通路：`audio_only_tick` 会挂起视频解码、只推进音频，
+    /// 回前台第一次 `render_tick` 再 flush 解码器 + 回关键帧续上画面。
+    public static let supportsBackgroundAudio = true
+
     private let lock = NSLock()
     private let presenter: ErikaPresenter
     private let renderLoop: RenderLoop
     private let continuation: AsyncStream<PlayerEvent>.Continuation
+
+    // MARK: 后台档位（改这块前先读 setBackgroundAudioOnly）
+
+    /// 后台档位状态。独立小锁：渲染线程每帧要在**进主锁之前**判档位，
+    /// 而切档发生在主线程，不能用主锁保护（主锁会被 open 长持）。
+    private let backgroundLock = NSLock()
+    private var _backgroundAudioOnly = false
+    /// 后台档的音频推进定时器；非后台档时为 nil。
+    private var backgroundTimer: DispatchSourceTimer?
+    /// 定时器队列。**不能复用渲染线程**：那条线程跑的是 `CADisplayLink` 的 runloop，
+    /// 后台没有 vsync，它跟着一起停摆。
+    private static let backgroundQueueLabel = "dev.jumusu.OcPlayer.audio-only"
+    private let backgroundQueue = DispatchQueue(
+        label: ErikaEngine.backgroundQueueLabel,
+        qos: .userInteractive
+    )
+    /// 已 attach 的承载视图（弱引用）。回前台要重启 `RenderLoop`，而
+    /// `RenderLoop.start` 要摸视图（macOS 靠 `NSView.displayLink` 跟随所在显示器）。
+    ///
+    /// 槽位由 `backgroundLock` 保护，**不是**因为指针本身会被并发解引用，而是写方
+    /// 分布在两个隔离域：`attach()` 在主线程，`detach()` 可能从视图的 `deinit` 过来
+    /// （`MetalHostView` 的 deinit / teardown），读方是主 actor 上的重启路径。
+    /// 与 `_deferredSurface` 存 `PlatformView` 是同一套处理：锁只保护槽位，
+    /// 真正使用指针只在主 actor 里（`RenderLoop.start`）。
+    private weak var _attachedView: PlatformView?
+
+    private func storedAttachedView() -> PlatformView? {
+        backgroundLock.lock()
+        defer { backgroundLock.unlock() }
+        // 出锁即转强引用：调用方拿到的视图不会被半路释放。
+        return _attachedView
+    }
+
+    private func setAttachedView(_ view: PlatformView?) {
+        backgroundLock.lock()
+        _attachedView = view
+        backgroundLock.unlock()
+    }
 
     // MARK: open 让位契约（改 open / stop / detach 前先读）
 
@@ -190,6 +232,8 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     deinit {
         renderLoop.stop()
+        // 后台档的定时器要显式取消：handler 虽是 weak self，但定时器本身会活到 cancel。
+        stopBackgroundTimer()
         continuation.finish()
     }
 
@@ -229,6 +273,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             throw error
         }
         PlaybackLog.info("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
+        setAttachedView(view)
         renderLoop.start(on: view)
     }
 
@@ -266,6 +311,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             return false
         }
         renderLoop.stop()
+        setAttachedView(nil)
         do {
             try withLock { try presenter.detachSurface() }
             PlaybackLog.info("detach surface 成功")
@@ -392,6 +438,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             // Sendable,但真实访问被 @MainActor 闭环限定,盒子只为过并发检查。
             let viewBox = UncheckedSendableBox(value: view)
             let loopBox = UncheckedSendableBox(value: renderLoop)
+            setAttachedView(view)
             Task { @MainActor in
                 loopBox.value.start(on: viewBox.value)
             }
@@ -399,6 +446,87 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     }
 
     private static let resizeThrottle = DiagnosticThrottle(key: "resize-surface", interval: 1)
+
+    // MARK: - 后台档位
+
+    /// 进后台（`true`）/ 回前台（`false`）切换帧驱动。
+    ///
+    /// **为什么要切**：后台没有 vsync，`CADisplayLink` 不再回调；而进程靠
+    /// `UIBackgroundModes: audio` + `.playback` 会话活着，必须有人继续推进音频，
+    /// 否则几百毫秒后音频队列就饿了。切过去之后内核走 `audio_only_tick`，
+    /// 它会挂起视频解码（`set_video_decode_suspended(true)`）并丢掉待解码帧——
+    /// 回前台第一次 `render_tick` 再 flush 解码器 + 回关键帧续上。
+    /// 这条通路是内核内建的，宿主只需要负责换驱动 + 保证 surface 还在。
+    ///
+    /// **顺序有讲究**：进档先停 `RenderLoop`（等渲染线程真正退出）再起定时器，
+    /// 保证不会再有一次 `render_tick` 把刚挂起的解码解开；退档反着来。
+    /// 两边都由 `step` 的档位闸门兜底，跨线程迟到的回调不会造成档位来回翻。
+    ///
+    /// 幂等：重复进/退档直接返回，不会反复重建定时器。
+    public func setBackgroundAudioOnly(_ active: Bool) {
+        backgroundLock.lock()
+        guard _backgroundAudioOnly != active else {
+            backgroundLock.unlock()
+            return
+        }
+        _backgroundAudioOnly = active
+        backgroundLock.unlock()
+
+        if active {
+            // 等渲染线程退出（内部最长等 1s），之后不会再有人调 render_tick。
+            renderLoop.stop()
+            startBackgroundTimer()
+            PlaybackLog.info("进后台档：帧驱动交给定时器，内核将挂起视频解码")
+        } else {
+            stopBackgroundTimer()
+            restartRenderLoop()
+            PlaybackLog.info("退后台档：帧驱动交回 CADisplayLink，内核在渲染帧里恢复视频解码")
+        }
+    }
+
+    private var isBackgroundAudioOnly: Bool {
+        backgroundLock.lock()
+        defer { backgroundLock.unlock() }
+        return _backgroundAudioOnly
+    }
+
+    /// 后台档的音频推进：16ms 一拍（≈60Hz，与内核的音频泵一致）。
+    /// leeway 给 4ms —— 后台不追求画面级时序，让系统有机会合并唤醒省电。
+    private func startBackgroundTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: backgroundQueue)
+        timer.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(4))
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            self.step(presentationTime: CACurrentMediaTime(), audioOnly: true)
+        }
+        timer.resume()
+        backgroundLock.lock()
+        backgroundTimer = timer
+        backgroundLock.unlock()
+    }
+
+    private func stopBackgroundTimer() {
+        backgroundLock.lock()
+        let timer = backgroundTimer
+        backgroundTimer = nil
+        backgroundLock.unlock()
+        // cancel 是异步的：已经在跑的 handler 会走完，由 step 的档位闸门丢弃。
+        timer?.cancel()
+    }
+
+    /// 回前台重启帧驱动。`RenderLoop.start` 要摸视图，只能在主线程做。
+    /// 没有已挂载的 surface 时不重启——此时内核的 `try_resume_video_decode` 也会因为
+    /// `surface_is_ready()` 不成立而保持挂起，等下一次 attach 自己把帧驱动带起来。
+    private func restartRenderLoop() {
+        guard let view = storedAttachedView() else {
+            PlaybackLog.warning("退后台档时没有已挂载的 surface，帧驱动未重启")
+            return
+        }
+        let viewBox = UncheckedSendableBox(value: view)
+        Task { @MainActor in
+            self.renderLoop.start(on: viewBox.value)
+        }
+    }
 
     // MARK: - 播放控制
 
@@ -432,6 +560,11 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     public func play() throws {
         if dropControlDuringOpen("play") { return }
+        // 音频会话必须在 play 之前配好：内核只推 AudioQueue，不碰 AVAudioSession，
+        // 默认类别下退后台 / 锁屏时系统会把会话和队列一起收走（见 ErikaAudioSession）。
+        #if os(iOS)
+        ErikaAudioSession.activateForPlayback()
+        #endif
         do {
             try withLock { try presenter.play() }
             PlaybackLog.info("play() 成功")
@@ -795,13 +928,24 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     private static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
 
     /// 渲染线程每帧一次。
-    private func step(presentationTime: Double) {
+    ///
+    /// `audioOnly` 为真时走 `audio_only_tick`（后台档）：内核据此**挂起视频解码**，
+    /// 只推进音频；事件抽干、统计采样、帧率档位这些外围逻辑两条路完全共用，
+    /// 否则后台期间的 position 事件会断供，锁屏进度条就冻住了。
+    private func step(presentationTime: Double, audioOnly: Bool = false) {
+        // 档位闸门：切档与 tick 来自不同线程，迟到的回调必须丢掉。
+        //  - 退出后台档后迟到的定时器回调若放行，会把内核刚解开的视频解码又挂起；
+        //  - 后台档期间若还有 render_tick 在跑（例如期间重新 attach 起了渲染线程），
+        //    放行等于把刚挂起的解码立刻解开，这一档就白切了。
+        guard audioOnly == isBackgroundAudioOnly else { return }
         var pending: [PlayerEvent] = []
 
         lock.lock()
         var memorySnapshot: ErikaMemorySnapshot?
         do {
-            let stats = try presenter.renderTick(at: presentationTime)
+            let stats = audioOnly
+                ? try presenter.audioOnlyTick()
+                : try presenter.renderTick(at: presentationTime)
             statsLock.lock()
             _latestStats = stats
             statsLock.unlock()            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。

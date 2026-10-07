@@ -92,6 +92,27 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     func setRate(_ rate: Double) throws
     func setVolume(_ volume: Double) throws
 
+    // MARK: - 后台档位（可选能力）
+
+    /// 内核是否支持「后台仅音频推进」档位（`setBackgroundAudioOnly`）。
+    ///
+    /// `false` 时宿主进后台只能主动 `pause()`：进程被挂起后音频出口撑不过往返，
+    /// 回来只能重建。支持的内核（Erika）可以在后台继续出声，回前台无缝续上画面。
+    /// 设置页 / 播放器不直接读它，`PlaybackController` 据它选进后台的策略。
+    static var supportsBackgroundAudio: Bool { get }
+
+    /// 进后台（`true`）/ 回前台（`false`）切换帧驱动档位。
+    ///
+    /// `true`：宿主停掉画面帧驱动（后台没有 vsync，`CADisplayLink` 不会再来），
+    /// 改用定时器只推进音频；内核在这一档里**自行挂起视频解码**，避免解码会话
+    /// 跨挂起往返后把第一包数据喂炸。
+    /// `false`：切回画面帧驱动；内核在渲染帧里 flush 解码器 + 回关键帧恢复视频，
+    /// 因此切回时 **surface 必须已 attach 且尺寸 > 0**，否则视频会静默保持挂起。
+    ///
+    /// 非抛：这是提示性调用，失败不打断播放（内核侧只记日志）。
+    /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认空实现。
+    func setBackgroundAudioOnly(_ active: Bool)
+
     // MARK: - 轨道与字幕
 
     func tracks() throws -> [TrackInfo]
@@ -144,6 +165,13 @@ public extension PlaybackEngine {
     /// 不接收显示器 headroom 更新的内核：空操作。headroom 只由创建参数决定
     /// （或内核自己探测显示器）。
     func updateDisplayEDRHeadroom(_ headroom: Double) {}
+
+    /// 不支持这个档位的内核：空操作。它们的音频输出不靠宿主驱动帧，
+    /// 进后台的行为由 `PlaybackController` 退回「主动暂停」承担。
+    func setBackgroundAudioOnly(_ active: Bool) {}
+
+    /// 没有后台档的内核（默认）。
+    static var supportsBackgroundAudio: Bool { false }
 
     /// 首帧是否已经出画。播放 loading 覆盖层撤掉的判据——
     /// 内核报了 ready 不代表屏幕上有东西，必须等真正渲染过一帧，

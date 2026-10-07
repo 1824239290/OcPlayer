@@ -12,11 +12,12 @@ private let remoteSkipInterval: Double = 10
 /// 拿到的好处：macOS 上键盘媒体键 / 控制中心 / 灵动岛式的「正在播放」小组件能控播放，
 /// iOS 上锁屏与控制中心同理。之前这些一律没反应——App 从来没往系统登记过任何东西。
 ///
-/// **刻意不碰 `AVAudioSession`**：内核（Erika）自己在 Rust 侧配置音频输出，
-/// App 层再去 setCategory / setActive 有可能把它已经建好的会话打翻。
-/// 这里只做两件纯登记的事——报元数据、收命令，不改任何音频状态。
-/// 因此 iOS 上锁屏能否显示，取决于内核把会话激活成什么类别；
-/// 后台播放还需要 `UIBackgroundModes: audio`（当前 Info.plist 没开，属另一件事）。
+/// **刻意不碰 `AVAudioSession`**：音频会话的类别 / 激活由内核适配器在每次
+/// `play()` 之前统一配置（`ErikaEngine.play()` → `ErikaAudioSession`），
+/// 这里再去 setCategory / setActive 只会和它抢同一份全局状态。
+/// 本类型只做两件纯登记的事——报元数据、收命令，不改任何音频状态。
+/// 配套前提是 `Info.plist` 的 `UIBackgroundModes: audio`（已在 `Config/Info.plist` 声明），
+/// 有它才谈得上后台继续播放与锁屏控件真正可控。
 @MainActor
 final class PlaybackNowPlayingCenter {
     /// 命令回调。`PlaybackController` 装一次，之后不再变。

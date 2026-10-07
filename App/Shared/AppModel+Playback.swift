@@ -400,10 +400,11 @@ extension AppModel {
     /// Hook this to `scenePhase == .background`. It immediately snapshots the
     /// current position instead of waiting for the next ten-second heartbeat.
     ///
-    /// iOS 上这一步还要在进程被挂起**之前**把在播的会话停下：冻住再醒来，内核的
-    /// 音频出口（AudioQueue）与 VideoToolbox 解码会话都撑不过来，回前台第一个包
-    /// 喂进 `avcodec_send_packet` 就是 AVERROR_UNKNOWN，播放器被钉在错误态，
-    /// 只能手动重试（用户截图里的那条）。详见 `PlaybackController.beginSystemSuspension`。
+    /// iOS 上还要在这里把播放切进「后台档」：进程靠 `UIBackgroundModes: audio` +
+    /// `.playback` 会话活着继续出声，但后台没有 vsync，帧驱动得从 `CADisplayLink`
+    /// 换到定时器（`setBackgroundAudioOnly(true)`），内核在这一档里挂起视频解码，
+    /// 避开「解码会话跨挂起往返后第一包数据就炸」（AVERROR_UNKNOWN -1313558101）
+    /// 那条只能手动重试的死路。详见 `PlaybackController.beginSystemSuspension`。
     @discardableResult
     func playbackDidEnterBackground() -> Task<Void, Never>? {
         #if os(iOS)
@@ -418,9 +419,10 @@ extension AppModel {
 
     /// Hook this to the foreground transition（`scenePhase == .active`）。
     ///
-    /// 按离开前记下的意图把播放接回去：内核算健康就直接解开那次暂停；内核没撑过
-    /// 挂起（`.error` / `setupError`）就走一次**静默重建**——和用户点「重试」是同
-    /// 一条路，只是不用他点。macOS 不挂起进程，这条路径整个是空转。
+    /// 按离开前记下的意图把播放接回去：正常路径只需要**退出后台档**——内核在回前台
+    /// 第一帧渲染 tick 里自行 flush 解码器 + 回关键帧恢复视频，不用重建任何东西。
+    /// 只有内核确实没撑住（`.error` / `setupError`）才走一次**静默重建**——和用户点
+    /// 「重试」是同一条路，只是不用他点。macOS 不挂起进程，这条路径整个是空转。
     func playbackDidEnterForeground() {
         #if os(iOS)
         guard let playback else { return }
@@ -436,8 +438,9 @@ extension AppModel {
         case .none:
             break
         case .resume:
-            // 恢复要重建 VT / AudioQueue，报错未必在 play() 当场落地——盯一小段；
-            // 连 play() 都没调成（内核已经不听使唤）就直接重建，不猜。
+            // 退出后台档后，内核要在回前台的头几帧里 flush 解码器 + 回关键帧重建 VT
+            // 会话，报错未必当场落地——盯一小段；连档位都没退成（内核已经不听使唤）
+            // 就直接重建，不猜。
             if reusable {
                 watchPlaybackAfterSystemResume()
             } else {
@@ -453,9 +456,9 @@ extension AppModel {
     enum ForegroundResumeAction: Equatable {
         /// 离开前没在播（用户自己按的暂停 / 本来就停在错误页）：什么都不做。
         case none
-        /// 内核算健康：把离开前那次暂停解开。
+        /// 内核算健康：退出后台档接着播（没有后台档的内核则是解开那次暂停）。
         case resume
-        /// 内核没撑过挂起：按「重试」那条路重建后接着播。
+        /// 内核没撑过后台往返：按「重试」那条路重建后接着播。
         case rebuild
     }
 

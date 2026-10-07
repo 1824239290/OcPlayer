@@ -305,10 +305,27 @@ final class PlaybackController: DanmakuPlaybackHosting {
     @ObservationIgnored private var suspendedSeconds: TimeInterval = 0
     @ObservationIgnored private var suspendedSince: Date?
 
+    /// 这次前后台往返用的哪条策略。进后台时选定，回前台按它退回——
+    /// 不能只看当前状态猜：后台档期间用户可能在锁屏上按过暂停。
+    @ObservationIgnored private var suspensionMode: SuspensionMode = .none
+
+    private enum SuspensionMode {
+        /// 没进过后台 / 进后台时就没在播。
+        case none
+        /// 内核有后台档：帧驱动交给定时器，内核挂起视频解码，回前台切回渲染档即可。
+        case audioOnly
+        /// 内核没有后台档：进程被挂起前主动暂停，回前台 play() 解开。
+        case paused
+    }
+
     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
     @ObservationIgnored private let wakeLock = PlaybackWakeLock()
     /// 系统「正在播放」与媒体键 / 控制中心命令。同样没有 UI 表示。
     @ObservationIgnored private let nowPlaying = PlaybackNowPlayingCenter()
+    #if os(iOS)
+    /// 来电 / Siri 之类的音频中断。配上 `.playback` 会话后系统才会发这些通知。
+    @ObservationIgnored private let audioInterruptions = PlaybackAudioInterruptions()
+    #endif
 
     /// 按当前状态对齐息屏抑制与系统「正在播放」。
     ///
@@ -348,7 +365,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         syncSystemPlaybackState()
     }
 
-    /// 装远程命令回调。`RootView` 注入控制器后调一次即可。
+    /// 装系统集成：远程命令回调 + iOS 音频中断。`RootView` 注入控制器后调一次即可。
     /// 闭包捕获 `self` 用 weak：命令中心是全局单例，强引用会把控制器永久钉住。
     func installRemoteCommandHandlers() {
         nowPlaying.install(handlers: .init(
@@ -370,7 +387,39 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 try? self.engine?.seek(to: .microseconds(Int64(target * 1_000_000)))
             }
         ))
+        #if os(iOS)
+        audioInterruptions.install(handlers: .init(
+            isPlaying: { [weak self] in self?.state.state == .playing },
+            pause: { [weak self] in self?.pauseForAudioInterruption() },
+            play: { [weak self] in self?.resumeAfterAudioInterruption() }
+        ))
+        audioInterruptions.start()
+        #endif
     }
+
+    #if os(iOS)
+    /// 中断收放：**刻意不经过 `togglePlayPause()`**——那条路会把「这次中断欠一次
+    /// 自动恢复」的标记当作用户意图清掉，电话挂断后就再也不自动接着播了。
+    private func pauseForAudioInterruption() {
+        guard state.state == .playing, let engine else { return }
+        do {
+            try engine.pause()
+            PlaybackLog.append("音频中断：暂停")
+        } catch {
+            setupError = "\(error)"
+        }
+    }
+
+    private func resumeAfterAudioInterruption() {
+        guard state.state == .paused, let engine else { return }
+        do {
+            try engine.play()
+            PlaybackLog.append("音频中断结束：接着播")
+        } catch {
+            setupError = "\(error)"
+        }
+    }
+    #endif
 
     /// 引擎懒创建：创建失败（缺内核 / 显卡不支持）时把原因留给 UI 显示。
     ///
@@ -1156,15 +1205,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     // MARK: - 系统前后台（iOS 挂起往返）
 
-    /// 进后台：开始记挂起时长；**在播的会话主动暂停**，返回「回前台是否该接着播」。
+    /// 进后台：开始记挂起时长，按内核能力选策略，返回「回前台是否该接着播」。
     ///
-    /// 为什么不能放着不管：iOS 没给这个 App 后台音频能力（Info.plist 无
-    /// `UIBackgroundModes: audio`，App 层也不配 `AVAudioSession`），进程几百毫秒后
-    /// 就被挂起。内核的音频出口（iOS 上是 AudioQueue）与 VideoToolbox 解码会话
-    /// 撑不过这趟往返：回前台后第一包数据喂进 `avcodec_send_packet` 直接
-    /// AVERROR_UNKNOWN（未知错误 -1313558101），播放器被钉死在 `.error`，
-    /// 只能手动「重试」重建内核才能继续。挂起前先停，内核就不会对着一个正在
-    /// 被系统拆掉的音频出口做恢复动作，回前台那条路也只剩「接着播」。
+    /// **有后台档的内核（Erika）**：进程靠 `UIBackgroundModes: audio` +
+    /// `.playback` 会话活着（见 `ErikaAudioSession`），不暂停、继续出声，只把帧驱动
+    /// 交给定时器（`setBackgroundAudioOnly(true)`）——内核在这一档里挂起视频解码，
+    /// 避开「解码会话跨挂起往返后第一包数据就炸」那条老路
+    /// （AVERROR_UNKNOWN -1313558101，回前台钉在错误态只能手动重试）。
+    ///
+    /// **没有后台档的内核**：退回原来的做法——在进程被挂起前主动暂停，
+    /// 回前台再解开；内核没撑住则由 App 层的重建路径兜。
     ///
     /// 已经在别的状态（暂停 / open 在飞 / 已报错）时不动引擎，返回 false——
     /// 那不是「用户离开时正在看」，前台不做任何自动动作。
@@ -1172,46 +1222,83 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func beginSystemSuspension() -> Bool {
         suspendedSince = Date()
         guard engineIsActive, openingRequestID == nil else { return false }
-        // `.ready` 也要停：那是「open 完了、内核正在自动起播」的窗口，冻在半路
-        // 回前台会停在一个说不清的状态；按暂停处理，回来接上。
+        // `.ready` 也要处理：那是「open 完了、内核正在自动起播」的窗口，冻在半路
+        // 回前台会停在一个说不清的状态；按「回来接上」处理。
         guard state.state == .playing || state.state == .ready else { return false }
+        guard let engine else { return false }
+
+        if type(of: engine).supportsBackgroundAudio {
+            engine.setBackgroundAudioOnly(true)
+            suspensionMode = .audioOnly
+            PlaybackLog.append("系统进后台：切到仅音频推进档，保持播放")
+            return true
+        }
+
         do {
-            try engine?.pause()
+            try engine.pause()
+            suspensionMode = .paused
             PlaybackLog.append("系统进后台：暂停在播会话，等回前台接着播")
             return true
         } catch {
             // 暂停都失败 = 这条会话已经不健康。照样记「该接着播」：
             // 回前台由 App 层的重建路径兜（见 AppModel.recoverPlaybackAfterBackgroundFailure）。
             playerLog.warning("系统进后台暂停失败，回前台按重建处理 error=\(error)")
+            suspensionMode = .none
             return true
         }
     }
 
-    /// 回前台：结束挂起时长记账；`resumePlaying` 为真且状态停在暂停 / 就绪时接着播。
+    /// 回前台：结束挂起时长记账，按进后台时选的策略退回。
     ///
-    /// 返回「这条会话能不能接着用」：状态不是暂停（内核在挂起期间死掉 → `.error`，
-    /// 或本次离开前就没在播）返回 false，`play()` 自己抛错也返回 false——两种情况
-    /// 都由 App 层决定要不要重建（它才知道这是哪一条 Jellyfin 会话）。
+    /// 返回「这条会话能不能接着用」：内核在后台期间死掉（`.error` / `setupError`）、
+    /// 或本次离开前就没在播，都返回 false——由 App 层决定要不要重建
+    /// （它才知道这是哪一条 Jellyfin 会话）。
     func endSystemSuspension(resumePlaying: Bool) -> Bool {
         if let since = suspendedSince {
             suspendedSeconds += Date().timeIntervalSince(since)
             suspendedSince = nil
         }
+        let mode = suspensionMode
+        suspensionMode = .none
+        // 档位是**驱动层**的事，和「要不要接着播」无关，必须无条件退出：
+        // 用户在后台把播放停掉（锁屏 / 播完自动关）再回前台时，决策表给的是 `.none`
+        // （`resumePlaying == false`），若把它和 play() 一起挡在 guard 后面，
+        // 渲染线程就再也不会被启动——回来是一片永远不动的黑屏。
+        if case .audioOnly = mode {
+            engine?.setBackgroundAudioOnly(false)
+        }
         guard resumePlaying, engineIsActive else { return false }
-        switch state.state {
-        case .paused, .ready:
-            do {
-                try engine?.play()
-                PlaybackLog.append("系统回前台：接着播")
+        switch mode {
+        case .audioOnly:
+            // 后台档里没暂停过，所以这里**没有** play() 要补：切回渲染档即可，
+            // 内核在随后第一帧渲染 tick 里自行 flush 解码器 + 回关键帧恢复视频。
+            // 只要它没落进错误态就还能接着用。
+            switch state.state {
+            case .playing, .paused, .ready:
+                PlaybackLog.append("系统回前台：退出仅音频推进档")
                 return true
-            } catch {
-                playerLog.warning("系统回前台恢复播放失败，走重建 error=\(error)")
+            default:
                 return false
             }
-        case .playing:
-            // 暂停没落下去（或被别处先恢复了）：已经在播，不重复 play。
-            return true
-        default:
+        case .paused:
+            switch state.state {
+            case .paused, .ready:
+                do {
+                    try engine?.play()
+                    PlaybackLog.append("系统回前台：接着播")
+                    return true
+                } catch {
+                    playerLog.warning("系统回前台恢复播放失败，走重建 error=\(error)")
+                    return false
+                }
+            case .playing:
+                // 暂停没落下去（或被别处先恢复了）：已经在播，不重复 play。
+                return true
+            default:
+                return false
+            }
+        case .none:
+            // 进后台时暂停就没成功（会话已经不健康）：交给 App 层重建。
             return false
         }
     }
@@ -1219,6 +1306,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
     // MARK: - 控制
 
     func togglePlayPause() {
+        #if os(iOS)
+        // 用户（或远程命令）自己按的收放：这次音频中断不再欠一次自动恢复。
+        audioInterruptions.noteUserIntent()
+        #endif
         // open 在飞（loading 层）时按下播放/暂停：把意图记下来，open 成功后补 pause。
         // 此时没有媒体内容，引擎侧 play/pause 都是丢弃；而 open 成功路径的 play()
         // 在队列闭包里，任何更早的 pause 都会被它盖掉。
