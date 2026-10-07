@@ -155,22 +155,37 @@ public struct JellyfinServer: MediaServer {
             .filter { $0.collectionType != .unknown && $0.collectionType != .folders }
     }
 
-    /// 首页「最近添加」。返回的是裸数组（非 QueryResult 信封）。
+    /// 首页「最近添加」：最近入库的电影 / 剧集，服务端按入库时间倒序。
+    ///
+    /// **刻意不用 `/Items/Latest`**——Jellyfin **12.1.0** 上该端点一旦带
+    /// `includeItemTypes` 就恒返回空数组。2026-10-07 对 12.1.0 实测（同一账号、
+    /// 同一台服务器）：`/Items/Latest?userId=…&includeItemTypes=Movie,Series&limit=24`
+    /// → `[]`，**HTTP 200**；同一个请求去掉 `includeItemTypes` 才返回内容；
+    /// 换成 `Movie` / `Series` / 小写 / 合并写法结果一样空。空数组是「成功值」，
+    /// 所以症状是首页「最近添加」整条**静默**消失——连 `rail 加载失败` 都不打。
+    ///
+    /// 补 `groupItems=false` 能让它出内容，但**会漏条目**（同一次实测：15 条 vs
+    /// `/Items` 的 43 条，连「刚入库两天」的条目都不在里面），所以这不是「少个参数」
+    /// 能修的病，而是该换端点。
+    ///
+    /// `/Items` + `DateCreated` 倒序是本机 12.1.0 实测正常的口径，也是本文件
+    /// `favoriteItems` 与库页「排序 = 最近添加」（`MediaItemsSortField.dateAdded`）
+    /// 一直在用的写法；10.x 起就稳定，比 12.x 的 Latest 保守。`isRecursive` 必需
+    /// （默认 false 时只返回顶层项）。注意返回的是信封 `BaseItemDtoQueryResult`，
+    /// 与 Emby 侧老式路由的裸数组不同。
     public func latestItems(limit: Int = 24) async throws -> [MediaItem] {
-        try await send(
-            Request<[BaseItemDto]>(
-                path: "/Items/Latest",
-                method: "GET",
-                query: [
-                    ("userId", profile.userID),
-                    ("includeItemTypes", "Movie,Series"),
-                    ("enableImageTypes", "Primary,Backdrop,Thumb,Logo"),
-                    ("limit", String(limit)),
-                ],
-                id: "GetLatestMedia"
-            )
+        let result = try await send(
+            Paths.getItems(parameters: .init(
+                userID: profile.userID,
+                limit: limit,
+                isRecursive: true,
+                sortOrder: [.descending],
+                includeItemTypes: [.movie, .series],
+                sortBy: [.dateCreated],
+                enableImageTypes: [.primary, .backdrop, .logo]
+            ))
         )
-        .map(\.domainItem)
+        return result.items?.map(\.domainItem) ?? []
     }
 
     /// 用户收藏的电影 / 剧集（M4 独立收藏页预留）。

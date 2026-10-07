@@ -7,11 +7,16 @@ import XCTest
 /// 首页三态判定（`AppModel.homePresentation`）。
 ///
 /// 这个文件的存在理由是**一次真实事故**：判定原先内联在 `HomeView` 的 `if` 链里，
-/// 用 `home.latest.isEmpty` 单独一条 rail 当「有没有内容」的判据。而服务器可以没有
-/// 「最近添加」（`railPresence` 就是为它存在的），那种服务器上 `latest` 恒为空——
+/// 用 `home.latest.isEmpty` 单独一条 rail 当「有没有内容」的判据。而「最近添加」可以为空
+/// （`railPresence` 就是为它存在的），那种形态下 `latest` 恒为空——
 /// 于是**缓存已经把内容读进内存了，界面还是只转骨架屏**（用户实测离线冷启动：
 /// 磁盘读出 resume=3 / nextUp=6，屏幕上却一直只有骨架）。判定留在视图里，
 /// 这件事就没有任何用例挡得住。
+///
+/// 记账：此后查出「本机那台服务器 latest 恒为空」**并不是服务器的固有形态**，
+/// 而是 `/Items/Latest` 带 `includeItemTypes` 在 Jellyfin 12.1.0 上恒返回空数组
+/// （2026-10-07 实测并修复，见 `JellyfinServer.latestItems`）。下面这些用例守的是
+/// 「latest 为空时三态判定不能错」，与 latest 为什么为空无关，**语义与断言都不变**。
 @MainActor
 final class HomePresentationTests: XCTestCase {
 
@@ -41,7 +46,9 @@ final class HomePresentationTests: XCTestCase {
     /// 后来全挂。必须显示内容，不能是骨架屏、也不能是错误页。
     func testCachedContentWinsOverLoadingAndError() {
         let app = AppModel()
-        // 关键：`latest` 为空——这台服务器没有「最近添加」，正是判据写错时踩的形态。
+        // 关键：`latest` 为空——这正是判据写错时踩的形态（本机 2026-10-07 之前
+        // 的 `latest` 恒空是 `/Items/Latest` 的 bug 造成的，但「某条 rail 为空」
+        // 本身是完全合法的服务器形态，判定必须扛住）。
         app.home = makeHome(resume: [item("r1"), item("r2"), item("r3")],
                             nextUp: (0..<6).map { item("n\($0)") },
                             isLoading: true,
@@ -58,7 +65,8 @@ final class HomePresentationTests: XCTestCase {
         XCTAssertEqual(app.homePresentation, .content)
     }
 
-    /// 「只有继续观看有内容、最近添加为空」是这台服务器的常态形态，单独钉一次。
+    /// 「只有继续观看有内容、最近添加为空」是合法且常见的形态（本机在 rails 修好前
+    /// 长期如此），单独钉一次。
     func testContentWithEmptyLatestStillCounts() {
         let app = AppModel()
         app.home = makeHome(resume: [item("r1")])

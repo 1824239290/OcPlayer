@@ -91,7 +91,8 @@ public protocol MediaServer: PlaybackReporting {
 
     /// 用户的媒体库列表（电影 / 剧集 / 音乐…）。
     func userViews() async throws -> [MediaLibrary]
-    /// 首页「最近添加」。
+    /// 首页「最近添加」：最近入库的电影 / 剧集（Jellyfin 侧按 `DateCreated` 倒序
+    /// 取，不用 `/Items/Latest`，原因见 `JellyfinServer.latestItems`）。
     func latestItems(limit: Int) async throws -> [MediaItem]
     /// 用户收藏的电影 / 剧集。
     func favoriteItems(limit: Int) async throws -> [MediaItem]

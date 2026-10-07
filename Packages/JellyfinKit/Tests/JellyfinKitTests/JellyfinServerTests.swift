@@ -201,6 +201,38 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    /// 回归（用户实测：首页「最近添加」整条消失）：**绝不能再打 `/Items/Latest`**。
+    ///
+    /// Jellyfin 12.1.0 上 `/Items/Latest` 一旦带 `includeItemTypes` 就恒返回 `[]`（HTTP 200），
+    /// 空数组是成功值 → rail 静默为空、连失败日志都不打。改用 `/Items` + `sortBy=DateCreated`
+    /// 倒序后本机实测 43 条电影/剧集（旧端点 0 条）。
+    ///
+    /// 这条用例同时钉三件互相关联的事：**端点**（`/Items` 而不是 `/Items/Latest`）、
+    /// **排序口径**（入库时间倒序，与库页「最近添加」同源）、**信封格式**
+    /// （`BaseItemDtoQueryResult`，不是 Latest 的裸数组——裸数组会直接解码失败）。
+    func testLatestMediaUsesItemsSortedByDateCreatedInsteadOfLatestEndpoint() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items", "不能再用 /Items/Latest：12.1.0 上带 includeItemTypes 恒返回空")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["recursive"], "true", "不递归只会拿到顶层项")
+            XCTAssertEqual(query["sortBy"], "DateCreated")
+            XCTAssertEqual(query["sortOrder"], "Descending", "最近添加 = 新在前")
+            XCTAssertEqual(query["limit"], "24")
+            XCTAssertEqual(query["userId"], "user-9")
+            XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Movie") == true)
+            XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Series") == true)
+            return MockURLProtocol.ok(
+                #"{"Items":[{"Id":"new-1","Name":"刚入库的剧","Type":"Series","ProductionYear":2026}],"TotalRecordCount":1}"#,
+                for: request.url!
+            )
+        } with: {
+            let items = try await makeServer().latestItems()
+            XCTAssertEqual(items.map(\.id), ["new-1"])
+            XCTAssertEqual(items[0].kind, .series)
+            XCTAssertEqual(items[0].year, 2026)
+        }
+    }
+
     func testItemRequestsPeopleGenresOverviewAndMapsCast() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items/abc")
@@ -759,7 +791,8 @@ final class JellyfinRetryBehaviourTests: XCTestCase {
             if attempts.increment() == 1 {
                 throw URLError(.notConnectedToInternet)
             }
-            return MockURLProtocol.ok("[]", for: request.url!)
+            // `latestItems` 走 `/Items`，服务端返回的是信封（不是 Latest 的裸数组）。
+            return MockURLProtocol.ok(#"{"Items":[],"TotalRecordCount":0}"#, for: request.url!)
         } with: {
             let items = try await makeServer().latestItems(limit: 5)
             XCTAssertTrue(items.isEmpty)
@@ -777,7 +810,8 @@ final class JellyfinRetryBehaviourTests: XCTestCase {
                     headerFields: ["Content-Type": "application/json"])!
                 return (response, Data(#"{"detail":"Bad Gateway"}"#.utf8))
             }
-            return MockURLProtocol.ok("[]", for: request.url!)
+            // 同上：`/Items` 的信封格式。
+            return MockURLProtocol.ok(#"{"Items":[],"TotalRecordCount":0}"#, for: request.url!)
         } with: {
             _ = try await makeServer().latestItems(limit: 5)
         }

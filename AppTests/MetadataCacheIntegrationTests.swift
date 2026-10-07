@@ -163,7 +163,9 @@ final class MetadataCacheIntegrationTests: XCTestCase {
     /// 用的 `latest.isEmpty` 把它挡在门外——两个各自"正确"的部分拼起来是坏的。
     func testOfflineColdStartShowsCachedContentInsteadOfSkeleton() async throws {
         let (app, stub, _, _) = try await makeApp { store, tenant in
-            // 复现这台服务器的形态：有「继续观看」「接下来看」，**没有「最近添加」**。
+            // 复现「latest 为空」的形态：有「继续观看」「接下来看」，这一条 rail 没内容。
+            // （本机 2026-10-07 之前正是这样，原因见 `JellyfinServer.latestItems`；
+            //  但「某条 rail 为空」本身也是合法的服务器形态，缓存预热必须扛住。）
             try await store.saveLibraries([
                 MediaLibrary(id: "lib-1", name: "电视剧", collectionType: .tvshows),
             ], tenant: tenant)
@@ -171,7 +173,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
                                      rail: "resume", tenant: tenant)
             try await store.saveRail((0..<6).map { MediaItem(id: "n\($0)", name: "下一集\($0)", kind: .episode) },
                                      rail: "nextUp", tenant: tenant)
-            // latest 刻意不写：服务器没有这一个 rail。
+            // latest 刻意不写：这条 rail 没有内容。
         }
 
         app.phase = .ready
