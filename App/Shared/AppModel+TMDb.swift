@@ -62,9 +62,13 @@ extension AppModel {
     /// - Parameter members: 合集成员。它同时是**定位的输入**（成员的
     ///   `ProviderIds["Tmdb"]` → `/movie/{id}` → `belongs_to_collection`），
     ///   所以必须在成员加载完之后调，否则只能眼睁睁返回 false。
-    @discardableResult
-    func refreshTMDbCollection(for item: MediaItem, members: [MediaItem]) async -> Bool {
-        guard let tenant = currentTenant else { return false }
+    /// - Returns: `RefreshOutcome`（不是 Bool）：调用方用 `.didFetch` 决定要不要重读
+    ///   overlay，用 `.isConclusive` 决定要不要记账「以后不必再试」。
+    func refreshTMDbCollection(
+        for item: MediaItem,
+        members: [MediaItem]
+    ) async -> TMDbEnricher.RefreshOutcome {
+        guard let tenant = currentTenant else { return .failed }
         return await tmdb.refreshCollection(item: item, members: members, tenant: tenant)
     }
 

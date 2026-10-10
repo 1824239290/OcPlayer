@@ -184,16 +184,9 @@ extension AppModel {
         ofCollection item: MediaItem,
         server: any MediaServer
     ) async throws -> MediaItem? {
-        let members = try await server.itemsPage(
-            parentID: item.id,
-            kinds: nil,
-            recursive: false,
-            startIndex: 0,
-            limit: Self.collectionMembersLimit,
-            sort: MediaItemsSort(field: .year, ascending: true),
-            watchState: nil,
-            searchTerm: nil
-        ).items
+        // 形态（`recursive: false` / 不传类型过滤 / 年份升序）与依据都收在
+        // `MediaServer.collectionMembers(of:)` —— 这里只挑第一个可播成员，取默认页大小。
+        let members = try await server.collectionMembers(of: item.id).items
         let leaves = members.filter { $0.kind == .movie || $0.kind == .episode }
         if let unwatched = leaves.first(where: { !($0.playState?.played ?? false) }) {
             return unwatched
@@ -206,11 +199,6 @@ extension AppModel {
         }
         return nil
     }
-
-    /// 合集一次最多取多少成员来挑「第一个可播的」。
-    /// 只为挑一条，不需要全量；合集条目数远超这个值时取前 N 条的服务端顺序，
-    /// 挑选结果仍是「靠前的可播成员」，不会因为截断而挑不到。
-    static let collectionMembersLimit = 200
 
     /// 解析不出可播条目时的用户可见文案（按条目类型说清楚是哪种情况）。
     nonisolated static func noPlayableContentMessage(for item: MediaItem) -> String {

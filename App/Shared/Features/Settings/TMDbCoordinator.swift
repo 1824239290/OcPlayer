@@ -176,8 +176,15 @@ final class TMDbCoordinator {
     /// 定位靠成员电影的 `belongs_to_collection`（合集自己没有可用的 TMDb id），
     /// 所以 `members` 是必需品——没加载出成员时本方法什么都不会发生。
     @discardableResult
-    func refreshCollection(item: MediaItem, members: [MediaItem], tenant: TenantID) async -> Bool {
-        guard let enricher else { return false }
+    /// 返回值是 `RefreshOutcome` 而**不是 Bool**：调用方要能区分「TMDb 上确实没有」
+    /// （确定结论，可不再重试）与「请求失败」（可重试）。用 Bool 时两者都是 false，
+    /// 调用方一记账，断网一次就让封面永久空白。
+    func refreshCollection(
+        item: MediaItem,
+        members: [MediaItem],
+        tenant: TenantID
+    ) async -> TMDbEnricher.RefreshOutcome {
+        guard let enricher else { return .failed }
         return await enricher.refreshCollection(item: item, members: members, tenant: tenant)
     }
 

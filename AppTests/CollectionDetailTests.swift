@@ -434,6 +434,48 @@ final class CollectionDetailTests: XCTestCase {
         XCTAssertNil(app.collectionPosterURL(for: boxSet(), width: 400))
     }
 
+
+    /// 成员请求失败**且一张海报都没拿到** → 不记账（可重试）。
+    ///
+    /// 这是「把失败吞成确定结论」那类缺陷的库卡版本：早先 `try?` 把成员请求的失败
+    /// 吞成「这个合集没海报」，再记账，结果一次断网就让库卡永久空白。
+    func testLibraryCoverWithFailedMemberLookupIsNotRecorded() async throws {
+        let (app, stub, _) = try await makeApp()
+        // 列合集成功、成员请求全部失败。
+        stub.itemsPageByParent = [
+            "lib-boxsets": MediaItemsPage(
+                items: [MediaItem(id: "box-1", name: "EVA", kind: .boxSet)],
+                startIndex: 0, totalRecordCount: 1),
+        ]
+        // 成员查询走 `itemsPageResult`（按 parentID 分派的字典里没有 box-1）→ 注入失败。
+        stub.itemsPageResult = .failure(JellyfinError(.transport("请求超时。")))
+
+        await app.resolveLibraryCoverIfNeeded(for: boxsetsLibrary())
+
+        XCTAssertTrue(app.libraryCoverURLs(for: boxsetsLibrary()).isEmpty)
+        XCTAssertFalse(app.libraryCoverAttempted.contains("lib-boxsets"),
+                       "成员请求失败不该被记成「确定没有海报」")
+    }
+
+    /// 个别合集的成员拉不到、但另一个合集给得出海报 → **存下来并记账**
+    /// （画面已经可用，不该为一次局部失败把整张库卡丢掉）。
+    func testLibraryCoverKeepsPartialResult() async throws {
+        let (app, stub, _) = try await makeApp()
+        stub.itemsPageByParent = [
+            "lib-boxsets": MediaItemsPage(
+                items: [MediaItem(id: "box-ok", name: "好的", kind: .boxSet)],
+                startIndex: 0, totalRecordCount: 1),
+            "box-ok": MediaItemsPage(
+                items: [posterMember("m-1", poster: "p1")],
+                startIndex: 0, totalRecordCount: 1),
+        ]
+
+        await app.resolveLibraryCoverIfNeeded(for: boxsetsLibrary())
+
+        XCTAssertEqual(app.libraryCoverURLs(for: boxsetsLibrary()).count, 1)
+        XCTAssertTrue(app.libraryCoverAttempted.contains("lib-boxsets"))
+    }
+
     // MARK: - 没配 TMDb 时不许出岔子
 
     /// 成员为空（离线首进 / 成员请求失败）+ 没配 TMDb key：整条路静默跳过，不崩不卡。

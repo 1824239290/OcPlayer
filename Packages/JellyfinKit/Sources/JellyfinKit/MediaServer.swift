@@ -180,15 +180,23 @@ extension MediaServer {
     /// - **排序显式给年份升序**：不传 sortBy 时服务端按合集自己的 `DisplayOrder`
     ///   （默认 PremiereDate）排，而该字段不在 `MediaItemsSortField` 值域里；显式指定
     ///   才可复现（副键 `SortName` 保证同年内稳定）。
-    public func collectionMembers(of itemID: String, limit: Int = 200) async throws -> MediaItemsPage {
+    /// - Parameter startIndex: 分页起点（合集成员可能多于一页，详情页「加载更多」用它）。
+    public func collectionMembers(
+        of itemID: String,
+        startIndex: Int = 0,
+        limit: Int = Self.collectionMembersDefaultLimit
+    ) async throws -> MediaItemsPage {
         try await itemsPage(
             parentID: itemID,
             kinds: nil,
             recursive: false,
-            startIndex: 0,
+            startIndex: startIndex,
             limit: limit,
             sort: MediaItemsSort(field: .year, ascending: true),
             watchState: nil,
             searchTerm: nil)
     }
+
+    /// 合集成员一页的默认条数。上限的意思：只为挑选/取图时不必拉全量。
+    public static var collectionMembersDefaultLimit: Int { 200 }
 }

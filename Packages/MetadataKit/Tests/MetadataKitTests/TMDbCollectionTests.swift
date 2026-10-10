@@ -73,8 +73,8 @@ final class TMDbCollectionTests: XCTestCase {
         let box = boxSet()
         let members = [member("m-q", tmdb: "75629"), member("m-final", tmdb: "283566")]
 
-        let didFetch = await enricher.refreshCollection(item: box, members: members, tenant: tenant)
-        XCTAssertTrue(didFetch)
+        let outcome = await enricher.refreshCollection(item: box, members: members, tenant: tenant)
+        XCTAssertEqual(outcome, .fetched)
 
         let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
         XCTAssertEqual(link?.entityKey, .collection(210303))
@@ -124,7 +124,7 @@ final class TMDbCollectionTests: XCTestCase {
 
         let again = await enricher.refreshCollection(item: box, members: members, tenant: tenant)
 
-        XCTAssertFalse(again, "未过期不该回源")
+        XCTAssertEqual(again, .skipped, "未过期不该回源")
         XCTAssertEqual(calls, afterFirst, "第二次打开合集页不该发任何请求")
     }
 
@@ -138,10 +138,10 @@ final class TMDbCollectionTests: XCTestCase {
             return (200, Self.collectionJSON)
         }
 
-        let didFetch = await enricher.refreshCollection(
+        let outcome = await enricher.refreshCollection(
             item: boxSet(), members: [member("m-1", tmdb: nil)], tenant: tenant)
 
-        XCTAssertFalse(didFetch)
+        XCTAssertEqual(outcome, .noMatch, "成员没 id = 确定没有，不是失败")
         XCTAssertEqual(calls, 0, "定位不出来时连名字搜索都不该发（那是猜）")
         let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
         XCTAssertNil(link, "不许猜一个合集落库")
@@ -154,10 +154,10 @@ final class TMDbCollectionTests: XCTestCase {
             return (200, Self.collectionJSON)
         }
 
-        let didFetch = await enricher.refreshCollection(
+        let outcome = await enricher.refreshCollection(
             item: boxSet(), members: [member("m-1", tmdb: "1")], tenant: tenant)
 
-        XCTAssertFalse(didFetch)
+        XCTAssertEqual(outcome, .noMatch, "TMDb 上没有这个合集 = 确定结论")
         let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
         XCTAssertNil(link)
     }
@@ -171,10 +171,10 @@ final class TMDbCollectionTests: XCTestCase {
         }
         let seriesMember = makeItem(id: "s-1", name: "剧", kind: .series, tmdbID: "153217")
 
-        let didFetch = await enricher.refreshCollection(
+        let outcome = await enricher.refreshCollection(
             item: boxSet(), members: [seriesMember], tenant: tenant)
 
-        XCTAssertFalse(didFetch)
+        XCTAssertEqual(outcome, .noMatch)
         XCTAssertEqual(calls, 0, "剧集没有 belongs_to_collection，不该为它发请求")
     }
 
@@ -187,11 +187,94 @@ final class TMDbCollectionTests: XCTestCase {
         }
         let members = [member("a", tmdb: ""), member("b", tmdb: "0"), member("c", tmdb: "abc")]
 
-        let didFetch = await enricher.refreshCollection(item: boxSet(), members: members,
-                                                        tenant: tenant)
+        let outcome = await enricher.refreshCollection(item: boxSet(), members: members,
+                                                       tenant: tenant)
 
-        XCTAssertFalse(didFetch)
+        XCTAssertEqual(outcome, .noMatch)
         XCTAssertEqual(calls, 0)
+    }
+
+
+    // MARK: - 「确定没有」与「请求失败」必须分开
+
+    /// 成员电影详情**全部请求失败**（断网 / 5xx）→ 结局必须是 `.failed`。
+    ///
+    /// 这是本次修的一个真缺陷：早先返回 `Bool`，失败与「TMDb 上没有」都是 `false`，
+    /// 调用方一律当确定结论记账 —— 症状是**断网一次就让合集封面永久空白**。
+    func testLookupFailureIsFailedNotNoMatch() async throws {
+        var requestedPaths: [String] = []
+        let enricher = makeEnricher { path in
+            requestedPaths.append(path)
+            if path.contains("/movie/") { return (500, Data()) }
+            return (200, Self.collectionJSON)
+        }
+        let members = [member("m-1", tmdb: "1")]
+
+        let outcome = await enricher.refreshCollection(item: boxSet(), members: members,
+                                                       tenant: tenant)
+
+        XCTAssertEqual(outcome, .failed, "网络失败不是「TMDb 上没有」")
+        XCTAssertTrue(outcome != .noMatch)
+        XCTAssertFalse(outcome.isConclusive, "失败必须让调用方知道「还能再试」")
+        XCTAssertFalse(requestedPaths.contains { $0.contains("/collection/") },
+                       "定位都失败时不该去拉合集详情")
+        let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
+        XCTAssertNil(link, "失败不许落库——落了下一次就会被当成「已定位」跳过")
+    }
+
+    /// 成员详情拿到了、但都没 `belongs_to_collection` → `.noMatch`（确定结论）。
+    /// 与上一条成对：同样是「没定位到」，一种是可重试的失败，一种是确定的没有。
+    func testSuccessfulLookupWithoutMembershipIsNoMatch() async throws {
+        let enricher = makeEnricher { path in
+            if path.contains("/movie/") { return (200, Self.movieWithoutCollectionJSON) }
+            return (200, Self.collectionJSON)
+        }
+        let members = [member("m-1", tmdb: "1"), member("m-2", tmdb: "2")]
+
+        let outcome = await enricher.refreshCollection(item: boxSet(), members: members,
+                                                       tenant: tenant)
+
+        XCTAssertEqual(outcome, .noMatch)
+        XCTAssertTrue(outcome.isConclusive, "确定没有 → 调用方可以不再重试")
+    }
+
+    /// 个别成员 404、另一个成员给出了归属 → 仍然定位成功（不该被一次 404 打断）。
+    func testPartialFailureStillResolves() async throws {
+        let enricher = makeEnricher { path in
+            if path.hasSuffix("/movie/1") { return (404, Data()) }
+            if path.hasSuffix("/movie/2") { return (200, Self.movieInCollectionJSON) }
+            if path.hasSuffix("/collection/210303") { return (200, Self.collectionJSON) }
+            return (404, Data())
+        }
+        let members = [member("m-1", tmdb: "1"), member("m-2", tmdb: "2")]
+
+        let outcome = await enricher.refreshCollection(item: boxSet(), members: members,
+                                                       tenant: tenant)
+
+        XCTAssertEqual(outcome, .fetched)
+        let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
+        XCTAssertEqual(link?.entityKey, .collection(210303))
+    }
+
+    /// 缓存命中 → `.skipped`（零请求，且是确定结论）。
+    func testFreshCacheReportsSkipped() async throws {
+        var calls = 0
+        let enricher = makeEnricher { path in
+            calls += 1
+            if path.hasSuffix("/movie/75629") { return (200, Self.movieInCollectionJSON) }
+            if path.hasSuffix("/collection/210303") { return (200, Self.collectionJSON) }
+            return (404, Data())
+        }
+        let box = boxSet()
+        let members = [member("m-q", tmdb: "75629")]
+        await enricher.refreshCollection(item: box, members: members, tenant: tenant)
+        let afterFirst = calls
+
+        let again = await enricher.refreshCollection(item: box, members: members, tenant: tenant)
+
+        XCTAssertEqual(again, .skipped)
+        XCTAssertTrue(again.isConclusive)
+        XCTAssertEqual(calls, afterFirst)
     }
 
     // MARK: - 夹具
