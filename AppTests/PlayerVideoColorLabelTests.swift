@@ -73,4 +73,56 @@ final class PlayerVideoColorLabelTests: XCTestCase {
         XCTAssertEqual(PlayerVideoColorLabel.aspect(width: 0, height: 1080), "—")
         XCTAssertEqual(PlayerVideoColorLabel.aspect(width: 1920, height: 0), "—")
     }
+
+    // MARK: - 「输出」行（编码 + 面格式 + 回退原因）
+
+    func testOutputDetailCombinesEncodingAndSurfaceFormat() {
+        let snapshot = PlaybackOutputSnapshot(
+            surfaceFormat: .tenBitUnorm,
+            fallbackReason: .none
+        )
+        XCTAssertEqual(
+            PlayerVideoColorLabel.outputDetail(encoding: .appleEdr, snapshot: snapshot),
+            "Apple EDR · 10bit"
+        )
+    }
+
+    /// 「源是 HDR 却出 SDR」时原因必须出现在这一行——这正是本行存在的理由。
+    func testOutputDetailSurfacesFallbackReason() {
+        let snapshot = PlaybackOutputSnapshot(
+            surfaceFormat: .eightBitUnorm,
+            fallbackReason: .displayHdrUnsupported
+        )
+        XCTAssertEqual(
+            PlayerVideoColorLabel.outputDetail(encoding: .sdr, snapshot: snapshot),
+            "SDR · 8bit · 回退 显示器不支持 HDR"
+        )
+    }
+
+    /// 内核比 App 新、报了不认识的码：说「有回退但原因未识别」，不装作没事。
+    func testOutputDetailDoesNotHideUnknownFallback() {
+        let snapshot = PlaybackOutputSnapshot(
+            surfaceFormat: .unknown,
+            fallbackReason: .unknown
+        )
+        XCTAssertEqual(
+            PlayerVideoColorLabel.outputDetail(encoding: .unknown, snapshot: snapshot),
+            "回退（原因未识别）"
+        )
+    }
+
+    /// 什么都没拿到（非 Erika 内核 / 打开中）：整行隐藏，而不是显示「未知」。
+    func testOutputDetailHiddenWhenNothingKnown() {
+        XCTAssertNil(
+            PlayerVideoColorLabel.outputDetail(encoding: .unknown, snapshot: .unknown)
+        )
+    }
+
+    /// 只有编码、拿不到面格式时也要出内容（内核版本老 / 该平台不报）。
+    func testOutputDetailPartialInformation() {
+        XCTAssertEqual(
+            PlayerVideoColorLabel.outputDetail(encoding: .sdr, snapshot: .unknown),
+            "SDR"
+        )
+    }
 }

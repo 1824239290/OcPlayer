@@ -257,4 +257,45 @@ struct ErikaRenderTests {
         }
         #expect(stats.render_failures == 0)
     }
+
+    /// 诊断字段的覆盖：`kernelDiagnosticsFields()` 必须把内核的原始计数器**全部**导出去。
+    /// 这条守的是「别再悄悄丢字段」——映射是几十行机械赋值，少写一行不会有任何编译
+    /// 错误，只会在下一次排障时表现为「那个数字又不在了」。所以逐个点名。
+    /// 放在本套件里是因为它要真实例化引擎（需要 Metal），与其它渲染用例同一前提。
+    @Test("诊断字段覆盖全部原始计数器与输出细节")
+    func kernelDiagnosticsFieldsCoverEverything() throws {
+        let engine = try ErikaEngine()
+        // 用 deinit 收尾而不是 close()：close 是终态，这里只想验证读字段。
+
+        let fields = engine.kernelDiagnosticsFields()
+
+        let requiredKeys = [
+            // 视频 / 渲染
+            "decoded_video_frames", "rendered_video_frames", "rendered_test_frames",
+            "software_video_frames", "hardware_video_frames", "zero_copy_video_frames",
+            "cpu_video_frame_fallbacks", "video_frame_backpressure_drops",
+            "direct_zero_copy_video_frames", "shared_handle_video_frames",
+            "last_render_micros", "last_render_current_micros",
+            "render_failures", "import_failures",
+            // 音频
+            "pushed_audio_frames", "audio_failures", "audio_clock_read_frames",
+            "audio_clock_queued_frames", "audio_clock_underflow_frames",
+            "audio_recovery_state", "audio_last_error_code", "audio_recovery_attempts",
+            "audio_recovery_count", "audio_recovery_failures",
+            // HDR
+            "hdr_source_frames", "hdr10_output_frames", "sdr_tonemap_frames",
+            "hdr10_metadata_updates", "hdr10_metadata_failures", "hdr10_output_failures",
+            "hdr10_output_active",
+            // 覆盖层 / 弹幕
+            "overlay_frames", "danmaku_frames", "danmaku_items",
+            // 输出细节
+            "output_encoding", "output_surface_format", "output_fallback_reason",
+            "output_fallback_count", "output_headroom_known", "output_headroom",
+            "output_extended_linear",
+        ]
+        for key in requiredKeys {
+            #expect(fields[key] != nil, "诊断字段缺了 \(key)——排障时那个数字就没了")
+        }
+        #expect(fields.count >= requiredKeys.count, "字段数不该少于点名清单")
+    }
 }

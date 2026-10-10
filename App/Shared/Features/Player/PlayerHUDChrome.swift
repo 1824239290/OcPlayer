@@ -135,6 +135,14 @@ struct PlayerHUDInfoPanel: View {
                                 "色彩",
                                 "\(PlayerVideoColorLabel.primaries(params.primaries)) · \(PlayerVideoColorLabel.transfer(params.transfer))"
                             )
+                            // 「输出」只在真有可报内容时出现（内核未报编码 / 拿不到
+                            // 快照时整行隐藏），避免 SDR 屏上凭空多一行「未知」。
+                            if let output = PlayerVideoColorLabel.outputDetail(
+                                encoding: controller.engine?.latestOutputEncoding ?? .unknown,
+                                snapshot: controller.engine?.latestOutputSnapshot ?? .unknown
+                            ) {
+                                infoRow("输出", output)
+                            }
                         } else {
                             infoRow("分辨率", "—")
                         }
@@ -353,6 +361,63 @@ enum PlayerVideoColorLabel {
         let h = height / divisor
         if w <= 50, h <= 50 { return "\(w):\(h)" }
         return String(format: "%.2f:1", Double(width) / Double(height))
+    }
+
+    /// 信息面板「输出」行：实际输出编码 + 面格式 + 回退原因。
+    ///
+    /// 与「动态范围」互补：那一行说源是什么、被映射成了什么，这一行说**为什么**——
+    /// 「源是 HDR 却出 SDR」的答案就在回退原因里（显示器不支持 HDR、面格式拿不到
+    /// 16 位浮点…）。两处都没有可报的内容（`.unknown` + 中性快照）时返回 nil，
+    /// 调用方据此隐藏整行，而不是显示一行假数据。
+    static func outputDetail(
+        encoding: PlaybackOutputEncoding,
+        snapshot: PlaybackOutputSnapshot
+    ) -> String? {
+        var parts: [String] = []
+        if let encodingLabel = outputEncodingLabel(encoding) { parts.append(encodingLabel) }
+        if let formatLabel = surfaceFormatLabel(snapshot.surfaceFormat) { parts.append(formatLabel) }
+        if snapshot.fallbackReason != .none && snapshot.fallbackReason != .unknown {
+            parts.append("回退 \(fallbackLabel(snapshot.fallbackReason))")
+        } else if snapshot.fallbackReason == .unknown {
+            // 内核报了一个本版本不认识的回退码：说「有回退但原因未知」，别装作没事。
+            parts.append("回退（原因未识别）")
+        }
+        if parts.isEmpty { return nil }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func outputEncodingLabel(_ encoding: PlaybackOutputEncoding) -> String? {
+        switch encoding {
+        case .sdr: "SDR"
+        case .appleEdr: "Apple EDR"
+        case .hdr10Pq: "HDR10 PQ"
+        case .extendedLinear: "扩展线性"
+        case .unknown: nil
+        }
+    }
+
+    private static func surfaceFormatLabel(_ format: PlaybackOutputSnapshot.SurfaceFormat) -> String? {
+        switch format {
+        case .eightBitUnorm: "8bit"
+        case .tenBitUnorm: "10bit"
+        case .sixteenBitFloat: "16bit 浮点"
+        case .unknown: nil
+        }
+    }
+
+    private static func fallbackLabel(_ reason: PlaybackOutputSnapshot.FallbackReason) -> String {
+        switch reason {
+        case .none: "无"
+        case .displayHdrUnsupported: "显示器不支持 HDR"
+        case .hybridCompositionRequired: "非直接合成面"
+        case .wgpuBackendNotVulkan: "后端不是 Vulkan"
+        case .rgba16FloatSurfaceFormatUnavailable: "缺 16 位浮点面格式"
+        case .nativeWindowDataSpaceApiUnavailable: "系统缺数据空间 API"
+        case .scrgbDataSpaceVerificationFailed: "scRGB 数据空间校验失败"
+        case .surfaceConfigureFailed: "输出面配置失败"
+        case .legacyAppleEdrUnsupported: "后端不支持 Apple EDR"
+        case .unknown: "原因未识别"
+        }
     }
 
     private static func gcd(_ a: Int, _ b: Int) -> Int {

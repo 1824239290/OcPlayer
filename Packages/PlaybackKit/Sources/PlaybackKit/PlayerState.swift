@@ -223,7 +223,21 @@ public final class PlayerState {
             hasSurface = true
         case .surfaceDetached:
             hasSurface = false
-        case .videoDecoderChanged, .audioOutputChanged, .trackSelectionChanged:
+        case .videoDecoderChanged:
+            // 硬解 ⇄ 软解的回退在现场只表现为「突然变卡」，画面照常，用户不会报
+            // 「内核换了解码器」。内核一直在报这个事件，此前到这里就是一个 break，
+            // 于是排障时永远拿不到第一现场。位置带上，能和进度对上。
+            PlaybackLog.event(
+                .decoderChanged,
+                fields: PlaybackEvent.decoderChangedFields(position: timeline.position)
+            )
+        case .audioOutputChanged:
+            // 刻意不处理：Apple 后端（AudioQueue）不实现音频自恢复状态机，这条事件
+            // 在 macOS / iOS 上**永不触发**（见 CHANGELOG 0.2.1 的记账）。留着 break
+            // 是有意的——不是遗漏，别当成缺陷来「修」。
+            break
+        case .trackSelectionChanged:
+            // 选轨本身会推一次，由 `refreshTracks` 那条路消费（见 onTracksRefreshed）。
             break
         case .failed(let code, let message):
             // 同一条错误只记一次：内核卡死时 .failed 会逐帧重发，去重前一次

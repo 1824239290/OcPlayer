@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 import SwiftUI
 
@@ -51,6 +52,30 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// 内核没报或此刻不适用时为 `.unknown`。
     /// ⚠️ 必须是协议要求（同 `hasRenderedFirstFrame` 的坑），扩展默认值恒 `.unknown`。
     var latestOutputEncoding: PlaybackOutputEncoding { get }
+
+    /// 输出细节：面格式、回退原因、有效 headroom。`latestOutputEncoding` 报「是什么」，
+    /// 这里报「为什么」——排查「源是 HDR 却出 SDR / 8bit」时缺的就是后半句。
+    /// 任意线程可读；内核没报或此刻不适用时是 `PlaybackOutputSnapshot.unknown`。
+    /// ⚠️ 必须是协议要求（同 `latestOutputEncoding` 的坑）。
+    var latestOutputSnapshot: PlaybackOutputSnapshot { get }
+
+    /// 内核特有的原始诊断计数器（选填能力：默认空字典，表示「这个内核不提供」）。
+    ///
+    /// 供**诊断日志**落盘，不做 UI。字段名一律 snake_case、与内核的 C 字段同名，
+    /// 以便和内核自己的 stderr trace 对照。注意每个内核各报各的：某些字段在
+    /// 特定平台上恒为 0（例如 Erika 的 `audio_recovery_*` 只在 Windows / Android /
+    /// OHOS 后端实现，Apple 后端恒 stable），**不要拿它做平台无关的判断**。
+    func kernelDiagnosticsFields() -> [String: DiagnosticValue]
+
+    /// 运行时切换亮度上采样（画质增强）。不支持的引擎是空操作。
+    ///
+    /// 免抛：这是**提示性**能力——目标后端不支持时内核不会失败，而是保留原生
+    /// 亮度采样并报 `inactive`（用 `lumaUpscalerState` 查）。为此打断播放不划算。
+    func setLumaUpscaler(_ mode: PlaybackUpscalerMode)
+
+    /// 上采样当前的实际状态（`requested != .off && backend == .inactive` 表示已回落）。
+    /// ⚠️ 必须是协议要求（同 `latestOutputEncoding` 的坑），扩展默认值恒中性。
+    var lumaUpscalerState: PlaybackUpscalerState { get }
 
     /// 宿主把显示器当前 EDR headroom（SDR 参考白的倍数：SDR 屏 ≈ 1.0，
     /// 内置 XDR ≈ 8）推给内核。不感知显示器的内核靠它决定 HDR 源是否真出
@@ -136,9 +161,10 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// 设置页据此决定要不要提示「当前内核不支持，这些选项不会生效」——比按内核 id
     /// 硬编码判断可靠（换内核 / 加内核时不会漏改），也让「支持」成为适配器自报的能力。
     static var supportsSubtitleStyle: Bool { get }
+
     // MARK: - 截图
 
-    /// 离屏截当前合成帧（视频 + 字幕 + 内核弹幕若有），RGBA8。
+    /// 离屏截当前合成帧（视频 + 字幕，**不含弹幕**——内核的截图契约就是排除在屏评论），RGBA8。
     /// 尺寸传视频物理分辨率。
     func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8]
 
@@ -174,6 +200,16 @@ public extension PlaybackEngine {
 
     /// 不暴露输出编码概念的内核：恒 `.unknown`，动态范围标注退回纯源侧判定。
     var latestOutputEncoding: PlaybackOutputEncoding { .unknown }
+
+    /// 不暴露输出细节的内核：中性值。HUD 的「输出」行据此隐藏（而不是显示一行假数据）。
+    var latestOutputSnapshot: PlaybackOutputSnapshot { .unknown }
+
+    /// 不提供原始诊断计数器的内核：空字典，诊断日志里就没有这段字段。
+    func kernelDiagnosticsFields() -> [String: DiagnosticValue] { [:] }
+
+    /// 不做画质增强的内核：空操作 + 中性状态（设置页据此不显示增强项）。
+    func setLumaUpscaler(_ mode: PlaybackUpscalerMode) {}
+    var lumaUpscalerState: PlaybackUpscalerState { .unknown }
 
     /// 不接收显示器 headroom 更新的内核：空操作。headroom 只由创建参数决定
     /// （或内核自己探测显示器）。

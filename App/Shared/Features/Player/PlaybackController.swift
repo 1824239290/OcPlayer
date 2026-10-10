@@ -1078,6 +1078,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func stopPlayback() {
         playerLog.info("stopPlayback hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        // 会话收尾先落一条内核原始计数器快照，**必须在下面的 engine?.stop() 之前**：
+        // 内核自 v0.2.1 起在 stop 时释放 HTTP 缓存与队列，而统计里有些量反映的正是
+        // 那一段（音频时钟欠载、背压丢帧、解码后端构成）。落在 stop 之后等于记录一个
+        // 已经被清过的现场。零 UI 成本，只在诊断包里可见。
+        logKernelDiagnosticsSnapshot()
         state.finishSession(reason: "user")
         // open 在飞时的收口：看门狗与在飞标记全部清掉。在飞引擎的让位登记
         // （下面的 stop()）由其 open 收尾补做，完成回调按过期代次落空。
@@ -1732,6 +1737,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 具体列由 `PlaybackEngine.debugStatsLine()` 决定（拿不到的内核填 0）。
     func statsLine() -> String {
         engine?.debugStatsLine() ?? "—"
+    }
+
+    /// 会话收尾的内核原始计数器快照（结构化字段，见 `kernelDiagnosticsFields`）。
+    ///
+    /// 为什么值得记：这一整块（26 个从没有任何读取点的字段）此前**只在内存里转一圈
+    /// 就被丢掉**——排障时想回答「刚才卡那一下是背压丢帧还是回退软解」，只能靠猜。
+    /// 引擎不支持时返回空字典，这里直接不打（不留空行噪声）。
+    func logKernelDiagnosticsSnapshot() {
+        guard let engine else { return }
+        let fields = engine.kernelDiagnosticsFields()
+        guard !fields.isEmpty else { return }
+        playerLog.info("内核统计快照", fields: fields)
     }
 
     // MARK: - DanmakuPlaybackHosting（弹幕编排器注入入口）

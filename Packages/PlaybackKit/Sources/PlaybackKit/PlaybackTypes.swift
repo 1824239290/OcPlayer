@@ -115,6 +115,77 @@ public enum PlaybackOutputEncoding: String, Sendable, Hashable {
     }
 }
 
+/// 内核协商出的输出细节（`latestOutputEncoding` 只报「编码」，这里补上「为什么」）。
+///
+/// 回答的是同一个问题链的第二半：动态范围标注说得出「源是 HDR、实际出的是 SDR」，
+/// 而**为什么会这样**在 `fallbackReason` 里——显示器不支持 HDR、面格式拿不到
+/// 16 位浮点、数据空间校验失败……内核一直都在报这些码（`ErikaOutputStatus`），
+/// 此前只读了 `active_encoding` 一个字段，剩下 12 个全被丢掉。
+public struct PlaybackOutputSnapshot: Sendable, Hashable {
+    /// 实际协商出的呈现面格式（8 位 UNORM / 10 位 UNORM / 16 位浮点）。
+    public enum SurfaceFormat: String, Sendable, Hashable {
+        case eightBitUnorm
+        case tenBitUnorm
+        case sixteenBitFloat
+        case unknown
+    }
+
+    /// 请求的输出模式没能生效时的**稳定**原因码。
+    ///
+    /// rawValue 与内核的 `ErikaOutputFallbackReason` 一一对应（内核承诺只追加、
+    /// 不重编号 0…8），所以日志与诊断包里可以直接按字符串比对。
+    public enum FallbackReason: String, Sendable, Hashable, CaseIterable {
+        case none
+        case displayHdrUnsupported = "display_hdr_unsupported"
+        case hybridCompositionRequired = "hybrid_composition_required"
+        case wgpuBackendNotVulkan = "wgpu_backend_not_vulkan"
+        case rgba16FloatSurfaceFormatUnavailable = "rgba16float_surface_format_unavailable"
+        case nativeWindowDataSpaceApiUnavailable = "native_window_dataspace_api_unavailable"
+        case scrgbDataSpaceVerificationFailed = "scrgb_dataspace_verification_failed"
+        case surfaceConfigureFailed = "surface_configure_failed"
+        case legacyAppleEdrUnsupported = "legacy_apple_edr_unsupported"
+        /// 内核报了一个本版本不认识的码（内核比 App 新）。**不猜语义**——
+        /// 猜错会把「未知」显示成确切原因，比不显示更坏。
+        ///
+        /// 注意与「什么都没有」的区别：中性快照（`.unknown`）用的是 `.none`，
+        /// 表示「没观察到回退」；这个 case 只在**内核确实报了回退、但码不认识**时出现，
+        /// UI 会照实说「回退（原因未识别）」而不是装作没事。
+        case unknown
+    }
+
+    public let surfaceFormat: SurfaceFormat
+    public let fallbackReason: FallbackReason
+    /// 累积的回退次数（一次播放内单调递增；用于判断「一直在回退」还是「偶尔一次」）。
+    public let fallbackCount: UInt64
+    /// 当前有效的显示 HDR/SDR 比；`nil` = 内核不知道（macOS Metal 后端目前如此）。
+    public let activeHeadroom: Float?
+    /// `activeHeadroom` 是否来自权威的平台读数（Android API 34+ 才有）。
+    public let activeHeadroomKnown: Bool
+    /// 是否走在浮点扩展线性（Apple EDR / Android scRGB）呈现通路上。
+    public let extendedLinearActive: Bool
+
+    /// `fallbackReason` 默认 `.none`（不是 `.unknown`）：中性构造代表「没有信息、
+    /// 也没观察到回退」，UI 才不会对不支持输出查询的内核显示一行「回退（原因未识别）」。
+    public init(
+        surfaceFormat: SurfaceFormat = .unknown,
+        fallbackReason: FallbackReason = .none,
+        fallbackCount: UInt64 = 0,
+        activeHeadroom: Float? = nil,
+        activeHeadroomKnown: Bool = false,
+        extendedLinearActive: Bool = false
+    ) {
+        self.surfaceFormat = surfaceFormat
+        self.fallbackReason = fallbackReason
+        self.fallbackCount = fallbackCount
+        self.activeHeadroom = activeHeadroom
+        self.activeHeadroomKnown = activeHeadroomKnown
+        self.extendedLinearActive = extendedLinearActive
+    }
+
+    /// 内核未报或此刻不适用（无画面、打开中、非 Erika 内核）时的中性值。
+    /// 面格式 `.unknown` + 无回退：UI 据此隐藏「输出」行，而不是显示一行假数据。
+    public static let unknown = PlaybackOutputSnapshot()
+}
 
 /// 亮度上采样（画质增强）档位。
 ///

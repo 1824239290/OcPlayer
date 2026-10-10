@@ -190,13 +190,18 @@ public final class ErikaPresenter {
         try ErikaError.check(erika_presenter_set_output_headroom(handle, headroom, known))
     }
 
-    /// 离屏截当前合成帧（视频 + 字幕 + 弹幕），RGBA8。没有可用帧时内核会报错。
     /// 字幕外观。`override_mask == 0` 时这些值只用来填脚本没指定的部分
     /// （ASS 自带排版与特效字体保留）；置了位才是替换。
     public func setSubtitleStyle(_ style: ErikaSubtitleStyle) throws {
         try ErikaError.check(erika_presenter_set_subtitle_style(handle, style))
     }
 
+    /// 离屏截当前合成帧（视频 + 字幕，**不含弹幕**），RGBA8。没有可用帧时内核会报错。
+    ///
+    /// 弹幕是刻意排除的（`erika.h` 的 `capture_frame_rgba` 注释：截图代表视频本身，
+    /// 而不是一闪而过的在屏评论）。宽高独立于 surface——想按源分辨率出图就传视频的
+    /// 物理分辨率，不必等于窗口尺寸。此前的行注释写成「视频 + 字幕 + 弹幕」，
+    /// 与内核契约相反，已按 erika.h 更正。
     /// 后续「截图」功能直接用它；测试里也用它证明画面真的解出来了。
     public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)

@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 
 /// 播放生命周期事件：**固定名字 + 固定字段**，供 grep 与脚本分析。
@@ -24,6 +25,9 @@ public enum PlaybackEvent: String, Sendable, CaseIterable {
     /// 在播状态位置停住、且内核**没有**报缓冲：demux/解码卡死的信号。
     /// 检测时 `recovered=false`，位置恢复后补一条 `recovered=true`（`frozen_ms` 为总冻结时长）。
     case stall
+    /// 内核换了视频解码后端（硬解 ⇄ 软解）。「刚才还流畅，突然变卡」的第一现场：
+    /// 硬解会话失败回退软解时画面还在走，只有这条记录留下证据。
+    case decoderChanged = "decoder.changed"
     /// 一次 seek；`kind` 区分来源：scrub（拖进度条）/ skip（±秒）/ chapter（章节）/
     /// auto（跳过片头片尾）/ resume（续播定位）。
     case seek
@@ -31,4 +35,14 @@ public enum PlaybackEvent: String, Sendable, CaseIterable {
     case error
     /// 本会话结束（`reason`：user / superseded / failed），带整段汇总。
     case sessionEnd = "session.end"
+}
+
+public extension PlaybackEvent {
+    /// `decoder.changed` 的字段：换解码后端那一刻的播放位置。
+    ///
+    /// 抽成纯函数是为了能钉住字段名与单位（`*_ms` 一律毫秒整数）——事件行是给
+    /// 脚本 grep 的契约，写在调用点里就没法单测，改名也不会有人发现。
+    static func decoderChangedFields(position: Duration) -> [String: DiagnosticValue] {
+        ["position_ms": .integer(position.microseconds / 1000)]
+    }
 }

@@ -160,22 +160,22 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// 「源是 HDR 但输出端映射成了 SDR」和「真的在出 HDR」。
     /// 直查型读入口，遵守 open 让位契约（open 在飞返回 `.unknown`，不撞长持锁）。
     public var latestOutputEncoding: PlaybackOutputEncoding {
-        if dropControlDuringOpen("latestOutputEncoding") { return .unknown }
-        guard let status = try? withLock({ try presenter.outputStatus() }) else {
-            return .unknown
-        }
-        switch Int32(status.active_encoding) {
-        case Int32(ErikaActiveOutputEncoding_SdrSrgb.rawValue):
-            return .sdr
-        case Int32(ErikaActiveOutputEncoding_AppleEdr.rawValue):
-            return .appleEdr
-        case Int32(ErikaActiveOutputEncoding_AndroidExtendedLinearScRgb.rawValue):
-            return .extendedLinear
-        case Int32(ErikaActiveOutputEncoding_Hdr10Pq.rawValue):
-            return .hdr10Pq
-        default:
-            return .unknown
-        }
+        guard let status = currentOutputStatus() else { return .unknown }
+        return Self.encoding(of: status)
+    }
+
+    /// 输出细节（面格式 / 回退原因 / 有效 headroom）。与 `latestOutputEncoding`
+    /// 共用同一把锁与同一个 C 调用，同一帧里两个都读也不会调两次内核。
+    public var latestOutputSnapshot: PlaybackOutputSnapshot {
+        guard let status = currentOutputStatus() else { return .unknown }
+        return PlaybackOutputSnapshot(status)
+    }
+
+    /// 直查型读入口的公共段：open 在飞让位（返回 nil，不撞长持锁），其余情况
+    /// 持主锁取一次 `get_output_status`。
+    private func currentOutputStatus() -> ErikaOutputStatus? {
+        if dropControlDuringOpen("outputStatus") { return nil }
+        return try? withLock { try presenter.outputStatus() }
     }
 
     /// 最近一次内核内存分项快照（渲染线程每 5s 采样，任意线程可读）。
@@ -201,6 +201,11 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     private static let memoryLogThresholdRatio: Double = 0.10
     /// 采样失败只报一次，避免逐帧刷屏。
     private var memorySampleFailed = false
+
+    /// 上次记录过的输出状态。与内存采样同一个 5s 窗口，**只在变化时**写日志
+    /// （输出状态是低频量：一次播放里通常只在起播与换屏时变，逐次记就是噪声）。
+    /// 只被渲染线程访问（同 `lastMemorySampleAt`），不加锁。
+    private var lastLoggedOutputStatus: ErikaOutputStatus?
 
     /// 最近一次内核 position 事件的媒体时间（渲染线程写、任意线程读）。
     /// 弹幕 overlay 用自己的采样时钟读它决定「谁该出场」：暂停/缓冲时内核
@@ -918,6 +923,62 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         )
     }
 
+    /// 锁外段：输出状态变化时记一条。
+    ///
+    /// 为什么值得单独记：`latestOutputEncoding` 只让 UI 看到「现在出的是什么」，
+    /// 而**回退**（请求了 HDR 却落到 SDR）在 UI 上几乎看不出来——画面照常、用户
+    /// 只会觉得「怎么不够亮」。内核把原因写在 `fallback_reason` 里，App 此前
+    /// 连读都没读。这里的变化才记口径与内存采样一致：一次播放通常只有起播与
+    /// 换屏两三次变化，逐次记就是噪声。
+    private func publishOutputStatus(_ raw: ErikaOutputStatus?) {
+        guard let raw else { return }
+        guard lastLoggedOutputStatus.map({ Self.isMeaningfulOutputChange(from: $0, to: raw) }) ?? true else {
+            return
+        }
+        lastLoggedOutputStatus = raw
+        let snapshot = PlaybackOutputSnapshot(raw)
+        var fields = snapshot.logFields
+        fields["encoding"] = .string(Self.encoding(of: raw).rawValue)
+        fields["requested_mode"] = .integer(Int64(raw.requested_mode))
+        fields["active_headroom"] = raw.active_headroom_known
+            ? .double(Double(raw.active_headroom))
+            : .null
+        fields["data_space_failures"] = .unsignedInteger(raw.data_space_failures)
+        fields["headroom_updates"] = .unsignedInteger(raw.headroom_updates)
+        PlaybackLog.info("内核输出 \(snapshot.summaryLine)", fields: fields)
+    }
+
+    /// 是否值得为这次输出状态再记一条日志。
+    ///
+    /// 只看**会变的语义量**：面格式 / 回退原因 / 回退次数 / headroom / 编码。
+    /// `headroom_updates`、`data_space_failures` 这类**累计计数不进比较**——它们每次
+    /// 采样都在涨，算进来就等于「每次都记」，把「变化才记」变成逐次刷屏。
+    /// internal 供测试直接钉住这张清单（纯值比较，不需要 GPU）。
+    static func isMeaningfulOutputChange(
+        from lhs: ErikaOutputStatus,
+        to rhs: ErikaOutputStatus
+    ) -> Bool {
+        lhs.surface_format != rhs.surface_format
+            || lhs.fallback_reason != rhs.fallback_reason
+            || lhs.fallback_count != rhs.fallback_count
+            || lhs.active_headroom != rhs.active_headroom
+            || lhs.active_headroom_known != rhs.active_headroom_known
+            || lhs.extended_linear_active != rhs.extended_linear_active
+            || lhs.active_encoding != rhs.active_encoding
+    }
+
+    /// `active_encoding` → 中立枚举。`latestOutputEncoding` 与输出日志共用一份映射
+    /// （两处各写一份 switch 就是等着漂移）。
+    private static func encoding(of raw: ErikaOutputStatus) -> PlaybackOutputEncoding {
+        switch Int32(raw.active_encoding) {
+        case Int32(ErikaActiveOutputEncoding_SdrSrgb.rawValue): .sdr
+        case Int32(ErikaActiveOutputEncoding_AppleEdr.rawValue): .appleEdr
+        case Int32(ErikaActiveOutputEncoding_AndroidExtendedLinearScRgb.rawValue): .extendedLinear
+        case Int32(ErikaActiveOutputEncoding_Hdr10Pq.rawValue): .hdr10Pq
+        default: .unknown
+        }
+    }
+
     /// tick 采样只在「与上次记录相比有实质变化」时写日志：关键分项变化 ≥8 MiB
     /// 或 ≥10%，或 drawable 数 / 输出模式切换计数变了（后者正是显示器侧切 HDR /
     /// 刷新率的证据，issue #2 要用）。open/stop 的基线永远写——那是一段播放的头尾锚点。
@@ -968,6 +1029,65 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         """
     }
 
+    /// 内核原始诊断计数器 + 输出状态，供宿主在会话收尾落一条日志。
+    ///
+    /// 覆盖 `ErikaPresenterStats` 的**全部**字段（此前只有 8 个进了中立层，其余 26 个
+    /// 从没有任何读取点）加输出细节。字段名与内核 C 字段同名，便于和内核自己的
+    /// stderr trace 对照。
+    ///
+    /// ⚠️ 两个前提必须知道，否则会误读这些数字：
+    /// - `audio_recovery_*` / `audio_last_error_code` 那套音频自恢复状态机**只在
+    ///   Windows WASAPI / Android AAudio / OHOS OHAudio 后端实现**，Apple 后端恒为
+    ///   stable/0、对应事件也永不触发——用它判断 iOS 的音频问题会永远看到「一切正常」。
+    /// - HDR 相关计数（`hdr_source_frames` / `sdr_tonemap_frames` …）只在真的走过
+    ///   HDR 链路时非零，SDR 片源全程为 0 是正常的。
+    public func kernelDiagnosticsFields() -> [String: DiagnosticValue] {
+        let s = latestErikaStats
+        var fields: [String: DiagnosticValue] = [:]
+        // 逐项赋值而不是一个大字典字面量：几十个混合类型的条目会让类型检查器超时
+        //（`PlayerState.finishSession` 里踩过同一个坑）。
+        fields["decoded_video_frames"] = .unsignedInteger(s.decoded_video_frames)
+        fields["rendered_video_frames"] = .unsignedInteger(s.rendered_video_frames)
+        fields["rendered_test_frames"] = .unsignedInteger(s.rendered_test_frames)
+        fields["pushed_audio_frames"] = .unsignedInteger(s.pushed_audio_frames)
+        fields["overlay_frames"] = .unsignedInteger(s.overlay_frames)
+        fields["danmaku_frames"] = .unsignedInteger(s.danmaku_frames)
+        fields["danmaku_items"] = .unsignedInteger(s.danmaku_items)
+        fields["import_failures"] = .unsignedInteger(s.import_failures)
+        fields["render_failures"] = .unsignedInteger(s.render_failures)
+        fields["audio_failures"] = .unsignedInteger(s.audio_failures)
+        fields["software_video_frames"] = .unsignedInteger(s.software_video_frames)
+        fields["hardware_video_frames"] = .unsignedInteger(s.hardware_video_frames)
+        fields["zero_copy_video_frames"] = .unsignedInteger(s.zero_copy_video_frames)
+        fields["cpu_video_frame_fallbacks"] = .unsignedInteger(s.cpu_video_frame_fallbacks)
+        fields["video_frame_backpressure_drops"] = .unsignedInteger(s.video_frame_backpressure_drops)
+        fields["direct_zero_copy_video_frames"] = .unsignedInteger(s.direct_zero_copy_video_frames)
+        fields["shared_handle_video_frames"] = .unsignedInteger(s.shared_handle_video_frames)
+        fields["last_render_micros"] = .unsignedInteger(s.last_render_micros)
+        fields["last_render_current_micros"] = .unsignedInteger(s.last_render_current_micros)
+        fields["audio_clock_read_frames"] = .unsignedInteger(s.audio_clock_read_frames)
+        fields["audio_clock_queued_frames"] = .unsignedInteger(s.audio_clock_queued_frames)
+        fields["audio_clock_underflow_frames"] = .unsignedInteger(s.audio_clock_underflow_frames)
+        fields["audio_recovery_state"] = .integer(Int64(s.audio_recovery_state))
+        fields["audio_last_error_code"] = .integer(Int64(s.audio_last_error_code))
+        fields["audio_recovery_attempts"] = .unsignedInteger(s.audio_recovery_attempts)
+        fields["audio_recovery_count"] = .unsignedInteger(s.audio_recovery_count)
+        fields["audio_recovery_failures"] = .unsignedInteger(s.audio_recovery_failures)
+        fields["hdr_source_frames"] = .unsignedInteger(s.hdr_source_frames)
+        fields["hdr10_output_frames"] = .unsignedInteger(s.hdr10_output_frames)
+        fields["sdr_tonemap_frames"] = .unsignedInteger(s.sdr_tonemap_frames)
+        fields["hdr10_metadata_updates"] = .unsignedInteger(s.hdr10_metadata_updates)
+        fields["hdr10_metadata_failures"] = .unsignedInteger(s.hdr10_metadata_failures)
+        fields["hdr10_output_failures"] = .unsignedInteger(s.hdr10_output_failures)
+        fields["hdr10_output_active"] = .boolean(s.hdr10_output_active)
+        // 输出细节加前缀，避免与统计字段重名。
+        for (key, value) in latestOutputSnapshot.logFields {
+            fields["output_\(key)"] = value
+        }
+        fields["output_encoding"] = .string(latestOutputEncoding.rawValue)
+        return fields
+    }
+
     /// 渲染线程每帧一次。失败在故障期间会逐帧触发，日志走 1s 节流，
     /// 只留下首条 + flush 时的一条汇总。
     private static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
@@ -987,6 +1107,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
         lock.lock()
         var memorySnapshot: ErikaMemorySnapshot?
+        var outputStatus: ErikaOutputStatus?
         do {
             let stats = audioOnly
                 ? try presenter.audioOnlyTick()
@@ -997,6 +1118,8 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             if presentationTime - lastMemorySampleAt >= Self.memorySampleIntervalSeconds {
                 lastMemorySampleAt = presentationTime
                 memorySnapshot = captureMemorySnapshotLocked()
+                // 输出状态搭同一趟车：多一次极短的 C 调用，换「HDR 为什么没出」的第一手证据。
+                outputStatus = try? presenter.outputStatus()
             }
         } catch let error as ErikaError {
             PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
@@ -1031,6 +1154,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         lock.unlock()
         // footprint / 日志不在主锁内做（纯进程读数 + 拼串，5s 一次也该让渲染不受扰）。
         publishMemorySample(memorySnapshot, reason: "tick")
+        publishOutputStatus(outputStatus)
 
         for event in pending {
             // 帧率档位跟随播放状态：paused 降帧 15-30（拖窗口/resize 仍要跟手）；
