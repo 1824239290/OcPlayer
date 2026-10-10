@@ -167,6 +167,57 @@ struct ErikaRenderTests {
         try presenter.close()
     }
 
+    /// `erika_presenter_render_tick_with_timing` 在钉点二进制里真实可用，且指针
+    /// 传递正确。
+    ///
+    /// 这条守两件事：①符号确实在 v0.2.1 的 macOS slice 里（本 App 依赖它在**编译期**
+    /// 解析——钉点低于 v0.2.1 会构建失败而不是静默降级）；②`withUnsafePointer` 传的
+    /// 是「到显示目标的延迟」而不是别的东西（内核只借用、开工前拷走）。带 timing 与
+    /// 不带 timing 的 tick 在无头环境里表现应当一致：都能出画、都不报错。
+    @Test("带显示目标延迟的 tick 正常出画")
+    func rendersWithPresentationTiming() async throws {
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 2)
+        defer { try? FileManager.default.removeItem(at: movie) }
+
+        let presenter = try ErikaPresenter()
+        let layer = try Self.makeLayer(width: 640, height: 360)
+        try Self.attach(presenter, layer, width: 640, height: 360)
+        try presenter.open(PlaybackSource(fileURL: movie))
+
+        var ready = false
+        var failure: String?
+        func note(_ event: PlayerEvent) {
+            switch event {
+            case .stateChanged(let state) where state != .opening && state != .idle: ready = true
+            case .failed(_, let message): failure = message ?? "unknown"
+            default: break
+            }
+        }
+        try Self.pump(presenter, frames: 120, collect: note, stop: { ready })
+        #expect(ready, "应至少进入过 Ready")
+        try presenter.play()
+
+        // 手动推进：这一批走的是带 timing 的重载（延迟取一帧，正好是内核对
+        // 「下一秒要显示的那一帧」的典型用法）。
+        var stats = ErikaPresenterStats()
+        for _ in 0..<30 {
+            stats = try presenter.renderTick(
+                at: CACurrentMediaTime() + 1.0 / 60,
+                presentationDelay: 1.0 / 60
+            )
+            while let event = try presenter.pollEvent() { note(event) }
+            try await Task.sleep(for: .milliseconds(16))
+        }
+
+        #expect(failure == nil, "带 timing 的 tick 不该报错：\(failure ?? "")")
+        #expect(stats.render_failures == 0, "渲染不该失败：\(stats.render_failures)")
+        #expect(stats.rendered_video_frames > 0, "带 timing 的 tick 也要真的出画")
+
+        try presenter.stop()
+        try presenter.detachSurface()
+        try presenter.close()
+    }
+
     /// 运行时切换亮度上采样：真实内核接受调用，且**要么真在跑、要么明确报回落**。
     ///
     /// 两条都重要：①运行期入口此前从未被调用过，这条证明它通；②`inactive` 有**两个**

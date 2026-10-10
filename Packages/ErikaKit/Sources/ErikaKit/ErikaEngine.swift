@@ -235,7 +235,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         continuation = sink
         renderLoop = RenderLoop()
         // 所有存储属性就位之后才能捕获 self；用 weak 断开 engine → renderLoop → engine 的环。
-        renderLoop.onTick = { [weak self] time in self?.step(presentationTime: time) }
+        renderLoop.onTick = { [weak self] time, delay in
+            self?.step(presentationTime: time, presentationDelay: delay)
+        }
         PlaybackLog.info("ErikaEngine init")
     }
 
@@ -1097,7 +1099,13 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// `audioOnly` 为真时走 `audio_only_tick`（后台档）：内核据此**挂起视频解码**，
     /// 只推进音频；事件抽干、统计采样、帧率档位这些外围逻辑两条路完全共用，
     /// 否则后台期间的 position 事件会断供，锁屏进度条就冻住了。
-    private func step(presentationTime: Double, audioOnly: Bool = false) {
+    ///
+    /// `presentationDelay` 是这一帧到显示目标的延迟（见 `RenderLoop`）：非 nil 时
+    /// 走 `render_tick_with_timing`，字幕与渲染上下文按同一个显示目标时刻采样。
+    /// 后台档用不到它（没有显示目标）。
+    private func step(presentationTime: Double,
+                      presentationDelay: Double? = nil,
+                      audioOnly: Bool = false) {
         // 档位闸门：切档与 tick 来自不同线程，迟到的回调必须丢掉。
         //  - 退出后台档后迟到的定时器回调若放行，会把内核刚解开的视频解码又挂起；
         //  - 后台档期间若还有 render_tick 在跑（例如期间重新 attach 起了渲染线程），
@@ -1111,7 +1119,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         do {
             let stats = audioOnly
                 ? try presenter.audioOnlyTick()
-                : try presenter.renderTick(at: presentationTime)
+                : try presenter.renderTick(at: presentationTime, presentationDelay: presentationDelay)
             statsLock.lock()
             _latestStats = stats
             statsLock.unlock()            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。

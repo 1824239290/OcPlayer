@@ -11,13 +11,19 @@ import UIKit
 /// 帧驱动：`CADisplayLink` 跑在**专用渲染线程**的 runloop 上，不占主线程。
 ///
 /// 每次回调把该帧的**绝对呈现时间**（`targetTimestamp`，与 `CACurrentMediaTime()` 同源）交给
-/// `tick`，正好是 `erika_presenter_render_tick` 要的语义。
+/// `tick`，正好是 `erika_presenter_render_tick` 要的语义；同时给出**到显示目标的延迟**
+/// （`targetTimestamp - CACurrentMediaTime()`），供 `render_tick_with_timing` 把
+/// 字幕与渲染上下文采样到同一个显示目标时间上。
 ///
 /// macOS 14+ 用 `NSView.displayLink(target:selector:)`（跟随视图所在显示器，取代已弃用的
 /// `CVDisplayLink`）；iOS 直接构造 `CADisplayLink`。
 final class RenderLoop {
-    /// 每帧回调，参数是该帧的绝对呈现时间（秒）。由 `ErikaEngine` 在 init 末尾装上。
-    var onTick: (@Sendable (Double) -> Void)?
+    /// 每帧回调：绝对呈现时间（秒）+ 到显示目标的延迟（秒，可能为 nil）。
+    ///
+    /// 延迟为 nil 的两种情况：算不出来（非有限）或超出内核允许的 ±0.25 s——
+    /// 那时调用方退回无 timing 的 `render_tick`（内核硬约束，传超界值会被拒）。
+    /// 由 `ErikaEngine` 在 init 末尾装上。
+    var onTick: (@Sendable (Double, Double?) -> Void)?
     private var thread: RenderThread?
     /// `let` + 内部加锁：暂停档位的开关可以从任意线程写，渲染线程每帧读。
     /// 不挂在 `thread` 上——那个引用会被 `stop()` 从主线程清掉，读写就撞上了。
@@ -135,10 +141,10 @@ private final class FrameRatePolicy: @unchecked Sendable {
 
 /// `CADisplayLink` 的 target。单独一层是为了不让 `RenderLoop` 被 runloop 强引用。
 private final class TickProxy: NSObject {
-    private let tick: @Sendable (Double) -> Void
+    private let tick: @Sendable (Double, Double?) -> Void
     private let frameRate: FrameRatePolicy
 
-    init(tick: @escaping @Sendable (Double) -> Void, frameRate: FrameRatePolicy) {
+    init(tick: @escaping @Sendable (Double, Double?) -> Void, frameRate: FrameRatePolicy) {
         self.tick = tick
         self.frameRate = frameRate
         super.init()
@@ -146,8 +152,30 @@ private final class TickProxy: NSObject {
 
     @objc func step(_ link: CADisplayLink) {
         frameRate.applyIfNeeded(to: link)
-        tick(link.targetTimestamp)
+        tick(link.targetTimestamp, RenderLoop.presentationDelay(for: link))
     }
+}
+
+extension RenderLoop {
+    /// 「到显示目标的延迟」= 本帧的呈现时间 − 现在。
+    ///
+    /// 逐帧调用，只做两次读数与几次比较，没有分配。
+    static func presentationDelay(for link: CADisplayLink) -> Double? {
+        sanitizedPresentationDelay(link.targetTimestamp - CACurrentMediaTime())
+    }
+
+    /// 把原始延迟夹成内核能接受的值，超界返回 nil。
+    ///
+    /// 内核只接受有限值且落在 ±0.25 s 内（`erika.h` 的硬约束，超出直接判错），
+    /// 所以这里先自己挡：拿不到有限值或超界都返回 nil，调用方退回无 timing 的
+    /// `render_tick`。抽成纯函数是为了能在没有 display link 的环境里钉住边界。
+    static func sanitizedPresentationDelay(_ raw: Double) -> Double? {
+        guard raw.isFinite, abs(raw) <= maximumPresentationDelay else { return nil }
+        return raw
+    }
+
+    /// 内核 `render_tick_with_timing` 的硬约束（`erika.h`：±0.25 秒）。
+    static let maximumPresentationDelay: Double = 0.25
 }
 
 /// 用 `Thread` 子类而不是 `Thread { }` 闭包：把非 `Sendable` 的 `CADisplayLink`

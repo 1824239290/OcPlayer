@@ -134,8 +134,33 @@ public final class ErikaPresenter {
     /// `presentationTime` 必须是该帧的**绝对呈现时间**（秒，`CACurrentMediaTime` 同源），不是 delta。
     @discardableResult
     public func renderTick(at presentationTime: Double) throws -> ErikaPresenterStats {
+        try renderTick(at: presentationTime, presentationDelay: nil)
+    }
+
+    /// 带「到显示目标的延迟」的帧推进（`render_tick_with_timing`）。
+    ///
+    /// `presentationDelay` 是 `CADisplayLink.targetTimestamp - CACurrentMediaTime()`：
+    /// 视频、字幕与渲染上下文都按**同一个显示目标时刻**采样播放快照，渲染繁忙时
+    /// 三者不会各采各的时间点。传 nil 等价于 `render_tick`（内核保留的旧语义）。
+    ///
+    /// ⚠️ 值必须是有限数且落在 ±0.25 s 内（`erika.h` 的硬约束）；调用方
+    /// （`RenderLoop.sanitizedPresentationDelay`）已经先夹过，这里不再重复校验。
+    @discardableResult
+    public func renderTick(at presentationTime: Double,
+                           presentationDelay: Double?) throws -> ErikaPresenterStats {
         var stats = ErikaPresenterStats()
-        try ErikaError.check(erika_presenter_render_tick(handle, presentationTime, &stats))
+        guard let presentationDelay else {
+            try ErikaError.check(erika_presenter_render_tick(handle, presentationTime, &stats))
+            return stats
+        }
+        // 内核只借用指针，且在开工前就把值拷走（`erika.h`：no pointer is retained），
+        // 所以这里的 inout 指针生命周期到调用结束为止即可。
+        var delay = presentationDelay
+        try withUnsafePointer(to: &delay) { pointer in
+            try ErikaError.check(
+                erika_presenter_render_tick_with_timing(handle, presentationTime, pointer, &stats)
+            )
+        }
         return stats
     }
 
