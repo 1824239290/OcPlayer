@@ -88,6 +88,15 @@ public struct TMDbClient: Sendable {
         try await entity(path: "tv/\(id)", mediaType: .tv, language: language)
     }
 
+    /// 合集详情（`/collection/{id}`）。Jellyfin / Emby 的合集（BoxSet）对应它。
+    ///
+    /// 复用同一条 `entity` 路径：合集响应同样有 `name` / `overview` / `poster_path` /
+    /// `backdrop_path`（我们只取这几个 + 图片），带 `append_to_response` 也实测 200
+    /// （TMDb 会忽略它不认识的那几个子资源）。
+    public func collection(id: Int, language: String) async throws -> TMDbEntity {
+        try await entity(path: "collection/\(id)", mediaType: .collection, language: language)
+    }
+
     /// 一季的全部集（**一次请求**）。
     public func season(tvID: Int, seasonNumber: Int, language: String) async throws -> TMDbSeason {
         let data = try await get(path: "tv/\(tvID)/season/\(seasonNumber)", language: language)
@@ -109,7 +118,9 @@ public struct TMDbClient: Sendable {
             switch mediaType {
             case .movie: items.append(URLQueryItem(name: "year", value: String(year)))
             case .tv: items.append(URLQueryItem(name: "first_air_date_year", value: String(year)))
-            case .season, .episode: break
+            // 季/集没有独立搜索端点；合集走 `/search/collection`（本仓库当前不搜合集，
+            // 合集的定位靠成员电影的 `belongs_to_collection`，见 `TMDbEnricher`）。
+            case .season, .episode, .collection: break
             }
         }
         let endpoint = mediaType == .movie ? "search/movie" : "search/tv"
@@ -242,7 +253,9 @@ enum TMDbDecoding {
             seasons: seasons(from: raw),
             originalLanguage: raw.string("original_language"),
             imdbID: raw["external_ids"]?.string("imdb_id"),
-            contentRating: contentRating(from: raw)
+            contentRating: contentRating(from: raw),
+            // 只对电影有意义；其它类型解出来是 nil（响应里没有这个键）。
+            collectionID: raw["belongs_to_collection"]?.int("id")
         )
     }
 

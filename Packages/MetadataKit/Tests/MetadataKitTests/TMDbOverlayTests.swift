@@ -293,15 +293,25 @@ final class TMDbOverlayTests: XCTestCase {
     // MARK: - 实体键
 
     func testEntityKeyRoundTrips() {
-        for key in [TMDbEntityKey.movie(603), .tv(1399), .season(tvID: 1399, number: 2)] {
+        for key in [TMDbEntityKey.movie(603), .tv(1399), .season(tvID: 1399, number: 2),
+                    .collection(210303)] {
             XCTAssertEqual(TMDbEntityKey(storageKey: key.storageKey), key)
         }
     }
 
     func testEntityKeyRejectsGarbage() {
-        for bad in ["", "movie", "movie/abc", "tv/1/season/x", "album/1", "movie/1/season/2"] {
+        for bad in ["", "movie", "movie/abc", "tv/1/season/x", "album/1", "movie/1/season/2",
+                    "collection/abc", "collection/1/2"] {
             XCTAssertNil(TMDbEntityKey(storageKey: bad), "「\(bad)」不该被解析")
         }
+    }
+
+    /// 合集的键：`collection/{id}`、`kind` 是 collection、`tmdbID` 就是合集 id。
+    func testCollectionKeyShape() {
+        let key = TMDbEntityKey.collection(210303)
+        XCTAssertEqual(key.storageKey, "collection/210303")
+        XCTAssertEqual(key.kind, .collection)
+        XCTAssertEqual(key.tmdbID, 210303)
     }
 
     /// 季的 `tmdbID` 是**所含的剧 id**（季没有独立 id），`kind` 仍是 season。

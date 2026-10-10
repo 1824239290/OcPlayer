@@ -1,6 +1,7 @@
 import AppDesignKit
 import CoreModel
 import JellyfinKit
+import MetadataKit
 import SwiftUI
 
 extension Color {
@@ -49,11 +50,11 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(item: item))
     }
 
-    /// 氛围布局是否生效：条目有 backdrop 图。没图时没有氛围层，
-    /// 浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
+    /// 氛围布局是否生效：条目有背景图（服务端 / TMDb / 合集成员兜底，见 VM 的 `hasBackdrop`）。
+    /// 没图时没有氛围层，浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
     private var isAmbientActive: Bool {
         guard app.server != nil else { return false }
-        if model.shown.backdropImageTag != nil { return true }
+        if model.hasBackdrop { return true }
         // 初版数据缺 tag 的剧集（「继续播放/接下来看」进来的占位剧集——分集没有
         // 自己的场布图，借不到 tag）：详情未落地前先按氛围布局渲染，别闪老横幅。
         // 背景有首页轮播图兜底（homeAmbience，没就绪时 BackdropAmbienceView 整体
@@ -72,8 +73,13 @@ struct DetailView: View {
     }
 
     /// 背景底图。整窗声明与页内氛围层共用一份，别再各拼一次 URL。
+    ///
+    /// 走 VM 的 `backdropTarget`（TMDb 优先补缺 + 合集成员兜底），**不是**条目的
+    /// 原始服务端图：早先这里用 `shown.imageTarget`，而 `isAmbientActive` 只看服务端
+    /// tag，两者恰好一致所以看不出问题；合集/TMDb 补图的条目一进来就会「走了氛围布局
+    /// 却画不出图」——同一份判定必须用同一个来源。
     private var backdropTarget: (url: URL?, authHeader: String?) {
-        model.shown.imageTarget(app.server, kind: .backdrop, width: 800)
+        model.backdropTarget(width: 800)
     }
 
     /// 底图未就绪时的兜底图：首页轮播当前那张（`AppModel.homeAmbience`）。
@@ -165,15 +171,31 @@ struct DetailView: View {
                     seasonBar
                     episodeList
                 }
-                BangumiChapterSection(
-                    item: model.shown,
-                    selectedSeason: selectedSeason
-                )
+                if model.shown.kind == .boxSet {
+                    collectionSection
+                }
+                // 合集不渲染 Bangumi 章节区：那一栏列的是「按集数组织的作品」的章节，
+                // 而合集是「多部电影的容器」，两者根本不是一回事。实测合集页上它匹配到
+                // 的是同名**剧集**（EVA 合集 → 新世纪福音战士 TV 的 01…26 集），
+                // 26 个「未看」格子里没有一个能点进合集里的那两部电影——纯粹是噪声。
+                if model.shown.kind != .boxSet {
+                    BangumiChapterSection(
+                        item: model.shown,
+                        selectedSeason: selectedSeason,
+                        // 章节列表同时是选集轨道占位的**兜底来源**：没配 TMDb（或 TMDb 编号
+                        // 对不上）时用它补出库里没有的集。让区块递上来而不是 VM 自己再读一次库，
+                        // 是因为区块今天已经在读全量章节，且自带启用开关 / 登录态 / 建库就绪三道闸门。
+                        onCandidatesLoaded: { model.acceptBangumiCandidates($0) }
+                    )
+                }
                 MoviePilotResourceSection(item: model.shown, showResource: $isResourcePresented)
                 if !model.displayCast.isEmpty { castRail }
                 // 当前选中集（电影为自身）的文件级媒体信息。
+                // 合集传 nil：它是容器，服务端对它的 `MediaSources` 恒为空
+                // （实测 `/Items?ids=<合集id>&fields=MediaSources` → 空），
+                // 区块本来就会整块不渲染，没必要为它白打一次请求。
                 DetailMediaInfoSection(
-                    item: playableItem,
+                    item: model.shown.kind == .boxSet ? nil : playableItem,
                     horizontalInset: detailHorizontalInset
                 )
                 if !model.similar.isEmpty { similarRail }
@@ -812,7 +834,7 @@ struct DetailView: View {
         HStack(spacing: 14) {
             Text("剧集").font(.title3.weight(.bold))
             Spacer()
-            if model.episodes.count > 1 {
+            if model.episodeSlots.count > 1 {
                 Button {
                     episodesAscending.toggle()
                 } label: {
@@ -882,7 +904,7 @@ struct DetailView: View {
                 .padding(.vertical, 12)
                 .padding(.horizontal, detailHorizontalInset)
                 .transition(.section)
-            } else if model.episodes.isEmpty {
+            } else if model.episodeSlots.isEmpty {
                 EmptyState(empty: "本季暂无剧集", systemImage: "rectangle.stack")
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -894,9 +916,12 @@ struct DetailView: View {
             }
         }
         // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
-        // 两个 value 都绑：loading 翻转和集列表整体替换（count 变化）各自开一次事务。
+        // **动画值刻意是本地集数而不是 slot 数**：占位是 TMDb 季数据晚到约一秒才插进来的，
+        // 用 slot 数当值会让整条轨道在占位到位时重播一次过渡（可见地闪一下）；用本地集数
+        // 则占位是「无动画插入」，观感更稳。空态 → 有占位那次翻转单独用一个值盖住。
         .animation(episodeListMotion, value: model.isLoadingEpisodes)
         .animation(episodeListMotion, value: model.episodes.count)
+        .animation(episodeListMotion, value: model.episodeSlots.isEmpty)
     }
 
     /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
@@ -904,15 +929,18 @@ struct DetailView: View {
         reduceMotion ? nil : Motion.standard
     }
 
-    /// 选集展示顺序：排序只影响横向条，不动 `model.episodes` 与选中态。
-    private var displayedEpisodes: [MediaItem] {
-        episodesAscending ? model.episodes : Array(model.episodes.reversed())
+    /// 选集展示顺序：排序只影响横向条，不动 `model.episodes`、`episodeSlots` 与选中态。
+    private var displayedSlots: [EpisodeSlot] {
+        episodesAscending ? model.episodeSlots : Array(model.episodeSlots.reversed())
     }
 
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
+    ///
+    /// 每一格按类型分派：库里有 → 可选可播的分集卡；库里没有 → 不可点的占位卡。
+    /// `scrollToID` 仍是选中集的 id（永远是本地条目），占位的 id 与它不同形，不会误滚。
     private var episodePickerRail: some View {
         HoverArrowHScroll(
-            items: displayedEpisodes,
+            items: displayedSlots,
             scrollStep: 4,
             contentLeading: contentLeading,
             edgeReserve: 28,
@@ -920,23 +948,136 @@ struct DetailView: View {
             // 箭头对准剧照中部（卡片上部），不是整卡含标题的几何中心。
             arrowYOffset: -18,
             scrollToID: model.selectedEpisodeID
-        ) { episode in
-            EpisodeSelectCard(
-                episode: episode,
-                server: app.server,
-                // 标题走 VM：服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
-                displayTitle: model.displayEpisodeTitle(episode),
-                displayOverview: model.displayEpisodeOverview(episode),
-                // 剧照同样按「能用 TMDb 就用」的策略解析（含 still_path）。
-                thumbTarget: model.episodeThumbTarget(for: episode, width: 400),
-                isSelected: episode.id == model.selectedEpisodeID,
-                onSelect: { model.selectEpisode(episode) },
-                onPlay: {
-                    model.selectEpisode(episode)
-                    app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
-                }
-            )
+        ) { slot in
+            switch slot {
+            case .local(let episode):
+                EpisodeSelectCard(
+                    episode: episode,
+                    server: app.server,
+                    // 标题走 VM：服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
+                    displayTitle: model.displayEpisodeTitle(episode),
+                    displayOverview: model.displayEpisodeOverview(episode),
+                    // 剧照同样按「能用 TMDb 就用」的策略解析（含 still_path）。
+                    thumbTarget: model.episodeThumbTarget(for: episode, width: 400),
+                    isSelected: episode.id == model.selectedEpisodeID,
+                    onSelect: { model.selectEpisode(episode) },
+                    onPlay: {
+                        model.selectEpisode(episode)
+                        app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
+                    }
+                )
+            case .placeholder(let placeholder):
+                EpisodePlaceholderCard(
+                    placeholder: placeholder,
+                    // TMDb 剧照优先，没有时用剧集自己的横版图（同首页「继续观看」那条链）。
+                    thumbTarget: model.placeholderThumbTarget(for: placeholder, width: 400)
+                )
+            }
         }
+    }
+
+    // MARK: - 合集：成员海报墙
+
+    /// 合集内容：`/Items?parentId=<合集id>&recursive=false` 的成员。
+    ///
+    /// 用网格而不是横向轨道：合集就是「一叠片」，成员通常 2–20 条，一屏看全比横着滑
+    /// 更好找；列宽算法与库页网格同一套（紧凑两列 / 常规自适应）。
+    /// 区块放在季/集那一档的同一位置（简介之下、Bangumi 区块之前）。
+    private var collectionSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text("合集内容").font(.title3.weight(.bold))
+                if let total = model.collectionMembersTotalCount, total > 0 {
+                    Text("共 \(total) 部")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Spacer()
+            }
+            .padding(.horizontal, detailHorizontalInset)
+            .padding(.top, 26)
+            .padding(.bottom, 12)
+
+            memberGrid
+        }
+        .animation(collectionMotion, value: model.isLoadingMembers)
+        .animation(collectionMotion, value: model.collectionMembers.count)
+    }
+
+    @ViewBuilder
+    private var memberGrid: some View {
+        if model.isLoadingMembers, model.collectionMembers.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 18)
+        } else if let membersError = model.membersLoadError, model.collectionMembers.isEmpty {
+            EmptyState(failure: membersError, title: "合集内容加载失败",
+                       systemImage: "wifi.exclamationmark") {
+                Task { await model.loadMembers(reset: true) }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, detailHorizontalInset)
+        } else if model.collectionMembers.isEmpty {
+            // 空合集是合法状态（刚建好、还没往里加片）：说清楚，别显示成加载失败。
+            EmptyState(empty: "这个合集里还没有内容", systemImage: "rectangle.stack")
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, detailHorizontalInset)
+        } else {
+            if let membersError = model.membersLoadError {
+                // 已有内容 + 这次刷新失败：保留内容，只提示一行（与库页翻页失败同口径）。
+                Text(membersError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, detailHorizontalInset)
+                    .padding(.bottom, 10)
+            }
+            LazyVGrid(columns: memberColumns, alignment: .leading, spacing: memberGridSpacing) {
+                ForEach(model.collectionMembers) { member in
+                    PosterCard(item: member, server: app.server, width: memberCardWidth) {
+                        app.openDetail(member)
+                    }
+                }
+            }
+            .padding(.horizontal, detailHorizontalInset)
+
+            if model.hasMoreMembers {
+                // 与库页不同，这里不自动预取：合集成员通常一页装得下，
+                // 自动翻页反而会在用户没看的时候把整份拉下来。
+                Button(UIStrings.loadMore) {
+                    Task { await model.loadMembers(reset: false) }
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isLoadingMembers)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 16)
+            }
+        }
+    }
+
+    private var memberColumns: [GridItem] {
+        if horizontalSizeClass == .compact {
+            return [
+                GridItem(.flexible(), spacing: 14),
+                GridItem(.flexible(), spacing: 14),
+            ]
+        }
+        return [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+    }
+
+    private var memberGridSpacing: CGFloat {
+        horizontalSizeClass == .compact ? 14 : Metrics.railSpacing + 8
+    }
+
+    private var memberCardWidth: CGFloat? {
+        horizontalSizeClass == .compact ? nil : Metrics.posterWidth
+    }
+
+    /// 成员区状态切换过渡；减弱动态效果时直接切换。
+    private var collectionMotion: Animation? {
+        reduceMotion ? nil : Motion.standard
     }
 
     // MARK: - 演员 / 类似

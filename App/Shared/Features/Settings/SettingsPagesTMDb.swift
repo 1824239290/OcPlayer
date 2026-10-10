@@ -61,6 +61,24 @@ struct TMDbSettingsView: View {
             }
             .settingsRowBackground()
 
+            // 刻意**放在 `isConfigured` 闸门之外**：这一项的兜底来源是 Bangumi 章节，
+            // 没配 TMDb key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
+            Section("剧集占位") {
+                Toggle("显示未入库剧集占位", isOn: Binding(
+                    get: { tmdb.showPlaceholders },
+                    set: { tmdb.setShowPlaceholders($0) }))
+                Text(tmdb.showPlaceholders
+                     ? "剧集详情页的选集条会把库里还没有的集画成占位卡（标「未播出」或「未入库」）。"
+                     + "数据优先用 TMDb 的季信息；没有 TMDb 数据时用已关联的 Bangumi 章节。"
+                     : "选集条只显示库里已有的集。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Text("占位卡不可播放，也不会写进已看记录与缓存；关掉只影响占位，不影响补全本身。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .settingsRowBackground()
+
             if tmdb.isConfigured {
                 Section("补全选项") {
                     Picker("语言", selection: Binding(

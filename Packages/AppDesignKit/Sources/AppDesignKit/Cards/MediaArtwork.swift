@@ -31,6 +31,8 @@ public struct MediaArtwork<Overlay: View>: View {
     public var cornerStyle: RoundedCornerStyle
     /// 解码下采样上限（长边像素）；定宽时默认按展示宽度 ×3 给。
     public var maxPixelSize: Int
+    /// 无图 / 加载失败时的占位图标（透传给 `RemoteImage`）。默认通用「photo」。
+    public var emptyIcon: String
     /// 细描边：白底图上让卡片边界可辨（Bangumi 日历卡 / 搜索结果行的习惯）。
     public var bordered: Bool
     /// 轻投影。
@@ -45,6 +47,7 @@ public struct MediaArtwork<Overlay: View>: View {
         cornerRadius: CGFloat = Metrics.cardRadius,
         cornerStyle: RoundedCornerStyle = .circular,
         maxPixelSize: Int? = nil,
+        emptyIcon: String = "photo",
         bordered: Bool = false,
         shadowed: Bool = false,
         @ViewBuilder overlay: () -> Overlay
@@ -56,6 +59,7 @@ public struct MediaArtwork<Overlay: View>: View {
         self.cornerRadius = cornerRadius
         self.cornerStyle = cornerStyle
         self.maxPixelSize = maxPixelSize ?? Int((width ?? 200) * 3)
+        self.emptyIcon = emptyIcon
         self.bordered = bordered
         self.shadowed = shadowed
         self.overlay = overlay()
@@ -64,7 +68,8 @@ public struct MediaArtwork<Overlay: View>: View {
     public var body: some View {
         Group {
             if let width {
-                RemoteImage(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+                RemoteImage(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize,
+                            emptyIcon: emptyIcon)
                     .aspectRatio(1 / shape.heightRatio, contentMode: .fill)
                     .frame(width: width, height: width * shape.heightRatio)
                     .overlay { overlay }
@@ -74,7 +79,8 @@ public struct MediaArtwork<Overlay: View>: View {
                     .aspectRatio(1 / shape.heightRatio, contentMode: .fit)
                     .overlay {
                         ZStack {
-                            RemoteImage(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+                            RemoteImage(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize,
+                                        emptyIcon: emptyIcon)
                                 .scaledToFill()
                             overlay
                         }
@@ -105,6 +111,7 @@ public extension MediaArtwork where Overlay == EmptyView {
         cornerRadius: CGFloat = Metrics.cardRadius,
         cornerStyle: RoundedCornerStyle = .circular,
         maxPixelSize: Int? = nil,
+        emptyIcon: String = "photo",
         bordered: Bool = false,
         shadowed: Bool = false
     ) {
@@ -116,6 +123,7 @@ public extension MediaArtwork where Overlay == EmptyView {
             cornerRadius: cornerRadius,
             cornerStyle: cornerStyle,
             maxPixelSize: maxPixelSize,
+            emptyIcon: emptyIcon,
             bordered: bordered,
             shadowed: shadowed,
             overlay: { EmptyView() }

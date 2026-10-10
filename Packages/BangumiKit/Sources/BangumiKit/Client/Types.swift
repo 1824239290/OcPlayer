@@ -382,13 +382,26 @@ public struct BangumiEpisodeDTO: Codable, Identifiable, Hashable, Sendable {
         collection?.typeEnum ?? .none
     }
 
-    /// 该集是否已开播（airdate 有值且不晚于今天）。
-    public var aired: Bool {
-        guard !airdate.isEmpty else { return false }
+    /// 播出日期。nil = **日期未知**（Bangumi 上未定档的集就是空串），
+    /// 与「未播出」是两件事——详情页的占位卡据此区分「未播出」与「未入库」：
+    /// 空 airdate 若是被当成未播出，十年前没刮到日期的老集会被标成「未播出」。
+    ///
+    /// 口径是**本地时区的当日零点**（`DateFormatter` 默认时区），
+    /// 与 `MetadataKit.TMDbAirDate` 必须一致，否则同一集在两个来源下会差一天。
+    public var airDateValue: Date? {
+        guard !airdate.isEmpty else { return nil }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        guard let date = formatter.date(from: airdate) else { return false }
+        return formatter.date(from: airdate)
+    }
+
+    /// 该集是否已开播（airdate 有值且不晚于今天）。
+    ///
+    /// 日期未知算「未开播」——这是**章节网格**的语义（未开播的格子禁用标记），
+    /// 与 `airDateValue` 的「未知 ≠ 未播出」不矛盾：网格只有「能不能点」两态。
+    public var aired: Bool {
+        guard let date = airDateValue else { return false }
         return date <= Date()
     }
 

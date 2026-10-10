@@ -56,6 +56,7 @@ public struct TMDbPreferences: @unchecked Sendable {
     public static let preferTMDbTextKey = "dev.jumusu.ocplayer.tmdb.preferText"
     public static let fillMissingImagesKey = "dev.jumusu.ocplayer.tmdb.fillImages"
     public static let expiresDaysKey = "dev.jumusu.ocplayer.tmdb.cacheDays"
+    public static let showPlaceholdersKey = "dev.jumusu.ocplayer.tmdb.showPlaceholders"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -102,6 +103,23 @@ public struct TMDbPreferences: @unchecked Sendable {
             return defaults.bool(forKey: Self.fillMissingImagesKey)
         }
         nonmutating set { defaults.set(newValue, forKey: Self.fillMissingImagesKey) }
+    }
+
+    /// 选集轨道是否补出「库里没有的集」的占位卡。**默认 true**。
+    ///
+    /// 数据来源：TMDb 的季叠加层优先，没有时用已关联的 Bangumi 章节兜底（判定在
+    /// `EpisodeSlotBuilder`，这里只管开关）。放在 TMDb 的偏好里而不是单开一个域，
+    /// 是因为它对用户而言是**一个视觉行为**（选集条上多出几张灰卡），而不是两个：
+    /// 分成「TMDb 占位」「Bangumi 占位」两个开关，就会出现「TMDb 关了但轨道上还有
+    /// 占位」的困惑状态。
+    ///
+    /// 用 `object(forKey:)` 判存在而不是 `bool(forKey:)`：同 `preferTMDbText` 那个坑。
+    public var showPlaceholders: Bool {
+        get {
+            guard defaults.object(forKey: Self.showPlaceholdersKey) != nil else { return true }
+            return defaults.bool(forKey: Self.showPlaceholdersKey)
+        }
+        nonmutating set { defaults.set(newValue, forKey: Self.showPlaceholdersKey) }
     }
 
     /// 缓存有效期（天）。

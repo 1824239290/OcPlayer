@@ -22,21 +22,28 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
     /// 某剧的某一季。**季没有独立的 TMDb id**（实测：Jellyfin 的季级 ProviderIds
     /// 只有 Tvdb、没有 Tmdb），只能由父剧 id + 季号定位。
     case season(tvID: Int, number: Int)
+    /// TMDb 的**合集**（`/collection/{id}`）。Jellyfin / Emby 的合集（BoxSet）用这个键。
+    ///
+    /// 与 `movie` / `tv` 不同，它**不是**由条目自己的 ProviderIds 得来的——合集没有
+    /// 可用的 TMDb id，是靠成员电影的 `belongs_to_collection` 反查出来的
+    /// （见 `TMDbEnricher.refreshCollection`）。
+    case collection(Int)
 
     public var storageKey: String {
         switch self {
         case .movie(let id): "movie/\(id)"
         case .tv(let id): "tv/\(id)"
         case .season(let tvID, let number): "tv/\(tvID)/season/\(number)"
+        case .collection(let id): "collection/\(id)"
         }
     }
 
     public var description: String { storageKey }
 
-    /// 顶层实体（电影/剧）的 TMDb id；季没有自己的 id，返回所含的**剧** id。
+    /// 顶层实体（电影/剧/合集）的 TMDb id；季没有自己的 id，返回所含的**剧** id。
     public var tmdbID: Int {
         switch self {
-        case .movie(let id), .tv(let id): id
+        case .movie(let id), .tv(let id), .collection(let id): id
         case .season(let tvID, _): tvID
         }
     }
@@ -46,6 +53,7 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
         case .movie: .movie
         case .tv: .tv
         case .season: .season
+        case .collection: .collection
         }
     }
 
@@ -58,6 +66,7 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
             switch parts[0] {
             case "movie": self = .movie(id)
             case "tv": self = .tv(id)
+            case "collection": self = .collection(id)
             default: return nil
             }
         case 4:

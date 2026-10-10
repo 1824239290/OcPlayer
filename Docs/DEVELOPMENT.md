@@ -115,7 +115,32 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 | 分集卡片的标题 | 该季每一集的 TMDb 标题（占位名「第 N 集」会被顶掉） |
 | 分集卡片的剧照 | TMDb 的 `still_path`（默认策略下优先于服务端的图） |
 | 分集卡片的悬停提示 | 该集的 TMDb 简介 |
+| **占位卡片**（库里没有的集） | TMDb 季数据的 `airDate` 优先，Bangumi 章节兜底（见下节） |
 | 页面简介 | 选中某季时优先显示**该季简介**，取不到回落剧集简介 |
+
+### 未入库剧集占位（`EpisodeSlotBuilder`）
+
+选集轨道显示的不是 `episodes`，而是派生出来的 `episodeSlots`：**库内条目 + 库里没有的集的占位**。规则收在 `MetadataKit.EpisodeSlotBuilder`（纯函数，`now` 注入），App 侧只负责把两个来源喂进去：
+
+| 环节 | 位置 |
+| --- | --- |
+| 来源一（首选） | `TMDbOverlay.episodeCandidates`（季叠加层，一次请求拿整季） |
+| 来源二（兜底） | `BangumiChapterSection` 读到章节后经 `onCandidatesLoaded` 递给 `DetailViewModel` |
+| 合成 | `DetailViewModel.rebuildEpisodeSlots()`（`episodes` / `tmdbSeasonOverlay` / `bangumiCandidates` 三者 `didSet` 触发） |
+| 渲染 | `EpisodeSelectCard`（本地，可点可播）/ `EpisodePlaceholderCard`（占位，**不是 Button**） |
+
+两条与布局有关的硬约束（都踩过）：
+
+- **两种卡必须严格同高**。横向 `ScrollView` 里 `LazyHStack` 的高度按**已实现的子视图**算，卡高不一时矮的那张会定下整条轨道的高度、高出的部分被直接裁掉（实测：占位卡的日期行被裁成半行）。所以占位卡的日期**画在图里**（左下角 + 底部渐隐），文字块与本地卡同构，标题统一 `lineLimit(2, reservesSpace: true)` 恒占两行。
+- **占位卡的图有兜底**：TMDb 的 `still_path` 优先，没有时用**剧集自己的横版图**（`MediaItem.homeStillImageTarget`，与首页「继续观看」同一条链）。占位本来就没有自己的剧照，用剧的图填格子比留灰底有用（用户口径）。本地分集卡**不走**这条兜底——那里用父级图会像串了集（见 `episodeThumbTarget` 的注释）。
+
+三条不能改的约束：
+
+1. **占位不进 `episodes`**。`episodes` 会流进播放、已看标记、连播、详情快照与磁盘缓存；混进假条目等于每一处都要再加一道「这是不是真的」判断。`episodeSlots` 只是展示面的派生值。
+2. **编号要锚点**。库内已有集号时，来源必须与它至少有一集同号（`pickSource`）；Jellyfin 的 `IndexNumber` 有时是季内相对号、有时是绝对号，没有交集说明两边不同源——**宁可不显示占位，也不显示错号的假卡片**（错号的占位会让用户按它去找片）。库内为空时直接用来源；库内有条目但一个集号都没有则视为不可信。
+3. **数量要有界**。占位只覆盖 `库内最小集号 … 库内最大集号 + 24`（`forwardWindow`，约一个标准季），另加 `maxPlaceholders = 60` 的安全网。不设下界的话，一部只有第 1000 集的库会把 1…999 全算成空洞、把有用的库尾挤掉；不设上界的话，海贼王那种「库内 500 / 来源 1100」会一次冒出 600 张卡。
+
+「未播出」的判定是**有播出日期且晚于现在**；日期未知算「未入库」——空 airdate 在 Bangumi 上很常见，当成未播出会让十年前的老集标成「未播出」。季号 0（特典）与季号缺失一律不补（TMDb 的 season 0 与 Jellyfin 从文件名派生的 SP 编号不同源）。**这一整块不发任何新请求**：TMDb 季数据本来就在拉，Bangumi 章节本来就在读，且两份缓存都在同一个 SQLite 里，所以离线也能出占位。开关在设置 → TMDb →「剧集占位」（`TMDbPreferences.showPlaceholders`，默认开）。
 
 **图片策略默认「TMDb 优先」**（`TMDbPreferences.replaceExistingImages` 默认 true，用户口径：填了 key 就是想要完整补全）。海报 / 背景 / 分集剧照三处都走 `TMDbImagePolicy`；用户可在设置页关掉。**改这个默认值时务必同时改 `TMDbImagePolicy.init` 的默认**——同一个概念两个默认值会让「生产优先、测试只补缺」，很难查。
 
@@ -132,10 +157,12 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 - **手动匹配**：`searchCandidates` / `bindManually` / `unbind`，UI 在 `TMDbMatchSheet`（入口是详情页头部的循环箭头）。手动绑定写 `source: .manual`，`isAuthoritative` 为真，**不会被自动匹配覆盖**。
 - ⚠️ **`/Items` 列表接口默认不返回 `ProviderIds`**（`/Items/{id}` 才默认返回）。库级补全全靠它拿 `tmdbID`，所以两个后端的 `itemsPage` 都显式带了 `fields`。改这里之前先想清楚：去掉它 = 批量补全退化成纯标题搜索。
 
-### 两条已知取舍（改之前先看这里）
+### 四条已知取舍（改之前先看这里）
 
 1. **分集剧照两段式**：首次渲染服务端图 → TMDb 到位后替换。要消掉得让季数据先于分集卡片就绪，代价是选集整条晚出现。
 2. **脏 `ProviderIds`（TMDb 上 404）**：每次打开详情页白打一次请求，且因权威对应不会被顶掉而**永不退回搜索**。实测本机库全量 41 个带 Tmdb id 的条目全部有效（0 个 404），故未加退避。修法见 `TMDbEnricher.performFetch` 的 catch 注释。
+3. **占位卡与 Bangumi 章节网格信息重复**：同一季「库里缺哪些集」会在选集轨道（占位卡）与 Bangumi 区块（章节格子）各出现一次。刻意保留——两者的用途不同（轨道是「播放 / 找片」，网格是「标记进度」），且网格在未关联 Bangumi 时根本不存在。真要合并，得先决定「用谁的编号为准」。
+4. **Jellyfin 一个季都没有的剧不显示占位**：`seasons` / `selectedSeason` 是 `MediaItem`，一路流进 `BangumiChapterSection`、`DetailExternalLinks`、`BangumiMatcher` 与详情快照；要造「合成季」得把它换成「本地 / 远程」联合类型，波及四处。收益只覆盖「空库条目」这种罕见形态，故不做。
 
 **展示路径不发网络**：`overlay(for:)` 只读库，`refresh(item:)` 才发请求。详情页先渲染已有 overlay，再在后台补——合成一个方法就没法离线复用、也没法让调用方控制时机。
 

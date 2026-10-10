@@ -224,8 +224,23 @@ struct LibraryView: View {
             LazyVStack(spacing: 0) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                     ForEach(items) { item in
-                        PosterCard(item: item, server: app.server, width: cardWidth) {
+                        PosterCard(
+                            item: item,
+                            server: app.server,
+                            width: cardWidth,
+                            // 合集卡：服务端没有封面图（实测 `ImageTags: {}`），
+                            // 用解析出来的 TMDb 合集海报顶上；还没解析出来时是 nil，
+                            // 卡片显示「一叠海报」占位图标。
+                            posterOverride: app.collectionPosterURL(for: item, width: 400)
+                        ) {
                             app.openDetail(item)
+                        }
+                        // 卡片**进入可视区**时解析一次封面（有界、失败不重试）。
+                        // 用 onAppear 而不是「进库时全量跑」：可见即需要，滚动扫过
+                        // 几十个合集也不会一次打上百个请求。非合集条目在方法里直接返回。
+                        .onAppear {
+                            guard library.collectionType == .boxsets else { return }
+                            Task { await app.resolveCollectionArtworkIfNeeded(for: item) }
                         }
                         .transition(reduceMotion ? .identity : .opacity)
                     }
@@ -278,6 +293,13 @@ struct LibraryView: View {
 
     /// 库类型 → 展示维度。剧集库要按「电视剧」列（而不是递归铺到每一集），
     /// 电影库按「电影」列。其它库类型暂时不映射（沿用递归叶子）。
+    ///
+    /// **合集库刻意保持 nil（不传 `includeItemTypes`）**，看着像「漏了」但不能补：
+    /// Jellyfin 的 `ItemsController` 对 `CollectionType = boxsets` 的库会**强制**
+    /// `includeItemTypes = [BoxSet]` 并从用户根重查，显式传 `BoxSet` 只会让同一件事
+    /// 多绕一层；而 10.11.x 上 `parentId` 配上 `includeItemTypes=BoxSet` 有已知 bug
+    /// （jellyfin#16454：parentId 被置空、返回**库**而不是合集）。本机 12.1.0 实测
+    /// 带与不带该参数结果相同（2 条都是 BoxSet），所以维持现状最稳。
     private var itemKinds: [MediaItem.Kind]? {
         switch library.collectionType {
         case .movies: return [.movie]

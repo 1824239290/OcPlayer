@@ -205,6 +205,8 @@ extension AppModel {
         libraries = []
         librariesError = nil
         libraryPages = [:]
+        // 合集封面缓存同样按条目 id 索引（id 只在那台服务器里有意义），清掉。
+        clearCollectionArtwork()
         home = HomeData()
         // 详情快照按 item id 索引，而 id 只在原服务器里有意义——两台同库的服务器
         // 可能撞 id，留着会让新会话的详情页显示旧服务器的剧集。快照连同它的

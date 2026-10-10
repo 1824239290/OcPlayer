@@ -116,6 +116,50 @@ final class AppModel {
 
     var libraryPages: [LibraryPageKey: LibraryPage] = [:]
 
+    /// 合集卡封面：合集条目 id → TMDb 合集的海报路径（`/xxx.jpg`）。
+    ///
+    /// ## 为什么网格需要一份独立缓存
+    ///
+    /// 合集在服务端**本来就没有图**（实测 `ImageTags: {}`），网格卡于是只剩占位图标；
+    /// 而详情页能出图是因为它手上有该条目的 TMDb overlay。网格没有 overlay（每张卡一条
+    /// 读路径不现实），所以把「解析出来的海报路径」按条目 id 记在这里，让详情页与网格
+    /// **共用同一次解析结果**。
+    ///
+    /// 解析入口是 `resolveCollectionArtworkIfNeeded(for:)`（卡片进入可视区时触发），
+    /// 值来源还有一条：详情页读到 overlay 后经 `noteCollectionArtwork` 同步过来——
+    /// 所以「先点开详情、再回网格」这一趟是**零请求**的。
+    var collectionArtwork: [MediaItem.ID: String] = [:]
+
+    /// 已经解析过（成功或确定失败）的合集 id：失败**不重试**，否则滚动一次就是一轮
+    /// 网络风暴；失败多为「TMDb 上没有这个合集」这种不会自己变好的情况。
+    ///
+    /// 与 `collectionArtworkInFlight` 一起只由 `AppModel+TMDb.swift` 的解析路径使用
+    /// （存储留在本文件、逻辑留在那个扩展里，所以这里是 internal 而不是 private）。
+    var collectionArtworkAttempted: Set<MediaItem.ID> = []
+    /// 正在解析的合集 id（同一个合集被多个卡片/多次 onAppear 触发时只跑一次）。
+    var collectionArtworkInFlight: Set<MediaItem.ID> = []
+
+    /// 换会话时清空合集封面缓存（见 `resetBrowseState`）。
+    /// 收在这里而不是让调用方直接改那两个私有集合：存储的可见性留在本文件。
+    func clearCollectionArtwork() {
+        collectionArtwork = [:]
+        collectionArtworkAttempted = []
+        libraryCoverArt = [:]
+        libraryCoverAttempted = []
+    }
+
+    /// 媒体库卡封面：库 id → 最多 4 张内容海报（服务端没给库封面时用它拼 2×2）。
+    /// 逻辑在 `AppModel+CollectionArtwork.swift`。
+    var libraryCoverArt: [MediaLibrary.ID: [URL]] = [:]
+    /// 已解析过（成功或确定没有可用海报）的库 id；失败不重试。
+    var libraryCoverAttempted: Set<MediaLibrary.ID> = []
+    /// 正在解析的库 id。
+    var libraryCoverInFlight: Set<MediaLibrary.ID> = []
+
+    /// 同时在飞的合集封面解析上限。滚动扫过几十个合集时不该并发打上百个请求——
+    /// 超限的直接跳过（下次滚回来还有机会，`attempted` 只在真正跑完时才记）。
+    static let collectionArtworkConcurrency = 2
+
     /// 分页缓存条目总量上限：超大服务器深翻多个库时无上限增长会吃掉几百 MB
     /// （每条 MediaItem 带长 overview）。超限就整份清空、只回填当前正在浏览的
     /// 这一库——分页缓存只是「回库不重拉」的加速器，清空代价是下次进库重新翻页，
@@ -154,6 +198,9 @@ final class AppModel {
         var similar: [MediaItem]
         var selectedSeasonID: String?
         var episodesBySeason: [String: [MediaItem]]
+        /// 合集成员（合集详情页的「合集内容」）。非合集条目恒为空。
+        /// 有默认值 → 既有构造点（磁盘快照 / 详情 VM）不必逐处补参数。
+        var collectionMembers: [MediaItem] = []
     }
 
     static let detailSnapshotLimit = 40

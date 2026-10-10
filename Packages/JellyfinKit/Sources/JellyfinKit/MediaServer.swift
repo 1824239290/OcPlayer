@@ -145,7 +145,6 @@ public protocol MediaServer: PlaybackReporting {
     func similar(itemID: String, limit: Int) async throws -> [MediaItem]
 
     // MARK: - 媒体资源
-
     /// 条目图片地址（不含 token，认证走请求头）。
     func imageURL(itemID: String, type: ItemImageType, maxWidth: Int?, tag: String?) throws -> URL
     /// 直连播放地址（认证走请求头，URL 里没有 token）。
@@ -160,4 +159,36 @@ public protocol MediaServer: PlaybackReporting {
     func mediaFileInfo(itemID: String) async throws -> MediaFileInfo?
     /// 开播协商：拿可用的 MediaSource 列表与会话 id。
     func playbackInfo(itemID: String) async throws -> PlaybackInfo
+}
+
+// MARK: - 合集（BoxSet）成员
+
+extension MediaServer {
+    /// 合集的**直接成员**（Jellyfin / Emby 的 Collection / BoxSet 里的条目）。
+    ///
+    /// 三条约束收在这里，因为两处调用点（详情页的「合集内容」、库网格的封面解析）
+    /// 需要的是**同一个**查询形态——各写一遍就是下一个漂移点：
+    ///
+    /// - **`recursive: false`**：合集成员存在服务端的 `LinkedChildren` 里，非递归只给
+    ///   直接成员；递归会走 `DescendantOfId` 一路往下（服务端单测
+    ///   `DescendantOfId_ReachesEpisodesOfALinkedSeries` 断言了这点），合集里放一部剧
+    ///   就会把它的季与集一起带出来。
+    /// - **不传 `kinds`**（即不发 `includeItemTypes`）：Jellyfin 的 `ItemsController`
+    ///   一旦发现 `parentId` 是合集且同时带了 `includeItemTypes`，会把 `parentId` **置空**
+    ///   改成从用户根重查——返回的是「所有合集」而不是这个合集的成员
+    ///   （[jellyfin#16454]；本机 12.1.0 实测带与不带该参数结果相同，正是这条重定根逻辑）。
+    /// - **排序显式给年份升序**：不传 sortBy 时服务端按合集自己的 `DisplayOrder`
+    ///   （默认 PremiereDate）排，而该字段不在 `MediaItemsSortField` 值域里；显式指定
+    ///   才可复现（副键 `SortName` 保证同年内稳定）。
+    public func collectionMembers(of itemID: String, limit: Int = 200) async throws -> MediaItemsPage {
+        try await itemsPage(
+            parentID: itemID,
+            kinds: nil,
+            recursive: false,
+            startIndex: 0,
+            limit: limit,
+            sort: MediaItemsSort(field: .year, ascending: true),
+            watchState: nil,
+            searchTerm: nil)
+    }
 }

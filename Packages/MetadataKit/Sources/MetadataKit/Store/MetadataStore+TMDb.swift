@@ -22,6 +22,8 @@ public enum TMDbEntityPayload: Codable, Equatable, Sendable {
         switch (self, key) {
         case (.entity(let entity), .movie(let id)): entity.id == id && entity.mediaType == .movie
         case (.entity(let entity), .tv(let id)): entity.id == id && entity.mediaType == .tv
+        case (.entity(let entity), .collection(let id)):
+            entity.id == id && entity.mediaType == .collection
         case (.season(let season), .season(_, let number)): season.seasonNumber == number
         default: false
         }

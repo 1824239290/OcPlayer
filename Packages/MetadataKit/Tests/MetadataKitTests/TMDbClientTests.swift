@@ -61,6 +61,44 @@ final class TMDbClientTests: XCTestCase {
         XCTAssertEqual(entity.seasons.last?.episodeCount, 10)
     }
 
+    /// 电影详情里的 `belongs_to_collection` 要解出来——它是合集定位的唯一权威入口。
+    func testMovieDetailDecodesBelongsToCollection() async throws {
+        let client = makeClient { _ in (200, Self.movieInCollectionJSON) }
+
+        let entity = try await client.movie(id: 75629, language: "zh-CN")
+
+        XCTAssertEqual(entity.collectionID, 210303)
+        XCTAssertEqual(entity.title, "福音战士新剧场版：Q")
+    }
+
+    /// 没有该键（TMDb 认为这部片不属于任何合集）→ nil，不是 0。
+    func testMovieWithoutCollectionDecodesToNil() async throws {
+        let client = makeClient { _ in (200, Self.movieJSON) }
+
+        let entity = try await client.movie(id: 603, language: "zh-CN")
+
+        XCTAssertNil(entity.collectionID)
+    }
+
+    /// 合集详情：走 `/collection/{id}`，`name` 解进 `title`（与电影/剧集同一套解码）。
+    func testCollectionDetailDecodesNameAndImages() async throws {
+        var seenPath: String?
+        let client = makeClient { request in
+            seenPath = request.url?.path
+            return (200, Self.collectionJSON)
+        }
+
+        let entity = try await client.collection(id: 210303, language: "zh-CN")
+
+        XCTAssertTrue(seenPath?.hasSuffix("/collection/210303") == true, "实际路径: \(seenPath ?? "")")
+        XCTAssertEqual(entity.id, 210303)
+        XCTAssertEqual(entity.mediaType, .collection)
+        XCTAssertEqual(entity.title, "福音战士新剧场版（系列）")
+        XCTAssertEqual(entity.backdropPath, "/eva-backdrop.jpg")
+        XCTAssertEqual(entity.posterPath, "/eva-poster.jpg")
+        XCTAssertTrue(entity.hasDisplayableContent)
+    }
+
     func testSeasonDecodesAllEpisodesInOneRequest() async throws {
         var requestCount = 0
         let client = makeClient { request in
@@ -364,6 +402,36 @@ private extension TMDbClientTests {
       ]},
       "images": {"posters": []},
       "content_ratings": {"results": [{"iso_3166_1": "US", "rating": "R"}]}
+    }
+    """#.utf8)
+
+    /// 属于某个 TMDb 合集的电影（裁剪自实测的 `/movie/75629`）。
+    static let movieInCollectionJSON = Data(#"""
+    {
+      "id": 75629,
+      "title": "福音战士新剧场版：Q",
+      "original_title": "ヱヴァンゲリヲン新劇場版：Q",
+      "overview": "简介",
+      "poster_path": "/q.jpg",
+      "backdrop_path": "/q-bd.jpg",
+      "belongs_to_collection": {
+        "id": 210303,
+        "name": "福音战士新剧场版（系列）",
+        "poster_path": "/eva-poster.jpg",
+        "backdrop_path": "/eva-backdrop.jpg"
+      }
+    }
+    """#.utf8)
+
+    /// 合集详情（裁剪自实测的 `/collection/210303`）。
+    static let collectionJSON = Data(#"""
+    {
+      "id": 210303,
+      "name": "福音战士新剧场版（系列）",
+      "overview": "再构建作品。",
+      "poster_path": "/eva-poster.jpg",
+      "backdrop_path": "/eva-backdrop.jpg",
+      "parts": [{"id": 75629, "title": "福音战士新剧场版：Q"}]
     }
     """#.utf8)
 

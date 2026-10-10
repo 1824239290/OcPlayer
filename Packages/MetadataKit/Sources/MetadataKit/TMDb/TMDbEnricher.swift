@@ -107,6 +107,109 @@ public actor TMDbEnricher {
         return await fetchAndStore(key: key)
     }
 
+    // MARK: - 合集（BoxSet）
+
+    /// 服务端合集 → TMDb 合集的补全。返回是否**发起了网络并成功落库**。
+    ///
+    /// ## 为什么合集要走单独一条路
+    ///
+    /// 电影/剧集的对应来自服务端 `ProviderIds["Tmdb"]`（权威）或标题搜索，两条对合集
+    /// 都不成立：实测 Jellyfin 手工建的合集 `ProviderIds` 是**空 Map**；按名字搜
+    /// `/search/collection` 又会撞上一堆近似集合（中文名带「（系列）」后缀，而 TMDb 上
+    /// 同一部片常有多个集合条目），没有任何东西能证明搜到的就是这一个。
+    ///
+    /// 真正权威的线索在**成员**身上：电影详情里的 `belongs_to_collection` 直接写着
+    /// 「这部片属于哪个合集」。实测本机两个合集都走这条，且同一合集的两个成员给出
+    /// **同一个** id（EVA → 210303、中二病 → 1192656），正好绕开了名字对不上的问题
+    /// （Jellyfin 里叫「新世纪福音战士新剧场版（系列）」，TMDb 上叫「福音战士新剧场版（系列）」）。
+    ///
+    /// ## 两个刻意的取舍
+    ///
+    /// 1. **不做名字搜索兜底**。少了它确实会漏掉「TMDb 知道这个合集、但成员的
+    ///    `belongs_to_collection` 缺失」的数据不全场景；但那种场景下名字搜索每次打开
+    ///    合集页都要多打 1 次搜索 + 最多 3 次详情（失败不落库 → 下次还会再试），
+    ///    而**猜错的代价是整页背景/海报/简介都来自另一个合集**。上层还有一条零成本的
+    ///    兜底：TMDb 没有对应时用第一个成员的背景图（见 `DetailViewModel`），够用。
+    /// 2. **不用合集条目自己的 `ProviderIds["Tmdb"]`**。Jellyfin 的 TMDb 合集 provider
+    ///    理论上会写这个 id，但本机这台服务器上它是空的，**没有样本可验证**它写的是
+    ///    合集 id 还是别的；拿一个没验证过的语义去请求，错了就是错误的背景图。
+    ///
+    /// - Parameter members: 合集的成员（`/Items?parentId=<合集id>&recursive=false`）。
+    ///   只用于取 `ProviderIds["Tmdb"]`，所以传空数组时本方法**一个请求都不发**。
+    @discardableResult
+    public func refreshCollection(
+        item: MediaItem,
+        members: [MediaItem],
+        tenant: TenantID
+    ) async -> Bool {
+        guard await client.isConfigured else { return false }
+        let language = preferences.language
+
+        // ① 已有对应且数据够新 → 一分钱不花。
+        // 这条早退是**成本的主要闸门**：合集页每次打开都会调这里，而定位本身要发请求。
+        let existingLink = try? await store.tmdbLink(itemID: item.id, tenant: tenant)
+        if let existingLink,
+           case .collection = existingLink.entityKey,
+           let cached = try? await store.tmdbPayload(key: existingLink.entityKey, language: language),
+           !cached.isExpired() {
+            return false
+        }
+        // 用户手定的对应不许被自动结果顶掉（与 `performRefresh` 同一条规矩）。
+        if let existingLink, existingLink.source == .manual {
+            return await fetchAndStore(key: existingLink.entityKey, language: language)
+        }
+
+        // ② 定位 TMDb 合集。
+        guard let resolved = await resolveCollection(for: item, members: members,
+                                                     language: language) else { return false }
+
+        try? await store.saveTMDbLink(itemID: item.id, entityKey: resolved.key,
+                                      source: resolved.source, confidence: resolved.confidence,
+                                      tenant: tenant)
+        return await fetchAndStore(key: resolved.key, language: language)
+    }
+
+    /// 合集 → TMDb 合集键。nil = 定位不出来（**不猜**，上层照旧没有 TMDb 数据）。
+    private func resolveCollection(
+        for item: MediaItem,
+        members: [MediaItem],
+        language: String
+    ) async -> (key: TMDbEntityKey, source: TMDbLinkSource, confidence: Double)? {
+        // 成员没有 TMDb id（未刮削 / Emby 没配 TMDb 插件）→ 无从下手，**不发任何请求**。
+        // 电影才可能属于 TMDb 合集，剧集成员直接跳过。
+        let memberIDs = members
+            .filter { $0.kind == .movie }
+            .compactMap(Self.providerTmdbID)
+        guard !memberIDs.isEmpty else { return nil }
+
+        // 逐个成员的 `/movie/{id}` 找 `belongs_to_collection`。
+        // **刻意不用 `fetchAndStore`**：那条路会写库并覆盖该电影的缓存载荷，而这里只是
+        // 「借一步」查集合归属；合集本身的数据在下面才落库（键也不同）。
+        //
+        // 上限 3 个成员：同一合集的成员给出的是同一个 id（实测），多试只是为了兜住
+        // 「个别成员在 TMDb 上没归集合」的情况，不值得为更大的合集无界地打请求。
+        for id in memberIDs.prefix(Self.collectionMemberLookupLimit) {
+            guard let entity = try? await client.movie(id: id, language: language) else { continue }
+            if let collectionID = entity.collectionID {
+                return (.collection(collectionID), .providerID, 1.0)
+            }
+        }
+        return nil
+    }
+
+    /// 成员电影的 `ProviderIds["Tmdb"]` → Int。
+    /// 脏数据（空串 / 非数字 / 0 / 负数）一律当没有——与 `TMDbMatcher` 同一口径，
+    /// 拿 0 去查会得到 404，日志里表现为「明明有 id 却查不到」。
+    static func providerTmdbID(_ item: MediaItem) -> Int? {
+        guard let raw = item.tmdbID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let id = Int(raw), id > 0
+        else { return nil }
+        return id
+    }
+
+    /// 定位 TMDb 合集时最多试几个成员（见 `resolveCollection`）。
+    static let collectionMemberLookupLimit = 3
+
     // MARK: - 网络：确保数据可用
 
     /// 服务端给出的**权威** TMDb id（`ProviderIds["Tmdb"]`）。nil = 没有 / 不可用。
@@ -252,6 +355,8 @@ public actor TMDbEnricher {
             case .season(let tvID, let number):
                 payload = .season(try await client.season(tvID: tvID, seasonNumber: number,
                                                           language: language))
+            case .collection(let id):
+                payload = .entity(try await client.collection(id: id, language: language))
             }
             try await store.saveTMDbPayload(payload, key: key, language: language,
                                            lifetime: preferences.cacheLifetime)
