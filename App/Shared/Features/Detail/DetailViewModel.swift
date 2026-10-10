@@ -467,8 +467,10 @@ final class DetailViewModel {
         guard !Task.isCancelled else { return }
 
         // ② 缺数据或已过期时后台补，补到再刷新一次。
-        let didFetch = await app.refreshTMDbCollection(for: shown, members: collectionMembers)
-        guard didFetch, !Task.isCancelled else { return }
+        // 用 `.didFetch`（只有真的落库了新数据才重读）——`RefreshOutcome` 的其余三种
+        // 结局（命中缓存 / TMDb 上没有 / 请求失败）都不需要再读一次库。
+        let outcome = await app.refreshTMDbCollection(for: shown, members: collectionMembers)
+        guard outcome.didFetch, !Task.isCancelled else { return }
         let refreshed = await app.tmdbOverlay(for: shown)
         guard !Task.isCancelled else { return }
         tmdbOverlay = refreshed
@@ -494,16 +496,7 @@ final class DetailViewModel {
 
         let startIndex = reset ? 0 : membersNextStartIndex
         do {
-            let page = try await server.itemsPage(
-                parentID: shown.id,
-                kinds: nil,
-                recursive: false,
-                startIndex: startIndex,
-                limit: Self.membersPageSize,
-                sort: MediaItemsSort(field: .year, ascending: true),
-                watchState: nil,
-                searchTerm: nil
-            )
+            let page = try await server.collectionMembers(of: shown.id, startIndex: startIndex)
             guard !Task.isCancelled else { return }
             if reset {
                 collectionMembers = page.items
@@ -535,8 +528,6 @@ final class DetailViewModel {
         guard let total = collectionMembersTotalCount else { return false }
         return collectionMembers.count < total
     }
-
-    private static let membersPageSize = 200
 
     /// 读已有 TMDb 数据并触发后台补齐。
     ///

@@ -136,13 +136,19 @@ public actor TMDbEnricher {
     ///
     /// - Parameter members: 合集的成员（`/Items?parentId=<合集id>&recursive=false`）。
     ///   只用于取 `ProviderIds["Tmdb"]`，所以传空数组时本方法**一个请求都不发**。
+    ///
+    /// - Returns: 与 `refresh` 同一套 `RefreshOutcome`。**调用方必须区分 `.noMatch`
+    ///   与 `.failed`**：前者是「TMDb 上确实没有这个合集」（确定结论，可以不再重试），
+    ///   后者是网络 / 401 / 429（**可以且应该重试**）。早先这里返回 `Bool`，两种结局
+    ///   都是 `false`，调用方一律当确定结论记了账 —— 症状是**断网一次就让合集封面
+    ///   永久空白**，只能重启 App。
     @discardableResult
     public func refreshCollection(
         item: MediaItem,
         members: [MediaItem],
         tenant: TenantID
-    ) async -> Bool {
-        guard await client.isConfigured else { return false }
+    ) async -> RefreshOutcome {
+        guard await client.isConfigured else { return .noMatch }
         let language = preferences.language
 
         // ① 已有对应且数据够新 → 一分钱不花。
@@ -152,35 +158,51 @@ public actor TMDbEnricher {
            case .collection = existingLink.entityKey,
            let cached = try? await store.tmdbPayload(key: existingLink.entityKey, language: language),
            !cached.isExpired() {
-            return false
+            return .skipped
         }
         // 用户手定的对应不许被自动结果顶掉（与 `performRefresh` 同一条规矩）。
         if let existingLink, existingLink.source == .manual {
             return await fetchAndStore(key: existingLink.entityKey, language: language)
+                ? .fetched : .failed
         }
 
-        // ② 定位 TMDb 合集。
-        guard let resolved = await resolveCollection(for: item, members: members,
-                                                     language: language) else { return false }
-
-        try? await store.saveTMDbLink(itemID: item.id, entityKey: resolved.key,
-                                      source: resolved.source, confidence: resolved.confidence,
-                                      tenant: tenant)
-        return await fetchAndStore(key: resolved.key, language: language)
+        // ② 定位 TMDb 合集。三种结局必须分开传出去（见方法的 Returns 说明）。
+        switch await resolveCollection(for: item, members: members, language: language) {
+        case .found(let key):
+            try? await store.saveTMDbLink(itemID: item.id, entityKey: key,
+                                          source: .providerID, confidence: 1.0,
+                                          tenant: tenant)
+            return await fetchAndStore(key: key, language: language) ? .fetched : .failed
+        case .noMatch:
+            return .noMatch
+        case .failed:
+            return .failed
+        }
     }
 
-    /// 合集 → TMDb 合集键。nil = 定位不出来（**不猜**，上层照旧没有 TMDb 数据）。
+    /// 定位 TMDb 合集的结果。
+    ///
+    /// **`.noMatch` 与 `.failed` 必须分开**：前者是「TMDb 上确实没有 / 成员没 id」这种
+    /// 不会自己变好的确定性结论；后者是请求失败，下次还能成功。混成一个 `nil` 会让
+    /// 调用方拿「断网」当「没有」，永久放弃重试。
+    private enum CollectionResolution {
+        case found(TMDbEntityKey)
+        case noMatch
+        case failed
+    }
+
+    /// 合集 → TMDb 合集键。**不猜**：定位不出来就是没有（见 `CollectionResolution`）。
     private func resolveCollection(
         for item: MediaItem,
         members: [MediaItem],
         language: String
-    ) async -> (key: TMDbEntityKey, source: TMDbLinkSource, confidence: Double)? {
+    ) async -> CollectionResolution {
         // 成员没有 TMDb id（未刮削 / Emby 没配 TMDb 插件）→ 无从下手，**不发任何请求**。
         // 电影才可能属于 TMDb 合集，剧集成员直接跳过。
         let memberIDs = members
             .filter { $0.kind == .movie }
             .compactMap(Self.providerTmdbID)
-        guard !memberIDs.isEmpty else { return nil }
+        guard !memberIDs.isEmpty else { return .noMatch }
 
         // 逐个成员的 `/movie/{id}` 找 `belongs_to_collection`。
         // **刻意不用 `fetchAndStore`**：那条路会写库并覆盖该电影的缓存载荷，而这里只是
@@ -188,13 +210,23 @@ public actor TMDbEnricher {
         //
         // 上限 3 个成员：同一合集的成员给出的是同一个 id（实测），多试只是为了兜住
         // 「个别成员在 TMDb 上没归集合」的情况，不值得为更大的合集无界地打请求。
+        var sawResponse = false
+        var sawFailure = false
         for id in memberIDs.prefix(Self.collectionMemberLookupLimit) {
-            guard let entity = try? await client.movie(id: id, language: language) else { continue }
-            if let collectionID = entity.collectionID {
-                return (.collection(collectionID), .providerID, 1.0)
+            do {
+                let entity = try await client.movie(id: id, language: language)
+                sawResponse = true
+                if let collectionID = entity.collectionID {
+                    return .found(.collection(collectionID))
+                }
+            } catch {
+                sawFailure = true
             }
         }
-        return nil
+        // 拿到过响应、但都没归集合 → TMDb 上确实没有这个合集。
+        if sawResponse { return .noMatch }
+        // 一个响应都没拿到、全是失败 → 是网络问题，不是「没有」。
+        return sawFailure ? .failed : .noMatch
     }
 
     /// 成员电影的 `ProviderIds["Tmdb"]` → Int。
@@ -244,7 +276,11 @@ public actor TMDbEnricher {
 
     /// 一次补全尝试的结局。批量补全据此分类统计（「多少条已是最新 / 拉到 / 匹配不上 /
     /// 拉取失败」），比只返回一个 Bool 有用得多——那四件事对用户的意义完全不同。
-    enum RefreshOutcome: Sendable, Equatable {
+    ///
+    /// `public` 是因为 `refreshCollection` 也返回它，而**调用方必须能区分
+    /// `.noMatch`（确定结论，可以不再重试）与 `.failed`（可以重试）**——
+    /// 把两者混成一个 `false`，症状就是「断网一次，合集封面永久空白」。
+    public enum RefreshOutcome: Sendable, Equatable {
         /// 已有对应且数据未过期，**没发请求**。
         case skipped
         /// 发了请求并成功落库。
@@ -255,7 +291,12 @@ public actor TMDbEnricher {
         /// 发了请求但失败（网络 / 401 / 429 / 404…）。
         case failed
 
-        var didFetch: Bool { self == .fetched }
+        /// 是否拉到了新数据（成功落库）。调用方据此决定「要不要重读一次 overlay」。
+        public var didFetch: Bool { self == .fetched }
+
+        /// 是否**确定**（可以不再重试）：不是故障就记下来，下次不必再打请求。
+        /// `.failed` 是唯一「值得重试」的结局。
+        public var isConclusive: Bool { self != .failed }
     }
 
     func performRefresh(

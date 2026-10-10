@@ -63,15 +63,19 @@ extension AppModel {
             // 成员：1 个请求（`collectionMembers` 里那三条硬约束是唯一一份）。
             let page = try await server.collectionMembers(of: item.id)
             guard sessionIsCurrent(generation, server: server) else { return }
-            _ = await tmdb.refreshCollection(item: item, members: page.items, tenant: tenant)
+            let outcome = await tmdb.refreshCollection(item: item, members: page.items,
+                                                       tenant: tenant)
             guard sessionIsCurrent(generation, server: server) else { return }
             let overlay = await tmdb.overlay(for: item, tenant: tenant)
             guard sessionIsCurrent(generation, server: server) else { return }
             noteCollectionArtwork(itemID: item.id, posterPath: overlay?.posterPath)
-            // 记账分两种：**拉到一轮 = 确定结论**（成功，或「TMDb 上没有这个合集」这种
-            // 不会自己变好的结果）；**成员列表就失败**（断网 / 服务端出错）走下面的
-            // catch，不记账——否则一次断网会让这些卡片此后永远空白。
-            collectionArtworkAttempted.insert(item.id)
+            // **只有确定结论才记账**：成功、命中缓存、「TMDb 上确实没有这个合集」都算；
+            // `.failed`（断网 / 401 / 429）不算 —— 记了的话，一次网络抖动就会让这些卡片
+            // 此后永远空白，只能重启 App。这条区分依赖 `RefreshOutcome`（早先它返回
+            // Bool，两种结局都是 false，必然踩坑）。
+            if outcome.isConclusive {
+                collectionArtworkAttempted.insert(item.id)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -129,12 +133,20 @@ extension AppModel {
             guard sessionIsCurrent(generation, server: server) else { return }
 
             var posters = top.items.filter { $0.primaryImageTag != nil }
+            // 成员请求有没有失败过（决定最后记不记账，见下）。
+            var memberLookupFailed = false
             // 合集库：库里是「合集」而合集没有图，再往下取一层成员的海报。
             if library.collectionType == .boxsets {
                 var perCollection: [[MediaItem]] = []
                 for box in top.items.prefix(Self.libraryCoverCollectionLimit) {
-                    let members = (try? await server.collectionMembers(of: box.id, limit: 4))?.items ?? []
-                    perCollection.append(members.filter { $0.primaryImageTag != nil })
+                    do {
+                        let members = try await server.collectionMembers(of: box.id, limit: 4).items
+                        perCollection.append(members.filter { $0.primaryImageTag != nil })
+                    } catch {
+                        // **不能吞成「这个合集没海报」**：那会把一次断网记成「确定没有」，
+                        // 库卡此后永久空白。标记后继续试下一个合集（前几个的海报仍然可用）。
+                        memberLookupFailed = true
+                    }
                 }
                 // **轮转取**：先每个合集各来一张，再回头取第二张——拼出来能同时代表
                 // 多个合集，而不是被第一个合集的成员占满。
@@ -155,9 +167,15 @@ extension AppModel {
                 try? server.imageURL(itemID: item.id, type: .primary,
                                      maxWidth: Self.libraryCoverWidth, tag: item.primaryImageTag)
             }
-            if !urls.isEmpty { libraryCoverArt[library.id] = urls }
-            // 拉到一轮就是确定结论（成功，或「这个库确实没有可用的海报」），记账。
-            libraryCoverAttempted.insert(library.id)
+            if !urls.isEmpty {
+                libraryCoverArt[library.id] = urls
+                // 拼出来了就是确定结论（哪怕某个合集没拉到——画面已经可用）。
+                libraryCoverAttempted.insert(library.id)
+            } else if !memberLookupFailed {
+                // 一张都没有、且**没有失败** → 确定这个库没有可用的海报。
+                libraryCoverAttempted.insert(library.id)
+            }
+            // 一张都没有、且有成员请求失败 → 不记账，下次进入可视区还要能再试。
         } catch is CancellationError {
             return
         } catch {
