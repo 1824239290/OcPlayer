@@ -145,6 +145,87 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
         XCTAssertTrue(terminalEvents.isEmpty)
     }
 
+    /// 回归：内核在片尾把「读到文件末尾」报成致命错误时，也必须按「播完」触发终态，
+    /// 否则既不连播也不退出、只剩错误徽章。现场见 `isEndOfStream` 的注释。
+    @MainActor
+    func testEndOfStreamErrorSignalsTerminalWithReachedEnd() async {
+        // 实测现场：位置 1471.512s / 时长 1472s（片长 − 0.488s）。
+        let source = TestPlaybackStateSource(snapshot: .error(position: 1471.512, duration: 1472))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source,
+            heartbeatInterval: .milliseconds(1)
+        )
+        let requestID = UUID()
+        var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-eof-error"),
+            requestID: requestID,
+            resumeSeconds: nil,
+            onTerminal: { terminalEvents.append($0) }
+        )
+        await waitUntil { terminalEvents.count == 1 }
+
+        XCTAssertEqual(terminalEvents, [.init(requestID: requestID, reachedEnd: true)])
+        XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
+    }
+
+    /// 片中（离片尾还远）的错误仍然只报 `reachedEnd=false`：错误徽章 + 「重试」那条路
+    /// 不能因为上面那条兜底被改掉。
+    @MainActor
+    func testMidStreamErrorSignalsTerminalWithoutReachedEnd() async {
+        let source = TestPlaybackStateSource(snapshot: .error(position: 31, duration: 100))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source,
+            heartbeatInterval: .milliseconds(1)
+        )
+        let requestID = UUID()
+        var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-mid-error"),
+            requestID: requestID,
+            resumeSeconds: nil,
+            onTerminal: { terminalEvents.append($0) }
+        )
+        await waitUntil { terminalEvents.count == 1 }
+
+        XCTAssertEqual(terminalEvents, [.init(requestID: requestID, reachedEnd: false)])
+        XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
+    }
+
+    /// 宿主主动 `stop()`（关播放器 / 换控制器）时，片尾的 `.error` **不算**播完——
+    /// 那时用户正在拆台，反过来触发连播是错的（见 `isNaturalEnd` 的注释）。
+    @MainActor
+    func testEndOfStreamErrorOnExplicitStopDoesNotSignalTerminal() async {
+        let source = TestPlaybackStateSource(snapshot: .error(position: 1471.512, duration: 1472))
+        let reporter = TestPlaybackReporter()
+        // 心跳窗口放到用例跑不完的长度：只让 `stop()` 这条路径有机会触发。
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source,
+            heartbeatInterval: .seconds(60)
+        )
+        var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-eof-error-stop"),
+            requestID: UUID(),
+            resumeSeconds: nil,
+            onTerminal: { terminalEvents.append($0) }
+        )
+        await waitUntil { reporter.events.count == 1 }
+
+        await coordinator.stop()?.value
+
+        XCTAssertTrue(terminalEvents.isEmpty)
+        XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
+    }
+
     @MainActor
     func testNextStartWaitsForPreviousStoppedToFinish() async {
         let source = TestPlaybackStateSource(snapshot: .active(position: 10))
@@ -541,7 +622,7 @@ private extension PlaybackReportSnapshot {
         Self(state: .stopped, positionSeconds: position, durationSeconds: duration, sourceOpenFailed: false)
     }
 
-    static func error(position: Double) -> Self {
-        Self(state: .error, positionSeconds: position, durationSeconds: 100, sourceOpenFailed: false)
+    static func error(position: Double, duration: Double = 100) -> Self {
+        Self(state: .error, positionSeconds: position, durationSeconds: duration, sourceOpenFailed: false)
     }
 }

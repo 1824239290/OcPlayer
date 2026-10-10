@@ -90,9 +90,32 @@ final class PlaybackReportingCoordinator {
             && snapshot.positionSeconds >= snapshot.durationSeconds - 2
     }
 
+    /// 终态里「已经播到文件尾」的判定（心跳分支用）。
+    ///
+    /// `.stopped` 是引擎干净收尾；`.error` 也要认，因为内核在片尾会**间歇性**把
+    /// 「读到文件末尾」报成致命错误，而不是干净 EOF：
+    ///
+    /// 实测（2026-10-09，iPad mini 5 / iPadOS 26.6.2 / OcPlayer 0.2.1 / Erika v0.2.1，
+    /// `我的朋友很少 S1E5`，1472 s 片源）——最后一次成功读取停在距文件尾 **3966 字节**
+    /// 处，下一次跨过 EOF 的读直接给出 `av_read_frame: Input/output error (-5)`，内核落
+    /// `playback_fatal`、App 状态进 `.error`。对照同一天另一次收尾：最后一次 range 恰好
+    /// 读到 EOF（919287807 + 81988 = 文件长度 919369795）→ `decoder_eof_drain complete`
+    /// → `.stopped` → 连播/退出照常。差别只在请求边界是否跨过 EOF。
+    ///
+    /// 此前只认 `.stopped`，于是这种片尾错误被算成 `reachedEnd=false`：既不连播也不退出，
+    /// 只剩错误徽章（那次日志里报错后 18 秒内唯一的动作是用户手动关闭）。
+    /// 位置判据与 `.stopped` 共用 `isReachedEnd`（片长 − 2 s 以内），片中的真错误不受影响。
+    private static func isEndOfStream(snapshot: PlaybackReportSnapshot?) -> Bool {
+        guard let snapshot, isReachedEnd(snapshot: snapshot) else { return false }
+        return snapshot.state == .stopped || snapshot.state == .error
+    }
+
     /// `stop()` 收口时是否该按「自然播完」触发终态事件。
-    /// 与心跳分支共用判定:只有引擎已发出 `.stopped`(播放器主动停也会经过这里,
-    /// 但那时不满足「位置在末尾」)才认为是自然到尾,避免片尾手动关闭被误判成连播。
+    /// 与心跳分支共用「位置在末尾」的判据，但**只认 `.stopped`**：这条路径由宿主主动
+    /// 进入（关播放器 / 换控制器 / 退后台），此刻把片尾的 `.error` 也当成播完，会在用户
+    /// 正拆台的时候反过来触发连播——`AppModel.playback` 的 didSet 里 `stop()` 甚至跑在
+    /// `clearPlaybackSessionState()`（它会清 `activePlaybackIdentity`）之前。
+    /// 片尾错误的兜底只放在心跳分支：那里还守着 `isCurrent`，用户先关了就不会误触发。
     private static func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
         return snapshot.state == .stopped && isReachedEnd(snapshot: snapshot)
@@ -223,7 +246,7 @@ final class PlaybackReportingCoordinator {
                     guard self.isCurrent(activeSession) else { return }
                     self.session = nil
                     self.heartbeatTask = nil
-                    let reachedEnd = snapshot.state == .stopped && Self.isReachedEnd(snapshot: snapshot)
+                    let reachedEnd = Self.isEndOfStream(snapshot: snapshot)
                     self.triggerTerminalIfNeeded(session: activeSession, reachedEnd: reachedEnd)
                     return
                 }
