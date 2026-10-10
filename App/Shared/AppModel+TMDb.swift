@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import Foundation
 import JellyfinKit
 import MetadataKit
@@ -54,6 +55,17 @@ extension AppModel {
     func tmdbSeriesLink(for item: MediaItem) async -> TMDbLink? {
         guard let link = await tmdbLink(for: item), case .tv = link.entityKey else { return nil }
         return link
+    }
+
+    /// 确保**服务端合集**（BoxSet）的 TMDb 合集数据可用。
+    ///
+    /// - Parameter members: 合集成员。它同时是**定位的输入**（成员的
+    ///   `ProviderIds["Tmdb"]` → `/movie/{id}` → `belongs_to_collection`），
+    ///   所以必须在成员加载完之后调，否则只能眼睁睁返回 false。
+    @discardableResult
+    func refreshTMDbCollection(for item: MediaItem, members: [MediaItem]) async -> Bool {
+        guard let tenant = currentTenant else { return false }
+        return await tmdb.refreshCollection(item: item, members: members, tenant: tenant)
     }
 
     /// 取某一季的叠加数据（**不发网络**）。

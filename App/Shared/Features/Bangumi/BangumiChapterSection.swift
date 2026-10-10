@@ -1,6 +1,7 @@
 import AppDesignKit
 import BangumiKit
 import CoreModel
+import MetadataKit
 import SwiftUI
 
 /// 详情页内嵌的 Bangumi 章节区块。
@@ -15,6 +16,11 @@ struct BangumiChapterSection: View {
     let item: MediaItem
     /// 当前选中的季（若当前为剧集且有选季）。
     var selectedSeason: MediaItem? = nil
+    /// 章节读到之后把**本篇**章节递出去（详情页拿它当选集轨道的兜底占位来源）。
+    ///
+    /// 让区块递而不是 VM 自己读库：区块今天已经在读全量章节，且它的 `.task` 已经受
+    /// 「启用开关 / 登录态 / 建库就绪」三道闸门保护；VM 复刻这三道闸门只会多一处漂移点。
+    var onCandidatesLoaded: (@MainActor ([EpisodeCandidate]) -> Void)? = nil
 
     @Environment(AppModel.self) private var app
     @Environment(BangumiCoordinator.self) private var bangumi
@@ -242,6 +248,7 @@ struct BangumiChapterSection: View {
             linkedSubjectID = nil
             subject = nil
             episodes = []
+            onCandidatesLoaded?([])
             return
         }
         // 选中的季 → 剧集 → 条目自身的解析链收敛在 BangumiMatcher（详情页头部的
@@ -270,6 +277,8 @@ struct BangumiChapterSection: View {
             subject = nil
             episodes = []
             loadError = nil
+            // 没关联就没有章节可当兜底来源：明确清空，别让上一次关联的章节继续撑着占位。
+            onCandidatesLoaded?([])
             return
         }
         isLoading = true
@@ -302,7 +311,12 @@ struct BangumiChapterSection: View {
         let cachedEpisodes = try? await bangumi.context.fetchEpisodes(subjectId: subjectID)
         guard loadGeneration == generation else { return }
         if let cached { subject = cached }
-        if let cachedEpisodes { episodes = cachedEpisodes }
+        if let cachedEpisodes {
+            episodes = cachedEpisodes
+            // 顺带把本篇章节递出去当占位兜底来源。放在这里（而不是 load 的末尾）是因为
+            // 它有三条读路径：缓存、远端补齐后重读、播放结束的失效通知——都收在 readLocal。
+            onCandidatesLoaded?(EpisodePlaceholderSource.bangumiCandidates(from: cachedEpisodes))
+        }
     }
 
     private func autoMatch() async {

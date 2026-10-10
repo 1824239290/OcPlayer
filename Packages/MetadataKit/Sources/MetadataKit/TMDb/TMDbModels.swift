@@ -16,12 +16,16 @@ public enum TMDbMediaType: String, Sendable, Codable, CaseIterable {
     case tv
     case season
     case episode
+    /// TMDb 的**合集**（`/collection/{id}`）——「同一系列的多部电影」那层容器，
+    /// 对应 Jellyfin / Emby 的合集（BoxSet）。**只装电影**：TMDb 没有剧集的合集概念。
+    case collection
 
     /// 顶层详情端点路径段（季/集没有独立端点，走 `/tv/{id}/season/{n}`）。
     var endpointSegment: String? {
         switch self {
         case .movie: "movie"
         case .tv: "tv"
+        case .collection: "collection"
         case .season, .episode: nil
         }
     }
@@ -31,6 +35,7 @@ public enum TMDbMediaType: String, Sendable, Codable, CaseIterable {
         switch self {
         case .movie: "movie"
         case .tv: "tv"
+        case .collection: "collection"
         case .season, .episode: "tv"
         }
     }
@@ -59,6 +64,16 @@ public struct TMDbEntity: Sendable, Equatable, Codable {
     /// 内容分级（按 `language` 取一条，用于和 Jellyfin 的 officialRating 对齐）。
     public var contentRating: String?
 
+    /// 这部电影**属于哪个 TMDb 合集**（电影详情里的 `belongs_to_collection.id`）。
+    ///
+    /// 这是把服务端的「合集」对到 TMDb 合集的**权威入口**：合集自己没有可用的
+    /// `ProviderIds["Tmdb"]`（实测 Jellyfin 手工建的合集是空 Map），但它的成员电影
+    /// 每一条都写着归属于哪个合集。见 `TMDbEnricher.refreshCollection`。
+    ///
+    /// **Optional 是有意的**：老缓存里没有这个键，`decodeIfPresent` 解成 nil
+    /// （「这份数据没带这条信息」），不会因为加字段而让既有 payload 全部解不出来。
+    public var collectionID: Int?
+
     public init(
         id: Int,
         mediaType: TMDbMediaType,
@@ -73,7 +88,8 @@ public struct TMDbEntity: Sendable, Equatable, Codable {
         seasons: [SeasonSummary] = [],
         originalLanguage: String? = nil,
         imdbID: String? = nil,
-        contentRating: String? = nil
+        contentRating: String? = nil,
+        collectionID: Int? = nil
     ) {
         self.id = id
         self.mediaType = mediaType
@@ -89,6 +105,7 @@ public struct TMDbEntity: Sendable, Equatable, Codable {
         self.originalLanguage = originalLanguage
         self.imdbID = imdbID
         self.contentRating = contentRating
+        self.collectionID = collectionID
     }
 
     /// 有没有「值得展示」的内容——补全后拿它判断是否落库。

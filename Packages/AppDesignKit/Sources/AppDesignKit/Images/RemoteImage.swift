@@ -12,6 +12,10 @@ public struct RemoteImage: View {
     public var authHeader: String?
     /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
     public var maxPixelSize: Int? = nil
+    /// 没有地址（或加载失败）时的占位图标，默认通用「photo」。
+    /// 合集这类**容器条目在服务端本来就不带图**，给它们一个语义更准的图标
+    /// （`PosterCard` 传 `rectangle.stack.fill`），别让整墙都是破图符号。
+    public var emptyIcon: String = "photo"
     /// 换图时是否保留当前位图，直到新图加载完成。适合背景图等需要连续画面的场景。
     public var preserveCurrentImageOnReload = false
     /// 图片替换时使用的淡入节奏；未指定时使用标准短淡入。
@@ -29,6 +33,7 @@ public struct RemoteImage: View {
         url: URL?,
         authHeader: String? = nil,
         maxPixelSize: Int? = nil,
+        emptyIcon: String = "photo",
         preserveCurrentImageOnReload: Bool = false,
         fadeAnimation: Animation? = nil,
         pipeline: ImagePipeline? = nil
@@ -36,6 +41,7 @@ public struct RemoteImage: View {
         self.url = url
         self.authHeader = authHeader
         self.maxPixelSize = maxPixelSize
+        self.emptyIcon = emptyIcon
         self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
         self.fadeAnimation = fadeAnimation
         self.pipeline = pipeline
@@ -88,7 +94,7 @@ public struct RemoteImage: View {
             if image == nil, failed || url == nil {
                 // 没有地址（该条目本来就没有这种图）和加载失败共用落点：
                 // 显示静态占位图标。否则 url 为 nil 时会永远转圈（task 里被 guard 挡掉）。
-                Image(systemName: "photo")
+                Image(systemName: emptyIcon)
                     .font(.title3)
                     .foregroundStyle(.tertiary)
             }

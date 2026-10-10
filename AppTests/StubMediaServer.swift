@@ -2,6 +2,18 @@ import CoreModel
 import Foundation
 import JellyfinKit
 
+/// 一次 `itemsPage` 调用的入参快照（替身用来让用例断言调用形态）。
+struct ItemsPageQuery: Sendable, Equatable {
+    var parentID: String?
+    var kinds: [MediaItem.Kind]?
+    var recursive: Bool
+    var startIndex: Int
+    var limit: Int
+    var sort: MediaItemsSort?
+    var watchState: MediaItemsWatchState?
+    var searchTerm: String?
+}
+
 /// `MediaServer` 的测试替身。
 ///
 /// 只实现用例真正关心的那几条（用 `Result` 逐条注入成功 / 失败），其余走空实现。
@@ -25,6 +37,17 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var itemResult: Result<MediaItem, any Error>?
     var seasonsResult: Result<[MediaItem], any Error> = .success([])
     var episodesResult: Result<[MediaItem], any Error> = .success([])
+    /// 库页 / 合集成员查询：nil = 空页。用例据此注入成员列表。
+    var itemsPageResult: Result<MediaItemsPage, any Error>?
+    /// 按 `parentID` 分派的页（优先于 `itemsPageResult`）。
+    ///
+    /// 存在的理由：有用例必须区分「**列合集**」与「**取某个合集的成员**」两类请求
+    /// （库卡封面要往下钻一层），一律返回同一页就无法表达那种拓扑。
+    /// 键为 nil 的条目对应「不带 parentID」的查询。
+    var itemsPageByParent: [String?: MediaItemsPage] = [:]
+    /// 最后一次 `itemsPage` 的入参（用例据此断言 `recursive` / `parentID` 这类
+    /// **调用形态**——合集成员必须 `recursive: false`，这是本替身记它的唯一理由）。
+    private(set) var lastItemsPageQuery: ItemsPageQuery?
 
     /// 调用计数：用来断言「读缓存不该顺带打网络」。
     ///
@@ -107,7 +130,13 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         watchState: MediaItemsWatchState?,
         searchTerm: String?
     ) async throws -> MediaItemsPage {
-        MediaItemsPage(items: [], startIndex: startIndex, totalRecordCount: 0)
+        count("itemsPage")
+        lastItemsPageQuery = ItemsPageQuery(
+            parentID: parentID, kinds: kinds, recursive: recursive, startIndex: startIndex,
+            limit: limit, sort: sort, watchState: watchState, searchTerm: searchTerm)
+        if let routed = itemsPageByParent[parentID] { return routed }
+        if let itemsPageResult { return try itemsPageResult.get() }
+        return MediaItemsPage(items: [], startIndex: startIndex, totalRecordCount: 0)
     }
 
     func items(parentID: String?, kinds: [MediaItem.Kind]?, recursive: Bool, limit: Int) async throws -> [MediaItem] { [] }
@@ -115,7 +144,14 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     // MARK: - 媒体资源
 
     func imageURL(itemID: String, type: ItemImageType, maxWidth: Int?, tag: String?) throws -> URL {
-        URL(string: "http://stub.local:8096/Items/\(itemID)/Images/\(type.rawValue)")!
+        // 与真实实现同形：`tag` 进 query（`MediaItem.imageTarget` 会断言它在 URL 里，
+        // 那条规则是「图换了 URL 就变 → 磁盘缓存自然失效」的事实依据）。
+        var components = URLComponents(string: "http://stub.local:8096/Items/\(itemID)/Images/\(type.rawValue)")!
+        var query: [URLQueryItem] = []
+        if let maxWidth { query.append(URLQueryItem(name: "maxWidth", value: String(maxWidth))) }
+        if let tag { query.append(URLQueryItem(name: "tag", value: tag)) }
+        components.queryItems = query.isEmpty ? nil : query
+        return components.url!
     }
 
     func streamURL(itemID: String, mediaSourceID: String?, playSessionID: String?) throws -> String {

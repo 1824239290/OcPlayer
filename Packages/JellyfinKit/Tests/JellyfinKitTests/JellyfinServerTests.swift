@@ -233,6 +233,33 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
+    /// 合集成员查询的**形态**必须钉住：这三条约束错了，服务端返回的就不是成员。
+    ///
+    /// - `recursive=false`：递归会走 `DescendantOfId` 把成员的下一层（剧集的季与集）
+    ///   一起带出来；
+    /// - **不带 `includeItemTypes`**：给合集 parentId 配上它，服务端会把 parentId 置空、
+    ///   改成从用户根重查（返回「所有合集」而不是成员，jellyfin#16454）；
+    /// - 排序显式给年份升序（不传 sortBy 时按合集自己的 DisplayOrder 排，不可复现）。
+    func testCollectionMembersQueryShape() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["parentId"], "box-1")
+            XCTAssertEqual(query["recursive"], "false", "合集成员不能递归取")
+            XCTAssertNil(query["includeItemTypes"], "带上它会被服务端把 parentId 置空")
+            XCTAssertEqual(query["sortBy"], "ProductionYear")
+            XCTAssertEqual(query["sortOrder"], "Ascending")
+            XCTAssertEqual(query["userId"], "user-9")
+            return MockURLProtocol.ok(
+                #"{"Items":[{"Id":"m-1","Name":"福音战士新剧场版：Q","Type":"Movie","ProductionYear":2012}],"TotalRecordCount":2}"#,
+                for: request.url!)
+        } with: {
+            let page = try await makeServer().collectionMembers(of: "box-1")
+            XCTAssertEqual(page.items.map(\.id), ["m-1"])
+            XCTAssertEqual(page.totalRecordCount, 2)
+        }
+    }
+
     func testItemRequestsPeopleGenresOverviewAndMapsCast() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items/abc")

@@ -50,6 +50,28 @@ struct BangumiKitTests {
         #expect(BangumiFixture.episode(id: 2, subjectID: 1, sort: 3).sortDisplay == "03")
     }
 
+    /// 播出日期的三态：解析得出 → Date；空串 / 坏值 → nil（**未知**，不是「未播出」）。
+    ///
+    /// 详情页的占位卡靠这个区分「未播出」与「未入库」：空 airdate 若被当成未播出，
+    /// 十年前没刮到日期的老集会被标成「未播出」。
+    @Test func airDateValueDistinguishesUnknownFromNotAired() {
+        let dated = BangumiFixture.episode(id: 1, subjectID: 1, sort: 1, airdate: "2026-10-11")
+        #expect(dated.airDateValue != nil)
+
+        #expect(BangumiFixture.episode(id: 2, subjectID: 1, sort: 2, airdate: "").airDateValue == nil)
+        #expect(BangumiFixture.episode(id: 3, subjectID: 1, sort: 3, airdate: "待定").airDateValue == nil)
+        #expect(BangumiFixture.episode(id: 4, subjectID: 1, sort: 4, airdate: "2026-13-45").airDateValue == nil)
+    }
+
+    /// `aired` 拆出 `airDateValue` 之后语义必须逐字不变：过去 → true，
+    /// 未来 → false，**空 / 坏值 → false**（章节网格据此禁用标记）。
+    @Test func airedSemanticsUnchangedAfterExtraction() {
+        #expect(BangumiFixture.episode(id: 1, subjectID: 1, sort: 1, airdate: "2020-01-01").aired)
+        #expect(!BangumiFixture.episode(id: 2, subjectID: 1, sort: 2, airdate: "2099-01-01").aired)
+        #expect(!BangumiFixture.episode(id: 3, subjectID: 1, sort: 3, airdate: "").aired)
+        #expect(!BangumiFixture.episode(id: 4, subjectID: 1, sort: 4, airdate: "待定").aired)
+    }
+
     @Test func progressFraction() {
         let progress = BangumiProgressSubject(
             subject: BangumiFixture.subject(id: 1, eps: 10, epStatus: 4), episodes: [])

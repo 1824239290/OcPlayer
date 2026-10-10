@@ -22,13 +22,33 @@ final class DetailViewModel {
 
     var detail: MediaItem?
     var seasons: [MediaItem] = []
-    var episodes: [MediaItem] = []
+    /// 库内分集（服务端事实）。**占位永远不进这个数组**——它会流进播放、已看标记、
+    /// 连播与详情快照，混进假条目就等于每一处都要再加一道「这是不是真的」判断。
+    var episodes: [MediaItem] = [] {
+        didSet { rebuildEpisodeSlots() }
+    }
+    /// 选集轨道（库内条目 + 库里没有的集的占位）。视图只渲染这个。
+    ///
+    /// 存成派生状态而不是计算属性：一千集的季每次 body 求值都重排一次是白费。
+    private(set) var episodeSlots: [EpisodeSlot] = []
     /// 本次停留期间已经拉过的季 → 集列表。来回切季不重拉、不闪 loading。
     /// `load()`（换条目）时整体清空。
     var episodesBySeason: [String: [MediaItem]] = [:]
     /// 每季各自记住用户选中的那一集：切走再切回来选中项还在。
     var selectedEpisodeBySeason: [String: MediaItem.ID] = [:]
     var similar: [MediaItem] = []
+    /// 合集成员（`/Items?parentId=<合集id>&recursive=false`）。只有合集才会去拉。
+    ///
+    /// 服务端本来就有这条能力（实测 Jellyfin 12.1.0：`parentId=<合集id>&recursive=false`
+    /// 返回全部成员电影），此前 App **一次都没调用过** —— 于是「合集」在详情页里
+    /// 只是一个空壳：没有成员列表，主按钮还会把合集自己的 id 送去协商播放。
+    var collectionMembers: [MediaItem] = []
+    /// 服务端报的成员总数（合集可能大于一页）；nil = 还没拉到 / 服务端没给。
+    private(set) var collectionMembersTotalCount: Int?
+    var isLoadingMembers = false
+    var membersLoadError: String?
+    private var membersNextStartIndex = 0
+
     var selectedSeasonID: String?
     var selectedEpisodeID: MediaItem.ID?
     /// 横向选集箭头滚动的锚点（可与选中集不同：只滚列表不改选中）。
@@ -79,7 +99,17 @@ final class DetailViewModel {
     ///
     /// 与 `tmdbOverlay`（剧集级）分开：两者来源不同（剧集级靠剧的对应、季靠
     /// `tv/{剧id}/season/{季号}`），生命周期也不同——切季就要换，而剧集级不动。
-    private(set) var tmdbSeasonOverlay: TMDbOverlay?
+    private(set) var tmdbSeasonOverlay: TMDbOverlay? {
+        didSet { rebuildEpisodeSlots() }
+    }
+
+    /// Bangumi 兜底候选（由 `BangumiChapterSection` 递上来，见 `acceptBangumiCandidates`）。
+    ///
+    /// **按季失效**：换季 / 重进页时清空（见 `selectSeason` 与 `load`），否则旧季的章节
+    /// 会跟新季的季号拼在一起，算出错号的占位卡。
+    private var bangumiCandidates: [EpisodeCandidate] = [] {
+        didSet { rebuildEpisodeSlots() }
+    }
 
     /// 叠加后的展示值。视图一律走这几个，不直接读 `shown`。
     ///
@@ -87,8 +117,12 @@ final class DetailViewModel {
     /// **可测逻辑**，摊进视图就没法用件测它了。
     var displayName: String {
         guard let tmdbOverlay else { return shown.name }
-        return tmdbOverlay.displayTitle(serverValue: shown.name,
-                                        preferTMDb: app?.tmdb.preferText ?? true)
+        // 合集的**名字是用户自己的标签**（他在 Jellyfin 里建合集时起的），不是作品的
+        // 正式标题，所以不给 TMDb 顶替、只在服务端名为空时用 TMDb 补上。
+        // 实测两者会不一样：Jellyfin「新世纪福音战士新剧场版（系列）」
+        // vs TMDb「福音战士新剧场版（系列）」，顶替会让页面标题与侧栏/合集库对不上。
+        let preferTMDb = shown.kind == .boxSet ? false : (app?.tmdb.preferText ?? true)
+        return tmdbOverlay.displayTitle(serverValue: shown.name, preferTMDb: preferTMDb)
     }
 
     /// 页面简介。
@@ -208,7 +242,49 @@ final class DetailViewModel {
         let serverTarget = shown.imageTarget(app?.server, kind: .backdrop, width: width)
         let url = DisplayMetadata.backdropURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
                                              requestedWidth: width, policy: policy)
-        return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
+        if let url {
+            return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
+        }
+        // 合集专用兜底：服务端与 TMDb 都没有背景图时，用**第一个成员的背景图**。
+        // 合集本身在服务端就是没有图的容器（实测 `ImageTags: {}`），而它的成员是正常
+        // 电影、海报背景一应俱全 —— jellyfin-web 对合集卡也是这么做的（拿子项的图顶上）。
+        // 只在合集上生效：电影/剧集缺背景图时不该擅自拿别人的图。
+        let fallback = collectionBackdropFallback(width: width)
+        return (fallback.url, fallback.authHeader)
+    }
+
+    /// 合集背景兜底：第一个**带背景图**的成员。非合集 / 没有这样的成员时返回 nil。
+    private func collectionBackdropFallback(width: Int) -> (url: URL?, authHeader: String?) {
+        guard shown.kind == .boxSet,
+              let member = collectionMembers.first(where: { $0.backdropImageTag != nil })
+        else { return (nil, nil) }
+        return member.imageTarget(app?.server, kind: .backdrop, width: width)
+    }
+
+    /// 这个页面有没有可用的背景图（决定详情页走「氛围布局」还是「老横幅布局」）。
+    ///
+    /// 三个来源，任一成立即可：服务端背景图 tag、TMDb 叠加层的背景图、合集的成员兜底。
+    /// **必须与 `backdropTarget` 判定一致**：早先视图只看 `shown.backdropImageTag`
+    /// （服务端那个），于是「只有 TMDb 有背景图」的条目会走氛围布局却画不出图。
+    var hasBackdrop: Bool {
+        if shown.backdropImageTag != nil { return true }
+        if let path = tmdbOverlay?.backdropPath, !path.isEmpty { return true }
+        return collectionBackdropFallback(width: 800).url != nil
+    }
+
+    /// 占位卡的取图目标：TMDb 的 `still_path` 优先，没有时用**剧集自己的横版图**。
+    ///
+    /// 兜底刻意走 `homeStillImageTarget`（首页「继续观看」那条链：剧的 Thumb → Backdrop →
+    /// Primary），而不是 `episodeThumbTarget` 那条「剧照 → 主图 → 占位」：后者对**真实分集**
+    /// 是刻意的（拿父级图会像串了集），但占位卡本来就没有自己的图，用剧的横版图把格子填上
+    /// 比一块灰底有用得多——这也是用户口径（「用他们自己的图片填坑，例如继续观看这里的图片」）。
+    /// TMDb 的图免鉴权，所以 TMDb 分支不带服务端凭证；兜底分支要走服务端，凭证由它自己带。
+    func placeholderThumbTarget(for placeholder: EpisodePlaceholder, width: Int)
+        -> (url: URL?, authHeader: String?) {
+        if let url = TMDbImageSize.url(path: placeholder.stillPath, requestedWidth: width) {
+            return (url, nil)
+        }
+        return shown.homeStillImageTarget(app?.server, width: width)
     }
 
     init(item: MediaItem) {
@@ -222,8 +298,15 @@ final class DetailViewModel {
     // MARK: - 选中
 
     /// 季选择器点选。
+    ///
+    /// 顺带把**按季**的两份数据清掉：季叠加层与 Bangumi 兜底候选都只对某一季成立。
+    /// 不清的话，新季落地那一帧会拿旧季的候选去配新季号，闪出一批错号的占位卡。
+    /// 清掉后轨道退回「只有本地集」（与换季前的观感一致），直到新季数据到位。
     func selectSeason(_ seasonID: String) {
+        guard seasonID != selectedSeasonID else { return }
         selectedSeasonID = seasonID
+        tmdbSeasonOverlay = nil
+        bangumiCandidates = []
     }
 
     /// 横向选集点选 / 点播共用：记下选中 + 滚动锚点 + 每季记忆。
@@ -244,6 +327,9 @@ final class DetailViewModel {
     func load() async {
         guard let app, let server = app.server else { return }
         prewarmAmbience()
+        // 兜底候选是**按季**的，且由 Bangumi 区块在出现时重新递上来。这里先清空，
+        // 免得重新进页时用上一轮（可能是另一季）的章节算出错号的占位卡。
+        bangumiCandidates = []
         // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
         // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
         var snapshot = app.detailSnapshot(for: item.id)
@@ -258,6 +344,8 @@ final class DetailViewModel {
             similar = snapshot.similar
             selectedSeasonID = snapshot.selectedSeasonID
             episodesBySeason = snapshot.episodesBySeason
+            // 合集成员也走快照：再次进入同一合集先出内容，网络回来原位覆盖。
+            collectionMembers = snapshot.collectionMembers
             if let seasonID = snapshot.selectedSeasonID,
                let cached = snapshot.episodesBySeason[seasonID] {
                 episodes = cached
@@ -281,6 +369,10 @@ final class DetailViewModel {
             selectedEpisodeID = nil
             episodeScrollFocusID = nil
             episodeLoadError = nil
+            collectionMembers = []
+            collectionMembersTotalCount = nil
+            membersNextStartIndex = 0
+            membersLoadError = nil
         }
 
         // Similar recommendations are optional and may be unavailable on
@@ -324,6 +416,12 @@ final class DetailViewModel {
         }
         isLoading = false
         similar = (try? await similarItems) ?? similar
+        // 合集成员：与详情/季同一条「网络为准」的路径，失败**不**影响整页
+        // （合集照样能展示标题与成员以外的信息，成员区自己出错误条 + 重试）。
+        // 放在 `storeSnapshot()` 之前，快照才带得上第一页成员。
+        if shown.kind == .boxSet {
+            await loadMembers(reset: true)
+        }
         // 有内容 + 刷新失败 = 正在展示缓存。没内容时（snapshot == nil）走的是既有的
         // 整页错误态，不该再叠一条提示。
         if let failure, snapshot != nil {
@@ -348,7 +446,97 @@ final class DetailViewModel {
         // 都已就位，且**晚于 `loadTMDbOverlay`**——季数据要靠父剧的对应来定位，
         // 而那条对应正是上一步刚建起来的。
         await loadSeasonOverlay()
+        // 合集：**必须晚于 `loadMembers`**（成员是它定位 TMDb 合集的输入，
+        // 见 `TMDbEnricher.refreshCollection`），也晚于 `loadTMDbOverlay`（先读后补）。
+        await loadCollectionOverlay()
     }
+
+    /// 合集的 TMDb 数据：先读已有（立即渲染），再后台补，补到后重读一次。
+    ///
+    /// 与 `loadSeasonOverlay` 同构，区别是定位靠**成员**：合集在服务端没有可用的
+    /// `ProviderIds["Tmdb"]`，TMDb 合集 id 是从成员电影的 `belongs_to_collection`
+    /// 反查出来的。所以成员还没加载出来时（离线首进、成员请求失败）本方法什么都不做，
+    /// 页面退回「服务端图 + 成员背景兜底」，不会卡在任何等待上。
+    func loadCollectionOverlay() async {
+        guard let app, shown.kind == .boxSet else { return }
+        // ① 立即用已有数据渲染（缓存命中时同步就绪）。
+        tmdbOverlay = await app.tmdbOverlay(for: shown)
+        // 顺手把海报路径递给网格卡：这样「先点开详情、再回合集库」这一趟是零请求的，
+        // 卡片不用自己再解析一遍（见 `AppModel.collectionArtwork`）。
+        app.noteCollectionArtwork(itemID: shown.id, posterPath: tmdbOverlay?.posterPath)
+        guard !Task.isCancelled else { return }
+
+        // ② 缺数据或已过期时后台补，补到再刷新一次。
+        let didFetch = await app.refreshTMDbCollection(for: shown, members: collectionMembers)
+        guard didFetch, !Task.isCancelled else { return }
+        let refreshed = await app.tmdbOverlay(for: shown)
+        guard !Task.isCancelled else { return }
+        tmdbOverlay = refreshed
+        app.noteCollectionArtwork(itemID: shown.id, posterPath: refreshed?.posterPath)
+        // 背景图可能刚从「无」变成 TMDb 那张：重预热（同 URL 时直接命中短路）。
+        prewarmAmbience()
+    }
+
+    /// 合集成员。
+    ///
+    /// 查询形态用 `MediaServer.collectionMembers(of:)`——**三条硬约束（`recursive: false`、
+    /// 不传 `includeItemTypes`、年份升序）与它们的服务端依据都收在那一个方法里**，
+    /// 库网格卡的封面解析走的是同一个方法；这里再写一份就是下一个漂移点。
+    /// 本方法只额外负责**分页**（一页 200 条，`totalRecordCount` 大于已加载数才给
+    /// 「加载更多」）。结果会被 `CachedMediaServer` 写进条目表与页缓存，不需要另加缓存路径。
+    func loadMembers(reset: Bool) async {
+        guard let server = app?.server, shown.kind == .boxSet else { return }
+        if reset {
+            isLoadingMembers = true
+            membersLoadError = nil
+        }
+        defer { isLoadingMembers = false }
+
+        let startIndex = reset ? 0 : membersNextStartIndex
+        do {
+            let page = try await server.itemsPage(
+                parentID: shown.id,
+                kinds: nil,
+                recursive: false,
+                startIndex: startIndex,
+                limit: Self.membersPageSize,
+                sort: MediaItemsSort(field: .year, ascending: true),
+                watchState: nil,
+                searchTerm: nil
+            )
+            guard !Task.isCancelled else { return }
+            if reset {
+                collectionMembers = page.items
+            } else {
+                // 防御服务端重复页：按 id 去重追加（与库页翻页同一口径）。
+                var existing = Set(collectionMembers.map(\.id))
+                collectionMembers += page.items.filter { existing.insert($0.id).inserted }
+            }
+            collectionMembersTotalCount = page.totalRecordCount
+            membersNextStartIndex = startIndex + page.items.count
+            membersLoadError = nil
+            storeSnapshot()
+            // 成员到位可能**第一次**让合集有背景图（TMDb 没对应时用第一个成员的图，
+            // 见 `collectionBackdropFallback`）。`load()` 里那两次预热都排在成员加载之前，
+            // 赶不上这一档，所以这里补一次（同 URL 会直接短路，不会重复解码）。
+            if reset { prewarmAmbience() }
+        } catch is CancellationError {
+            return
+        } catch let e as JellyfinError {
+            membersLoadError = e.errorDescription
+        } catch {
+            membersLoadError = "\(error)"
+        }
+    }
+
+    /// 还有没拉完的成员（服务端给了总数且大于已加载数）。
+    var hasMoreMembers: Bool {
+        guard shown.kind == .boxSet else { return false }
+        guard let total = collectionMembersTotalCount else { return false }
+        return collectionMembers.count < total
+    }
+
+    private static let membersPageSize = 200
 
     /// 读已有 TMDb 数据并触发后台补齐。
     ///
@@ -505,6 +693,37 @@ final class DetailViewModel {
         }
     }
 
+    // MARK: - 占位（库里没有的集）
+
+    /// 接收 Bangumi 章节兜底候选。
+    ///
+    /// 由 `BangumiChapterSection` 在读到本地章节后递上来（见那里的注释：区块今天已经在
+    /// 读全量章节，复用它就不必在 VM 里再读一次库、也不必复刻 `bangumiEnabled` /
+    /// 登录态 / 建库就绪三道闸门）。相同内容重复递上来时直接返回，避免白白触发一次
+    /// 观察失效（区块在缓存与远端两条路径上都会递一次）。
+    func acceptBangumiCandidates(_ candidates: [EpisodeCandidate]) {
+        guard candidates != bangumiCandidates else { return }
+        bangumiCandidates = candidates
+    }
+
+    /// 重算选集轨道。
+    ///
+    /// 三个输入各自 `didSet` 调用（本地集、季叠加层、兜底候选），所以「TMDb 数据晚到」
+    /// 「切季」「播放后刷新」都不需要各自记得再算一次——少一处调用点就少一处漏算。
+    private func rebuildEpisodeSlots() {
+        // 关掉开关 = 退回加占位之前的行为（`episodes` 就是全部）。
+        guard app?.tmdb.showPlaceholders ?? true else {
+            episodeSlots = episodes.map(EpisodeSlot.local)
+            return
+        }
+        episodeSlots = EpisodeSlotBuilder.build(
+            seasonNumber: selectedSeason?.seasonNumber,
+            local: episodes,
+            primary: tmdbSeasonOverlay?.episodeCandidates ?? [],
+            fallback: bangumiCandidates,
+            now: Date())
+    }
+
     /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
     func reloadAfterPlayback() async {
         guard let server = app?.server else { return }
@@ -553,7 +772,8 @@ final class DetailViewModel {
         guard let app, let detail else { return }
         app.storeDetailSnapshot(
             .init(detail: detail, seasons: seasons, similar: similar,
-                  selectedSeasonID: selectedSeasonID, episodesBySeason: episodesBySeason),
+                  selectedSeasonID: selectedSeasonID, episodesBySeason: episodesBySeason,
+                  collectionMembers: collectionMembers),
             for: item.id)
     }
 

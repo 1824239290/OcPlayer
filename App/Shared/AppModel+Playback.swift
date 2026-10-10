@@ -81,10 +81,12 @@ extension AppModel {
         // 首页「最近添加」等入口可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
         // 只接受可播放的叶子条目。沿用详情页的语义：优先「接下来看」，否则取
         // 首个未看完的常规剧集；避免把 Series ID 直接送进 /Videos/{id}/stream。
+        // 合集（BoxSet）同理：它是容器，Id 送进 PlaybackInfo / stream 一律 400。
         let playableItem: MediaItem
         do {
             guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
-                playbackPreparation = .failed(title: item.name, error: "该剧没有可播放的剧集")
+                playbackPreparation = .failed(title: item.name,
+                                              error: Self.noPlayableContentMessage(for: item))
                 return
             }
             guard !Task.isCancelled else { return }
@@ -151,7 +153,11 @@ extension AppModel {
     /// 把浏览层条目归一化为可直接播放的叶子条目。
     /// 电影 / 集数 / 音频等已经是叶子，剧集则优先复用首页 nextUp / resume，避免额外请求。
     /// （半集会从「接下来看」去重进「继续观看」，所以 resume 也是该集的落点。）
+    /// 合集是**容器**：解析成里面第一个可播的成员，绝不把合集自身的 id 送去协商。
     func resolvePlayableItem(for item: MediaItem, server: any MediaServer) async throws -> MediaItem? {
+        if item.kind == .boxSet {
+            return try await resolvePlayableMember(ofCollection: item, server: server)
+        }
         guard item.kind == .series else { return item }
 
         if let next = home.nextUp.first(where: { $0.seriesID == item.id })
@@ -163,6 +169,59 @@ extension AppModel {
         let regularEpisodes = episodes.filter { $0.seasonNumber != 0 }
         return regularEpisodes.first(where: { !($0.playState?.played ?? false) })
             ?? regularEpisodes.first
+    }
+
+    /// 合集 → 第一个可播成员。
+    ///
+    /// `recursive: false` **不能省**（服务端源码口径：`recursive=true` 会走
+    /// `DescendantOfId` 把链接条目的下一层一并递归出来，服务端单测
+    /// `DescendantOfId_ReachesEpisodesOfALinkedSeries` 断言了这一点），
+    /// `kinds` 也不能给（给合集 parentId 配 `includeItemTypes` 会被服务端把
+    /// `parentId` 置空、改成从用户根查，见 jellyfin#16454）。
+    /// 挑选规则与剧集那条一致：先取第一个没看过的叶子，其次第一个叶子；
+    /// 成员里若只有剧集，则回到剧集自己的解析规则（它可能已经有续播进度）。
+    private func resolvePlayableMember(
+        ofCollection item: MediaItem,
+        server: any MediaServer
+    ) async throws -> MediaItem? {
+        let members = try await server.itemsPage(
+            parentID: item.id,
+            kinds: nil,
+            recursive: false,
+            startIndex: 0,
+            limit: Self.collectionMembersLimit,
+            sort: MediaItemsSort(field: .year, ascending: true),
+            watchState: nil,
+            searchTerm: nil
+        ).items
+        let leaves = members.filter { $0.kind == .movie || $0.kind == .episode }
+        if let unwatched = leaves.first(where: { !($0.playState?.played ?? false) }) {
+            return unwatched
+        }
+        if let first = leaves.first {
+            return first
+        }
+        if let series = members.first(where: { $0.kind == .series }) {
+            return try await resolvePlayableItem(for: series, server: server)
+        }
+        return nil
+    }
+
+    /// 合集一次最多取多少成员来挑「第一个可播的」。
+    /// 只为挑一条，不需要全量；合集条目数远超这个值时取前 N 条的服务端顺序，
+    /// 挑选结果仍是「靠前的可播成员」，不会因为截断而挑不到。
+    static let collectionMembersLimit = 200
+
+    /// 解析不出可播条目时的用户可见文案（按条目类型说清楚是哪种情况）。
+    nonisolated static func noPlayableContentMessage(for item: MediaItem) -> String {
+        switch item.kind {
+        case .boxSet:
+            return "这个合集里还没有可播放的内容"
+        case .series:
+            return "该剧没有可播放的剧集"
+        default:
+            return "这个条目没有可播放的内容"
+        }
     }
 
     func presentPlayback(

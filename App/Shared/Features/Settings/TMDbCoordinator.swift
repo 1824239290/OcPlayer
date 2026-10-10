@@ -25,6 +25,8 @@ final class TMDbCoordinator {
     private(set) var preferText = true
     /// 图片是否允许顶替服务端已有的图（默认只补缺）。
     private(set) var replaceImages = false
+    /// 选集轨道是否补出「库里没有的集」的占位（默认开）。
+    private(set) var showPlaceholders = true
     /// 缓存天数。
     private(set) var cacheDays = TMDbPreferences.defaultCacheDays
     /// 当前租户已建立多少条对应（设置页显示「已补全 N 部」）。
@@ -59,6 +61,7 @@ final class TMDbCoordinator {
         self.language = preferences.language
         self.preferText = preferences.preferTMDbText
         self.replaceImages = preferences.replaceExistingImages
+        self.showPlaceholders = preferences.showPlaceholders
         self.cacheDays = preferences.cacheDays
         self.isConfigured = credentials.apiKey() != nil
     }
@@ -123,6 +126,11 @@ final class TMDbCoordinator {
         replaceImages = value
     }
 
+    func setShowPlaceholders(_ value: Bool) {
+        preferences.showPlaceholders = value
+        showPlaceholders = value
+    }
+
     func setCacheDays(_ value: Int) {
         preferences.cacheDays = value
         cacheDays = preferences.cacheDays
@@ -161,6 +169,16 @@ final class TMDbCoordinator {
     func refreshSeason(seriesLink: TMDbLink, seasonNumber: Int) async -> Bool {
         guard let enricher else { return false }
         return await enricher.refreshSeason(seriesLink: seriesLink, seasonNumber: seasonNumber)
+    }
+
+    /// 确保**服务端合集**（Jellyfin / Emby 的 BoxSet）的 TMDb 合集数据可用。
+    ///
+    /// 定位靠成员电影的 `belongs_to_collection`（合集自己没有可用的 TMDb id），
+    /// 所以 `members` 是必需品——没加载出成员时本方法什么都不会发生。
+    @discardableResult
+    func refreshCollection(item: MediaItem, members: [MediaItem], tenant: TenantID) async -> Bool {
+        guard let enricher else { return false }
+        return await enricher.refreshCollection(item: item, members: members, tenant: tenant)
     }
 
     /// 取最近一次失败并转成用户能看懂的文案（设置页出现时调）。

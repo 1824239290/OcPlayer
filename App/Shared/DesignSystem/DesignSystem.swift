@@ -68,6 +68,14 @@ extension MediaItem {
     }
 
     /// 带 `tag` 的图片地址（tag 让磁盘缓存自动失效）；`authHeader` 给 `RemoteImage` 用。
+    ///
+    /// **没有 tag 就不发请求**（返回 nil url）。服务端返回的 `ImageTags` 就是「这个条目
+    /// 有没有这张图」的事实来源：Jellyfin/Emby 的列表与详情响应都会带上它，缺键 =
+    /// 本来就没图。以前这里照样拼 URL，于是每个无图条目（手工建的**合集**、没头像的
+    /// 演员、缺海报的老片）都白打一次 404 —— 实测日志里已累计十几条，而 `RemoteImage`
+    /// 拿到 404 后显示的仍是同一块占位，**除了浪费一次请求没有任何差别**。
+    /// 合集是这条规则的最大受益者：Jellyfin 新建的合集默认不带任何图，页面上每渲染
+    /// 一次就 404 一次（同一会话里反复出现，见 `图片请求返回非 200` 日志）。
     func imageTarget(_ server: (any MediaServer)?, kind: CardImage, width: Int)
         -> (url: URL?, authHeader: String?) {
         guard let server else { return (nil, nil) }
@@ -84,6 +92,7 @@ extension MediaItem {
         case .logo:
             (tag, type, targetItemID) = (logoImageTag, .logo, logoItemID)
         }
+        guard tag != nil else { return (nil, server.authorizationHeader) }
         let url = try? server.imageURL(itemID: targetItemID, type: type, maxWidth: width, tag: tag)
         return (url, server.authorizationHeader)
     }
@@ -258,6 +267,15 @@ struct PosterCard: View {
     let item: MediaItem
     let server: (any MediaServer)?
     var width: CGFloat? = Metrics.posterWidth
+    /// 封面覆盖：条目自身没有服务端图时外部补一张（当前唯一来源是**合集的 TMDb 海报**）。
+    /// nil = 用条目自己的图（`imageTarget` 那条既有链）。
+    ///
+    /// 为什么要开这个口子：合集在服务端**本来就没有图**（实测 `ImageTags: {}`），
+    /// 卡片只剩占位图标；而 TMDb 合集的海报要经一次解析才有（见
+    /// `AppModel.collectionPosterURL`）。把「取哪张图」留给调用方，卡片本身不必知道
+    /// TMDb 的存在。
+    var posterOverride: URL? = nil
+
     var onTap: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -269,13 +287,19 @@ struct PosterCard: View {
         let cardWidth = width ?? Metrics.posterWidth
         return Button(action: onTap) {
             VStack(alignment: .leading, spacing: 9) {
-                let target = item.imageTarget(server, kind: .primary, width: 400)
+                let serverTarget = item.imageTarget(server, kind: .primary, width: 400)
+                // 覆盖图优先，但它**免鉴权**（TMDb CDN 不校验）：带上服务端凭证
+                // 既无意义、也把凭证多送一处。
+                let url = posterOverride ?? serverTarget.url
                 MediaArtwork(
-                    url: target.url,
-                    authHeader: target.authHeader,
+                    url: url,
+                    authHeader: posterOverride == nil ? serverTarget.authHeader : nil,
                     shape: .poster,
                     width: cardWidth,
-                    maxPixelSize: 400
+                    maxPixelSize: 400,
+                    // 合集在服务端不带图是常态（新建的合集默认没有封面），
+                    // 给它一个「一叠海报」的图标，别显示成一张破图。
+                    emptyIcon: item.kind == .boxSet ? "rectangle.stack.fill" : "photo"
                 )
                 HStack {
                     Text(item.name)
@@ -321,9 +345,15 @@ extension MediaLibrary.CollectionType {
 /// 媒体库卡（首页媒体库栏）：16:9 库封面 + 标题行 + 类型副标题。
 /// 布局对齐 `StillCard`（封面取 Jellyfin/Emby UserView 自己的 Primary 图，
 /// 带 tag 供缓存失效），Rail 走 `.still` 档高度。
+///
+/// 服务端**没给库封面**时（合集库是必然：实测 7 种图片类型全部 404）用 `collageURLs`
+/// 里的内容海报拼一张 2×2；拼不出来才落回占位图标。
 struct LibraryCard: View {
     let library: MediaLibrary
     let server: (any MediaServer)?
+    /// 内容海报（最多 4 张）：服务端没给库封面时用它拼图，见
+    /// `AppModel.libraryCoverURLs(for:)`。
+    var collageURLs: [URL] = []
     var width: CGFloat = Metrics.stillWidth
     var onTap: () -> Void
 
@@ -331,7 +361,7 @@ struct LibraryCard: View {
     @State private var hovering = false
 
     private var coverTarget: (url: URL?, authHeader: String?) {
-        guard let server else { return (nil, nil) }
+        guard let server, library.primaryImageTag != nil else { return (nil, nil) }
         let url = try? server.imageURL(
             itemID: library.id, type: .primary, maxWidth: 720, tag: library.primaryImageTag)
         return (url, server.authorizationHeader)
@@ -341,13 +371,24 @@ struct LibraryCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 let target = coverTarget
-                MediaArtwork(
-                    url: target.url,
-                    authHeader: target.authHeader,
-                    shape: .still,
-                    width: width,
-                    maxPixelSize: 720
-                )
+                if target.url == nil, !collageURLs.isEmpty {
+                    LibraryCoverCollage(
+                        urls: Array(collageURLs.prefix(4)),
+                        authHeader: server?.authorizationHeader,
+                        width: width)
+                } else {
+                    MediaArtwork(
+                        url: target.url,
+                        authHeader: target.authHeader,
+                        shape: .still,
+                        width: width,
+                        maxPixelSize: 720,
+                        // 合集库（UserView 的 CollectionType = boxsets）在服务端没有封面图
+                        // ——实测 `/UserViews` 里它是 `ImageTags: {}`，以前照样拼 URL、每渲染
+                        // 一次就 404 一次（跨会话在日志里反复出现），显示的却是同一张灰底。
+                        emptyIcon: library.collectionType == .boxsets ? "rectangle.stack.fill" : "photo"
+                    )
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(library.name)
                         .font(.subheadline.weight(.semibold))
@@ -366,6 +407,65 @@ struct LibraryCard: View {
         .accessibilityLabel("打开媒体库 \(library.name)")
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
+    }
+}
+
+/// 库卡封面拼图：把库里的内容海报拼成一张 16:9 的图。
+///
+/// 存在的理由：服务端对某些库**一张图都没有**（合集库实测 7 种图片类型全 404），
+/// 而库卡空着会让人以为这个库是坏的。1 张铺满、2 张并排、3 张上二下一、4 张 2×2——
+/// 每格都 `scaledToFill` + 裁切，所以任何张数都恰好填满、不留缝也不变形。
+private struct LibraryCoverCollage: View {
+    let urls: [URL]
+    let authHeader: String?
+    let width: CGFloat
+
+    private var height: CGFloat { width * 9.0 / 16.0 }
+
+    var body: some View {
+        Group {
+            switch urls.count {
+            case 0:
+                Rectangle().fill(Metrics.placeholderFill)
+            case 1:
+                cell(urls[0]).frame(width: width, height: height)
+            case 2:
+                HStack(spacing: 0) {
+                    cell(urls[0])
+                    cell(urls[1])
+                }
+                .frame(width: width, height: height)
+            case 3:
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        cell(urls[0])
+                        cell(urls[1])
+                    }
+                    cell(urls[2]).frame(height: height / 2)
+                }
+                .frame(width: width, height: height)
+            default:
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        cell(urls[0])
+                        cell(urls[1])
+                    }
+                    HStack(spacing: 0) {
+                        cell(urls[2])
+                        cell(urls[3])
+                    }
+                }
+                .frame(width: width, height: height)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+    }
+
+    /// 一格。宽高都由外层 HStack / VStack 定，图 `scaledToFill` 后裁掉溢出。
+    private func cell(_ url: URL) -> some View {
+        RemoteImage(url: url, authHeader: authHeader, maxPixelSize: 360)
+            .scaledToFill()
+            .clipped()
     }
 }
 

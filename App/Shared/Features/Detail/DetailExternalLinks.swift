@@ -67,6 +67,8 @@ enum ExternalMetadataLinks {
             URL(string: "https://www.themoviedb.org/tv/\(id)")
         case .season(let tvID, let number):
             URL(string: "https://www.themoviedb.org/tv/\(tvID)/season/\(number)")
+        case .collection(let id):
+            URL(string: "https://www.themoviedb.org/collection/\(id)")
         }
     }
 

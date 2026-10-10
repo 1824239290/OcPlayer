@@ -233,8 +233,18 @@ struct HomeView: View {
         case .libraries:
             if !app.libraries.isEmpty {
                 Rail("媒体库", kind: .still, items: app.libraries) { library in
-                    LibraryCard(library: library, server: app.server, width: stillWidth) {
+                    LibraryCard(
+                        library: library,
+                        server: app.server,
+                        // 服务端没给库封面的库（合集库是必然）：用库里内容的海报拼一张。
+                        collageURLs: app.libraryCoverURLs(for: library),
+                        width: stillWidth
+                    ) {
                         app.openLibrary(library)
+                    }
+                    // 卡片进入可视区时解析一次封面（有界、失败不重试）。
+                    .onAppear {
+                        Task { await app.resolveLibraryCoverIfNeeded(for: library) }
                     }
                 }
                 .transition(.section)
