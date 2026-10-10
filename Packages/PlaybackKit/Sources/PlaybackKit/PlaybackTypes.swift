@@ -357,6 +357,12 @@ public struct TrackInfo: Identifiable, Hashable, Sendable {
     public let channels: Int?
     /// 采样率 Hz（音轨）。
     public let sampleRate: Int?
+    /// 内核是否允许移除这条轨（外挂字幕 true，内嵌轨 false）。
+    ///
+    /// **这是「删除」入口的唯一闸门**：`removeSubtitleTrack` 在不支持的内核上是
+    /// 空操作（见 `PlaybackEngine` 的默认实现），UI 若无条件渲染删除项就会出现
+    /// 「点了没反应」。默认 `false`，只有内核明确报 `can_remove` 才放行。
+    public let canRemove: Bool
 
     public init(
         id: Int64,
@@ -367,7 +373,8 @@ public struct TrackInfo: Identifiable, Hashable, Sendable {
         language: String?,
         codec: String?,
         channels: Int?,
-        sampleRate: Int?
+        sampleRate: Int?,
+        canRemove: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -378,6 +385,7 @@ public struct TrackInfo: Identifiable, Hashable, Sendable {
         self.codec = codec
         self.channels = channels
         self.sampleRate = sampleRate
+        self.canRemove = canRemove
     }
 
     /// 菜单里显示的一行：标题优先，没有就语言 + 编码。

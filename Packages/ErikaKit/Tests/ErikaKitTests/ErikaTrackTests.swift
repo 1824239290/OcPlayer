@@ -83,6 +83,61 @@ final class ErikaTrackTests: XCTestCase {
         )
     }
 
+    /// 外挂字幕轨可移除，内嵌轨不可。
+    ///
+    /// `canRemove` 是 App 侧「删除」入口的**唯一闸门**（内嵌轨不给删除项），所以两半
+    /// 都要钉住：①外挂轨报 true 且真的删得掉；②内嵌轨报 false。
+    /// `TestMedia` 造不出内嵌字幕轨，用同素材的**内嵌视频/音轨**覆盖同一段映射
+    /// （`can_remove` 的判定在内核里是按轨来源给的，与轨类型无关）。
+    func testRemoveExternalSubtitleTrack() async throws {
+        let media = try await TestMedia.makeMovieWithTwoTones(seconds: 2)
+        defer { try? FileManager.default.removeItem(at: media) }
+
+        let engine = try ErikaEngine()
+        defer { try? engine.close() }
+        try engine.open(PlaybackSource(fileURL: media))
+        try engine.play()
+
+        let initial = try await waitForTracks(engine) { !$0.isEmpty }
+        // 内嵌轨一律不可移除：UI 若照 source 猜而不是读内核，这里会先炸。
+        let embedded = initial.filter { $0.source == .embedded }
+        XCTAssertFalse(embedded.isEmpty, "前提：素材应含内嵌轨")
+        XCTAssertFalse(
+            embedded.contains { $0.canRemove },
+            "内嵌轨不该报 canRemove——App 的删除入口就是按它显隐的"
+        )
+
+        let srt = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocplayer-sub-remove-\(UUID().uuidString).srt")
+        let srtContent = """
+        1
+        00:00:00,000 --> 00:00:02,000
+        待删除的字幕
+
+        """
+        try srtContent.write(to: srt, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: srt) }
+
+        let subtitleID = try engine.addExternalSubtitle(srt.path)
+        let withSub = try await waitForTracks(engine) {
+            $0.contains { $0.id == subtitleID }
+        }
+        let external = try XCTUnwrap(withSub.first { $0.id == subtitleID })
+        XCTAssertTrue(external.canRemove, "外挂字幕轨应报 canRemove")
+        try engine.selectSubtitleTrack(subtitleID)
+        _ = try await waitForTracks(engine) { $0.contains { $0.id == subtitleID && $0.selected } }
+
+        // 删掉当前选中的这条：内核轨道列表里应彻底消失。
+        try engine.removeSubtitleTrack(subtitleID)
+        let removed = try await waitForTracks(engine) {
+            !$0.contains { $0.id == subtitleID }
+        }
+        XCTAssertFalse(
+            removed.contains { $0.id == subtitleID },
+            "移除后的外挂字幕轨不该再出现在 tracks() 里"
+        )
+    }
+
     /// 手动 tick 直到轨道条件满足（无头环境内核事件靠 tick 驱动）。
     private func waitForTracks(
         _ engine: ErikaEngine,

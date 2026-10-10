@@ -727,6 +727,14 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         return try withLock { try presenter.addExternalSubtitle(uri) }
     }
 
+    /// 移除一条字幕轨。open 在飞时丢弃（那时轨道列表本来就还没就绪）。
+    ///
+    /// 调用方必须先看 `TrackInfo.canRemove`：内嵌轨内核会拒绝，这里会把错误抛出去。
+    public func removeSubtitleTrack(_ id: Int64) throws {
+        if dropControlDuringOpen("removeSubtitleTrack") { return }
+        try withLock { try presenter.removeSubtitleTrack(id) }
+    }
+
     /// 字幕整体缩放（1.0 = 默认字号；HUD 的「字号 +/-」用）。
     /// open 在飞时丢弃：open 成功路径会按宿主快照重放字幕缩放，无需登记。
     public func setSubtitleScale(_ scale: Double) throws {

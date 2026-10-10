@@ -146,6 +146,12 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     func selectSubtitleTrack(_ id: Int64?) throws
     /// 外挂字幕（本地路径 / URL），返回新轨道 id。
     @discardableResult func addExternalSubtitle(_ uri: String) throws -> Int64
+    /// 移除一条字幕轨（外挂字幕删掉后从轨道列表消失）。
+    ///
+    /// UI 的闸门是 `TrackInfo.canRemove`（默认 false）——不支持的引擎这里是空操作，
+    /// 无条件调用等于「点了没反应」，所以调用方必须先看 `canRemove`。
+    /// 内嵌轨内核不允许移除，`canRemove` 会是 false。
+    func removeSubtitleTrack(_ id: Int64) throws
     /// 字幕整体缩放（1.0 = 默认字号）。
     func setSubtitleScale(_ scale: Double) throws
 
@@ -222,6 +228,9 @@ public extension PlaybackEngine {
     /// 没有后台档的内核（默认）。
     static var supportsBackgroundAudio: Bool { false }
 
+    /// 不支持轨移除的内核（默认）：空操作。调用方按 `TrackInfo.canRemove` 决定
+    /// 要不要给用户这个入口，所以这里的静默不会有「点了没反应」的观感。
+    func removeSubtitleTrack(_ id: Int64) throws {}
 
     /// 不做字幕外观覆盖的内核：空操作（设置页会按 `supportsSubtitleStyle` 给出提示，
     /// 但那本来就是**可选能力**，不该逼所有内核实现）。

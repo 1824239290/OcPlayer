@@ -22,7 +22,11 @@ extension TrackInfo {
             language: raw.language.map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 },
             codec: raw.codec.map { String(cString: $0) }.flatMap { $0.isEmpty ? nil : $0 },
             channels: raw.channels > 0 ? Int(raw.channels) : nil,
-            sampleRate: raw.sample_rate > 0 ? Int(raw.sample_rate) : nil
+            sampleRate: raw.sample_rate > 0 ? Int(raw.sample_rate) : nil,
+            // 内核按轨来源给的可移除性：外挂字幕 true、内嵌轨 false。
+            // 直接透传，不在宿主侧用 `source == .external` 猜——猜出来的闸门
+            // 一旦和内核不一致，就是「UI 给了删除入口但内核拒绝」。
+            canRemove: raw.can_remove
         )
     }
 
@@ -68,5 +72,10 @@ extension ErikaPresenter {
         var trackID: Int64 = -1
         try ErikaError.check(erika_presenter_add_external_subtitle(handle, uri, &trackID))
         return trackID
+    }
+
+    /// 移除一条字幕轨。内嵌轨内核会拒绝（`can_remove` 为 false 的轨不该走到这里）。
+    public func removeSubtitleTrack(_ id: Int64) throws {
+        try ErikaError.check(erika_presenter_remove_subtitle_track(handle, id))
     }
 }

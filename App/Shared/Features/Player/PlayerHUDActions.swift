@@ -673,11 +673,17 @@ struct PlayerHUDExpandedActionCard: View {
                     onUserInteraction()
                 }
                 ForEach(controller.state.subtitleTracks) { track in
-                    PlayerHUDCheckRow(
+                    PlayerHUDTrackRow(
                         title: subtitleTrackLabel(track),
-                        isSelected: track.selected
+                        isSelected: track.selected,
+                        // 内嵌轨的 canRemove 是 false：不给删除入口，而不是给了
+                        // 再让内核拒绝——那会变成一条「点了没反应」的菜单项。
+                        canRemove: track.canRemove
                     ) {
                         controller.setSubtitle(track)
+                        onUserInteraction()
+                    } onRemove: {
+                        controller.removeSubtitle(track)
                         onUserInteraction()
                     }
                 }
@@ -891,6 +897,43 @@ struct PlayerHUDCheckRow: View {
             .font(.callout.weight(isSelected ? .semibold : .medium))
         }
         .buttonStyle(PlayerHUDMenuRowButtonStyle())
+    }
+}
+
+/// 轨道行：整行可点选中，尾随可选的删除按钮（目前只有字幕轨用得上）。
+///
+/// 刻意**不复用 `PlayerHUDCheckRow`**：那本身就是一个 Button，把删除按钮嵌进去
+/// 会变成 Button in Button——两侧的点击范围与手势判定都不确定（macOS 上是误触，
+/// iOS 上是外层吞掉内层）。这里并排两个独立 Button，各自有自己的命中区。
+struct PlayerHUDTrackRow: View {
+    let title: String
+    let isSelected: Bool
+    let canRemove: Bool
+    let onSelect: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onSelect) {
+                PlayerHUDMenuRowLabel(title: title, showsCheckmark: isSelected)
+                    .font(.callout.weight(isSelected ? .semibold : .medium))
+            }
+            .buttonStyle(PlayerHUDMenuRowButtonStyle())
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+            if canRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(PlayerHUDPalette.secondary)
+                        .frame(width: 34, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PlayerHUDMenuRowButtonStyle())
+                .accessibilityLabel("删除 \(title)")
+                .padding(.trailing, 4)
+            }
+        }
     }
 }
 

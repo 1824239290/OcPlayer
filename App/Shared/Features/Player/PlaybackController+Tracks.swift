@@ -227,6 +227,35 @@ extension PlaybackController {
         state.refreshTracks(from: engine)
     }
 
+    /// 移除一条外挂字幕轨（内嵌轨的 `canRemove` 是 false，走不进来）。
+    ///
+    /// 三条记账：
+    /// - 删的是**当前选中**那条 → 清掉「用户自己拨过」闸门，让既有偏好校正
+    ///   （`applySubtitlePreferenceIfNeeded`）在刷新后重新挑一条或关闭。闸门是为
+    ///   「别覆盖用户的选择」而设的，而那条轨已经不存在了，继续拦着只会让用户
+    ///   停在「字幕没了也不自动选」的状态里。
+    /// - 顺手清 `externalSubtitleNames`：显示名按轨道 id 记账，不清就会串到内核
+    ///   复用的新轨 id 上（Jellyfin 侧车字幕的「简体 / 繁体」判定读的就是它）。
+    /// - **不删磁盘上的导入副本**：同一文件可能被多条轨引用，且目录由
+    ///   `ManagedDirectoryPruner` 按 100 文件 / 512 MB 有界修剪，孤儿不是泄漏。
+    func removeSubtitle(_ track: TrackInfo) {
+        guard let engine, track.canRemove else { return }
+        do {
+            try engine.removeSubtitleTrack(track.id)
+        } catch {
+            setupError = "字幕删除失败：\(error)"
+            playerLog.warning("删除字幕轨失败 id=\(track.id) error=\(error)")
+            return
+        }
+        externalSubtitleNames.removeValue(forKey: track.id)
+        if track.selected { userChoseSubtitleForCurrentSource = false }
+        playerLog.info(
+            "删除字幕轨 id=\(track.id) wasSelected=\(track.selected) "
+                + "title=\(track.displayTitle) source=\(track.source.rawValue)"
+        )
+        state.refreshTracks(from: engine)
+    }
+
     /// 加外挂字幕轨道（用户手动选文件：加载并立即选中）。
     func loadExternalSubtitle(fileURL: URL) {
         guard let engine else { return }
