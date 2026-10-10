@@ -1684,6 +1684,22 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine?.setSubtitleScale(1.0)
     }
 
+    /// 字幕外观偏好变更后即时下发（设置页改动即生效，不用重开片）。
+    ///
+    /// 无引擎 / 没在播时静默返回：`open` 收尾会按快照重放，所以「下次播放生效」
+    /// 不需要在这里登记什么。
+    func applySubtitleStyle() {
+        guard let engine else { return }
+        let style = PlaybackPreferences.subtitleStyle()
+        engine.setSubtitleStyle(style, overrides: PlaybackPreferences.subtitleStyleOverridesMask())
+        playerLog.info(
+            "字幕外观下发 alignment=\(style.alignment.map(String.init) ?? "-") "
+                + "marginV=\(style.marginVertical.map(String.init) ?? "-") "
+                + "outline=\(style.outlineWidth.map { String(format: "%.1f", $0) } ?? "-") "
+                + "覆盖=\(PlaybackPreferences.subtitleStyleOverrides)"
+        )
+    }
+
     func copyImportedSubtitle(_ source: URL) -> URL? {
         let scope = source.startAccessingSecurityScopedResource()
         defer { if scope { source.stopAccessingSecurityScopedResource() } }

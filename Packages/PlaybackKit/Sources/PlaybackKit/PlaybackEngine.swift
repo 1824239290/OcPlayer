@@ -124,6 +124,18 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// 字幕整体缩放（1.0 = 默认字号）。
     func setSubtitleScale(_ scale: Double) throws
 
+    /// 设置字幕外观（颜色 / 描边 / 位置 / 边距 / 加粗）。
+    ///
+    /// `overrides` 为**空**（默认）时这些值只是「填充脚本没指定的部分」——片源自带
+    /// 的 ASS 排版与特效字体原样保留；只有用户显式要求覆盖时，才把对应项变成替换。
+    /// 不做样式覆盖的内核是空操作。
+    func setSubtitleStyle(_ style: SubtitleStyle, overrides: SubtitleStyleOverrides)
+
+    /// 内核是否支持字幕外观设置。
+    ///
+    /// 设置页据此决定要不要提示「当前内核不支持，这些选项不会生效」——比按内核 id
+    /// 硬编码判断可靠（换内核 / 加内核时不会漏改），也让「支持」成为适配器自报的能力。
+    static var supportsSubtitleStyle: Bool { get }
     // MARK: - 截图
 
     /// 离屏截当前合成帧（视频 + 字幕 + 内核弹幕若有），RGBA8。
@@ -155,6 +167,7 @@ public extension PlaybackEngine {
     /// 实例侧的便捷读取（`type(of:).descriptor` 写起来太吵）。
     var descriptor: PlaybackEngineDescriptor { Self.descriptor }
     var supportsKernelDanmaku: Bool { Self.supportsKernelDanmaku }
+    var supportsSubtitleStyle: Bool { Self.supportsSubtitleStyle }
 
     /// 不支持让位语义的内核：open 期间不存在让位，恒 false。
     var openWasInterrupted: Bool { false }
@@ -172,6 +185,14 @@ public extension PlaybackEngine {
 
     /// 没有后台档的内核（默认）。
     static var supportsBackgroundAudio: Bool { false }
+
+
+    /// 不做字幕外观覆盖的内核：空操作（设置页会按 `supportsSubtitleStyle` 给出提示，
+    /// 但那本来就是**可选能力**，不该逼所有内核实现）。
+    func setSubtitleStyle(_ style: SubtitleStyle, overrides: SubtitleStyleOverrides) {}
+
+    /// 不支持字幕外观设置的内核（默认）。
+    static var supportsSubtitleStyle: Bool { false }
 
     /// 首帧是否已经出画。播放 loading 覆盖层撤掉的判据——
     /// 内核报了 ready 不代表屏幕上有东西，必须等真正渲染过一帧，

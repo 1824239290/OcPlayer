@@ -25,4 +25,14 @@ final class ErikaEngineCapabilityTests: XCTestCase {
     func testErikaAdvertisesKernelDanmaku() {
         XCTAssertTrue(ErikaEngine.supportsKernelDanmaku)
     }
+
+    /// 字幕外观（`erika_presenter_set_subtitle_style`）是设置页那一组的依据：
+    /// 被误改成 false，设置页就会对 Erika 报「当前内核不支持」——而选项其实是生效的，
+    /// 用户只会以为设置坏了。
+    func testErikaAdvertisesSubtitleStyle() {
+        XCTAssertTrue(
+            ErikaEngine.supportsSubtitleStyle,
+            "Erika 从 v0.1.9 起就有 set_subtitle_style，关掉这个标志会让设置页谎报不支持"
+        )
+    }
 }

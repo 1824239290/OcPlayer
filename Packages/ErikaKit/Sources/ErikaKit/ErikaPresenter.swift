@@ -191,6 +191,12 @@ public final class ErikaPresenter {
     }
 
     /// 离屏截当前合成帧（视频 + 字幕 + 弹幕），RGBA8。没有可用帧时内核会报错。
+    /// 字幕外观。`override_mask == 0` 时这些值只用来填脚本没指定的部分
+    /// （ASS 自带排版与特效字体保留）；置了位才是替换。
+    public func setSubtitleStyle(_ style: ErikaSubtitleStyle) throws {
+        try ErikaError.check(erika_presenter_set_subtitle_style(handle, style))
+    }
+
     /// 后续「截图」功能直接用它；测试里也用它证明画面真的解出来了。
     public func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] {
         var pixels = [UInt8](repeating: 0, count: width * height * 4)

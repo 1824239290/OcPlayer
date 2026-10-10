@@ -42,6 +42,10 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     public static let supportsKernelDanmaku = true
 
+    /// 内核支持字幕外观（`erika_presenter_set_subtitle_style`，v0.1.9 起）。
+    /// 设置页按它决定要不要提示「当前内核不支持」。
+    public static let supportsSubtitleStyle = true
+
     /// 内核内建后台播放通路：`audio_only_tick` 会挂起视频解码、只推进音频，
     /// 回前台第一次 `render_tick` 再 flush 解码器 + 回关键帧续上画面。
     public static let supportsBackgroundAudio = true
@@ -721,6 +725,47 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     public func setSubtitleScale(_ scale: Double) throws {
         if dropControlDuringOpen("setSubtitleScale") { return }
         try withLock { try ErikaError.check(erika_presenter_set_subtitle_scale(presenter.handle, scale)) }
+    }
+
+    /// 设置字幕外观（颜色 / 描边 / 位置 / 边距 / 加粗）。
+    ///
+    /// `overrides` 为空时是「只填空缺」：片源自带的 ASS 排版与特效字体全部保留；
+    /// 非空时把对应项变成替换（用户显式要求「覆盖字幕自带样式」）。
+    /// open 在飞时丢弃——open 成功路径会按宿主快照重放，无需登记。
+    ///
+    /// **免抛**：外观是提示性设置，内核拒绝（例如没有可用字幕）不该打断播放。
+    public func setSubtitleStyle(_ style: SubtitleStyle, overrides: SubtitleStyleOverrides) {
+        if dropControlDuringOpen("setSubtitleStyle") { return }
+        do {
+            // 字体名 / 文件不在这里传（需要 C 字符串存活到调用结束），由随后的
+            // setSubtitleFont 单独下发；本仓库暂不开放字体选择，所以是 nil。
+            let raw = ErikaSubtitleStyle(style, overrides: overrides)
+            try withLock { try presenter.setSubtitleStyle(raw) }
+        } catch {
+            PlaybackLog.warning("设置字幕外观失败 error=\(error)")
+        }
+    }
+
+    // MARK: - 画质增强（亮度上采样）
+
+    /// 运行时切换亮度上采样档位。open 在飞时丢弃（那时还没有画面可增强）；
+    /// 宿主的 open 收尾会按当前偏好重放一次，所以丢弃不会留下不一致。
+    ///
+    /// **免抛**：目标后端不支持时内核保留原生亮度采样并在状态里报 `inactive`，
+    /// 这不是错误，不该打断播放。
+    public func setLumaUpscaler(_ mode: PlaybackUpscalerMode) {
+        if dropControlDuringOpen("setLumaUpscaler") { return }
+        do {
+            try withLock { try presenter.setUpscaler(mode) }
+        } catch {
+            PlaybackLog.warning("切换亮度上采样失败 mode=\(mode.rawValue) error=\(error)")
+        }
+    }
+
+    /// 上采样后端状态。遵守 open 让位契约（open 在飞返回中性值）。
+    public var lumaUpscalerState: PlaybackUpscalerState {
+        if dropControlDuringOpen("lumaUpscalerState") { return .unknown }
+        return (try? withLock { try presenter.upscalerStatus() }) ?? .unknown
     }
 
     // MARK: - 截图

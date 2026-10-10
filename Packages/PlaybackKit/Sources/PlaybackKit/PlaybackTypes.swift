@@ -179,6 +179,91 @@ public struct PlaybackUpscalerState: Sendable, Hashable {
         requested != .off && backend == .inactive
     }
 }
+
+/// 字幕外观覆盖（选填能力：内核不做样式覆盖时下面是空操作）。
+///
+/// **每个字段都是可选的，nil = 不碰这一项。** 这对应内核 `ErikaSubtitleStyle` 的
+/// 「回落」语义：不覆盖的字段只用于填充脚本自己没指定的部分（片源自带的 ASS
+/// 样式、特效字体全部保留）；只有用户显式要求「覆盖字幕自带样式」时，才会把
+/// 改过的那些项变成**替换**（内核的 `override_mask`）。
+///
+/// 只暴露与日常抱怨对应的字段（字幕贴边 → 位置与边距；亮场看不清 → 颜色与描边）；
+/// 字距 / XY 缩放 / 模糊 / 边框样式刻意先不透出——它们要么极少用，要么一改就毁掉
+/// 字幕组精心调过的排版。
+public struct SubtitleStyle: Sendable, Equatable {
+    /// 屏幕位置：九宫格 1…9（小键盘布局，2 = 底部居中）。
+    public var alignment: Int?
+    /// 垂直边距（对着底/顶边那一侧）。
+    public var marginVertical: Int?
+    /// 左右边距。
+    public var marginLeft: Int?
+    public var marginRight: Int?
+    /// 正文颜色，`0xRRGGBBAA`。
+    public var primaryColorRGBA: UInt32?
+    /// 描边颜色，`0xRRGGBBAA`。
+    public var outlineColorRGBA: UInt32?
+    /// 描边粗细（ASS 脚本单位，内核钳到 0…32）。
+    public var outlineWidth: Double?
+    public var bold: Bool?
+
+    public init(
+        alignment: Int? = nil,
+        marginVertical: Int? = nil,
+        marginLeft: Int? = nil,
+        marginRight: Int? = nil,
+        primaryColorRGBA: UInt32? = nil,
+        outlineColorRGBA: UInt32? = nil,
+        outlineWidth: Double? = nil,
+        bold: Bool? = nil
+    ) {
+        self.alignment = alignment
+        self.marginVertical = marginVertical
+        self.marginLeft = marginLeft
+        self.marginRight = marginRight
+        self.primaryColorRGBA = primaryColorRGBA
+        self.outlineColorRGBA = outlineColorRGBA
+        self.outlineWidth = outlineWidth
+        self.bold = bold
+    }
+
+    /// 一个字段都没设：调用方据此跳过下发（不发等于保持内核现状）。
+    public var isEmpty: Bool { self == SubtitleStyle() }
+}
+
+/// 哪些字段要**替换**字幕自带样式（而不是只填空缺）。
+///
+/// 默认是空的 OptionSet：一切照旧，片源 ASS 的排版与特效原样保留。
+/// 只有用户在设置页显式打开「覆盖字幕自带样式」，才把改过的项对应位置位。
+public struct SubtitleStyleOverrides: OptionSet, Sendable, Hashable {
+    public let rawValue: UInt32
+    public init(rawValue: UInt32) { self.rawValue = rawValue }
+
+    public static let colors = SubtitleStyleOverrides(rawValue: 1 << 0)
+    public static let attributes = SubtitleStyleOverrides(rawValue: 1 << 1)
+    public static let border = SubtitleStyleOverrides(rawValue: 1 << 2)
+    public static let alignment = SubtitleStyleOverrides(rawValue: 1 << 3)
+    public static let margins = SubtitleStyleOverrides(rawValue: 1 << 4)
+
+    /// 用户改过的**全部**项都替换（就是「覆盖自带样式」开关的语义）。
+    public static let all: SubtitleStyleOverrides = [
+        .colors, .attributes, .border, .alignment, .margins,
+    ]
+
+    /// 这些覆盖项涉及的字幕字段在本仓库里有对应的可调项。
+    /// 留作自检：`SubtitleStyle` 新增字段时忘了加进这里，用例会报出来。
+    public static func covering(_ style: SubtitleStyle) -> SubtitleStyleOverrides {
+        var mask: SubtitleStyleOverrides = []
+        if style.primaryColorRGBA != nil || style.outlineColorRGBA != nil { mask.insert(.colors) }
+        if style.bold != nil { mask.insert(.attributes) }
+        if style.outlineWidth != nil { mask.insert(.border) }
+        if style.alignment != nil { mask.insert(.alignment) }
+        if style.marginVertical != nil || style.marginLeft != nil || style.marginRight != nil {
+            mask.insert(.margins)
+        }
+        return mask
+    }
+}
+
 /// 内核视角的一条轨道（视频 / 音频 / 字幕）。
 /// 外挂字幕通过 `addExternalSubtitle` 加入后也会出现在列表里（`source == .external`）。
 public struct TrackInfo: Identifiable, Hashable, Sendable {

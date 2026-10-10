@@ -66,6 +66,111 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.lumaUpscaler) }
     }
 
+    // MARK: - 字幕外观
+
+    /// 字幕位置：九宫格 1…9（小键盘布局，2 = 底部居中）。0 = 不干预。
+    ///
+    /// **每一项都有「不设置」这个状态**，因为字幕默认交给片源自带的 ASS 排版：
+    /// 用户没动过的项绝不能被一个「看起来合理」的默认值顶替掉。
+    static var subtitleAlignment: Int {
+        get { storedInt(forKey: SettingsKeys.subtitleAlignment, range: 0...9, default: 0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleAlignment) }
+    }
+
+    /// 垂直边距（0 = 不干预）。
+    static var subtitleMarginVertical: Int {
+        get { storedInt(forKey: SettingsKeys.subtitleMarginVertical, range: 0...200, default: 0) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleMarginVertical) }
+    }
+
+    /// 主色 / 描边色，`0xRRGGBBAA`。nil = 不干预。
+    static var subtitlePrimaryColorRGBA: UInt32? {
+        get { storedColor(forKey: SettingsKeys.subtitlePrimaryColor) }
+        set { storeColor(newValue, forKey: SettingsKeys.subtitlePrimaryColor) }
+    }
+    static var subtitleOutlineColorRGBA: UInt32? {
+        get { storedColor(forKey: SettingsKeys.subtitleOutlineColor) }
+        set { storeColor(newValue, forKey: SettingsKeys.subtitleOutlineColor) }
+    }
+
+    /// 描边粗细（0 = 不干预；内核钳到 0…32）。
+    ///
+    /// 这里**不用 `storedDouble` 的钳制语义**：那套是给「对任何值都能取个最近的合理数」
+    /// 的量准备的（不透明度、缩放）。描边宽度是「0 = 用户根本没设」的三态字段，
+    /// 把人手改坏的 999 钳成 32 会变成一个用户没要过的**有效设置**，等于替他改了字幕。
+    /// 所以非法值一律当作「不设置」。
+    static var subtitleOutlineWidth: Double {
+        get {
+            guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleOutlineWidth) != nil else {
+                return 0
+            }
+            let value = UserDefaults.standard.double(forKey: SettingsKeys.subtitleOutlineWidth)
+            guard value.isFinite, value >= 0, value <= 32 else { return 0 }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleOutlineWidth) }
+    }
+
+    /// 加粗：三态（nil = 不干预 / false = 明确不加粗 / true = 加粗）。
+    /// 存的是「有没有设过」而不是裸布尔——「没设过」与「明确关掉」在样式下发里
+    /// 必须区分得开，否则用户一进设置页就会把片源的字重覆盖成常规。
+    static var subtitleBold: Bool? {
+        get {
+            guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleBold) != nil else {
+                return nil
+            }
+            return UserDefaults.standard.bool(forKey: SettingsKeys.subtitleBold)
+        }
+        set {
+            guard let newValue else {
+                UserDefaults.standard.removeObject(forKey: SettingsKeys.subtitleBold)
+                return
+            }
+            UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleBold)
+        }
+    }
+
+    /// 是否用上面的值**替换**字幕自带样式。默认关（只填空缺，ASS 特效字体保留）。
+    static var subtitleStyleOverrides: Bool {
+        get { storedBool(forKey: SettingsKeys.subtitleStyleOverrides, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.subtitleStyleOverrides) }
+    }
+
+    /// 当前偏好 → 中立样式：**只把用户真正设过的项带出去**（其余留 nil）。
+    ///
+    /// 这一步是「不干预」语义的落点：没设过的项若带个 0/默认值出去，内核在只填空缺
+    /// 的模式下会拿它去填脚本空缺，等于替用户改了字幕。
+    static func subtitleStyle() -> SubtitleStyle {
+        SubtitleStyle(
+            alignment: subtitleAlignment > 0 ? subtitleAlignment : nil,
+            marginVertical: subtitleMarginVertical > 0 ? subtitleMarginVertical : nil,
+            primaryColorRGBA: subtitlePrimaryColorRGBA,
+            outlineColorRGBA: subtitleOutlineColorRGBA,
+            outlineWidth: subtitleOutlineWidth > 0 ? subtitleOutlineWidth : nil,
+            bold: subtitleBold
+        )
+    }
+
+    /// 下发时的覆盖位：没打开「覆盖自带样式」就是空（一切照旧）。
+    static func subtitleStyleOverridesMask() -> SubtitleStyleOverrides {
+        subtitleStyleOverrides ? .all : []
+    }
+
+    private static func storedColor(forKey key: String) -> UInt32? {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return nil }
+        let value = UserDefaults.standard.integer(forKey: key)
+        guard value > 0, value <= Int(UInt32.max) else { return nil }
+        return UInt32(value)
+    }
+
+    private static func storeColor(_ value: UInt32?, forKey key: String) {
+        guard let value else {
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        UserDefaults.standard.set(Int(value), forKey: key)
+    }
+
     static var danmakuEnabled: Bool {
         get { storedBool(forKey: danmakuEnabledKey, default: true) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuEnabledKey) }

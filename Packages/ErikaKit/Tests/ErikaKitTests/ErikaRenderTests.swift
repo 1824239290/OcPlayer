@@ -221,4 +221,40 @@ struct ErikaRenderTests {
         try presenter.detachSurface()
         try presenter.close()
     }
+
+    /// 字幕外观下发：真实内核接受这个调用，且覆盖与非覆盖两条路都不报错。
+    ///
+    /// 这条守的是**符号与结构体布局**（`erika_presenter_set_subtitle_style` 按值传
+    /// 21 字段的结构体，此前从未被调用过），以及「没有字幕轨时也不该炸」——
+    /// 用户完全可能先改字幕外观再打开片源。
+    @Test("字幕外观下发：无字幕轨时也不报错")
+    func appliesSubtitleStyleSafely() async throws {
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 1)
+        defer { try? FileManager.default.removeItem(at: movie) }
+
+        let engine = try ErikaEngine()
+        try engine.open(PlaybackSource(fileURL: movie))
+
+        // 只填空缺（不覆盖）：片源自带排版保留。
+        engine.setSubtitleStyle(
+            SubtitleStyle(alignment: 2, marginVertical: 40, outlineWidth: 3, bold: true),
+            overrides: []
+        )
+        // 覆盖模式：把改过的项变成替换。
+        engine.setSubtitleStyle(
+            SubtitleStyle(alignment: 8, primaryColorRGBA: 0xFFFF_00FF),
+            overrides: [.alignment, .colors]
+        )
+        // 空样式（用户什么都没设）：调用方会跳过下发，这里直接验内核也不介意。
+        engine.setSubtitleStyle(SubtitleStyle(), overrides: [])
+
+        // 走到这里没抛错就说明内核接受了（setSubtitleStyle 内部失败只记日志，
+        // 所以用一次正常 tick 确认引擎还活着）。
+        try engine.play()
+        var stats = ErikaPresenterStats()
+        for _ in 0..<10 {
+            stats = try engine.audioOnlyTick()
+        }
+        #expect(stats.render_failures == 0)
+    }
 }

@@ -100,6 +100,8 @@ struct PlaybackSettingsView: View {
             }
             .settingsRowBackground()
 
+            SubtitleAppearanceSection()
+
             PlaybackKernelSection()
         }
         .scrollContentBackground(.hidden)

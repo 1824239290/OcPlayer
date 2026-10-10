@@ -23,6 +23,16 @@ enum SettingsKeys {
     /// 画质增强（亮度上采样）档位：存 `PlaybackUpscalerMode.rawValue`，缺省 / 坏值 = 关闭。
     /// 设置页 ↔ `PlaybackPreferences` ↔ 装配点（引擎创建参数）。
     static let lumaUpscaler = "dev.jumusu.ocplayer.playback.lumaUpscaler"
+    /// 字幕外观（位置 / 边距 / 颜色 / 描边 / 加粗）。缺省 = 不干预（用片源自带样式）。
+    /// 见 `PlaybackPreferences.subtitleStyle`。
+    static let subtitleAlignment = "dev.jumusu.ocplayer.playback.subtitleAlignment"
+    static let subtitleMarginVertical = "dev.jumusu.ocplayer.playback.subtitleMarginVertical"
+    static let subtitlePrimaryColor = "dev.jumusu.ocplayer.playback.subtitlePrimaryColor"
+    static let subtitleOutlineColor = "dev.jumusu.ocplayer.playback.subtitleOutlineColor"
+    static let subtitleOutlineWidth = "dev.jumusu.ocplayer.playback.subtitleOutlineWidth"
+    static let subtitleBold = "dev.jumusu.ocplayer.playback.subtitleBold"
+    /// 是否用上面这些值**替换**字幕自带样式（默认关：只填空缺，ASS 特效字体保留）。
+    static let subtitleStyleOverrides = "dev.jumusu.ocplayer.playback.subtitleStyleOverrides"
     /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
     static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
     /// 首页栏目顺序与显隐：逗号分隔 token（`rawValue` = 显示，`-rawValue` = 已关闭），
