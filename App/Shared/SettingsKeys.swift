@@ -20,6 +20,9 @@ enum SettingsKeys {
     /// 默认字幕语言偏好（中文优先·简体为默认）。设置页 ↔ `PlaybackPreferences`
     /// ↔ 轨道就绪后的自动选轨（`SubtitleTrackSelector`）。
     static let subtitleLanguagePreference = "dev.jumusu.ocplayer.playback.subtitleLanguage"
+    /// 画质增强（亮度上采样）档位：存 `PlaybackUpscalerMode.rawValue`，缺省 / 坏值 = 关闭。
+    /// 设置页 ↔ `PlaybackPreferences` ↔ 装配点（引擎创建参数）。
+    static let lumaUpscaler = "dev.jumusu.ocplayer.playback.lumaUpscaler"
     /// 详情页选集排序：true = 正序（第 1 集在前），false = 倒序（最新在前）。
     static let episodeSortAscending = "dev.jumusu.ocplayer.detail.episodeSortAscending"
     /// 首页栏目顺序与显隐：逗号分隔 token（`rawValue` = 显示，`-rawValue` = 已关闭），

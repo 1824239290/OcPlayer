@@ -50,6 +50,22 @@ enum PlaybackPreferences {
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.subtitleLanguagePreference) }
     }
+
+    /// 画质增强（亮度上采样）档位。
+    ///
+    /// 取值直接存 `PlaybackUpscalerMode.rawValue`；读不出来（旧版本从没写过 / 被人手
+    /// 改坏 / 未来版本删过档位）一律回落**关闭**——这个能力有 GPU 与显存开销，
+    /// 坏数据不该把一个用户没要过的负担打开。
+    static var lumaUpscaler: PlaybackUpscalerMode {
+        get {
+            guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.lumaUpscaler),
+                  let value = PlaybackUpscalerMode(rawValue: raw)
+            else { return .off }
+            return value
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: SettingsKeys.lumaUpscaler) }
+    }
+
     static var danmakuEnabled: Bool {
         get { storedBool(forKey: danmakuEnabledKey, default: true) }
         set { UserDefaults.standard.set(newValue, forKey: danmakuEnabledKey) }
@@ -194,6 +210,17 @@ enum PlaybackPreferences {
     ) -> Double {
         guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
         return UserDefaults.standard.double(forKey: key).clamped(range)
+    }
+
+    /// 整数档位的读取校验：非法存量值（人手改坏 / 旧版本写过别的语义）回 fallback。
+    private static func storedInt(
+        forKey key: String,
+        range: ClosedRange<Int>,
+        default fallback: Int
+    ) -> Int {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
+        let value = UserDefaults.standard.integer(forKey: key)
+        return range.contains(value) ? value : fallback
     }
 
     /// 默认值感知的读取统一走 `UserDefaults.bool(forKey:default:)`（见 SettingsKeys）：

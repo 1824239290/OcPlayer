@@ -115,6 +115,70 @@ public enum PlaybackOutputEncoding: String, Sendable, Hashable {
     }
 }
 
+
+/// 亮度上采样（画质增强）档位。
+///
+/// 内核用神经网络对**亮度**做 2 倍重建（色度保持原生采样）：低清动画 / 老片在
+/// 大屏上的观感提升明显。代价是 GPU 与显存占用，所以默认关闭、由用户显式打开。
+public enum PlaybackUpscalerMode: String, Sendable, Hashable, CaseIterable {
+    case off
+    case artCnnC4F16
+    case artCnnC4F32
+    case artCnnC4F16Ds
+
+    /// 设置页与菜单里的名字。`artCnnC4F16Ds` 的 DS 是 denoise+sharpen：
+    /// 面向压缩痕迹重的动画素材。
+    public var displayName: String {
+        switch self {
+        case .off: "关闭"
+        case .artCnnC4F16: "ArtCNN F16"
+        case .artCnnC4F32: "ArtCNN F32"
+        case .artCnnC4F16Ds: "ArtCNN F16 去噪"
+        }
+    }
+}
+
+/// 上采样后端当前的实际状态：请求了什么、真正跑在什么上、回退过几次。
+///
+/// 存在的意义是**别把「设了」当成「生效了」**：内核在不支持的后端上会保留原生
+/// 亮度采样并明确报 `inactive`（而不是悄悄什么都不做，也不是报错）。
+public struct PlaybackUpscalerState: Sendable, Hashable {
+    public enum Backend: String, Sendable, Hashable {
+        case off
+        /// 该后端不支持，已回落原生采样（设置页据此给出提示）。
+        case inactive
+        case building
+        case scalar
+        case simdgroupMatrix
+        case unknown
+    }
+
+    public let requested: PlaybackUpscalerMode
+    public let backend: Backend
+    public let fallbackCount: UInt64
+    public let upscaledFrames: UInt64
+
+    public init(
+        requested: PlaybackUpscalerMode = .off,
+        backend: Backend = .off,
+        fallbackCount: UInt64 = 0,
+        upscaledFrames: UInt64 = 0
+    ) {
+        self.requested = requested
+        self.backend = backend
+        self.fallbackCount = fallbackCount
+        self.upscaledFrames = upscaledFrames
+    }
+
+    /// 内核没报或此刻不适用时的中性值（请求关闭、后端 off）。
+    public static let unknown = PlaybackUpscalerState()
+
+    /// 请求了增强但后端跑不了：UI 要按这个提示「已回落原生采样」，
+    /// 否则用户看到开关开着却毫无变化，只会以为是骗人的。
+    public var isFallingBackNatively: Bool {
+        requested != .off && backend == .inactive
+    }
+}
 /// 内核视角的一条轨道（视频 / 音频 / 字幕）。
 /// 外挂字幕通过 `addExternalSubtitle` 加入后也会出现在列表里（`source == .external`）。
 public struct TrackInfo: Identifiable, Hashable, Sendable {

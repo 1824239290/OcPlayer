@@ -166,4 +166,59 @@ struct ErikaRenderTests {
         try presenter.detachSurface()
         try presenter.close()
     }
+
+    /// 运行时切换亮度上采样：真实内核接受调用，且**要么真在跑、要么明确报回落**。
+    ///
+    /// 两条都重要：①运行期入口此前从未被调用过，这条证明它通；②`inactive` 有**两个**
+    /// 来源——后端不支持，以及画面管线还没跑起来（未 attach / 首帧之前）。所以这条
+    /// 用例必须挂上 surface 并真的 tick 过，再断言「有计算后端就必须有帧被上采样」，
+    /// 否则「设了没效果」和「后端不支持」在 App 侧根本分不开。
+    /// 不把具体后端写死（不同机器可以是 simdgroupMatrix / scalar / inactive）。
+    @Test("运行期切换亮度上采样：挂上画布后要么真在跑、要么明确回落")
+    func switchesLumaUpscalerAtRuntime() async throws {
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 2)
+        defer { try? FileManager.default.removeItem(at: movie) }
+
+        let presenter = try ErikaPresenter()
+        let layer = try Self.makeLayer(width: 640, height: 360)
+        try Self.attach(presenter, layer, width: 640, height: 360)
+        try presenter.open(PlaybackSource(fileURL: movie))
+        try presenter.play()
+
+        // 先跑热：没有画面时内核报 inactive 只代表「还没开始」。
+        var stats = try Self.pump(presenter, frames: 60)
+        #expect(stats.rendered_video_frames > 0, "前提：应真的出过画")
+
+        for mode in PlaybackUpscalerMode.allCases {
+            try presenter.setUpscaler(mode)
+            stats = try Self.pump(presenter, frames: 40)
+            let state = try presenter.upscalerStatus()
+            #expect(state.requested == mode, "请求的档位要能被内核读回：\(mode.rawValue)")
+
+            switch state.backend {
+            case .off:
+                // 关闭档：后端必须是 off，且不该有上采样帧。
+                #expect(mode == .off, "只有关闭档才允许后端为 off")
+            case .inactive:
+                // 明确回落：允许（该后端不支持 ArtCNN），但设置页会据此提示。
+                #expect(mode != .off, "开着增强却报 inactive 是回退，不是常态")
+            case .building, .scalar, .simdgroupMatrix:
+                #expect(
+                    state.upscaledFrames > 0,
+                    "报了计算后端却一帧都没上采样：\(mode.rawValue) backend=\(state.backend.rawValue)"
+                )
+            case .unknown:
+                Issue.record("后端状态不该是 unknown：\(mode.rawValue)")
+            }
+        }
+
+        // 关回去也要能读回（用户关掉增强不该留下残影）。
+        try presenter.setUpscaler(.off)
+        _ = try Self.pump(presenter, frames: 20)
+        #expect(try presenter.upscalerStatus().requested == .off)
+
+        try presenter.stop()
+        try presenter.detachSurface()
+        try presenter.close()
+    }
 }

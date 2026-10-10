@@ -815,6 +815,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let rateNow = rate
         let scaleNow = subtitleScale
         let danmakuPrefs = danmakuPrefsSnapshot()
+        // 画质增强是**创建期参数**（`luma_upscaler` 进 ErikaPresenterConfig），
+        // 装配点已按偏好建好引擎；这里再重放一次是为了盖住「引擎建好之后、open
+        // 收尾之前用户改了设置」的窗口，让最终状态只取决于这一刻的偏好。
+        // 必须在主线程先取快照：`PlaybackPreferences` 是 @MainActor 的。
+        let upscalerNow = PlaybackPreferences.lumaUpscaler
+        let subtitleStyleNow = PlaybackPreferences.subtitleStyle()
+        let subtitleOverridesNow = PlaybackPreferences.subtitleStyleOverridesMask()
         let engineID = ObjectIdentifier(engine)
         Self.engineOpenQueue.async { [weak self] in
             var openError: Error?
@@ -832,6 +839,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 try? engine.setRate(rateNow)
                 if scaleNow != 1.0 {
                     try? engine.setSubtitleScale(scaleNow)
+                }
+                // 免抛：后端不支持时内核保留原生亮度采样并在状态里报 inactive。
+                engine.setLumaUpscaler(upscalerNow)
+                // 字幕外观同理是「宿主快照」类设置：open 期间下发的会被让位丢弃，
+                // 收尾按快照重放一次，保证下一次播放用的就是设置页里的样子。
+                if !subtitleStyleNow.isEmpty {
+                    engine.setSubtitleStyle(subtitleStyleNow, overrides: subtitleOverridesNow)
                 }
                 do {
                     try Self.applyDanmakuPrefs(danmakuPrefs, to: engine)

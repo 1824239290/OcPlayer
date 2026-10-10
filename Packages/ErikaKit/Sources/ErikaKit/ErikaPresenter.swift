@@ -37,11 +37,11 @@ public final class ErikaPresenter {
     /// 创建 presenter。失败时抛错，原因取自内核的线程局部错误槽。
     public init(outputMode: ErikaPresenterOutputMode = ErikaPresenterOutputMode_Auto,
                 edrHeadroom: Float = 0,
-                upscaler: ErikaLumaUpscalerMode = ErikaLumaUpscalerMode_Off) throws {
+                upscaler: PlaybackUpscalerMode = .off) throws {
         let config = ErikaPresenterConfig(
             output_mode: Int32(outputMode.rawValue),
             edr_headroom: edrHeadroom,
-            luma_upscaler: Int32(upscaler.rawValue),
+            luma_upscaler: Int32(upscaler.erikaValue.rawValue),
             // v0.1.7+dolby.2 新增（透明视频合成）；普通播放固定不透明。
             video_alpha_mode: Int32(ErikaVideoAlphaMode_Opaque.rawValue)
         )
@@ -167,6 +167,19 @@ public final class ErikaPresenter {
         var status = ErikaOutputStatus()
         try ErikaError.check(erika_presenter_get_output_status(handle, &status))
         return status
+    }
+
+    /// 运行时切换亮度上采样档位（创建 config 之外的第二个入口）。
+    /// 目标后端不支持时不报错：内核保留原生亮度采样，状态里报 `inactive`。
+    public func setUpscaler(_ mode: PlaybackUpscalerMode) throws {
+        try ErikaError.check(erika_presenter_set_upscaler(handle, Int32(mode.erikaValue.rawValue)))
+    }
+
+    /// 上采样后端状态：请求了什么、实际跑在什么上、回退过几次、已上采样多少帧。
+    public func upscalerStatus() throws -> PlaybackUpscalerState {
+        var status = ErikaUpscalerStatus()
+        try ErikaError.check(erika_presenter_get_upscaler_status(handle, &status))
+        return PlaybackUpscalerState(status)
     }
 
     /// 推送显示器 EDR headroom（SDR 参考白的倍数）。`known: false` 表示宿主

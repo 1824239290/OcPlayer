@@ -20,8 +20,13 @@ enum PlaybackEngineAssembly {
         // 工厂闭包每次播放的引擎懒创建时才跑：此刻查询窗口所在屏的 EDR headroom
         // 进创建 config。内核 macOS 端不探测屏幕，创建值是目前唯一生效的 HDR
         // 档位通道（播放中换屏经 updateDisplayEDRHeadroom 推送，内核补齐后生效）。
+        // 画质增强同理是**创建期参数**（`luma_upscaler`），所以在这里读偏好：
+        // 设置页改完的下一次播放生效（不打断当前播放去重建内核）。
         PlaybackEngineRegistry.register(ErikaEngine.descriptor) {
-            try ErikaEngine(edrHeadroom: PlaybackDisplayMetrics.headroomForEngineCreation())
+            try ErikaEngine(
+                edrHeadroom: PlaybackDisplayMetrics.headroomForEngineCreation(),
+                upscaler: PlaybackPreferences.lumaUpscaler
+            )
         }
         // 自愈：存的选择指向本构建不存在的内核（例如已弃用的 MPV 实验分支残留）
         // 就地清掉，让回退「生效一次后不再存在」，而不是常驻一条回退告警。

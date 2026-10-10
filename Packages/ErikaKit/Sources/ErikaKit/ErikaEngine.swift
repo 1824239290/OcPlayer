@@ -219,7 +219,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     public init(outputMode: ErikaPresenterOutputMode = ErikaPresenterOutputMode_Auto,
                 edrHeadroom: Float = 0,
-                upscaler: ErikaLumaUpscalerMode = ErikaLumaUpscalerMode_Off) throws {
+                upscaler: PlaybackUpscalerMode = .off) throws {
         presenter = try ErikaPresenter(outputMode: outputMode, edrHeadroom: edrHeadroom, upscaler: upscaler)
         var sink: AsyncStream<PlayerEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .bufferingNewest(256)) { sink = $0 }
