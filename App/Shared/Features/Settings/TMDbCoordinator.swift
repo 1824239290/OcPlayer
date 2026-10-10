@@ -52,12 +52,19 @@ final class TMDbCoordinator {
     @ObservationIgnored private let preferences: TMDbPreferences
     @ObservationIgnored private var enricher: TMDbEnricher?
     @ObservationIgnored private var credentials: TMDbCredentialStore
+    /// 测试注入的会话配置（nil = 生产用的独立会话，见 `makeClient`）。
+    @ObservationIgnored private let sessionConfiguration: URLSessionConfiguration?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, sessionConfiguration: URLSessionConfiguration? = nil) {
         // 包一层自己的 store 实例，让设置页的读写与 `TMDbPreferences` 走同一个 defaults
         // （测试可注入独立 suite，避免污染 `.standard`）。
         self.credentials = TMDbCredentialStore(defaults: defaults)
         self.preferences = TMDbPreferences(defaults: defaults)
+        // 注入点存在的理由：**测试要能替换 TMDb 的网络**。此前客户端硬编码
+        // `URLSession(configuration: .default)`，于是 App 层「TMDb 请求失败时怎么办」
+        // 这类分支**根本造不出来** —— 我曾把「断网即永久放弃重试」的缺陷写进 App 层
+        // 却测不到（把判断改回错的，用例照样全绿）。传 nil = 生产行为逐字不变。
+        self.sessionConfiguration = sessionConfiguration
         self.language = preferences.language
         self.preferText = preferences.preferTMDbText
         self.replaceImages = preferences.replaceExistingImages
@@ -80,7 +87,9 @@ final class TMDbCoordinator {
 
     private func makeClient() -> TMDbClient {
         // 独立的 URLSession：TMDb 与媒体服务器的重试/超时语义不同，也不该共用连接池。
-        let configuration = URLSessionConfiguration.default
+        // 注入了配置（测试）时**在它的副本上**补超时，别改调用方的那个对象。
+        let configuration = sessionConfiguration?.copy() as? URLSessionConfiguration
+            ?? URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 20
         configuration.timeoutIntervalForResource = 60
         configuration.waitsForConnectivity = false

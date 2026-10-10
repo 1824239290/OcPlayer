@@ -32,6 +32,7 @@ final class CollectionDetailTests: XCTestCase {
 
     private func makeApp(
         configureKey: Bool = false,
+        tmdbSession: URLSessionConfiguration? = nil,
         seed: (MetadataStore, TenantID) async throws -> Void = { _, _ in }
     ) async throws -> (AppModel, StubMediaServer, MetadataStore) {
         // key 必须在造 `AppModel` **之前**写进隔离域：协调器在 init 时读一次
@@ -40,7 +41,12 @@ final class CollectionDetailTests: XCTestCase {
             defaults.set("0123456789abcdef0123456789abcdef",
                          forKey: TMDbCredentialStore.defaultsKey)
         }
-        let app = AppModel(preferences: try XCTUnwrap(defaults))
+        // 注入 `tmdbSession` 才换得掉 TMDb 的网络：不注入时协调器用生产会话，
+        // App 层「TMDb 请求失败」的分支就造不出来（见 `TMDbCoordinator.init` 的注释）。
+        let app = AppModel(
+            tmdb: TMDbCoordinator(defaults: try XCTUnwrap(defaults),
+                                  sessionConfiguration: tmdbSession),
+            preferences: try XCTUnwrap(defaults))
         app.metadata.setup(directory: directory)
         let ready = await app.metadata.waitUntilReady()
         XCTAssertTrue(ready, "临时目录建库应成功")
@@ -474,6 +480,102 @@ final class CollectionDetailTests: XCTestCase {
 
         XCTAssertEqual(app.libraryCoverURLs(for: boxsetsLibrary()).count, 1)
         XCTAssertTrue(app.libraryCoverAttempted.contains("lib-boxsets"))
+    }
+
+
+    // MARK: - App 层：「失败」与「确定没有」的分野（补上前一批记录的覆盖缺口）
+
+    /// **TMDb 请求失败时不许记账** —— 这条正是上一批修掉的那个缺陷的回归用例。
+    ///
+    /// 现场：`collectionArtworkAttempted` 是**会话级**缓存，一旦在断网时被写入，
+    /// 这个合集在本会话内再也不会重试 → **卡片永久空白，只能重启 App**。
+    /// 此前测不到是因为 `TMDbCoordinator` 的客户端硬编码、换不掉 TMDb 的网络；
+    /// 现在能注入 `URLSessionConfiguration`，这条分支才第一次真正被测到。
+    func testCollectionArtworkIsNotRecordedWhenTMDbRequestFails() async throws {
+        // TMDb 侧全部失败（模拟断网）：成员列表（媒体服务器）正常，TMDb 请求打不通。
+        MockURLProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
+        defer { MockURLProtocol.handler = nil }
+
+        let member = MediaItem(id: "m-1", name: "Q", kind: .movie, tmdbID: "75629")
+        let (app, stub, _) = try await makeApp(
+            configureKey: true, tmdbSession: TestSupport.mockedSessionConfiguration())
+        { store, _ in
+            // 预置「模型自己」的 TMDb 对应，让定位不依赖网络也能走到「拉合集详情」那一步。
+            // 注意：这里**不**预置合集载荷，于是 `fetchAndStore` 会真去拉 → 失败。
+            _ = store
+        }
+        stub.itemsPageResult = .success(MediaItemsPage(
+            items: [member], startIndex: 0, totalRecordCount: 1))
+        let box = boxSet()
+
+        await app.resolveCollectionArtworkIfNeeded(for: box)
+
+        XCTAssertNil(app.collectionPosterURL(for: box, width: 400))
+        XCTAssertFalse(app.collectionArtworkAttempted.contains(box.id),
+                       "TMDb 失败绝不能记账：记了就是「断网一次 → 本会话永久空白」")
+    }
+
+    /// 与上一条成对：TMDb **确实没有**这个合集（响应正常、只是没有对应）→ 记账。
+    /// 两条一起把「可重试的失败」与「确定的没有」钉死在 App 层。
+    func testCollectionArtworkIsRecordedWhenTMDbSaysNoMatch() async throws {
+        // TMDb 正常响应，但不含 belongs_to_collection（`/movie/{id}` 与 `/collection/{id}`
+        // 都走这个分支）。
+        MockURLProtocol.handler = { request in
+            let body = #"{"id":75629,"title":"福音战士新剧场版：Q","overview":"简介"}"#
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(body.utf8))
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let member = MediaItem(id: "m-1", name: "Q", kind: .movie, tmdbID: "75629")
+        let (app, stub, _) = try await makeApp(
+            configureKey: true, tmdbSession: TestSupport.mockedSessionConfiguration())
+        stub.itemsPageResult = .success(MediaItemsPage(
+            items: [member], startIndex: 0, totalRecordCount: 1))
+        let box = boxSet()
+
+        await app.resolveCollectionArtworkIfNeeded(for: box)
+
+        XCTAssertTrue(app.collectionArtworkAttempted.contains(box.id),
+                      "TMDb 明确说没有 → 记账，不必每次滚回来都重列成员")
+    }
+
+    /// 断网 → 恢复网络后**还能再试成功**（上一条「不记账」的收益闭环）。
+    func testCollectionArtworkRetriesAfterFailureAndThenSucceeds() async throws {
+        var tmdbs = 0
+        MockURLProtocol.handler = { request in
+            tmdbs += 1
+            // 第一次调用（成员详情）直接失败；之后恢复正常。
+            if tmdbs == 1 { throw URLError(.notConnectedToInternet) }
+            // ⚠️ 两个端点的载荷**必须按路径分派**：合集载荷的 `id` 要等于合集 id，
+            // 否则 `MetadataStore.tmdbPayload` 的 `matches(key)` 会（正确地）拒收它，
+            // `fetchAndStore` 于是返回 false，用例会误报成「实现有问题」。
+            let path = request.url?.path ?? ""
+            let body = path.contains("/collection/")
+                ? #"{"id":210303,"name":"EVA","poster_path":"/eva.jpg"}"#
+                : #"{"id":75629,"title":"Q","belongs_to_collection":{"id":210303,"name":"EVA"}}"#
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(body.utf8))
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let member = MediaItem(id: "m-1", name: "Q", kind: .movie, tmdbID: "75629")
+        let (app, stub, _) = try await makeApp(
+            configureKey: true, tmdbSession: TestSupport.mockedSessionConfiguration())
+        stub.itemsPageResult = .success(MediaItemsPage(
+            items: [member], startIndex: 0, totalRecordCount: 1))
+        let box = boxSet()
+
+        await app.resolveCollectionArtworkIfNeeded(for: box)
+        XCTAssertFalse(app.collectionArtworkAttempted.contains(box.id), "失败不记账")
+
+        // 再试一次：这次 TMDb 通了，应当定位成功并落库。
+        await app.resolveCollectionArtworkIfNeeded(for: box)
+
+        XCTAssertTrue(app.collectionArtworkAttempted.contains(box.id),
+                      "恢复后重试成功并记账")
     }
 
     // MARK: - 没配 TMDb 时不许出岔子
