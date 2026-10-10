@@ -39,6 +39,8 @@ struct EmbyItemDTO: Decodable, Sendable {
     var indexNumber: Int?
     var childCount: Int?
     var imageTags: [String: String]?
+    /// 主图宽高比（Emby 同样支持 `PrimaryImageAspectRatio`，见 `embySafeFields`）。
+    var primaryImageAspectRatio: Double?
     var backdropImageTags: [String]?
     var albumPrimaryImageTag: String?
     var seriesPrimaryImageTag: String?

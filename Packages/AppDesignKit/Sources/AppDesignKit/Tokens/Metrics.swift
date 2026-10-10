@@ -16,6 +16,21 @@ public enum Metrics {
     public static let contentInset: CGFloat = 52
     /// 紧凑宽度（iPhone、iPad 分屏窄窗）的横向留白。
     public static let compactContentInset: CGFloat = 22
+    /// 紧凑宽度海报墙的**最小列宽**。402pt 宽的手机（iPhone 16/17 Pro）扣掉左右
+    /// 各 22pt 页面留白后是 358pt：按它排正好 **3 列 × 112.7pt**，与隔壁 Rex 的
+    /// 媒体库版式同观感（截图像素实测 ≈118pt × 3 列）。取值判据见 `PosterGrid`。
+    public static let compactGridPosterMinWidth: CGFloat = 100
+    /// 拿不到图片真实比例时，海报卡**兜底**用的框比例（宽 ÷ 高）。
+    ///
+    /// 取 **0.70** 而不是教科书 2:3（0.667）：实测本机 Jellyfin 库 26 部剧集里
+    /// **22 部是 0.7013**、2 部 0.75、3 部 0.6667——兜底取多数派，能把「比例还没到手」
+    /// 那一小段的偏差从 11%（按 2:3 铺 0.70 的图）降到 4.5%。真正决定观感的是跟随
+    /// 图片自己的比例（见 `MediaArtwork`），这里只影响加载中的那一拍。
+    public static let posterFallbackRatio: CGFloat = 0.70
+    /// 紧凑海报墙的列距（Rex 实测 ≈10pt；常规宽度网格走 `railSpacing`）。
+    public static let compactGridColumnSpacing: CGFloat = 10
+    /// 紧凑海报墙的行距（Rex 实测 ≈16pt）。
+    public static let compactGridRowSpacing: CGFloat = 16
     /// Rail 横向 ScrollView 上下为悬停放大预留的内边距（上下各一档）。
     public static let railHoverPadding: CGFloat = 28
 

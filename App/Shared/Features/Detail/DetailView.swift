@@ -1057,22 +1057,18 @@ struct DetailView: View {
         }
     }
 
+    /// 合集成员海报墙：与库页 / 搜索结果同一份 `PosterGrid` 策略（紧凑端 3 列、
+    /// 卡宽跟随列宽、标题区两行居中）。
     private var memberColumns: [GridItem] {
-        if horizontalSizeClass == .compact {
-            return [
-                GridItem(.flexible(), spacing: 14),
-                GridItem(.flexible(), spacing: 14),
-            ]
-        }
-        return [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+        PosterGrid.columns(compact: horizontalSizeClass == .compact)
     }
 
     private var memberGridSpacing: CGFloat {
-        horizontalSizeClass == .compact ? 14 : Metrics.railSpacing + 8
+        PosterGrid.rowSpacing(compact: horizontalSizeClass == .compact)
     }
 
     private var memberCardWidth: CGFloat? {
-        horizontalSizeClass == .compact ? nil : Metrics.posterWidth
+        PosterGrid.cardWidth(compact: horizontalSizeClass == .compact)
     }
 
     /// 成员区状态切换过渡；减弱动态效果时直接切换。
@@ -1104,11 +1100,22 @@ struct DetailView: View {
 
     private var similarRail: some View {
         Rail("类似推荐", kind: .poster, items: model.similar) { item in
-            PosterCard(item: item, server: app.server) {
+            // 卡宽必须显式给紧凑档 120：`Rail` 的紧凑高度（`posterRailHeight(compact:)`）
+            // 就是按 120 算的，漏传会落到默认 178 —— 292pt 的卡塞进 267pt 的框，
+            // 标题行被裁掉（与首页「最近添加」同一口径，见 `HomeView.posterWidth`）。
+            PosterCard(
+                item: item,
+                server: app.server,
+                width: isCompactWidth ? Metrics.compactPosterWidth : Metrics.posterWidth
+            ) {
                 app.openDetail(item)
             }
         }
     }
+
+    /// 紧凑宽度（iPhone / iPad 分屏窄窗）：与 `horizontalSizeClass` 同口径，
+    /// 只是给上面几处版式取值用。
+    private var isCompactWidth: Bool { horizontalSizeClass == .compact }
 
     private func personImageTarget(_ person: MediaItem.Person) -> (url: URL?, authHeader: String?) {
         // 交给 VM：TMDb 补的演员要走 TMDb CDN（它的 id 在服务端不存在，直接问会 400）。

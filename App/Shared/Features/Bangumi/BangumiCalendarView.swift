@@ -448,8 +448,9 @@ private struct CalendarItemCard: View {
                 shape: .poster,
                 width: 68,
                 cornerRadius: 6,
-                maxPixelSize: 300,
-                bordered: true
+                bordered: true,
+                // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                nominalRatio: 2.0 / 3.0
             )
 
             // 信息列

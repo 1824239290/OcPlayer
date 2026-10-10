@@ -79,22 +79,18 @@ struct LibraryView: View {
         horizontalSizeClass == .compact
     }
 
+    /// 列 / 行距 / 卡宽三件都走 `PosterGrid`（与搜索结果、合集成员同一份策略）：
+    /// 紧凑端（手机）3 列、卡宽跟随列宽、标题区两行居中；常规端维持原样。
     private var columns: [GridItem] {
-        if isCompact {
-            return [
-                GridItem(.flexible(), spacing: 14),
-                GridItem(.flexible(), spacing: 14),
-            ]
-        }
-        return [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+        PosterGrid.columns(compact: isCompact)
     }
 
     private var gridSpacing: CGFloat {
-        isCompact ? 14 : Metrics.railSpacing + 8
+        PosterGrid.rowSpacing(compact: isCompact)
     }
 
     private var cardWidth: CGFloat? {
-        isCompact ? nil : Metrics.posterWidth
+        PosterGrid.cardWidth(compact: isCompact)
     }
 
     private var hasMore: Bool {

@@ -124,6 +124,7 @@ extension BaseItemDto {
         }
         fields.childCount = childCount
         fields.imageTags = imageTags ?? [:]
+        fields.primaryImageAspectRatio = primaryImageAspectRatio
         fields.backdropImageTags = backdropImageTags ?? []
         fields.albumPrimaryImageTag = albumPrimaryImageTag
         fields.seriesPrimaryImageTag = seriesPrimaryImageTag

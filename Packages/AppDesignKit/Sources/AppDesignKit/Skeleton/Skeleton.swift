@@ -111,8 +111,18 @@ public extension View {
     }
 }
 
-/// 骨架海报卡：2:3 图块 + 标题条，和 `PosterCard` 同尺寸。
+/// 骨架海报卡：2:3 图块 + 标题条，和 `PosterCard` 同尺寸、同版式。
+///
+/// `width` 与 `PosterCard` 同一套语义（见那边的类型注释）：**nil = 跟随网格列宽**，
+/// 此时标题区换成上下两条居中的文案条（内缩比例按真实卡片的标题/年份长度给，
+/// 不额外测量列宽）；给定值 = 定宽卡（Rail / 常规宽度网格）。
 public struct SkeletonPosterCard: View {
+    /// 骨架的图块比例＝**兜底海报比例**（多数派 0.70，见 `Metrics.posterFallbackRatio`）。
+    ///
+    /// 曾经写死 2:3：真实卡片现在会各自跟随图片比例（0.667…0.75），骨架只能押一个。
+    /// 押多数派（0.70），撤掉骨架时的跳动对绝大多数条目最小；押 2:3 则每张都差 5%。
+    private static let posterRatio = Metrics.posterFallbackRatio
+
     public var width: CGFloat? = Metrics.posterWidth
 
     public init(width: CGFloat? = Metrics.posterWidth) {
@@ -120,14 +130,28 @@ public struct SkeletonPosterCard: View {
     }
 
     public var body: some View {
-        let cardWidth = width ?? Metrics.posterWidth
-        VStack(alignment: .leading, spacing: 9) {
-            SkeletonBlock()
-                .frame(width: cardWidth, height: cardWidth * 1.5)
-            SkeletonBlock(cornerRadius: 4)
-                .frame(width: cardWidth * 0.7, height: 12)
+        if let width {
+            VStack(alignment: .leading, spacing: 9) {
+                SkeletonBlock()
+                    .frame(width: width, height: width / Self.posterRatio)
+                SkeletonBlock(cornerRadius: 4)
+                    .frame(width: width * 0.7, height: 12)
+            }
+            .frame(width: width, alignment: .leading)
+        } else {
+            // 图块靠 2:3 自己定高（网格列里量到的提案宽度就是列宽），
+            // 两条文案条按比例内缩——和 `PosterCard.columnMeta` 的两行对齐。
+            VStack(spacing: 6) {
+                SkeletonBlock()
+                    .aspectRatio(Self.posterRatio, contentMode: .fit)
+                SkeletonBlock(cornerRadius: 4)
+                    .frame(height: 12)
+                    .padding(.horizontal, 16)
+                SkeletonBlock(cornerRadius: 4)
+                    .frame(height: 10)
+                    .padding(.horizontal, 40)
+            }
         }
-        .frame(width: width, alignment: .leading)
     }
 }
 
@@ -198,7 +222,9 @@ public struct SkeletonRail: View {
                 HStack(spacing: Metrics.railSpacing) {
                     ForEach(0..<cardCount, id: \.self) { _ in
                         switch kind {
-                        case .poster: SkeletonPosterCard(width: isCompact ? Metrics.compactPosterWidth : nil)
+                        // 这里必须给**定宽**：Rail 的滚动轴向上没有宽度提案，
+                        // 传 nil（= 跟随列宽）在横排里量不出宽度。
+                        case .poster: SkeletonPosterCard(width: isCompact ? Metrics.compactPosterWidth : Metrics.posterWidth)
                         case .still: SkeletonStillCard(width: isCompact ? Metrics.compactStillWidth : Metrics.stillWidth)
                         }
                     }

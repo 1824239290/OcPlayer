@@ -262,7 +262,19 @@ struct ItemTitleLogoView: View {
 
 // MARK: - 卡片
 
-/// 海报卡（最近添加 / 媒体库网格）：2:3 + 标题行 + 年份。
+/// 海报卡（最近添加 / 媒体库网格）：图区（**比例跟随图片**）+ 标题区 + 年份。
+///
+/// **卡宽两档语义**（`width`，与 `MediaArtwork.width` 同口径）：
+/// - **给定值**＝定宽卡（Rail、常规宽度网格），宽度写死、超长标题撑不宽它；
+///   标题与年份同一行、左对齐。
+/// - **nil**＝跟随所在网格的**列宽**（紧凑端海报墙，见 `PosterGrid`）；此时标题区
+///   换成**两行居中**（标题一行、年份一行）。手机上单卡只有 110pt 出头，标题和
+///   年份挤一行会双双被截断——Rex 的媒体库也是这个版式（截图像素实测：标题
+///   与所在卡左右居中对齐、年份在其下一行更小更淡）。
+///
+/// 注意这个 `nil` 以前是「回落 178pt 定宽」：紧凑网格传 nil 本意是跟随列宽，
+/// 实际却按 178 画，比列宽还宽 6pt，卡片两侧各溢出 3pt（卡缝从 14pt 缩成 8pt）。
+/// 语义改成跟随列宽后，Rail 那几处必须显式给宽度（那正是「定宽卡」的意思）。
 struct PosterCard: View {
     let item: MediaItem
     let server: (any MediaServer)?
@@ -281,12 +293,12 @@ struct PosterCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
 
+    /// 跟随列宽＝紧凑海报墙版式（两行居中标题区），见类型注释。
+    private var fillsColumn: Bool { width == nil }
+
     var body: some View {
-        // 卡宽必须是确定值：width 传 nil（紧凑网格的自适应列）时也回落到默认海报宽，
-        // 否则超长标题会把标题行撑得比海报还宽，挤乱横向 Rail 和网格。
-        let cardWidth = width ?? Metrics.posterWidth
         return Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: fillsColumn ? .center : .leading, spacing: fillsColumn ? 6 : 9) {
                 let serverTarget = item.imageTarget(server, kind: .primary, width: 400)
                 // 覆盖图优先，但它**免鉴权**（TMDb CDN 不校验）：带上服务端凭证
                 // 既无意义、也把凭证多送一处。
@@ -295,31 +307,63 @@ struct PosterCard: View {
                     url: url,
                     authHeader: posterOverride == nil ? serverTarget.authHeader : nil,
                     shape: .poster,
-                    width: cardWidth,
-                    maxPixelSize: 400,
+                    width: width,
+                    // 解码预算不写死：按卡片实际显示尺寸 × 屏幕缩放算（见 MediaArtwork）。
                     // 合集在服务端不带图是常态（新建的合集默认没有封面），
                     // 给它一个「一叠海报」的图标，别显示成一张破图。
-                    emptyIcon: item.kind == .boxSet ? "rectangle.stack.fill" : "photo"
+                    emptyIcon: item.kind == .boxSet ? "rectangle.stack.fill" : "photo",
+                    // 边框跟着**这张图自己的比例**走（服务端 `PrimaryImageAspectRatio`）：
+                    // 不同剧集的海报 0.667 / 0.70 / 0.75 都有，写死 2:3 就会裁或留边。
+                    aspectRatio: item.primaryImageAspectRatio.map { CGFloat($0) }
                 )
-                HStack {
-                    Text(item.name)
-                        .lineLimit(1)
-                        .foregroundStyle(.primary)
-                    Spacer(minLength: 4)
-                    if let year = item.year {
-                        Text(String(year))
-                            .monospacedDigit()
-                            .layoutPriority(1)
-                            .foregroundStyle(.tertiary)
-                    }
+                if fillsColumn {
+                    columnMeta
+                } else {
+                    inlineMeta
                 }
-                .font(.footnote)
             }
-            .frame(width: cardWidth)
+            // 定宽卡锁住宽度（超长标题不许把卡撑得比海报还宽）；跟随列宽时不锁，
+            // 卡自己吃满网格列（图区把列宽接过来，标题区再按它居中）。
+            .frame(width: width)
         }
         .buttonStyle(.plain)
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
+    }
+
+    /// 紧凑海报墙（跟随列宽）的标题区：标题一行、年份一行，整体居中。
+    /// 标题独占一行才装得下 Rex 那种 7–8 字的剧名（`lineLimit(1)` 超出截尾）。
+    private var columnMeta: some View {
+        VStack(spacing: 2) {
+            Text(item.name)
+                .font(.footnote)
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+            if let year = item.year {
+                Text(String(year))
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Rail / 常规宽度网格的标题区：标题左、年份右，同一行（原样）。
+    private var inlineMeta: some View {
+        HStack {
+            Text(item.name)
+                .lineLimit(1)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 4)
+            if let year = item.year {
+                Text(String(year))
+                    .monospacedDigit()
+                    .layoutPriority(1)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .font(.footnote)
     }
 }
 
@@ -382,7 +426,6 @@ struct LibraryCard: View {
                         authHeader: target.authHeader,
                         shape: .still,
                         width: width,
-                        maxPixelSize: 720,
                         // 合集库（UserView 的 CollectionType = boxsets）在服务端没有封面图
                         // ——实测 `/UserViews` 里它是 `ImageTags: {}`，以前照样拼 URL、每渲染
                         // 一次就 404 一次（跨会话在日志里反复出现），显示的却是同一张灰底。
@@ -461,11 +504,17 @@ private struct LibraryCoverCollage: View {
         .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
     }
 
-    /// 一格。宽高都由外层 HStack / VStack 定，图 `scaledToFill` 后裁掉溢出。
+    /// 一格。宽高都由外层 HStack / VStack 定，图**铺满裁切**（`.fill`——拼图必须
+    /// 不留缝，这里刻意不用卡片默认的 `.fit`）。解码预算按格子实际尺寸算：格宽固定，
+    /// 但长边是「撑满后的宽」，按 `width` 的两倍给足以覆盖 2×2 的每一格。
     private func cell(_ url: URL) -> some View {
-        RemoteImage(url: url, authHeader: authHeader, maxPixelSize: 360)
-            .scaledToFill()
-            .clipped()
+        RemoteImage(
+            url: url,
+            authHeader: authHeader,
+            maxPixelSize: Int(width * 2),
+            scaling: .fill
+        )
+        .clipped()
     }
 }
 
@@ -534,8 +583,7 @@ struct StillCard: View {
                     url: target.url,
                     authHeader: target.authHeader,
                     shape: .still,
-                    width: width,
-                    maxPixelSize: 720
+                    width: width
                 ) {
                     ZStack(alignment: .bottomLeading) {
                         // 底部只做很轻的可读性压暗；不再为常驻按钮铺厚渐变。

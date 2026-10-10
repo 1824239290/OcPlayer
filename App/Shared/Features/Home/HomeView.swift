@@ -12,7 +12,9 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { sizeClass == .compact }
     private var stillWidth: CGFloat { isCompact ? Metrics.compactStillWidth : Metrics.stillWidth }
-    private var posterWidth: CGFloat? { isCompact ? Metrics.compactPosterWidth : nil }
+    /// 「最近添加」Rail 的卡宽：紧凑 120 / 常规 178。**必须显式给**——`PosterCard`
+    /// 的 nil 语义是「跟随网格列宽」，横排 Rail 里没有列宽可跟随（见那边的注释）。
+    private var posterWidth: CGFloat { isCompact ? Metrics.compactPosterWidth : Metrics.posterWidth }
 
     /// 首页栏目顺序与显隐（设置页「首页栏目」可调）。布局里含**已关闭**的栏目，
     /// 首页只渲染 `visible`——关掉的栏目仍在设置页保留，随时可以再打开。
@@ -439,15 +441,13 @@ struct HomeSearchContent: View {
         return searchLastPageWasFull
     }
 
-    /// 列宽与库页海报墙同款（LibraryView.columns），搜索结果和库浏览观感一致。
+    /// 列宽与库页海报墙同款（`PosterGrid`）：紧凑端 3 列、卡宽跟随列宽，
+    /// 搜索结果和库浏览观感一致。
     private var searchColumns: [GridItem] {
-        if isCompact {
-            return [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-        }
-        return [GridItem(.adaptive(minimum: Metrics.posterWidth + 8), spacing: Metrics.railSpacing)]
+        PosterGrid.columns(compact: isCompact)
     }
 
-    private var searchCardWidth: CGFloat? { isCompact ? nil : Metrics.posterWidth }
+    private var searchCardWidth: CGFloat? { PosterGrid.cardWidth(compact: isCompact) }
 
 
     private var searchContent: some View {
@@ -457,7 +457,7 @@ struct HomeSearchContent: View {
             // 回来直接替换，改词就不会闪。
             if searchResults.isEmpty && (isSearchLoading || !searchLanded) {
                 ScrollView {
-                    LazyVGrid(columns: searchColumns, alignment: .leading, spacing: Metrics.railSpacing + 8) {
+                    LazyVGrid(columns: searchColumns, alignment: .leading, spacing: PosterGrid.rowSpacing(compact: isCompact)) {
                         ForEach(0..<24, id: \.self) { _ in
                             SkeletonPosterCard(width: searchCardWidth)
                         }
@@ -497,7 +497,7 @@ struct HomeSearchContent: View {
                     // ScrollView 内容里只在加入视图树时触发一次，那样第 3 页
                     // 起就不会再自动预取，只能手点。
                     LazyVStack(spacing: 0) {
-                        LazyVGrid(columns: searchColumns, alignment: .leading, spacing: Metrics.railSpacing + 8) {
+                        LazyVGrid(columns: searchColumns, alignment: .leading, spacing: PosterGrid.rowSpacing(compact: isCompact)) {
                             ForEach(searchResults) { item in
                                 PosterCard(item: item, server: app.server, width: searchCardWidth) {
                                     app.openDetail(item)

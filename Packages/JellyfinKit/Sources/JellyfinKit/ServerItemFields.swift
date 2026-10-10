@@ -31,6 +31,8 @@ struct ServerItemFields {
     var cast: [MediaItem.Person] = []
     var childCount: Int?
     var imageTags: [String: String] = [:]
+    /// 主图宽高比（`PrimaryImageAspectRatio`）。卡片「边框贴图」靠它（见 `MediaItem`）。
+    var primaryImageAspectRatio: Double?
     var backdropImageTags: [String] = []
     var albumPrimaryImageTag: String?
     var seriesPrimaryImageTag: String?
@@ -99,6 +101,7 @@ struct ServerItemFields {
             cast: cast,
             childCount: childCount,
             primaryImageTag: primaryTag,
+            primaryImageAspectRatio: primaryImageAspectRatio,
             thumbImageTag: thumbTag,
             backdropImageTag: backdropTag,
             logoImageTag: logoTag,

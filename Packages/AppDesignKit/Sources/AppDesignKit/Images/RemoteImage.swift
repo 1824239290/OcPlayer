@@ -2,15 +2,30 @@ import CryptoKit
 import Foundation
 import SwiftUI
 
+/// 位图与容器比例不一致时怎么放。卡片图区（`MediaArtwork`）默认 `.fit`：
+/// **服务端给什么比例就显示什么比例，不裁切**——Jellyfin/Emby 的海报并不是教科书
+/// 2:3，实测本机库 26 部剧集里 22 部是 400×570（≈0.702）、2 部 400×533（0.75）、
+/// 只有 1 部是 400×600（0.667），按 2:3 铺等于**每一张都裁掉一截**（0.702 的左右
+/// 各裁 ~2.5%，0.75 的各裁 ~5.6%，阿松 / Re:0 那种连标题字都被切掉）。
+public enum ArtworkScaling: Sendable {
+    /// 填满容器、溢出裁掉（横排拼图这类「必须铺满」的场景）。
+    case fill
+    /// 完整显示整张图，等比缩放到容器内（不裁切）。
+    case fit
+}
+
 /// 远程图视图：加载中 / 失败都有落点，占位色跟主题走。
 public struct RemoteImage: View {
     @State private var image: PlatformImage?
     @State private var failed = false
     @State private var loadedKey: String?
+    /// 已经回报过的位图尺寸：只在变化时回调，避免同一张图反复触发上层重排。
+    @State private var reportedSize: CGSize?
 
     public let url: URL?
     public var authHeader: String?
     /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
+    /// nil = 不下采样（由调用方自己保证展示尺寸已知并显式给值）。
     public var maxPixelSize: Int? = nil
     /// 没有地址（或加载失败）时的占位图标，默认通用「photo」。
     /// 合集这类**容器条目在服务端本来就不带图**，给它们一个语义更准的图标
@@ -18,6 +33,16 @@ public struct RemoteImage: View {
     public var emptyIcon: String = "photo"
     /// 换图时是否保留当前位图，直到新图加载完成。适合背景图等需要连续画面的场景。
     public var preserveCurrentImageOnReload = false
+    /// 位图与容器比例不一致时的铺法（见 `ArtworkScaling`）。默认 `.fill` 沿用旧行为，
+    /// 卡片图区由 `MediaArtwork` 按卡片语义决定。
+    public var scaling: ArtworkScaling = .fill
+    /// 位图解码完成后回报它的像素尺寸，供上层把盒子调成图片自己的比例。
+    ///
+    /// **为什么需要**：服务端没给 `PrimaryImageAspectRatio` 时（老服务器 / 条目是外部
+    /// 加进去的），盒子只能先按兜底比例画；等图真到手上再按真实比例校正一次，
+    /// 才能做到「图片四边刚好贴在边框上」——既不裁切、也不留灰边。
+    /// 回调只在**尺寸变化**时触发（同一张图重复加载不会反复改布局）。
+    public var onImageSizeChange: ((CGSize) -> Void)?
     /// 图片替换时使用的淡入节奏；未指定时使用标准短淡入。
     public var fadeAnimation: Animation? = nil
     /// 显式指定图片管道；nil = 取环境的 `imagePipeline`（默认 `.shared`）。
@@ -35,6 +60,8 @@ public struct RemoteImage: View {
         maxPixelSize: Int? = nil,
         emptyIcon: String = "photo",
         preserveCurrentImageOnReload: Bool = false,
+        scaling: ArtworkScaling = .fill,
+        onImageSizeChange: ((CGSize) -> Void)? = nil,
         fadeAnimation: Animation? = nil,
         pipeline: ImagePipeline? = nil
     ) {
@@ -43,6 +70,8 @@ public struct RemoteImage: View {
         self.maxPixelSize = maxPixelSize
         self.emptyIcon = emptyIcon
         self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
+        self.scaling = scaling
+        self.onImageSizeChange = onImageSizeChange
         self.fadeAnimation = fadeAnimation
         self.pipeline = pipeline
         // 内存缓存命中就**同步**出图：首帧即有位图，不再经历「先占位、异步命中
@@ -58,6 +87,9 @@ public struct RemoteImage: View {
             url: url, authHeader: authHeader, maxPixelSize: maxPixelSize
            ) {
             _image = State(initialValue: cached)
+            // 同步命中也算「图已到手」：尺寸回调要在同一拍发出去，否则盒子会停在
+            // 兜底比例上，等下一次重绘才校正。
+            _reportedSize = State(initialValue: cached.size)
             _loadedKey = State(initialValue: Self.loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize))
         }
     }
@@ -110,7 +142,10 @@ public struct RemoteImage: View {
             if let image {
                 Image(platform: image)
                     .resizable()
-                    .scaledToFill()
+                    // `.fill` ＝铺满裁切（旧行为），`.fit` ＝整张显示不裁切。位图的
+                    // 画幅比例由服务端决定，容器比例是我们定的——两者不一致时必须
+                    // 让位图赢，否则用户的封面永远缺一条边。
+                    .aspectRatio(contentMode: scaling == .fill ? .fill : .fit)
                     .id(loadedKey)
                     // 加载完成在占位层上淡入，不再硬弹出；背景图保留旧帧时，
                     // 新图也沿同一过渡交叉淡入。
@@ -119,6 +154,13 @@ public struct RemoteImage: View {
         }
         .clipped()
         .animation(imageFade, value: loadedKey)
+        // 位图尺寸变化就回报（见 `onImageSizeChange`）。放在 overlay 之后、不进布局，
+        // 用 `.onChange` 而不是在加载回调里直接调——后者会撞上「视图更新期间改状态」。
+        .onChange(of: image?.size, initial: true) { _, size in
+            guard let size, size != reportedSize else { return }
+            reportedSize = size
+            onImageSizeChange?(size)
+        }
         .task(id: loadKey) {
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). Ordinary content clears the previous

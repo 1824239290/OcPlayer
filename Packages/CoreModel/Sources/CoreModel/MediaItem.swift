@@ -73,6 +73,16 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
 
     /// 图像 tag：变了说明图片换了，用它当 URL 的一部分让缓存自动失效。
     public var primaryImageTag: String?
+    /// 主图（Primary）的**宽高比**（宽 ÷ 高），服务端 `PrimaryImageAspectRatio`。
+    ///
+    /// 存在的理由：海报卡要「边框贴着图片」就不能假设 2:3——实测本机 Jellyfin 库
+    /// 26 部剧集里 22 部是 0.7013、2 部 0.75、只有 1 部是 0.6667（见
+    /// `ArtworkScaling`）。**必须从服务端拿**：等图片加载完再量，网格会先按兜底比例
+    /// 排一遍、再整体跳一次。
+    ///
+    /// nil = 服务端没给（老服务器 / 非图片条目）——此时由卡片回落到画幅默认值，
+    /// 或退一步用位图实测比例（见 `MediaArtwork`）。
+    public var primaryImageAspectRatio: Double?
     /// 分集剧照常用的 Thumb 图像 tag。
     public var thumbImageTag: String?
     public var backdropImageTag: String?
@@ -126,6 +136,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         cast: [Person] = [],
         childCount: Int? = nil,
         primaryImageTag: String? = nil,
+        primaryImageAspectRatio: Double? = nil,
         thumbImageTag: String? = nil,
         backdropImageTag: String? = nil,
         logoImageTag: String? = nil,
@@ -162,6 +173,7 @@ public struct MediaItem: Identifiable, Hashable, Sendable {
         self.cast = cast
         self.childCount = childCount
         self.primaryImageTag = primaryImageTag
+        self.primaryImageAspectRatio = primaryImageAspectRatio
         self.thumbImageTag = thumbImageTag
         self.backdropImageTag = backdropImageTag
         self.logoImageTag = logoImageTag

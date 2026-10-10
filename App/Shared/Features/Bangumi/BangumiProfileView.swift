@@ -211,7 +211,8 @@ private struct CollectionTile: View {
                 shape: .poster,
                 width: 84,
                 cornerRadius: 8,
-                maxPixelSize: 300
+                // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                nominalRatio: 2.0 / 3.0
             )
             Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
                 .font(.caption)

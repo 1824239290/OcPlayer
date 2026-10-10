@@ -828,7 +828,7 @@ private struct MoviePilotSubscribeCard: View {
 
     /// 严格 2:3 比例的海报容器，并在内部叠放状态徽章、季数与评分
     private var posterContainer: some View {
-        MediaArtwork(url: subscribe.posterURL, shape: .poster, width: nil, maxPixelSize: 500) {
+        MediaArtwork(url: subscribe.posterURL, shape: .poster, width: nil, nominalRatio: 2.0 / 3.0) {
             ZStack(alignment: .bottomLeading) {
                 // 底部暗部渐变
                 LinearGradient(
@@ -929,7 +929,8 @@ private struct MoviePilotMediaGlassCard: View {
                 width: 76,
                 cornerRadius: 12,
                 cornerStyle: .continuous,
-                maxPixelSize: 360
+                // TMDb 的海报惯例就是 2:3：给它兜底比例，加载前那一帧也严丝合缝。
+                nominalRatio: 2.0 / 3.0
             )
             // 封面投影比通用原语默认为重，保留原观感。
             .shadow(color: .black.opacity(0.18), radius: 8, y: 4)

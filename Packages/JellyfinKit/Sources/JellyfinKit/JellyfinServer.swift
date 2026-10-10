@@ -180,6 +180,7 @@ public struct JellyfinServer: MediaServer {
                 limit: limit,
                 isRecursive: true,
                 sortOrder: [.descending],
+                fields: [.primaryImageAspectRatio],
                 includeItemTypes: [.movie, .series],
                 sortBy: [.dateCreated],
                 enableImageTypes: [.primary, .backdrop, .logo]
@@ -198,6 +199,7 @@ public struct JellyfinServer: MediaServer {
                 userID: profile.userID,
                 limit: limit,
                 sortOrder: [.descending],
+                fields: [.primaryImageAspectRatio],
                 includeItemTypes: [.movie, .series],
                 filters: [.isFavorite],
                 sortBy: [.dateCreated],
@@ -213,6 +215,7 @@ public struct JellyfinServer: MediaServer {
             Paths.getResumeItems(parameters: .init(
                 userID: profile.userID,
                 limit: 24,
+                fields: [.primaryImageAspectRatio],
                 mediaTypes: [.video],
                 enableImageTypes: [.primary, .backdrop, .thumb, .logo]
             ))
@@ -226,6 +229,7 @@ public struct JellyfinServer: MediaServer {
             Paths.getNextUp(parameters: .init(
                 userID: profile.userID,
                 limit: 24,
+                fields: [.primaryImageAspectRatio],
                 enableImageTypes: [.primary, .backdrop, .thumb, .logo]
             ))
         )
@@ -272,7 +276,7 @@ public struct JellyfinServer: MediaServer {
                 path: "/Items/\(id)",
                 query: [
                     ("userId", profile.userID),
-                    ("fields", "People,Genres,Overview,Chapters"),
+                    ("fields", "People,Genres,Overview,Chapters,PrimaryImageAspectRatio"),
                 ]
             )
         )
@@ -335,9 +339,15 @@ public struct JellyfinServer: MediaServer {
                 // 没有 `tmdbID`，TMDb 匹配就只能退化成标题搜索——库级批量补全全靠
                 // 这个字段。体积上它只是个小字典。
                 //
+                // `primaryImageAspectRatio`：海报卡要「边框贴着图片」就不能假设 2:3
+                // ——实测本机库里 0.667 / 0.70 / 0.75 三种都有，比例必须从服务端拿
+                // （拿不到就得先按兜底比例排一遍再跳，见 `MediaArtwork`）。
+                // 列表接口**默认不返回**它（实测 `/Items` 不带 fields 时 0/12 带比例），
+                // 所以必须显式要。
+                //
                 // 位置有讲究：SDK 的 `init` 要求 `fields` 排在 `includeItemTypes`
                 // **之前**（Swift 实参顺序必须与声明一致）。
-                fields: [.providerIDs],
+                fields: [.providerIDs, .primaryImageAspectRatio],
                 includeItemTypes: kinds.map { kinds in
                     kinds.compactMap { kind in BaseItemKind(kind) }
                 },

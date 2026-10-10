@@ -119,7 +119,8 @@ private struct CollectionRow: View {
                 shape: .poster,
                 width: 48,
                 cornerRadius: 6,
-                maxPixelSize: 240
+                // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                nominalRatio: 2.0 / 3.0
             )
             VStack(alignment: .leading, spacing: 3) {
                 Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)

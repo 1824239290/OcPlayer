@@ -293,7 +293,7 @@ public struct EmbyServer: MediaServer {
     // MARK: - 详情
 
     public func item(_ id: String) async throws -> MediaItem {
-        try await detail(id, fields: "People,Genres,Overview,Chapters").domainItem
+        try await detail(id, fields: "People,Genres,Overview,Chapters,PrimaryImageAspectRatio").domainItem
     }
 
     public func chapters(itemID: String) async throws -> [JellyfinChapter] {
@@ -345,7 +345,8 @@ public struct EmbyServer: MediaServer {
             // 补全要靠它拿 `tmdbID`。`ProviderIds` 与这里已在用的
             // People / Genres / Overview / Chapters / MediaSources 同属标准
             // `ItemFields`，Emby 认这个名字；仍过一道 `embySafeFields` 保持一致。
-            ("fields", embySafeFields("ProviderIds") ?? "ProviderIds"),
+            ("fields", embySafeFields("ProviderIds,PrimaryImageAspectRatio")
+                ?? "ProviderIds,PrimaryImageAspectRatio"),
         ]
         if let searchTerm {
             let trimmed = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)

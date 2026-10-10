@@ -630,7 +630,8 @@ private struct ProgressCard: View {
                     shape: .poster,
                     width: 56,
                     cornerRadius: 6,
-                    maxPixelSize: 300
+                    // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                    nominalRatio: 2.0 / 3.0
                 )
             }
             .buttonStyle(.plain)
@@ -809,9 +810,10 @@ private struct SearchResultRow: View {
                 shape: .poster,
                 width: 58,
                 cornerRadius: 8,
-                maxPixelSize: 300,
                 bordered: true,
-                shadowed: true
+                shadowed: true,
+                // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                nominalRatio: 2.0 / 3.0
             )
 
             VStack(alignment: .leading, spacing: 6) {
