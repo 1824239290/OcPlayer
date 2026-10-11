@@ -52,9 +52,9 @@ final class DanmakuPlaybackContextTests: XCTestCase {
     func testJellyfinSynthesizesCanonicalNameForBareNumericFile() {
         let context = DanmakuPlaybackContext.jellyfin(
             item: makeItem(), request: makeRequest(), serverProfileID: "server-1")
-        XCTAssertEqual(context.fileName, "葬送的芙莉莲 第05话")
-        XCTAssertEqual(context.isMovie, false)
-        XCTAssertNil(context.special)
+        XCTAssertEqual(context.match.fileName, "葬送的芙莉莲 第05话")
+        XCTAssertEqual(context.match.isMovie, false)
+        XCTAssertNil(context.match.special)
     }
 
     /// 原始文件名自带番剧名时保留（只剥扩展名），不打乱发布组信息。
@@ -67,7 +67,7 @@ final class DanmakuPlaybackContextTests: XCTestCase {
             ),
             serverProfileID: "server-1"
         )
-        XCTAssertEqual(context.fileName, "[NC-Raws] 葬送的芙莉莲 - 05 [1080p]")
+        XCTAssertEqual(context.match.fileName, "[NC-Raws] 葬送的芙莉莲 - 05 [1080p]")
     }
 
     /// 第二季带上季数，避免同名作品串季。
@@ -78,8 +78,8 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 mediaSourcePath: "/media/Anime/碧蓝之海/S02/03.mkv", mediaSourceName: "03.mkv"),
             serverProfileID: "server-1"
         )
-        XCTAssertEqual(context.fileName, "葬送的芙莉莲 第2季 第03话")
-        XCTAssertEqual(context.seasonNumber, 2)
+        XCTAssertEqual(context.match.fileName, "葬送的芙莉莲 第2季 第03话")
+        XCTAssertEqual(context.match.seasonNumber, 2)
     }
 
     /// Jellyfin season 0 = 特典：给出特典序号与命名空间尝试顺序，文件名带 SP token。
@@ -90,9 +90,9 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 mediaSourcePath: "/media/Anime/来玩游戏吧/S00/SP02.mkv", mediaSourceName: "SP02.mkv"),
             serverProfileID: "server-1"
         )
-        XCTAssertEqual(context.special?.index, 2)
-        XCTAssertEqual(context.special?.kinds.first, .special, "SP 关键词 → 首选 S 命名空间")
-        XCTAssertEqual(context.fileName, "葬送的芙莉莲 SP2")
+        XCTAssertEqual(context.match.special?.index, 2)
+        XCTAssertEqual(context.match.special?.kinds.first, .special, "SP 关键词 → 首选 S 命名空间")
+        XCTAssertEqual(context.match.fileName, "葬送的芙莉莲 SP2")
     }
 
     /// 附属影像（NCOP）→ 首选 C 命名空间。
@@ -103,8 +103,8 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 mediaSourcePath: "/media/Anime/碧蓝之海/S00/NCOP.mkv", mediaSourceName: "NCOP.mkv"),
             serverProfileID: "server-1"
         )
-        XCTAssertEqual(context.special?.kinds, [.extra])
-        XCTAssertEqual(context.fileName, "葬送的芙莉莲 C1")
+        XCTAssertEqual(context.match.special?.kinds, [.extra])
+        XCTAssertEqual(context.match.fileName, "葬送的芙莉莲 C1")
     }
 
     /// 剧场版（kind == .movie）标记为电影目标，且不当作特典。
@@ -115,8 +115,8 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 title: "剧场版", mediaSourcePath: "/media/Anime/某剧场版.mkv", mediaSourceName: "某剧场版.mkv"),
             serverProfileID: "server-1"
         )
-        XCTAssertTrue(context.isMovie)
-        XCTAssertNil(context.special)
+        XCTAssertTrue(context.match.isMovie)
+        XCTAssertNil(context.match.special)
     }
 
     /// standalone：文件名是裸数字时用父目录推断的番剧名合成规范名（旧实现直接送裸数字）。
@@ -129,9 +129,9 @@ final class DanmakuPlaybackContextTests: XCTestCase {
 
         let context = DanmakuPlaybackContext.standalone(
             request: PlaybackRequest(title: "01.mp4", uri: file.path))
-        XCTAssertEqual(context.animeTitle, "葬送的芙莉莲")
-        XCTAssertEqual(context.fileName, "葬送的芙莉莲 第01话")
-        XCTAssertEqual(context.episodeNumber, 1)
+        XCTAssertEqual(context.match.animeTitle, "葬送的芙莉莲")
+        XCTAssertEqual(context.match.fileName, "葬送的芙莉莲 第01话")
+        XCTAssertEqual(context.match.episodeNumber, 1)
     }
 
     /// standalone：文件名自带番剧名时保留原名。
@@ -141,7 +141,7 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 title: "Sousou no Frieren - 05.mkv",
                 uri: "https://media.example.com/Sousou no Frieren - 05.mkv")
         )
-        XCTAssertEqual(context.fileName, "Sousou no Frieren - 05")
+        XCTAssertEqual(context.match.fileName, "Sousou no Frieren - 05")
     }
 
     /// standalone：文件名含 NCOP 关键词 → 特典（C 命名空间），序号缺省按第 1 集。
@@ -151,7 +151,7 @@ final class DanmakuPlaybackContextTests: XCTestCase {
                 title: "碧蓝之海 NCOP.mkv",
                 uri: "https://media.example.com/碧蓝之海 NCOP.mkv")
         )
-        XCTAssertEqual(context.special?.index, 1)
-        XCTAssertEqual(context.special?.kinds, [.extra])
+        XCTAssertEqual(context.match.special?.index, 1)
+        XCTAssertEqual(context.match.special?.kinds, [.extra])
     }
 }

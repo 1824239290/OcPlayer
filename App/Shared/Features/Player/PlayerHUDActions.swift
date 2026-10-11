@@ -412,14 +412,14 @@ struct PlayerHUDExpandedActionCard: View {
             PlayerHUDNavRow(
                 icon: "circle.lefthalf.filled",
                 title: "不透明度",
-                value: percentLabel(controller.danmakuOpacity)
+                value: playerHUDPercentLabel(controller.danmakuOpacity)
             ) {
                 open(.danmakuOpacity)
             }
             PlayerHUDNavRow(
                 icon: "arrow.up.to.line",
                 title: "显示区域",
-                value: "顶部 \(percentLabel(controller.danmakuDisplayArea))"
+                value: "顶部 \(playerHUDPercentLabel(controller.danmakuDisplayArea))"
             ) {
                 open(.danmakuDisplayArea)
             }
@@ -444,7 +444,7 @@ struct PlayerHUDExpandedActionCard: View {
             PlayerHUDNavRow(
                 icon: "textformat.size",
                 title: "字体大小",
-                value: percentLabel(controller.subtitleScale)
+                value: playerHUDPercentLabel(controller.subtitleScale)
             ) {
                 open(.subtitleScale)
             }
@@ -502,7 +502,7 @@ struct PlayerHUDExpandedActionCard: View {
                         onUserInteraction()
                     } label: {
                         HStack(spacing: 10) {
-                            Text(timeString(chapter.startSeconds))
+                            Text(playerHUDTimeLabel(.seconds(chapter.startSeconds)))
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(PlayerHUDPalette.tertiary)
                                 .frame(width: 52, alignment: .leading)
@@ -593,14 +593,14 @@ struct PlayerHUDExpandedActionCard: View {
             optionRows(
                 [0.25, 0.5, 0.75, 1.0],
                 current: controller.danmakuOpacity,
-                title: { percentLabel($0) },
+                title: { playerHUDPercentLabel($0) },
                 select: { controller.setDanmakuOpacity($0) }
             )
         case .danmakuDisplayArea:
             optionRows(
                 [0.25, 0.5, 0.75, 1.0],
                 current: controller.danmakuDisplayArea,
-                title: { "顶部 \(percentLabel($0))" },
+                title: { "顶部 \(playerHUDPercentLabel($0))" },
                 select: { controller.setDanmakuDisplayArea($0) }
             )
         case .danmakuFontSize:
@@ -741,7 +741,7 @@ struct PlayerHUDExpandedActionCard: View {
     }
 
     private var fontSizeLabel: String {
-        percentLabel(controller.danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize)
+        playerHUDPercentLabel(controller.danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize)
     }
 
     private var currentSubtitleLabel: String {
@@ -757,18 +757,6 @@ struct PlayerHUDExpandedActionCard: View {
             : track.displayTitle
     }
 
-    private func percentLabel(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
-    }
-
-    private func timeString(_ seconds: Double) -> String {
-        let total = Int(seconds.rounded())
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        let s = total % 60
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
-        return String(format: "%d:%02d", m, s)
-    }
 }
 
 // MARK: - Infuse 式菜单行组件

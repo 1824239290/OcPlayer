@@ -14,15 +14,35 @@ public struct IntroSeekEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// 手动跳过学习的全部判定参数（**单源**）。
+///
+/// 「什么算一次有效落点」此前一半写在 App 层（`DanmakuCoordinator.handleUserSeek`
+/// 的过滤窗/最小前跳/确认容差）、一半写在本包（聚簇容差/合理性窗），±10s 的
+/// 「同一落点」容差两侧各写一份——它们是同一物理意义，必须同调，所以全部收在这里。
+public enum IntroLearningPolicy {
+    /// 落点过滤窗：片头结束点的合理区间（秒）。
+    public static let landingWindow: ClosedRange<Double> = 30...360
+    /// 触发学习的最小前跳秒数（太小的拖动不是「跳过片头」）。
+    public static let minimumSeekSeconds: Double = 5
+    /// 「同一落点」容差（秒）：确认升级（落点贴合既有提示）与跨集聚簇共用。
+    public static let snapToleranceSeconds: Double = 10
+    /// 跨集共识要求的最少**不同集**数（同人同集反复跳不算跨集证据）。
+    public static let minimumConsensusEpisodes = 2
+    /// 每番学习事件上限（最新优先），防长跑库无限膨胀。
+    public static let maxEventsPerAnime = 200
+}
+
 /// 手动跳过学习存储（`learned-intros.json`，anime 级，永久；已列入
 /// `DanmakuCache.permanentFileNames` 白名单，不会被缓存清理删掉）。
 ///
 /// 学习信号 = 用户在播放中**主动前跳**且落点落在片头结束区间（范围过滤在 App
-/// 层做完才喂进来）。两条晋升路径：
-/// 1. **确认升级**：落点与该集既有提示 end ±10s → 用户背书了猜测，该提示升级为
-///    `.learned`（防后续低优先级来源覆盖）——判定在 App 层做（它持有当前提示）；
-/// 2. **跨集晋升**：≥2 个不同集的落点聚簇（±10s）→ 同季 OP 恒定，中位数推广到
-///    全番。变量 OP 的番（各集冷开场/前情不同）落点自然离散，聚不起来不会误套。
+/// 层按 `IntroLearningPolicy` 做完才喂进来）。两条晋升路径：
+/// 1. **确认升级**：落点与该集既有提示 end ±`snapToleranceSeconds` → 用户背书了
+///    猜测，该提示升级为 `.learned`（防后续低优先级来源覆盖）——判定在 App 层做
+///    （它持有当前提示）；
+/// 2. **跨集晋升**：≥`minimumConsensusEpisodes` 个不同集的落点聚簇 → 同季 OP 恒定，
+///    中位数推广到全番。变量 OP 的番（各集冷开场/前情不同）落点自然离散，
+///    聚不起来不会误套。
 public actor IntroLearningStore {
     private struct AnimeLearning: Codable, Sendable {
         var events: [IntroSeekEvent] = []
@@ -46,9 +66,9 @@ public actor IntroLearningStore {
     public func record(animeID: Int64, event: IntroSeekEvent) {
         var learning = load()[String(animeID)] ?? AnimeLearning()
         learning.events.append(event)
-        // 事件有界:每番最多留 200 条(最新优先),防长跑库无限膨胀。
-        if learning.events.count > 200 {
-            learning.events = Array(learning.events.suffix(200))
+        // 事件有界:最新优先截断（上限见 IntroLearningPolicy）。
+        if learning.events.count > IntroLearningPolicy.maxEventsPerAnime {
+            learning.events = Array(learning.events.suffix(IntroLearningPolicy.maxEventsPerAnime))
         }
         setLearning(learning, for: animeID)
     }
@@ -84,13 +104,13 @@ public actor IntroLearningStore {
     /// 反复跳不算跨集证据），返回簇内位置中位数与集数。无共识返回 nil。
     public static func crossEpisodeConsensus(
         of events: [IntroSeekEvent],
-        minimumEpisodes: Int = 2
+        minimumEpisodes: Int = IntroLearningPolicy.minimumConsensusEpisodes
     ) -> (end: Double, episodeCount: Int)? {
         let sorted = events.sorted { $0.position < $1.position }
         guard !sorted.isEmpty else { return nil }
         var clusters: [[IntroSeekEvent]] = [[sorted[0]]]
         for event in sorted.dropFirst() {
-            if event.position - (clusters[clusters.count - 1].last?.position ?? event.position) <= 10 {
+            if event.position - (clusters[clusters.count - 1].last?.position ?? event.position) <= IntroLearningPolicy.snapToleranceSeconds {
                 clusters[clusters.count - 1].append(event)
             } else {
                 clusters.append([event])
@@ -108,8 +128,8 @@ public actor IntroLearningStore {
               Set(best.map(\.episodeID)).count >= minimumEpisodes
         else { return nil }
         let end = median(best.map(\.position))
-        // 落点合理性:与学习窗口一致(片头结束点不会在 30s 内/360s 外)。
-        guard end >= 30, end <= 360 else { return nil }
+        // 落点合理性:与学习窗口同源（片头结束点不会在窗外）。
+        guard IntroLearningPolicy.landingWindow.contains(end) else { return nil }
         return (end, Set(best.map(\.episodeID)).count)
     }
 

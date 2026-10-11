@@ -200,7 +200,7 @@ struct PlayerHUDInfoPanel: View {
         let timeline = controller.state.timeline
         var value = "\(playerHUDTimeLabel(timeline.displayPosition)) / \(playerHUDTimeLabel(timeline.duration))"
         if timeline.duration > .zero {
-            value += " · \(Int((timeline.progress * 100).rounded()))%"
+            value += " · \(playerHUDPercentLabel(timeline.progress))"
         }
         return value
     }
@@ -438,4 +438,9 @@ func playerHUDTimeLabel(_ duration: Duration) -> String {
     duration.formatted(
         .time(pattern: duration > .seconds(3600) ? .hourMinuteSecond : .minuteSecond)
     )
+}
+
+/// 进度/比例统一显示为整数百分比（HUD 各行只此一份）。
+func playerHUDPercentLabel(_ fraction: Double) -> String {
+    "\(Int((fraction * 100).rounded()))%"
 }
