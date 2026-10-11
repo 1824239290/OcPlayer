@@ -383,6 +383,10 @@ struct DetailView: View {
                 DetailExternalLinksView(item: model.shown, selectedSeason: selectedSeason)
             }
         }
+        // 同桌面 metaRow：详情未落地前隐匿（评分/分级/季数随 `shown` 切换补齐，
+        // 半成品行先现身会在翻转动画里滑动），落地后带完整内容一次性淡入。
+        .opacity(model.detail == nil ? 0 : 1)
+        .motion(Motion.standard, value: model.detail != nil)
     }
 
     private var compactActionSection: some View {
@@ -648,6 +652,13 @@ struct DetailView: View {
             )
         }
         .font(.subheadline)
+        // 详情未落地前整行隐匿（占住行高）：`shown` 从列表条目切到详情条目时
+        // 「N 季 / 评分 / 分级」才补齐，这些元素都排在行中段——半成品行先现身的话，
+        // 补齐瞬间正好赶上横幅↔氛围翻转的动画作用域，它们会集体向右滑（录屏
+        // 逐帧实证的徽章滑动）。行内前三位（年份/类型/时长）两态同值同位，
+        // 切换对它们零影响；外链徽章后到，插在行尾不动别人。
+        .opacity(model.detail == nil ? 0 : 1)
+        .motion(Motion.standard, value: model.detail != nil)
     }
 
     private var metaParts: [String] {
