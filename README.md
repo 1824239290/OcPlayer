@@ -35,7 +35,7 @@ Bangumi / MoviePilot 不用可在设置里停用,入口会全部隐藏。
 - **macOS**:`OcPlayer-<版本>-macOS-arm64.dmg`,打开把 App 拖进「应用程序」
 - **iOS / iPadOS**:`OcPlayer-<版本>-ios-unsigned.ipa`,未签名,用 [AltStore](https://altstore.io/) / [Sideloadly](https://sideloadly.io/) / TrollStore 等工具重签安装
 
-> 产物未经 Apple 公证。macOS 首次打开若遇 Gatekeeper 提示,右键点 App 选「打开」即可;iOS 的签名与证书问题请参考所选工具的说明。
+> 产物未经 Apple 公证。macOS 首次打开若遇 Gatekeeper 提示,进入设置 APP 选择隐私与安全性在安全性分区找到 App 选「打开」即可;iOS 的签名与证书问题请参考所选工具的说明。
 
 ## 快速上手
 
