@@ -599,6 +599,13 @@ struct DetailView: View {
                 .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+        } else {
+            // **槽位恒占位**：海报 URL 未就绪/缺失时也要留住这 120×180。否则
+            // 「横幅 ↔ 氛围」翻转（占位剧集详情落地、hasBackdrop 翻转）时两个
+            // 头部的文字列 x 差 ~120px，交叉淡化被眼睛读成「logo/年份/播放钮
+            // 从左往右滑」（录屏逐帧实证：落地帧文字列在 75 = 52 inset + 24
+            // 空槽间距，落定在 196）。占位后两版布局逐像素同构，翻转只剩纯淡入。
+            Color.clear.frame(width: width, height: height)
         }
     }
 
