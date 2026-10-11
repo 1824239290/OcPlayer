@@ -28,6 +28,9 @@ enum NetworkLog {
     enum Emby {
         private static let category = "Emby"
 
+        /// 「请求被取消」这类非故障日志用（见 `EmbySession.send` 的取消分支）。
+        static let logger = DiagnosticsKit.NetworkLog.logger(category: category)
+
         static func requestSucceeded(_ path: String, duration: TimeInterval, level: DiagnosticLevel = .info) {
             DiagnosticsKit.NetworkLog.requestSucceeded(category: category, path: path, duration: duration, level: level)
         }
@@ -542,7 +545,16 @@ public struct JellyfinServer: MediaServer {
             } catch {
                 let wrapped = JellyfinError.wrapPreservingCancellation(error)
                 // 取消照抛：那是"调用方不要了"，不是可重试的失败。
-                if JellyfinError.isCancellation(error) { throw wrapped }
+                if JellyfinError.isCancellation(error) {
+                    // 但要留痕：取消连 requestFailed 都不走，出了「加载失败」类
+                    // 问题时诊断包里既无成功也无失败，无从归因（2026-10-11 排查
+                    // 集列表 -999 实证）。用 info 而不是 debug——默认档只落 info
+                    // 及以上，debug 进不了诊断包（见下方重试日志的同一取舍）。
+                    NetworkLog.logger.info(
+                        "请求被取消（任务取消，非故障）\(request.method.rawValue) \(path)",
+                        fields: ["duration_ms": .integer(Int64(Date().timeIntervalSince(start) * 1000))])
+                    throw wrapped
+                }
                 lastError = wrapped
                 // ⚠️ 换址判断必须排在下面的重试闸门**之前**。
                 //

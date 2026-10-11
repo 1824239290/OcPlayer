@@ -211,7 +211,16 @@ final class EmbySession: @unchecked Sendable {
             return data
         } catch {
             let wrapped = JellyfinError.wrapPreservingCancellation(error)
-            NetworkLog.Emby.requestFailed(path, error: wrapped, duration: Date().timeIntervalSince(start))
+            if JellyfinError.isCancellation(wrapped) {
+                // 取消不是故障，不记「请求失败」（.error 档会把换季/离页的正常取消
+                // 刷成一片红）：info 级留痕供归因，与 Jellyfin 路径同口径（见
+                // `JellyfinServer.send` 的取消分支注释）。
+                NetworkLog.Emby.logger.info(
+                    "请求被取消（任务取消，非故障）\(method) \(path)",
+                    fields: ["duration_ms": .integer(Int64(Date().timeIntervalSince(start) * 1000))])
+            } else {
+                NetworkLog.Emby.requestFailed(path, error: wrapped, duration: Date().timeIntervalSince(start))
+            }
             await notifyIfTokenExpired(wrapped)
             throw wrapped
         }
