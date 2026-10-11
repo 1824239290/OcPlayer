@@ -88,7 +88,7 @@ final class MoviePilotCoordinator {
             // 回滚到登录前的凭据与 token：错误凭据只是「尝试」，不该持久化，
             // 更不能把上一台服务器的可用会话一起带走。
             store.restore(snapshot)
-            let message = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            let message = MoviePilotError.userMessage(of: error)
             MoviePilotNetworkLog.logger.error("MoviePilot 登录失败（已回滚凭据）error=\(error)")
             authError = message
             return message

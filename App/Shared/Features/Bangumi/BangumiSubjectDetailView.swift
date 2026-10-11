@@ -101,12 +101,8 @@ struct BangumiSubjectDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 32)
                 } else if let loadError, subject == nil {
-                    ContentUnavailableView {
-                        Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(loadError)
-                    } actions: {
-                        Button(UIStrings.retry) { Task { await load() } }
+                    EmptyState(failure: loadError) {
+                        Task { await load() }
                     }
                     .padding(.horizontal, contentLeading)
                 } else {
@@ -190,16 +186,16 @@ struct BangumiSubjectDetailView: View {
                 FlowLayout(spacing: 6) {
                     let type = subject?.type ?? initialSubject?.type ?? .none
                     if type != .none {
-                        badgeView(text: type.description, icon: type.icon)
+                        PillChip(type.description, systemImage: type.icon)
                     }
                     if let platform = subject?.platform, !platform.typeCN.isEmpty {
-                        badgeView(text: platform.typeCN)
+                        PillChip(platform.typeCN)
                     }
                     if let airdate = subject?.airtime.date, !airdate.isEmpty {
-                        badgeView(text: airdate)
+                        PillChip(airdate)
                     }
                     if let eps = subject?.eps, eps > 0 {
-                        badgeView(text: "\(eps) 话")
+                        PillChip("\(eps) 话")
                     }
                 }
 
@@ -276,21 +272,6 @@ struct BangumiSubjectDetailView: View {
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius + 4))
-    }
-
-    private func badgeView(text: String, icon: String? = nil) -> some View {
-        HStack(spacing: 3) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
-            }
-            Text(text)
-                .font(.caption2.weight(.medium))
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(Color.primary.opacity(0.06), in: Capsule())
-        .foregroundStyle(.secondary)
     }
 
     /// MoviePilot 下载快捷入口（集成停用时整块隐藏）。

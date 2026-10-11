@@ -90,23 +90,19 @@ struct BangumiCalendarView: View {
                 // `PageFillingState` 铺满，否则整条尺寸链塌掉、氛围背景与顶栏
                 // 一起失去内容（见该类型注释）。
                 PageFillingState {
-                    ContentUnavailableView {
-                        Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(loadError)
-                    } actions: {
-                        Button(UIStrings.retry) { Task { await loadCalendar() } }
-                            .buttonStyle(.borderedProminent)
+                    EmptyState(failure: loadError) {
+                        Task { await loadCalendar() }
                     }
                 }
             } else if days.isEmpty {
                 PageFillingState {
-                    ContentUnavailableView {
-                        Label("暂无放送数据", systemImage: "calendar.badge.exclamationmark")
-                    } description: {
-                        Text("未能获取到本季度的每日放送时间表。")
-                    } actions: {
-                        Button("刷新") { Task { await loadCalendar(force: true) } }
+                    EmptyState(
+                        empty: "暂无放送数据",
+                        systemImage: "calendar.badge.exclamationmark",
+                        message: "未能获取到本季度的每日放送时间表。",
+                        actionTitle: "刷新"
+                    ) {
+                        Task { await loadCalendar(force: true) }
                     }
                 }
             } else {
@@ -137,11 +133,11 @@ struct BangumiCalendarView: View {
                 }
 
                 if displayDays.isEmpty {
-                    ContentUnavailableView {
-                        Label("未找到相关番剧", systemImage: "magnifyingglass")
-                    } description: {
-                        Text(searchKeyword.isEmpty ? "该星期暂无番剧放送。" : "未找到与「\(searchKeyword)」相关的放送番剧。")
-                    }
+                    EmptyState(
+                        empty: "未找到相关番剧",
+                        systemImage: "magnifyingglass",
+                        message: searchKeyword.isEmpty ? "该星期暂无番剧放送。" : "未找到与「\(searchKeyword)」相关的放送番剧。"
+                    )
                     .frame(maxWidth: .infinity, minHeight: 280)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 20) {
@@ -532,12 +528,10 @@ private struct CalendarItemCard: View {
     }
 
     private func interestBadge(_ interest: BangumiCollectionType) -> some View {
-        let color = BangumiStatusColor.collection(interest)
-        return Text(interest.description(.anime))
-            .font(.system(size: 10, weight: .semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.16), in: Capsule())
-            .foregroundStyle(color)
+        PillChip(
+            interest.description(.anime),
+            role: .custom(BangumiStatusColor.collection(interest)),
+            font: .system(size: 10, weight: .semibold)
+        )
     }
 }

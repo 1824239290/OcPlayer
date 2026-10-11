@@ -6,12 +6,8 @@ struct DanmakuSelectionSheet: View {
     @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(\.dismiss) private var dismiss
 
-    private enum Field: Hashable {
-        case anime
-        case episode
-    }
-
-    @FocusState private var focusedField: Field?
+    @FocusState private var animeFocused: Bool
+    @FocusState private var episodeFocused: Bool
 
     @State private var animeQuery: String
     @State private var episodeQuery: String
@@ -151,84 +147,22 @@ struct DanmakuSelectionSheet: View {
             // 输入行：作品名 + 集数 + 搜索按钮
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
-                    // 作品名输入框
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundStyle(focusedField == .anime ? Color.accentColor : Color.secondary)
-                        TextField("作品名（如：葬送的芙莉莲）", text: $animeQuery)
-                            .textFieldStyle(.plain)
-                            .font(.callout)
-                            .focused($focusedField, equals: .anime)
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .submitLabel(.search)
-                            #endif
-                            .autocorrectionDisabled()
-                            .onSubmit(startSearch)
-                            .onChange(of: animeQuery) { invalidateChangedSearch() }
-
-                        if !animeQuery.isEmpty {
-                            Button {
-                                animeQuery = ""
-                                invalidateChangedSearch()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.primary.opacity(0.04), in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(
-                                focusedField == .anime ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08),
-                                lineWidth: 0.5
-                            )
+                    CapsuleSearchField(
+                        "作品名（如：葬送的芙莉莲）",
+                        text: $animeQuery,
+                        focus: $animeFocused,
+                        onSubmit: startSearch,
+                        onChange: invalidateChangedSearch
                     )
 
-                    // 集数输入框
-                    HStack(spacing: 4) {
-                        TextField("集数", text: $episodeQuery)
-                            .textFieldStyle(.plain)
-                            .font(.callout)
-                            .focused($focusedField, equals: .episode)
-                            #if os(iOS)
-                            .textInputAutocapitalization(.never)
-                            .submitLabel(.search)
-                            #endif
-                            .autocorrectionDisabled()
-                            .onSubmit(startSearch)
-                            .onChange(of: episodeQuery) { invalidateChangedSearch() }
-
-                        if !episodeQuery.isEmpty {
-                            Button {
-                                episodeQuery = ""
-                                invalidateChangedSearch()
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    #if os(macOS)
-                    .frame(width: 80)
-                    #else
-                    .frame(maxWidth: 80)
-                    #endif
-                    .background(Color.primary.opacity(0.04), in: Capsule())
-                    .overlay(
-                        Capsule()
-                            .strokeBorder(
-                                focusedField == .episode ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08),
-                                lineWidth: 0.5
-                            )
+                    CapsuleSearchField(
+                        "集数",
+                        text: $episodeQuery,
+                        focus: $episodeFocused,
+                        onSubmit: startSearch,
+                        onChange: invalidateChangedSearch
                     )
+                    .frame(maxWidth: 96)
 
                     // 搜索按钮
                     Button(action: startSearch) {
@@ -323,15 +257,8 @@ struct DanmakuSelectionSheet: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let errorMessage {
-            ContentUnavailableView {
-                Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
-            } description: {
-                Text(errorMessage)
-            } actions: {
-                Button(UIStrings.retry) {
-                    startSearch()
-                }
-                .buttonStyle(.borderedProminent)
+            EmptyState(failure: errorMessage, title: UIStrings.searchFailed) {
+                startSearch()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if hasSearched && validAnimeResults.isEmpty {
@@ -346,33 +273,27 @@ struct DanmakuSelectionSheet: View {
     }
 
     private var noResultsView: some View {
-        ContentUnavailableView {
-            Label("未找到相关弹幕", systemImage: "magnifyingglass")
-        } description: {
-            let hasEpisode = !episodeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let anime = animeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-            if hasEpisode {
-                Text("未找到与「\(anime)」第「\(episodeQuery)」集匹配的弹幕。\n请尝试清空集数搜索全部剧集，或调整作品名称。")
-            } else {
-                Text("未找到与「\(anime)」相关的弹幕。\n请检查作品名称拼写，或尝试使用更通用的关键词。")
-            }
-        } actions: {
-            if !episodeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button("清空集数重新搜索") {
-                    episodeQuery = ""
-                    startSearch()
-                }
-                .buttonStyle(.borderedProminent)
-            }
+        let hasEpisode = !episodeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let anime = animeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return EmptyState(
+            empty: "未找到相关弹幕",
+            systemImage: "magnifyingglass",
+            message: hasEpisode
+                ? "未找到与「\(anime)」第「\(episodeQuery)」集匹配的弹幕。\n请尝试清空集数搜索全部剧集，或调整作品名称。"
+                : "未找到与「\(anime)」相关的弹幕。\n请检查作品名称拼写，或尝试使用更通用的关键词。",
+            actionTitle: hasEpisode ? "清空集数重新搜索" : nil
+        ) {
+            episodeQuery = ""
+            startSearch()
         }
     }
 
     private var initialGuideView: some View {
-        ContentUnavailableView {
-            Label("搜索弹幕", systemImage: "text.magnifyingglass")
-        } description: {
-            Text("输入作品名与集数，检索弹弹play网络弹幕库。")
-        }
+        EmptyState(
+            empty: "搜索弹幕",
+            systemImage: "text.magnifyingglass",
+            message: "输入作品名与集数，检索弹弹play网络弹幕库。"
+        )
     }
 
     /// 第一层子菜单：匹配到的动画作品列表（点击下钻进入选集）

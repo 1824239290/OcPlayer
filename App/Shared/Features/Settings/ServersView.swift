@@ -488,79 +488,66 @@ private struct AddAddressSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("服务器地址")
-                            .font(.subheadline.weight(.semibold))
-                        TextField(
-                            "",
-                            text: $text,
-                            prompt: Text("例如 100.64.1.20:8096 或 nas.example.ts.net:8096")
-                        )
-                        .textContentType(.URL)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: .infinity)
-                        .onSubmit { Task { await submit(allowUnreachable: false) } }
-                        Text("可以不打 http:// 前缀；Tailscale 请填 100.x 地址或 MagicDNS 名字。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("协议")
-                            .font(.subheadline.weight(.semibold))
-                        Picker("协议", selection: $scheme) {
-                            Text("HTTP").tag(ServerScheme.http)
-                            Text("HTTPS").tag(ServerScheme.https)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                    }
-
-                    if let failure {
-                        VStack(alignment: .leading, spacing: 8) {
-                            failureNotice(failure)
-                            if failure == .unreachable {
-                                Button("仍然添加") {
-                                    Task { await submit(allowUnreachable: true) }
-                                }
-                                .disabled(isSubmitting)
-                            }
-                        }
-                    }
+        FormSheetShell(
+            title: "添加地址",
+            confirmEnabled: isValid && !isSubmitting,
+            onConfirm: {
+                Task { await submit(allowUnreachable: false) }
+            },
+            confirmLabel: {
+                if isSubmitting {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Text("添加")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 20)
             }
-            .navigationTitle("添加地址")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+        ) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("服务器地址")
+                    .font(.subheadline.weight(.semibold))
+                TextField(
+                    "",
+                    text: $text,
+                    prompt: Text("例如 100.64.1.20:8096 或 nas.example.ts.net:8096")
+                )
+                .textContentType(.URL)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: .infinity)
+                .onSubmit { Task { await submit(allowUnreachable: false) } }
+                Text("可以不打 http:// 前缀；Tailscale 请填 100.x 地址或 MagicDNS 名字。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("协议")
+                    .font(.subheadline.weight(.semibold))
+                Picker("协议", selection: $scheme) {
+                    Text("HTTP").tag(ServerScheme.http)
+                    Text("HTTPS").tag(ServerScheme.https)
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        Task { await submit(allowUnreachable: false) }
-                    } label: {
-                        if isSubmitting {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Text("添加")
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+
+            if let failure {
+                VStack(alignment: .leading, spacing: 8) {
+                    failureNotice(failure)
+                    if failure == .unreachable {
+                        Button("仍然添加") {
+                            Task { await submit(allowUnreachable: true) }
                         }
+                        .disabled(isSubmitting)
                     }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!isValid || isSubmitting)
                 }
             }
         }
         #if os(macOS)
-        .frame(width: 520, height: 380)
+        .frame(height: 380)
         #endif
     }
 

@@ -70,25 +70,6 @@ struct MoviePilotHomeView: View {
         horizontalSizeClass == .compact
     }
 
-    /// 规范化的自适应网格列：
-    /// - 窄屏/手机：2 列等宽自适应
-    /// - 宽屏/Mac：自适应列宽（最小 180pt，最大 240pt），确保大图呼吸感，避免卡片挤成一团
-    private var gridColumns: [GridItem] {
-        if isCompact {
-            return [
-                GridItem(.flexible(), spacing: 16),
-                GridItem(.flexible(), spacing: 16),
-            ]
-        }
-        return [
-            GridItem(.adaptive(minimum: 180, maximum: 240), spacing: 20)
-        ]
-    }
-
-    private var gridRowSpacing: CGFloat {
-        isCompact ? 18 : 28
-    }
-
     var body: some View {
         Group {
             switch moviepilot.integrationState {
@@ -317,7 +298,7 @@ struct MoviePilotHomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let notice {
-                    noticeBanner(notice, isError: isNoticeError)
+                    MoviePilotNoticeBanner(text: notice, isError: isNoticeError)
                         .padding(.horizontal, contentLeading)
                         .padding(.top, 12)
                 }
@@ -413,16 +394,13 @@ struct MoviePilotHomeView: View {
     }
 
     private var skeletonGrid: some View {
-        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gridRowSpacing) {
+        LazyVGrid(
+            columns: PosterGrid.columns(compact: isCompact),
+            alignment: .leading,
+            spacing: PosterGrid.rowSpacing(compact: isCompact)
+        ) {
             ForEach(0..<10, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 8) {
-                    SkeletonBlock()
-                        .aspectRatio(2 / 3, contentMode: .fit)
-                    SkeletonBlock(cornerRadius: 4)
-                        .frame(height: 14)
-                    SkeletonBlock(cornerRadius: 4)
-                        .frame(width: 80, height: 12)
-                }
+                SkeletonPosterCard(width: nil)
             }
         }
         .padding(.horizontal, contentLeading)
@@ -431,7 +409,11 @@ struct MoviePilotHomeView: View {
     }
 
     private var subscriptionsGrid: some View {
-        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: gridRowSpacing) {
+        LazyVGrid(
+            columns: PosterGrid.columns(compact: isCompact),
+            alignment: .leading,
+            spacing: PosterGrid.rowSpacing(compact: isCompact)
+        ) {
             ForEach(displayedSubscribes) { subscribe in
                 MoviePilotSubscribeCard(
                     subscribe: subscribe,
@@ -475,7 +457,7 @@ struct MoviePilotHomeView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         if let notice {
-                            noticeBanner(notice, isError: isNoticeError)
+                            MoviePilotNoticeBanner(text: notice, isError: isNoticeError)
                                 .padding(.top, 8)
                         }
 
@@ -500,11 +482,7 @@ struct MoviePilotHomeView: View {
                                 .font(.title3.weight(.bold))
                                 .foregroundStyle(.primary)
 
-                            Text("\(results.count)")
-                                .font(.footnote.weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(.fill.quaternary, in: Capsule())
+                            PillChip("\(results.count)", font: .footnote.weight(.semibold))
 
                             Spacer()
                         }
@@ -555,13 +533,6 @@ struct MoviePilotHomeView: View {
         }
     }
 
-    private func noticeBanner(_ text: String, isError: Bool) -> some View {
-        Label(text, systemImage: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-            .foregroundStyle(isError ? .red : .green)
-            .font(.callout)
-            .padding(.vertical, 4)
-    }
-
     /// MoviePilot 请求失败的错误态：登录失效（token 过期且静默重登也被拒）时
     /// 重试没有意义，标题与按钮换成「登录状态已失效 / 重新登录」，直弹登录窗；
     /// 其余错误维持原文案 + 重试。
@@ -571,25 +542,19 @@ struct MoviePilotHomeView: View {
         retry: @escaping () -> Void
     ) -> some View {
         let isAuthFailure = error.isAuthenticationFailure
-        return ContentUnavailableView {
-            Label(
-                isAuthFailure ? "登录状态已失效" : failedTitle,
-                systemImage: isAuthFailure
-                    ? "person.crop.circle.badge.exclamationmark" : "exclamationmark.triangle"
-            )
-        } description: {
-            Text(
-                isAuthFailure
-                    ? "MoviePilot 的登录凭证已过期或被服务端拒绝，重新登录后即可继续。"
-                    : error.userMessage
-            )
-        } actions: {
+        return EmptyState(
+            empty: isAuthFailure ? "登录状态已失效" : failedTitle,
+            systemImage: isAuthFailure
+                ? "person.crop.circle.badge.exclamationmark" : "exclamationmark.triangle",
+            message: isAuthFailure
+                ? "MoviePilot 的登录凭证已过期或被服务端拒绝，重新登录后即可继续。"
+                : error.userMessage,
+            actionTitle: isAuthFailure ? "重新登录" : UIStrings.retry
+        ) {
             if isAuthFailure {
-                Button("重新登录") { isPresentingReloginSheet = true }
-                    .buttonStyle(.borderedProminent)
+                isPresentingReloginSheet = true
             } else {
-                Button(UIStrings.retry, action: retry)
-                    .buttonStyle(.bordered)
+                retry()
             }
         }
     }
@@ -683,7 +648,7 @@ struct MoviePilotHomeView: View {
             isNoticeError = false
             Task { await loadSubscribes() }
         } catch {
-            notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            notice = MoviePilotError.userMessage(of: error)
             isNoticeError = true
         }
         subscribingMediaIDs.remove(media.id)
@@ -701,7 +666,7 @@ struct MoviePilotHomeView: View {
             notice = "已取消「\(subscribe.name ?? "")」的订阅"
             isNoticeError = false
         } catch {
-            notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            notice = MoviePilotError.userMessage(of: error)
             isNoticeError = true
         }
     }
@@ -714,7 +679,7 @@ struct MoviePilotHomeView: View {
             isNoticeError = false
             await loadSubscribes()
         } catch {
-            notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            notice = MoviePilotError.userMessage(of: error)
             isNoticeError = true
         }
     }
@@ -726,7 +691,7 @@ struct MoviePilotHomeView: View {
             notice = "已向服务器发送全站追更检索指令"
             isNoticeError = false
         } catch {
-            notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            notice = MoviePilotError.userMessage(of: error)
             isNoticeError = true
         }
     }

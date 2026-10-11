@@ -70,71 +70,38 @@ struct DanmakuGatewayEntrySheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("网关地址")
-                            .font(.subheadline.weight(.semibold))
-                        TextField(
-                            "",
-                            text: $gatewayURL,
-                            prompt: Text("https://gateway.example.com")
-                        )
-                        .textContentType(.URL)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: .infinity)
-                        Text("仅支持 HTTPS 根地址；留空恢复默认网关。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+        FormSheetShell(
+            title: "弹幕网关",
+            confirmEnabled: gatewayURLIsValid,
+            onConfirm: {
+                onSubmit(
+                    gatewayURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                    key.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                dismiss()
+            },
+            confirmLabel: { Text("保存") }
+        ) {
+            LabeledCredentialField(
+                label: "网关地址",
+                text: $gatewayURL,
+                prompt: "https://gateway.example.com",
+                caption: "仅支持 HTTPS 根地址；留空恢复默认网关。",
+                kind: .url
+            )
 
-                    Divider()
+            Divider()
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("API Key")
-                            .font(.subheadline.weight(.semibold))
-                        SecureField(
-                            "",
-                            text: $key,
-                            prompt: Text("由网关管理员签发")
-                        )
-                        .textContentType(.password)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: .infinity)
-                        Text("Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 20)
-            }
-            .navigationTitle("弹幕网关")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        onSubmit(
-                            gatewayURL.trimmingCharacters(in: .whitespacesAndNewlines),
-                            key.trimmingCharacters(in: .whitespacesAndNewlines)
-                        )
-                        dismiss()
-                    }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!gatewayURLIsValid)
-                }
-            }
+            LabeledCredentialField(
+                label: "API Key",
+                text: $key,
+                prompt: "由网关管理员签发",
+                caption: "Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。",
+                kind: .secure
+            )
         }
         #if os(macOS)
-        .frame(width: 520, height: 340)
+        .frame(height: 340)
         #endif
     }
 

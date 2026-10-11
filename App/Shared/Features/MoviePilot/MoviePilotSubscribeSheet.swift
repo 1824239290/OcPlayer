@@ -512,7 +512,7 @@ struct MoviePilotSubscribeSheet: View {
             onSaved?()
             dismiss()
         } catch {
-            errorMessage = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            errorMessage = MoviePilotError.userMessage(of: error)
             isSaving = false
         }
     }
