@@ -134,6 +134,12 @@ extension MediaItem {
 }
 
 /// 条目标题 Logo / 文本标题视图：优先展示透明艺术字 ClearLogo，未配置或加载失败时优雅回退为文字标题。
+/// 标题 Logo 图（失败回退文字标题）。
+///
+/// **为什么不是 `RemoteImage`**：它是「框锚定」组件——布局尺寸由占位矩形（外部
+/// 提议）决定、位图走 overlay 不反哺布局；而 Logo 是「图锚定」——视图尺寸随
+/// 位图自然大小（上限封顶），海报/标题列要与图底边对齐，占位列（骨架→文字）
+/// 也不是 RemoteImage 的灰块语义。两套路由契约不同，别硬套。
 struct ItemTitleLogoView: View {
     let item: MediaItem
     let server: (any MediaServer)?

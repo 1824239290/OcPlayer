@@ -178,7 +178,7 @@ struct MoviePilotResourceSection: View {
             } ?? results.first
         } catch {
             guard generation == matchGeneration else { return }
-            errorText = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            errorText = MoviePilotError.userMessage(of: error)
         }
     }
 }

@@ -575,7 +575,12 @@ public struct JellyfinServer: MediaServer {
 
     /// 幂等判定：按 HTTP 语义（与 MoviePilotKit 的 `MPRequest.isIdempotent` 同口径）。
     static func isIdempotent(_ method: HTTPMethod) -> Bool {
-        switch method.rawValue.uppercased() {
+        isIdempotent(method.rawValue)
+    }
+
+    /// String 版：Emby 侧的裸传输层（`EmbySession`）也走同一张表。
+    static func isIdempotent(_ method: String) -> Bool {
+        switch method.uppercased() {
         case "GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE":
             return true
         default:

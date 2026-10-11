@@ -320,25 +320,27 @@ public enum BangumiMatcher {
         return linkedSubjectID(forJellyfinItemID: fallback)
     }
 
+    /// 持久化「条目 ↔ subject」关联的统一入口：主键 +「第 1 季 / 单季回落 series」
+    /// 双写——与 `linkedSubjectID(for:selectedSeason:)` 的读取链正好镜像。自动匹配
+    /// 与手动选择都走这里，回落规则只有一份（曾散在三处各抄一遍）。
+    public static func persistLink(_ subjectID: Int, for item: MediaItem, season: MediaItem?) {
+        let linkItemID = season?.id ?? item.seriesID ?? item.id
+        setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
+        if season == nil || season?.seasonNumber == 1 {
+            let fallbackID = item.seriesID ?? item.id
+            if fallbackID != linkItemID {
+                setLinkedSubjectID(subjectID, forJellyfinItemID: fallbackID)
+            }
+        }
+    }
+
     /// 自动匹配：返回命中的 subject（未命中 nil）。命中即持久化关联。
     public static func autoMatch(
         for item: MediaItem,
         season: MediaItem? = nil
     ) async throws -> BangumiSlimSubjectDTO? {
         guard let result = try await searchAndPick(for: item, season: season) else { return nil }
-
-        // 决定持久化 ID：有季绑季，否则绑剧集或自身
-        let linkItemID = season?.id ?? item.seriesID ?? item.id
-        setLinkedSubjectID(result.id, forJellyfinItemID: linkItemID)
-
-        // 若当前选中的是第 1 季或单季，顺便同步绑到 series ID 上，兼容旧读取逻辑
-        if season == nil || season?.seasonNumber == 1 {
-            let fallbackID = item.seriesID ?? item.id
-            if fallbackID != linkItemID {
-                setLinkedSubjectID(result.id, forJellyfinItemID: fallbackID)
-            }
-        }
-
+        persistLink(result.id, for: item, season: season)
         return result
     }
 

@@ -132,6 +132,12 @@ public enum MoviePilotError: Error, CustomStringConvertible, LocalizedError, Sen
         userMessage
     }
 
+    /// UI 错误文案的统一转换：MP 错误取 `userMessage`，其余错误给描述串。
+    /// 视图层曾把 `(error as? MoviePilotError)?.userMessage ?? "\(error)"` 抄了约 10 处。
+    public static func userMessage(of error: any Error) -> String {
+        (error as? MoviePilotError)?.userMessage ?? "\(error)"
+    }
+
     /// 鉴权失效类错误（`.requireLogin`，含 401/403-token 的归并结果）：UI 据此
     /// 把「重试」换成「重新登录」。
     public var isAuthenticationFailure: Bool {

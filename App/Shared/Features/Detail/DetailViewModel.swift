@@ -361,7 +361,7 @@ final class DetailViewModel {
             // 渲染、零请求直接返回。「重进秒开」的手感来自这条短路；过了 TTL 走
             // 下面的 SWR 刷新，语义不变。TMDb 照读本地缓存（refresh 有自己的
             // 过期策略，命中时不会发网络）。
-            if Date().timeIntervalSince(snapshot.fetchedAt) < AppModel.detailSnapshotTTL {
+            if snapshot.isFresh {
                 isLoading = false
                 loadError = nil
                 staleNotice = nil
@@ -394,34 +394,19 @@ final class DetailViewModel {
         async let similarItems = server.similar(itemID: item.id, limit: 12)
         var failure: (any Error)?
         do {
-            // item 与季**并行**：季请求只依赖 seriesID，不必等详情回来确认 kind——
-            // kind 从手上已有的条目（列表条目 / SWR 快照）预判。预判错的代价只是
-            // 白拉一次季列表（列表 Type 极少缺失），兜底在 else 分支以详情响应的
-            // kind 补拉。原先 item → seasons 串行要付两跳 RTT，是详情页首拉
-            // 「转圈久」的主要来源；点击预取把这条链提前到转场瞬间，这里是预取
-            // 没赶上时的保底。
             if shown.kind == .series {
-                async let seasonsRequest = server.seasons(seriesID: item.id)
-                let loadedDetail = try await server.item(item.id)
-                // 季失败**不连累详情**：详情已到手就先上屏，季区空着、错误并入
-                // failure（与原串行版 catch 的语义一致）。
-                var seasonsFailure: (any Error)?
-                let loadedSeasons: [MediaItem]
-                do { loadedSeasons = try await seasonsRequest }
-                catch where JellyfinError.isCancellation(error) {
-                    loadedSeasons = []
-                    throw CancellationError()
-                } catch {
-                    loadedSeasons = []
-                    seasonsFailure = error
-                }
+                // 取数编排（item∥季并行、季失败不连累详情、取消归一）与点击预取
+                // 同一段链，见 `AppModel.fetchDetailAndSeasons`。kind 从手上已有的
+                // 条目（列表条目 / SWR 快照）预判，兜底在 else 分支以详情响应的
+                // kind 补拉。点击预取把这条链提前到转场瞬间，这里是预取没赶上时的保底。
+                let fetched = try await AppModel.fetchDetailAndSeasons(server: server, item: item)
                 guard !Task.isCancelled else { return }
-                detail = loadedDetail
+                detail = fetched.detail
                 // 完整详情的图 tag 可能与列表页快照不同：换图重预热（同 URL 时直接命中短路）。
                 prewarmAmbience()
-                if !loadedSeasons.isEmpty {
-                    seasons = loadedSeasons
-                    selectedSeasonID = app.preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
+                if !fetched.seasons.isEmpty {
+                    seasons = fetched.seasons
+                    selectedSeasonID = app.preferredSeasonID(in: fetched.seasons, seriesID: fetched.detail.id)
                     // 元数据已确认是新的：把来自磁盘的季集缓存作废，让 `loadEpisodes`
                     // 重新拉一次。不清的话，几天前拉的集列表会一直显示到用户手动切季。
                     for seasonID in diskHydratedSeasons {
@@ -429,7 +414,7 @@ final class DetailViewModel {
                     }
                     diskHydratedSeasons = []
                 }
-                if let seasonsFailure {
+                if let seasonsFailure = fetched.seasonsFailure {
                     failure = seasonsFailure
                     if snapshot == nil {
                         loadError = (seasonsFailure as? JellyfinError)?.errorDescription
@@ -518,32 +503,52 @@ final class DetailViewModel {
         }
     }
 
+    /// 「先读缓存立即渲染 → 缺数据/过期时后台补 → 真补到了再重读一次」三段式的
+    /// 唯一实现：合集 / 条目 / 季三条 TMDb overlay 链路曾各写一份（仅定位输入与
+    /// 落点不同，连注释都互相引用）。
+    ///
+    /// - `read`：读已有数据（缓存命中时同步就绪，立即渲染）。
+    /// - `refresh`：后台补齐，返回「是否真的落库了新数据」（`RefreshOutcome.didFetch`
+    ///   语义——命中缓存 / TMDb 上没有 / 请求失败都不需要重读）。
+    /// - `apply`：overlay 落点（条目/合集是同一个 `tmdbOverlay`，季是另一个属性）。
+    /// - `onRefreshed`：补到后的附带动作（重预热氛围、同步合集海报给网格卡）。
+    private func refreshOverlayThenReload<Overlay>(
+        read: () async -> Overlay,
+        refresh: () async -> Bool,
+        apply: (Overlay) -> Void,
+        onRefreshed: () -> Void = {}
+    ) async {
+        apply(await read())
+        guard !Task.isCancelled else { return }
+        let didFetch = await refresh()
+        guard didFetch, !Task.isCancelled else { return }
+        apply(await read())
+        guard !Task.isCancelled else { return }
+        onRefreshed()
+    }
+
     /// 合集的 TMDb 数据：先读已有（立即渲染），再后台补，补到后重读一次。
     ///
-    /// 与 `loadSeasonOverlay` 同构，区别是定位靠**成员**：合集在服务端没有可用的
-    /// `ProviderIds["Tmdb"]`，TMDb 合集 id 是从成员电影的 `belongs_to_collection`
-    /// 反查出来的。所以成员还没加载出来时（离线首进、成员请求失败）本方法什么都不做，
-    /// 页面退回「服务端图 + 成员背景兜底」，不会卡在任何等待上。
+    /// 定位靠**成员**：合集在服务端没有可用的 `ProviderIds["Tmdb"]`，TMDb 合集 id
+    /// 是从成员电影的 `belongs_to_collection` 反查出来的。所以成员还没加载出来时
+    /// （离线首进、成员请求失败）本方法什么都不做，页面退回「服务端图 + 成员背景
+    /// 兜底」，不会卡在任何等待上。
     func loadCollectionOverlay() async {
         guard let app, shown.kind == .boxSet else { return }
-        // ① 立即用已有数据渲染（缓存命中时同步就绪）。
-        tmdbOverlay = await app.tmdbOverlay(for: shown)
-        // 顺手把海报路径递给网格卡：这样「先点开详情、再回合集库」这一趟是零请求的，
+        // 海报路径顺手递给网格卡：「先点开详情、再回合集库」这一趟零请求，
         // 卡片不用自己再解析一遍（见 `AppModel.collectionArtwork`）。
-        app.noteCollectionArtwork(itemID: shown.id, posterPath: tmdbOverlay?.posterPath)
-        guard !Task.isCancelled else { return }
-
-        // ② 缺数据或已过期时后台补，补到再刷新一次。
-        // 用 `.didFetch`（只有真的落库了新数据才重读）——`RefreshOutcome` 的其余三种
-        // 结局（命中缓存 / TMDb 上没有 / 请求失败）都不需要再读一次库。
-        let outcome = await app.refreshTMDbCollection(for: shown, members: collectionMembers)
-        guard outcome.didFetch, !Task.isCancelled else { return }
-        let refreshed = await app.tmdbOverlay(for: shown)
-        guard !Task.isCancelled else { return }
-        tmdbOverlay = refreshed
-        app.noteCollectionArtwork(itemID: shown.id, posterPath: refreshed?.posterPath)
-        // 背景图可能刚从「无」变成 TMDb 那张：重预热（同 URL 时直接命中短路）。
-        prewarmAmbience()
+        await refreshOverlayThenReload(
+            read: { await app.tmdbOverlay(for: self.shown) },
+            refresh: {
+                await app.refreshTMDbCollection(for: self.shown, members: self.collectionMembers).didFetch
+            },
+            apply: { overlay in
+                tmdbOverlay = overlay
+                app.noteCollectionArtwork(itemID: shown.id, posterPath: overlay?.posterPath)
+            },
+            // 背景图可能刚从「无」变成 TMDb 那张：重预热（同 URL 时直接命中短路）。
+            onRefreshed: { prewarmAmbience() }
+        )
     }
 
     /// 合集成员。
@@ -603,20 +608,14 @@ final class DetailViewModel {
     /// 失败/未配置一律静默：TMDb 是可选增强，任何问题都不该影响详情页。
     private func loadTMDbOverlay() async {
         guard let app else { return }
-        // 立即用已有数据渲染（缓存命中时这里是同步就绪的）。
-        let existing = await app.tmdbOverlay(for: shown)
-        guard !Task.isCancelled else { return }
-        tmdbOverlay = existing
-
-        // 再补：缺数据或已过期时发网络。等它完成后刷新一次 overlay。
-        let didFetch = await app.refreshTMDb(for: shown)
-        guard didFetch, !Task.isCancelled else { return }
-        let refreshed = await app.tmdbOverlay(for: shown)
-        guard !Task.isCancelled else { return }
-        tmdbOverlay = refreshed
-        // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDb」变成另一个 URL，
-        // 重新预热一次氛围层（URL 未变时 `prewarmedAmbienceURL` 会直接短路）。
-        prewarmAmbience()
+        await refreshOverlayThenReload(
+            read: { await app.tmdbOverlay(for: self.shown) },
+            refresh: { await app.refreshTMDb(for: self.shown) },
+            apply: { self.tmdbOverlay = $0 },
+            // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDb」变成另一个 URL，
+            // 重新预热一次氛围层（URL 未变时 `prewarmedAmbienceURL` 会直接短路）。
+            onRefreshed: { prewarmAmbience() }
+        )
     }
 
     /// 从磁盘缓存装载详情（冷启动 / 离线时的内容来源）。
@@ -657,26 +656,22 @@ final class DetailViewModel {
     }
 
     /// 预热当前条目的氛围底图：与 `BackdropAmbienceView` / 整窗层完全同参
-    /// （800 宽 URL + 512 解码），保证视图层的 `RemoteImage` 首帧命中缓存。
+    /// （`DetailAmbienceImage` 单源），保证视图层的 `RemoteImage` 首帧命中缓存。
     /// 同一 URL 只预热一次；换条目 / 详情落地换 tag 时重跑。
     private func prewarmAmbience() {
         guard app?.server != nil else { return }
         // 走 `backdropTarget` 而不是裸 `imageTarget`：前者在服务端缺背景图时会回落到
         // TMDb（TMDb 只补缺）。否则「服务端没有背景图」的条目永远没有氛围层。
-        let target = backdropTarget(width: 800)
+        let target = backdropTarget(width: DetailAmbienceImage.urlWidth)
         guard let url = target.url else { return }
         guard url != prewarmedAmbienceURL else { return }
         prewarmedAmbienceURL = url
         let authHeader = target.authHeader
         ambiencePrewarmTask?.cancel()
         ambiencePrewarmTask = Task {
-            if ImagePipeline.shared.memoryCachedImage(url: url, authHeader: authHeader, maxPixelSize: 512) != nil {
-                isAmbienceReady = true
-                return
-            }
-            let loaded = try? await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: 512)
+            let ready = await DetailAmbienceImage.prewarm(url: url, authHeader: authHeader)
             guard !Task.isCancelled else { return }
-            isAmbienceReady = (loaded != nil)
+            isAmbienceReady = ready
         }
     }
 
@@ -694,17 +689,11 @@ final class DetailViewModel {
             tmdbSeasonOverlay = nil
             return
         }
-        // ① 立即用已有数据渲染（缓存命中时同步就绪）。
-        tmdbSeasonOverlay = await app.tmdbSeasonOverlay(seriesLink: seriesLink,
-                                                       seasonNumber: number)
-        guard !Task.isCancelled else { return }
-
-        // ② 缺数据或已过期时后台补，补到再刷新一次。
-        let didFetch = await app.refreshTMDbSeason(seriesLink: seriesLink, seasonNumber: number)
-        guard didFetch, !Task.isCancelled else { return }
-        let refreshed = await app.tmdbSeasonOverlay(seriesLink: seriesLink, seasonNumber: number)
-        guard !Task.isCancelled else { return }
-        tmdbSeasonOverlay = refreshed
+        await refreshOverlayThenReload(
+            read: { await app.tmdbSeasonOverlay(seriesLink: seriesLink, seasonNumber: number) },
+            refresh: { await app.refreshTMDbSeason(seriesLink: seriesLink, seasonNumber: number) },
+            apply: { self.tmdbSeasonOverlay = $0 }
+        )
     }
 
     func loadEpisodes() async {

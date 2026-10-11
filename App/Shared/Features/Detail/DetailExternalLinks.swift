@@ -1,3 +1,4 @@
+import AppDesignKit
 import BangumiKit
 import CoreModel
 import MetadataKit
@@ -193,6 +194,10 @@ struct DetailExternalLinksView: View {
                 }
             }
         }
+        // 链接是异步解析出来的（Bangumi 关联 / TMDb 对应在 task 里到齐）：出现与
+        // 增减都走淡入，不做硬弹。Bangumi 徽章排在 TMDb 前面，它后到时 TMDb 徽章
+        // 会挪一格——动画让它挪得可接受，硬跳则像 bug。
+        .motion(Motion.standard, value: links.map(\.id))
         .task(id: resolveKey) { await resolve() }
         // 页内区块刚自动匹配 / 用户刚手动关联完，头部图标要立刻跟上，
         // 不能等到下次进页面才出现。

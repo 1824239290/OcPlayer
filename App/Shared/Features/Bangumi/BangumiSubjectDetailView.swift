@@ -101,12 +101,8 @@ struct BangumiSubjectDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 32)
                 } else if let loadError, subject == nil {
-                    ContentUnavailableView {
-                        Label(UIStrings.loadFailed, systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(loadError)
-                    } actions: {
-                        Button(UIStrings.retry) { Task { await load() } }
+                    EmptyState(failure: loadError) {
+                        Task { await load() }
                     }
                     .padding(.horizontal, contentLeading)
                 } else {
@@ -190,16 +186,16 @@ struct BangumiSubjectDetailView: View {
                 FlowLayout(spacing: 6) {
                     let type = subject?.type ?? initialSubject?.type ?? .none
                     if type != .none {
-                        badgeView(text: type.description, icon: type.icon)
+                        PillChip(type.description, systemImage: type.icon)
                     }
                     if let platform = subject?.platform, !platform.typeCN.isEmpty {
-                        badgeView(text: platform.typeCN)
+                        PillChip(platform.typeCN)
                     }
                     if let airdate = subject?.airtime.date, !airdate.isEmpty {
-                        badgeView(text: airdate)
+                        PillChip(airdate)
                     }
                     if let eps = subject?.eps, eps > 0 {
-                        badgeView(text: "\(eps) 话")
+                        PillChip("\(eps) 话")
                     }
                 }
 
@@ -276,21 +272,6 @@ struct BangumiSubjectDetailView: View {
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius + 4))
-    }
-
-    private func badgeView(text: String, icon: String? = nil) -> some View {
-        HStack(spacing: 3) {
-            if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 9))
-            }
-            Text(text)
-                .font(.caption2.weight(.medium))
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(Color.primary.opacity(0.06), in: Capsule())
-        .foregroundStyle(.secondary)
     }
 
     /// MoviePilot 下载快捷入口（集成停用时整块隐藏）。
@@ -693,14 +674,10 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                     episodes = epData
                 }
             }
-        } catch let e as BangumiError {
-            guard loadGeneration == gen else { return }
-            loadError = e.userMessage
-            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == gen else { return }
-            loadError = "\(error)"
-            BangumiDiagnostics.log("加载 Bangumi 详情失败 subject=\(subjectID) error=\(error)", level: .warning)
+            loadError = BangumiActionPerformer.loadFailureMessage(
+                "加载 Bangumi 详情失败 subject=\(subjectID)", error)
         }
     }
 
@@ -716,57 +693,49 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
 
     private func setSubjectStatus(_ type: BangumiCollectionType) async {
         guard bangumi.isAuthenticated else { return }
-        updatingStatus = true
-        defer { updatingStatus = false }
-        do {
-            try await bangumi.context.updateSubjectCollection(subjectId: subjectID, type: type)
-            actionError = nil
-            await readLocal()
-        } catch let e as BangumiError {
-            actionError = e.userMessage
-            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(e)", level: .warning)
-        } catch {
-            actionError = "状态更新失败：\(error)"
-            BangumiDiagnostics.log("更新条目状态失败 subject=\(subjectID) error=\(error)", level: .warning)
-        }
+        await BangumiActionPerformer.run(
+            "更新条目状态失败 subject=\(subjectID)",
+            isBusy: updatingStatus,
+            setBusy: { updatingStatus = $0 },
+            operation: {
+                try await bangumi.context.updateSubjectCollection(subjectId: subjectID, type: type)
+            },
+            onSuccess: {
+                actionError = nil
+                await readLocal()
+            },
+            onError: { actionError = $0 }
+        )
     }
 
     private func setRating(_ rate: Int) async {
         guard bangumi.isAuthenticated else { return }
-        updatingRating = true
-        defer { updatingRating = false }
-        do {
-            try await bangumi.context.updateSubjectRating(subjectId: subjectID, rate: rate)
-            actionError = nil
-            await readLocal()
-        } catch let e as BangumiError {
-            actionError = e.userMessage
-            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(e)", level: .warning)
-        } catch {
-            actionError = "评分更新失败：\(error)"
-            BangumiDiagnostics.log("更新条目评分失败 subject=\(subjectID) error=\(error)", level: .warning)
-        }
+        await BangumiActionPerformer.run(
+            "更新条目评分失败 subject=\(subjectID)",
+            isBusy: updatingRating,
+            setBusy: { updatingRating = $0 },
+            operation: {
+                try await bangumi.context.updateSubjectRating(subjectId: subjectID, rate: rate)
+            },
+            onSuccess: {
+                actionError = nil
+                await readLocal()
+            },
+            onError: { actionError = $0 }
+        )
     }
 
     private func performEpisodeAction(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
-        guard bangumi.isAuthenticated, updatingEpisodeID == nil else { return }
-        updatingEpisodeID = episode.id
-        defer { updatingEpisodeID = nil }
-        do {
-            switch action {
-            case .set(let type):
-                try await bangumi.context.updateEpisodeCollection(episodeId: episode.id, type: type)
-            case .markUpTo:
-                try await bangumi.context.updateEpisodeCollection(episodeId: episode.id, type: .collect, batch: true)
-            }
-            actionError = nil
-            await readLocal()
-        } catch let e as BangumiError {
-            actionError = e.userMessage
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
-        } catch {
-            actionError = "章节标记失败：\(error)"
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
-        }
+        guard bangumi.isAuthenticated else { return }
+        await BangumiActionPerformer.performEpisodeAction(
+            action, on: episode, context: bangumi.context,
+            isBusy: updatingEpisodeID != nil,
+            setBusy: { updatingEpisodeID = $0 },
+            onSuccess: {
+                actionError = nil
+                await readLocal()
+            },
+            onError: { actionError = $0 }
+        )
     }
 }

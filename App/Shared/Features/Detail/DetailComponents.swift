@@ -123,11 +123,6 @@ struct EpisodeSelectCard: View {
                             lineWidth: isSelected ? 2.5 : 1
                         )
                 }
-                .shadow(
-                    color: .black.opacity(isSelected ? 0.28 : (hovering ? 0.18 : 0)),
-                    radius: isSelected || hovering ? 10 : 0,
-                    y: isSelected || hovering ? 4 : 0
-                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     if let label = episode.episodeLabel {
@@ -149,9 +144,8 @@ struct EpisodeSelectCard: View {
                 }
             }
             .frame(width: cardWidth, alignment: .topLeading)
-            .scaleEffect(lifted ? 1.03 : 1)
-            .motion(Motion.lift, value: isSelected)
-            .motion(Motion.lift, value: hovering)
+            // 抬升选中 + 悬停都触发（选中卡持续浮起），与全站网格卡同一组件。
+            .hoverLift(active: isSelected || hovering, reduceMotion: reduceMotion)
         }
         .buttonStyle(.plain)
         // 分集简介做 tooltip：卡片本身放不下（宽度固定、标题已占两行），
@@ -167,10 +161,6 @@ struct EpisodeSelectCard: View {
         .accessibilityLabel(accessibilityLabelText)
         .accessibilityHint("轻点以选中，双击直接播放")
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    private var lifted: Bool {
-        !reduceMotion && (isSelected || hovering)
     }
 
     @ViewBuilder

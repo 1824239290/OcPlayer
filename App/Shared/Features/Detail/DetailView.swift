@@ -189,6 +189,14 @@ struct DetailView: View {
                 if !model.similar.isEmpty { similarRail }
             }
             .padding(.bottom, 48)
+            // 简介 / 演员 / 相似推荐都是**数据到了才插入**的区块（占位剧集详情落地
+            // 才有简介与 cast，similar 异步更晚）。插入会把下方内容整体下压——动画
+            // 作用域必须挂在**页面级** VStack 上才盖得住兄弟区块的下推（挂在区块
+            // 自己上只会淡入自己，下面照样硬跳）。作用域按数据源各挂一个：值翻转
+            // 的那一拍，插入区块淡入、下方下推，整页一次平滑重排。
+            .motion(Motion.standard, value: model.displayOverview == nil)
+            .motion(Motion.standard, value: model.displayCast.isEmpty)
+            .motion(Motion.standard, value: model.similar.isEmpty)
             // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
             // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
             // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
@@ -383,6 +391,10 @@ struct DetailView: View {
                 DetailExternalLinksView(item: model.shown, selectedSeason: selectedSeason)
             }
         }
+        // 同桌面 metaRow：详情未落地前隐匿（评分/分级/季数随 `shown` 切换补齐，
+        // 半成品行先现身会在翻转动画里滑动），落地后带完整内容一次性淡入。
+        .opacity(model.detail == nil ? 0 : 1)
+        .motion(Motion.standard, value: model.detail != nil)
     }
 
     private var compactActionSection: some View {
@@ -599,6 +611,13 @@ struct DetailView: View {
                 .frame(width: width, height: height)
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+        } else {
+            // **槽位恒占位**：海报 URL 未就绪/缺失时也要留住这 120×180。否则
+            // 「横幅 ↔ 氛围」翻转（占位剧集详情落地、hasBackdrop 翻转）时两个
+            // 头部的文字列 x 差 ~120px，交叉淡化被眼睛读成「logo/年份/播放钮
+            // 从左往右滑」（录屏逐帧实证：落地帧文字列在 75 = 52 inset + 24
+            // 空槽间距，落定在 196）。占位后两版布局逐像素同构，翻转只剩纯淡入。
+            Color.clear.frame(width: width, height: height)
         }
     }
 
@@ -641,6 +660,13 @@ struct DetailView: View {
             )
         }
         .font(.subheadline)
+        // 详情未落地前整行隐匿（占住行高）：`shown` 从列表条目切到详情条目时
+        // 「N 季 / 评分 / 分级」才补齐，这些元素都排在行中段——半成品行先现身的话，
+        // 补齐瞬间正好赶上横幅↔氛围翻转的动画作用域，它们会集体向右滑（录屏
+        // 逐帧实证的徽章滑动）。行内前三位（年份/类型/时长）两态同值同位，
+        // 切换对它们零影响；外链徽章后到，插在行尾不动别人。
+        .opacity(model.detail == nil ? 0 : 1)
+        .motion(Motion.standard, value: model.detail != nil)
     }
 
     private var metaParts: [String] {

@@ -47,6 +47,25 @@ enum SettingsKeys {
     static let moviepilotEnabled = "dev.jumusu.ocplayer.moviepilot.enabled"
     /// 弹幕诊断日志开关。
     static let danmakuDiagnostics = "dev.jumusu.ocplayer.danmaku.diagnostics"
+    /// 播放偏好（`PlaybackPreferences` 的存取口都在那一处，key 统一登记在这里）。
+    static let playbackRate = "dev.jumusu.ocplayer.playback.rate"
+    static let playbackVolume = "dev.jumusu.ocplayer.playback.volume"
+    static let playbackMuted = "dev.jumusu.ocplayer.playback.muted"
+    static let playbackSubtitleScale = "dev.jumusu.ocplayer.playback.subtitleScale"
+    /// 弹幕偏好（HUD 弹幕菜单 ↔ `PlaybackPreferences` ↔ 装配点）。
+    static let danmakuEnabled = "dev.jumusu.ocplayer.danmaku.enabled"
+    static let danmakuOpacity = "dev.jumusu.ocplayer.danmaku.opacity"
+    static let danmakuDisplayArea = "dev.jumusu.ocplayer.danmaku.displayArea"
+    static let danmakuBlockTop = "dev.jumusu.ocplayer.danmaku.blockTop"
+    static let danmakuBlockBottom = "dev.jumusu.ocplayer.danmaku.blockBottom"
+    static let danmakuBlockScroll = "dev.jumusu.ocplayer.danmaku.blockScroll"
+    /// 「合并重复」：当前只写内核弹幕配置（渲染恒走 overlay，HUD 入口已撤），
+    /// key 保留，内核弹幕恢复时连同 HUD 入口一起恢复。
+    static let danmakuMergeDuplicates = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
+    static let danmakuAllowStacking = "dev.jumusu.ocplayer.danmaku.allowStacking"
+    static let danmakuFontSize = "dev.jumusu.ocplayer.danmaku.fontSize"
+    /// 弹幕自动装载开关（`DanmakuCoordinator`，此前硬编码在协调器里）。
+    static let danmakuAutoLoad = "dev.jumusu.ocplayer.danmaku.autoLoad"
     /// 诊断日志：详细（debug）档开关。关（默认）= 只落 info 及以上（状态迁移 / 失败）；
     /// 开 = 连守卫与中间态一起落盘，排障用。见 `DiagnosticsSettings`。
     static let diagnosticsVerbose = "dev.jumusu.ocplayer.diagnostics.verbose"

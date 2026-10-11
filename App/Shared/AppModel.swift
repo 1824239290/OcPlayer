@@ -206,6 +206,12 @@ final class AppModel {
         /// 不参与 TTL**（`loadFromDisk` 构造时置 `.distantPast`）：它是上一次会话
         /// 写穿的，一律走 SWR 网络确认。
         var fetchedAt: Date = Date()
+
+        /// TTL 内 = 网络刚刚确认过（进页零请求短路的判据）。判据只有这一份——
+        /// 此前同一句表达式散在预取与 VM 两处。
+        var isFresh: Bool {
+            Date().timeIntervalSince(fetchedAt) < AppModel.detailSnapshotTTL
+        }
     }
 
     static let detailSnapshotLimit = 40
@@ -213,7 +219,8 @@ final class AppModel {
     /// 已看状态在播放返回时有本地同步（`applyPlayState` / `reloadAfterPlayback`
     /// 都会重新 storeSnapshot、刷新时间戳），5 分钟窗口内唯一可能过期的是
     /// 「在另一台设备上看完一集」这种并发改动，最终一致可接受。
-    static let detailSnapshotTTL: TimeInterval = 5 * 60
+    /// nonisolated：`DetailSnapshot.isFresh` 在非隔离上下文也要读它。
+    nonisolated static let detailSnapshotTTL: TimeInterval = 5 * 60
     var detailSnapshots: [MediaItem.ID: DetailSnapshot] = [:]
     /// 快照的最近使用顺序（末尾最新）。淘汰时按它丢**最旧**的，而不是整份清空。
     private var detailSnapshotRecency: [MediaItem.ID] = []

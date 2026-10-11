@@ -63,17 +63,13 @@ struct BangumiLinkPicker: View {
                 ProgressView("搜索中…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let searchError {
-                ContentUnavailableView {
-                    Label(UIStrings.searchFailed, systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(searchError)
-                }
+                EmptyState(failure: searchError, title: UIStrings.searchFailed)
             } else if results.isEmpty {
-                ContentUnavailableView {
-                    Label("搜索 Bangumi 条目", systemImage: "magnifyingglass")
-                } description: {
-                    Text("输入名称搜索，选择后完成关联。")
-                }
+                EmptyState(
+                    empty: "搜索 Bangumi 条目",
+                    systemImage: "magnifyingglass",
+                    message: "输入名称搜索，选择后完成关联。"
+                )
             } else {
                 List(results) { subject in
                     Button {

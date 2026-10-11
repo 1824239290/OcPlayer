@@ -34,7 +34,7 @@ struct MoviePilotDownloadsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 14) {
                 if let notice {
-                    noticeBanner(notice, isError: isNoticeError)
+                    MoviePilotNoticeBanner(text: notice, isError: isNoticeError, glassCard: true)
                 }
 
                 if isFirstLoad {
@@ -110,13 +110,13 @@ struct MoviePilotDownloadsView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("没有下载中的任务", systemImage: "arrow.down.circle")
-        } description: {
-            Text("当前没有下载中的任务。下载完成的项目由 MoviePilot 整理后进入 Jellyfin 媒体库。")
-        } actions: {
-            Button("刷新") { Task { await refresh() } }
-                .buttonStyle(.bordered)
+        EmptyState(
+            empty: "没有下载中的任务",
+            systemImage: "arrow.down.circle",
+            message: "当前没有下载中的任务。下载完成的项目由 MoviePilot 整理后进入 Jellyfin 媒体库。",
+            actionTitle: "刷新"
+        ) {
+            Task { await refresh() }
         }
         .frame(maxWidth: .infinity, minHeight: 420)
     }
@@ -149,18 +149,6 @@ struct MoviePilotDownloadsView: View {
                 onDelete: { pendingDelete = task }
             )
         }
-    }
-
-    private func noticeBanner(_ text: String, isError: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-            Text(text)
-            Spacer()
-        }
-        .font(.callout)
-        .foregroundStyle(isError ? .red : .green)
-        .padding(12)
-        .liquidGlassCard(cornerRadius: 14)
     }
 
     private func errorCard(_ message: String) -> some View {
@@ -200,7 +188,7 @@ struct MoviePilotDownloadsView: View {
         } catch is CancellationError {
             // 离页取消，不算错误
         } catch {
-            loadError = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+            loadError = MoviePilotError.userMessage(of: error)
         }
         isFirstLoad = false
     }
@@ -212,7 +200,7 @@ struct MoviePilotDownloadsView: View {
             do {
                 try await operation()
             } catch {
-                notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+                notice = MoviePilotError.userMessage(of: error)
                 isNoticeError = true
             }
             actionInFlight.remove(task.id)

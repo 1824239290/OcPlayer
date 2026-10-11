@@ -27,6 +27,7 @@ struct MoviePilotResourceView: View {
     @State private var searchError: String?
     @State private var searchGeneration = 0
     @State private var searchTask: Task<Void, Never>?
+    @FocusState private var searchFieldFocused: Bool
 
     // 筛选与排序（对齐 MP 网页端：本地过滤，候选值从结果聚合；排序偏好记忆）。
     @State private var filters = TorrentFilters()
@@ -91,7 +92,7 @@ struct MoviePilotResourceView: View {
 
                     // 4. 状态提示条
                     if let notice {
-                        noticeBanner(notice, isError: isNoticeError)
+                        MoviePilotNoticeBanner(text: notice, isError: isNoticeError, glassCard: true)
                     }
 
                     // 5. 资源列表（Torrents List）
@@ -157,32 +158,13 @@ struct MoviePilotResourceView: View {
 
                 HStack(spacing: 6) {
                     if let type = media.type, !type.isEmpty {
-                        Text(type)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2.5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
+                        PillChip(type)
                     }
                     if let year = media.titleYear ?? media.year, !year.isEmpty {
-                        Text(year)
-                            .font(.caption2.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2.5)
-                            .background(Color.primary.opacity(0.06), in: Capsule())
+                        PillChip(year, font: .caption2.monospacedDigit())
                     }
                     if let rating = media.voteAverage, rating > 0 {
-                        HStack(spacing: 2) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.yellow)
-                            Text(String(format: "%.1f", rating))
-                                .font(.caption2.weight(.bold).monospacedDigit())
-                        }
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(Color.yellow.opacity(0.12), in: Capsule())
+                        RatingPill(score: rating, style: .capsule)
                     }
                 }
 
@@ -213,35 +195,9 @@ struct MoviePilotResourceView: View {
 
     private var searchAndControlBar: some View {
         HStack(spacing: 10) {
-            // 搜索输入框
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-
-                TextField("搜索关键词", text: $keyword)
-                    .textFieldStyle(.plain)
-                    .font(.callout)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .submitLabel(.search)
-                    #endif
-                    .onSubmit { search() }
-
-                if !keyword.isEmpty {
-                    Button {
-                        keyword = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
+            CapsuleSearchField("搜索关键词", text: $keyword, focus: $searchFieldFocused) {
+                search()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(Color.primary.opacity(0.04), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
 
             // 搜索按钮
             Button {
@@ -384,19 +340,6 @@ struct MoviePilotResourceView: View {
             }
     }
 
-    private func noticeBanner(_ text: String, isError: Bool) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(isError ? .red : .green)
-            Text(text)
-                .font(.callout)
-                .foregroundStyle(isError ? .red : .green)
-            Spacer()
-        }
-        .padding(12)
-        .liquidGlassCard(cornerRadius: 14)
-    }
-
     // MARK: - 动作
 
     /// 返回搜索任务：`.refreshable` 需要 await 它，下拉刷新的转圈才跟随流式
@@ -437,7 +380,7 @@ struct MoviePilotResourceView: View {
                     }
                 } catch {
                     if generation == searchGeneration, !Task.isCancelled {
-                        continuation.yield(.failure((error as? MoviePilotError)?.userMessage ?? "\(error)"))
+                        continuation.yield(.failure(MoviePilotError.userMessage(of: error)))
                     }
                 }
             }
@@ -477,7 +420,7 @@ struct MoviePilotResourceView: View {
                 isNoticeError = false
                 navigateToDownloads = true
             } catch {
-                notice = (error as? MoviePilotError)?.userMessage ?? "\(error)"
+                notice = MoviePilotError.userMessage(of: error)
                 isNoticeError = true
             }
             addingDownloadID = nil

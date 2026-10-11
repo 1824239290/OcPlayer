@@ -518,8 +518,7 @@ struct BangumiHomeView: View {
                 limit: limit, offset: offset)
             return .init(items: page.data, total: page.total)
         } errorMessage: { error in
-            BangumiDiagnostics.log("进度页加载失败 error=\(error)", level: .warning)
-            return (error as? BangumiError)?.userMessage ?? "\(error)"
+            BangumiActionPerformer.loadFailureMessage("进度页加载失败", error)
         }
     }
 
@@ -535,8 +534,7 @@ struct BangumiHomeView: View {
             )
             return .init(items: page.data, total: page.total)
         } errorMessage: { error in
-            BangumiDiagnostics.log("搜索条目失败 error=\(error)", level: .warning)
-            return (error as? BangumiError)?.userMessage ?? "搜索失败：\(error.localizedDescription)"
+            BangumiActionPerformer.loadFailureMessage("搜索条目失败", error)
         } isCancellation: { error in
             // 请求被新输入取消 / 旧条件作废：不是错误，不占错误位。
             if error is CancellationError { return true }
@@ -553,14 +551,10 @@ struct BangumiHomeView: View {
             _ = try await bangumi.refreshCollections(force: force)
             actionError = nil
             await progressLoader?.loadInitial()
-        } catch let e as BangumiError {
-            progressLoader?.reportError(e.userMessage)
-            actionError = e.userMessage
-            BangumiDiagnostics.log("同步收藏失败 error=\(e)", level: .warning)
         } catch {
-            progressLoader?.reportError("\(error)")
-            actionError = "\(error)"
-            BangumiDiagnostics.log("同步收藏失败 error=\(error)", level: .warning)
+            let message = BangumiActionPerformer.loadFailureMessage("同步收藏失败", error)
+            progressLoader?.reportError(message)
+            actionError = message
         }
     }
 
@@ -731,18 +725,16 @@ private struct ProgressCard: View {
     }
 
     private func setSubjectStatus(_ type: BangumiCollectionType) async {
-        updatingStatus = true
-        defer { updatingStatus = false }
-        do {
-            try await bangumi.context.updateSubjectCollection(
-                subjectId: subject.id, type: type)
-        } catch let e as BangumiError {
-            reportError(e.userMessage)
-            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(e)", level: .warning)
-        } catch {
-            reportError("状态更新失败：\(error)")
-            BangumiDiagnostics.log("手动改条目状态失败 subject=\(subject.id) error=\(error)", level: .warning)
-        }
+        await BangumiActionPerformer.run(
+            "手动改条目状态失败 subject=\(subject.id)",
+            isBusy: updatingStatus,
+            setBusy: { updatingStatus = $0 },
+            operation: {
+                try await bangumi.context.updateSubjectCollection(subjectId: subject.id, type: type)
+            },
+            onSuccess: { },
+            onError: { reportError($0) }
+        )
     }
 
     @ViewBuilder
@@ -783,27 +775,16 @@ private struct ProgressCard: View {
     }
 
     private func perform(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
-        guard updatingEpisodeID == nil else { return }
-        updatingEpisodeID = episode.id
-        defer { updatingEpisodeID = nil }
-        do {
-            switch action {
-            case .set(let type):
-                try await bangumi.context.updateEpisodeCollection(
-                    episodeId: episode.id, type: type)
-            case .markUpTo:
-                try await bangumi.context.updateEpisodeCollection(
-                    episodeId: episode.id, type: .collect, batch: true)
-            }
-            reportError(nil)
-            await reload()
-        } catch let e as BangumiError {
-            reportError(e.userMessage)
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
-        } catch {
-            reportError("\(error)")
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
-        }
+        await BangumiActionPerformer.performEpisodeAction(
+            action, on: episode, context: bangumi.context,
+            isBusy: updatingEpisodeID != nil,
+            setBusy: { updatingEpisodeID = $0 },
+            onSuccess: {
+                reportError(nil)
+                await reload()
+            },
+            onError: { reportError($0) }
+        )
     }
 }
 

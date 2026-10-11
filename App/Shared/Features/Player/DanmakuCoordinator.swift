@@ -49,36 +49,18 @@ struct DanmakuPlaybackContext {
         case remoteURL
     }
 
-    let requestID: PlaybackRequest.ID
-    let cacheKey: String
-    let allowsCachedMatchReuse: Bool
+    /// 匹配上下文（DanmakuKit 的输入）。匹配字段只在这一份——此前这里平铺约 20 个
+    /// 字段与 `DanmakuMatchContext` 互为孪生，靠 `matchContext(from:)` 手工逐字段
+    /// 映射对齐，加一个字段要同步改三处。
+    let match: DanmakuMatchContext
     let sourceKind: SourceKind
-    let fileName: String
-    let fileSize: Int64?
-    let durationSeconds: Int?
-    let localFileURL: URL?
-    let remoteURL: URL?
-    let remoteHeaders: [String: String]
+    /// 手动搜索的预填（作品名 / 集数）：UI 预填语，不参与匹配输入，
+    /// 所以不在 `DanmakuMatchContext` 里。
     let suggestedAnime: String
     let suggestedEpisode: String
-    let animeTitle: String?
-    /// 媒体库的原生标题（Jellyfin OriginalTitle，番剧库多为日文原名）。
-    /// AniSkip 的 MAL ID 解析候选：dandanplay 的中文标题在 AniList 常搜不中。
-    let originalTitle: String?
-    /// 剧集条目的 seriesID（Jellyfin）；standalone 为 nil。供 TheIntroDB 换取
-    /// 剧集级 TMDB ID 用。
-    let seriesID: String?
-    let episodeNumber: Int?
-    let seasonNumber: Int?
-    let isFinal: Bool
-    let tmdbID: Int?
-    /// ProviderIds 直取的 MyAnimeList / AniList ID（AniSkip 跳过片头用，机会性存在）。
-    let malID: Int?
-    let anilistID: Int?
-    /// 目标是剧场版/电影（`MediaItem.kind == .movie`）。
-    let isMovie: Bool
-    /// 目标是特典（Jellyfin season 0 / 文件名关键词命中），序号即特典编号。
-    let special: DanmakuSpecialTarget?
+
+    /// 播放请求 id（`match.uuid` 的 App 层语义别名）。
+    var requestID: PlaybackRequest.ID { match.uuid }
 
     static func jellyfin(
         item: MediaItem,
@@ -123,29 +105,31 @@ struct DanmakuPlaybackContext {
             durationSeconds.map(String.init) ?? "unknown-duration",
         ].joined(separator: "\n")
         return DanmakuPlaybackContext(
-            requestID: request.id,
-            cacheKey: "jellyfin:\(sha256(cacheIdentity))",
-            allowsCachedMatchReuse: true,
+            match: DanmakuMatchContext(
+                uuid: request.id,
+                cacheKey: "jellyfin:\(sha256(cacheIdentity))",
+                allowsCachedMatchReuse: true,
+                fileName: fileName,
+                fileSize: fileSize,
+                durationSeconds: durationSeconds,
+                localFileURL: nil,
+                remoteURL: URL(string: request.uri),
+                remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
+                animeTitle: seriesName.isEmpty ? nil : seriesName,
+                originalTitle: originalTitle,
+                seriesID: item.seriesID,
+                episodeNumber: episodeNumber,
+                seasonNumber: seasonNumber,
+                isFinal: false,
+                tmdbID: tmdbID,
+                malID: item.malID.flatMap(Int.init),
+                anilistID: item.anilistID.flatMap(Int.init),
+                isMovie: item.kind == .movie,
+                special: special
+            ),
             sourceKind: .jellyfin,
-            fileName: fileName,
-            fileSize: fileSize,
-            durationSeconds: durationSeconds,
-            localFileURL: nil,
-            remoteURL: URL(string: request.uri),
-            remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
             suggestedAnime: seriesName,
-            suggestedEpisode: episodeNumber.map(String.init) ?? "",
-            animeTitle: seriesName.isEmpty ? nil : seriesName,
-            originalTitle: originalTitle,
-            seriesID: item.seriesID,
-            episodeNumber: episodeNumber,
-            seasonNumber: seasonNumber,
-            isFinal: false,
-            tmdbID: tmdbID,
-            malID: item.malID.flatMap(Int.init),
-            anilistID: item.anilistID.flatMap(Int.init),
-            isMovie: item.kind == .movie,
-            special: special
+            suggestedEpisode: episodeNumber.map(String.init) ?? ""
         )
     }
 
@@ -202,29 +186,31 @@ struct DanmakuPlaybackContext {
         )
 
         return DanmakuPlaybackContext(
-            requestID: request.id,
-            cacheKey: "standalone:\(sha256(identity))",
-            allowsCachedMatchReuse: allowsCachedMatchReuse,
+            match: DanmakuMatchContext(
+                uuid: request.id,
+                cacheKey: "standalone:\(sha256(identity))",
+                allowsCachedMatchReuse: allowsCachedMatchReuse,
+                fileName: fileName,
+                fileSize: fileSize,
+                durationSeconds: nil,
+                localFileURL: localURL,
+                remoteURL: remoteURL,
+                remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
+                animeTitle: effectiveAnimeTitle.isEmpty ? nil : effectiveAnimeTitle,
+                originalTitle: nil,
+                seriesID: nil,
+                episodeNumber: parsed.episodeNumber,
+                seasonNumber: parsed.seasonNumber,
+                isFinal: parsed.isFinal,
+                tmdbID: nil,
+                malID: nil,
+                anilistID: nil,
+                isMovie: false,
+                special: special
+            ),
             sourceKind: localURL == nil ? .remoteURL : .localFile,
-            fileName: fileName,
-            fileSize: fileSize,
-            durationSeconds: nil,
-            localFileURL: localURL,
-            remoteURL: remoteURL,
-            remoteHeaders: request.authHeader.map { ["Authorization": $0] } ?? [:],
             suggestedAnime: suggestedAnime,
-            suggestedEpisode: suggestedEpisode,
-            animeTitle: effectiveAnimeTitle.isEmpty ? nil : effectiveAnimeTitle,
-            originalTitle: nil,
-            seriesID: nil,
-            episodeNumber: parsed.episodeNumber,
-            seasonNumber: parsed.seasonNumber,
-            isFinal: parsed.isFinal,
-            tmdbID: nil,
-            malID: nil,
-            anilistID: nil,
-            isMovie: false,
-            special: special
+            suggestedEpisode: suggestedEpisode
         )
     }
 
@@ -292,7 +278,6 @@ struct DanmakuPlaybackContext {
 @MainActor
 @Observable
 final class DanmakuCoordinator {
-    private static let autoLoadKey = "dev.jumusu.ocplayer.danmaku.autoLoad"
 
     private(set) var status: DanmakuLoadStatus = .idle
     private(set) var currentMatch: DanmakuEpisodeMatch?
@@ -318,8 +303,8 @@ final class DanmakuCoordinator {
 
     init(session: URLSession = DanmakuNetworking.makeSession()) {
         let defaults = UserDefaults.standard
-        isAutoLoadingEnabled = defaults.object(forKey: Self.autoLoadKey) == nil
-            ? true : defaults.bool(forKey: Self.autoLoadKey)
+        isAutoLoadingEnabled = defaults.object(forKey: SettingsKeys.danmakuAutoLoad) == nil
+            ? true : defaults.bool(forKey: SettingsKeys.danmakuAutoLoad)
         let directory = OcPlayerStorage.directory("Danmaku")
         let service = DanmakuService(cache: DanmakuCache(directory: directory))
         let introLearningStore = IntroLearningStore(directory: directory)
@@ -347,7 +332,7 @@ final class DanmakuCoordinator {
     func setAutoLoadingEnabled(_ enabled: Bool) {
         guard enabled != isAutoLoadingEnabled else { return }
         isAutoLoadingEnabled = enabled
-        UserDefaults.standard.set(enabled, forKey: Self.autoLoadKey)
+        UserDefaults.standard.set(enabled, forKey: SettingsKeys.danmakuAutoLoad)
         if !enabled {
             invalidateLoad()
             status = .disabled
@@ -504,7 +489,7 @@ final class DanmakuCoordinator {
             let outcome = await orchestrator.runManual(
                 match: match,
                 uuid: requestID,
-                cacheKey: context.cacheKey,
+                cacheKey: context.match.cacheKey,
                 configuration: configuration,
                 playback: playback,
                 revision: generation,
@@ -568,7 +553,7 @@ final class DanmakuCoordinator {
         case .noMatch:
             AppDiagnostics.logInfo("弹幕未匹配", fields: [
                 "source": .string(context.sourceKind.rawValue),
-                "fileName": .string(context.fileName),
+                "fileName": .string(context.match.fileName),
             ])
             status = .noMatch
         case .empty(let episodeID, let title, let introHint):
@@ -583,7 +568,7 @@ final class DanmakuCoordinator {
             status = .failed(message: message)
             AppDiagnostics.logWarning("弹幕装载失败", fields: [
                 "source": .string(context.sourceKind.rawValue),
-                "fileName": .string(context.fileName),
+                "fileName": .string(context.match.fileName),
                 "error": .string(message),
             ])
         }
@@ -609,22 +594,23 @@ final class DanmakuCoordinator {
 
     // MARK: 片头学习
 
-    /// 用户主动 seek → 片头落点学习。过滤:落点 ∈ [30,360]s(片头结束点合理窗)、
-    /// 前跳 ≥5s。两条晋升路径见 `IntroLearningStore`:确认升级(落点贴合当前提示)
-    /// 与跨集共识(≥2 个不同集聚簇)。
+    /// 用户主动 seek → 片头落点学习。过滤与容差全部走 `IntroLearningPolicy`
+    /// （与 DanmakuKit 的聚簇判定同一组参数）：落点在学习窗内、前跳够格才算
+    /// 一次有效落点。两条晋升路径见 `IntroLearningStore`。
     private func handleUserSeek(fromSeconds from: Double, toSeconds to: Double) {
         guard let context, let match = currentMatch else { return }
-        guard to >= 30, to <= 360, from < to - 5 else { return }
+        guard IntroLearningPolicy.landingWindow.contains(to),
+              from < to - IntroLearningPolicy.minimumSeekSeconds else { return }
         guard let animeID = match.animeID ?? match.derivedAnimeID else { return }
         let episodeID = match.episodeID
         let requestID = context.requestID
         Task { [weak self] in
             guard let self else { return }
-            // 路径一:确认升级——落点与该集既有提示(弹幕推导)end ±10s,
+            // 路径一:确认升级——落点与该集既有提示(弹幕推导)end 贴合(容差与聚簇同源),
             // 用户用行为背书了猜测,提示升级为 .learned(防低来源覆盖)。
             if let current = await self.orchestrator.service.cachedIntroHint(for: episodeID),
                current.source == .danmaku,
-               abs(to - current.endSeconds) <= 10 {
+               abs(to - current.endSeconds) <= IntroLearningPolicy.snapToleranceSeconds {
                 let upgraded = DanmakuIntroHint(
                     startSeconds: current.startSeconds,
                     endSeconds: current.endSeconds,
@@ -667,39 +653,14 @@ final class DanmakuCoordinator {
         }
     }
 
-    private func matchContext(from context: DanmakuPlaybackContext) -> DanmakuMatchContext {
-        DanmakuMatchContext(
-            uuid: context.requestID,
-            cacheKey: context.cacheKey,
-            allowsCachedMatchReuse: context.allowsCachedMatchReuse,
-            fileName: context.fileName,
-            fileSize: context.fileSize,
-            durationSeconds: context.durationSeconds,
-            localFileURL: context.localFileURL,
-            remoteURL: context.remoteURL,
-            remoteHeaders: context.remoteHeaders,
-            animeTitle: context.animeTitle,
-            originalTitle: context.originalTitle,
-            seriesID: context.seriesID,
-            episodeNumber: context.episodeNumber,
-            seasonNumber: context.seasonNumber,
-            isFinal: context.isFinal,
-            tmdbID: context.tmdbID,
-            malID: context.malID,
-            anilistID: context.anilistID,
-            isMovie: context.isMovie,
-            special: context.special
-        )
-    }
-
     /// 带剧集级 TMDB ID 的匹配上下文（TheIntroDB 源用）。同一播放请求只换一次;
     /// 无 seriesID / 未注入 provider / 服务器查询失败时 seriesTmdbID 保持 nil,
     /// 多源解析器自动跳过 TheIntroDB。
     private func resolvedMatchContext(
         for context: DanmakuPlaybackContext
     ) async -> DanmakuMatchContext {
-        var matchContext = matchContext(from: context)
-        guard let seriesID = context.seriesID else { return matchContext }
+        var matchContext = context.match
+        guard let seriesID = matchContext.seriesID else { return matchContext }
         if let cached = seriesTmdbIDCache, cached.requestID == context.requestID {
             matchContext.seriesTmdbID = cached.value
             return matchContext
@@ -728,9 +689,9 @@ final class DanmakuCoordinator {
         // 真实值由 orchestrator 算完指纹后自己记一条（见 DanmakuLoadOrchestrator）。
         [
             "source": .string(context.sourceKind.rawValue),
-            "fileName": .string(context.fileName),
-            "fileSize": context.fileSize.map(DiagnosticValue.integer) ?? .null,
-            "videoDuration": context.durationSeconds
+            "fileName": .string(context.match.fileName),
+            "fileSize": context.match.fileSize.map(DiagnosticValue.integer) ?? .null,
+            "videoDuration": context.match.durationSeconds
                 .map { DiagnosticValue.integer(Int64($0)) } ?? .null,
             "matchMode": .string(MatchRequest.MatchMode.hashAndFileName.rawValue),
         ]

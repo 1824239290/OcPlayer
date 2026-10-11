@@ -119,13 +119,13 @@ struct HomeView: View {
     }
 
     private var noServerState: some View {
-        ContentUnavailableView {
-            Label("还没连接服务器", systemImage: "antenna.radiowaves.left.and.right.slash")
-        } description: {
-            Text("连上媒体库后，这里会有继续观看和最近添加。本地文件播放不受影响。")
-        } actions: {
-            Button("去连接") { app.reconnectFlow() }
-                .buttonStyle(.borderedProminent)
+        EmptyState(
+            empty: "还没连接服务器",
+            systemImage: "antenna.radiowaves.left.and.right.slash",
+            message: "连上媒体库后，这里会有继续观看和最近添加。本地文件播放不受影响。",
+            actionTitle: "去连接"
+        ) {
+            app.reconnectFlow()
         }
     }
 
@@ -164,11 +164,11 @@ struct HomeView: View {
                 }
 
                 if allConfiguredSectionsEmpty {
-                    ContentUnavailableView {
-                        Label("媒体库暂无可展示内容", systemImage: "sparkles")
-                    } description: {
-                        Text("服务器上还没有可展示的内容，媒体库可能正在建立索引。")
-                    }
+                    EmptyState(
+                        empty: "媒体库暂无可展示内容",
+                        systemImage: "sparkles",
+                        message: "服务器上还没有可展示的内容，媒体库可能正在建立索引。"
+                    )
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)
                     .transition(.section)
