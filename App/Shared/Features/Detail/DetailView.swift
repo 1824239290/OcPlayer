@@ -189,6 +189,14 @@ struct DetailView: View {
                 if !model.similar.isEmpty { similarRail }
             }
             .padding(.bottom, 48)
+            // 简介 / 演员 / 相似推荐都是**数据到了才插入**的区块（占位剧集详情落地
+            // 才有简介与 cast，similar 异步更晚）。插入会把下方内容整体下压——动画
+            // 作用域必须挂在**页面级** VStack 上才盖得住兄弟区块的下推（挂在区块
+            // 自己上只会淡入自己，下面照样硬跳）。作用域按数据源各挂一个：值翻转
+            // 的那一拍，插入区块淡入、下方下推，整页一次平滑重排。
+            .motion(Motion.standard, value: model.displayOverview == nil)
+            .motion(Motion.standard, value: model.displayCast.isEmpty)
+            .motion(Motion.standard, value: model.similar.isEmpty)
             // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
             // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
             // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
