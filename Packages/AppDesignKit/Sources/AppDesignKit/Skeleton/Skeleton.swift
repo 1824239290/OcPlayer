@@ -178,8 +178,10 @@ public struct SkeletonStillCard: View {
 
 /// 骨架横向 Rail：标题 + 一排同尺寸骨架卡，和真实 `Rail` 布局一致。
 ///
-/// 间距 / 上边距必须跟 `Rail` 完全对齐（`spacing: 14`、`.padding(.top, 24)`），
-/// 否则骨架撤掉的瞬间每条 Rail 都会错开几 pt——那正好是骨架屏要消掉的东西。
+/// 间距 / 上边距必须跟 `Rail` 完全对齐（两者都读 `Metrics.railHeaderSpacing` /
+/// `Metrics.railTopInset` / `Metrics.railHoverPadding`，不再各写一份字面量——
+/// 原先这里是硬编码的 `spacing: 14` + `.padding(.top, 24)`，改 Rail 时漏改这边
+/// 就会在骨架撤掉的瞬间让每条 Rail 错开几 pt，而那正是骨架屏要消掉的东西）。
 public struct SkeletonRail: View {
     public let title: String
     public let kind: RailKind
@@ -191,6 +193,7 @@ public struct SkeletonRail: View {
     public enum RailKind {
         case poster   // 2:3 海报卡
         case still    // 16:9 剧照卡
+        case latest   // 16:9 横版「最近添加」卡（无进度条）
     }
 
     public init(title: String, kind: RailKind) {
@@ -207,7 +210,7 @@ public struct SkeletonRail: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Metrics.railHeaderSpacing) {
             // 标题位用真实文案垫宽（`.hidden()` 只占位不绘制），灰条盖在它上面：
             // 比写死一个宽度更贴合真实标题的行宽与基线。
             Text(title)
@@ -226,6 +229,9 @@ public struct SkeletonRail: View {
                         // 传 nil（= 跟随列宽）在横排里量不出宽度。
                         case .poster: SkeletonPosterCard(width: isCompact ? Metrics.compactPosterWidth : Metrics.posterWidth)
                         case .still: SkeletonStillCard(width: isCompact ? Metrics.compactStillWidth : Metrics.stillWidth)
+                        // 「最近添加」卡没有进度轨，骨架与剧照卡同形——直接复用
+                        // （两行文案条 + 16:9 图块），只把宽度换成最新那档。
+                        case .latest: SkeletonStillCard(width: isCompact ? Metrics.compactLatestWidth : Metrics.latestWidth)
                         }
                     }
                 }
@@ -236,7 +242,7 @@ public struct SkeletonRail: View {
             // 骨架不该比真实内容更能滚：真实 Rail 卡片铺不满时也是不滚的。
             .scrollDisabled(true)
         }
-        .padding(.top, 24)
+        .padding(.top, Metrics.railTopInset)
     }
 
     /// 卡片区可视高度：和真实 Rail 的 scrollHeight 对齐，避免骨架与内容间跳动。
@@ -244,6 +250,7 @@ public struct SkeletonRail: View {
         switch kind {
         case .poster: Metrics.posterRailHeight(compact: isCompact)
         case .still: Metrics.stillRailHeight(compact: isCompact)
+        case .latest: Metrics.latestRailHeight(compact: isCompact)
         }
     }
 }

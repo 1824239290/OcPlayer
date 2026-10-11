@@ -114,6 +114,11 @@ struct MoviePilotHomeView: View {
         .navigationTitle("MoviePilot")
         #if os(macOS)
         .navigationSubtitle(navigationSubtitleText)
+        #else
+        // iPhone / iPad：Tab 根页不挂大标题（与首页同一口径，见 HomeView 顶部
+        // 注释）；macOS 是窗口工具栏标题 + 副标题，本来就不占版面，保持原样。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
         #endif
         // 登录失效的两个入口（门控按钮 / 错误态按钮）都直弹登录窗：预填地址与
         // 账号，用户只补密码，不必绕道设置页。挂在 Group 上——token 被清后
