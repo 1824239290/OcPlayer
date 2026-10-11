@@ -756,7 +756,12 @@ final class AppModel {
             if isCompact {
                 compactPath.append(route)
             } else {
-                path.append(route)
+                // 落地禁动画：系统 push 滑动会与 routeExiting 复位的回弹淡入
+                // 叠加（页面边滑入边淡入，肉眼可见左移）；入场观感由两段式
+                // 唯一承担，与 pop 侧 `back()` 的禁动画落地对称。
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { self.path.append(route) }
             }
         }
     }
@@ -781,8 +786,9 @@ final class AppModel {
 
     /// 两段式换页（push / pop / 分区切换共用）：点击后当前页先淡出
     /// （`Motion.exit`），淡出完成再执行 `land` 落地，落点/新页由淡出层回弹
-    /// 淡入（push 页另有 `pageEntrance` 接力）。compact（iPhone）系统动画
-    /// 本来就在，reduceMotion 直切，都不等待。pop 侧由自绘返回键调用。
+    /// 淡入（新页以隐藏态出生，routeExiting 复位即它的入场——全站唯一入场
+    /// 机制）。compact（iPhone）系统动画本来就在，reduceMotion 直切，都不等待。
+    /// pop 侧由自绘返回键调用。
     func beginRouteExit(land: @escaping @MainActor () -> Void, restoreDelay: Double = 0) {
         if isCompact || reduceMotion {
             land()

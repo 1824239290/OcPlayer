@@ -112,7 +112,6 @@ struct MoviePilotResourceView: View {
                     // 与 MoviePilot 首页那个入口同款顶栏（此前只有系统返回键，
                     // 常规布局下与其它页不一致）。
                     .appShellBackChrome(title: "下载管理", presented: $navigateToDownloads)
-                    .pageEntrance()
             }
             // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：下载管理
             // 落地期间本页（含声明，供整窗层继续渲染）整页隐去（见 coveredByPresented）。

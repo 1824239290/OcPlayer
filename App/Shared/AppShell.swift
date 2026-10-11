@@ -251,7 +251,7 @@ struct AppShellView: View {
         .transition(.section)
         .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
         // 两段式转场第一段：进入点击后本页淡出，淡出完成才落地 push，新页由
-        // pageEntrance 接力入场（见 AppModel.beginRouteExit）。
+        // routeExiting 复位的回弹淡入接力入场（见 AppModel.beginRouteExit）。
         .routeExitFade()
         // 栈根在 push 期间必须保持隐藏：页面是透明的（氛围层透显设计），栈根
         // 漏出来会透过详情页显示。用 **path 驱动**而不是 onAppear/onDisappear
@@ -354,17 +354,17 @@ extension View {
 /// 我在栈顶＝可见。
 ///
 /// 为什么不用 onDisappear：实测 macOS 26 的导航栈 push 时**不给被盖页发
-/// onDisappear**（探针证实整个进出播放流程零生命周期事件），pageEntrance
-/// 的「被覆盖即复位」因此从未生效——被盖页一直 opacity 1，只是系统平时不
+/// onDisappear**（探针证实整个进出播放流程零生命周期事件），「被覆盖即复位」
+/// 的生命周期方案因此从未生效——被盖页一直 opacity 1，只是系统平时不
 /// 合成它；播放器开合翻转窗口工具栏可见性、乃至改一次窗口尺寸，都会让它
 /// 重新参与合成，透过透明详情页漏出（用户报「播放完返回详情页背景丢失」）。
 /// 与栈根同一哲学：**path 驱动、与生命周期解耦**。
 ///
 /// 仅 macOS 生效：紧凑布局的导航栈宿主不合成被盖页，且 `app.path` 在
-/// 紧凑布局下恒空，深度无意义（保持直通，语义同 pageEntrance 的分叉）。
+/// 紧凑布局下恒空，深度无意义（iOS 直通）。
 private struct CoveredPageHider: ViewModifier {
     @Environment(AppModel.self) private var app
-    /// 本页在共享栈里的深度；nil＝尚未落地（落地过渡交给 pageEntrance）。
+    /// 本页在共享栈里的深度；nil＝尚未落地（落地过渡交给 routeExitFade 复位淡入）。
     @State private var depth: Int?
 
     func body(content: Content) -> some View {
@@ -591,13 +591,12 @@ extension View {
                 settingsSubpageView(subpage)
             }
         }
-        // macOS 系统 push 被吞（见 pageEntrance 注释），所有路由页统一自带入场；
-        // 两段式换页时由本页自己淡出（routeExitFade）。两者在 iOS 上都空转：
-        // 系统自带 push / pop 滑动，routeExiting 也不会被置起。
+        // 两段式换页由本页自己淡出（routeExiting 复位的回弹淡入即入场，
+        // 见 RouteExitFader）；系统 push 滑动已由 AppModel.push 禁动画掐掉。
+        // 两者在 iOS 上都空转：系统自带 push / pop 滑动，routeExiting 也不会被置起。
         // coveredPageHidden：被后推的页盖住时按深度归零透明度（见 CoveredPageHider）。
         .coveredPageHidden()
         .routeExitFade()
-        .pageEntrance()
     }
 
     /// 设置 hub 的子页（`SettingsSubpage`）。页面自身不设 navigationTitle——

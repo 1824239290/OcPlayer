@@ -49,7 +49,6 @@ struct MoviePilotResourceSection: View {
                         .appShellBackChrome(
                             title: media.title ?? "资源搜索", presented: $showResource
                         )
-                        .pageEntrance()
                 }
             }
         }

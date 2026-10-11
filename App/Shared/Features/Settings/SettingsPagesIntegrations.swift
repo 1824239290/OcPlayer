@@ -82,7 +82,6 @@ struct JellyfinSettingsView: View {
         .navigationDestination(isPresented: $showServers) {
             ServersView()
                 .appShellBackChrome(title: "管理服务器", presented: $showServers)
-                .pageEntrance()
         }
         // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间
         // 本页整页隐去，别透过半透的管理服务器页漏出（见 coveredByPresented）。

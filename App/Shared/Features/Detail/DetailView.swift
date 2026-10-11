@@ -96,19 +96,6 @@ struct DetailView: View {
     /// 紧凑端（iPhone）沉浸式横幅高度。
     private var compactBannerHeight: CGFloat { 290 }
 
-    /// 氛围头部与屏幕顶部的间距。内容整体越过顶部安全区（ScrollView
-    /// `ignoresSafeArea(.top)`），iPadOS 26 的导航栏玻璃按钮（侧栏开关 +
-    /// 返回）悬深到 ~76pt、滚动边缘渐进模糊尾部到 ~82pt，64pt 会把海报
-    /// 顶部压进两者——收起侧栏后海报左缘(52pt)正对按钮列尤其明显。
-    /// iOS 抬到 104pt 让海报整张落在模糊带之下；macOS 工具栏浅，维持原深度。
-    private var ambientHeaderTopInset: CGFloat {
-        #if os(iOS)
-        104
-        #else
-        64
-        #endif
-    }
-
     /// 紧凑宽度的播放钮窄一点，和海报/标题一起塞进窄屏不溢出。
     private var playButtonWidth: CGFloat {
         horizontalSizeClass == .compact ? 200 : 228
@@ -153,7 +140,8 @@ struct DetailView: View {
                     }
                     // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
                     // 占位条目落地后有图；氛围初版落地后发现确无图）——头部在
-                    // 横幅与氛围两版之间切换时交叉淡入 + 高度过渡，不再硬切跳变。
+                    // 横幅与氛围两版之间切换时交叉淡入；两版同高（bannerHeight），
+                    // 不产生高度过渡，下方内容纹丝不动。
                     .motion(Motion.standard, value: isAmbientActive)
                     metadata
                 }
@@ -201,10 +189,10 @@ struct DetailView: View {
                 if !model.similar.isEmpty { similarRail }
             }
             .padding(.bottom, 48)
-            // 入场过渡由路由出口的 .pageEntrance() 统一承担（淡入 + 上移落位）；
-            // 加载中的骨架块（海报 / 头像 / 标题 Logo）与 RemoteImage 的原位
-            // 淡入承担「加载过渡」，不做整页透明度脉冲——那会在每次进入时
-            // 可见地变暗又提亮一次（「闪一下」）。
+            // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
+            // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
+            // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
+            // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .ignoresSafeArea(edges: .top)
@@ -575,8 +563,12 @@ struct DetailView: View {
         // 老横幅靠全宽图片层把 ZStack 撑满；这里没有图层级，自己撑满全宽。
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
-        .padding(.top, ambientHeaderTopInset)
         .padding(.bottom, 28)
+        // 与老横幅**同高**（bannerHeight）底对齐：两版头部高度一致，isAmbientActive
+        // 翻转只剩交叉淡入——没有高度过渡把下方内容上推；内容底边与横幅 overlay
+        // 落在同一竖直位置。内容顶边 = 320-28-180 = 112pt，iPadOS 26 导航栏玻璃
+        // 按钮 ~104pt 的悬深自然让开（等高框取代了此前的固定 top inset）。
+        .frame(height: bannerHeight, alignment: .bottom)
     }
 
     /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
