@@ -7,7 +7,6 @@ import SwiftUI
 /// Quick Connect 在服务器确认后自动开始轮询；它没开 / 超时也不挡密码登录。
 struct OnboardingView: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var serverAddress = ""
@@ -65,8 +64,8 @@ struct OnboardingView: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.18), radius: 30, y: 12)
-        .motionAnimation(Motion.standard, value: app.loginSession != nil, reduceMotion: reduceMotion)
-        .motionAnimation(Motion.standard, value: app.onboardingError, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: app.loginSession != nil)
+        .motion(Motion.standard, value: app.onboardingError)
     }
 
     // MARK: 第一步：服务器地址
@@ -231,8 +230,8 @@ struct OnboardingView: View {
                 }
             }
         }
-        .motionAnimation(Motion.standard, value: app.quickConnectCode, reduceMotion: reduceMotion)
-        .motionAnimation(Motion.standard, value: app.quickConnectError, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: app.quickConnectCode)
+        .motion(Motion.standard, value: app.quickConnectError)
     }
 
     /// 三种状态共用同一个盒子，切换时框体不跳。
@@ -321,7 +320,6 @@ struct OnboardingView: View {
     private func connect() async {
         await app.connectServer(serverAddress, scheme: serverScheme)
     }
-
 
     private func submitPassword() async {
         await app.signIn(username: username, password: password)

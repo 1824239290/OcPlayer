@@ -14,7 +14,6 @@ struct RootView: View {
     @Environment(PlaybackController.self) private var controller
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var updateChecker = AppUpdateChecker.shared
 
     var body: some View {
@@ -36,7 +35,7 @@ struct RootView: View {
                     .transition(.section)
             }
         }
-        .motionAnimation(Motion.slide, value: app.phase, reduceMotion: reduceMotion)
+        .motion(Motion.slide, value: app.phase)
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
@@ -65,10 +64,10 @@ struct RootView: View {
                     .zIndex(1)
             }
         }
-        .motionAnimation(Motion.standard, value: app.presentedPlayer, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: app.presentedPlayer)
         // loading 淡出（首帧已上屏后）稍长一点：黑屏 loading 与画面交叉融化，
         // 出画面是"浮现"而不是"闪现"。
-        .motionAnimation(Motion.slide, value: app.playbackPreparation, reduceMotion: reduceMotion)
+        .motion(Motion.slide, value: app.playbackPreparation)
         .onOpenURL { url in
             if url.scheme == "ocplayer", url.host == "oauth" {
                 // 错误由 BangumiCoordinator.authError 承接，登录页会显示出来。

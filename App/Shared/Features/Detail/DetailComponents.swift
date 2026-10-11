@@ -150,8 +150,8 @@ struct EpisodeSelectCard: View {
             }
             .frame(width: cardWidth, alignment: .topLeading)
             .scaleEffect(lifted ? 1.03 : 1)
-            .animation(motion, value: isSelected)
-            .animation(motion, value: hovering)
+            .motion(Motion.lift, value: isSelected)
+            .motion(Motion.lift, value: hovering)
         }
         .buttonStyle(.plain)
         // 分集简介做 tooltip：卡片本身放不下（宽度固定、标题已占两行），
@@ -171,12 +171,6 @@ struct EpisodeSelectCard: View {
 
     private var lifted: Bool {
         !reduceMotion && (isSelected || hovering)
-    }
-
-    private var motion: Animation? {
-        reduceMotion
-            ? nil
-            : .spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12)
     }
 
     @ViewBuilder

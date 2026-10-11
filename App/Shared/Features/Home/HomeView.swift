@@ -181,10 +181,10 @@ struct HomeView: View {
         .contentMargins(.horizontal, 0, for: .scrollContent)
         .refreshable { await app.reloadBrowserData() }
         // 下拉刷新会先清空再填充各 Rail 的数组，count 变化触发整体 crossfade。
-        .motionAnimation(Motion.slide, value: app.home.resume.count, reduceMotion: reduceMotion)
-        .motionAnimation(Motion.slide, value: app.home.nextUp.count, reduceMotion: reduceMotion)
-        .motionAnimation(Motion.slide, value: app.home.latest.count, reduceMotion: reduceMotion)
-        .motionAnimation(Motion.slide, value: app.libraries.count, reduceMotion: reduceMotion)
+        .motion(Motion.slide, value: app.home.resume.count)
+        .motion(Motion.slide, value: app.home.nextUp.count)
+        .motion(Motion.slide, value: app.home.latest.count)
+        .motion(Motion.slide, value: app.libraries.count)
     }
 
     /// 启用的栏目里是否一条内容都没有（空态的判定只看启用栏目）。
@@ -511,7 +511,7 @@ struct HomeSearchContent: View {
                                 PosterCard(item: item, server: app.server, width: searchCardWidth) {
                                     app.openDetail(item)
                                 }
-                                .transition(reduceMotion ? .identity : .opacity)
+                                .transition(reduceMotion ? .identity : .section)
                             }
                         }
                         .padding(.horizontal, contentLeading)
@@ -524,7 +524,7 @@ struct HomeSearchContent: View {
                     }
                 }
                 .scrollBounceBehavior(.basedOnSize)
-                .animation(reduceMotion ? nil : Motion.standard, value: searchResults.count)
+                .motion(Motion.standard, value: searchResults.count)
             }
         }
     }

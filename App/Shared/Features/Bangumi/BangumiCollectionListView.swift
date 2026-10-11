@@ -22,7 +22,7 @@ struct BangumiCollectionListView: View {
             if let loader {
                 content(loader)
                     .id(collectionType)
-                    .transition(.opacity)
+                    .transition(.section)
                     .motion(Motion.standard, value: collectionType)
             } else {
                 // 根级状态视图（本页此时还没有 `List` 兜底）走 `PageFillingState`
@@ -89,7 +89,7 @@ struct BangumiCollectionListView: View {
                 }
             }
             .listStyle(.inset)
-            .animation(reduceMotion ? nil : Motion.standard, value: loader.items.count)
+            .motion(Motion.standard, value: loader.items.count)
         }
     }
 

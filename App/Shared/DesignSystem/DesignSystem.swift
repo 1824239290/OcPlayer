@@ -185,10 +185,6 @@ struct ItemTitleLogoView: View {
         }
     }
 
-    private var imageFade: Animation? {
-        reduceMotion ? nil : Motion.standard
-    }
-
     var body: some View {
         Group {
             if let logoImage {
@@ -215,7 +211,7 @@ struct ItemTitleLogoView: View {
                     .transition(.section)
             }
         }
-        .animation(imageFade, value: logoImage != nil)
+        .motion(Motion.standard, value: logoImage != nil)
         .task(id: "\(item.id)#\(item.logoImageTag ?? "")") {
             let key = "\(item.id)#\(item.logoImageTag ?? "")"
             guard item.logoImageTag != nil else {
@@ -665,7 +661,7 @@ struct StillCard: View {
                             .padding(18)
                             .opacity(actionBadgeVisible ? 1 : 0)
                             .scaleEffect(actionBadgeVisible ? 1 : 0.92)
-                            .animation(badgeMotion, value: actionBadgeVisible)
+                            .motion(Motion.fast, value: actionBadgeVisible)
                             .accessibilityHidden(true)
                     }
                 }
@@ -694,10 +690,6 @@ struct StillCard: View {
     /// 悬停或读屏时显示；减弱动态效果时仍显示，避免只靠动画提示可点。
     private var actionBadgeVisible: Bool {
         hovering || voiceOverEnabled || reduceMotion
-    }
-
-    private var badgeMotion: Animation? {
-        reduceMotion ? nil : Motion.fast
     }
 
     private var actionBadge: some View {

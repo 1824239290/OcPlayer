@@ -537,7 +537,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 }
             }
             .id(selectedEpisodeTab)
-            .transition(.opacity)
+            .transition(.section)
             .motion(Motion.standard, value: selectedEpisodeTab)
         }
     }

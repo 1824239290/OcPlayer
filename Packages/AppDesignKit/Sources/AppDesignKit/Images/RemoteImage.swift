@@ -114,8 +114,6 @@ public struct RemoteImage: View {
         Self.loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
     }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     public var body: some View {
         ZStack {
             // 常驻底层：加载中就是它在当占位，图片到位后从它上面淡入。
@@ -153,7 +151,7 @@ public struct RemoteImage: View {
             }
         }
         .clipped()
-        .animation(imageFade, value: loadedKey)
+        .motion(fadeAnimation ?? Motion.standard, value: loadedKey)
         // 位图尺寸变化就回报（见 `onImageSizeChange`）。放在 overlay 之后、不进布局，
         // 用 `.onChange` 而不是在加载回调里直接调——后者会撞上「视图更新期间改状态」。
         .onChange(of: image?.size, initial: true) { _, size in
@@ -199,10 +197,5 @@ public struct RemoteImage: View {
                 failed = true
             }
         }
-    }
-
-    /// 图片出现/消失的淡入淡出；减弱动态效果时直接切换，不播动画。
-    private var imageFade: Animation? {
-        reduceMotion ? nil : (fadeAnimation ?? Motion.standard)
     }
 }

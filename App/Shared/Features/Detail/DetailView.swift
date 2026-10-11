@@ -120,10 +120,10 @@ struct DetailView: View {
                     ZStack(alignment: .top) {
                         if isAmbientActive {
                             ambientCompactHeader
-                                .transition(.opacity)
+                                .transition(.section)
                         } else {
                             compactHeaderView
-                                .transition(.opacity)
+                                .transition(.section)
                         }
                     }
                     .motion(Motion.standard, value: isAmbientActive)
@@ -132,10 +132,10 @@ struct DetailView: View {
                         if isAmbientActive {
                             // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
                             ambientHeader
-                                .transition(.opacity)
+                                .transition(.section)
                         } else {
                             banner
-                                .transition(.opacity)
+                                .transition(.section)
                         }
                     }
                     // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
@@ -890,7 +890,7 @@ struct DetailView: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 18)
-                    .transition(.opacity)
+                    .transition(.section)
             } else if let episodeError = model.episodeLoadError {
                 EmptyState(failure: episodeError, title: "集列表加载失败", systemImage: "wifi.exclamationmark") {
                     Task { await model.loadEpisodes() }
@@ -914,14 +914,9 @@ struct DetailView: View {
         // **动画值刻意是本地集数而不是 slot 数**：占位是 TMDb 季数据晚到约一秒才插进来的，
         // 用 slot 数当值会让整条轨道在占位到位时重播一次过渡（可见地闪一下）；用本地集数
         // 则占位是「无动画插入」，观感更稳。空态 → 有占位那次翻转单独用一个值盖住。
-        .animation(episodeListMotion, value: model.isLoadingEpisodes)
-        .animation(episodeListMotion, value: model.episodes.count)
-        .animation(episodeListMotion, value: model.episodeSlots.isEmpty)
-    }
-
-    /// 选集区域的状态切换过渡；减弱动态效果时直接切换。
-    private var episodeListMotion: Animation? {
-        reduceMotion ? nil : Motion.standard
+        .motion(Motion.standard, value: model.isLoadingEpisodes)
+        .motion(Motion.standard, value: model.episodes.count)
+        .motion(Motion.standard, value: model.episodeSlots.isEmpty)
     }
 
     /// 选集展示顺序：排序只影响横向条，不动 `model.episodes`、`episodeSlots` 与选中态。
@@ -996,8 +991,8 @@ struct DetailView: View {
 
             memberGrid
         }
-        .animation(collectionMotion, value: model.isLoadingMembers)
-        .animation(collectionMotion, value: model.collectionMembers.count)
+        .motion(Motion.standard, value: model.isLoadingMembers)
+        .motion(Motion.standard, value: model.collectionMembers.count)
     }
 
     @ViewBuilder
@@ -1064,11 +1059,6 @@ struct DetailView: View {
 
     private var memberCardWidth: CGFloat? {
         PosterGrid.cardWidth(compact: horizontalSizeClass == .compact)
-    }
-
-    /// 成员区状态切换过渡；减弱动态效果时直接切换。
-    private var collectionMotion: Animation? {
-        reduceMotion ? nil : Motion.standard
     }
 
     // MARK: - 演员 / 类似

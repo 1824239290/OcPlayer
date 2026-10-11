@@ -152,7 +152,6 @@ struct PlayerPlaybackErrorBadge: View {
 /// 常挂载 + `.opacity` 切换——macOS 上 `.transition` 的移除不被动画化（见 PlayerScreen 注释）。
 struct PlayerHoldFastForwardBadge: View {
     @Environment(PlaybackController.self) private var controller
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isShowing: Bool { controller.isHoldFastForwarding }
 
@@ -171,7 +170,7 @@ struct PlayerHoldFastForwardBadge: View {
         }
         .opacity(isShowing ? 1 : 0)
         .scaleEffect(isShowing ? 1 : 0.92)
-        .motionAnimation(Motion.standard, value: isShowing, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: isShowing)
         .allowsHitTesting(false)
         .accessibilityHidden(!isShowing)
         .accessibilityElement(children: .ignore)

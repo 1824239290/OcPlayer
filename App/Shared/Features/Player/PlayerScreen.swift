@@ -147,7 +147,7 @@ struct PlayerScreen: View {
                     .padding(16)
             }
             .opacity(showsBufferingIndicator ? 1 : 0)
-            .motionAnimation(Motion.standard, value: showsBufferingIndicator, reduceMotion: reduceMotion)
+            .motion(Motion.standard, value: showsBufferingIndicator)
             .allowsHitTesting(false)
             .accessibilityHidden(!showsBufferingIndicator)
             .accessibilityElement(children: .ignore)
@@ -215,8 +215,8 @@ struct PlayerScreen: View {
                 }
             }
             .allowsHitTesting(true)
-            .motionAnimation(Motion.glass, value: expandedActionTab, reduceMotion: reduceMotion)
-            .motionAnimation(Motion.glass, value: panelContentHeight, reduceMotion: reduceMotion)
+            .motion(Motion.glass, value: expandedActionTab)
+            .motion(Motion.glass, value: panelContentHeight)
 
             // 长按右键 2x 提示徽章：独立于 HUD 显隐（加速不唤醒 HUD），浮在顶部中央。
             VStack(spacing: 0) {
@@ -243,9 +243,9 @@ struct PlayerScreen: View {
         }
         // HUD 显隐动画：`.animation(value:)` 挂在容器上，`.opacity` 属性动画
         // 两个方向都渐变（macOS 上 transition removal 不生效，见上方注释）。
-        .motionAnimation(Motion.standard, value: hudVisibility.isVisible, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: hudVisibility.isVisible)
         // opening→ready/playing 时让 loading 层、缓冲圈、错误徽章的显隐柔和过渡。
-        .motionAnimation(Motion.standard, value: controller.state.state, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: controller.state.state)
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)
@@ -346,7 +346,7 @@ struct PlayerScreen: View {
         .onChange(of: reduceMotion, initial: true) {
             hudVisibility.motionAnimation = reduceMotion ? nil : Motion.standard
             // 卸载延时跟随动画：无动画（reduceMotion）时立即卸载。
-            hudVisibility.unmountDelay = reduceMotion ? .zero : .milliseconds(200)
+            hudVisibility.unmountDelay = reduceMotion ? .zero : .seconds(Motion.standardSeconds)
         }
         .onChange(of: controller.state.state, initial: true) { _, newState in
             PlaybackLog.info("PlayerState -> \(newState)")
@@ -1108,7 +1108,7 @@ private struct PlayerPanFeedbackOverlay: View {
                 }
             }
         }
-        .motionAnimation(Motion.fast, value: feedback.session?.mode, reduceMotion: reduceMotion)
+        .motion(Motion.fast, value: feedback.session?.mode)
     }
 }
 #endif

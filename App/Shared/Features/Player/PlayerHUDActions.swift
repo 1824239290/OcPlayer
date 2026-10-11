@@ -139,7 +139,7 @@ struct PlayerHUDActionCluster: View {
                             } label: {
                                 PlayerHUDActionIconContent(tab: tab, controlSide: controlSide)
                             }
-                            .buttonStyle(PlayerHUDInteractiveButtonStyle())
+                            .buttonStyle(.pressScale)
                             .playerHUDGlassButton()
                             .glassEffectID(tab.id, in: glassNamespace)
                             .help(tab.rawValue)
@@ -771,15 +771,6 @@ struct PlayerHUDExpandedActionCard: View {
     }
 }
 
-struct PlayerHUDInteractiveButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .motion(Motion.fast, value: configuration.isPressed)
-    }
-}
-
 // MARK: - Infuse 式菜单行组件
 
 /// 行内容统一视觉：图标 + 标题 +（尾随值 / checkmark / 箭头）。供各按钮行与 ShareLink 复用。
@@ -1019,7 +1010,7 @@ struct PlayerSkipPromptView: View {
                     .padding(.vertical, 11)
                     .contentShape(Capsule())
                 }
-                .buttonStyle(PlayerSkipButtonStyle())
+                .buttonStyle(.pressScale)
                 .playerHUDGlassButton(in: Capsule())
                 .shadow(color: .black.opacity(0.45), radius: 6, y: 3)
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
@@ -1030,15 +1021,6 @@ struct PlayerSkipPromptView: View {
         .onChange(of: controller.state.timeline.progress, initial: true) {
             prompt = controller.currentSkipPrompt
         }
-    }
-}
-
-struct PlayerSkipButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .motion(Motion.fast, value: configuration.isPressed)
     }
 }
 
