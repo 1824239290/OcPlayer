@@ -89,29 +89,4 @@ public struct MetadataHydrator: Sendable {
         return DetailSnapshot(
             item: item, seasons: seasons, episodes: episodes, fetchedAt: cached.fetchedAt)
     }
-
-    /// 某一季的集（切季时用）。
-    public func episodes(seriesID: MediaItem.ID, seasonID: MediaItem.ID) async -> [MediaItem] {
-        (try? await store.episodes(seriesID: seriesID, seasonID: seasonID, tenant: tenant)) ?? []
-    }
-
-    // MARK: - 媒体技术信息
-
-    public func mediaFileInfo(itemID: MediaItem.ID) async -> CachedMediaFileInfo? {
-        try? await store.mediaFileInfo(itemID: itemID, tenant: tenant)
-    }
-
-    // MARK: - 库页
-
-    public struct PageSnapshot: Sendable {
-        public var items: [MediaItem]
-        public var totalRecordCount: Int?
-        public var fetchedAt: Date
-    }
-
-    public func page(_ key: PageKey) async -> PageSnapshot? {
-        guard let cached = try? await store.page(key, tenant: tenant) else { return nil }
-        return PageSnapshot(
-            items: cached.items, totalRecordCount: cached.totalRecordCount, fetchedAt: cached.fetchedAt)
-    }
 }

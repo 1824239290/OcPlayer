@@ -42,36 +42,24 @@ final class PlaybackEngineSelectionTests: XCTestCase {
         XCTAssertFalse(erika?.summary.isEmpty ?? true)
     }
 
-    /// 内核弹幕渲染当前版本被禁用：无论偏好怎么说，路线一律是 overlay。
-    /// `resolveOverlayDanmakuRoute()` 恢复旧判定（内核支持则听偏好）时改回本测试。
+    /// 内核弹幕渲染当前版本被禁用：路线一律是 overlay（`resolveOverlayDanmakuRoute`
+    /// 恒 true）。恢复旧判定（内核支持则听偏好）时改回本测试。
     func testDanmakuRouteIsForcedToOverlayWhileKernelDanmakuDisabled() {
         PlaybackEngineAssembly.registerAll()
 
-        let original = PlaybackPreferences.danmakuUseOverlayRenderer
-        defer { PlaybackPreferences.danmakuUseOverlayRenderer = original }
-
-        PlaybackPreferences.danmakuUseOverlayRenderer = true
-        XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer)
-
-        PlaybackPreferences.danmakuUseOverlayRenderer = false
         XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer,
-                      "内核弹幕禁用期间不能回到内核渲染，偏好里 overlay=关也不行")
+                      "内核弹幕禁用期间不能回到内核渲染")
     }
 
-    /// 内核**不支持**内核弹幕时强制 overlay，用户偏好说什么都不管——
-    /// 否则弹幕会静默消失（内核收下数据但没有渲染器）。
-    /// 这条为将来的非弹幕内核守着这段逻辑。
+    /// 内核**不支持**内核弹幕时强制 overlay——否则弹幕会静默消失（内核收下数据
+    /// 但没有渲染器）。这条为将来的非弹幕内核守着这段逻辑。
     func testDanmakuRouteIsForcedToOverlayWhenKernelCannotRenderIt() {
         PlaybackEngineRegistry.register(NoDanmakuEngine.descriptor) { NoDanmakuEngine() }
         PlaybackEngineRegistry.select(NoDanmakuEngine.descriptor.id)
 
-        let original = PlaybackPreferences.danmakuUseOverlayRenderer
-        defer { PlaybackPreferences.danmakuUseOverlayRenderer = original }
-
-        PlaybackPreferences.danmakuUseOverlayRenderer = false
         XCTAssertTrue(
             PlaybackController().usesOverlayDanmakuRenderer,
-            "内核没有弹幕渲染器时必须强制 overlay，不能听偏好"
+            "内核没有弹幕渲染器时必须强制 overlay"
         )
     }
 

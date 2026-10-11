@@ -171,9 +171,9 @@ public struct JellyfinServer: MediaServer {
     /// `/Items` 的 43 条，连「刚入库两天」的条目都不在里面），所以这不是「少个参数」
     /// 能修的病，而是该换端点。
     ///
-    /// `/Items` + `DateCreated` 倒序是本机 12.1.0 实测正常的口径，也是本文件
-    /// `favoriteItems` 与库页「排序 = 最近添加」（`MediaItemsSortField.dateAdded`）
-    /// 一直在用的写法；10.x 起就稳定，比 12.x 的 Latest 保守。`isRecursive` 必需
+    /// `/Items` + `DateCreated` 倒序是本机 12.1.0 实测正常的口径，也是库页
+    /// 「排序 = 最近添加」（`MediaItemsSortField.dateAdded`）一直在用的写法；
+    /// 10.x 起就稳定，比 12.x 的 Latest 保守。`isRecursive` 必需
     /// （默认 false 时只返回顶层项）。注意返回的是信封 `BaseItemDtoQueryResult`，
     /// 与 Emby 侧老式路由的裸数组不同。
     public func latestItems(limit: Int = 24) async throws -> [MediaItem] {
@@ -193,25 +193,6 @@ public struct JellyfinServer: MediaServer {
         request.query?.append(("fields", MediaListFields.items))
         let result = try await send(request)
         return result.items?.map(\.domainItem) ?? []
-    }
-
-    /// 用户收藏的电影 / 剧集（M4 独立收藏页预留）。
-    /// Jellyfin 的用户数据只有 `IsFavorite`，不记录收藏发生时间；`DateCreated`
-    /// 是媒体条目的入库 / 创建时间，不能对外表述为“最近收藏”。
-    /// 返回单页（不递归展开）；收藏为空时调用方负责空态。
-    public func favoriteItems(limit: Int = 24) async throws -> [MediaItem] {
-        var request = Paths.getItems(parameters: .init(
-            userID: profile.userID,
-            limit: limit,
-            sortOrder: [.descending],
-            includeItemTypes: [.movie, .series],
-            filters: [.isFavorite],
-            sortBy: [.dateCreated],
-            enableImageTypes: [.primary, .backdrop, .logo]
-        ))
-        request.query?.append(("fields", MediaListFields.items))
-        return try await send(request)
-            .items?.map(\.domainItem) ?? []
     }
 
     /// 首页「继续观看」。

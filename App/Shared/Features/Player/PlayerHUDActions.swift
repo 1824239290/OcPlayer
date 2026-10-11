@@ -646,14 +646,9 @@ struct PlayerHUDExpandedActionCard: View {
                         set: { controller.setDanmakuBlocked(bottom: !$0); onUserInteraction() }
                     )
                 )
-                PlayerHUDToggleMenuRow(
-                    icon: "arrow.triangle.merge",
-                    title: "合并重复",
-                    isOn: Binding(
-                        get: { controller.danmakuMergeDuplicates },
-                        set: { controller.setDanmakuMergeDuplicates($0); onUserInteraction() }
-                    )
-                )
+                // 「合并重复」入口已撤：它只写内核弹幕配置，而渲染恒走 overlay
+                //（DanmakuRenderKit 不实现 merge），拨了没有任何效果。内核弹幕
+                // 恢复时连同 setDanmakuMergeDuplicates 链路一起恢复入口。
                 PlayerHUDToggleMenuRow(
                     icon: "square.stack.3d.up",
                     title: "允许堆叠",

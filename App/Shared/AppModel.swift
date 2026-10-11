@@ -780,7 +780,7 @@ final class AppModel {
             guard let self else { return }
             var transaction = Transaction()
             transaction.disablesAnimations = true
-            withTransaction(transaction) { self.path.removeLast() }
+            withTransaction(transaction) { _ = self.path.removeLast() }
         }, restoreDelay: Motion.exitSeconds)
     }
 

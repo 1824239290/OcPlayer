@@ -181,28 +181,6 @@ final class JellyfinServerTests: XCTestCase {
         }
     }
 
-    func testFavoriteItemsFiltersFavoritesAndSortsByMediaCreationDate() async throws {
-        try await TestSupport.withMock { request in
-            XCTAssertEqual(request.url?.path, "/Items")
-            let query = TestSupport.queryItems(of: request)
-            XCTAssertEqual(query["filters"], "IsFavorite")
-            XCTAssertEqual(query["fields"], MediaListFields.items)
-            XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Movie") == true)
-            XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Series") == true)
-            XCTAssertEqual(query["sortBy"], "DateCreated")
-            XCTAssertEqual(query["sortOrder"], "Descending")
-            return MockURLProtocol.ok(
-                #"{"Items":[{"Id":"fav-1","Name":"沙丘 2","Type":"Movie","BackdropImageTags":["bd"]}],"TotalRecordCount":1}"#,
-                for: request.url!
-            )
-        } with: {
-            let items = try await makeServer().favoriteItems()
-            XCTAssertEqual(items.map(\.id), ["fav-1"])
-            XCTAssertEqual(items[0].kind, .movie)
-            XCTAssertEqual(items[0].backdropImageTag, "bd")
-        }
-    }
-
     /// 回归（用户实测：首页「最近添加」整条消失）：**绝不能再打 `/Items/Latest`**。
     ///
     /// Jellyfin 12.1.0 上 `/Items/Latest` 一旦带 `includeItemTypes` 就恒返回 `[]`（HTTP 200），

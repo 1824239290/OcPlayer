@@ -21,7 +21,7 @@ public enum Metrics {
     public static let latestWidth: CGFloat = 230
     public static let cardRadius: CGFloat = 10
     /// 选集卡圆角。比 `cardRadius` 略小，选集卡在详情页里尺寸更小、更密集，
-    /// 和海报/剧照卡用同一个圆角会显得偏圆。`EpisodeSelectCard` 与 `SkeletonEpisodeStrip` 共用。
+    /// 和海报/剧照卡用同一个圆角会显得偏圆。`EpisodeSelectCard` 在用。
     public static let episodeCardRadius: CGFloat = 8
     public static let railSpacing: CGFloat = 22
     /// Rail 标题与内容行之间的间距。

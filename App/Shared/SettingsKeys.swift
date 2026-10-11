@@ -45,8 +45,6 @@ enum SettingsKeys {
     static let bangumiEnabled = "dev.jumusu.ocplayer.bangumi.enabled"
     /// MoviePilot 集成启用开关（默认开）。关闭只藏 UI 与停网络活动，服务器配置保留。
     static let moviepilotEnabled = "dev.jumusu.ocplayer.moviepilot.enabled"
-    /// 弹幕：走 App 层 overlay 渲染（内核渲染当前被禁）。
-    static let danmakuUseOverlayRenderer = "dev.jumusu.ocplayer.danmaku.useOverlayRenderer"
     /// 弹幕诊断日志开关。
     static let danmakuDiagnostics = "dev.jumusu.ocplayer.danmaku.diagnostics"
     /// 诊断日志：详细（debug）档开关。关（默认）= 只落 info 及以上（状态迁移 / 失败）；

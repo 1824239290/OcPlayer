@@ -66,7 +66,7 @@ struct CachedMediaServerTests {
         #expect(episode?.item.seasonNumber == 1)
     }
 
-    @Test func itemsPagePersistsItemsAndPageSnapshot() async throws {
+    @Test func itemsPagePersistsItemsOnly() async throws {
         let (server, stub, store, tenant, dir) = try await makeFixture()
         defer { dir.cleanUp() }
         stub.itemsPageResult = .success(MediaItemsPage(
@@ -79,40 +79,20 @@ struct CachedMediaServerTests {
             watchState: .all, searchTerm: nil)
         #expect(page.totalRecordCount == 137)
 
-        let key = PageKey(parentID: "lib-1", kinds: [.movie],
-                          sort: MediaItemsSort(field: .name, ascending: true),
-                          watchState: .all, searchTerm: nil, startIndex: 0, limit: 60)
-        let cached = try #require(try await store.page(key, tenant: tenant))
-        #expect(cached.items.map(\.id) == ["p1", "p2"])
-        #expect(cached.totalRecordCount == 137)
-        // 页里的条目也要进 item 表：否则离线进详情页是空的。
+        // 页快照不再写盘（没有任何读路径）；页里的条目仍要进 item 表：
+        // 否则离线进详情页是空的。
         #expect(try await store.item("p1", tenant: tenant)?.item.name == "条目一")
+        #expect(try await store.item("p2", tenant: tenant)?.item.name == "条目二")
     }
 
-    @Test func mediaFileInfoIsPersisted() async throws {
-        let (server, stub, store, tenant, dir) = try await makeFixture()
-        defer { dir.cleanUp() }
-        let info = MediaFileInfo(
-            video: .init(codec: "hevc", width: 1920, height: 1080, bitrate: 8_000_000,
-                         frameRate: 24, bitDepth: 8, colorPrimaries: nil, colorTransfer: nil,
-                         colorSpace: nil, colorRange: nil, videoRangeType: "SDR",
-                         profile: "Main", isInterlaced: false),
-            audioTracks: [], subtitleTracks: [], container: "mp4",
-            sizeBytes: 1_000_000, durationSeconds: 1440, fileName: "e1.mp4", sourceCount: 1)
-        stub.mediaFileInfoResult = .success(info)
-
-        _ = try await server.mediaFileInfo(itemID: "e1")
-        #expect(try await store.mediaFileInfo(itemID: "e1", tenant: tenant)?.info == info)
-    }
-
-    /// `nil` 结果不写盘（「没有媒体源」不该被当成一条缓存记录）。
-    @Test func nilMediaFileInfoIsNotPersisted() async throws {
-        let (server, stub, store, tenant, dir) = try await makeFixture()
+    /// `nil` 结果原样透传（「没有媒体源」与「有媒体源」都不落缓存——
+    /// mediaFileInfo 的缓存写路径已删，纯透传）。
+    @Test func nilMediaFileInfoPassesThrough() async throws {
+        let (server, stub, _, _, dir) = try await makeFixture()
         defer { dir.cleanUp() }
         stub.mediaFileInfoResult = .success(nil)
         let result = try await server.mediaFileInfo(itemID: "e1")
         #expect(result == nil)
-        #expect(try await store.mediaFileInfo(itemID: "e1", tenant: tenant) == nil)
     }
 
     /// 标记已看：服务端返回的 playState 是权威值，直接写回缓存。

@@ -23,9 +23,4 @@ public enum MetadataCache {
     public static func sizeInBytes(at directory: URL) -> Int64 {
         MetadataDatabaseFactory.totalBytes(at: directory)
     }
-
-    /// 删库（含 WAL / SHM）。设置页「清空」的最后一档，也是排障手段。
-    public static func removeDatabase(at directory: URL) {
-        MetadataDatabaseFactory.removeDatabaseFiles(at: directory)
-    }
 }

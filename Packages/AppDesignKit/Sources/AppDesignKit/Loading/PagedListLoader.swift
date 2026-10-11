@@ -2,29 +2,6 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// 列表加载的统一状态：空转 / 首载 / 成功 / 失败。
-public enum LoadableState<T> {
-    case idle
-    case loading
-    case loaded(T)
-    case failed(String)
-
-    public var isLoading: Bool {
-        if case .loading = self { return true }
-        return false
-    }
-
-    public var value: T? {
-        if case .loaded(let value) = self { return value }
-        return nil
-    }
-
-    public var errorMessage: String? {
-        if case .failed(let message) = self { return message }
-        return nil
-    }
-}
-
 /// 分页列表加载器：把「isLoading / isLoadingMore / loadError / hasMore /
 /// 代次守卫 / 追加去重」这套每个列表页都抄一遍的状态机收成一份。
 ///

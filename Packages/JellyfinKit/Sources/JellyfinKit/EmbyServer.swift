@@ -99,25 +99,6 @@ public struct EmbyServer: MediaServer {
         return items.map(\.domainItem)
     }
 
-    public func favoriteItems(limit: Int = 24) async throws -> [MediaItem] {
-        let result = try await session.get(
-            "/Items",
-            query: [
-                ("userId", userID),
-                ("limit", String(limit)),
-                ("sortBy", "DateCreated"),
-                ("sortOrder", "Descending"),
-                ("includeItemTypes", "Movie,Series"),
-                ("filters", "IsFavorite"),
-                ("enableImageTypes", "Primary,Backdrop,Logo"),
-                ("recursive", "true"),
-                ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
-            ],
-            as: EmbyQueryResultDTO.self
-        )
-        return (result.items ?? []).map(\.domainItem)
-    }
-
     public func resumeItems() async throws -> [MediaItem] {
         // Emby 走老式 `/Users/{id}/Items/Resume`（Jellyfin 是 `/UserItems/Resume`）。
         let result = try await session.get(

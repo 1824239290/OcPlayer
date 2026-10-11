@@ -1,5 +1,6 @@
 import Darwin
 import DiagnosticsKit
+import ErikaKit
 import Foundation
 
 /// 播放结束后的 malloc 空闲页归还。
@@ -16,9 +17,6 @@ import Foundation
 /// AimesSoft/Erika#125），那个线程最多还能带着 HTTP 缓冲活 20 秒（fetch 重试预算）。
 /// 第一拍（2s）回收 presenter 析构立刻释放的页；第二拍（25s）等 demux 线程尾巴退出后
 /// 再收一次。每拍前后各采一条进程 footprint，`diagnostics.jsonl` 里直接看 relief 拿回多少。
-///
-/// footprint 读数在这里自己实现（ErikaKit 的 `ProcessFootprint` 是包内 internal 类型），
-/// 语义与它一致：phys_footprint + malloc 全 zone 已分配字节数。
 @MainActor
 enum MallocPressureRelief {
 
@@ -51,7 +49,7 @@ enum MallocPressureRelief {
 
     /// 对进程内所有 malloc zone 做一次压力归还，前后各采一条 footprint 进诊断日志。
     nonisolated private static func perform(reason: String) {
-        let before = readFootprint()
+        let before = ProcessFootprint.current()
 
         var zonePointers: UnsafeMutablePointer<vm_address_t>?
         var zoneCount: UInt32 = 0
@@ -65,48 +63,17 @@ enum MallocPressureRelief {
             }
         }
 
-        let after = readFootprint()
+        let after = ProcessFootprint.current()
         let message = "malloc relief reason=\(reason) "
-            + "进程 \(format(before.footprint)) → \(format(after.footprint)) · "
-            + "malloc \(format(before.malloc)) → \(format(after.malloc))"
+            + "进程 \(format(before.physFootprintBytes)) → \(format(after.physFootprintBytes)) · "
+            + "malloc \(format(before.mallocAllocatedBytes)) → \(format(after.mallocAllocatedBytes))"
         playerLog.info(message, fields: [
             "reason": .string(reason),
-            "before_footprint_bytes": .unsignedInteger(before.footprint),
-            "before_malloc_bytes": .unsignedInteger(before.malloc),
-            "after_footprint_bytes": .unsignedInteger(after.footprint),
-            "after_malloc_bytes": .unsignedInteger(after.malloc),
+            "before_footprint_bytes": .unsignedInteger(before.physFootprintBytes),
+            "before_malloc_bytes": .unsignedInteger(before.mallocAllocatedBytes),
+            "after_footprint_bytes": .unsignedInteger(after.physFootprintBytes),
+            "after_malloc_bytes": .unsignedInteger(after.mallocAllocatedBytes),
         ])
-    }
-
-    private nonisolated static func readFootprint() -> (footprint: UInt64, malloc: UInt64) {
-        var footprint: UInt64 = 0
-        var info = task_vm_info_data_t()
-        var count = mach_msg_type_number_t(
-            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
-        )
-        let kr = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
-            }
-        }
-        if kr == KERN_SUCCESS {
-            footprint = UInt64(info.phys_footprint)
-        }
-
-        var mallocBytes: UInt64 = 0
-        var zonePointers: UnsafeMutablePointer<vm_address_t>?
-        var zoneCount: UInt32 = 0
-        malloc_get_all_zones(mach_task_self_, nil, &zonePointers, &zoneCount)
-        if let zonePointers, zoneCount > 0 {
-            for index in 0..<Int(zoneCount) {
-                guard let zoneRaw = UnsafeMutableRawPointer(bitPattern: zonePointers[index]) else { continue }
-                let zone = zoneRaw.assumingMemoryBound(to: malloc_zone_t.self)
-                var stats = malloc_statistics_t()
-                malloc_zone_statistics(zone, &stats)
-                mallocBytes += UInt64(stats.size_allocated)
-            }
-        }
-        return (footprint, mallocBytes)
     }
 
     private nonisolated static func format(_ bytes: UInt64) -> String {

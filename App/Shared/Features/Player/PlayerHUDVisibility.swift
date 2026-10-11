@@ -156,12 +156,6 @@ final class PlayerHUDVisibilityCoordinator {
         }
     }
 
-    /// 原生 Menu 没有公开 isPresented；打开菜单时给足停留时间，选中动作后会恢复正常计时。
-    func holdForMenu(canAutoHide: Bool) {
-        setVisible(true)
-        scheduleHide(after: .seconds(30), canAutoHide: canAutoHide)
-    }
-
     func pointerMoved(to location: CGPoint, canAutoHide: Bool) {
         // 用户主动关闭期间，鼠标移动不唤出（要点击才重新打开）。
         guard !userHidden else { return }

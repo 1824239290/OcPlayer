@@ -225,15 +225,6 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue, forKey: danmakuDiagnosticsKey) }
     }
 
-    /// 弹幕渲染走 App 层 overlay（DanmakuRenderKit）而非 Erika 内核的 DFM+ 子系统。
-    /// 当前版本内核弹幕因滑窗重排跳轨问题被禁用（`PlaybackController` 强制 overlay），
-    /// 本 key 已不被读取；保留是为了将来内核修复后恢复「默认内核弹幕、可切 overlay」，
-    /// 用户旧选择仍在。恢复时记得同步设置页开关与相关测试。
-    static var danmakuUseOverlayRenderer: Bool {
-        get { storedBool(forKey: SettingsKeys.danmakuUseOverlayRenderer, default: false) }
-        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuUseOverlayRenderer) }
-    }
-
     /// HTTP 源前向预取窗口（MiB）。仅 Erika 内核生效；0 = 内核默认 2 MiB。
     ///
     /// 内核（v0.2.0）用**持久流预取**：两个 worker 持有

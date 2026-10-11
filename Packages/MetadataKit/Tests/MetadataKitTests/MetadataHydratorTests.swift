@@ -3,8 +3,6 @@ import Foundation
 import JellyfinKit
 import Testing
 
-// `MediaFileInfo` 的逐字段 init 是包内可见（见 MetadataSnapshotTests 的同款说明）。
-@testable import JellyfinKit
 @testable import MetadataKit
 
 /// 离线读：内容 + 新鲜度，且「没缓存」必须与「缓存是空的」区分开。
@@ -106,59 +104,5 @@ struct MetadataHydratorTests {
         #expect(detail.item.kind == .movie)
         #expect(detail.seasons.isEmpty)
         #expect(detail.episodes.isEmpty)
-    }
-
-    /// 切季时按季取集。
-    @Test func episodesBySeason() async throws {
-        let (hydrator, store, tenant, dir) = try await makeFixture()
-        defer { dir.cleanUp() }
-        try await store.saveItems([
-            makeItem(id: "s1", kind: .season, seriesID: "series-1", seasonNumber: 1),
-            makeItem(id: "s2", kind: .season, seriesID: "series-1", seasonNumber: 2),
-            makeItem(id: "s1e1", kind: .episode, seriesID: "series-1", seasonNumber: 1, episodeNumber: 1),
-            makeItem(id: "s2e1", kind: .episode, seriesID: "series-1", seasonNumber: 2, episodeNumber: 1),
-        ], tenant: tenant)
-
-        let season2 = await hydrator.episodes(seriesID: "series-1", seasonID: "s2")
-        // 取集是按 seasonID 过滤的：第 2 季只该拿到第 2 季的集。
-        #expect(season2.map(\.id).contains("s2e1"))
-    }
-
-    // MARK: - 媒体信息
-
-    @Test func mediaFileInfoFromCache() async throws {
-        let (hydrator, store, tenant, dir) = try await makeFixture()
-        defer { dir.cleanUp() }
-        let info = MediaFileInfo(
-            video: .init(codec: "h264", width: 1920, height: 1080, bitrate: 5_000_000,
-                         frameRate: 24, bitDepth: 8, colorPrimaries: nil, colorTransfer: nil,
-                         colorSpace: nil, colorRange: nil, videoRangeType: "SDR",
-                         profile: "High", isInterlaced: false),
-            audioTracks: [], subtitleTracks: [], container: "mp4",
-            sizeBytes: 1_000, durationSeconds: 100, fileName: "a.mp4", sourceCount: 1)
-        try await store.saveMediaFileInfo(info, itemID: "m1", tenant: tenant)
-        let cached = try #require(await hydrator.mediaFileInfo(itemID: "m1"))
-        #expect(cached.info.video?.codec == "h264")
-        #expect(await hydrator.mediaFileInfo(itemID: "nope") == nil)
-    }
-
-    // MARK: - 库页
-
-    @Test func pageFromCache() async throws {
-        let (hydrator, store, tenant, dir) = try await makeFixture()
-        defer { dir.cleanUp() }
-        let key = PageKey(parentID: "lib-1", kinds: [.movie], sort: nil, watchState: nil,
-                          searchTerm: nil, startIndex: 0, limit: 60)
-        try await store.savePage(
-            MediaItemsPage(items: [makeItem(id: "p1")], startIndex: 0, totalRecordCount: 42),
-            key: key, tenant: tenant)
-
-        let page = try #require(await hydrator.page(key))
-        #expect(page.items.map(\.id) == ["p1"])
-        #expect(page.totalRecordCount == 42)
-
-        let missing = PageKey(parentID: "lib-2", kinds: nil, sort: nil, watchState: nil,
-                              searchTerm: nil, startIndex: 0, limit: 60)
-        #expect(await hydrator.page(missing) == nil)
     }
 }

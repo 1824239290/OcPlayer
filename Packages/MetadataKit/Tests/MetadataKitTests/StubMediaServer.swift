@@ -18,7 +18,6 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var resumeResult: Result<[MediaItem], any Error> = .success([])
     var nextUpResult: Result<[MediaItem], any Error> = .success([])
     var latestResult: Result<[MediaItem], any Error> = .success([])
-    var favoriteResult: Result<[MediaItem], any Error> = .success([])
     var itemResult: Result<MediaItem, any Error>?
     var itemsPageResult: Result<MediaItemsPage, any Error>?
     var seasonsResult: Result<[MediaItem], any Error> = .success([])
@@ -63,9 +62,6 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     }
     func latestItems(limit: Int) async throws -> [MediaItem] {
         count("latestItems"); return try latestResult.get()
-    }
-    func favoriteItems(limit: Int) async throws -> [MediaItem] {
-        count("favoriteItems"); return try favoriteResult.get()
     }
     /// 刻意弹错：装饰器不该把它当成「必需」的东西而让整条路径失败。
     func randomBackdropItems(limit: Int) async throws -> [MediaItem] {
