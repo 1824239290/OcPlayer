@@ -265,7 +265,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/Items/abc")
             let query = TestSupport.queryItems(of: request)
             XCTAssertEqual(query["userId"], "user-9")
-            XCTAssertEqual(query["fields"], "People,Genres,Overview,Chapters")
+            XCTAssertEqual(query["fields"], "People,Genres,Overview,Chapters,PrimaryImageAspectRatio")
             return MockURLProtocol.ok(
                 """
                 {"Id":"abc","Name":"沙丘 2","Type":"Movie",
