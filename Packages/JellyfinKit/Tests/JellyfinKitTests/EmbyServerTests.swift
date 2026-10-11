@@ -60,6 +60,9 @@ final class EmbyServerTests: XCTestCase {
     func testLatestItemsUsesLegacyRouteAndBareArray() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items/Latest")
+            // 与 Jellyfin 同口径：列表条目自带简介/评分，详情页首屏免等。
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             return MockURLProtocol.ok(
                 """
                 [{"Id":"m-1","Name":"新电影","Type":"Movie","ProductionYear":2026},
@@ -79,6 +82,8 @@ final class EmbyServerTests: XCTestCase {
     func testResumeItemsUsesLegacyRoute() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items/Resume")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             return MockURLProtocol.ok(
                 #"{"Items":[{"Id":"m-1","Name":"沙丘","Type":"Movie"}],"TotalRecordCount":1}"#,
                 for: request.url!

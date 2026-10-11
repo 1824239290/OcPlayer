@@ -56,6 +56,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/UserItems/Resume")
             let query = TestSupport.queryItems(of: request)
             XCTAssertEqual(query["mediaTypes"], "Video")
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             return MockURLProtocol.ok(
                 """
                 {"Items":[{
@@ -185,6 +186,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/Items")
             let query = TestSupport.queryItems(of: request)
             XCTAssertEqual(query["filters"], "IsFavorite")
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Movie") == true)
             XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Series") == true)
             XCTAssertEqual(query["sortBy"], "DateCreated")
@@ -219,6 +221,9 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(query["sortOrder"], "Descending", "最近添加 = 新在前")
             XCTAssertEqual(query["limit"], "24")
             XCTAssertEqual(query["userId"], "user-9")
+            // 详情页首屏免等的前提：列表条目自带简介/流派/评分/比例/TMDb id
+            //（SDK 枚举缺 CommunityRating/OfficialRating，所以必须是这条字符串）。
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Movie") == true)
             XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Series") == true)
             return MockURLProtocol.ok(
@@ -250,6 +255,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(query["sortBy"], "ProductionYear")
             XCTAssertEqual(query["sortOrder"], "Ascending")
             XCTAssertEqual(query["userId"], "user-9")
+            XCTAssertEqual(query["fields"], MediaListFields.items)
             return MockURLProtocol.ok(
                 #"{"Items":[{"Id":"m-1","Name":"福音战士新剧场版：Q","Type":"Movie","ProductionYear":2012}],"TotalRecordCount":2}"#,
                 for: request.url!)

@@ -25,6 +25,22 @@ public enum MediaServerAuthentication {
         "dev.jumusu.OcPlayer.server.authenticationRequired")
 }
 
+/// 列表接口（首页 rail / 库网格 / 合集成员）的 `fields` 口径，Jellyfin 与 Emby 两端共用。
+///
+/// 列表**默认不返回**这些扩展字段（实测 Jellyfin 12.1.0 不带 fields 时连
+/// `PrimaryImageAspectRatio` 都没有），此前列表条目只有标题和图 tag，点进详情页
+/// 首屏全靠二次请求。带上这几个字段后，列表条目本身就有简介 / 流派 / 评分，
+/// 详情页首屏可以直接渲染，`/Items/{id}` 只需要补演员表等重头字段。
+///
+/// **刻意不含 `People`**：演员表是列表 payload 的大头（每条十几人 × 24 条），
+/// 而演员区不是首屏关键——详情请求在点击瞬间由预取发出，晚一两百毫秒无感。
+/// `ProviderIds` 只是小字典且库级批量 TMDb 补全靠它，随列表一起带上。
+public enum MediaListFields {
+    /// 首页 rail / 库网格 / 合集成员统一口径。
+    public static let items =
+        "Overview,Genres,CommunityRating,OfficialRating,PrimaryImageAspectRatio,ProviderIds"
+}
+
 /// 媒体库单页结果。`totalRecordCount` 来自服务端；未知时为 nil。
 public struct MediaItemsPage: Sendable, Equatable {
     public var items: [MediaItem]
