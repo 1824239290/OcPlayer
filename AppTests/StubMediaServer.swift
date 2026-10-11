@@ -89,7 +89,6 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     func resumeItems() async throws -> [MediaItem] { count("resumeItems"); return try resumeResult.get() }
     func nextUp() async throws -> [MediaItem] { count("nextUp"); return try nextUpResult.get() }
     func latestItems(limit: Int) async throws -> [MediaItem] { count("latestItems"); return try latestResult.get() }
-    func favoriteItems(limit: Int) async throws -> [MediaItem] { [] }
     func randomBackdropItems(limit: Int) async throws -> [MediaItem] { [] }
 
     func markPlayed(itemID: String) async throws -> MediaItem.PlayState {

@@ -222,9 +222,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     /// 当前版本统一强制 overlay：内核 DFM+ 的滑窗重排仍会让在屏弹幕跳轨，
-    /// 内核弹幕渲染暂时禁用（设置页「用内核渲染弹幕」开关同步置灰并附说明）。
-    /// 内核修复后恢复旧判定：内核不支持弹幕时强制 overlay，否则走
-    /// `PlaybackPreferences.danmakuUseOverlayRenderer`（key 保留着，用户旧选择还在）。
+    /// 内核弹幕渲染暂时禁用。内核修复后恢复旧判定：内核不支持弹幕时强制
+    /// overlay，否则听用户偏好（「走 overlay 还是内核」的偏好 key 曾挂在
+    /// `PlaybackPreferences`，随无效入口清理一并删了，恢复时重加）。
     private static func resolveOverlayDanmakuRoute() -> Bool {
         true
     }
@@ -251,13 +251,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
-    /// 当前内核里打开的源（去重用：覆盖层出现时不重复 open 同一个源）。
-    var currentlyOpenURI: String?
     // MARK: open 在飞状态（open 已移出主线程,见 engineOpenQueue 注释）
     /// 在飞的 open。用途：同请求重入去重、换片时判定「旧引擎还在 open」、看门狗。
     /// 每次尝试独立关联，迟到回调不得清除重试请求的状态。
     private(set) var openingRequestID: PlaybackRequest.ID?
-    private(set) var openingSourceURI: String?
     private var openingWatchdogTask: Task<Void, Never>?
     @ObservationIgnored private var openingAttempt: PlaybackOpenAttempt?
     /// open 在飞期间按下的暂停意图：引擎对 play/pause 让位丢弃，且 open 成功后
@@ -498,14 +495,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
         let title = URL(string: uri)?.lastPathComponent ?? uri
         return PlaybackRequest(title: title, uri: uri, authHeader: authHeader)
-    }
-
-    func open(fileURL: URL) {
-        open(request: PlaybackRequest(
-            title: fileURL.lastPathComponent,
-            uri: fileURL.path,
-            securityScopedURL: fileURL
-        ))
     }
 
     /// Register a request before SwiftUI presents `PlayerScreen`. Async resource
@@ -770,7 +759,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
             playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
             try? engine?.stop()
             hasLoadedSource = false
-            currentlyOpenURI = nil
             releaseSecurityScopedResource()
             resetEngine()
         }
@@ -807,7 +795,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let attempt = PlaybackOpenAttempt(scopeLease: scopeLease)
         openingAttempt = attempt
         openingRequestID = request.id
-        openingSourceURI = source.uri
         scheduleOpenWatchdog(for: request, generation: generation, attempt: attempt)
         PlaybackLog.append("open() 派发到后台 title=\(request.title)")
         // 主线程快照：队列闭包只碰引擎，不读 @MainActor 状态。
@@ -917,7 +904,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("open() 成功，补放 open 在飞期间的暂停意图 title=\(request.title)")
         }
         setupError = nil
-        currentlyOpenURI = uri
         activeSecurityScopeLease = attempt.scopeLease
         engineIsActive = true
         playerLog.info("open 成功 title=\(currentTitle ?? "?")")
@@ -980,7 +966,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         openingWatchdogTask = nil
         openingAttempt = nil
         openingRequestID = nil
-        openingSourceURI = nil
     }
 
     /// open 看门狗：内核对 DNS 解析没有任何超时，弱网下 open 理论上可无限挂。
@@ -1091,7 +1076,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         openingAttempt?.cancel()
         openingAttempt = nil
         openingRequestID = nil
-        openingSourceURI = nil
         // 音量尾去抖的落盘任务大概率等不到 300ms（控制器即将销毁）：收口补写一次，
         // 否则「调完音量立刻退出」会丢掉最后一拍音量。
         volumePersistTask?.cancel()
@@ -1105,7 +1089,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // stop 之后旧源已经不算“已加载”，必须清掉标记，否则下一次 open 会误以为要换片，
         // 白白把还没加载新源的引擎丢掉重建（无害但没必要）。
         hasLoadedSource = false
-        currentlyOpenURI = nil
         activeRequest = nil
         expectedRequestID = nil
         sourceGeneration &+= 1

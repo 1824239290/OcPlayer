@@ -119,12 +119,6 @@ public struct CachedMediaServer: MediaServer {
         return items
     }
 
-    public func favoriteItems(limit: Int) async throws -> [MediaItem] {
-        let items = try await wrapped.favoriteItems(limit: limit)
-        await record(items: items, rail: "favorite")
-        return items
-    }
-
     public func resumeItems() async throws -> [MediaItem] {
         let items = try await wrapped.resumeItems()
         await record(items: items, rail: "resume")
@@ -177,13 +171,9 @@ public struct CachedMediaServer: MediaServer {
             parentID: parentID, kinds: kinds, recursive: recursive,
             startIndex: startIndex, limit: limit, sort: sort,
             watchState: watchState, searchTerm: searchTerm)
-        let key = PageKey(parentID: parentID, kinds: kinds, sort: sort, watchState: watchState,
-                          searchTerm: searchTerm, startIndex: startIndex, limit: limit)
-        await record {
-            // 条目与页快照一次事务写完：只写页快照的话，详情页（读 item 表）拿不到这些条目。
-            try await store.saveItems(page.items, tenant: tenant)
-            try await store.savePage(page, key: key, tenant: tenant)
-        }
+        // 只写条目（详情页读 item 表用）；页快照不写——没有任何读路径，
+        // 写了纯属积累（页快照读侧已随 MetadataHydrator.page 一并删除）。
+        await record { try await store.saveItems(page.items, tenant: tenant) }
         return page
     }
 
@@ -220,11 +210,8 @@ public struct CachedMediaServer: MediaServer {
     }
 
     public func mediaFileInfo(itemID: String) async throws -> MediaFileInfo? {
-        let info = try await wrapped.mediaFileInfo(itemID: itemID)
-        if let info {
-            await record { try await store.saveMediaFileInfo(info, itemID: itemID, tenant: tenant) }
-        }
-        return info
+        // 纯透传：缓存写路径已删（没有任何读侧，见 MetadataHydrator.mediaFileInfo 的移除）。
+        try await wrapped.mediaFileInfo(itemID: itemID)
     }
 
     // MARK: - 写盘

@@ -6,8 +6,8 @@ import PlaybackKit
 //
 // ⚠️ 当前版本内核弹幕渲染因滑窗重排跳轨问题被禁用：App 一律走 **App 层 overlay**
 // （`DanmakuRenderKit`），这条内核路径只是保留实现。恢复内核渲染时把
-// `PlaybackController.resolveOverlayDanmakuRoute()` 与设置页开关改回
-// `PlaybackPreferences.danmakuUseOverlayRenderer` 即可。
+// `PlaybackController.resolveOverlayDanmakuRoute()` 改回听用户偏好（并重加
+// 设置页开关与偏好 key）即可。
 
 extension DanmakuTrackInfo {
     init(_ raw: ErikaDanmakuTrackInfo) {

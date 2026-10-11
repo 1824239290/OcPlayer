@@ -76,6 +76,4 @@ public extension AnyTransition {
     }
     /// 大区 / 模块平级切换：统一 crossfade。
     static var section: AnyTransition { .opacity }
-    /// 面板 / 行内出现：微收缩 + 淡入。
-    static var pop: AnyTransition { .scale(scale: 0.96).combined(with: .opacity) }
 }
