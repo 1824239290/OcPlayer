@@ -382,6 +382,12 @@ extension AppModel {
 
     /// 剧集级 TMDB ID（TheIntroDB 跳过片头源用）。
     func seriesTmdbID(for seriesID: String) async -> Int? {
+        // 详情快照里就有 tmdbID（进过详情的剧集直接命中），别再为弹幕链路
+        // 全量重拉一遍详情（含 People/Genres，贵）。
+        if let snapshot = detailSnapshot(for: seriesID),
+           let tmdbID = snapshot.detail.tmdbID.flatMap(Int.init) {
+            return tmdbID
+        }
         guard let server else { return nil }
         guard let item = try? await server.item(seriesID) else { return nil }
         return item.tmdbID.flatMap(Int.init)

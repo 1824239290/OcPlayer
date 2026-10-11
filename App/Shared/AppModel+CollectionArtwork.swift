@@ -40,6 +40,41 @@ extension AppModel {
         collectionArtwork[itemID] = posterPath
     }
 
+    /// 「进入可视区解析一次」的统一机具：in-flight 去重、并发上限、attempted 记账
+    /// （**只有确定结论才记账**——断网/401/429 不记，记了的话一次网络抖动就让这些
+    /// 卡片此后永远空白，只能重启 App）、取消静默、失败告警。
+    /// 合集封面与库卡封面两份机具曾逐字段复制（存储声明在 `AppModel.swift`）。
+    ///
+    /// - Parameter body: 解析体；返回「是否为确定结论」（成功 / 命中缓存 / 确认没有
+    ///   都算；会话过期返回 false 不记账，新会话可重试）。
+    private func resolveArtworkOnce<ID: Hashable>(
+        id: ID,
+        label: String,
+        isResolved: () -> Bool,
+        attempted: ReferenceWritableKeyPath<AppModel, Set<ID>>,
+        inFlight: ReferenceWritableKeyPath<AppModel, Set<ID>>,
+        concurrency: Int,
+        body: () async throws -> Bool
+    ) async {
+        guard !isResolved(),
+              !self[keyPath: attempted].contains(id),
+              !self[keyPath: inFlight].contains(id),
+              self[keyPath: inFlight].count < concurrency
+        else { return }
+        self[keyPath: inFlight].insert(id)
+        defer { self[keyPath: inFlight].remove(id) }
+        do {
+            if try await body() {
+                self[keyPath: attempted].insert(id)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            // 连列表都拉不到（离线 / 服务端出错）：不记账，下次进入可视区再试。
+            AppDiagnostics.logWarning(label, fields: ["error": .string("\(error)")])
+        }
+    }
+
     /// 卡片进入可视区时解析一次该合集的海报。**有界、失败不重试**。
     ///
     /// 成本：一次成员列表（走缓存装饰器、会写库）+ 最多 `collectionMemberLookupLimit`
@@ -48,42 +83,29 @@ extension AppModel {
     /// 进库时全量跑：可见即需要，滚动扫过几十个合集也不会一次打上百个请求。
     func resolveCollectionArtworkIfNeeded(for item: MediaItem) async {
         guard item.kind == .boxSet, item.primaryImageTag == nil else { return }
-        guard collectionArtwork[item.id] == nil,
-              !collectionArtworkAttempted.contains(item.id),
-              !collectionArtworkInFlight.contains(item.id),
-              collectionArtworkInFlight.count < Self.collectionArtworkConcurrency,
-              tmdb.isReady,
-              let server, let tenant = currentTenant
-        else { return }
+        guard tmdb.isReady, let server, let tenant = currentTenant else { return }
         let generation = sessionGeneration
-        collectionArtworkInFlight.insert(item.id)
-        defer { collectionArtworkInFlight.remove(item.id) }
-
-        do {
+        await resolveArtworkOnce(
+            id: item.id,
+            label: "合集封面解析失败 item=\(item.name)",
+            isResolved: { self.collectionArtwork[item.id] != nil },
+            attempted: \.collectionArtworkAttempted,
+            inFlight: \.collectionArtworkInFlight,
+            concurrency: Self.collectionArtworkConcurrency
+        ) {
             // 成员：1 个请求（`collectionMembers` 里那三条硬约束是唯一一份）。
             let page = try await server.collectionMembers(of: item.id)
-            guard sessionIsCurrent(generation, server: server) else { return }
+            guard sessionIsCurrent(generation, server: server) else { return false }
             let outcome = await tmdb.refreshCollection(item: item, members: page.items,
                                                        tenant: tenant)
-            guard sessionIsCurrent(generation, server: server) else { return }
+            guard sessionIsCurrent(generation, server: server) else { return false }
             let overlay = await tmdb.overlay(for: item, tenant: tenant)
-            guard sessionIsCurrent(generation, server: server) else { return }
+            guard sessionIsCurrent(generation, server: server) else { return false }
             noteCollectionArtwork(itemID: item.id, posterPath: overlay?.posterPath)
             // **只有确定结论才记账**：成功、命中缓存、「TMDb 上确实没有这个合集」都算；
-            // `.failed`（断网 / 401 / 429）不算 —— 记了的话，一次网络抖动就会让这些卡片
-            // 此后永远空白，只能重启 App。这条区分依赖 `RefreshOutcome`（早先它返回
-            // Bool，两种结局都是 false，必然踩坑）。
-            if outcome.isConclusive {
-                collectionArtworkAttempted.insert(item.id)
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            // 成员列表都拉不到（离线 / 服务端出错）：不记账，下次再试。
-            AppDiagnostics.logWarning("合集封面解析失败", fields: [
-                "item": .string(item.name),
-                "error": .string("\(error)"),
-            ])
+            // `.failed`（断网 / 401 / 429）不算。这条区分依赖 `RefreshOutcome`
+            // （早先它返回 Bool，两种结局都是 false，必然踩坑）。
+            return outcome.isConclusive
         }
     }
 
@@ -110,17 +132,16 @@ extension AppModel {
     /// TMDb」挡住。
     func resolveLibraryCoverIfNeeded(for library: MediaLibrary) async {
         guard library.primaryImageTag == nil else { return }
-        guard libraryCoverArt[library.id] == nil,
-              !libraryCoverAttempted.contains(library.id),
-              !libraryCoverInFlight.contains(library.id),
-              libraryCoverInFlight.count < Self.libraryCoverConcurrency,
-              let server
-        else { return }
+        guard let server else { return }
         let generation = sessionGeneration
-        libraryCoverInFlight.insert(library.id)
-        defer { libraryCoverInFlight.remove(library.id) }
-
-        do {
+        await resolveArtworkOnce(
+            id: library.id,
+            label: "媒体库封面解析失败 library=\(library.name)",
+            isResolved: { self.libraryCoverArt[library.id] != nil },
+            attempted: \.libraryCoverAttempted,
+            inFlight: \.libraryCoverInFlight,
+            concurrency: Self.libraryCoverConcurrency
+        ) {
             let top = try await server.itemsPage(
                 parentID: library.id,
                 kinds: nil,
@@ -130,7 +151,7 @@ extension AppModel {
                 sort: MediaItemsSort(field: .name, ascending: true),
                 watchState: nil,
                 searchTerm: nil)
-            guard sessionIsCurrent(generation, server: server) else { return }
+            guard sessionIsCurrent(generation, server: server) else { return false }
 
             var posters = top.items.filter { $0.primaryImageTag != nil }
             // 成员请求有没有失败过（决定最后记不记账，见下）。
@@ -161,7 +182,7 @@ extension AppModel {
                     index += 1
                 }
             }
-            guard sessionIsCurrent(generation, server: server) else { return }
+            guard sessionIsCurrent(generation, server: server) else { return false }
 
             let urls = posters.prefix(Self.libraryCoverCount).compactMap { item in
                 try? server.imageURL(itemID: item.id, type: .primary,
@@ -169,21 +190,11 @@ extension AppModel {
             }
             if !urls.isEmpty {
                 libraryCoverArt[library.id] = urls
-                // 拼出来了就是确定结论（哪怕某个合集没拉到——画面已经可用）。
-                libraryCoverAttempted.insert(library.id)
-            } else if !memberLookupFailed {
-                // 一张都没有、且**没有失败** → 确定这个库没有可用的海报。
-                libraryCoverAttempted.insert(library.id)
             }
+            // 确定结论 = 拼出来了（哪怕某个合集没拉到——画面已经可用），
+            // 或一张都没有但**没有失败**（确定这个库没有可用的海报）。
             // 一张都没有、且有成员请求失败 → 不记账，下次进入可视区还要能再试。
-        } catch is CancellationError {
-            return
-        } catch {
-            // 列表都拉不到（离线 / 服务端出错）：不记账，下次再试。
-            AppDiagnostics.logWarning("媒体库封面解析失败", fields: [
-                "library": .string(library.name),
-                "error": .string("\(error)"),
-            ])
+            return !urls.isEmpty || !memberLookupFailed
         }
     }
 
