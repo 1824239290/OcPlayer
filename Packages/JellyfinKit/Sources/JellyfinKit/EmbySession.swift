@@ -147,8 +147,14 @@ final class EmbySession: @unchecked Sendable {
         return try await data(path, method: method, query: query, body: payload, timeout: timeout)
     }
 
-    /// 发请求。**地址决议与换址重试都在这一层**：它是 Emby 侧唯一的发送口，
+    /// 发请求。**地址决议、换址与退避重试都在这一层**：它是 Emby 侧唯一的发送口，
     /// 浏览 / 详情 / 字幕下载全从这走，上层不必知道「地址刚换过」。
+    ///
+    /// 重试语义与 `JellyfinServer.send` 对齐（此前 Emby 侧只有换址那一次重试，
+    /// 服务器回 502/503 或瞬时断连时用户只能看着转圈到超时）：幂等的浏览类
+    /// 请求（GET）按 `browseRetryPolicy` 退避重试，写操作不重试（重放会把一次
+    /// 用户操作变成两次）；判据也是同一份（`isIdempotent` / `isRetryable` /
+    /// `RetryPolicy`，全在 JellyfinKit 内共享）。
     func data(
         _ path: String,
         method: String,
@@ -156,25 +162,42 @@ final class EmbySession: @unchecked Sendable {
         body: Data? = nil,
         timeout: TimeInterval? = nil
     ) async throws -> Data {
-        // 首启 / 网络变化后这里会等一次探活；平时是同步读缓存。
-        _ = await directory?.resolvedURL()
-        let attemptURL = baseURL
-        do {
-            return try await send(path, method: method, query: query, body: body, timeout: timeout)
-        } catch let failure as JellyfinError {
-            // 传输层失败先怀疑「这条地址现在不通」：重新探活，换了地址就在新地址上
-            // 立刻再试一次（出门那条路：局域网断了 → Tailscale）。
-            // 只重试一次：第二次再失败就如实报错，不做地址轮盘赌。
-            guard failure.isAddressFailure, let directory,
-                  await directory.reportFailure(of: attemptURL) else {
-                throw failure
+        let policy = JellyfinServer.isIdempotent(method)
+            ? JellyfinServer.browseRetryPolicy : JellyfinServer.noRetryPolicy
+        var lastError: (any Error)?
+        for attempt in 1...policy.attempts {
+            // 首启 / 网络变化后这里会等一次探活；平时是同步读缓存。
+            _ = await directory?.resolvedURL()
+            let attemptURL = baseURL
+            do {
+                return try await send(path, method: method, query: query, body: body, timeout: timeout)
+            } catch let failure as JellyfinError {
+                // 取消照抛：那是「调用方不要了」，不是可重试的失败。
+                if JellyfinError.isCancellation(failure) { throw failure }
+                lastError = failure
+                // 传输层失败先怀疑「这条地址现在不通」：重新探活，换了地址就在新地址上
+                // 立刻再试一次（出门那条路：局域网断了 → Tailscale）。
+                // 换址判断必须排在重试闸门之前（同 JellyfinServer.send 的教训：
+                // 先过闸门的话 break 会把换址一起吃掉）。
+                if failure.isAddressFailure, let directory,
+                   attempt < policy.attempts, await directory.reportFailure(of: attemptURL) {
+                    NetworkLog.logger.info(
+                        "地址不可用，换地址后重试 \(method) \(path)",
+                        fields: ["from": .string(attemptURL.absoluteString),
+                                 "to": .string(baseURL.absoluteString)])
+                    continue
+                }
+                guard attempt < policy.attempts, JellyfinServer.isRetryable(failure) else { break }
+                let delay = policy.backoffNanoseconds(attempt: attempt)
+                // 与 Jellyfin 侧同一取舍：重试日志用 .info（默认档只落 info 及以上，
+                // debug 进不了诊断包），这是「瞬态失败已自愈」的唯一可见证据。
+                NetworkLog.logger.info(
+                    "重试 \(method) \(path)（第 \(attempt + 1)/\(policy.attempts) 次）",
+                    fields: ["attempt": .integer(Int64(attempt + 1))])
+                try? await Task.sleep(nanoseconds: delay)
             }
-            NetworkLog.logger.info(
-                "地址不可用，换地址后重试 \(method) \(path)",
-                fields: ["from": .string(attemptURL.absoluteString),
-                         "to": .string(baseURL.absoluteString)])
-            return try await send(path, method: method, query: query, body: body, timeout: timeout)
         }
+        throw lastError ?? JellyfinError(.other("请求失败"))
     }
 
     /// 单次发送：拼 URL、注入认证头、校验状态码、记日志。

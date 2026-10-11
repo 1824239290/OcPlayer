@@ -1,4 +1,5 @@
 import CoreModel
+import DiagnosticsKit
 import XCTest
 @testable import JellyfinKit
 
@@ -658,6 +659,96 @@ final class EmbyServerTests: XCTestCase {
         XCTAssertEqual(embySafeFields("Chapters"), "Chapters")
         XCTAssertNil(embySafeFields("ItemCounts"), "摘空了就整个不发这个参数")
         XCTAssertNil(embySafeFields(nil))
+    }
+}
+
+/// `EmbySession.data` 的**端到端**重试行为（与 `JellyfinRetryBehaviourTests` 对应的
+/// Emby 侧覆盖）：此前 Emby 只有「换址」那一次重试，瞬态断网 / 5xx 直接抛给 UI。
+/// 语义对齐后，幂等请求（GET）同样按 `browseRetryPolicy` 退避重试，写操作不重试。
+final class EmbyRetryBehaviourTests: XCTestCase {
+
+    private var savedBrowse: RetryPolicy!
+
+    override func setUp() {
+        super.setUp()
+        savedBrowse = JellyfinServer.browseRetryPolicy
+        // 预算 2 + 退避近零：验证「重试发生了」而不必真等 0.5–1.5 秒
+        //（第 1 次重试的等待只与 jitter 有关，与 base 无关）。
+        JellyfinServer.browseRetryPolicy = RetryPolicy(attempts: 2, jitter: 0.001...0.002)
+    }
+
+    override func tearDown() {
+        JellyfinServer.browseRetryPolicy = savedBrowse
+        super.tearDown()
+    }
+
+    private func makeServer() -> EmbyServer {
+        let profile = ServerProfile(
+            id: "emby-1:user-e",
+            serverName: "emby-nas",
+            baseURL: URL(string: "http://nas.local:8096/emby")!,
+            userID: "user-e",
+            userName: "jumusu",
+            serverVersion: "4.8.0.42",
+            kind: .emby
+        )
+        return EmbyServer(
+            profile: profile,
+            session: EmbySession(
+                baseURL: profile.baseURL,
+                accessToken: "tok",
+                profileID: profile.id,
+                sessionConfiguration: TestSupport.mockedSessionConfiguration()
+            )
+        )
+    }
+
+    /// 瞬态断网（-1009）重试：第一次失败后再发一次并成功（修复前直接抛给 UI）。
+    func testTransientNoNetworkIsRetriedAndThenSucceeds() async throws {
+        let attempts = LockedCounter()
+        try await TestSupport.withMock { request in
+            if attempts.increment() == 1 {
+                throw URLError(.notConnectedToInternet)
+            }
+            // Emby 的老式路由返回裸数组（不是信封）。
+            return MockURLProtocol.ok(#"[]"#, for: request.url!)
+        } with: {
+            let items = try await makeServer().latestItems(limit: 5)
+            XCTAssertTrue(items.isEmpty)
+        }
+        XCTAssertEqual(attempts.value, 2, "第一次失败后应再发一次")
+    }
+
+    /// 写操作（POST）不重试：重放会把一次用户操作变成两次
+    ///（与 Jellyfin 侧 `noRetryPolicy` 同一条规矩）。
+    func testWriteOperationIsNotRetried() async throws {
+        let attempts = LockedCounter()
+        do {
+            try await TestSupport.withMock { request in
+                attempts.increment()
+                throw URLError(.notConnectedToInternet)
+            } with: {
+                try await makeServer().markPlayed(itemID: "m1")
+            }
+            XCTFail("-1009 应抛错")
+        } catch {
+            // 预期抛错
+        }
+        XCTAssertEqual(attempts.value, 1, "POST 即使碰到可重试错误也不该重发")
+    }
+}
+
+/// 测试辅助：并发安全的调用计数。
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var value = 0
+
+    @discardableResult
+    func increment() -> Int {
+        lock.withLock {
+            value += 1
+            return value
+        }
     }
 }
 
