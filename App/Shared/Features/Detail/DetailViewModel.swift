@@ -59,6 +59,12 @@ final class DetailViewModel {
     var episodeLoadError: String?
     /// 播放退出后的静默刷新任务：离页时由视图取消。
     var reloadAfterPlaybackTask: Task<Void, Never>?
+    /// 集列表取消后的静默补拉任务（见 `scheduleEpisodeReloadAfterCancellation`）。
+    /// 真离页时由视图撤掉；被盖页不发 onDisappear（macOS 26 实测），被盖场景
+    /// 补拉照跑——正是要救的场景。
+    var episodeReloadTask: Task<Void, Never>?
+    /// 补拉防风暴计数：同一轮访问最多补拉 2 次（成功 / 换季 / 重进页复位）。
+    private(set) var episodeReloadAttemptCount = 0
 
     /// 正在展示的内容**没能**被网络确认（离线 / 服务端出错）。
     ///
@@ -307,6 +313,8 @@ final class DetailViewModel {
         selectedSeasonID = seasonID
         tmdbSeasonOverlay = nil
         bangumiCandidates = []
+        // 换季 = 新一轮取数，补拉预算清零。
+        episodeReloadAttemptCount = 0
     }
 
     /// 横向选集点选 / 点播共用：记下选中 + 滚动锚点 + 每季记忆。
@@ -327,6 +335,8 @@ final class DetailViewModel {
     func load() async {
         guard let app, let server = app.server else { return }
         prewarmAmbience()
+        // 重进页 = 新一轮访问，补拉预算清零。
+        episodeReloadAttemptCount = 0
         // 兜底候选是**按季**的，且由 Bangumi 区块在出现时重新递上来。这里先清空，
         // 免得重新进页时用上一轮（可能是另一季）的章节算出错号的占位卡。
         bangumiCandidates = []
@@ -402,6 +412,10 @@ final class DetailViewModel {
                 } catch let e as JellyfinError {
                     failure = e
                     if snapshot == nil { loadError = e.errorDescription }
+                } catch where JellyfinError.isCancellation(error) {
+                    // 取消不是失败（判据缺口见 `loadEpisodes` 同款修复的注释）：
+                    // 不置 failure / loadError，照常落到收尾，别把页面层取消的
+                    // `.task` 记成「刷新失败」（那会误报 staleNotice）。
                 } catch {
                     failure = error
                     if snapshot == nil { loadError = "\(error)" }
@@ -410,6 +424,8 @@ final class DetailViewModel {
         } catch let e as JellyfinError {
             failure = e
             if snapshot == nil { loadError = e.errorDescription }
+        } catch where JellyfinError.isCancellation(error) {
+            // 同上：取消不置 failure / loadError。
         } catch {
             failure = error
             if snapshot == nil { loadError = "\(error)" }
@@ -513,7 +529,9 @@ final class DetailViewModel {
             // 见 `collectionBackdropFallback`）。`load()` 里那两次预热都排在成员加载之前，
             // 赶不上这一档，所以这里补一次（同 URL 会直接短路，不会重复解码）。
             if reset { prewarmAmbience() }
-        } catch is CancellationError {
+        } catch where JellyfinError.isCancellation(error) {
+            // 取消不是失败：翻页/离页的取消不该挂错误条（判据缺口见
+            // `loadEpisodes` 同款修复的注释）。
             return
         } catch let e as JellyfinError {
             membersLoadError = e.errorDescription
@@ -651,6 +669,7 @@ final class DetailViewModel {
             episodeScrollFocusID = restored
             isLoadingEpisodes = false
             episodeLoadError = nil
+            episodeReloadAttemptCount = 0
             return
         }
         episodes = []
@@ -671,16 +690,39 @@ final class DetailViewModel {
             let preferred = preferredEpisodeID(in: loaded, seriesID: shown.id)
             selectedEpisodeID = preferred
             episodeScrollFocusID = preferred
+            episodeLoadError = nil
+            episodeReloadAttemptCount = 0
             storeSnapshot()
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription
-        } catch is CancellationError {
-            // 切季/离页的取消不是错误，别闪错误条。
-            return
+        } catch where JellyfinError.isCancellation(error) {
+            // 取消分两种来路：结构化取消抛 `CancellationError`；URLSession 任务被取消
+            // 抛的是 `URLError`（NSURLErrorDomain, -999），与前者**无子型关系**，
+            // `is CancellationError` 接不住（2026-10-11 实测：集列表挂出 -999 裸 dump，
+            // 且那次访问再无任何重试）。切季 / 离页 / 页面层重建的取消都不是错误，
+            // 不写错误条；但这次确实没拉到，排一次静默补拉（换季/已有数据则不补）。
+            scheduleEpisodeReloadAfterCancellation(seasonID: seasonID)
         } catch {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = "\(error)"
+        }
+    }
+
+    /// 取消后的静默补拉：`.task` 被页面层取消后不会重启（macOS 26 实测，详情见
+    /// 视图侧 `.task(id: selectedSeasonID)` 的注释），不补拉的话集列表那次访问
+    /// 就永远空着。三道守卫——季没换、数据没到、没超上限；晚到的补拉也无害：
+    /// `loadEpisodes` 读的是**当时**的选中季，已拉到则走缓存空转。
+    private func scheduleEpisodeReloadAfterCancellation(seasonID: String) {
+        guard selectedSeasonID == seasonID,
+              episodesBySeason[seasonID] == nil,
+              episodeReloadAttemptCount < 2 else { return }
+        episodeReloadAttemptCount += 1
+        episodeReloadTask?.cancel()
+        episodeReloadTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await loadEpisodes()
         }
     }
 

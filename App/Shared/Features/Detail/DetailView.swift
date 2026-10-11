@@ -260,6 +260,9 @@ struct DetailView: View {
         }
         .onDisappear {
             model.reloadAfterPlaybackTask?.cancel()
+            // 真离页撤掉待补拉（被盖页 macOS 26 不发 onDisappear，被盖场景
+            // 补拉照跑——正是要救的场景）。
+            model.episodeReloadTask?.cancel()
         }
     }
 
