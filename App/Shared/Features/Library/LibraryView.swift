@@ -105,21 +105,35 @@ struct LibraryView: View {
 
     var body: some View {
         Group {
-            if isLoading && items.isEmpty {
+            // `.task` 首跑前的落地首帧：`lastLibraryID` 还没被写、items 必空——
+            // 此时直接渲染骨架，别落到下面的空态分支。否则「这里还没有内容」先出
+            // 一帧、再被 `.motion` 拉成 0.2s 交叉淡变叠进随后出现的网格（进库时
+            // 空态鬼影的来历）。task 跑起来后骨架改由 `isLoading` 驱动（与搜索
+            // 防抖同一通道）。
+            if (isLoading || lastLibraryID == nil) && items.isEmpty {
                 skeletonGrid
             } else if let loadError, items.isEmpty {
-                EmptyState(failure: loadError, systemImage: "wifi.exclamationmark") {
-                    Task { await reload() }
+                // 空态 / 失败态是根级状态视图，必须由滚动容器承载（缘由见
+                // PageFillingState 文档）：裸 EmptyState 理想尺寸恒 400×400，
+                // 会把尺寸链连着氛围背景层一起塌掉——顶栏玻璃底下没图，露出
+                // 系统白底（进库时顶栏发白的来历；修法同 Bangumi 合集列表 /
+                // 每日放送，见 CHANGELOG 判例）。
+                PageFillingState {
+                    EmptyState(failure: loadError, systemImage: "wifi.exclamationmark") {
+                        Task { await reload() }
+                    }
                 }
             } else if items.isEmpty {
                 let term = searchText.trimmingCharacters(in: .whitespaces)
-                EmptyState(
-                    empty: isSearching
-                        ? (term.count < 2 ? "「\(term)」没有匹配" : "没有匹配「\(term)」的结果")
-                        : "这里还没有内容",
-                    systemImage: isSearching ? "magnifyingglass" : "tray",
-                    message: searchEmptyMessage(term: term)
-                )
+                PageFillingState {
+                    EmptyState(
+                        empty: isSearching
+                            ? (term.count < 2 ? "「\(term)」没有匹配" : "没有匹配「\(term)」的结果")
+                            : "这里还没有内容",
+                        systemImage: isSearching ? "magnifyingglass" : "tray",
+                        message: searchEmptyMessage(term: term)
+                    )
+                }
             } else {
                 grid
             }
@@ -197,10 +211,15 @@ struct LibraryView: View {
             }
             .padding(.horizontal, contentLeading)
             .padding(.vertical, 28)
+            // 必须是**活的** ScrollView（与 PageFillingState 同一判例）：工具栏玻璃
+            // 材质依赖「顶栏下有可滚动内容」，`scrollDisabled` 的容器撑得住布局、
+            // 却不被系统算数——骨架期一长（慢服务器 / 大库），顶栏就翻成系统白底
+            //（人工延迟实验实锤）。内容高度锁到视口、不溢出：没有滚动条可闪
+            //（系统常显滚动条也画不出来），自然不需要 scrollDisabled；折页以下的
+            // 卡片本来就看不见，少实例化几行不吃成本。
+            .containerRelativeFrame(.vertical, alignment: .top)
         }
-        // 骨架不该比真实内容更能滚（滚动条会闪一下），也不用真去测窗口高度：
-        // `LazyVGrid` 只实例化可视行，卡数给足够铺满最高常见窗口即可，多给不吃成本。
-        .scrollDisabled(true)
+        .scrollBounceBehavior(.basedOnSize)
         .skeletonShimmer()
     }
 
