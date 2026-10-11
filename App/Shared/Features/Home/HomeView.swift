@@ -12,9 +12,10 @@ struct HomeView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { sizeClass == .compact }
     private var stillWidth: CGFloat { isCompact ? Metrics.compactStillWidth : Metrics.stillWidth }
-    /// 「最近添加」Rail 的卡宽：紧凑 120 / 常规 178。**必须显式给**——`PosterCard`
-    /// 的 nil 语义是「跟随网格列宽」，横排 Rail 里没有列宽可跟随（见那边的注释）。
-    private var posterWidth: CGFloat { isCompact ? Metrics.compactPosterWidth : Metrics.posterWidth }
+    /// 「最近添加」Rail 的卡宽：紧凑 165 / 常规 230。**定宽必须显式给**——
+    /// `MediaArtwork` 的 nil 语义是「跟随网格列宽」，横排 Rail 里没有列宽可跟随。
+    /// 这一栏是 **16:9 横版**（`LatestCard`），不是海报，理由见那个类型。
+    private var latestWidth: CGFloat { isCompact ? Metrics.compactLatestWidth : Metrics.latestWidth }
 
     /// 首页栏目顺序与显隐（设置页「首页栏目」可调）。布局里含**已关闭**的栏目，
     /// 首页只渲染 `visible`——关掉的栏目仍在设置页保留，随时可以再打开。
@@ -61,6 +62,14 @@ struct HomeView: View {
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
         // 常规布局的搜索入口：窗口工具栏搜索框。iOS 走底部放大镜 Tab。
         .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
+        #else
+        // iPhone / iPad：**整块标题去掉**。「首页」已经写在底部 Tab 上，顶部再挂一遍
+        // 只白占约 52pt（大标题）——对照 Rex 的首页：第一个栏位标题紧贴状态栏下方，
+        // 我们的在 194pt 处（截图像素实测）。去掉标题后剩下的导航栏只承载右上角
+        // 那两个按钮（打开 / 刷新），与 Rex 的顶栏形态一致。
+        // 搜索入口是放大镜 Tab，不经导航栏，因此不受影响。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
         #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -225,8 +234,8 @@ struct HomeView: View {
             }
         case .latest:
             if !app.home.latest.isEmpty {
-                Rail("最近添加", kind: .poster, items: app.home.latest) { item in
-                    PosterCard(item: item, server: app.server, width: posterWidth) {
+                Rail("最近添加", kind: .latest, items: app.home.latest) { item in
+                    LatestCard(item: item, server: app.server, width: latestWidth) {
                         app.openDetail(item)
                     }
                 }
@@ -277,7 +286,7 @@ struct HomeView: View {
 
     private var loadingState: some View {
         // 骨架屏：按设置里启用的栏目铺和真实布局同结构的 Rail（继续观看 /
-        // 接下来看 = 剧照卡，最近添加 = 海报卡，媒体库 = 剧照卡），数据加载完
+        // 接下来看 = 剧照卡，最近添加 = 16:9 横版卡，媒体库 = 剧照卡），数据加载完
         // 原位替换。
         //
         // 内容型栏目铺几条按上一次成功加载的结论走（`home.railPresence`，跨启动
@@ -301,7 +310,7 @@ struct HomeView: View {
                         }
                     case .latest:
                         if showsLatest {
-                            SkeletonRail(title: "最近添加", kind: .poster)
+                            SkeletonRail(title: "最近添加", kind: .latest)
                         }
                     case .libraries:
                         SkeletonRail(title: "媒体库", kind: .still)

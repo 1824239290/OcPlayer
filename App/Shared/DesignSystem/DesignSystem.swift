@@ -367,6 +367,73 @@ struct PosterCard: View {
     }
 }
 
+/// 首页「最近添加」卡：**16:9 横版**图 + 标题 + 「年份 · 类型」两行文案，定宽。
+///
+/// 版式照 Rex 的首页「最近更新」定（2026-10-11 对照截图实测），与 `PosterCard`
+/// （2:3 海报）的差别有两处：
+/// - **画幅**：那一栏是 16:9 横版，卡宽 ≈ 屏宽的 41%，同屏「继续观看」的剧照卡是
+///   59%——参考产品的口径就是「最近添加比剧照卡小一档」，而本 App 原先这一栏
+///   用的是 2:3 海报（紧凑 120 宽 / 180 高，面积是 Rex 那张的两倍多）。
+/// - **取图链**：走 `homeStillImageChoice`（Thumb → Backdrop → Primary），与
+///   「继续观看」同一条链，所以条目有横版图时不会被裁；没有横版图才落到 Primary
+///   海报、由 `.fill` 裁出中间一段（剧照画幅刻意不跟随图片比例，理由见
+///   `MediaArtwork.Shape.followsImageRatio`）。
+///
+/// 文案两行：标题一行、「年份 · 类型」一行（Rex 是 `2024 · 喜剧`）。两样都缺时
+/// 第二行整行不画，不留空行。
+struct LatestCard: View {
+    let item: MediaItem
+    let server: (any MediaServer)?
+    var width: CGFloat = Metrics.latestWidth
+    var onTap: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hovering = false
+
+    /// 「年份 · 首类型」。Jellyfin 的 `Genres` 是数组，首项就是主类型。
+    private var metaLine: String? {
+        var parts: [String] = []
+        if let year = item.year {
+            parts.append(String(year))
+        }
+        if let genre = item.genres.first, !genre.isEmpty {
+            parts.append(genre)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 0) {
+                let target = item.homeStillImageTarget(server, width: 720)
+                MediaArtwork(
+                    url: target.url,
+                    authHeader: target.authHeader,
+                    shape: .still,
+                    width: width
+                )
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    if let metaLine {
+                        Text(metaLine)
+                            .font(.footnote)
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.top, 10)
+            }
+            .frame(width: width)
+        }
+        .buttonStyle(.plain)
+        .hoverLift(active: hovering, reduceMotion: reduceMotion)
+        .onHover { hovering = $0 }
+    }
+}
+
 /// 媒体库类型的中文名。
 extension MediaLibrary.CollectionType {
     var displayName: String {

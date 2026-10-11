@@ -59,6 +59,13 @@ struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("设置")
+        #if !os(macOS)
+        // iPhone / iPad：Tab 根页不挂大标题——「设置」已写在底部 Tab 上，顶部再挂
+        // 一遍只白占一截（与首页同一口径，见 HomeView 顶部注释）。子页不受影响：
+        // 子页是 push 页，标题统一在 AppShell.settingsSubpageView 给定。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
+        #endif
         .formStyle(.grouped)
     }
 

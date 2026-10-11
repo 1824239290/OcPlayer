@@ -103,6 +103,11 @@ struct BangumiHomeView: View {
             } else {
                 BangumiLoginView()
                     .navigationTitle("Bangumi")
+                    #if !os(macOS)
+                    // Tab 根页不挂大标题（与首页同一口径，见 HomeView 顶部注释）。
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar(removing: .title)
+                    #endif
             }
         }
         .task(id: loadKey) { await loadIfReady() }
@@ -153,6 +158,11 @@ struct BangumiHomeView: View {
         .navigationTitle("Bangumi")
         #if os(macOS)
         .navigationSubtitle(progressSubtitle)
+        #else
+        // Tab 根页不挂大标题（与首页同一口径，见 HomeView 顶部注释）；macOS 是
+        // 窗口工具栏标题 + 副标题，本来就不占版面，保持原样。
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(removing: .title)
         #endif
         .toolbar { toolbar }
     }
