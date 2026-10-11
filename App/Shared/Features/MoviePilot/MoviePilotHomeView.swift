@@ -29,7 +29,7 @@ struct MoviePilotHomeView: View {
     /// 登录失效时直弹 MoviePilot 登录窗（门控按钮与错误态按钮共用）。
     @State private var isPresentingReloginSheet = false
     /// view-destination 页（下载管理 / 资源搜索）统一走 pushPresented 两段式：
-    /// 点击先淡出当前页，落地后由 pageEntrance 入场，与路由页同一节奏。
+    /// 点击先淡出当前页，落地后由 routeExiting 复位的回弹淡入入场，与路由页同一节奏。
     @State private var showDownloads = false
     @State private var showResource = false
     @State private var resourceMedia: MPMediaInfo?
@@ -255,7 +255,6 @@ struct MoviePilotHomeView: View {
         .navigationDestination(isPresented: $showDownloads) {
             MoviePilotDownloadsView()
                 .appShellBackChrome(title: "下载管理", presented: $showDownloads)
-                .pageEntrance()
         }
         .navigationDestination(isPresented: $showResource) {
             if let resourceMedia {
@@ -263,7 +262,6 @@ struct MoviePilotHomeView: View {
                     .appShellBackChrome(
                         title: resourceMedia.title ?? "资源搜索", presented: $showResource
                     )
-                    .pageEntrance()
             }
         }
         // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间

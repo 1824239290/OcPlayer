@@ -13,7 +13,9 @@ public enum Motion {
     /// 稍长的切换：大区间 / Tab 切换 / 全屏进出。
     public static let slide = Animation.easeInOut(duration: 0.25)
     /// 换页退场：点击后当前页淡出，淡出完成再落地 push（两段式转场第一段，
-    /// 第二段是新页 `pageEntrance` 入场）。落地延迟用 `exitSeconds`。
+    /// 第二段是落地后 routeExiting 复位的回弹淡入——新页以隐藏态出生，复位
+    /// 时正好有 from-state，入场淡入由 `RouteExitFader` 唯一承担）。落地延迟
+    /// 用 `exitSeconds`。
     public static let exit = Animation.easeInOut(duration: 0.45)
     /// 与 `exit` 同节奏的 push 落地延迟秒数（淡出完成 → 落地）。
     public static let exitSeconds: Double = 0.45
@@ -57,47 +59,6 @@ public extension View {
         reduceMotion: Bool
     ) -> some View {
         self.animation(reduceMotion ? nil : animation, value: value)
-    }
-}
-
-// MARK: - 页面入场
-
-private struct PageEntranceModifier: ViewModifier {
-    @State private var appeared = false
-
-    func body(content: Content) -> some View {
-        #if os(macOS)
-        content
-            .opacity(appeared ? 1 : 0)
-            .motion(Motion.standard, value: appeared)
-            // 首帧锚定：先让 opacity-0 的首帧提交再翻 appeared——onAppear 直接
-            // 翻会跟初始渲染合并成同一帧，动画被吞成硬切。
-            .onAppear {
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(Motion.restoreDelay))
-                    appeared = true
-                }
-            }
-            // 被覆盖即复位：系统 pop 与 push 同样被吞，「退出过渡」由落点页
-            // 重放入场承担。
-            .onDisappear { appeared = false }
-        #else
-        // iOS 系统自带 push / pop 滑动，再叠一层「页面不可见」只会让转场中间
-        // 多出几帧黑（实测 iPad 进详情页：暗色模式下亮度掉到落地页的一半，
-        // 约 0.4s 才回来）。这里直通，入场交给系统动画。
-        content
-        #endif
-    }
-}
-
-public extension View {
-    /// push 页面的统一入场：内容纯淡入。**仅 macOS 有效**——macOS 的系统 push
-    /// 会被同帧的整窗氛围声明 / 工具栏重建吞掉（实测 1 帧硬切），页面层自保证
-    /// 一段可见、统一的过渡；reduceMotion 下 `.motion` 自动直切。iOS 上是
-    /// no-op（系统滑动已经在做这件事，叠加反而露出底层黑底）。
-    /// 挂在导航出口（`appRouteView`）或个别直推页面上，整页一份，别叠加两层。
-    func pageEntrance() -> some View {
-        modifier(PageEntranceModifier())
     }
 }
 

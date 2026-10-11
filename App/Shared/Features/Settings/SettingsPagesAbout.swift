@@ -39,7 +39,6 @@ struct AboutSettingsView: View {
         .navigationDestination(isPresented: $showLicenses) {
             OpenSourceLicensesView()
                 .appShellBackChrome(title: "开源许可证", presented: $showLicenses)
-                .pageEntrance()
         }
         // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间
         // 本页整页隐去，别透过半透的许可证页漏出（见 coveredByPresented）。
