@@ -142,7 +142,7 @@ private struct CollectionSection: View {
                     .padding(.vertical, 2)
                 }
                 .id(selected)
-                .transition(.opacity)
+                .transition(.section)
             }
         }
         .motion(Motion.standard, value: selected)

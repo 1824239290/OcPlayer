@@ -257,7 +257,7 @@ struct LibraryView: View {
                             guard library.collectionType == .boxsets else { return }
                             Task { await app.resolveCollectionArtworkIfNeeded(for: item) }
                         }
-                        .transition(reduceMotion ? .identity : .opacity)
+                        .transition(reduceMotion ? .identity : .section)
                     }
                 }
                 .padding(.horizontal, contentLeading)
@@ -271,12 +271,7 @@ struct LibraryView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .refreshable { await reload() }
-        .animation(loadedMoreMotion, value: items.count)
-    }
-
-    /// 翻页新卡片入场过渡；减弱动态效果时直接显示。
-    private var loadedMoreMotion: Animation? {
-        reduceMotion ? nil : Motion.standard
+        .motion(Motion.standard, value: items.count)
     }
 
     private var loadMoreFooter: some View {

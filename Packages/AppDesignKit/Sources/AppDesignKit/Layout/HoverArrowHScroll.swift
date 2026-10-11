@@ -95,7 +95,7 @@ public struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
                     .offset(y: arrowYOffset)
                     .opacity(arrowsVisible ? 1 : 0)
                     .allowsHitTesting(arrowsVisible)
-                    .animation(arrowAnimation, value: arrowsVisible)
+                    .motion(Motion.fast, value: arrowsVisible)
                     // 不跟 enabled 做隐式动画，避免点到尽头时整组闪一下。
                     .accessibilityElement(children: .contain)
                 }
@@ -139,10 +139,6 @@ public struct HoverArrowHScroll<Item: Identifiable, ItemContent: View>: View {
     /// 鼠标在轨道上，或 VoiceOver 需要始终可点到箭头。
     private var arrowsVisible: Bool {
         showsArrowChrome && (isHovering || voiceOverEnabled)
-    }
-
-    private var arrowAnimation: Animation? {
-        reduceMotion ? nil : Motion.fast
     }
 
     private var scrollAnimation: Animation? {

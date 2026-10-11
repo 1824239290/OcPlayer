@@ -97,7 +97,7 @@ struct AmbientBackdropCarousel: View {
             // 背景里滑出一条渐变带（全屏下肉眼可见）。
             if isWindowFullscreen {
                 FullscreenTitlebarFade()
-                    .transition(.opacity)
+                    .transition(.section)
             }
         }
         .animation(Motion.ambient, value: isWindowFullscreen)

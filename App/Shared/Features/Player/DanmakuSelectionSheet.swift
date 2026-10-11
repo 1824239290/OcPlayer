@@ -95,7 +95,7 @@ struct DanmakuSelectionSheet: View {
             if let anime = selectedAnime {
                 // 子菜单第二层：返回作品列表按钮
                 Button {
-                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                    withAnimation(Motion.lift) {
                         selectedAnime = nil
                     }
                 } label: {
@@ -384,7 +384,7 @@ struct DanmakuSelectionSheet: View {
                         $0.episodeId == danmakuModel.danmaku.currentMatch?.episodeID
                     }
                     Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        withAnimation(Motion.lift) {
                             selectedAnime = anime
                         }
                     } label: {

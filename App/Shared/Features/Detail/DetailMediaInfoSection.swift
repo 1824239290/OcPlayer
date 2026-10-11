@@ -78,7 +78,7 @@ struct DetailMediaInfoSection: View {
             ProgressView()
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 18)
-                .transition(.opacity)
+                .transition(.section)
         } else if let message = errorMessage(for: item) {
             ErrorNotice(message) {
                 Task { await load(item, force: true) }

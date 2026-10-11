@@ -10,6 +10,9 @@ public enum Motion {
     public static let fast = Animation.easeOut(duration: 0.12)
     /// 常用标准过渡：面板出现、骨架→内容、行内状态切换。
     public static let standard = Animation.easeInOut(duration: 0.2)
+    /// `standard` 的秒数：给不能收 `Animation` 的计时口（卸载延时、看门狗）用，
+    /// 保证「等动画跑完」永远跟着 token 走，不写散落的魔法数。
+    public static let standardSeconds: Double = 0.2
     /// 稍长的切换：大区间 / Tab 切换 / 全屏进出。
     public static let slide = Animation.easeInOut(duration: 0.25)
     /// 换页退场：点击后当前页淡出，淡出完成再落地 push（两段式转场第一段，
@@ -49,16 +52,6 @@ public extension View {
     /// 用法：`.motion(Motion.standard, value: foo)`
     func motion<V: Equatable>(_ animation: Animation, value: V) -> some View {
         modifier(MotionModifier(animation: animation, value: value))
-    }
-
-    /// 与 `.motion(_:value:)` 同义，但显式传入 `reduceMotion`（供明确需要
-    /// 手动控制的调用点使用；新代码优先用 `.motion(_:value:)`）。
-    func motionAnimation<V: Equatable>(
-        _ animation: Animation,
-        value: V,
-        reduceMotion: Bool
-    ) -> some View {
-        self.animation(reduceMotion ? nil : animation, value: value)
     }
 }
 

@@ -212,17 +212,11 @@ struct AppShellView: View {
     }
 
     private var compactLayout: some View {
+        // 切换动画只由下面的 `.motion` 驱动（value 变化自动动画，reduceMotion
+        // 自动直切）——setter 里再包一层 withAnimation 是同一变化的双驱动。
         return TabView(selection: Binding(
             get: { app.selectedSection },
-            set: { newSection in
-                if reduceMotion {
-                    app.selectedSection = newSection
-                } else {
-                    withAnimation(Motion.slide) {
-                        app.selectedSection = newSection
-                    }
-                }
-            }
+            set: { newSection in app.selectedSection = newSection }
         )) {
             compactTabs
         }
@@ -249,7 +243,7 @@ struct AppShellView: View {
             }
         }
         .transition(.section)
-        .motionAnimation(Motion.standard, value: app.selectedSection, reduceMotion: reduceMotion)
+        .motion(Motion.standard, value: app.selectedSection)
         // 两段式转场第一段：进入点击后本页淡出，淡出完成才落地 push，新页由
         // routeExiting 复位的回弹淡入接力入场（见 AppModel.beginRouteExit）。
         .routeExitFade()
@@ -281,7 +275,7 @@ struct AppShellView: View {
                     // 图片被 .clipped() 裁到工具栏以下，顶栏露出窗口底色），
                     // 所以在调用点再显式退出一次安全区。
                     .ignoresSafeArea()
-                    .transition(.opacity)
+                    .transition(.section)
                 }
             }
             // 只动画专属背景，底下的首页轮播始终留在视图树里。
@@ -295,7 +289,7 @@ struct AppShellView: View {
             // （全屏下肉眼可见）。
             if isWindowFullscreen, app.windowAmbience != nil {
                 FullscreenTitlebarFade()
-                    .transition(.opacity)
+                    .transition(.section)
             }
             #endif
         }

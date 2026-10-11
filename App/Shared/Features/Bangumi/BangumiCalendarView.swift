@@ -147,7 +147,7 @@ struct BangumiCalendarView: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         ForEach(displayDays) { day in
                             daySection(day: day)
-                                .transition(reduceMotion ? .identity : .opacity)
+                                .transition(reduceMotion ? .identity : .section)
                         }
                     }
                     .padding(.horizontal, contentLeading)

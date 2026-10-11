@@ -35,7 +35,7 @@ final class PlayerHUDVisibilityCoordinator {
 
     /// 卸载延时：和动画时长一致，动画跑完才真正卸载。reduceMotion（无动画）
     /// 时为 0，直接卸载。由视图随 motionAnimation 一起注入。
-    @ObservationIgnored var unmountDelay: Duration = .milliseconds(200)
+    @ObservationIgnored var unmountDelay: Duration = .seconds(Motion.standardSeconds)
 
     /// 显隐过渡任务：淡出后卸载、或挂载后淡入，都用这一个槽位互斥持有。
     /// 任何新的显隐意图先取消它，避免竞态（例如淡入前又触发隐藏）。

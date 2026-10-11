@@ -9,8 +9,6 @@ import AppKit
 #endif
 
 struct PlayerHUDOverlay: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     let isNarrow: Bool
     let playbackID: String
     let title: String
@@ -34,10 +32,6 @@ struct PlayerHUDOverlay: View {
     let onShare: () -> Void
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     let onUserInteraction: () -> Void
-
-    private var animation: Animation? {
-        reduceMotion ? nil : Motion.glass
-    }
 
     var body: some View {
         ZStack {
@@ -106,13 +100,13 @@ struct PlayerHUDOverlay: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(PlayerHUDPalette.primary)
-        .animation(animation, value: expandedTab)
+        .motion(Motion.glass, value: expandedTab)
     }
 
     private func closeExpanded() {
-        withAnimation(animation) {
-            expandedTab = nil
-        }
+        // 不用 withAnimation 包：expandedTab 的变化由容器上的
+        // `.motion(Motion.glass, value:)` 统一驱动（双驱动会叠两段曲线）。
+        expandedTab = nil
         onInteractionChanged(.menuTracking, false)
         onUserInteraction()
     }
@@ -321,18 +315,9 @@ struct PlayerHUDTransportControls: View {
                 .shadow(color: .black.opacity(0.7), radius: 3, y: 1)
                 .contentTransition(symbolTransition ? .symbolEffect(.replace) : .identity)
         }
-        .buttonStyle(PlayerHUDTransportButtonStyle())
+        .buttonStyle(.pressScale)
         .glassEffect(.regular.interactive(), in: Circle())
         .help(label)
         .accessibilityLabel(label)
-    }
-}
-
-struct PlayerHUDTransportButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.72 : 1)
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .motion(Motion.fast, value: configuration.isPressed)
     }
 }
