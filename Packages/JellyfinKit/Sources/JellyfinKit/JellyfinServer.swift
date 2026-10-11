@@ -177,18 +177,21 @@ public struct JellyfinServer: MediaServer {
     /// （默认 false 时只返回顶层项）。注意返回的是信封 `BaseItemDtoQueryResult`，
     /// 与 Emby 侧老式路由的裸数组不同。
     public func latestItems(limit: Int = 24) async throws -> [MediaItem] {
-        let result = try await send(
-            Paths.getItems(parameters: .init(
-                userID: profile.userID,
-                limit: limit,
-                isRecursive: true,
-                sortOrder: [.descending],
-                fields: [.primaryImageAspectRatio],
-                includeItemTypes: [.movie, .series],
-                sortBy: [.dateCreated],
-                enableImageTypes: [.primary, .backdrop, .logo]
-            ))
-        )
+        // fields 走字符串常量：SDK 的 `ItemFields` 枚举没有 `CommunityRating` /
+        // `OfficialRating` 两个 case（官方 SDK 生成缺口），而列表要带上它们
+        // 详情页首屏才能免等。`fields: nil` 让 SDK 不生成该 key，再手动补全量
+        // 字符串，其余参数保持类型化。
+        var request = Paths.getItems(parameters: .init(
+            userID: profile.userID,
+            limit: limit,
+            isRecursive: true,
+            sortOrder: [.descending],
+            includeItemTypes: [.movie, .series],
+            sortBy: [.dateCreated],
+            enableImageTypes: [.primary, .backdrop, .logo]
+        ))
+        request.query?.append(("fields", MediaListFields.items))
+        let result = try await send(request)
         return result.items?.map(\.domainItem) ?? []
     }
 
@@ -197,46 +200,43 @@ public struct JellyfinServer: MediaServer {
     /// 是媒体条目的入库 / 创建时间，不能对外表述为“最近收藏”。
     /// 返回单页（不递归展开）；收藏为空时调用方负责空态。
     public func favoriteItems(limit: Int = 24) async throws -> [MediaItem] {
-        try await send(
-            Paths.getItems(parameters: .init(
-                userID: profile.userID,
-                limit: limit,
-                sortOrder: [.descending],
-                fields: [.primaryImageAspectRatio],
-                includeItemTypes: [.movie, .series],
-                filters: [.isFavorite],
-                sortBy: [.dateCreated],
-                enableImageTypes: [.primary, .backdrop, .logo]
-            ))
-        )
-        .items?.map(\.domainItem) ?? []
+        var request = Paths.getItems(parameters: .init(
+            userID: profile.userID,
+            limit: limit,
+            sortOrder: [.descending],
+            includeItemTypes: [.movie, .series],
+            filters: [.isFavorite],
+            sortBy: [.dateCreated],
+            enableImageTypes: [.primary, .backdrop, .logo]
+        ))
+        request.query?.append(("fields", MediaListFields.items))
+        return try await send(request)
+            .items?.map(\.domainItem) ?? []
     }
 
     /// 首页「继续观看」。
     public func resumeItems() async throws -> [MediaItem] {
-        try await send(
-            Paths.getResumeItems(parameters: .init(
-                userID: profile.userID,
-                limit: 24,
-                fields: [.primaryImageAspectRatio],
-                mediaTypes: [.video],
-                enableImageTypes: [.primary, .backdrop, .thumb, .logo]
-            ))
-        )
-        .items?.map(\.domainItem) ?? []
+        var request = Paths.getResumeItems(parameters: .init(
+            userID: profile.userID,
+            limit: 24,
+            mediaTypes: [.video],
+            enableImageTypes: [.primary, .backdrop, .thumb, .logo]
+        ))
+        request.query?.append(("fields", MediaListFields.items))
+        return try await send(request)
+            .items?.map(\.domainItem) ?? []
     }
 
     /// 「接下来看」：追剧下一集。
     public func nextUp() async throws -> [MediaItem] {
-        try await send(
-            Paths.getNextUp(parameters: .init(
-                userID: profile.userID,
-                limit: 24,
-                fields: [.primaryImageAspectRatio],
-                enableImageTypes: [.primary, .backdrop, .thumb, .logo]
-            ))
-        )
-        .items?.map(\.domainItem) ?? []
+        var request = Paths.getNextUp(parameters: .init(
+            userID: profile.userID,
+            limit: 24,
+            enableImageTypes: [.primary, .backdrop, .thumb, .logo]
+        ))
+        request.query?.append(("fields", MediaListFields.items))
+        return try await send(request)
+            .items?.map(\.domainItem) ?? []
     }
 
     /// 首页氛围背景取材：全库随机一批带 backdrop 的电影 / 剧集。
@@ -327,39 +327,30 @@ public struct JellyfinServer: MediaServer {
         case .all, nil: itemFilters = nil
         }
         let trimmedSearch = searchTerm?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let result = try await send(
-            Paths.getItems(parameters: .init(
-                userID: profile.userID,
-                startIndex: pageStart,
-                limit: pageSize,
-                isRecursive: recursive,
-                searchTerm: (trimmedSearch?.isEmpty == false) ? trimmedSearch : nil,
-                sortOrder: sortOrders.compactMap(SortOrder.init(rawValue:)),
-                parentID: parentID,
-                // 显式要 `ProviderIds`：**列表接口默认不返回它**（实测本机
-                // Jellyfin 12.1.0：`/Items` 不带 fields 时 0/5 个条目有
-                // `ProviderIds`，而 `/Items/{id}` 默认就有）。缺了它的 `MediaItem`
-                // 没有 `tmdbID`，TMDb 匹配就只能退化成标题搜索——库级批量补全全靠
-                // 这个字段。体积上它只是个小字典。
-                //
-                // `primaryImageAspectRatio`：海报卡要「边框贴着图片」就不能假设 2:3
-                // ——实测本机库里 0.667 / 0.70 / 0.75 三种都有，比例必须从服务端拿
-                // （拿不到就得先按兜底比例排一遍再跳，见 `MediaArtwork`）。
-                // 列表接口**默认不返回**它（实测 `/Items` 不带 fields 时 0/12 带比例），
-                // 所以必须显式要。
-                //
-                // 位置有讲究：SDK 的 `init` 要求 `fields` 排在 `includeItemTypes`
-                // **之前**（Swift 实参顺序必须与声明一致）。
-                fields: [.providerIDs, .primaryImageAspectRatio],
-                includeItemTypes: kinds.map { kinds in
-                    kinds.compactMap { kind in BaseItemKind(kind) }
-                },
-                filters: itemFilters,
-                sortBy: sortKeys.compactMap(ItemSortBy.init(rawValue:)),
-                enableImageTypes: [.primary, .backdrop, .logo],
-                enableTotalRecordCount: true
-            ))
-        )
+        var request = Paths.getItems(parameters: .init(
+            userID: profile.userID,
+            startIndex: pageStart,
+            limit: pageSize,
+            isRecursive: recursive,
+            searchTerm: (trimmedSearch?.isEmpty == false) ? trimmedSearch : nil,
+            sortOrder: sortOrders.compactMap(SortOrder.init(rawValue:)),
+            parentID: parentID,
+            includeItemTypes: kinds.map { kinds in
+                kinds.compactMap { kind in BaseItemKind(kind) }
+            },
+            filters: itemFilters,
+            sortBy: sortKeys.compactMap(ItemSortBy.init(rawValue:)),
+            enableImageTypes: [.primary, .backdrop, .logo],
+            enableTotalRecordCount: true
+        ))
+        // `fields` 用共享字符串常量而非 SDK 枚举：列表**默认不返回**这些字段
+        // （实测本机 Jellyfin 12.1.0 不带 fields 时 0/5 有 ProviderIds、0/12 有
+        // 图片比例），而海报卡比例、TMDb 匹配、详情页首屏的简介/评分全靠它们。
+        // SDK 的 `ItemFields` 枚举缺 `CommunityRating` / `OfficialRating` 两个
+        // case（官方生成缺口），所以统一走 `MediaListFields` 字符串、`fields: nil`
+        // 让 SDK 不生成该 key。
+        request.query?.append(("fields", MediaListFields.items))
+        let result = try await send(request)
         let page = result.items?.map(\.domainItem) ?? []
         return MediaItemsPage(
             items: page,

@@ -87,10 +87,10 @@ public struct EmbyServer: MediaServer {
         var query: [(String, String)] = [
             ("limit", String(limit)),
             ("enableImageTypes", "Primary,Backdrop,Thumb"),
+            // 与 Jellyfin 同口径（见 `MediaListFields`）：列表条目自带简介/评分,
+            // 详情页首屏免等。老式 Latest 端点同样认 `fields`。
+            ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
         ]
-        if let fields = embySafeFields("PrimaryImageAspectRatio") {
-            query.append(("fields", fields))
-        }
         let items = try await session.get(
             "/Users/\(userID)/Items/Latest",
             query: query,
@@ -111,6 +111,7 @@ public struct EmbyServer: MediaServer {
                 ("filters", "IsFavorite"),
                 ("enableImageTypes", "Primary,Backdrop,Logo"),
                 ("recursive", "true"),
+                ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
             ],
             as: EmbyQueryResultDTO.self
         )
@@ -125,6 +126,7 @@ public struct EmbyServer: MediaServer {
                 ("limit", "24"),
                 ("mediaTypes", "Video"),
                 ("enableImageTypes", "Primary,Backdrop,Thumb,Logo"),
+                ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
             ],
             as: EmbyQueryResultDTO.self
         )
@@ -139,6 +141,7 @@ public struct EmbyServer: MediaServer {
                 ("userId", userID),
                 ("limit", "24"),
                 ("enableImageTypes", "Primary,Backdrop,Thumb,Logo"),
+                ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
             ],
             as: EmbyQueryResultDTO.self
         )
@@ -341,12 +344,11 @@ public struct EmbyServer: MediaServer {
             ("sortOrder", sortOrders.joined(separator: ",")),
             ("enableImageTypes", "Primary,Backdrop,Logo"),
             ("enableTotalRecordCount", "true"),
-            // 与 Jellyfin 同理（列表接口默认不返回 ProviderIds），库级 TMDb 批量
-            // 补全要靠它拿 `tmdbID`。`ProviderIds` 与这里已在用的
-            // People / Genres / Overview / Chapters / MediaSources 同属标准
-            // `ItemFields`，Emby 认这个名字；仍过一道 `embySafeFields` 保持一致。
-            ("fields", embySafeFields("ProviderIds,PrimaryImageAspectRatio")
-                ?? "ProviderIds,PrimaryImageAspectRatio"),
+            // 与 Jellyfin 同口径（`MediaListFields.items`）：列表**默认不返回**
+            // ProviderIds / 图片比例 / 简介 / 评分，库级 TMDb 批量补全要靠
+            // `ProviderIds` 拿 `tmdbID`，详情页首屏要靠简介/评分免等。
+            // 仍过一道 `embySafeFields` 保持一致。
+            ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),
         ]
         if let searchTerm {
             let trimmed = searchTerm.trimmingCharacters(in: .whitespacesAndNewlines)

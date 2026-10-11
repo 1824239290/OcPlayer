@@ -201,12 +201,25 @@ final class AppModel {
         /// 合集成员（合集详情页的「合集内容」）。非合集条目恒为空。
         /// 有默认值 → 既有构造点（磁盘快照 / 详情 VM）不必逐处补参数。
         var collectionMembers: [MediaItem] = []
+        /// 快照写入时间（本会话内各次 `storeSnapshot` 都会刷新它）。TTL 短路
+        /// （`detailSnapshotTTL`）据此决定「这次进页要不要再问网络」。**磁盘快照
+        /// 不参与 TTL**（`loadFromDisk` 构造时置 `.distantPast`）：它是上一次会话
+        /// 写穿的，一律走 SWR 网络确认。
+        var fetchedAt: Date = Date()
     }
 
     static let detailSnapshotLimit = 40
+    /// 快照多新才算「不用再问网络」。Jellyfin 元数据变更频率低（刮削、已看状态），
+    /// 已看状态在播放返回时有本地同步（`applyPlayState` / `reloadAfterPlayback`
+    /// 都会重新 storeSnapshot、刷新时间戳），5 分钟窗口内唯一可能过期的是
+    /// 「在另一台设备上看完一集」这种并发改动，最终一致可接受。
+    static let detailSnapshotTTL: TimeInterval = 5 * 60
     var detailSnapshots: [MediaItem.ID: DetailSnapshot] = [:]
     /// 快照的最近使用顺序（末尾最新）。淘汰时按它丢**最旧**的，而不是整份清空。
     private var detailSnapshotRecency: [MediaItem.ID] = []
+    /// 点击预取的在途任务（按条目 id 去重；逻辑在 `AppModel+DetailPrefetch.swift`，
+    /// 存储属性按类注释的规矩集中在这里）。
+    var detailPrefetchTasks: [MediaItem.ID: Task<Void, Never>] = [:]
 
     func storeDetailSnapshot(_ snapshot: DetailSnapshot, for id: MediaItem.ID) {
         detailSnapshots[id] = snapshot
@@ -237,7 +250,10 @@ final class AppModel {
     }
 
     /// 会话边界用：快照与它的顺序表必须一起清，否则顺序表会留下悬空 id。
+    /// 在途预取一并取消——旧会话的预取不该把半截数据写进新会话的快照表。
     func clearDetailSnapshots() {
+        for task in detailPrefetchTasks.values { task.cancel() }
+        detailPrefetchTasks = [:]
         detailSnapshots = [:]
         detailSnapshotRecency = []
     }
@@ -667,6 +683,8 @@ final class AppModel {
     }
 
     func openDetail(_ item: MediaItem) {
+        // 点击瞬间预取（与 push 转场并行）：详情页秒开的数据来源。
+        prefetchDetail(for: item)
         push(.detail(item))
     }
 
