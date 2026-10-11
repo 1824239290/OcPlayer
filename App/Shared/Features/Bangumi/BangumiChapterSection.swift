@@ -85,13 +85,7 @@ struct BangumiChapterSection: View {
             }
             .sheet(isPresented: $showLinkPicker) {
                 BangumiLinkPicker(item: item, season: selectedSeason) { subjectID in
-                    BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: linkItemID)
-                    if selectedSeason == nil || selectedSeason?.seasonNumber == 1 {
-                        let fallbackID = item.seriesID ?? item.id
-                        if fallbackID != linkItemID {
-                            BangumiMatcher.setLinkedSubjectID(subjectID, forJellyfinItemID: fallbackID)
-                        }
-                    }
+                    BangumiMatcher.persistLink(subjectID, for: item, season: selectedSeason)
                     linkedSubjectID = subjectID
                     subject = nil
                     episodes = []
@@ -262,13 +256,8 @@ struct BangumiChapterSection: View {
             defer { if loadGeneration == generation { isMatching = false } }
             if let matched = try? await BangumiMatcher.autoMatch(for: item, season: selectedSeason) {
                 guard loadGeneration == generation else { return }
-                BangumiMatcher.setLinkedSubjectID(matched.id, forJellyfinItemID: linkItemID)
-                if selectedSeason == nil || selectedSeason?.seasonNumber == 1 {
-                    let fallbackID = item.seriesID ?? item.id
-                    if fallbackID != linkItemID {
-                        BangumiMatcher.setLinkedSubjectID(matched.id, forJellyfinItemID: fallbackID)
-                    }
-                }
+                // autoMatch 内部已持久化（persistLink：主键 + 第 1 季回落双写），
+                // 这里只需把结果反映到本区块状态。
                 linkedSubjectID = matched.id
             }
         }
@@ -292,14 +281,10 @@ struct BangumiChapterSection: View {
             try await bangumi.context.ensureSubjectLoaded(subjectID)
             guard loadGeneration == generation else { return }
             await readLocal(subjectID, generation: generation)
-        } catch let e as BangumiError {
-            guard loadGeneration == generation else { return }
-            loadError = e.userMessage
-            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(e)", level: .warning)
         } catch {
             guard loadGeneration == generation else { return }
-            loadError = "\(error)"
-            BangumiDiagnostics.log("加载 Bangumi 条目失败 subject=\(subjectID) error=\(error)", level: .warning)
+            loadError = BangumiActionPerformer.loadFailureMessage(
+                "加载 Bangumi 条目失败 subject=\(subjectID)", error)
         }
     }
 
@@ -331,40 +316,29 @@ struct BangumiChapterSection: View {
             }
             linkedSubjectID = matched.id
             loadToken += 1
-        } catch let e as BangumiError {
-            loadError = e.userMessage
-            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(e)", level: .warning)
         } catch {
-            loadError = "\(error)"
-            BangumiDiagnostics.log("自动匹配失败 item=\(item.id) error=\(error)", level: .warning)
+            loadError = BangumiActionPerformer.loadFailureMessage(
+                "自动匹配失败 item=\(item.id)", error)
         }
     }
 
     private func perform(_ action: BangumiEpisodeAction, on episode: BangumiEpisodeDTO) async {
-        guard let subjectID = linkedSubjectID, updatingEpisodeID == nil else { return }
+        guard let subjectID = linkedSubjectID else { return }
         let generation = loadGeneration
-        updatingEpisodeID = episode.id
-        defer { updatingEpisodeID = nil }
-        do {
-            switch action {
-            case .set(let type):
-                try await bangumi.context.updateEpisodeCollection(
-                    episodeId: episode.id, type: type)
-            case .markUpTo:
-                try await bangumi.context.updateEpisodeCollection(
-                    episodeId: episode.id, type: .collect, batch: true)
+        await BangumiActionPerformer.performEpisodeAction(
+            action, on: episode, context: bangumi.context,
+            isBusy: updatingEpisodeID != nil,
+            setBusy: { updatingEpisodeID = $0 },
+            onSuccess: {
+                // 提交期间条目被换掉（代次翻转）则这次重读作废。
+                guard loadGeneration == generation else { return }
+                loadError = nil
+                await readLocal(subjectID, generation: generation)
+            },
+            onError: { message in
+                guard loadGeneration == generation else { return }
+                loadError = message
             }
-            guard loadGeneration == generation else { return }
-            loadError = nil
-            await readLocal(subjectID, generation: generation)
-        } catch let e as BangumiError {
-            guard loadGeneration == generation else { return }
-            loadError = e.userMessage
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(e)", level: .warning)
-        } catch {
-            guard loadGeneration == generation else { return }
-            loadError = "\(error)"
-            BangumiDiagnostics.log("标记章节失败 episode=\(episode.id) error=\(error)", level: .warning)
-        }
+        )
     }
 }
