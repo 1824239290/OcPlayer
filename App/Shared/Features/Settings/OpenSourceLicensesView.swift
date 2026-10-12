@@ -390,12 +390,15 @@ enum OpenSourceLicenseCatalog {
 }
 
 struct OpenSourceLicensesView: View {
+    @Environment(AppModel.self) private var app
+
     var body: some View {
         List {
             Section {
                 Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 Erika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
                     .foregroundStyle(.secondary)
             }
+            .settingsRowBackground()
 
             ForEach(OpenSourceLicenseCatalog.groups) { group in
                 Section(group.title) {
@@ -407,8 +410,15 @@ struct OpenSourceLicensesView: View {
                         }
                     }
                 }
+                .settingsRowBackground()
             }
         }
+        // 行底 / 列表底都要清：iOS 的 grouped 行底是系统不透明白，会把氛围图挡死
+        // （`scrollContentBackground(.hidden)` 只管列表底，管不到行底——见
+        // `settingsRowBackground()` 的注释）。
+        .scrollContentBackground(.hidden)
+        // 本页是**呈现式叶子页**，不在 `appRouteView` 上，氛围底要单独挂。
+        .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle("开源许可证")
     }
 }
@@ -438,6 +448,7 @@ private struct OpenSourceComponentRow: View {
 
 private struct OpenSourceLicenseDetailView: View {
     let component: OpenSourceComponent
+    @Environment(AppModel.self) private var app
     @State private var bundledText: String?
 
     var body: some View {
@@ -455,11 +466,13 @@ private struct OpenSourceLicenseDetailView: View {
                     Label("许可证说明", systemImage: "doc.text")
                 }
             }
+            .settingsRowBackground()
 
             Section("用途") {
                 Text(component.purpose)
                     .textSelection(.enabled)
             }
+            .settingsRowBackground()
 
             if let bundledText {
                 Section("随包许可证文本") {
@@ -467,9 +480,14 @@ private struct OpenSourceLicenseDetailView: View {
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                 }
+                .settingsRowBackground()
             }
         }
+        .scrollContentBackground(.hidden)
         .formStyle(.grouped)
+        // 本页是从「开源许可证」列表里 NavigationLink 推上来的深层页（不在 `Route`
+        // 上），氛围底同样要单独挂。
+        .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle(component.name)
         .task(id: component.id) {
             bundledText = BundledLicenseText.load(paths: component.bundledLicensePaths)

@@ -568,11 +568,78 @@ final class AppModel {
         windowAmbienceStack.removeAll()
     }
 
-    /// 首页氛围轮播当前那张图，由 `AmbientBackdropCarousel` 声明。iOS 的详情页在
-    /// 自身底图就绪前拿它顶底：导航栈宿主不透明、栈后垫层到不了屏幕（实测），
-    /// 「背景从首页延续进详情页」只能在页面内做——先画这张（与首页同 URL、同档
-    /// 解码，内存缓存直接命中），自己的底图到位后再淡入替换。
+    /// 首页氛围轮播当前那张图，由氛围池（下面的字段 + `AppModel+Ambience`）声明。
+    /// iOS 的详情页在自身底图就绪前拿它顶底：导航栈宿主不透明、栈后垫层到不了屏幕
+    /// （实测），「背景从首页延续进详情页」只能在页面内做——先画这张（与首页同
+    /// URL、同档解码，内存缓存直接命中），自己的底图到位后再淡入替换。
+    ///
+    /// **写入者只有氛围池一处**（`publishCurrentAmbience()`）：页面自垫、详情页兜底、
+    /// 下载页、四个 Tab 根页全都是读方。
     var homeAmbience: WindowAmbience?
+
+    // MARK: - 氛围池（会话级）
+    //
+    // 池子决定 `homeAmbience`，而 `homeAmbience` 被一堆页面消费（iOS 上它们是各自
+    // 自垫的背景源）。**所有权必须在这里，不能在首页那个视图里**：原先池子住在
+    // `AmbientBackdropCarousel` 的 `@State`、而该视图只挂在首页 Tab 内——冷启动
+    // 直奔别的 Tab（或进设置子页）时池子从未装载，那些页面整个会话都停在纯色底。
+    // 搬到模型上后由 AppShell 根节点单点驱动，双端一致、会话内只装载一次。
+
+    /// 全库随机取来的一批带 backdrop 条目（池子大小见 `AmbiencePool.poolSize`）。
+    ///
+    /// 写入口只有 `AppModel+Ambience` 里那几个方法（装载 / 换片 / 会话清理）——
+    /// 这里不用 `private(set)` 是因为那个作用域是**声明所在文件**，而池的行为
+    /// 在另一个文件里（与本类其它状态一样的内部可见口径）。
+    var ambiencePool: [MediaItem] = []
+    /// 当前展示的池内下标（模池长）。
+    var ambienceIndex = 0
+    /// 装载成功时的会话代次。**失败不记账**（保持旧值）——这是「冷启动抢跑之后
+    /// 这个会话永远是纯色底」那条回归的修法：触发键变化后 `.task` 会重跑一次。
+    var ambienceLoadedGeneration: Int?
+    /// 装载时用的服务器地址。协议决议（局域网 / Tailscale 择优）可能在同一会话内
+    /// 换址，池里的图片 URL 随之作废，也要重拉一次。
+    var ambienceLoadedEndpoint: String?
+    /// 当前池是否装载成功（供用例与调试断言）。
+    var ambiencePoolIsLoaded: Bool { !ambiencePool.isEmpty }
+
+    /// 池内当前条目；空池为 nil（页面据此回退纯色底）。
+    var currentAmbienceItem: MediaItem? {
+        guard !ambiencePool.isEmpty else { return nil }
+        return ambiencePool[ambienceIndex % ambiencePool.count]
+    }
+
+    /// 当前那张图的取图三元组（与首页轮播、各页自垫完全同参）。
+    var currentAmbienceTarget: (url: URL?, authHeader: String?) {
+        guard let item = currentAmbienceItem else { return (nil, nil) }
+        return item.imageTarget(server, kind: .backdrop, width: AmbiencePool.imageWidth)
+    }
+
+    /// 首页是否已有可作回退的条目（`loadAmbiencePool` 在随机查询失败时用它们兜底）。
+    var homeHasAmbienceFallback: Bool {
+        !(home.latest.isEmpty && home.resume.isEmpty && home.nextUp.isEmpty)
+    }
+
+    /// 装载触发键：会话代次 + 当前生效地址 + 「池子空着但已有回退源」这个补救机会。
+    var ambienceTrigger: BackdropCarouselTrigger {
+        BackdropCarouselTrigger(
+            sessionGeneration: sessionGeneration,
+            poolIsEmpty: ambiencePool.isEmpty,
+            hasHomeFallback: homeHasAmbienceFallback,
+            endpoint: serverEndpointURL?.absoluteString)
+    }
+
+    // MARK: - 自动化深链（Debug-only，见 AppModel+LaunchRoute）
+
+    /// 深链是否已落地（只落一次：视图重建 / 会话恢复都不该重放它）。
+    var didApplyLaunchRoute = false
+
+    /// 待展开的呈现式叶子页标记（管理服务器 / 开源许可证）。
+    ///
+    /// 这类页面不在 `path` 上（`navigationDestination(isPresented:)`），模型侧没法
+    /// 直接 push；由**宿主子页**在出现时消费这个标记、置回 nil。一次性语义：消费
+    /// 即清，避免用户返回后又被弹回去。Release 下没有任何写入点（`initialRoute`
+    /// 恒 nil），这个字段永远为 nil。
+    var pendingPresentedLeaf: LaunchRoute.SettingsLeaf?
 
     /// 播放器控制引用（RootView 装配时注入）：进度上报 / 连播要读实时位置。
     weak var playback: PlaybackController? {

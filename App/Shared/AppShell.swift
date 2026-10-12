@@ -48,6 +48,15 @@ struct AppShellView: View {
             #if os(macOS)
             .background { windowAmbienceLayer }
             #endif
+            // 氛围池驱动：**双端唯一装载点**。放在这里（而不是首页那个视图里）是
+            // 因为池子产的 `homeAmbience` 被一堆页面消费——挂在首页 Tab 内时，
+            // 冷启动直奔别的 Tab / 进设置子页就没人为它装载，那些页面整个会话都停在
+            // 纯色底。触发键变化（换会话 / 换地址 / 首页数据到位可补救）会自动重跑。
+            .task(id: app.ambienceTrigger) { await app.runAmbienceCarousel() }
+            // 自动化深链（Debug-only）：`OCPLAYER_START_ROUTE` 指定的 push 页 /
+            // 设置子页在这里落地——挂 AppShell 而不挂 RootView，是因为目标页依赖
+            // 「布局已定型、isCompact 已设定」这个前提（push 按它分派栈）。
+            .task { await app.applyLaunchRouteIfNeeded() }
             // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
             // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
             .onChange(of: bangumiEnabled) { _, enabled in
@@ -138,15 +147,18 @@ struct AppShellView: View {
     /// sheet——播放器覆盖层不再被遮住。
     @TabContentBuilder<AppModel.Section>
     private var compactTabs: some TabContent<AppModel.Section> {
+        // 五个 Tab 根页统一用 `pageAmbience`：它会按平台分叉（iOS 自垫 /
+        // macOS 靠整窗层），调用点不再各自写一遍 `.background { BackdropAmbienceView }`。
+        //
+        // 两条历史约束仍成立，只是收进了 `PageAmbience`：
+        //   * 必须走 `.background`（布局隔离）——氛围层做 ZStack 兄弟节点时其
+        //     `ignoresSafeArea` 会把根布局撑到全窗宽、内容列被顶出屏幕；
+        //   * 首页那一格垫的是**轮播组件本身**（不是单图），它会随 12s 换片自己淡入
+        //     淡出——所以首页不走 `pageAmbience` 的单图语义。
         Tab("首页", systemImage: "house.fill", value: AppModel.Section.home) {
             NavigationStack(path: navPathBinding(.home)) {
                 HomeView()
                     .appRoutes()
-                    // iOS 的 UIKit 宿主不透明，AppShell 根节点垫的整窗层到不了
-                    // 屏幕——首页氛围轮播改垫在页面背景层（macOS 仍走整窗层）。
-                    // 必须走 `.background`（布局隔离）：轮播做 ZStack 兄弟节点时
-                    // 其 ignoresSafeArea 会把根布局撑到全窗宽，内容列被顶出屏幕
-                    // （macOS 侧栏时代实测过同一坑）。
                     .background {
                         AmbientBackdropCarousel()
                             .ignoresSafeArea()
@@ -159,16 +171,8 @@ struct AppShellView: View {
                 NavigationStack(path: navPathBinding(.bangumi)) {
                     BangumiHomeView()
                         .appRoutes()
-                        // 与首页同一张轮播图（Carousel 声明到 homeAmbience）：跨 Tab
-                        // 背景连续，也不多拉一次图。macOS 靠整窗层给非声明页垫底，
-                        // iOS 的宿主不透明，只能各 Tab 自己垫。
-                        .background {
-                            BackdropAmbienceView(
-                                target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
-                                scrim: .home
-                            )
-                            .ignoresSafeArea()
-                        }
+                        // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
+                        .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
             }
         }
@@ -178,13 +182,7 @@ struct AppShellView: View {
                 NavigationStack(path: navPathBinding(.moviepilot)) {
                     MoviePilotHomeView()
                         .appRoutes()
-                        .background {
-                            BackdropAmbienceView(
-                                target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
-                                scrim: .home
-                            )
-                            .ignoresSafeArea()
-                        }
+                        .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
             }
         }
@@ -193,20 +191,17 @@ struct AppShellView: View {
             NavigationStack(path: navPathBinding(.settings)) {
                 SettingsView()
                     .appRoutes()
-                    .background {
-                        BackdropAmbienceView(
-                            target: (app.homeAmbience?.url, app.homeAmbience?.authHeader),
-                            scrim: .home
-                        )
-                        .ignoresSafeArea()
-                    }
+                    .pageAmbience(AmbienceTarget.sessionPool(app))
             }
         }
 
+        // 搜索 Tab 此前**没有**垫任何底（漏网的第 11 类页面）：iOS 上整页纯色，
+        // 而底部 Tab 栏玻璃底下能透出氛围图——图就在栈根下面，页面自己没画。
         Tab("搜索", systemImage: "magnifyingglass", value: AppModel.Section.search, role: .search) {
             NavigationStack(path: navPathBinding(.search)) {
                 HomeSearchView()
                     .appRoutes()
+                    .pageAmbience(AmbienceTarget.sessionPool(app))
             }
         }
     }
@@ -589,6 +584,7 @@ extension View {
         // 见 RouteExitFader）；系统 push 滑动已由 AppModel.push 禁动画掐掉。
         // 两者在 iOS 上都空转：系统自带 push / pop 滑动，routeExiting 也不会被置起。
         // coveredPageHidden：被后推的页盖住时按深度归零透明度（见 CoveredPageHider）。
+        .routeAmbience(route)
         .coveredPageHidden()
         .routeExitFade()
     }

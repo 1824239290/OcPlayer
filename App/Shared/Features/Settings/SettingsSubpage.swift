@@ -6,7 +6,9 @@
 /// `coveredByPresented` **逐层登记**才不会透过半透页面漏底；path 驱动的页面
 /// 由根级 `opacity(app.path.isEmpty)` 与 `coveredPageHidden` 按深度自动隐藏
 /// 整条链，谁都不用登记谁。
-enum SettingsSubpage: Hashable {
+/// `CaseIterable` 有两个用处：① 自动化深链的合法键校验（`init?(routeKey:)`）；
+/// ② 覆盖契约测试可以遍历全部子页断言「都有氛围底」，而不是靠人记得加。
+enum SettingsSubpage: Hashable, CaseIterable {
     case playback
     case homeSections
     case danmaku

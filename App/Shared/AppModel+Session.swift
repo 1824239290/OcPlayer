@@ -215,6 +215,9 @@ extension AppModel {
         // 氛围图的 URL 里带着**旧服务器的 authHeader**：不清掉，新会话首屏会拿
         // 旧凭据去请求图片（既拿不到图，也把旧凭据用在了新会话上）。
         resetWindowAmbienceStack()
+        // 氛围池同理：池里的条目与图片 URL 都取自旧服务器。清完触发键变化，
+        // AppShellView 的 `.task(id:)` 会为新会话自动重装。
+        resetAmbiencePool()
         homeAmbience = nil
         pendingMoviePilotQuery = nil
         // 在飞的「淡出 → 落地」闭包属于旧会话，代次自增使其作废（见 beginRouteExit）。

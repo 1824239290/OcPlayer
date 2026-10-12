@@ -54,8 +54,16 @@ struct ServersView: View {
             } footer: {
                 Text("正在使用的服务器不能删除；想删它先退出 Jellyfin 登录。默认启动的服务器带星标。展开一行可以管理这台服务器的多个地址。")
             }
+            .settingsRowBackground()
         }
+        // 行底清空（iOS 的 grouped 行底是系统不透明白，会把氛围图挡死；
+        // `scrollContentBackground(.hidden)` 只管列表底、管不到行底，见
+        // `settingsRowBackground()` 的类型注释）。
+        .scrollContentBackground(.hidden)
         .formStyle(.grouped)
+        // 氛围底：本页是**呈现式叶子页**（`navigationDestination(isPresented:)`），
+        // 不在 `appRouteView` 上，所以要单独挂（统一入口，iOS 自垫 / macOS 靠整窗层）。
+        .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle("管理服务器")
         .confirmationDialog(
             "删除服务器？",
