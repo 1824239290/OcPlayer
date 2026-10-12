@@ -23,6 +23,9 @@ struct TMDbSettingsView: View {
             Section("API Key") {
                 if tmdb.isConfigured {
                     KeyValueRow(label: "当前 Key", value: tmdb.apiKeyDisplay)
+                    Text("💡 需要同步到 iPad / iPhone？前往「设置 → 维护」导出配置，保存至 iCloud 云盘或通过隔空投送（AirDrop）即可一键恢复。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 // 没有「启用」开关：**留空即禁用**（与 anime-skip Client ID 一致）。
                 // 一个「打开」的开关若在 key 为空时什么都不做，用户会以为坏了；

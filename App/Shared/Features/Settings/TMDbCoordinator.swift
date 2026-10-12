@@ -116,6 +116,9 @@ final class TMDbCoordinator {
         return "••••\(tail)"
     }
 
+    /// 导出配置与多端备份用（未配置时返回 nil）。
+    var rawAPIKey: String? { credentials.apiKey() }
+
     func setLanguage(_ value: String) {
         preferences.language = value
         language = preferences.language
