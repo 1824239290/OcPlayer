@@ -20,7 +20,8 @@ public enum Motion {
     /// 时正好有 from-state，入场淡入由 `RouteExitFader` 唯一承担）。落地延迟
     /// 用 `exitSeconds`。
     public static let exit = Animation.easeInOut(duration: 0.45)
-    /// 与 `exit` 同节奏的 push 落地延迟秒数（淡出完成 → 落地）。
+    /// 与 `exit` 同节奏的落地延迟秒数（淡出完成 → 落地）。push / pop 同拍，
+    /// 落地后不再为任何「系统过渡」加等（实测弹栈落地即撤页）。
     public static let exitSeconds: Double = 0.45
     /// 落地后的恢复前置拍：新页必须先以「隐藏态」提交至少一帧，透明度恢复
     /// 才有 from-state 可动画（同帧出生即恢复 = 硬切无动画）。
