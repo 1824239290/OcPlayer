@@ -21,14 +21,6 @@ struct MoviePilotDownloadsView: View {
     @State private var isFirstLoad = true
 
     @Environment(\.contentLeading) private var contentLeading
-    @Environment(\.horizontalSizeClass) private var sizeClass
-
-    /// 页面是否自己垫氛围层：iOS 上整窗层到不了屏幕（见
-    /// `WindowAmbience.reachesScreen`），常规布局也得自垫；macOS 常规布局
-    /// 保持全透明，透显整窗层。
-    private var drawsOwnAmbience: Bool {
-        !WindowAmbience.reachesScreen || sizeClass == .compact
-    }
 
     var body: some View {
         ScrollView {
@@ -61,18 +53,10 @@ struct MoviePilotDownloadsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .background {
-            if drawsOwnAmbience {
-                if let ambience = app.homeAmbience {
-                    BackdropAmbienceView(
-                        target: (url: ambience.url, authHeader: ambience.authHeader),
-                        scrim: ambience.scrim
-                    )
-                } else {
-                    Color.pageBackground.ignoresSafeArea()
-                }
-            }
-        }
+        // 氛围背景：走统一入口。本页没有自己的主体图，用会话池那张
+        // （与 MoviePilot Tab、首页轮播同源，跨页背景连续、不多拉一次图）。
+        // target 为 nil（池子还没装好）时该入口会出兜底纯色，页面不留白底。
+        .pageAmbience(AmbienceTarget.sessionPool(app))
         .task {
             // 5 秒轮询：视图在树上就转，销毁即取消（.task 生命周期）。
             while !Task.isCancelled {

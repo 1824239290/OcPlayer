@@ -64,13 +64,11 @@ struct DetailView: View {
         return false
     }
 
-    /// 页面是否自己垫氛围层。整窗层够得着屏幕时（macOS）常规布局靠它，页面
-    /// 保持透明才能和侧栏连成一张图；够不着时（iOS，见
-    /// `WindowAmbience.reachesScreen`）常规布局也得自垫。紧凑布局没有整窗层，
-    /// 一律自垫。
-    private var drawsOwnAmbience: Bool {
-        !WindowAmbience.reachesScreen || horizontalSizeClass == .compact
-    }
+    /// 页面是否自己垫氛围层——**已收进 `PageAmbience` 修饰符**（双端唯一分叉点），
+    /// 本页不再自己判断 `WindowAmbience.reachesScreen` / 尺寸类。留着这条注释是为了
+    /// 说明为什么这里看不到那段判断了：它曾经在本文件、MoviePilot 资源页、下载页与
+    /// 四个 Tab 根页各写一遍，而漏掉的那些页面（搜索 Tab、媒体库、Bangumi 四页、
+    /// 设置 10 个子页）在 iOS 上整页纯色底。
 
     /// 背景底图。整窗声明与页内氛围层共用一份，别再各拼一次 URL。
     ///
@@ -82,10 +80,24 @@ struct DetailView: View {
         model.backdropTarget(width: 800)
     }
 
-    /// 底图未就绪时的兜底图：首页轮播当前那张（`AppModel.homeAmbience`）。
-    /// 与首页用的是同一个 URL、同一档解码，内存缓存直接命中，页面一出生就能画。
+    /// 底图未就绪时的兜底图：氛围池当前那张（与首页轮播同源）。
+    /// 同一个 URL、同一档解码，内存缓存直接命中，页面一出生就能画。
     private var homeAmbienceTarget: (url: URL?, authHeader: String?) {
-        (app.homeAmbience?.url, app.homeAmbience?.authHeader)
+        app.currentAmbienceTarget
+    }
+
+    /// 交给 `pageAmbience` 的氛围声明。无氛围布局（条目没有 backdrop 且不是
+    /// 待落地的剧集）时整页走老横幅布局，交给统一入口出兜底纯色底。
+    private var ambienceTarget: AmbienceTarget? {
+        guard isAmbientActive else { return nil }
+        let target = model.isAmbienceReady ? backdropTarget : homeAmbienceTarget
+        return AmbienceTarget(
+            url: target.url,
+            authHeader: target.authHeader,
+            scrim: .detail,
+            fade: model.isAmbienceReady ? Motion.ambient : Motion.fast,
+            ownsArt: true
+        )
     }
 
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
@@ -213,36 +225,21 @@ struct DetailView: View {
         #elseif os(macOS)
         .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
-        // 氛围背景：整窗层够得着屏幕时（macOS 常规布局）由 AppShell 垫声明图，
-        // 页面必须保持透明才能和侧栏连成一张图；够不着时（iOS）或紧凑布局没有
-        // 整窗层，页面自己垫氛围 + 兜底纯色。macOS 的整窗声明在底图预热完成后
-        // 才发出：氛围层淡入时图已就绪，不会先灰一块、图到位再可见地补加载。
-        .background {
-            if drawsOwnAmbience, isAmbientActive {
-                // 自身底图（backdrop@800）冷启必走一次网络。iOS 的导航栈宿主不透明
-                // （栈后面垫层到不了屏幕，实测），「背景延续」只能在页面内做：先画
-                // 首页轮播当前那张——同一个 URL 已在内存缓存里，瞬时可画、观感与
-                // 首页连续；自己的底图到位后由 `RemoteImage`
-                // （preserveCurrentImageOnReload）原位缓慢淡入替换，全程不露黑底。
-                BackdropAmbienceView(
-                    target: model.isAmbienceReady ? backdropTarget : homeAmbienceTarget,
-                    scrim: .detail,
-                    // 兜底那张是内存缓存命中、首帧就能画，用短淡入（1.6s 会拖成「先黑
-                    // 一下」）；换成自己那张时仍走默认的缓慢渐变。
-                    fade: model.isAmbienceReady ? Motion.ambient : Motion.fast
-                )
-            }
-        }
-        .background {
-            if drawsOwnAmbience || !isAmbientActive {
-                Color.pageBackground.ignoresSafeArea()
-            }
-        }
-        .windowAmbience(
-            WindowAmbience.reachesScreen && isAmbientActive && model.isAmbienceReady
-                ? WindowAmbience(url: backdropTarget.url, authHeader: backdropTarget.authHeader)
-                : nil
-        )
+        // 氛围背景：走统一入口 `pageAmbience`（平台分叉收在那一个修饰符里）。
+        // 本页是"自带主体图"的那一类（`ownsArt`）——macOS 上由它声明整窗层覆盖
+        // 首页轮播，iOS 上自己垫。
+        //
+        // 三处本页特有的语义都作为参数传进去，不复制渲染代码：
+        //   * **底图未就绪时先画首页轮播那张**（`isAmbienceReady` 为假）：iOS 的导航
+        //     栈宿主不透明，「背景延续」只能在页面内做——先画池子里那张（同 URL、
+        //     内存缓存命中、瞬时可画、与首页观感连续），自己的底图到位后由
+        //     `RemoteImage`（preserveCurrentImageOnReload）原位缓慢淡入替换。
+        //   * **两档淡入**：兜底那张是缓存命中、首帧就能画，用短淡入（默认的 1.6s
+        //     在推页那 0.35s 里只走到 ~25% 不透明度，观感等于没兜住）；换成自己那张
+        //     时仍走默认的缓慢渐变。
+        //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
+        //     图已就绪，不会先灰一块再可见地补加载。
+        .pageAmbience(ambienceTarget)
         // 呈现「资源搜索」页期间整页隐去（见 isResourcePresented 注释）。
         .coveredByPresented($isResourcePresented)
         .task(id: item.id) {

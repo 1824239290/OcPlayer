@@ -31,6 +31,12 @@ import AppKit
 ///
 /// 需要验证 Release 构建的显示链时，给该配置临时加上 `OCPLAYER_SELFTEST`
 /// 编译条件即可（`SWIFT_ACTIVE_COMPILATION_CONDITIONS`），不必改代码。
+///
+/// 通道一览（全部 Debug-only）：
+///   * `OCPLAYER_START_SECTION` / `OCPLAYER_SECTION_SWITCH_SECONDS` —— 直落分区；
+///   * `OCPLAYER_START_ROUTE` —— 直落某个 push 页 / 设置子页 / 呈现式叶子页
+///     （语法见 `LaunchRoute`，验收台 `Scripts/verify-ambience.sh` 用它逐页截图）；
+///   * `OCPLAYER_SELFTEST_FILE` / `OCPLAYER_SELFTEST_SECONDS` —— 开窗播一段再自退。
 enum LaunchOptions {
 
 #if OCPLAYER_SELFTEST
@@ -57,6 +63,18 @@ enum LaunchOptions {
         guard initialSection != nil else { return nil }
         return ProcessInfo.processInfo.environment["OCPLAYER_SECTION_SWITCH_SECONDS"]
             .flatMap(Double.init)
+    }
+
+    /// `OCPLAYER_START_ROUTE=<目标页>`：启动后直接落到某个**非分区根页**的页面
+    /// （push 路由 / 设置子页 / 呈现式叶子页）。语法见 `LaunchRoute.parse`。
+    ///
+    /// 存在的理由与 `initialSection` 相同、覆盖范围互补：`initialSection` 只能到
+    /// 分区根页，而 iOS 上「push 进来的页面」与「设置子页」才是氛围背景最容易漏的
+    /// 地方（它们必须自己垫底），验收台要能逐页进场截图。解析失败按 nil 处理：
+    /// 脚本写错了目标名，等同于没给，不该让 App 起不来。
+    static var initialRoute: LaunchRoute? {
+        ProcessInfo.processInfo.environment["OCPLAYER_START_ROUTE"]
+            .flatMap(LaunchRoute.parse)
     }
 
     private static var providedTokenMatches: Bool {
@@ -180,6 +198,9 @@ enum LaunchOptions {
     static var initialSection: AppModel.Section? { nil }
 
     static var sectionSwitchSeconds: Double? { nil }
+
+    /// Release：深链通道同样不存在（与上面同一口径——不读环境变量、无副作用）。
+    static var initialRoute: LaunchRoute? { nil }
 
     @MainActor
     static func run(

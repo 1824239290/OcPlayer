@@ -50,6 +50,12 @@ struct AboutSettingsView: View {
             if updateChecker.state == .idle {
                 await updateChecker.checkForUpdates()
             }
+            // 自动化深链（Debug-only）：`OCPLAYER_START_ROUTE=settings.about.licenses`
+            // 的标记由宿主页（本页）消费并展开，走与手动点击同一条 pushPresented。
+            if app.pendingPresentedLeaf == .licenses {
+                app.pendingPresentedLeaf = nil
+                app.pushPresented { showLicenses = true }
+            }
         }
     }
 }

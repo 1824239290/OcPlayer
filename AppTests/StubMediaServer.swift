@@ -89,7 +89,15 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     func resumeItems() async throws -> [MediaItem] { count("resumeItems"); return try resumeResult.get() }
     func nextUp() async throws -> [MediaItem] { count("nextUp"); return try nextUpResult.get() }
     func latestItems(limit: Int) async throws -> [MediaItem] { count("latestItems"); return try latestResult.get() }
-    func randomBackdropItems(limit: Int) async throws -> [MediaItem] { [] }
+    /// 氛围池取材：可注入失败与条目（`nil` = 空数组，等价"服务器没给随机结果"）。
+    /// 池装载的用例要能区分「随机查询失败」「随机查询成功但没图」「回退到首页条目」
+    /// 三条路径，`Result` 是表达它们的最小形态。
+    var randomBackdropResult: Result<[MediaItem], any Error> = .success([])
+
+    func randomBackdropItems(limit: Int) async throws -> [MediaItem] {
+        count("randomBackdropItems")
+        return try randomBackdropResult.get()
+    }
 
     func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
         MediaItem.PlayState(played: true, percentage: 1, positionSeconds: 0)

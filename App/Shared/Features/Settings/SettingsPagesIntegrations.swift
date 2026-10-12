@@ -78,6 +78,13 @@ struct JellyfinSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             selectedDefaultServerID = app.store.defaultServerID
+            // 自动化深链（Debug-only）：`OCPLAYER_START_ROUTE=settings.jellyfin.servers`
+            // 的标记由**宿主页**（本页）消费并展开。走 pushPresented 与手动点击完全
+            // 同一条路，不另开呈现路径；消费即清（一次性）。
+            if app.pendingPresentedLeaf == .servers {
+                app.pendingPresentedLeaf = nil
+                app.pushPresented { showServers = true }
+            }
         }
         .navigationDestination(isPresented: $showServers) {
             ServersView()
