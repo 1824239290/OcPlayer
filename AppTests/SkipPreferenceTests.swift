@@ -82,12 +82,25 @@ final class SkipPreferenceTests: XCTestCase {
             position: 1150, duration: 1200, retentionSeconds: 20), 1180)
         XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
             position: 1150, duration: 1200, retentionSeconds: 30), 1170)
+        XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
+            position: 1150, duration: 1200, retentionSeconds: 5), 1195,
+            "高于尾部边际的档位原样生效")
     }
 
-    func testEndCreditsSkipTargetZeroRetentionClampsBeforeEOF() {
-        // 不保留也不能 seek 到片长整点：EOF 之后内核会进错误风暴。
+    func testEndCreditsSkipTargetZeroRetentionClampsToTailMargin() {
+        // 不保留也不能贴到片尾尽头：最后几秒的落点会让内核在文件末尾做同步
+        // 读取，读失败即 fatal（Erika v0.2.1 实测）。统一钳到片长 − 3s。
         XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
-            position: 1150, duration: 1200, retentionSeconds: 0), 1199.5)
+            position: 1150, duration: 1200, retentionSeconds: 0), 1197)
+        XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
+            position: 1150, duration: 1200, retentionSeconds: 2), 1197,
+            "低于尾部边际的档位按边际兜底")
+    }
+
+    func testClampedBeforeEndKeepsUnknownDurationUntouched() {
+        XCTAssertEqual(PlaybackController.clampedBeforeEnd(1199.5, duration: 0), 1199.5)
+        XCTAssertEqual(PlaybackController.clampedBeforeEnd(1199.5, duration: 1200), 1197)
+        XCTAssertEqual(PlaybackController.clampedBeforeEnd(1150, duration: 1200), 1150)
     }
 
     func testEndCreditsSkipTargetNeverSeeksBackward() {
@@ -203,7 +216,34 @@ final class SkipPreferenceTests: XCTestCase {
 
         controller.performSkip()
 
-        XCTAssertEqual(engine.seeks, [.seconds(1199.5)], "不保留时钳在片长 − 0.5s")
+        XCTAssertEqual(engine.seeks, [.seconds(1197)], "不保留时钳在片长 − 3s 尾部边际")
+    }
+
+    // MARK: - 片尾标记（MediaSegments / 章节启发式）落点
+
+    func testPerformSkipMarkClampsToTailMargin() async throws {
+        // 实战形态：Outro 段的 endTicks 恰是片长（1442.048s 片源 → 旧口径落到
+        // 1441.548s、距文件尾 70 KB，内核尾部同步读失败即 fatal）。落点必须钳出
+        // 最后 3 秒。
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(1150))
+        controller.chapterSession.skipMarks = [mark(.credits, start: 1100, end: 1200)]
+
+        controller.performSkip()
+
+        XCTAssertEqual(engine.seeks, [.seconds(1197)], "标记终点在尾巴内：钳到片长 − 3s")
+    }
+
+    func testPerformSkipMarkEndInsideFileUntouched() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(1150))
+        controller.chapterSession.skipMarks = [mark(.credits, start: 1100, end: 1155)]
+
+        controller.performSkip()
+
+        XCTAssertEqual(engine.seeks, [.seconds(1155)], "远离片尾的标记终点不钳")
     }
 
     func testCurrentSkipPromptRespectsOutroToggle() async throws {

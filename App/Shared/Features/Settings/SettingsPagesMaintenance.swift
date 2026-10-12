@@ -1,4 +1,5 @@
 import AppDesignKit
+import DanmakuKit
 import DiagnosticsKit
 import SwiftUI
 
@@ -14,6 +15,18 @@ struct MaintenanceSettingsView: View {
             Section("缓存") {
                 ImageCacheSettingsRow()
                 MetadataCacheSettingsRow()
+            }
+            .settingsRowBackground()
+
+            Section {
+                ConfigBackupSection()
+            } header: {
+                Text("配置备份与多端同步")
+            } footer: {
+                // 不用 `**粗体**`：多个字面量相加得到的是 String，`Text(String)` 不解析
+                // markdown，星号会原样画出来。
+                Text("把 TMDb Key、播放偏好等设置导出成一个文件，可存进 iCloud 云盘或隔空投送（AirDrop）给其他设备。"
+                     + "备份文件里是明文 TMDb Key（不含服务器地址与账号密码），请勿公开分享。")
             }
             .settingsRowBackground()
 
@@ -302,5 +315,163 @@ struct DiagnosticsSection: View {
             parts.append("(另抑制 \(suppressed) 条)")
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - 配置备份与多端同步
+
+private struct ConfigBackupSection: View {
+    @Environment(AppModel.self) private var app
+
+    @State private var isExporting = false
+    @State private var exportDocument: ConfigBackupDocument?
+    @State private var isImporting = false
+
+    @State private var pendingBackup: AppConfigBackup?
+    @State private var pendingSummary: BackupSummary?
+    @State private var showImportConfirmation = false
+
+    @State private var statusNotice: String?
+    @State private var isError = false
+
+    var body: some View {
+        Button {
+            exportConfig()
+        } label: {
+            Label("导出配置文件…", systemImage: "square.and.arrow.up")
+        }
+        .fileExporter(
+            isPresented: $isExporting,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: ConfigBackupCoordinator.suggestedFileName()
+        ) { result in
+            switch result {
+            case .success:
+                statusNotice = "配置已成功导出"
+                isError = false
+            case .failure(let error):
+                statusNotice = "导出失败：\(error.localizedDescription)"
+                isError = true
+            }
+        }
+
+        Button {
+            isImporting = true
+        } label: {
+            Label("从文件恢复配置…", systemImage: "square.and.arrow.down")
+        }
+        .fileImporter(
+            isPresented: $isImporting,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result)
+        }
+        .confirmationDialog(
+            "确认恢复配置？",
+            isPresented: $showImportConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("覆盖恢复") {
+                applyPendingBackup()
+            }
+            Button("取消", role: .cancel) {
+                pendingBackup = nil
+                pendingSummary = nil
+            }
+        } message: {
+            if let summary = pendingSummary {
+                Text(confirmationMessage(for: summary))
+            } else {
+                Text("将使用该文件覆盖当前的播放偏好与 TMDb Key。")
+            }
+        }
+
+        if let statusNotice {
+            Text(statusNotice)
+                .font(.caption)
+                .foregroundStyle(isError ? .red : .secondary)
+        }
+    }
+
+    /// 弹幕设置经 `AppModel` 取（同一个实例），不再单独 `@Environment(...)`：
+    /// 少一层环境依赖，也保证写回的是播放链路正在用的那一份。
+    private var dandanplayStore: DandanplaySettingsStore {
+        app.danmakuModel.dandanplayStore
+    }
+
+    private func exportConfig() {
+        let backup = ConfigBackupCoordinator.makeBackup(
+            tmdb: app.tmdb,
+            // 传**原始值**：未自定义时是 nil，不该把内置默认网关写进备份文件。
+            dandanplayGatewayURL: dandanplayStore.gatewayURLString
+        )
+        do {
+            exportDocument = try ConfigBackupDocument(backup: backup)
+            isExporting = true
+            statusNotice = nil
+        } catch {
+            statusNotice = "生成备份失败：\(error.localizedDescription)"
+            isError = true
+        }
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            // app 关闭沙盒授权后 URL 立刻失效，所以读盘要在这里就发起。
+            Task {
+                do {
+                    let backup = try ConfigBackupCoordinator.readBackup(from: url)
+                    pendingBackup = backup
+                    pendingSummary = ConfigBackupCoordinator.summary(of: backup)
+                    showImportConfirmation = true
+                    statusNotice = nil
+                } catch {
+                    statusNotice = "读取失败：\(error.localizedDescription)"
+                    isError = true
+                }
+            }
+        case .failure(let error):
+            statusNotice = "选取文件失败：\(error.localizedDescription)"
+            isError = true
+        }
+    }
+
+    private func applyPendingBackup() {
+        guard let backup = pendingBackup else { return }
+        ConfigBackupCoordinator.applyBackup(
+            backup,
+            tmdb: app.tmdb,
+            dandanplayStore: dandanplayStore
+        )
+        pendingBackup = nil
+        pendingSummary = nil
+        statusNotice = "配置已成功恢复并生效"
+        isError = false
+    }
+
+    private func confirmationMessage(for summary: BackupSummary) -> String {
+        var items: [String] = []
+        if summary.hasTMDb {
+            let tail = summary.tmdbKeyTail ?? ""
+            let lang = summary.tmdbLanguage ?? "zh-CN"
+            items.append("• TMDb Key: \(tail)（语言: \(lang)）")
+        }
+        if summary.hasPlayback {
+            items.append("• 播放器与字幕偏好")
+        }
+        if summary.hasDanmaku {
+            items.append("• 弹幕偏好")
+        }
+        if summary.hasGeneral {
+            items.append("• 常规偏好")
+        }
+        let fromDevice = summary.deviceName.map { "（来自 \($0)）" } ?? ""
+        return "导出时间: \(summary.exportedAtFormatted)\(fromDevice)\n\n包含内容:\n"
+            + items.joined(separator: "\n")
+            + "\n\n点击「覆盖恢复」将更新当前设置。"
     }
 }

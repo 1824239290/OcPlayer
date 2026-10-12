@@ -79,7 +79,7 @@ struct PlaybackSettingsView: View {
                     }
                 }
                 .disabled(!skipOutroEnabled)
-                Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留则直接跳到片尾尽头。")
+                Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 3 秒。")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
