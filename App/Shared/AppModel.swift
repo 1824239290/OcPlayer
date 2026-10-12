@@ -739,10 +739,10 @@ final class AppModel {
     /// 的返回键必须显式把自己的落地开关交进来（见
     /// `appShellBackChrome(title:presented:)`），不能走 `back()`。
     ///
-    /// `restoreDelay` 与 `back()` 同理：系统关闭动画期间离场页还挂在树里，
-    /// 立即复位 `routeExiting` 会让它边滑边显形。
+    /// 时序与 `back()` 一致：关闭本身是硬切（实测离场页 onDisappear 只比落地晚
+    /// ~20ms），恢复拍不额外等待。
     func popPresented(_ dismiss: @escaping @MainActor () -> Void) {
-        beginRouteExit(land: dismiss, restoreDelay: Motion.exitSeconds)
+        beginRouteExit(land: dismiss)
     }
 
     /// 分区切换（顶栏药丸）：常规布局走与 push 相同的两段式——当前页淡出后
@@ -781,14 +781,17 @@ final class AppModel {
     /// 不在 `path` 里，`path` 为空时的返回是空操作——那种页面走 `popPresented`。
     func back() {
         guard !path.isEmpty else { return }
-        // 弹栈的过渡期间离场页还挂在树里，立即恢复 routeExiting 会让它
-        // 边滑边显形——等过渡走完（离场页真正移除）再恢复，落点页独自淡入。
-        beginRouteExit(land: { [weak self] in
+        // 与 push 同一拍：弹栈落地同样禁动画，离场页随 path 变短**当帧移除**
+        // （实测 onDisappear 只比落地晚 ~10ms），恢复拍只留 0.05s 前置帧。
+        // 曾在此多等 Motion.exitSeconds：当年以为弹栈有系统过渡要遮、离场页
+        // 还在树里，实测无此事——白等 0.45s 只让落点页的淡入晚半拍，返回比
+        // 进入慢近一半（0.95s vs 1.4s）。
+        beginRouteExit { [weak self] in
             guard let self else { return }
             var transaction = Transaction()
             transaction.disablesAnimations = true
             withTransaction(transaction) { _ = self.path.removeLast() }
-        }, restoreDelay: Motion.exitSeconds)
+        }
     }
 
     /// 两段式换页（push / pop / 分区切换共用）：点击后当前页先淡出
@@ -796,7 +799,11 @@ final class AppModel {
     /// 淡入（新页以隐藏态出生，routeExiting 复位即它的入场——全站唯一入场
     /// 机制）。compact（iPhone）系统动画本来就在，reduceMotion 直切，都不等待。
     /// pop 侧由自绘返回键调用。
-    func beginRouteExit(land: @escaping @MainActor () -> Void, restoreDelay: Double = 0) {
+    ///
+    /// 两个方向的节奏**同拍**：淡出 0.45s → 落地 → 0.05s 前置帧 → 淡入 0.45s。
+    /// 落地（不论 push 建页还是 pop 撤页）都用禁动画 transaction，没有系统
+    /// 过渡参与，恢复拍不需要为谁多等。
+    func beginRouteExit(land: @escaping @MainActor () -> Void) {
         if isCompact || reduceMotion {
             land()
             return
@@ -813,12 +820,8 @@ final class AppModel {
             guard generation == routeExitGeneration else { return }
             land()
             // 恢复前留出前置拍：新页（push 落地新建的视图）必须先以隐藏态
-            // 提交一帧，routeExiting 复位的淡入才有 from-state；pop 侧还要
-            // 加上 restoreDelay 等系统弹栈过渡走完（离场页真正移除）。
+            // 提交一帧，routeExiting 复位的淡入才有 from-state。
             try? await Task.sleep(for: .seconds(Motion.restoreDelay))
-            if restoreDelay > 0 {
-                try? await Task.sleep(for: .seconds(restoreDelay))
-            }
             routeExiting = false
         }
     }
