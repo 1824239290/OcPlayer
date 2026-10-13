@@ -45,6 +45,15 @@ final class ImageBlobStore: @unchecked Sendable {
         FNV1a.hex(of: key) + ".img"
     }
 
+    /// 键对应的缓存文件，**存在才返回**。只查文件，不读内容、不解码。
+    ///
+    /// 登录页海报墙靠它做「这张图的字节在不在本机」的判断：墙要按条目复原缓存键，
+    /// 然后逐个问「有没有」，命中的才摆上墙。
+    func fileURL(forKey key: String) -> URL? {
+        let url = directory.appendingPathComponent(Self.fileName(for: key))
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     /// 读字节。
     ///
     /// **两个时间戳分工**（这里踩过坑，别合并）：

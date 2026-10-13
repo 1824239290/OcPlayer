@@ -30,12 +30,13 @@ func makeItem(
     seasonNumber: Int? = nil,
     episodeNumber: Int? = nil,
     playState: MediaItem.PlayState? = nil,
-    tmdbID: String? = nil
+    tmdbID: String? = nil,
+    primaryImageTag: String? = nil
 ) -> MediaItem {
     MediaItem(
         id: id, name: name, kind: kind, year: year,
         seriesID: seriesID, seasonNumber: seasonNumber, episodeNumber: episodeNumber,
-        playState: playState, tmdbID: tmdbID)
+        playState: playState, primaryImageTag: primaryImageTag, tmdbID: tmdbID)
 }
 
 /// 一个最小可用的服务器档案（租户 id 从它派生）。

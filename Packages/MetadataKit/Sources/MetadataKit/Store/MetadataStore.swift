@@ -173,6 +173,66 @@ public actor MetadataStore {
         }
     }
 
+    /// 登录页海报墙的候选：**库里有主图（海报）的**电影 / 剧集。
+    ///
+    /// ## 为什么必须是它，而不是「缓存里像海报的文件」
+    ///
+    /// 图片缓存里同时存着**演员头像**（`/Items/{personId}/Images/Primary`）与条目海报
+    /// ——两者都是 2:3 的竖图，按宽高比根本分不开（本机实测：429 张竖图里最大的两档
+    /// 尺寸 342×513、240×360 几乎全是头像）。所以「墙上摆哪些图」必须由**条目身份**
+    /// 决定，而不是由图片外观决定。这个查询就是那个身份来源。
+    ///
+    /// ## 顺序
+    ///
+    /// 墙是装饰，不需要「有意义」的顺序，但**必须是确定的**——同一份缓存两次装配要
+    /// 得到同一面墙，否则每次冷启动墙都换一副面孔。所以排序是
+    /// `fetched_at DESC, item_id`（后者只是给同秒的行一个稳定次序）。
+    ///
+    /// ## 为什么在内存里筛「有没有主图」
+    ///
+    /// `primaryImageTag` 在 `payload` 里，不在列上。用 `json_extract` 能塞进 WHERE，
+    /// 但那等于把 payload 的编码（JSON）钉进查询——而 payload 的契约是**对读方不透明**
+    /// （见 `PayloadCodec`：版本不认就当未命中）。为了一面装饰墙去动那条契约不划算，
+    /// 所以按 kind 取一个**有界窗口**回来，解码后筛。窗口给足余量（`limit * 8`，
+    /// 至少 240 行）以免库里「无图条目」占比高时凑不满。
+    ///
+    /// - Parameter limit: 想要多少张。实际返回可能更少（库里本来就没那么多带图条目）。
+    public func posterCandidates(tenant: TenantID, limit: Int) throws -> [CachedItem] {
+        guard limit > 0 else { return [] }
+        let scanLimit = max(limit * 8, 240)
+        return try database.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT item_id, payload_version, payload, fetched_at, progress_fetched_at
+                    FROM item
+                    WHERE tenant_id = ? AND kind IN ('movie', 'series')
+                    ORDER BY fetched_at DESC, item_id
+                    LIMIT ?
+                    """,
+                arguments: [tenant.rawValue, scanLimit])
+
+            var candidates: [CachedItem] = []
+            candidates.reserveCapacity(limit)
+            for row in rows {
+                guard candidates.count < limit else { break }
+                guard let data = row["payload"] as Data?,
+                      let item = PayloadCodec.decode(MediaItem.self, from: data,
+                                                     storedVersion: row["payload_version"]),
+                      item.primaryImageTag != nil
+                else { continue }
+                candidates.append(
+                    CachedItem(
+                        item: item,
+                        fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)),
+                        progressFetchedAt: (row["progress_fetched_at"] as Int64?).map {
+                            Date(timeIntervalSince1970: TimeInterval($0))
+                        }))
+            }
+            return candidates
+        }
+    }
+
     /// 只把进度写回（`markPlayed` / `markUnplayed` / 播放上报的返回）。
     ///
     /// 不动 `fetched_at`：进度变了不代表元数据过期。也不动 payload 里的其它字段——

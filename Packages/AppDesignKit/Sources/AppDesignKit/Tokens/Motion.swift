@@ -34,6 +34,9 @@ public enum Motion {
     public static let lift = Animation.spring(response: 0.34, dampingFraction: 0.84, blendDuration: 0.12)
     /// 玻璃 / Liquid 形变（HUD 面板）。
     public static let glass = Animation.smooth(duration: 0.35)
+    /// 指针驱动的景深跟随（登录页海报墙的 3D 倾斜）。要**明显慢于**指针本身，
+    /// 否则墙像贴在光标上被拖着走，而不是「一面墙被倾斜」。
+    public static let pointerTilt = Animation.smooth(duration: 0.42)
 }
 
 private struct MotionModifier<V: Equatable>: ViewModifier {

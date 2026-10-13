@@ -47,6 +47,15 @@ enum ImageCacheKey {
 
     /// 缓存键。`authHeader` 为 nil（公开图床）时用固定串，保证确定性。
     static func canonicalURL(for url: URL, authHeader: String?) -> URL? {
+        canonicalURL(for: url, identity: authIdentity(authHeader))
+    }
+
+    /// 同上，但身份**已经算好**。
+    ///
+    /// 给「登录页海报墙」用：那一刻 token 已经被删了（登出 / 过期都会删），算不出
+    /// 身份，只能用会话还在时记下的那一个。两条入口必须产出**同一个键**，
+    /// 所以身份只在这里拼一次。
+    static func canonicalURL(for url: URL, identity: String) -> URL? {
         guard isMediaServerImage(url) else { return nil }
         var components = URLComponents()
         components.scheme = "http"
@@ -55,7 +64,7 @@ enum ImageCacheKey {
         components.query = url.query
         // 认证身份拼进查询：不同服务器 / 不同账号的键互不可见。
         var items = components.queryItems ?? []
-        items.append(URLQueryItem(name: "_auth", value: authIdentity(authHeader)))
+        items.append(URLQueryItem(name: "_auth", value: identity))
         components.queryItems = items
         return components.url
     }

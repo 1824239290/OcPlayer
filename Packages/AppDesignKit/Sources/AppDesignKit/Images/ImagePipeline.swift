@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import ImageIO
 import SwiftUI
 
 #if canImport(UIKit)
@@ -197,6 +198,81 @@ public final class ImagePipeline: @unchecked Sendable {
         return cachedImage(forKey: key)
     }
 
+    /// **只读本地缓存**（内存 → 磁盘字节），命中就返回位图，**绝不发起网络请求**。
+    ///
+    /// 与 `load` 的区别只有一条，但这条很关键：`load` 在磁盘未命中时会去回源，
+    /// 而这里不会。登录页的海报墙需要它——登录时可能根本没有可用会话、或服务器
+    /// 不可达，而海报墙只是装饰：不该为它产生任何网络流量，也不该让登录页等一次
+    /// 网络超时。墙上的图全部来自用户自己库里的历史缓存。
+    ///
+    /// 命中后照常写回内存缓存，所以同一张图第二次出现是纯内存命中。
+    /// 取消（视图走掉）与真失败都收敛成 `nil`：调用方一律按「这张没有图」处理。
+    public func cachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) async -> PlatformImage? {
+        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+        if let cached = cachedImage(forKey: key) {
+            return cached
+        }
+        guard let image = try? await imageFromBlobStore(key: key, maxPixelSize: maxPixelSize) else {
+            return nil
+        }
+        // 走同步方法写回内存缓存：`NSLock` 不能在 async 上下文直接加解锁
+        // （与本文件其它临界区同一条约定）。
+        acceptFromCache(image, forKey: key)
+        return image
+    }
+
+    /// 把**本地缓存**解出的位图写回内存缓存。
+    ///
+    /// 不复用 `accept(_:forKey:generation:)`：那个入口是为「网络任务回来时判断
+    /// 这次请求是否已被作废」而存在的，需要调用方先持有代次；这里没有在途任务，
+    /// 代次只在临界区内读一次即可，避免把 `cacheGeneration` 暴露到 async 上下文。
+    private func acceptFromCache(_ image: PlatformImage, forKey key: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        memoryCache.setObject(image, forKey: key as NSString, cost: Self.memoryCost(of: image))
+    }
+
+    /// 解码一个本地缓存文件。**不查缓存键、不出网**。
+    ///
+    /// 与 `cachedFileURL` 配对：查键只回答「字节在不在」，真正的解码留到这里按需做，
+    /// 于是墙可以边解边铺，而不是等一整批。
+    public func decodeCachedFile(_ url: URL, maxPixelSize: Int) async -> PlatformImage? {
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        // 走 `decoder`（专用队列 + 并发上限），理由同 `imageFromBlobStore`。
+        return try? await decoder.decode(data, maxPixelSize: maxPixelSize)
+    }
+
+    // MARK: - 按条目复原缓存（登录页海报墙的**主**来源）
+
+    /// 认证头对应的**缓存身份**（`ImageCacheKey.authIdentity` 的公开投影）。
+    ///
+    /// 调用方（登录页）需要在**没有 token** 的时候复原历史图片的缓存键，而键里含
+    /// 这个身份。会话还在时把它记下来，登录页就能接着用——token 被删不影响已经
+    /// 落到磁盘上的字节。
+    public static func cacheIdentity(authHeader: String?) -> String {
+        ImageCacheKey.authIdentity(authHeader)
+    }
+
+    /// 这条 URL 的字节在本地缓存里吗？**只查文件**：不读内容、不解码、不出网。
+    ///
+    /// - Parameter maxPixelSize: 必须与当初存进去的那一档一致——它是缓存键的一部分
+    ///   （见 `requestKey`）。调用方按 `LoginWallStyle` 的阶梯逐个试。
+    /// - Returns: 命中的缓存文件，可以直接交给 `decodeCachedFile`。
+    public func cachedFileURL(url: URL, authHeader: String?, maxPixelSize: Int) -> URL? {
+        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+        return blobStore.fileURL(forKey: key)
+    }
+
+    /// 同上，但用**已经记下来的**缓存身份而不是当前认证头。
+    ///
+    /// 登录页用这一条：那一刻 token 已经没了，身份只能用会话还在时记下的那一个
+    /// （见 `cacheIdentity(authHeader:)`）。两条入口共用 `requestKey`，所以算出的键
+    /// 与当初存进去的完全一致。
+    public func cachedFileURL(url: URL, cacheIdentity: String, maxPixelSize: Int) -> URL? {
+        let key = requestKey(url: url, identity: cacheIdentity, maxPixelSize: maxPixelSize)
+        return blobStore.fileURL(forKey: key)
+    }
+
     /// 加载一张图。返回 `nil` = 真正失败（下次可重试）。
     ///
     /// 同一 URL 的并发调用共享同一个网络任务（列表滚动反复出现同一张图时不重复拉）；
@@ -355,9 +431,17 @@ public final class ImagePipeline: @unchecked Sendable {
     ///    失效。这里用 `ImageCacheKey.authIdentity`（只取 DeviceId + Token 的 FNV1a 哈希），
     ///    跨进程稳定，且不随 App 版本变化（版本号曾在里面，见该方法的说明）。
     private func requestKey(url: URL, authHeader: String?, maxPixelSize: Int?) -> String {
-        let canonical = ImageCacheKey.canonicalURL(for: url, authHeader: authHeader)?.absoluteString
+        requestKey(url: url, identity: ImageCacheKey.authIdentity(authHeader), maxPixelSize: maxPixelSize)
+    }
+
+    /// 同上，但身份**已经算好**（见 `cachedFileURL(url:cacheIdentity:maxPixelSize:)`）。
+    ///
+    /// 两条入口共用这一份实现是必须的：`_auth` 同时出现在规范化 URL 的查询里和键的
+    /// 中段，两处必须来自同一个身份，否则「按身份查缓存」与「按请求存缓存」会各自
+    /// 算出一个键、永远互相看不见。
+    private func requestKey(url: URL, identity: String, maxPixelSize: Int?) -> String {
+        let canonical = ImageCacheKey.canonicalURL(for: url, identity: identity)?.absoluteString
             ?? url.absoluteString
-        let identity = ImageCacheKey.authIdentity(authHeader)
         return canonical + "\u{0}" + identity + "\u{0}" + "\(maxPixelSize ?? 0)"
     }
 

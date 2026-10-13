@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import DiagnosticsKit
 import Foundation
@@ -63,6 +64,13 @@ extension AppModel {
         // 包装必须在「赋值给 self.server」之前完成：下面立刻就会发首屏请求。
         let cached = await metadata.wrap(server)
         self.server = cached
+        // 记下本会话的图片缓存身份。**唯一**的会话落地点（登录 / 启动恢复 / 切换服务器）
+        // 就是这里，所以只在这一处记；登录页在没有 token 时靠它复原海报的缓存键。
+        // 刻意不在登出时清除——见 `ImageCacheIdentityStore`。
+        ImageCacheIdentityStore.remember(
+            identity: ImagePipeline.cacheIdentity(authHeader: server.authorizationHeader),
+            tenant: server.profile.id
+        )
         // 地址决议接线要跟会话走：决议器选中新地址时把结论写回档案、并刷新界面。
         // 决议器读的是 `profile`，装饰器原样透传，接线不受影响。
         attachEndpoints(to: cached)

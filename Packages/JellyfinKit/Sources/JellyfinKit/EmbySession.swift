@@ -271,18 +271,11 @@ final class EmbySession: @unchecked Sendable {
 
     /// 拼绝对地址。`baseURL` 可能带子路径（Emby 档案是 `/emby`），
     /// 所以拼在它**后面**而不是覆盖它 —— 一处前缀全链路生效。
+    ///
+    /// 实现委托 `ServerURLBuilder`：登录页的海报墙要在没有会话时复原同一条 URL
+    /// （只为了算缓存键），两处必须逐字节一致。
     private func url(path: String, query: [(String, String)]) throws -> URL {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw JellyfinError(.other("Emby 地址拼接失败：\(path)"))
-        }
-        var basePath = components.path
-        while basePath.hasSuffix("/") { basePath.removeLast() }
-        components.path = basePath + (path.hasPrefix("/") ? path : "/" + path)
-        if !query.isEmpty {
-            // 用数组而不是字典：`includeItemTypes=Movie,Series` 这类同名多值要保序。
-            components.queryItems = query.map { URLQueryItem(name: $0.0, value: $0.1) }
-        }
-        guard let url = components.url else {
+        guard let url = ServerURLBuilder.url(base: baseURL, path: path, query: query) else {
             throw JellyfinError(.other("Emby 地址拼接失败：\(path)"))
         }
         return url

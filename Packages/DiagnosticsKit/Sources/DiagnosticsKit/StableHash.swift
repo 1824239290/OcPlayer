@@ -24,6 +24,10 @@ public struct FNV1a {
         String(format: "%016llx", hash)
     }
 
+    /// 原始 64 位摘要。给「要的是种子而不是十六进制串」的场景（登录页海报墙的程序化
+    /// 封面按条目 id 播种）；字符串口径仍走 `finishHex()`。
+    public var value: UInt64 { hash }
+
     /// 一次算完的便捷入口（单串场景）。
     public static func hex(of string: String) -> String {
         var hasher = FNV1a()
