@@ -30,7 +30,7 @@ final class ConfigBackupTests: XCTestCase {
         suiteNames = []
     }
 
-    // MARK: - TMDb：导出 → 序列化 → 恢复
+    // MARK: - TMDB：导出 → 序列化 → 恢复
 
     func testExportAndImportTMDbConfig() throws {
         let source = try makeDefaults("tmdb-source")
@@ -89,7 +89,7 @@ final class ConfigBackupTests: XCTestCase {
         XCTAssertEqual(targetTMDb.cacheDays, 7)
     }
 
-    /// 备份里没有 Key（用户没配 TMDb）时导入，**不能清掉目标设备已有的 Key**：
+    /// 备份里没有 Key（用户没配 TMDB）时导入，**不能清掉目标设备已有的 Key**：
     /// 「备份里没有凭据」不等于「用户想登出」。
     func testImportWithoutAPIKeyKeepsExistingKey() throws {
         let source = try makeDefaults("nokey-source")
@@ -131,7 +131,7 @@ final class ConfigBackupTests: XCTestCase {
         XCTAssertEqual(target.bool(forKey: SettingsKeys.bangumiEnabled), false)
     }
 
-    /// 局部备份（只有 TMDb）不能碰目标设备的其它设置。
+    /// 局部备份（只有 TMDB）不能碰目标设备的其它设置。
     func testPartialBackupPreservesUntouchedSettings() throws {
         let target = try makeDefaults("partial-target")
         let targetTMDb = TMDbCoordinator(defaults: target)
@@ -357,7 +357,7 @@ final class ConfigBackupTests: XCTestCase {
         XCTAssertFalse(summary.exportedAtFormatted.isEmpty)
     }
 
-    /// 没配 TMDb 的备份，摘要不能谎称有 Key。
+    /// 没配 TMDB 的备份，摘要不能谎称有 Key。
     func testSummaryWithoutKey() throws {
         let source = try makeDefaults("summary-nokey")
         let backup = ConfigBackupCoordinator.makeBackup(

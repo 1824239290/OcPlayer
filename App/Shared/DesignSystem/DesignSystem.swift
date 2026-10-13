@@ -281,13 +281,13 @@ struct PosterCard: View {
     let item: MediaItem
     let server: (any MediaServer)?
     var width: CGFloat? = Metrics.posterWidth
-    /// 封面覆盖：条目自身没有服务端图时外部补一张（当前唯一来源是**合集的 TMDb 海报**）。
+    /// 封面覆盖：条目自身没有服务端图时外部补一张（当前唯一来源是**合集的 TMDB 海报**）。
     /// nil = 用条目自己的图（`imageTarget` 那条既有链）。
     ///
     /// 为什么要开这个口子：合集在服务端**本来就没有图**（实测 `ImageTags: {}`），
-    /// 卡片只剩占位图标；而 TMDb 合集的海报要经一次解析才有（见
+    /// 卡片只剩占位图标；而 TMDB 合集的海报要经一次解析才有（见
     /// `AppModel.collectionPosterURL`）。把「取哪张图」留给调用方，卡片本身不必知道
-    /// TMDb 的存在。
+    /// TMDB 的存在。
     var posterOverride: URL? = nil
 
     var onTap: () -> Void
@@ -302,7 +302,7 @@ struct PosterCard: View {
         return Button(action: onTap) {
             VStack(alignment: fillsColumn ? .center : .leading, spacing: fillsColumn ? 6 : 9) {
                 let serverTarget = item.imageTarget(server, kind: .primary, width: 400)
-                // 覆盖图优先，但它**免鉴权**（TMDb CDN 不校验）：带上服务端凭证
+                // 覆盖图优先，但它**免鉴权**（TMDB CDN 不校验）：带上服务端凭证
                 // 既无意义、也把凭证多送一处。
                 let url = posterOverride ?? serverTarget.url
                 MediaArtwork(

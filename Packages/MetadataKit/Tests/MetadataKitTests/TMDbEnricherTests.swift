@@ -316,7 +316,7 @@ final class TMDbEnricherTests: XCTestCase {
         let season = try XCTUnwrap(overlay)
         XCTAssertEqual(season.overview, "第二季简介")
         XCTAssertEqual(season.episodes.count, 2)
-        // 分集标题：占位名被 TMDb 顶掉
+        // 分集标题：占位名被 TMDB 顶掉
         XCTAssertEqual(season.displayEpisodeTitle(number: 9, serverValue: "第 9 集",
                                                   preferTMDb: false), "离别之时")
         XCTAssertEqual(season.displayEpisodeTitle(number: 1, serverValue: "服务端标题",

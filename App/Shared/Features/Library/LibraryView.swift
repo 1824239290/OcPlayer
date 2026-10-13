@@ -244,7 +244,7 @@ struct LibraryView: View {
                             server: app.server,
                             width: cardWidth,
                             // 合集卡：服务端没有封面图（实测 `ImageTags: {}`），
-                            // 用解析出来的 TMDb 合集海报顶上；还没解析出来时是 nil，
+                            // 用解析出来的 TMDB 合集海报顶上；还没解析出来时是 nil，
                             // 卡片显示「一叠海报」占位图标。
                             posterOverride: app.collectionPosterURL(for: item, width: 400)
                         ) {

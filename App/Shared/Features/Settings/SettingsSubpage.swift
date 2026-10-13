@@ -40,7 +40,7 @@ enum SettingsSubpage: Hashable, CaseIterable {
         case .jellyfin: "媒体服务器"
         case .bangumi: "Bangumi"
         case .moviepilot: "MoviePilot"
-        case .tmdb: "TMDb 元数据补全"
+        case .tmdb: "TMDB 元数据补全"
         case .maintenance: "维护"
         case .about: "关于"
         }
@@ -53,11 +53,11 @@ enum SettingsSubpage: Hashable, CaseIterable {
     /// 与 `title` 放在一起：两者都是呈现层，改一个时另一个就在眼皮底下。
     ///
     /// 图标选择口径：
-    /// * **有品牌资产的用品牌图**（Bangumi / MoviePilot / TMDb）——用户 2026-10-13 的口径是
+    /// * **有品牌资产的用品牌图**（Bangumi / MoviePilot / TMDB）——用户 2026-10-13 的口径是
     ///   「bangumi 的图标改成和 tabview 一样用 SVG、moviepilot 也一样、tmdb 也是」。
     ///   Bangumi / MoviePilot 走的是**和 Tab 栏同一份资产**（`-logo` 那套带 template
     ///   渲染意图的），所以和 Tab 上看到的、以及 macOS 顶栏药丸上的完全一致；
-    ///   TMDb 只有官方彩色字标（`tmdb-logo`，无 template 意图 → 保持品牌配色）。
+    ///   TMDB 只有官方彩色字标（`tmdb-logo`，无 template 意图 → 保持品牌配色）。
     /// * 其余用 SF Symbol，**语义直白优先**，且避免两个子页用同一个符号
     ///   （`SettingsHubGroupingTests` 会断言互不重复）。
     var icon: SettingsRowIconSource {

@@ -99,7 +99,7 @@ extension AppModel {
     }
 
     /// 氛围底图预热：服务端一路与进页后的 `DetailViewModel.prewarmAmbience`
-    /// 同链（`DetailAmbienceImage` 单源）。TMDb 回落那一路（服务端缺背景图时）
+    /// 同链（`DetailAmbienceImage` 单源）。TMDB 回落那一路（服务端缺背景图时）
     /// 预取阶段没有 overlay 可判，留给进页后的 prewarmAmbience 补——同 URL 时
     /// 它直接短路，不重复解码。
     private func prewarmDetailBackdrop(for item: MediaItem) {

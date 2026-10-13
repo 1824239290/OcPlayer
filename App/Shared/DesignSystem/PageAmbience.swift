@@ -130,7 +130,7 @@ extension View {
 /// 漏一处（实测漏了 11 类）。挂在路由出口后，**新增 `Route` case 自动继承**，
 /// 不需要谁记得登记。
 ///
-/// **详情页显式让路**：它有自己的主体图（条目 backdrop + TMDb 补图 + 合集成员兜底），
+/// **详情页显式让路**：它有自己的主体图（条目 backdrop + TMDB 补图 + 合集成员兜底），
 /// 整窗声明由 `DetailView` 自己发，而且底图未就绪时发的是 nil（"本页暂无氛围"）。
 /// 外层要是在它之后再声明一次，就会把它的声明盖掉、详情页背景消失——所以这里跳过它。
 private struct RouteAmbienceModifier: ViewModifier {

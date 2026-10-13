@@ -14,27 +14,27 @@ import MetadataKit
 /// 但用户的信息诉求是「这里该有几张电影海报」。
 ///
 /// 两条互补的路：
-/// 1. **合集条目**：借 TMDb 合集的海报（`refreshTMDbCollection` 定位）。
-/// 2. **合集库本身**（首页「媒体库」那一排的库卡）：服务端与 TMDb 都没有「一个库」的封面，
+/// 1. **合集条目**：借 TMDB 合集的海报（`refreshTMDbCollection` 定位）。
+/// 2. **合集库本身**（首页「媒体库」那一排的库卡）：服务端与 TMDB 都没有「一个库」的封面，
 ///    所以用**库里内容的海报拼一张** —— 列合集 → 取成员电影的海报 → 2×2 拼图。
-///    只依赖服务端，**不需要 TMDb key**。
+///    只依赖服务端，**不需要 TMDB key**。
 ///
 /// 两条路都按条目 / 库 id 做会话级缓存，并在换会话时清空（id 只在那台服务器上有意义）。
 extension AppModel {
 
-    /// 网格卡上该用的 TMDb 合集海报 URL。nil = 还没解析出来 / TMDb 上没有这个合集。
+    /// 网格卡上该用的 TMDB 合集海报 URL。nil = 还没解析出来 / TMDB 上没有这个合集。
     ///
     /// **只补缺**：条目自己有服务端图（`primaryImageTag`）时返回 nil，照旧用服务端的图——
-    /// 与详情页「TMDb 只补服务端缺的」同一条策略。合集的常态是服务端没图，所以这里
-    /// 基本都会走到 TMDb 那条。
+    /// 与详情页「TMDB 只补服务端缺的」同一条策略。合集的常态是服务端没图，所以这里
+    /// 基本都会走到 TMDB 那条。
     func collectionPosterURL(for item: MediaItem, width: Int) -> URL? {
         guard item.kind == .boxSet, item.primaryImageTag == nil else { return nil }
         guard let path = collectionArtwork[item.id] else { return nil }
-        // TMDb 的图**免鉴权**（CDN 不校验），调用方传 nil authHeader。
+        // TMDB 的图**免鉴权**（CDN 不校验），调用方传 nil authHeader。
         return TMDbImageSize.url(path: path, requestedWidth: width)
     }
 
-    /// 记下某合集的 TMDb 海报路径（详情页读到 overlay 后同步给网格，省掉一次解析）。
+    /// 记下某合集的 TMDB 海报路径（详情页读到 overlay 后同步给网格，省掉一次解析）。
     func noteCollectionArtwork(itemID: MediaItem.ID, posterPath: String?) {
         guard let posterPath, !posterPath.isEmpty else { return }
         collectionArtwork[itemID] = posterPath
@@ -102,7 +102,7 @@ extension AppModel {
             let overlay = await tmdb.overlay(for: item, tenant: tenant)
             guard sessionIsCurrent(generation, server: server) else { return false }
             noteCollectionArtwork(itemID: item.id, posterPath: overlay?.posterPath)
-            // **只有确定结论才记账**：成功、命中缓存、「TMDb 上确实没有这个合集」都算；
+            // **只有确定结论才记账**：成功、命中缓存、「TMDB 上确实没有这个合集」都算；
             // `.failed`（断网 / 401 / 429）不算。这条区分依赖 `RefreshOutcome`
             // （早先它返回 Bool，两种结局都是 false，必然踩坑）。
             return outcome.isConclusive
@@ -128,8 +128,8 @@ extension AppModel {
     /// 原因）；只有成员电影才有服务端海报。实测成员确实都在（EVA 2 部、中二病 2 部），
     /// 所以 2 个合集正好凑满 2×2。
     ///
-    /// 只走服务端，**不需要 TMDb key** —— 库卡在首页一进来就要画，不该被「用户配没配
-    /// TMDb」挡住。
+    /// 只走服务端，**不需要 TMDB key** —— 库卡在首页一进来就要画，不该被「用户配没配
+    /// TMDB」挡住。
     func resolveLibraryCoverIfNeeded(for library: MediaLibrary) async {
         guard library.primaryImageTag == nil else { return }
         guard let server else { return }

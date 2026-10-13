@@ -58,7 +58,7 @@ final class TMDbMatcherTests: XCTestCase {
     }
 
     /// 脏 `ProviderIds`（空串 / 0 / 非数字 / 空白）必须当「没有」，否则会拿 0 去查
-    /// TMDb 得到 404，日志里表现为「明明有 id 却查不到」，很难查。
+    /// TMDB 得到 404，日志里表现为「明明有 id 却查不到」，很难查。
     func testDirtyProviderIDsAreIgnored() async throws {
         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
@@ -71,7 +71,7 @@ final class TMDbMatcherTests: XCTestCase {
 
     // MARK: - 集 / 季：不许用自己的 tmdbID
 
-    /// **本文件最要紧的用例**：集带一个「单集 TMDb id」，它**不是剧集 id**。
+    /// **本文件最要紧的用例**：集带一个「单集 TMDB id」，它**不是剧集 id**。
     /// 若拿它去查 `/tv/{id}` 会拉到另一部剧或 404（实测 S1E1 的 Tmdb=3384539
     /// 而剧集 id 是 153217）。
     func testEpisodeUsesSeriesLinkNotItsOwnTmdbID() async throws {
@@ -171,7 +171,7 @@ final class TMDbMatcherTests: XCTestCase {
         XCTAssertFalse(m?.shouldApplyAutomatically == true)
     }
 
-    /// 原名命中也算（用户库里存的可能是原名）。中文译名在 TMDb 索引里常查不到。
+    /// 原名命中也算（用户库里存的可能是原名）。中文译名在 TMDB 索引里常查不到。
     func testOriginalTitleMatchCounts() async throws {
         let results = [TMDbSearchResult(id: 603, mediaType: .movie, title: "黑客帝国",
                                         originalTitle: "The Matrix", year: 1999)]

@@ -73,7 +73,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 | 内容 | 位置 | 清理 |
 | --- | --- | --- |
 | 媒体元数据缓存 | `Media.sqlite` | 设置 → 维护可清空；每日维护按 3 万条 / 200 MB 淘汰最旧 |
-| TMDb 补全数据 | `Media.sqlite` 的 `tmdb_entity` / `tmdb_link` 两张表 | 设置 → TMDb 区块可单独清除；过期实体随每日维护清 |
+| TMDB 补全数据 | `Media.sqlite` 的 `tmdb_entity` / `tmdb_link` 两张表 | 设置 → TMDB 区块可单独清除；过期实体随每日维护清 |
 | Bangumi 本地库 | `Bangumi.sqlite` | 登出清账号态；体积随每日维护上报 |
 | 弹幕（正文可弃 / 其余永久） | `Danmaku/` | 白名单淘汰，永久文件见 `DanmakuCache.permanentFileNames` |
 | 图片字节缓存 | `ImageCache/` | 设置 → 维护可清空；512 MiB 上限 |
@@ -81,9 +81,9 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 > 维护清单没登记的目录**等于不存在**（不会被清理、体积也不可见）——`Bangumi.sqlite` 就这么漏了几个月，所以「取路径 + 登记」是两件必须一起做的事。
 
-## TMDb 元数据补全
+## TMDB 元数据补全
 
-用户自填 API Key（设置 → TMDb 元数据补全，**留空即禁用**）。v3 API Key 与 v4 Read Access Token 都支持。代码在 `Packages/MetadataKit/TMDb/`。
+用户自填 API Key（设置 → TMDB 元数据补全，**留空即禁用**）。v3 API Key 与 v4 Read Access Token 都支持。代码在 `Packages/MetadataKit/TMDB/`。
 
 ### 三条必须知道的约束
 
@@ -94,8 +94,8 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
    集   ProviderIds["Tmdb"] = 3384539     ← 单集 id，拿它查 /tv/{id} 会拉到别的剧或 404
    ```
    所以季/集一律从**父剧**推导 `tv/{剧id}/season/{季号}`。判断收在 `TMDbEntityKey` 的唯一入口。
-2. **TMDb 不做语言回退。** `language=zh-CN` 时没翻译的字段返回**空串**（不是 nil），判定必须用「非空」。且只补缺、不整包替换。
-3. **缓存期不得超过 6 个月**（TMDb 条款）。`TMDbPreferences.maxCacheDays = 180`，不要调大。
+2. **TMDB 不做语言回退。** `language=zh-CN` 时没翻译的字段返回**空串**（不是 nil），判定必须用「非空」。且只补缺、不整包替换。
+3. **缓存期不得超过 6 个月**（TMDB 条款）。`TMDbPreferences.maxCacheDays = 180`，不要调大。
 
 ### 分层
 
@@ -103,21 +103,21 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 | --- | --- |
 | `TMDbClient` | 纯网络：详情 / 一季 / 搜索，限流 + 重试 |
 | `TMDbMatcher` | 匹配与打分（ProviderIds → 搜索），**不碰网络**（搜索入口是注入的闭包） |
-| `MetadataStore+TMDb` | 落库：实体全局共享、对应按租户隔离 |
+| `MetadataStore+TMDB` | 落库：实体全局共享、对应按租户隔离 |
 | `TMDbEnricher` | 串起来：匹配 → 拉取 → 落库 → 只读叠加 |
-| `TMDbOverlay` / `DisplayMetadata` | 展示策略（文本与图片**默认都 TMDb 优先**，各自可关），纯函数 |
+| `TMDbOverlay` / `DisplayMetadata` | 展示策略（文本与图片**默认都 TMDB 优先**，各自可关），纯函数 |
 | `TMDbCoordinator`（App 层） | 设置读写、生命周期、与 `AppModel` 的接线 |
 
 ### 季与分集的展示面
 
-**分集/季没有自己的详情页**（首页续播走 `openSeriesDetail(for:)` 解析到所属剧集；搜索只请求 `kinds: [.movie, .series]`），但它们的 TMDb 数据**在剧集页上有展示面**：
+**分集/季没有自己的详情页**（首页续播走 `openSeriesDetail(for:)` 解析到所属剧集；搜索只请求 `kinds: [.movie, .series]`），但它们的 TMDB 数据**在剧集页上有展示面**：
 
 | 展示面 | 数据来源 |
 | --- | --- |
-| 分集卡片的标题 | 该季每一集的 TMDb 标题（占位名「第 N 集」会被顶掉） |
-| 分集卡片的剧照 | TMDb 的 `still_path`（默认策略下优先于服务端的图） |
-| 分集卡片的悬停提示 | 该集的 TMDb 简介 |
-| **占位卡片**（库里没有的集） | TMDb 季数据的 `airDate` 优先，Bangumi 章节兜底（见下节） |
+| 分集卡片的标题 | 该季每一集的 TMDB 标题（占位名「第 N 集」会被顶掉） |
+| 分集卡片的剧照 | TMDB 的 `still_path`（默认策略下优先于服务端的图） |
+| 分集卡片的悬停提示 | 该集的 TMDB 简介 |
+| **占位卡片**（库里没有的集） | TMDB 季数据的 `airDate` 优先，Bangumi 章节兜底（见下节） |
 | 页面简介 | 选中某季时优先显示**该季简介**，取不到回落剧集简介 |
 
 ### 未入库剧集占位（`EpisodeSlotBuilder`）
@@ -134,7 +134,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 两条与布局有关的硬约束（都踩过）：
 
 - **两种卡必须严格同高**。横向 `ScrollView` 里 `LazyHStack` 的高度按**已实现的子视图**算，卡高不一时矮的那张会定下整条轨道的高度、高出的部分被直接裁掉（实测：占位卡的日期行被裁成半行）。所以占位卡的日期**画在图里**（左下角 + 底部渐隐），文字块与本地卡同构，标题统一 `lineLimit(2, reservesSpace: true)` 恒占两行。
-- **占位卡的图有兜底**：TMDb 的 `still_path` 优先，没有时用**剧集自己的横版图**（`MediaItem.homeStillImageTarget`，与首页「继续观看」同一条链）。占位本来就没有自己的剧照，用剧的图填格子比留灰底有用（用户口径）。本地分集卡**不走**这条兜底——那里用父级图会像串了集（见 `episodeThumbTarget` 的注释）。
+- **占位卡的图有兜底**：TMDB 的 `still_path` 优先，没有时用**剧集自己的横版图**（`MediaItem.homeStillImageTarget`，与首页「继续观看」同一条链）。占位本来就没有自己的剧照，用剧的图填格子比留灰底有用（用户口径）。本地分集卡**不走**这条兜底——那里用父级图会像串了集（见 `episodeThumbTarget` 的注释）。
 
 三条不能改的约束：
 
@@ -142,9 +142,9 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 2. **编号要锚点**。库内已有集号时，来源必须与它至少有一集同号（`pickSource`）；Jellyfin 的 `IndexNumber` 有时是季内相对号、有时是绝对号，没有交集说明两边不同源——**宁可不显示占位，也不显示错号的假卡片**（错号的占位会让用户按它去找片）。库内为空时直接用来源；库内有条目但一个集号都没有则视为不可信。
 3. **数量要有界**。占位只覆盖 `库内最小集号 … 库内最大集号 + 24`（`forwardWindow`，约一个标准季），另加 `maxPlaceholders = 60` 的安全网。不设下界的话，一部只有第 1000 集的库会把 1…999 全算成空洞、把有用的库尾挤掉；不设上界的话，海贼王那种「库内 500 / 来源 1100」会一次冒出 600 张卡。
 
-「未播出」的判定是**有播出日期且晚于现在**；日期未知算「未入库」——空 airdate 在 Bangumi 上很常见，当成未播出会让十年前的老集标成「未播出」。季号 0（特典）与季号缺失一律不补（TMDb 的 season 0 与 Jellyfin 从文件名派生的 SP 编号不同源）。**这一整块不发任何新请求**：TMDb 季数据本来就在拉，Bangumi 章节本来就在读，且两份缓存都在同一个 SQLite 里，所以离线也能出占位。开关在设置 → TMDb →「剧集占位」（`TMDbPreferences.showPlaceholders`，默认开）。
+「未播出」的判定是**有播出日期且晚于现在**；日期未知算「未入库」——空 airdate 在 Bangumi 上很常见，当成未播出会让十年前的老集标成「未播出」。季号 0（特典）与季号缺失一律不补（TMDB 的 season 0 与 Jellyfin 从文件名派生的 SP 编号不同源）。**这一整块不发任何新请求**：TMDB 季数据本来就在拉，Bangumi 章节本来就在读，且两份缓存都在同一个 SQLite 里，所以离线也能出占位。开关在设置 → TMDB →「剧集占位」（`TMDbPreferences.showPlaceholders`，默认开）。
 
-**图片策略默认「TMDb 优先」**（`TMDbPreferences.replaceExistingImages` 默认 true，用户口径：填了 key 就是想要完整补全）。海报 / 背景 / 分集剧照三处都走 `TMDbImagePolicy`；用户可在设置页关掉。**改这个默认值时务必同时改 `TMDbImagePolicy.init` 的默认**——同一个概念两个默认值会让「生产优先、测试只补缺」，很难查。
+**图片策略默认「TMDB 优先」**（`TMDbPreferences.replaceExistingImages` 默认 true，用户口径：填了 key 就是想要完整补全）。海报 / 背景 / 分集剧照三处都走 `TMDbImagePolicy`；用户可在设置页关掉。**改这个默认值时务必同时改 `TMDbImagePolicy.init` 的默认**——同一个概念两个默认值会让「生产优先、测试只补缺」，很难查。
 
 所以 `AppModel.refreshTMDb` 只处理电影与剧集（详情页只会收到这两种），而**季数据由 `loadSeasonOverlay()` 单独取**——入口是「父剧的 link + 季号」（季没有自己的对应关系）。
 
@@ -161,8 +161,8 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 ### 四条已知取舍（改之前先看这里）
 
-1. **分集剧照两段式**：首次渲染服务端图 → TMDb 到位后替换。要消掉得让季数据先于分集卡片就绪，代价是选集整条晚出现。
-2. **脏 `ProviderIds`（TMDb 上 404）**：每次打开详情页白打一次请求，且因权威对应不会被顶掉而**永不退回搜索**。实测本机库全量 41 个带 Tmdb id 的条目全部有效（0 个 404），故未加退避。修法见 `TMDbEnricher.performFetch` 的 catch 注释。
+1. **分集剧照两段式**：首次渲染服务端图 → TMDB 到位后替换。要消掉得让季数据先于分集卡片就绪，代价是选集整条晚出现。
+2. **脏 `ProviderIds`（TMDB 上 404）**：每次打开详情页白打一次请求，且因权威对应不会被顶掉而**永不退回搜索**。实测本机库全量 41 个带 Tmdb id 的条目全部有效（0 个 404），故未加退避。修法见 `TMDbEnricher.performFetch` 的 catch 注释。
 3. **占位卡与 Bangumi 章节网格信息重复**：同一季「库里缺哪些集」会在选集轨道（占位卡）与 Bangumi 区块（章节格子）各出现一次。刻意保留——两者的用途不同（轨道是「播放 / 找片」，网格是「标记进度」），且网格在未关联 Bangumi 时根本不存在。真要合并，得先决定「用谁的编号为准」。
 4. **Jellyfin 一个季都没有的剧不显示占位**：`seasons` / `selectedSeason` 是 `MediaItem`，一路流进 `BangumiChapterSection`、`DetailExternalLinks`、`BangumiMatcher` 与详情快照；要造「合成季」得把它换成「本地 / 远程」联合类型，波及四处。收益只覆盖「空库条目」这种罕见形态，故不做。
 
@@ -170,4 +170,4 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 ## 后续方向
 
-M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDb 补全**：Phase 1（SQLite 缓存）、Phase 2（点播式补全：客户端 / 匹配器 / 落库 / 叠加层 / 设置页）与 Phase 3（库级批量补全 + 人工匹配面板）均已落地（v0.2.1）。历史变更见 [CHANGELOG](../CHANGELOG.md)。
+M1 媒体库、M2 播放体验、M3 弹幕完整链路、M5 Bangumi 联动与 MoviePilot 找片均已接入；M4 打磨进行中——09-14 全项目 review 的 P1/P2/P3 已全部处置，剩余打磨项（凭据入 Keychain、转码降级、Trickplay 等）排在后续版本。**媒体元数据 TMDB 补全**：Phase 1（SQLite 缓存）、Phase 2（点播式补全：客户端 / 匹配器 / 落库 / 叠加层 / 设置页）与 Phase 3（库级批量补全 + 人工匹配面板）均已落地（v0.2.1）。历史变更见 [CHANGELOG](../CHANGELOG.md)。

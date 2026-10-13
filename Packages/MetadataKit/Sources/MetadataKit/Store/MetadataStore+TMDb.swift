@@ -1,7 +1,7 @@
 import Foundation
 import GRDB
 
-/// 落库的 TMDb 载荷。
+/// 落库的 TMDB 载荷。
 ///
 /// 一个键只可能是这三者之一（`movie/…` → entity、`tv/…` → entity、
 /// `tv/…/season/…` → season），所以用带关联值的枚举而不是「两个可空字段」——
@@ -30,7 +30,7 @@ public enum TMDbEntityPayload: Codable, Equatable, Sendable {
     }
 }
 
-/// 从库里读回来的一份 TMDb 数据。
+/// 从库里读回来的一份 TMDB 数据。
 /// `Sendable`：要从 `MetadataStore`（actor）跨边界交给 `TMDbEnricher`（也是 actor）。
 public struct CachedTMDbPayload: Sendable {
     public var payload: TMDbEntityPayload
@@ -41,13 +41,13 @@ public struct CachedTMDbPayload: Sendable {
     public func isExpired(now: Date = Date()) -> Bool { now >= expiresAt }
 }
 
-// MARK: - TMDb 存取
+// MARK: - TMDB 存取
 
 extension MetadataStore {
 
-    /// 写一份 TMDb 数据。
+    /// 写一份 TMDB 数据。
     ///
-    /// - Parameter lifetime: 缓存期。调用方应已按 TMDb 条款夹在 6 个月内
+    /// - Parameter lifetime: 缓存期。调用方应已按 TMDB 条款夹在 6 个月内
     ///   （见 `TMDbPreferences.maxCacheDays`），这里不重复判断——但也不允许为负。
     public func saveTMDbPayload(
         _ payload: TMDbEntityPayload,
@@ -81,7 +81,7 @@ extension MetadataStore {
         }
     }
 
-    /// 读一份 TMDb 数据。nil = 没缓存过 / 版本不认识 / 载荷与键不匹配（一律当未命中）。
+    /// 读一份 TMDB 数据。nil = 没缓存过 / 版本不认识 / 载荷与键不匹配（一律当未命中）。
     public func tmdbPayload(key: TMDbEntityKey, language: String) throws -> CachedTMDbPayload? {
         try database.read { db in
             guard let row = try Row.fetchOne(
@@ -110,7 +110,7 @@ extension MetadataStore {
 
     // MARK: - 对应关系（link）
 
-    /// 建立/更新「服务端条目 → TMDb 实体」的对应。
+    /// 建立/更新「服务端条目 → TMDB 实体」的对应。
     ///
     /// **不会覆盖权威来源**由调用方判断（见 `link(itemID:tenant:)` 的注释）——
     /// 这里只管写，语义判断收在匹配器里，避免两处各判一遍。
@@ -203,7 +203,7 @@ extension MetadataStore {
         }
     }
 
-    /// 清掉某租户的全部对应关系与孤儿实体（设置页「清除 TMDb 补全数据」）。
+    /// 清掉某租户的全部对应关系与孤儿实体（设置页「清除 TMDB 补全数据」）。
     ///
     /// 顺序有讲究：先删 link 再删实体。反过来的话，`tmdb_entity` 会因为
     /// 还有 link 指着而被 `NOT EXISTS` 保住——用户以为清了，实际数据还在。

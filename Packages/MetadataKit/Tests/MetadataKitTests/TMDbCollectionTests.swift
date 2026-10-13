@@ -4,13 +4,13 @@ import XCTest
 
 @testable import MetadataKit
 
-/// 服务端**合集**（Jellyfin / Emby 的 BoxSet）→ TMDb 合集的定位与补全。
+/// 服务端**合集**（Jellyfin / Emby 的 BoxSet）→ TMDB 合集的定位与补全。
 ///
-/// 现场（2026-10-10 实测本机 Jellyfin 12.1.0 + 真实 TMDb key）：
+/// 现场（2026-10-10 实测本机 Jellyfin 12.1.0 + 真实 TMDB key）：
 /// - 合集自己**没有**可用的 `ProviderIds["Tmdb"]`（手工建的合集是空 Map）；
 /// - 成员电影的 `/movie/{id}` 里有 `belongs_to_collection`，且同一合集的两个成员
 ///   给出**同一个** id：EVA → 210303、中二病 → 1192656；
-/// - 名字却对不上（Jellyfin「新世纪福音战士新剧场版（系列）」vs TMDb「福音战士新剧场版（系列）」），
+/// - 名字却对不上（Jellyfin「新世纪福音战士新剧场版（系列）」vs TMDB「福音战士新剧场版（系列）」），
 ///   所以按名字搜合集是条不可信的路。
 final class TMDbCollectionTests: XCTestCase {
 
@@ -82,7 +82,7 @@ final class TMDbCollectionTests: XCTestCase {
         XCTAssertEqual(link?.confidence ?? 0, 1.0, accuracy: 0.0001)
 
         XCTAssertFalse(requestedPaths.contains { $0.contains("search") },
-                       "有成员线索时不该去搜名字：实测名字与 TMDb 对不上")
+                       "有成员线索时不该去搜名字：实测名字与 TMDB 对不上")
 
         let overlay = await enricher.overlay(for: box, tenant: tenant)
         XCTAssertEqual(overlay?.entityKey, .collection(210303))
@@ -91,7 +91,7 @@ final class TMDbCollectionTests: XCTestCase {
         XCTAssertEqual(overlay?.posterPath, "/eva-poster.jpg")
     }
 
-    /// 第一个成员在 TMDb 上没归集合（`belongs_to_collection` 缺失）时，继续试下一个成员。
+    /// 第一个成员在 TMDB 上没归集合（`belongs_to_collection` 缺失）时，继续试下一个成员。
     func testCollectionFallsThroughToLaterMember() async throws {
         let enricher = makeEnricher { path in
             if path.hasSuffix("/movie/1") { return (200, Self.movieWithoutCollectionJSON) }
@@ -130,7 +130,7 @@ final class TMDbCollectionTests: XCTestCase {
 
     // MARK: - 不猜的边界
 
-    /// 成员都没有 TMDb id（未刮削 / Emby 没配 TMDb）→ **不发任何请求**、不落库。
+    /// 成员都没有 TMDB id（未刮削 / Emby 没配 TMDB）→ **不发任何请求**、不落库。
     func testCollectionWithoutMemberIDsDoesNothing() async throws {
         var calls = 0
         let enricher = makeEnricher { _ in
@@ -147,7 +147,7 @@ final class TMDbCollectionTests: XCTestCase {
         XCTAssertNil(link, "不许猜一个合集落库")
     }
 
-    /// 成员在 TMDb 上确实没有集合归属 → 同样不落库（页面照旧没有 TMDb 数据）。
+    /// 成员在 TMDB 上确实没有集合归属 → 同样不落库（页面照旧没有 TMDB 数据）。
     func testCollectionWithoutTMDbCounterpartIsNotLinked() async throws {
         let enricher = makeEnricher { path in
             if path.contains("/movie/") { return (200, Self.movieWithoutCollectionJSON) }
@@ -157,12 +157,12 @@ final class TMDbCollectionTests: XCTestCase {
         let outcome = await enricher.refreshCollection(
             item: boxSet(), members: [member("m-1", tmdb: "1")], tenant: tenant)
 
-        XCTAssertEqual(outcome, .noMatch, "TMDb 上没有这个合集 = 确定结论")
+        XCTAssertEqual(outcome, .noMatch, "TMDB 上没有这个合集 = 确定结论")
         let link = try await store.tmdbLink(itemID: "box-1", tenant: tenant)
         XCTAssertNil(link)
     }
 
-    /// 剧集成员不参与定位（TMDb 的合集只装电影）。
+    /// 剧集成员不参与定位（TMDB 的合集只装电影）。
     func testSeriesMembersAreNotUsedForLookup() async throws {
         var calls = 0
         let enricher = makeEnricher { _ in
@@ -199,7 +199,7 @@ final class TMDbCollectionTests: XCTestCase {
 
     /// 成员电影详情**全部请求失败**（断网 / 5xx）→ 结局必须是 `.failed`。
     ///
-    /// 这是本次修的一个真缺陷：早先返回 `Bool`，失败与「TMDb 上没有」都是 `false`，
+    /// 这是本次修的一个真缺陷：早先返回 `Bool`，失败与「TMDB 上没有」都是 `false`，
     /// 调用方一律当确定结论记账 —— 症状是**断网一次就让合集封面永久空白**。
     func testLookupFailureIsFailedNotNoMatch() async throws {
         var requestedPaths: [String] = []
@@ -213,7 +213,7 @@ final class TMDbCollectionTests: XCTestCase {
         let outcome = await enricher.refreshCollection(item: boxSet(), members: members,
                                                        tenant: tenant)
 
-        XCTAssertEqual(outcome, .failed, "网络失败不是「TMDb 上没有」")
+        XCTAssertEqual(outcome, .failed, "网络失败不是「TMDB 上没有」")
         XCTAssertTrue(outcome != .noMatch)
         XCTAssertFalse(outcome.isConclusive, "失败必须让调用方知道「还能再试」")
         XCTAssertFalse(requestedPaths.contains { $0.contains("/collection/") },

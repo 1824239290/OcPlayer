@@ -135,19 +135,19 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - TMDb 署名
+// MARK: - TMDB 署名
 
-/// 设置页**最底部**的 TMDb 署名（官方要求的那一句 + 官方字标）。
+/// 设置页**最底部**的 TMDB 署名（官方要求的那一句 + 官方字标）。
 ///
-/// 用户 2026-10-13 口径：「设置最底部加上给你的这张图这个」——给的是 TMDb 官方的
+/// 用户 2026-10-13 口径：「设置最底部加上给你的这张图这个」——给的是 TMDB 官方的
 /// 署名图（字标 + `This product uses the TMDB API but is not endorsed or certified
 /// by TMDB.`）。**为什么不直接放那张图**：那是 Rex 的**截图**，紫色背景是它自己的
 /// 界面底色、被一起烤进了 JPEG；贴到我们这层氛围背景上会是一块突兀的方片。
 /// 所以按它的**内容**重建：官方字标（用仓里既有的矢量资产 `tmdb-logo`，
 /// 与详情页「在 TMDB 打开」同一份）+ 官方要求的**英文原文**。
 ///
-/// 用**英文原文**而不是仓里已有的中文译句（`OpenSourceLicensesView` / TMDb 子页里那句）
-/// 是因为 TMDb 的条款给的是这一句固定表述，署名以原文最稳妥；两处译句保留不动
+/// 用**英文原文**而不是仓里已有的中文译句（`OpenSourceLicensesView` / TMDB 子页里那句）
+/// 是因为 TMDB 的条款给的是这一句固定表述，署名以原文最稳妥；两处译句保留不动
 /// （职责不同：那两处是条款说明，这里是品牌署名）。
 ///
 /// 位置：**卡片之外**、`Form` 的最后一个 Section——署名是「页脚级别的法务信息」，
@@ -157,14 +157,14 @@ struct TMDbAttributionFooter: View {
         Section {
             VStack(spacing: 10) {
                 Image("tmdb-logo")
-                    // **保持品牌配色**（`.original`）：这是 TMDb 的官方字标，
+                    // **保持品牌配色**（`.original`）：这是 TMDB 的官方字标，
                     // 与详情页「在 TMDB 打开」同一条口径——改色等于改品牌标识。
                     .renderingMode(.original)
                     .resizable()
                     .scaledToFit()
                     .frame(width: 96)
                     // 署名是装饰性文案，读屏念一遍商标名没有意义（文字里已经说明
-                    // 用了 TMDb API）；与行图标同一条无障碍口径。
+                    // 用了 TMDB API）；与行图标同一条无障碍口径。
                     .accessibilityHidden(true)
 
                 Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")

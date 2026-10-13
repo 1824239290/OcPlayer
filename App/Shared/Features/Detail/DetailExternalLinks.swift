@@ -27,13 +27,13 @@ enum ExternalMetadataLinks {
     /// 取自官方 256×256 图标逐行采样）。矢量、带透明通道，任意尺寸都清晰。
     /// 单独一份而不是复用模板图的理由见 `DetailExternalLinksView.body` 的渲染注释。
     private static let bangumiLogoSize = CGSize(width: 15, height: 15)
-    /// TMDb 官方字标（`blue_square_1`）：viewBox 190.24×81.52，宽扁两行 TM/DB，
+    /// TMDB 官方字标（`blue_square_1`）：viewBox 190.24×81.52，宽扁两行 TM/DB，
     /// 按原画幅等比。比 Bangumi 高一档是因为它与方形标记只对齐高度会显小 ——
     /// 实测两个官方方形变体里只有这个在图标尺寸仍可辨认，另一个
     /// （`blue_square_2` 的 "THE MOVIE DB" 三行走排）在 12pt 下糊成一团。
     private static let tmdbLogoSize = CGSize(width: 28, height: 12)
 
-    /// TMDb 站点地址。**只在能拼出确定指向时才返回**：
+    /// TMDB 站点地址。**只在能拼出确定指向时才返回**：
     ///
     /// - 电影 → `/movie/{id}`、剧集 → `/tv/{id}`：条目自身的 ProviderIds 就是该粒度的 id。
     /// - 季 / 分集要拼 `/tv/{id}/season/{n}/episode/{m}`，需要的是**剧集级** id，
@@ -59,7 +59,7 @@ enum ExternalMetadataLinks {
         }
     }
 
-    /// TMDb 实体键 → 站点地址。
+    /// TMDB 实体键 → 站点地址。
     static func url(for key: TMDbEntityKey) -> URL? {
         switch key {
         case .movie(let id):
@@ -118,7 +118,7 @@ enum ExternalMetadataLinks {
 
 /// 详情页头部的「去原站看看」图标行：Bangumi / TMDB。
 ///
-/// 自己解析数据面（TMDb 直读条目上的 ProviderIds，Bangumi 读本地关联映射），
+/// 自己解析数据面（TMDB 直读条目上的 ProviderIds，Bangumi 读本地关联映射），
 /// 不往 `DetailView` 再塞一份状态、也不回调——它在头部两处布局里各出现一次，
 /// 谁放它谁不用管数据。
 struct DetailExternalLinksView: View {
@@ -134,7 +134,7 @@ struct DetailExternalLinksView: View {
     @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
 
     @State private var bangumiSubjectID: Int?
-    /// 已建立的 TMDb 对应（手动匹配完图标要立刻跟上）。
+    /// 已建立的 TMDB 对应（手动匹配完图标要立刻跟上）。
     @State private var tmdbLink: TMDbLink?
     @State private var showingMatchSheet = false
 
@@ -172,7 +172,7 @@ struct DetailExternalLinksView: View {
                             openURL(link.url)
                         } label: {
                             // **原色渲染**：两个图标都是品牌彩色图（Bangumi 官方 glyph +
-                            // 官方渐变、TMDb 官方字标），改色等于改品牌标识。顶栏药丸 /
+                            // 官方渐变、TMDB 官方字标），改色等于改品牌标识。顶栏药丸 /
                             // iOS Tab 用的是另一份单色模板图（`bangumi-logo`）——那里
                             // 图标要跟标签文字一起随选中态变亮变暗。
                             Image(link.assetName)
@@ -194,8 +194,8 @@ struct DetailExternalLinksView: View {
                 }
             }
         }
-        // 链接是异步解析出来的（Bangumi 关联 / TMDb 对应在 task 里到齐）：出现与
-        // 增减都走淡入，不做硬弹。Bangumi 徽章排在 TMDb 前面，它后到时 TMDb 徽章
+        // 链接是异步解析出来的（Bangumi 关联 / TMDB 对应在 task 里到齐）：出现与
+        // 增减都走淡入，不做硬弹。Bangumi 徽章排在 TMDB 前面，它后到时 TMDB 徽章
         // 会挪一格——动画让它挪得可接受，硬跳则像 bug。
         .motion(Motion.standard, value: links.map(\.id))
         .task(id: resolveKey) { await resolve() }
@@ -212,7 +212,7 @@ struct DetailExternalLinksView: View {
     }
 
     /// 手动匹配入口。用系统符号而不是品牌图：它不是一个外部站点链接，
-    /// 混在品牌图标里会让人以为点下去是「打开 TMDb 网站」。
+    /// 混在品牌图标里会让人以为点下去是「打开 TMDB 网站」。
     private var matchButton: some View {
         Button {
             showingMatchSheet = true
@@ -224,8 +224,8 @@ struct DetailExternalLinksView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("手动匹配 TMDb 条目")
-        .accessibilityLabel("手动匹配 TMDb 条目")
+        .help("手动匹配 TMDB 条目")
+        .accessibilityLabel("手动匹配 TMDB 条目")
     }
 
     /// 解析 Bangumi 关联。
@@ -245,9 +245,9 @@ struct DetailExternalLinksView: View {
         Task { await resolveTMDbLink() }
     }
 
-    /// 取该条目已建立的 TMDb 对应（**不发网络**）。
+    /// 取该条目已建立的 TMDB 对应（**不发网络**）。
     ///
-    /// 与 Bangumi 那边不同，这里**不受 Bangumi 开关影响**：TMDb 图标与手动匹配入口
+    /// 与 Bangumi 那边不同，这里**不受 Bangumi 开关影响**：TMDB 图标与手动匹配入口
     /// 是独立功能，停用 Bangumi 不该把它们一起藏掉。
     private func resolveTMDbLink() async {
         guard app.tmdb.isReady else {

@@ -4,7 +4,7 @@ import Foundation
 import JellyfinKit
 import MetadataKit
 
-/// TMDb 补全在 App 层的取用口。
+/// TMDB 补全在 App 层的取用口。
 ///
 /// 都挂在 `AppModel` 上而不是塞进 `DetailView`：详情页需要「当前租户」「父剧条目」
 /// 「父剧对应」这几样，它们分别来自会话、网络与缓存——只有 `AppModel` 拿得全。
@@ -22,13 +22,13 @@ extension AppModel {
         TMDbImagePolicy(replacesExisting: tmdb.replaceImages)
     }
 
-    /// 取一个条目已有的 TMDb 叠加数据（**不发网络**）。
+    /// 取一个条目已有的 TMDB 叠加数据（**不发网络**）。
     func tmdbOverlay(for item: MediaItem) async -> TMDbOverlay? {
         guard let tenant = currentTenant else { return nil }
         return await tmdb.overlay(for: item, tenant: tenant)
     }
 
-    /// 确保一个条目的 TMDb 数据可用。
+    /// 确保一个条目的 TMDB 数据可用。
     ///
     /// ## 只处理电影与剧集（这是刻意的，不是漏了）
     ///
@@ -38,7 +38,7 @@ extension AppModel {
     /// - 搜索 → `kinds: [.movie, .series]`；
     /// - 库页 / 相似推荐 → 库里就是剧与电影。
     ///
-    /// 所以**季与集没有自己的详情页**，也就没有地方展示它们的 TMDb 数据。
+    /// 所以**季与集没有自己的详情页**，也就没有地方展示它们的 TMDB 数据。
     /// 曾经这里写过一条 `.season/.episode` 分支转 `refreshEpisodeOrSeason`，
     /// 实测**永远走不到**——那种「看起来接好了、其实不可达」的代码比不写更危险，
     /// 所以连那个方法一起删掉了（它后来也被 `refreshSeason` 取代）。
@@ -51,13 +51,13 @@ extension AppModel {
         return await tmdb.refresh(item: item, tenant: tenant, seriesLink: seriesLink)
     }
 
-    /// 剧集类条目的 TMDb 对应（只有 `.tv` 键才返回）。季/集数据都靠它定位。
+    /// 剧集类条目的 TMDB 对应（只有 `.tv` 键才返回）。季/集数据都靠它定位。
     func tmdbSeriesLink(for item: MediaItem) async -> TMDbLink? {
         guard let link = await tmdbLink(for: item), case .tv = link.entityKey else { return nil }
         return link
     }
 
-    /// 确保**服务端合集**（BoxSet）的 TMDb 合集数据可用。
+    /// 确保**服务端合集**（BoxSet）的 TMDB 合集数据可用。
     ///
     /// - Parameter members: 合集成员。它同时是**定位的输入**（成员的
     ///   `ProviderIds["Tmdb"]` → `/movie/{id}` → `belongs_to_collection`），
@@ -142,7 +142,7 @@ extension AppModel {
         return ok
     }
 
-    /// 解除某条目的 TMDb 对应。
+    /// 解除某条目的 TMDB 对应。
     func tmdbUnbind(itemID: String) async {
         guard let tenant = currentTenant else { return }
         await tmdb.unbind(itemID: itemID, tenant: tenant)

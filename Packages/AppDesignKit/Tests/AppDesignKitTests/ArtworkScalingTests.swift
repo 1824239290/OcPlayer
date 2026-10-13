@@ -153,17 +153,17 @@ final class ArtworkScalingTests: XCTestCase {
         XCTAssertEqual(geometry.greenPixels, 0, "横版海报同样不许留边")
     }
 
-    /// **兜底比例**（`nominalRatio`）：来源本身有固定惯例时（TMDb / bgm.tv 的海报都是
+    /// **兜底比例**（`nominalRatio`）：来源本身有固定惯例时（TMDB / bgm.tv 的海报都是
     /// 2:3），调用点给一个兜底比例，**加载前那一帧**也严丝合缝——不留边、不裁切。
     ///
-    /// 不传这个参数时用的是通用兜底（0.70，Jellyfin 库的多数派），对 2:3 的 TMDb 海报
+    /// 不传这个参数时用的是通用兜底（0.70，Jellyfin 库的多数派），对 2:3 的 TMDB 海报
     /// 会多裁约 5%——那正是加这个参数的起因。
     func testNominalRatioMakesPreloadFrameFitExactly() async throws {
         let pixelSize = CGSize(width: 400, height: 600)          // 2:3
         let pipeline = try makePipeline(pixelSize: pixelSize)
         let url = makeURL()
         // 预热内存缓存（键要与 `MediaArtwork` 内部算的一致才会同步出图）。
-        // 然后**不传 aspectRatio**：模拟「来源没有比例字段」的 TMDb / Bangumi 卡片，
+        // 然后**不传 aspectRatio**：模拟「来源没有比例字段」的 TMDB / Bangumi 卡片，
         // 那一帧就只能靠 `nominalRatio` 排。
         _ = try await pipeline.load(
             url, authHeader: nil,

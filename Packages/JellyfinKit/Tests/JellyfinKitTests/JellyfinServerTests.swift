@@ -199,7 +199,7 @@ final class JellyfinServerTests: XCTestCase {
             XCTAssertEqual(query["sortOrder"], "Descending", "最近添加 = 新在前")
             XCTAssertEqual(query["limit"], "24")
             XCTAssertEqual(query["userId"], "user-9")
-            // 详情页首屏免等的前提：列表条目自带简介/流派/评分/比例/TMDb id
+            // 详情页首屏免等的前提：列表条目自带简介/流派/评分/比例/TMDB id
             //（SDK 枚举缺 CommunityRating/OfficialRating，所以必须是这条字符串）。
             XCTAssertEqual(query["fields"], MediaListFields.items)
             XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Movie") == true)

@@ -11,7 +11,7 @@ import UIKit
 /// 凭据只回显尾 4 位（与 `TMDbCoordinator.apiKeyDisplay` 同一取舍：避免肩窥与截图泄露）。
 struct BackupSummary: Sendable, Equatable {
     var hasTMDb: Bool
-    /// TMDb Key 尾 4 位（形如 `••••abcd`），未配置时为 nil。
+    /// TMDB Key 尾 4 位（形如 `••••abcd`），未配置时为 nil。
     var tmdbKeyTail: String?
     var tmdbLanguage: String?
     var hasPlayback: Bool
@@ -52,7 +52,7 @@ enum ConfigBackupCoordinator {
     /// 当成用户显式选择写下去，等于替用户改了样式。
     ///
     /// - Parameters:
-    ///   - tmdb: TMDb 协调器（提供 Key 与语言策略）。
+    ///   - tmdb: TMDB 协调器（提供 Key 与语言策略）。
     ///   - dandanplayGatewayURL: 用户自定义的弹弹play 网关（**原始值**，
     ///     传 `DandanplaySettingsStore.gatewayURLString`；nil = 从没设过）。
     ///   - defaults: 偏好域（测试注入独立 suite；生产传 `.standard`）。

@@ -50,7 +50,7 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(item: item))
     }
 
-    /// 氛围布局是否生效：条目有背景图（服务端 / TMDb / 合集成员兜底，见 VM 的 `hasBackdrop`）。
+    /// 氛围布局是否生效：条目有背景图（服务端 / TMDB / 合集成员兜底，见 VM 的 `hasBackdrop`）。
     /// 没图时没有氛围层，浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
     private var isAmbientActive: Bool {
         guard app.server != nil else { return false }
@@ -72,9 +72,9 @@ struct DetailView: View {
 
     /// 背景底图。整窗声明与页内氛围层共用一份，别再各拼一次 URL。
     ///
-    /// 走 VM 的 `backdropTarget`（TMDb 优先补缺 + 合集成员兜底），**不是**条目的
+    /// 走 VM 的 `backdropTarget`（TMDB 优先补缺 + 合集成员兜底），**不是**条目的
     /// 原始服务端图：早先这里用 `shown.imageTarget`，而 `isAmbientActive` 只看服务端
-    /// tag，两者恰好一致所以看不出问题；合集/TMDb 补图的条目一进来就会「走了氛围布局
+    /// tag，两者恰好一致所以看不出问题；合集/TMDB 补图的条目一进来就会「走了氛围布局
     /// 却画不出图」——同一份判定必须用同一个来源。
     private var backdropTarget: (url: URL?, authHeader: String?) {
         model.backdropTarget(width: 800)
@@ -182,7 +182,7 @@ struct DetailView: View {
                     BangumiChapterSection(
                         item: model.shown,
                         selectedSeason: selectedSeason,
-                        // 章节列表同时是选集轨道占位的**兜底来源**：没配 TMDb（或 TMDb 编号
+                        // 章节列表同时是选集轨道占位的**兜底来源**：没配 TMDB（或 TMDB 编号
                         // 对不上）时用它补出库里没有的集。让区块递上来而不是 VM 自己再读一次库，
                         // 是因为区块今天已经在读全量章节，且自带启用开关 / 登录态 / 建库就绪三道闸门。
                         onCandidatesLoaded: { model.acceptBangumiCandidates($0) }
@@ -600,7 +600,7 @@ struct DetailView: View {
     @ViewBuilder
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
         // 条件用 `posterTarget` 的结果而不是 `primaryImageTag != nil`：
-        // 服务端没图但 TMDb 有海报时也该显示（TMDb 只补缺，正是这个场景）。
+        // 服务端没图但 TMDB 有海报时也该显示（TMDB 只补缺，正是这个场景）。
         let poster = model.posterTarget(width: 300)
         if poster.url != nil {
             RemoteImage(url: poster.url, authHeader: poster.authHeader, maxPixelSize: 300)
@@ -900,7 +900,7 @@ struct DetailView: View {
         .padding(.top, 26)
         .padding(.bottom, 12)
         .task(id: model.selectedSeasonID) {
-            // 集列表与季的 TMDb 数据缓存粒度不同（见 VM 注释），并行取。
+            // 集列表与季的 TMDB 数据缓存粒度不同（见 VM 注释），并行取。
             async let episodes: Void = model.loadEpisodes()
             async let seasonTMDb: Void = model.loadSeasonOverlay()
             _ = await (episodes, seasonTMDb)
@@ -934,7 +934,7 @@ struct DetailView: View {
             }
         }
         // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
-        // **动画值刻意是本地集数而不是 slot 数**：占位是 TMDb 季数据晚到约一秒才插进来的，
+        // **动画值刻意是本地集数而不是 slot 数**：占位是 TMDB 季数据晚到约一秒才插进来的，
         // 用 slot 数当值会让整条轨道在占位到位时重播一次过渡（可见地闪一下）；用本地集数
         // 则占位是「无动画插入」，观感更稳。空态 → 有占位那次翻转单独用一个值盖住。
         .motion(Motion.standard, value: model.isLoadingEpisodes)
@@ -967,10 +967,10 @@ struct DetailView: View {
                 EpisodeSelectCard(
                     episode: episode,
                     server: app.server,
-                    // 标题走 VM：服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
+                    // 标题走 VM：服务端那种「第 9 集」的占位名会被 TMDB 的真标题顶掉。
                     displayTitle: model.displayEpisodeTitle(episode),
                     displayOverview: model.displayEpisodeOverview(episode),
-                    // 剧照同样按「能用 TMDb 就用」的策略解析（含 still_path）。
+                    // 剧照同样按「能用 TMDB 就用」的策略解析（含 still_path）。
                     thumbTarget: model.episodeThumbTarget(for: episode, width: 400),
                     isSelected: episode.id == model.selectedEpisodeID,
                     onSelect: { model.selectEpisode(episode) },
@@ -982,7 +982,7 @@ struct DetailView: View {
             case .placeholder(let placeholder):
                 EpisodePlaceholderCard(
                     placeholder: placeholder,
-                    // TMDb 剧照优先，没有时用剧集自己的横版图（同首页「继续观看」那条链）。
+                    // TMDB 剧照优先，没有时用剧集自己的横版图（同首页「继续观看」那条链）。
                     thumbTarget: model.placeholderThumbTarget(for: placeholder, width: 400)
                 )
             }
@@ -1126,7 +1126,7 @@ struct DetailView: View {
     private var isCompactWidth: Bool { horizontalSizeClass == .compact }
 
     private func personImageTarget(_ person: MediaItem.Person) -> (url: URL?, authHeader: String?) {
-        // 交给 VM：TMDb 补的演员要走 TMDb CDN（它的 id 在服务端不存在，直接问会 400）。
+        // 交给 VM：TMDB 补的演员要走 TMDB CDN（它的 id 在服务端不存在，直接问会 400）。
         model.castImageTarget(for: person, width: 240)
     }
 

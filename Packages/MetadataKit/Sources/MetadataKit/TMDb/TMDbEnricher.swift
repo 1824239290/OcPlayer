@@ -2,16 +2,16 @@ import CoreModel
 import DiagnosticsKit
 import Foundation
 
-/// TMDb 补全服务：把「客户端 + 匹配器 + 数据库」串成一条可用路径。
+/// TMDB 补全服务：把「客户端 + 匹配器 + 数据库」串成一条可用路径。
 ///
 /// ## 职责
 ///
-/// - `overlay(for:tenant:)`：给定服务端条目，返回可叠加的 TMDb 数据（**只读路径**）。
+/// - `overlay(for:tenant:)`：给定服务端条目，返回可叠加的 TMDB 数据（**只读路径**）。
 /// - `refresh(item:tenant:)`：确保该条目的数据已拉取/未过期（**会发网络**）。
 ///
 /// 两者分开是刻意的：**展示不该隐式发网络**。详情页可以只调 `overlay` 拿到已有数据
 /// 立刻渲染，再在合适时机（`.task`）调 `refresh`。若合成一个方法，「打开详情页」
-/// 与「打 TMDb 请求」就被绑死了，既没法离线复用，也没法让调用方控制时机。
+/// 与「打 TMDB 请求」就被绑死了，既没法离线复用，也没法让调用方控制时机。
 ///
 /// ## 为什么它不碰 `MediaServer`
 ///
@@ -26,7 +26,7 @@ public actor TMDbEnricher {
     let store: MetadataStore
     /// `internal`：同上（扩展文件要用）。
     let preferences: TMDbPreferences
-    private let logger = NetworkLog.logger(category: "TMDb")
+    private let logger = NetworkLog.logger(category: "TMDB")
 
     /// 正在拉取的键（同一实体并发请求只打一次——详情页与剧集页可能同时要它）。
     private var inFlight: [String: Task<Void, Never>] = [:]
@@ -51,9 +51,9 @@ public actor TMDbEnricher {
 
     // MARK: - 只读：取叠加数据
 
-    /// 拿这个条目当前的 TMDb 叠加数据。**不发网络**。
+    /// 拿这个条目当前的 TMDB 叠加数据。**不发网络**。
     ///
-    /// 返回 nil 的三种情况（调用方都该当作「没有 TMDb 数据」正常渲染）：
+    /// 返回 nil 的三种情况（调用方都该当作「没有 TMDB 数据」正常渲染）：
     /// 没建立对应关系、对应上了但数据没拉过、拉过但语言对不上。
     public func overlay(for item: MediaItem, tenant: TenantID) async -> TMDbOverlay? {
         guard await client.isConfigured else { return nil }
@@ -109,28 +109,28 @@ public actor TMDbEnricher {
 
     // MARK: - 合集（BoxSet）
 
-    /// 服务端合集 → TMDb 合集的补全。返回是否**发起了网络并成功落库**。
+    /// 服务端合集 → TMDB 合集的补全。返回是否**发起了网络并成功落库**。
     ///
     /// ## 为什么合集要走单独一条路
     ///
     /// 电影/剧集的对应来自服务端 `ProviderIds["Tmdb"]`（权威）或标题搜索，两条对合集
     /// 都不成立：实测 Jellyfin 手工建的合集 `ProviderIds` 是**空 Map**；按名字搜
-    /// `/search/collection` 又会撞上一堆近似集合（中文名带「（系列）」后缀，而 TMDb 上
+    /// `/search/collection` 又会撞上一堆近似集合（中文名带「（系列）」后缀，而 TMDB 上
     /// 同一部片常有多个集合条目），没有任何东西能证明搜到的就是这一个。
     ///
     /// 真正权威的线索在**成员**身上：电影详情里的 `belongs_to_collection` 直接写着
     /// 「这部片属于哪个合集」。实测本机两个合集都走这条，且同一合集的两个成员给出
     /// **同一个** id（EVA → 210303、中二病 → 1192656），正好绕开了名字对不上的问题
-    /// （Jellyfin 里叫「新世纪福音战士新剧场版（系列）」，TMDb 上叫「福音战士新剧场版（系列）」）。
+    /// （Jellyfin 里叫「新世纪福音战士新剧场版（系列）」，TMDB 上叫「福音战士新剧场版（系列）」）。
     ///
     /// ## 两个刻意的取舍
     ///
-    /// 1. **不做名字搜索兜底**。少了它确实会漏掉「TMDb 知道这个合集、但成员的
+    /// 1. **不做名字搜索兜底**。少了它确实会漏掉「TMDB 知道这个合集、但成员的
     ///    `belongs_to_collection` 缺失」的数据不全场景；但那种场景下名字搜索每次打开
     ///    合集页都要多打 1 次搜索 + 最多 3 次详情（失败不落库 → 下次还会再试），
     ///    而**猜错的代价是整页背景/海报/简介都来自另一个合集**。上层还有一条零成本的
-    ///    兜底：TMDb 没有对应时用第一个成员的背景图（见 `DetailViewModel`），够用。
-    /// 2. **不用合集条目自己的 `ProviderIds["Tmdb"]`**。Jellyfin 的 TMDb 合集 provider
+    ///    兜底：TMDB 没有对应时用第一个成员的背景图（见 `DetailViewModel`），够用。
+    /// 2. **不用合集条目自己的 `ProviderIds["Tmdb"]`**。Jellyfin 的 TMDB 合集 provider
     ///    理论上会写这个 id，但本机这台服务器上它是空的，**没有样本可验证**它写的是
     ///    合集 id 还是别的；拿一个没验证过的语义去请求，错了就是错误的背景图。
     ///
@@ -138,7 +138,7 @@ public actor TMDbEnricher {
     ///   只用于取 `ProviderIds["Tmdb"]`，所以传空数组时本方法**一个请求都不发**。
     ///
     /// - Returns: 与 `refresh` 同一套 `RefreshOutcome`。**调用方必须区分 `.noMatch`
-    ///   与 `.failed`**：前者是「TMDb 上确实没有这个合集」（确定结论，可以不再重试），
+    ///   与 `.failed`**：前者是「TMDB 上确实没有这个合集」（确定结论，可以不再重试），
     ///   后者是网络 / 401 / 429（**可以且应该重试**）。早先这里返回 `Bool`，两种结局
     ///   都是 `false`，调用方一律当确定结论记了账 —— 症状是**断网一次就让合集封面
     ///   永久空白**，只能重启 App。
@@ -166,7 +166,7 @@ public actor TMDbEnricher {
                 ? .fetched : .failed
         }
 
-        // ② 定位 TMDb 合集。三种结局必须分开传出去（见方法的 Returns 说明）。
+        // ② 定位 TMDB 合集。三种结局必须分开传出去（见方法的 Returns 说明）。
         switch await resolveCollection(for: item, members: members, language: language) {
         case .found(let key):
             try? await store.saveTMDbLink(itemID: item.id, entityKey: key,
@@ -180,9 +180,9 @@ public actor TMDbEnricher {
         }
     }
 
-    /// 定位 TMDb 合集的结果。
+    /// 定位 TMDB 合集的结果。
     ///
-    /// **`.noMatch` 与 `.failed` 必须分开**：前者是「TMDb 上确实没有 / 成员没 id」这种
+    /// **`.noMatch` 与 `.failed` 必须分开**：前者是「TMDB 上确实没有 / 成员没 id」这种
     /// 不会自己变好的确定性结论；后者是请求失败，下次还能成功。混成一个 `nil` 会让
     /// 调用方拿「断网」当「没有」，永久放弃重试。
     private enum CollectionResolution {
@@ -191,14 +191,14 @@ public actor TMDbEnricher {
         case failed
     }
 
-    /// 合集 → TMDb 合集键。**不猜**：定位不出来就是没有（见 `CollectionResolution`）。
+    /// 合集 → TMDB 合集键。**不猜**：定位不出来就是没有（见 `CollectionResolution`）。
     private func resolveCollection(
         for item: MediaItem,
         members: [MediaItem],
         language: String
     ) async -> CollectionResolution {
-        // 成员没有 TMDb id（未刮削 / Emby 没配 TMDb 插件）→ 无从下手，**不发任何请求**。
-        // 电影才可能属于 TMDb 合集，剧集成员直接跳过。
+        // 成员没有 TMDB id（未刮削 / Emby 没配 TMDB 插件）→ 无从下手，**不发任何请求**。
+        // 电影才可能属于 TMDB 合集，剧集成员直接跳过。
         let memberIDs = members
             .filter { $0.kind == .movie }
             .compactMap(Self.providerTmdbID)
@@ -209,7 +209,7 @@ public actor TMDbEnricher {
         // 「借一步」查集合归属；合集本身的数据在下面才落库（键也不同）。
         //
         // 上限 3 个成员：同一合集的成员给出的是同一个 id（实测），多试只是为了兜住
-        // 「个别成员在 TMDb 上没归集合」的情况，不值得为更大的合集无界地打请求。
+        // 「个别成员在 TMDB 上没归集合」的情况，不值得为更大的合集无界地打请求。
         var sawResponse = false
         var sawFailure = false
         for id in memberIDs.prefix(Self.collectionMemberLookupLimit) {
@@ -223,7 +223,7 @@ public actor TMDbEnricher {
                 sawFailure = true
             }
         }
-        // 拿到过响应、但都没归集合 → TMDb 上确实没有这个合集。
+        // 拿到过响应、但都没归集合 → TMDB 上确实没有这个合集。
         if sawResponse { return .noMatch }
         // 一个响应都没拿到、全是失败 → 是网络问题，不是「没有」。
         return sawFailure ? .failed : .noMatch
@@ -239,12 +239,12 @@ public actor TMDbEnricher {
         return id
     }
 
-    /// 定位 TMDb 合集时最多试几个成员（见 `resolveCollection`）。
+    /// 定位 TMDB 合集时最多试几个成员（见 `resolveCollection`）。
     static let collectionMemberLookupLimit = 3
 
     // MARK: - 网络：确保数据可用
 
-    /// 服务端给出的**权威** TMDb id（`ProviderIds["Tmdb"]`）。nil = 没有 / 不可用。
+    /// 服务端给出的**权威** TMDB id（`ProviderIds["Tmdb"]`）。nil = 没有 / 不可用。
     ///
     /// **只认电影与剧集**：实测集的 `ProviderIds["Tmdb"]` 是**单集 id**（如 3384539），
     /// 剧集 id 是另一个（153217）。拿单集 id 去当剧集 id 会拉到别的剧或 404。
@@ -259,12 +259,12 @@ public actor TMDbEnricher {
         case .season, .episode:
             return nil
         default:
-            // 合集 / 音乐 / 书 / 文件夹… TMDb 的 movie/tv 端点都不适用，一律不用它的 id。
+            // 合集 / 音乐 / 书 / 文件夹… TMDB 的 movie/tv 端点都不适用，一律不用它的 id。
             return nil
         }
     }
 
-    /// 确保该条目的 TMDb 数据可用（缺失则拉、过期则后台刷）。
+    /// 确保该条目的 TMDB 数据可用（缺失则拉、过期则后台刷）。
     ///
     /// - Returns: 这次有没有**实际拉到数据**（供调用方判断是否值得重新读一次 overlay）。
     ///
@@ -286,7 +286,7 @@ public actor TMDbEnricher {
         /// 发了请求并成功落库。
         case fetched
         /// 匹配不上（没有可信的候选），或已有对应但**确实没有数据**。
-        /// 与 `.failed` 分开：这个不是故障，是「TMDb 上没有 / 认不出来」。
+        /// 与 `.failed` 分开：这个不是故障，是「TMDB 上没有 / 认不出来」。
         case noMatch
         /// 发了请求但失败（网络 / 401 / 429 / 404…）。
         case failed
@@ -409,7 +409,7 @@ public actor TMDbEnricher {
             //
             // ## 404 的现状与为什么不加退避
             //
-            // 404 = 服务端 `ProviderIds["Tmdb"]` 里的 id 在 TMDb 不存在。当前表现是：
+            // 404 = 服务端 `ProviderIds["Tmdb"]` 里的 id 在 TMDB 不存在。当前表现是：
             // 该条目**每次打开详情页白打一次请求**，而且因为权威对应不会被自动匹配
             // 顶掉，它也**永远不会退回标题搜索**（等于永久补全不了）。
             //
@@ -421,13 +421,13 @@ public actor TMDbEnricher {
             // 正确做法是在 `tmdb_link` 上记失败时间，N 天内直接跳过；顺带可以在
             // 权威 id 失效时**退回标题搜索**，让条目仍有机会被补全。
             if error == .notFound {
-                logger.debug("TMDb 实体不存在 key=\(key.storageKey)")
+                logger.debug("TMDB 实体不存在 key=\(key.storageKey)")
             } else {
-                logger.warning("TMDb 拉取失败 key=\(key.storageKey) error=\(error)")
+                logger.warning("TMDB 拉取失败 key=\(key.storageKey) error=\(error)")
             }
         } catch {
             lastFailure = .transport("\(error)")
-            logger.warning("TMDb 拉取失败 key=\(key.storageKey) error=\(error)")
+            logger.warning("TMDB 拉取失败 key=\(key.storageKey) error=\(error)")
         }
         return false
     }
@@ -443,7 +443,7 @@ public actor TMDbEnricher {
         (try? await store.evictExpiredTMDbEntities()) ?? 0
     }
 
-    /// 清某租户的全部补全数据（设置页「清除 TMDb 数据」）。
+    /// 清某租户的全部补全数据（设置页「清除 TMDB 数据」）。
     public func clear(tenant: TenantID) async {
         try? await store.clearTMDbData(tenant: tenant)
     }

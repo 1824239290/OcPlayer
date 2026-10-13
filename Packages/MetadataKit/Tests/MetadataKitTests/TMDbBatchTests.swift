@@ -112,7 +112,7 @@ final class TMDbBatchTests: XCTestCase {
         XCTAssertEqual(result.enriched, 1, "中间那条要成功")
     }
 
-    /// 非电影/剧（合集、音乐…）被跳过但计入 `processed`——TMDb 的 movie/tv 端点不适用。
+    /// 非电影/剧（合集、音乐…）被跳过但计入 `processed`——TMDB 的 movie/tv 端点不适用。
     func testNonVideoKindsAreSkippedButCounted() async throws {
         var requests = 0
         let enricher = makeEnricher { _ in requests += 1; return (200, Self.movieJSON) }

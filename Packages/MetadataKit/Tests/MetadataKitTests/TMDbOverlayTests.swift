@@ -9,7 +9,7 @@ final class TMDbOverlayTests: XCTestCase {
 
     private func entity(
         id: Int = 603, type: TMDbMediaType = .movie,
-        title: String? = "黑客帝国", overview: String? = "TMDb 简介",
+        title: String? = "黑客帝国", overview: String? = "TMDB 简介",
         genres: [String] = ["动作"], rating: Double? = 8.2,
         cast: [CastMember] = [], poster: String? = "/p.jpg", backdrop: String? = "/b.jpg"
     ) -> TMDbEntity {
@@ -30,11 +30,11 @@ final class TMDbOverlayTests: XCTestCase {
 
     // MARK: - 文本策略
 
-    /// `preferTMDbText = true`：TMDb 顶替服务端。
+    /// `preferTMDbText = true`：TMDB 顶替服务端。
     func testPreferTMDbReplacesServerText() {
         let o = overlay()
         XCTAssertEqual(o.displayTitle(serverValue: "服务端标题", preferTMDb: true), "黑客帝国")
-        XCTAssertEqual(o.displayOverview(serverValue: "服务端简介", preferTMDb: true), "TMDb 简介")
+        XCTAssertEqual(o.displayOverview(serverValue: "服务端简介", preferTMDb: true), "TMDB 简介")
     }
 
     /// `preferTMDbText = false`：只补空缺，不顶替。
@@ -42,13 +42,13 @@ final class TMDbOverlayTests: XCTestCase {
         let o = overlay()
         XCTAssertEqual(o.displayTitle(serverValue: "服务端标题", preferTMDb: false), "服务端标题")
         XCTAssertEqual(o.displayOverview(serverValue: "服务端简介", preferTMDb: false), "服务端简介")
-        // 服务端缺 → 用 TMDb
+        // 服务端缺 → 用 TMDB
         XCTAssertEqual(o.displayTitle(serverValue: "", preferTMDb: false), "黑客帝国")
-        XCTAssertEqual(o.displayOverview(serverValue: nil, preferTMDb: false), "TMDb 简介")
-        XCTAssertEqual(o.displayOverview(serverValue: "", preferTMDb: false), "TMDb 简介")
+        XCTAssertEqual(o.displayOverview(serverValue: nil, preferTMDb: false), "TMDB 简介")
+        XCTAssertEqual(o.displayOverview(serverValue: "", preferTMDb: false), "TMDB 简介")
     }
 
-    /// **TMDb 的空串必须当作「没有」**：它用空串表示「这门语言没这个字段」。
+    /// **TMDB 的空串必须当作「没有」**：它用空串表示「这门语言没这个字段」。
     /// 用 `??` 会把空串当有效值，于是把服务端的简介顶成空白。
     func testTMDbEmptyStringFallsBackToServerValue() {
         let o = overlay(entity: entity(title: "", overview: ""))
@@ -67,7 +67,7 @@ final class TMDbOverlayTests: XCTestCase {
         XCTAssertEqual(o.displayRating(serverValue: nil, preferTMDb: false), 8.2)
     }
 
-    /// 演员映射必须带 `kind: "Actor"`——UI 只显示 Actor，传别的会让 TMDb 补的
+    /// 演员映射必须带 `kind: "Actor"`——UI 只显示 Actor，传别的会让 TMDB 补的
     /// 演员一个都不显示（而且不报错）。
     func testCastMappingCarriesActorKind() {
         let o = overlay(entity: entity(cast: [CastMember(id: 1, name: "基努", character: "Neo")]))
@@ -78,12 +78,12 @@ final class TMDbOverlayTests: XCTestCase {
         XCTAssertEqual(mapped[0].id, "tmdb-1", "id 要加前缀，避免与服务端的演员 id 撞")
     }
 
-    /// **TMDb 演员的头像必须能反查到路径**。
+    /// **TMDB 演员的头像必须能反查到路径**。
     ///
-    /// 这是一次真实缺陷的回归：演员头像原先一律由「服务端条目 id」拼 URL，而 TMDb
+    /// 这是一次真实缺陷的回归：演员头像原先一律由「服务端条目 id」拼 URL，而 TMDB
     /// 演员的 id 在服务端根本不存在——实测服务端返回 **400**（日志实证
     /// `/Items/tmdb-1254052/Images/Primary` → 400），每个演员一张破图 + 一次白打的
-    /// 请求（一页最多 20 个）。修法是让叠加层能由 `Person.id` 反查 TMDb 头像路径。
+    /// 请求（一页最多 20 个）。修法是让叠加层能由 `Person.id` 反查 TMDB 头像路径。
     func testCastProfilePathIsResolvableFromPersonID() {
         let o = overlay(entity: entity(cast: [
             CastMember(id: 1254052, name: "内田雄马", character: "百川稻子", profilePath: "/a.jpg"),
@@ -92,15 +92,15 @@ final class TMDbOverlayTests: XCTestCase {
         let people = o.displayCast(serverValue: [], preferTMDb: true)
 
         XCTAssertEqual(o.profilePath(forPersonID: people[0].id), "/a.jpg")
-        XCTAssertNil(o.profilePath(forPersonID: people[1].id), "TMDb 没有头像时返回 nil")
-        // 服务端的演员 id 不该被误认为 TMDb 的
+        XCTAssertNil(o.profilePath(forPersonID: people[1].id), "TMDB 没有头像时返回 nil")
+        // 服务端的演员 id 不该被误认为 TMDB 的
         XCTAssertNil(o.profilePath(forPersonID: "server-actor-id"))
         XCTAssertNil(o.profilePath(forPersonID: ""))
         // 前缀不对但数字对：也不认
         XCTAssertNil(o.profilePath(forPersonID: "1254052"))
     }
 
-    /// 前缀是**两套编号的隔离带**：服务端与 TMDb 的演员 id 可能撞号，
+    /// 前缀是**两套编号的隔离带**：服务端与 TMDB 的演员 id 可能撞号，
     /// 撞了就会「拿服务端 id 问服务端、拿到另一个人的头像」这种静默错图。
     func testCastIDsArePrefixed() {
         let o = overlay(entity: entity(cast: [CastMember(id: 42, name: "某人")]))
@@ -109,10 +109,10 @@ final class TMDbOverlayTests: XCTestCase {
         XCTAssertTrue(people[0].id.hasPrefix(TMDbOverlay.tmdbPersonPrefix))
     }
 
-    /// 服务端自己的演员**不该**被当成 TMDb 演员（`preferTMDb: false` 且服务端有数据时
+    /// 服务端自己的演员**不该**被当成 TMDB 演员（`preferTMDb: false` 且服务端有数据时
     /// 原样返回，id 保持服务端形态）。
     func testServerCastIsLeftAlone() {
-        let o = overlay(entity: entity(cast: [CastMember(id: 1, name: "TMDb 的人")]))
+        let o = overlay(entity: entity(cast: [CastMember(id: 1, name: "TMDB 的人")]))
         let serverPeople = [MediaItem.Person(id: "srv-1", name: "服务端的人",
                                              role: "角色", kind: "Actor")]
         let kept = o.displayCast(serverValue: serverPeople, preferTMDb: false)
@@ -138,7 +138,7 @@ final class TMDbOverlayTests: XCTestCase {
     }
 
     /// **服务端的「第 N 集」是没数据的表现，不是用户的元数据**——无论开关如何都该
-    /// 被 TMDb 的真标题顶掉。用户实测指出图一里 S1E9 就显示成「第 9 集」。
+    /// 被 TMDB 的真标题顶掉。用户实测指出图一里 S1E9 就显示成「第 9 集」。
     func testPlaceholderEpisodeNameIsReplacedEvenWhenTMDbIsNotPreferred() {
         let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 9, name: "妹妹的发明")])
         // preferTMDb = false（只补缺）时，占位名仍应被顶掉
@@ -152,21 +152,21 @@ final class TMDbOverlayTests: XCTestCase {
 
     /// 但**真实的**服务端标题不该被顶掉（`preferTMDb = false` 时）。
     func testRealServerEpisodeTitleIsKeptWhenNotPreferred() {
-        let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "TMDb 的标题")])
+        let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "TMDB 的标题")])
         XCTAssertEqual(o.displayEpisodeTitle(number: 1, serverValue: "服务端的真标题", preferTMDb: false),
                        "服务端的真标题")
-        // 开了 TMDb 优先就该换
+        // 开了 TMDB 优先就该换
         XCTAssertEqual(o.displayEpisodeTitle(number: 1, serverValue: "服务端的真标题", preferTMDb: true),
-                       "TMDb 的标题")
+                       "TMDB 的标题")
     }
 
-    /// 服务端名字为空 → 用 TMDb。
+    /// 服务端名字为空 → 用 TMDB。
     func testEmptyServerEpisodeNameUsesTMDb() {
-        let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "TMDb 标题")])
-        XCTAssertEqual(o.displayEpisodeTitle(number: 1, serverValue: "", preferTMDb: false), "TMDb 标题")
+        let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "TMDB 标题")])
+        XCTAssertEqual(o.displayEpisodeTitle(number: 1, serverValue: "", preferTMDb: false), "TMDB 标题")
     }
 
-    /// TMDb 没有这一集 / 没有标题 → 原样返回服务端值（不能弄丢标题）。
+    /// TMDB 没有这一集 / 没有标题 → 原样返回服务端值（不能弄丢标题）。
     func testMissingTMDbEpisodeFallsBackToServerValue() {
         let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "只有第一集")])
         XCTAssertEqual(o.displayEpisodeTitle(number: 99, serverValue: "第 99 集", preferTMDb: true),
@@ -178,13 +178,13 @@ final class TMDbOverlayTests: XCTestCase {
 
     func testEpisodeOverviewFollowsPolicy() {
         let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 3, name: "X",
-                                                      overview: "TMDb 的分集简介")])
+                                                      overview: "TMDB 的分集简介")])
         XCTAssertEqual(o.displayEpisodeOverview(number: 3, serverValue: "服务端简介", preferTMDb: true),
-                       "TMDb 的分集简介")
+                       "TMDB 的分集简介")
         XCTAssertEqual(o.displayEpisodeOverview(number: 3, serverValue: "服务端简介", preferTMDb: false),
                        "服务端简介")
         XCTAssertEqual(o.displayEpisodeOverview(number: 3, serverValue: nil, preferTMDb: false),
-                       "TMDb 的分集简介")
+                       "TMDB 的分集简介")
         XCTAssertNil(o.displayEpisodeOverview(number: 99, serverValue: nil, preferTMDb: true))
     }
 
@@ -228,7 +228,7 @@ final class TMDbOverlayTests: XCTestCase {
 
     // MARK: - 图片策略
 
-    /// **默认 TMDb 优先**（用户口径：填了 key 就是想要完整补全，能用 TMDb 就用）。
+    /// **默认 TMDB 优先**（用户口径：填了 key 就是想要完整补全，能用 TMDB 就用）。
     ///
     /// 但仍然保留「只补缺」这条路：用户显式关掉开关时必须尊重，
     /// 因为刮削器精修过的海报被顶掉是**单向损失**。
@@ -239,7 +239,7 @@ final class TMDbOverlayTests: XCTestCase {
 
         XCTAssertEqual(DisplayMetadata.posterURL(serverURL: server, overlay: o,
                                                  requestedWidth: 400, policy: policy)?.host,
-                       "image.tmdb.org", "默认 TMDb 优先：服务端有图也用 TMDb")
+                       "image.tmdb.org", "默认 TMDB 优先：服务端有图也用 TMDB")
     }
 
     /// 显式关掉后只补缺：服务端已有图就不动。
@@ -254,7 +254,7 @@ final class TMDbOverlayTests: XCTestCase {
         let tmdb = DisplayMetadata.posterURL(serverURL: nil, overlay: o,
                                             requestedWidth: 400, policy: policy)
         XCTAssertEqual(tmdb?.absoluteString, "https://image.tmdb.org/t/p/w500/p.jpg",
-                       "服务端缺图 → 用 TMDb，且按宽度映射档位（400→w500）")
+                       "服务端缺图 → 用 TMDB，且按宽度映射档位（400→w500）")
     }
 
     func testPosterReplacesWhenPolicyAllows() {
@@ -262,10 +262,10 @@ final class TMDbOverlayTests: XCTestCase {
         let o = overlay()
         let url = DisplayMetadata.posterURL(serverURL: server, overlay: o, requestedWidth: 400,
                                             policy: TMDbImagePolicy(replacesExisting: true))
-        XCTAssertEqual(url?.host, "image.tmdb.org", "允许顶替时应换成 TMDb 图")
+        XCTAssertEqual(url?.host, "image.tmdb.org", "允许顶替时应换成 TMDB 图")
     }
 
-    /// TMDb 没有海报时回落服务端（不能因为「想用 TMDb」而把已有的图弄没）。
+    /// TMDB 没有海报时回落服务端（不能因为「想用 TMDB」而把已有的图弄没）。
     func testFallsBackToServerWhenTMDbHasNoImage() {
         let o = overlay(entity: entity(poster: nil))
         let server = URL(string: "http://server/x.jpg")!
@@ -283,7 +283,7 @@ final class TMDbOverlayTests: XCTestCase {
         XCTAssertEqual(url?.absoluteString, "https://image.tmdb.org/t/p/original/b.jpg")
     }
 
-    /// 识别 TMDb 图：决定要不要带服务端认证头（给 CDN 发 Jellyfin 凭证无意义且多送一处）。
+    /// 识别 TMDB 图：决定要不要带服务端认证头（给 CDN 发 Jellyfin 凭证无意义且多送一处）。
     func testIdentifiesTMDbImages() {
         XCTAssertTrue(DisplayMetadata.isTMDbImage(URL(string: "https://image.tmdb.org/t/p/w500/x.jpg")))
         XCTAssertFalse(DisplayMetadata.isTMDbImage(URL(string: "http://192.168.1.1:8096/Items/x/Images/Primary")))

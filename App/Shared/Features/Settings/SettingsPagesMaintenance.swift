@@ -25,8 +25,8 @@ struct MaintenanceSettingsView: View {
             } footer: {
                 // 不用 `**粗体**`：多个字面量相加得到的是 String，`Text(String)` 不解析
                 // markdown，星号会原样画出来。
-                Text("把 TMDb Key、播放偏好等设置导出成一个文件，可存进 iCloud 云盘或隔空投送（AirDrop）给其他设备。"
-                     + "备份文件里是明文 TMDb Key（不含服务器地址与账号密码），请勿公开分享。")
+                Text("把 TMDB Key、播放偏好等设置导出成一个文件，可存进 iCloud 云盘或隔空投送（AirDrop）给其他设备。"
+                     + "备份文件里是明文 TMDB Key（不含服务器地址与账号密码），请勿公开分享。")
             }
             .settingsCard()
 
@@ -380,7 +380,7 @@ private struct ConfigBackupSection: View {
             if let summary = pendingSummary {
                 Text(confirmationMessage(for: summary))
             } else {
-                Text("将使用该文件覆盖当前的播放偏好与 TMDb Key。")
+                Text("将使用该文件覆盖当前的播放偏好与 TMDB Key。")
             }
         }
 
@@ -454,7 +454,7 @@ private struct ConfigBackupSection: View {
         if summary.hasTMDb {
             let tail = summary.tmdbKeyTail ?? ""
             let lang = summary.tmdbLanguage ?? "zh-CN"
-            items.append("• TMDb Key: \(tail)（语言: \(lang)）")
+            items.append("• TMDB Key: \(tail)（语言: \(lang)）")
         }
         if summary.hasPlayback {
             items.append("• 播放器与字幕偏好")

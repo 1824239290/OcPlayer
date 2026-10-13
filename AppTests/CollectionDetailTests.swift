@@ -7,8 +7,8 @@ import XCTest
 
 /// 合集详情页的展示策略（真 AppModel + 真 SQLite + 替身服务器，**全部离线**）。
 ///
-/// 这一层要守住的是「接线对不对」：TMDb 的合集数据接上了没有、标题该不该被顶替、
-/// 背景图的三个来源谁优先。包内单测（`TMDbCollectionTests`）只证明「能定位到 TMDb 合集」，
+/// 这一层要守住的是「接线对不对」：TMDB 的合集数据接上了没有、标题该不该被顶替、
+/// 背景图的三个来源谁优先。包内单测（`TMDbCollectionTests`）只证明「能定位到 TMDB 合集」，
 /// 证明不了页面会把它用起来。
 @MainActor
 final class CollectionDetailTests: XCTestCase {
@@ -41,8 +41,8 @@ final class CollectionDetailTests: XCTestCase {
             defaults.set("0123456789abcdef0123456789abcdef",
                          forKey: TMDbCredentialStore.defaultsKey)
         }
-        // 注入 `tmdbSession` 才换得掉 TMDb 的网络：不注入时协调器用生产会话，
-        // App 层「TMDb 请求失败」的分支就造不出来（见 `TMDbCoordinator.init` 的注释）。
+        // 注入 `tmdbSession` 才换得掉 TMDB 的网络：不注入时协调器用生产会话，
+        // App 层「TMDB 请求失败」的分支就造不出来（见 `TMDbCoordinator.init` 的注释）。
         let app = AppModel(
             tmdb: TMDbCoordinator(defaults: try XCTUnwrap(defaults),
                                   sessionConfiguration: tmdbSession),
@@ -190,10 +190,10 @@ final class CollectionDetailTests: XCTestCase {
         XCTAssertTrue(app.libraryCoverURLs(for: boxsetsLibrary()).isEmpty)
     }
 
-    // MARK: - 标题：用户给合集起的名字不许被 TMDb 顶掉
+    // MARK: - 标题：用户给合集起的名字不许被 TMDB 顶掉
 
     /// 实测两边的名字并不一样：Jellyfin「新世纪福音战士新剧场版（系列）」
-    /// vs TMDb「福音战士新剧场版（系列）」。合集名是**用户自己的标签**，
+    /// vs TMDB「福音战士新剧场版（系列）」。合集名是**用户自己的标签**，
     /// 被顶掉会让页面标题与合集库/侧栏对不上。
     func testCollectionKeepsServerNameOverTMDbTitle() async throws {
         let (app, stub, _) = try await makeApp(configureKey: true) { store, tenant in
@@ -213,19 +213,19 @@ final class CollectionDetailTests: XCTestCase {
         model.attach(app)
         await model.load()
 
-        XCTAssertNotNil(model.tmdbOverlay, "已落库的 TMDb 合集数据应当被读进来")
+        XCTAssertNotNil(model.tmdbOverlay, "已落库的 TMDB 合集数据应当被读进来")
         XCTAssertEqual(model.displayName, "新世纪福音战士新剧场版（系列）",
                        "合集标题用服务端（用户起的）名字")
-        XCTAssertEqual(model.displayOverview, "再构建作品。", "简介仍由 TMDb 补缺")
+        XCTAssertEqual(model.displayOverview, "再构建作品。", "简介仍由 TMDB 补缺")
     }
 
-    /// 剧集仍按「TMDb 文本优先」——上面那条只管合集，别把既有行为改坏。
+    /// 剧集仍按「TMDB 文本优先」——上面那条只管合集，别把既有行为改坏。
     func testSeriesStillPrefersTMDbTitle() async throws {
         let (app, stub, _) = try await makeApp(configureKey: true) { store, tenant in
             try await store.saveTMDbLink(itemID: "s-1", entityKey: .tv(71785),
                                          source: .providerID, confidence: 1.0, tenant: tenant)
             try await store.saveTMDbPayload(
-                .entity(TMDbEntity(id: 71785, mediaType: .tv, title: "TMDb 标题")),
+                .entity(TMDbEntity(id: 71785, mediaType: .tv, title: "TMDB 标题")),
                 key: .tv(71785), language: "zh-CN", lifetime: 3600)
         }
         let series = MediaItem(id: "s-1", name: "服务端标题", kind: .series)
@@ -236,7 +236,7 @@ final class CollectionDetailTests: XCTestCase {
         await model.load()
 
         XCTAssertNotNil(model.tmdbOverlay)
-        XCTAssertEqual(model.displayName, "TMDb 标题")
+        XCTAssertEqual(model.displayName, "TMDB 标题")
     }
 
     // MARK: - 背景图：三个来源的优先级
@@ -280,7 +280,7 @@ final class CollectionDetailTests: XCTestCase {
         XCTAssertNil(model.backdropTarget(width: 800).url)
     }
 
-    /// 服务端自己有背景图时，**不看** TMDb / 成员兜底（默认策略下服务端优先）。
+    /// 服务端自己有背景图时，**不看** TMDB / 成员兜底（默认策略下服务端优先）。
     func testServerBackdropWins() async throws {
         let (app, _, _) = try await makeApp()
         let item = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
@@ -317,16 +317,16 @@ final class CollectionDetailTests: XCTestCase {
 
         let url = app.collectionPosterURL(for: box, width: 400)
         XCTAssertEqual(url?.absoluteString, "https://image.tmdb.org/t/p/w500/eva-poster.jpg",
-                       "网格卡应拿到 TMDb 合集海报")
+                       "网格卡应拿到 TMDB 合集海报")
     }
 
-    /// 网格解析：列一次成员 → 命中已落库的 TMDb 对应（**零 TMDb 请求**）→ 出图；
+    /// 网格解析：列一次成员 → 命中已落库的 TMDB 对应（**零 TMDB 请求**）→ 出图；
     /// 再调一次直接早退（卡片每次进入可视区都会调它，这是成本闸门）。
     func testResolveCollectionArtworkThenStopsAsking() async throws {
         let (app, stub, _) = try await makeApp(configureKey: true) { store, tenant in
-            // 预置对应 + 数据 → `refreshCollection` 走缓存早退，全程不打 TMDb。
+            // 预置对应 + 数据 → `refreshCollection` 走缓存早退，全程不打 TMDB。
             // **必须预置**：不预置的话定位会真去打 api.themoviedb.org（用例会慢到
-            // 分钟级且依赖网络），而 TMDb 的定位逻辑本身已在 `TMDbCollectionTests`
+            // 分钟级且依赖网络），而 TMDB 的定位逻辑本身已在 `TMDbCollectionTests`
             // 里用 `URLProtocol` 桩逐条覆盖过了。
             try await store.saveTMDbLink(itemID: "box-1", entityKey: .collection(210303),
                                          source: .providerID, confidence: 1.0, tenant: tenant)
@@ -352,14 +352,14 @@ final class CollectionDetailTests: XCTestCase {
         XCTAssertEqual(stub.callCount("itemsPage"), 1, "已解析过就不该再发请求")
     }
 
-    /// 成员列出了、但定位不出 TMDb 合集：这是**确定结论**（TMDb 上没有 / 成员没 id），
+    /// 成员列出了、但定位不出 TMDB 合集：这是**确定结论**（TMDB 上没有 / 成员没 id），
     /// 记账，免得每次滚回来都重新列一遍成员。
     func testResolveCollectionArtworkRecordsDefinitiveNoMatch() async throws {
         let (app, stub, _) = try await makeApp(configureKey: true) { store, tenant in
             try await store.saveTMDbLink(itemID: "box-1", entityKey: .collection(210303),
                                          source: .providerID, confidence: 1.0, tenant: tenant)
         }
-        // 成员没有 `ProviderIds["Tmdb"]`：定位不出来，且**一个 TMDb 请求都不会发**。
+        // 成员没有 `ProviderIds["Tmdb"]`：定位不出来，且**一个 TMDB 请求都不会发**。
         stub.itemsPageResult = .success(MediaItemsPage(
             items: [MediaItem(id: "m-1", name: "未刮削", kind: .movie)],
             startIndex: 0, totalRecordCount: 1))
@@ -389,7 +389,7 @@ final class CollectionDetailTests: XCTestCase {
                        "失败不记账，否则一次断网就让卡片永远空白")
     }
 
-    /// 服务端自己有封面的条目**不许**被 TMDb 顶掉（「只补缺」策略）。
+    /// 服务端自己有封面的条目**不许**被 TMDB 顶掉（「只补缺」策略）。
     func testGridPosterIsNotOverriddenWhenServerHasOne() async throws {
         let (app, _, _) = try await makeApp(configureKey: true)
         app.noteCollectionArtwork(itemID: "box-1", posterPath: "/eva-poster.jpg")
@@ -408,7 +408,7 @@ final class CollectionDetailTests: XCTestCase {
                                              width: 400))
     }
 
-    /// 没配 TMDb key 时网格不做任何事（连成员列表都不拉）。
+    /// 没配 TMDB key 时网格不做任何事（连成员列表都不拉）。
     func testResolveCollectionArtworkIsNoOpWithoutKey() async throws {
         let (app, stub, _) = try await makeApp()
         let box = boxSet()
@@ -485,14 +485,14 @@ final class CollectionDetailTests: XCTestCase {
 
     // MARK: - App 层：「失败」与「确定没有」的分野（补上前一批记录的覆盖缺口）
 
-    /// **TMDb 请求失败时不许记账** —— 这条正是上一批修掉的那个缺陷的回归用例。
+    /// **TMDB 请求失败时不许记账** —— 这条正是上一批修掉的那个缺陷的回归用例。
     ///
     /// 现场：`collectionArtworkAttempted` 是**会话级**缓存，一旦在断网时被写入，
     /// 这个合集在本会话内再也不会重试 → **卡片永久空白，只能重启 App**。
-    /// 此前测不到是因为 `TMDbCoordinator` 的客户端硬编码、换不掉 TMDb 的网络；
+    /// 此前测不到是因为 `TMDbCoordinator` 的客户端硬编码、换不掉 TMDB 的网络；
     /// 现在能注入 `URLSessionConfiguration`，这条分支才第一次真正被测到。
     func testCollectionArtworkIsNotRecordedWhenTMDbRequestFails() async throws {
-        // TMDb 侧全部失败（模拟断网）：成员列表（媒体服务器）正常，TMDb 请求打不通。
+        // TMDB 侧全部失败（模拟断网）：成员列表（媒体服务器）正常，TMDB 请求打不通。
         MockURLProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
         defer { MockURLProtocol.handler = nil }
 
@@ -500,7 +500,7 @@ final class CollectionDetailTests: XCTestCase {
         let (app, stub, _) = try await makeApp(
             configureKey: true, tmdbSession: TestSupport.mockedSessionConfiguration())
         { store, _ in
-            // 预置「模型自己」的 TMDb 对应，让定位不依赖网络也能走到「拉合集详情」那一步。
+            // 预置「模型自己」的 TMDB 对应，让定位不依赖网络也能走到「拉合集详情」那一步。
             // 注意：这里**不**预置合集载荷，于是 `fetchAndStore` 会真去拉 → 失败。
             _ = store
         }
@@ -512,13 +512,13 @@ final class CollectionDetailTests: XCTestCase {
 
         XCTAssertNil(app.collectionPosterURL(for: box, width: 400))
         XCTAssertFalse(app.collectionArtworkAttempted.contains(box.id),
-                       "TMDb 失败绝不能记账：记了就是「断网一次 → 本会话永久空白」")
+                       "TMDB 失败绝不能记账：记了就是「断网一次 → 本会话永久空白」")
     }
 
-    /// 与上一条成对：TMDb **确实没有**这个合集（响应正常、只是没有对应）→ 记账。
+    /// 与上一条成对：TMDB **确实没有**这个合集（响应正常、只是没有对应）→ 记账。
     /// 两条一起把「可重试的失败」与「确定的没有」钉死在 App 层。
     func testCollectionArtworkIsRecordedWhenTMDbSaysNoMatch() async throws {
-        // TMDb 正常响应，但不含 belongs_to_collection（`/movie/{id}` 与 `/collection/{id}`
+        // TMDB 正常响应，但不含 belongs_to_collection（`/movie/{id}` 与 `/collection/{id}`
         // 都走这个分支）。
         MockURLProtocol.handler = { request in
             let body = #"{"id":75629,"title":"福音战士新剧场版：Q","overview":"简介"}"#
@@ -538,7 +538,7 @@ final class CollectionDetailTests: XCTestCase {
         await app.resolveCollectionArtworkIfNeeded(for: box)
 
         XCTAssertTrue(app.collectionArtworkAttempted.contains(box.id),
-                      "TMDb 明确说没有 → 记账，不必每次滚回来都重列成员")
+                      "TMDB 明确说没有 → 记账，不必每次滚回来都重列成员")
     }
 
     /// 断网 → 恢复网络后**还能再试成功**（上一条「不记账」的收益闭环）。
@@ -571,16 +571,16 @@ final class CollectionDetailTests: XCTestCase {
         await app.resolveCollectionArtworkIfNeeded(for: box)
         XCTAssertFalse(app.collectionArtworkAttempted.contains(box.id), "失败不记账")
 
-        // 再试一次：这次 TMDb 通了，应当定位成功并落库。
+        // 再试一次：这次 TMDB 通了，应当定位成功并落库。
         await app.resolveCollectionArtworkIfNeeded(for: box)
 
         XCTAssertTrue(app.collectionArtworkAttempted.contains(box.id),
                       "恢复后重试成功并记账")
     }
 
-    // MARK: - 没配 TMDb 时不许出岔子
+    // MARK: - 没配 TMDB 时不许出岔子
 
-    /// 成员为空（离线首进 / 成员请求失败）+ 没配 TMDb key：整条路静默跳过，不崩不卡。
+    /// 成员为空（离线首进 / 成员请求失败）+ 没配 TMDB key：整条路静默跳过，不崩不卡。
     func testCollectionOverlayIsNoOpWithoutKeyOrMembers() async throws {
         let (app, _, _) = try await makeApp()
         let model = DetailViewModel(item: boxSet())

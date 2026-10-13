@@ -176,7 +176,7 @@ final class SettingsLayoutTests: XCTestCase {
             "绝对值 37pt（= 22 + 15）；这条对着定义写就没有意义了")
     }
 
-    /// hub **最底部**必须有 TMDb 署名（官方字标 + 官方那句英文）。
+    /// hub **最底部**必须有 TMDB 署名（官方字标 + 官方那句英文）。
     ///
     /// 判据是「从整页底部往上扫，能找到一块大幅亮于背景的图 + 多行文字」——
     /// 只在**拉长到 1400pt** 的画布上量（`Form` 装得下全部内容才不滚动，
@@ -205,7 +205,7 @@ final class SettingsLayoutTests: XCTestCase {
         let chroma = try bitmap.maxChromaBelow(fraction: 0.62)
         XCTAssertGreaterThanOrEqual(
             chroma, 40,
-            "页面下方找不到 TMDb 字标的彩色（最大色度 \(chroma)）："
+            "页面下方找不到 TMDB 字标的彩色（最大色度 \(chroma)）："
             + "署名要么没挂上，要么被 `.renderingMode(.template)` 洗成了单色——"
             + "官方字标必须保持品牌配色。")
     }
@@ -213,7 +213,7 @@ final class SettingsLayoutTests: XCTestCase {
     /// **三个品牌行图标都必须是单色**——和 SF Symbol 行图标同色（`.primary`）。
     ///
     /// 用户口径（2026-10-13）：「把 tmdb 元数据补充的那个 logo 改成和 bangumi、
-    /// moviepilot 的一样的颜色」。TMDb 那份资产是**官方彩色渐变字标**（绿→蓝），
+    /// moviepilot 的一样的颜色」。TMDB 那份资产是**官方彩色渐变字标**（绿→蓝），
     /// 它自己在 imageset 里**没有** `template-rendering-intent`，所以只要
     /// `SettingsRowIcon` 漏掉 `.renderingMode(.template)`，这一行的图标就会是
     /// 一行彩色、跟旁边两行不是一回事——正是用户指出的那个不一致。

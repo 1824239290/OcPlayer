@@ -326,7 +326,7 @@ public struct JellyfinServer: MediaServer {
         ))
         // `fields` 用共享字符串常量而非 SDK 枚举：列表**默认不返回**这些字段
         // （实测本机 Jellyfin 12.1.0 不带 fields 时 0/5 有 ProviderIds、0/12 有
-        // 图片比例），而海报卡比例、TMDb 匹配、详情页首屏的简介/评分全靠它们。
+        // 图片比例），而海报卡比例、TMDB 匹配、详情页首屏的简介/评分全靠它们。
         // SDK 的 `ItemFields` 枚举缺 `CommunityRating` / `OfficialRating` 两个
         // case（官方生成缺口），所以统一走 `MediaListFields` 字符串、`fields: nil`
         // 让 SDK 不生成该 key。
