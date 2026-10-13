@@ -35,7 +35,7 @@ struct SubtitleAppearanceSection: View {
     private static let unsetPlaceholder = Color.white
 
     var body: some View {
-        Section("字幕外观") {
+        Section {
             Picker("位置", selection: alignmentBinding) {
                 Text("不设置").tag(0)
                 ForEach(Self.alignmentOptions, id: \.value) { option in
@@ -82,11 +82,6 @@ struct SubtitleAppearanceSection: View {
 
             Toggle("覆盖字幕自带样式", isOn: $overridesEnabled)
                 .onChange(of: overridesEnabled) { _, _ in controller.applySubtitleStyle() }
-            Text(overridesEnabled
-                 ? "已打开：上面改过的项会**替换**字幕自带的排版，包括 ASS 特效字体。"
-                 : "关闭时以上设置只用于填补字幕没指定的部分，片源自带的排版与特效字体原样保留。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
 
             if let engine = controller.engine, !engine.supportsSubtitleStyle {
                 // 说清楚「没生效」的原因，而不是让用户以为设置坏了。
@@ -100,8 +95,16 @@ struct SubtitleAppearanceSection: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        } header: {
+            Text("字幕外观")
+        } footer: {
+            // 「上面改过的项 / 以上设置」说的是整段控件怎么配合，不是某一个控件的注解 → 段脚。
+            // 段脚收的是字面量，`**替换**` 照旧按 Markdown 出粗体（SettingsNote 收 String，会画成星号）。
+            Text(overridesEnabled
+                 ? "已打开：上面改过的项会**替换**字幕自带的排版，包括 ASS 特效字体。"
+                 : "关闭时以上设置只用于填补字幕没指定的部分，片源自带的排版与特效字体原样保留。")
         }
-        .settingsRowBackground()
+        .settingsCard()
         .onAppear { syncBoldFromDefaults() }
     }
 

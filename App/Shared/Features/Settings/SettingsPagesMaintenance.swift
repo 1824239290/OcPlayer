@@ -16,7 +16,7 @@ struct MaintenanceSettingsView: View {
                 ImageCacheSettingsRow()
                 MetadataCacheSettingsRow()
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             Section {
                 ConfigBackupSection()
@@ -28,20 +28,18 @@ struct MaintenanceSettingsView: View {
                 Text("把 TMDb Key、播放偏好等设置导出成一个文件，可存进 iCloud 云盘或隔空投送（AirDrop）给其他设备。"
                      + "备份文件里是明文 TMDb Key（不含服务器地址与账号密码），请勿公开分享。")
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             Section {
                 DiagnosticsSection()
                 Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
-                Text("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
             } header: {
                 Text("日志与诊断")
             } footer: {
                 Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)
@@ -179,11 +177,9 @@ struct DiagnosticsSection: View {
                 DiagnosticsSettings.apply()
             }
 
-        Text("打开后记录 debug 级链路细节（守卫拒绝、中间态）并打开内核 trace"
+        SettingsNote("打开后记录 debug 级链路细节（守卫拒绝、中间态）并打开内核 trace"
             + "（HTTP 逐请求 / 播放读失败 / HDR 调试，**下一次播放生效**）；"
             + "关闭时只记状态迁移与失败。")
-            .font(.caption)
-            .foregroundStyle(.secondary)
 
         Button {
             revealPath.toggle()

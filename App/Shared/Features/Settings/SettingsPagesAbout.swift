@@ -32,7 +32,7 @@ struct AboutSettingsView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)

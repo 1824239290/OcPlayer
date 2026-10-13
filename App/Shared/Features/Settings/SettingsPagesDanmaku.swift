@@ -29,19 +29,15 @@ struct DanmakuSettingsView: View {
                     }
                 }
                 if !danmakuModel.dandanplayIsConfigured {
-                    Text("未配置网关时不请求网络弹幕，播放不受影响。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    SettingsNote("未配置网关时不请求网络弹幕，播放不受影响。")
                 }
                 TextField("anime-skip Client ID（可选）", text: Binding(
                     get: { danmakuModel.animeSkipClientID },
                     set: { danmakuModel.animeSkipClientID = $0 }
                 ))
-                Text("填入后启用 anime-skip 跳过片头源（在 anime-skip.com 注册获取）。TheIntroDB 免密钥自动启用。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("填入后启用 anime-skip 跳过片头源（在 anime-skip.com 注册获取）。TheIntroDB 免密钥自动启用。")
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)

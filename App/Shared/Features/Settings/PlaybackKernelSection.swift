@@ -69,9 +69,7 @@ struct PlaybackKernelSection: View {
                     Text(mode.displayName).tag(mode)
                 }
             }
-            Text("用神经网络对亮度做 2 倍重建（色度保持原生），低清动画与老片在大屏上更锐利。会增加 GPU 与显存占用；后端不支持时自动回落原生亮度采样。改动从下一次播放开始生效。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            SettingsNote("用神经网络对亮度做 2 倍重建（色度保持原生），低清动画与老片在大屏上更锐利。会增加 GPU 与显存占用；后端不支持时自动回落原生亮度采样。改动从下一次播放开始生效。")
 
             // 「开着却没变化」要能自证：内核在不支持的后端上会明确报 inactive。
             //
@@ -100,7 +98,7 @@ struct PlaybackKernelSection: View {
                 )
             }
         }
-        .settingsRowBackground()
+        .settingsCard()
         .onAppear {
             selectedKernelID = PlaybackEngineRegistry.selected?.id
         }
