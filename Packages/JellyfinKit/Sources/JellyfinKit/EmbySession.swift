@@ -19,6 +19,11 @@ final class EmbySession: @unchecked Sendable {
 
     let accessToken: String?
 
+    /// 登录该账号的稳定标识（`ServerProfile.userID`）。只用于**认证头里的 `UserId`**，
+    /// 进而决定图片缓存的身份——见 `ClientIdentity.authorizationHeader(scheme:userId:token:)`。
+    /// nil = 匿名会话（探活 / 登录阶段）。
+    let userID: String?
+
     /// 已登录档案的 id；nil 表示这是**匿名**会话（探活 / 登录阶段）。
     /// 只有已登录会话的 401 才发 `MediaServerAuthentication` —— 登录接口自身的
     /// 401 是密码错误，发通知会把用户从登录页踢回登录页。
@@ -30,6 +35,7 @@ final class EmbySession: @unchecked Sendable {
     init(
         baseURL: URL,
         accessToken: String?,
+        userID: String? = nil,
         profileID: String? = nil,
         sessionConfiguration: URLSessionConfiguration = .default,
         directory: ServerEndpointDirectory? = nil
@@ -37,6 +43,7 @@ final class EmbySession: @unchecked Sendable {
         self.fixedBaseURL = baseURL
         self.directory = directory
         self.accessToken = accessToken
+        self.userID = userID
         self.profileID = profileID
 
         // .default 是进程级共享单例，直接改会影响全 App 的会话；copy 一份再调。
@@ -63,7 +70,7 @@ final class EmbySession: @unchecked Sendable {
 
     /// Emby 用自己的 `Emby` scheme（Jellyfin 是 `MediaBrowser`）。
     var authorizationHeader: String {
-        ClientIdentity.authorizationHeader(scheme: "Emby", token: accessToken)
+        ClientIdentity.authorizationHeader(scheme: "Emby", userId: userID, token: accessToken)
     }
 
     /// `timeout` 是**这条请求**的读写空闲上限，覆盖会话默认值。给「尽力而为、

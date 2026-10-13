@@ -100,7 +100,8 @@ public struct JellyfinServer: MediaServer {
     ) -> JellyfinServer? {
         guard let token = store.token(for: profile) else { return nil }
         let directory = store.endpointDirectory(for: profile, sessionConfiguration: sessionConfiguration)
-        directory.setAuthorizationHeader(ClientIdentity.mediaBrowserAuthorizationHeader(token: token))
+        directory.setAuthorizationHeader(
+            ClientIdentity.mediaBrowserAuthorizationHeader(userId: profile.userID, token: token))
         return JellyfinServer(
             session: JellyfinSession(
                 profile: profile,
@@ -476,7 +477,7 @@ public struct JellyfinServer: MediaServer {
 
     /// 给内核（`open_with_headers`）和图片加载共用的认证头。
     public var authorizationHeader: String {
-        ClientIdentity.mediaBrowserAuthorizationHeader(token: accessToken)
+        ClientIdentity.mediaBrowserAuthorizationHeader(userId: profile.userID, token: accessToken)
     }
 
     // MARK: - 出错统一包装

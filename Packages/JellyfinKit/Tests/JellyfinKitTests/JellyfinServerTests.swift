@@ -541,12 +541,21 @@ final class JellyfinServerTests: XCTestCase {
 
     func testAuthorizationHeaderFormat() {
         let header = makeServer().authorizationHeader
-        let expected = ClientIdentity.mediaBrowserAuthorizationHeader(token: "tok-123")
+        let expected = ClientIdentity.mediaBrowserAuthorizationHeader(userId: "user-9", token: "tok-123")
         XCTAssertEqual(header, expected)
         XCTAssertTrue(header.hasPrefix("MediaBrowser "))
         XCTAssertTrue(header.contains(#"Token="tok-123""#))
         XCTAssertTrue(header.contains("Client=\"OcPlayer\""))
         XCTAssertTrue(header.contains("DeviceId=\"\(ClientIdentity.deviceID)\""))
+        // `UserId` 是**图片缓存身份**的一半（见 `ImageCacheKey.authIdentity`）：
+        // 有它才能做到「同一账号重新登录不换缓存键」。它还必须排在 `Token` **之前**
+        // 且每次构造同序——键序漂移会让缓存键跟着漂移。
+        XCTAssertTrue(header.contains(#"UserId="user-9""#), header)
+        guard let userIdRange = header.range(of: #"UserId=""#),
+              let tokenRange = header.range(of: #"Token=""#) else {
+            return XCTFail("头里应当同时有 UserId 与 Token：\(header)")
+        }
+        XCTAssertLessThan(userIdRange.lowerBound, tokenRange.lowerBound, "UserId 必须排在 Token 之前")
     }
 
     // MARK: - 章节

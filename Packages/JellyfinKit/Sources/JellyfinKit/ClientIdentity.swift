@@ -114,20 +114,42 @@ public enum ClientIdentity {
     /// 字段必须按固定顺序拼接：Dictionary 字面量每次构造的迭代顺序随实例种子抖动
     /// （并发/多次调用会产出键序不同的字符串）。语义等价的头若字节不同，
     /// 上层以其哈希做缓存键时（如 RemoteImage 的凭证指纹）会误判「凭证变了」。
-    public static func mediaBrowserAuthorizationHeader(token: String? = nil) -> String {
-        authorizationHeader(scheme: "MediaBrowser", token: token)
+    public static func mediaBrowserAuthorizationHeader(
+        userId: String? = nil,
+        token: String? = nil
+    ) -> String {
+        authorizationHeader(scheme: "MediaBrowser", userId: userId, token: token)
     }
 
     /// 按产品分叉的认证头。**scheme 是两家唯一的分叉点**：Jellyfin 用
     /// `MediaBrowser`，Emby 用自己的 `Emby`（Emby 客户端一贯的写法）。
     /// 其余字段与拼接顺序完全一致，缓存键语义不受影响。
-    public static func authorizationHeader(scheme: String, token: String? = nil) -> String {
+    ///
+    /// ## 为什么要带 `UserId`
+    ///
+    /// 图片缓存的身份取的是「**哪台服务器 + 哪个账号**」（见 `ImageCacheKey.authIdentity`），
+    /// 而这条头里原本只有 `DeviceId` 与 `Token` 够格当身份——`Token` **不是**账号：
+    /// 服务端每次重新登录都会发一个新 token（同一账号、同一份可见范围）。拿它当身份，
+    /// 等于每登录一次就把整个图片缓存另存一份：实测本机攒出过 **7 份**，512MB 的
+    /// 图片缓存被切成七份、每份都更早被淘汰。`UserId` 才是账号的稳定标识——
+    /// 换账号会变（正确），重新登录不会变。
+    ///
+    /// 服务端**不认识**这个字段，会照旧忽略（`MediaBrowser` 头的解析是按键取值）；
+    /// 它是给缓存键用的，顺带让 `RemoteImage` 的凭证指纹也不再随 token 漂移。
+    public static func authorizationHeader(
+        scheme: String,
+        userId: String? = nil,
+        token: String? = nil
+    ) -> String {
         var fields: [(String, String)] = [
             ("Client", clientName),
             ("Device", deviceName),
             ("DeviceId", deviceID),
             ("Version", version),
         ]
+        if let userId, !userId.isEmpty {
+            fields.append(("UserId", userId))
+        }
         if let token, !token.isEmpty {
             fields.append(("Token", token))
         }

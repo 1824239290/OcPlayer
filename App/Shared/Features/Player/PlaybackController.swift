@@ -486,6 +486,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
     // MARK: - 打开源
 
     /// 手动直连链接（设置页入口）：构造带认证头的播放请求。
+    ///
+    /// 这里**刻意不带 `UserId`**（其余发头的地方都带，见
+    /// `ClientIdentity.authorizationHeader(scheme:userId:token:)`）：直连入口只拿得到
+    /// 一个 token、拿不到服务器档案，也就没有账号可报。它只用于播流、不进图片缓存，
+    /// 所以「缓存身份必须稳定」那条约束在这里不适用。
     static func request(uri: String, jellyfinToken: String?) -> PlaybackRequest {
         let authHeader: String?
         if let token = jellyfinToken, !token.isEmpty {

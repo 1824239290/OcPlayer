@@ -45,12 +45,14 @@ public struct EmbyServer: MediaServer {
     ) -> EmbyServer? {
         guard let token = store.token(for: profile) else { return nil }
         let directory = store.endpointDirectory(for: profile, sessionConfiguration: sessionConfiguration)
-        directory.setAuthorizationHeader(ClientIdentity.authorizationHeader(scheme: "Emby", token: token))
+        directory.setAuthorizationHeader(
+            ClientIdentity.authorizationHeader(scheme: "Emby", userId: profile.userID, token: token))
         return EmbyServer(
             profile: profile,
             session: EmbySession(
                 baseURL: profile.baseURL,
                 accessToken: token,
+                userID: profile.userID,
                 profileID: profile.id,
                 sessionConfiguration: sessionConfiguration,
                 directory: directory

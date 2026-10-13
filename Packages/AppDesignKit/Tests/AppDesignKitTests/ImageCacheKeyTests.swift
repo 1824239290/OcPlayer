@@ -107,6 +107,9 @@ final class ImageCacheKeyTests: XCTestCase {
     }
 
     /// 换 token / 换设备必须换键（那是另一份可见范围 / 另一次安装）。
+    ///
+    /// **这是没有 `UserId` 的退化路径**（老版本的头）。带 `UserId` 的头走下面
+    /// `testAuthIdentityIsStableAcrossRelogin`：那里换 token **不换**键。
     func testAuthIdentityChangesWithTokenAndDevice() {
         func header(device: String, token: String) -> String {
             "MediaBrowser Client=\"OcPlayer\", Device=\"mac\", DeviceId=\"\(device)\", " +
@@ -116,6 +119,79 @@ final class ImageCacheKeyTests: XCTestCase {
         XCTAssertNotEqual(base, ImageCacheKey.authIdentity(header(device: "D1", token: "T2")))
         XCTAssertNotEqual(base, ImageCacheKey.authIdentity(header(device: "D2", token: "T1")))
         XCTAssertEqual(base, ImageCacheKey.authIdentity(header(device: "D1", token: "T1")))
+    }
+
+    // MARK: - 账号身份（UserId 路径）
+
+    private func accountHeader(
+        device: String = "DEV-1",
+        user: String = "USER-1",
+        token: String = "TOK-1",
+        version: String = "0.2.0 (506)"
+    ) -> String {
+        "MediaBrowser Client=\"OcPlayer\", Device=\"mac\", DeviceId=\"\(device)\", " +
+        "Version=\"\(version)\", UserId=\"\(user)\", Token=\"\(token)\""
+    }
+
+    /// **同一账号重新登录（换 token）不该换键**——这正是本轮修掉的那个坑。
+    ///
+    /// 服务端每次重新登录都会发一个新 token，而可见范围一个字都没变。早先拿
+    /// `DeviceId + Token` 当身份，于是**登录一次就把整个图片缓存另存一份**：本机实测
+    /// 攒出过 **7 个**身份，512MB 的图片缓存被切成七份、每份都更早被淘汰；登录页那面
+    /// 海报墙也随每次重新登录整面变空（靠 `ImageCacheIdentityStore` 的身份历史才把旧
+    /// 字节捞回来）。身份要回答的是「哪个账号的可见范围」，那就该用 `UserId`。
+    func testAuthIdentityIsStableAcrossRelogin() {
+        let first = ImageCacheKey.authIdentity(accountHeader(token: "TOK-1"))
+        XCTAssertEqual(first, ImageCacheKey.authIdentity(accountHeader(token: "TOK-2")), "换 token 不该换键")
+        XCTAssertEqual(first, ImageCacheKey.authIdentity(accountHeader(token: "TOK-3")), "换 token 不该换键")
+        XCTAssertEqual(first, ImageCacheKey.authIdentity(accountHeader()), "同样的输入必须同键")
+    }
+
+    /// 换账号 / 换设备仍然必须换键——那确实是另一份可见范围 / 另一次安装。
+    func testAuthIdentityChangesWithAccountAndDevice() {
+        let base = ImageCacheKey.authIdentity(accountHeader(device: "DEV-1", user: "USER-1"))
+        XCTAssertNotEqual(base, ImageCacheKey.authIdentity(accountHeader(device: "DEV-1", user: "USER-2")), "换账号必须换键")
+        XCTAssertNotEqual(base, ImageCacheKey.authIdentity(accountHeader(device: "DEV-2", user: "USER-1")), "换设备必须换键")
+    }
+
+    /// 带 `UserId` 的头里同样含 App 版本——绝不能进键（否则每次发版全体失效）。
+    func testAuthIdentityWithUserIdIgnoresAppVersion() {
+        let v505 = ImageCacheKey.authIdentity(accountHeader(version: "0.2.0 (505)"))
+        let v506 = ImageCacheKey.authIdentity(accountHeader(version: "0.2.0 (506)"))
+        XCTAssertEqual(v505, v506, "换版本不该换键")
+        XCTAssertEqual(v505, ImageCacheKey.authIdentity(accountHeader(version: "9.9.9 (9999)")))
+    }
+
+    /// 钉住 `UserId` 路径的具体值：它是**磁盘键**，跨进程必须稳定。
+    /// 这个常量变了 = 所有用户的图片缓存集体失效一次。
+    func testAuthIdentityWithUserIdIsStableAcrossProcesses() {
+        let value = ImageCacheKey.authIdentity(accountHeader())
+        XCTAssertEqual(value, "1d454d148c20")
+        XCTAssertEqual(value.count, 12)
+    }
+
+    /// **退化路径逐字保留**：改动之前写下的键必须还能被原样算出来，否则登录页靠
+    /// 身份历史去认旧字节时会全部落空（那面墙会静默变成程序化封面）。
+    func testLegacyHeaderKeepsItsExactOldIdentity() {
+        let legacy = "MediaBrowser Client=\"OcPlayer\", Device=\"mac\", DeviceId=\"DEV-1\", " +
+            "Version=\"0.2.0 (506)\", Token=\"TOK-1\""
+        XCTAssertEqual(ImageCacheKey.authIdentity(legacy), "68b26b3c60c8")
+
+        // 同一份头加上 UserId 之后必须落到**另一个**键上：两个命名空间不能撞。
+        XCTAssertNotEqual(ImageCacheKey.authIdentity(legacy), ImageCacheKey.authIdentity(accountHeader()))
+    }
+
+    /// 字段名必须**独立成立**：`XUserId="…"` 里的 `UserId="` 不能被当成真字段，
+    /// 否则两套身份会被读成一套、两组缓存键撞在一起。
+    func testFieldNameMustStandAlone() {
+        let sneaky = "MediaBrowser Client=\"OcPlayer\", DeviceId=\"DEV-1\", " +
+            "XUserId=\"NOT-THE-ACCOUNT\", Token=\"TOK-1\""
+        let clean = "MediaBrowser Client=\"OcPlayer\", DeviceId=\"DEV-1\", Token=\"TOK-1\""
+        XCTAssertEqual(
+            ImageCacheKey.authIdentity(sneaky),
+            ImageCacheKey.authIdentity(clean),
+            "`XUserId` 被误当成 `UserId` 了"
+        )
     }
 
     /// 解析不出来的头（非 Jellyfin/Emby 形态）退回整串哈希，宁可少共享也不误共享。

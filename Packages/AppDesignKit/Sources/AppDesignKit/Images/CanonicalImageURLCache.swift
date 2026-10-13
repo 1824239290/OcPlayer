@@ -69,42 +69,84 @@ enum ImageCacheKey {
         return components.url
     }
 
-    /// 认证身份：**只取与「哪台服务器 + 哪个账号」有关的字段**，绝不含版本。
+    /// 认证身份：**只取与「哪台服务器 + 哪个账号」有关的字段**，绝不含版本、也绝不含凭证。
     ///
     /// 客户端身份头长这样：
     /// ```
     /// MediaBrowser Client="OcPlayer", Device="…", DeviceId="…",
-    ///               Version="0.2.0 (506)", Token="…"
+    ///               Version="0.2.0 (506)", UserId="…", Token="…"
     /// ```
     /// 其中 `Version` 的构建号 = git 提交数（`Scripts/build-macos.sh` 取 `GIT_COUNT`），
     /// **每次提交/发版都会变**。若把整条头拿去哈希，就等于「每次更新 App 全部图片缓存
     /// 失效」——实测 Build 505 与 506 的哈希确实不同。Device/Client 同理与资源身份无关。
     ///
-    /// 所以这里显式挑出 `DeviceId` + `Token`：前者标识安装，后者标识服务器上的账号。
-    /// 换账号 / token 轮换会让缓存失效一次（正确：那是另一份可见范围），
-    /// 而换地址、升级版本**不再**影响。
+    /// ## `UserId` 而不是 `Token`（这是本条最重要的一句）
+    ///
+    /// 身份要回答的是「这是哪个账号的可见范围」，而 `Token` **不是账号**：服务端每次
+    /// 重新登录都会发一个新 token（同一账号、同一份可见范围）。早先拿 `DeviceId + Token`
+    /// 当身份，于是**登录一次就把整个图片缓存另存一份**——本机实测攒出过 **7 个**不同的
+    /// 身份，512MB 的图片缓存被切成七份、每份都更早被淘汰，而登录页那面墙也随每次
+    /// 重新登录整面变空（要靠 `ImageCacheIdentityStore` 的身份历史去把旧字节捞回来）。
+    ///
+    /// 换成 `DeviceId + UserId` 之后：换账号会变（正确——那是另一份可见范围），
+    /// 重新登录 / token 轮换**不再**变，升级版本与换地址依旧不影响。
+    ///
+    /// 老版本的头里没有 `UserId`，所以仍认 `Token`——但那只作为**退化**路径，
+    /// 让改动之前写下的键还能被算出来一次（登录页的身份历史正是靠它去认旧字节）。
     static func authIdentity(_ authHeader: String?) -> String {
         guard let authHeader, !authHeader.isEmpty else { return "none" }
-        var identity = ""
+
+        // 新路径：账号用 UserId（稳定，重新登录不变）。
+        if let account = headerValue("UserId", in: authHeader) {
+            var preimage = ""
+            if let device = headerValue("DeviceId", in: authHeader) {
+                preimage += "DeviceId=\(device);"
+            }
+            return digest(preimage + "UserId=\(account);")
+        }
+
+        // 退化路径：老版本的头没有 UserId。这里**逐字保留**改动前的算法
+        // （`DeviceId` + `Token`，缺哪个算哪个；都没有才退整串哈希），
+        // 于是改动之前写下的每一个键都还能被原样算出来——登录页的身份历史
+        // 正是靠它去认那些已经落在磁盘上的字节。
+        var legacy = ""
         for field in ["DeviceId", "Token"] {
             if let value = headerValue(field, in: authHeader) {
-                identity += "\(field)=\(value);"
+                legacy += "\(field)=\(value);"
             }
         }
         // 一个字段都没解析出来（非 Jellyfin/Emby 头的自定义调用）→ 退回整串哈希，
         // 宁可保守地少共享，也不要让两份不同凭证误共用缓存。
-        guard !identity.isEmpty else {
-            return String(FNV1a.hex(of: authHeader).prefix(12))
-        }
-        return String(FNV1a.hex(of: identity).prefix(12))
+        return digest(legacy.isEmpty ? authHeader : legacy)
+    }
+
+    private static func digest(_ value: String) -> String {
+        String(FNV1a.hex(of: value).prefix(12))
     }
 
     /// 从 `Key="value", Key2="value2"` 形态的头里取一个字段。
+    ///
+    /// 字段名必须**独立成立**（前一个字符不是标识符字符）：只看子串的话，
+    /// `XUserId="…"` 里的 `UserId="` 会被当成真的 `UserId`，把两套身份读成一套、
+    /// 两组缓存键撞在一起。命中不独立就继续往后找。
     private static func headerValue(_ field: String, in header: String) -> String? {
-        guard let range = header.range(of: "\(field)=\"") else { return nil }
-        let rest = header[range.upperBound...]
-        guard let end = rest.firstIndex(of: "\"") else { return nil }
-        return String(rest[rest.startIndex..<end])
+        let needle = "\(field)=\""
+        var searchStart = header.startIndex
+        while let range = header.range(of: needle, range: searchStart..<header.endIndex) {
+            let isStandalone = range.lowerBound == header.startIndex
+                || !isIdentifierCharacter(header[header.index(before: range.lowerBound)])
+            if isStandalone {
+                let rest = header[range.upperBound...]
+                guard let end = rest.firstIndex(of: "\"") else { return nil }
+                return String(rest[rest.startIndex..<end])
+            }
+            searchStart = range.upperBound
+        }
+        return nil
+    }
+
+    private static func isIdentifierCharacter(_ character: Character) -> Bool {
+        character.isLetter || character.isNumber || character == "_"
     }
 }
 

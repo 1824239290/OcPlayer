@@ -28,6 +28,7 @@ final class EmbyServerTests: XCTestCase {
             session: EmbySession(
                 baseURL: profile.baseURL,
                 accessToken: "tok",
+                userID: profile.userID,
                 profileID: profile.id,
                 sessionConfiguration: TestSupport.mockedSessionConfiguration()
             )
@@ -649,6 +650,9 @@ final class EmbyServerTests: XCTestCase {
         let header = makeServer().authorizationHeader
         XCTAssertTrue(header.hasPrefix("Emby Client=\"OcPlayer\""), header)
         XCTAssertTrue(header.contains("Token=\"tok\""))
+        // 账号也必须进头：`ImageCacheKey.authIdentity` 用它当**稳定的缓存身份**
+        // （Token 每次重新登录都会换新，拿它当身份等于每登录一次把图片缓存另存一份）。
+        XCTAssertTrue(header.contains(#"UserId="user-e""#), header)
     }
 
     /// Emby 收到不认识的 `Fields` 名字会拒掉**整个请求**，所以只属于 Jellyfin 的
@@ -697,6 +701,7 @@ final class EmbyRetryBehaviourTests: XCTestCase {
             session: EmbySession(
                 baseURL: profile.baseURL,
                 accessToken: "tok",
+                userID: profile.userID,
                 profileID: profile.id,
                 sessionConfiguration: TestSupport.mockedSessionConfiguration()
             )
