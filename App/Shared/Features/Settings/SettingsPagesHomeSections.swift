@@ -21,7 +21,7 @@ struct HomeSectionsSettingsView: View {
             } footer: {
                 Text("上下按钮调整顺序；开关只控制首页是否显示，关掉的栏目会留在这里，随时可以再打开（位置不变）。")
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)

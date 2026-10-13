@@ -31,34 +31,22 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("服务") {
-                hubRow(.jellyfin, icon: "server.rack", value: jellyfinValue)
-                hubRow(.bangumi, icon: "tv", value: bangumiValue)
-                hubRow(.moviepilot, icon: "arrow.down.circle", value: moviePilotValue)
+            // 分段表在 `SettingsHub`（唯一事实源）：新增子页漏挂 hub 会被
+            // `SettingsHubGroupingTests` 当场拦下，不再靠「记得改这里」。
+            ForEach(SettingsHub.groups) { group in
+                Section(group.title) {
+                    ForEach(group.subpages, id: \.self) { subpage in
+                        hubRow(subpage, value: value(for: subpage))
+                    }
+                }
+                .settingsCard()
             }
-            .settingsRowBackground()
 
-            Section("播放与界面") {
-                hubRow(.playback, icon: "play.circle", value: PlaybackEngineRegistry.selected?.displayName)
-                hubRow(.danmaku, icon: "text.bubble", value: danmakuValue)
-                hubRow(.homeSections, icon: "square.grid.2x2", value: homeSectionsValue)
-            }
-            .settingsRowBackground()
-
-            Section("网络与元数据") {
-                hubRow(.tmdb, icon: "film.stack", value: app.tmdb.isConfigured ? "已启用" : "未启用")
-                hubRow(.network, icon: "network", value: customUserAgent.isEmpty ? "默认 UA" : "自定义 UA")
-            }
-            .settingsRowBackground()
-
-            Section {
-                hubRow(.maintenance, icon: "wrench.and.screwdriver")
-                hubRow(.about, icon: "info.circle", value: AppVersion.displayString)
-            }
-            .settingsRowBackground()
+            TMDbAttributionFooter()
         }
         .scrollContentBackground(.hidden)
         .navigationTitle("设置")
+        .settingsSectionSpacing()
         #if !os(macOS)
         // iPhone / iPad：Tab 根页不挂大标题——「设置」已写在底部 Tab 上，顶部再挂
         // 一遍只白占一截（与首页同一口径，见 HomeView 顶部注释）。子页不受影响：
@@ -67,6 +55,27 @@ struct SettingsView: View {
         .toolbar(removing: .title)
         #endif
         .formStyle(.grouped)
+    }
+
+    /// 每行的值预览。集中在一处、按子页穷举分派——原先值是**逐个行手写**在各自的
+    /// `Section` 里的（`hubRow(.jellyfin, icon: …, value: jellyfinValue)`），于是
+    /// 「哪一页有值预览、预览什么」这件事散在四个 Section 的调用点上。
+    /// 现在它是一处穷举 `switch`：新增子页时**编译器**会要求在这里表态
+    /// （不加 case 就不通过），「忘了给新页配值预览」从静默遗漏变成编译错误。
+    private func value(for subpage: SettingsSubpage) -> String? {
+        switch subpage {
+        case .jellyfin: jellyfinValue
+        case .bangumi: bangumiValue
+        case .moviepilot: moviePilotValue
+        case .tmdb: app.tmdb.isConfigured ? "已启用" : "未启用"
+        case .network: customUserAgent.isEmpty ? "默认 UA" : "自定义 UA"
+        case .playback: PlaybackEngineRegistry.selected?.displayName
+        case .danmaku: danmakuValue
+        case .homeSections: homeSectionsValue
+        // 维护 / 关于：没有「一眼可见的状态」，行尾只有箭头（对照产品同款口径）。
+        case .maintenance: nil
+        case .about: AppVersion.displayString
+        }
     }
 
     // MARK: - 值预览
@@ -110,42 +119,105 @@ struct SettingsView: View {
 
     /// 整行可点 + 右侧 chevron；值预览窄屏下中间截断（iOS 设置的行内值口径）。
     /// 用按钮而不是 NavigationLink：落地走 `pushPresented` 两段式，与路由页一致。
-    private func hubRow(_ subpage: SettingsSubpage, icon: String, value: String? = nil) -> some View {
-        Button {
+    ///
+    /// 行身（图标列 / 单色 glyph / 分隔线对齐 / 行高）全部走 `SettingsNavRow`
+    /// ——原先 `Label` 会让**图标吃系统强调色**（对照产品是白色单色，见
+    /// `SettingsRowIcon`），且图标宽度会带动文字 leading 一起漂。
+    private func hubRow(_ subpage: SettingsSubpage, value: String?) -> some View {
+        SettingsNavRow(
+            title: subpage.title,
+            // 图标来源在 `SettingsSubpage.icon`（符号或品牌图）。
+            icon: subpage.icon,
+            value: value
+        ) {
             app.openSettingsSubpage(subpage)
-        } label: {
-            HStack(spacing: 10) {
-                Label(subpage.title, systemImage: icon)
-                Spacer(minLength: 8)
-                if let value, !value.isEmpty {
-                    Text(value)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
         }
-        .buttonStyle(.plain)
     }
 }
 
-// MARK: - 分组行底（iOS）
+// MARK: - TMDb 署名
+
+/// 设置页**最底部**的 TMDb 署名（官方要求的那一句 + 官方字标）。
+///
+/// 用户 2026-10-13 口径：「设置最底部加上给你的这张图这个」——给的是 TMDb 官方的
+/// 署名图（字标 + `This product uses the TMDB API but is not endorsed or certified
+/// by TMDB.`）。**为什么不直接放那张图**：那是 Rex 的**截图**，紫色背景是它自己的
+/// 界面底色、被一起烤进了 JPEG；贴到我们这层氛围背景上会是一块突兀的方片。
+/// 所以按它的**内容**重建：官方字标（用仓里既有的矢量资产 `tmdb-logo`，
+/// 与详情页「在 TMDB 打开」同一份）+ 官方要求的**英文原文**。
+///
+/// 用**英文原文**而不是仓里已有的中文译句（`OpenSourceLicensesView` / TMDb 子页里那句）
+/// 是因为 TMDb 的条款给的是这一句固定表述，署名以原文最稳妥；两处译句保留不动
+/// （职责不同：那两处是条款说明，这里是品牌署名）。
+///
+/// 位置：**卡片之外**、`Form` 的最后一个 Section——署名是「页脚级别的法务信息」，
+/// 不参与分组，所以不挂 `settingsCard()`，也不该长得像一行可点的设置项。
+struct TMDbAttributionFooter: View {
+    var body: some View {
+        Section {
+            VStack(spacing: 10) {
+                Image("tmdb-logo")
+                    // **保持品牌配色**（`.original`）：这是 TMDb 的官方字标，
+                    // 与详情页「在 TMDB 打开」同一条口径——改色等于改品牌标识。
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 96)
+                    // 署名是装饰性文案，读屏念一遍商标名没有意义（文字里已经说明
+                    // 用了 TMDb API）；与行图标同一条无障碍口径。
+                    .accessibilityHidden(true)
+
+                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            // 卡片之外的页脚：行底透明 + 无分隔线，别长成一行设置项。
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+    }
+}
+
+// MARK: - 分段卡底（iOS）
 
 extension View {
-    /// 清空 Form 分组的行底。**iOS 专用**：iOS 的 grouped Form 行底是系统不透明白
+    /// 设置分段的**卡底**。**iOS 专用**：iOS 的 grouped 行底是系统不透明白
     /// （`scrollContentBackground(.hidden)` 只管列表底，管不到行底），会把垫在页面里的
     /// 氛围图挡死；macOS 的分组玻璃本来就近乎零填充、观感正确，直通不动。
     ///
-    /// 注意必须挂在**每个 Section** 上：挂在 Form 上不生效（行底是逐行的 trait，
-    /// Form 自己是容器，写在它外面的值传不到行）。材质 / glassEffect / 调透明度都试过，
-    /// 都自带一层模式色纱，跟 `.home` 遮罩叠出来还是「死白」，所以直接全透：
-    /// 分组结构交给 Section 标题与分隔线表达，行浮在氛围图上（同 macOS 观感）。
-    func settingsRowBackground() -> some View {
+    /// **必须挂在每个 Section 上**：行底是逐行的 trait，挂在 Form 上不生效
+    /// （Form 自己是容器，写在它外面的值传不到行）。`insetGrouped` 的段背景是
+    /// **连续**的——从标题一直包到页脚——所以逐行铺同一个半透明色，观感就是一张整卡，
+    /// 圆角与首尾行形状都由系统给，不必自绘（自绘就会跟系统那套圆角体系打架）。
+    ///
+    /// **2026-10-13 改口径：从「全透」改成「半透明卡」。** 改前这里是 `Color.clear`，
+    /// 理由是 material / glassEffect 都自带一层模式色纱，跟 `.home` 遮罩叠出来是死白。
+    /// 用户拿对照产品（Rex）的设置页截图给的口径是「我们的显得很粗糙」——逐像素量下来
+    /// 主因就是**根本没有卡**：行直接压在模糊氛围图上，分段只剩空气。Rex 的卡实测是
+    /// 页面 lum 49.7 → 卡内 71.6（Δ≈22，反解 `白 ≈10%`），**纯色叠加**没有那层模式色纱，
+    /// 于是「有卡片边界」与「氛围图仍透出来」两件事同时成立。
+    func settingsCard() -> some View {
         #if os(iOS)
-        listRowBackground(Color.clear)
+        listRowBackground(SettingsCardFill())
+        #else
+        self
+        #endif
+    }
+
+    /// 设置页的**段间距**：上一张卡底 → 段标题 ink 顶的目标 ≈40pt（对照产品实测 40.7pt）。
+    ///
+    /// **`listSectionSpacing` 没有 macOS 可用性**（iOS 17+ / watchOS 10+），
+    /// 所以这里必须分平台——macOS 的分组表单自带段间距，直通即可。
+    /// 子页刻意不施加：它们一个屏装得下的段更多，收紧段距会把「一块一块」的分组
+    /// 读成「一大块」（hub 只有三段，收紧才显得利落）。
+    @ViewBuilder
+    func settingsSectionSpacing() -> some View {
+        #if os(iOS)
+        listSectionSpacing(SettingsMetrics.sectionSpacing)
         #else
         self
         #endif

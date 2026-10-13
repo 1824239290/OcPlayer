@@ -47,9 +47,7 @@ struct PlaybackSettingsView: View {
                 }
                 // 内核用持久流预取（开放式 GET 长连接，背压就是 TCP），档位不再
                 // 对应带宽门槛：深度只影响内存占用与抗卡顿能力，弱网下无需刻意调小。
-                Text("数值越大越能抗带宽抖动，内存占用相应增加。内核用持久流预取，弱网下无需刻意调小。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("数值越大越能抗带宽抖动，内存占用相应增加。内核用持久流预取，弱网下无需刻意调小。")
 
                 Picker("回退缓冲", selection: Binding(
                     get: { backBufferMiB },
@@ -61,13 +59,13 @@ struct PlaybackSettingsView: View {
                 }
                 // 回退预算与码率挂钩：16 MiB 在 71 Mbps 下只够 -1.8 秒，
                 // 高码率片源想随意回退 10 秒需要 ~89 MB。低码率番剧默认档已够数分钟。
-                Text("已播内容保留在缓存里，回退落在这段内不发网络请求。高码率片源建议调大（16 MiB 在 70 Mbps 下只够回退约 2 秒）。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("已播内容保留在缓存里，回退落在这段内不发网络请求。高码率片源建议调大（16 MiB 在 70 Mbps 下只够回退约 2 秒）。")
             }
-            .settingsRowBackground()
+            .settingsCard()
 
-            Section("跳过片头与片尾") {
+            // 这一段的说明解释的是**整段**（三个控件如何配合），所以放 footer——
+            // iOS 设置里段级解释的标准位置：卡片下方的那段留白，不会把卡片内部切开。
+            Section {
                 Toggle("跳过片头", isOn: $skipIntroEnabled)
                 Toggle("跳过片尾", isOn: $skipOutroEnabled)
                 Picker("片尾保留", selection: Binding(
@@ -79,13 +77,14 @@ struct PlaybackSettingsView: View {
                     }
                 }
                 .disabled(!skipOutroEnabled)
+            } header: {
+                Text("跳过片头与片尾")
+            } footer: {
                 Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 3 秒。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
             }
-            .settingsRowBackground()
+            .settingsCard()
 
-            Section("字幕") {
+            Section {
                 Picker("默认字幕语言", selection: Binding(
                     get: { subtitleLanguage },
                     set: { storedSubtitleLanguage = $0.rawValue }
@@ -94,11 +93,11 @@ struct PlaybackSettingsView: View {
                         Text(Self.label(for: preference)).tag(preference)
                     }
                 }
-                Text("打开新片源时按这里的偏好挑字幕轨：有中文字幕就自动切过去（用不到第一条外语字幕），没有中文则保持片源自带的默认选择。在播放器里自己选过之后，本片不再自动改动。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("打开新片源时按这里的偏好挑字幕轨：有中文字幕就自动切过去（用不到第一条外语字幕），没有中文则保持片源自带的默认选择。在播放器里自己选过之后，本片不再自动改动。")
+            } header: {
+                Text("字幕")
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             SubtitleAppearanceSection()
 

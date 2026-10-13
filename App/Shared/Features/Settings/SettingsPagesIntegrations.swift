@@ -31,7 +31,7 @@ struct JellyfinSettingsView: View {
                     serverAddressNote(profile)
                 }
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             if !app.store.profiles.isEmpty {
                 Section("启动") {
@@ -42,11 +42,9 @@ struct JellyfinSettingsView: View {
                                 .tag(String?.some(profile.id))
                         }
                     }
-                    Text("打开 App 时优先连接这台。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    SettingsNote("打开 App 时优先连接这台。")
                 }
-                .settingsRowBackground()
+                .settingsCard()
             }
 
             Section {
@@ -72,7 +70,7 @@ struct JellyfinSettingsView: View {
                     Label("退出 Jellyfin", systemImage: "rectangle.portrait.and.arrow.right")
                 }
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)
@@ -122,13 +120,9 @@ struct JellyfinSettingsView: View {
     private func serverAddressNote(_ profile: ServerProfile) -> some View {
         let active = (app.serverEndpointURL ?? profile.baseURL).absoluteString
         if let pinned = profile.pinnedURL {
-            Text("已固定使用 \(pinned.absoluteString)，不会自动切换。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            SettingsNote("已固定使用 \(pinned.absoluteString)，不会自动切换。")
         } else {
-            Text("共 \(profile.allAddresses.count) 个地址：自动选择最快的（现在用的是 \(active)）；可在「管理服务器」里添加、删除或固定地址。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            SettingsNote("共 \(profile.allAddresses.count) 个地址：自动选择最快的（现在用的是 \(active)）；可在「管理服务器」里添加、删除或固定地址。")
         }
     }
 }
@@ -159,17 +153,14 @@ struct BangumiSettingsView: View {
                             Label("退出 Bangumi", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     } else {
-                        Text("登录入口在顶栏的 Bangumi 分区。")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                        // 未登录时它就是「账号」行的注解（登录入口在哪儿），不是整段的说明。
+                        SettingsNote("登录入口在顶栏的 Bangumi 分区。")
                     }
                 } else {
-                    Text("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    SettingsNote("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
                 }
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)
@@ -223,11 +214,9 @@ struct MoviePilotSettingsView: View {
                     Toggle("记住密码（令牌过期后免重输）", isOn: Binding(
                         get: { moviepilot.rememberPassword },
                         set: { moviepilot.rememberPassword = $0 }))
-                    Text("MoviePilot 的登录令牌 8 天过期且无法刷新。默认不保存密码："
+                    SettingsNote("MoviePilot 的登录令牌 8 天过期且无法刷新。默认不保存密码："
                         + "到期后需要重新输入一次。打开此项会把密码存到本机凭据文件"
                         + "（已排除 iCloud / Time Machine 备份）。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
                     if moviepilot.isAuthenticated {
                         Button(role: .destructive) {
                             confirmSignOut = true
@@ -236,12 +225,10 @@ struct MoviePilotSettingsView: View {
                         }
                     }
                 } else {
-                    Text("关闭后顶栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    SettingsNote("关闭后顶栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
                 }
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)

@@ -1,3 +1,4 @@
+import AppDesignKit
 import JellyfinKit
 import SwiftUI
 
@@ -20,11 +21,9 @@ struct NetworkSettingsView: View {
                     #if os(macOS)
                     .textFieldStyle(.roundedBorder)
                     #endif
-                Text("部分服务器开了播放器白名单，会把非白名单客户端的请求拒之门外；填入白名单内的播放器 UA（如 SenPlayer 的）即可通过。对所有服务器生效，浏览与拉流即时生效、无需重连；控制字符会被剔除。")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                SettingsNote("部分服务器开了播放器白名单，会把非白名单客户端的请求拒之门外；填入白名单内的播放器 UA（如 SenPlayer 的）即可通过。对所有服务器生效，浏览与拉流即时生效、无需重连；控制字符会被剔除。")
             }
-            .settingsRowBackground()
+            .settingsCard()
         }
         .scrollContentBackground(.hidden)
         .formStyle(.grouped)

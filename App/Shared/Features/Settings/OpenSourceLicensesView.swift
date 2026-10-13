@@ -398,7 +398,7 @@ struct OpenSourceLicensesView: View {
                 Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 Erika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
                     .foregroundStyle(.secondary)
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             ForEach(OpenSourceLicenseCatalog.groups) { group in
                 Section(group.title) {
@@ -410,12 +410,12 @@ struct OpenSourceLicensesView: View {
                         }
                     }
                 }
-                .settingsRowBackground()
+                .settingsCard()
             }
         }
-        // 行底 / 列表底都要清：iOS 的 grouped 行底是系统不透明白，会把氛围图挡死
+        // 行底 / 列表底都要处理：iOS 的 grouped 行底是系统不透明白，会把氛围图挡死
         // （`scrollContentBackground(.hidden)` 只管列表底，管不到行底——见
-        // `settingsRowBackground()` 的注释）。
+        // `settingsCard()` 的注释）。
         .scrollContentBackground(.hidden)
         // 本页是**呈现式叶子页**，不在 `appRouteView` 上，氛围底要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
@@ -466,13 +466,13 @@ private struct OpenSourceLicenseDetailView: View {
                     Label("许可证说明", systemImage: "doc.text")
                 }
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             Section("用途") {
                 Text(component.purpose)
                     .textSelection(.enabled)
             }
-            .settingsRowBackground()
+            .settingsCard()
 
             if let bundledText {
                 Section("随包许可证文本") {
@@ -480,7 +480,7 @@ private struct OpenSourceLicenseDetailView: View {
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                 }
-                .settingsRowBackground()
+                .settingsCard()
             }
         }
         .scrollContentBackground(.hidden)
