@@ -87,21 +87,21 @@ final class DetailViewModel {
 
     var shown: MediaItem { detail ?? item }
 
-    /// 当前选中的季。视图与 TMDb 取数都用它（原先只在视图里算，两处需要同一份判断）。
+    /// 当前选中的季。视图与 TMDB 取数都用它（原先只在视图里算，两处需要同一份判断）。
     var selectedSeason: MediaItem? {
         seasons.first { $0.id == selectedSeasonID }
     }
 
-    // MARK: - TMDb 补全
+    // MARK: - TMDB 补全
 
-    /// 当前展示的 TMDb 叠加数据。nil = 没有（未配置 / 没匹配上 / 还没拉到）。
+    /// 当前展示的 TMDB 叠加数据。nil = 没有（未配置 / 没匹配上 / 还没拉到）。
     ///
-    /// 是**独立存储**而不是把 TMDb 字段写进 `detail`：服务端数据是「当前事实」，
-    /// TMDb 是可选增强，混在一起后「关掉 TMDb」就得把改过的字段改回去——而那时
+    /// 是**独立存储**而不是把 TMDB 字段写进 `detail`：服务端数据是「当前事实」，
+    /// TMDB 是可选增强，混在一起后「关掉 TMDB」就得把改过的字段改回去——而那时
     /// 已经不知道原值了（见 `TMDbOverlay` 的类型注释）。
     private(set) var tmdbOverlay: TMDbOverlay?
 
-    /// 当前**选中那一季**的 TMDb 叠加数据（含该季每一集的标题/简介）。
+    /// 当前**选中那一季**的 TMDB 叠加数据（含该季每一集的标题/简介）。
     ///
     /// 与 `tmdbOverlay`（剧集级）分开：两者来源不同（剧集级靠剧的对应、季靠
     /// `tv/{剧id}/season/{季号}`），生命周期也不同——切季就要换，而剧集级不动。
@@ -124,9 +124,9 @@ final class DetailViewModel {
     var displayName: String {
         guard let tmdbOverlay else { return shown.name }
         // 合集的**名字是用户自己的标签**（他在 Jellyfin 里建合集时起的），不是作品的
-        // 正式标题，所以不给 TMDb 顶替、只在服务端名为空时用 TMDb 补上。
+        // 正式标题，所以不给 TMDB 顶替、只在服务端名为空时用 TMDB 补上。
         // 实测两者会不一样：Jellyfin「新世纪福音战士新剧场版（系列）」
-        // vs TMDb「福音战士新剧场版（系列）」，顶替会让页面标题与侧栏/合集库对不上。
+        // vs TMDB「福音战士新剧场版（系列）」，顶替会让页面标题与侧栏/合集库对不上。
         let preferTMDb = shown.kind == .boxSet ? false : (app?.tmdb.preferText ?? true)
         return tmdbOverlay.displayTitle(serverValue: shown.name, preferTMDb: preferTMDb)
     }
@@ -134,8 +134,8 @@ final class DetailViewModel {
     /// 页面简介。
     ///
     /// **选中某季时优先显示该季简介**（取不到再回落剧集简介）。用户实测指出：
-    /// 切季之后简介一动不动，而 TMDb 的季简介就在手上。回落是必须的——
-    /// 不少季在 TMDb 上没有简介，若直接替换会让整段文字凭空消失。
+    /// 切季之后简介一动不动，而 TMDB 的季简介就在手上。回落是必须的——
+    /// 不少季在 TMDB 上没有简介，若直接替换会让整段文字凭空消失。
     var displayOverview: String? {
         let preferTMDb = app?.tmdb.preferText ?? true
         if let seasonOverview = seasonOverviewText(preferTMDb: preferTMDb) {
@@ -145,7 +145,7 @@ final class DetailViewModel {
         return tmdbOverlay.displayOverview(serverValue: shown.overview, preferTMDb: preferTMDb)
     }
 
-    /// 选中季的简介（TMDb 优先 / 服务端补缺）。nil = 该季没有任何简介可用。
+    /// 选中季的简介（TMDB 优先 / 服务端补缺）。nil = 该季没有任何简介可用。
     private func seasonOverviewText(preferTMDb: Bool) -> String? {
         guard let season = selectedSeason else { return nil }
         let server = season.overview
@@ -156,9 +156,9 @@ final class DetailViewModel {
         return server
     }
 
-    // MARK: - 分集展示值（TMDb 优先）
+    // MARK: - 分集展示值（TMDB 优先）
 
-    /// 分集标题。服务端那种「第 9 集」的占位名会被 TMDb 的真标题顶掉。
+    /// 分集标题。服务端那种「第 9 集」的占位名会被 TMDB 的真标题顶掉。
     func displayEpisodeTitle(_ episode: MediaItem) -> String {
         guard let overlay = tmdbSeasonOverlay, let number = episode.episodeNumber else {
             return episode.name
@@ -194,7 +194,7 @@ final class DetailViewModel {
                                        preferTMDb: app?.tmdb.preferText ?? true)
     }
 
-    /// 海报取图目标：服务端缺图（或用户允许顶替）时回落到 TMDb。
+    /// 海报取图目标：服务端缺图（或用户允许顶替）时回落到 TMDB。
     ///
     /// 走 `MediaItem.imageTarget`（App 层既有的取图链）而不是自己拼 URL：
     /// 那条链已经处理了「哪张图、带不带 tag」这些 Jellyfin 侧的细节。
@@ -203,15 +203,15 @@ final class DetailViewModel {
         let serverTarget = shown.imageTarget(app?.server, kind: .primary, width: width)
         let url = DisplayMetadata.posterURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
                                            requestedWidth: width, policy: policy)
-        // TMDb 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
+        // TMDB 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
         return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
     }
 
     /// 演员头像取图目标。
     ///
-    /// TMDb 补的演员**不能**用它的 `Person.id` 去问服务端要图：那个 id 在服务端不存在，
+    /// TMDB 补的演员**不能**用它的 `Person.id` 去问服务端要图：那个 id 在服务端不存在，
     /// 实测返回 400，于是每个演员一张破图 + 一次白打的请求（一页最多 20 个）。
-    /// 这里优先走 TMDb CDN（免鉴权），取不到才回落到服务端的演员图。
+    /// 这里优先走 TMDB CDN（免鉴权），取不到才回落到服务端的演员图。
     func castImageTarget(for person: MediaItem.Person, width: Int) -> (url: URL?, authHeader: String?) {
         if let path = tmdbOverlay?.profilePath(forPersonID: person.id),
            let url = TMDbImageSize.url(path: path, requestedWidth: width) {
@@ -225,10 +225,10 @@ final class DetailViewModel {
         return (url, server.authorizationHeader)
     }
 
-    /// 分集剧照取图目标：**能用 TMDb 的 `still_path` 就用**。
+    /// 分集剧照取图目标：**能用 TMDB 的 `still_path` 就用**。
     ///
-    /// 服务端没有剧照时（新入库、刮削器没跑到）TMDb 能补上；而按当前默认策略
-    /// （TMDb 优先）即便服务端有也以 TMDb 为准。回落链与服务端那条一致：
+    /// 服务端没有剧照时（新入库、刮削器没跑到）TMDB 能补上；而按当前默认策略
+    /// （TMDB 优先）即便服务端有也以 TMDB 为准。回落链与服务端那条一致：
     /// 剧照 → 主图 → 占位（不用剧集海报，那会让人以为配错了集）。
     func episodeThumbTarget(for episode: MediaItem, width: Int) -> (url: URL?, authHeader: String?) {
         let serverTarget = episode.episodeThumbTarget(app?.server, width: width)
@@ -238,7 +238,7 @@ final class DetailViewModel {
               let path = tmdbSeasonOverlay?.episodeStillPath(number: number),
               let url = TMDbImageSize.url(path: path, requestedWidth: width)
         else { return serverTarget }
-        // TMDb 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
+        // TMDB 的图**免鉴权**：给它带服务端凭证既无意义、也把凭证多送一处。
         return (url, nil)
     }
 
@@ -251,7 +251,7 @@ final class DetailViewModel {
         if let url {
             return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
         }
-        // 合集专用兜底：服务端与 TMDb 都没有背景图时，用**第一个成员的背景图**。
+        // 合集专用兜底：服务端与 TMDB 都没有背景图时，用**第一个成员的背景图**。
         // 合集本身在服务端就是没有图的容器（实测 `ImageTags: {}`），而它的成员是正常
         // 电影、海报背景一应俱全 —— jellyfin-web 对合集卡也是这么做的（拿子项的图顶上）。
         // 只在合集上生效：电影/剧集缺背景图时不该擅自拿别人的图。
@@ -269,22 +269,22 @@ final class DetailViewModel {
 
     /// 这个页面有没有可用的背景图（决定详情页走「氛围布局」还是「老横幅布局」）。
     ///
-    /// 三个来源，任一成立即可：服务端背景图 tag、TMDb 叠加层的背景图、合集的成员兜底。
+    /// 三个来源，任一成立即可：服务端背景图 tag、TMDB 叠加层的背景图、合集的成员兜底。
     /// **必须与 `backdropTarget` 判定一致**：早先视图只看 `shown.backdropImageTag`
-    /// （服务端那个），于是「只有 TMDb 有背景图」的条目会走氛围布局却画不出图。
+    /// （服务端那个），于是「只有 TMDB 有背景图」的条目会走氛围布局却画不出图。
     var hasBackdrop: Bool {
         if shown.backdropImageTag != nil { return true }
         if let path = tmdbOverlay?.backdropPath, !path.isEmpty { return true }
         return collectionBackdropFallback(width: 800).url != nil
     }
 
-    /// 占位卡的取图目标：TMDb 的 `still_path` 优先，没有时用**剧集自己的横版图**。
+    /// 占位卡的取图目标：TMDB 的 `still_path` 优先，没有时用**剧集自己的横版图**。
     ///
     /// 兜底刻意走 `homeStillImageTarget`（首页「继续观看」那条链：剧的 Thumb → Backdrop →
     /// Primary），而不是 `episodeThumbTarget` 那条「剧照 → 主图 → 占位」：后者对**真实分集**
     /// 是刻意的（拿父级图会像串了集），但占位卡本来就没有自己的图，用剧的横版图把格子填上
     /// 比一块灰底有用得多——这也是用户口径（「用他们自己的图片填坑，例如继续观看这里的图片」）。
-    /// TMDb 的图免鉴权，所以 TMDb 分支不带服务端凭证；兜底分支要走服务端，凭证由它自己带。
+    /// TMDB 的图免鉴权，所以 TMDB 分支不带服务端凭证；兜底分支要走服务端，凭证由它自己带。
     func placeholderThumbTarget(for placeholder: EpisodePlaceholder, width: Int)
         -> (url: URL?, authHeader: String?) {
         if let url = TMDbImageSize.url(path: placeholder.stillPath, requestedWidth: width) {
@@ -359,7 +359,7 @@ final class DetailViewModel {
             applySnapshot(snapshot)
             // TTL 内 = 网络刚刚确认过（本次会话刚拉过 / 点击预取刚落）：整页原位
             // 渲染、零请求直接返回。「重进秒开」的手感来自这条短路；过了 TTL 走
-            // 下面的 SWR 刷新，语义不变。TMDb 照读本地缓存（refresh 有自己的
+            // 下面的 SWR 刷新，语义不变。TMDB 照读本地缓存（refresh 有自己的
             // 过期策略，命中时不会发网络）。
             if snapshot.isFresh {
                 isLoading = false
@@ -464,11 +464,11 @@ final class DetailViewModel {
         }
         storeSnapshot()
 
-        // TMDb 补全：**放在所有服务端路径之后**，且不 await 网络——
+        // TMDB 补全：**放在所有服务端路径之后**，且不 await 网络——
         // 它在后台补齐，补到后只更新 overlay、不动服务端数据。
         //
         // 顺序讲究：先读已有 overlay（立即渲染），再触发 refresh。若先 refresh
-        // 再读，离线或慢网络下详情页会白等一次网络才有 TMDb 数据。
+        // 再读，离线或慢网络下详情页会白等一次网络才有 TMDB 数据。
         await loadTMDbOverlay()
         // 季数据**必须在这里触发**，不能只靠视图上的 `.task(id: selectedSeasonID)`：
         // 实测那个 task 只在页面初现时跑了一次，而那一刻 `seasons` 还是空的
@@ -477,7 +477,7 @@ final class DetailViewModel {
         // 都已就位，且**晚于 `loadTMDbOverlay`**——季数据要靠父剧的对应来定位，
         // 而那条对应正是上一步刚建起来的。
         await loadSeasonOverlay()
-        // 合集：**必须晚于 `loadMembers`**（成员是它定位 TMDb 合集的输入，
+        // 合集：**必须晚于 `loadMembers`**（成员是它定位 TMDB 合集的输入，
         // 见 `TMDbEnricher.refreshCollection`），也晚于 `loadTMDbOverlay`（先读后补）。
         await loadCollectionOverlay()
     }
@@ -504,12 +504,12 @@ final class DetailViewModel {
     }
 
     /// 「先读缓存立即渲染 → 缺数据/过期时后台补 → 真补到了再重读一次」三段式的
-    /// 唯一实现：合集 / 条目 / 季三条 TMDb overlay 链路曾各写一份（仅定位输入与
+    /// 唯一实现：合集 / 条目 / 季三条 TMDB overlay 链路曾各写一份（仅定位输入与
     /// 落点不同，连注释都互相引用）。
     ///
     /// - `read`：读已有数据（缓存命中时同步就绪，立即渲染）。
     /// - `refresh`：后台补齐，返回「是否真的落库了新数据」（`RefreshOutcome.didFetch`
-    ///   语义——命中缓存 / TMDb 上没有 / 请求失败都不需要重读）。
+    ///   语义——命中缓存 / TMDB 上没有 / 请求失败都不需要重读）。
     /// - `apply`：overlay 落点（条目/合集是同一个 `tmdbOverlay`，季是另一个属性）。
     /// - `onRefreshed`：补到后的附带动作（重预热氛围、同步合集海报给网格卡）。
     private func refreshOverlayThenReload<Overlay>(
@@ -527,9 +527,9 @@ final class DetailViewModel {
         onRefreshed()
     }
 
-    /// 合集的 TMDb 数据：先读已有（立即渲染），再后台补，补到后重读一次。
+    /// 合集的 TMDB 数据：先读已有（立即渲染），再后台补，补到后重读一次。
     ///
-    /// 定位靠**成员**：合集在服务端没有可用的 `ProviderIds["Tmdb"]`，TMDb 合集 id
+    /// 定位靠**成员**：合集在服务端没有可用的 `ProviderIds["Tmdb"]`，TMDB 合集 id
     /// 是从成员电影的 `belongs_to_collection` 反查出来的。所以成员还没加载出来时
     /// （离线首进、成员请求失败）本方法什么都不做，页面退回「服务端图 + 成员背景
     /// 兜底」，不会卡在任何等待上。
@@ -546,7 +546,7 @@ final class DetailViewModel {
                 tmdbOverlay = overlay
                 app.noteCollectionArtwork(itemID: shown.id, posterPath: overlay?.posterPath)
             },
-            // 背景图可能刚从「无」变成 TMDb 那张：重预热（同 URL 时直接命中短路）。
+            // 背景图可能刚从「无」变成 TMDB 那张：重预热（同 URL 时直接命中短路）。
             onRefreshed: { prewarmAmbience() }
         )
     }
@@ -581,7 +581,7 @@ final class DetailViewModel {
             membersNextStartIndex = startIndex + page.items.count
             membersLoadError = nil
             storeSnapshot()
-            // 成员到位可能**第一次**让合集有背景图（TMDb 没对应时用第一个成员的图，
+            // 成员到位可能**第一次**让合集有背景图（TMDB 没对应时用第一个成员的图，
             // 见 `collectionBackdropFallback`）。`load()` 里那两次预热都排在成员加载之前，
             // 赶不上这一档，所以这里补一次（同 URL 会直接短路，不会重复解码）。
             if reset { prewarmAmbience() }
@@ -603,16 +603,16 @@ final class DetailViewModel {
         return collectionMembers.count < total
     }
 
-    /// 读已有 TMDb 数据并触发后台补齐。
+    /// 读已有 TMDB 数据并触发后台补齐。
     ///
-    /// 失败/未配置一律静默：TMDb 是可选增强，任何问题都不该影响详情页。
+    /// 失败/未配置一律静默：TMDB 是可选增强，任何问题都不该影响详情页。
     private func loadTMDbOverlay() async {
         guard let app else { return }
         await refreshOverlayThenReload(
             read: { await app.tmdbOverlay(for: self.shown) },
             refresh: { await app.refreshTMDb(for: self.shown) },
             apply: { self.tmdbOverlay = $0 },
-            // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDb」变成另一个 URL，
+            // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDB」变成另一个 URL，
             // 重新预热一次氛围层（URL 未变时 `prewarmedAmbienceURL` 会直接短路）。
             onRefreshed: { prewarmAmbience() }
         )
@@ -661,7 +661,7 @@ final class DetailViewModel {
     private func prewarmAmbience() {
         guard app?.server != nil else { return }
         // 走 `backdropTarget` 而不是裸 `imageTarget`：前者在服务端缺背景图时会回落到
-        // TMDb（TMDb 只补缺）。否则「服务端没有背景图」的条目永远没有氛围层。
+        // TMDB（TMDB 只补缺）。否则「服务端没有背景图」的条目永远没有氛围层。
         let target = backdropTarget(width: DetailAmbienceImage.urlWidth)
         guard let url = target.url else { return }
         guard url != prewarmedAmbienceURL else { return }
@@ -675,12 +675,12 @@ final class DetailViewModel {
         }
     }
 
-    /// 读当前选中季的 TMDb 数据（先读缓存立即渲染，再后台补）。
+    /// 读当前选中季的 TMDB 数据（先读缓存立即渲染，再后台补）。
     ///
     /// 单独一个方法而不是塞进 `loadEpisodes()`：后者在「这一季已拉过」时会提前 return，
-    /// 而季的 TMDb 数据那时同样需要——两件事的缓存粒度不同（集列表 vs 季元数据）。
+    /// 而季的 TMDB 数据那时同样需要——两件事的缓存粒度不同（集列表 vs 季元数据）。
     ///
-    /// 失败/未配置一律静默：TMDb 是可选增强，任何问题都不该影响剧集页。
+    /// 失败/未配置一律静默：TMDB 是可选增强，任何问题都不该影响剧集页。
     func loadSeasonOverlay() async {
         guard let app, shown.kind == .series,
               let number = selectedSeason?.seasonNumber,
@@ -787,7 +787,7 @@ final class DetailViewModel {
 
     /// 重算选集轨道。
     ///
-    /// 三个输入各自 `didSet` 调用（本地集、季叠加层、兜底候选），所以「TMDb 数据晚到」
+    /// 三个输入各自 `didSet` 调用（本地集、季叠加层、兜底候选），所以「TMDB 数据晚到」
     /// 「切季」「播放后刷新」都不需要各自记得再算一次——少一处调用点就少一处漏算。
     private func rebuildEpisodeSlots() {
         // 关掉开关 = 退回加占位之前的行为（`episodes` 就是全部）。

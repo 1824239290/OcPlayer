@@ -68,11 +68,11 @@ private struct PointingHandCursor: ViewModifier {
 struct EpisodeSelectCard: View {
     let episode: MediaItem
     let server: (any MediaServer)?
-    /// 展示用标题（TMDb 优先；占位名会被真标题顶掉）。调用方已解析好。
+    /// 展示用标题（TMDB 优先；占位名会被真标题顶掉）。调用方已解析好。
     let displayTitle: String
     /// 展示用简介（tooltip 用）。nil = 没有。
     let displayOverview: String?
-    /// 已解析好的剧照取图目标（服务端 / TMDb 的 still_path，由调用方按策略定）。
+    /// 已解析好的剧照取图目标（服务端 / TMDB 的 still_path，由调用方按策略定）。
     let thumbTarget: (url: URL?, authHeader: String?)
     let isSelected: Bool
     var onSelect: () -> Void
@@ -205,7 +205,7 @@ struct EpisodeSelectCard: View {
 
 // MARK: - 占位（库里没有的集）
 
-/// 选集轨道里的占位卡：库里还没有这一集，但来源（TMDb 季数据 / Bangumi 章节）说它有。
+/// 选集轨道里的占位卡：库里还没有这一集，但来源（TMDB 季数据 / Bangumi 章节）说它有。
 ///
 /// **刻意不是 Button**：占位没有可播的条目，做成按钮就会出现「点了没反应」或者更糟的
 /// 「点了进播放器然后失败」。所以它只是一个带 `.help` 的静态卡片，无障碍上也不带
@@ -217,7 +217,7 @@ struct EpisodeSelectCard: View {
 /// 所以日期**画在图里**（左下角），文字块与本地卡严格同构。
 struct EpisodePlaceholderCard: View {
     let placeholder: EpisodePlaceholder
-    /// 已解析好的剧照取图目标：TMDb 的 `still_path` 优先，没有时是**剧集自己的横版图**
+    /// 已解析好的剧照取图目标：TMDB 的 `still_path` 优先，没有时是**剧集自己的横版图**
     /// （与首页「继续观看」同一条取图链，由 `DetailViewModel.placeholderThumbTarget` 决定）。
     let thumbTarget: (url: URL?, authHeader: String?)
 

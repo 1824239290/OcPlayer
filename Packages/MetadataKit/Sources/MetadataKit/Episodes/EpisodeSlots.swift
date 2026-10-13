@@ -7,7 +7,7 @@ import Foundation
 ///
 /// ## 为什么要这一层中立类型
 ///
-/// 占位数据的来源有两个：TMDb 的季叠加层（`TMDbOverlay.episodes`）与 Bangumi 的章节
+/// 占位数据的来源有两个：TMDB 的季叠加层（`TMDbOverlay.episodes`）与 Bangumi 的章节
 /// 列表（`BangumiEpisodeDTO`）。两者字段名、字段有无都不一样（Bangumi 没有剧照、
 /// 时长是字符串），而「哪一格该不该出现占位、算空洞还是算未播出」这套判断是**纯策略**，
 /// 只该写一遍、只该测一遍。
@@ -19,7 +19,7 @@ public struct EpisodeCandidate: Sendable, Hashable {
     public var number: Int
     public var title: String?
     public var overview: String?
-    /// TMDb 的 `still_path`（`/xxx.jpg`）。Bangumi 侧恒 nil。
+    /// TMDB 的 `still_path`（`/xxx.jpg`）。Bangumi 侧恒 nil。
     public var stillPath: String?
     /// 播出日期。**nil = 未知，不是「未播出」**——这两件事在占位卡上是两种状态。
     public var airDate: Date?
@@ -150,11 +150,11 @@ public enum EpisodeSlotBuilder {
     /// 合成选集轨道。
     ///
     /// - Parameters:
-    ///   - seasonNumber: 当前选中的季号。nil 或 0（特典）时**不补占位**：TMDb 的
+    ///   - seasonNumber: 当前选中的季号。nil 或 0（特典）时**不补占位**：TMDB 的
     ///     season 0 编号与 Jellyfin 从文件名派生的 SP 编号本来就对不上，硬补只会造出
     ///     一批错号的假卡片。
     ///   - local: 库内条目（服务端返回的当前季分集，顺序不限）。
-    ///   - primary: 首选来源（TMDb 季叠加层）。
+    ///   - primary: 首选来源（TMDB 季叠加层）。
     ///   - fallback: 兜底来源（Bangumi 章节）。
     ///   - now: 「未播出」的判定基准（注入是为了能测）。
     public static func build(
@@ -222,7 +222,7 @@ public enum EpisodeSlotBuilder {
     ///
     /// **编号可信**是这里唯一的判断：库内已有集号时，来源必须与它**至少有一集同号**。
     /// 实测两种编号口径都存在——Jellyfin 的分集 `IndexNumber` 有时是季内相对号、有时是
-    /// 绝对号，而 TMDb / Bangumi 各自也只认自己那一套。没有交集说明两边的编号根本不同源，
+    /// 绝对号，而 TMDB / Bangumi 各自也只认自己那一套。没有交集说明两边的编号根本不同源，
     /// 此时**宁可不显示占位，也不显示错号的假卡片**（错号的占位比没有占位更坏：用户会
     /// 按它去找片）。
     ///
@@ -266,7 +266,7 @@ public enum EpisodeSlotBuilder {
     }
 }
 
-// MARK: - TMDb 季叠加层 → 候选
+// MARK: - TMDB 季叠加层 → 候选
 
 extension TMDbOverlay {
 
@@ -287,7 +287,7 @@ extension TMDbOverlay {
     }
 }
 
-/// TMDb 的 `air_date` 是 `yyyy-MM-dd`。
+/// TMDB 的 `air_date` 是 `yyyy-MM-dd`。
 ///
 /// 与 `BangumiEpisodeDTO.airDateValue` **必须同口径**（都是本地时区的当日零点）：
 /// 两边算出来的日期若差一天，同一集会在两个来源下被判成不同的播出状态。

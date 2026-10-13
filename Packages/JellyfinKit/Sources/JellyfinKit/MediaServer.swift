@@ -34,7 +34,7 @@ public enum MediaServerAuthentication {
 ///
 /// **刻意不含 `People`**：演员表是列表 payload 的大头（每条十几人 × 24 条），
 /// 而演员区不是首屏关键——详情请求在点击瞬间由预取发出，晚一两百毫秒无感。
-/// `ProviderIds` 只是小字典且库级批量 TMDb 补全靠它，随列表一起带上。
+/// `ProviderIds` 只是小字典且库级批量 TMDB 补全靠它，随列表一起带上。
 public enum MediaListFields {
     /// 首页 rail / 库网格 / 合集成员统一口径。
     public static let items =

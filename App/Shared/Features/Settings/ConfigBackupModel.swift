@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
 ///    模块时老版本也必须能读（多出来的键被忽略）。
 /// 2. **只收「用户可搬走」的偏好，不收凭据**：服务器地址、账号密码、会话 token
 ///    一律不进备份——它们跟着服务器而不是跟着用户，且泄露面太大。
-///    TMDb Key / 弹弹play Key 是用户自己申请、可随时重置的第三方凭据，属于例外。
+///    TMDB Key / 弹弹play Key 是用户自己申请、可随时重置的第三方凭据，属于例外。
 /// 3. **取值形态必须与落盘形态一致**：这些字段最终都写回 `UserDefaults`，
 ///    类型选错（例如把 UInt32 的颜色存成 String）不会编译报错，只会静默失效。
 ///    每一项都在下方注明它对应的 key 与真实类型。
@@ -60,7 +60,7 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
     }
 }
 
-/// TMDb 配置（`MetadataKit.TMDbCredentialStore` / `TMDbPreferences` 的落盘键）。
+/// TMDB 配置（`MetadataKit.TMDbCredentialStore` / `TMDbPreferences` 的落盘键）。
 struct TMDbBackupConfig: Codable, Sendable, Equatable {
     /// `dev.jumusu.ocplayer.tmdb.apiKey`。v3 API Key 或 v4 Read Access Token。
     var apiKey: String?

@@ -273,8 +273,8 @@ final class SettingsRhythmTests: XCTestCase {
 
     /// 品牌图在图标框里**保比例**：宽高各试一遍，取更紧的那一维。
     ///
-    /// 三个品牌图的宽高比差 2.7 倍（Bangumi 0.94 / MoviePilot 0.86 / TMDb 2.33），
-    /// 所以「按哪一维约束」是必须算准的一步：TMDb 的官方字标若按高约束，
+    /// 三个品牌图的宽高比差 2.7 倍（Bangumi 0.94 / MoviePilot 0.86 / TMDB 2.33），
+    /// 所以「按哪一维约束」是必须算准的一步：TMDB 的官方字标若按高约束，
     /// 22pt 的框里会算出 42pt 宽——**溢出图标列、把标题挤走**。
     func testBrandIconFittedSizePreservesAspect() {
         let box = CGSize(width: 22, height: 18)

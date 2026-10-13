@@ -3,7 +3,7 @@ import XCTest
 
 @testable import MetadataKit
 
-/// TMDb 客户端：解码、语言逐字段回退、v3/v4 密钥形态、错误映射、限流。
+/// TMDB 客户端：解码、语言逐字段回退、v3/v4 密钥形态、错误映射、限流。
 ///
 /// 全部离线：`URLProtocol` 挡掉网络，按请求路径分发固定 JSON。
 final class TMDbClientTests: XCTestCase {
@@ -45,7 +45,7 @@ final class TMDbClientTests: XCTestCase {
         XCTAssertEqual(entity.voteAverage ?? 0, 8.2, accuracy: 0.01)
         XCTAssertEqual(entity.genres, ["动作", "科幻"])
         XCTAssertEqual(entity.imdbID, "tt0133093")
-        // 演员只取前 20 位（TMDb 能返回上百位，多存等于撑大 payload）
+        // 演员只取前 20 位（TMDB 能返回上百位，多存等于撑大 payload）
         XCTAssertEqual(entity.cast.count, 2)
         XCTAssertEqual(entity.cast.first?.name, "基努·里维斯")
         XCTAssertEqual(entity.cast.first?.character, "Neo")
@@ -71,7 +71,7 @@ final class TMDbClientTests: XCTestCase {
         XCTAssertEqual(entity.title, "福音战士新剧场版：Q")
     }
 
-    /// 没有该键（TMDb 认为这部片不属于任何合集）→ nil，不是 0。
+    /// 没有该键（TMDB 认为这部片不属于任何合集）→ nil，不是 0。
     func testMovieWithoutCollectionDecodesToNil() async throws {
         let client = makeClient { _ in (200, Self.movieJSON) }
 
@@ -138,7 +138,7 @@ final class TMDbClientTests: XCTestCase {
 
     // MARK: - 语言逐字段回退
 
-    /// TMDb 不做语言回退：`zh-CN` 没翻译的字段返回**空串**。
+    /// TMDB 不做语言回退：`zh-CN` 没翻译的字段返回**空串**。
     /// 缺失时补一次回退语言，且**逐字段**取（中文标题 + 英文简介的混合是可接受的，
     /// 整包替换会把已有的中文顶掉）。
     func testLanguageFallbackIsPerField() async throws {
@@ -241,7 +241,7 @@ final class TMDbClientTests: XCTestCase {
         }
     }
 
-    /// 坏 JSON 抛 `.decoding`（TMDb 改 schema 时不至于崩，只是这次补全失败）。
+    /// 坏 JSON 抛 `.decoding`（TMDB 改 schema 时不至于崩，只是这次补全失败）。
     func testMalformedJSONThrowsDecoding() async throws {
         let client = makeClient { _ in (200, Data("not json at all".utf8)) }
         do {
@@ -309,7 +309,7 @@ final class TMDbClientTests: XCTestCase {
     // MARK: - 图片尺寸映射
 
     func testImageSizePicksNearestLargerBucket() {
-        // TMDb 只认固定档位；取**不小于**请求宽度的最小档（宁可略大也别糊）
+        // TMDB 只认固定档位；取**不小于**请求宽度的最小档（宁可略大也别糊）
         XCTAssertEqual(TMDbImageSize.nearest(to: 80), .w92)
         XCTAssertEqual(TMDbImageSize.nearest(to: 92), .w92)
         XCTAssertEqual(TMDbImageSize.nearest(to: 93), .w154)
@@ -405,7 +405,7 @@ private extension TMDbClientTests {
     }
     """#.utf8)
 
-    /// 属于某个 TMDb 合集的电影（裁剪自实测的 `/movie/75629`）。
+    /// 属于某个 TMDB 合集的电影（裁剪自实测的 `/movie/75629`）。
     static let movieInCollectionJSON = Data(#"""
     {
       "id": 75629,

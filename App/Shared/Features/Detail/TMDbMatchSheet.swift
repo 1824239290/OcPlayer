@@ -3,14 +3,14 @@ import CoreModel
 import MetadataKit
 import SwiftUI
 
-/// 手动 TMDb 匹配面板。
+/// 手动 TMDB 匹配面板。
 ///
 /// ## 为什么需要它
 ///
 /// 自动匹配刻意**只在置信度 ≥ 0.85 时落库**——错误的匹配（别人的剧情简介、别人的海报）
 /// 比没有匹配更糟。代价是总有一部分条目匹配不上：冷门番、译名差异大、服务端没有
 /// `ProviderIds` 又搜不到。没有这个面板，那些条目就永远只能空着，而用户明明知道
-/// 正确的 TMDb 条目是哪一个。
+/// 正确的 TMDB 条目是哪一个。
 ///
 /// ## 交互
 ///
@@ -29,7 +29,7 @@ struct TMDbMatchSheet: View {
     @State private var currentLink: TMDbLink?
     @State private var isBinding = false
 
-    /// 只有电影与剧能手动匹配（TMDb 的 movie/tv 端点；季/集靠父剧推导）。
+    /// 只有电影与剧能手动匹配（TMDB 的 movie/tv 端点；季/集靠父剧推导）。
     private var mediaType: TMDbMediaType {
         item.kind == .movie ? .movie : .tv
     }
@@ -57,7 +57,7 @@ struct TMDbMatchSheet: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("TMDb 匹配")
+                Text("TMDB 匹配")
                     .font(.headline)
                 Spacer()
                 // 匹配错了必须能取消：没有这个出口的话，一个错误的自动匹配会永远
@@ -216,7 +216,7 @@ struct TMDbMatchSheet: View {
             results = try await app.tmdbSearchCandidates(
                 query: trimmed, mediaType: mediaType, year: item.year)
         } catch {
-            // 失败要如实说，而不是显示「没搜到」——那会让用户以为 TMDb 上没有。
+            // 失败要如实说，而不是显示「没搜到」——那会让用户以为 TMDB 上没有。
             errorText = "搜索失败：\(TMDbCoordinator.message(for: error as? TMDbError) ?? "\(error)")"
             results = []
         }

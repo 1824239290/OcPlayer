@@ -69,7 +69,7 @@ enum MetadataDatabaseFactory {
             try db.execute(sql: Schema.createTables)
         }
         // v2 只**加表**、不动 v1 的任何列与数据——所以升级是纯增量的，老缓存全部有效。
-        // （对比：若当初把 TMDb 字段塞进 `item` 表，这里就得重建表并搬数据。）
+        // （对比：若当初把 TMDB 字段塞进 `item` 表，这里就得重建表并搬数据。）
         migrator.registerMigration("addTMDbSchemaV2") { db in
             try db.execute(sql: Schema.createTMDbTables)
         }

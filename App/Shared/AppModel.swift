@@ -116,12 +116,12 @@ final class AppModel {
 
     var libraryPages: [LibraryPageKey: LibraryPage] = [:]
 
-    /// 合集卡封面：合集条目 id → TMDb 合集的海报路径（`/xxx.jpg`）。
+    /// 合集卡封面：合集条目 id → TMDB 合集的海报路径（`/xxx.jpg`）。
     ///
     /// ## 为什么网格需要一份独立缓存
     ///
     /// 合集在服务端**本来就没有图**（实测 `ImageTags: {}`），网格卡于是只剩占位图标；
-    /// 而详情页能出图是因为它手上有该条目的 TMDb overlay。网格没有 overlay（每张卡一条
+    /// 而详情页能出图是因为它手上有该条目的 TMDB overlay。网格没有 overlay（每张卡一条
     /// 读路径不现实），所以把「解析出来的海报路径」按条目 id 记在这里，让详情页与网格
     /// **共用同一次解析结果**。
     ///
@@ -131,9 +131,9 @@ final class AppModel {
     var collectionArtwork: [MediaItem.ID: String] = [:]
 
     /// 已经解析过（成功或确定失败）的合集 id：失败**不重试**，否则滚动一次就是一轮
-    /// 网络风暴；失败多为「TMDb 上没有这个合集」这种不会自己变好的情况。
+    /// 网络风暴；失败多为「TMDB 上没有这个合集」这种不会自己变好的情况。
     ///
-    /// 与 `collectionArtworkInFlight` 一起只由 `AppModel+TMDb.swift` 的解析路径使用
+    /// 与 `collectionArtworkInFlight` 一起只由 `AppModel+TMDB.swift` 的解析路径使用
     /// （存储留在本文件、逻辑留在那个扩展里，所以这里是 internal 而不是 private）。
     var collectionArtworkAttempted: Set<MediaItem.ID> = []
     /// 正在解析的合集 id（同一个合集被多个卡片/多次 onAppear 触发时只跑一次）。
@@ -364,9 +364,9 @@ final class AppModel {
     /// 原样返回服务器，行为与引入缓存之前一致。
     let metadata: MetadataCoordinator
 
-    /// TMDb 元数据补全（可选增强，用户配置 key 后生效）。
+    /// TMDB 元数据补全（可选增强，用户配置 key 后生效）。
     ///
-    /// 与 `metadata` 分开两个协调器，但**共用同一个 `Media.sqlite`**（TMDb 的表
+    /// 与 `metadata` 分开两个协调器，但**共用同一个 `Media.sqlite`**（TMDB 的表
     /// 就在那个库里）：缓存层与补全层的生命周期、失败模式都不一样，混成一个类
     /// 会让「没配 key」与「建库失败」两种降级纠缠在一起。
     let tmdb: TMDbCoordinator
@@ -721,7 +721,7 @@ final class AppModel {
         self.danmakuModel = danmakuModel
         self.metadata = metadata
         // 默认用注入的那个 `preferences` 域构造：测试传独立 suite 时，
-        // TMDb 的设置项不该落到 `.standard`（否则会与其他测试进程互相污染）。
+        // TMDB 的设置项不该落到 `.standard`（否则会与其他测试进程互相污染）。
         self.tmdb = tmdb ?? TMDbCoordinator(defaults: preferences)
         self.preferences = preferences
         // 首屏骨架的条数来自注入域（不是 `HomeData` 默认值里的 `.standard`）。

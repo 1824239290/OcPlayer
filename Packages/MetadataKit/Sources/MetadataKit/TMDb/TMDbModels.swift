@@ -1,23 +1,23 @@
 import Foundation
 
-/// TMDb 响应模型。
+/// TMDB 响应模型。
 ///
-/// 只声明**我们真的会用到**的字段：TMDb 的响应很大（`append_to_response` 之后
+/// 只声明**我们真的会用到**的字段：TMDB 的响应很大（`append_to_response` 之后
 /// 一部剧的 payload 可达几百 KB），把不用的字段也解出来等于白白占内存与磁盘。
 ///
-/// 解码一律**宽容**（`decodeIfPresent` + 默认值）：TMDb 的字段会增删，
+/// 解码一律**宽容**（`decodeIfPresent` + 默认值）：TMDB 的字段会增删，
 /// 而解析失败意味着整条补全失败——比某个字段取到 nil 严重得多。
 
 // MARK: - 媒体类型
 
-/// TMDb 的实体类型。`season` / `episode` 不是顶层端点，靠父剧集 id + 季集号定位。
+/// TMDB 的实体类型。`season` / `episode` 不是顶层端点，靠父剧集 id + 季集号定位。
 public enum TMDbMediaType: String, Sendable, Codable, CaseIterable {
     case movie
     case tv
     case season
     case episode
-    /// TMDb 的**合集**（`/collection/{id}`）——「同一系列的多部电影」那层容器，
-    /// 对应 Jellyfin / Emby 的合集（BoxSet）。**只装电影**：TMDb 没有剧集的合集概念。
+    /// TMDB 的**合集**（`/collection/{id}`）——「同一系列的多部电影」那层容器，
+    /// 对应 Jellyfin / Emby 的合集（BoxSet）。**只装电影**：TMDB 没有剧集的合集概念。
     case collection
 
     /// 顶层详情端点路径段（季/集没有独立端点，走 `/tv/{id}/season/{n}`）。
@@ -47,7 +47,7 @@ public enum TMDbMediaType: String, Sendable, Codable, CaseIterable {
 public struct TMDbEntity: Sendable, Equatable, Codable {
     public var id: Int
     public var mediaType: TMDbMediaType
-    /// 本地化标题（`title` 或 `name`）。可能为空串——那门语言没有翻译时 TMDb 就这么返回。
+    /// 本地化标题（`title` 或 `name`）。可能为空串——那门语言没有翻译时 TMDB 就这么返回。
     public var title: String?
     /// 原始语言标题（`original_title` / `original_name`）。**永远非空**，是最后兜底。
     public var originalTitle: String?
@@ -64,9 +64,9 @@ public struct TMDbEntity: Sendable, Equatable, Codable {
     /// 内容分级（按 `language` 取一条，用于和 Jellyfin 的 officialRating 对齐）。
     public var contentRating: String?
 
-    /// 这部电影**属于哪个 TMDb 合集**（电影详情里的 `belongs_to_collection.id`）。
+    /// 这部电影**属于哪个 TMDB 合集**（电影详情里的 `belongs_to_collection.id`）。
     ///
-    /// 这是把服务端的「合集」对到 TMDb 合集的**权威入口**：合集自己没有可用的
+    /// 这是把服务端的「合集」对到 TMDB 合集的**权威入口**：合集自己没有可用的
     /// `ProviderIds["Tmdb"]`（实测 Jellyfin 手工建的合集是空 Map），但它的成员电影
     /// 每一条都写着归属于哪个合集。见 `TMDbEnricher.refreshCollection`。
     ///
@@ -219,7 +219,7 @@ public struct TMDbSearchResult: Sendable, Equatable, Codable {
 
 // MARK: - 图片尺寸
 
-/// TMDb 的图片 CDN 只认固定尺寸档，不接受任意宽度。
+/// TMDB 的图片 CDN 只认固定尺寸档，不接受任意宽度。
 ///
 /// 我们的调用点传的是「希望的最大宽度」（如 400 / 720 / 1600），必须映射到最近的档位：
 /// 取**不小于**请求宽度的最小档（宁可略大也别糊），超出最大档时用 `original`。
@@ -251,7 +251,7 @@ public enum TMDbImageSize: String, Sendable, CaseIterable {
         return best
     }
 
-    /// 拼出可直接下载的图片 URL。`path` 是 TMDb 返回的 `/xxxx.jpg`。
+    /// 拼出可直接下载的图片 URL。`path` 是 TMDB 返回的 `/xxxx.jpg`。
     ///
     /// **免鉴权**：图片 CDN 不需要 key，也不带我们的 Authorization 头
     /// （所以 `RemoteImage` 调用时 `authHeader` 传 nil）。

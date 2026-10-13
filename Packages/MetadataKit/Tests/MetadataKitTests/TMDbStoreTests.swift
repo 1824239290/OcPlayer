@@ -4,7 +4,7 @@ import XCTest
 
 @testable import MetadataKit
 
-/// TMDb 落库：实体（跨租户共享）+ 对应关系（按租户隔离）+ 迁移 + 清理。
+/// TMDB 落库：实体（跨租户共享）+ 对应关系（按租户隔离）+ 迁移 + 清理。
 final class TMDbStoreTests: XCTestCase {
 
     private func makeStore() throws -> (MetadataStore, TemporaryDirectory) {

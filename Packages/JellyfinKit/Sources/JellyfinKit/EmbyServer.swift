@@ -326,7 +326,7 @@ public struct EmbyServer: MediaServer {
             ("enableImageTypes", "Primary,Backdrop,Logo"),
             ("enableTotalRecordCount", "true"),
             // 与 Jellyfin 同口径（`MediaListFields.items`）：列表**默认不返回**
-            // ProviderIds / 图片比例 / 简介 / 评分，库级 TMDb 批量补全要靠
+            // ProviderIds / 图片比例 / 简介 / 评分，库级 TMDB 批量补全要靠
             // `ProviderIds` 拿 `tmdbID`，详情页首屏要靠简介/评分免等。
             // 仍过一道 `embySafeFields` 保持一致。
             ("fields", embySafeFields(MediaListFields.items) ?? MediaListFields.items),

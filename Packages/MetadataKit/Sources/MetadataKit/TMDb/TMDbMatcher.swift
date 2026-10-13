@@ -30,11 +30,11 @@ public struct TMDbMatch: Sendable, Equatable {
     }
 }
 
-/// 匹配器：把服务端条目对应到 TMDb 实体。
+/// 匹配器：把服务端条目对应到 TMDB 实体。
 ///
 /// ## 优先级
 ///
-/// 1. **`ProviderIds["Tmdb"]`**（权威）：服务端自己就有 TMDb id，直接用，置信度 1.0。
+/// 1. **`ProviderIds["Tmdb"]`**（权威）：服务端自己就有 TMDB id，直接用，置信度 1.0。
 /// 2. **标题搜索 + 年份**（兜底）：没有 id 的条目（用户自建库、老刮削器）靠此匹配。
 ///
 /// ## 一个必须守住的边界：集与季的 `tmdbID` 不是剧集 id
@@ -72,7 +72,7 @@ public struct TMDbMatcher: Sendable {
 
     // MARK: - 入口
 
-    /// 为一个条目决定它的 TMDb 实体键。
+    /// 为一个条目决定它的 TMDB 实体键。
     ///
     /// - Parameters:
     ///   - item: 服务端条目。
@@ -114,7 +114,7 @@ public struct TMDbMatcher: Sendable {
 
     /// `ProviderIds["Tmdb"]` → Int。脏数据（空串 / 非数字 / ≤0）一律当没有。
     ///
-    /// 服务端的刮削器偶尔会写进 `""` 或 `"0"`，直接用会拿 0 去查 TMDb 并得到 404，
+    /// 服务端的刮削器偶尔会写进 `""` 或 `"0"`，直接用会拿 0 去查 TMDB 并得到 404，
     /// 日志里表现为「明明有 id 却查不到」，很难查。
     func providerTmdbID(of item: MediaItem) -> Int? {
         guard let raw = item.tmdbID?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -129,7 +129,7 @@ public struct TMDbMatcher: Sendable {
         let mediaType: TMDbMediaType = item.kind == .movie ? .movie : .tv
         // 年份：优先用服务端字段；服务端没给时从标题里认（「某片 (2019)」）。
         //
-        // 为什么值得兜这一层：TMDb 的搜索支持按年份过滤，而**没有年份时同名作品的
+        // 为什么值得兜这一层：TMDB 的搜索支持按年份过滤，而**没有年份时同名作品的
         // 候选会混在一起**（重名、翻拍、特别篇），打分只能靠标题精确度硬扛。
         // 服务端把年份写进标题而不写进字段是常见现象（实测库里就有这种条目）。
         let year = item.year ?? TitleNormalizer.year(fromTitle: item.name)
@@ -138,7 +138,7 @@ public struct TMDbMatcher: Sendable {
 
         // 主语言的标题查不到时，用**原始标题**再试一次。
         //
-        // 为什么需要：TMDb 的搜索是按它自己索引的标题匹配的，中文译名不一定在索引里
+        // 为什么需要：TMDB 的搜索是按它自己索引的标题匹配的，中文译名不一定在索引里
         // （尤其冷门番剧）。`originalTitle` 常是日文/英文原名，命中率高得多。
         // 只在第一次**没选出可自动应用的候选**时才多打这一趟，多数条目不会走到。
         if !candidates.contains(where: { score($0, item: item) >= Self.autoApplyThreshold }),

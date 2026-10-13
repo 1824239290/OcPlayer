@@ -84,7 +84,7 @@ final class EpisodeSlotTests: XCTestCase {
         XCTAssertNil(slots[0].placeholder, "本地集不能被占位顶掉")
     }
 
-    /// 集号在本地但来源没有（服务端比 TMDb 多一集，如特番）→ 本地那集必须保留。
+    /// 集号在本地但来源没有（服务端比 TMDB 多一集，如特番）→ 本地那集必须保留。
     func testKeepsLocalEpisodesUnknownToTheSource() {
         let local = [localEpisode(1), localEpisode(99)]
         let source = (1...3).map { candidate($0, airDate: "2020-01-01") }
@@ -202,18 +202,18 @@ final class EpisodeSlotTests: XCTestCase {
 
     // MARK: - 来源优先级
 
-    /// TMDb 有数据时用 TMDb，Bangumi 只做兜底。
+    /// TMDB 有数据时用 TMDB，Bangumi 只做兜底。
     func testPrimaryWinsOverFallback() {
         let slots = build(local: [localEpisode(1)],
-                          primary: [candidate(1, title: "TMDb 标题"), candidate(2, title: "TMDb 的 2")],
+                          primary: [candidate(1, title: "TMDB 标题"), candidate(2, title: "TMDB 的 2")],
                           fallback: [candidate(1), candidate(2, title: "Bangumi 的 2"),
                                      candidate(3, title: "Bangumi 的 3")])
 
         XCTAssertEqual(numbers(slots), [1, 2])
-        XCTAssertEqual(slots[1].placeholder?.title, "TMDb 的 2")
+        XCTAssertEqual(slots[1].placeholder?.title, "TMDB 的 2")
     }
 
-    /// TMDb 没数据时用 Bangumi 兜底。
+    /// TMDB 没数据时用 Bangumi 兜底。
     func testFallbackUsedWhenPrimaryIsEmpty() {
         let slots = build(local: [localEpisode(25)],
                           fallback: [candidate(25), candidate(26, title: "第 26 话")])
@@ -222,8 +222,8 @@ final class EpisodeSlotTests: XCTestCase {
         XCTAssertEqual(slots[1].placeholder?.title, "第 26 话")
     }
 
-    /// TMDb 有数据但编号对不上（锚点不过）时，继续试 Bangumi 兜底——这正是
-    /// 「TMDb 优先、Bangumi 兜底」比「只看 TMDb 有没有」更有价值的地方。
+    /// TMDB 有数据但编号对不上（锚点不过）时，继续试 Bangumi 兜底——这正是
+    /// 「TMDB 优先、Bangumi 兜底」比「只看 TMDB 有没有」更有价值的地方。
     func testFallbackRescuesAMismatchedPrimary() {
         let slots = build(local: [localEpisode(25)],
                           primary: (1...12).map { candidate($0, airDate: "2026-11-01") },
@@ -242,7 +242,7 @@ final class EpisodeSlotTests: XCTestCase {
 
     // MARK: - 特典 / 季号
 
-    /// 特典（季号 0）与季号缺失都不补：TMDb 的 season 0 与 Jellyfin 从文件名派生的
+    /// 特典（季号 0）与季号缺失都不补：TMDB 的 season 0 与 Jellyfin 从文件名派生的
     /// SP 编号本来就不同源。
     func testSpecialsSeasonIsNeverFilled() {
         let local = [localEpisode(1)]
@@ -275,7 +275,7 @@ final class EpisodeSlotTests: XCTestCase {
         XCTAssertEqual(Set(slots.map(\.id)).count, slots.count)
     }
 
-    /// 集号 ≤ 0 的候选一律丢弃（服务端/TMDb 的脏数据不该变成负号卡片）。
+    /// 集号 ≤ 0 的候选一律丢弃（服务端/TMDB 的脏数据不该变成负号卡片）。
     func testNonPositiveNumbersAreDropped() {
         let slots = build(local: [localEpisode(1)],
                           primary: [candidate(1), candidate(0), candidate(-3), candidate(2)])
@@ -295,7 +295,7 @@ final class EpisodeSlotTests: XCTestCase {
         XCTAssertEqual(slots[1].placeholder?.episodeLabel, "S3E2")
     }
 
-    // MARK: - TMDb 季叠加层 → 候选
+    // MARK: - TMDB 季叠加层 → 候选
 
     private func seasonOverlay(episodes: [EpisodeEntry]) -> TMDbOverlay {
         let season = TMDbSeason(seasonNumber: 3, name: "第 3 季", overview: nil,

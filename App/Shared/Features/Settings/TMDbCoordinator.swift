@@ -5,14 +5,14 @@ import JellyfinKit
 import MetadataKit
 import Observation
 
-/// App 层的 TMDb 补全协调器：持有客户端与补全服务、暴露设置页要的状态。
+/// App 层的 TMDB 补全协调器：持有客户端与补全服务、暴露设置页要的状态。
 ///
 /// 与 `MetadataCoordinator` 同款职责划分：域包（`MetadataKit`）只懂「怎么匹配、
 /// 怎么落库、怎么叠加」，路径与生命周期留在 App 层。
 ///
 /// **它自己不建库**：复用 `MetadataCoordinator` 已经建好的那个 `MetadataStore`
-/// （TMDb 的表就在同一个 `Media.sqlite` 里）。两个协调器共用一个库，所以设置页
-/// 「清空媒体元数据缓存」与「清除 TMDb 补全数据」是同一个库上的两种粒度。
+/// （TMDB 的表就在同一个 `Media.sqlite` 里）。两个协调器共用一个库，所以设置页
+/// 「清空媒体元数据缓存」与「清除 TMDB 补全数据」是同一个库上的两种粒度。
 @MainActor
 @Observable
 final class TMDbCoordinator {
@@ -21,7 +21,7 @@ final class TMDbCoordinator {
     private(set) var isConfigured = false
     /// 当前语言（设置页改它 → 重建客户端无关，语言是每次请求现读的）。
     private(set) var language = "zh-CN"
-    /// 文本是否 TMDb 优先。
+    /// 文本是否 TMDB 优先。
     private(set) var preferText = true
     /// 图片是否允许顶替服务端已有的图（默认只补缺）。
     private(set) var replaceImages = false
@@ -60,8 +60,8 @@ final class TMDbCoordinator {
         // （测试可注入独立 suite，避免污染 `.standard`）。
         self.credentials = TMDbCredentialStore(defaults: defaults)
         self.preferences = TMDbPreferences(defaults: defaults)
-        // 注入点存在的理由：**测试要能替换 TMDb 的网络**。此前客户端硬编码
-        // `URLSession(configuration: .default)`，于是 App 层「TMDb 请求失败时怎么办」
+        // 注入点存在的理由：**测试要能替换 TMDB 的网络**。此前客户端硬编码
+        // `URLSession(configuration: .default)`，于是 App 层「TMDB 请求失败时怎么办」
         // 这类分支**根本造不出来** —— 我曾把「断网即永久放弃重试」的缺陷写进 App 层
         // 却测不到（把判断改回错的，用例照样全绿）。传 nil = 生产行为逐字不变。
         self.sessionConfiguration = sessionConfiguration
@@ -78,7 +78,7 @@ final class TMDbCoordinator {
     /// 用 `MetadataCoordinator` 的库装配补全服务。未建库完成时是空操作，
     /// 之后 `storeDidBecomeReady(_:)` 会再补一次。
     ///
-    /// 这样安排的原因：建库是异步的（不阻塞首屏），而 TMDb 只是可选增强——
+    /// 这样安排的原因：建库是异步的（不阻塞首屏），而 TMDB 只是可选增强——
     /// 让启动路径等它没有意义。
     func attach(store: MetadataStore?) {
         guard let store else { return }
@@ -86,7 +86,7 @@ final class TMDbCoordinator {
     }
 
     private func makeClient() -> TMDbClient {
-        // 独立的 URLSession：TMDb 与媒体服务器的重试/超时语义不同，也不该共用连接池。
+        // 独立的 URLSession：TMDB 与媒体服务器的重试/超时语义不同，也不该共用连接池。
         // 注入了配置（测试）时**在它的副本上**补超时，别改调用方的那个对象。
         let configuration = sessionConfiguration?.copy() as? URLSessionConfiguration
             ?? URLSessionConfiguration.default
@@ -154,7 +154,7 @@ final class TMDbCoordinator {
 
     // MARK: - 补全
 
-    /// 确保该条目的 TMDb 数据可用（缺失则拉、过期则刷）。返回是否发起了网络。
+    /// 确保该条目的 TMDB 数据可用（缺失则拉、过期则刷）。返回是否发起了网络。
     ///
     /// 调用方（详情页）在 `.task` 里调；**展示路径不应依赖它**——先渲染已有的
     /// overlay，再让这个方法在后台补齐。
@@ -183,12 +183,12 @@ final class TMDbCoordinator {
         return await enricher.refreshSeason(seriesLink: seriesLink, seasonNumber: seasonNumber)
     }
 
-    /// 确保**服务端合集**（Jellyfin / Emby 的 BoxSet）的 TMDb 合集数据可用。
+    /// 确保**服务端合集**（Jellyfin / Emby 的 BoxSet）的 TMDB 合集数据可用。
     ///
-    /// 定位靠成员电影的 `belongs_to_collection`（合集自己没有可用的 TMDb id），
+    /// 定位靠成员电影的 `belongs_to_collection`（合集自己没有可用的 TMDB id），
     /// 所以 `members` 是必需品——没加载出成员时本方法什么都不会发生。
     @discardableResult
-    /// 返回值是 `RefreshOutcome` 而**不是 Bool**：调用方要能区分「TMDb 上确实没有」
+    /// 返回值是 `RefreshOutcome` 而**不是 Bool**：调用方要能区分「TMDB 上确实没有」
     /// （确定结论，可不再重试）与「请求失败」（可重试）。用 Bool 时两者都是 false，
     /// 调用方一记账，断网一次就让封面永久空白。
     func refreshCollection(
@@ -202,7 +202,7 @@ final class TMDbCoordinator {
 
     /// 取最近一次失败并转成用户能看懂的文案（设置页出现时调）。
     ///
-    /// `notFound` 刻意**不提示**：那是服务端 `ProviderIds` 里的脏数据（id 在 TMDb
+    /// `notFound` 刻意**不提示**：那是服务端 `ProviderIds` 里的脏数据（id 在 TMDB
     /// 不存在），不是用户配置或网络的问题——弹一个他无法处理的错误只会添乱。
     func refreshLastFailure() async {
         guard let enricher else {
@@ -221,17 +221,17 @@ final class TMDbCoordinator {
         case .none:
             nil
         case .unauthorized:
-            "API Key 无效或已被 TMDb 拒绝"
+            "API Key 无效或已被 TMDB 拒绝"
         case .rateLimited:
-            "TMDb 限流，请稍后再试"
+            "TMDB 限流，请稍后再试"
         case .transport:
-            "连不上 TMDb（检查网络或代理）"
+            "连不上 TMDB（检查网络或代理）"
         case .http(let status):
-            "TMDb 返回 HTTP \(status)"
+            "TMDB 返回 HTTP \(status)"
         case .decoding:
-            "TMDb 返回了无法解析的数据"
+            "TMDB 返回了无法解析的数据"
         case .notConfigured, .notFound:
-            // `notFound` 是服务端 ProviderIds 里的脏数据（id 在 TMDb 不存在），
+            // `notFound` 是服务端 ProviderIds 里的脏数据（id 在 TMDB 不存在），
             // 不是用户配置或网络的问题——弹一个他无法处理的错误只会添乱。
             nil
         }
@@ -258,7 +258,7 @@ final class TMDbCoordinator {
         guard let enricher else { return }
         let removed = await enricher.evictExpired()
         if removed > 0 {
-            AppDiagnostics.logInfo("TMDb 过期数据清理", fields: ["removed": .integer(Int64(removed))])
+            AppDiagnostics.logInfo("TMDB 过期数据清理", fields: ["removed": .integer(Int64(removed))])
         }
     }
 
@@ -340,7 +340,7 @@ final class TMDbCoordinator {
 
 /// 设置页可选的语言列表。
 ///
-/// 只列 TMDb 支持得好的几种，而不是把它的全部 locale 铺出来（上百个，还有
+/// 只列 TMDB 支持得好的几种，而不是把它的全部 locale 铺出来（上百个，还有
 /// 只翻译了部分字段的）：选一个没有翻译的语言，结果是「标题英文、简介空白」，
 /// 用户会以为功能坏了。
 enum TMDbLanguageOption: String, CaseIterable, Identifiable {

@@ -106,7 +106,7 @@ public struct MediaArtwork<Overlay: View>: View {
     /// 覆盖画幅的**兜底比例**（宽 ÷ 高）；nil ＝用 `Shape.nominalRatio`。
     ///
     /// 只影响「比例还没到手」的那一拍（有真实比例就跟随真实比例）。给那些**来源本身
-    /// 有固定惯例**的调用点用：TMDb / Bangumi 的海报都是 2:3，传 `2.0/3.0` 就能让
+    /// 有固定惯例**的调用点用：TMDB / Bangumi 的海报都是 2:3，传 `2.0/3.0` 就能让
     /// 加载前那一帧也严丝合缝；不传则按通用兜底比例排，那一帧会有一点点裁。
     public var nominalRatio: CGFloat?
     /// 位图铺法。默认 `nil` ＝**按比例来源自动决定**：有真实比例（服务端或位图实测）
@@ -206,7 +206,7 @@ public struct MediaArtwork<Overlay: View>: View {
     private var boxRatio: CGFloat {
         if let ratio = clamped(aspectRatio) { return ratio }
         if shape.followsImageRatio, let ratio = clamped(measuredRatio) { return ratio }
-        // 调用点能覆盖兜底比例（TMDb / Bangumi 的海报惯例是 2:3，见 `nominalRatio`）。
+        // 调用点能覆盖兜底比例（TMDB / Bangumi 的海报惯例是 2:3，见 `nominalRatio`）。
         return clamped(nominalRatio) ?? shape.nominalRatio
     }
 

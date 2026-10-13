@@ -78,10 +78,10 @@ final class SettingsHubGroupingTests: XCTestCase {
     }
 
     /// 三个品牌图各自的**宽高比**必须与资产里的内容包围盒一致
-    /// （Bangumi 0.94 / MoviePilot 0.86 / TMDb 2.33，2026-10-13 实测）。
+    /// （Bangumi 0.94 / MoviePilot 0.86 / TMDB 2.33，2026-10-13 实测）。
     ///
     /// 为什么值得钉：图标框是 22 × 18，`fittedSize` 靠这个比例决定「按宽还是按高」——
-    /// 填错方向的后果是**字标溢出图标列、把标题挤走**（TMDb 的 2.33:1 wordmark
+    /// 填错方向的后果是**字标溢出图标列、把标题挤走**（TMDB 的 2.33:1 wordmark
     /// 若按高约束就是 42pt 宽，比列宽宽近一倍）。
     func testBrandIconAspectRatiosArePinned() {
         let expected: [SettingsSubpage: CGFloat] = [
@@ -102,7 +102,7 @@ final class SettingsHubGroupingTests: XCTestCase {
         let brandCount = SettingsSubpage.allCases.filter {
             if case .brand = $0.icon { return true } else { return false }
         }.count
-        XCTAssertEqual(brandCount, 3, "品牌图恰好三个（Bangumi / MoviePilot / TMDb）")
+        XCTAssertEqual(brandCount, 3, "品牌图恰好三个（Bangumi / MoviePilot / TMDB）")
     }
 
     /// 「Jellyfin」这个名字**不再出现在 hub 入口上**（用户口径：改成「媒体服务器」）。

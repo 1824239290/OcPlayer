@@ -1,13 +1,13 @@
 import Foundation
 
-/// TMDb 实体的**存储键**：一首/一季/一集的唯一定位串。
+/// TMDB 实体的**存储键**：一首/一季/一集的唯一定位串。
 ///
 /// 单独抽出来是因为它同时承担三件事，散在各处写字符串容易漂移：
 /// 1. 作为 `tmdb_entity` 的主键（跨启动必须稳定，故不含任何进程内值）
-/// 2. 判断「两个条目是不是同一个 TMDb 实体」（如剧与其季的归属）
+/// 2. 判断「两个条目是不是同一个 TMDB 实体」（如剧与其季的归属）
 /// 3. 诊断日志里可读
 ///
-/// 形态（**故意做得像 URL 路径**，因为 TMDb 自己的端点就是这个形状，便于对照）：
+/// 形态（**故意做得像 URL 路径**，因为 TMDB 自己的端点就是这个形状，便于对照）：
 /// ```
 /// movie/603
 /// tv/1399
@@ -19,13 +19,13 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
     case movie(Int)
     /// 剧集。
     case tv(Int)
-    /// 某剧的某一季。**季没有独立的 TMDb id**（实测：Jellyfin 的季级 ProviderIds
+    /// 某剧的某一季。**季没有独立的 TMDB id**（实测：Jellyfin 的季级 ProviderIds
     /// 只有 Tvdb、没有 Tmdb），只能由父剧 id + 季号定位。
     case season(tvID: Int, number: Int)
-    /// TMDb 的**合集**（`/collection/{id}`）。Jellyfin / Emby 的合集（BoxSet）用这个键。
+    /// TMDB 的**合集**（`/collection/{id}`）。Jellyfin / Emby 的合集（BoxSet）用这个键。
     ///
     /// 与 `movie` / `tv` 不同，它**不是**由条目自己的 ProviderIds 得来的——合集没有
-    /// 可用的 TMDb id，是靠成员电影的 `belongs_to_collection` 反查出来的
+    /// 可用的 TMDB id，是靠成员电影的 `belongs_to_collection` 反查出来的
     /// （见 `TMDbEnricher.refreshCollection`）。
     case collection(Int)
 
@@ -40,7 +40,7 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
 
     public var description: String { storageKey }
 
-    /// 顶层实体（电影/剧/合集）的 TMDb id；季没有自己的 id，返回所含的**剧** id。
+    /// 顶层实体（电影/剧/合集）的 TMDB id；季没有自己的 id，返回所含的**剧** id。
     public var tmdbID: Int {
         switch self {
         case .movie(let id), .tv(let id), .collection(let id): id
@@ -79,7 +79,7 @@ public enum TMDbEntityKey: Hashable, Sendable, CustomStringConvertible {
     }
 }
 
-/// 「条目 → TMDb 实体」的对应关系是怎么来的。
+/// 「条目 → TMDB 实体」的对应关系是怎么来的。
 ///
 /// 存进库是为了**区分用户手动认定的与自动猜的**：手动匹配过的条目将来重新补全时
 /// 不该被自动匹配顶掉（那是用户在纠正我们）。

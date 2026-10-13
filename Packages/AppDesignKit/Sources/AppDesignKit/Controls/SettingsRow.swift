@@ -15,7 +15,7 @@ public enum SettingsRowIconSource: Hashable, Sendable {
     /// SF Symbol 名。跟随 `.primary` 单色、按 `iconGlyphSize` 字号渲染。
     case symbol(String)
     /// 资产目录里的图像名（矢量 SVG）。`aspect` = 内容宽高比，用来在图标框里
-    /// **保比例缩放**——字标（如 TMDb 的 TMDB wordmark，2.33:1）与方形 logo 必须
+    /// **保比例缩放**——字标（如 TMDB 的 TMDB wordmark，2.33:1）与方形 logo 必须
     /// 分别按宽 / 按高约束，否则要么溢出图标列、要么被压扁。
     case brand(name: String, aspect: CGFloat)
 }
@@ -94,7 +94,7 @@ public struct SettingsRowIcon: View {
                 // 的一样的颜色」）。
                 //
                 // 显式写 `.template` 而不是「靠资产自己声明」：Bangumi / MoviePilot
-                // 的 imageset 带 `template-rendering-intent`，TMDb 那份**没有**
+                // 的 imageset 带 `template-rendering-intent`，TMDB 那份**没有**
                 // （它是官方彩色渐变字标，资产层要保持原样给详情页与页脚署名用）。
                 // 靠资产声明的话，「行图标必须单色」这条不变量就散落在
                 // Contents.json 里——加第四个品牌图时谁也不会记得去改 JSON。

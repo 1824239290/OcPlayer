@@ -84,7 +84,7 @@ final class DetailExternalLinksTests: XCTestCase {
                        "https://www.themoviedb.org/tv/1399/season/2")
     }
 
-    /// `links(...)` 也要能靠已建立的对应补出 TMDb 那一条。
+    /// `links(...)` 也要能靠已建立的对应补出 TMDB 那一条。
     func testLinksIncludeTMDBFromLinkedEntity() {
         let item = series(tmdb: nil)
         let links = ExternalMetadataLinks.links(item: item, bangumiSubjectID: nil,
@@ -110,7 +110,7 @@ final class DetailExternalLinksTests: XCTestCase {
         XCTAssertEqual(both.map(\.title), ["在 Bangumi 打开", "在 TMDB 打开"])
         // 品牌图标：两个都用各自的彩色图（详情页行内原色渲染，不做单色化）。
         XCTAssertEqual(both.map(\.assetName), ["bangumi-logo-color", "tmdb-logo"])
-        // 宽高都钉死：Bangumi 是正方形标记，TMDb 是宽扁字标，两者高度不同是有意的。
+        // 宽高都钉死：Bangumi 是正方形标记，TMDB 是宽扁字标，两者高度不同是有意的。
         XCTAssertEqual(both.map(\.size), [CGSize(width: 15, height: 15), CGSize(width: 28, height: 12)])
 
         XCTAssertEqual(

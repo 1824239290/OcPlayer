@@ -2,13 +2,13 @@ import AppDesignKit
 import MetadataKit
 import SwiftUI
 
-/// 设置 → TMDb 元数据补全。
+/// 设置 → TMDB 元数据补全。
 ///
 /// 设计上刻意与「维护」页的「媒体元数据缓存」分开两处：
 /// - 那一行是**缓存**（服务端数据的副本，清掉只是重新拉）；
 /// - 这一块是**补全**（用第三方数据增强展示，清掉会丢掉「哪条对应到哪」的判断）。
 ///
-/// 合成一项的话，用户点「清除 TMDb 数据」时并不知道自己放弃的是后者。
+/// 合成一项的话，用户点「清除 TMDB 数据」时并不知道自己放弃的是后者。
 struct TMDbSettingsView: View {
     @Environment(AppModel.self) private var app
     @State private var keyInput = ""
@@ -49,7 +49,7 @@ struct TMDbSettingsView: View {
                 }
                 .disabled(keyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if !tmdb.isConfigured {
-                    SettingsNote("填入后启用 TMDb 补全：用第三方元数据补充详情页的简介、评分、演员与海报。"
+                    SettingsNote("填入后启用 TMDB 补全：用第三方元数据补充详情页的简介、评分、演员与海报。"
                          + "留空 = 关闭，不请求、不影响任何现有功能。")
                 }
             } header: {
@@ -63,14 +63,14 @@ struct TMDbSettingsView: View {
             .settingsCard()
 
             // 刻意**放在 `isConfigured` 闸门之外**：这一项的兜底来源是 Bangumi 章节，
-            // 没配 TMDb key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
+            // 没配 TMDB key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
             Section {
                 Toggle("显示未入库剧集占位", isOn: Binding(
                     get: { tmdb.showPlaceholders },
                     set: { tmdb.setShowPlaceholders($0) }))
                 SettingsNote(tmdb.showPlaceholders
                      ? "剧集详情页的选集条会把库里还没有的集画成占位卡（标「未播出」或「未入库」）。"
-                     + "数据优先用 TMDb 的季信息；没有 TMDb 数据时用已关联的 Bangumi 章节。"
+                     + "数据优先用 TMDB 的季信息；没有 TMDB 数据时用已关联的 Bangumi 章节。"
                      : "选集条只显示库里已有的集。")
             } header: {
                 Text("剧集占位")
@@ -92,18 +92,18 @@ struct TMDbSettingsView: View {
                     }
                     SettingsNote("标题与简介按此语言取；该语言缺翻译的字段自动回退到英文。")
 
-                    Toggle("文本以 TMDb 优先", isOn: Binding(
+                    Toggle("文本以 TMDB 优先", isOn: Binding(
                         get: { tmdb.preferText },
                         set: { tmdb.setPreferText($0) }))
                     SettingsNote(tmdb.preferText
-                         ? "标题/简介/类型用 TMDb 的替换服务端的。"
+                         ? "标题/简介/类型用 TMDB 的替换服务端的。"
                          : "只补服务端缺的字段，已有的不动。")
 
-                    Toggle("用 TMDb 图片替换已有的图", isOn: Binding(
+                    Toggle("用 TMDB 图片替换已有的图", isOn: Binding(
                         get: { tmdb.replaceImages },
                         set: { tmdb.setReplaceImages($0) }))
                     SettingsNote(tmdb.replaceImages
-                         ? "海报/背景/分集剧照优先用 TMDb 的（服务端已有的图会被顶掉）。"
+                         ? "海报/背景/分集剧照优先用 TMDB 的（服务端已有的图会被顶掉）。"
                          : "只补服务端没有图的条目；已精修过的海报不会被覆盖。")
                 }
                 .settingsCard()
@@ -134,11 +134,11 @@ struct TMDbSettingsView: View {
                         Button(role: .destructive) {
                             confirmClear = true
                         } label: {
-                            Label(cleared ? "已清除" : "清除 TMDb 补全数据", systemImage: "trash")
+                            Label(cleared ? "已清除" : "清除 TMDB 补全数据", systemImage: "trash")
                         }
                         .disabled(isClearing)
                         if cleared {
-                            Text("对应关系与已下载的 TMDb 数据已删除")
+                            Text("对应关系与已下载的 TMDB 数据已删除")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
@@ -147,9 +147,9 @@ struct TMDbSettingsView: View {
                     Text("数据")
                 } footer: {
                     // 缓存上限与署名要求都是整段（不是某一行）的说明 → 一起进段脚。
-                    // TMDb 的署名要求。完整条款在开源许可证页的「社区数据与服务」分组。
-                    Text("缓存上限 \(tmdb.cacheLifetimeDescription)（TMDb 条款要求不超过 \(tmdb.maxCacheDays) 天）。"
-                         + "本产品使用 TMDb API，但未获得 TMDb 认可或认证。")
+                    // TMDB 的署名要求。完整条款在开源许可证页的「社区数据与服务」分组。
+                    Text("缓存上限 \(tmdb.cacheLifetimeDescription)（TMDB 条款要求不超过 \(tmdb.maxCacheDays) 天）。"
+                         + "本产品使用 TMDB API，但未获得 TMDB 认可或认证。")
                 }
                 .settingsCard()
             }
@@ -165,13 +165,13 @@ struct TMDbSettingsView: View {
             }
         }
         .confirmationDialog(
-            "清除 TMDb 补全数据？",
+            "清除 TMDB 补全数据？",
             isPresented: $confirmClear,
             titleVisibility: .visible
         ) {
             Button("清除", role: .destructive) { clear() }
         } message: {
-            Text("对应关系与已下载的 TMDb 数据会一起删除；想恢复只能重新匹配补全。")
+            Text("对应关系与已下载的 TMDB 数据会一起删除；想恢复只能重新匹配补全。")
         }
     }
 

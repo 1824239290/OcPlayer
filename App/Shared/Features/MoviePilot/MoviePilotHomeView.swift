@@ -897,7 +897,7 @@ private struct MoviePilotMediaGlassCard: View {
                 width: 76,
                 cornerRadius: 12,
                 cornerStyle: .continuous,
-                // TMDb 的海报惯例就是 2:3：给它兜底比例，加载前那一帧也严丝合缝。
+                // TMDB 的海报惯例就是 2:3：给它兜底比例，加载前那一帧也严丝合缝。
                 nominalRatio: 2.0 / 3.0
             )
             // 封面投影比通用原语默认为重，保留原观感。

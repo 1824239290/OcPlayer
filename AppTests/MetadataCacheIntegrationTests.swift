@@ -324,10 +324,10 @@ final class MetadataCacheIntegrationTests: XCTestCase {
 
     // MARK: - 详情页占位（库里没有的集）
 
-    /// 预置「已匹配 + 已缓存且未过期」的 TMDb 状态。
+    /// 预置「已匹配 + 已缓存且未过期」的 TMDB 状态。
     ///
     /// **必须三份都齐**（对应 + 剧集实体 + 季数据）：少一份，`performRefresh` 就会
-    /// 走到真正的网络请求——用例碰真实 TMDb 既慢又不稳，本仓的规矩是包测试全部离线。
+    /// 走到真正的网络请求——用例碰真实 TMDB 既慢又不稳，本仓的规矩是包测试全部离线。
     /// 三份都未过期时 `performRefresh` 第一步就短路（「已有对应且数据够新 → 不动」）。
     private func seedTMDb(
         store: MetadataStore,
@@ -352,7 +352,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
             key: .season(tvID: tvID, number: seasonNumber), language: "zh-CN", lifetime: lifetime)
     }
 
-    /// 剧集页的选集轨道：库内只有 S3E25，TMDb 的季数据说这一季有 25…36 →
+    /// 剧集页的选集轨道：库内只有 S3E25，TMDB 的季数据说这一季有 25…36 →
     /// 轨道补出 26…36 的占位卡，而 `episodes`（服务端事实）与选中集**一个都不多**。
     ///
     /// 这条同时钉住「占位是派生展示、不是数据」：`episodes` 里多出一张假条目，
@@ -414,7 +414,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
                        "占位 id 不能与本地 id 或彼此相撞")
     }
 
-    /// 关掉开关 → 即使 TMDb 季数据就在库里也不出占位（退回加占位之前的行为）。
+    /// 关掉开关 → 即使 TMDB 季数据就在库里也不出占位（退回加占位之前的行为）。
     func testDetailPlaceholdersRespectTheSetting() async throws {
         let (app, stub, store, tenant) = try await makeApp { store, tenant in
             try await store.saveItems([
@@ -451,7 +451,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
         XCTAssertTrue(model.episodeSlots.allSatisfy { $0.placeholder == nil })
     }
 
-    /// 没配 TMDb（没 key）→ 不补占位；此时 Bangumi 章节兜底接手。
+    /// 没配 TMDB（没 key）→ 不补占位；此时 Bangumi 章节兜底接手。
     ///
     /// 这条同时验证优先级：编号对不上的来源**必须被忽略**（宁可没有占位，也不要错号的
     /// 假卡片）。用注入的候选数组就能测，不需要 Bangumi 登录态
@@ -502,7 +502,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
         XCTAssertEqual(model.episodeSlots.map(\.id), ["ep-25"])
     }
 
-    /// 占位卡的取图：TMDb 有剧照就用它（免鉴权）；没有就用**剧集自己的横版图**
+    /// 占位卡的取图：TMDB 有剧照就用它（免鉴权）；没有就用**剧集自己的横版图**
     /// （首页「继续观看」那条链），把格子填上而不是留一块灰底。
     func testPlaceholderThumbPrefersTMDbStillThenFallsBackToSeriesImage() async throws {
         let series = MediaItem(id: "series-1", name: "某番", kind: .series,
@@ -529,7 +529,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
         await model.load()
         await model.loadEpisodes()
 
-        // 没有 TMDb 剧照 → 剧集自己的 Thumb（服务端图，带凭证）。
+        // 没有 TMDB 剧照 → 剧集自己的 Thumb（服务端图，带凭证）。
         // 断言拆成「路径」与「query」两段而不是整串字面量：替身的 `imageURL` 与真实
         // 实现同形（`?maxWidth=…&tag=…`），整串比较会在每次调整取图参数时无意义地变红；
         // 这里真正要钉住的是「回落到**剧集自己**的那张 Thumb」与「tag 传下去了」。
@@ -542,7 +542,7 @@ final class MetadataCacheIntegrationTests: XCTestCase {
                       "tag 要进 URL：图换了 URL 就变，磁盘缓存自然失效")
         XCTAssertEqual(fallback.authHeader, stub.authorizationHeader)
 
-        // 有 TMDb 剧照 → 走 TMDb CDN，且**不带**服务端凭证（CDN 不校验，多送一处没意义）。
+        // 有 TMDB 剧照 → 走 TMDB CDN，且**不带**服务端凭证（CDN 不校验，多送一处没意义）。
         let withStill = EpisodePlaceholder(number: 27, seasonNumber: 3,
                                            stillPath: "/s27.jpg", reason: .notInLibrary)
         let tmdb = model.placeholderThumbTarget(for: withStill, width: 400)

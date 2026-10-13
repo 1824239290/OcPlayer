@@ -111,19 +111,19 @@ final class TMDbCoordinatorTests: XCTestCase {
         XCTAssertTrue(reopened.replaceImages)
     }
 
-    /// 默认值：`zh-CN` + **文本与图片都 TMDb 优先** + 90 天缓存。
+    /// 默认值：`zh-CN` + **文本与图片都 TMDB 优先** + 90 天缓存。
     ///
     /// 两个「默认开」的开关尤其要钉住：它们都用 `object(forKey:)` 判存在而不是
     /// `bool(forKey:)`——后者对默认开的开关在键不存在时返回 false，
     /// 会让默认值静默失效。
     ///
-    /// 图片默认也从「只补缺」改成了「TMDb 优先」（用户口径：填了 key 就是想要
-    /// 完整补全，能用 TMDb 就用），所以这里断言为 true。
+    /// 图片默认也从「只补缺」改成了「TMDB 优先」（用户口径：填了 key 就是想要
+    /// 完整补全，能用 TMDB 就用），所以这里断言为 true。
     func testDefaults() {
         let coordinator = TMDbCoordinator(defaults: defaults)
         XCTAssertEqual(coordinator.language, "zh-CN")
         XCTAssertTrue(coordinator.preferText)
-        XCTAssertTrue(coordinator.replaceImages, "默认 TMDb 优先")
+        XCTAssertTrue(coordinator.replaceImages, "默认 TMDB 优先")
         XCTAssertEqual(coordinator.cacheDays, TMDbPreferences.defaultCacheDays)
     }
 
@@ -137,7 +137,7 @@ final class TMDbCoordinatorTests: XCTestCase {
         XCTAssertFalse(TMDbImagePolicy(replacesExisting: coordinator.replaceImages).replacesExisting)
     }
 
-    /// 缓存天数被夹在 TMDb 条款上限内（6 个月），且下限为 1 天。
+    /// 缓存天数被夹在 TMDB 条款上限内（6 个月），且下限为 1 天。
     func testCacheDaysIsClamped() {
         let coordinator = TMDbCoordinator(defaults: defaults)
         coordinator.setCacheDays(9999)
@@ -152,7 +152,7 @@ final class TMDbCoordinatorTests: XCTestCase {
     func testImagePolicyFollowsSetting() {
         let coordinator = TMDbCoordinator(defaults: defaults)
         XCTAssertTrue(TMDbImagePolicy(replacesExisting: coordinator.replaceImages).replacesExisting,
-                      "默认 TMDb 优先")
+                      "默认 TMDB 优先")
         coordinator.setReplaceImages(false)
         XCTAssertFalse(TMDbImagePolicy(replacesExisting: coordinator.replaceImages).replacesExisting)
     }
@@ -263,18 +263,18 @@ final class TMDbCoordinatorTests: XCTestCase {
     ///
     /// 这条路径原先完全静默：用户填了 key、翻了几页、什么都没发生，只会以为
     /// 功能坏了。实测（把 key 换成无效值后开详情页）确认设置页会显示
-    /// 「API Key 无效或已被 TMDb 拒绝」。
+    /// 「API Key 无效或已被 TMDB 拒绝」。
     func testFailureMessages() {
-        XCTAssertEqual(TMDbCoordinator.message(for: .unauthorized), "API Key 无效或已被 TMDb 拒绝")
-        XCTAssertEqual(TMDbCoordinator.message(for: .transport("x")), "连不上 TMDb（检查网络或代理）")
-        XCTAssertEqual(TMDbCoordinator.message(for: .rateLimited(retryAfter: 5)), "TMDb 限流，请稍后再试")
-        XCTAssertEqual(TMDbCoordinator.message(for: .http(status: 503)), "TMDb 返回 HTTP 503")
-        XCTAssertEqual(TMDbCoordinator.message(for: .decoding("x")), "TMDb 返回了无法解析的数据")
+        XCTAssertEqual(TMDbCoordinator.message(for: .unauthorized), "API Key 无效或已被 TMDB 拒绝")
+        XCTAssertEqual(TMDbCoordinator.message(for: .transport("x")), "连不上 TMDB（检查网络或代理）")
+        XCTAssertEqual(TMDbCoordinator.message(for: .rateLimited(retryAfter: 5)), "TMDB 限流，请稍后再试")
+        XCTAssertEqual(TMDbCoordinator.message(for: .http(status: 503)), "TMDB 返回 HTTP 503")
+        XCTAssertEqual(TMDbCoordinator.message(for: .decoding("x")), "TMDB 返回了无法解析的数据")
         // 成功 → 不提示
         XCTAssertNil(TMDbCoordinator.message(for: nil))
         // 未配置 key 是「功能关着」，不是错误
         XCTAssertNil(TMDbCoordinator.message(for: .notConfigured))
-        // 脏 ProviderIds（id 在 TMDb 不存在）：用户无法处理，不打扰
+        // 脏 ProviderIds（id 在 TMDB 不存在）：用户无法处理，不打扰
         XCTAssertNil(TMDbCoordinator.message(for: .notFound))
     }
 
@@ -297,8 +297,8 @@ final class TMDbCoordinatorTests: XCTestCase {
 
     // MARK: - AppModel 接线
 
-    /// `AppModel` 默认用注入的 `preferences` 域构造 TMDb 协调器——
-    /// 否则测试传了独立 suite，TMDb 的设置仍会写进真实的 `.standard`。
+    /// `AppModel` 默认用注入的 `preferences` 域构造 TMDB 协调器——
+    /// 否则测试传了独立 suite，TMDB 的设置仍会写进真实的 `.standard`。
     func testAppModelUsesInjectedPreferencesDomain() async throws {
         let app = AppModel(preferences: defaults)
         app.tmdb.setAPIKey("0123456789abcdef0123456789abcdef")
@@ -315,7 +315,7 @@ final class TMDbCoordinatorTests: XCTestCase {
     /// 图片策略跟着设置走（详情页取图时现读）。
     func testAppModelImagePolicyReflectsSetting() {
         let app = AppModel(preferences: defaults)
-        XCTAssertTrue(app.tmdbImagePolicy.replacesExisting, "默认 TMDb 优先")
+        XCTAssertTrue(app.tmdbImagePolicy.replacesExisting, "默认 TMDB 优先")
         app.tmdb.setReplaceImages(false)
         XCTAssertFalse(app.tmdbImagePolicy.replacesExisting)
     }

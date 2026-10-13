@@ -13,7 +13,7 @@ public struct TMDbBatchProgress: Sendable, Equatable {
     public var skipped: Int
     /// 这次成功拉到数据的条目数。
     public var enriched: Int
-    /// 匹配不上（TMDb 上没有 / 认不出来）。**不是故障**，需要人工匹配。
+    /// 匹配不上（TMDB 上没有 / 认不出来）。**不是故障**，需要人工匹配。
     public var unmatched: Int
     /// 发了请求但失败（网络 / 401 / 429 / 404）。
     public var failed: Int
@@ -85,7 +85,7 @@ extension TMDbEnricher {
     ///   让 `.task` 随视图消失而取消）。不用额外的 cancel 标志，避免两套取消机制打架。
     ///
     /// - Parameter items: 要处理的条目。非电影/剧（合集、音乐、书…）会被跳过并计入
-    ///   `processed`——TMDb 的 movie/tv 端点对它们不适用。
+    ///   `processed`——TMDB 的 movie/tv 端点对它们不适用。
     public func enrichAll(
         items: [MediaItem],
         tenant: TenantID,
@@ -104,7 +104,7 @@ extension TMDbEnricher {
                 break
             }
 
-            // 只有电影与剧有对应的 TMDb 端点；其它类型不适用（也拿不到 id 语义）。
+            // 只有电影与剧有对应的 TMDB 端点；其它类型不适用（也拿不到 id 语义）。
             guard item.kind == .movie || item.kind == .series else {
                 result.processed += 1
                 continue
@@ -138,7 +138,7 @@ extension TMDbEnricher {
     /// 拉某部剧的各季。返回成功拉取的季数。
     ///
     /// 季号来自**已落库的剧实体**（`entity.seasons`），而不是再问服务端要一遍剧集列表：
-    /// 我们刚刚已经把它拉下来了，TMDb 的季列表与 Jellyfin 的季是对应的（季号即
+    /// 我们刚刚已经把它拉下来了，TMDB 的季列表与 Jellyfin 的季是对应的（季号即
     /// `IndexNumber`，特别篇为 0）。
     private func enrichSeasons(ofSeries item: MediaItem, tenant: TenantID) async -> Int {
         let language = preferences.language

@@ -1,7 +1,7 @@
 import DiagnosticsKit
 import Foundation
 
-/// TMDb 客户端错误。
+/// TMDB 客户端错误。
 public enum TMDbError: Error, Equatable {
     /// 没配置 key → **整个功能禁用**（不是错误，调用方应静默跳过）。
     case notConfigured
@@ -9,13 +9,13 @@ public enum TMDbError: Error, Equatable {
     case unauthorized
     /// 配额用尽（429）。`retryAfter` 是服务端给的秒数。
     case rateLimited(retryAfter: Double?)
-    /// 404：该 id 在 TMDb 不存在（`ProviderIds` 里的脏数据会走到这）。
+    /// 404：该 id 在 TMDB 不存在（`ProviderIds` 里的脏数据会走到这）。
     case notFound
     /// 其它 HTTP 状态。
     case http(status: Int)
     /// 传输层失败（断网 / 超时）。
     case transport(String)
-    /// 响应解不出来（TMDb 改 schema）。
+    /// 响应解不出来（TMDB 改 schema）。
     case decoding(String)
 
     /// 值不值得重试：限流与传输层可重试，其余（401/404/解码）重试也是白搭。
@@ -32,14 +32,14 @@ public enum TMDbError: Error, Equatable {
     }
 }
 
-/// TMDb 客户端。
+/// TMDB 客户端。
 ///
 /// 走共享的 `HTTPClient`（传输日志 / 计时 / 错误映射）+ `RetryPolicy`（指数退避、
 /// 尊重 429 的 `Retry-After`），与既有 5 个域客户端同形。
 ///
-/// 两处 TMDb 特有的讲究：
+/// 两处 TMDB 特有的讲究：
 ///
-/// 1. **语言按字段回退**：TMDb 不做语言回退——`language=zh-CN` 时没有中文翻译的字段
+/// 1. **语言按字段回退**：TMDB 不做语言回退——`language=zh-CN` 时没有中文翻译的字段
 ///    直接返回**空串**。所以关键字段（标题 / 简介）为空时会再取一次回退语言补上；
 ///    非关键字段（如分级）缺了就缺了，不为此多打一次请求。
 /// 2. **季一次拿全**：`/tv/{id}/season/{n}` 一次返回整季的所有集，
@@ -65,10 +65,10 @@ public struct TMDbClient: Sendable {
         retryPolicy: RetryPolicy = RetryPolicy(attempts: 3)
     ) {
         self.credentials = credentials
-        self.client = HTTPClient(session: session, category: "TMDb")
+        self.client = HTTPClient(session: session, category: "TMDB")
         self.limiter = limiter
         self.retryPolicy = retryPolicy
-        self.logger = NetworkLog.logger(category: "TMDb")
+        self.logger = NetworkLog.logger(category: "TMDB")
     }
 
     /// 是否已配置（未配置时所有方法都抛 `.notConfigured`，调用方应据此整体跳过）。
@@ -92,7 +92,7 @@ public struct TMDbClient: Sendable {
     ///
     /// 复用同一条 `entity` 路径：合集响应同样有 `name` / `overview` / `poster_path` /
     /// `backdrop_path`（我们只取这几个 + 图片），带 `append_to_response` 也实测 200
-    /// （TMDb 会忽略它不认识的那几个子资源）。
+    /// （TMDB 会忽略它不认识的那几个子资源）。
     public func collection(id: Int, language: String) async throws -> TMDbEntity {
         try await entity(path: "collection/\(id)", mediaType: .collection, language: language)
     }
@@ -136,7 +136,7 @@ public struct TMDbClient: Sendable {
                           extraQuery: [URLQueryItem(name: "append_to_response", value: Self.appendToResponse)]),
             mediaType: mediaType)
 
-        // 关键字段缺翻译（TMDb 返回空串）时，用回退语言补一次。
+        // 关键字段缺翻译（TMDB 返回空串）时，用回退语言补一次。
         // 只在**真的缺**时才多打一个请求——绝大多数中文条目不需要。
         if TMDbLanguage.needsFallback(title: primary.title, overview: primary.overview) {
             let fallback = TMDbLanguage.fallback(for: language)
@@ -200,7 +200,7 @@ public struct TMDbClient: Sendable {
             } retryAfterProvider: { error in
                 (error as? TMDbError)?.retryAfter
             } onRetry: { attempt, error in
-                logger.debug("TMDb 重试 attempt=\(attempt)", fields: ["error": .string("\(error)")])
+                logger.debug("TMDB 重试 attempt=\(attempt)", fields: ["error": .string("\(error)")])
             }
         }
     }
@@ -220,7 +220,7 @@ enum TMDbLanguage {
 
     /// 逐字段回退：**主语言非空即用主语言**。
     ///
-    /// TMDb 用空串表示「这门语言没这个字段」，所以判定必须是「非空」而不是「非 nil」——
+    /// TMDB 用空串表示「这门语言没这个字段」，所以判定必须是「非空」而不是「非 nil」——
     /// 用 `??` 会把空串当有效值，英文永远补不上。
     static func pick(_ primary: String?, _ fallback: String?) -> String? {
         if let primary, !primary.isEmpty { return primary }
@@ -231,7 +231,7 @@ enum TMDbLanguage {
 
 // MARK: - 解码
 
-/// TMDb 响应 → 模型。宽容解码（字段增删不该让整条补全失败）。
+/// TMDB 响应 → 模型。宽容解码（字段增删不该让整条补全失败）。
 enum TMDbDecoding {
 
     static func entity(_ data: Data, mediaType: TMDbMediaType) throws -> TMDbEntity {
@@ -301,7 +301,7 @@ enum TMDbDecoding {
     private static func cast(from raw: JSONObject) -> [CastMember] {
         guard let credits = raw["credits"], let list = credits.array("cast") else { return [] }
         // 只取前 20 位：详情页的演员栏本就只展示十几个，
-        // 多存等于把 payload 撑大（TMDb 一部片能返回上百位）。
+        // 多存等于把 payload 撑大（TMDB 一部片能返回上百位）。
         return list.prefix(20).compactMap { member -> CastMember? in
             guard let id = member.int("id"), let name = member.string("name") else { return nil }
             return CastMember(id: id, name: name,
@@ -322,7 +322,7 @@ enum TMDbDecoding {
         }
     }
 
-    /// 从 `content_ratings.results` 里按语言取一条（TMDb 返回多国分级）。
+    /// 从 `content_ratings.results` 里按语言取一条（TMDB 返回多国分级）。
     private static func contentRating(from raw: JSONObject) -> String? {
         guard let results = raw["content_ratings"]?.array("results"), !results.isEmpty else { return nil }
         let preferred = raw.string("__language") ?? "US"
@@ -346,7 +346,7 @@ enum TMDbDecoding {
 
 /// 极简 JSON 取值包装。
 ///
-/// 不用 `JSONDecoder` + 一堆 `Decodable` 结构体：TMDb 的响应字段名多且我们只要其中
+/// 不用 `JSONDecoder` + 一堆 `Decodable` 结构体：TMDB 的响应字段名多且我们只要其中
 /// 十几个，写 20 个 struct 的样板反而更容易在字段改名时漏改。这里把「宽容读取」
 /// 收成一个类型，取值失败一律返回 nil（上层按缺字段处理）。
 struct JSONObject {
