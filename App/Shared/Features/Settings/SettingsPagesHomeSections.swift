@@ -70,6 +70,7 @@ struct HomeSectionsSettingsView: View {
             .buttonStyle(.borderless)
 
             Toggle("", isOn: sectionVisibilityBinding(section))
+            .neutralSwitch()
                 .labelsHidden()
                 .accessibilityLabel("在首页显示\(section.title)")
         }

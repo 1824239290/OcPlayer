@@ -100,12 +100,12 @@ struct EpisodeSelectCard: View {
                     )
 
                     if episode.playState?.played == true {
-                        // 用 tint 而不是硬编码的绿：设计系统只用「中性 primary +
-                        // tint 表示已生效」两色（同 BangumiEpisodeCell / 下面那条进度轨），
-                        // 绿勾配蓝轨会让同一张卡上出现两个色相。
+                        // 中性强调色：实底 + **反色**勾。原来写的是 `.foregroundStyle(.white, .tint)`，
+                        // tint 变 `.primary` 之后勾与圆同色（深色模式下白圆白勾）等于消失，
+                        // 所以改用 `AppAccent.solid` / `onSolid` 这一对，两种外观都自适应。
                         Image(systemName: "checkmark.circle.fill")
                             .font(.footnote)
-                            .foregroundStyle(.white, .tint)
+                            .foregroundStyle(AppAccent.solid, AppAccent.onSolid)
                             .padding(8)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     }

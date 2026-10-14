@@ -230,7 +230,7 @@ struct BangumiCalendarView: View {
             HStack(spacing: 5) {
                 if isToday && !isSelected {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(AppAccent.solid)
                         .frame(width: 6, height: 6)
                 }
 
@@ -242,17 +242,18 @@ struct BangumiCalendarView: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
                     .background(
-                        isSelected ? Color.white.opacity(0.25) : Color.primary.opacity(0.08),
+                        // 选中时底是实底（`.primary`），徽章底必须用**反色**才看得见。
+                        isSelected ? AppAccent.onSolid.opacity(0.25) : Color.primary.opacity(0.08),
                         in: Capsule()
                     )
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(
-                isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.fill.tertiary),
+                isSelected ? AnyShapeStyle(AppAccent.solid) : AnyShapeStyle(.fill.tertiary),
                 in: Capsule()
             )
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .foregroundStyle(isSelected ? AppAccent.onSolid : Color.primary)
         }
         .buttonStyle(.plain)
         .motion(Motion.fast, value: isSelected)

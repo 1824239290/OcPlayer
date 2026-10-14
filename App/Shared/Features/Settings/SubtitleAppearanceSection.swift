@@ -72,6 +72,7 @@ struct SubtitleAppearanceSection: View {
 
             HStack {
                 Toggle("加粗", isOn: boldBinding)
+                .neutralSwitch()
                 Spacer(minLength: 8)
                 if bold != nil {
                     Button("还原") { resetBold() }
@@ -81,6 +82,7 @@ struct SubtitleAppearanceSection: View {
             }
 
             Toggle("覆盖字幕自带样式", isOn: $overridesEnabled)
+            .neutralSwitch()
                 .onChange(of: overridesEnabled) { _, _ in controller.applySubtitleStyle() }
 
             if let engine = controller.engine, !engine.supportsSubtitleStyle {

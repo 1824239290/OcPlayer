@@ -951,15 +951,19 @@ struct PlayerHUDToggleMenuRow: View {
 }
 
 /// HUD 内的迷你开关：系统 Switch 在玻璃底上对比度不稳，手绘胶囊 + 圆点。
+///
+/// 开态的路轨在中性强调色下就是 `PlayerHUDPalette.primary`（白），而圆点原本也是白——
+/// 白轨道 + 白圆点会把圆点整个吃掉，只剩一条看不出开/关的白色胶囊。所以开态圆点
+/// 取**反色**（近黑），关态才用白点压在暗轨道上；两种外观下开关的"位"都读得出来。
 private struct PlayerHUDMiniSwitch: View {
     let isOn: Bool
 
     var body: some View {
         ZStack(alignment: .leading) {
             Capsule()
-                .fill(isOn ? Color.accentColor : Color.white.opacity(0.22))
+                .fill(isOn ? PlayerHUDPalette.primary : Color.white.opacity(0.22))
             Circle()
-                .fill(Color.white)
+                .fill(isOn ? AppAccent.onSolid : PlayerHUDPalette.primary)
                 .frame(width: 14, height: 14)
                 .offset(x: isOn ? 16 : 2)
         }

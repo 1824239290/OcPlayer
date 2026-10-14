@@ -16,6 +16,7 @@ struct DanmakuSettingsView: View {
                     get: { danmakuModel.danmaku.isAutoLoadingEnabled },
                     set: { app.setDanmakuAutoLoadingEnabled($0) }
                 ))
+                .neutralSwitch()
                 HStack {
                     Text("网关")
                     Spacer()

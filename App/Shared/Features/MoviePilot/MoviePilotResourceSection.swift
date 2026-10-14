@@ -143,7 +143,7 @@ struct MoviePilotResourceSection: View {
                     Label("在 MoviePilot 找资源", systemImage: "magnifyingglass")
                         .font(.callout.weight(.medium))
                 }
-                .buttonStyle(.borderedProminent)
+                .neutralProminentButton()
                 Text("这个条目没有 Tmdb 编号，先按标题匹配一次。")
                     .font(.caption)
                     .foregroundStyle(.secondary)

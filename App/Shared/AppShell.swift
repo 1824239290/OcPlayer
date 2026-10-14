@@ -146,9 +146,8 @@ struct AppShellView: View {
     /// 脱离导航栏。每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非
     /// sheet——播放器覆盖层不再被遮住。
     ///
-    /// **每个 Tab 根页都挂 `.tabContentAccent()`**：`compactLayout` 给 TabView 设的
-    /// `.tint` 只为了改标签栏的选中色，而 tint 是环境值、会渗进内容（见该处
-    /// 说明）。新增 Tab 时别忘了补这一句，否则该 Tab 内的强调色元素会变白/黑。
+    /// 强调色不在这里管：整棵树吃 `RootView` 根节点钉的那一个中性 tint，标签栏
+    /// 选中色与内容侧是**同一个来源**，新增 Tab 不需要补任何一句。
     @TabContentBuilder<AppModel.Section>
     private var compactTabs: some TabContent<AppModel.Section> {
         // 五个 Tab 根页统一用 `pageAmbience`：它会按平台分叉（iOS 自垫 /
@@ -168,7 +167,6 @@ struct AppShellView: View {
                             .ignoresSafeArea()
                     }
             }
-            .tabContentAccent()
         }
 
         if bangumiEnabled {
@@ -179,8 +177,7 @@ struct AppShellView: View {
                         // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
-                .tabContentAccent()
-            }
+                }
         }
 
         if moviepilotEnabled {
@@ -190,8 +187,7 @@ struct AppShellView: View {
                         .appRoutes()
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
-                .tabContentAccent()
-            }
+                }
         }
 
         Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
@@ -200,7 +196,6 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
-            .tabContentAccent()
         }
 
         // 搜索 Tab 此前**没有**垫任何底（漏网的第 11 类页面）：iOS 上整页纯色，
@@ -211,7 +206,6 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
-            .tabContentAccent()
         }
     }
 
@@ -224,19 +218,16 @@ struct AppShellView: View {
         )) {
             compactTabs
         }
-        // 标签栏选中色对齐 macOS 顶栏药丸：macOS 那套选中态只靠前景色亮暗区分
-        // （选中 `.primary` / 未选中 `.secondary`，见 `AppShellSectionGroup.segmentBackground`
-        // ——用户明确否过蓝色选中底），iOS 的 TabView 选中项默认吃环境 tint，
-        // 没有 AccentColor 资源时就是系统蓝。这里把标签栏的 tint 钉成 `.primary`：
-        // 选中项变白（深色）/ 黑（浅色），与顶栏药丸同一套语言，系统自带的
-        // 玻璃选中底保留（iOS 26 的悬浮玻璃标签栏）。
+        // 标签栏的选中色**继承** `RootView` 根节点钉的中性 tint（`.primary`）：
+        // 选中项变白（深色）/ 黑（浅色），与顶栏药丸同一套语言，系统自带的玻璃
+        // 选中底保留（iOS 26 的悬浮玻璃标签栏）。这里不再单独钉一遍——两处钉同一
+        // 个值只会制造"改了一处忘了另一处"的机会。
         //
         // 两条走过弯路的路子，别再试：
         //   * `UITabBar.appearance().tintColor = .label` —— iOS 26 的玻璃标签栏
         //     不认这套 appearance 代理，实测选中项依旧是系统蓝；
         //   * 内容侧用 `.tint(Color.accentColor)` 把强调色钉回去 —— 自我指涉，
-        //     详见 `TabContentAccent`。
-        .tint(Color.primary)
+        //     且钉的是具体色值 `Color.blue`；见文件末「强调色」一节的说明。
         .motion(Motion.slide, value: app.selectedSection)
         .onAppear { app.setCompact(true) }
     }
@@ -326,39 +317,16 @@ struct AppShellView: View {
     }
 }
 
-// MARK: - Tab 内容的强调色回钉
+// MARK: - 强调色
 
-#if !os(macOS)
-
-/// 把一个 Tab 的整棵子树（页面 + 导航栏 chrome）钉回强调色。
-///
-/// `compactLayout` 给 TabView 设的 `.tint(Color.primary)` 是**给标签栏改选中色**的
-/// （对齐 macOS 顶栏药丸的选中态），但 tint 是环境值，会一路渗进 Tab 内容——
-/// 而且 `Color.accentColor` **也**跟着环境 tint 走（实测：不钉回去时详情页
-/// `compactPlayButton` 的 `.fill(Color.accentColor)` 整颗渲染成白色、「展开全文」
-/// 那类 `.foregroundStyle(.tint)` 同样变白）。所以这里必须点名一个**具体色值**：
-/// 写 `.tint(Color.accentColor)` 是自我指涉——在 TabView 内部求值拿到的正是被污染
-/// 后的 `.primary`，等于没钉。`Color.blue` 就是本 App 改动前的强调色：资源目录里
-/// 没有 AccentColor，`.tint` / `Color.accentColor` 解出来的就是系统默认强调色
-/// （systemBlue），与 `Color.blue` 逐值相同（截图逐像素比对过）。
-///
-/// 挂在 `NavigationStack` **外面**是为了连导航栏一起覆盖——系统工具栏里吃 tint 的
-/// 按钮同样按改动前的强调色渲染；push 进来的路由页也照样继承（实测详情页逐像素
-/// 与改动前相同）。
-private struct TabContentAccent: ViewModifier {
-    func body(content: Content) -> some View {
-        content.tint(Color.blue)
-    }
-}
-
-extension View {
-    /// Tab 根页把强调色钉回内容侧（见 `TabContentAccent`）。
-    func tabContentAccent() -> some View {
-        modifier(TabContentAccent())
-    }
-}
-
-#endif
+// 强调色（中性）统一由 `RootView` 在**根节点**钉一次，这里不再按 Tab 各钉一遍。
+//
+// 历史：曾经在 `compactLayout` 给 TabView 钉 `.tint(Color.primary)` 改标签栏选中色，
+// 再给每个 Tab 根页挂 `.tabContentAccent()`（钉具体色值 `Color.blue`）把强调色"钉回去"。
+// 那次改动顺带把 Toggle（绿→蓝）、菜单式 Picker 取值（灰→蓝）、圆形不定 ProgressView
+// （灰→蓝）、工具栏按钮（label→蓝）、`.bordered` 底（中性→蓝）一起换了色，原因是
+// `.tint` 是环境值、而公开 API 无法把它还原成"未设置"（`\.tint` 是 package 保护级）。
+// 根节点钉一次就没有"内容被污染再钉回来"这回事，也不再有"新增 Tab 忘了补一句"的坑。
 
 // MARK: - 两段式换页：退场淡出
 

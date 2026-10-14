@@ -33,6 +33,7 @@ struct MaintenanceSettingsView: View {
             Section {
                 DiagnosticsSection()
                 Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
+                .neutralSwitch()
                 SettingsNote("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
             } header: {
                 Text("日志与诊断")
@@ -172,6 +173,7 @@ struct DiagnosticsSection: View {
 
     var body: some View {
         Toggle("详细日志", isOn: $verboseLogging)
+        .neutralSwitch()
             .onChange(of: verboseLogging) { _, _ in
                 // 立即生效：改的是日志管线的进程级最低级别，不需要重启。
                 DiagnosticsSettings.apply()

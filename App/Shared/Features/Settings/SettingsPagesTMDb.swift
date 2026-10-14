@@ -68,6 +68,7 @@ struct TMDbSettingsView: View {
                 Toggle("显示未入库剧集占位", isOn: Binding(
                     get: { tmdb.showPlaceholders },
                     set: { tmdb.setShowPlaceholders($0) }))
+                .neutralSwitch()
                 SettingsNote(tmdb.showPlaceholders
                      ? "剧集详情页的选集条会把库里还没有的集画成占位卡（标「未播出」或「未入库」）。"
                      + "数据优先用 TMDB 的季信息；没有 TMDB 数据时用已关联的 Bangumi 章节。"
@@ -95,6 +96,7 @@ struct TMDbSettingsView: View {
                     Toggle("文本以 TMDB 优先", isOn: Binding(
                         get: { tmdb.preferText },
                         set: { tmdb.setPreferText($0) }))
+                    .neutralSwitch()
                     SettingsNote(tmdb.preferText
                          ? "标题/简介/类型用 TMDB 的替换服务端的。"
                          : "只补服务端缺的字段，已有的不动。")
@@ -102,6 +104,7 @@ struct TMDbSettingsView: View {
                     Toggle("用 TMDB 图片替换已有的图", isOn: Binding(
                         get: { tmdb.replaceImages },
                         set: { tmdb.setReplaceImages($0) }))
+                    .neutralSwitch()
                     SettingsNote(tmdb.replaceImages
                          ? "海报/背景/分集剧照优先用 TMDB 的（服务端已有的图会被顶掉）。"
                          : "只补服务端没有图的条目；已精修过的海报不会被覆盖。")

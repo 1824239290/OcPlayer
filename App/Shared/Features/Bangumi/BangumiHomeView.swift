@@ -93,7 +93,7 @@ struct BangumiHomeView: View {
                             Button("重试") {
                                 bangumi.retryDatabaseSetup()
                             }
-                            .buttonStyle(.borderedProminent)
+                            .neutralProminentButton()
                         }
                         .padding(24)
                     }
@@ -260,7 +260,7 @@ struct BangumiHomeView: View {
                                     Button(UIStrings.retry) {
                                         Task { await loader.loadInitial() }
                                     }
-                                    .buttonStyle(.borderedProminent)
+                                    .neutralProminentButton()
 
                                     Button("返回在看") {
                                         exitSearchMode()
@@ -372,10 +372,11 @@ struct BangumiHomeView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
-                isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.fill.tertiary),
+                // 中性强调色：选中 = 实底反色，未选中 = 三级填充 + 前景色。区分靠亮度。
+                isSelected ? AnyShapeStyle(AppAccent.solid) : AnyShapeStyle(.fill.tertiary),
                 in: Capsule()
             )
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .foregroundStyle(isSelected ? AppAccent.onSolid : Color.primary)
         }
         .buttonStyle(.plain)
     }

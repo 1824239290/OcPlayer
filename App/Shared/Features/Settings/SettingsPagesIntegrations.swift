@@ -141,6 +141,7 @@ struct BangumiSettingsView: View {
         Form {
             Section {
                 Toggle("启用 Bangumi", isOn: $bangumiEnabled)
+                .neutralSwitch()
                 if bangumiEnabled {
                     KeyValueRow(label: "账号", value: bangumiAccountText)
                     if bangumi.isAuthenticated {
@@ -201,6 +202,7 @@ struct MoviePilotSettingsView: View {
         Form {
             Section {
                 Toggle("启用 MoviePilot", isOn: $moviepilotEnabled)
+                .neutralSwitch()
                 if moviepilotEnabled {
                     KeyValueRow(label: "地址", value: moviepilot.store.serverURLString ?? "—")
                     KeyValueRow(label: "用户", value: moviepilot.profile?.name
@@ -214,6 +216,7 @@ struct MoviePilotSettingsView: View {
                     Toggle("记住密码（令牌过期后免重输）", isOn: Binding(
                         get: { moviepilot.rememberPassword },
                         set: { moviepilot.rememberPassword = $0 }))
+                    .neutralSwitch()
                     SettingsNote("MoviePilot 的登录令牌 8 天过期且无法刷新。默认不保存密码："
                         + "到期后需要重新输入一次。打开此项会把密码存到本机凭据文件"
                         + "（已排除 iCloud / Time Machine 备份）。")

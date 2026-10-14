@@ -440,7 +440,8 @@ private struct MoviePilotTorrentGlassCard: View {
                 // 微型发光胶囊标签行
                 HStack(spacing: 6) {
                     if let site = torrent.siteName {
-                        PillChip(site, role: .custom(.blue), font: .caption2.weight(.semibold), bordered: true)
+                        // 同 MoviePilotDownloadsView：站点身份标签走中性档，不占色相。
+                        PillChip(site, role: .neutral, font: .caption2.weight(.semibold), bordered: true)
                     }
                     if torrent.isFree {
                         PillChip("免费", role: .custom(.green), font: .caption2.weight(.semibold), bordered: true)

@@ -363,6 +363,7 @@ struct MoviePilotSubscribeSheet: View {
     private var advancedSection: some View {
         Section("高级设置") {
             Toggle("最佳版本洗版 (自动下载更高质量版本)", isOn: $bestVersion)
+            .neutralSwitch()
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("自定义存储路径")

@@ -407,12 +407,18 @@ struct DetailView: View {
     private var compactPlayButton: some View {
         Button(action: playCurrent) {
             ZStack(alignment: .leading) {
+                // 中性强调色下的实底主行动：填充 `.primary`，文字必须**反色**
+                // （`AppAccent.onSolid`）。不点名反色字会整颗糊成白底白字——tint 是
+                // `.primary` 时系统不会自动给实底按钮换字色（详见 `AppAccent`）。
                 Capsule()
-                    .fill(Color.accentColor)
+                    .fill(AppAccent.solid)
 
                 if let progress = resumeProgress {
+                    // 已播进度条压在实底上：用**反色**的半透明带——深色模式下是压暗、
+                    // 浅色模式下是提亮，两种外观都看得见（原来的 `Color.white` 压在
+                    // 白色实底上完全不可见）。
                     Rectangle()
-                        .fill(Color.white.opacity(0.24))
+                        .fill(AppAccent.onSolid.opacity(0.25))
                         .scaleEffect(x: progress, y: 1, anchor: .leading)
                 }
 
@@ -424,7 +430,7 @@ struct DetailView: View {
                         .monospacedDigit()
                         .lineLimit(1)
                 }
-                .foregroundStyle(Color.white)
+                .foregroundStyle(AppAccent.onSolid)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(height: 48)

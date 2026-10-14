@@ -146,12 +146,12 @@ struct MoviePilotHomeView: View {
             } actions: {
                 if allowsRelogin {
                     Button("重新登录") { isPresentingReloginSheet = true }
-                        .buttonStyle(.borderedProminent)
+                        .neutralProminentButton()
                     Button("去设置") { app.switchSection(.settings) }
                         .buttonStyle(.bordered)
                 } else {
                     Button("去设置") { app.switchSection(.settings) }
-                        .buttonStyle(.borderedProminent)
+                        .neutralProminentButton()
                 }
             }
         }
@@ -381,7 +381,7 @@ struct MoviePilotHomeView: View {
                     sheetMedia = nil
                     isPresentingAddSheet = true
                 }
-                .buttonStyle(.borderedProminent)
+                .neutralProminentButton()
 
                 Button("刷新") {
                     Task { await loadSubscribes() }

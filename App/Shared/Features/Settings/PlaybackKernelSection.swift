@@ -94,7 +94,9 @@ struct PlaybackKernelSection: View {
                     "当前播放仍在用 \(pendingSwitch.displayName)，"
                         + "下一次播放会切到 \(selected.displayName)。",
                     icon: "clock.arrow.circlepath",
-                    tint: .blue
+                    // 中性强调色下不留「信息 = 蓝」这一档：这条是提示不是警告，图标
+                    // 跟着正文一起走中性前景色；警告档仍然是橙（语义色，见上一条）。
+                    tint: Color.primary.opacity(0.55)
                 )
             }
         }

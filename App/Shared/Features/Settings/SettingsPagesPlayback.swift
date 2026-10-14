@@ -67,7 +67,9 @@ struct PlaybackSettingsView: View {
             // iOS 设置里段级解释的标准位置：卡片下方的那段留白，不会把卡片内部切开。
             Section {
                 Toggle("跳过片头", isOn: $skipIntroEnabled)
+                .neutralSwitch()
                 Toggle("跳过片尾", isOn: $skipOutroEnabled)
+                .neutralSwitch()
                 Picker("片尾保留", selection: Binding(
                     get: { outroRetentionSeconds },
                     set: { storedOutroRetention = $0 }

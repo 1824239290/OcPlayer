@@ -66,7 +66,7 @@ struct BangumiLoginView: View {
                             Label("登录 Bangumi", systemImage: "arrow.right.circle")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .neutralProminentButton()
                     .controlSize(.large)
                 }
 

@@ -237,7 +237,9 @@ private struct DownloadTaskCard: View {
                     PillChip("下载中", role: .custom(.green), font: .caption2.weight(.semibold))
                 }
                 if let site = task.siteName, !site.isEmpty {
-                    PillChip(site, role: .custom(.blue), font: .caption2.weight(.semibold), bordered: true)
+                    // 站点名是身份标签、不是强调：中性档（原来钉的是通用蓝，全 App 去蓝后
+                    // 它会成为画面上唯一的色相，比状态色还抢眼）。
+                    PillChip(site, role: .neutral, font: .caption2.weight(.semibold), bordered: true)
                 }
                 PillChip(task.sizeText, font: .caption2.monospacedDigit())
                 Spacer(minLength: 0)

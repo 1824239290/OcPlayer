@@ -36,6 +36,25 @@ struct RootView: View {
             }
         }
         .motion(Motion.slide, value: app.phase)
+        // 全 App 的强调色语言 = **中性**：只用前景色亮暗差表达「选中 / 强调」，
+        // 色相不参与（与 macOS 顶栏药丸、iOS 标签栏同一套，见 `AppShellSectionGroup`）。
+        //
+        // **钉在根节点这一个地方**，不再按 Tab 或按平台各钉一遍。tint 是环境值，
+        // `Color.accentColor` 与 `.foregroundStyle(.tint)` 都会跟着它走，所以这一行
+        // 覆盖：iOS 标签栏选中色、导航栏 / 工具栏按钮、`.bordered*` 按钮、Toggle /
+        // Picker / Stepper / Slider / ProgressView 这些吃 tint 的系统控件、以及 40 处
+        // 显式 `Color.accentColor` 与 13 处 `.foregroundStyle(.tint)`。macOS 原先没有
+        // 任何 pin、跟着用户的系统强调色走（可能是粉 / 石墨），这里一并统一。
+        //
+        // **曾经的做法别再回去**：`TabView` 上钉 `.tint(Color.primary)` 改标签栏选中色，
+        // 再给每个 Tab 根页挂 `.tabContentAccent()`（钉 `Color.blue`）把强调色"钉回去"。
+        // 那条路有三重代价——① 每新增一个 Tab 都要记得补一句，漏了不报错、只是那个 Tab
+        // 的强调元素悄悄变白；② 钉的是**具体色值** `Color.blue`，等于把全 App 的强调色
+        // 写死成系统蓝；③ `.tint` 无法用公开 API 还原成"未设置"（`\.tint` 是 `package`
+        // 保护级，`.environment(\.tint, nil)` 编译不过），于是那次"改标签栏"顺带把
+        // Toggle（绿→蓝）、菜单式 Picker 取值（灰→蓝）、圆形不定 ProgressView（灰→蓝）、
+        // 工具栏按钮（label→蓝）、`.bordered` 底（中性→蓝）一起换了色。
+        .tint(Color.primary)
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
