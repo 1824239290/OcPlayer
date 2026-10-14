@@ -199,9 +199,15 @@ extension AppModel {
         nextEpisodeTask = nil
         externalSubtitleTask?.cancel()
         externalSubtitleTask = nil
+        userAvatarTask?.cancel()
+        userAvatarTask = nil
         sessionGeneration &+= 1
         server = nil
         serverEndpointURL = nil
+        // 头像是**账号身份**，不是内容：换服务器 / 登出 / 401 之后不能还挂着上一个
+        // 账号的脸（那比挂一张旧海报更刺眼——它是「你是谁」）。URL 里也带着旧账号的
+        // authHeader，留着就是拿旧凭据去请求。
+        userAvatarImage = nil
         libraries = []
         librariesError = nil
         libraryPages = [:]

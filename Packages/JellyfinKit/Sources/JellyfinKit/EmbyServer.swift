@@ -471,6 +471,29 @@ public struct EmbyServer: MediaServer {
         return (result.items ?? []).map(\.domainItem)
     }
 
+    // MARK: - 当前用户
+
+    /// 当前账号头像的图 tag（`GET /Users/Me` → `PrimaryImageTag`）。
+    ///
+    /// Emby 的 `/Users/Me` 与 Jellyfin 同形，走的也是本包自己的宽松 DTO —— 它同样
+    /// 会带 Jellyfin schema 之外的字段（UserPolicy 变体），强类型解码会整包炸。
+    public func currentUserAvatarTag() async throws -> String? {
+        try await session.get("/Users/Me", as: EmbyUserDTO.self).primaryImageTag
+    }
+
+    /// 用户头像地址。Emby 走老式 `/Users/{id}/Images/Primary`（与 `/Users/{id}/Views`、
+    /// `/Users/{id}/Items/Latest` 同批旧路由），拼法委托 `ServerURLBuilder`，
+    /// 与条目图逐字节同源。
+    public func userImageURL(tag: String? = nil) -> URL? {
+        var query: [(String, String)] = []
+        if let tag { query.append(("tag", tag)) }
+        return ServerURLBuilder.url(
+            base: session.baseURL,
+            path: "/Users/\(userID)/Images/Primary",
+            query: query
+        )
+    }
+
     // MARK: - 媒体资源
 
     public func imageURL(itemID: String, type: ItemImageType = .primary,

@@ -645,6 +645,53 @@ final class EmbyServerTests: XCTestCase {
         XCTAssertFalse(image.absoluteString.lowercased().contains("token"))
     }
 
+    // MARK: - 当前用户头像
+
+    /// Emby 的用户头像走老式 `/Users/{id}/Images/Primary`（与 `/Users/{id}/Views`
+    /// 同批旧路由），**不是** Jellyfin 12.x 的 `/UserImage`。形状钉成黄金值：
+    /// `ImageCacheKey` 按 path 认这条端点，拼错了头像会换地址重复下载。
+    func testUserImageURLUsesLegacyUserImagesRoute() throws {
+        let url = try XCTUnwrap(makeServer().userImageURL(tag: "av-7"))
+        XCTAssertEqual(url.path, "/emby/Users/user-e/Images/Primary")
+        XCTAssertTrue(url.query?.contains("tag=av-7") == true)
+        XCTAssertFalse(url.absoluteString.lowercased().contains("token"))
+
+        // 没有 tag（= 这个账号没头像）时只发路径，不该被调用方发出去。
+        XCTAssertEqual(try XCTUnwrap(makeServer().userImageURL(tag: nil)).query, nil)
+    }
+
+    func testCurrentUserAvatarTagReadsUsersMe() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/emby/Users/Me")
+            return MockURLProtocol.ok(
+                #"{"Id":"user-e","Name":"jumusu","PrimaryImageTag":"av-7"}"#,
+                for: request.url!
+            )
+        } with: {
+            let tag = try await makeServer().currentUserAvatarTag()
+            XCTAssertEqual(tag, "av-7")
+        }
+    }
+
+    /// Emby 的 `/Users/Me` 同样会带 Jellyfin schema 之外的字段（UserPolicy 变体），
+    /// 宽松 DTO 必须照常解出 tag —— 用 SDK 强类型解这里会整包炸。
+    func testCurrentUserAvatarTagToleratesEmbyExtraFields() async throws {
+        try await TestSupport.withMock { request in
+            MockURLProtocol.ok(
+                """
+                {"Id":"user-e","Name":"jumusu","PrimaryImageTag":"av-9",
+                 "Policy":{"IsAdministrator":true,"EnableContentDeletion":true},
+                 "Configuration":{"SubtitleMode":"Default"},
+                 "LastLoginDate":"2026-08-27T06:00:00Z"}
+                """,
+                for: request.url!
+            )
+        } with: {
+            let tag = try await makeServer().currentUserAvatarTag()
+            XCTAssertEqual(tag, "av-9")
+        }
+    }
+
     /// Emby 用 `Emby` scheme，Jellyfin 用 `MediaBrowser` —— 两家唯一的分叉点。
     func testAuthorizationHeaderUsesEmbyScheme() {
         let header = makeServer().authorizationHeader

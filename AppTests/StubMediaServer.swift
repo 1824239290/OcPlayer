@@ -73,12 +73,14 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         _callCounts[name, default: 0] += 1
     }
 
-    init(profileID: String = "srv:user", kind: ServerKind = .jellyfin) {
+    init(profileID: String = "srv:user", kind: ServerKind = .jellyfin,
+         primaryImageTag: String? = nil) {
         profile = ServerProfile(
             id: profileID,
             serverName: "stub",
             baseURL: URL(string: "http://stub.local:8096")!,
             userID: profileID.split(separator: ":").last.map(String.init) ?? profileID,
+            primaryImageTag: primaryImageTag,
             kind: kind
         )
     }
@@ -147,6 +149,27 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     }
 
     func items(parentID: String?, kinds: [MediaItem.Kind]?, recursive: Bool, limit: Int) async throws -> [MediaItem] { [] }
+
+    // MARK: - 当前用户
+
+    /// 头像 tag：默认「这个账号没有头像」——真实世界里多数账号确实没有，默认 nil
+    /// 也让所有既有用例保持「不发任何头像请求」的行为。
+    var userAvatarTagResult: Result<String?, any Error> = .success(nil)
+
+    func currentUserAvatarTag() async throws -> String? {
+        count("currentUserAvatarTag")
+        return try userAvatarTagResult.get()
+    }
+
+    /// 与真实实现同形（Jellyfin 的 `/UserImage`，见 `JellyfinServer.userImageURL`）：
+    /// `tag` 进 query —— 「换了头像 URL 就变 → 缓存自然失效」这条规则的事实依据。
+    func userImageURL(tag: String?) -> URL? {
+        var components = URLComponents(string: "http://stub.local:8096/UserImage")!
+        var query: [URLQueryItem] = [URLQueryItem(name: "userId", value: profile.userID)]
+        if let tag { query.append(URLQueryItem(name: "tag", value: tag)) }
+        components.queryItems = query
+        return components.url
+    }
 
     // MARK: - 媒体资源
 

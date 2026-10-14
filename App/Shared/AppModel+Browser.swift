@@ -81,6 +81,12 @@ extension AppModel {
         initialDataTask = Task { [weak self] in
             await self?.loadInitialData(server: cached, generation: generation)
         }
+        // 头像单独一条任务，不搭首屏那趟车：它只喂首页 Tab 的图标，不该拖慢首屏；
+        // 而首屏任务会被下拉刷新 / 重试重建，头像没必要跟着重来一遍。
+        userAvatarTask?.cancel()
+        userAvatarTask = Task { [weak self] in
+            await self?.loadUserAvatar(server: cached, generation: generation)
+        }
     }
 
     func sessionIsCurrent(_ generation: Int, server: any MediaServer) -> Bool {

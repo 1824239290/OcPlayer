@@ -438,6 +438,24 @@ public struct JellyfinServer: MediaServer {
         .items?.map(\.domainItem) ?? []
     }
 
+    // MARK: - 当前用户
+
+    /// 当前账号头像的图 tag（`GET /Users/Me` → `UserDto.PrimaryImageTag`）。
+    ///
+    /// 登录响应里本来也带这个字段（`LoginResult.primaryImageTag`），这里再问一次是
+    /// 为了**校准**：用户在服务端换过头像之后，档案里那份 tag 就过期了。
+    public func currentUserAvatarTag() async throws -> String? {
+        try await send(Paths.getCurrentUser).primaryImageTag
+    }
+
+    /// 用户头像地址。Jellyfin 12.x 把用户图收在**独立端点** `/UserImage` 上
+    /// （`userId` / `tag` / `format` 三个 query），**不是**条目图那套
+    /// `/Users/{userId}/Images/{type}` —— 后者在本项目钉住的 SDK 生成的 OpenAPI 里
+    /// 根本不存在（用户图是唯一一条不遵循 `{id}/Images/{type}` 形状的图路由）。
+    public func userImageURL(tag: String? = nil) -> URL? {
+        client.url(with: Paths.getUserImage(parameters: .init(userID: profile.userID, tag: tag)))
+    }
+
     // MARK: - URL
 
     /// 条目图片地址。**不含 token**（加载方带 `Authorization` 头）；`tag` 进 query，

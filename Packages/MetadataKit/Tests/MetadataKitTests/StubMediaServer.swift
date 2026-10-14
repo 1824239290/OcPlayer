@@ -113,6 +113,24 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         count("similar"); return []
     }
 
+    // MARK: - 当前用户
+
+    /// 默认「这个账号没有头像」：既有用例因此不会多出任何头像请求。
+    var userAvatarTagResult: Result<String?, any Error> = .success(nil)
+
+    func currentUserAvatarTag() async throws -> String? {
+        count("currentUserAvatarTag")
+        return try userAvatarTagResult.get()
+    }
+
+    func userImageURL(tag: String?) -> URL? {
+        var components = URLComponents(string: "http://stub.local:8096/UserImage")!
+        var query: [URLQueryItem] = [URLQueryItem(name: "userId", value: profile.userID)]
+        if let tag { query.append(URLQueryItem(name: "tag", value: tag)) }
+        components.queryItems = query
+        return components.url
+    }
+
     // MARK: - 媒体资源
 
     func imageURL(itemID: String, type: ItemImageType, maxWidth: Int?, tag: String?) throws -> URL {

@@ -143,7 +143,8 @@ final class MediaServerLoginTests: XCTestCase {
                 return MockURLProtocol.ok(
                     """
                     {"AccessToken":"tok-123","ServerId":"srv-1",
-                     "User":{"Id":"user-9","Name":"jumusu","ServerId":"srv-1"}}
+                     "User":{"Id":"user-9","Name":"jumusu","ServerId":"srv-1",
+                             "PrimaryImageTag":"av-tag-1"}}
                     """,
                     for: request.url!
                 )
@@ -156,6 +157,9 @@ final class MediaServerLoginTests: XCTestCase {
                 sessionConfiguration: TestSupport.mockedSessionConfiguration())
             let result = try await session.signIn(username: "jumusu", password: "hunter2")
             XCTAssertEqual(result.token, "tok-123")
+            // 头像 tag 是登录响应里白拿的（SDK 的 `AuthenticationResult.User` 就是
+            // `UserDto`）：拿它就不必为「有没有头像」多发一次 `/Users/Me`。
+            XCTAssertEqual(result.primaryImageTag, "av-tag-1")
 
             // Jellyfin 路径的 finish 产出 JellyfinServer —— token 必须已装进 SDK 客户端。
             let server = try XCTUnwrap(try session.finish(result, store: store) as? JellyfinServer)
@@ -163,9 +167,12 @@ final class MediaServerLoginTests: XCTestCase {
             XCTAssertEqual(server.profile.userID, "user-9")
             XCTAssertEqual(server.profile.userName, "jumusu")
             XCTAssertEqual(server.accessToken, "tok-123")
+            // 登录 → 档案：头像 tag 必须一路带进 profile（冷启动第一帧靠它出图）。
+            XCTAssertEqual(server.profile.primaryImageTag, "av-tag-1")
 
             // 落盘：档案和 token 通过各自的存储抽象保存
             XCTAssertEqual(store.currentProfile?.id, "srv-1:user-9")
+            XCTAssertEqual(store.currentProfile?.primaryImageTag, "av-tag-1")
             XCTAssertEqual(store.token(for: server.profile), "tok-123")
         }
     }
@@ -296,6 +303,27 @@ final class MediaServerLoginTests: XCTestCase {
         XCTAssertEqual(result.token, "embytoken123")
         XCTAssertEqual(result.userID, "e2b1longid")
         XCTAssertEqual(result.userName, "jumusu")
+        // 没有头像的账号：`PrimaryImageTag` 缺失 → nil（调用方据此不发请求、回落图标）。
+        XCTAssertNil(result.primaryImageTag)
+    }
+
+    /// 登录响应里的 `User.PrimaryImageTag` 要抽出来：它是「这个账号有没有头像」
+    /// 以及「换了头像怎么让缓存失效」的唯一依据。
+    ///
+    /// 空串与缺失同义 —— 服务端没头像时可能发 `""` 而不是省略字段，当成有 tag
+    /// 会白打一次 404。
+    func testParseLoginResponseCarriesUserAvatarTag() throws {
+        func parse(userJSON: String) throws -> LoginResult {
+            try LoginResult.parse(
+                #"{"AccessToken":"t","User":\#(userJSON)}"#.data(using: .utf8)!)
+        }
+        XCTAssertEqual(
+            try parse(userJSON: #"{"Id":"u1","PrimaryImageTag":"av-1"}"#).primaryImageTag,
+            "av-1")
+        XCTAssertNil(try parse(userJSON: #"{"Id":"u1"}"#).primaryImageTag)
+        XCTAssertNil(try parse(userJSON: #"{"Id":"u1","PrimaryImageTag":""}"#).primaryImageTag)
+        // 类型不对（服务端发数字）也当没有，不炸整包。
+        XCTAssertNil(try parse(userJSON: #"{"Id":"u1","PrimaryImageTag":7}"#).primaryImageTag)
     }
 
     /// 缺 token / 缺 User.Id 的成功响应不能当作登录成功。

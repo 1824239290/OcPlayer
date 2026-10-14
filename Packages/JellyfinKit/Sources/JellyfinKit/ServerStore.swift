@@ -29,6 +29,12 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     public var baseURL: URL
     public var userID: String
     public var userName: String?
+    /// 当前账号头像的图 tag（服务端 `User.PrimaryImageTag`）；nil = 没设头像。
+    ///
+    /// 落进档案是为了**冷启动第一帧就有头像**：头像 URL 由 tag 决定，有它就不必
+    /// 等 `/Users/Me` 回来（离线也能出图）。会话激活后仍会用
+    /// `MediaServer.currentUserAvatarTag()` 刷新一次——用户在服务端换了头像，tag 会变。
+    public var primaryImageTag: String?
     public var serverVersion: String?
     /// 服务器类型；Emby 的 `baseURL` 已含 `/emby` 前缀。
     public var kind: ServerKind
@@ -40,7 +46,8 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
     public var serverID: String?
 
     public init(id: String, serverName: String, baseURL: URL, userID: String,
-                userName: String? = nil, serverVersion: String? = nil,
+                userName: String? = nil, primaryImageTag: String? = nil,
+                serverVersion: String? = nil,
                 kind: ServerKind = .jellyfin,
                 addresses: [ServerAddress] = [],
                 pinnedURL: URL? = nil,
@@ -50,6 +57,7 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
         self.baseURL = baseURL
         self.userID = userID
         self.userName = userName
+        self.primaryImageTag = primaryImageTag
         self.serverVersion = serverVersion
         self.kind = kind
         self.addresses = addresses
@@ -81,7 +89,7 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, serverName, baseURL, userID, userName, serverVersion, kind
-        case addresses, pinnedURL, serverID
+        case primaryImageTag, addresses, pinnedURL, serverID
     }
 
     public init(from decoder: Decoder) throws {
@@ -91,6 +99,8 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
         baseURL = try values.decode(URL.self, forKey: .baseURL)
         userID = try values.decode(String.self, forKey: .userID)
         userName = try values.decodeIfPresent(String.self, forKey: .userName)
+        // 后加字段：老档案解出来是「这个账号没头像」，不是坏数据（头像本来就可选）。
+        primaryImageTag = try values.decodeIfPresent(String.self, forKey: .primaryImageTag)
         serverVersion = try values.decodeIfPresent(String.self, forKey: .serverVersion)
         // 旧版本落盘的 profile 没有 kind 字段：默认 Jellyfin，不炸老数据。
         kind = try values.decodeIfPresent(ServerKind.self, forKey: .kind) ?? .jellyfin
@@ -114,6 +124,10 @@ public struct ServerProfile: Codable, Identifiable, Hashable, Sendable {
         // 固定项由用户在设置页决定，登录流程不碰它：新登录没带就沿用旧的。
         if result.pinnedURL == nil { result.pinnedURL = existing.pinnedURL }
         if result.serverID == nil { result.serverID = existing.resolvedServerID }
+        // 头像 tag：新登录带着就用新的（用户可能刚换过头像）；**没带**时沿用旧的，
+        // 别把已有的抹成「没头像」—— 老服务器 / 宽松解析漏抽都可能给 nil，而会话
+        // 激活后的 `currentUserAvatarTag()` 本来就会再校准一次。
+        if result.primaryImageTag == nil { result.primaryImageTag = existing.primaryImageTag }
         return result
     }
 }
@@ -309,6 +323,19 @@ public final class ServerStore: @unchecked Sendable {
                 excluding: url)
             profile.baseURL = url
         }
+    }
+
+    /// 更新档案里记的**头像 tag**（会话激活后由 App 层用 `/Users/Me` 校准出来的那个）。
+    ///
+    /// **刻意走 `mutate` 而不是 `save`**：`save` 会过一遍 `ServerProfile.merged`，
+    /// 而那里的规则是「新档案没带 tag 就沿用旧的」（防一次没带该字段的登录把已有
+    /// 头像抹掉）。于是 `save` **没法表达「服务端上这个头像已经没有了」** ——
+    /// 而那正是用户删掉头像后必须落盘的结果：不落盘的话下次冷启动又会拿旧 tag 出图。
+    /// `mutate` 是「改档案的唯一落点」，语义就是「把这一项改成这个值」，含改成 nil。
+    ///
+    /// 空操作不落盘（`mutate` 自带）：同一个 tag 反复校准不会反复写 UserDefaults。
+    public func setPrimaryImageTag(_ tag: String?, for profileID: String) {
+        mutate(profileID) { $0.primaryImageTag = tag }
     }
 
     /// 档案的地址决议器（不存在就按档案建一个）。

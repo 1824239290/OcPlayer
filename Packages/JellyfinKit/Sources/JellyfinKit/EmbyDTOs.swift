@@ -154,6 +154,16 @@ struct EmbyAuthResultDTO: Decodable, Sendable {
     var user: UserDTO?
 }
 
+/// `/Users/Me`（当前用户）。只抽头像 tag 一项 —— 用户名 / 服务器版本在登录时就落进
+/// 档案了，这里唯一的用途是**校准**「用户换过头像没有」。
+///
+/// 属性名按解码器的 `keyDecodingStrategy`（首字母降位）写，wire 上是 `PrimaryImageTag`。
+struct EmbyUserDTO: Decodable, Sendable {
+    var id: String?
+    var name: String?
+    var primaryImageTag: String?
+}
+
 /// `/System/Info/Public` 探活响应。
 struct EmbyPublicSystemInfoDTO: Decodable, Sendable {
     var id: String?

@@ -468,6 +468,55 @@ final class JellyfinServerTests: XCTestCase {
         XCTAssertEqual(dict["tag"], "logo-tag")
     }
 
+    // MARK: - 当前用户头像
+
+    /// 用户头像是**唯一一条不遵循 `{id}/Images/{type}` 形状**的媒体服务器图路由：
+    /// Jellyfin 12.x 把它收在 `/UserImage` 上（本项目钉住的 SDK 生成的 OpenAPI 里
+    /// 根本没有 `/Users/{userId}/Images/{type}`）。形状钉成黄金值 —— `ImageCacheKey`
+    /// 会按 path 认这条端点（`isMediaServerImage`），拼错了头像就会换地址重复下载。
+    func testUserImageURLUsesUserImageEndpoint() throws {
+        let url = try XCTUnwrap(makeServer().userImageURL(tag: "av-7"))
+        XCTAssertEqual(url.path, "/UserImage")
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let dict = Dictionary(query.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
+        XCTAssertEqual(dict["userId"], "user-9")
+        XCTAssertEqual(dict["tag"], "av-7")
+        // token 走请求头，绝不进 URL。
+        XCTAssertNil(dict["api_key"])
+        XCTAssertFalse(url.absoluteString.contains("tok-123"))
+    }
+
+    /// 没有 tag 时只带 `userId`：这条 URL 不该被发出去（无 tag = 没头像 = 必然 404）。
+    func testUserImageURLWithoutTagOmitsTagQuery() throws {
+        let url = try XCTUnwrap(makeServer().userImageURL(tag: nil))
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(query.map(\.name), ["userId"])
+    }
+
+    func testCurrentUserAvatarTagReadsUsersMe() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Users/Me")
+            return MockURLProtocol.ok(
+                #"{"Id":"user-9","Name":"jumusu","PrimaryImageTag":"av-7"}"#,
+                for: request.url!
+            )
+        } with: {
+            let tag = try await makeServer().currentUserAvatarTag()
+            XCTAssertEqual(tag, "av-7")
+        }
+    }
+
+    /// 没设头像的账号（多数）：`PrimaryImageTag` 缺失 → nil，调用方据此回落图标、
+    /// 并且**不发**取图请求。
+    func testCurrentUserAvatarTagIsNilWhenAccountHasNoAvatar() async throws {
+        try await TestSupport.withMock { request in
+            MockURLProtocol.ok(#"{"Id":"user-9","Name":"jumusu"}"#, for: request.url!)
+        } with: {
+            let tag = try await makeServer().currentUserAvatarTag()
+            XCTAssertNil(tag)
+        }
+    }
+
     func testItemMappingExtractsLogoAndParentLogo() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/Items/ep-1")

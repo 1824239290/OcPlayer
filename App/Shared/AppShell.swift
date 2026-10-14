@@ -158,14 +158,38 @@ struct AppShellView: View {
         //     `ignoresSafeArea` 会把根布局撑到全窗宽、内容列被顶出屏幕；
         //   * 首页那一格垫的是**轮播组件本身**（不是单图），它会随 12s 换片自己淡入
         //     淡出——所以首页不走 `pageAmbience` 的单图语义。
-        Tab("首页", systemImage: "house.fill", value: AppModel.Section.home) {
-            NavigationStack(path: navPathBinding(.home)) {
-                HomeView()
-                    .appRoutes()
-                    .background {
-                        AmbientBackdropCarousel()
-                            .ignoresSafeArea()
-                    }
+        // 首页 Tab 的图标是**服务端上这个账号的头像**（对照产品 Rex 的「发现」栏位
+        // 就是这个形态），没有头像时回落系统原来的 `house.fill`。
+        //
+        // ## 三条实测约束（iOS 26.3 / iPhone 17 Pro 模拟器实拍，别再踩）
+        //
+        // 1. **label 里不能有 `if/else`**。条件视图会让标签栏在那个位置画出一个约
+        //    84pt 的**黑色圆角块**，图标与「首页」文字全被盖住（A/B 实拍：把条件
+        //    换成单一 `Image` 立刻恢复正常）。所以条件提到 **Tab 这一层**，两个分支
+        //    各自的 label 里只有一个 `Image`。
+        // 2. **位图必须是 `alwaysOriginal`，而且要在 `UIImage` 上设**。否则标签栏把
+        //    它当模板图渲染 —— 整张头像变成一坨纯色（浅色模式下是黑的，实测就是
+        //    84pt 纯黑圆角块）。SwiftUI 的 `.renderingMode(.original)` 在这里不起作用。
+        // 3. **位图要按点尺寸栅格化**。标签栏按图片的**自然尺寸**画，`.frame` /
+        //    `.resizable()` / `.clipShape()` 全部被忽略：84px 的位图会被画成 84pt。
+        //    所以裁圆、缩放、渲染模式三件事都在装载时烤进位图（见
+        //    `AppModel+Avatar.swift` 的 `tabIcon(from:)`），这里只放一个裸 `Image`。
+        //
+        // 两个分支的 `value` 都是 `.home`：头像到位只是标签栏那一格换个图标，
+        // 选中分区与内容栈都不受影响。
+        if let avatar = app.userAvatarImage {
+            Tab(value: AppModel.Section.home) {
+                homeTabRoot
+            } label: {
+                Label {
+                    Text("首页")
+                } icon: {
+                    Image(platform: avatar)
+                }
+            }
+        } else {
+            Tab("首页", systemImage: "house.fill", value: AppModel.Section.home) {
+                homeTabRoot
             }
         }
 
@@ -206,6 +230,20 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
+        }
+    }
+
+    /// 首页 Tab 的根页。抽出来是因为它有两个调用点（有头像 / 没头像两个 label 分支，
+    /// 见 `compactTabs` 的注释）——抄两份迟早会漂移。
+    @ViewBuilder
+    private var homeTabRoot: some View {
+        NavigationStack(path: navPathBinding(.home)) {
+            HomeView()
+                .appRoutes()
+                .background {
+                    AmbientBackdropCarousel()
+                        .ignoresSafeArea()
+                }
         }
     }
 

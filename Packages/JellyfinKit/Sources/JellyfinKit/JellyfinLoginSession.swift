@@ -94,7 +94,8 @@ public final class JellyfinLoginSession: ServerLoginSession {
     }
 
     public func finish(_ result: LoginResult, store: ServerStore) throws -> any MediaServer {
-        let profile = makeProfile(userID: result.userID, userName: result.userName)
+        let profile = makeProfile(userID: result.userID, userName: result.userName,
+                                  primaryImageTag: result.primaryImageTag)
         store.activate(profile, token: result.token)
         // 刻意走 store 重新构造会话，而不是直接用手里这个匿名 client：
         // ① `activate` 会把档案**合并**（同一台服务器从另一条地址登录时，旧地址

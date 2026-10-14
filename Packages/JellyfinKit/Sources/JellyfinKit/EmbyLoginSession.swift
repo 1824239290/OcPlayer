@@ -58,7 +58,8 @@ public final class EmbyLoginSession: ServerLoginSession {
     }
 
     public func finish(_ result: LoginResult, store: ServerStore) throws -> any MediaServer {
-        let profile = makeProfile(userID: result.userID, userName: result.userName)
+        let profile = makeProfile(userID: result.userID, userName: result.userName,
+                                  primaryImageTag: result.primaryImageTag)
         store.activate(profile, token: result.token)
         // 与 Jellyfin 侧同口径：走 store 重建会话，拿到**合并后**的档案并挂上
         // 地址决议器（理由见 `JellyfinLoginSession.finish`）。

@@ -156,7 +156,69 @@ final class ServerStoreTests: XCTestCase {
 
         XCTAssertEqual(store.profiles.count, 1)
         XCTAssertEqual(store.profiles[0].kind, .jellyfin)
+        // 头像 tag 是后加字段：老档案解出来是「这个账号没头像」这个**正常**状态，
+        // 不是坏数据（头像本来就可选），不能因此拒绝整份档案。
+        XCTAssertNil(store.profiles[0].primaryImageTag)
         XCTAssertNotNil(MediaServerFactory.restore(from: store), "旧档案必须能静默恢复")
+    }
+
+    // MARK: - 头像 tag 的持久化与合并
+
+    /// 头像 tag 要能落盘再读回：冷启动第一帧靠它出图（不必等 `/Users/Me`）。
+    func testPrimaryImageTagRoundTripsThroughStorage() {
+        store.activate(
+            ServerProfile(id: "srv:u1", serverName: "nas",
+                          baseURL: URL(string: "http://nas.local:8096")!,
+                          userID: "u1", primaryImageTag: "av-1"),
+            token: "tok-1")
+
+        let reopened = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
+        XCTAssertEqual(reopened.currentProfile?.primaryImageTag, "av-1")
+    }
+
+    /// 合并规则：新登录带着 tag 就用新的（用户可能刚换过头像）；**没带**时沿用旧的。
+    ///
+    /// 后者是关键——老服务器 / 宽松解析漏抽都可能给 nil，而「把已有头像抹成没有」
+    /// 是用户可见的退化（Tab 图标从脸变回房子）。
+    func testMergePrefersIncomingAvatarTagButKeepsExistingWhenMissing() {
+        store.activate(
+            ServerProfile(id: "srv:u1", serverName: "nas", baseURL: lanAddress,
+                          userID: "u1", primaryImageTag: "av-old"),
+            token: "tok-1")
+
+        // ① 新登录带着新 tag → 换新的。
+        store.activate(
+            ServerProfile(id: "srv:u1", serverName: "nas", baseURL: tailscaleAddress,
+                          userID: "u1", primaryImageTag: "av-new"),
+            token: "tok-2")
+        XCTAssertEqual(store.profiles[0].primaryImageTag, "av-new")
+
+        // ② 新登录没带 tag → 沿用旧的，不能抹成 nil。
+        store.activate(
+            ServerProfile(id: "srv:u1", serverName: "nas", baseURL: lanAddress, userID: "u1"),
+            token: "tok-3")
+        XCTAssertEqual(store.profiles[0].primaryImageTag, "av-new")
+    }
+
+    /// 校准口必须**能把 tag 改成 nil**（用户在服务端把头像删了）。
+    ///
+    /// 这条正是不能拿 `save` 当校准口的原因：`save` 会过
+    /// `ServerProfile.merged`，而那里「新档案没带 tag 就沿用旧的」会把 nil 挡回来
+    /// —— 于是「头像已经没了」永远落不了盘，下次冷启动又拿旧 tag 出图。
+    func testSetPrimaryImageTagCanClearToNil() {
+        store.activate(
+            ServerProfile(id: "srv:u1", serverName: "nas", baseURL: lanAddress,
+                          userID: "u1", primaryImageTag: "av-1"),
+            token: "tok-1")
+
+        store.setPrimaryImageTag(nil, for: "srv:u1")
+        XCTAssertNil(store.currentProfile?.primaryImageTag)
+        // 落盘也必须是 nil，不能只在内存里改。
+        let reopened = ServerStore(defaults: defaults, credentialsDirectory: credentialsDirectory)
+        XCTAssertNil(reopened.currentProfile?.primaryImageTag)
+
+        store.setPrimaryImageTag("av-2", for: "srv:u1")
+        XCTAssertEqual(store.currentProfile?.primaryImageTag, "av-2")
     }
 
     // MARK: - 启动默认服务器

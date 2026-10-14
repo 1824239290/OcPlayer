@@ -158,6 +158,28 @@ public protocol MediaServer: PlaybackReporting {
     /// 「类似推荐」。
     func similar(itemID: String, limit: Int) async throws -> [MediaItem]
 
+    // MARK: - 当前用户
+
+    /// 当前登录用户头像的图 tag（服务端 `User.PrimaryImageTag`）；nil = 没设头像。
+    ///
+    /// 与条目图同一条规则：**没有 tag 就不要发请求**（那是一次必然 404 的白打）。
+    /// 拿它拼出的 URL 也自带缓存失效——用户换了头像，tag 变，URL 变，图片缓存自然
+    /// 不命中（与合集封面「无 tag 不发请求」同口径，见 CHANGELOG）。
+    ///
+    /// 头像在服务端是**可选**的：多数账号没有，调用方必须准备好回落图标。
+    func currentUserAvatarTag() async throws -> String?
+
+    /// 用户头像地址（不含 token，认证走请求头）。`tag` 来自 `currentUserAvatarTag()`
+    /// 或档案里缓存的 `ServerProfile.primaryImageTag`。
+    ///
+    /// **不做服务端缩放**：Jellyfin 12.x 的用户图端点只有 `userId` / `tag` / `format`
+    /// 三个参数，没有 `maxWidth`（与条目图不同）。显示尺寸交给调用方的
+    /// `maxPixelSize` 本地下采样——这样 Tab 图标与设置页共用同一条 URL、同一份缓存。
+    ///
+    /// 返回 nil = 档案地址畸形。地址形状：Jellyfin `/UserImage?userId=&tag=`、
+    /// Emby `/Users/{userId}/Images/Primary?tag=`。
+    func userImageURL(tag: String?) -> URL?
+
     // MARK: - 媒体资源
     /// 条目图片地址（不含 token，认证走请求头）。
     func imageURL(itemID: String, type: ItemImageType, maxWidth: Int?, tag: String?) throws -> URL

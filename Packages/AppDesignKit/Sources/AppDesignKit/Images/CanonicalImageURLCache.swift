@@ -36,13 +36,18 @@ enum ImageCacheKey {
     /// 而这里造出来的 URL **只当缓存键用、从不出网**（真正发的请求用原 URL）。
     static let placeholderHost = "ocplayer.invalid"
 
-    /// 只规范化媒体服务器的图片端点（路径含 `/Images/`）。
+    /// 只规范化媒体服务器的图片端点（路径含 `/Images/`，或用户头像那条 `/UserImage`）。
     ///
     /// 其它图源（`image.tmdb.org`、`lain.bgm.tv` 等）本来就只有一条地址，没有这个问题；
     /// 不去动它们可以避免「不同图床路径相同」这种理论上的撞键，也把改动面收在
     /// 真正出事的那一类 URL 上。
+    ///
+    /// **`/UserImage` 为什么要单独认**：Jellyfin 12.x 把**用户头像**放在独立端点上
+    /// （`/UserImage?userId=&tag=`，见 `JellyfinServer.userImageURL`），它是全仓唯一
+    /// 一条不含 `/Images/` 段的媒体服务器图路由。漏了它，头像的缓存键会保留 host，
+    /// 于是局域网 ↔ Tailscale 各存一份、换地址重下一遍——正是这个规范化要修的病。
     static func isMediaServerImage(_ url: URL) -> Bool {
-        url.path.contains("/Images/")
+        url.path.contains("/Images/") || url.path.hasSuffix("/UserImage")
     }
 
     /// 缓存键。`authHeader` 为 nil（公开图床）时用固定串，保证确定性。

@@ -7,28 +7,36 @@ public struct LoginResult: Sendable {
     public let token: String
     public let userID: String
     public let userName: String?
+    /// 当前账号头像的图 tag（服务端 `User.PrimaryImageTag`）。
+    ///
+    /// 登录响应里**白拿**的一个字段，不必为它多发一次请求。它同时回答两件事：
+    /// 这个账号在服务端有没有头像（nil = 没有），以及「用户换了头像怎么让缓存
+    /// 失效」—— tag 进 URL，URL 变则图片缓存自然不命中。
+    public let primaryImageTag: String?
 
     /// 宽松解码路径（`parse`）与 SDK 路径（`init(_:)`）都汇到这里。
-    public init(token: String, userID: String, userName: String?) {
+    public init(token: String, userID: String, userName: String?, primaryImageTag: String? = nil) {
         self.token = token
         self.userID = userID
         self.userName = userName
+        self.primaryImageTag = primaryImageTag
     }
 
     init(_ result: AuthenticationResult) throws {
         guard let token = result.accessToken, let userID = result.user?.id else {
             throw JellyfinError(.unauthorized)
         }
-        self.init(token: token, userID: userID, userName: result.user?.name)
+        self.init(token: token, userID: userID, userName: result.user?.name,
+                  primaryImageTag: result.user?.primaryImageTag)
     }
 
     /// 从登录响应原始 JSON 抽必要字段；多余字段与类型波动全部忽略。
     ///
-    /// **两家的顶层与 `User` 对象字段名一致**（`AccessToken` / `User.Id`），所以
-    /// 这条宽松解析两边共用：只做「拿到什么算什么」的容错，类型不对的字段当 nil
-    /// 处理，不炸整包。Emby 的 `User` 对象里带 Jellyfin schema 没有的字段
-    /// （如 UserPolicy 变体），强类型解码会整包炸出 "The data couldn't be read
-    /// because it is missing"，而登录只需要这三样。
+    /// **两家的顶层与 `User` 对象字段名一致**（`AccessToken` / `User.Id` /
+    /// `User.PrimaryImageTag`），所以这条宽松解析两边共用：只做「拿到什么算什么」
+    /// 的容错，类型不对的字段当 nil 处理，不炸整包。Emby 的 `User` 对象里带
+    /// Jellyfin schema 没有的字段（如 UserPolicy 变体），强类型解码会整包炸出
+    /// "The data couldn't be read because it is missing"，而登录只需要这四样。
     public static func parse(_ data: Data) throws -> LoginResult {
         let object = try? JSONSerialization.jsonObject(with: data, options: [])
         guard let dict = object as? [String: Any] else {
@@ -42,7 +50,13 @@ public struct LoginResult: Sendable {
         guard let userID = user.flatMap({ nonEmptyString($0["Id"]) }) else {
             throw JellyfinError(.unauthorized)
         }
-        return LoginResult(token: token, userID: userID, userName: user?["Name"] as? String)
+        return LoginResult(
+            token: token,
+            userID: userID,
+            userName: user?["Name"] as? String,
+            // 空串与缺失同义：没有头像时服务端可能发 `""` 而不是省略该字段。
+            primaryImageTag: user.flatMap { nonEmptyString($0["PrimaryImageTag"]) }
+        )
     }
 
     private static func nonEmptyString(_ value: Any?) -> String? {
@@ -93,7 +107,7 @@ public protocol ServerLoginSession: AnyObject, Sendable {
 
 extension ServerLoginSession {
     /// 档案 id = `serverID:userID`，同一服务器换账号 = 不同 profile。
-    func makeProfile(userID: String, userName: String?) -> ServerProfile {
+    func makeProfile(userID: String, userName: String?, primaryImageTag: String? = nil) -> ServerProfile {
         let resolvedServerID = serverID ?? baseURL.host(percentEncoded: false) ?? baseURL.absoluteString
         return ServerProfile(
             id: "\(resolvedServerID):\(userID)",
@@ -101,6 +115,8 @@ extension ServerLoginSession {
             baseURL: baseURL,
             userID: userID,
             userName: userName,
+            // 登录响应里白拿的头像 tag：存进档案，冷启动第一帧就能出图（见 `ServerProfile`）。
+            primaryImageTag: primaryImageTag,
             serverVersion: serverVersion,
             kind: kind,
             // 显式带上服务器 Id：地址探活时用它确认「换的这条地址还是同一台服务器」。

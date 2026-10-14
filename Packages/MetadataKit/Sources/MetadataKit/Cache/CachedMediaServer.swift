@@ -48,6 +48,16 @@ public struct CachedMediaServer: MediaServer {
         try wrapped.imageURL(itemID: itemID, type: type, maxWidth: maxWidth, tag: tag)
     }
 
+    /// 头像 tag 与 URL 都直通：它是**会话身份**的一部分，不是条目元数据。
+    /// 缓存它只会让「用户换了头像」这件事被一层磁盘挡住。
+    public func currentUserAvatarTag() async throws -> String? {
+        try await wrapped.currentUserAvatarTag()
+    }
+
+    public func userImageURL(tag: String?) -> URL? {
+        wrapped.userImageURL(tag: tag)
+    }
+
     public func streamURL(itemID: String, mediaSourceID: String?, playSessionID: String?) throws -> String {
         try wrapped.streamURL(itemID: itemID, mediaSourceID: mediaSourceID, playSessionID: playSessionID)
     }

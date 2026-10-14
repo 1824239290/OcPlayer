@@ -54,6 +54,29 @@ final class AppModel {
     /// 网络路径监听（Wi-Fi ↔ 蜂窝 / Tailscale 起停 → 地址结论作废重探）。
     let endpointMonitor = ServerEndpointMonitor()
 
+    /// 当前账号头像的位图，**已经烤成标签栏要的样子**（裁圆、28pt@3x、`alwaysOriginal`）；
+    /// nil = 没有头像或还没加载出来。
+    ///
+    /// **为什么把它存在模型里而不是让视图自己去拉**：首页 Tab 的图标要它，而 Tab 项
+    /// 是宿主渲染的、异步图加载完不会回填，且会忽略 `.frame` / `.clipShape` / SwiftUI 的
+    /// `.renderingMode`（实测，见 `AppModel+Avatar.tabIcon(from:)`）。所以这里给出的是
+    /// 一张「贴上去就对」的位图，视图同步读一个值即可。
+    ///
+    /// 生命周期跟着会话走：`resetBrowseState()` 里清掉（换服务器 / 登出 / 401 之后
+    /// 不能还挂着上一个账号的脸）。详见 `AppModel+Avatar.swift`。
+    var userAvatarImage: PlatformImage?
+
+    /// 正在跑的头像装载任务（换会话时取消，避免旧会话的结果落到新会话上）。
+    var userAvatarTask: Task<Void, Never>?
+
+    /// 头像取图用的图片管道。默认 `.shared`（与界面里其它图同一份缓存）。
+    ///
+    /// 留成可注入项而不是直接写 `ImagePipeline.shared`，与 `RemoteImage.pipeline` /
+    /// `LoginWallCatalogLoader(pipeline:)` 同一条口径：用例要能塞一个挂
+    /// `MockURLProtocol` 的管道，让「头像真的落进了模型」这条断言走完整条加载链，
+    /// 而不是在测试里去真发一次 `stub.local` 的请求。
+    var avatarImagePipeline: ImagePipeline = .shared
+
     /// Every authenticated session gets a new generation. Async responses keep
     /// their generation and may only mutate state while it is still current.
     var sessionGeneration = 0

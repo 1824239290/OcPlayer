@@ -76,6 +76,45 @@ final class ImageCacheKeyTests: XCTestCase {
         XCTAssertTrue(ImageCacheKey.isMediaServerImage(mediaURL(host: "h")))
     }
 
+    /// **用户头像**（Jellyfin 12.x 的 `/UserImage?userId=&tag=`）也必须规范化。
+    ///
+    /// 它是全仓唯一一条不含 `/Images/` 段的媒体服务器图路由（见
+    /// `JellyfinServer.userImageURL`）。漏了它，头像的键会保留 host：局域网 ↔
+    /// Tailscale 各存一份、换地址重下一遍——正是这个规范化要修的病。
+    func testUserAvatarEndpointSharesKeyAcrossHosts() throws {
+        func avatar(host: String, tag: String = "av-7") -> URL {
+            URL(string: "http://\(host):8096/UserImage?userId=user-9&tag=\(tag)")!
+        }
+        let lan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107"),
+                                                           authHeader: "UserId=\"user-9\""))
+        let wan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "100.127.128.96"),
+                                                           authHeader: "UserId=\"user-9\""))
+        XCTAssertEqual(lan, wan, "换地址必须共键")
+        XCTAssertEqual(lan.host, ImageCacheKey.placeholderHost)
+        XCTAssertEqual(lan.path, "/UserImage")
+        XCTAssertTrue(lan.query?.contains("tag=av-7") == true)
+
+        // 换了头像（tag 变）必须换键，否则用户会一直看到旧头像。
+        XCTAssertNotEqual(
+            lan,
+            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107", tag: "av-8"),
+                                       authHeader: "UserId=\"user-9\""))
+        // 同一台服务器上的两个账号不能互看缓存。
+        XCTAssertNotEqual(
+            lan,
+            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107"),
+                                       authHeader: "UserId=\"other\""))
+    }
+
+    /// Emby 的头像走 `/emby/Users/{id}/Images/Primary` —— 含 `/Images/` 段，
+    /// 老规则本来就认它。这条钉住「Emby 侧不需要额外分支」。
+    func testEmbyUserAvatarEndpointIsRecognized() throws {
+        let url = URL(string: "http://nas.local:8096/emby/Users/user-e/Images/Primary?tag=av-7")!
+        XCTAssertTrue(ImageCacheKey.isMediaServerImage(url))
+        let key = try XCTUnwrap(ImageCacheKey.canonicalURL(for: url, authHeader: "UserId=\"user-e\""))
+        XCTAssertEqual(key.path, "/emby/Users/user-e/Images/Primary")
+    }
+
     // MARK: - 跨进程稳定
 
     /// **哈希必须跨进程稳定**：这是磁盘键，用 `String.hashValue`（每进程随机播种）
