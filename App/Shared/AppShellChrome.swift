@@ -59,7 +59,8 @@ struct AppShellNavigationToolbarContent: ToolbarContent {
 
 // MARK: - 分区图标组
 
-/// 分区切换组：一个玻璃圆角容器装若干纯图标按钮，当前分区带强调色底。
+/// 分区切换组：一个玻璃圆角容器装若干纯图标按钮，当前分区**只靠图标自己的表现**
+/// 区分（glyph 走前景色亮暗，头像那一格走饱和度，见 `SectionAvatarIcon`）。
 ///
 /// 容器玻璃只上**一层**（挂在整组上），组内按钮用内容层的半透明填充表示
 /// hover / 选中：给玻璃上 tint 会顺着 `GlassEffectContainer` 的取样区域晕开，
@@ -75,12 +76,15 @@ struct AppShellSectionGroup: View {
 
     /// 组里的一颗按钮。`id` 取 section，方便 ForEach 稳定复用。
     struct Segment: Identifiable {
-        /// 图标来源：SF Symbol 或品牌矢量图（Assets.xcassets imageset）。
+        /// 图标来源：SF Symbol、品牌矢量图（Assets.xcassets imageset），或当前账号头像。
         enum Icon {
             case symbol(String)
             /// `side`：品牌图渲染边长（pt）。各 SVG 在 viewBox 里的留白不同，
             /// 统一边长会显得一大一小，按图逐个标定。
             case brand(String, side: CGFloat)
+            /// 首页那一格：当前账号的头像。没设头像时回落 `house.fill`
+            /// （回落发生在 `segmentIcon` 里，不在段定义里——段是静态的）。
+            case avatar
         }
 
         let section: AppModel.Section
@@ -92,7 +96,7 @@ struct AppShellSectionGroup: View {
 
     /// 顺序沿用侧栏：首页 → MoviePilot → Bangumi → 设置。
     static func makeSegments(bangumiEnabled: Bool, moviepilotEnabled: Bool) -> [Segment] {
-        var segments: [Segment] = [Segment(section: .home, title: "首页", icon: .symbol("house.fill"))]
+        var segments: [Segment] = [Segment(section: .home, title: "首页", icon: .avatar)]
         if moviepilotEnabled {
             segments.append(Segment(section: .moviepilot, title: "MoviePilot", icon: .brand("moviepilot-logo", side: 18)))
         }
@@ -135,7 +139,7 @@ struct AppShellSectionGroup: View {
             // 常规布局走两段式（当前页淡出后再换分区），compact 由 AppModel 直切。
             app.switchSection(segment.section)
         } label: {
-            segmentIcon(segment.icon)
+            segmentIcon(segment.icon, isSelected: isSelected)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .frame(width: 28, height: 24)
                 .contentShape(.rect(cornerRadius: 6))
@@ -162,8 +166,11 @@ struct AppShellSectionGroup: View {
     /// SF Symbol 走字体渲染；品牌图是矢量 imageset，按标定边长缩放对齐
     /// 13pt Symbol 的视觉体量。两个 logo 均为模板渲染（见 imageset），
     /// 与 SF Symbol 一样跟随 primary/secondary 前景色。
+    ///
+    /// 头像那一格是**位图**，既不吃 `foregroundStyle` 也不吃模板渲染，所以它的选中态
+    /// 走另一条通道（饱和度），见 `SectionAvatarIcon`。
     @ViewBuilder
-    private func segmentIcon(_ icon: Segment.Icon) -> some View {
+    private func segmentIcon(_ icon: Segment.Icon, isSelected: Bool) -> some View {
         switch icon {
         case .symbol(let name):
             Image(systemName: name)
@@ -173,6 +180,14 @@ struct AppShellSectionGroup: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: side, height: side)
+        case .avatar:
+            if let avatar = app.userAvatarImage {
+                SectionAvatarIcon(image: avatar, isSelected: isSelected)
+            } else {
+                // 没有头像（服务端上头像是可选的，多数账号没设）——与改动前逐像素同款。
+                Image(systemName: "house.fill")
+                    .font(.system(size: 13, weight: .semibold))
+            }
         }
     }
 
@@ -183,6 +198,55 @@ struct AppShellSectionGroup: View {
         // （实测 primary 0.08 不可见），hover 档按玻璃上可见的下限取。
         if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
         return AnyShapeStyle(.clear)
+    }
+}
+
+// MARK: - 头像格
+
+/// 药丸里「首页」那一格的图标：当前账号的头像。选中 = 原色，未选中 = 灰化。
+///
+/// ## 为什么选中信号走**饱和度**而不是「亮暗」
+///
+/// 药丸现有的选中信号只有一条：前景色亮暗（选中 `.primary` / 未选中 `.secondary`）。
+/// 头像接不进来 —— 位图不吃 `foregroundStyle`。按同构思路试过「未选中压暗 /
+/// 降不透明」，**实测不成立**：
+///
+/// * 头像的亮度由**图片内容**决定，不由 App 决定。本机真实头像平均明度
+///   **209/255**（偏亮），压在浅色玻璃上 `opacity(0.55)` 只剩 **Δ20/255**；
+///   而相邻 glyph 的 primary ↔ secondary 是 **Δ120/255**（深色 96）—— 差 6 倍，
+///   浅色模式下基本看不出来。
+/// * 深色模式下方向还反了：变淡 = 往深底里沉 = 更像「选中」。
+///
+/// 灰化换的是**饱和度**通道：同一张头像平均饱和度 **57/255 → 0**（整条），
+/// 与图片内容无关，深浅两种外观下都读得出来。代价是药丸多了一条只有这一格才有的
+/// 信号通道 —— 这是刻意的取舍（另一条路是给所有 segment 补一个中性选中底，但那会
+/// 和 hover 底撞车：悬停在非当前页上会和「当前页」长得一模一样）。
+///
+/// ## 与 hover 不冲突
+///
+/// hover 底只在鼠标悬停时出现（`primary@0.14`），于是四种组合都能区分：
+/// 彩色无底 = 当前页；彩色有底 = 当前页且鼠标在这；灰色有底 = 鼠标在这但不是当前页；
+/// 灰色无底 = 都不是。
+struct SectionAvatarIcon: View {
+    let image: PlatformImage
+    /// 选中保留原色；未选中灰化。
+    let isSelected: Bool
+    /// 渲染边长（pt）。取 18 是量出来的：13pt（SF Symbol 那一档）实拍只剩一团粉、
+    /// 认不出人，16pt 勉强，**18pt 起才看得出脸** —— 正好落在品牌 logo 已有的
+    /// 18 / 20pt 档里，槽位（28×24）与胶囊高度（36pt）都不用动。
+    var side: CGFloat = 18
+
+    var body: some View {
+        Image(platform: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: side, height: side)
+            .clipShape(.circle)
+            // 用 `.grayscale` 而不是 `.saturation(0)`：观感等价（都是把饱和度整条抽掉），
+            // 但 **`.saturation()` 在 `ImageRenderer` 里不生效**（实测：纯色矩形与位图
+            // 加与不加逐值相同，0.897 vs 0.897），而 `.grayscale()` 生效（0.762 → 0.000）。
+            // 这一格唯一的选中信号就是它，必须能被渲染用例钉住。
+            .grayscale(isSelected ? 0 : 1)
     }
 }
 

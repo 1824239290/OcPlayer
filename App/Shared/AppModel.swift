@@ -54,13 +54,17 @@ final class AppModel {
     /// 网络路径监听（Wi-Fi ↔ 蜂窝 / Tailscale 起停 → 地址结论作废重探）。
     let endpointMonitor = ServerEndpointMonitor()
 
-    /// 当前账号头像的位图，**已经烤成标签栏要的样子**（裁圆、28pt@3x、`alwaysOriginal`）；
-    /// nil = 没有头像或还没加载出来。
+    /// 当前账号头像的位图；nil = 没有头像或还没加载出来。
     ///
-    /// **为什么把它存在模型里而不是让视图自己去拉**：首页 Tab 的图标要它，而 Tab 项
-    /// 是宿主渲染的、异步图加载完不会回填，且会忽略 `.frame` / `.clipShape` / SwiftUI 的
-    /// `.renderingMode`（实测，见 `AppModel+Avatar.tabIcon(from:)`）。所以这里给出的是
-    /// 一张「贴上去就对」的位图，视图同步读一个值即可。
+    /// **两端的形态不同，因为两端的宿主约束不同**：
+    /// * iOS：已经烤成**标签栏要的样子**（裁圆、28pt@3x、`alwaysOriginal`）—— 标签栏
+    ///   会忽略 `.frame` / `.clipShape` / SwiftUI 的 `.renderingMode`，见
+    ///   `AppModel+Avatar.tabIcon(from:)`。
+    /// * macOS：原始解码位图（`tabIcon` 直通）。那边没有标签栏，消费方是顶栏药丸里
+    ///   自绘的 `SectionAvatarIcon`，`.frame` / `.clipShape` 都正常生效。
+    ///
+    /// **为什么把它存在模型里而不是让视图自己去拉**：两个宿主（Tab 项 / 工具栏药丸）
+    /// 都是宿主渲染的，异步图加载完不会回填，视图只能同步读一个已经就绪的值。
     ///
     /// 生命周期跟着会话走：`resetBrowseState()` 里清掉（换服务器 / 登出 / 401 之后
     /// 不能还挂着上一个账号的脸）。详见 `AppModel+Avatar.swift`。
