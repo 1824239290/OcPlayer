@@ -4,6 +4,27 @@ import SwiftUI
 
 #if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
+
+#if !os(macOS)
+/// iOS 外壳使用的尺寸类：**iPad 恒为紧凑**（用户口径「只用 iPhone 版的样式」）。
+///
+/// 抽成纯函数只为一件事：这段决策没有别的办法用用例钉住 —— 「系统把标签栏画成
+/// 底部还是顶部」只能靠实拍（见 `AppShellView.compactLayout` 的注释），但
+/// 「iPad 恒 compact、iPhone 不动」是我们自己的口径，必须能防回归。
+enum ShellSizeClass {
+    /// - Parameters:
+    ///   - idiom: 真实设备类型（`UIDevice.current.userInterfaceIdiom`）。
+    ///   - actual: 真实的 `horizontalSizeClass`。
+    /// - Returns: iPad 恒 `.compact`；其余原样返回 —— iPhone 的 compact 是常态，
+    ///   Pro Max 横屏的 regular 是它自己的版式，不动。
+    static func resolved(idiom: UIUserInterfaceIdiom,
+                         actual: UserInterfaceSizeClass?) -> UserInterfaceSizeClass? {
+        idiom == .pad ? .compact : actual
+    }
+}
 #endif
 
 /// 主框架：macOS 用顶栏液态玻璃药丸（分区），iPhone / iPad 统一用底部 Tab。
@@ -13,7 +34,11 @@ import AppKit
 /// 用 Tab；媒体库入口在首页「媒体库」栏，整列宽度让给内容。iPad 曾试过与
 /// macOS 同款顶栏药丸：iOS 的导航栏自带白底玻璃条、氛围层垫在导航栈外到不了
 /// 屏幕（见 `WindowAmbience.reachesScreen`），顶栏既不是悬浮药丸、首页背景也
-/// 出不来——iPad 回归 Tab 方案，内容列宽仍跟随常规宽度。
+/// 出不来——iPad 回归 Tab 方案。
+///
+/// **iPad 的内容列宽也按 iPhone 走**（`compactLayout` 里把尺寸类钉成紧凑档，
+/// 见那里的注释）：用户口径是「只用 iPhone 版的样式」。曾经是跟随常规宽度
+/// （更宽的留白 + 更少更大的卡片），已改。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -74,9 +99,23 @@ struct AppShellView: View {
             .onChange(of: reduceMotion) { _, newValue in app.reduceMotion = newValue }
     }
 
-    /// nil 视作 regular：macOS 上 `horizontalSizeClass` 常为 nil，窗口再窄也不走紧凑版式。
+    /// 外壳使用的尺寸类。
+    ///
+    /// - macOS：真实值（`horizontalSizeClass` 常为 nil → 视作 regular，窗口再窄也不走紧凑版式）。
+    /// - iOS：**iPad 恒 compact**（见 `ShellSizeClass`），iPhone 原样。
+    private var shellSizeClass: UserInterfaceSizeClass? {
+        #if os(macOS)
+        sizeClass
+        #else
+        ShellSizeClass.resolved(idiom: UIDevice.current.userInterfaceIdiom, actual: sizeClass)
+        #endif
+    }
+
+    /// 页面横向留白。跟**外壳用的尺寸类**走，不跟真实 trait 走 —— iPad 上外壳是
+    /// 紧凑版式（内容列宽、卡片尺寸都是 iPhone 档），留白必须同口径；否则会出现
+    /// 「内容是 iPhone 版式、左右留白还是 iPad 的 52pt」这种错位。
     private var contentLeading: CGFloat {
-        sizeClass == .compact ? Metrics.compactContentInset : Metrics.contentInset
+        shellSizeClass == .compact ? Metrics.compactContentInset : Metrics.contentInset
     }
 
     @ViewBuilder
@@ -256,6 +295,25 @@ struct AppShellView: View {
         )) {
             compactTabs
         }
+        // **iPad 也按 iPhone 版式**（用户口径「只用 iPhone 版的样式」）：标签栏压成
+        // 底部形态，内容列宽 / 卡片尺寸 / 横向留白一起走紧凑档。
+        //
+        // ## 为什么是「改尺寸类」而不是某个「选底部栏」的开关
+        //
+        // SwiftUI **没有**这种 API：`EnvironmentValues.tabBarPlacement` 是只读的
+        // （只能读「栏现在在哪」）、`.tabViewStyle(.tabBarOnly)` 只管「别变成侧栏」、
+        // `UITabBarController.mode` 同样只有 automatic / tabBar / tabSidebar。能用的
+        // 只有尺寸类这个**副作用** —— `TabView` 那一层的尺寸类决定标签栏形态。
+        //
+        // ## 代价（认下来的）
+        //
+        // 这是**跟平台口径对着干**：iPadOS 18 起标签栏默认在顶部（Liquid Glass 顶部
+        // 胶囊）。将来系统改行为，会**静默**退回顶部胶囊 —— 不会崩，但会白改，所以
+        // 这条口径在 `CHANGELOG` 与本注释里都写明来历。
+        //
+        // 顺带解决的一件事：顶部胶囊**只渲染文字、把图标丢掉了**，所以头像在 iPad 上
+        // 原本根本看不到（见 `AppModel+Avatar.swift`）；底部栏有图标，头像就出来了。
+        .environment(\.horizontalSizeClass, shellSizeClass)
         // 标签栏的选中色**继承** `RootView` 根节点钉的中性 tint（`.primary`）：
         // 选中项变白（深色）/ 黑（浅色），与顶栏药丸同一套语言，系统自带的玻璃
         // 选中底保留（iOS 26 的悬浮玻璃标签栏）。这里不再单独钉一遍——两处钉同一
