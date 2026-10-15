@@ -644,6 +644,140 @@ struct BangumiDatabaseTests {
         #expect(try await db.fetchSubjectIDsMissingEpisodes().isEmpty)
     }
 
+    /// 「已看状态脱节」查询的核心现场（用户 2026-10-15 报的 bug）：条目级已看数已经是
+    /// 2、本地章节表里只有第 1 集标了看过 —— 章节一条不缺，所以补齐查询**看不见**它，
+    /// 格子就会一直停在「02 未看」。
+    ///
+    /// 判据 ② 带一个很短的冷却（防「刚拉完还是对不上」的重复请求），所以这里分两段：
+    /// 默认冷却下不入选，冷却归零后入选。
+    @Test func staleEpisodeProgressQuerySelectsWhenServerCountIsAhead() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 630, eps: 12, epStatus: 2))
+        try await db.saveEpisodes(
+            subjectId: 630,
+            items: (1...12).map {
+                BangumiFixture.episode(
+                    id: 6300 + $0, subjectID: 630, sort: Float($0),
+                    status: $0 == 1 ? .collect : .none)
+            })
+
+        // 刚同步过（episodes_synced_at = 刚刚）→ 冷却期内不重复拉。
+        #expect(try await db.fetchSubjectIDsWithStaleEpisodeProgress().isEmpty)
+        // 冷却归零 → 已看数对不上，必须重拉。
+        #expect(
+            try await db.fetchSubjectIDsWithStaleEpisodeProgress(resyncCooldown: 0) == [630])
+    }
+
+    /// 判据 ①：服务端收藏记录比上次章节同步新（`collected_at > episodes_synced_at`）。
+    /// 这条覆盖「已看总数没变、只是挪了一集」——那种情况判据 ② 看不见，而 bgm.tv 在
+    /// 单集进度变化时**同时**推进收藏记录的 `updated_at`（实测 554779 的 `updated_at`
+    /// 与 ep2 的 `collection.updatedAt` 逐秒相同），所以拿它当信号。
+    ///
+    /// 它**不节流**（自清：重拉后 synced_at 就晚于 collected_at 了）。
+    @Test func staleEpisodeProgressQuerySelectsWhenCollectionRecordIsNewer() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        // collected_at 取「现在之后」= 服务端记录比上次章节同步新。
+        let now = Int(Date().timeIntervalSince1970)
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 640, eps: 12, epStatus: 1, collectedAt: now + 600))
+        try await db.saveEpisodes(
+            subjectId: 640,
+            items: (1...12).map {
+                BangumiFixture.episode(
+                    id: 6400 + $0, subjectID: 640, sort: Float($0),
+                    status: $0 == 1 ? .collect : .none)
+            })
+
+        // 已看数对得上（1 == 1），只有时间戳能发现它。
+        #expect(try await db.fetchSubjectIDsWithStaleEpisodeProgress() == [640])
+    }
+
+    /// 对得上且同步在后的条目一个都不拉（默认路径零请求）。
+    @Test func staleEpisodeProgressQueryIgnoresConsistentSubjects() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 650, eps: 12, epStatus: 1))
+        try await db.saveEpisodes(
+            subjectId: 650,
+            items: (1...12).map {
+                BangumiFixture.episode(
+                    id: 6500 + $0, subjectID: 650, sort: Float($0),
+                    status: $0 == 1 ? .collect : .none)
+            })
+
+        #expect(try await db.fetchSubjectIDsWithStaleEpisodeProgress(resyncCooldown: 0).isEmpty)
+    }
+
+    /// 本地一条章节都没有的条目不归这条查询管：那是 `fetchSubjectIDsMissingEpisodes`
+    /// 的活（它另有一套按 eps 判据 + 6 小时退避）。两处都捞会白拉。
+    @Test func staleEpisodeProgressQueryNeedsLocalEpisodes() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 660, eps: 12, epStatus: 2))
+
+        #expect(try await db.fetchSubjectIDsWithStaleEpisodeProgress(resyncCooldown: 0).isEmpty)
+    }
+
+    /// 只看「在看」里的动画 / 三次元：看过、想看、游戏条目的章节状态不参与进度页。
+    @Test func staleEpisodeProgressQueryOnlyInProgressAnime() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 670, eps: 2, epStatus: 2, collectionType: .collect))
+        try await db.saveSubject(
+            BangumiFixture.subject(id: 671, eps: 2, epStatus: 2, subjectType: .game))
+        try await db.saveEpisodes(
+            subjectId: 670,
+            items: [BangumiFixture.episode(id: 6700, subjectID: 670, sort: 1, status: .collect)])
+        try await db.saveEpisodes(
+            subjectId: 671,
+            items: [BangumiFixture.episode(id: 6710, subjectID: 671, sort: 1, status: .collect)])
+
+        #expect(try await db.fetchSubjectIDsWithStaleEpisodeProgress(resyncCooldown: 0).isEmpty)
+    }
+
+    /// 全量章节落库对 collection 的两种口径：
+    /// - `authoritativeCollection: true`（已登录的整份替换）→ 远端没给 collection 的集
+    ///   必须归零，否则「在别处取消看过」撤不掉；
+    /// - 默认 false（未登录 / 只读到「这次没给」）→ 保留本地状态，不清空已看。
+    @Test func authoritativeEpisodeSyncClearsUnwatchedStatus() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 680, eps: 2, epStatus: 1))
+        try await db.saveEpisodes(
+            subjectId: 680,
+            items: [BangumiFixture.episode(id: 6800, subjectID: 680, sort: 1, status: .collect)])
+
+        // 远端回包：这一集没看过 —— 线上就是**没有 collection 字段**（不是 status 0）。
+        let remote = [BangumiEpisodeDTO(
+            id: 6800, subjectID: 680, type: .main, sort: 1, name: "EP1", nameCN: "",
+            duration: "24m", airdate: "2024-01-01", comment: 0, disc: 0, collection: nil)]
+        #expect(remote[0].collection == nil)
+
+        try await db.saveEpisodes(subjectId: 680, items: remote)
+        var episodes = try await db.fetchEpisodes(subjectId: 680)
+        #expect(episodes.first?.collectionTypeEnum == .collect, "非权威路径不得清掉本地已看")
+
+        try await db.saveEpisodes(subjectId: 680, items: remote, authoritativeCollection: true)
+        episodes = try await db.fetchEpisodes(subjectId: 680)
+        // 显式写全 `.none` 的限定名：`Optional` 上下文里裸 `.none` 会被解成 nil。
+        #expect(
+            episodes.first?.collectionTypeEnum == BangumiEpisodeCollectionType.none,
+            "权威路径要把取消的看过撤掉")
+    }
+
+    /// 对齐目标 = 补齐清单 + 脱节清单，保序去重（同一条目可能两处都命中）。
+    @Test func episodeSyncTargetsMergesMissingAndStale() {
+        #expect(
+            BangumiEpisodeRepository.episodeSyncTargets(
+                missingEpisodes: [3, 1], staleProgress: [1, 5]) == [3, 1, 5])
+        #expect(
+            BangumiEpisodeRepository.episodeSyncTargets(
+                missingEpisodes: [], staleProgress: [9]) == [9])
+        #expect(
+            BangumiEpisodeRepository.episodeSyncTargets(
+                missingEpisodes: [2], staleProgress: []) == [2])
+        #expect(
+            BangumiEpisodeRepository.episodeSyncTargets(
+                missingEpisodes: [], staleProgress: []).isEmpty)
+    }
+
     /// 整页批量落库与逐条落库结果一致。
     @Test func saveSubjectsWritesWholePage() async throws {
         let db = try BangumiFixture.makeDatabase()

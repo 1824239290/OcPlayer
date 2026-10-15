@@ -284,7 +284,18 @@ public actor BangumiDatabaseOperator {
         }
     }
 
-    public func saveEpisodes(subjectId: Int, items: [BangumiEpisodeDTO]) throws {
+    /// 落库条目的**全量**章节。
+    ///
+    /// - Parameter authoritativeCollection: 远端没给 `collection` 字段时，是否按
+    ///   「服务端说这一集没看过」处理（把本地 status 归零）。`p1/subjects/{id}/episodes`
+    ///   对**没看过**的集就是不给这个字段（实测：看过的集带 `{"status":2,…}`，没看过的是
+    ///   `null`），而这条路径是整份替换，所以登录态下必须传 true —— 否则「在别的设备上
+    ///   取消看过」永远撤不掉：本地旧 status 会被保留，格子一直显示「看过」。
+    ///   默认 **false**（保守）：未登录时整个响应都没有 collection，按 nil 归零会把
+    ///   本地已看状态清空。
+    public func saveEpisodes(
+        subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false
+    ) throws {
         try database.write { db in
             var subjectRef = try fetchSubject(in: db, id: subjectId)
             if subjectRef == nil, let slim = items.first?.subject {
@@ -302,7 +313,7 @@ public actor BangumiDatabaseOperator {
             for item in items {
                 let episode: BangumiEpisode
                 if let existing = existingMap[item.id] {
-                    existing.update(item)
+                    existing.update(item, authoritativeCollection: authoritativeCollection)
                     episode = existing
                 } else {
                     episode = BangumiEpisode(item)
@@ -571,6 +582,74 @@ public actor BangumiDatabaseOperator {
                     limit,
                 ]
             )
+        }
+    }
+
+    /// 「在看」里**单集已看状态**可能与服务端脱节的条目（收藏同步后的第二道对齐）。
+    ///
+    /// 背景：收藏同步只回读条目级的 `epStatus`（进度条上的「2 / 12」），**一个单集状态都
+    /// 不碰**；而 `fetchSubjectIDsMissingEpisodes` 只挑「本地章节条数 < eps」的条目。
+    /// 于是「章节一条不少、但单集状态是旧的」这类条目永远等不到重拉 —— 在别的设备 /
+    /// 网页上标了一集之后，进度卡上写「2 / 12」、下面的格子还停在「未看」（用户
+    /// 2026-10-15 报的现场，subject=554779：服务端 ep2 `status=2`、本地还是 0，最后一次
+    /// 章节同步是 8 天前）。
+    ///
+    /// 两条判据（任一命中即重拉）：
+    /// ① `collected_at > episodes_synced_at` —— 服务端收藏记录的 `updated_at` 比上次章节
+    ///    同步新。bgm.tv 在单集进度变化时**同时**推进收藏记录的 `updated_at`（实测 554779
+    ///    的 `updated_at` 与 ep2 的 `collection.updatedAt` 逐秒相同），所以这条能覆盖
+    ///    「总数没变、只是挪了一集」这种 ② 看不见的情况。它**自清**：重拉之后
+    ///    `episodes_synced_at` 就晚于 `collected_at` 了，不会再命中。
+    /// ② 服务端已看数 ≠ 本地标为看过的本篇数 —— 本地确实落后（或超前）。这条用
+    ///    `resyncCooldown` 挡一下「刚拉完还是对不上」的重复请求（服务端口径万一与本地
+    ///    计数不同源，不设闸就会每次刷新都白拉一条）；冷却很短是因为它必须能立刻救现场。
+    public func fetchSubjectIDsWithStaleEpisodeProgress(
+        limit: Int = 200, resyncCooldown: TimeInterval = 60
+    ) throws -> [Int] {
+        let cooldownBefore = Int(Date().timeIntervalSince1970 - resyncCooldown)
+        return try database.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT s.subject_id, s.collected_at, s.episodes_synced_at, s.interest_data,
+                           (
+                             SELECT COUNT(*) FROM episodes AS e
+                             WHERE e.subject_id = s.subject_id AND e.type = ? AND e.status = ?
+                           ) AS watched
+                    FROM subjects AS s
+                    WHERE s.ctype = ?
+                      AND s.type IN (?, ?)
+                      AND EXISTS (
+                        SELECT 1 FROM episodes AS e
+                        WHERE e.subject_id = s.subject_id AND e.type = ?
+                      )
+                    ORDER BY s.collected_at DESC
+                    LIMIT ?
+                    """,
+                arguments: [
+                    BangumiEpisodeType.main.rawValue,
+                    BangumiEpisodeCollectionType.collect.rawValue,
+                    BangumiCollectionType.doing.rawValue,
+                    BangumiSubjectType.anime.rawValue,
+                    BangumiSubjectType.real.rawValue,
+                    BangumiEpisodeType.main.rawValue,
+                    limit,
+                ]
+            )
+            return rows.compactMap { row -> Int? in
+                let subjectID: Int = row["subject_id"]
+                let collectedAt: Int = row["collected_at"]
+                let syncedAt: Int = row["episodes_synced_at"]
+                // ① 服务端收藏记录比上次章节同步新：进度可能被别处改过（自清，不节流）。
+                if collectedAt > syncedAt { return subjectID }
+                // ② 已看数对不上：本地单集状态确实落后（或超前）。
+                let watched: Int = row["watched"]
+                let interest: BangumiSubjectInterest? = row.jsonOptional("interest_data")
+                if watched != (interest?.epStatus ?? 0), syncedAt <= cooldownBefore {
+                    return subjectID
+                }
+                return nil
+            }
         }
     }
 
@@ -914,7 +993,13 @@ extension BangumiSubject {
 }
 
 extension BangumiEpisode {
-    func update(_ item: BangumiEpisodeDTO) {
+    /// 用远端 DTO 更新本地章节。
+    ///
+    /// - Parameter authoritativeCollection: 远端没带 `collection` 时是否按「没看过」处理
+    ///   （status / collected_at 归零）。见 `saveEpisodes`：章节接口对没看过的集不给这个
+    ///   字段，只有「整份替换 + 已登录」那条路径才该传 true。默认 **false**：别的调用点
+    ///   拿到的是「这次没读到」，按 nil 归零等于把已看状态抹掉。
+    func update(_ item: BangumiEpisodeDTO, authoritativeCollection: Bool = false) {
         if subjectId != item.subjectID { subjectId = item.subjectID }
         if type != item.type.rawValue { type = item.type.rawValue }
         if sort != item.sort { sort = item.sort }
@@ -930,6 +1015,9 @@ extension BangumiEpisode {
             if let collectedAt = collection.updatedAt, self.collectedAt != collectedAt {
                 self.collectedAt = collectedAt
             }
+        } else if authoritativeCollection {
+            if status != 0 { status = 0 }
+            if collectedAt != 0 { collectedAt = 0 }
         }
     }
 }

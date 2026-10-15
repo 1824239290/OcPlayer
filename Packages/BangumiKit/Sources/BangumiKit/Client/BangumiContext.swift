@@ -41,33 +41,48 @@ public enum BangumiCollectionRepository {
         return count
     }
 
-    /// 给「在看」里章节还缺的条目补齐章节。
+    /// 收藏同步之后的章节侧对齐（进度页刷新调）。两件事：
     ///
-    /// 收藏接口只返回条目，不含章节，而进度页的章节网格、「下一集」按钮全靠本地
-    /// 章节表。不补的话同步完照样是空网格，还会因为找不到未看集而显示成「已看完」。
+    /// ① **补齐章节**。收藏接口只返回条目、不含章节，而进度页的章节网格、「下一集」按钮
+    ///    全靠本地章节表。不补的话同步完照样是空网格，还会因为找不到未看集而显示成「已看完」。
+    /// ② **重拉单集状态脱节的条目**。收藏同步只更新条目级 `epStatus`（进度条的「2 / 12」），
+    ///    单集状态一个都不碰 —— 在别的设备 / 网页上看过之后，进度条是新值、格子还是旧的
+    ///    （`fetchSubjectIDsWithStaleEpisodeProgress` 有完整现场）。
+    ///
     /// 并发有上限，别把几十个条目的章节请求一次全发出去。
     @discardableResult
-    public static func backfillMissingEpisodes(maxConcurrent: Int = 4) async -> Int {
+    public static func reconcileEpisodes(maxConcurrent: Int = 4) async -> Int {
         guard let db = BangumiContext.shared.database else { return 0 }
-        let subjectIDs = (try? await db.fetchSubjectIDsMissingEpisodes()) ?? []
+        let missing = (try? await db.fetchSubjectIDsMissingEpisodes()) ?? []
+        let stale = (try? await db.fetchSubjectIDsWithStaleEpisodeProgress()) ?? []
+        let subjectIDs = BangumiEpisodeRepository.episodeSyncTargets(
+            missingEpisodes: missing, staleProgress: stale)
         guard !subjectIDs.isEmpty else { return 0 }
+        // 与「重拉」同一个事实：章节接口是否带 collection 取决于当前登录态。
+        let authoritativeCollection = BangumiContext.shared.isAuthenticated
 
         var filled = 0
         await withTaskGroup(of: Bool.self) { group in
             var pending = subjectIDs.makeIterator()
             for _ in 0..<max(1, maxConcurrent) {
                 guard let subjectID = pending.next() else { break }
-                group.addTask { await BangumiEpisodeRepository.syncEpisodesQuietly(subjectID, db: db) }
+                group.addTask {
+                    await BangumiEpisodeRepository.syncEpisodesQuietly(
+                        subjectID, db: db, authoritativeCollection: authoritativeCollection)
+                }
             }
             while let succeeded = await group.next() {
                 if succeeded { filled += 1 }
                 if let subjectID = pending.next() {
-                    group.addTask { await BangumiEpisodeRepository.syncEpisodesQuietly(subjectID, db: db) }
+                    group.addTask {
+                        await BangumiEpisodeRepository.syncEpisodesQuietly(
+                            subjectID, db: db, authoritativeCollection: authoritativeCollection)
+                    }
                 }
             }
         }
         if filled > 0 {
-            BangumiNetworkLog.logger.info("章节补齐完成 subjects=\(filled)")
+            BangumiNetworkLog.logger.info("章节对齐完成 subjects=\(filled)")
         }
         return filled
     }
@@ -76,9 +91,28 @@ public enum BangumiCollectionRepository {
 /// 章节远程与本地组合层。
 @MainActor
 public enum BangumiEpisodeRepository {
+    /// 收藏同步之后的章节侧对齐要重拉的条目：先「章节还缺的」，再「单集状态脱节的」。
+    ///
+    /// 两边的查询都按 `collected_at DESC` 排（最近在看的在前），同一条目可能两处都命中
+    /// （章节缺 + 进度脱节），去重时保住这个次序。纯函数，便于单测钉住顺序与去重。
+    nonisolated static func episodeSyncTargets(
+        missingEpisodes: [Int], staleProgress: [Int]
+    ) -> [Int] {
+        var targets = missingEpisodes
+        var seen = Set(missingEpisodes)
+        for subjectID in staleProgress where seen.insert(subjectID).inserted {
+            targets.append(subjectID)
+        }
+        return targets
+    }
+
     /// 拉取条目全部章节并落库，删除本地多余章节。不发通知，供批量补齐复用。
+    ///
+    /// `authoritativeCollection` 见 `BangumiDatabaseOperator.saveEpisodes`：已登录时
+    /// 「远端没给 collection」就是「这一集没看过」，必须按它归零，否则在别处取消的
+    /// 「看过」撤不掉。
     nonisolated static func syncEpisodes(
-        _ subjectId: Int, db: BangumiDatabaseOperator
+        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool
     ) async throws {
         var offset = 0
         let limit = 1000
@@ -97,16 +131,18 @@ public enum BangumiEpisodeRepository {
             offset += limit
             if offset >= total { break }
         }
-        try await db.saveEpisodes(subjectId: subjectId, items: items)
+        try await db.saveEpisodes(
+            subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
         try await db.deleteEpisodesNotIn(subjectId: subjectId, episodeIds: episodeIds)
     }
 
     /// `syncEpisodes` 的静默版本：失败只记日志，返回是否成功（批量补齐用）。
     nonisolated static func syncEpisodesQuietly(
-        _ subjectId: Int, db: BangumiDatabaseOperator
+        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool
     ) async -> Bool {
         do {
-            try await syncEpisodes(subjectId, db: db)
+            try await syncEpisodes(
+                subjectId, db: db, authoritativeCollection: authoritativeCollection)
             return true
         } catch {
             BangumiNetworkLog.logger.warning("章节补齐失败 subject=\(subjectId) error=\(error)")
@@ -117,7 +153,8 @@ public enum BangumiEpisodeRepository {
     /// 拉取条目全部章节并落库，删除本地多余章节。
     public static func loadEpisodes(_ subjectId: Int) async throws {
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
-        try await syncEpisodes(subjectId, db: db)
+        try await syncEpisodes(
+            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated)
         BangumiProgressInvalidation.post(subjectId: subjectId)
     }
 
@@ -135,7 +172,9 @@ public enum BangumiEpisodeRepository {
         }
         let counts = try await db.fetchEpisodeCounts(subjectId: subjectId)
         if refreshEpisodes || counts.main + counts.other == 0 {
-            try await syncEpisodes(subjectId, db: db)
+            try await syncEpisodes(
+                subjectId, db: db,
+                authoritativeCollection: BangumiContext.shared.isAuthenticated)
         }
         BangumiProgressInvalidation.post(subjectId: subjectId)
     }
@@ -150,7 +189,8 @@ public enum BangumiEpisodeRepository {
             remote.interest = interest
         }
         try await db.saveSubject(remote)
-        try await syncEpisodes(subjectId, db: db)
+        try await syncEpisodes(
+            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated)
     }
 
     /// 单集标记后的服务端对齐（播放结束自动标记用）。
@@ -531,8 +571,8 @@ public final class BangumiContext {
         let querySince = since > 0 ? max(0, since - Self.collectionSyncOverlap) : 0
         let count = try await BangumiCollectionRepository.refreshCollections(since: querySince)
         store.setCollectionsUpdatedAt(startedAt)
-        // 收藏接口不带章节，进度页的章节网格靠这一步补。
-        await BangumiCollectionRepository.backfillMissingEpisodes()
+        // 收藏接口既不带章节、也不带单集状态：进度页的章节网格与格子状态都靠这一步对齐。
+        await BangumiCollectionRepository.reconcileEpisodes()
         return count
     }
 
