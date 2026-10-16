@@ -38,7 +38,10 @@ public final class MoviePilotStore: @unchecked Sendable {
 
     /// 全局唯一实例：协调器与 APIClient 共用同一份 store（此前两边各 `MoviePilotStore()`，
     /// 两个实例只靠同一份 UserDefaults 碰巧同步——收敛成单一实例，消除双写时序差）。
-    public static let shared = MoviePilotStore()
+    ///
+    /// 默认域走 `OcPlayerStorage.defaultPreferences`：自动化（`OCPLAYER_ISOLATED_STORAGE=1`，
+    /// 即 AppTests 跑在 App 宿主里的那些进程）落到隔离域，不写开发者本机的真实偏好。
+    public static let shared = MoviePilotStore(defaults: OcPlayerStorage.defaultPreferences)
 
     private let defaults: UserDefaults
     private let credentials: CredentialFileStore

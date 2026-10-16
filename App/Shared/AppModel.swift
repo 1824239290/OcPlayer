@@ -733,14 +733,17 @@ final class AppModel {
     ///   这些用例共用同一个 bundle id 的 `UserDefaults.standard`，两个类同时写
     ///   同一个键就会互相污染（实测：新增的集成用例与本文件里的
     ///   `HomeRailLoadingTests` 抢 `home.railPresence`，后者当场挂）。
+    ///   默认值走 `OcPlayerStorage.defaultPreferences`：生产就是 `.standard`，
+    ///   自动化运行（`OCPLAYER_ISOLATED_STORAGE=1`）落到隔离域 —— 测试宿主
+    ///   （AppTests 就跑在 App 进程里）不该写开发者本机的真实偏好。
     init(
-        store: ServerStore = ServerStore(),
+        store: ServerStore = ServerStore(defaults: OcPlayerStorage.defaultPreferences),
         bangumi: BangumiCoordinator = BangumiCoordinator(),
         moviepilot: MoviePilotCoordinator = MoviePilotCoordinator(),
         danmakuModel: DanmakuModel = DanmakuModel(),
         metadata: MetadataCoordinator = MetadataCoordinator(),
         tmdb: TMDbCoordinator? = nil,
-        preferences: UserDefaults = .standard
+        preferences: UserDefaults = OcPlayerStorage.defaultPreferences
     ) {
         self.store = store
         self.bangumi = bangumi

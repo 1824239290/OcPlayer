@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 import Observation
 
@@ -147,7 +148,9 @@ public final class AppUpdateChecker {
         }
     }
 
-    public static let shared = AppUpdateChecker()
+    /// 默认域走 `OcPlayerStorage.defaultPreferences`：自动化运行（`OCPLAYER_ISOLATED_STORAGE=1`）
+    /// 落到隔离域 —— 「上次检查时间」这类写入不该落在开发者本机的真实偏好里。
+    public static let shared = AppUpdateChecker(defaults: OcPlayerStorage.defaultPreferences)
 
     public private(set) var state: State = .idle
 

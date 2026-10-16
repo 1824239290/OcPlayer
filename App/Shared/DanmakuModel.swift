@@ -1,4 +1,5 @@
 import DanmakuKit
+import DiagnosticsKit
 import Foundation
 import Observation
 
@@ -17,7 +18,10 @@ final class DanmakuModel {
 
     init(
         danmaku: DanmakuCoordinator? = nil,
-        dandanplayStore: DandanplaySettingsStore = DandanplaySettingsStore()
+        // 默认域走 `OcPlayerStorage.defaultPreferences`：自动化运行落到隔离域，
+        // 测试宿主不写开发者本机的真实偏好（生产就是 `.standard`）。
+        dandanplayStore: DandanplaySettingsStore =
+            DandanplaySettingsStore(defaults: OcPlayerStorage.defaultPreferences)
     ) {
         self.danmaku = danmaku ?? DanmakuCoordinator()
         self.dandanplayStore = dandanplayStore

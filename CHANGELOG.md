@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。
+  - **现象**：`AppTests` 跑在 **App 宿主进程**里（`TEST_HOST = OcPlayer.app`），宿主照常装配真实存储与真实偏好 —— 跑完一次 macOS 全量用例，`~/Library/Application Support/OcPlayer/` 下 `credentials.json`、`Media.sqlite-wal`、`Bangumi.sqlite-wal` 与真实偏好 plist 的 mtime 全落在测试窗口内。逐键比对确认凭据**内容没坏**（只是 JSON 键序被重排），但一个会写开发机凭据文件的测试套件迟早会把它写坏。
+  - **开关**：环境变量 `OCPLAYER_ISOLATED_STORAGE=1`，收在 `OcPlayerStorage.isIsolated`。打开后存储根 → `临时目录/OcPlayerAutomation`（凭据 / 各 sqlite / 图片缓存 / 弹幕 / 字幕），App 偏好默认域 → 隔离根下的独立 plist（`UserDefaults(suiteName:)` 认「像路径的名字」，于是也不在 `~/Library/Preferences` 留垃圾）。生产不设它 → 默认域仍是 `.standard`，行为零变化。
+  - **接线**：新增 `OcPlayerStorage.defaultPreferences` 作为 App 偏好默认域的单一入口 —— `ServerStore(defaults:)`（App 侧默认参数）、`AppModel(preferences:)`、`BangumiStore.shared`、`MoviePilotStore.shared`、`DandanplaySettingsStore`、`AppUpdateChecker.shared`、`HomeRailPresence`、`DiagnosticsSettings` 全走它；两个 scheme 的 TestAction 设上变量。包内 `init(defaults:)` 的公开默认值**没动**（只改包内单例的构造点），对外 API 不变。
+  - **踩到的坑（已写进 scheme 注释）**：TestAction 的 `shouldUseLaunchSchemeArgsEnv` 原本是 `YES`，含义是「测试沿用 **Run 动作**的参数与环境变量」—— 于是加在 TestAction 里的隔离变量被**静默忽略**，第一次复跑真实文件照写。两个 scheme 的 Run 动作本来就没有参数/环境变量，改成 `NO` 不丢东西。**以后往 TestAction 加变量，先确认这一位。**
+  - **边界（写在 `defaultPreferences` 的类型注释里）**：视图层 50 处 `@AppStorage` 仍读 `.standard`（那些键只在用户真去点开关时才写，测试不点）→ 隔离运行下真实偏好 plist 的 **mtime 仍会被刷一次，但内容逐值一致**（`defaults export` hash 不变）。日志目录此前已由 `RuntimeEnvironment.isRunningTests` 隔离（写临时目录），不在本次范围。
+  - **验证**：跑前跑后对真实数据目录（mtime + 凭据逐键 hash）与真实偏好域（导出 hash）做快照 —— macOS 全量用例期间**数据目录 diff 为空**，测试产物全部落在 `临时目录/OcPlayerAutomation`（`Danmaku/`、`ImageCache/`、`Subtitles/`、`preferences.plist`）。跑分：iOS 596 条 0 失败、macOS 578 通过 / 0 失败 / 18 跳过；被改动的三个包（DiagnosticsKit / BangumiKit / MoviePilotKit）包测试各自通过。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。

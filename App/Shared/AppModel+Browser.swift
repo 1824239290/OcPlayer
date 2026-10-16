@@ -21,7 +21,9 @@ struct HomeRailPresence: Equatable {
         [resume, nextUp, latest].filter { $0 }.count
     }
 
-    static func restored(from defaults: UserDefaults = .standard) -> HomeRailPresence {
+    /// 默认域走 `OcPlayerStorage.defaultPreferences`（生产 = `.standard`；自动化运行是隔离域）：
+    /// 首屏骨架条数是 App 自有偏好，测试宿主不该写开发者本机那一份。
+    static func restored(from defaults: UserDefaults = OcPlayerStorage.defaultPreferences) -> HomeRailPresence {
         guard let mask = defaults.object(forKey: storageKey) as? Int else {
             return HomeRailPresence()
         }
@@ -32,7 +34,7 @@ struct HomeRailPresence: Equatable {
         )
     }
 
-    func persist(to defaults: UserDefaults = .standard) {
+    func persist(to defaults: UserDefaults = OcPlayerStorage.defaultPreferences) {
         let mask = (resume ? 0b001 : 0) | (nextUp ? 0b010 : 0) | (latest ? 0b100 : 0)
         defaults.set(mask, forKey: Self.storageKey)
     }

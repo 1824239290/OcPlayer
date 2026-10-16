@@ -40,7 +40,11 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "NO">
+      <!-- `shouldUseLaunchSchemeArgsEnv="NO"` 是**必需**的：它原本是 YES，意思是「测试
+           用 Run 动作的参数与环境变量」，于是下面这条只属于测试的隔离变量会被静默忽略
+           （实测过一次：加在 TestAction 里但测试照样写了真实数据）。Run 动作没有任何
+           参数/环境变量，改成 NO 不会丢东西。 -->
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -50,6 +54,16 @@
             ReferencedContainer = "container:OcPlayer.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
+      <!-- 隔离运行：AppTests 跑在 App 宿主进程里，没有这一条就会读写开发者本机的
+           真实数据目录与真实偏好域（见 OcPlayerStorage.isIsolated 的注释）。
+           iOS scheme 同款。 -->
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "OCPLAYER_ISOLATED_STORAGE"
+            value = "1"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
       <Testables>
          <TestableReference
             skipped = "NO"

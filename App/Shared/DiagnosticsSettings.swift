@@ -9,8 +9,11 @@ import Foundation
 /// 级别是日志管线的进程级状态，改了立刻生效（不需要重启，也不需要重建引擎）；
 /// 唯一要注意的是启动顺序——`OcPlayerApp.init` 里先 `apply()` 再写第一条日志。
 enum DiagnosticsSettings {
-    /// `defaults` 可注入：测试用隔离域，生产走 `.standard`。
-    static func isVerboseLoggingEnabled(in defaults: UserDefaults = .standard) -> Bool {
+    /// `defaults` 可注入；默认走 `OcPlayerStorage.defaultPreferences` —— 生产是 `.standard`，
+    /// 自动化运行（`OCPLAYER_ISOLATED_STORAGE=1`）是隔离域，测试宿主不碰真实偏好。
+    static func isVerboseLoggingEnabled(
+        in defaults: UserDefaults = OcPlayerStorage.defaultPreferences
+    ) -> Bool {
         defaults.bool(forKey: SettingsKeys.diagnosticsVerbose)
     }
 
@@ -19,7 +22,10 @@ enum DiagnosticsSettings {
     /// 一并处理内核开关（`ERIKA_*` trace / 诊断）：它们由内核在**引擎创建时**读取，
     /// 所以改动在下一次播放（重建引擎）后生效——设置页文案按这个口径写。
     /// `logDirectory` 只给测试注入临时目录用（避免动到真实日志目录里的 trace 文件）。
-    static func apply(in defaults: UserDefaults = .standard, logDirectory: URL? = nil) {
+    static func apply(
+        in defaults: UserDefaults = OcPlayerStorage.defaultPreferences,
+        logDirectory: URL? = nil
+    ) {
         let verbose = isVerboseLoggingEnabled(in: defaults)
         DiagnosticLogger.setMinimumLevel(verbose ? .debug : .info)
         let directory = logDirectory ?? AppDiagnostics.fileURL.deletingLastPathComponent()

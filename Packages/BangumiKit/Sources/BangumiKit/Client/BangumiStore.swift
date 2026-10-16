@@ -29,7 +29,10 @@ import Foundation
 public final class BangumiStore: @unchecked Sendable {
     /// 全局共用实例。同一份 UserDefaults 被多个 store 实例读写时，每个实例各有一把锁
     /// 等于没锁，所以除测试注入自定义 defaults 外都用这一个。
-    public static let shared = BangumiStore()
+    ///
+    /// 默认域走 `OcPlayerStorage.defaultPreferences`：自动化（`OCPLAYER_ISOLATED_STORAGE=1`，
+    /// 即 AppTests 跑在 App 宿主里的那些进程）落到隔离域，不写开发者本机的真实偏好。
+    public static let shared = BangumiStore(defaults: OcPlayerStorage.defaultPreferences)
 
     private let lock = NSLock()
     private let defaults: UserDefaults
