@@ -45,6 +45,10 @@ extension AppModel {
 
     /// 取图时的下采样目标（像素）。按 3× 屏取够用，同时保证标签栏那格不会抱着一张
     /// 服务端原图（用户可能上传了 2000×2000）。
+    ///
+    /// ⚠️ **不是烤出来那张位图的尺寸**：`tabIcon(from:)` 按屏幕 scale 栅格化
+    /// （@3x 屏 84px / iPad 的 @2x 屏 56px，两者自然尺寸都是 28pt）。这里只是
+    /// 「取图时最多要这么多像素」的上限。
     static let userAvatarPixelSize = Int(userAvatarPointSize * 3)
 
     /// 把取到的位图做成**标签栏能直接用**的样子：裁圆、按点尺寸栅格化、
@@ -55,8 +59,9 @@ extension AppModel {
         #if canImport(UIKit)
         let pointSize = userAvatarPointSize
         let rect = CGRect(x: 0, y: 0, width: pointSize, height: pointSize)
-        // `UIGraphicsImageRendererFormat.default()` 自带屏幕 scale，正好得到
-        // 28pt @3x = 84px 的位图；标签栏按 28pt 画，与其它 glyph 槽位同高。
+        // `UIGraphicsImageRendererFormat.default()` 自带屏幕 scale：@3x 屏得到
+        // 28pt = 84px 的位图，iPad 那种 @2x 屏得到 56px —— 两者**自然尺寸都是 28pt**，
+        // 标签栏按 28pt 画，与其它 glyph 槽位同高（所以别把像素数当常量钉）。
         let format = UIGraphicsImageRendererFormat.default()
         format.opaque = false
         let rendered = UIGraphicsImageRenderer(size: rect.size, format: format).image { _ in

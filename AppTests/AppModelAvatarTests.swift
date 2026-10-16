@@ -122,7 +122,14 @@ final class AppModelAvatarTests: XCTestCase {
         XCTAssertEqual(icon.size.width, AppModel.userAvatarPointSize, accuracy: 0.5)
         XCTAssertEqual(icon.renderingMode, .alwaysOriginal)
         let cg = try XCTUnwrap(icon.cgImage)
-        XCTAssertEqual(cg.width, AppModel.userAvatarPixelSize, "像素数 = 点尺寸 × 屏幕 scale")
+        // **别把像素数写成常量**：烤图密度跟**屏幕 scale** 走 —— @3x 机是 84px、iPad 那种
+        // @2x 机是 56px，两种都对（位图的自然尺寸都是 28pt，标签栏按点画）。此前这里钉的是
+        // `userAvatarPixelSize`（＝按 @3x 估的解码预算 84），于是**只有 @3x 机型能过**：
+        // destination 换成 iPad 模拟器当场红，而 CI 一直跑 iPhone 所以没暴露。
+        XCTAssertEqual(icon.scale, UIGraphicsImageRendererFormat.default().scale,
+                       "烤图密度必须跟屏幕一致，不能钉死某一档")
+        XCTAssertEqual(cg.width, Int((AppModel.userAvatarPointSize * icon.scale).rounded()),
+                       "像素数 = 点尺寸 × 屏幕 scale（@2x 56 / @3x 84）")
 
         // 裁圆：四角透明、中心不透明。
         XCTAssertEqual(Self.alpha(of: cg, x: 1, y: 1), 0, accuracy: 0.02, "左上角必须被裁掉")

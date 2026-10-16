@@ -14,6 +14,8 @@
   - **边界（写在 `defaultPreferences` 的类型注释里）**：视图层 50 处 `@AppStorage` 仍读 `.standard`（那些键只在用户真去点开关时才写，测试不点）→ 隔离运行下真实偏好 plist 的 **mtime 仍会被刷一次，但内容逐值一致**（`defaults export` hash 不变）。日志目录此前已由 `RuntimeEnvironment.isRunningTests` 隔离（写临时目录），不在本次范围。
   - **验证**：跑前跑后对真实数据目录（mtime + 凭据逐键 hash）与真实偏好域（导出 hash）做快照 —— macOS 全量用例期间**数据目录 diff 为空**，测试产物全部落在 `临时目录/OcPlayerAutomation`（`Danmaku/`、`ImageCache/`、`Subtitles/`、`preferences.plist`）。跑分：iOS 596 条 0 失败、macOS 578 通过 / 0 失败 / 18 跳过；被改动的三个包（DiagnosticsKit / BangumiKit / MoviePilotKit）包测试各自通过。
 
+- **`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷**（上一轮 iPad 实拍时暴露）：用例把烤出来的标签栏头像断言成 `userAvatarPixelSize`（＝按 @3x 估的 84px），而 `tabIcon(from:)` 按**屏幕 scale** 栅格化 —— iPad 是 @2x、实测 56px，于是把 destination 换成 iPad 模拟器当场红（CI 一直跑 iPhone，所以一直没暴露）。位图的**自然尺寸**两档都对（都是 28pt），功能无碍。改成「像素数 = 点尺寸 × 屏幕 scale」＋「烤图密度与 `UIGraphicsImageRendererFormat.default().scale` 一致」；顺带把 `userAvatarPixelSize` 与 `tabIcon` 里两处「正好 28pt @3x = 84px」的表述改成两档都写明 —— 那个常量是**取图下采样预算**，不是烤图尺寸。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。
