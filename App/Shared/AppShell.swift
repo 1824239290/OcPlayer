@@ -9,20 +9,39 @@ import UIKit
 #endif
 
 #if !os(macOS)
-/// iOS 外壳使用的尺寸类：**iPad 恒为紧凑**（用户口径「只用 iPhone 版的样式」）。
+/// iOS 外壳的尺寸类口径：**标签栏那一层 iPad 恒紧凑，页面内容那一层按设备真实宽度**。
 ///
-/// 抽成纯函数只为一件事：这段决策没有别的办法用用例钉住 —— 「系统把标签栏画成
-/// 底部还是顶部」只能靠实拍（见 `AppShellView.compactLayout` 的注释），但
-/// 「iPad 恒 compact、iPhone 不动」是我们自己的口径，必须能防回归。
+/// 为什么要分两层：`TabView` **自己那一层**的尺寸类决定标签栏形态 —— iPadOS 18 起系统
+/// 默认把标签栏放顶部（Liquid Glass 胶囊），只有把那一层钉成紧凑档才会落回 iPhone 那样的
+/// 底部栏（SwiftUI 没有公开 API 能直接选「底部栏」，见 `compactLayout` 的注释）。但内容
+/// 不该跟着降级：用户口径是「**tabview 保留 iPhone 样式，其他所有都保持 iPad 的**」——
+/// 首页 rail、媒体库列数、详情页头部、设置卡片全部按设备真实宽度。
+///
+/// 所以两个落点读同一个纯函数的两个 `Layer`：`TabView` 读 `.tabBar`，每个 Tab 的内容读
+/// `.pageContent`。抽成纯函数是为了能用例钉住「哪一层被强制、哪一层不动」—— 系统怎么渲染
+/// 只能靠实拍，但这条分层决策是我们自己的。
 enum ShellSizeClass {
+    /// 哪一层在读这个尺寸类。
+    enum Layer {
+        /// `TabView` 自己那一层：决定标签栏画成底部栏还是顶部胶囊。
+        case tabBar
+        /// Tab 的内容层（Tab 根页 + push 出来的页）：决定页面版式。
+        case pageContent
+    }
+
     /// - Parameters:
     ///   - idiom: 真实设备类型（`UIDevice.current.userInterfaceIdiom`）。
     ///   - actual: 真实的 `horizontalSizeClass`。
-    /// - Returns: iPad 恒 `.compact`；其余原样返回 —— iPhone 的 compact 是常态，
-    ///   Pro Max 横屏的 regular 是它自己的版式，不动。
+    ///   - layer: 谁在读。
+    /// - Returns:
+    ///   - `.tabBar` 且 iPad：恒 `.compact` —— 标签栏落到底部（iPhone 形态）。
+    ///   - 其余一律**原样返回**：iPad 的内容保持它自己的常规宽度；iPhone 的 compact 是
+    ///     常态；Pro Max 横屏的 regular 是它自己的版式。都不动。
     static func resolved(idiom: UIUserInterfaceIdiom,
-                         actual: UserInterfaceSizeClass?) -> UserInterfaceSizeClass? {
-        idiom == .pad ? .compact : actual
+                         actual: UserInterfaceSizeClass?,
+                         layer: Layer) -> UserInterfaceSizeClass? {
+        guard layer == .tabBar, idiom == .pad else { return actual }
+        return .compact
     }
 }
 #endif
@@ -36,9 +55,12 @@ enum ShellSizeClass {
 /// 屏幕（见 `WindowAmbience.reachesScreen`），顶栏既不是悬浮药丸、首页背景也
 /// 出不来——iPad 回归 Tab 方案。
 ///
-/// **iPad 的内容列宽也按 iPhone 走**（`compactLayout` 里把尺寸类钉成紧凑档，
-/// 见那里的注释）：用户口径是「只用 iPhone 版的样式」。曾经是跟随常规宽度
-/// （更宽的留白 + 更少更大的卡片），已改。
+/// **iPad 上只有标签栏走 iPhone 形态，内容全部保持 iPad 版式**（用户口径：
+/// 「tabview 保留 iPhone 样式的，但其他所有都保持 iPad 的」）。
+///
+/// 两层分开读尺寸类，见 `ShellSizeClass`：`TabView` 那一层恒紧凑（标签栏因此落到
+/// 底部），每个 Tab 的内容层换回设备真实宽度（首页 rail / 媒体库列数 / 详情页头部 /
+/// 设置卡片都还是 iPad 档）。
 struct AppShellView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -62,6 +84,8 @@ struct AppShellView: View {
             // 横向留白跟**窗口宽度**走，不跟设备型号走：iPad 拖到 1/3 宽时
             // hSizeClass 已经是 compact，而 UIDevice 的 idiom 仍是 .pad
             // （见 `EnvironmentValues.contentLeading` 的注释）。
+            // 口径跟**内容**层（`contentSizeClass`），不跟标签栏层：iPad 的内容是
+            // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
             #if os(macOS)
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
@@ -99,23 +123,41 @@ struct AppShellView: View {
             .onChange(of: reduceMotion) { _, newValue in app.reduceMotion = newValue }
     }
 
-    /// 外壳使用的尺寸类。
+    /// **标签栏那一层**用的尺寸类（`TabView` 自己读它）。
     ///
-    /// - macOS：真实值（`horizontalSizeClass` 常为 nil → 视作 regular，窗口再窄也不走紧凑版式）。
-    /// - iOS：**iPad 恒 compact**（见 `ShellSizeClass`），iPhone 原样。
+    /// - macOS：真实值（`horizontalSizeClass` 常为 nil → 视作 regular）。
+    /// - iOS：**iPad 恒 compact** —— 标签栏因此落到底部（iPhone 形态），见 `ShellSizeClass`。
     private var shellSizeClass: UserInterfaceSizeClass? {
         #if os(macOS)
         sizeClass
         #else
-        ShellSizeClass.resolved(idiom: UIDevice.current.userInterfaceIdiom, actual: sizeClass)
+        ShellSizeClass.resolved(idiom: UIDevice.current.userInterfaceIdiom,
+                                actual: sizeClass,
+                                layer: .tabBar)
         #endif
     }
 
-    /// 页面横向留白。跟**外壳用的尺寸类**走，不跟真实 trait 走 —— iPad 上外壳是
-    /// 紧凑版式（内容列宽、卡片尺寸都是 iPhone 档），留白必须同口径；否则会出现
-    /// 「内容是 iPhone 版式、左右留白还是 iPad 的 52pt」这种错位。
+    /// **页面内容那一层**用的尺寸类（每个 Tab 的内容读它）。
+    ///
+    /// iPad 上它与 `shellSizeClass` 相反：**设备真实宽度**（常规宽度 → iPad 版式）。
+    /// 用户口径「tabview 保留 iPhone 样式的，但其他所有都保持 iPad 的」在这里落地。
+    private var contentSizeClass: UserInterfaceSizeClass? {
+        #if os(macOS)
+        sizeClass
+        #else
+        ShellSizeClass.resolved(idiom: UIDevice.current.userInterfaceIdiom,
+                                actual: sizeClass,
+                                layer: .pageContent)
+        #endif
+    }
+
+    /// 页面横向留白：跟**内容**尺寸类走（iPad 52pt / iPhone 22pt）。
+    ///
+    /// 不跟标签栏那一层走 —— 标签栏的紧凑档只是为了让栏落到底部，内容既然还是
+    /// iPad 版式，留白就必须是 iPad 档；否则会出现「内容是 iPad 版式、左右留白却是
+    /// iPhone 的 22pt」这种错位。
     private var contentLeading: CGFloat {
-        shellSizeClass == .compact ? Metrics.compactContentInset : Metrics.contentInset
+        contentSizeClass == .compact ? Metrics.compactContentInset : Metrics.contentInset
     }
 
     @ViewBuilder
@@ -187,6 +229,10 @@ struct AppShellView: View {
     ///
     /// 强调色不在这里管：整棵树吃 `RootView` 根节点钉的那一个中性 tint，标签栏
     /// 选中色与内容侧是**同一个来源**，新增 Tab 不需要补任何一句。
+    ///
+    /// **每个 Tab 的内容都挂 `.pageContentSizeClass(contentSizeClass)`**：外壳在
+    /// `compactLayout` 里为了标签栏把尺寸类钉成了紧凑档（见那里的注释），内容必须换成
+    /// 设备真实的那一份，否则整页版式会跟着标签栏一起降级成 iPhone 档。新增 Tab 别忘了这一句。
     @TabContentBuilder<AppModel.Section>
     private var compactTabs: some TabContent<AppModel.Section> {
         // 五个 Tab 根页统一用 `pageAmbience`：它会按平台分叉（iOS 自垫 /
@@ -240,7 +286,8 @@ struct AppShellView: View {
                         // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
-                }
+                .pageContentSizeClass(contentSizeClass)
+            }
         }
 
         if moviepilotEnabled {
@@ -250,7 +297,8 @@ struct AppShellView: View {
                         .appRoutes()
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
-                }
+                .pageContentSizeClass(contentSizeClass)
+            }
         }
 
         Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
@@ -259,6 +307,7 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
+            .pageContentSizeClass(contentSizeClass)
         }
 
         // 搜索 Tab 此前**没有**垫任何底（漏网的第 11 类页面）：iOS 上整页纯色，
@@ -269,6 +318,7 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
+            .pageContentSizeClass(contentSizeClass)
         }
     }
 
@@ -284,6 +334,7 @@ struct AppShellView: View {
                         .ignoresSafeArea()
                 }
         }
+        .pageContentSizeClass(contentSizeClass)
     }
 
     private var compactLayout: some View {
@@ -295,8 +346,10 @@ struct AppShellView: View {
         )) {
             compactTabs
         }
-        // **iPad 也按 iPhone 版式**（用户口径「只用 iPhone 版的样式」）：标签栏压成
-        // 底部形态，内容列宽 / 卡片尺寸 / 横向留白一起走紧凑档。
+        // **iPad 上只有标签栏走 iPhone 形态**（用户口径：「tabview 保留 iPhone 样式的，
+        // 但其他所有都保持 iPad 的」）：这一层钉成紧凑档只是为了标签栏落到底部，
+        // **内容不受影响** —— 每个 Tab 的内容都由 `pageContentSizeClass(contentSizeClass)`
+        // 换回设备真实宽度（见 `compactTabs`）。
         //
         // ## 为什么是「改尺寸类」而不是某个「选底部栏」的开关
         //
@@ -654,6 +707,35 @@ extension View {
     /// `AppModel.popPresented`；顺带由本层补挂离场淡出。
     func appShellBackChrome(title: String? = nil, presented: Binding<Bool>) -> some View {
         modifier(RegularBackChrome(title: title, presented: presented))
+    }
+}
+
+// MARK: - Tab 内容层的尺寸类
+
+/// 把 Tab 内容层（Tab 根页 + 它 push 出来的所有页）的尺寸类钉成**设备真实宽度**。
+///
+/// 存在的唯一理由：外壳为了让标签栏落到底部，给 `TabView` 那一层钉了紧凑档
+/// （见 `compactLayout`），而环境是**向下继承**的 —— 不在这里换回来，整页版式就会跟着
+/// 标签栏一起降级成 iPhone 档。用户口径：「**tabview 保留 iPhone 样式的，但其他所有都
+/// 保持 iPad 的**」。
+///
+/// 落在每个 Tab 的内容上（而不是某个具体页面）：Tab 根页、push 出来的页
+/// （`appRoutes()` 的 destination 都在这棵子树里）一起生效，新增页面不用各自补。
+///
+/// 值由 `AppShellView.contentSizeClass` 给：iPad 上是真实常规宽度，iPhone 上是它自己的
+/// compact —— 也就是「设备本来什么宽度，内容就什么版式」。
+private struct PageContentSizeClass: ViewModifier {
+    let sizeClass: UserInterfaceSizeClass?
+
+    func body(content: Content) -> some View {
+        content.environment(\.horizontalSizeClass, sizeClass)
+    }
+}
+
+extension View {
+    /// Tab 内容层的尺寸类（见 `PageContentSizeClass`）。
+    func pageContentSizeClass(_ sizeClass: UserInterfaceSizeClass?) -> some View {
+        modifier(PageContentSizeClass(sizeClass: sizeClass))
     }
 }
 

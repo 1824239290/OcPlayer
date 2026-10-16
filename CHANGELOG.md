@@ -16,6 +16,13 @@
 
 - **`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷**（上一轮 iPad 实拍时暴露）：用例把烤出来的标签栏头像断言成 `userAvatarPixelSize`（＝按 @3x 估的 84px），而 `tabIcon(from:)` 按**屏幕 scale** 栅格化 —— iPad 是 @2x、实测 56px，于是把 destination 换成 iPad 模拟器当场红（CI 一直跑 iPhone，所以一直没暴露）。位图的**自然尺寸**两档都对（都是 28pt），功能无碍。改成「像素数 = 点尺寸 × 屏幕 scale」＋「烤图密度与 `UIGraphicsImageRendererFormat.default().scale` 一致」；顺带把 `userAvatarPixelSize` 与 `tabIcon` 里两处「正好 28pt @3x = 84px」的表述改成两档都写明 —— 那个常量是**取图下采样预算**，不是烤图尺寸。
 
+- **iPad 只让标签栏走 iPhone 形态，内容全部回 iPad 版式**（用户口径：「**tabview 保留 iPhone 样式的，但其他所有都保持 iPad 的**，这是 iPad 端的目标」）。上一条「iPad 整个走 iPhone 版式」做过头了：外壳为了让标签栏落到底部，把 `TabView` 整棵子树的 `horizontalSizeClass` 钉成了紧凑档，而**环境是向下继承的** —— 页面读到的也成了紧凑档，于是 iPad 上首页 rail、媒体库（13″ 横屏 **12 列**）、详情页（290pt 通栏横幅 + 通栏播放钮 + 20pt 留白，即「iPad 端怎么详情页也变成了 iPhone 的样式了」）、设置卡片全被降级成放大版 iPhone。
+  - **口径按「层」切开**：同一个纯函数 `ShellSizeClass.resolved(idiom:actual:layer:)` 有两个 `Layer` —— `TabView` **自己那一层**（`.tabBar`）iPad 恒紧凑（标签栏因此落到底部，这是钉尺寸类的唯一目的），**内容那一层**（`.pageContent`）原样返回设备真实宽度。
+  - **实现**：`TabView` 那层保留 `.environment(\.horizontalSizeClass, shellSizeClass)`；每个 Tab 的内容挂 `.pageContentSizeClass(contentSizeClass)` 换回真实值（Tab 根页与 `appRoutes()` 推出来的页都在这棵子树里，新增页面不用各自补）。横向留白 `contentLeading` 同步改回跟**内容**层走（iPad 52pt / iPhone 22pt）—— 内容不降级，留白也不该降级，否则会出现「iPad 版式 + iPhone 留白」的错位。
+  - **验证**：`ShellSizeClassTests` 改写为 4 条 —— 标签栏层 iPad 恒紧凑（常规 / 分屏紧凑 / nil 三种输入）；内容层 iPad 原样（`.regular` 保持、分屏 `.compact` 也不是被强制的）；iPhone 两层都不动；外加一条**渲染探针**用例，把「外壳紧凑档已继承下来 → 内容层换回真实值」这条链原样搭出来（含反证：不挂内容层那一句读到的就是紧凑档），从视图体内读回实际生效的值（`ImageRenderer`）。判据取渲染后实际生效的环境值而不是常量：iPad 版式的全部分叉（rail 尺寸、网格列数、详情页头部与留白）都由它决定。跑分：`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、`OcPlayer-macOS` **578 通过 / 0 失败 / 18 跳过**。
+  - **一条与本改动相关、已在紧随其后一批里修掉的用例缺陷**：destination 换成 iPad 模拟器时 `AppModelAvatarTests.testTabIconBakesCircleSizeAndRenderingMode` 会红 —— 它断言烤出来的图标是 `AppModel.userAvatarPixelSize`（写死 `28 × 3 = 84`，@3x 口径），而 iPad 屏是 @2x，实测 56。功能无碍（图片自然尺寸仍是 28pt），是该用例只能在 @3x 机型上成立；CI 跑 iPhone 所以一直没暴露。修法与跑分见上面「`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷」那条。
+  - **实拍判据（本次唯一靠推理定不了的一步）**：给 `TabView` 那层钉紧凑、把**内容**换回常规，标签栏会不会被内容顶回系统默认的顶部胶囊？先用最小探针 App 在 iPad Pro 13″ / iPadOS 26.3 模拟器确认（标签栏仍在底部 + 内容层读到 `.regular`），再用**真服务器 + 真账号**跑整机 A/B：同一个构建、同一台设备、同一条目，只把 `contentSizeClass` 临时换回 `shellSizeClass`（复现改动前形态）重建对照 —— **详情页** 290pt 通栏横幅 + 剧名居中 + 通栏播放条 ➜ 左竖版海报 + 横排元数据 + 小胶囊钮；**媒体库** 9 列小卡 ➜ 4 列大卡；**首页**与**设置**同为 iPad 档；底部标签栏在两种状态都在底部。截图与做法见 `Reports/ipad-content-layout-20261016/`（本地 gitignore 目录）。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。
