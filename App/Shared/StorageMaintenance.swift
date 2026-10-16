@@ -71,9 +71,25 @@ final class AppStorageMaintenance: @unchecked Sendable {
         }
     }
 
-    /// Coalesced by the serial utility queue; called after a managed file is added.
+    /// 两次真跑之间的最小间隔。日定时器仍是兜底，所以把「每条一次」压成
+    /// 「每 30 秒一次」不改变上限语义。
+    static let minimumInterval: TimeInterval = 30
+    /// 上次真跑的时刻。**只在 `queue` 上读写**（`performMaintenance` 的唯一执行域）。
+    private var lastPerformedAt: Date = .distantPast
+
+    /// 真正的「合并」：串行队列上 30s 内已经跑过就直接返回。
+    ///
+    /// 调用点之一是 `AppModel+Playback` 里**逐条下载侧车字幕的循环体**：一部带 12 条
+    /// 字幕的片源开播会连打 12 次，而每次 `performMaintenance` 都是一轮完整维护
+    /// （日志保留策略 + 数据库 `refreshSize`/`itemCount`/`evictItems`，库超 200MB
+    /// 还会 VACUUM 整库 + 三个受管目录全量枚举 + 逐文件 stat + 排序）。
+    /// 原先注释写着 "Coalesced"，实际是每次调用排一次完整维护。
     func requestMaintenance() {
-        queue.async { [weak self] in self?.performMaintenance() }
+        queue.async { [weak self] in
+            guard let self else { return }
+            guard Date().timeIntervalSince(lastPerformedAt) >= Self.minimumInterval else { return }
+            performMaintenance()
+        }
     }
 
     // MARK: - 数据库维护注入点
@@ -89,6 +105,7 @@ final class AppStorageMaintenance: @unchecked Sendable {
     }
 
     private func performMaintenance() {
+        lastPerformedAt = Date()
         AppDiagnostics.logger.performMaintenance()
         // 本方法**只在 queue 上跑**，所以这里读 `databaseMaintenance` 是安全的；
         // 闭包捕获出去之后不再碰这个属性（把读取与调用点收在同一个串行域里）。

@@ -161,10 +161,15 @@ public actor DanmakuService {
         return selected
     }
 
+    /// - Parameter detectingIntro: 是否现算弹幕正文里的片头提示。编排层在「已有永久
+    ///   缓存且不是强制重匹配」时传 `false`——那时 `resolveIntroHint` 必然直接返回
+    ///   缓存，现算的结果会被整个丢掉，而 `DanmakuIntroDetector.detect` 要对每条弹幕
+    ///   做 2 次 `p.split` + 19 次子串搜索（3 万条约 57 万次 `String.contains`）。
     public func payload(
         for match: DanmakuEpisodeMatch,
         client: DanmakuGatewayClient,
-        format: DanmakuPayloadFormat = .both
+        format: DanmakuPayloadFormat = .both,
+        detectingIntro: Bool = true
     ) async throws -> DanmakuPayload {
         let comments: [DanmakuComment]
         if let cached = await cache.comments(for: match.episodeID) {
@@ -174,7 +179,7 @@ public actor DanmakuService {
             await cache.setComments(fetched, for: match.episodeID)
             comments = fetched
         }
-        let detected = DanmakuIntroDetector.detect(in: comments)
+        let detected = detectingIntro ? DanmakuIntroDetector.detect(in: comments) : nil
         return DanmakuPayload(
             match: match,
             entries: format == .kernelTrack ? nil : DanmakuJSONConverter.entries(from: comments),

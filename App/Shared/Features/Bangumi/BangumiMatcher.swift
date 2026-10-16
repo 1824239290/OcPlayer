@@ -460,7 +460,13 @@ public enum BangumiMatcher {
             case .failure(let error): lastError = error
             }
         }
-        if let best = pickBestCandidate(from: candidates, query: queryInfo), best.score >= 2000 {
+        // 先算一次：下面「放开类型过滤」那一轮只在**候选为空**的罕见分支才执行，所以
+        // 绝大多数调用里候选集不会再变——原先在末尾无条件再算一遍，入参、`enumerated()`
+        // 位次、`queryInfo` 全都没变，结果逐字相同（`pickBestCandidate` 是纯函数）。
+        // 而每个候选每次打分要 `parse` 两遍标题，单次 `parse` 又是 37–43 次现编译正则 +
+        // 100 次整串替换——这一遍重算正好落在「标题不完全相等」这个最常见的模糊匹配分支上。
+        var best = pickBestCandidate(from: candidates, query: queryInfo)
+        if let best, best.score >= 2000 {
             return best.candidate
         }
 
@@ -485,6 +491,8 @@ public enum BangumiMatcher {
                 case .failure(let error): lastError = error
                 }
             }
+            // 候选集变了，只有这一条路径需要重算。
+            best = pickBestCandidate(from: candidates, query: queryInfo)
         }
 
         // 关键词全发失败（断网 / 服务端异常）且一个候选都没有：抛出最后一个
@@ -493,12 +501,7 @@ public enum BangumiMatcher {
             throw lastError
         }
 
-        guard !candidates.isEmpty else { return nil }
-
-        // 4. 打分并选出最优候选
-        guard let best = pickBestCandidate(from: candidates, query: queryInfo) else {
-            return nil
-        }
+        guard let best else { return nil }
 
         // 置信度阈值：必须达到 1200 分（保证类型为动画/真人 + 标题基本匹配 + 季度无冲突）
         guard best.score >= 1200 else {

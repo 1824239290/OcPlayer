@@ -151,7 +151,7 @@ public enum DanmakuCandidateScorer {
         // 2. 季度一致性
         score += seasonScore(
             target: target,
-            candidateAnimeTitle: animeTitle,
+            candidateSeason: candAnimeParsed.seasonNumber,
             candidateIsFinal: candAnimeParsed.isFinal
         )
 
@@ -219,13 +219,18 @@ public enum DanmakuCandidateScorer {
     }
 
     /// 季度一致性。
+    ///
+    /// `candidateSeason` **由调用方传入**：调用点已经从同一个 `animeTitle` 的 `parse`
+    /// 结果里拿到了 `seasonNumber`（`:146`），这里原先又自己 `parse` 一遍。而
+    /// `DanmakuFilenameParser.parse` 单次含约 31 次 ICU 正则操作，等于每个候选白付
+    /// 一整轮解析；一次开播最多约 7 轮全量打分、长番可上千候选，且这段跑在
+    /// `@MainActor` 的编排器上（`DanmakuLoadOrchestrator`）。
     private static func seasonScore(
         target: TargetContext,
-        candidateAnimeTitle: String?,
+        candidateSeason: Int?,
         candidateIsFinal: Bool
     ) -> Int {
-        let candidate = DanmakuFilenameParser.parse(candidateAnimeTitle ?? "")
-        let candSeason = candidate.seasonNumber
+        let candSeason = candidateSeason
         var score = 0
 
         if target.isFinal {

@@ -34,6 +34,17 @@ final class ImageBlobStore: @unchecked Sendable {
     /// 目录体积缓存：`load` 热路径上不该每次都枚举目录（海报墙一次几十张）。
     private var cachedBytes: Int?
 
+    /// 两次「全目录扫描」之间至少写入多少字节。
+    ///
+    /// `pruneIfNeeded` 要枚举整个缓存目录、对**每个文件**取一次
+    /// `attributesOfItem` 再排序，而 `store` 是「每张图一次」——海报墙滚一屏就是
+    /// 几十次全目录 stat（上限内文件数可达数千）。按字节数节流后扫描频率从
+    /// 「每张图」降到「每 4 MB」，超限最多晚 4 MB 才修剪（上限的 1.6%）。
+    private static let pruneIntervalBytes = 4 * 1024 * 1024
+    /// 本进程已写入、尚未触发过扫描的字节数。初值 = 阈值：进程内第一次写入仍会
+    /// 扫一次，把上次会话遗留的超限收掉。
+    private var bytesSincePrune = ImageBlobStore.pruneIntervalBytes
+
     init(directory: URL, maxBytes: Int = ImageBlobStore.defaultMaxBytes) {
         self.directory = directory
         self.maxBytes = maxBytes
@@ -88,8 +99,11 @@ final class ImageBlobStore: @unchecked Sendable {
             try? FileManager.default.setAttributes([.creationDate: Date()], ofItemAtPath: url.path)
             lock.lock()
             cachedBytes = nil          // 让下次统计重新算
+            bytesSincePrune += data.count
+            let shouldPrune = bytesSincePrune >= Self.pruneIntervalBytes
+            if shouldPrune { bytesSincePrune = 0 }
             lock.unlock()
-            pruneIfNeeded()
+            if shouldPrune { pruneIfNeeded() }
         } catch {
             // 写不进去（磁盘满 / 权限）不该影响这次显示：图已经拿到手了。
             DiagnosticLogger(category: "Image").warning("图片字节写盘失败", fields: [

@@ -174,14 +174,19 @@ public struct TMDbOverlay: Sendable, Equatable {
         // 「我的朋友很少 - S01E00 - 第 0 集」这种由文件名派生的形态，
         // 锚了开头就抓不到它（而它显然也是占位名）。
         // 结尾锚定同时保证「第 9 集的秘密」这类真标题不被误伤。
-        let patterns = [
-            #"第\s*[0-9]+\s*[集话話]$"#,
-            #"^[Ee][Pp]isode\s*[0-9]+$"#,
-            #"^[Ee][Pp]\.?\s*[0-9]+$"#,
-            #"^[0-9]+$"#,
-        ]
-        return patterns.contains { trimmed.range(of: $0, options: .regularExpression) != nil }
+        let range = NSRange(trimmed.startIndex..., in: trimmed)
+        return Self.placeholderNameRegexes.contains { $0.firstMatch(in: trimmed, range: range) != nil }
     }
+
+    /// 占位集名正则**只编译一次**：`range(of:options:.regularExpression)` 每次调用
+    /// 都会现场编译 ICU 正则，而本方法在分集行渲染路径上（每行一次）。
+    /// 语义与逐条 `range(of:options:.regularExpression) != nil` 逐字相同。
+    private static let placeholderNameRegexes: [NSRegularExpression] = [
+        #"第\s*[0-9]+\s*[集话話]$"#,
+        #"^[Ee][Pp]isode\s*[0-9]+$"#,
+        #"^[Ee][Pp]\.?\s*[0-9]+$"#,
+        #"^[0-9]+$"#,
+    ].compactMap { try? NSRegularExpression(pattern: $0) }
 
     // MARK: - 取值（按用户策略决定是否顶替）
 

@@ -372,9 +372,18 @@ struct MoviePilotResourceView: View {
                 guard generation == searchGeneration else { break }
                 switch update {
                 case .batch(let current, let progress):
-                    torrents = current
-                    recomputeDisplayed()
-                    filterOptions = TorrentFilterEngine.options(current)
+                    // 纯进度事件与帧间心跳也走这条回调（`MoviePilotAPIClient` 的 `default:`
+                    // 分支照样 `onUpdate`），而它们的载荷与上一批**逐字段相同**。此时重算
+                    // 是纯浪费：`recomputeDisplayed()` 是 filter + sorted，
+                    // `TorrentFilterEngine.options` 还要 7 个 Set 各自 `sorted()`，
+                    // 再加 4 次 `@Observable` 写入把整页重算一遍。
+                    // 一场「按标题全站搜索」有 60–120 个事件，绝大多数属于这一类。
+                    // 用值比较而不是条数：`replace` 事件可能条数相同而内容不同。
+                    if current != torrents {
+                        torrents = current
+                        recomputeDisplayed()
+                        filterOptions = TorrentFilterEngine.options(current)
+                    }
                     progressText = progress.text
                 case .failure(let message):
                     searchError = message

@@ -201,7 +201,8 @@ final class EmbySession: @unchecked Sendable {
                 NetworkLog.logger.info(
                     "重试 \(method) \(path)（第 \(attempt + 1)/\(policy.attempts) 次）",
                     fields: ["attempt": .integer(Int64(attempt + 1))])
-                try? await Task.sleep(nanoseconds: delay)
+                // 同 JellyfinServer.send：取消照抛，别让退避被 `try?` 吞掉后续打必败请求。
+                try await Task.sleep(nanoseconds: delay)
             }
         }
         throw lastError ?? JellyfinError(.other("请求失败"))

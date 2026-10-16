@@ -796,7 +796,6 @@ private final class DiagnosticBackend: @unchecked Sendable {
     }
 
     private func write(_ data: Data) throws {
-        try ensureDirectory()
         try enforceRetention(referenceDate: now(), force: false)
         if handle == nil {
             currentBytes = fileSize(at: fileURL)
@@ -805,6 +804,10 @@ private final class DiagnosticBackend: @unchecked Sendable {
             try continueInNewFile()
         }
         if handle == nil {
+            // 目录只在**真要开文件**时保证一次。原先每条记录都 `createDirectory`
+            // 一次（目录早已存在，纯白付一次系统调用 + 路径解析），而调用方
+            // 包含每一次 Jellyfin/Emby 请求与每 10s 一次的播放上报。
+            try ensureDirectory()
             if !FileManager.default.fileExists(atPath: fileURL.path) {
                 FileManager.default.createFile(atPath: fileURL.path, contents: nil)
             }

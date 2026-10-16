@@ -293,11 +293,30 @@ extension TMDbOverlay {
 /// 两边算出来的日期若差一天，同一集会在两个来源下被判成不同的播出状态。
 /// 解析不出来一律 nil（= 日期未知），**不拿本地时钟顶替**。
 enum TMDbAirDate {
+    /// `yyyy-MM-dd` 的**共享**解析器。
+    ///
+    /// ⚠️ **不要每次现建**：`DateFormatter()` + `dateFormat` 赋值要现编译 ICU 格式，
+    /// 实测 **43.9 µs/次**（共享后 20 µs/次）。而 `episodeCandidates` 是**没有缓存**的
+    /// 计算属性、对每一集调一次 `parse` —— 一季 1000 集就是 **44 ms** 的主 actor 开销，
+    /// 详情页一次加载会重建 ≥3 次（`DetailViewModel` 的 `episodes` / `tmdbSeasonOverlay` /
+    /// `bangumiCandidates` 三个 didSet）。
+    ///
+    /// `DateFormatter.date(from:)` 本身线程安全；用 `@unchecked Sendable` 持有，
+    /// 与 `BangumiKit.BangumiCollectionTimestamp`、`BangumiEpisodeDTO.airDateParser` 同款。
+    /// **时区口径不能动**：默认（本地）时区的当日零点，必须与 `BangumiEpisodeDTO.airDateValue`
+    /// 逐字一致，差一天会让同一集在两个来源下判成不同播出状态。
+    private final class SharedParser: @unchecked Sendable {
+        static let shared = SharedParser()
+        let formatter: DateFormatter = {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            return formatter
+        }()
+    }
+
     static func parse(_ raw: String?) -> Date? {
         guard let raw, !raw.isEmpty else { return nil }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.date(from: raw)
+        return SharedParser.shared.formatter.date(from: raw)
     }
 }

@@ -32,6 +32,21 @@
   - **时间轴对齐**：`comments.firstIndex { $0.time > now } ?? count` 是**线性扫描**，而每次 seek / 换源 / 改偏移都要对齐一次指针，一张热番 3k–30k 条。改成 `DanmakuOverlayController.upperBound(of:time:)` 二分（O(log n)，30k 条 ≈ 15 次比较），语义与线性扫描**逐字等价**。
   - **验证**：新增 `OverlayDanmakuCellRenderTests`（8 条 —— 填充趟与旧 `NSString.draw` **逐像素零差异**，12/14/16/18/22/26/30/36/44 九档字号；基线公式九档成立；描边确实在填充外缘加墨、权重与旧口径相当；极深字走浅描边；CoreText 路径显著快于旧描边）、`DanmakuOverlaySpawnCostTests`（3 条 —— 主线程上 300 条补发的模型构造 / `shoot` / 端到端成本，阈值取数量级判据）、`DanmakuOverlayTimelinePointerTests`（6 条 —— 与线性扫描逐点等价，含空表 / 恰好相等 / 重复时间戳 / 2000 条中段对照）。
 
+- **一轮「热路径少算一遍」的收敛：弹幕匹配与加载、日期解析、目录扫描、日志与存储维护**（同一形状 —— 纯函数的入参没变却重算一遍，或每次调用都做一次全量系统调用）。
+  - **弹幕匹配打分**：`DanmakuCandidateScorer.seasonScore` 原先自己再 `parse` 一遍候选标题，而调用点已经从同一个 `animeTitle` 的 `parse` 结果里拿到了 `seasonNumber`（单次 `parse` 含约 31 次 ICU 正则操作）；一次开播最多约 7 轮全量打分、长番可上千候选，且跑在编排器的 `@MainActor` 上。改为由调用方传入 `candidateSeason`。
+  - **片头提示只在真会用到时才算**：`resolveIntroHint` 在「非强制重匹配 + 已有缓存」时直接返回**永久缓存**（`intro-hints.json` 在 `DanmakuCache.permanentFileNames` 里），现算结果**整个丢掉** —— 而 `DanmakuIntroDetector.detect` 要对每条弹幕做 2 次 `p.split` + 19 次子串搜索（3 万条 ≈ 57 万次 `String.contains`），全串行跑在弹幕上屏之前。`DanmakuService.payload` 新增 `detectingIntro:`，编排层先查一次**内存**缓存决定要不要算（`await` 不能写在 `||` 右操作数里 —— 那是 `@autoclosure`，不支持并发）。
+  - **日期解析器共享**：`BangumiEpisodeDTO.airDateValue` 与 `TMDbAirDate.parse` 都**每次现建** `DateFormatter`（实测 **43.9 µs/次**，共享后 20 µs/次）。前者是无缓存计算属性、选集格一次 body 读 `aired` 7–8 次（一屏 40 格 ≈ 12.5 ms）；后者一季 1000 集 ≈ 44 ms 主 actor 开销、详情页一次加载重建 ≥3 次。两处改为共享持有（`DateFormatter.date(from:)` 本身线程安全），**时区口径一字不动** —— 必须与另一来源逐字一致，差一天会让同一集判成不同播出状态。
+  - **`MetadataStore` 的 `library` payload 解码器共享**：冷启动首屏 `MetadataHydrator.home()` 那条读路径此前「每行新建一个 `JSONDecoder()`」，改用 actor 内共用的一份。
+  - **占位集名正则预编译**：`TMDbOverlay.isPlaceholderEpisodeName` 在分集行渲染路径上（每行一次），原先逐条 `range(of:options:.regularExpression)` —— 每次都现场编译 ICU 正则，改成 `NSRegularExpression` 静态量。**反向的一处刻意不动**：`TitleNormalizer.normalize` 那 5 条 pattern **不换** —— 两套 API 的 `\d` 口径不同（`String.range(of:options:)` 的 `\d` 连「一/二/三/十/九」这类带数值的汉字都匹配，实测跨 BMP 命中 2023 个码点；`NSRegularExpression` 只认 `\p{Nd}`），换掉之后「阿松 第二季」不再被剥成「阿松」，已有用例当场红（已实测）。
+  - **日志目录只在该开文件时保证**：`DiagnosticBackend.write` 原先**每条记录**都 `createDirectory` 一次（目录早已存在，纯白付一次系统调用 + 路径解析），而调用方包含每一次 Jellyfin/Emby 请求与每 10s 一次的播放上报；移进 `handle == nil` 的分支。
+  - **图片缓存按字节数节流扫描**：`ImageBlobStore.store` 是「每张图一次」，而 `pruneIfNeeded` 要枚举整个缓存目录、**逐文件** `attributesOfItem` 再排序（上限内文件数可达数千），海报墙滚一屏就是几十次全目录 stat。改为累计写入 **4 MB** 才扫一次（上限的 1.6%，超限最多晚 4 MB 才修剪），进程内首次写入仍扫一次 —— 收掉上次会话遗留的超限。
+  - **存储维护真的被合并**：`AppStorageMaintenance.requestMaintenance` 注释写着 "Coalesced"、实际每次调用都排一轮**完整**维护（日志保留策略 + 数据库 `refreshSize`/`itemCount`/`evictItems`，库超 200MB 还会 VACUUM 整库 + 三个受管目录全量枚举与逐文件 stat）。而调用点之一是**逐条下载侧车字幕的循环体**（一部带 12 条字幕的片源开播连打 12 次）。改为串行队列上 **30s** 最小间隔（日定时器仍是兜底，上限语义不变）；`lastPerformedAt` 只在 `queue` 上读写。
+  - **Bangumi 匹配去掉末尾的无条件重打分**：`pickBestCandidate` 是纯函数，末尾那次重算的入参、`enumerated()` 位次、`queryInfo` 全没变，结果逐字相同；而它正好落在「标题不完全相等」这个最常见的模糊匹配分支上 —— 每个候选每次打分要 `parse` **两遍**标题（单次 `parse` 是 37–43 次现编译正则 + 100 次整串替换）。改为只在「放开类型过滤」那条候选集真变了的路径上重算。
+  - **MoviePilot 搜索的纯进度事件不再触发整页重算**：批量回调里进度 / 帧间心跳的载荷与上一批**逐字段相同**，此前照样 `recomputeDisplayed()`（filter + sorted）+ `TorrentFilterEngine.options`（7 个 Set 各自 `sorted()`）+ 4 次 `@Observable` 写入把整页重算。一场「按标题全站搜索」有 60–120 个事件、绝大多数属于这一类；判据用**值比较**而不是条数（`replace` 事件可能条数相同而内容不同）。
+  - **Jellyfin / Emby 的退避等待不再吞取消**：`try? await Task.sleep(...)` 会把 `CancellationError` 吞掉，循环继续走到下一次 attempt —— 退避被整个跳过（0 延迟立刻重发），调用方明明已经不要了却仍多推一格失败序列。两处对齐共享实现 `RetryPolicy.run` 的写法（改 `try await`）。
+  - **设置页「图片缓存」用量统计挪出主线程**：`ImagePipeline.shared.diskUsage` 是**目录内每文件一次 stat + 全量排序**，512 MB 上限下可有数千个小文件，留在主线程就是进页卡顿（冷目录几十~几百 ms）。与同页「导出诊断包」「清空图片缓存」一致改走后台，回主 actor 只赋字符串。
+  - **验证**：本批**不改行为语义**（等价重算、少一次系统调用、后台化），唯一有输出差异的是 macOS 弹幕描边的圆环近似 —— 由 `OverlayDanmakuCellRenderTests` 的逐像素 / 加墨量对照守住。实跑：`OcPlayer-macOS` scheme **578 通过 / 0 失败 / 18 跳过**（含上面三个新用例文件）、`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、被改动的 7 个包（AppDesignKit / DiagnosticsKit / DanmakuKit / JellyfinKit / BangumiKit / MetadataKit / MoviePilotKit）各自套件通过。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。

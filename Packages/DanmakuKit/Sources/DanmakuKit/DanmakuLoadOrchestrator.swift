@@ -440,10 +440,21 @@ public struct DanmakuLoadOrchestrator {
     ) async -> DanmakuLoadOutcome {
         do {
             try Task.checkCancellation()
+            // 片头提示只在**真的会用到**时才算。`resolveIntroHint`（下方 :520）在
+            // 「非强制重匹配 + 已有缓存」时直接返回缓存、把现算的结果整个丢掉，而那份
+            // 缓存是永久的（`intro-hints.json` 在 `DanmakuCache.permanentFileNames` 里）。
+            // 也就是说同一集第二次开播起，`DanmakuIntroDetector.detect` 的结果必然是
+            // 废的——而它要对**每一条**弹幕做 2 次 `p.split` + 19 次子串搜索（3 万条约
+            // 57 万次 `String.contains`），全串行跑在弹幕上屏之前。
+            // 这里先查一次内存缓存（`cache.introHint` 命中内存字典，零 I/O）决定要不要算。
+            // ⚠️ `await` 不能写在 `||` 的右操作数里——那是 `@autoclosure`，不支持并发。
+            let cachedIntroHint = await service.cachedIntroHint(for: match.episodeID)
+            let detectingIntro = forceRematch || cachedIntroHint == nil
             let payload = try await service.payload(
                 for: match,
                 client: client,
-                format: playback.danmakuPayloadFormat
+                format: playback.danmakuPayloadFormat,
+                detectingIntro: detectingIntro
             )
             try Task.checkCancellation()
             let name = Self.matchTitle(match)

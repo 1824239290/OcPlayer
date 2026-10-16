@@ -241,6 +241,13 @@ enum YearRelation {
 enum TitleNormalizer {
 
     /// 归一化（用于相等比较）。
+    ///
+    /// ⚠️ **不要「顺手」把这 5 条 pattern 提成 `NSRegularExpression` 静态量**：
+    /// 两套 API 的 `\d` 口径不同。`String.range(of:options:.regularExpression)` 的
+    /// `\d` 会匹配「一/二/三/十/九…」这类**带数值的汉字**（实测跨 BMP 命中 2023 个
+    /// 码点），`NSRegularExpression` 的 `\d` 只认 `\p{Nd}`——换掉之后
+    /// 「阿松 第二季」不再被剥成「阿松」，`TMDbMatcherTests
+    /// .testTitleNormalizationStripsSeasonSuffix` 会红（已实测）。
     static func normalize(_ raw: String?) -> String {
         guard let raw else { return "" }
         var text = raw.lowercased()
@@ -252,7 +259,7 @@ enum TitleNormalizer {
                    && !CharacterSet.whitespacesAndNewlines.contains($0)
                    && !CharacterSet.symbols.contains($0) }
             .reduce(into: "") { $0.unicodeScalars.append($1) }
-        // 去掉结尾的季数标记（「第2季」「season2」「2ndseason」）
+        // 去掉结尾的季数标记（「第2季」「season2」「2ndseason」「第二季」）
         for pattern in [#"第\d+季$"#, #"season\d+$"#, #"\d+ndseason$"#, #"\d+rdseason$"#, #"\d+thseason$"#] {
             if let range = text.range(of: pattern, options: .regularExpression) {
                 text.removeSubrange(range)

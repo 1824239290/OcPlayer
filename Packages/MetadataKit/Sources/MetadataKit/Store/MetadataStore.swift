@@ -17,6 +17,11 @@ public actor MetadataStore {
     /// 跨文件访问需要 ≥ internal。对外仍是 `public actor` 封装，不泄露给使用方。
     let database: DatabasePool
 
+    /// `library` 表的 payload 解码器。**共用一份**：`JSONDecoder()` 的构造要初始化
+    /// 内部的策略/容器状态，而这条读路径在冷启动首屏（`MetadataHydrator.home()`）上，
+    /// 之前是「每行新建一个」。actor 隔离保证它只被串行访问。
+    private let libraryDecoder = JSONDecoder()
+
     public init(database: DatabasePool) {
         self.database = database
     }
@@ -299,7 +304,7 @@ public actor MetadataStore {
                 arguments: [tenant.rawValue])
             return rows.compactMap { row in
                 guard let data = row["payload"] as Data?,
-                      let library = try? JSONDecoder().decode(MediaLibrary.self, from: data)
+                      let library = try? libraryDecoder.decode(MediaLibrary.self, from: data)
                 else { return nil }
                 return CachedLibrary(
                     library: library,

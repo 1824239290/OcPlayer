@@ -87,8 +87,15 @@ private struct ImageCacheSettingsRow: View {
     }
 
     private func refresh() {
-        let usage = ImagePipeline.shared.diskUsage
-        usageText = "\(Self.format(usage.usedBytes)) / \(Self.format(usage.capacityBytes))"
+        // 目录内**每文件一次 stat** + 全量排序：512 MB 上限下可有数千个小文件，
+        // 留在主线程就是进页卡顿（冷目录时几十~几百 ms）。与同页「导出诊断包」
+        // 「清空图片缓存」一致，挪到后台算，回主 actor 只赋字符串。
+        Task {
+            let usage = await Task.detached(priority: .utility) {
+                ImagePipeline.shared.diskUsage
+            }.value
+            usageText = "\(Self.format(usage.usedBytes)) / \(Self.format(usage.capacityBytes))"
+        }
     }
 
     private static func format(_ bytes: Int) -> String {

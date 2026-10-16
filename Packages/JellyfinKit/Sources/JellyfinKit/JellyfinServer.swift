@@ -574,7 +574,11 @@ public struct JellyfinServer: MediaServer {
                 NetworkLog.logger.info(
                     "重试 \(request.method.rawValue) \(path)（第 \(attempt + 1)/\(policy.attempts) 次）",
                     fields: ["attempt": .integer(Int64(attempt + 1))])
-                try? await Task.sleep(nanoseconds: delay)
+                // 取消要照抛：`try?` 会把 CancellationError 吞掉，循环继续走到下一次
+                // attempt——退避等待被整个跳过（0 延迟立刻重发），调用方明明已经不要了
+                // 却仍多推一格失败序列。共享实现 `RetryPolicy.run` 用的是不带 `try?`
+                // 的写法，这里对齐。
+                try await Task.sleep(nanoseconds: delay)
             }
         }
         let finalError = lastError ?? JellyfinError(.other("请求失败"))
