@@ -1,3 +1,4 @@
+import CoreText
 import DanmakuKit
 import DanmakuRenderKit
 import PlaybackKit
@@ -276,7 +277,7 @@ final class DanmakuOverlayController {
         viewPausedBySync = false
         let raw = mediaSeconds(engine)
         let now = effectiveSeconds(raw)
-        pointer = comments.firstIndex { $0.time > now } ?? comments.count
+        pointer = Self.upperBound(of: comments, time: now)
         if diagnosticsEnabled {
             // 对齐点即「从此刻起才发射的弹幕时间轴」。续播起播若这里对齐到 ~0
             // 而实际播放已在续播位，后面 tick 会把 0~续播位 的弹幕一次补发。
@@ -345,6 +346,24 @@ final class DanmakuOverlayController {
     private func makeModel(for comment: Comment) -> DanmakuCellModel {
         OverlayDanmakuModel(comment: comment, fontSize: CGFloat(preferences.fontSize))
     }
+
+    /// 第一条 `time > seconds` 的下标；全部不超过则返回 `count`。
+    ///
+    /// `comments` 按 `time` 升序（`DanmakuJSONConverter.entries(from:)` 保证）。
+    /// 用二分而不是 `firstIndex(where:)`：一张热番的弹幕表有几万条，线性扫描是
+    /// 几十微秒量级，而每次 seek / 换源 / 改偏移都要对齐一次指针；二分是 O(log n)
+    /// （30k 条 ≈ 15 次比较）。语义与
+    /// `comments.firstIndex { $0.time > seconds } ?? comments.count` 逐字相同。
+    /// `nonisolated` + 纯函数：便于 `AppTests` 直接钉住边界（空表 / 全过 / 全未过）。
+    nonisolated static func upperBound(of comments: [Comment], time seconds: Double) -> Int {
+        var low = 0
+        var high = comments.count
+        while low < high {
+            let mid = low + (high - low) / 2
+            if comments[mid].time > seconds { high = mid } else { low = mid + 1 }
+        }
+        return low
+    }
 }
 
 // MARK: - Cell
@@ -361,6 +380,18 @@ final class OverlayDanmakuModel: DanmakuCellModel {
     let displayTime: Double
     let type: DanmakuCellType
     var track: UInt?
+
+    /// 行盒高度（`NSAttributedString.size().height`，**未加边距**）。
+    /// 基线换算要用它，见 `OverlayDanmakuCell.baseline`。
+    let textLineHeight: CGFloat
+
+    /// 亮度自适应描边色：亮色/浅色字用纯黑坚实描边，极深字用高亮描边避免黑成一团。
+    /// 与旧实现同口径（0.299/0.587/0.114 亮度、阈值 0.25）。
+    let strokeColor: PlatformColor
+
+    /// 描边外扩半径。旧实现是 `strokeWidth = 8% 字号` 的**居中**描边，向外扩一半
+    /// 即 4% 字号；下面用「同一行文字按圆环偏移画 12 次」复现同样的外扩量。
+    let outlineRadius: CGFloat
 
     init(comment: DanmakuOverlayController.Comment, fontSize: CGFloat) {
         self.comment = comment
@@ -385,6 +416,7 @@ final class OverlayDanmakuModel: DanmakuCellModel {
         }
         let attributed = NSAttributedString(string: comment.text, attributes: [.font: font])
         var measured = attributed.size()
+        textLineHeight = measured.height
         // 描边与阴影在字形外扩，测量宽度与高度预留边距，避免边缘裁切。
         let mX = max(8.0, fontSize * 0.35)
         let mY = max(4.0, fontSize * 0.15)
@@ -393,6 +425,60 @@ final class OverlayDanmakuModel: DanmakuCellModel {
         measured.width += mX
         measured.height += mY
         size = measured
+
+        let red = CGFloat((comment.color >> 16) & 0xFF) / 255
+        let green = CGFloat((comment.color >> 8) & 0xFF) / 255
+        let blue = CGFloat((comment.color & 0xFF)) / 255
+        let luminance = 0.299 * red + 0.587 * green + 0.114 * blue
+        strokeColor = luminance < 0.25
+            ? PlatformColor(white: 0.85, alpha: 1.0)
+            : PlatformColor.black
+        outlineRadius = max(0.6, fontSize * 0.045)
+    }
+
+    // MARK: - CoreText 排版（懒建 + 缓存）
+
+    private let lineLock = NSLock()
+    private var fillLine: CTLine?
+    private var outlineLine: CTLine?
+    private var lineBaselineOffset: CGFloat = 0
+
+    /// 原色行 / 描边色行 / **行盒底 → 基线**的偏移。
+    ///
+    /// **懒建而不是在 `init` 里建**：`init` 在主线程上、每条弹幕一次，
+    /// 而 `CTLineCreateWithAttributedString` 实测约 26 µs，两行就是 52 µs 的主线程税；
+    /// `displaying` 在 `DanmakuAsyncLayer` 的池队列上，两帧可能重叠，所以加锁。
+    /// 无竞争时只是一次 `NSLock`（约 20 ns）。
+    ///
+    /// 偏移口径见 `OverlayDanmakuCell.baseline`。
+    func lines() -> (fill: CTLine, outline: CTLine, baselineOffset: CGFloat) {
+        lineLock.lock()
+        defer { lineLock.unlock() }
+        if let fillLine, let outlineLine { return (fillLine, outlineLine, lineBaselineOffset) }
+
+        func line(_ color: PlatformColor) -> CTLine {
+            CTLineCreateWithAttributedString(
+                NSAttributedString(string: comment.text, attributes: [.font: font, .foregroundColor: color])
+            )
+        }
+        let fill = line(self.color)
+        let outline = line(strokeColor)
+        var ascent: CGFloat = 0
+        var descent: CGFloat = 0
+        var leading: CGFloat = 0
+        _ = CTLineGetTypographicBounds(fill, &ascent, &descent, &leading)
+
+        // ⚠️ 是 `行盒高 − round(ascent)`，**不是** `round(descent)`。两者在多数字号下
+        // 相等（AppKit 的行盒高通常就是 round(ascent)+round(descent)），但 16pt 上
+        // 不等：ascent 15.469 / descent 3.375，行盒高 19 → 偏移 19−15 = 4，
+        // 而 round(descent) = 3，会造成整条弹幕错位一个像素。九档字号（12…44pt）
+        // 逐像素对照旧路径钉住了这条（`OverlayDanmakuCellRenderTests`）。
+        let offset = textLineHeight - ascent.rounded()
+
+        fillLine = fill
+        outlineLine = outline
+        lineBaselineOffset = offset
+        return (fill, outline, offset)
     }
 
     var cellClass: DanmakuCell.Type { OverlayDanmakuCell.self }
@@ -408,7 +494,32 @@ final class OverlayDanmakuModel: DanmakuCellModel {
 /// 2. 双通道分层绘制：底层纯黑描边 + 顶层原色填充，确保弹幕原色鲜亮纯正；
 /// 3. 亮度自适应描边（亮色字纯黑描边，极深字柔和浅描边）；
 /// 4. 柔和投影增强高亮与复杂视频背景穿透力。
+///
+/// ## macOS：描边改成 CoreText + 圆环偏移（2026-10-15，实测 11–27×）
+///
+/// 原先两趟都走 `NSString.draw(at:withAttributes:)`，描边靠 `.strokeWidth` 文本效果。
+/// 那条路**每次绘制都要把字形实时转成 `CGPath`**——`CTFontCreatePathForGlyph` 实测
+/// 237 µs/字形，一条 13 字的弹幕光描边就 2.0 ms（填充只要 46 µs）。改用
+/// 「同一行 `CTLine` 按圆环偏移画 12 次 + 画一次原色填充」后实测 2.43 ms → 0.23 ms。
+/// 缓存字形描边路径（`CGPath.copy(strokingWithWidth:)`）虽然也能提速，但只有 6×
+/// 且要 ~15 MB 字形缓存，故不取。
+///
+/// iOS 仍走原路径：`DanmakuAsyncLayer` 在 iOS 用 `UIGraphicsBeginImageContextWithOptions`
+/// （y-down 翻转上下文），CoreText 的文本矩阵约定与 macOS 的 y-up 上下文不同，
+/// 未在本机验证过，不冒险。
 final class OverlayDanmakuCell: DanmakuCell {
+
+    /// 描边圆环方向表（12 向，近似圆）。三角函数只在类型初始化时算一次。
+    ///
+    /// **试过两圈（内 8 + 外 12）并否决**：内环只让墨迹多 5 个像素——12 份副本的
+    /// 并集本来就把环带内部填实了，剩下的差异在最外缘的半透明过渡带与投影上
+    /// （旧实现的投影投在「填充 + 描边」后的字形上，比只投填充更大），补内环治不到。
+    /// 单圈成本更低、代码更短。
+    private static let outlineDirections: [CGPoint] = (0..<12).map { index in
+        let angle = 2 * Double.pi * Double(index) / 12
+        return CGPoint(x: CGFloat(cos(angle)), y: CGFloat(sin(angle)))
+    }
+
     override func displaying(_ context: CGContext, _ size: CGSize, _ isCancelled: Bool) {
         guard !isCancelled, let model = model as? OverlayDanmakuModel else { return }
 
@@ -426,30 +537,46 @@ final class OverlayDanmakuCell: DanmakuCell {
         context.setLineCap(.round)
 
         #if os(macOS)
+        let lines = model.lines()
+        let baseline = Self.baseline(for: model, offset: lines.baselineOffset)
+
+        context.saveGState()
+        context.textMatrix = .identity
+        // 第 1 遍：底层纯黑描边 = 同一行文字按圆环偏移画 12 次。
+        for direction in Self.outlineDirections {
+            context.textPosition = CGPoint(
+                x: baseline.x + direction.x * model.outlineRadius,
+                y: baseline.y + direction.y * model.outlineRadius
+            )
+            CTLineDraw(lines.outline, context)
+        }
+        // 第 2 遍：顶层 100% 原始色彩填充 + 柔和投影。
+        // 投影用 CGContext 而不是 `NSShadow` 属性：CTLineDraw 不认 AppKit 的 `.shadow`，
+        // 而 CGContext 的投影语义与旧实现一致（只压在填充这一遍，不污染描边）。
+        context.setShadow(offset: CGSize(width: 0, height: -1.0), blur: 1.5,
+                          color: PlatformColor.black.withAlphaComponent(0.45).cgColor)
+        context.textPosition = baseline
+        CTLineDraw(lines.fill, context)
+        context.restoreGState()
+        #else
+        drawLegacy(context: context, model: model)
+        #endif
+    }
+
+    /// 旧实现：两趟 `NSString.draw(at:withAttributes:)` + `NSShadow` + `.strokeWidth` 描边。
+    /// iOS 仍在使用；同时是渲染回归用例的对照基准（见 `drawFill`）。
+    func drawLegacy(context: CGContext, model: OverlayDanmakuModel) {
+        let text = NSString(string: model.comment.text)
+
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 1.5
+        #if os(macOS)
+        shadow.shadowOffset = NSSize(width: 0, height: -1.0)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         defer { NSGraphicsContext.restoreGraphicsState() }
-        #endif
-
-        let text = NSString(string: model.comment.text)
-
-        // 计算文字亮度：浅色/亮色文字用纯黑坚实描边，深色/黑字用高亮描边避免黑成一团
-        let r = CGFloat((model.comment.color >> 16) & 0xFF) / 255
-        let g = CGFloat((model.comment.color >> 8) & 0xFF) / 255
-        let b = CGFloat(model.comment.color & 0xFF) / 255
-        let luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        let strokeColor: PlatformColor = luminance < 0.25
-            ? PlatformColor(white: 0.85, alpha: 1.0)
-            : PlatformColor.black
-
-        #if os(macOS)
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 1.5
-        shadow.shadowOffset = NSSize(width: 0, height: -1.0)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
         #else
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 1.5
         shadow.shadowOffset = CGSize(width: 0, height: 1.0)
         shadow.shadowColor = UIColor.black.withAlphaComponent(0.45)
         #endif
@@ -461,8 +588,8 @@ final class OverlayDanmakuCell: DanmakuCell {
 
         let strokeAttributes: [NSAttributedString.Key: Any] = [
             .font: model.font,
-            .foregroundColor: strokeColor,
-            .strokeColor: strokeColor,
+            .foregroundColor: model.strokeColor,
+            .strokeColor: model.strokeColor,
             .strokeWidth: strokeWidthPercent,
             .shadow: shadow,
         ]
@@ -476,6 +603,36 @@ final class OverlayDanmakuCell: DanmakuCell {
         text.draw(at: origin, withAttributes: strokeAttributes)
         text.draw(at: origin, withAttributes: fillAttributes)
     }
+
+    #if os(macOS)
+    /// `CTLineDraw` 的基线。
+    ///
+    /// 旧实现用 `NSString.draw(at:)`，在 y-up 上下文里它的 `origin` 是**行盒左下角**，
+    /// 而行盒高由 AppKit 定（`NSAttributedString.size().height`），基线在
+    /// `行盒高 − round(ascent)` 处。实测 12/14/16/18/22/26/30/36/44 pt 九档字号与
+    /// 旧路径**逐像素零差异**（`OverlayDanmakuCellRenderTests` 钉住这条）。
+    static func baseline(for model: OverlayDanmakuModel, offset: CGFloat) -> CGPoint {
+        CGPoint(x: model.marginX / 2, y: model.marginY / 2 + offset)
+    }
+
+    /// 只画原色填充（不含描边；`withShadow` 控制是否带投影）。
+    ///
+    /// `displaying` 的填充趟走这里；渲染回归用例也用它——与旧 `NSString.draw` 的
+    /// 填充趟逐像素对照，钉住上面那条基线换算（写错就整屏弹幕错位，而它不会让
+    /// 任何现有用例变红）。
+    func drawFill(_ context: CGContext, model: OverlayDanmakuModel, withShadow: Bool) {
+        let lines = model.lines()
+        context.saveGState()
+        context.textMatrix = .identity
+        if withShadow {
+            context.setShadow(offset: CGSize(width: 0, height: -1.0), blur: 1.5,
+                              color: PlatformColor.black.withAlphaComponent(0.45).cgColor)
+        }
+        context.textPosition = Self.baseline(for: model, offset: lines.baselineOffset)
+        CTLineDraw(lines.fill, context)
+        context.restoreGState()
+    }
+    #endif
 }
 
 // MARK: - SwiftUI 宿主

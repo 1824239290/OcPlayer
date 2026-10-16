@@ -23,6 +23,15 @@
   - **一条与本改动相关、已在紧随其后一批里修掉的用例缺陷**：destination 换成 iPad 模拟器时 `AppModelAvatarTests.testTabIconBakesCircleSizeAndRenderingMode` 会红 —— 它断言烤出来的图标是 `AppModel.userAvatarPixelSize`（写死 `28 × 3 = 84`，@3x 口径），而 iPad 屏是 @2x，实测 56。功能无碍（图片自然尺寸仍是 28pt），是该用例只能在 @3x 机型上成立；CI 跑 iPhone 所以一直没暴露。修法与跑分见上面「`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷」那条。
   - **实拍判据（本次唯一靠推理定不了的一步）**：给 `TabView` 那层钉紧凑、把**内容**换回常规，标签栏会不会被内容顶回系统默认的顶部胶囊？先用最小探针 App 在 iPad Pro 13″ / iPadOS 26.3 模拟器确认（标签栏仍在底部 + 内容层读到 `.regular`），再用**真服务器 + 真账号**跑整机 A/B：同一个构建、同一台设备、同一条目，只把 `contentSizeClass` 临时换回 `shellSizeClass`（复现改动前形态）重建对照 —— **详情页** 290pt 通栏横幅 + 剧名居中 + 通栏播放条 ➜ 左竖版海报 + 横排元数据 + 小胶囊钮；**媒体库** 9 列小卡 ➜ 4 列大卡；**首页**与**设置**同为 iPad 档；底部标签栏在两种状态都在底部。截图与做法见 `Reports/ipad-content-layout-20261016/`（本地 gitignore 目录）。
 
+### 性能
+
+- **macOS 弹幕描边不再实时转字形路径；时间轴对齐指针改二分**（弹幕上屏与 seek 两条热路径，双端共用同一份模型）。
+  - **描边（`OverlayDanmakuCell`）**：原先两趟都走 `NSString.draw(at:withAttributes:)`、描边靠 `.strokeWidth` 文本效果 —— 那条路**每次绘制都要把字形实时转成 `CGPath`**（`CTFontCreatePathForGlyph` 实测 **237 µs/字形**：一条 13 字弹幕光描边就 **2.0 ms**，而填充只要 46 µs）。改成「同一行 `CTLine` 按 12 向圆环偏移画 12 次 + 画一次原色填充」，单条 **2.43 ms → 0.23 ms**（代码注释与 `OverlayDanmakuCellRenderTests` 在案）。缓存字形描边路径（`CGPath.copy(strokingWithWidth:)`）也能提速但只有 ~6× 且要多养 ~15 MB 字形缓存，**否决**；两圈（内 8 + 外 12）也试过并否决 —— 12 份副本的并集本就把环带填实，内环只多 5 个像素墨迹。
+  - **换实现必须重新对基线**：旧路径在 y-up 上下文里的 `origin` 是**行盒左下角**，`CTLineDraw` 要基线 —— 换算成 `行盒高 − round(ascent)`，**不是** `round(descent)`：多数字号下两者相等，16pt 上不等（ascent 15.469 / descent 3.375 / 行盒 19 → 4 vs 3），写错就整条弹幕错位一个像素，而**不会让任何既有用例变红**。两行 `CTLine` 在 `displaying` 里**懒建 + `NSLock` 缓存**：`init` 跑在主线程、每条弹幕一次，两行约 52 µs 的主线程税不该付。
+  - **iOS 走原路径**：`DanmakuAsyncLayer` 在 iOS 用 `UIGraphicsBeginImageContextWithOptions`（y-down 翻转上下文），CoreText 的文本矩阵约定与 macOS 的 y-up 不同，本机未验证，不冒险。
+  - **时间轴对齐**：`comments.firstIndex { $0.time > now } ?? count` 是**线性扫描**，而每次 seek / 换源 / 改偏移都要对齐一次指针，一张热番 3k–30k 条。改成 `DanmakuOverlayController.upperBound(of:time:)` 二分（O(log n)，30k 条 ≈ 15 次比较），语义与线性扫描**逐字等价**。
+  - **验证**：新增 `OverlayDanmakuCellRenderTests`（8 条 —— 填充趟与旧 `NSString.draw` **逐像素零差异**，12/14/16/18/22/26/30/36/44 九档字号；基线公式九档成立；描边确实在填充外缘加墨、权重与旧口径相当；极深字走浅描边；CoreText 路径显著快于旧描边）、`DanmakuOverlaySpawnCostTests`（3 条 —— 主线程上 300 条补发的模型构造 / `shoot` / 端到端成本，阈值取数量级判据）、`DanmakuOverlayTimelinePointerTests`（6 条 —— 与线性扫描逐点等价，含空表 / 恰好相等 / 重复时间戳 / 2000 条中段对照）。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。
