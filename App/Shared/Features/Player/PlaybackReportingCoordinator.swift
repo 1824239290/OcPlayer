@@ -220,6 +220,8 @@ final class PlaybackReportingCoordinator {
             await startTask.value
             guard !Task.isCancelled else { return }
             var ticks = 0
+            // 本次暂停是否已经报过（恢复播放时复位）。见下面的暂停分支。
+            var reportedPause = false
             while !Task.isCancelled {
                 do {
                     try await Task.sleep(for: self?.heartbeatInterval ?? .seconds(1))
@@ -250,6 +252,22 @@ final class PlaybackReportingCoordinator {
                     self.triggerTerminalIfNeeded(session: activeSession, reachedEnd: reachedEnd)
                     return
                 }
+
+                // 暂停只报一次：位置已经不再前进，服务端拿到这一条就知道「停在哪 +
+                // 现在是暂停」；之后每个 tick 重复发同一条纯属浪费 —— 实测暂停挂机会
+                // 每 10 s 发一次真实 POST（**360 次/小时**），而载荷逐字相同。
+                // 恢复播放后复位，照常按 progressEveryTicks 上报。
+                if snapshot.state == .paused {
+                    if !reportedPause {
+                        reportedPause = true
+                        _ = self.enqueueProgressReport(
+                            session: activeSession,
+                            snapshot: snapshot
+                        )
+                    }
+                    continue
+                }
+                reportedPause = false
 
                 if ticks % self.progressEveryTicks == 0 {
                     _ = self.enqueueProgressReport(

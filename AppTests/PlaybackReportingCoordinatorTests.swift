@@ -430,6 +430,51 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
         )
     }
 
+    /// 回归：**暂停后不再每 N tick 重复上报**。
+    ///
+    /// 原实现里 `.paused` 不被终止态判据拦下，直接落到
+    /// `ticks % progressEveryTicks == 0` 的通用分支 —— 于是暂停挂机也每 10 s 发一次
+    /// 真实 POST（**360 次/小时**），而暂停期间播放位置根本不再前进：除第一条外，
+    /// 后面每一条都是同一条数据的复制品。
+    ///
+    /// 语义要求两条，缺一不可：
+    /// 1. 进入暂停时**仍要报一次**（服务端需要「停在哪 + 现在是暂停」）；
+    /// 2. 暂停期间不再重复；恢复播放后照常恢复上报。
+    @MainActor
+    func testPausedDoesNotRepeatProgressReports() async {
+        let source = TestPlaybackStateSource(snapshot: .paused(position: 30))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(
+            stateSource: source,
+            heartbeatInterval: .milliseconds(5),
+            progressEveryTicks: 2
+        )
+
+        coordinator.start(
+            reporter: reporter,
+            context: PlaybackSessionContext(itemID: "episode-paused"),
+            requestID: UUID(),
+            resumeSeconds: nil,
+            onTerminal: { _ in }
+        )
+
+        // 1) 暂停后必须**先报一次**，且标明 isPaused。
+        await waitUntil { reporter.progressCount >= 1 }
+        XCTAssertEqual(reporter.progressCount, 1, "进入暂停时要上报一次")
+        XCTAssertEqual(reporter.progressPausedFlags, [true], "这一条要标成暂停")
+
+        // 2) 再等约 40 个 tick（每 tick 5 ms）：不该再多出任何一条。
+        try? await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(reporter.progressCount, 1, "暂停期间不该重复上报")
+
+        // 3) 恢复播放后照常上报。
+        source.snapshot = .active(position: 31)
+        await waitUntil { reporter.progressCount >= 2 }
+        XCTAssertEqual(reporter.progressPausedFlags, [true, false], "恢复后要按非暂停上报")
+
+        await coordinator.stop()?.value
+    }
+
     // MARK: - 上报超时
 
     /// 回归：「超时」此前**不生效**。原实现是「到点 `task.cancel()`，然后仍
@@ -568,6 +613,18 @@ private final class TestPlaybackReporter: PlaybackReporting {
     }
 
     var events: [Event] = []
+    /// 进度上报条数（暂停期间的「是不是重复发了」靠它数）。
+    var progressCount: Int {
+        events.filter(\.isProgress).count
+    }
+
+    /// 每条进度上报的 `isPaused`，按发生顺序。
+    var progressPausedFlags: [Bool] {
+        events.compactMap { event in
+            guard case let .progress(_, _, isPaused) = event else { return nil }
+            return isPaused
+        }
+    }
     var shouldSuspendStop = false
     private(set) var isStopSuspended = false
     private var stoppedContinuation: CheckedContinuation<Void, Never>?
