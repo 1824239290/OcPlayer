@@ -47,6 +47,15 @@
   - **设置页「图片缓存」用量统计挪出主线程**：`ImagePipeline.shared.diskUsage` 是**目录内每文件一次 stat + 全量排序**，512 MB 上限下可有数千个小文件，留在主线程就是进页卡顿（冷目录几十~几百 ms）。与同页「导出诊断包」「清空图片缓存」一致改走后台，回主 actor 只赋字符串。
   - **验证**：本批**不改行为语义**（等价重算、少一次系统调用、后台化），唯一有输出差异的是 macOS 弹幕描边的圆环近似 —— 由 `OverlayDanmakuCellRenderTests` 的逐像素 / 加墨量对照守住。实跑：`OcPlayer-macOS` scheme **578 通过 / 0 失败 / 18 跳过**（含上面三个新用例文件）、`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、被改动的 7 个包（AppDesignKit / DiagnosticsKit / DanmakuKit / JellyfinKit / BangumiKit / MetadataKit / MoviePilotKit）各自套件通过。
 
+### 构建 / 发布
+
+- **发版产物重新带上 dSYM（否则崩溃日志永远查不出东西）**（性能审查清单 `CORR-01`）。
+  - **现象**：`package-macos.sh` 与 `package-ios.sh` 都在 `xcodebuild` 命令行覆盖了工程设置 `DEBUG_INFORMATION_FORMAT=dwarf`，而工程 Release 配置本来就是 `dwarf-with-dsym`（`project.pbxproj` 的 `1A0000000000000000000006` 块）—— 覆盖把符号从发版产物里抹掉了。**而且光删覆盖还不够**：两个脚本从头到尾没有任何收集 `.dSYM` 的动作，符号只留在 `DerivedData` 里，`dist/` 拿不到，`release.yml` 又只上传 `dist/*`，所以发布资产里根本没有符号。
+  - **修法**：① 删掉两处命令行覆盖，并在原位置留注释说明「不要再传这个设置」；② 把 `.dSYM` 打成独立资产（`$ARTIFACT_BASE.dSYM.zip`）放进 `dist/` —— 普通用户下载体积不变，需要符号的人多下一个文件；③ 加**硬断言**：`APP_PATH` 存在但 `.dSYM` 缺失就 `exit 1`。这一条是有意为之 —— 缺符号时构建一切正常、包也能发，**没有任何报错**，不钉死就会再次静默退化。`release.yml` 不需要改（`gh release upload dist/*` 会把新资产自动带上）。
+  - **实测**（本机 Release 打包，`v0.0.0-dsymtest`）：UUID 逐字符一致 `FDAF2C22-0EA3-387F-A6DC-F418E0B34A9F`（app ↔ dSYM）；dSYM zip 35 MB、内含 138 MB 未压缩 DWARF，`DW_AT_linkage_name` **194 200 条**、编译单元带源码路径与语句表；`atos` 能把真实地址解成 `main (in OcPlayer) (OcPlayerApp.swift:0)` 与 `partial apply for closure #4 in DanmakuSelectionSheet.body.getter`；`shasum -a 256 -c` 三项全 OK。
+  - **一条必须说清的边界（比原判更精确）**：发版 `.app` 本体**并未被 strip**（`LC_SYMTAB` 有 652 580 条符号），所以**函数名**本来就能从公开的 app 二进制里解出来；真正缺的是 **DWARF** —— 发版二进制 `otool -l` 里 **0 个 debug 节**，`dwarfdump --lookup` 直读为空。也就是说：**行号、内联帧与源码位置此前完全拿不到**，而这正是定位崩溃的关键；而且唯一可用的符号来源是随包公开的二进制，一旦将来对 `.app` 做 strip（`COPY_PHASE_STRIP=YES`）就彻底归零。dSYM 是标准且与 UUID 绑定，补上它才算真正可查。
+  - **验证入口**：`bash -n Scripts/package-macos.sh Scripts/package-ios.sh`；`SKIP_ERIKA_FETCH=1 Scripts/package-macos.sh v0.0.0-dsymtest` 后 `ls dist/*.dSYM.zip` + `dwarfdump --uuid` 比对 + `shasum -a 256 -c SHA256SUMS.txt`。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。
