@@ -54,6 +54,26 @@ jobs:
           restore-keys: |
             spm-test-v1-${{ runner.os }}-
 
+      # iOS 那步是 job 里唯一没有被缓存、且波动最大的一步（2026-10-17 两次运行实测
+      # 462 s ↔ 627 s，而同一次运行里命中缓存的 macOS 步只要 100 s）。它的耗时构成是
+      # 解析 ~57 s + 编译 ~403 s + 用例 ~110 s + 收尾 ~48 s，前两项正是 DerivedData 里
+      # 的东西 —— 本机同根实测：冷建 116 s → 改两个源文件后增量 14 s，体积 1.9 GB。
+      #
+      # **单独一条**而不是并进上面那条 `spm-test-`：它只服务 iOS 这一步，胖了 / 坏了
+      # 可以单独删掉，不必连 macOS 与包构建的缓存一起丢；key 前缀不同，两者不会互相顶掉。
+      # 主键同样只由 Package.resolved 决定 ⇒ 依赖没变的 PR 精确命中、且**命中的运行不会
+      # 再写一条新的**（见 PR #29 第二次运行的 `Cache hit occurred on the primary key,
+      # not saving cache`）。依赖变了的 PR 会新写一条 ~1.9 GB 的 PR 作用域副本，靠合并后
+      # 删 PR 副本回收（条目按 ref 隔离，详见 CHANGELOG BLD-04 条）。
+      # `-v1-` 是失效旋钮：换 runner 镜像 / Xcode 大版本时 bump。
+      - name: Cache iOS DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .local-build/ci-test-ios
+          key: ios-dd-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ios-dd-v1-${{ runner.os }}-
+
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
       # 渲染集成测试在 SPM 包内，下面单独跑。
       - name: Run App tests (macOS scheme)
