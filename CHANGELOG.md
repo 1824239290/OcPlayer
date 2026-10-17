@@ -81,7 +81,40 @@
     | PR #29 首次 | 1 s（miss） | 86 s | 又建一条**同 key** @ `refs/pull/29/merge` |
     | 缓存现状 | — | — | 同 key 两条（2.603 + 2.602 GiB）+ 内核 0.736 = **5.94 GiB** |
     准确的说法是：**同一 PR 内多次 push 会复用同一条**（改前每次 push 都新写一条，这才是主要收益），而**跨 PR 的复用要靠默认分支** —— 等 `main` 上跑出一次 `refs/heads/main` 的条目后，后续 PR 才能命中它并不再重复写。也就是说稳态「一条 + 内核」要**等一次 main 的 push 运行之后**才成立。
-  - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）。
+  - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）→ **已由下一批单独落地**，见下方「iOS 测试的 DerivedData 单独进缓存」条。
+
+- **iOS 测试的 DerivedData 单独进 CI 缓存**（性能审查清单 `BLD-02`）。
+  - **现象**：`test.yml` 缓存的是 `.local-build/ci-test` + `Packages/*/.build`，而 iOS 那步用的是**另一个根** `.local-build/ci-test-ios` —— 于是 job 里最慢的一步恰好是唯一没有缓存的一步。实测（2026-10-17 的两个 run）：iOS 步 **462 s ↔ 627 s**，同一次运行里命中缓存的 macOS 步只要 **100 s**；它的耗时构成是解析 **57 s** + 编译 **403 s** + 用例 **110 s** + 收尾 48 s，前两项正是 DerivedData 里的东西。而且它的波动（±165 s）比缓存能省下的还大 —— 冷编译受 runner 负载影响最狠。
+  - **修法**：**单开一条** `ios-dd-v1-<os>-<Package.resolved 哈希>`，`path` 只放 `.local-build/ci-test-ios`。不并进 `spm-test-` 那条：它只服务 iOS 这一步，胖了 / 坏了可以**单独删掉**，不必连 macOS 与包构建的缓存一起丢（并入后两档各涨到 4–5 GiB，一旦把内核 0.736 GiB 挤出去，每次运行白下 306 MB）。主键同样只由 `Package.resolved` 决定 ⇒ 依赖没变的 PR 精确命中、且**命中的运行不会再写一条新的**。**不进 `release.yml`**：tag 运行的条目按 tag 隔离、写不进默认分支，单独改它只是白占额度，归 `BLD-03`（从默认分支播种）一起做。
+  - **本地实测**（同一个 `-derivedDataPath`，`-scheme OcPlayer-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build-for-testing`）：**冷建 116 s → 增量 14 s**（改 `PlaybackController.swift` + `StorageMaintenance.swift` 两个真源文件，日志里确有这两条 `SwiftCompile`）；只把 mtime 摸一下则是 15 s（Xcode 用**内容签名**判定增量，不是 mtime —— 所以 CI 每次全新 checkout 也不会因此全量重编）。缓存体积 **1.9 GB** = `Build` 1.0 G + `SourcePackages` 556 M + `ModuleCache`/`Index` 275 M。
+  - **额度算术**：先删掉两条僵尸条目（见上一条的 ref 作用域说明；`refs/pull/28/merge` 与 `refs/pull/29/merge` 各 2.6 GiB，key 与 `refs/heads/main` 那条逐字相同）→ **8.54 GiB → 3.34 GiB**；新条目 +1.9 GB ⇒ **5.24 GiB / 10 GB**。稳态就是「main 的 SPM 条目 + main 的 iOS 条目 + 内核」= 5.24 GiB（PR 从默认分支恢复、精确命中不再新写）。
+  - **预期收益**：iOS 步 627 s → 约 330 s（省掉解析 57 s + 编译 403 s，换回恢复 ~60 s + 增量编译 ~50 s，按 runner 与增量比 3.4× 折算）。判据是「重跑同一次运行拿到同机同码 A/B」，未到即为空口。
+  - **✅ 同码 A/B 实测**（PR #30 的**四次**运行：att 1 冷缓存、att 2/3/4 均命中；同一 commit、同一 runner）：
+    | 阶段（iOS 步内部） | att1（miss） | att2（命中） | att3（命中） | att4（命中） |
+    |---|---|---|---|---|
+    | 解析 Package Graph | 7 s | 6 s | 4 s | 7 s |
+    | **编译**（resolve → `builtin-validationUtility`） | **211 s** | **81 s** | **78 s** | **91 s** |
+    | **模拟器启动 + 装机**（→ 首条 App 日志） | 185 s | 162 s | **331 s** | 181 s |
+    | 用例（`All tests`） | 106 s | 114 s | 109 s | 109 s |
+    | iOS 步总计 | 511 s | 377 s | 534 s | 388 s |
+    **结论要分开说，别混在一起：**
+    - **编译阶段稳定省 ~125 s**（211 s → 78–91 s，三次命中分别是 81 / 78 / 91 s）。这是本条的**真实收益**，与「依赖模块完全复用」互相印证（冷缓存时 `JellyfinAPI` 29 个 / `GRDB` 7 个 / `swift-nio` 系若干文件重编，命中后只剩 41 个 App 侧文件）。
+    - **步总 / job 总不能用这些数算** —— 中间那段「模拟器启动 + 装机」在 **162 / 181 / 331 s** 之间跳，att3 的 331 s 是离群点（**±170 s**），比缓存收益还大。att3 命中缓存却比冷启动还慢（534 s vs 511 s）就是被它拖的。**这正是审查清单原文说的「iOS 步 462 s ↔ 627 s 的波动比缓存收益还大」，现在查清了机制：波动不在编译，在模拟器启动。**
+    - 准确口径：**每 job 稳定省 ~125 s**（编译），步总仍会在 ~380–540 s 之间跳，取决于当次 runner 的模拟器冷启速度。
+  - **由这条带出的新条目（`BLD-08`，未修）**：模拟器启动/装机那 162–331 s **既没缓存也没有预算**，是 iOS 步波动的主因，也是下一刀要切的地方（候选：`xcrun simctl boot` + `simctl bootstatus -b` 预热、或用 `-destination 'platform=iOS Simulator,id=…'` 跳过机型解析）。本轮**不做**：与缓存无关，属另一条线。
+  - **⚠️ 一条被自己推翻的错误结论（如实记）**：第一版把「iOS 步 511 → 377 s」当成了缓存收益、还写进了 PR 评论。第三次运行（同样命中，却 534 s）推翻了它。把 iOS 步按四段切开才看清：**收益在编译、噪声在模拟器启动**。教训是**同码 A/B 至少要两次命中运行**才能把噪声和收益分开，只看一次会得出反的答案。PR 里已发更正评论。
+  - **一条没做到位的地方（如实记）**：命中后仍有 **41 个文件的 `SwiftCompile`**（冷缓存是 120 个），编译没有全量命中。本机同根实测的增量只要 14 s，说明 CI 侧还有别的东西在让 fingerprint 失效（**未定位**）。再往下压编译得先查这个，属下一轮的活。
+  - **验证入口**：`ruby -ryaml -e 'YAML.load_file(".github/workflows/test.yml")'`（并确认 `gh api .../actions/workflows` 里 Test 仍是 `active` —— YAML 写坏会变 `disabled_invalid`）；A/B 见上表。
+
+- **测试夹具的等待改成显式失败**（性能审查清单 `CORR-08`）。
+  - **现象**：`AppTests/SkipPreferenceTests.swift` 的 `makeController` 用 3 秒轮询等「playing + 片长 + 位置」三件套落地，**超时后既不 `XCTFail` 也不重试就直接返回**。于是「夹具没等到」被伪装成一条**完全看不懂的断言失败**：`main` 的 `597a8d6` 就是这么红的 —— `testSkipForwardClampsToTailMargin` 报 `("10.0") is not equal to ("1197.0")`，而 `10.0` 正是「位置还停在 0 时 `skip(by: 10)`」的落点，跟「尾部边际」毫无关系。为这一条排查了半轮 26 分钟的 CI + 一次重跑，最后判定为偶发。
+  - **修法**：换成同类测试里已有的 `waitUntil` 形态 —— 超时 `XCTFail`，并把**实测状态**一起打出来（`state=… duration=… position=…`）。不加新用例：这次修的是**失败的可诊断性**，现有 10 个调用点就是回归面。`PlaybackControllerOpenTests.setUp` 里那两处静默等待**不动** —— 有注释说明是故意「等不到就带残留继续」。
+  - **红 → 绿（真跑过）**：临时把 `timeout` 改 0，`-only-testing:OcPlayerTests/SkipPreferenceTests` 立刻红，报 `等待超时：引擎事件落到状态机（playing + 片长 + 位置）（实测 state=idle duration=0.0 seconds position=0.0 seconds）`，**同一用例下面紧跟着就是那条 `("10.0") is not equal to ("1197.0")`** —— 根因当场坐实，不用再猜。改回默认后该套件 18/18 全绿；全量 macOS `OcPlayerTests` **600 条：582 通过 / 18 跳过 / 0 失败**。
+  - **同一个坑还有第二处，本轮一并修了**：`ServerEndpointWiringTests` 自己那个 `waitUntil`（`:190-199`）**也是静默超时**。全仓 `AppTests` 里 8 个等待辅助，**7 个会 `XCTFail`，只有它不会** —— 而它恰好在本次 PR 的最后一次 CI 上炸了：`testResolvedAddressIsPersistedAndPublished` 报三条看不懂的地址断言（`http://192.0.2.10:8096 ≠ http://100.64.1.20:8096`），看起来像地址决议算错了；实际是那次 runner 被拖慢 —— 同套件上一条 `testCallbackFromReplacedSessionIsIgnored` 跑了 **35.2 s**（本机 **0.012 s**），后台探活没在 3 s 内落地，夹具静默返回。
+    - 修法同上：超时 `XCTFail` + 打实测状态（`serverEndpointURL` / `profile.baseURL` / `probes.count`）。
+    - **红 → 绿**：临时把 `timeout` 改成 `.zero`，报 `等待超时：后台探活/请求计数未在 0.0 seconds 内落地（实测 serverEndpointURL=http://192.0.2.10:8096 profile.baseURL=http://192.0.2.10:8096）`，**后面紧跟的那三条与 CI 上的失败逐字符一致** —— 复现 + 解释两件事一次拿到。撤掉探针后 `ServerEndpointWiringTests` 5/5 全绿。
+    - 结论：这两处加起来才把「夹具静默超时」这一类清干净；只修一处就还会在别处浪费一整轮 CI。
+
 
 ### 修复
 

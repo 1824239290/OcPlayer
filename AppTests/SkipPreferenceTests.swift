@@ -189,13 +189,46 @@ final class SkipPreferenceTests: XCTestCase {
         engine.emit(.stateChanged(.playing))
         engine.emit(.durationChanged(duration))
         engine.emit(.positionChanged(position))
-        let deadline = Date().addingTimeInterval(3)
-        while !(controller.state.state == .playing
+        // 等待**必须显式失败**：静默返回会把「夹具没等到」伪装成一条看不懂的断言
+        // 失败 —— `main` 的 `597a8d6` 就为此红过一次，报 `10.0 ≠ 1197.0`，其实是
+        // 位置还停在 0、`skip(by: 10)` 从 0 起跳，与「尾部边际」毫无关系。写法与
+        // `PlayerHUDGatesTests` / `PlaybackControllerOpenTests` 等处保持一致。
+        try await waitUntil(
+            "引擎事件落到状态机（playing + 片长 + 位置）",
+            diagnostics: {
+                "state=\(controller.state.state) "
+                    + "duration=\(controller.state.duration) "
+                    + "position=\(controller.state.position)"
+            }
+        ) {
+            controller.state.state == .playing
                 && controller.state.duration == duration
-                && controller.state.position == position), Date() < deadline {
-            try await Task.sleep(for: .milliseconds(10))
+                && controller.state.position == position
         }
         return controller
+    }
+
+    /// 轮询等到条件成立；超时 `XCTFail`（带实测状态）后返回。
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 3,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        diagnostics: @MainActor () -> String = { "" },
+        _ condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                let detail = diagnostics()
+                XCTFail(
+                    "等待超时：\(description)" + (detail.isEmpty ? "" : "（实测 \(detail)）"),
+                    file: file, line: line
+                )
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     /// Duration → 秒：`.seconds(Double)` 的落点带二进制浮点尾数，等值断言要留容差。
