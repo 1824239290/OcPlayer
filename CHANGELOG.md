@@ -6,6 +6,8 @@
 
 ### 修复
 
+- **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。
+
 - **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。
   - **现象**：`AppTests` 跑在 **App 宿主进程**里（`TEST_HOST = OcPlayer.app`），宿主照常装配真实存储与真实偏好 —— 跑完一次 macOS 全量用例，`~/Library/Application Support/OcPlayer/` 下 `credentials.json`、`Media.sqlite-wal`、`Bangumi.sqlite-wal` 与真实偏好 plist 的 mtime 全落在测试窗口内。逐键比对确认凭据**内容没坏**（只是 JSON 键序被重排），但一个会写开发机凭据文件的测试套件迟早会把它写坏。
   - **开关**：环境变量 `OCPLAYER_ISOLATED_STORAGE=1`，收在 `OcPlayerStorage.isIsolated`。打开后存储根 → `临时目录/OcPlayerAutomation`（凭据 / 各 sqlite / 图片缓存 / 弹幕 / 字幕），App 偏好默认域 → 隔离根下的独立 plist（`UserDefaults(suiteName:)` 认「像路径的名字」，于是也不在 `~/Library/Preferences` 留垃圾）。生产不设它 → 默认域仍是 `.standard`，行为零变化。

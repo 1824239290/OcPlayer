@@ -198,6 +198,65 @@ final class SkipPreferenceTests: XCTestCase {
         return controller
     }
 
+    /// Duration → 秒：`.seconds(Double)` 的落点带二进制浮点尾数，等值断言要留容差。
+    private func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1e18
+    }
+
+    // MARK: - ±10 秒跳转（skip(by:)）落点
+
+    /// 实机回归（2026-10-17，FX战士久留美 S01E03）：duration=1426s、位置 540.749s，
+    /// 按「后退 10 秒」时日志记 `kind=skip from_ms=540749 to_ms=1423450` —— 落点
+    /// 正好是「片长 − 3s」的尾部边际，进度条直接跳结尾。根因是 `skip(by:)` 把
+    /// µs 口径的落点当成秒去跟（秒口径的）片长取 min：任何一次 ±10s 都会被钳到
+    /// 片长 − 3s。
+    func testSkipBackwardLandsTenSecondsEarlier() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .milliseconds(1_426_450), position: .milliseconds(540_749))
+
+        controller.skip(by: -10)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 530.749, accuracy: 0.0005,
+                       "后退 10 秒应落到 530.749s，而不是片长 − 3s")
+    }
+
+    func testSkipForwardLandsTenSecondsLater() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(600))
+
+        controller.skip(by: 10)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 610, accuracy: 0.0005, "前进 10 秒应落到 610s")
+    }
+
+    func testSkipBackwardClampsAtStart() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(5))
+
+        controller.skip(by: -10)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 0, accuracy: 0.0005, "不落到负时间")
+    }
+
+    func testSkipForwardClampsToTailMargin() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(1195))
+
+        controller.skip(by: 10)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 1197, accuracy: 0.0005,
+                       "越过片尾时钳到片长 − 3s 尾部边际")
+    }
+
     func testPerformSkipSeeksToDurationMinusDefaultRetention() async throws {
         let engine = SeekRecordingEngine()
         let controller = try await makeController(
