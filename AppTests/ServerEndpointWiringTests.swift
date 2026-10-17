@@ -49,7 +49,12 @@ final class ServerEndpointWiringTests: XCTestCase {
         let app = AppModel(store: store)
         app.server = server
         app.attachEndpoints(to: server, sessionConfiguration: configuration)
-        await waitUntil { app.serverEndpointURL == self.tailscale }
+        await waitUntil(
+            diagnostics: {
+                "serverEndpointURL=\(app.serverEndpointURL?.absoluteString ?? "nil") "
+                    + "profile.baseURL=\(app.store.profiles.first?.baseURL.absoluteString ?? "nil")"
+            }
+        ) { app.serverEndpointURL == self.tailscale }
 
         XCTAssertEqual(app.serverEndpointURL, tailscale, "界面要显示当前生效地址")
         XCTAssertEqual(app.store.profiles[0].baseURL, tailscale, "换址结论要写回档案")
@@ -78,7 +83,7 @@ final class ServerEndpointWiringTests: XCTestCase {
         app.attachEndpoints(to: server, sessionConfiguration: configuration)
         // 必须等探活**真的跑过**再断言「状态没变」：固定 sleep 是恒真断言，
         // 探活整个坏掉（mock 没拦住 / 全 nil）时它照样绿。
-        await waitUntil { probes.count >= 2 }
+        await waitUntil(diagnostics: { "probes.count=\(probes.count)" }) { probes.count >= 2 }
 
         XCTAssertGreaterThanOrEqual(probes.count, 2, "两个候选地址都该被探到")
         XCTAssertEqual(app.serverEndpointURL, lan)
@@ -187,8 +192,18 @@ final class ServerEndpointWiringTests: XCTestCase {
 
     // MARK: - 工具
 
+    /// 轮询等到条件成立；超时 `XCTFail`（带实测状态）后返回。
+    ///
+    /// **必须显式失败**：静默返回会把「后台探活没在 3 s 内落地」伪装成下游那几条
+    /// 完全看不懂的断言 —— CI 实测过一次（runner 被拖慢，上一条用例跑了 35 s），
+    /// 报的是 `http://192.0.2.10:8096 ≠ http://100.64.1.20:8096`，看起来像地址决议
+    /// 算错了，其实是夹具没等到。写法与 `PlayerHUDGatesTests` / `SkipPreferenceTests`
+    /// 等处一致。
     private func waitUntil(
         timeout: Duration = .seconds(3),
+        diagnostics: () -> String = { "" },
+        file: StaticString = #filePath,
+        line: UInt = #line,
         _ condition: () -> Bool
     ) async {
         let deadline = ContinuousClock.now + timeout
@@ -196,5 +211,11 @@ final class ServerEndpointWiringTests: XCTestCase {
             if condition() { return }
             try? await Task.sleep(for: .milliseconds(20))
         }
+        let detail = diagnostics()
+        XCTFail(
+            "等待超时：后台探活/请求计数未在 \(timeout) 内落地"
+                + (detail.isEmpty ? "" : "（实测 \(detail)）"),
+            file: file, line: line
+        )
     }
 }

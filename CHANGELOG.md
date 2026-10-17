@@ -92,6 +92,10 @@
   - **现象**：`AppTests/SkipPreferenceTests.swift` 的 `makeController` 用 3 秒轮询等「playing + 片长 + 位置」三件套落地，**超时后既不 `XCTFail` 也不重试就直接返回**。于是「夹具没等到」被伪装成一条**完全看不懂的断言失败**：`main` 的 `597a8d6` 就是这么红的 —— `testSkipForwardClampsToTailMargin` 报 `("10.0") is not equal to ("1197.0")`，而 `10.0` 正是「位置还停在 0 时 `skip(by: 10)`」的落点，跟「尾部边际」毫无关系。为这一条排查了半轮 26 分钟的 CI + 一次重跑，最后判定为偶发。
   - **修法**：换成同类测试里已有的 `waitUntil` 形态 —— 超时 `XCTFail`，并把**实测状态**一起打出来（`state=… duration=… position=…`）。不加新用例：这次修的是**失败的可诊断性**，现有 10 个调用点就是回归面。`PlaybackControllerOpenTests.setUp` 里那两处静默等待**不动** —— 有注释说明是故意「等不到就带残留继续」。
   - **红 → 绿（真跑过）**：临时把 `timeout` 改 0，`-only-testing:OcPlayerTests/SkipPreferenceTests` 立刻红，报 `等待超时：引擎事件落到状态机（playing + 片长 + 位置）（实测 state=idle duration=0.0 seconds position=0.0 seconds）`，**同一用例下面紧跟着就是那条 `("10.0") is not equal to ("1197.0")`** —— 根因当场坐实，不用再猜。改回默认后该套件 18/18 全绿；全量 macOS `OcPlayerTests` **600 条：582 通过 / 18 跳过 / 0 失败**。
+  - **同一个坑还有第二处，本轮一并修了**：`ServerEndpointWiringTests` 自己那个 `waitUntil`（`:190-199`）**也是静默超时**。全仓 `AppTests` 里 8 个等待辅助，**7 个会 `XCTFail`，只有它不会** —— 而它恰好在本次 PR 的最后一次 CI 上炸了：`testResolvedAddressIsPersistedAndPublished` 报三条看不懂的地址断言（`http://192.0.2.10:8096 ≠ http://100.64.1.20:8096`），看起来像地址决议算错了；实际是那次 runner 被拖慢 —— 同套件上一条 `testCallbackFromReplacedSessionIsIgnored` 跑了 **35.2 s**（本机 **0.012 s**），后台探活没在 3 s 内落地，夹具静默返回。
+    - 修法同上：超时 `XCTFail` + 打实测状态（`serverEndpointURL` / `profile.baseURL` / `probes.count`）。
+    - **红 → 绿**：临时把 `timeout` 改成 `.zero`，报 `等待超时：后台探活/请求计数未在 0.0 seconds 内落地（实测 serverEndpointURL=http://192.0.2.10:8096 profile.baseURL=http://192.0.2.10:8096）`，**后面紧跟的那三条与 CI 上的失败逐字符一致** —— 复现 + 解释两件事一次拿到。撤掉探针后 `ServerEndpointWiringTests` 5/5 全绿。
+    - 结论：这两处加起来才把「夹具静默超时」这一类清干净；只修一处就还会在别处浪费一整轮 CI。
 
 
 ### 修复
