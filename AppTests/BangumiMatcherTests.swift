@@ -270,4 +270,91 @@ final class BangumiMatcherTests: XCTestCase {
         XCTAssertNotNil(best)
         XCTAssertEqual(best?.candidate.id, 2, "超电磁炮S 应匹配超电磁炮S")
     }
+
+    // MARK: - 第二轮「放开类型过滤」的触发条件
+
+    /// 回归：**关键词请求全部失败时，不该再发第二轮注定失败的请求**。
+    ///
+    /// 第二轮用的是同一批关键词、只是把 `filter` 从 `.anime` 换成 `nil`，所以网关
+    /// 全挂 / 断网时它必然也全失败 —— 唯一效果是把等待翻倍（每轮 ≈ 关键词数 × 10 s
+    /// 超时）。判据必须是「**至少有一个请求真的到达了服务端**」，而不是
+    /// `lastError == nil`：部分成功 + 部分失败时 `lastError` 也非空，而那一轮放开
+    /// 类型过滤仍可能命中真人剧（见下一条用例）。
+    @MainActor
+    func testAllSearchesFailingSkipsTypeFilterRound() async {
+        let recorder = SearchRecorder()
+        let item = MediaItem(id: "movie-offline", name: "某部不存在的电影", kind: .movie)
+
+        var thrown: Error?
+        do {
+            _ = try await BangumiMatcher.searchAndPick(for: item, search: { _, filter in
+                recorder.record(filter: filter)
+                throw URLError(.notConnectedToInternet)
+            })
+            XCTFail("全部失败应当抛出，而不是返回 nil —— 后者会被 UI 读成「没找到」")
+        } catch {
+            thrown = error
+        }
+
+        XCTAssertNotNil(thrown, "全部失败要抛出")
+        XCTAssertGreaterThan(recorder.count, 0, "第一轮本来就该发出去")
+        XCTAssertFalse(
+            recorder.didSearchWithoutTypeFilter,
+            "全部失败时不该再发第二轮（放开类型过滤那次）")
+    }
+
+    /// 反证：**部分失败**（有的关键词到达了服务端）时，第二轮仍要发。
+    /// 这一条守的是「别把守卫收得太紧」——拿 `lastError == nil` 当判据会漏掉这种情形。
+    @MainActor
+    func testPartialFailureStillAllowsTypeFilterRound() async {
+        let recorder = SearchRecorder()
+        let item = MediaItem(id: "movie-partial", name: "某部不存在的电影", kind: .movie)
+
+        _ = try? await BangumiMatcher.searchAndPick(for: item, search: { _, filter in
+            let seen = recorder.record(filter: filter)
+            // 只让第一发失败：模拟「部分关键词没到达服务端」
+            if filter == .anime, seen == 1 {
+                throw URLError(.timedOut)
+            }
+            return BangumiPagedDTO(data: [], total: 0)
+        })
+
+        XCTAssertTrue(
+            recorder.didSearchWithoutTypeFilter,
+            "有过成功请求 ⇒ 候选为空时仍要放开类型过滤再试一轮")
+    }
+}
+
+/// 记录注入检索被调用的次数，以及**有没有出现过 `filter == nil` 那一次**
+/// （= 第二轮「放开类型过滤」是否真的发了）。
+///
+/// 判据取「有没有发过 nil 过滤」而不是「发了几次」：次数会随关键词生成规则变动
+/// （无季号条目 2 条、带季号 3 条），而「第二轮发没发」才是这两条用例要钉的。
+/// 注入的闭包跑在 `withTaskGroup` 里，所以要自己上锁。
+private final class SearchRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callCount = 0
+    private var sawUnfiltered = false
+
+    /// 返回这是第几次调用（从 1 开始）。
+    @discardableResult
+    func record(filter: BangumiSubjectType?) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        callCount += 1
+        if filter == nil { sawUnfiltered = true }
+        return callCount
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return callCount
+    }
+
+    var didSearchWithoutTypeFilter: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return sawUnfiltered
+    }
 }
