@@ -1,4 +1,5 @@
 import DiagnosticsKit
+import PlaybackKit
 import SwiftUI
 
 #if os(macOS)
@@ -174,6 +175,9 @@ struct OcPlayerApp: App {
                         let task = appModel.playbackWillTerminate()
                         // 有界等待：2 秒内没落完就放行退出（别吊住用户关窗口）。
                         AppDiagnostics.flush(timeout: 2)
+                        // 播放日志是**另一个** logger 实例，抑制计数也在它自己那儿，
+                        // 不一起 flush 就永远汇总不出来（见 PlaybackLog.flush(timeout:)）。
+                        PlaybackLog.flush(timeout: 1)
                         return task
                     }
                 }

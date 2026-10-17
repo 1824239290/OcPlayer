@@ -44,6 +44,30 @@ final class DiagnosticLoggerTests: XCTestCase {
         XCTAssertEqual(records[0].diagnosticLevel, .error)
     }
 
+    /// `subsystem` / `category` 的脱敏从「每条记录各跑 6 趟正则」改成 `init` 算一次，
+    /// 输出必须逐字节相同。这条钉住那个**不变式** —— 谁要是为了省事直接写原始常量，
+    /// 含用户路径的 subsystem 就会漏进日志。
+    func testSubsystemAndCategoryAreRedacted() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let log = DiagnosticLogger(
+            subsystem: "test-\(home)/OcPlayer", category: "cat-\(home)/Playback",
+            directory: directory, maxFileBytes: 1024 * 1024, emitToOSLog: false
+        )
+        log.info("hello")
+        log.flush()
+
+        let records = try log.readRecords()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertFalse(records[0].subsystem.contains(home), "subsystem 里的家目录没被脱敏")
+        XCTAssertFalse(records[0].category.contains(home), "category 里的家目录没被脱敏")
+        XCTAssertEqual(records[0].subsystem, DiagnosticRedactor.redact("test-\(home)/OcPlayer"),
+                       "预计算的结果必须与逐条脱敏完全一致")
+        XCTAssertEqual(records[0].category, DiagnosticRedactor.redact("cat-\(home)/Playback"))
+    }
+
     func testFieldRedactionReachesDisk() throws {
         let directory = try makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

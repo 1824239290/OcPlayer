@@ -1,5 +1,6 @@
 import AppDesignKit
 import JellyfinKit
+import PlaybackKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -160,6 +161,8 @@ struct RootView: View {
             // iOS 退出前也要把排队的 JSONL 落盘（此前只收播放上报，最后几条日志会随进程丢）；
             // 有界等待，别在 willTerminate 里吊住系统。
             AppDiagnostics.flush(timeout: 1)
+            // 播放日志是另一个 logger 实例，抑制计数在它自己那儿，得一起 flush。
+            PlaybackLog.flush(timeout: 1)
         }
         #endif
         .sheet(item: $updateChecker.promptRelease) { release in
