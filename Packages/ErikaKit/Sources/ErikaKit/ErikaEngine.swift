@@ -902,6 +902,11 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// （摸 presenter 必须持锁），失败记录 memorySampleFailed（只报一次——
     /// 通常意味着该能力在某版本不可用，不该逐帧刷屏）；footprint / 日志 / 落库
     /// 在 publishMemorySample 锁外做——纯进程读数 + 字符串拼串，不该拉长主锁持有期。
+    ///
+    /// ⚠️ 下面这条 `PlaybackLog.error` 是 `step()` 调用链里**唯一**还在主锁内的日志，
+    /// 有意留着：它被 `memorySampleFailed` 门控，一次会话最多一条（不是热路径），
+    /// 而挪出去要把错误从采样函数里递出来、连带改 open / stop / step 三个调用点，
+    /// 收益与改动不成比例。其他 4 处逐帧失败日志已由 `emitFailures` 挪到锁外。
     private func captureMemorySnapshotLocked() -> ErikaMemorySnapshot? {
         do {
             let snapshot = ErikaMemorySnapshot(try presenter.resourceStatus())
@@ -1100,7 +1105,55 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     /// 渲染线程每帧一次。失败在故障期间会逐帧触发，日志走 1s 节流，
     /// 只留下首条 + flush 时的一条汇总。
-    private static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
+    static let renderThrottle = DiagnosticThrottle(key: "render-failure", interval: 1)
+
+    /// 事件轮询失败的节流。
+    ///
+    /// **必须与 `renderThrottle` 用不同 key**：同一个 key 上谁先到谁就占住那 1s
+    /// 窗口，另一条会被整段压掉 —— 内核同时坏 render 与 poll 时，恰恰是最需要
+    /// 两种证据都在的时候。没有节流前，内核错误态下这里逐帧一条（实测单条 46.8µs，
+    /// 60Hz 就是每秒 2.8ms，且全部持主锁）。
+    static let pollThrottle = DiagnosticThrottle(key: "poll-failure", interval: 1)
+
+    /// `step()` 锁内攒下、出锁后才落盘的一条失败。
+    ///
+    /// 为什么要拆成两段：`step()` 持有主锁（UI 的 play / pause / seek / tracks 全在
+    /// 这把锁上等），而一条 error 日志要付「插值 + 6 趟正则 × 3 段 + OSLog + 入队」。
+    /// 内核错误态下逐帧一条就把锁一圈圈占满，UI 直查跟着一起卡。所以锁内只**装值**
+    /// （纯 enum），插值 / 脱敏 / 落盘统一挪到 `lock.unlock()` 之后。
+    ///
+    /// 不用 `any Error` 一把装：`ErikaError` 有状态码要带进 `.failed` 事件，
+    /// 两种 catch 分支的消息文本也不一样，分开写才不会为了省一个 case 去猜。
+    enum RenderFailure {
+        case renderTick(ErikaError)
+        case renderTickUnknown(any Error)
+        case pollEvent(ErikaError)
+        case pollEventUnknown(any Error)
+    }
+
+    /// 把锁内攒下的失败逐条落盘。**只能在 `lock.unlock()` 之后调用。**
+    ///
+    /// `sink` 只为可测：生产恒为 `PlaybackLog.error`；测试注入收集器来钉住
+    /// 「消息文本」与「节流键」这两件最容易写错、且改错了不会有任何现象的事。
+    static func emitFailures(
+        _ failures: [RenderFailure],
+        sink: (String, DiagnosticThrottle?) -> Void = { message, throttle in
+            PlaybackLog.error(message, throttle: throttle)
+        }
+    ) {
+        for failure in failures {
+            switch failure {
+            case .renderTick(let error):
+                sink("render_tick 失败 error=\(error)", Self.renderThrottle)
+            case .renderTickUnknown(let error):
+                sink("render_tick 失败（未知） error=\(error)", Self.renderThrottle)
+            case .pollEvent(let error):
+                sink("poll_event 失败 error=\(error)", Self.pollThrottle)
+            case .pollEventUnknown(let error):
+                sink("poll_event 失败（未知） error=\(error)", Self.pollThrottle)
+            }
+        }
+    }
 
     /// 渲染线程每帧一次。
     ///
@@ -1120,6 +1173,8 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         //    放行等于把刚挂起的解码立刻解开，这一档就白切了。
         guard audioOnly == isBackgroundAudioOnly else { return }
         var pending: [PlayerEvent] = []
+        // 锁内只攒失败、不落盘；`emitFailures` 在 unlock 之后统一发。见 `RenderFailure`。
+        var failures: [RenderFailure] = []
 
         lock.lock()
         var memorySnapshot: ErikaMemorySnapshot?
@@ -1138,10 +1193,10 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
                 outputStatus = try? presenter.outputStatus()
             }
         } catch let error as ErikaError {
-            PlaybackLog.error("render_tick 失败 error=\(error)", throttle: Self.renderThrottle)
+            failures.append(.renderTick(error))
             pending.append(.failed(code: Int32(bitPattern: error.status.rawValue), message: error.message))
         } catch {
-            PlaybackLog.error("render_tick 失败（未知） error=\(error)", throttle: Self.renderThrottle)
+            failures.append(.renderTickUnknown(error))
             pending.append(.failed(code: 0, message: "\(error)"))
         }
         // 事件是轮询模型：每帧抽干，不然会积压。但每帧迭代要有上限——内核坏掉
@@ -1159,15 +1214,18 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
                 }
                 pending.append(event)
             } catch let error as ErikaError {
-                PlaybackLog.error("poll_event 失败 error=\(error)")
+                failures.append(.pollEvent(error))
                 pending.append(.failed(code: Int32(bitPattern: error.status.rawValue), message: error.message))
                 break
             } catch {
-                PlaybackLog.error("poll_event 失败（未知） error=\(error)")
+                failures.append(.pollEventUnknown(error))
                 break
             }
         }
         lock.unlock()
+        // 失败日志出锁才发：插值 / 6 趟正则 × 3 段 / OSLog / 入队都不该占着主锁。
+        // 顺序仍在 `.failed` 事件 yield 之前，时间线与改动前一致。
+        Self.emitFailures(failures)
         // footprint / 日志不在主锁内做（纯进程读数 + 拼串，5s 一次也该让渲染不受扰）。
         publishMemorySample(memorySnapshot, reason: "tick")
         publishOutputStatus(outputStatus)
