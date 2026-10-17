@@ -27,6 +27,17 @@
 
 ### 性能
 
+- **暂停后不再每 10 秒重复上报进度**（性能审查清单 `P1-01`，属「纯浪费」——不改用户可见行为，只是不再白发请求）。
+  - **暂停挂机 360 次 POST/小时**：心跳循环的终止态判据只认 `.stopped` / `.error` / `sourceOpenFailed`，`.paused` 于是落到通用的 `ticks % progressEveryTicks == 0` 分支 —— 每 10 s 发一次真实 `reportPlaybackProgress`。而暂停期间播放位置根本不再前进：**除第一条外，后面每一条都是同一条数据的复制品**（载荷逐字相同）。改成「进入暂停时报一次（服务端仍需要知道『停在哪 + 现在是暂停』），暂停期间不再重复，恢复播放后复位」。
+  - **验证（红 → 绿）**：`testPausedDoesNotRepeatProgressReports` 修前 `XCTAssertEqual failed: ("17") is not equal to ("1") - 暂停期间不该重复上报`（200 ms 窗口里发了 17 条），修后通过。该用例同时钉住「暂停要报一次」与「恢复后照常上报」两条语义。
+
+- **网关全挂时不再发第二轮注定失败的关键词检索**（性能审查清单 `P1-03`，同属「纯浪费」）。
+  - **全失败时等待翻倍**：第二轮「放开类型过滤」用的是**同一批关键词**、只把 `filter` 从 `.anime` 换成 `nil`，所以网关全挂 / 断网时它必然也全失败，唯一效果是把等待翻倍（每轮 ≈ 关键词数 × 10 s 超时）。判据加在第一轮汇总处：**至少有一个请求真的到达了服务端**（`succeededSearches > 0`）才发第二轮。
+  - **判据为什么不是 `lastError == nil`**：部分成功 + 部分失败时 `lastError` 也非空，而那种情形下放开类型过滤仍可能命中真人剧 —— 用后者会把这种情况一起挡掉。为此专门加了反证用例 `testPartialFailureStillAllowsTypeFilterRound` 守住这条边界。
+  - **可测性**：`BangumiMatcher.searchAndPick` 新增一个**带默认值**的注入参数 `search:`（生产默认值就是原来那句 `BangumiSubjectService.search`，逐字不变），与 `ImagePipeline(cacheDirectory:)` / `BangumiAPIClient(sessionFactory:)` 同一模式 —— 失败路径在生产里无法稳定复现，只能靠注入。
+  - **验证（红 → 绿）**：`testAllSearchesFailingSkipsTypeFilterRound` 修前红（第二轮照发、共 4 次请求），加守卫后通过。macOS AppTests 全量 **585 通过 / 18 跳过 / 0 失败**（xcresult `result=Passed`）。
+  - **顺带清掉一个构建副作用**：本次构建把 `Package.resolved` 里的 swift-nio 从 2.101.3 顶到了 2.104.0（`originHash` 也变了）。那是解析器行为、与本次修复无关，**已还原**，没有混进提交。
+
 - **macOS 弹幕描边不再实时转字形路径；时间轴对齐指针改二分**（弹幕上屏与 seek 两条热路径，双端共用同一份模型）。
   - **描边（`OverlayDanmakuCell`）**：原先两趟都走 `NSString.draw(at:withAttributes:)`、描边靠 `.strokeWidth` 文本效果 —— 那条路**每次绘制都要把字形实时转成 `CGPath`**（`CTFontCreatePathForGlyph` 实测 **237 µs/字形**：一条 13 字弹幕光描边就 **2.0 ms**，而填充只要 46 µs）。改成「同一行 `CTLine` 按 12 向圆环偏移画 12 次 + 画一次原色填充」，单条 **2.43 ms → 0.23 ms**（代码注释与 `OverlayDanmakuCellRenderTests` 在案）。缓存字形描边路径（`CGPath.copy(strokingWithWidth:)`）也能提速但只有 ~6× 且要多养 ~15 MB 字形缓存，**否决**；两圈（内 8 + 外 12）也试过并否决 —— 12 份副本的并集本就把环带填实，内环只多 5 个像素墨迹。
   - **换实现必须重新对基线**：旧路径在 y-up 上下文里的 `origin` 是**行盒左下角**，`CTLineDraw` 要基线 —— 换算成 `行盒高 − round(ascent)`，**不是** `round(descent)`：多数字号下两者相等，16pt 上不等（ascent 15.469 / descent 3.375 / 行盒 19 → 4 vs 3），写错就整条弹幕错位一个像素，而**不会让任何既有用例变红**。两行 `CTLine` 在 `displaying` 里**懒建 + `NSLock` 缓存**：`init` 跑在主线程、每条弹幕一次，两行约 52 µs 的主线程税不该付。
@@ -63,6 +74,13 @@
   - **实测额度**（`gh api .../actions/caches`）：仓库缓存已占 **8.56 GiB / 10 GB**，其中 **3 条 2.61 GiB 的僵尸 SPM 条目**只差 sha 尾缀（`Package.resolved` 哈希完全相同 `9dfe529d…`），内核 `erika-macOS-ARM64-v0.2.1` 0.736 GiB。改前每个 workflow 的条目几乎从不复用、且随时可能把内核缓存挤出去。
   - **修法**：主键去掉 `-${{ github.sha }}`，改为 `spm-test-v1-…` / `spm-release-v1-…`。**前缀是必需的而不是美化**：两个块缓存的是**不同路径**（`ci-test` vs `ci-release-test`），去掉 sha 后 key 会逐字相同、互相顶掉。`-v1-` 是留给将来的手动失效旋钮。内核那块本来就不带 sha、每次都命中，**不动**。
   - **取舍**：主键稳定 ⇒ 条目只在首次写入、之后不刷新，缓存会随提交变旧（未改动的依赖模块仍复用，收益从「冷构建」变成「增量构建」）。不选 `run_id` 滚动 key，是因为那会回到每次写一条 2.6 GiB、把额度打爆的老路。
+  - **⚠️ 落地后的实测更正（2026-10-17 晚，两个 PR 的 CI 数据）**：上面「条目回到每个 workflow 一条」这句话**在 PR 阶段并不成立** —— `actions/cache` 的条目**按 ref 作用域隔离**，PR 运行的 ref 是 `refs/pull/<n>/merge`，读不到别的 PR 写的条目。实测：
+    | 运行 | `Cache`（恢复） | `Post Cache`（保存） | 结果 |
+    |---|---|---|---|
+    | PR #28 首次 | 2 s（miss） | 76 s | 建出 `spm-test-v1-…` @ `refs/pull/28/merge` |
+    | PR #29 首次 | 1 s（miss） | 86 s | 又建一条**同 key** @ `refs/pull/29/merge` |
+    | 缓存现状 | — | — | 同 key 两条（2.603 + 2.602 GiB）+ 内核 0.736 = **5.94 GiB** |
+    准确的说法是：**同一 PR 内多次 push 会复用同一条**（改前每次 push 都新写一条，这才是主要收益），而**跨 PR 的复用要靠默认分支** —— 等 `main` 上跑出一次 `refs/heads/main` 的条目后，后续 PR 才能命中它并不再重复写。也就是说稳态「一条 + 内核」要**等一次 main 的 push 运行之后**才成立。
   - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）→ **已由下一批单独落地**，见下方「iOS 测试的 DerivedData 单独进缓存」条。
 
 - **iOS 测试的 DerivedData 单独进 CI 缓存**（性能审查清单 `BLD-02`）。

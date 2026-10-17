@@ -377,10 +377,21 @@ public enum BangumiMatcher {
         }
     }
 
+    /// 一次关键词检索。抽成参数只为**可测性**：失败路径（断网 / 服务端异常）在
+    /// 生产里无法稳定复现，而「全部失败时还要不要再发一轮」正是要靠用例钉住的判断。
+    /// 生产调用一律走默认值，行为与内联时逐字相同。
+    public typealias SubjectSearch = @Sendable (String, BangumiSubjectType?) async throws
+        -> BangumiPagedDTO<BangumiSlimSubjectDTO>
+
     /// 综合检索并根据打分器选出最佳条目。
+        // `@escaping`：下面并发搜索要把它交给 `withTaskGroup` 的 `addTask`。
     public static func searchAndPick(
         for item: MediaItem,
-        season: MediaItem? = nil
+        season: MediaItem? = nil,
+        search: @escaping SubjectSearch = { keyword, filter in
+            try await BangumiSubjectService.search(
+                keyword: keyword, filter: filter, limit: 30, offset: 0)
+        }
     ) async throws -> BangumiSlimSubjectDTO? {
         let seriesName = item.seriesName ?? item.name
         let seasonNumber = season?.seasonNumber ?? item.seasonNumber
@@ -425,6 +436,8 @@ public enum BangumiMatcher {
         var candidates: [BangumiSlimSubjectDTO] = []
         var seenIDs = Set<Int>()
         var lastError: (any Error)?
+        /// 第一轮里**真的到达了服务端**的请求数。见下面第二轮的守卫。
+        var succeededSearches = 0
 
         let trimmedKeywords = keywordsToTry
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -446,7 +459,7 @@ public enum BangumiMatcher {
         ) { group in
             for kw in trimmedKeywords {
                 group.addTask {
-                    do { return .success(try await BangumiSubjectService.search(keyword: kw, filter: .anime, limit: 30, offset: 0)) }
+                    do { return .success(try await search(kw, .anime)) }
                     catch { return .failure(error) }
                 }
             }
@@ -456,7 +469,9 @@ public enum BangumiMatcher {
         }
         for result in animePages {
             switch result {
-            case .success(let page): merge(page)
+            case .success(let page):
+                succeededSearches += 1
+                merge(page)
             case .failure(let error): lastError = error
             }
         }
@@ -471,13 +486,21 @@ public enum BangumiMatcher {
         }
 
         // 3. 若仍无候选条目（可能为三次元真人剧），放开类型过滤
-        if candidates.isEmpty {
+        //
+        // **但只有「至少有一个请求真的到达了服务端」才值得再发一轮**：第二轮用的是
+        // 同一批关键词、只把 filter 换成 nil，网关全挂 / 断网时它必然也全失败，唯一
+        // 效果是把等待翻倍（每轮 ≈ 关键词数 × 10 s 超时）。
+        //
+        // 判据取 `succeededSearches > 0` 而不是 `lastError == nil`：部分成功 + 部分
+        // 失败时 `lastError` 也非空，而那一轮放开类型过滤仍可能命中真人剧 —— 用后者
+        // 会把这种情形一起挡掉（`testPartialFailureStillAllowsTypeFilterRound` 守这条）。
+        if candidates.isEmpty, succeededSearches > 0 {
             let allPages = await withTaskGroup(
                 of: Result<BangumiPagedDTO<BangumiSlimSubjectDTO>, Error>.self
             ) { group in
                 for kw in trimmedKeywords {
                     group.addTask {
-                        do { return .success(try await BangumiSubjectService.search(keyword: kw, filter: nil, limit: 30, offset: 0)) }
+                        do { return .success(try await search(kw, nil)) }
                         catch { return .failure(error) }
                     }
                 }
