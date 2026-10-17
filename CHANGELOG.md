@@ -56,6 +56,13 @@
   - **一条必须说清的边界（比原判更精确）**：发版 `.app` 本体**并未被 strip**（`LC_SYMTAB` 有 652 580 条符号），所以**函数名**本来就能从公开的 app 二进制里解出来；真正缺的是 **DWARF** —— 发版二进制 `otool -l` 里 **0 个 debug 节**，`dwarfdump --lookup` 直读为空。也就是说：**行号、内联帧与源码位置此前完全拿不到**，而这正是定位崩溃的关键；而且唯一可用的符号来源是随包公开的二进制，一旦将来对 `.app` 做 strip（`COPY_PHASE_STRIP=YES`）就彻底归零。dSYM 是标准且与 UUID 绑定，补上它才算真正可查。
   - **验证入口**：`bash -n Scripts/package-macos.sh Scripts/package-ios.sh`；`SKIP_ERIKA_FETCH=1 Scripts/package-macos.sh v0.0.0-dsymtest` 后 `ls dist/*.dSYM.zip` + `dwarfdump --uuid` 比对 + `shasum -a 256 -c SHA256SUMS.txt`。
 
+- **CI 缓存 key 去掉 `github.sha`，并给两个 workflow 各自加前缀**（性能审查清单 `BLD-04`）。
+  - **现象**：`test.yml` 与 `release.yml` 的 `actions/cache` 主键都是 `spm-<os>-<Package.resolved 哈希>-<github.sha>`。带 sha 意味着**只有同一次 run 重跑才命中**，每个 PR 都 miss（靠 `restore-keys` 前缀回退拿到上一版快照），但 `Post Cache` 每次照样 save 一条新条目（实测每 run 白花 67–110 s 上传）。
+  - **实测额度**（`gh api .../actions/caches`）：仓库缓存已占 **8.56 GiB / 10 GB**，其中 **3 条 2.61 GiB 的僵尸 SPM 条目**只差 sha 尾缀（`Package.resolved` 哈希完全相同 `9dfe529d…`），内核 `erika-macOS-ARM64-v0.2.1` 0.736 GiB。改前每个 workflow 的条目几乎从不复用、且随时可能把内核缓存挤出去。
+  - **修法**：主键去掉 `-${{ github.sha }}`，改为 `spm-test-v1-…` / `spm-release-v1-…`。**前缀是必需的而不是美化**：两个块缓存的是**不同路径**（`ci-test` vs `ci-release-test`），去掉 sha 后 key 会逐字相同、互相顶掉。`-v1-` 是留给将来的手动失效旋钮。内核那块本来就不带 sha、每次都命中，**不动**。
+  - **取舍**：主键稳定 ⇒ 条目只在首次写入、之后不刷新，缓存会随提交变旧（未改动的依赖模块仍复用，收益从「冷构建」变成「增量构建」）。不选 `run_id` 滚动 key，是因为那会回到每次写一条 2.6 GiB、把额度打爆的老路。
+  - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。

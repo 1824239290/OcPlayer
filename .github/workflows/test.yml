@@ -39,16 +39,20 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
+      # key **不要**带 github.sha：那样只有「同一次 run 重跑」才命中，每个 PR 都 miss
+      # 却照样 save 一条 2.6 GiB 快照，把 10 GB 仓库额度打成 LRU 抖动（实测曾同时躺着
+      # 3 条只差 sha 的僵尸条目）。去掉 sha 后主键稳定命中，条目回到每个 workflow 一条。
+      # 前缀 `spm-test-` 是必需的：release.yml 那个块缓存的是**不同路径**
+      # （ci-release-test），两边 key 若逐字相同会互相顶掉。`-v1-` 是留给将来的失效旋钮。
       - name: Cache SwiftPM builds
         uses: actions/cache@v4
         with:
           path: |
             .local-build/ci-test
             Packages/*/.build
-          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+          key: spm-test-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-
-            spm-${{ runner.os }}-
+            spm-test-v1-${{ runner.os }}-
 
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
       # 渲染集成测试在 SPM 包内，下面单独跑。
