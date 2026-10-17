@@ -71,20 +71,20 @@
   - **本地实测**（同一个 `-derivedDataPath`，`-scheme OcPlayer-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build-for-testing`）：**冷建 116 s → 增量 14 s**（改 `PlaybackController.swift` + `StorageMaintenance.swift` 两个真源文件，日志里确有这两条 `SwiftCompile`）；只把 mtime 摸一下则是 15 s（Xcode 用**内容签名**判定增量，不是 mtime —— 所以 CI 每次全新 checkout 也不会因此全量重编）。缓存体积 **1.9 GB** = `Build` 1.0 G + `SourcePackages` 556 M + `ModuleCache`/`Index` 275 M。
   - **额度算术**：先删掉两条僵尸条目（见上一条的 ref 作用域说明；`refs/pull/28/merge` 与 `refs/pull/29/merge` 各 2.6 GiB，key 与 `refs/heads/main` 那条逐字相同）→ **8.54 GiB → 3.34 GiB**；新条目 +1.9 GB ⇒ **5.24 GiB / 10 GB**。稳态就是「main 的 SPM 条目 + main 的 iOS 条目 + 内核」= 5.24 GiB（PR 从默认分支恢复、精确命中不再新写）。
   - **预期收益**：iOS 步 627 s → 约 330 s（省掉解析 57 s + 编译 403 s，换回恢复 ~60 s + 增量编译 ~50 s，按 runner 与增量比 3.4× 折算）。判据是「重跑同一次运行拿到同机同码 A/B」，未到即为空口。
-  - **✅ 同码 A/B 实测**（PR #30 的三次运行：attempt 1 冷缓存、attempt 2/3 均命中，同一 commit、同一 runner）：
-    | 阶段（iOS 步内部） | att 1（miss） | att 2（命中） | att 3（命中） |
-    |---|---|---|---|
-    | 解析 Package Graph | 48 s | 20 s | 4 s |
-    | **编译（resolve → `builtin-validationUtility`）** | **211 s** | **81 s** | **78 s** |
-    | **模拟器启动 + 装机（→ 首条 App 日志）** | **185 s** | **162 s** | **331 s** |
-    | 用例（`All tests`） | 106 s | 114 s | 109 s |
-    | **iOS 步总计** | **511 s** | **377 s** | **534 s** |
-    | job 总计 | 1030 s | 904 s | 1066 s |
+  - **✅ 同码 A/B 实测**（PR #30 的**四次**运行：att 1 冷缓存、att 2/3/4 均命中；同一 commit、同一 runner）：
+    | 阶段（iOS 步内部） | att1（miss） | att2（命中） | att3（命中） | att4（命中） |
+    |---|---|---|---|---|
+    | 解析 Package Graph | 7 s | 6 s | 4 s | 7 s |
+    | **编译**（resolve → `builtin-validationUtility`） | **211 s** | **81 s** | **78 s** | **91 s** |
+    | **模拟器启动 + 装机**（→ 首条 App 日志） | 185 s | 162 s | **331 s** | 181 s |
+    | 用例（`All tests`） | 106 s | 114 s | 109 s | 109 s |
+    | iOS 步总计 | 511 s | 377 s | 534 s | 388 s |
     **结论要分开说，别混在一起：**
-    - **编译阶段稳定省下约 130 s**（211 s → 78–81 s，两次命中几乎逐秒一致）。这是本条的**真实收益**，与「依赖模块完全复用」互相印证（冷缓存时 `JellyfinAPI` 29 个 / `GRDB` 7 个 / `swift-nio` 系若干文件重编，命中后只剩 41 个 App 侧文件）。
-    - **步总耗时 / job 总耗时不能用这三次来算** —— 中间那段 **162–331 s 的「模拟器启动 + 装机」是纯噪声**，波动 ±170 s，比缓存收益还大。attempt 3 缓存命中却比冷启动还慢（534 s vs 511 s），就是被这段拖的。**这正是审查清单原文说的「iOS 步 462 s ↔ 627 s 的波动比缓存收益还大」，现在查清了机制：波动不在编译，在模拟器启动。**
-    - 所以准确的口径是：**每 job 稳定省 ~130 s 编译 + ~28 s 解析 ≈ 2.6 分钟**；而 iOS 步的总时长会继续在 ~380–540 s 之间跳，取决于当次 runner 的模拟器冷启速度。
-  - **由这条带出的新条目（`BLD-08`，未修）**：iOS 那 162–331 s 的**模拟器启动/装机是无人管的一段**，既没有缓存也没有预算。它才是 iOS 步波动的主因，也是下一刀要切的地方（候选：`xcrun simctl boot` + `bootstatus` 预热、或换 `-destination 'platform=iOS Simulator,id=…'` 避免机型解析）。本轮**不做**：它与缓存无关，属另一条线。
+    - **编译阶段稳定省 ~125 s**（211 s → 78–91 s，三次命中分别是 81 / 78 / 91 s）。这是本条的**真实收益**，与「依赖模块完全复用」互相印证（冷缓存时 `JellyfinAPI` 29 个 / `GRDB` 7 个 / `swift-nio` 系若干文件重编，命中后只剩 41 个 App 侧文件）。
+    - **步总 / job 总不能用这些数算** —— 中间那段「模拟器启动 + 装机」在 **162 / 181 / 331 s** 之间跳，att3 的 331 s 是离群点（**±170 s**），比缓存收益还大。att3 命中缓存却比冷启动还慢（534 s vs 511 s）就是被它拖的。**这正是审查清单原文说的「iOS 步 462 s ↔ 627 s 的波动比缓存收益还大」，现在查清了机制：波动不在编译，在模拟器启动。**
+    - 准确口径：**每 job 稳定省 ~125 s**（编译），步总仍会在 ~380–540 s 之间跳，取决于当次 runner 的模拟器冷启速度。
+  - **由这条带出的新条目（`BLD-08`，未修）**：模拟器启动/装机那 162–331 s **既没缓存也没有预算**，是 iOS 步波动的主因，也是下一刀要切的地方（候选：`xcrun simctl boot` + `simctl bootstatus -b` 预热、或用 `-destination 'platform=iOS Simulator,id=…'` 跳过机型解析）。本轮**不做**：与缓存无关，属另一条线。
+  - **⚠️ 一条被自己推翻的错误结论（如实记）**：第一版把「iOS 步 511 → 377 s」当成了缓存收益、还写进了 PR 评论。第三次运行（同样命中，却 534 s）推翻了它。把 iOS 步按四段切开才看清：**收益在编译、噪声在模拟器启动**。教训是**同码 A/B 至少要两次命中运行**才能把噪声和收益分开，只看一次会得出反的答案。PR 里已发更正评论。
   - **一条没做到位的地方（如实记）**：命中后仍有 **41 个文件的 `SwiftCompile`**（冷缓存是 120 个），编译没有全量命中。本机同根实测的增量只要 14 s，说明 CI 侧还有别的东西在让 fingerprint 失效（**未定位**）。再往下压编译得先查这个，属下一轮的活。
   - **验证入口**：`ruby -ryaml -e 'YAML.load_file(".github/workflows/test.yml")'`（并确认 `gh api .../actions/workflows` 里 Test 仍是 `active` —— YAML 写坏会变 `disabled_invalid`）；A/B 见上表。
 
