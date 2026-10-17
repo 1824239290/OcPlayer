@@ -8,6 +8,11 @@ import Foundation
 /// 维护只看这张清单，没登记的目录等于不存在：不会被清理、体积也不可见。
 /// `Bangumi.sqlite` 就是这么漏掉的（自引入起从未纳入，见 S0 修复）；
 /// 新增落盘时请同时做「取路径 + 登记」两件事。
+///
+/// ⚠️ 例外：**可再生缓存不进这张清单**。图片字节 / URL 响应住
+/// `OcPlayerStorage.cachesRoot`（`Caches/OcPlayer`），由各自的容量上限自管
+/// （`URLCache` 512 MB + `ImageBlobStore` 256 MB），系统也能整目录回收；
+/// 登记进来反而会被这里「按最旧优先淘汰」的维护器当普通文件处理。
 enum AppStorageDirectories {
     /// 根目录（`Application Support/OcPlayer`）。
     static let root = OcPlayerStorage.defaultRoot
@@ -15,8 +20,6 @@ enum AppStorageDirectories {
     static let screenshots = URL.picturesDirectory
         .appending(path: OcPlayerStorage.directoryName, directoryHint: .isDirectory)
     static let danmaku = OcPlayerStorage.directory("Danmaku")
-    /// 图片字节缓存（`ImagePipeline` 的 URLCache 落盘位置）。
-    static let imageCache = OcPlayerStorage.directory("ImageCache")
     /// 本地数据库。**不是普通缓存**：进度/关联/元数据都不能随手删，
     /// 所以它们只参与「体积上报」，不进 `ManagedDirectoryPruner` 的删除路径。
     static let databaseFileNames = ["Bangumi.sqlite", "Media.sqlite"]

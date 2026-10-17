@@ -1376,16 +1376,22 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func skip(by seconds: Double) {
         guard let engine else { return }
-        var target = Double(state.position.microseconds) + seconds * 1_000_000
+        // 落点统一到「秒」口径再钳：`position` 是 µs，而 `duration` 与
+        // `clampedBeforeEnd` 都是秒。混用过一次——`target` 还是 µs 就被当成秒
+        // 去跟「片长 − 3s」取 min，于是**每一次** ±10s 都落到片长 − 3s
+        // （2026-10-17 实机：duration=1426s、位置 540.749s，按后退 10 秒，
+        // 日志 `kind=skip from_ms=540749 to_ms=1423450`，进度条直接跳结尾）。
+        var target = Double(state.position.microseconds) / 1_000_000 + seconds
         // 别越过片长：seek 到 EOF 之后内核会进「audio output stalled at EOF」
         // 错误风暴（逐帧重发 .failed，实测一次刷了 6302 条），画面冻结假死。
         // 边际口径见 endOfFileMarginSeconds。
         if state.duration > .zero {
             let duration = Double(state.duration.microseconds) / 1_000_000
-            target = Self.clampedBeforeEnd(target, duration: duration) * 1_000_000
+            target = Self.clampedBeforeEnd(target, duration: duration)
         }
-        recordSeek(toSeconds: max(0, target) / 1_000_000, kind: "skip")
-        try? engine.seek(to: .microseconds(Int64(max(0, target))))
+        let landing = max(0, target)
+        recordSeek(toSeconds: landing, kind: "skip")
+        try? engine.seek(to: .seconds(landing))
     }
 
     /// 视为用户主动意图的 seek 类型（片头学习数据源）。auto（跳过按钮）与

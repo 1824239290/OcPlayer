@@ -54,6 +54,10 @@ fi
 ZIP_PATH="$DIST_DIR/$ARTIFACT_BASE.zip"
 DMG_PATH="$DIST_DIR/$ARTIFACT_BASE.dmg"
 CHECKSUM_PATH="$DIST_DIR/SHA256SUMS.txt"
+# 符号单独成一个资产，不塞进 app zip：普通用户下载体积不变，需要符号的人多下一个文件。
+# 缺了 dSYM 的后果是「所有用户崩溃日志永远无法符号化」，所以下面既有硬断言、也进发布资产。
+DSYM_PATH="$BUILD_ROOT/DerivedData/Build/Products/Release/$APP_NAME.app.dSYM"
+DSYM_ZIP_PATH="$DIST_DIR/$ARTIFACT_BASE.dSYM.zip"
 
 if [[ "$RELEASE_TAG" =~ ^v?([0-9]+\.[0-9]+\.[0-9]+)([-+][A-Za-z0-9.-]+)?$ ]]; then
     MARKETING_VERSION="${BASH_REMATCH[1]}"
@@ -76,8 +80,11 @@ else
 fi
 
 mkdir -p "$BUILD_ROOT" "$DIST_DIR"
-rm -f "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"
+rm -f "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH" "$DSYM_ZIP_PATH"
 
+# ⚠️ 不要在这里传 `DEBUG_INFORMATION_FORMAT`：工程 Release 配置就是 `dwarf-with-dsym`，
+# 历史上这里写过 `DEBUG_INFORMATION_FORMAT=dwarf`，把符号从发版产物里抹掉了 ——
+# 结果所有用户的崩溃日志都无法符号化，而构建本身一切正常，没有任何报错。
 xcodebuild \
     -project "$ROOT/OcPlayer.xcodeproj" \
     -scheme "$SCHEME" \
@@ -87,7 +94,6 @@ xcodebuild \
     ARCHS=arm64 \
     ONLY_ACTIVE_ARCH=NO \
     CODE_SIGNING_ALLOWED=NO \
-    DEBUG_INFORMATION_FORMAT=dwarf \
     MARKETING_VERSION="$MARKETING_VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     GIT_COMMIT_HASH="$GIT_INFO" \
@@ -96,6 +102,11 @@ xcodebuild \
 APP_PATH="$BUILD_ROOT/DerivedData/Build/Products/Release/$APP_NAME.app"
 if [[ ! -d "$APP_PATH" ]]; then
     echo "Build succeeded but $APP_PATH was not produced" >&2
+    exit 1
+fi
+# 发版不带符号 = 用户崩溃日志永远查不了。构建能过、包也能发，所以必须在这里钉死。
+if [[ ! -d "$DSYM_PATH" ]]; then
+    echo "Build succeeded but no dSYM at $DSYM_PATH (release symbols would be lost)" >&2
     exit 1
 fi
 
@@ -220,6 +231,7 @@ codesign --force --sign - "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$DSYM_PATH" "$DSYM_ZIP_PATH"
 
 DMG_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/ocplayer-dmg.XXXXXX")"
 trap 'rm -rf "$DMG_STAGE"' EXIT
@@ -234,8 +246,8 @@ hdiutil create \
 
 (
     cd "$DIST_DIR"
-    shasum -a 256 "$(basename "$ZIP_PATH")" "$(basename "$DMG_PATH")" > "$(basename "$CHECKSUM_PATH")"
+    shasum -a 256 "$(basename "$ZIP_PATH")" "$(basename "$DMG_PATH")" "$(basename "$DSYM_ZIP_PATH")" > "$(basename "$CHECKSUM_PATH")"
 )
 
 echo "Release artifacts (v$MARKETING_VERSION Build $BUILD_NUMBER · $GIT_INFO):"
-printf '  %s\n' "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"
+printf '  %s\n' "$ZIP_PATH" "$DMG_PATH" "$DSYM_ZIP_PATH" "$CHECKSUM_PATH"

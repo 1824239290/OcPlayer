@@ -121,7 +121,9 @@ enum ImageCacheIdentityStore {
 
     /// 只读扫一遍图片缓存目录里的 URL 缓存库。
     static func scanURLCacheForIdentities() -> Set<String> {
-        let directory = OcPlayerStorage.directory("ImageCache")
+        // 缓存已从 `Application Support` 搬到 `Caches`，这里必须跟着走，
+        // 否则扫的是一个永远不存在的目录（空结果 = 登录页海报墙退化成程序化封面）。
+        let directory = OcPlayerStorage.cacheDirectory("ImageCache")
         var found: Set<String> = []
         // `-wal` 里可能躺着还没并回主库的新记录，两个都看。
         for name in ["Cache.db", "Cache.db-wal"] {

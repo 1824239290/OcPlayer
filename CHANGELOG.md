@@ -6,6 +6,8 @@
 
 ### 修复
 
+- **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。
+
 - **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。
   - **现象**：`AppTests` 跑在 **App 宿主进程**里（`TEST_HOST = OcPlayer.app`），宿主照常装配真实存储与真实偏好 —— 跑完一次 macOS 全量用例，`~/Library/Application Support/OcPlayer/` 下 `credentials.json`、`Media.sqlite-wal`、`Bangumi.sqlite-wal` 与真实偏好 plist 的 mtime 全落在测试窗口内。逐键比对确认凭据**内容没坏**（只是 JSON 键序被重排），但一个会写开发机凭据文件的测试套件迟早会把它写坏。
   - **开关**：环境变量 `OCPLAYER_ISOLATED_STORAGE=1`，收在 `OcPlayerStorage.isIsolated`。打开后存储根 → `临时目录/OcPlayerAutomation`（凭据 / 各 sqlite / 图片缓存 / 弹幕 / 字幕），App 偏好默认域 → 隔离根下的独立 plist（`UserDefaults(suiteName:)` 认「像路径的名字」，于是也不在 `~/Library/Preferences` 留垃圾）。生产不设它 → 默认域仍是 `.standard`，行为零变化。
@@ -46,6 +48,32 @@
   - **Jellyfin / Emby 的退避等待不再吞取消**：`try? await Task.sleep(...)` 会把 `CancellationError` 吞掉，循环继续走到下一次 attempt —— 退避被整个跳过（0 延迟立刻重发），调用方明明已经不要了却仍多推一格失败序列。两处对齐共享实现 `RetryPolicy.run` 的写法（改 `try await`）。
   - **设置页「图片缓存」用量统计挪出主线程**：`ImagePipeline.shared.diskUsage` 是**目录内每文件一次 stat + 全量排序**，512 MB 上限下可有数千个小文件，留在主线程就是进页卡顿（冷目录几十~几百 ms）。与同页「导出诊断包」「清空图片缓存」一致改走后台，回主 actor 只赋字符串。
   - **验证**：本批**不改行为语义**（等价重算、少一次系统调用、后台化），唯一有输出差异的是 macOS 弹幕描边的圆环近似 —— 由 `OverlayDanmakuCellRenderTests` 的逐像素 / 加墨量对照守住。实跑：`OcPlayer-macOS` scheme **578 通过 / 0 失败 / 18 跳过**（含上面三个新用例文件）、`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、被改动的 7 个包（AppDesignKit / DiagnosticsKit / DanmakuKit / JellyfinKit / BangumiKit / MetadataKit / MoviePilotKit）各自套件通过。
+
+### 构建 / 发布
+
+- **发版产物重新带上 dSYM（否则崩溃日志永远查不出东西）**（性能审查清单 `CORR-01`）。
+  - **现象**：`package-macos.sh` 与 `package-ios.sh` 都在 `xcodebuild` 命令行覆盖了工程设置 `DEBUG_INFORMATION_FORMAT=dwarf`，而工程 Release 配置本来就是 `dwarf-with-dsym`（`project.pbxproj` 的 `1A0000000000000000000006` 块）—— 覆盖把符号从发版产物里抹掉了。**而且光删覆盖还不够**：两个脚本从头到尾没有任何收集 `.dSYM` 的动作，符号只留在 `DerivedData` 里，`dist/` 拿不到，`release.yml` 又只上传 `dist/*`，所以发布资产里根本没有符号。
+  - **修法**：① 删掉两处命令行覆盖，并在原位置留注释说明「不要再传这个设置」；② 把 `.dSYM` 打成独立资产（`$ARTIFACT_BASE.dSYM.zip`）放进 `dist/` —— 普通用户下载体积不变，需要符号的人多下一个文件；③ 加**硬断言**：`APP_PATH` 存在但 `.dSYM` 缺失就 `exit 1`。这一条是有意为之 —— 缺符号时构建一切正常、包也能发，**没有任何报错**，不钉死就会再次静默退化。`release.yml` 不需要改（`gh release upload dist/*` 会把新资产自动带上）。
+  - **实测**（本机 Release 打包，`v0.0.0-dsymtest`）：UUID 逐字符一致 `FDAF2C22-0EA3-387F-A6DC-F418E0B34A9F`（app ↔ dSYM）；dSYM zip 35 MB、内含 138 MB 未压缩 DWARF，`DW_AT_linkage_name` **194 200 条**、编译单元带源码路径与语句表；`atos` 能把真实地址解成 `main (in OcPlayer) (OcPlayerApp.swift:0)` 与 `partial apply for closure #4 in DanmakuSelectionSheet.body.getter`；`shasum -a 256 -c` 三项全 OK。
+  - **一条必须说清的边界（比原判更精确）**：发版 `.app` 本体**并未被 strip**（`LC_SYMTAB` 有 652 580 条符号），所以**函数名**本来就能从公开的 app 二进制里解出来；真正缺的是 **DWARF** —— 发版二进制 `otool -l` 里 **0 个 debug 节**，`dwarfdump --lookup` 直读为空。也就是说：**行号、内联帧与源码位置此前完全拿不到**，而这正是定位崩溃的关键；而且唯一可用的符号来源是随包公开的二进制，一旦将来对 `.app` 做 strip（`COPY_PHASE_STRIP=YES`）就彻底归零。dSYM 是标准且与 UUID 绑定，补上它才算真正可查。
+  - **验证入口**：`bash -n Scripts/package-macos.sh Scripts/package-ios.sh`；`SKIP_ERIKA_FETCH=1 Scripts/package-macos.sh v0.0.0-dsymtest` 后 `ls dist/*.dSYM.zip` + `dwarfdump --uuid` 比对 + `shasum -a 256 -c SHA256SUMS.txt`。
+
+- **CI 缓存 key 去掉 `github.sha`，并给两个 workflow 各自加前缀**（性能审查清单 `BLD-04`）。
+  - **现象**：`test.yml` 与 `release.yml` 的 `actions/cache` 主键都是 `spm-<os>-<Package.resolved 哈希>-<github.sha>`。带 sha 意味着**只有同一次 run 重跑才命中**，每个 PR 都 miss（靠 `restore-keys` 前缀回退拿到上一版快照），但 `Post Cache` 每次照样 save 一条新条目（实测每 run 白花 67–110 s 上传）。
+  - **实测额度**（`gh api .../actions/caches`）：仓库缓存已占 **8.56 GiB / 10 GB**，其中 **3 条 2.61 GiB 的僵尸 SPM 条目**只差 sha 尾缀（`Package.resolved` 哈希完全相同 `9dfe529d…`），内核 `erika-macOS-ARM64-v0.2.1` 0.736 GiB。改前每个 workflow 的条目几乎从不复用、且随时可能把内核缓存挤出去。
+  - **修法**：主键去掉 `-${{ github.sha }}`，改为 `spm-test-v1-…` / `spm-release-v1-…`。**前缀是必需的而不是美化**：两个块缓存的是**不同路径**（`ci-test` vs `ci-release-test`），去掉 sha 后 key 会逐字相同、互相顶掉。`-v1-` 是留给将来的手动失效旋钮。内核那块本来就不带 sha、每次都命中，**不动**。
+  - **取舍**：主键稳定 ⇒ 条目只在首次写入、之后不刷新，缓存会随提交变旧（未改动的依赖模块仍复用，收益从「冷构建」变成「增量构建」）。不选 `run_id` 滚动 key，是因为那会回到每次写一条 2.6 GiB、把额度打爆的老路。
+  - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）。
+
+### 修复
+
+- **可再生的图片缓存搬出 `Application Support`，进 `Caches`**（性能审查清单 `CORR-02`）。
+  - **现象**：`OcPlayerStorage.defaultRoot` 是 `Application Support/OcPlayer`（类型注释明说「iOS 上该目录不参与系统清理」——这对凭据/进度是对的），但 `ImagePipeline` 把两套**可再生**的图片缓存也放在这个根下：512 MB 的 `URLCache`（`Cache.db`）与 256 MB 的字节缓存（`Blobs/`），**上限相加 768 MB**，本机实测已到 **370 MB**。后果三条：① iOS 上进 iCloud 备份（用户备份里带上几百 MB 重下即可获得的海报字节）；② 系统存储吃紧时**不会被回收**（`Caches` 才会）；③ 与真实会话峰值 RSS 435 MB 叠加。全仓唯一设了 `isExcludedFromBackup` 的地方是**凭据文件**。
+  - **修法**：不改 `defaultRoot`（它的定位是对的），而是给可再生数据开一条**并行入口** —— 新增 `OcPlayerStorage.cachesRoot`（`Caches/OcPlayer`）与 `cacheDirectory(_:in:)`，与 `directory(_:in:)` 对称，并在类型注释里把「用户数据 vs 可再生缓存」的分工写成表格。**必须沿用隔离机制**：`isIsolated` 时落到 `isolationRoot/Caches`，否则跑一次测试就会写开发机真实的 `~/Library/Caches`。落盘点只改两行（`ImagePipeline` 的 URLCache 目录与 `Blobs/` 父目录）；`ImageCacheIdentityStore` 的复原扫描跟着搬（它读的是同一份 `Cache.db`，不跟就是扫一个永不存在的目录）；删掉 `AppStorageDirectories.imageCache`（已核实声明了但**全仓零引用**）。
+  - **一次性清理旧目录**：搬家后旧目录既不会被读、又继续占着备份额度，所以首次启动删掉（marker `…imageCache.cachesRootV1`，与同文件另两个迁移同形）。删除前过**四道闸门**（末段必须叫 `ImageCache` / 父目录必须是数据根 / `legacy != current` 防参数写反删掉新目录 / 目标确实存在），抽成纯函数 `shouldRemoveLegacyImageCache` 逐条正反向钉死 —— 这是一条 `removeItem`，判据错了就是删用户真正的缓存。
+  - **顺带修掉一个真实事故**：这条迁移把「一次性迁移在测试进程里跑」从一个隐患变成了破坏 —— `ImageDecoderTests` 会读 `ImagePipeline.shared`（= 默认目录），于是跑一遍 `swift test --package-path Packages/AppDesignKit` 就**真的删掉了开发机 370 MB 的旧缓存**（实测发生）。新增 `shouldRunOneTimeMigrations(cacheDirectory:)`：注入目录的调用方不跑，且**测试进程一律不跑**（`RuntimeEnvironment.isRunningTests` 同时覆盖 `xcodebuild test` 与 `swift test`），并加用例把这条回护钉死。原有的两个迁移同样受这条守卫保护。
+  - **实测**：`DiagnosticsKit` 69 条、`AppDesignKit` 127 条（新增 6 + 9 条）全绿；macOS Debug 构建通过；端到端跑真 App —— 造出旧目录 + 清标记后启动，**旧目录被删、新目录建出并真的缓存了 25 张图（18 MB）**，迁移标记落位为 `1`。
+  - **代价（有意接受）**：升级后首次启动图片缓存**冷一次**（按需重下），与仓库既有两次缓存键迁移同一取舍；旧 `Cache.db` 被删后「从旧缓存捞回历史身份」对旧字节失去意义，但那些字节本来也一起删了。
 
 ### 改动
 

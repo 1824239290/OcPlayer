@@ -72,16 +72,17 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
+      # 同 test.yml：key 去掉 github.sha，并用 `spm-release-` 前缀与 test.yml 的块区分
+      # （两者缓存路径不同，key 相同会互相顶掉）。
       - name: Cache SwiftPM builds
         uses: actions/cache@v4
         with:
           path: |
             .local-build/ci-release-test
             Packages/*/.build
-          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+          key: spm-release-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}-
-            spm-${{ runner.os }}-
+            spm-release-v1-${{ runner.os }}-
 
       - name: Run App tests (macOS scheme)
         shell: bash
