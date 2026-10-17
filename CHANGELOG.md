@@ -60,6 +60,27 @@
   - **设置页「图片缓存」用量统计挪出主线程**：`ImagePipeline.shared.diskUsage` 是**目录内每文件一次 stat + 全量排序**，512 MB 上限下可有数千个小文件，留在主线程就是进页卡顿（冷目录几十~几百 ms）。与同页「导出诊断包」「清空图片缓存」一致改走后台，回主 actor 只赋字符串。
   - **验证**：本批**不改行为语义**（等价重算、少一次系统调用、后台化），唯一有输出差异的是 macOS 弹幕描边的圆环近似 —— 由 `OverlayDanmakuCellRenderTests` 的逐像素 / 加墨量对照守住。实跑：`OcPlayer-macOS` scheme **578 通过 / 0 失败 / 18 跳过**（含上面三个新用例文件）、`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、被改动的 7 个包（AppDesignKit / DiagnosticsKit / DanmakuKit / JellyfinKit / BangumiKit / MetadataKit / MoviePilotKit）各自套件通过。
 
+- **内核逐帧失败日志不再占着渲染主锁；`poll_event` 失败补上节流**（性能审查清单 `P1-17`）。
+  - **现象**：`ErikaEngine.step()` 持有一把主锁（UI 的 `play` / `pause` / `seek` / `tracks` 全在这把锁上等），而 4 处逐帧失败日志就打在 `lock.lock()` 与 `lock.unlock()` **之间**。一条 error 日志的成本 = 字符串插值 + `DiagnosticRedactor.redact` 6 趟正则 × 3 段（消息 / subsystem / category）+ OSLog 提交 + 入队，实测 **46.8 µs/条**（`emitToOSLog: false`，故为**下界**）。内核错误态下 60 Hz 就是**每秒 2.8 ms 全持锁**，等锁的 UI 直查跟着一起卡。
+  - **`poll_event` 完全没有节流**：同一函数的 `.renderTick` 失败早在 `renderThrottle`（1 s）里，`.pollEvent` 失败却是裸调用。`PlayerState.apply(.failed)` 那边已按 `code|message` 去重（注释记着「一次 EOF stall 刷了 6302 条」）—— 同类问题在 App 侧修过，**引擎侧这条被漏掉了**。这也说明 `.failed` 事件本身不会二次放大，要处理的只是日志。
+  - **修法**：锁内只攒纯 enum（`RenderFailure`），落盘统一挪到 `lock.unlock()` 之后（`emitFailures`）。**消息文本逐字节不变**，顺序仍在 `.failed` 事件 `yield` 之前，时间线与改动前一致。`poll_event` 加 1 s 节流，键 `poll-failure` —— **必须与 `render-failure` 不同键**：同键上谁先到谁就占住那 1 s 窗口、另一条被整段压掉，而内核同时坏 render 与 poll 时恰恰是最需要两种证据都在的时候。
+  - **一条有意保留的例外**：`captureMemorySnapshotLocked()` 里那条 `PlaybackLog.error` 仍在锁内。它被 `memorySampleFailed` 门控，**一次会话最多一条**（不是热路径）；挪出去要把错误从采样函数里递出来、连带改 `open` / `stop` / `step` 三个调用点，收益与改动不成比例。已在注释里写明是**例外不是遗漏**。
+  - **顺带记一个不改的东西**：`.failed` 风暴期间渲染档位**不降** —— `renderLoop.setTier` 只认 `.stateChanged`，`.failed` 反复而 `.stateChanged(.error)` 未到的窗口里渲染线程仍按 `active` 满速跑。这正是「逐帧一条」得以成立的前提。**本轮只记录不改**：改档位等于改渲染行为，风险不对等。
+  - **⚠️ 没有红 → 绿**：`step()` 由渲染线程的 `CADisplayLink` 驱动、是 `private`，而构造 `ErikaPresenter` 需要真内核与 Metal —— 全仓没有任何运行时用例能覆盖它（驱动 `ErikaEngine` 的测试只碰 `open()` / `audioOnlyTick()` 这类同步入口）。新增的 `RenderFailureLogTests`（11 条）钉的是**契约**：哪种失败落哪条消息、带哪个节流键。这两件事改错了**不会有任何现象**，只能靠断言钉住。
+  - **验证**：`swift test --package-path Packages/ErikaKit`（本机带真内核、不加 `--skip`）**64 个 swift-testing + 28 个 XCTest 全绿**；CI 口径（7 个 `--skip`）同样全绿。
+
+- **诊断日志的常量脱敏从「每条记录」改成「`init` 一次」**（本轮新记 `P2-39`）。
+  - **现象**：`DiagnosticLogger.submit` 每条记录都对 `subsystem` 与 `category` 各跑一遍 `DiagnosticRedactor.redact`（各 6 趟正则）。而这两个都是**不可变常量**，`redact` 又是纯函数 —— 纯浪费。实测这两段合计 **15.4 µs/条，占单条日志 46.8 µs 的 33%**。
+  - **修法**：`init` 里各算一次存成 `redactedSubsystem` / `redactedCategory`，`submit` 直接用。**输出逐字节相同**；OSLog 那一侧仍用原始值（`Logger(subsystem:category:)` 不动）。
+  - **实测**（2000 次 × 5 轮取均值）：单条 error 日志 **46.8 µs → 29.9 µs（−36%）**。口径同上，`emitToOSLog: false` 是下界，生产还多一次 OSLog 提交。
+  - **验证**：新增 `testSubsystemAndCategoryAreRedacted` 钉住不变式 —— 谁要是为了省事直接写原始常量，含用户路径的 `subsystem` 就会漏进日志。`DiagnosticsKit` **70 条全绿**（原 69 + 1）。
+
+- **播放日志的节流抑制计数终于能落盘**（本轮新记正确性项 `CORR-09`）。
+  - **现象**：`PlaybackLog.flush()` 全仓**只有定义、没有调用点**。App 退出时只调 `AppDiagnostics.flush(timeout:)`，而抑制计数存在**各自的** `DiagnosticLogger` 实例里（两个实例共用同一个文件 backend，但 `throttles` 各一份）。于是 Playback 侧所有节流键的 `suppressed=N` **一直是丢的** —— 「`render_tick` 失败了多少次」查不到，只看得到首条。
+  - **为什么本批必须先修它**：上面刚给 `poll_event` 加的节流，如果汇总落不了盘，等于把 59/60 的证据悄悄扔掉、只留一条「又失败了」。
+  - **修法**：`PlaybackLog` 加 `flush(timeout:)`（有界版，供进程终止路径用；原无界 `flush()` 保留并注明「终止路径别用」）。macOS 退出（`OcPlayerApp.terminationHandler`）与 iOS `willTerminate`（`RootView`）各补一行调用，沿用既有的有界等待写法，**不新增阻塞风险**。
+  - **一条更实在的害处（同一批测量顺带算出）**：单条记录 **264 B**，错误风暴 60 条/秒时填满 `maxFileBytes` 20 MB 只要 **22.1 分钟**、填满 `maxTotalBytes` 50 MB 只要 **55.2 分钟** —— 也就是「故障前那段有用历史」会被风暴在一个小时内整段轮转掉。节流 + 计数落盘正好把这条堵上。
+
 ### 构建 / 发布
 
 - **发版产物重新带上 dSYM（否则崩溃日志永远查不出东西）**（性能审查清单 `CORR-01`）。
