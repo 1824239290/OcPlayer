@@ -13,8 +13,23 @@ public enum PlaybackLog {
     public static var fileURL: URL { logger.fileURL }
 
     /// 等所有排队的 JSONL 写盘完成（App 退出前调用，别让最后几条丢）。
+    ///
+    /// ⚠️ **无界版本，进程终止路径别用它** —— 用下面的 `flush(timeout:)`。
     public static func flush() {
         logger.flush()
+    }
+
+    /// 有界等待版 flush（进程终止路径用）：先把各节流键的抑制计数汇总落盘，再排空。
+    ///
+    /// **只 flush `AppDiagnostics` 不够**：抑制计数存在**各自的** `DiagnosticLogger`
+    /// 实例里（两个实例共用同一个文件 backend，但 `throttles` 各一份），而 App 退出
+    /// 时只调了 `AppDiagnostics.flush(timeout:)`。于是本文件此前根本没有调用点，
+    /// Playback 侧所有节流键的 `suppressed=N` 一直是丢的 —— 「render_tick 失败了多少
+    /// 次」查不到，只看得到首条。加节流前必须先补上这条，否则节流等于把 59/60 的证据
+    /// 悄悄扔掉。
+    @discardableResult
+    public static func flush(timeout: TimeInterval) -> Bool {
+        logger.flush(timeout: timeout)
     }
 
     /// 追加一条 debug 级链路日志（守卫拒绝、中间态；默认档被最低级别过滤，
