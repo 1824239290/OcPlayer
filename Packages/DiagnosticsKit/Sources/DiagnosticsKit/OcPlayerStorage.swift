@@ -11,6 +11,11 @@ import Foundation
 ///
 /// 因此：**新增落盘一律经本类型取路径**，再在 `AppStorageDirectories`
 /// （App 层）登记进维护清单。
+///
+/// ⚠️ 但**只有用户数据登记进那张清单**。可再生缓存（图片字节等）走
+/// `cachesRoot` / `cacheDirectory(_:in:)`：它们不在 `Application Support` 下，
+/// 由各自的容量上限自管（`URLCache` 512 MB + `ImageBlobStore` 256 MB），
+/// 也不该被「按旧优先淘汰」的维护器当普通文件处理。
 public enum OcPlayerStorage {
 
     /// 应用数据根目录（`Application Support/OcPlayer`）。
@@ -96,6 +101,46 @@ public enum OcPlayerStorage {
         let url = directory(name, in: base)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    // MARK: - 可再生缓存（`Caches/`）
+
+    /// 可再生缓存的根目录（`Caches/OcPlayer`）。
+    ///
+    /// **与 `defaultRoot` 的分工**（放错一边就是 bug，不是风格问题）：
+    ///
+    /// | | `defaultRoot`（Application Support） | `cachesRoot`（Caches） |
+    /// |---|---|---|
+    /// | 内容 | 用户数据：凭据、追番进度、弹幕映射、外挂字幕 | 可再生数据：图片字节、URL 响应 |
+    /// | 丢了会怎样 | 用户要重新登录 / 丢进度 | 重新下载即可 |
+    /// | iOS 系统存储吃紧 | **不回收** | **会被系统回收** |
+    /// | iCloud / 备份 | 会进 | 不进 |
+    ///
+    /// 把图片缓存放进 Application Support 的实际后果：几百 MB 的**可重下**字节
+    /// 进用户的 iCloud 备份，并且在系统存储吃紧时拿不回来（实测本机曾达 370 MB，
+    /// 而两套缓存的上限相加是 768 MB）。
+    ///
+    /// 隔离运行（见 `isIsolated`）时同样落到隔离根下 —— 否则跑一次测试就会写开发机
+    /// 真实的 `~/Library/Caches`。
+    public static var cachesRoot: URL {
+        if isIsolated {
+            return isolationRoot.appending(path: "Caches", directoryHint: .isDirectory)
+        }
+        return caches.appending(path: directoryName, directoryHint: .isDirectory)
+    }
+
+    /// 缓存根目录下的一个子目录。`base` 只给测试注入临时目录用。
+    public static func cacheDirectory(_ name: String, in base: URL? = nil) -> URL {
+        (base ?? cachesRoot).appending(path: name, directoryHint: .isDirectory)
+    }
+
+    /// 系统缓存根（未附加 `OcPlayer`）。
+    ///
+    /// ⚠️ 只在本类型内部与确实需要「系统级 Caches」的调用方使用；
+    /// 业务取路径请用 `cachesRoot` / `cacheDirectory(_:in:)`。
+    public static var caches: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL.cachesDirectory
     }
 
     /// 应用数据根目录（未附加 `OcPlayer`）。

@@ -63,6 +63,16 @@
   - **取舍**：主键稳定 ⇒ 条目只在首次写入、之后不刷新，缓存会随提交变旧（未改动的依赖模块仍复用，收益从「冷构建」变成「增量构建」）。不选 `run_id` 滚动 key，是因为那会回到每次写一条 2.6 GiB、把额度打爆的老路。
   - **本步不做 `BLD-02`**（把 iOS DerivedData 也加进缓存路径）：额度算术不允许 —— 本步改完后约 5.9 GiB 有余量，若同时加两个 iOS 根，两档各涨到 4–5 GiB、合计约 9.2 GiB，又会把内核挤出去。留待单独评估（更稳的做法是给它单开一个可独立淘汰的条目）。
 
+### 修复
+
+- **可再生的图片缓存搬出 `Application Support`，进 `Caches`**（性能审查清单 `CORR-02`）。
+  - **现象**：`OcPlayerStorage.defaultRoot` 是 `Application Support/OcPlayer`（类型注释明说「iOS 上该目录不参与系统清理」——这对凭据/进度是对的），但 `ImagePipeline` 把两套**可再生**的图片缓存也放在这个根下：512 MB 的 `URLCache`（`Cache.db`）与 256 MB 的字节缓存（`Blobs/`），**上限相加 768 MB**，本机实测已到 **370 MB**。后果三条：① iOS 上进 iCloud 备份（用户备份里带上几百 MB 重下即可获得的海报字节）；② 系统存储吃紧时**不会被回收**（`Caches` 才会）；③ 与真实会话峰值 RSS 435 MB 叠加。全仓唯一设了 `isExcludedFromBackup` 的地方是**凭据文件**。
+  - **修法**：不改 `defaultRoot`（它的定位是对的），而是给可再生数据开一条**并行入口** —— 新增 `OcPlayerStorage.cachesRoot`（`Caches/OcPlayer`）与 `cacheDirectory(_:in:)`，与 `directory(_:in:)` 对称，并在类型注释里把「用户数据 vs 可再生缓存」的分工写成表格。**必须沿用隔离机制**：`isIsolated` 时落到 `isolationRoot/Caches`，否则跑一次测试就会写开发机真实的 `~/Library/Caches`。落盘点只改两行（`ImagePipeline` 的 URLCache 目录与 `Blobs/` 父目录）；`ImageCacheIdentityStore` 的复原扫描跟着搬（它读的是同一份 `Cache.db`，不跟就是扫一个永不存在的目录）；删掉 `AppStorageDirectories.imageCache`（已核实声明了但**全仓零引用**）。
+  - **一次性清理旧目录**：搬家后旧目录既不会被读、又继续占着备份额度，所以首次启动删掉（marker `…imageCache.cachesRootV1`，与同文件另两个迁移同形）。删除前过**四道闸门**（末段必须叫 `ImageCache` / 父目录必须是数据根 / `legacy != current` 防参数写反删掉新目录 / 目标确实存在），抽成纯函数 `shouldRemoveLegacyImageCache` 逐条正反向钉死 —— 这是一条 `removeItem`，判据错了就是删用户真正的缓存。
+  - **顺带修掉一个真实事故**：这条迁移把「一次性迁移在测试进程里跑」从一个隐患变成了破坏 —— `ImageDecoderTests` 会读 `ImagePipeline.shared`（= 默认目录），于是跑一遍 `swift test --package-path Packages/AppDesignKit` 就**真的删掉了开发机 370 MB 的旧缓存**（实测发生）。新增 `shouldRunOneTimeMigrations(cacheDirectory:)`：注入目录的调用方不跑，且**测试进程一律不跑**（`RuntimeEnvironment.isRunningTests` 同时覆盖 `xcodebuild test` 与 `swift test`），并加用例把这条回护钉死。原有的两个迁移同样受这条守卫保护。
+  - **实测**：`DiagnosticsKit` 69 条、`AppDesignKit` 127 条（新增 6 + 9 条）全绿；macOS Debug 构建通过；端到端跑真 App —— 造出旧目录 + 清标记后启动，**旧目录被删、新目录建出并真的缓存了 25 张图（18 MB）**，迁移标记落位为 `1`。
+  - **代价（有意接受）**：升级后首次启动图片缓存**冷一次**（按需重下），与仓库既有两次缓存键迁移同一取舍；旧 `Cache.db` 被删后「从旧缓存捞回历史身份」对旧字节失去意义，但那些字节本来也一起删了。
+
 ### 改动
 
 - **iPad 整个走 iPhone 版式：底部标签栏 + 紧凑内容**（用户口径：「iPad 可以改用 iPhone 那样的 tabview 吗？我看 iPad 的小火箭是 iPhone 样式的」；给了三个变体，选了「V2：只用 iPhone 版的样式」）。

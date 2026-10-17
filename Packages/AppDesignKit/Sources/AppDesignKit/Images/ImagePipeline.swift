@@ -82,17 +82,18 @@ public final class ImagePipeline: @unchecked Sendable {
             memoryCapacity: 32 * 1024 * 1024,
             diskCapacity: Self.diskCapacityBytes,
             directory: cacheDirectory
-                ?? OcPlayerStorage.directory("ImageCache")
+                ?? OcPlayerStorage.cacheDirectory("ImageCache")
         )
         self.cache = cache
-        let resolvedCacheDirectory = cacheDirectory ?? OcPlayerStorage.directory("ImageCache")
+        let resolvedCacheDirectory = cacheDirectory ?? OcPlayerStorage.cacheDirectory("ImageCache")
         // 字节缓存与 URLCache 同目录下的 Blobs/：两者一起被「清空图片缓存」清掉，
         // 报体积时也能一起算。
         self.blobStore = ImageBlobStore(
             directory: resolvedCacheDirectory.appendingPathComponent("Blobs", isDirectory: true))
-        // 生产路径（用默认目录）才做一次性清理：注入目录的都是测试，
-        // 不该被这个迁移搅动（也不该写生产 UserDefaults）。
-        if cacheDirectory == nil {
+        // 一次性迁移只在生产默认目录下跑，且测试进程一律不跑（见
+        // `shouldRunOneTimeMigrations`）——注入目录的都是测试，不该被迁移搅动，
+        // 更不该让一条 `removeItem` 在测试进程里打到真实目录。
+        if Self.shouldRunOneTimeMigrations(cacheDirectory: cacheDirectory) {
             let directory = resolvedCacheDirectory
             let blobs = blobStore
             Task.detached(priority: .utility) {
@@ -100,6 +101,12 @@ public final class ImagePipeline: @unchecked Sendable {
                 // 键从「含服务器地址 + 含 App 版本」改成稳定键后，旧字节也读不到了
                 // （文件名是键的哈希）。同样只在首次清一次，避免每次启动都清。
                 Self.purgeStaleBlobsIfNeeded(store: blobs, defaults: .standard)
+                // 缓存从 Application Support 搬到 Caches 之后，旧目录里的字节既不会被读、
+                // 又会继续占着 iCloud 备份额度，首次启动直接清掉。
+                Self.purgeLegacyImageCacheIfNeeded(
+                    legacy: OcPlayerStorage.directory("ImageCache"),
+                    current: directory,
+                    defaults: .standard)
             }
         }
         let configuration = URLSessionConfiguration.default
@@ -161,6 +168,72 @@ public final class ImagePipeline: @unchecked Sendable {
         store.removeAll()
         defaults.set(true, forKey: markerKey)
         Self.logger.info("图片字节缓存键升级：已清空旧数据")
+    }
+
+    /// 一次性迁移是否该跑：只在**生产默认目录**下跑，且**绝不在测试进程里跑**。
+    ///
+    /// 后半条是硬要求，不是洁癖：`ImageDecoderTests` 会读 `ImagePipeline.shared`
+    /// （`cacheDirectory == nil` = 默认目录），而这条迁移里有 `removeItem`。
+    /// 实测发生过一次 —— 跑一遍 `swift test --package-path Packages/AppDesignKit`
+    /// 就把开发机真实的 `Application Support/OcPlayer/ImageCache`（370 MB）删了。
+    /// `RuntimeEnvironment.isRunningTests` 同时覆盖 `xcodebuild test`（AppTests）
+    /// 与 `swift test`（SPM 包测试）两种跑法。
+    static func shouldRunOneTimeMigrations(cacheDirectory: URL?) -> Bool {
+        cacheDirectory == nil && !RuntimeEnvironment.isRunningTests
+    }
+
+    /// 一次性清理：缓存从 `Application Support` 搬到 `Caches` 之后，旧目录（`Cache.db`
+    /// + `Blobs/`，实测曾达 370 MB）既不会再被读，还会继续进 iCloud 备份、且不受系统
+    /// 回收。首次启动删掉，与上面两个迁移同理「只做一次」。
+    ///
+    /// 删之前必须过 `shouldRemoveLegacyImageCache(legacy:current:root:)` 那四道闸门 ——
+    /// 这是一条 `removeItem`，判据错了就是删掉用户真正的缓存目录。
+    ///
+    /// `root` 可注入：生产不传（= 数据根），测试传自己的沙箱根。
+    static func purgeLegacyImageCacheIfNeeded(
+        legacy: URL,
+        current: URL,
+        defaults: UserDefaults,
+        root: URL = OcPlayerStorage.defaultRoot
+    ) {
+        let markerKey = "dev.jumusu.ocplayer.imageCache.cachesRootV1"
+        guard !defaults.bool(forKey: markerKey) else { return }
+        if shouldRemoveLegacyImageCache(legacy: legacy, current: current, root: root) {
+            do {
+                try FileManager.default.removeItem(at: legacy)
+                Self.logger.info("图片缓存迁到 Caches：已清理旧目录", fields: [
+                    "legacy": .string(legacy.lastPathComponent),
+                    "current": .string(current.path),
+                ])
+            } catch {
+                // 删不掉不算故障：旧目录只是占地方，不影响新缓存工作。
+                Self.logger.warning("图片缓存旧目录清理失败", fields: [
+                    "legacy": .string(legacy.path),
+                    "error": .string("\(error)"),
+                ])
+            }
+        }
+        // 与同文件另两个迁移一致：标记写在这里 ⇒ 只尝试一次，不会每次启动都去删。
+        defaults.set(true, forKey: markerKey)
+    }
+
+    /// `removeItem` 前的四道闸门。**纯函数，便于直接断言**。
+    ///
+    /// 1. 末段必须叫 `ImageCache` —— 防有人把别的路径传进来；
+    /// 2. 父目录必须正是 `root`（`Application Support/OcPlayer`）—— 限定删除范围；
+    /// 3. `legacy != current` —— 防参数写反时把**新**目录删掉；
+    /// 4. 目标确实存在且是目录 —— 不存在就不动（也让「跑两次」天然幂等）。
+    static func shouldRemoveLegacyImageCache(legacy: URL, current: URL, root: URL) -> Bool {
+        let legacyPath = legacy.standardizedFileURL.path
+        let currentPath = current.standardizedFileURL.path
+        guard legacy.standardizedFileURL.lastPathComponent == "ImageCache" else { return false }
+        guard legacy.standardizedFileURL.deletingLastPathComponent().path
+            == root.standardizedFileURL.path else { return false }
+        guard legacyPath != currentPath else { return false }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: legacyPath, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return false }
+        return true
     }
 
     /// Current disk usage and the hard URLCache limit. The 512 MiB capacity is
