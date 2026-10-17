@@ -70,8 +70,19 @@
   - **修法**：**单开一条** `ios-dd-v1-<os>-<Package.resolved 哈希>`，`path` 只放 `.local-build/ci-test-ios`。不并进 `spm-test-` 那条：它只服务 iOS 这一步，胖了 / 坏了可以**单独删掉**，不必连 macOS 与包构建的缓存一起丢（并入后两档各涨到 4–5 GiB，一旦把内核 0.736 GiB 挤出去，每次运行白下 306 MB）。主键同样只由 `Package.resolved` 决定 ⇒ 依赖没变的 PR 精确命中、且**命中的运行不会再写一条新的**。**不进 `release.yml`**：tag 运行的条目按 tag 隔离、写不进默认分支，单独改它只是白占额度，归 `BLD-03`（从默认分支播种）一起做。
   - **本地实测**（同一个 `-derivedDataPath`，`-scheme OcPlayer-iOS -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build-for-testing`）：**冷建 116 s → 增量 14 s**（改 `PlaybackController.swift` + `StorageMaintenance.swift` 两个真源文件，日志里确有这两条 `SwiftCompile`）；只把 mtime 摸一下则是 15 s（Xcode 用**内容签名**判定增量，不是 mtime —— 所以 CI 每次全新 checkout 也不会因此全量重编）。缓存体积 **1.9 GB** = `Build` 1.0 G + `SourcePackages` 556 M + `ModuleCache`/`Index` 275 M。
   - **额度算术**：先删掉两条僵尸条目（见上一条的 ref 作用域说明；`refs/pull/28/merge` 与 `refs/pull/29/merge` 各 2.6 GiB，key 与 `refs/heads/main` 那条逐字相同）→ **8.54 GiB → 3.34 GiB**；新条目 +1.9 GB ⇒ **5.24 GiB / 10 GB**。稳态就是「main 的 SPM 条目 + main 的 iOS 条目 + 内核」= 5.24 GiB（PR 从默认分支恢复、精确命中不再新写）。
-  - **预期收益**：iOS 步 627 s → 约 330 s（省掉解析 57 s + 编译 403 s，换回恢复 ~60 s + 增量编译 ~50 s，按 runner 与增量比 3.4× 折算）。判据是「合并后重跑同一次 `main` 运行拿到同机同码 A/B」，未到即为空口。
-  - **验证入口**：`ruby -ryaml -e 'YAML.load_file(".github/workflows/test.yml")'`（并确认 `gh api .../actions/workflows` 里 Test 仍是 `active` —— YAML 写坏会变 `disabled_invalid`）；合并后按上一条拿 A/B 数。
+  - **预期收益**：iOS 步 627 s → 约 330 s（省掉解析 57 s + 编译 403 s，换回恢复 ~60 s + 增量编译 ~50 s，按 runner 与增量比 3.4× 折算）。判据是「重跑同一次运行拿到同机同码 A/B」，未到即为空口。
+  - **✅ 同码 A/B 实测**（PR #30 的 attempt 1 冷缓存 ↔ attempt 2 命中，同一 commit、同一 runner、相邻两次）：
+    | 步骤 | attempt 1（`ios-dd` miss） | attempt 2（命中 712 MB） | 差 |
+    |---|---|---|---|
+    | `Cache iOS DerivedData` | 10 s（miss） | 32 s（下载 + 解压） | +22 s |
+    | Run App tests (macOS) | 181 s | 165 s | −16 s |
+    | **Run App tests (iOS)** | **511 s** | **377 s** | **−134 s（−26%）** |
+    | Run SwiftPM package tests | 157 s | 165 s | +8 s |
+    | `Post Cache iOS DerivedData` | 32 s（保存） | 19 s（命中检查，不保存） | −13 s |
+    | **job 总计**（`Set up job` → `Complete job`） | **1030 s（17m10s）** | **904 s（15m04s）** | **−126 s** |
+    iOS 步内部：解析 **48 → 20 s**、编译 **349 → 232 s**、用例 **98 → 114 s**（±噪声）。依赖模块（`JellyfinAPI` / `GRDB` / `swift-nio` 系）**完全复用**。
+  - **一条没做到位的地方（如实记）**：命中后仍有 **41 个文件的 `SwiftCompile`**（冷缓存是 120 个），也就是说编译阶段**没有全量命中** —— 232 s 里还含模拟器启动/装机与这部分剩余编译。本机同根实测的增量是 14 s，两者差得远，说明 CI 侧还有别的东西在失效（未定位）。要继续压缩得先查出是什么让这 41 个文件失效，属下一轮的活，不在本条内。
+  - **验证入口**：`ruby -ryaml -e 'YAML.load_file(".github/workflows/test.yml")'`（并确认 `gh api .../actions/workflows` 里 Test 仍是 `active` —— YAML 写坏会变 `disabled_invalid`）；A/B 见上表。
 
 - **测试夹具的等待改成显式失败**（性能审查清单 `CORR-08`）。
   - **现象**：`AppTests/SkipPreferenceTests.swift` 的 `makeController` 用 3 秒轮询等「playing + 片长 + 位置」三件套落地，**超时后既不 `XCTFail` 也不重试就直接返回**。于是「夹具没等到」被伪装成一条**完全看不懂的断言失败**：`main` 的 `597a8d6` 就是这么红的 —— `testSkipForwardClampsToTailMargin` 报 `("10.0") is not equal to ("1197.0")`，而 `10.0` 正是「位置还停在 0 时 `skip(by: 10)`」的落点，跟「尾部边际」毫无关系。为这一条排查了半轮 26 分钟的 CI + 一次重跑，最后判定为偶发。
