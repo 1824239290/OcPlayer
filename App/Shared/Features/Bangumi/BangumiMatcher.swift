@@ -34,6 +34,137 @@ public struct AnimeTitleInfo: Sendable, Equatable {
 /// 动画标题解析与规范化工具。
 public enum AnimeTitleParser {
 
+    // MARK: - 静态编译的正则
+    //
+    // 打分器对**每个候选**都调两次 `parse()`（`nameCN` + `name`），一次自动匹配最多
+    // 360 次；而单次 `parse` 原先现场编译 40 条 `NSRegularExpression`。
+    //
+    // 实测（本机 Debug，5 轮取均值）：
+    //   `NSRegularExpression` **编译 61.5 µs / 条**，**匹配 0.53 µs / 条** —— 差两个数量级。
+    //   改前单次 `parse` **0.812 ms** → 改后 **0.208 ms（−74%）**；
+    //   一次「90 候选 × 2 遍」的 `pickBestCandidate` **262.3 ms → 69.7 ms（−73%）**。
+    //
+    // 与 `DanmakuKit/DanmakuFilenameParser` 同一套做法（那边注释里写着
+    // 「全集搜索可返回数百分集——现场编译正则就是主线程秒级卡顿」，同一个病）。
+    //
+    // ## 三条刻意的边界
+    //
+    // **① 只提「本来就走 `NSRegularExpression`」的那批，`finalPatterns` 那 3 条不动。**
+    // 那 3 条走 `String.range(of:options:.regularExpression)`。**穷举实测证明两套 API
+    // 不等价**：36816 条语料（含 BMP 0x20–0x2FFF 逐码点包裹）上，`finalPatterns`
+    // 那 3 条出现 **2300 处分歧**（如 `"Final Season\u{300}"`：`range(of:)` 判不匹配、
+    // `NSRegularExpression` 判匹配）。这比 `REJ-02` 记的 `\d` 口径差异**更广** ——
+    // 连 `\s` 与大小写折叠都不同。所以那 3 条**必须留在原 API**：它对每次 `parse`
+    // 只花 3×4.58 = 13.7 µs，省这点钱去冒语义漂移的险不划算。
+    //
+    // **② 编译失败仍然静默跳过（`compactMap`），不改成 `preconditionFailure`。**
+    // 语义必须逐字保持：改前是 `if let regex = try? ...`，编译失败那条就跳过。
+    // 若哪天某条 pattern 编不过，golden 语料（`AnimeTitleParserGoldenTests`）会立刻
+    // 报红 —— 有测试兜着，不需要在运行时炸掉用户。
+    //
+    // **③ 剩下 208 µs 已经不是正则了**：43 条匹配 22.8 µs + 3 条 `range(of:)` 13.7 µs
+    // = 36.5 µs，其余 **171.5 µs 是字符串处理**（`normalizeFullWidth` 逐 scalar 重建、
+    // `replaceChineseSeasonNumbers` 40 趟 + `replaceRomanNumerals` 22 趟整串替换、
+    // `cleanBaseString` 末尾逐字符过滤）。要继续压得往那儿去，别再琢磨正则了。
+
+    /// 编译一条内置正则。模式是常量，理论上不会失败；失败返回 nil 让调用方跳过
+    /// （与改动前的 `try?` 语义一致）。
+    private static func compiled(_ pattern: String) -> NSRegularExpression? {
+        try? NSRegularExpression(pattern: pattern)
+    }
+
+    /// `cleanBaseString` 的噪声剥离表（24 条）。
+    private static let stripRegexes: [NSRegularExpression] = [
+        // 最终季 / 完结篇
+        "(?i)(?:the\\s+)?final\\s+season",
+        "最终季", "完结篇", "完结",
+        // 季数
+        "(?i)season\\s*\\d+",
+        "(?i)\\d+(?:st|nd|rd|th)\\s*season",
+        "(?i)\\bS\\d+\\b",
+        "第\\s*\\d+\\s*[季期部]",
+        // 结尾独立数字季（如 "吹响吧！上低音号 3" / "约会大作战 4"）
+        "(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])\\s+\\d{1,2}\\s*$",
+        // Part / Cour
+        "(?i)part\\s*\\d+",
+        "(?i)cour\\s*\\d+",
+        "第\\s*\\d+\\s*クール",
+        "前半", "后半", "前篇", "后篇",
+        // 常见特殊篇章后缀
+        "游郭篇", "无限列车篇", "锻刀村篇", "柱训练篇", "怀玉[·・]?玉折", "涩谷事变", "死灭洄游",
+        "(?i)after\\s*story",
+    ].compactMap { compiled($0) }
+
+    /// ASCII 罗马数字（12 条，pattern 与替换模板配对）。
+    ///
+    /// 模板串跟着 pattern 一起静态化 —— 只静态化 pattern 会让替换文本留在循环体的
+    /// 字面量里，等于白拆一遍。
+    private static let asciiRomanReplacements: [(regex: NSRegularExpression, template: String)] = [
+        ("(?i)\\bVIII\\b", " 8 "),
+        ("(?i)\\bVII\\b", " 7 "),
+        ("(?i)\\bVI\\b", " 6 "),
+        ("(?i)\\bIV\\b", " 4 "),
+        ("(?i)\\bV\\b", " 5 "),
+        ("(?i)\\bIII\\b", " 3 "),
+        ("(?i)\\bII\\b", " 2 "),
+        ("(?i)\\bIX\\b", " 9 "),
+        ("(?i)\\bX\\b", " 10 "),
+        // 如 デート・ア・ライブIV、Overlord II、Fate/stay night II 等结尾
+        ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])IV$", " 4"),
+        ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])III$", " 3"),
+        ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])II$", " 2"),
+    ].compactMap { pattern, template in
+        compiled(pattern).map { (regex: $0, template: template) }
+    }
+
+    /// 季数识别（5 条）。顺序即优先级 —— 调用点按原 `else if` 链的次序逐个尝试、命中即停。
+    private static let seasonRegexes: [NSRegularExpression] = [
+        "第\\s*(\\d+)\\s*[季期部]",
+        "(?i)season\\s*(\\d+)",
+        "(?i)(\\d+)(?:st|nd|rd|th)\\s*season",
+        "(?i)(?<=[\\s_\\-.\\[(])S(\\d+)(?=[\\s_\\-.\\])]|$)",
+        "(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])\\s+(\\d{1,2})\\s*$",
+    ].compactMap { compiled($0) }
+
+    /// Part / Cour 识别（2 条）：`Part N` 与 `第 N クール`。
+    private static let partRegexes: [NSRegularExpression] = [
+        "(?i)part\\s*(\\d+)",
+        "第\\s*(\\d+)\\s*クール",
+    ].compactMap { compiled($0) }
+
+    /// 中文季数替换表（40 对）—— 原先每次调用都重新分配这个字面量数组。
+    private static let chineseDigitReplacements: [(String, String)] = [
+        ("第十季度", "第10季"), ("第九季度", "第9季"), ("第八季度", "第8季"),
+        ("第七季度", "第7季"), ("第六季度", "第6季"), ("第五季度", "第5季"),
+        ("第四季度", "第4季"), ("第三季度", "第3季"), ("第二季度", "第2季"), ("第一季度", "第1季"),
+        ("第十季", "第10季"), ("第九季", "第9季"), ("第八季", "第8季"),
+        ("第七季", "第7季"), ("第六季", "第6季"), ("第五季", "第5季"),
+        ("第四季", "第4季"), ("第三季", "第3季"), ("第二季", "第2季"), ("第一季", "第1季"),
+        ("第十期", "第10期"), ("第九期", "第9期"), ("第八期", "第8期"),
+        ("第七期", "第7期"), ("第六期", "第6期"), ("第五期", "第5期"),
+        ("第四期", "第4期"), ("第三期", "第3期"), ("第二期", "第2期"), ("第一期", "第1期"),
+        ("第十部", "第10部"), ("第九部", "第9部"), ("第八部", "第8部"),
+        ("第七部", "第7部"), ("第六部", "第6部"), ("第五部", "第5部"),
+        ("第四部", "第4部"), ("第三部", "第3部"), ("第二部", "第2部"), ("第一部", "第1部"),
+    ]
+
+    /// Unicode 罗马数字替换表（10 对）。
+    private static let unicodeRomanReplacements: [(String, String)] = [
+        ("Ⅰ", " 1 "), ("Ⅱ", " 2 "), ("Ⅲ", " 3 "), ("Ⅳ", " 4 "), ("Ⅴ", " 5 "),
+        ("Ⅵ", " 6 "), ("Ⅶ", " 7 "), ("Ⅷ", " 8 "), ("Ⅸ", " 9 "), ("Ⅹ", " 10 "),
+    ]
+
+    /// 最终季识别用的 3 条 —— **刻意继续走 `String.range(of:)`**（见本节开头边界 ①）。
+    private static let finalPatterns = [
+        "(?i)(?:the\\s+)?final\\s+season", "最终季", "完结篇",
+    ]
+
+    /// 篇章关键词（11 条）。
+    private static let arcKeywords = [
+        "游郭篇", "无限列车篇", "锻刀村篇", "柱训练篇", "怀玉·玉折", "怀玉玉折",
+        "涩谷事变", "死灭洄游", "after story", "afterstory", "代号白",
+    ]
+
     /// 全角字符转半角。
     public static func normalizeFullWidth(_ str: String) -> String {
         var result = ""
@@ -55,20 +186,7 @@ public enum AnimeTitleParser {
     /// 中文季数转换为阿拉伯数字形式。
     public static func replaceChineseSeasonNumbers(_ str: String) -> String {
         var s = str
-        let chineseDigits: [(String, String)] = [
-            ("第十季度", "第10季"), ("第九季度", "第9季"), ("第八季度", "第8季"),
-            ("第七季度", "第7季"), ("第六季度", "第6季"), ("第五季度", "第5季"),
-            ("第四季度", "第4季"), ("第三季度", "第3季"), ("第二季度", "第2季"), ("第一季度", "第1季"),
-            ("第十季", "第10季"), ("第九季", "第9季"), ("第八季", "第8季"),
-            ("第七季", "第7季"), ("第六季", "第6季"), ("第五季", "第5季"),
-            ("第四季", "第4季"), ("第三季", "第3季"), ("第二季", "第2季"), ("第一季", "第1季"),
-            ("第十期", "第10期"), ("第九期", "第9期"), ("第八期", "第8期"),
-            ("第七期", "第7期"), ("第六期", "第6期"), ("第五期", "第5期"),
-            ("第四期", "第4期"), ("第三期", "第3期"), ("第二期", "第2期"), ("第一期", "第1期"),
-            ("第十部", "第10部"), ("第九部", "第9部"), ("第八部", "第8部"),
-            ("第七部", "第7部"), ("第六部", "第6部"), ("第五部", "第5部"),
-            ("第四部", "第4部"), ("第三部", "第3部"), ("第二部", "第2部"), ("第一部", "第1部"),
-        ]
+        let chineseDigits = Self.chineseDigitReplacements
         for (cn, ar) in chineseDigits {
             s = s.replacingOccurrences(of: cn, with: ar)
         }
@@ -78,35 +196,16 @@ public enum AnimeTitleParser {
     /// 罗马数字转换。
     public static func replaceRomanNumerals(_ str: String) -> String {
         var s = str
-        let unicodeRomans: [(String, String)] = [
-            ("Ⅰ", " 1 "), ("Ⅱ", " 2 "), ("Ⅲ", " 3 "), ("Ⅳ", " 4 "), ("Ⅴ", " 5 "),
-            ("Ⅵ", " 6 "), ("Ⅶ", " 7 "), ("Ⅷ", " 8 "), ("Ⅸ", " 9 "), ("Ⅹ", " 10 "),
-        ]
+        let unicodeRomans = Self.unicodeRomanReplacements
         for (r, n) in unicodeRomans {
             s = s.replacingOccurrences(of: r, with: n)
         }
 
         // ASCII 罗马数字（词边界或后缀）
-        let asciiRomans: [(String, String)] = [
-            ("(?i)\\bVIII\\b", " 8 "),
-            ("(?i)\\bVII\\b", " 7 "),
-            ("(?i)\\bVI\\b", " 6 "),
-            ("(?i)\\bIV\\b", " 4 "),
-            ("(?i)\\bV\\b", " 5 "),
-            ("(?i)\\bIII\\b", " 3 "),
-            ("(?i)\\bII\\b", " 2 "),
-            ("(?i)\\bIX\\b", " 9 "),
-            ("(?i)\\bX\\b", " 10 "),
-            // 如 デート・ア・ライブIV、Overlord II、Fate/stay night II 等结尾
-            ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])IV$", " 4"),
-            ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])III$", " 3"),
-            ("(?i)(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])II$", " 2"),
-        ]
-        for (pattern, replacement) in asciiRomans {
-            if let regex = try? NSRegularExpression(pattern: pattern) {
-                let range = NSRange(s.startIndex..., in: s)
-                s = regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: replacement)
-            }
+        for (regex, template) in Self.asciiRomanReplacements {
+            let range = NSRange(s.startIndex..., in: s)
+            s = regex.stringByReplacingMatches(
+                in: s, options: [], range: range, withTemplate: template)
         }
         return s
     }
@@ -119,32 +218,11 @@ public enum AnimeTitleParser {
 
         // 去除篇章括号内容（如 ～到了异世界就拿出真本事～, (2024), 【第2季】）
         // 但保留核心汉字与假名/字母
-        let stripPatterns = [
-            // 最终季 / 完结篇
-            "(?i)(?:the\\s+)?final\\s+season",
-            "最终季", "完结篇", "完结",
-            // 季数
-            "(?i)season\\s*\\d+",
-            "(?i)\\d+(?:st|nd|rd|th)\\s*season",
-            "(?i)\\bS\\d+\\b",
-            "第\\s*\\d+\\s*[季期部]",
-            // 结尾独立数字季（如 "吹响吧！上低音号 3" / "约会大作战 4"）
-            "(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])\\s+\\d{1,2}\\s*$",
-            // Part / Cour
-            "(?i)part\\s*\\d+",
-            "(?i)cour\\s*\\d+",
-            "第\\s*\\d+\\s*クール",
-            "前半", "后半", "前篇", "后篇",
-            // 常见特殊篇章后缀
-            "游郭篇", "无限列车篇", "锻刀村篇", "柱训练篇", "怀玉[·・]?玉折", "涩谷事变", "死灭洄游",
-            "(?i)after\\s*story",
-        ]
-
-        for p in stripPatterns {
-            if let regex = try? NSRegularExpression(pattern: p) {
-                let range = NSRange(s.startIndex..., in: s)
-                s = regex.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: " ")
-            }
+        // 剥离表与编译好的正则都是静态量（见类型开头的「静态编译的正则」）。
+        for regex in Self.stripRegexes {
+            let range = NSRange(s.startIndex..., in: s)
+            s = regex.stringByReplacingMatches(
+                in: s, options: [], range: range, withTemplate: " ")
         }
 
         // 去除标点符号与特殊字符
@@ -173,8 +251,7 @@ public enum AnimeTitleParser {
         var subtitle: String? = nil
 
         // 1. 最终季识别
-        let finalPatterns = ["(?i)(?:the\\s+)?final\\s+season", "最终季", "完结篇"]
-        for p in finalPatterns {
+        for p in Self.finalPatterns {
             if converted.range(of: p, options: .regularExpression) != nil {
                 isFinal = true
                 break
@@ -183,40 +260,30 @@ public enum AnimeTitleParser {
 
         // 2. 季数识别（若未显式指定）
         if detectedSeason == nil {
-            // 第 N 季 / 第 N 期 / 第 N 部
-            if let regex = try? NSRegularExpression(pattern: "第\\s*(\\d+)\\s*[季期部]"),
-               let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-               let range = Range(match.range(at: 1), in: converted) {
+            // 前 5 条正则按优先级依次尝试（第 N 季 / Season N / Nth Season / S N /
+            // 结尾裸数字），命中第一条即停 —— 与原先的 `else if` 链等价。
+            //
+            // ⚠️ `usedRegex` 这个标志**必须保留**，不能写成「命中就拿值、否则走后面的
+            // 兜底」：原实现里只要某条正则**完整绑定成功**（正则命中且捕获组能转成
+            // Range），后面的 `else if` 全被跳过 —— 哪怕 `Int(converted[range])` 返回
+            // nil。这不是假想情形：`NSRegularExpression` 的 `\\d` 等于 `\\p{Nd}`，
+            // 「第٣季」（阿拉伯-印度数字）会命中、而 `Int("٣")` 是 nil，于是
+            // season 保持 nil 且**不会**再去看 S/T/续/完。golden 语料钉了这条。
+            var usedSeasonRegex = false
+            for regex in Self.seasonRegexes {
+                guard let match = regex.firstMatch(
+                        in: converted, range: NSRange(converted.startIndex..., in: converted)),
+                      let range = Range(match.range(at: 1), in: converted)
+                else { continue }
                 detectedSeason = Int(converted[range])
+                usedSeasonRegex = true
+                break
             }
-            // Season N
-            else if let regex = try? NSRegularExpression(pattern: "(?i)season\\s*(\\d+)"),
-                    let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-                    let range = Range(match.range(at: 1), in: converted) {
-                detectedSeason = Int(converted[range])
-            }
-            // Nst/nd/rd/th Season
-            else if let regex = try? NSRegularExpression(pattern: "(?i)(\\d+)(?:st|nd|rd|th)\\s*season"),
-                    let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-                    let range = Range(match.range(at: 1), in: converted) {
-                detectedSeason = Int(converted[range])
-            }
-            // S2 / S3
-            else if let regex = try? NSRegularExpression(pattern: "(?i)(?<=[\\s_\\-.\\[(])S(\\d+)(?=[\\s_\\-.\\])]|$)"),
-                    let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-                    let range = Range(match.range(at: 1), in: converted) {
-                detectedSeason = Int(converted[range])
-            }
-            // 结尾空格+数字（如 "进击的巨人 2", "吹响吧！上低音号 3", "约会大作战 4"）
-            else if let regex = try? NSRegularExpression(pattern: "(?<=[\\p{Han}\\p{Hiragana}\\p{Katakana}a-zA-Z])\\s+(\\d{1,2})\\s*$"),
-                    let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-                    let range = Range(match.range(at: 1), in: converted) {
-                detectedSeason = Int(converted[range])
-            }
+            if !usedSeasonRegex {
             // 特殊单字母续作（超电磁炮S -> 2, 超电磁炮T -> 3）。只认「结尾
             // S/T 的前一个字符是 CJK 或分隔符」——Arknights 这类以拉丁字母
             // 结尾的标题不能被误判成第二季（整季误绑）。
-            else if AnimeTitleParser.trailingSeasonLetter(converted) == "S" || converted.contains(" S ") {
+            if AnimeTitleParser.trailingSeasonLetter(converted) == "S" || converted.contains(" S ") {
                 subtitle = "s"
                 detectedSeason = 2
             } else if AnimeTitleParser.trailingSeasonLetter(converted) == "T" || converted.contains(" T ") {
@@ -227,17 +294,22 @@ public enum AnimeTitleParser {
             } else if converted.hasSuffix("完") {
                 isFinal = true
             }
+            }
         }
 
-        // 3. Part / Cour 识别
-        if let regex = try? NSRegularExpression(pattern: "(?i)part\\s*(\\d+)"),
-           let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-           let range = Range(match.range(at: 1), in: converted) {
+        // 3. Part / Cour 识别（前 2 条正则按优先级；同样用标志保留原 `else if` 语义）
+        var usedPartRegex = false
+        for regex in Self.partRegexes {
+            guard let match = regex.firstMatch(
+                    in: converted, range: NSRange(converted.startIndex..., in: converted)),
+                  let range = Range(match.range(at: 1), in: converted)
+            else { continue }
             detectedPart = Int(converted[range])
-        } else if let regex = try? NSRegularExpression(pattern: "第\\s*(\\d+)\\s*クール"),
-                  let match = regex.firstMatch(in: converted, range: NSRange(converted.startIndex..., in: converted)),
-                  let range = Range(match.range(at: 1), in: converted) {
-            detectedPart = Int(converted[range])
+            usedPartRegex = true
+            break
+        }
+        if usedPartRegex {
+            // 已由正则判定，跳过中文「前半 / 后半」兜底
         } else if converted.contains("前半") || converted.contains("前篇") {
             detectedPart = 1
         } else if converted.contains("后半") || converted.contains("后篇") {
@@ -245,12 +317,8 @@ public enum AnimeTitleParser {
         }
 
         // 4. 副标题 / 篇章识别
-        let arcKeywords = [
-            "游郭篇", "无限列车篇", "锻刀村篇", "柱训练篇", "怀玉·玉折", "怀玉玉折",
-            "涩谷事变", "死灭洄游", "after story", "afterstory", "代号白",
-        ]
         let lower = converted.lowercased()
-        for kw in arcKeywords {
+        for kw in Self.arcKeywords {
             if lower.contains(kw) {
                 subtitle = kw
                 break
