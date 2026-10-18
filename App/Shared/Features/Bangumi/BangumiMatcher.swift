@@ -37,7 +37,9 @@ public enum AnimeTitleParser {
     // MARK: - 静态编译的正则
     //
     // 打分器对**每个候选**都调两次 `parse()`（`nameCN` + `name`），一次自动匹配最多
-    // 360 次；而单次 `parse` 原先现场编译 40 条 `NSRegularExpression`。
+    // 360 次；而单次 `parse` 原先现场编译 **43 条** `NSRegularExpression`（24 剥离表
+    // + 12 ASCII 罗马数字 + 5 季数 + 2 Part）。实测每次 `parse` 的编译次数在 **51–86**
+    // 之间（标题不同走到的分支不同；`explicitSeasonName` 非空时最多，走第二次 `cleanBaseString`）。
     //
     // 实测（本机 Debug，5 轮取均值）：
     //   `NSRegularExpression` **编译 61.5 µs / 条**，**匹配 0.53 µs / 条** —— 差两个数量级。
@@ -61,6 +63,11 @@ public enum AnimeTitleParser {
     // 语义必须逐字保持：改前是 `if let regex = try? ...`，编译失败那条就跳过。
     // 若哪天某条 pattern 编不过，golden 语料（`AnimeTitleParserGoldenTests`）会立刻
     // 报红 —— 有测试兜着，不需要在运行时炸掉用户。
+    //
+    // ⚠️ 但这句话**曾经是假的**：2026-10-18 独立审查逐条把 43 条 pattern 换成哨兵跑
+    // golden，发现 **19 条删掉后 golden 仍全绿**（当时语料只有 39 条）。现已补到
+    // **50 条**并逐条复验（每条都实测过「替换成哨兵 → golden 报红」）。将来**新增
+    // pattern 必须同时给 golden 加一条能触发它的标题**，否则这个守卫会退化成装饰。
     //
     // **③ 剩下 208 µs 已经不是正则了**：43 条匹配 22.8 µs + 3 条 `range(of:)` 13.7 µs
     // = 36.5 µs，其余 **171.5 µs 是字符串处理**（`normalizeFullWidth` 逐 scalar 重建、
@@ -268,7 +275,11 @@ public enum AnimeTitleParser {
             // Range），后面的 `else if` 全被跳过 —— 哪怕 `Int(converted[range])` 返回
             // nil。这不是假想情形：`NSRegularExpression` 的 `\\d` 等于 `\\p{Nd}`，
             // 「第٣季」（阿拉伯-印度数字）会命中、而 `Int("٣")` 是 nil，于是
-            // season 保持 nil 且**不会**再去看 S/T/续/完。golden 语料钉了这条。
+            // season 保持 nil 且**不会**再去看 S/T/续/完。
+            //
+            // golden 语料里有「第٣季 续 ⟹ season=nil」（**不是** 2）钉着这条 —— 这句
+            // 声明原先也是假的（独立审查指出语料根本没覆盖），补完已实测：把本标志改回
+            // `if detectedSeason == nil`，golden 立刻报红。
             var usedSeasonRegex = false
             for regex in Self.seasonRegexes {
                 guard let match = regex.firstMatch(
