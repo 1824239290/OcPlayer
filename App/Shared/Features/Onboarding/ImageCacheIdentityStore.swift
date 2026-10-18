@@ -46,10 +46,12 @@ enum ImageCacheIdentityStore {
 
     /// 从 URL 缓存里最多捞几个身份。那是个全局池子（规范化 URL 抹掉了 host，
     /// 无法归属到某台服务器），捞多了只是让复原时多几次判断。
-    static let discoveredLimit = 12
+    ///
+    /// `nonisolated`：`nonisolated` 的扫描函数要读它。不可变 `let` 本来就安全。
+    nonisolated static let discoveredLimit = 12
 
     /// 身份哈希的固定长度（`authIdentity` 取 FNV1a 十六进制的前 12 位）。
-    static let identityLength = 12
+    nonisolated static let identityLength = 12
 
     private static let prefix = "dev.jumusu.ocplayer.imageCacheIdentity."
     private static let discoveredKey = "dev.jumusu.ocplayer.imageCacheIdentities.discovered"
@@ -76,9 +78,12 @@ enum ImageCacheIdentityStore {
     ///
     /// 除本服务器的历史之外，还会带上从 URL 缓存里捞到的全局身份池——那些身份属于
     /// 哪台服务器已经无从考证，但「多试一个哈希」的代价只是一次文件存在性判断。
-    static func identities(for tenant: String) -> [String] {
+    ///
+    /// `async` 是因为首次调用要扫 URL 缓存库（见 `discoveredIdentities`）。
+    /// 全仓只有一个调用点（`LoginWallCatalogLoader`），async 化不外溢。
+    static func identities(for tenant: String) async -> [String] {
         var result = history(for: tenant)
-        for identity in discoveredIdentities() where !result.contains(identity) {
+        for identity in await discoveredIdentities() where !result.contains(identity) {
             result.append(identity)
         }
         return result
@@ -106,27 +111,47 @@ enum ImageCacheIdentityStore {
 
     // MARK: - 从 URL 缓存捞历史身份
 
-    private static func discoveredIdentities() -> [String] {
+    /// 首次调用时扫一遍 URL 缓存库，结果并入 UserDefaults；之后只读 UserDefaults。
+    ///
+    /// ## 为什么必须是 `async` + `nonisolated`
+    ///
+    /// 扫描要对整个 `Cache.db` / `Cache.db-wal` 做 mmap + 逐字节搜索。而这个类型是
+    /// `@MainActor`，改前整条链（`LoginWallCatalogLoader` → `identities(for:)` →
+    /// 这里）都在主线程上跑 —— 实测 2.0 MB 真实缓存 **7.77 ms**，按 `URLCache`
+    /// 512 MB 上限外推可达 **~2 s**。登录页恰是用户点完「退出登录」马上看到的页面，
+    /// 让它在主线程上冻两秒毫无道理。
+    ///
+    /// `nonisolated async` 函数在全局并发执行器上跑（SE-0338），且**沿用结构化并发**
+    /// ——视图消失时取消会自然传播。不用 `Task.detached`：那个会脱离结构化并发，
+    /// 离页之后扫描仍会跑完。
+    private static func discoveredIdentities() async -> [String] {
         let defaults = UserDefaults.standard
-        var stored = defaults.stringArray(forKey: discoveredKey) ?? []
+        let stored = defaults.stringArray(forKey: discoveredKey) ?? []
         guard !didScanURLCache else { return stored }
+        // **先同步置位再 await**：两处并发进登录页时不能双扫（既浪费也可能重复写）。
+        // 置位后即使这次扫描失败也不算「没扫过」——它是提示，不是依赖。
         didScanURLCache = true
 
-        let found = scanURLCacheForIdentities()
+        let found = await scanURLCacheForIdentities()
         guard !found.isEmpty else { return stored }
-        stored = Array(Set(stored).union(found)).sorted()
-        defaults.set(stored, forKey: discoveredKey)
-        return stored
+        let merged = Array(Set(stored).union(found)).sorted()
+        defaults.set(merged, forKey: discoveredKey)
+        return merged
     }
 
     /// 只读扫一遍图片缓存目录里的 URL 缓存库。
-    static func scanURLCacheForIdentities() -> Set<String> {
+    ///
+    /// `nonisolated` 是这条链能离开主线程的关键：它只碰不可变路径与纯函数，
+    /// 本来就不需要 actor 隔离。
+    nonisolated static func scanURLCacheForIdentities() async -> Set<String> {
         // 缓存已从 `Application Support` 搬到 `Caches`，这里必须跟着走，
         // 否则扫的是一个永远不存在的目录（空结果 = 登录页海报墙退化成程序化封面）。
         let directory = OcPlayerStorage.cacheDirectory("ImageCache")
+        // 逐文件判取消：单文件已可达数百 MB，离页后不该再继续扫下一个。
         var found: Set<String> = []
         // `-wal` 里可能躺着还没并回主库的新记录，两个都看。
         for name in ["Cache.db", "Cache.db-wal"] {
+            if Task.isCancelled { return found }
             let url = directory.appendingPathComponent(name)
             guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { continue }
             found.formUnion(authIdentities(in: data))
@@ -136,7 +161,7 @@ enum ImageCacheIdentityStore {
     }
 
     /// 从一段字节里挑出所有 `_auth=<12 位十六进制>` 的值。纯函数，便于直接断言。
-    static func authIdentities(in data: Data) -> Set<String> {
+    nonisolated static func authIdentities(in data: Data) -> Set<String> {
         let marker = Data("_auth=".utf8)
         var result: Set<String> = []
         var searchStart = data.startIndex

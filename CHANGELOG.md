@@ -27,6 +27,28 @@
 
 ### 性能
 
+- **登录页海报墙的 5 760 次文件判定搬离主线程**（性能审查清单 `P1-09`）。
+  - **实测（先测后改）**：`cachedFileURL` 单次 **21.74 µs**；最坏情况 96 张候选 × 阶梯 3 档 × 身份池 20 = **5 760 次 = 125.2 ms**，改前这一整段跑在 `@MainActor` 上。而登录页正是用户点完「退出登录」马上看到的页面。
+  - **实测（改后）**：同样的 5 760 次判定 **199.13 ms**、`pthread_main_np() == 0`（确在非主线程）。耗时数字比改前预算高，是因为探针用了全 miss 的最坏构造；关键指标是**不再占主线程**。
+  - **改法**：把逐候选的判定与组装提成 `nonisolated static func resolvePosters(...)` / `resolvePosterFile(...)`。用 `nonisolated async` 而**不是** `Task.detached` —— 后者脱离结构化并发，离页后这 5 760 次判定仍会跑完；前者沿用结构化并发，取消会自然传播（并在循环内加了 `Task.isCancelled` 检查）。
+  - **保留在主 actor 的只有**：读 `app.store.profiles`、拿 `activeStore`、`posterCandidates` 的 actor 调用。
+  - **⚠️ 计划里标注「必须实测不能推理」的点**：SE-0338 保证 `nonisolated async` 不继承调用方 actor，但我没有靠推理结案 —— 用 `pthread_main_np()` 探针实测得到 `onMain=false`。Swift 6 在 async 上下文里**直接禁用 `Thread.isMainThread`**（"unavailable from asynchronous contexts"），这本身就是强提示，绕法就是 `pthread_main_np()`。
+
+- **登录页首次出现时不再在主线程扫 URL 缓存库**（性能审查清单 `P1-08`）。
+  - **实测（先测后改）**：本机真实缓存 `Cache.db` + `Cache.db-wal` 共 **2.0 MB**，扫描 **7.77 ms**，`onMainThread=true`。按 `URLCache` 512 MB 上限外推 **≈2.08 s**（理论最坏，非日常）。
+  - **改法**：`scanURLCacheForIdentities()` / `authIdentities(in:)` 标 `nonisolated`；`discoveredIdentities()` 与 `identities(for:)` 改 `async`。全仓只有 1 个调用点（`LoginWallCatalogLoader`），async 化不外溢。
+  - **两条不变式**：① `didScanURLCache` **必须在 `await` 之前同步置位** —— 否则两处并发进登录页会双扫、并可能重复写；② 扫描是提示不是依赖，失败照旧当没扫到，不阻塞登录。
+  - **顺带发现**：这个编译错误本身就是 `P1-08` 的直接证据 —— 探针在非主线程上**编不过**（`call to main actor-isolated static method 'authIdentities(in:)' in a synchronous nonisolated context`），说明改前它确实只能在主线程用。
+
+- **下载页轮询在应用进入后台时停止**（性能审查清单 `P2-40`）。
+  - **问题**：5 秒轮询循环只判 `Task.isCancelled`，macOS `⌘H` 隐藏 / iOS 进后台后进程还在跑，于是每 5 s 发一次请求（挂机 **720 次/小时**）。用户完全无感，但确实是白发的。
+  - **改法**：`.task` → `.task(id: DownloadsPollingPolicy.taskID(scenePhase))`，循环前判 `shouldPoll`。**必须用 `.task(id:)`** —— `.task` 的闭包捕获的是启动那一刻的视图快照，循环里读 `scenePhase` 永远读到旧值（SwiftUI 经典坑），只有把相位放进 id 才会随相位重建任务。
+  - **判据只认 `.background`，不认 `.inactive`**（这条最容易改错）：本机实测 `⌘H` → `.background`、最小化 → `.inactive`；但 **`.inactive` 同时表示「应用不在最前」** —— 窗口还完整可见、用户只是点了别的 app，也是 `.inactive`。拿它当「不可见」信号会让**看得见的进度条冻住**，比多几次请求糟得多。残余代价是最小化时仍轮询一次，注释里写清了理由。
+  - **⚠️ 明确不动的 5 个循环**：全仓 7 个 `while !Task.isCancelled` 里，`PlaybackReportingCoordinator` 心跳与 `PlaybackController` 的 4 个**必须**在后台继续（`UIBackgroundModes: audio` 下后台播放要照常上报进度）；氛围轮播（12 s）不产生网络请求、隐藏窗口不渲染，浪费接近零，且改它要动 `.task(id: ambienceTrigger)` 的重启语义，得不偿失。**别顺手统一。**
+  - **验证（红 → 绿）**：新增 `DownloadsPollingPolicyTests` 5 条。把判据改成 `phase == .active`（即 `.inactive` 也停）→ 当场红。另 4 条钉住 `.active`/`.inactive` 都轮询、`.background` 停、三个相位的 `taskID` 互不相同且值稳定。
+
+### 性能
+
 - **弹幕正文加有界内存缓存：同一集重开不再重读重解 0.1–0.8 MB JSON**（性能审查清单 `P1-15`）。
   - **问题**：`DanmakuCache` 的三层里，`mapping.json` 与 `intro-hints.json` 都有写穿内存缓存，唯独最大的一层——每集弹幕正文——**每次纯磁盘读**。换源、重试、手动选集都会重新装载同一集，于是每次都重读盘 + 重解码整份 JSON。
   - **实测（先测后改）**：本机真实缓存 23 个文件共 6.4 MB，最大一份 **756 KB / 8159 条**；单次 `comments(for:)` 冷读 **13.2 ms**，加内存层后**热读 0.001 ms**。清单原文估的「3–6 MB」偏大，实测平均 **279 KB/集**。

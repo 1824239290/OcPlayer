@@ -21,6 +21,8 @@ struct MoviePilotDownloadsView: View {
     @State private var isFirstLoad = true
 
     @Environment(\.contentLeading) private var contentLeading
+    /// 前台门控用。见 `.task(id:)` 与 `DownloadsPollingPolicy`。
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -57,8 +59,13 @@ struct MoviePilotDownloadsView: View {
         // （与 MoviePilot Tab、首页轮播同源，跨页背景连续、不多拉一次图）。
         // target 为 nil（池子还没装好）时该入口会出兜底纯色，页面不留白底。
         .pageAmbience(AmbienceTarget.sessionPool(app))
-        .task {
-            // 5 秒轮询：视图在树上就转，销毁即取消（.task 生命周期）。
+        // 5 秒轮询：视图在树上就转，销毁即取消（.task 生命周期）。
+        //
+        // **`.task(id:)` 而不是普通 `.task`**：`.task` 的闭包捕获的是启动那一刻的
+        // 视图快照，循环里读 `scenePhase` 永远读到旧值 —— SwiftUI 的经典坑。
+        // 只有把相位放进 id，相位一变才会取消并重建任务。
+        .task(id: DownloadsPollingPolicy.taskID(scenePhase)) {
+            guard DownloadsPollingPolicy.shouldPoll(scenePhase) else { return }
             while !Task.isCancelled {
                 await refresh()
                 guard !Task.isCancelled else { break }
@@ -189,6 +196,46 @@ struct MoviePilotDownloadsView: View {
             }
             actionInFlight.remove(task.id)
             await refresh()
+        }
+    }
+}
+
+// MARK: - 轮询门控
+
+/// 下载页 5 秒轮询的前台判据。
+///
+/// ## 为什么只认 `.background`
+///
+/// 本机实测（`REJ-07`）：macOS `⌘H` 隐藏 → **`.background`**；最小化 → `.inactive`。
+/// 看起来「最小化也该停」，但 **`.inactive` 同时表示「应用不在最前」** —— 窗口还
+/// 完整可见、用户只是点了别的 app，也是 `.inactive`。拿它当「不可见」信号会让
+/// **看得见的进度条冻住**，比多几次请求糟得多。
+///
+/// 所以只停 `.background`（隐藏 / iOS 进后台）。代价是最小化时仍每 5 s 发一次
+/// 请求，这是可接受的残余：窗口不可见但进程还在，且这是唯一安全的取舍。
+///
+/// ## 为什么不是所有轮询都加这个门控
+///
+/// 全仓 7 个 `while !Task.isCancelled` 循环里，**5 个是播放相关**（
+/// `PlaybackReportingCoordinator` 心跳、`PlaybackController` 的 4 个）—— 它们
+/// **必须**在后台继续：`UIBackgroundModes: audio` 下后台播放要照常上报进度。
+/// 给它们加门控会直接破坏后台播放。氛围轮播（12 s）不产生网络请求、隐藏窗口
+/// 不渲染，浪费接近零，改它要动 `.task(id: ambienceTrigger)` 的重启语义，得不偿失。
+enum DownloadsPollingPolicy {
+    /// 该相位要不要继续轮询。
+    ///
+    /// 纯函数、`nonisolated`：门控逻辑能单独断言，不必起视图。
+    static func shouldPoll(_ phase: ScenePhase) -> Bool {
+        phase != .background
+    }
+
+    /// `.task(id:)` 的触发键。相位一变就重建任务 —— 这是读到**当前**相位的唯一可靠方式。
+    static func taskID(_ phase: ScenePhase) -> Int {
+        switch phase {
+        case .active: 0
+        case .inactive: 1
+        case .background: 2
+        @unknown default: 3
         }
     }
 }
