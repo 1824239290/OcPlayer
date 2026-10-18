@@ -29,16 +29,26 @@
 
 - **卡片 body 里的三处「不变的值反复现算」**（性能审查清单 `P1-10` / `P1-12` / `P1-11`）。三条实测合计从 **~634 µs / 屏**降到 **~22 µs / 屏**。
   - **`P1-12` `authorizationHeader` 加进程级缓存（11.49 µs → 0.66 µs，17.5×）**：`JellyfinServer` / `EmbySession` 的 `authorizationHeader` 都是计算属性，`DesignSystem` 里 7 处在 `imageTarget` 系列里读它 —— 每张卡每次 body 都走。拼一次头要读 2 次 UserDefaults（各带 NSLock）+ 2 次 Info.plist 查询。**关键取舍：缓存整条拼好的头，而不是分别缓存 `deviceID`/`deviceName`/`version`。** 因为 `version(in: bundle)` 是可注入 Bundle 的，`ClientIdentityTests` 用临时 Bundle 连测了 5 种版本组合，给它加无键全局缓存会**跨用例串台**（清单点名的坑）。缓存整条头绕开这件事，`version(in:)` 一行没动。缓存键**同时含 scheme + userId + token** —— 只按 userId 缓存会让 token 轮换后仍发旧 token（表现为「重新登录了还是 401」）。
-  - **`P1-10` 十六进制改查表（15.04 µs → 5.33 µs，2.8×）+ 加载键提到 `init`**：`loadKey` 原来是计算属性，在 body 里被读 **3 次**（`.task(id:)` / guard / 赋值），每次都跑一遍 SHA256 + 十六进制编码。拆开实测发现**钱不在 SHA256 上**：`String(format: "%02x", $0)` 八次就要 **13.74 µs**（占 91%），SHA256 本身只占 9%。换成字符表编码后单次 **15.04 → 5.33 µs**。
-    - **「提到 `init`」的真实收益要说准**：SwiftUI 重建 View 时会**重新调 `init`**，所以它不是「整卡只算一次」，而是把 **body 内 3 次 → init 1 次**，即每次 body 省 2 次计算（5.33 × 2 ≈ **10.7 µs/卡**，20 卡约 213 µs）。改前每次 body 3 次 ≈ 45 µs/卡，改后每次 body 0 次 —— 这个数字才是准确的，别再往上加。
+  - **`P1-10` 十六进制改查表（15.04 µs → 5.33 µs，2.8×）+ 加载键提到 `init`**：`loadKey` 原来是计算属性，**每次读**都要跑一遍 SHA256 + 十六进制编码。读取点共 3 个：**body 里 1 次**（`.task(id:)` 的 id）+ **task 闭包里 2 次**（guard、成功赋值）。拆开实测发现**钱不在 SHA256 上**：`String(format: "%02x", $0)` 八次就要 **13.74 µs**（占 91%），SHA256 本身只占 9%。换成字符表编码后单次 **15.04 → 5.33 µs**。
+    - **「提到 `init`」的真实收益要说准**：SwiftUI 重建 View 时会**重新调 `init`**，所以它不是「整卡只算一次」。准确说法是：**每次 body 省 1 次**（改前 1 次/body，改后 0），**每次 task 启动省 2 次**（闭包里那两次读变成读存储属性）。初版写「body 里 3 次 → 每次 body 省 2 次」是错的（把 task 闭包里的读取算进了 body），已由独立审查纠正。
   - **`P1-11` `imageURLString` 整条记忆化（7.05 µs → 1.32 µs，5.3×）**，并**撤销了清单建议的 `domains` 记忆化** —— 实测证明那一步净收益为零：
     | 步骤 | 实测 |
     |---|---|
-    | 读镜像键 `UserDefaults.string` | **1.34 µs** |
+    | 读镜像键 `UserDefaults.string` | **1.34 µs**（冷路径量级；审查 `-O` 热读复核为 0.29–0.35 µs） |
     | `BangumiDomains` 本体 | 0.50 µs |
     | NSLock 加解锁一对 | 0.38 µs |
-    「带失效检查的记忆化」= 1.34 + 0.38 ≈ **1.86 µs**，而直接算 = 1.34 + 0.50 ≈ **1.84 µs** —— **一样快**，白加锁。想真省 1.34 µs 只能靠 `didChangeNotification` 失效，而本 App 用户操作时频繁写默认值，会反复清空缓存。更要紧的是：`domains` 的调用点几乎都在 `imageURLString` 内部，而后者已整条缓存，命中路径根本走不到它。
+    「带失效检查的记忆化」= 读 UserDefaults(1.34) + 锁(0.38) ≈ **1.72 µs**，而直接算 = 1.34 + 0.50 ≈ **1.84 µs** —— **一样快**，白加锁。想真省 1.34 µs 只能靠 `didChangeNotification` 失效，而本 App 用户操作时频繁写默认值，会反复清空缓存。而 `domains` 的主要调用点是 `api` / `next` / `main`（BangumiServices 与 AuthService 共 **10 处**），只有 **1 处**在 `imageURLString` 内部 —— 初版把这条写反了，已由审查纠正。
   - **顺带发现：镜像域名是死配置** —— `dev.jumusu.ocplayer.bangumi.mirrorRootDomain` 全仓**只有读、没有写入点**，所以运行时恒为官方域名。失效逻辑仍按正确语义写好（用**原始字符串**而非规范化后的域名当失效键，否则 `"x"` 与 `"https://x"` 的切换会被当成没变），但现实里永不触发。
+  - **⚠️ 初版有一处注释是错的，独立审查挑出并已修**：我原先写「`imageURLStringCache` 里镜像变化时的 `removeAll` 只是内存回收，去掉也不会被任何用例发现」。**这是错的** —— 该缓存只记一个整表代次标签，所以只在新代次里写一个 key 就会推进标签，旧代次的**其余** key 会以新代次身份被命中（返回旧域名 URL → 图裂）。审查给出的反例已复现：
+    ```
+    store("OFFICIAL-A", k1, nil); store("OFFICIAL-B", k2, nil)
+    store("MIRRORED-C", k3, "mirror.example")
+    value("k1", "mirror.example")   有清空 → nil（正确）；无清空 → "OFFICIAL-A"（错）
+    ```
+    已把注释改成「正确性必需、删不得」，并补 `mirrorChangeInvalidatesAllKeysNotJustTheNewOne` 等 2 条用例 —— 现在删掉清空会红。
+  - **⚠️ 容量策略也按审查实测改了**：原先超上限是**整表清空**，实测「滚到底再回顶」N=512 命中 50%、**N=513 直接掉到 0%**（每次第 513 个新 key 触发清空）。而 Bangumi 缓存是**进程级**的，中等收藏（1000+ 条目）一次浏览就超 512。改成 **FIFO 只丢最旧一条**。
+  - **⚠️ 修了一个 TOCTOU**：`imageURLString` 先采样镜像当代次标签，而 `composeImageURLString` 内部又走 `domains` **重读一次** UserDefaults —— 两次读之间镜像若变，会把「B 代次算出的 URL」存进「A 代次的标签」，之后永久命中错值。改成把采样到的 mirror **传参**进 compose。
+  - **⚠️ 一处已知的测试盲区（诚实记录）**：镜像键全仓只有读、没有写，测试环境里 `mirrorRootDomain` 恒为 `nil`，所以「入口传 `mirrorRootDomain`」与「传 `nil`」**结果完全相同** —— 审查的 N12 变异（入口把代次固定成 nil）在任何用例下都抓不到。能测的只有「`compose` 用了传进来的值」。防线是**结构上的单点采样**，已写进注释：将来接上镜像写入口时，务必补一条「设了镜像后入口返回镜像域名」的用例。
   - **⚠️ 一处「变异测不出」的诚实记录**：`imageURLStringCache` 里「镜像变了就 `entries.removeAll()`」那两句**去掉不会被任何用例发现** —— 因为正确性靠**代次检查**（读时 `mirror != current` 直接返回 `nil`），清空只是内存回收。这条写进了类注释，免得后人去为它补人为断言。
   - **验证（红 → 绿）**：新增 5 + 7 + 5 条用例。逐个变异验红：缓存键去掉 token（最致命的错法，会让重登后仍发旧 token）→ 红；十六进制高低位写反 → 红；用大写表 → 红；用规范化域名当失效键 → 红。
   - **⚠️ 测试并行的一个坑**：第一版 `BangumiURLCacheTests` 直接改 `UserDefaults.standard` 的镜像键来验失效，而 Swift Testing **默认并行跑用例** —— 全局键被改的瞬间别的套件读到镜像形态，当场红。改成**直接测缓存类**（`mirror` 本来就是方法参数），完全离线、不碰全局状态。

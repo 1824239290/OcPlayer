@@ -64,6 +64,46 @@ final class ClientIdentityTests: XCTestCase {
         }
     }
 
+    /// **头的字段顺序与格式是契约，必须精确钉住。**
+    ///
+    /// 审查实测：把 `composeAuthorizationHeader` 的字段顺序调换后，所有用例**全绿** ——
+    /// 因为缓存版与现拼版同源，对拍抓不到顺序变化；而既有那条
+    /// `testMediaBrowserAuthorizationHeaderIncludesStableIdentity` 只用 `contains`。
+    ///
+    /// 顺序为什么是契约：`RemoteImage` 的凭证指纹是**整条头的 SHA256**，
+    /// 顺序一变指纹就变 → 全部图片缓存键失效 → 表现为「升级后所有图重新下载」。
+    func testAuthorizationHeaderFieldOrderIsPinned() {
+        ClientIdentity.resetHeaderCacheForTesting()
+        let composed = ClientIdentity.composeAuthorizationHeader(
+            scheme: "MediaBrowser", userId: "UID", token: "TOK")
+
+        // 用设备实际值拼出黄金串（deviceID/deviceName/version 是进程常量）。
+        let expected = "MediaBrowser "
+            + "Client=\"OcPlayer\", "
+            + "Device=\"\(ClientIdentity.deviceName)\", "
+            + "DeviceId=\"\(ClientIdentity.deviceID)\", "
+            + "Version=\"\(ClientIdentity.version)\", "
+            + "UserId=\"UID\", "
+            + "Token=\"TOK\""
+        XCTAssertEqual(composed, expected, "字段顺序 / 分隔符 / 引号形式都是契约")
+    }
+
+    /// 无 userId / token 时**不追加空字段**（不是 `UserId=""`）。
+    func testAuthorizationHeaderOmitsEmptyFields() {
+        ClientIdentity.resetHeaderCacheForTesting()
+        let composed = ClientIdentity.composeAuthorizationHeader(
+            scheme: "MediaBrowser", userId: nil, token: nil)
+        XCTAssertFalse(composed.contains("UserId="))
+        XCTAssertFalse(composed.contains("Token="))
+        XCTAssertFalse(composed.hasSuffix(", "), "不能留下尾随分隔符")
+
+        // nil 与空串必须产出**同一个**头（compose 里按 isEmpty 判空），
+        // 缓存键也因此合并 —— 这条保证两种写法不会算出两种指纹。
+        let emptyStrings = ClientIdentity.composeAuthorizationHeader(
+            scheme: "MediaBrowser", userId: "", token: "")
+        XCTAssertEqual(composed, emptyStrings)
+    }
+
     // MARK: - 认证头缓存（P1-12）
 
     /// 缓存值必须与「不走缓存现拼」的值逐字节一致。
