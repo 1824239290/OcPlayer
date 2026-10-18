@@ -29,7 +29,8 @@
 
 - **卡片 body 里的三处「不变的值反复现算」**（性能审查清单 `P1-10` / `P1-12` / `P1-11`）。三条实测合计从 **~634 µs / 屏**降到 **~22 µs / 屏**。
   - **`P1-12` `authorizationHeader` 加进程级缓存（11.49 µs → 0.66 µs，17.5×）**：`JellyfinServer` / `EmbySession` 的 `authorizationHeader` 都是计算属性，`DesignSystem` 里 7 处在 `imageTarget` 系列里读它 —— 每张卡每次 body 都走。拼一次头要读 2 次 UserDefaults（各带 NSLock）+ 2 次 Info.plist 查询。**关键取舍：缓存整条拼好的头，而不是分别缓存 `deviceID`/`deviceName`/`version`。** 因为 `version(in: bundle)` 是可注入 Bundle 的，`ClientIdentityTests` 用临时 Bundle 连测了 5 种版本组合，给它加无键全局缓存会**跨用例串台**（清单点名的坑）。缓存整条头绕开这件事，`version(in:)` 一行没动。缓存键**同时含 scheme + userId + token** —— 只按 userId 缓存会让 token 轮换后仍发旧 token（表现为「重新登录了还是 401」）。
-  - **`P1-10` 加载键提到 `init` + 十六进制改查表（15.04 µs → 5.33 µs）**：`loadKey` 原来是计算属性，在 body 里被读 3 次（`.task(id:)` / guard / 赋值），每次都跑一遍 SHA256 + 十六进制编码。拆开实测发现**钱不在 SHA256 上**：`String(format: "%02x", $0)` 八次就要 **13.74 µs**（占 91%），SHA256 本身只占 9%。换成字符表编码后 **15.04 → 5.33 µs**，再把它提到 `init` 算一次（`url`/`authHeader`/`maxPixelSize` 均构造后不改），body 三次读取零成本。
+  - **`P1-10` 十六进制改查表（15.04 µs → 5.33 µs，2.8×）+ 加载键提到 `init`**：`loadKey` 原来是计算属性，在 body 里被读 **3 次**（`.task(id:)` / guard / 赋值），每次都跑一遍 SHA256 + 十六进制编码。拆开实测发现**钱不在 SHA256 上**：`String(format: "%02x", $0)` 八次就要 **13.74 µs**（占 91%），SHA256 本身只占 9%。换成字符表编码后单次 **15.04 → 5.33 µs**。
+    - **「提到 `init`」的真实收益要说准**：SwiftUI 重建 View 时会**重新调 `init`**，所以它不是「整卡只算一次」，而是把 **body 内 3 次 → init 1 次**，即每次 body 省 2 次计算（5.33 × 2 ≈ **10.7 µs/卡**，20 卡约 213 µs）。改前每次 body 3 次 ≈ 45 µs/卡，改后每次 body 0 次 —— 这个数字才是准确的，别再往上加。
   - **`P1-11` `imageURLString` 整条记忆化（7.05 µs → 1.32 µs，5.3×）**，并**撤销了清单建议的 `domains` 记忆化** —— 实测证明那一步净收益为零：
     | 步骤 | 实测 |
     |---|---|
