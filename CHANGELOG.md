@@ -27,6 +27,17 @@
 
 ### 性能
 
+- **复核推翻一条审查结论：下载页 5 s 轮询「每次整表重建」不存在**（性能审查清单 `P1-04` → `REJ-07`）。
+  - **原判**：下载页每 5 秒轮询把 `tasks` 整个重写，导致每个 `DownloadTaskCard`（双层玻璃 + 取图）全部重建；且被上层页面盖住时轮询照跑。
+  - **实测四条断言，3 条错、1 条数字错**：
+    ① **「每卡取图」不成立** —— 卡片里**没有任何图片加载**，全文只有 3 个 `Image(systemName:)`（SF Symbols，零成本）。
+    ② **「双层玻璃」数字错** —— 实际是 **3 层**：整卡 `liquidGlassCard` + 暂停键 `liquidGlassCapsule` + 删除键 `liquidGlassCapsule`。
+    ③ **「被 push 盖住」这个场景不可达** —— `MoviePilotDownloadsView` 内部**没有任何 `navigationDestination`**，它是 `navigationDestination(isPresented:)` 呈现族；宿主在它浮现期间已被 `coveredByPresented` 隐去，且它是**另一个视图实例**，销毁即取消 `.task`。
+    ④ **「整表重建」不成立（最关键）** —— 探针实测（真 `NSHostingView` 挂离屏窗口，数子视图 `body` 求值次数）：给 `@State` 与 `@Observable` **写入逐字段相等的值，body 一次都不重算**（`initial=1 → afterEqualWrite=1`；写不同值才 `→ 2`）。**SwiftUI 自己已经做了相等性去重**，所以「5 s 一次整表重建」这个浪费根本不存在 —— 依赖它的「判等门控」改动收益为零。
+  - **附带一个 macOS 事实**：`scenePhase` **永不进 `.background`**。实测：最小化窗口 → `.inactive`；**⌘H 隐藏 → scenePhase 完全不变**（只有 `NSApplication.didHide`）。所以「进后台就停轮询」这类门控在 macOS 上恒为真、等于没写 —— 将来若真要在 macOS 上做「窗口不可见即停」，得挂 `NSWindow.didMiniaturize` / `NSApplication.didHide`，不能靠 `scenePhase`。
+  - **处置**：**不修**。这条已移入 `REJ-07`（结论被推翻），编号保留以防重复排查。审查清单总账 `P1` 17 → **16**、合计 92 → **91**。
+  - **顺手**：`CLAUDE.md`（本地文件、不进仓库）的 4 处过期事实已按实测改正 —— 工作区基准 `0399500` → `d4018b7`、Xcode 26.3/Swift 6.2.4 → **27.1/6.4**、包 scheme「10 个」→ **11 个**（漏 MetadataKit）、`swift test` 包清单补上 `MetadataKit`。
+
 - **暂停后不再每 10 秒重复上报进度**（性能审查清单 `P1-01`，属「纯浪费」——不改用户可见行为，只是不再白发请求）。
   - **暂停挂机 360 次 POST/小时**：心跳循环的终止态判据只认 `.stopped` / `.error` / `sourceOpenFailed`，`.paused` 于是落到通用的 `ticks % progressEveryTicks == 0` 分支 —— 每 10 s 发一次真实 `reportPlaybackProgress`。而暂停期间播放位置根本不再前进：**除第一条外，后面每一条都是同一条数据的复制品**（载荷逐字相同）。改成「进入暂停时报一次（服务端仍需要知道『停在哪 + 现在是暂停』），暂停期间不再重复，恢复播放后复位」。
   - **验证（红 → 绿）**：`testPausedDoesNotRepeatProgressReports` 修前 `XCTAssertEqual failed: ("17") is not equal to ("1") - 暂停期间不该重复上报`（200 ms 窗口里发了 17 条），修后通过。该用例同时钉住「暂停要报一次」与「恢复后照常上报」两条语义。
