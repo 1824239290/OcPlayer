@@ -1,3 +1,4 @@
+import MoviePilotKit
 import SwiftUI
 import XCTest
 
@@ -38,22 +39,128 @@ final class DownloadsPollingPolicyTests: XCTestCase {
             "`.background` 时进程还在跑但界面不可见，继续每 5 s 发请求纯属浪费。")
     }
 
-    /// `.task(id:)` 的触发键必须**对三个相位各不相同** ——
-    /// 相同的话相位变化不会重建任务，循环里读到的还是旧值（SwiftUI 的经典坑：
-    /// `.task` 闭包捕获的是启动那一刻的视图快照）。
-    func testTaskIDDistinguishesEveryPhase() {
-        let ids: [Int] = [
+    /// **`.active` 与 `.inactive` 必须共用同一个 `.task(id:)` 键。**
+    ///
+    /// 这条是修一个真实缺陷后加的：第一版按相位逐个给 id，于是
+    /// `.active ↔ .inactive` 每次切换都取消并重建轮询任务。而在飞的 `refresh()`
+    /// 被取消后，`URLSession` 抛 `URLError(.cancelled)`（**不是**
+    /// `CancellationError`）→ `MoviePilotError.ignore("请求已取消")` →
+    /// `refresh()` 的通用 `catch` 写进 `loadError` → 用户点一下别的窗口再回来
+    /// 就看见「请求已取消」错误卡片。
+    ///
+    /// 两者的轮询决定本来就一样，没有任何理由为它们重建任务。
+    func testTaskIDIsStableAcrossActiveAndInactive() {
+        XCTAssertEqual(
             DownloadsPollingPolicy.taskID(.active),
             DownloadsPollingPolicy.taskID(.inactive),
-            DownloadsPollingPolicy.taskID(.background),
-        ]
-        XCTAssertEqual(Set(ids).count, ids.count, "三个相位必须映射到不同的触发键：\(ids)")
+            "`.active` 与 `.inactive` 都要轮询，共用一个键才不会每次切相位都取消重建任务")
     }
 
-    /// 键与相位一一对应（固定值，改动会被这条钉住）。
+    /// 进出 `.background` 必须换键 —— 否则任务不会重启，回到前台也不恢复轮询。
+    func testTaskIDChangesWhenPollingDecisionChanges() {
+        let polling = DownloadsPollingPolicy.taskID(.active)
+        let stopped = DownloadsPollingPolicy.taskID(.background)
+        XCTAssertNotEqual(polling, stopped, "轮询决定变了就必须换键，否则任务不会重启/停止")
+    }
+
+    // MARK: 接线（不只是纯函数）
+
+    /// **`.background` 时循环一次都不取数。**
+    ///
+    /// 这条是审查指出的测试缺口：只断言 `shouldPoll` 的返回值时，把视图里的
+    /// `guard shouldPoll(...)` 删掉（或把 `.task(id:)` 改回普通 `.task`），
+    /// 纯函数用例一条都不红 —— 审查实测删掉 guard 后，隐藏 16 秒仍 refresh 4 次。
+    ///
+    /// 所以把循环本体提成 `runPollingLoop(phase:interval:fetch:)`，这里直接驱动它。
+    func testBackgroundLoopNeverFetches() async {
+        final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = 0
+            func bump() { lock.lock(); value += 1; lock.unlock() }
+            var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        let counter = Counter()
+        await DownloadsPollingPolicy.runPollingLoop(phase: .background) {
+            counter.bump()
+        }
+        XCTAssertEqual(counter.count, 0, "`.background` 时一次都不该取数")
+    }
+
+    /// **`.inactive` 时循环真的会转**（且能被取消停下来）。
+    ///
+    /// 用 1 ms 间隔跑 60 ms：至少取数一次；再验证取消后不再继续。
+    func testInactiveLoopFetchesAndStopsOnCancel() async {
+        final class Counter: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = 0
+            func bump() { lock.lock(); value += 1; lock.unlock() }
+            var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        let counter = Counter()
+        let task = Task {
+            await DownloadsPollingPolicy.runPollingLoop(
+                phase: .inactive, interval: .milliseconds(1)
+            ) {
+                counter.bump()
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(60))
+        task.cancel()
+        _ = await task.value
+        let afterCancel = counter.count
+        XCTAssertGreaterThan(afterCancel, 0, "`.inactive` 仍要轮询（窗口可能可见）")
+
+        // 取消后必须真的停：再等一会儿，计数不应继续涨。
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(counter.count, afterCancel, "取消后循环必须停下")
+    }
+
+    /// 键只有两种取值，与「轮 / 不轮」一一对应（改动会被这条钉住）。
     func testTaskIDValuesAreStable() {
         XCTAssertEqual(DownloadsPollingPolicy.taskID(.active), 0)
-        XCTAssertEqual(DownloadsPollingPolicy.taskID(.inactive), 1)
-        XCTAssertEqual(DownloadsPollingPolicy.taskID(.background), 2)
+        XCTAssertEqual(DownloadsPollingPolicy.taskID(.inactive), 0)
+        XCTAssertEqual(DownloadsPollingPolicy.taskID(.background), 1)
+    }
+}
+
+/// 刷新失败时**要不要**显示错误卡片。
+///
+/// 这条独立成文件里的一个小块，是因为它守着一条真实会发生的坏体验：切相位 /
+/// 离页取消时，`URLSession` 抛的是 `URLError(.cancelled)`（不是
+/// `CancellationError`），经 `MoviePilotError(networkError:)` 映射成
+/// `.ignore("请求已取消")`。只 catch `CancellationError` 的话，用户点一下别的窗口
+/// 再回来就会看到一张「请求已取消」的错误卡片。
+final class DownloadsRefreshSurfaceTests: XCTestCase {
+
+    /// `CancellationError` 不显示。
+    func testCancellationErrorIsSilent() {
+        XCTAssertFalse(DownloadsRefreshSurface.shouldSurfaceError(CancellationError()))
+    }
+
+    /// `URLError(.cancelled)` 经网关层映射成 `MoviePilotError.ignore` —— **这条是重点**：
+    /// 它不是 `CancellationError`，只 catch 前者挡不住。
+    func testIgnoreErrorIsSilent() {
+        let error = MoviePilotError(networkError: URLError(.cancelled) as NSError)
+        guard case .ignore = error else {
+            return XCTFail("`.cancelled` 应当映射成 .ignore，实际 \(error)")
+        }
+        XCTAssertFalse(
+            DownloadsRefreshSurface.shouldSurfaceError(error),
+            ".ignore 是「不显示」的语义，不该写成错误卡片")
+    }
+
+    /// 真错误照常显示 —— 别把下面这条顺手也改成 true。
+    func testGenuineErrorsAreSurfaced() {
+        let timeout = MoviePilotError(networkError: URLError(.timedOut) as NSError)
+        XCTAssertTrue(DownloadsRefreshSurface.shouldSurfaceError(timeout))
+
+        let noConnection = MoviePilotError(networkError: URLError(.notConnectedToInternet) as NSError)
+        XCTAssertTrue(DownloadsRefreshSurface.shouldSurfaceError(noConnection))
+
+        XCTAssertTrue(DownloadsRefreshSurface.shouldSurfaceError(MoviePilotError.requireLogin))
+
+        // 非 MoviePilotError 的未知错误也要显示（不能因为「认不出」就吞掉）。
+        struct Weird: Error {}
+        XCTAssertTrue(DownloadsRefreshSurface.shouldSurfaceError(Weird()))
     }
 }

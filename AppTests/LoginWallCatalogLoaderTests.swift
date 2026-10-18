@@ -209,23 +209,76 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
         )
     }
 
-    /// **取消不算「扫过」**：扫描中途取消只有部分结果，若照样把「每进程只扫一次」
-    /// 的标志置位，身份池就被永久截断、再也不补 —— 而它唯一的作用就是「多试几个
-    /// 身份、多找回几张海报」。这条钉住「取消 → 标志复位 → 下次重扫」的语义。
-    ///
-    /// 改前（返回裸 `Set`、无法区分「扫完了没找到」与「没扫完」）本用例红。
-    func testScanSignalssCancellationSeparatelyFromEmptyResult() async {
+    /// 扫描**必须如实报告「被取消」**，不能把「没扫完」混成「扫完了但没找到」。
+    func testScanSeparatesCancellationFromEmptyResult() async {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("identity-scan-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        try? Data("_auth=b484f14daf8d".utf8)
+            .write(to: dir.appendingPathComponent("Cache.db"))
+
         // 未取消：wasCancelled 必须是 false（空结果 ≠ 被取消）。
-        let clean = await ImageCacheIdentityStore.scanURLCacheForIdentities()
+        let clean = await ImageCacheIdentityStore.scanURLCacheForIdentities(in: dir)
         XCTAssertFalse(clean.wasCancelled, "正常扫完时不能报成被取消")
 
         // 在已取消的任务里跑：必须报 wasCancelled，而不是安静地返回空集。
         let task = Task {
-            await ImageCacheIdentityStore.scanURLCacheForIdentities()
+            await ImageCacheIdentityStore.scanURLCacheForIdentities(in: dir)
         }
         task.cancel()
         let cancelled = await task.value
         XCTAssertTrue(cancelled.wasCancelled, "任务已取消时扫描必须如实报告")
+    }
+
+    /// **取消之后必须能重扫、并把身份捞回来。**
+    ///
+    /// 这条才是 `9fd4dbd` 修复语义的真正守门人：前一条只断言了 `scanURLCache`
+    /// 的返回值，**没有断言 `didScanURLCache` 被复位**。审查用变异证明过——
+    /// 把 `discoveredIdentities` 里 `guard !scan.wasCancelled` 那段删掉（行为退回
+    /// 修复前），前一条用例照样全绿，而身份池仍被**永久截断**。
+    ///
+    /// 所以这里走**完整入口** `identities(for:in:)`（不是扫描函数本身）：
+    /// ① 先在被取消的任务里触发一次扫描 → 只有部分结果、标志应复位；
+    /// ② 再正常调一次 → 必须真的把 Cache.db 里的 `_auth=` 身份捞进结果。
+    /// 修复前 ② 拿不到任何捞回身份（因为 `didScanURLCache` 已置位、直接短路）。
+    func testCancelledScanIsRetriedAndRecoversIdentities() async throws {
+        let tenant = "tenant-\(UUID().uuidString)"
+        let discoveredKey = "dev.jumusu.ocplayer.imageCacheIdentities.discovered"
+        let historyKey = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: historyKey)
+            UserDefaults.standard.removeObject(forKey: discoveredKey)
+        }
+        UserDefaults.standard.removeObject(forKey: historyKey)
+        UserDefaults.standard.removeObject(forKey: discoveredKey)
+        ImageCacheIdentityStore.resetDiscoveredScanForTesting()
+
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("identity-retry-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+
+        // 目标身份：必须是小写十六进制 12 位。
+        let target = "b484f14daf8d"
+        try Data("_auth=\(target)".utf8)
+            .write(to: dir.appendingPathComponent("Cache.db"))
+
+        // ① 在被取消的任务里扫一次。`Task.cancel()` 在任务开跑前置位，
+        //    扫描函数一进循环就应当看到取消。
+        let cancelledTask = Task {
+            await ImageCacheIdentityStore.identities(for: tenant, in: dir)
+        }
+        cancelledTask.cancel()
+        _ = await cancelledTask.value
+
+        // ② 正常再扫一次：必须能捞出目标身份。
+        ImageCacheIdentityStore.resetDiscoveredScanForTesting()
+        let identities = await ImageCacheIdentityStore.identities(for: tenant, in: dir)
+        XCTAssertTrue(
+            identities.contains(target),
+            "取消后重扫必须捞回身份（修复前这里会因「已扫过」标志短路而永远为空）：\(identities)"
+        )
     }
 
     /// 没有任何 `_auth=` 时安静返回空集，不崩。

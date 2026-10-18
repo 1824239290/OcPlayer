@@ -91,6 +91,17 @@ enum LoginWallCatalogLoader {
     ///
     /// 用 `nonisolated async` 而不是 `Task.detached`：后者脱离结构化并发，
     /// 视图消失后这 5 760 次文件判定仍会跑完。
+    ///
+    /// ## ⚠️ 「离开主线程」是**当前编译设置**的产物，不是语法保证
+    ///
+    /// 独立审查实测：本工程（`SWIFT_VERSION=6.0`、无任何 `-enable-upcoming-feature`）
+    /// 下从 `@MainActor` 调这里的 `nonisolated async`，`pthread_main_np() == 0`；
+    /// 但只要打开 `NonisolatedNonsendingByDefault` 或 `ApproachableConcurrency`，
+    /// **同一段代码立刻变回 `pthread_main_np() == 1`**（跑回主 actor）。
+    ///
+    /// 也就是说：将来谁为了采用 Swift 6.2 的并发默认值打开那个开关，这里会**静默
+    /// 退化成主线程执行**，而这批的性能收益（5 760 次 × 21.74 µs）会全部还回去。
+    /// `LoginWallOffMainTests` 用「主线程心跳计数」把这条前提钉住了 —— 真退化了会红。
     nonisolated static func resolvePosters(
         candidates: [CachedItem],
         profile: ServerProfile,

@@ -32,6 +32,7 @@
   - **实测（改后）**：同样的 5 760 次判定 **199.13 ms**、`pthread_main_np() == 0`（确在非主线程）。耗时数字比改前预算高，是因为探针用了全 miss 的最坏构造；关键指标是**不再占主线程**。
   - **改法**：把逐候选的判定与组装提成 `nonisolated static func resolvePosters(...)` / `resolvePosterFile(...)`。用 `nonisolated async` 而**不是** `Task.detached` —— 后者脱离结构化并发，离页后这 5 760 次判定仍会跑完；前者沿用结构化并发，取消会自然传播（并在循环内加了 `Task.isCancelled` 检查）。
   - **保留在主 actor 的只有**：读 `app.store.profiles`、拿 `activeStore`、`posterCandidates` 的 actor 调用。
+  - **⚠️「离开主线程」是当前编译设置的产物，不是语法保证**（审查实测）：本工程（`SWIFT_VERSION=6.0`、无 `-enable-upcoming-feature`）下 `pthread_main_np()==0`；但打开 `NonisolatedNonsendingByDefault` 或 `ApproachableConcurrency` 后**同一段代码立刻变回 `=1`**（跑回主 actor）。也就是说将来谁为采用 Swift 6.2 并发默认值打开那个开关，这批收益会**静默还回去**，而别的用例一条都不会红。所以新增 `LoginWallOffMainTests`：用**主线程心跳计数**（另一个 `@MainActor` 任务每 1 ms 跳一次）钉住 —— 50 400 次判定跑 1 s 期间心跳必须仍 > 3 次。把 `resolvePosters` 改成 `@MainActor` 模拟退化即红。
   - **⚠️ 计划里标注「必须实测不能推理」的点**：SE-0338 保证 `nonisolated async` 不继承调用方 actor，但我没有靠推理结案 —— 用 `pthread_main_np()` 探针实测得到 `onMain=false`。Swift 6 在 async 上下文里**直接禁用 `Thread.isMainThread`**（"unavailable from asynchronous contexts"），这本身就是强提示，绕法就是 `pthread_main_np()`。
 
 - **登录页首次出现时不再在主线程扫 URL 缓存库**（性能审查清单 `P1-08`）。
@@ -44,9 +45,15 @@
 - **下载页轮询在应用进入后台时停止**（性能审查清单 `P2-40`）。
   - **问题**：5 秒轮询循环只判 `Task.isCancelled`，macOS `⌘H` 隐藏 / iOS 进后台后进程还在跑，于是每 5 s 发一次请求（挂机 **720 次/小时**）。用户完全无感，但确实是白发的。
   - **改法**：`.task` → `.task(id: DownloadsPollingPolicy.taskID(scenePhase))`，循环前判 `shouldPoll`。**必须用 `.task(id:)`** —— `.task` 的闭包捕获的是启动那一刻的视图快照，循环里读 `scenePhase` 永远读到旧值（SwiftUI 经典坑），只有把相位放进 id 才会随相位重建任务。
-  - **判据只认 `.background`，不认 `.inactive`**（这条最容易改错）：本机实测 `⌘H` → `.background`、最小化 → `.inactive`；但 **`.inactive` 同时表示「应用不在最前」** —— 窗口还完整可见、用户只是点了别的 app，也是 `.inactive`。拿它当「不可见」信号会让**看得见的进度条冻住**，比多几次请求糟得多。残余代价是最小化时仍轮询一次，注释里写清了理由。
+  - **判据只认 `.background`，不认 `.inactive`**：本机实测 `⌘H` → `.background`、最小化 → `.inactive`。`.inactive` 不当作「不可见」，因为它还覆盖 iOS 上通知中心 / 切换器 / 来电那类**短暂**状态 —— 拿它去停轮询，重进前台时首帧会空一拍。
+  - **⚠️ 一条被实测推翻的论据（结论不变、依据换掉）**：最初的注释写「`.inactive` 同时表示『应用不在最前』，用户点了别的 app 也是 `.inactive`」。独立审查用最小 SwiftUI app 实测**推翻了它**：macOS 26.6 上切到别的 app（`NSApp.isActive == false` 持续 2 s）**不产生任何相位变化**，`scenePhase` 一直 `.active`；本机 `.inactive` 主要来自**最小化**。所以「最小化仍每 5 s 发一次请求」现在是**明确的已知残余**，不是「安全取舍」。真要按窗口可见性判，得看 `NSWindow.occlusionState` / `miniaturized`，不是 `scenePhase`。
   - **⚠️ 明确不动的 5 个循环**：全仓 7 个 `while !Task.isCancelled` 里，`PlaybackReportingCoordinator` 心跳与 `PlaybackController` 的 4 个**必须**在后台继续（`UIBackgroundModes: audio` 下后台播放要照常上报进度）；氛围轮播（12 s）不产生网络请求、隐藏窗口不渲染，浪费接近零，且改它要动 `.task(id: ambienceTrigger)` 的重启语义，得不偿失。**别顺手统一。**
-  - **验证（红 → 绿）**：新增 `DownloadsPollingPolicyTests` 5 条。把判据改成 `phase == .active`（即 `.inactive` 也停）→ 当场红。另 4 条钉住 `.active`/`.inactive` 都轮询、`.background` 停、三个相位的 `taskID` 互不相同且值稳定。
+  - **⚠️ `.task(id:)` 的键只能随「轮询决定」变化，不能随相位逐个变**（第一版写错，自查 + 审查双向发现）：按相位逐个给 id 时，`.active ↔ .inactive` 每次切换都**取消并重建**轮询任务。实测（审查者的真实 SwiftUI 探针）：最小化 → `TASK START id=1 phase=inactive` + 新起一次 refresh。而在飞请求被取消后 `URLSession` 抛 `URLError(.cancelled)`（**不是** `CancellationError`）→ `MoviePilotError.ignore("请求已取消")` → `refresh()` 的通用 `catch` 写进 `loadError` → 用户最小化再还原就看到一张「请求已取消」错误卡片（审查实测最小化即触发重建）。改成 `taskID = shouldPoll ? 0 : 1`：`.active`/`.inactive` 共用一个键（它们本来就都轮），只有进出 `.background` 才重启。
+  - **同时补一层**：`refresh()` 原本只 catch `CancellationError`，挡不住上面那条 `.ignore`。抽出可测的纯函数 `DownloadsRefreshSurface.shouldSurfaceError(_:)`：`CancellationError` 与 `MoviePilotError.ignore` 都不显示，真错误照常显示。
+  - **验证（红 → 绿）**：`DownloadsPollingPolicyTests` 6 条 + `DownloadsRefreshSurfaceTests` 3 条。三个变异逐个验红：判据改成 `phase == .active`（`.inactive` 也停）、`taskID` 退回按相位逐个给、删掉 `.ignore` 判据。
+  - **旁证**：审查者用真实 SwiftUI 探针实测确认了 `.task` 的陷阱 —— 普通 `.task`（无 id）下 `phaseInLoop` 在 `PHASE -> background` 之后**仍恒为 `active`**，`.task(id:)` 是唯一可靠形态。
+  - **⚠️ 一处测试缺口（审查指出并已补）**：阶梯前两档 `(400,400)` / `(300,300)` 的两个数值**恰好相同**，所以只用这两档的 fixture 结构上发现不了「把 `step.maxWidth` 与 `step.maxPixelSize` 用反」——审查实测：用反后原 10 条用例**全绿**。第三档 `(720,360)` 是唯一**数值不对称**的一档，从没被写过。补 `testResolvePosterFileKeepsAsymmetricLadderStepParameters`（只写第三档）+ `testResolvePosterFilePrefersEarlierLadderStep`（两档都写、断言返回更靠前那档）。参数用反即红。
+  - **测试缺口（审查指出并已补）**：只断言 `shouldPoll` 返回值时，把视图里的 `guard shouldPoll(...)` 删掉、或把 `.task(id:)` 改回普通 `.task`，**用例一条都不红**（审查实测：删掉 guard 后隐藏 16 秒仍 refresh 4 次）。所以把循环本体提成 `@MainActor static func runPollingLoop(phase:interval:fetch:)`，新增两条直接驱动它的用例：`.background` 时 `fetch` 一次都不被调用；`.inactive` 会转且取消后真的停。删掉 guard 即红。
 
 ### 性能
 

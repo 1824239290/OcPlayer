@@ -58,6 +58,14 @@ enum ImageCacheIdentityStore {
     /// 扫描每个进程只做一次。
     private static var didScanURLCache = false
 
+    /// 测试专用：复位「每进程只扫一次」的标志。
+    ///
+    /// 生产不需要它 —— 这个标志的整个意义就是「别扫第二次」。但用例要连续验证
+    /// 「取消后能重扫」就必须能回到初始态，否则第一条用例就把进程状态定死了。
+    static func resetDiscoveredScanForTesting() {
+        didScanURLCache = false
+    }
+
     // MARK: - 记录
 
     /// 记下某个服务器当前生效的缓存身份。会话落地时调用（见 `AppModel.activate`）。
@@ -81,9 +89,9 @@ enum ImageCacheIdentityStore {
     ///
     /// `async` 是因为首次调用要扫 URL 缓存库（见 `discoveredIdentities`）。
     /// 全仓只有一个调用点（`LoginWallCatalogLoader`），async 化不外溢。
-    static func identities(for tenant: String) async -> [String] {
+    static func identities(for tenant: String, in directory: URL? = nil) async -> [String] {
         var result = history(for: tenant)
-        for identity in await discoveredIdentities() where !result.contains(identity) {
+        for identity in await discoveredIdentities(in: directory) where !result.contains(identity) {
             result.append(identity)
         }
         return result
@@ -128,14 +136,16 @@ enum ImageCacheIdentityStore {
     ///   部分结果；如果照样把 `didScanURLCache` 置位，身份池就被永久截断、再也不补
     ///   ——而它唯一的作用就是「多试几个身份，多找回几张海报」。所以取消时要把标志
     ///   复位，让下次进登录页重扫。
-    private static func discoveredIdentities() async -> [String] {
+    /// - Parameter directory: 缓存目录。生产不传（= `OcPlayerStorage` 的规范路径）；
+    ///   测试注入临时目录，才能造出「扫到一半被取消」这种真实形状。
+    static func discoveredIdentities(in directory: URL? = nil) async -> [String] {
         let defaults = UserDefaults.standard
         let stored = defaults.stringArray(forKey: discoveredKey) ?? []
         guard !didScanURLCache else { return stored }
         // **先同步置位再 await**：两处并发进登录页时不能双扫（既浪费也可能重复写）。
         didScanURLCache = true
 
-        let scan = await scanURLCacheForIdentities()
+        let scan = await scanURLCacheForIdentities(in: directory)
         guard !scan.wasCancelled else {
             // 取消：结果不完整，不能把它当成「扫过了」。标志复位，下次重扫。
             didScanURLCache = false
@@ -149,11 +159,11 @@ enum ImageCacheIdentityStore {
 
     /// 扫描结果。带 `wasCancelled` 是有意的：**调用方必须能区分「扫完了但没找到」与
     /// 「没扫完」** —— 前者该缓存、后者不该。
-    nonisolated static func scanURLCacheForIdentities() async
+    nonisolated static func scanURLCacheForIdentities(in directory: URL? = nil) async
         -> (identities: Set<String>, wasCancelled: Bool) {
         // 缓存已从 `Application Support` 搬到 `Caches`，这里必须跟着走，
         // 否则扫的是一个永远不存在的目录（空结果 = 登录页海报墙退化成程序化封面）。
-        let directory = OcPlayerStorage.cacheDirectory("ImageCache")
+        let directory = directory ?? OcPlayerStorage.cacheDirectory("ImageCache")
         // 逐文件判取消：单文件已可达数百 MB，离页后不该再继续扫下一个。
         var found: Set<String> = []
         // `-wal` 里可能躺着还没并回主库的新记录，两个都看。

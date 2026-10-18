@@ -65,11 +65,8 @@ struct MoviePilotDownloadsView: View {
         // 视图快照，循环里读 `scenePhase` 永远读到旧值 —— SwiftUI 的经典坑。
         // 只有把相位放进 id，相位一变才会取消并重建任务。
         .task(id: DownloadsPollingPolicy.taskID(scenePhase)) {
-            guard DownloadsPollingPolicy.shouldPoll(scenePhase) else { return }
-            while !Task.isCancelled {
+            await DownloadsPollingPolicy.runPollingLoop(phase: scenePhase) {
                 await refresh()
-                guard !Task.isCancelled else { break }
-                try? await Task.sleep(for: .seconds(5))
             }
         }
         .confirmationDialog(
@@ -176,10 +173,16 @@ struct MoviePilotDownloadsView: View {
             let fetched = try await MoviePilotAPIClient.shared.downloadingTasks()
             tasks = fetched
             loadError = nil
-        } catch is CancellationError {
-            // 离页取消，不算错误
         } catch {
-            loadError = MoviePilotError.userMessage(of: error)
+            // 取消分两种形态，都要当「不是错误」：
+            // ① `CancellationError` —— Swift 结构化并发的取消；
+            // ② `MoviePilotError.ignore` —— `URLSession` 抛的 `URLError(.cancelled)`
+            //    经 `MoviePilotError(networkError:)` 映射而来，**不是**
+            //    `CancellationError`，落不到 ①。只 catch ① 的话，切相位 / 离页取消
+            //    会在页面上闪一张「请求已取消」的错误卡片。
+            if DownloadsRefreshSurface.shouldSurfaceError(error) {
+                loadError = MoviePilotError.userMessage(of: error)
+            }
         }
         isFirstLoad = false
     }
@@ -212,7 +215,21 @@ struct MoviePilotDownloadsView: View {
 /// **看得见的进度条冻住**，比多几次请求糟得多。
 ///
 /// 所以只停 `.background`（隐藏 / iOS 进后台）。代价是最小化时仍每 5 s 发一次
-/// 请求，这是可接受的残余：窗口不可见但进程还在，且这是唯一安全的取舍。
+/// 请求（窗口不可见但进程还在），这是已知的、被接受的残余。
+///
+/// ## ⚠️ macOS 上 `.inactive` 的来源（实测更正）
+///
+/// 本批最初的注释写「`.inactive` 同时表示『应用不在最前』，用户点了别的 app 也是
+/// `.inactive`」。**独立审查用最小 SwiftUI app 实测推翻了这条**：macOS 26.6 上
+/// 切到别的 app（`NSApp.isActive == false` 持续 2 s）**不产生任何相位变化**，
+/// `scenePhase` 一直是 `.active`。本机 `.inactive` 主要来自**最小化**，
+/// `.background` 来自 `⌘H` 隐藏。
+///
+/// 结论（只停 `.background`）不变，但**依据要换掉**：iOS 上 `.inactive` 确实是
+/// 通知中心 / 切换器 / 来电那一类短暂状态，把它们当「不可见」去停轮询会让重进前台
+/// 的首帧空一拍。真正「窗口是否可见」的精确判据是
+/// `NSWindow.occlusionState` / `miniaturized`，不是 `scenePhase` —— 于是最小化
+/// 仍轮询成了这个方案的**已知残余**，而不是「安全取舍」。
 ///
 /// ## 为什么不是所有轮询都加这个门控
 ///
@@ -229,14 +246,55 @@ enum DownloadsPollingPolicy {
         phase != .background
     }
 
-    /// `.task(id:)` 的触发键。相位一变就重建任务 —— 这是读到**当前**相位的唯一可靠方式。
-    static func taskID(_ phase: ScenePhase) -> Int {
-        switch phase {
-        case .active: 0
-        case .inactive: 1
-        case .background: 2
-        @unknown default: 3
+    /// 轮询循环本体。抽出来是为了**可断言**：门控只写在视图里的话，
+    /// 「`.background` 时到底会不会取数」只能靠起视图手工观察
+    /// （独立审查实测：删掉 guard 后隐藏 16 秒仍会 refresh 4 次，
+    /// 而纯函数用例一条都不红）。
+    ///
+    /// - Parameter fetch: 一次取数。生产传入视图的 `refresh()`。
+    /// - Parameter interval: 轮询间隔。生产默认 5 s；测试注入极短间隔。
+    @MainActor
+    static func runPollingLoop(
+        phase: ScenePhase,
+        interval: Duration = .seconds(5),
+        fetch: () async -> Void
+    ) async {
+        guard shouldPoll(phase) else { return }
+        while !Task.isCancelled {
+            await fetch()
+            guard !Task.isCancelled else { break }
+            try? await Task.sleep(for: interval)
         }
+    }
+
+    /// `.task(id:)` 的触发键。**只在「轮询决定」变化时才变**，不是「相位一变就变」。
+    ///
+    /// ## 为什么不能按相位逐个给 id
+    ///
+    /// 第一版让 `.active` / `.inactive` / `.background` 各占一个 id。后果是
+    /// `.active ↔ .inactive` 每次切换都会**取消并重建**轮询任务 —— 而在飞的那次
+    /// `refresh()` 被取消后，`URLSession` 抛的是 `URLError(.cancelled)`（**不是**
+    /// `CancellationError`），经 `MoviePilotError(networkError:)` 映射成
+    /// `.ignore("请求已取消")`，`refresh()` 的通用 `catch` 就把它写进 `loadError`
+    /// —— 用户点一下别的窗口再回来，就看到一条「请求已取消」的错误卡片。
+    ///
+    /// 而 `.active` 与 `.inactive` 的**轮询决定完全相同**（都要轮），没有任何理由
+    /// 为它们重建任务。所以 id 只区分「轮」与「不轮」两种状态：
+    /// `.inactive → .active` 不重启，只有进出 `.background` 才重启。
+    static func taskID(_ phase: ScenePhase) -> Int {
+        shouldPoll(phase) ? 0 : 1
+    }
+}
+
+/// 刷新失败时**要不要**显示错误卡片。
+///
+/// 抽成纯函数是为了可断言：取消类错误不该出现在 UI 上，而这条判据藏在
+/// `refresh()` 的 catch 链里时只能靠起视图验证。
+enum DownloadsRefreshSurface {
+    static func shouldSurfaceError(_ error: any Error) -> Bool {
+        if error is CancellationError { return false }
+        if let moviePilot = error as? MoviePilotError, case .ignore = moviePilot { return false }
+        return true
     }
 }
 

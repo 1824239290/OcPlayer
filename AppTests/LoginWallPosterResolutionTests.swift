@@ -156,6 +156,58 @@ final class LoginWallPosterResolutionTests: XCTestCase {
         XCTAssertNotNil(file, "第一档未命中时必须继续试后面的阶梯")
     }
 
+    /// **`maxWidth` 与 `maxPixelSize` 不能互换**。
+    ///
+    /// 阶梯里前两档 `(400,400)` / `(300,300)` 的两个数值**恰好相同**，所以只写这两档
+    /// 的 fixture 结构上发现不了「把 `step.maxWidth` 与 `step.maxPixelSize` 用反」这个
+    /// 变异（独立审查实测：用反后前两档仍全部命中、10 条用例全绿）。
+    ///
+    /// 第三档 `(720, 360)` 是唯一**数值不对称**的一档，这条专门写它。
+    func testResolvePosterFileKeepsAsymmetricLadderStepParameters() async {
+        let (pipeline, _) = makePipeline()
+        let profile = makeProfile()
+        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        // 只按第三档 (720, 360) 写：maxWidth=720、maxPixelSize=360。
+        await seedCache(
+            pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
+            step: (720, 360))
+
+        let file = LoginWallCatalogLoader.resolvePosterFile(
+            pipeline: pipeline, profile: profile, identities: [identity],
+            itemID: "abc123", tag: "t1")
+        XCTAssertNotNil(
+            file,
+            "第三档 (720,360) 的 maxWidth 与 maxPixelSize 数值不同 —— "
+                + "把两者用反时这条会红（前两档 (400,400)/(300,300) 发现不了）")
+    }
+
+    /// 阶梯**顺序**：两档都写了字节时，必须返回**先命中**那一档的文件。
+    func testResolvePosterFilePrefersEarlierLadderStep() async throws {
+        let (pipeline, _) = makePipeline()
+        let profile = makeProfile()
+        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+
+        // 两档都写。第一档 (400,400) 在阶梯里更靠前。
+        await seedCache(
+            pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
+            step: (400, 400))
+        await seedCache(
+            pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
+            step: (720, 360))
+
+        let file = try XCTUnwrap(LoginWallCatalogLoader.resolvePosterFile(
+            pipeline: pipeline, profile: profile, identities: [identity],
+            itemID: "abc123", tag: "t1"))
+
+        // 第一档对应的键必须与命中的这个文件一致。
+        let firstStep = try XCTUnwrap(LoginWallStyle.cacheParameterLadder.first)
+        let firstURL = try XCTUnwrap(profile.imageURL(
+            itemID: "abc123", type: .primary, maxWidth: firstStep.maxWidth, tag: "t1"))
+        let expected = try XCTUnwrap(pipeline.cachedFileURL(
+            url: firstURL, cacheIdentity: identity, maxPixelSize: firstStep.maxPixelSize))
+        XCTAssertEqual(file, expected, "两档都命中时必须返回阶梯里更靠前的那一档")
+    }
+
     /// 空身份池 → 直接 nil（不能因为「没有身份」就退化成用当前认证头）。
     func testResolvePosterFileReturnsNilWithoutIdentities() async {
         let (pipeline, _) = makePipeline()
