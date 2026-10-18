@@ -46,6 +46,18 @@ enum LoginWallCatalogLoader {
     }
 
     /// 主来源：本机媒体库里带主图的电影 / 剧集，且字节确实在图片缓存里。
+    ///
+    /// ## 重活都在 `nonisolated` 里
+    ///
+    /// 「这张海报的字节在不在本机」要试 `ladder(3) × identities(≤20)` 个组合，每个
+    /// 组合一次 `cachedFileURL`（内部 `URLComponents` 重排 + FNV1a + 一次 `fileExists`）。
+    /// 实测单次 **21.74 µs**，96 张候选全落空时 = **5 760 次 / 125.2 ms**。
+    /// 改前这一整段跑在 `@MainActor` 上，而登录页正是用户点完「退出登录」马上看到的
+    /// 页面 —— 卡在这儿最刺眼。
+    ///
+    /// 这里只保留必须主 actor 的部分（读 `app.store.profiles` / 拿 `activeStore`），
+    /// 逐候选的判定与组装都交给 `resolvePosters`（`nonisolated async`，在全局并发
+    /// 执行器上跑，且沿用结构化并发、离页即取消）。
     static func libraryPosters(app: AppModel) async -> [LoginWallPoster] {
         guard await app.metadata.waitUntilReady(), let store = app.metadata.activeStore else { return [] }
 
@@ -56,30 +68,68 @@ enum LoginWallCatalogLoader {
         // 所以每台都用自己的档案拼 URL、用自己的缓存身份算键。
         for profile in app.store.profiles {
             guard posters.count < catalogSize else { break }
-            let identities = ImageCacheIdentityStore.identities(for: profile.id)
+            let identities = await ImageCacheIdentityStore.identities(for: profile.id)
             guard !identities.isEmpty else { continue }
             guard let candidates = try? await store.posterCandidates(
                 tenant: TenantID(profile: profile), limit: catalogSize
             ) else { continue }
 
-            for candidate in candidates {
-                guard posters.count < catalogSize else { break }
-                let item = candidate.item
-                guard let tag = item.primaryImageTag else { continue }
-                guard let file = cachedPosterFile(
-                    pipeline: pipeline, profile: profile, identities: identities,
-                    itemID: item.id, tag: tag
-                ) else { continue }
+            let resolved = await resolvePosters(
+                candidates: candidates,
+                profile: profile,
+                identities: identities,
+                pipeline: pipeline,
+                limit: catalogSize - posters.count
+            )
+            posters.append(contentsOf: resolved)
+        }
+        return posters
+    }
 
-                posters.append(
-                    LoginWallPoster(
-                        id: item.id,
-                        title: item.name,
-                        year: item.year,
-                        imageFile: file,
-                        art: LoginWallArt.make(seedString: item.id)
-                    ))
-            }
+    /// 逐候选判定 + 组装。**`nonisolated async`**：在全局并发执行器上跑，
+    /// 不占主线程；外层取消（离页）会自然传播进来。
+    ///
+    /// 用 `nonisolated async` 而不是 `Task.detached`：后者脱离结构化并发，
+    /// 视图消失后这 5 760 次文件判定仍会跑完。
+    ///
+    /// ## ⚠️ 「离开主线程」是**当前编译设置**的产物，不是语法保证
+    ///
+    /// 独立审查实测：本工程（`SWIFT_VERSION=6.0`、无任何 `-enable-upcoming-feature`）
+    /// 下从 `@MainActor` 调这里的 `nonisolated async`，`pthread_main_np() == 0`；
+    /// 但只要打开 `NonisolatedNonsendingByDefault` 或 `ApproachableConcurrency`，
+    /// **同一段代码立刻变回 `pthread_main_np() == 1`**（跑回主 actor）。
+    ///
+    /// 也就是说：将来谁为了采用 Swift 6.2 的并发默认值打开那个开关，这里会**静默
+    /// 退化成主线程执行**，而这批的性能收益（5 760 次 × 21.74 µs）会全部还回去。
+    /// `LoginWallOffMainTests` 用「主线程心跳计数」把这条前提钉住了 —— 真退化了会红。
+    nonisolated static func resolvePosters(
+        candidates: [CachedItem],
+        profile: ServerProfile,
+        identities: [String],
+        pipeline: ImagePipeline,
+        limit: Int
+    ) async -> [LoginWallPoster] {
+        guard limit > 0 else { return [] }
+        var posters: [LoginWallPoster] = []
+        posters.reserveCapacity(min(candidates.count, limit))
+
+        for candidate in candidates {
+            if Task.isCancelled || posters.count >= limit { break }
+            let item = candidate.item
+            guard let tag = item.primaryImageTag else { continue }
+            guard let file = resolvePosterFile(
+                pipeline: pipeline, profile: profile, identities: identities,
+                itemID: item.id, tag: tag
+            ) else { continue }
+
+            posters.append(
+                LoginWallPoster(
+                    id: item.id,
+                    title: item.name,
+                    year: item.year,
+                    imageFile: file,
+                    art: LoginWallArt.make(seedString: item.id)
+                ))
         }
         return posters
     }
@@ -94,7 +144,7 @@ enum LoginWallCatalogLoader {
     ///   全部缓存键跟着变，字节却一张没少（见 `ImageCacheIdentityStore`）。
     ///
     /// 每个组合只是一次「文件在不在」的判断，不发网络请求。
-    private static func cachedPosterFile(
+    nonisolated static func resolvePosterFile(
         pipeline: ImagePipeline,
         profile: ServerProfile,
         identities: [String],
