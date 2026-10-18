@@ -27,17 +27,6 @@
 
 ### 性能
 
-- **复核推翻一条审查结论：下载页 5 s 轮询「每次整表重建」不存在**（性能审查清单 `P1-04` → `REJ-07`）。
-  - **原判**：下载页每 5 秒轮询把 `tasks` 整个重写，导致每个 `DownloadTaskCard`（双层玻璃 + 取图）全部重建；且被上层页面盖住时轮询照跑。
-  - **实测四条断言，3 条错、1 条数字错**：
-    ① **「每卡取图」不成立** —— 卡片里**没有任何图片加载**，全文只有 3 个 `Image(systemName:)`（SF Symbols，零成本）。
-    ② **「双层玻璃」数字错** —— 实际是 **3 层**：整卡 `liquidGlassCard` + 暂停键 `liquidGlassCapsule` + 删除键 `liquidGlassCapsule`。
-    ③ **「被 push 盖住」这个场景不可达** —— `MoviePilotDownloadsView` 内部**没有任何 `navigationDestination`**，它是 `navigationDestination(isPresented:)` 呈现族；宿主在它浮现期间已被 `coveredByPresented` 隐去，且它是**另一个视图实例**，销毁即取消 `.task`。
-    ④ **「整表重建」不成立（最关键）** —— 探针实测（真 `NSHostingView` 挂离屏窗口，数子视图 `body` 求值次数）：给 `@State` 与 `@Observable` **写入逐字段相等的值，body 一次都不重算**（`initial=1 → afterEqualWrite=1`；写不同值才 `→ 2`）。**SwiftUI 自己已经做了相等性去重**，所以「5 s 一次整表重建」这个浪费根本不存在 —— 依赖它的「判等门控」改动收益为零。
-  - **附带一个 macOS 事实**：`scenePhase` **永不进 `.background`**。实测：最小化窗口 → `.inactive`；**⌘H 隐藏 → scenePhase 完全不变**（只有 `NSApplication.didHide`）。所以「进后台就停轮询」这类门控在 macOS 上恒为真、等于没写 —— 将来若真要在 macOS 上做「窗口不可见即停」，得挂 `NSWindow.didMiniaturize` / `NSApplication.didHide`，不能靠 `scenePhase`。
-  - **处置**：**不修**。这条已移入 `REJ-07`（结论被推翻），编号保留以防重复排查。审查清单总账 `P1` 17 → **16**、合计 92 → **91**。
-  - **顺手**：`CLAUDE.md`（本地文件、不进仓库）的 4 处过期事实已按实测改正 —— 工作区基准 `0399500` → `d4018b7`、Xcode 26.3/Swift 6.2.4 → **27.1/6.4**、包 scheme「10 个」→ **11 个**（漏 MetadataKit）、`swift test` 包清单补上 `MetadataKit`。
-
 - **暂停后不再每 10 秒重复上报进度**（性能审查清单 `P1-01`，属「纯浪费」——不改用户可见行为，只是不再白发请求）。
   - **暂停挂机 360 次 POST/小时**：心跳循环的终止态判据只认 `.stopped` / `.error` / `sourceOpenFailed`，`.paused` 于是落到通用的 `ticks % progressEveryTicks == 0` 分支 —— 每 10 s 发一次真实 `reportPlaybackProgress`。而暂停期间播放位置根本不再前进：**除第一条外，后面每一条都是同一条数据的复制品**（载荷逐字相同）。改成「进入暂停时报一次（服务端仍需要知道『停在哪 + 现在是暂停』），暂停期间不再重复，恢复播放后复位」。
   - **验证（红 → 绿）**：`testPausedDoesNotRepeatProgressReports` 修前 `XCTAssertEqual failed: ("17") is not equal to ("1") - 暂停期间不该重复上报`（200 ms 窗口里发了 17 条），修后通过。该用例同时钉住「暂停要报一次」与「恢复后照常上报」两条语义。
@@ -91,6 +80,16 @@
   - **为什么本批必须先修它**：上面刚给 `poll_event` 加的节流，如果汇总落不了盘，等于把 59/60 的证据悄悄扔掉、只留一条「又失败了」。
   - **修法**：`PlaybackLog` 加 `flush(timeout:)`（有界版，供进程终止路径用；原无界 `flush()` 保留并注明「终止路径别用」）。macOS 退出（`OcPlayerApp.terminationHandler`）与 iOS `willTerminate`（`RootView`）各补一行调用，沿用既有的有界等待写法，**不新增阻塞风险**。
   - **一条更实在的害处（同一批测量顺带算出）**：单条记录 **264 B**，错误风暴 60 条/秒时填满 `maxFileBytes` 20 MB 只要 **22.1 分钟**、填满 `maxTotalBytes` 50 MB 只要 **55.2 分钟** —— 也就是「故障前那段有用历史」会被风暴在一个小时内整段轮转掉。节流 + 计数落盘正好把这条堵上。
+
+- **复核 `P1-04`：主体结论推翻，但留下一条真实的小浪费**（性能审查清单 `P1-04` → 部分 `REJ-07` + 新记 `P2-40`）。
+  - **原判**：下载页每 5 秒轮询把 `tasks` 整个重写 → 每张 `DownloadTaskCard`（「双层玻璃 + 取图」）全部重建；且被上层页面盖住时轮询照跑。
+  - **逐条实测，两条是错的**：① **「取图」不成立** —— 卡片里没有任何图片加载，全文只有 3 个 `Image(systemName:)`（SF Symbols）；② **「双层玻璃」数字错** —— 实际 3 层（整卡 `liquidGlassCard` + 暂停键 + 删除键 `liquidGlassCapsule`）。③ **「被 push 盖住」在本页内不可达** —— 本页内部零 `navigationDestination`，它是 `navigationDestination(isPresented:)` 呈现族。⚠️ 但这条只对「页内 push」成立：**全局路由仍可能盖到它**，且 macOS 上被盖页的 `.task` 不会取消（未测全局路由那条，别当已证）。
+  - **关键：④「每次都整表重建」不成立（这条我一开始测错过，见下）**。按真实形状复现（`@State [Row]` + `ForEach` + 卡片闭包**捕获 row**、每次 body 都是新闭包），用真 `NSHostingView` 挂窗口数 body 求值：**等值数组写入 → root 与卡片都不重算**（`root 1→1`、`card 2→2`）；**真变更写入 → 两者都重算**（`root 1→2`、`card 2→4`）。SwiftUI 在 `@State` 写入时做了相等性去重，所以「5 秒一次整表重建」这个浪费不存在。
+  - **⚠️ 一条被我自己推翻的错误结论（过程留着防重犯）**：初版探针只数了**叶子子视图**的 body（其唯一输入是 `Int`，自然不变），据此得出「无一重算」；独立审查指出该结构不符真实形状，改成上面的真实形状后结论仍然成立、但依据换了。**教训：测「某个状态变化会不会导致重算」，必须数触发源所在的那个 body，并且让被测视图的输入包含变化的那个值。**
+  - **⚠️ 另一条彻底错的，也留在这里**：初版写「`scenePhase` 在 macOS 上永不进 `.background`、⌘H 隐藏时完全不变」。**错。** 重测（从 `active` 起）实测：**隐藏 → `NSApplication.didHide` + `scenePhase active → background`**；最小化 → `active → inactive`；恢复 → `active`。初版之所以「没变化」，是因为按 ⌘H 时 app **已经处于最小化后的 `inactive`**，不是从 active 隐藏 —— 测量前提就不对。
+  - **由 ④/⑤ 的更正带出一条真实的小浪费（新记 `P2-40`）**：轮询循环只看 `Task.isCancelled`，**不管 app 是否在前台**。macOS 隐藏 / 最小化、iOS 进后台时，只要进程还在跑就每 5 秒发一次请求（iOS 后台会被系统挂起，macOS 不会）。**`scenePhase == .background` 就是正确的门控点** —— 实测可靠。量级很小（挂机 720 次/小时的无用请求），不紧急，但真实存在。
+  - **处置**：`P1-04` 主体推翻（进 `REJ-07`），残留的真实项单立 **`P2-40`**。`P1-04` 编号保留以防重复排查。审查清单：`P1` 17 → **16**、`P2` 39 → **40**、合计仍 **92**。
+  - **顺手**：`CLAUDE.md`（本地文件、不进仓库）4 处过期事实已按实测改正 —— 工作区基准 `0399500` → `d4018b7`、Xcode 26.3/Swift 6.2.4 → **27.1/6.4**、包 scheme「10 个」→ **11 个**（漏 MetadataKit）、`swift test` 包清单补上 `MetadataKit`。
 
 ### 构建 / 发布
 
