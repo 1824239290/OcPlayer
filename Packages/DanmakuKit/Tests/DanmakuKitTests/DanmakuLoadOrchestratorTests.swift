@@ -111,6 +111,189 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertNotNil(cached)
     }
 
+    // MARK: 降级瀑布总预算（P1-16）
+
+    /// 「慢但成功」是唯一能跑完四层的真实坏路径（超时/5xx 会被 `gatewayDown` 短路）。
+    /// 关掉预算时它最坏发 8 个请求；打开预算后必须裁到「预算 + 一次在途请求」。
+    func testWaterfallRespectsTotalBudget() async throws {
+        // 基线：预算关闭 = 旧行为。
+        let unbounded = try await countRequests(slowMs: 100, budget: .zero)
+        XCTAssertGreaterThan(unbounded.count, 4,
+                             "预算关闭时应跑完整个瀑布（实测 8 个请求）")
+
+        // 预算 250 ms + 100 ms/请求 ⇒ 最多 3–4 个请求。
+        let bounded = try await countRequests(slowMs: 100, budget: .milliseconds(250))
+        XCTAssertLessThan(bounded.count, unbounded.count,
+                          "预算必须真的减少请求数：有界 \(bounded.count) vs 无界 \(unbounded.count)")
+        XCTAssertLessThanOrEqual(bounded.count, 4,
+                                 "预算 + 一次在途请求的上界被突破：\(bounded.count) 个请求")
+        // 总耗时上界 = 预算 + 一次在途请求（100 ms）+ 调度余量。
+        XCTAssertLessThan(bounded.elapsedMs, 600,
+                          "总耗时必须被预算框住，实测 \(bounded.elapsedMs) ms")
+    }
+
+    /// 预算耗尽但已经有过 `tierError` 时，结果仍必须是 `.failed`（可重试），
+    /// **不能**退化成 `.noMatch` —— 那是 P1-03 修的边界，不能被预算改回去。
+    func testBudgetExhaustedStillReportsFailure() async throws {
+        let boundedOrchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: TestSupport.mockedSession(),
+            retryPolicy: RetryPolicy(attempts: 1, base: 0, jitter: 0.0...0.0),
+            totalBudget: .milliseconds(150)
+        )
+        let fingerprint = makeFingerprintData()
+        MockURLProtocol.handler = { request in
+            if request.url!.path == "/video.mp4" {
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+            // 慢 + 404：4xx 不在 gatewayDown 白名单里 → 不短路，但会记 tierError。
+            Thread.sleep(forTimeInterval: 0.2)
+            return TestSupport.response("{}", status: 404, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await boundedOrchestrator.runAutomatic(
+            matchContext: makeContext(cacheKey: "budget-failed"),
+            configuration: makeConfiguration(),
+            playback: playback,
+            revision: 1
+        )
+        guard case .failed = outcome else {
+            return XCTFail("预算耗尽 + 有 tierError 时应为 .failed，实际 \(outcome)")
+        }
+    }
+
+    /// 缓存命中的路径完全不受预算影响（零网络请求，也不该被预算判据碰）。
+    func testBudgetDoesNotAffectCachedMatchPath() async throws {
+        let tinyBudgetOrchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: TestSupport.mockedSession(),
+            retryPolicy: RetryPolicy(attempts: 1, base: 0, jitter: 0.0...0.0),
+            // 极小预算：即便 1 ns 也该走完缓存路径。
+            totalBudget: .nanoseconds(1)
+        )
+        let context = makeContext(cacheKey: "budget-cached")
+        await service.remember(
+            match: DanmakuEpisodeMatch(episodeID: 3003, shiftSeconds: 0),
+            cacheKey: context.cacheKey,
+            revision: 0
+        )
+        await service.persistComments(
+            [DanmakuComment(cid: 1, p: "1,1,16777215,1", m: "缓存弹幕")],
+            for: 3003
+        )
+        MockURLProtocol.handler = { _ in throw URLError(.badServerResponse) }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await tinyBudgetOrchestrator.runAutomatic(
+            matchContext: context,
+            configuration: makeConfiguration(),
+            playback: playback,
+            revision: 1
+        )
+        guard case .loaded(let episodeID, let count, _, _) = outcome else {
+            return XCTFail("缓存命中应直接装载，实际 \(outcome)")
+        }
+        XCTAssertEqual(episodeID, 3003)
+        XCTAssertEqual(count, 1)
+    }
+
+    /// **指纹下载不占预算**：`mediaHash` 拉的是媒体服务器的前 16 MiB，成本由
+    /// `URLSession` 超时管着，闸门既管不到也不该管。
+    ///
+    /// 修前实测：指纹 500 ms + 预算 300 ms ⇒ 进到 Tier 1 预算已耗尽，
+    /// **零次搜索请求**且落成 `.noMatch`（谎报「未匹配到剧集」）。慢媒体服务器上可达。
+    func testSlowFingerprintDoesNotConsumeBudget() async throws {
+        final class Counter: @unchecked Sendable {
+            var searches = 0
+        }
+        let boundedOrchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: TestSupport.mockedSession(),
+            retryPolicy: RetryPolicy(attempts: 1, base: 0, jitter: 0.0...0.0),
+            totalBudget: .milliseconds(300)
+        )
+        let counter = Counter()
+        let fingerprint = makeFingerprintData()
+        MockURLProtocol.handler = { request in
+            if request.url!.path == "/video.mp4" {
+                // 慢但成功：吃掉的时间必须**不计入**预算。
+                Thread.sleep(forTimeInterval: 0.5)
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+            counter.searches += 1
+            return TestSupport.response("{}", status: 404, url: request.url!)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let outcome = await boundedOrchestrator.runAutomatic(
+            matchContext: makeContext(cacheKey: "slow-fingerprint"),
+            configuration: makeConfiguration(),
+            playback: playback,
+            revision: 1
+        )
+        XCTAssertGreaterThan(counter.searches, 0,
+                             "指纹耗时不该耗尽预算 —— 四层至少要尝试一次")
+        // 有 tierError（404 会记）时必须是可重试的失败，不能谎报未匹配。
+        guard case .failed = outcome else {
+            return XCTFail("应有 tierError → .failed，实际 \(outcome)")
+        }
+    }
+
+    /// 数一遍「慢但成功」路径下真实发出的搜索请求数。
+    private func countRequests(
+        slowMs: Double,
+        budget: Duration
+    ) async throws -> (count: Int, elapsedMs: Double) {
+        final class Counter: @unchecked Sendable {
+            var searches = 0
+        }
+        // 每轮用独立的 orchestrator 与缓存键，避免上一轮的映射命中缓存。
+        let boundedOrchestrator = DanmakuLoadOrchestrator(
+            service: service,
+            session: TestSupport.mockedSession(),
+            retryPolicy: RetryPolicy(attempts: 1, base: 0, jitter: 0.0...0.0),
+            totalBudget: budget
+        )
+        let counter = Counter()
+        let fingerprint = makeFingerprintData()
+        MockURLProtocol.handler = { request in
+            if request.url!.path == "/video.mp4" {
+                return makeRange206Response(fingerprint, url: request.url!)
+            }
+            counter.searches += 1
+            Thread.sleep(forTimeInterval: slowMs / 1000)
+            // 200 + 空结果：层内循环会继续，且不触发 gatewayDown —— 真正的坏路径。
+            let body = #"{"success":true,"errorCode":0,"animes":[],"episodes":[]}"#
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                    headerFields: ["Content-Type": "application/json"])!,
+                    Data(body.utf8))
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let context = DanmakuMatchContext(
+            uuid: UUID(),
+            cacheKey: "budget-bench-\(slowMs)-\(budget)",
+            allowsCachedMatchReuse: false,
+            fileName: "[Sub] 葬送的芙莉莲 - 03 [1080p].mkv",
+            fileSize: 64,
+            durationSeconds: 1440,
+            localFileURL: nil,
+            remoteURL: URL(string: "https://media.example.com/video.mp4"),
+            remoteHeaders: ["Authorization": "Bearer x"],
+            animeTitle: "完全不同的标题",
+            tmdbID: 123_456
+        )
+        let started = CFAbsoluteTimeGetCurrent()
+        _ = await boundedOrchestrator.runAutomatic(
+            matchContext: context,
+            configuration: makeConfiguration(),
+            playback: playback,
+            revision: 1
+        )
+        return (counter.searches, (CFAbsoluteTimeGetCurrent() - started) * 1000)
+    }
+
     // MARK: 缓存命中
 
     func testCachedMatchReuseSkipsHashAndGateway() async throws {

@@ -7,6 +7,17 @@ import Foundation
 ///    不再回源。缓存放 `Application Support/OcPlayer/Danmaku/`，目录可注入便于测试。
 ///
 /// 缓存文件按 `mapping.json` 与 `comments-<episodeId>.json` 分离；并发写入由 actor 隔离。
+///
+/// ## 三层都有写穿内存缓存，但正文那层**必须是有界的**
+///
+/// `mapping` / `intro-hints` 是几百字节的小字典，常驻无妨；弹幕正文每集是
+/// **0.1–0.8 MB 的 JSON、上千条记录**（本机真实缓存：23 个文件共 6.4 MB，
+/// 最大一份 756 KB / 8159 条）。无界常驻几十集就是几十 MB，而本 App 的真实
+/// 峰值 RSS 已经到过 435 MB —— 那等于拿内存告警换一次十几毫秒的磁盘读。
+///
+/// 所以正文缓存按**最近使用**只留 `commentsMemoryCapacity` 集（默认 2：当前这集
+/// 与刚切走的那集）。这正是它唯一要覆盖的场景——换源 / 重试 / 手动选集后
+/// 重新装载同一集。
 public actor DanmakuCache {
     // MARK: - 落盘文件名（与 App 的定期清理共享的单一事实源）
 
@@ -37,14 +48,25 @@ public actor DanmakuCache {
     private let decoder = JSONDecoder()
     private var latestMappingRevision: [String: UInt64] = [:]
 
+    // MARK: 正文内存缓存（有界，见类型注释）
+
+    /// 最近读/写过的正文，键是 episodeID。值带上 `fetchedAt`，命中时仍要校验 TTL。
+    private var commentsCache: [Int64: CachedComments] = [:]
+    /// 最近使用顺序：**尾 = 最近使用**。容量满了从头部淘汰。
+    private var commentsCacheOrder: [Int64] = []
+    /// 最多常驻几集。0 = 关闭（测试与极端低内存场景）。
+    private let commentsMemoryCapacity: Int
+
     public init(
         directory: URL,
         commentsTTL: TimeInterval = 3600,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        commentsMemoryCapacity: Int = 2
     ) {
         self.directory = directory
         self.commentsTTL = commentsTTL
         self.fileManager = fileManager
+        self.commentsMemoryCapacity = max(0, commentsMemoryCapacity)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -154,16 +176,32 @@ public actor DanmakuCache {
 
     // MARK: 弹幕正文（带 TTL）
 
+    /// 先查内存、再读盘。**命中内存也要校验 TTL** —— 条目里带着 `fetchedAt`，
+    /// 而长会话（>1 小时）里内存会一直返回过期弹幕，磁盘路径本来会删掉它。
     public func comments(for episodeID: Int64) -> [DanmakuComment]? {
+        let now = Date()
+
+        if let entry = commentsCache[episodeID] {
+            guard now.timeIntervalSince(entry.fetchedAt) <= commentsTTL else {
+                forgetCommentsInMemory(episodeID)
+                try? fileManager.removeItem(at: commentsURL(episodeID))
+                return nil
+            }
+            touchCommentsInMemory(episodeID)
+            return entry.comments
+        }
+
         let url = commentsURL(episodeID)
         guard let data = try? Data(contentsOf: url) else { return nil }
+        // 解码失败**不进内存**：一次临时损坏不该被永久记住（与 `loadMapping` 的保守策略一致）。
         guard let entry = try? decoder.decode(CachedComments.self, from: data) else { return nil }
-        if Date().timeIntervalSince(entry.fetchedAt) > commentsTTL {
+        guard now.timeIntervalSince(entry.fetchedAt) <= commentsTTL else {
             // 过期即删：TTL 只影响读取的话，过期文件会永远躺在盘上
             //（每集一份弹幕正文，几十 MB 很快就堆出来）。
             try? fileManager.removeItem(at: url)
             return nil
         }
+        rememberCommentsInMemory(entry, for: episodeID)
         return entry.comments
     }
 
@@ -171,11 +209,38 @@ public actor DanmakuCache {
         let entry = CachedComments(fetchedAt: Date(), comments: comments)
         guard let data = try? encoder.encode(entry) else { return }
         try? data.write(to: commentsURL(episodeID), options: .atomic)
+        rememberCommentsInMemory(entry, for: episodeID)
     }
 
     private func commentsURL(_ episodeID: Int64) -> URL {
         directory.appendingPathComponent("comments-\(episodeID).json")
     }
+
+    /// 写穿内存并维持 LRU 顺序。淘汰只丢内存，**不删文件** —— 删了就把缓存变成丢数据。
+    private func rememberCommentsInMemory(_ entry: CachedComments, for episodeID: Int64) {
+        guard commentsMemoryCapacity > 0 else { return }
+        commentsCache[episodeID] = entry
+        touchCommentsInMemory(episodeID)
+        while commentsCacheOrder.count > commentsMemoryCapacity {
+            let evicted = commentsCacheOrder.removeFirst()
+            commentsCache.removeValue(forKey: evicted)
+        }
+    }
+
+    private func touchCommentsInMemory(_ episodeID: Int64) {
+        if let index = commentsCacheOrder.firstIndex(of: episodeID) {
+            commentsCacheOrder.remove(at: index)
+        }
+        commentsCacheOrder.append(episodeID)
+    }
+
+    private func forgetCommentsInMemory(_ episodeID: Int64) {
+        commentsCache.removeValue(forKey: episodeID)
+        commentsCacheOrder.removeAll { $0 == episodeID }
+    }
+
+    /// 当前常驻的集数（诊断与测试用）。
+    public var commentsMemoryCount: Int { commentsCache.count }
 
     private struct CachedComments: Codable {
         let fetchedAt: Date
@@ -240,6 +305,8 @@ public actor DanmakuCache {
         mappingCacheLoaded = false
         cachedIntroHints = nil
         introHintsLoaded = false
+        commentsCache.removeAll()
+        commentsCacheOrder.removeAll()
     }
 }
 

@@ -148,6 +148,112 @@ final class DanmakuCacheTests: XCTestCase {
         XCTAssertNil(expired)
     }
 
+    // MARK: 正文内存缓存（P1-15）
+
+    /// 命中内存后即使把文件删掉也仍能返回 —— 证明第二次读没有碰磁盘。
+    /// 改前（纯磁盘读）这里必然返回 nil。
+    func testCommentsServedFromMemoryAfterFileRemoved() async throws {
+        let (cache, dir) = await makeCache()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let comments = [DanmakuComment(cid: 1, p: "0.5,1,16777215,u", m: "hello")]
+        await cache.setComments(comments, for: 555)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("comments-555.json"))
+
+        let got = await cache.comments(for: 555)
+        XCTAssertEqual(got?.first?.m, "hello")
+    }
+
+    /// 命中内存也必须校验 TTL —— 否则长会话里会一直返回过期弹幕。
+    func testExpiredCommentsAreEvictedFromMemory() async throws {
+        let (cache, dir) = await makeCache(ttl: 0.001)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "x")], for: 7)
+        let count = await cache.commentsMemoryCount
+        XCTAssertEqual(count, 1, "写入后应常驻内存")
+
+        try await Task.sleep(for: .milliseconds(50))
+        let expired = await cache.comments(for: 7)
+        XCTAssertNil(expired)
+
+        let afterCount = await cache.commentsMemoryCount
+        XCTAssertEqual(afterCount, 0, "过期条目必须从内存里驱逐，不能只返回 nil")
+    }
+
+    /// 容量有界：连写 3 集后最旧那集不再驻留内存（但其文件仍在）。
+    func testCommentMemoryCacheIsBounded() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
+        let cache = DanmakuCache(directory: dir, commentsTTL: 3600, commentsMemoryCapacity: 2)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        for id in Int64(1)...3 {
+            await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "ep\(id)")], for: id)
+        }
+        let count = await cache.commentsMemoryCount
+        XCTAssertEqual(count, 2, "容量 2 时必须淘汰到 2 集")
+
+        // 最旧的第 1 集已被逐出内存 —— 删掉它的文件后读不到了。
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("comments-1.json"))
+        let evicted = await cache.comments(for: 1)
+        XCTAssertNil(evicted, "第 1 集应已被淘汰出内存")
+
+        // 最近的第 3 集仍在内存 —— 删文件后仍能读到。
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("comments-3.json"))
+        let resident = await cache.comments(for: 3)
+        XCTAssertEqual(resident?.first?.m, "ep3")
+
+        // 淘汰只丢内存、不删文件：第 2 集的文件必须还在。
+        let keptFile = dir.appendingPathComponent("comments-2.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keptFile.path),
+                      "内存淘汰不能顺手删盘上文件")
+    }
+
+    /// 解码失败不进内存：文件修好后应能读到，说明失败态没被缓存。
+    func testCorruptedCommentsAreNotCached() async throws {
+        let (cache, dir) = await makeCache()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let url = dir.appendingPathComponent("comments-42.json")
+        try Data("not-json".utf8).write(to: url)
+        let broken = await cache.comments(for: 42)
+        XCTAssertNil(broken)
+
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "fixed")], for: 42)
+        let recovered = await cache.comments(for: 42)
+        XCTAssertEqual(recovered?.first?.m, "fixed")
+    }
+
+    /// `purge()` 要一并清空正文内存层（否则清缓存后还读得到旧数据）。
+    func testPurgeClearsCommentCache() async throws {
+        let (cache, dir) = await makeCache()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "x")], for: 9)
+        await cache.purge()
+
+        let count = await cache.commentsMemoryCount
+        XCTAssertEqual(count, 0)
+        let afterPurge = await cache.comments(for: 9)
+        XCTAssertNil(afterPurge)
+    }
+
+    /// 容量 0 = 关闭内存层，行为退回纯磁盘（给极端低内存场景留的开关）。
+    func testZeroCapacityDisablesMemoryCache() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
+        let cache = DanmakuCache(directory: dir, commentsTTL: 3600, commentsMemoryCapacity: 0)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "disk")], for: 11)
+        let count = await cache.commentsMemoryCount
+        XCTAssertEqual(count, 0)
+
+        let fromDisk = await cache.comments(for: 11)
+        XCTAssertEqual(fromDisk?.first?.m, "disk", "容量 0 时仍要能读盘")
+    }
+
     func testCorruptedMappingDoesNotGetOverwritten() async throws {
         let (cache, dir) = await makeCache()
         defer { try? FileManager.default.removeItem(at: dir) }
