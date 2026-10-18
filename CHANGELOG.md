@@ -27,6 +27,12 @@
 
 ### 性能
 
+- **（顺带修）`testWaterfallRespectsTotalBudget` 的机器相关性断言**（第七批引入，本批暴露）。
+  - CI 上它红了两次，两个原因都记一下：
+    1. **请求数不能用固定区间**：本机 250 ms 预算发出 2–3 个请求，而 CI runner 调度慢，实测只发出 **1 个** —— 区间 `2...3` 当场红。改成「> 0 且 **严格少于**无界的一半」（必须严格：只做层间检查时恰好是 4 个 = 8 的一半，用 `<=` 抓不住那个变异）。
+    2. 同一轮 CI 里还出现过 `ImageCacheLegacyPurgeTests` 的 SQLite `disk I/O error`（`error-code=10`）—— 与本批改动无关的 runner 磁盘抖动，重跑后该用例转绿。
+  - 两个变异在新判据下仍红：`deadline` 立即过期 → 0 个请求红；删掉层内闸门 → 4 个请求红。
+
 - **卡片 body 里的三处「不变的值反复现算」**（性能审查清单 `P1-10` / `P1-12` / `P1-11`）。三条实测合计从 **~634 µs / 屏**降到 **~22 µs / 屏**。
   - **`P1-12` `authorizationHeader` 加进程级缓存（11.49 µs → 0.66 µs，17.5×）**：`JellyfinServer` / `EmbySession` 的 `authorizationHeader` 都是计算属性，`DesignSystem` 里 7 处在 `imageTarget` 系列里读它 —— 每张卡每次 body 都走。拼一次头要读 2 次 UserDefaults（各带 NSLock）+ 2 次 Info.plist 查询。**关键取舍：缓存整条拼好的头，而不是分别缓存 `deviceID`/`deviceName`/`version`。** 因为 `version(in: bundle)` 是可注入 Bundle 的，`ClientIdentityTests` 用临时 Bundle 连测了 5 种版本组合，给它加无键全局缓存会**跨用例串台**（清单点名的坑）。缓存整条头绕开这件事，`version(in:)` 一行没动。缓存键**同时含 scheme + userId + token** —— 只按 userId 缓存会让 token 轮换后仍发旧 token（表现为「重新登录了还是 401」）。
   - **`P1-10` 十六进制改查表（15.04 µs → 5.33 µs，2.8×）+ 加载键提到 `init`**：`loadKey` 原来是计算属性，**每次读**都要跑一遍 SHA256 + 十六进制编码。读取点共 3 个：**body 里 1 次**（`.task(id:)` 的 id）+ **task 闭包里 2 次**（guard、成功赋值）。拆开实测发现**钱不在 SHA256 上**：`String(format: "%02x", $0)` 八次就要 **13.74 µs**（占 91%），SHA256 本身只占 9%。换成字符表编码后单次 **15.04 → 5.33 µs**。

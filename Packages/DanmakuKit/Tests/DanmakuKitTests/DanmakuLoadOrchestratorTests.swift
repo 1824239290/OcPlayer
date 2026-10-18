@@ -119,7 +119,7 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
     /// **请求数是主判据，墙钟只做相对比较。** 两个漏网变异：
     /// - 删掉层内全部 `guard budgetOpen()`（只留层间检查）→ **4 个**；
     /// - `deadline` 设成「一进函数就过期」→ **0 个**。
-    /// 早先只写 `<= 4`，这两个变异都能过；现在收成 `2...3`，两端都钉住。
+    /// 早先只写 `<= 4`，这两个变异都能过；现在用「>0 且 ≤ 无界的一半」，两端都钉住。
     ///
     /// ⚠️ **墙钟不能写绝对值**：本机 3 个请求 312–324 ms，但 CI runner 上同样
     /// 3 个请求要 **421.9 ms** —— 而「删掉层内闸门」在本机是 4 个 / 418 ms。
@@ -131,13 +131,22 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
         XCTAssertGreaterThan(unbounded.count, 4,
                              "预算关闭时应跑完整个瀑布（实测 8 个请求）")
 
-        // 预算 250 ms + 100 ms/请求 ⇒ 理论 2–3 个（预算 + 一次在途）。
+        // 预算 250 ms + 100 ms/请求 ⇒ 本机理论 2–3 个（预算 + 一次在途）。
+        //
+        // ⚠️ **不用固定区间断言**：CI runner 上同一条用例实测只发出 **1 个**请求
+        // （调度慢到 250 ms 只够跑完一次「100 ms 睡眠 + 开销」），区间 `2...3` 当场红。
+        // 请求数的**上界**仍然由「预算 + 一次在途」给出，但下界取决于机器——
+        // 所以判据换成**比例**：有界必须显著少于无界（8 个）。
         let bounded = try await countRequests(slowMs: 100, budget: .milliseconds(250))
         XCTAssertLessThan(bounded.count, unbounded.count,
                           "预算必须真的减少请求数：有界 \(bounded.count) vs 无界 \(unbounded.count)")
-        XCTAssertTrue((2...3).contains(bounded.count),
-                      "应恰好裁到「预算 + 一次在途」（2–3 个），实测 \(bounded.count) 个"
-                      + "；0 个 = 闸门提前失效，4 个 = 层内闸门没生效")
+        XCTAssertGreaterThan(bounded.count, 0,
+                             "0 个 = 闸门提前失效（deadline 一进函数就过期）")
+        // 必须**严格**少于一半：只做层间检查时实测恰好是 4 个（无界 8 个的一半），
+        // 用 `<` 才能把它与真正的层内闸门（2–3 个）分开。
+        XCTAssertLessThan(bounded.count * 2, unbounded.count,
+                          "有界请求数 \(bounded.count) 必须不到无界 \(unbounded.count) 的一半"
+                          + "（只做层间检查时是 \(unbounded.count / 2) 个，层内闸门才裁得下去）")
         // 相对耗时：有界必须显著短于无界（同机同轮，不受 runner 快慢影响）。
         // 2–3 个请求 vs 8 个请求，正常应在 0.5 倍以内；留到 0.75 容忍调度抖动。
         XCTAssertLessThan(bounded.elapsedMs, unbounded.elapsedMs * 0.75,
