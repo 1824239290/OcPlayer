@@ -39,6 +39,7 @@
   - **改法**：`scanURLCacheForIdentities()` / `authIdentities(in:)` 标 `nonisolated`；`discoveredIdentities()` 与 `identities(for:)` 改 `async`。全仓只有 1 个调用点（`LoginWallCatalogLoader`），async 化不外溢。
   - **两条不变式**：① `didScanURLCache` **必须在 `await` 之前同步置位** —— 否则两处并发进登录页会双扫、并可能重复写；② 扫描是提示不是依赖，失败照旧当没扫到，不阻塞登录。
   - **顺带发现**：这个编译错误本身就是 `P1-08` 的直接证据 —— 探针在非主线程上**编不过**（`call to main actor-isolated static method 'authIdentities(in:)' in a synchronous nonisolated context`），说明改前它确实只能在主线程用。
+  - **⚠️ 第一版有 bug，自查发现并修了**：扫描加了「逐文件判取消」之后，**取消会返回部分结果**，而 `didScanURLCache` 已置位 —— 身份池于是被**永久截断、再也不补**（这个标志的语义就是「每进程只扫一次」）。而这正是它唯一的作用：多试几个身份、多找回几张海报。改成扫描返回 `(identities:wasCancelled:)`，**取消时复位标志让下次重扫**。`testScanSignalssCancellationSeparatelyFromEmptyResult` 钉住（取消处理改成恒 `false` 即红）。
 
 - **下载页轮询在应用进入后台时停止**（性能审查清单 `P2-40`）。
   - **问题**：5 秒轮询循环只判 `Task.isCancelled`，macOS `⌘H` 隐藏 / iOS 进后台后进程还在跑，于是每 5 s 发一次请求（挂机 **720 次/小时**）。用户完全无感，但确实是白发的。

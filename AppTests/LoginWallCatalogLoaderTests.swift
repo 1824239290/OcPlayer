@@ -209,6 +209,25 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
         )
     }
 
+    /// **取消不算「扫过」**：扫描中途取消只有部分结果，若照样把「每进程只扫一次」
+    /// 的标志置位，身份池就被永久截断、再也不补 —— 而它唯一的作用就是「多试几个
+    /// 身份、多找回几张海报」。这条钉住「取消 → 标志复位 → 下次重扫」的语义。
+    ///
+    /// 改前（返回裸 `Set`、无法区分「扫完了没找到」与「没扫完」）本用例红。
+    func testScanSignalssCancellationSeparatelyFromEmptyResult() async {
+        // 未取消：wasCancelled 必须是 false（空结果 ≠ 被取消）。
+        let clean = await ImageCacheIdentityStore.scanURLCacheForIdentities()
+        XCTAssertFalse(clean.wasCancelled, "正常扫完时不能报成被取消")
+
+        // 在已取消的任务里跑：必须报 wasCancelled，而不是安静地返回空集。
+        let task = Task {
+            await ImageCacheIdentityStore.scanURLCacheForIdentities()
+        }
+        task.cancel()
+        let cancelled = await task.value
+        XCTAssertTrue(cancelled.wasCancelled, "任务已取消时扫描必须如实报告")
+    }
+
     /// 没有任何 `_auth=` 时安静返回空集，不崩。
     func testAuthIdentitiesHandlesEmptyAndUnrelatedBytes() {
         XCTAssertTrue(ImageCacheIdentityStore.authIdentities(in: Data()).isEmpty)

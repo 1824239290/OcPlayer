@@ -124,26 +124,33 @@ enum ImageCacheIdentityStore {
     /// `nonisolated async` 函数在全局并发执行器上跑（SE-0338），且**沿用结构化并发**
     /// ——视图消失时取消会自然传播。不用 `Task.detached`：那个会脱离结构化并发，
     /// 离页之后扫描仍会跑完。
+    /// - Note: **取消不算「扫过」**。扫描可能被中途取消（登录页离页），那时它只有
+    ///   部分结果；如果照样把 `didScanURLCache` 置位，身份池就被永久截断、再也不补
+    ///   ——而它唯一的作用就是「多试几个身份，多找回几张海报」。所以取消时要把标志
+    ///   复位，让下次进登录页重扫。
     private static func discoveredIdentities() async -> [String] {
         let defaults = UserDefaults.standard
         let stored = defaults.stringArray(forKey: discoveredKey) ?? []
         guard !didScanURLCache else { return stored }
         // **先同步置位再 await**：两处并发进登录页时不能双扫（既浪费也可能重复写）。
-        // 置位后即使这次扫描失败也不算「没扫过」——它是提示，不是依赖。
         didScanURLCache = true
 
-        let found = await scanURLCacheForIdentities()
-        guard !found.isEmpty else { return stored }
-        let merged = Array(Set(stored).union(found)).sorted()
+        let scan = await scanURLCacheForIdentities()
+        guard !scan.wasCancelled else {
+            // 取消：结果不完整，不能把它当成「扫过了」。标志复位，下次重扫。
+            didScanURLCache = false
+            return stored
+        }
+        guard !scan.identities.isEmpty else { return stored }
+        let merged = Array(Set(stored).union(scan.identities)).sorted()
         defaults.set(merged, forKey: discoveredKey)
         return merged
     }
 
-    /// 只读扫一遍图片缓存目录里的 URL 缓存库。
-    ///
-    /// `nonisolated` 是这条链能离开主线程的关键：它只碰不可变路径与纯函数，
-    /// 本来就不需要 actor 隔离。
-    nonisolated static func scanURLCacheForIdentities() async -> Set<String> {
+    /// 扫描结果。带 `wasCancelled` 是有意的：**调用方必须能区分「扫完了但没找到」与
+    /// 「没扫完」** —— 前者该缓存、后者不该。
+    nonisolated static func scanURLCacheForIdentities() async
+        -> (identities: Set<String>, wasCancelled: Bool) {
         // 缓存已从 `Application Support` 搬到 `Caches`，这里必须跟着走，
         // 否则扫的是一个永远不存在的目录（空结果 = 登录页海报墙退化成程序化封面）。
         let directory = OcPlayerStorage.cacheDirectory("ImageCache")
@@ -151,13 +158,13 @@ enum ImageCacheIdentityStore {
         var found: Set<String> = []
         // `-wal` 里可能躺着还没并回主库的新记录，两个都看。
         for name in ["Cache.db", "Cache.db-wal"] {
-            if Task.isCancelled { return found }
+            if Task.isCancelled { return (found, true) }
             let url = directory.appendingPathComponent(name)
             guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { continue }
             found.formUnion(authIdentities(in: data))
             if found.count >= discoveredLimit { break }
         }
-        return found
+        return (found, Task.isCancelled)
     }
 
     /// 从一段字节里挑出所有 `_auth=<12 位十六进制>` 的值。纯函数，便于直接断言。
