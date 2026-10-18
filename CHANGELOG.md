@@ -91,6 +91,25 @@
   - **处置**：`P1-04` 主体推翻（进 `REJ-07`），残留的真实项单立 **`P2-40`**。`P1-04` 编号保留以防重复排查。审查清单：`P1` 17 → **16**、`P2` 39 → **40**、合计仍 **92**。
   - **顺手**：`CLAUDE.md`（本地文件、不进仓库）4 处过期事实已按实测改正 —— 工作区基准 `0399500` → `d4018b7`、Xcode 26.3/Swift 6.2.4 → **27.1/6.4**、包 scheme「10 个」→ **11 个**（漏 MetadataKit）、`swift test` 包清单补上 `MetadataKit`。
 
+- **动画标题解析的 40 条正则提成静态量：单次 `parse` 省 74%，一次自动匹配的主线程阻塞从 ~262 ms 降到 ~70 ms**（性能审查清单 `P1-07`）。
+  - **现象**：`AnimeTitleParser.parse` 每次调用**现场编译** 40 条 `NSRegularExpression`（`cleanBaseString` 的 24 条剥离表 + `replaceRomanNumerals` 的 12 条 ASCII 罗马数字 + 季数识别 5 条 + Part/Cour 2 条）。而打分器对**每个候选**都调两次 `parse`（`nameCN` + `name`），一次自动匹配最多 **360 次**，全在 `@MainActor` 上一口气做完。触发点是「进任何未关联条目的详情页 / 切到未关联的季」。
+  - **实测归因**（本机 Debug，5 轮取均值）：一条 `NSRegularExpression` **编译 61.5 µs**、**匹配只要 0.53 µs** —— 差两个数量级。「每次调用重新编译常量 pattern」是纯粹的浪费。
+  - **修法**：全部提成 `static let`，连编译助手也沿用本仓既有约定（`DanmakuKit/DanmakuFilenameParser` 早就这么做，注释理由同构：「全集搜索可返回数百分集——现场编译正则就是主线程秒级卡顿」）。顺带把每次调用都重新分配的字面量数组也静态化（`chineseDigits` 40 对、`unicodeRomans` 10 对、`asciiRomanReplacements` 12 对、`arcKeywords`、`finalPatterns`）。ASCII 罗马数字的**替换模板**与 pattern 配对静态化 —— 只静态化 pattern 会让模板留在循环体字面量里，等于白拆一半。
+  - **收益**（本机 Debug，同口径）：
+
+    | 指标 | 改前 | 改后 | 降幅 |
+    |---|---|---|---|
+    | 单次 `parse` | **0.812 ms** | **0.208 ms** | **−74%** |
+    | `pickBestCandidate`（90 候选 × 2 遍） | **262.3 ms** | **69.7 ms** | **−73%** |
+
+  - **三条刻意的边界（都写进了代码注释）**：
+    ① **`finalPatterns` 那 3 条继续走 `String.range(of:)`，不换。** 穷举实测证明两套 API **不等价**：36816 条语料（含 BMP `0x20–0x2FFF` 逐码点包裹）上出现 **2300 处分歧**，例如 `"Final Season\u{300}"`（末尾组合附加符号）—— `range(of:)` 判**不**匹配、`NSRegularExpression` 判匹配。这比 `REJ-02` 记的 `\d` 口径差异**更广**：连 `\s` 与大小写折叠都不同。那 3 条对每次 `parse` 只花 **13.7 µs**，不值得为这点钱冒语义漂移的险。
+    ② **编译失败仍静默跳过**（`compactMap`），不改成 `preconditionFailure`。改前是 `if let regex = try? ...`，语义必须逐字保持；有 golden 语料兜底，不需要在运行时炸用户。
+    ③ **季数链的 `usedSeasonRegex` 标志必须保留**：原实现里某条正则**完整绑定成功**后，后续 `else if` 全被跳过 —— 哪怕 `Int()` 返回 `nil`（`NSRegularExpression` 的 `\d` 等于 `\p{Nd}`，「第٣季」会命中而 `Int("٣")` 是 nil）。写成「命中就拿值、否则走兜底」是**行为变更**，不是重构。
+  - **等价性怎么保证**：golden 语料在**改动实现之前**用原实现 dump 出来（独立一个 commit），39 条覆盖每一条 pattern 家族 + 空白/极短标题 + `explicitSeasonName` 分支 + 三个公开字符串变换。改后 **4/4 全绿、逐字节一致**。
+  - **顺带更正一个我自己算错的数**：原计划把「3 条 `range(of:)` 每次多花 184 µs」当成本底，实测**只有 13.7 µs** —— 61.5 µs 是 `NSRegularExpression` 的**构造**成本，不是 `range(of:)` 的调用成本。改后剩 208 µs 里正则只占 **36.5 µs**，其余 **171.5 µs 全是字符串处理**（`normalizeFullWidth` 逐 scalar 重建、62 趟整串替换、末尾逐字符过滤）。**要继续压得往字符串处理去，别再琢磨正则。**
+  - **验证**：macOS `OcPlayerTests` **607 条 / 589 通过 / 18 跳过 / 0 失败**（基线 603/585 + 新增 4 条 golden）；`BangumiKit` 55 条不变（本批不动该包）。
+
 ### 构建 / 发布
 
 - **发版产物重新带上 dSYM（否则崩溃日志永远查不出东西）**（性能审查清单 `CORR-01`）。
