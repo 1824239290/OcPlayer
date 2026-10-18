@@ -185,12 +185,12 @@ public struct DanmakuLoadOrchestrator {
             /// - 4xx / 解码失败 → 不短路，**4 个请求**（每层 1 个，首个请求即抛错）；
             /// - 慢但 200 空结果 → 不短路且层内循环走完，**最多 8 个** ← 真正的坏情况。
             ///
-            /// ## 为什么闸门要下沉到层内
+            /// ## 闸门在两处检查：层与层之间 **+** 层内每次请求之前
             ///
-            /// 只在层与层之间检查的话，上界是「预算 + **一整层**」——而 Tier 2
+            /// 只做层间检查的话，上界是「预算 + **一整层**」——而 Tier 2
             /// （`searchByTMDB`）自己就会串行发 3 个请求、Tier 3/4 各 2 个。实测
             /// 120 ms/请求 + 250 ms 预算：关掉闸门 8 个请求 / 1012 ms，只做层间检查
-            /// 仍有 4 个 / 497 ms。所以 `deadline` 也传进两个搜索函数，每次请求前再判一次。
+            /// 仍有 4 个 / 497 ms，**下沉到层内后 2 个 / 252 ms**（= 预算 + 一次在途）。
             ///
             /// ## 预算从「指纹之后」起算，不是从函数开头
             ///
@@ -200,13 +200,21 @@ public struct DanmakuLoadOrchestrator {
             /// 进到 Tier 1 预算已耗尽，**四层一次都不尝试**，最后还落成 `.noMatch`
             /// （谎报「未匹配到剧集」）—— 慢媒体服务器上这是可达的。
             var tiersAttempted = 0
+            /// 预算时钟。初值只为满足局部函数捕获规则 —— **指纹之后会被重置**。
             var started = ContinuousClock.now
             var deadline: ContinuousClock.Instant? =
                 totalBudget > .zero ? started.advanced(by: totalBudget) : nil
-            /// 每层之前 + 每次请求之前共用同一个判据。
+            /// 闸门**真的拒绝过**至少一次吗？只有它才让结尾那条日志成立 ——
+            /// 「结束时刚好过点但一次都没拒绝过」不能记成「超出总预算」。
+            var budgetDidCut = false
+            /// 每层之前 + 每次请求之前共用同一个判据。拒绝时打标记。
             func budgetOpen() -> Bool {
                 guard let deadline else { return true }
-                return ContinuousClock.now < deadline
+                guard ContinuousClock.now < deadline else {
+                    budgetDidCut = true
+                    return false
+                }
+                return true
             }
 
             // Tier 1: 尝试 Hash + 文件名匹配
@@ -278,7 +286,7 @@ public struct DanmakuLoadOrchestrator {
                         tmdbID: tmdbID,
                         target: target,
                         client: client,
-                        deadline: deadline
+                        budgetOpen: budgetOpen
                     )
                 } catch is CancellationError {
                     throw CancellationError()
@@ -301,7 +309,7 @@ public struct DanmakuLoadOrchestrator {
                         animeTitle: animeTitle,
                         target: target,
                         client: client,
-                        deadline: deadline
+                        budgetOpen: budgetOpen
                     )
                 } catch is CancellationError {
                     throw CancellationError()
@@ -324,7 +332,7 @@ public struct DanmakuLoadOrchestrator {
                         animeTitle: cleanTitle,
                         target: target,
                         client: client,
-                        deadline: deadline
+                        budgetOpen: budgetOpen
                     )
                 } catch is CancellationError {
                     throw CancellationError()
@@ -343,9 +351,10 @@ public struct DanmakuLoadOrchestrator {
                 if forceRematch {
                     await service.forgetMatch(cacheKey: cacheKey, revision: revision)
                 }
-                // 预算耗尽要留下证据：否则诊断包里「主动放弃」与「真的没匹配上」
-                // 长得一模一样。只记一条，不改变下面的结果映射。
-                if !budgetOpen() {
+                // 预算**真的掐掉过请求**才记这条（`budgetDidCut`，不是「结束时刚好过点」）。
+                // 否则「四层全跑完、8 个请求全发出，只因为总耗时长而记一条超出预算」
+                // 是误报 —— 而这条日志存在的唯一理由就是区分「主动放弃」与「真的没匹配上」。
+                if budgetDidCut {
                     let elapsed = ContinuousClock.now - started
                     NetworkLog.report(
                         category: "Danmaku",
@@ -353,11 +362,9 @@ public struct DanmakuLoadOrchestrator {
                         "弹幕自动匹配降级检索超出总预算",
                         fields: [
                             "cacheKey": .string(cacheKey),
-                            "budgetMs": .integer(Int64(totalBudget.components.seconds * 1000
-                                + totalBudget.components.attoseconds / 1_000_000_000_000_000)),
+                            "budgetMs": .integer(durationMilliseconds(totalBudget)),
                             "tiersAttempted": .integer(Int64(tiersAttempted)),
-                            "elapsedMs": .integer(Int64(elapsed.components.seconds * 1000
-                                + elapsed.components.attoseconds / 1_000_000_000_000_000)),
+                            "elapsedMs": .integer(durationMilliseconds(elapsed)),
                             "hadTierError": .boolean(tierError != nil),
                         ]
                     )
@@ -366,6 +373,14 @@ public struct DanmakuLoadOrchestrator {
                     // 指纹不可用是更具体的诊断（引导手动选集）；GatewayClient 已逐请求
                     // 记录了失败日志，这里维持既有文案优先级。
                     return .failed(message: userMessage(for: AutomaticMatchError.fingerprintUnavailable))
+                }
+                if budgetDidCut, tierError == nil {
+                    // 预算提前放弃 ≠ 「未匹配到剧集」。这条比 `.noMatch` 诚实：
+                    // 我们**没跑完**降级链，剩下的层里可能本来就有答案 —— 实测把唯一
+                    // 命中放在 Tier 4 时，`.zero` 预算能 `loaded`，250 ms 预算却落
+                    // `.noMatch`。走 `.failed` 的可重试文案（与 P1-03 同一立场：
+                    // 不准把「我们这边没跑完」说成「服务端没有这一集」）。
+                    return .failed(message: "弹幕匹配超时，请重试")
                 }
                 if let tierError {
                     // 网络/网关失败不能谎报「未匹配到剧集」：UI 走可重试的失败态，
@@ -407,14 +422,15 @@ public struct DanmakuLoadOrchestrator {
         }
     }
 
-    /// 层内请求前的预算判据。`deadline == nil` = 预算关闭。
+    /// `Duration` → 毫秒，**四舍五入**而不是向下截断。
     ///
-    /// 层内提前返回 `nil`（而不是抛错）是有意的：预算耗尽不是「网关坏了」，
-    /// 不该把它记成 `tierError` 污染最终的用户文案 —— 结果映射仍由
-    /// 「有没有 `tierError`」决定，预算只负责别再发请求。
-    private static func withinBudget(_ deadline: ContinuousClock.Instant?) -> Bool {
-        guard let deadline else { return true }
-        return ContinuousClock.now < deadline
+    /// 截断会让 `.nanoseconds(1)` 记成 `budgetMs: 0` —— 而 0 恰好是「预算关闭」的
+    /// 取值，读诊断包的人会误解成「没开预算」。
+    private func durationMilliseconds(_ duration: Duration) -> Int64 {
+        let components = duration.components
+        let secondsPart = Double(components.seconds) * 1000
+        let attosPart = Double(components.attoseconds) / 1_000_000_000_000_000
+        return Int64((secondsPart + attosPart).rounded())
     }
 
     /// 搜索参数序列：正片先精确集数再全集兜底。**特典只发全集搜索**——Jellyfin 的
@@ -432,12 +448,12 @@ public struct DanmakuLoadOrchestrator {
         tmdbID: Int,
         target: DanmakuCandidateScorer.TargetContext,
         client: DanmakuGatewayClient,
-        deadline: ContinuousClock.Instant?
+        budgetOpen: () -> Bool
     ) async throws -> DanmakuEpisodeMatch? {
         // 错误直接上抛给 tier 的 do/catch（不再内部 try? 吞掉）：
         // 网关挂了要能让最终结果落「失败可重试」而不是「未匹配」。
         let episodeQuery = Self.episodeQueries(for: target).first ?? nil
-        guard Self.withinBudget(deadline) else { return nil }
+        guard budgetOpen() else { return nil }
         let episodeScoped = try await client.searchEpisodes(
             tmdbId: tmdbID,
             tmdbIdType: 0,
@@ -447,7 +463,7 @@ public struct DanmakuLoadOrchestrator {
            let best = DanmakuCandidateScorer.pickBestEpisode(from: episodeScoped, target: target) {
             return best.match
         }
-        if target.episodeNumber != nil && target.special == nil, Self.withinBudget(deadline) {
+        if target.episodeNumber != nil && target.special == nil, budgetOpen() {
             let all = try await client.searchEpisodes(
                 tmdbId: tmdbID,
                 tmdbIdType: 0,
@@ -458,7 +474,7 @@ public struct DanmakuLoadOrchestrator {
                 return best.match
             }
         }
-        guard Self.withinBudget(deadline) else { return nil }
+        guard budgetOpen() else { return nil }
         let movieScoped = try await client.searchEpisodes(
             tmdbId: tmdbID,
             tmdbIdType: 1,
@@ -475,7 +491,7 @@ public struct DanmakuLoadOrchestrator {
         animeTitle: String,
         target: DanmakuCandidateScorer.TargetContext,
         client: DanmakuGatewayClient,
-        deadline: ContinuousClock.Instant?
+        budgetOpen: () -> Bool
     ) async throws -> DanmakuEpisodeMatch? {
         let trimmedTitle = animeTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return nil }
@@ -483,7 +499,7 @@ public struct DanmakuLoadOrchestrator {
         // 1. 依次尝试：正片集数 / 特典命名空间（S→C→O）；错误上抛给 tier 的 do/catch。
         // 2. 全集搜索：不带 episode，在返回的所有分集里按 token 打分挑。
         for query in Self.episodeQueries(for: target) {
-            guard Self.withinBudget(deadline) else { return nil }
+            guard budgetOpen() else { return nil }
             let scoped = try await client.searchEpisodes(
                 anime: trimmedTitle,
                 episode: query

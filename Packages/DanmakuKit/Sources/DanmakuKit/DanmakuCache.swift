@@ -178,19 +178,31 @@ public actor DanmakuCache {
 
     /// 先查内存、再读盘。**命中内存也要校验 TTL** —— 条目里带着 `fetchedAt`，
     /// 而长会话（>1 小时）里内存会一直返回过期弹幕，磁盘路径本来会删掉它。
+    ///
+    /// ## 内存条目过期后**不能**照着它删文件
+    ///
+    /// 内存里的 `fetchedAt` 是本实例的旧快照，而盘上那份可能已被**另一个实例**
+    /// 刷新过（预览、重建 `AppModel`、测试里多实例同目录都是真实写法）。实测过的
+    /// 坏路径：A 的内存条目过期 → A 读一次 → 把 B 刚写进去的新文件删掉。
+    ///
+    /// 所以这里只丢内存、**落到磁盘路径继续判断**：那份数据由 `diskComments` 先解码、
+    /// 再按**盘上自己的** `fetchedAt` 决定是返回、还是真过期后删除。
     public func comments(for episodeID: Int64) -> [DanmakuComment]? {
         let now = Date()
 
         if let entry = commentsCache[episodeID] {
-            guard now.timeIntervalSince(entry.fetchedAt) <= commentsTTL else {
-                forgetCommentsInMemory(episodeID)
-                try? fileManager.removeItem(at: commentsURL(episodeID))
-                return nil
+            if now.timeIntervalSince(entry.fetchedAt) <= commentsTTL {
+                touchCommentsInMemory(episodeID)
+                return entry.comments
             }
-            touchCommentsInMemory(episodeID)
-            return entry.comments
+            forgetCommentsInMemory(episodeID)
         }
 
+        return diskComments(for: episodeID, now: now)
+    }
+
+    /// 磁盘路径：解码 → 按**盘上那份**的 `fetchedAt` 判 TTL → 过期才删。
+    private func diskComments(for episodeID: Int64, now: Date) -> [DanmakuComment]? {
         let url = commentsURL(episodeID)
         guard let data = try? Data(contentsOf: url) else { return nil }
         // 解码失败**不进内存**：一次临时损坏不该被永久记住（与 `loadMapping` 的保守策略一致）。

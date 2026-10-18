@@ -115,21 +115,114 @@ final class DanmakuLoadOrchestratorTests: XCTestCase {
 
     /// 「慢但成功」是唯一能跑完四层的真实坏路径（超时/5xx 会被 `gatewayDown` 短路）。
     /// 关掉预算时它最坏发 8 个请求；打开预算后必须裁到「预算 + 一次在途请求」。
+    ///
+    /// **上下界都要钉**（审查实测的两个漏网变异）：
+    /// - 删掉层内全部 `guard budgetOpen()`（只留层间检查）→ **4 个 / ~420 ms**；
+    /// - `deadline` 设成「一进函数就过期」→ **0 个**。
+    /// 原来只写 `<= 4` 与 `< 600 ms`，这两个变异**都能通过**。现在收成
+    /// `2...3` 且 `< 400 ms`：下界保证「至少进了 Tier 1/Tier 2」，上界卡住
+    /// 「层内闸门真的生效」。
     func testWaterfallRespectsTotalBudget() async throws {
         // 基线：预算关闭 = 旧行为。
         let unbounded = try await countRequests(slowMs: 100, budget: .zero)
         XCTAssertGreaterThan(unbounded.count, 4,
                              "预算关闭时应跑完整个瀑布（实测 8 个请求）")
 
-        // 预算 250 ms + 100 ms/请求 ⇒ 最多 3–4 个请求。
+        // 预算 250 ms + 100 ms/请求 ⇒ 实测稳定 3 个（312–324 ms）；慢机可能 2 个。
         let bounded = try await countRequests(slowMs: 100, budget: .milliseconds(250))
         XCTAssertLessThan(bounded.count, unbounded.count,
                           "预算必须真的减少请求数：有界 \(bounded.count) vs 无界 \(unbounded.count)")
-        XCTAssertLessThanOrEqual(bounded.count, 4,
-                                 "预算 + 一次在途请求的上界被突破：\(bounded.count) 个请求")
-        // 总耗时上界 = 预算 + 一次在途请求（100 ms）+ 调度余量。
-        XCTAssertLessThan(bounded.elapsedMs, 600,
+        XCTAssertTrue((2...3).contains(bounded.count),
+                      "应恰好裁到「预算 + 一次在途」（2–3 个），实测 \(bounded.count) 个"
+                      + "；0 个 = 闸门提前失效，4 个 = 层内闸门没生效")
+        // 上界 = 预算 + 一次在途（100 ms）+ 调度余量。实测 312–324 ms；
+        // 去掉层内闸门会到 ~420 ms。
+        XCTAssertLessThan(bounded.elapsedMs, 400,
                           "总耗时必须被预算框住，实测 \(bounded.elapsedMs) ms")
+    }
+
+    /// **预算切掉的那次运行不能报「未匹配到剧集」。**
+    ///
+    /// 审查给的反例：把唯一命中放在 Tier 4 —— `.zero` 预算能 `loaded`，
+    /// 250 ms 预算却落 `.noMatch`。那不是「服务端没有这一集」，是我们**没跑完**。
+    /// 与 P1-03 同一立场：不准把「我们这边没跑完」说成「服务端没有」。
+    func testBudgetCutReportsRetryableFailureNotNoMatch() async throws {
+        let fingerprint = makeFingerprintData()
+        let noMatchBody = """
+        {"success":true,"errorCode":0,"resultCount":0,"isMatched":false,"matches":[]}
+        """
+        let emptySearch = #"{"success":true,"errorCode":0,"animes":[]}"#
+        // 只有「纯化标题」那次搜索能命中 —— 它只出现在 Tier 4。
+        let cleanTitleHit = """
+        {"success":true,"errorCode":0,"animes":[{"animeId":10,"animeTitle":"葬送的芙莉莲","type":"tvseries","episodes":[{"episodeId":5001,"episodeTitle":"第1话"}]}]}
+        """
+        let commentsBody = """
+        {"count":1,"comments":[{"cid":1,"p":"1,1,16777215,1","m":"x"}]}
+        """
+
+        func run(budget: Duration) async throws -> DanmakuLoadOutcome {
+            let orchestrator = DanmakuLoadOrchestrator(
+                service: service,
+                session: TestSupport.mockedSession(),
+                retryPolicy: RetryPolicy(attempts: 1, base: 0, jitter: 0.0...0.0),
+                totalBudget: budget
+            )
+            MockURLProtocol.handler = { request in
+                if request.url!.path == "/video.mp4" {
+                    return makeRange206Response(fingerprint, url: request.url!)
+                }
+                if request.url!.path == "/v1/match" {
+                    Thread.sleep(forTimeInterval: 0.1)
+                    return TestSupport.response(noMatchBody, url: request.url!)
+                }
+                if request.url!.path.hasPrefix("/v1/comments/") {
+                    return TestSupport.response(commentsBody, url: request.url!)
+                }
+                // 搜索：只有日语原名（纯化标题 = Tier 4）命中。
+                Thread.sleep(forTimeInterval: 0.1)
+                let raw = request.url!.absoluteString
+                let jp = "葬送的芙莉莲".addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+                if raw.contains(jp) {
+                    return TestSupport.response(cleanTitleHit, url: request.url!)
+                }
+                return TestSupport.response(emptySearch, url: request.url!)
+            }
+            defer { MockURLProtocol.handler = nil }
+            // 关键：`animeTitle` 与文件名解析出的标题**必须不同**，Tier 4 才会执行
+            // （Tier 3 用 animeTitle，Tier 4 用 parsed.title；两者相同则 Tier 4 被跳过）。
+            // 命中只给 parsed.title 那一次 —— 于是命中一定落在 Tier 4。
+            let context = DanmakuMatchContext(
+                uuid: UUID(),
+                cacheKey: "budget-honest-\(budget)",
+                allowsCachedMatchReuse: false,
+                fileName: "葬送的芙莉莲 01",
+                fileSize: 64,
+                durationSeconds: 1440,
+                localFileURL: nil,
+                remoteURL: URL(string: "https://media.example.com/video.mp4"),
+                remoteHeaders: ["Authorization": "Bearer x"],
+                animeTitle: "完全不同的标题"
+            )
+            return await orchestrator.runAutomatic(
+                matchContext: context,
+                configuration: makeConfiguration(),
+                playback: playback,
+                revision: 1
+            )
+        }
+
+        let unbounded = try await run(budget: .zero)
+        guard case .loaded = unbounded else {
+            return XCTFail("预算关闭时应能命中 Tier 4，实际 \(unbounded)")
+        }
+
+        let bounded = try await run(budget: .milliseconds(150))
+        if case .noMatch = bounded {
+            return XCTFail("预算提前放弃不能报 .noMatch（那是在说服务端没有这一集）")
+        }
+        guard case .failed = bounded else {
+            return XCTFail("预算提前放弃应为可重试的 .failed，实际 \(bounded)")
+        }
     }
 
     /// 预算耗尽但已经有过 `tierError` 时，结果仍必须是 `.failed`（可重试），

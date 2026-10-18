@@ -225,6 +225,96 @@ final class DanmakuCacheTests: XCTestCase {
         XCTAssertEqual(recovered?.first?.m, "fixed")
     }
 
+    /// **读盘后必须回填内存** —— 这是 P1-15 的主要收益（冷读 13.2 ms → 热读）。
+    /// 删掉 `rememberCommentsInMemory` 那一行时本用例必须红。
+    ///
+    /// 用**第二个实例**读：它的内存层是空的，所以一定走磁盘路径 —— 才能真正验证
+    /// 「读盘之后回填」，而不是靠第一个实例的写穿掩盖过去。
+    func testDiskReadBackfillsMemoryCache() async throws {
+        let (writer, dir) = await makeCache()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        await writer.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "disk")], for: 77)
+
+        let reader = DanmakuCache(directory: dir, commentsTTL: 3600)
+        let before = await reader.commentsMemoryCount
+        XCTAssertEqual(before, 0, "新实例内存层应为空")
+
+        _ = await reader.comments(for: 77)
+        let after = await reader.commentsMemoryCount
+        XCTAssertEqual(after, 1, "读盘后必须回填内存")
+
+        // 回填有效：文件删掉后仍能读到。
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("comments-77.json"))
+        let warm = await reader.comments(for: 77)
+        XCTAssertEqual(warm?.first?.m, "disk", "回填后应走内存、不再依赖磁盘")
+    }
+
+    /// LRU 必须是**最近使用**而不是先进先出：读过的条目要把使用顺序提前。
+    /// 把内存命中时的 `touchCommentsInMemory` 删掉（退化成 FIFO）本用例必须红。
+    func testMemoryCacheEvictsLeastRecentlyUsed() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
+        let cache = DanmakuCache(directory: dir, commentsTTL: 3600, commentsMemoryCapacity: 2)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "ep1")], for: 1)
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "ep2")], for: 2)
+        // 读第 1 集 → 它变成「最近使用」，第 2 集退成最旧。
+        _ = await cache.comments(for: 1)
+        // 写第 3 集 → 应淘汰第 2 集（最久未使用），而不是第 1 集。
+        await cache.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "ep3")], for: 3)
+
+        for id in Int64(1)...2 {
+            try FileManager.default.removeItem(at: dir.appendingPathComponent("comments-\(id).json"))
+        }
+        let ep1 = await cache.comments(for: 1)
+        let ep2 = await cache.comments(for: 2)
+        XCTAssertEqual(ep1?.first?.m, "ep1", "读过的第 1 集应仍驻留（LRU 不是 FIFO）")
+        XCTAssertNil(ep2, "最久未使用的第 2 集应被淘汰")
+    }
+
+    /// 解码失败**不能进内存**（负缓存）。只断言「读不到」是不够的 ——
+    /// 后面再 `setComments` 会把内存覆盖掉，看不出失败态被缓存过。
+    func testCorruptedCommentsDoNotEnterMemory() async throws {
+        let (cache, dir) = await makeCache()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try Data("not-json".utf8).write(to: dir.appendingPathComponent("comments-42.json"))
+        let broken = await cache.comments(for: 42)
+        XCTAssertNil(broken)
+        let count = await cache.commentsMemoryCount
+        XCTAssertEqual(count, 0, "解码失败不该被当成有效条目缓存")
+    }
+
+    /// **内存快照过期不能拿去删文件**：盘上那份可能已被另一个实例刷新过。
+    ///
+    /// 修前实测：A（TTL 0.05）写 7 → 等待过期 → B（TTL 3600）刷新写 7 →
+    /// A 读一次就把 B 刚写的新文件删了，之后全新实例 C 也读不到。
+    func testStaleMemoryDoesNotDeleteFileWrittenElsewhere() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
+        let stale = DanmakuCache(directory: dir, commentsTTL: 0.05)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        await stale.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "old")], for: 7)
+        try await Task.sleep(for: .milliseconds(120))
+
+        // 另一实例在同一目录写入新数据（生产里是预览 / 重建 AppModel）。
+        let other = DanmakuCache(directory: dir, commentsTTL: 3600)
+        await other.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "fresh")], for: 7)
+
+        // stale 的内存里是过期旧条目；它读一次**不能**把新文件删掉。
+        let viaStale = await stale.comments(for: 7)
+        XCTAssertEqual(viaStale?.first?.m, "fresh", "读到盘上那份新数据，而不是 nil")
+
+        let url = dir.appendingPathComponent("comments-7.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path),
+                      "内存快照过期不得删除盘上文件")
+        let freshReader = DanmakuCache(directory: dir, commentsTTL: 3600)
+        let onDisk = await freshReader.comments(for: 7)
+        XCTAssertEqual(onDisk?.first?.m, "fresh")
+    }
+
     /// `purge()` 要一并清空正文内存层（否则清缓存后还读得到旧数据）。
     func testPurgeClearsCommentCache() async throws {
         let (cache, dir) = await makeCache()
