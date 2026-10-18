@@ -64,6 +64,88 @@ final class ClientIdentityTests: XCTestCase {
         }
     }
 
+    // MARK: - 认证头缓存（P1-12）
+
+    /// 缓存值必须与「不走缓存现拼」的值逐字节一致。
+    ///
+    /// 这条是缓存透明性的守门人：缓存实现写错（键少一个字段、拼错分隔符）时，
+    /// 页面上的表现是「图片鉴权偶发失败」，极难查。
+    func testMemoizedHeaderMatchesFreshComposition() {
+        ClientIdentity.resetHeaderCacheForTesting()
+
+        for scheme in ["MediaBrowser", "Emby"] {
+            let cached = ClientIdentity.authorizationHeader(
+                scheme: scheme, userId: "user-1", token: "token-abc")
+            let fresh = ClientIdentity.composeAuthorizationHeader(
+                scheme: scheme, userId: "user-1", token: "token-abc")
+            XCTAssertEqual(cached, fresh, "缓存版与现拼版必须一致（scheme=\(scheme)）")
+            // 再调一次走缓存，仍要一致。
+            XCTAssertEqual(
+                ClientIdentity.authorizationHeader(
+                    scheme: scheme, userId: "user-1", token: "token-abc"),
+                fresh)
+        }
+    }
+
+    /// **缓存键必须含 token。**
+    ///
+    /// 只按 `userId` 缓存是这里最致命的错法：Jellyfin 的 access token 会轮换，
+    /// 按 userId 缓存会让重登之后**仍发旧 token**，表现为「重新登录了但还是 401」。
+    func testHeaderCacheDistinguishesTokens() {
+        ClientIdentity.resetHeaderCacheForTesting()
+
+        let first = ClientIdentity.authorizationHeader(
+            scheme: "MediaBrowser", userId: "user-1", token: "token-old")
+        let second = ClientIdentity.authorizationHeader(
+            scheme: "MediaBrowser", userId: "user-1", token: "token-new")
+
+        XCTAssertNotEqual(first, second, "token 变了头必须跟着变")
+        XCTAssertTrue(second.contains(#"Token="token-new""#))
+        XCTAssertFalse(second.contains("token-old"))
+    }
+
+    /// 缓存键必须含 scheme：Jellyfin 用 `MediaBrowser`、Emby 用 `Emby`。
+    func testHeaderCacheDistinguishesScheme() {
+        ClientIdentity.resetHeaderCacheForTesting()
+
+        let jellyfin = ClientIdentity.authorizationHeader(
+            scheme: "MediaBrowser", userId: "u", token: "t")
+        let emby = ClientIdentity.authorizationHeader(
+            scheme: "Emby", userId: "u", token: "t")
+
+        XCTAssertTrue(jellyfin.hasPrefix("MediaBrowser "))
+        XCTAssertTrue(emby.hasPrefix("Emby "))
+        XCTAssertNotEqual(jellyfin, emby)
+    }
+
+    /// 缓存键必须含 userId（图片缓存身份靠它区分账号）。
+    func testHeaderCacheDistinguishesUsers() {
+        ClientIdentity.resetHeaderCacheForTesting()
+
+        let a = ClientIdentity.authorizationHeader(
+            scheme: "MediaBrowser", userId: "user-a", token: "t")
+        let b = ClientIdentity.authorizationHeader(
+            scheme: "MediaBrowser", userId: "user-b", token: "t")
+
+        XCTAssertNotEqual(a, b)
+        XCTAssertTrue(b.contains(#"UserId="user-b""#))
+    }
+
+    /// **注入的 Bundle 不能受缓存影响**：`version(in:)` 本体没有缓存，
+    /// 连续读两个不同的临时 Bundle 必须各自拿到自己的版本。
+    ///
+    /// 这条守住的是清单点名的坑：如果为了加速而给 `version(in:)` 加无键全局缓存，
+    /// 这里就会串台（第二次读到第一次的 `"1.2.3 (45)"`）。
+    func testVersionInInjectedBundleIsNotCachedAcrossBundles() throws {
+        let first = try makeBundle(shortVersion: "1.2.3", build: "45")
+        let second = try makeBundle(shortVersion: nil, build: "99")
+
+        XCTAssertEqual(ClientIdentity.version(in: first), "1.2.3 (45)")
+        XCTAssertEqual(ClientIdentity.version(in: second), "99", "第二个 Bundle 不能被第一个的结果污染")
+        // 反过来再读一次第一个，也仍要正确。
+        XCTAssertEqual(ClientIdentity.version(in: first), "1.2.3 (45)")
+    }
+
     private func makeBundle(shortVersion: String?, build: String?) throws -> Bundle {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "ClientIdentityTests-\(UUID().uuidString).bundle", directoryHint: .isDirectory)

@@ -136,7 +136,41 @@ public enum ClientIdentity {
     ///
     /// 服务端**不认识**这个字段，会照旧忽略（`MediaBrowser` 头的解析是按键取值）；
     /// 它是给缓存键用的，顺带让 `RemoteImage` 的凭证指纹也不再随 token 漂移。
+    ///
+    /// ## 为什么带缓存
+    ///
+    /// 这是**每张卡片每次 body** 都会走的一条路：`JellyfinServer.authorizationHeader`
+    /// 与 `EmbySession.authorizationHeader` 都是计算属性，`DesignSystem` 里 7 处在
+    /// `imageTarget` 系列里读它。而拼一次头要读 2 次 UserDefaults（`Device`/`DeviceId`，
+    /// 各带 NSLock）加 2 次 Info.plist 查询（`Version`）—— 实测 **11.49 µs/次**，
+    /// 一屏 20 张卡就是 **230 µs**，纯粹是「完全不变的数据反复现算」。
+    ///
+    /// ## 为什么缓存整条头，而不是分别缓存 `deviceID` / `deviceName` / `version`
+    ///
+    /// 因为 `version(in: bundle)` 是**可注入 Bundle** 的，而 `ClientIdentityTests`
+    /// 确实用临时 Bundle 连测了 5 种版本组合（`"1.2.3 (45)"` / `"99"` / `"development"` 等）。
+    /// 给 `version(in:)` 加无键全局缓存会**跨用例串台**。
+    ///
+    /// 只缓存拼好的头就绕开了这件事：这里用的 `version` 是 `version(in: .main)`，
+    /// 进程内恒定；`deviceID` / `deviceName` 都只在首用时写一次 UserDefaults
+    /// （全仓无第二写入点）。`version(in:)` 本体**一行都不用改**。
+    ///
+    /// ⚠️ 将来若新增「重设设备 ID / 改名」这类功能，**必须**同时清掉这张缓存
+    /// （见 `resetHeaderCacheForTesting()` 同一处），否则会一直发旧设备身份。
     public static func authorizationHeader(
+        scheme: String,
+        userId: String? = nil,
+        token: String? = nil
+    ) -> String {
+        let key = HeaderCacheKey(scheme: scheme, userId: userId ?? "", token: token ?? "")
+        if let cached = cachedAuthorizationHeader(for: key) { return cached }
+        let header = composeAuthorizationHeader(scheme: scheme, userId: userId, token: token)
+        storeAuthorizationHeader(header, for: key)
+        return header
+    }
+
+    /// 实际拼接。抽出来是为了让用例能拿到「不走缓存」的参考值做对拍。
+    static func composeAuthorizationHeader(
         scheme: String,
         userId: String? = nil,
         token: String? = nil
@@ -155,4 +189,45 @@ public enum ClientIdentity {
         }
         return scheme + " " + fields.map { "\($0.0)=\"\($0.1)\"" }.joined(separator: ", ")
     }
+
+    // MARK: - 认证头缓存
+
+    /// 缓存键。**必须含 token**：只按 `userId` 缓存会让 token 轮换后仍发旧 token。
+    private struct HeaderCacheKey: Hashable {
+        let scheme: String
+        let userId: String
+        let token: String
+    }
+
+    /// 上限 8 条。实际只会用到 1–2 条（当前服务器 + 可能的一台备机），
+    /// 留余量是为了「切换服务器」时不必立刻清空。
+    private static let headerCacheLimit = 8
+    private static let headerLock = NSLock()
+    nonisolated(unsafe) private static var headerCache: [HeaderCacheKey: String] = [:]
+
+    private static func cachedAuthorizationHeader(for key: HeaderCacheKey) -> String? {
+        headerLock.lock()
+        defer { headerLock.unlock() }
+        return headerCache[key]
+    }
+
+    private static func storeAuthorizationHeader(_ header: String, for key: HeaderCacheKey) {
+        headerLock.lock()
+        defer { headerLock.unlock() }
+        if headerCache.count >= headerCacheLimit, headerCache[key] == nil {
+            headerCache.removeAll(keepingCapacity: true)
+        }
+        headerCache[key] = header
+    }
+
+    /// 测试专用：清空认证头缓存。
+    ///
+    /// 生产**不需要**它 —— 缓存键含 token，换账号/重登自然不命中。但用例要断言
+    /// 「缓存值 == 现拼值」就必须能回到冷状态。
+    static func resetHeaderCacheForTesting() {
+        headerLock.lock()
+        headerCache.removeAll()
+        headerLock.unlock()
+    }
+
 }
