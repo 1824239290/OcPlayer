@@ -67,7 +67,8 @@ extension AppModel {
             if try await body() {
                 self[keyPath: attempted].insert(id)
             }
-        } catch is CancellationError {
+        } catch where CancellationClassifier.isCancellation(error) {
+            // 同 `RailResult.load`：取消时不该记账、更不该记 warning。
             return
         } catch {
             // 连列表都拉不到（离线 / 服务端出错）：不记账，下次进入可视区再试。

@@ -98,7 +98,17 @@ public actor MetadataStore {
         now: Date = Date(),
         progressFresh: Bool = true
     ) throws {
-        guard !items.isEmpty else { return }
+        // ⚠️ **不能写成 `guard !items.isEmpty else { return }`**。
+        //
+        // 「空 items + 非 nil rail」是一个**有意义的组合**：服务端说「这个 rail 现在
+        // 没有内容」时，`saveRail` 会把 `RailSnapshot(items: [])` 写进去、**清掉**上一份。
+        // 若在这里早退，磁盘会**原地保留过期 rail** —— 而 `MetadataHydrator.home()`
+        // 读 rail 无任何新鲜度门槛（`fetchedAt` 只参与 `dates.min()`），
+        // 冷启动/离线就会把过期条目当「继续观看/接下来看/最近添加」铺上首页。
+        //
+        // 第一版就是那样写的，独立审查用端到端用例实测出「服务端返回空之后磁盘仍是
+        // 旧 rail」；回归见 `CachedMediaServerTests.emptyRailResponseClearsStaleRail`。
+        guard !items.isEmpty || rail != nil else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
         // 两次编码都在事务外。
         let rows: [(MediaItem, Data)] = items.compactMap { item in

@@ -323,8 +323,12 @@ public final class AppUpdateChecker {
         defaults.set(Date().timeIntervalSince1970, forKey: SettingsKeys.updateLastCheckedAt)
     }
 
+    /// 取消判据。委托给唯一真源 —— 这里早先是**第三份副本**，而且比真源更宽：
+    /// 只查 `code == NSURLErrorCancelled`、**不查 domain**，于是
+    /// `NSError(domain: "SomeOtherDomain", code: -999)` 会被误判成取消
+    /// （`CancellationClassifierTests` 明确断言它**不算**取消）。
+    /// `Task.isCancelled` 保留在前：本类型比分类器多知道一层「当前任务已取消」。
     private static func isCancellation(_ error: Error) -> Bool {
-        if Task.isCancelled || error is CancellationError { return true }
-        return (error as NSError).code == NSURLErrorCancelled
+        Task.isCancelled || CancellationClassifier.isCancellation(error)
     }
 }

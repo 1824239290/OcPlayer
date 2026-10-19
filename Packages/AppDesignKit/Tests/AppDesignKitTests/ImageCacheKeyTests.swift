@@ -660,7 +660,6 @@ final class ImagePipelineCancellationTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Timeout-\(UUID().uuidString)", isDirectory: true)
         addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
-        TimeoutProtocol.install()
         let pipeline = ImagePipeline(cacheDirectory: dir, protocolClasses: [TimeoutProtocol.self])
         let url = URL(string: "http://h:8096/Items/b/Images/Thumb?maxWidth=720")!
 
@@ -678,8 +677,6 @@ final class ImagePipelineCancellationTests: XCTestCase {
 
 /// 网络层抛超时的协议。
 final class TimeoutProtocol: URLProtocol {
-    static func install() {}
-
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 

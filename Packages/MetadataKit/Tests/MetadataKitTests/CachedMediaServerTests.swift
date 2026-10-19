@@ -93,6 +93,52 @@ struct CachedMediaServerTests {
         #expect(try await store.rail("resume", tenant: tenant) == nil)
     }
 
+    /// **服务端说「这个 rail 没有内容」时，必须把磁盘上的旧 rail 清掉。**
+    ///
+    /// 「空 items + 非 nil rail」是一个**有意义的组合**，不是空操作：
+    /// `saveRail` 会写 `RailSnapshot(items: [])` 覆盖上一份。
+    /// 而 `MetadataHydrator.home()` 读 rail **没有任何新鲜度门槛** ——
+    /// 冷启动 / 离线时会把残留的过期条目当「继续观看」铺上首页。
+    ///
+    /// 回归背景：`saveItemsAndRail` 第一版写了 `guard !items.isEmpty else { return }`，
+    /// 把清空路径一刀切掉。独立审查端到端实测出「服务端返回空之后磁盘仍是旧 rail」。
+    @Test func emptyRailResponseClearsStaleRail() async throws {
+        let (server, stub, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        // 上次成功拉取：rail 里有内容。
+        stub.resumeResult = .success([makeItem(id: "stale", name: "过期")])
+        _ = try await server.resumeItems()
+        #expect(try await store.rail("resume", tenant: tenant)?.items.map(\.id) == ["stale"])
+
+        // 这次服务端说「没有续播」——空 items + 非 nil rail。
+        stub.resumeResult = .success([])
+        _ = try await server.resumeItems()
+
+        let after = try await store.rail("resume", tenant: tenant)
+        #expect(after != nil, "空响应也要写一份空快照（而不是什么都不写）")
+        #expect(after?.items.isEmpty == true,
+                "过期 rail 残留了 —— 首页会铺出早已看完的条目")
+    }
+
+    /// 直接钉 `saveItemsAndRail` 在「空 items + 非 nil rail」下的语义
+    /// （不走 `CachedMediaServer`，避免上面的用例只覆盖到一条链路）。
+    @Test func saveItemsAndRailWithEmptyItemsStillClearsRail() async throws {
+        let (_, _, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        try await store.saveRail([makeItem(id: "old", name: "旧")], rail: "resume", tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.map(\.id) == ["old"])
+
+        try await store.saveItemsAndRail([], rail: "resume", tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.isEmpty == true,
+                "空 items 也必须覆盖 rail（否则旧快照永远清不掉）")
+
+        // `rail: nil` + 空 items 才是真正的空操作（不能把什么都写一遍）。
+        try await store.saveItemsAndRail([], rail: nil, tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.isEmpty == true)
+    }
+
     // MARK: - 写穿
 
     @Test func homeRailsArePersisted() async throws {
