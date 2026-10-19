@@ -73,6 +73,52 @@ final class ServerProbeSessionReuseTests: XCTestCase {
             "应按 timeout 分档：2s 一档、0.5s 一档（2s 的第二次要命中缓存）")
     }
 
+    /// **配置不同就不许共用会话**（审查实测的串台风险）。
+    ///
+    /// 第一版只按 `timeout` 做键：两个配置分别挂 ProtoA / ProtoB、同 timeout=2
+    /// 各探一次 → 第二次拿到第一次的会话，`r1=A r2=A`，第二个配置**完全没生效**。
+    /// 而 `sessionConfiguration` 正是测试注入口，AppTests 里不同套件用不同 mock、
+    /// timeout 都可能是 2 —— 顺序相关、随机串台。
+    func testDifferentConfigurationsDoNotShareSession() async throws {
+        let url = URL(string: "http://192.0.2.20:8096")!
+        ServerProbe.resetSessionCacheForTesting()
+        ServerProbe.resetSessionCreationCounterForTesting()
+
+        ServerAProtocol.serverID = "A"
+        ServerBProtocol.serverID = "B"
+        let configA = URLSessionConfiguration.ephemeral
+        configA.protocolClasses = [ServerAProtocol.self]
+        let configB = URLSessionConfiguration.ephemeral
+        configB.protocolClasses = [ServerBProtocol.self]
+
+        let a = await ServerProbe(timeout: 2, sessionConfiguration: configA).probe(url: url)
+        let b = await ServerProbe(timeout: 2, sessionConfiguration: configB).probe(url: url)
+
+        XCTAssertEqual(a?.serverID, "A")
+        XCTAssertEqual(b?.serverID, "B", "第二个配置没生效 —— 会话按 timeout 串台了")
+        XCTAssertEqual(ServerProbe.sessionCreationCountForTesting, 2,
+                       "不同配置必须各自建会话")
+    }
+
+    /// 非法 timeout（NaN / 0 / 负数 / 无穷）必须被夹成有限正数。
+    ///
+    /// 因为 timeout 是缓存键的一部分：NaN 做键**永不命中**（每次新建、键表无界增长），
+    /// 负数 / infinity 会被 URLSession 接受但行为诡异。
+    func testNonPositiveOrNonFiniteTimeoutIsClamped() async throws {
+        let url = URL(string: "http://192.0.2.21:8096")!
+        for bad in [Double.nan, 0, -1, .infinity] {
+            ServerProbe.resetSessionCacheForTesting()
+            ServerProbe.resetSessionCreationCounterForTesting()
+            let probe = ServerProbe(
+                timeout: bad, sessionConfiguration: TestSupport.mockedSessionConfiguration())
+            _ = await probe.probe(url: url)
+            _ = await probe.probe(url: url)
+            XCTAssertEqual(
+                ServerProbe.sessionCreationCountForTesting, 1,
+                "timeout=\(bad) 时缓存键不稳定（NaN 永不命中 / 每次新建）")
+        }
+    }
+
     /// 复用会话之后，探活结果仍然正确（延迟有值、serverID 解析出来）。
     ///
     /// 防的是「为了复用而把请求/解码改坏」。
@@ -89,4 +135,44 @@ final class ServerProbeSessionReuseTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(result.latency, 0)
         }
     }
+}
+
+
+/// 探活测试用：固定返回带指定 `Id` 的公开信息。
+private class ServerAProtocol: URLProtocol {
+    nonisolated(unsafe) static var serverID = "A"
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let body = Data(#"{"Id":"\#(Self.serverID)","ServerName":"home"}"#.utf8)
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+private final class ServerBProtocol: URLProtocol {
+    nonisolated(unsafe) static var serverID = "B"
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let body = Data(#"{"Id":"\#(Self.serverID)","ServerName":"home"}"#.utf8)
+        let response = HTTPURLResponse(
+            url: request.url!, statusCode: 200, httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

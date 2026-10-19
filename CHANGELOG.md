@@ -33,7 +33,15 @@
     每次探活都重新付 DNS + TCP + TLS。
   - **这不只是慢，是判据被污染**：探活测出的 `latency` 正是「挑最快地址」的判据输入，
     而局域网 / Tailscale / 反代的握手成本各不相同，串进延迟里会让选路偏。
-  - 改成按 `timeout` 缓存会话（全 App 只有一个取值，窗口极窄），第二次起走 TCP/TLS 复用。
+  - 改成缓存会话，第二次起走 TCP/TLS 复用。
+  - **⚠️ 第一版只按 `timeout` 做键，被审查实测出串台**：同 timeout、不同
+    `sessionConfiguration`（正是测试注入口，塞 `URLProtocol`）会拿到第一次建的会话 ——
+    实测两个配置分别挂 ProtoA/ProtoB、timeout 都是 2，结果 `r1=A r2=A`，第二个配置**完全没生效**。
+    AppTests 里不同套件用不同 mock、timeout 都是 2，存在顺序相关的随机串台。
+    改成键含**配置指纹**（`protocolClasses` 身份集合 + `waitsForConnectivity` +
+    `allowsCellularAccess` + timeout）。
+  - 顺带夹住非法 timeout：NaN 做键**永不命中**（每次新建、键表无界增长），
+    负数 / infinity 会被 `URLSession` 接受但行为诡异 —— 入口 `guard timeout.isFinite && > 0`。
   - 用例直接钉「新建过几个会话」：同一 timeout 探活 5 次只建 **1** 个；不同 timeout 各一档。
     变异（退回每次新建 + `invalidateAndCancel`）→ 红。
 
@@ -41,15 +49,24 @@
   - 改前「主检索 `await` 完 → 再 `await` 别名链」：最坏两段**串行 RTT**
     （网关 `timeoutIntervalForRequest = 10` / `ForResource = 20`，即 ≤10–20 s），
     而这期间**网关已经成功返回的结果上不了屏**。
-  - 改成：别名链**并发起飞** → 主检索回来即可用 → 别名最多再等 `aliasBudget`（1.5 s），
-    超时就放弃。别名只是「多找回几部」的增强，**不是结果正确性的前提**。
+  - 改成：别名链**并发起飞**，主检索回来后最多再等 `aliasBudget`。
+    **⚠️ 第一版把 `aliasBudget` 设成 1.5 s、还声称「主检索回来即可用」—— 这是错的。**
+    返回值只有一个，主检索回来后仍要 `await` 别名链才能组装最终结果。独立审查用
+    同构场景实测（main 10 ms / alias 900 ms / budget 1500 ms）：
+    `mainReadyAt=11ms returnedAt=957ms` —— 调用方多等 **946 ms**，
+    等于把「串行 10–20 s」换成「串行 min(别名, 1.5 s)」，典型场景收益接近零。
+    **按清单原本的建议改成「给该步单独设短超时」= 300 ms。** 别名是增强、不是前提。
   - **踩了一个真坑**：第一版用 `withTaskGroup` 竞速，实测**超时失效** ——
     group 在作用域结束时会等所有子任务，于是超时分支返回后仍被慢任务拖住。
     用例实测「预算 50 ms + 慢任务 1 s」耗时 **1.110 s**（应 <500 ms）。
     改成「计时的 Task + 结果槽（锁 + 一次性 continuation）」：两边互不阻塞，
     同一用例降到 **0.054 s**。
-  - 用例覆盖：工作先完成→原值返回；工作慢于预算→**及时**返回 nil（用耗时判，不只看返回值）；
-    被放弃的工作**仍能自然完成**（我们不取消它，只不等它）；`aliasBudget` 取值在合理区间。
+  - 用例覆盖（8 条）：工作先完成→原值返回；工作慢于预算→**及时**返回 nil（用耗时判）；
+    被放弃的工作**仍能自然完成**（实测 `waiter.cancel()` 不会取消底层 `work`）；
+    `aliasBudget` 取值合理；**别名链契约**4 条（命中即停 / 跳过同名 / 全不命中 / 被取消提前退出）。
+  - **另修两条审查发现**：① 主检索抛错时 `aliasSearch` 曾是无人管的孤儿任务（会跑满网关
+    10/20 s，重试还会叠加）→ `defer { aliasSearch.cancel() }` + 循环里检查 `Task.isCancelled`；
+    ② `aliasHit` 语义从「别名链返回非空」变成「别名带来新增条目」，改名 `aliasAdded` 以免误读历史日志。
 
 ### 安全 / 正确性
 

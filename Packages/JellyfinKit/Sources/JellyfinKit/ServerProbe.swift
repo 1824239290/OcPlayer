@@ -54,7 +54,10 @@ public struct ServerProbe: Sendable {
     var inject: (@Sendable (URL) async -> ServerProbeResult?)?
 
     public init(timeout: TimeInterval = 2, sessionConfiguration: URLSessionConfiguration = .default) {
-        self.timeout = timeout
+        // ⚠️ `timeout` 是缓存键的一部分，**必须是有限正数**：NaN 做键永不命中
+        // （每次新建会话、键表无界增长），负数 / infinity 会被 URLSession 接受但行为诡异。
+        // 生产固定 2，只有测试或未来 API 可能传坏值 —— 在这里夹住最省心。
+        self.timeout = (timeout.isFinite && timeout > 0) ? timeout : 2
         self.sessionConfiguration = sessionConfiguration
     }
 
@@ -169,16 +172,42 @@ public struct ServerProbe: Sendable {
 
     // MARK: - 给 UI 用的组合口
 
-    /// 探活会话缓存（按 `timeout` 分档）。
+    /// 探活会话缓存。
     ///
     /// 为什么需要缓存：见 `request(...)` 里那段注释 —— 每次新建并
     /// `invalidateAndCancel` 会让连接池当场作废，探活延迟里混进 DNS + TCP + TLS，
     /// 而那个延迟正是「挑最快地址」的判据输入。
     ///
+    /// ## ⚠️ 键必须含**配置指纹**，不能只有 timeout
+    ///
+    /// 第一版只按 `timeout` 做键，于是「同 timeout、不同 `sessionConfiguration`」
+    /// 会拿到第一次建的那个会话 —— 而 `sessionConfiguration` 正是测试注入口
+    /// （塞 `URLProtocol`）。审查实测：两个配置分别挂 ProtoA / ProtoB、同 timeout=2
+    /// 各探一次 → `r1=A r2=A`，第二个配置**完全没生效**。
+    ///
+    /// 生产上这还意味着「改了配置（证书 / 代理）从第二次起无声失效」。
+    ///
+    /// 指纹取**测试与生产都会变的那几项**；`protocolClasses` 用 `ObjectIdentifier`
+    /// 集合（`URLProtocol` 子类身份）。这与会话的真实行为相关，不是随意字符串。
+    ///
     /// `@unchecked Sendable`：内部全用锁保护，`URLSession` 本身线程安全。
     private final class SessionCache: @unchecked Sendable {
+        private struct Key: Hashable {
+            let timeout: TimeInterval
+            let protocolClasses: Set<ObjectIdentifier>
+            let waitsForConnectivity: Bool
+            let allowsCellularAccess: Bool
+
+            init(configuration: URLSessionConfiguration, timeout: TimeInterval) {
+                self.timeout = timeout
+                self.protocolClasses = Set((configuration.protocolClasses ?? []).map(ObjectIdentifier.init))
+                self.waitsForConnectivity = configuration.waitsForConnectivity
+                self.allowsCellularAccess = configuration.allowsCellularAccess
+            }
+        }
+
         private let lock = NSLock()
-        private var sessions: [TimeInterval: URLSession] = [:]
+        private var sessions: [Key: URLSession] = [:]
         private var createdSessions = 0
 
         func resetCreationCount() {
@@ -194,16 +223,17 @@ public struct ServerProbe: Sendable {
         }
 
         func session(configuration: URLSessionConfiguration, timeout: TimeInterval) -> URLSession {
+            let key = Key(configuration: configuration, timeout: timeout)
             lock.lock()
             defer { lock.unlock() }
-            if let existing = sessions[timeout] { return existing }
+            if let existing = sessions[key] { return existing }
             let copy = configuration.copy() as! URLSessionConfiguration
             copy.timeoutIntervalForRequest = timeout
             copy.timeoutIntervalForResource = timeout
             // 探活要的是「现在通不通」：等网络恢复是请求层的事，不是这里的事。
             copy.waitsForConnectivity = false
             let session = URLSession(configuration: copy)
-            sessions[timeout] = session
+            sessions[key] = session
             createdSessions += 1
             return session
         }

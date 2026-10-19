@@ -409,12 +409,21 @@ final class DanmakuCoordinator {
         )
     }
 
-    /// 别名检索最多还能占用多久（**主检索已经回来后**的追加等待）。
+    /// 别名检索最多还能占用多久 —— **这是「主检索之后的追加等待」，必须短**。
     ///
-    /// 它不是请求超时，而是「用户已经能看见结果了，还愿意为多找回几部等多久」。
-    /// 取 1.5 s：别名链的下一跳是 Bangumi 的标题解析（本地缓存命中时是微秒级），
-    /// 慢的只会是冷缓存 + 网络；而它命中时确实能把「搜不到」变成「搜到」。
-    nonisolated static let aliasBudget: Duration = .milliseconds(1500)
+    /// ## ⚠️ 取 1.5 s 是错的，实测推翻了原注释
+    ///
+    /// 第一版写 1.5 s，注释还声称「主检索回来即可用」。**不成立**：返回值只有一个，
+    /// 主检索回来后仍要 `await` 别名链才能组装最终结果。独立审查用同构场景实测
+    /// （main 10 ms / alias 900 ms / budget 1500 ms）：`mainReadyAt=11ms
+    /// returnedAt=957ms` —— 调用方多等了 **946 ms**。那等于把「串行 10–20 s」
+    /// 换成「串行 min(别名, 1.5 s)」，典型场景收益接近零。
+    ///
+    /// 清单对这条的建议本来就是「别名合并降级为非阻塞；**给该步单独设短超时**」。
+    /// 所以取 **300 ms**：这是「主结果已经在手，还愿意为多找回几部再等多久」的上限，
+    /// 不是请求超时。别名命中时多是本地缓存的标题解析（微秒级）+ 一次网关往返，
+    /// 300 ms 够覆盖缓存命中与同城往返；覆盖不了的场景就放弃 —— 它是增强，不是前提。
+    nonisolated static let aliasBudget: Duration = .milliseconds(300)
 
     /// 有界等待一个尚未完成的并发工作；超时返回 nil（放弃，不取消也不报错）。
     ///
@@ -451,16 +460,20 @@ final class DanmakuCoordinator {
     /// 依次试别名，返回第一个非空结果。
     ///
     /// 与改前的循环等价（同一个 `break` 语义：命中就停），只是现在跑在并发分支里。
+    /// 依次试别名，返回第一个非空结果。
+    ///
+    /// `search` 是注入的闭包（而不是直接收 `DanmakuGatewayClient`）—— 那样用例才能
+    /// 不碰网络地验证「命中即停」「跳过同名别名」「被取消时提前退出」这三条契约。
+    /// 生产调用点传一个包住 client 的闭包。
     nonisolated static func firstNonEmptyAliasResult(
-        resolver: DanmakuTitleAliasResolver,
-        client: DanmakuGatewayClient,
-        anime: String,
-        episode: String?
+        aliases: @Sendable (String) async -> [String],
+        search: @Sendable (String) async -> [AnimeWithEpisodes]?,
+        anime: String
     ) async -> [AnimeWithEpisodes]? {
-        for alias in await resolver.aliases(for: anime) where alias != anime {
-            guard let aliasResult = try? await client.searchEpisodes(
-                anime: alias, episode: episode
-            ).payload.animes, !aliasResult.isEmpty else { continue }
+        for alias in await aliases(anime) where alias != anime {
+            // 被取消就没有必要继续试下一个别名了（主检索已失败 / 用户已离开）。
+            if Task.isCancelled { return nil }
+            guard let aliasResult = await search(alias), !aliasResult.isEmpty else { continue }
             return aliasResult
         }
         return nil
@@ -478,6 +491,7 @@ final class DanmakuCoordinator {
             "episode": episode.isEmpty ? .null : .string(episode),
         ])
         let client = DanmakuGatewayClient(configuration: configuration, session: session)
+        let episodeOrNil = episode.isEmpty ? nil : episode
         do {
             // 别名检索**与主检索并发**，不再串在它后面。
             //
@@ -490,9 +504,20 @@ final class DanmakuCoordinator {
             // 不是结果正确性的前提）。
             let aliasSearch = Task { [titleAliasResolver] in
                 await Self.firstNonEmptyAliasResult(
-                    resolver: titleAliasResolver, client: client, anime: anime,
-                    episode: episode.isEmpty ? nil : episode)
+                    aliases: { [titleAliasResolver] title in
+                        await titleAliasResolver.aliases(for: title)
+                    },
+                    search: { alias in
+                        try? await client.searchEpisodes(anime: alias, episode: episodeOrNil)
+                            .payload.animes
+                    },
+                    anime: anime)
             }
+            // 主检索抛错时**必须取消**它：否则这个已起飞的任务会跑满网关的
+            // 10 s / 20 s 超时，用户重试还会叠加多个孤儿别名链（纯浪费，
+            // 还会额外触发 `DanmakuTitleAliasResolver` 的 store 写入）。
+            // 改前别名链根本不会启动，所以这条是并发化带来的新责任。
+            defer { aliasSearch.cancel() }
 
             var result = try await client.searchEpisodes(
                 anime: anime,
@@ -502,12 +527,15 @@ final class DanmakuCoordinator {
             // `boundedValue` 返回 `T?`，而 `T` 本身是 `[AnimeWithEpisodes]?` —— 拍平一层。
             // 外层 nil = 超时放弃别名；内层 nil/空 = 别名链没有命中。
             let aliasResult = await Self.boundedValue(of: aliasSearch, within: Self.aliasBudget) ?? nil
-            var aliasHit = false
+            // 语义说明：改前这个字段表示「别名链路返回了非空结果」；
+            // 现在是「别名**带来了新增条目**」（去重后非空）。对结果无影响，
+            // 但日志口径变了，所以改名为 `aliasAdded` 以免误读历史日志。
+            var aliasAdded = false
             if let aliasResult, !aliasResult.isEmpty {
                 let known = Set(result.map(\.animeId))
                 let merged = aliasResult.filter { !known.contains($0.animeId) }
                 result += merged
-                aliasHit = !merged.isEmpty
+                aliasAdded = !merged.isEmpty
             }
 
             AppDiagnostics.logInfo("弹幕手动搜索完成", fields: [
@@ -515,7 +543,7 @@ final class DanmakuCoordinator {
                 "episode": episode.isEmpty ? .null : .string(episode),
                 "animeCount": .integer(Int64(result.count)),
                 "episodeCount": .integer(Int64(result.reduce(0) { $0 + $1.episodes.count })),
-                "aliasHit": .boolean(aliasHit),
+                "aliasAdded": .boolean(aliasAdded),
             ])
             return result
         } catch {

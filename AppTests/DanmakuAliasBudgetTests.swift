@@ -1,3 +1,4 @@
+import DanmakuKit
 import Foundation
 import XCTest
 
@@ -44,8 +45,11 @@ final class DanmakuAliasBudgetTests: XCTestCase {
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - started) * 1000
 
         XCTAssertNil(value, "超预算时必须放弃别名")
-        XCTAssertLessThan(elapsedMs, 500,
-                          "耗时 \(Int(elapsedMs)) ms —— 说明它在等慢任务跑完，而不是超时就返回")
+        // 判据用**比值**而不是固定毫秒：work 要 1000ms，若实现是「等它跑完再丢弃」
+        // 必然 ≥1000ms；超时正确则 ≈预算（50ms）。取 1/4 留足 CI 抖动余量。
+        XCTAssertLessThan(elapsedMs, 250,
+                          "耗时 \(Int(elapsedMs)) ms —— 说明它在等 1000ms 的慢任务跑完，"
+                              + "而不是超时就返回")
     }
 
     /// 超时放弃之后，那个工作**仍然能自然完成**（我们不取消它，只是不等）。
@@ -62,9 +66,68 @@ final class DanmakuAliasBudgetTests: XCTestCase {
         let value = await DanmakuCoordinator.boundedValue(of: work, within: .milliseconds(20))
         XCTAssertNil(value)
 
-        // 等它自己跑完。
-        try? await Task.sleep(for: .milliseconds(300))
+        // 等它自己跑完。窗口给足（work 120ms → 等 1000ms，余量 8x）：
+        // 慢 runner 上短窗口会先红（上一批已踩过机器相关性）。
+        for _ in 0..<50 where !box.isDone {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
         XCTAssertTrue(box.isDone, "被放弃等待的工作必须仍能自然完成（没被取消）")
+    }
+
+    /// **别名链「命中即停」契约**（审查指出我原文件头声称测了、实际零覆盖）。
+    func testFirstNonEmptyAliasResultStopsAtFirstHit() async {
+        let tried = TriedAliases()
+        let result = await DanmakuCoordinator.firstNonEmptyAliasResult(
+            aliases: { _ in ["a", "b", "c"] },
+            search: { alias in
+                tried.record(alias)
+                guard alias == "b" else { return [] }
+                let data = Data(animeJSON(id: 7).utf8)
+                return (try? JSONDecoder().decode(AnimeWithEpisodes.self, from: data)).map { [$0] }
+            },
+            anime: "anime")
+        XCTAssertEqual(result?.map(\.animeId), [7], "应返回第一个命中的别名结果")
+        XCTAssertEqual(tried.values, ["a", "b"], "命中后必须停（不该再试 c）")
+    }
+
+    /// 同名别名要跳过（`aliases(for:)` 会把自己也返回，那是浪费一次请求）。
+    func testFirstNonEmptyAliasResultSkipsTheOriginalTitle() async {
+        let tried = TriedAliases()
+        _ = await DanmakuCoordinator.firstNonEmptyAliasResult(
+            aliases: { _ in ["anime", "other"] },
+            search: { alias in
+                tried.record(alias)
+                return []
+            },
+            anime: "anime")
+        XCTAssertEqual(tried.values, ["other"], "与作品名同名的别名不该被检索")
+    }
+
+    /// 全部别名都没结果 → nil。
+    func testFirstNonEmptyAliasResultReturnsNilWhenNothingHits() async {
+        let result = await DanmakuCoordinator.firstNonEmptyAliasResult(
+            aliases: { _ in ["a", "b"] },
+            search: { _ in [] },
+            anime: "anime")
+        XCTAssertNil(result)
+    }
+
+    /// **被取消时提前退出**（主检索失败时会 cancel 这个任务，别让它跑满网关超时）。
+    func testFirstNonEmptyAliasResultStopsWhenCancelled() async {
+        let tried = TriedAliases()
+        let task = Task {
+            await DanmakuCoordinator.firstNonEmptyAliasResult(
+                aliases: { _ in ["a", "b", "c", "d"] },
+                search: { alias in
+                    tried.record(alias)
+                    return []
+                },
+                anime: "anime")
+        }
+        task.cancel()
+        _ = await task.value
+        XCTAssertLessThan(tried.values.count, 4,
+                          "已取消却把所有别名都试完了：\(tried.values)")
     }
 
     /// 预算本身是有限值：不能设成 0（等于永远放弃别名）或无穷。
@@ -91,5 +154,29 @@ private final class CompletionBox: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return done
+    }
+}
+
+
+/// `AnimeWithEpisodes` 只有 `Decodable`、没有 memberwise init，所以用 JSON 造。
+private func animeJSON(id: Int) -> String {
+    #"{"animeId":\#(id),"animeTitle":"t","type":"tvseries","typeDescription":"TV","episodes":[]}"#
+}
+
+/// 记录试过哪些别名（`@unchecked Sendable`：内部用锁）。
+private final class TriedAliases: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    func record(_ alias: String) {
+        lock.lock()
+        storage.append(alias)
+        lock.unlock()
+    }
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
     }
 }
