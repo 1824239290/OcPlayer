@@ -238,10 +238,15 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
     /// 让用例失去鉴别力（审查在 `passwd` 那条上就逮到过这个问题）。
     func testLongSDoesNotBypassRedaction() {
         let secret = "Zx9QwErTyUiOp42"   // 不含 s / token / password 等任何关键词
+        // ⚠️ 用户路径正则里的用户名是**按 `NSUserName()` 动态构造**的
+        // （`SensitivePatterns.homeRoots`），所以这里必须用当前用户名拼路径。
+        // 写死 `/Users/jumusu/...` 只在本机通过，CI runner 上用户是 `runner`
+        // —— 正则压根不匹配，断言必然红（本 PR 第一次 CI 就是这么红的）。
+        let user = NSUserName()
         let inputs = [
             "\u{017F}ecret=\(secret)",          // ſecret
             "ba\u{017F}ic \(secret)",           // baſic（Authorization 头）
-            "/U\u{017F}ERS/jumusu/x",           // /UſERS/（用户路径）
+            "/U\u{017F}ERS/\(user)/x",          // /UſERS/<user>/（用户路径）
             "\u{017F}ecret: \u{017F}\(secret)",
         ]
         for input in inputs {
@@ -254,7 +259,8 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
         // 凭据必须消失（前两条带触发关键词；第三条是路径、断言被换成占位符）。
         XCTAssertFalse(DiagnosticRedactor.redact("\u{017F}ecret=\(secret)").contains(secret))
         XCTAssertFalse(DiagnosticRedactor.redact("ba\u{017F}ic \(secret)").contains(secret))
-        XCTAssertEqual(DiagnosticRedactor.redact("/U\u{017F}ERS/jumusu/x"), "<user-path>")
+        XCTAssertEqual(DiagnosticRedactor.redact("/U\u{017F}ERS/\(NSUserName())/x"), "<user-path>",
+                       "ICU 折叠下 /UſERS/ 应等于 /Users/（正则带 (?i)）")
     }
 
     /// 守卫在我实际会遇到的**所有** C 串陷阱下都要与全跑一致。
