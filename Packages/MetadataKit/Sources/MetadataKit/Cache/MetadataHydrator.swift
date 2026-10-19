@@ -49,7 +49,10 @@ public struct MetadataHydrator: Sendable {
         //
         // ⚠️ 我最初量错了（把「读」当成不可拆的整体，得出「只省 0.9 µs、量不出来」的
         // 错误结论，差两个数量级）。上面这两个数才是真的 —— 别再照那句旧结论放弃。
-        let parts = await store.homeSnapshotParts(tenant: tenant)
+        // 读失败要**与「没有缓存」区分开**：前者应让调用方保留加载态（可能是临时
+        // I/O 错误，下次会好），后者才是「服务端就是空的」→ 返回 nil。
+        // 失败时返回 nil 保持原加载态，与原来「四个 try? 全失败」的结果一致。
+        guard let parts = try? await store.homeSnapshotParts(tenant: tenant) else { return nil }
         let libraries = parts.libraries.map(\.library)
         let resume = parts.rails["resume"]
         let nextUp = parts.rails["nextUp"]

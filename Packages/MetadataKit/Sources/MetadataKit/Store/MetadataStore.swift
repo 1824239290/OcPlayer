@@ -420,22 +420,42 @@ public actor MetadataStore {
     /// （实测：4 个事务跑 4 条 trivial 查询 147.0 µs，1 个事务跑 4 条 59.0 µs，
     /// 差 88 µs / 3 个事务）。
     ///
-    /// 真实数据上的 A/B（8 个库 + 3 条 rail × 20 条 `MediaItem`）：
+    /// 真实数据上的 A/B（8 个库 + 3 条 rail × 20 条 `MediaItem`，交替 300 次取 p50）：
     ///
     /// | 变体 | p50 |
     /// |---|---|
-    /// | 四个独立读 | 966.2 µs |
-    /// | **一次读 + 一条 SQL 取三条 rail** | **789.8 µs（省 18.3%）** |
+    /// | 四个独立读 | 751.0 µs |
+    /// | **一次读 + 一条 SQL 取三条 rail** | **602.0 µs（省 19.8%）** |
+    ///
+    /// > 独立审查在另一台负载上测到 1251.0 → 1037.3 µs（−17.1%）、
+    /// > 以及 966.2 → 789.8 µs（−18.3%）。**绝对值随机器/数据规模变，比例稳定在
+    /// > −17% ~ −20%** —— 引用时请以比例为准，别把某一台机器的绝对值当结论。
     ///
     /// 三条 rail 用**一条** `IN (?, ?, ?)` 取回，而不是三次 `rail(...)` ——
     /// 后者在同一个事务里也省了 checkout，但再多两条 round-trip 的解析开销。
     ///
-    /// - Note: 任何一项缺失都按空处理（与调用方原来的 `try?` 语义一致）；
-    ///   单条 rail 解码失败只让那一条变 nil，不影响其它。
-    public func homeSnapshotParts(tenant: TenantID)
+    /// ## 失败语义（与旧实现**不同**，有意为之）
+    ///
+    /// - **单条 rail 解码失败 / 版本不认**：只跳过那一条（其余照常返回）—— 与旧实现一致。
+    /// - **整个读事务失败**（库损坏 / 表缺失 / I/O 错误）：**抛错**。
+    ///
+    ///   ⚠️ 第一版写的是 `(try? database.read { ... }) ?? ([], [:])`，把「读失败」
+    ///   压成了「全空」，与「服务端确实是空的」不可区分 —— 而这会**丢掉本来还能显示的
+    ///   部分**（例如库读得到、rail 表坏了：旧实现返回「2 个库 + 空 rails」的快照，
+    ///   新实现整体失败）。
+    ///
+    ///   所以这里抛错，由 `MetadataHydrator.home()` 决定怎么降级 —— 它现在
+    ///   `guard let ... = try? await ...` **返回 nil**（保持调用方的骨架屏、等下次重试），
+    ///   而不是吞掉错误当成「没有缓存」。
+    /// 测试用：在写事务里跑任意 SQL（用于制造「读失败」这类异常状态）。
+    func rawWriteForTesting(_ body: @escaping (Database) throws -> Void) throws {
+        try database.write { db in try body(db) }
+    }
+
+    public func homeSnapshotParts(tenant: TenantID) throws
         -> (libraries: [CachedLibrary], rails: [String: CachedRail]) {
         let rails = ["resume", "nextUp", "latest"]
-        return (try? database.read { db in
+        return try database.read { db in
             let libraryRows = try Row.fetchAll(
                 db,
                 sql: "SELECT library_id, payload, fetched_at FROM library "
@@ -469,7 +489,7 @@ public actor MetadataStore {
                     fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)))
             }
             return (libraries, byName)
-        }) ?? ([], [:])
+        }
     }
 
     // MARK: - page（库页 / 搜索页）
