@@ -218,6 +218,45 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
         }
     }
 
+    /// **U+017F `ſ`（长 s）：守卫与正则必须是同一个大小写视角。**
+    ///
+    /// 这是审查实测发现的**第二个真实泄漏**，同样是本批守卫引入的：
+    /// ICU 的 `(?i)` 认为 `ſ` 等于 `s`，而 `String.lowercased()` **不折叠它**
+    /// （`"ſ".lowercased() == "ſ"`）。于是守卫查不到 `ſecret` 里的关键词、
+    /// 整趟跳过，凭据明文留下：
+    ///
+    /// ```
+    /// 输入      "ſecret=Zx9QwErTyUiOp42"
+    /// 修复前    "ſecret=Zx9QwErTyUiOp42"   ← 泄漏
+    /// 强制全跑  "ſecret=<redacted>"
+    /// ```
+    ///
+    /// 修法是换用**同一套 ICU 折叠** `folding(options: .caseInsensitive, locale: en_US_POSIX)`
+    /// —— 穷举全部 1,114,112 个 Unicode 标量 × 26 个 ASCII 字母，两种视角零分歧。
+    ///
+    /// secret 值刻意用**不含任何关键词子串**的串，否则会被别的关键词规则顺带抹掉、
+    /// 让用例失去鉴别力（审查在 `passwd` 那条上就逮到过这个问题）。
+    func testLongSDoesNotBypassRedaction() {
+        let secret = "Zx9QwErTyUiOp42"   // 不含 s / token / password 等任何关键词
+        let inputs = [
+            "\u{017F}ecret=\(secret)",          // ſecret
+            "ba\u{017F}ic \(secret)",           // baſic（Authorization 头）
+            "/U\u{017F}ERS/jumusu/x",           // /UſERS/（用户路径）
+            "\u{017F}ecret: \u{017F}\(secret)",
+        ]
+        for input in inputs {
+            let guarded = DiagnosticRedactor.redact(input)
+            let unguarded = DiagnosticRedactor.redactWithoutGuards(input)
+            XCTAssertEqual(
+                guarded, unguarded,
+                "含 U+017F 的输入守卫与全跑不一致：\(input.debugDescription)")
+        }
+        // 凭据必须消失（前两条带触发关键词；第三条是路径、断言被换成占位符）。
+        XCTAssertFalse(DiagnosticRedactor.redact("\u{017F}ecret=\(secret)").contains(secret))
+        XCTAssertFalse(DiagnosticRedactor.redact("ba\u{017F}ic \(secret)").contains(secret))
+        XCTAssertEqual(DiagnosticRedactor.redact("/U\u{017F}ERS/jumusu/x"), "<user-path>")
+    }
+
     /// 守卫在我实际会遇到的**所有** C 串陷阱下都要与全跑一致。
     ///
     /// 除 NUL 外还有两个已知的字节级坑：
@@ -238,6 +277,123 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
                 DiagnosticRedactor.redact(input),
                 DiagnosticRedactor.redactWithoutGuards(input),
                 "边界输入下守卫改变了输出：\(input.prefix(40).debugDescription)")
+        }
+    }
+
+    /// **关键词表与正则必须双向同步。**
+    ///
+    /// 审查实测：去掉表里的 `passwd` / `client-secret` / `access-token` /
+    /// `x-emby-token`，**84 条用例全绿** —— 因为没有任何用例检查同步性。
+    /// 而表漏词的方向就是**真泄漏**（守卫跳过 → 该类凭据明文留下）。
+    ///
+    /// ## 判据怎么取
+    ///
+    /// 不能用「守卫版 ≠ 全跑版」——正则会命中时两者**都会**脱敏、结果相同。
+    /// 正确的判据是**直接看守卫放行与否**：关键词表的语义就是「含这个词 ⇒ 放行
+    /// `sensitiveAssignment` 这趟」。所以对每个关键词断言
+    /// `containsAnySensitiveKeywordProbe`（即 `containsASCII(折叠串, 关键词)`）为真。
+    ///
+    /// 这条同时钉住了「折叠视角」——`ſ` 那类反例会让 `containsASCII` 查不到。
+    func testEveryKeywordInTheTableActuallyTripsTheGuard() {
+        let keywords = DiagnosticRedactor.assignmentKeywordsForTesting
+        XCTAssertFalse(keywords.isEmpty, "关键词表空了")
+
+        var notTripping: [String] = []
+        for keyword in keywords {
+            // ⚠️ 必须**逐词**问「这个词自己认不认得出」，不能问「整表是否命中」——
+            // 后者会被别的词顺带命中，去掉任何一个词都仍然全绿（审查实测）。
+            if !DiagnosticRedactor.containsSensitiveKeywordForTesting(keyword) {
+                notTripping.append(keyword)
+            }
+            // 大小写变体也必须被认出（守卫是大小写不敏感的）。
+            if !DiagnosticRedactor.containsSensitiveKeywordForTesting(keyword.uppercased()) {
+                notTripping.append("\(keyword)（大写）")
+            }
+        }
+        XCTAssertTrue(
+            notTripping.isEmpty,
+            "这些关键词在表里，但**单独查它查不到**（折叠/查找有问题 → 该类凭据会漏脱敏）：\(notTripping)")
+    }
+
+    /// 反向：正则认得出、但表里**没有**的关键词要被发现。
+    ///
+    /// 防的是「正则加了新关键词、忘了同步表」。做法是从 pattern 里抽出关键词族，
+    /// 要求每一族在表里至少有一个形态。
+    func testKeywordsTheRegexKnowsAreAllInTheTable() {
+        let pattern = DiagnosticRedactor.sensitiveAssignmentPatternForTesting.pattern
+        let families = Self.keywordFamilies(inPattern: pattern)
+        XCTAssertFalse(families.isEmpty, "没能从正则里抽出关键词组")
+
+        let table = Set(DiagnosticRedactor.assignmentKeywordsForTesting)
+        // 判据用**子串包含**而非等值：守卫是子串匹配，所以表里的 `cookie`
+        // 能覆盖正则里的 `set-cookie`。只有「正则词的所有形态都不是表里任何词的
+        // 子串」才算漏。
+        let missing = families.filter { family in
+            family.allSatisfy { form in
+                !table.contains { $0.isEmpty == false && form.contains($0) }
+            }
+        }
+        XCTAssertTrue(
+            missing.isEmpty,
+            "正则里有、守卫表里一个形态都没有的关键词族（守卫会漏判 → 可能泄漏）："
+                + "\(missing.map { $0.sorted() })")
+    }
+
+    /// 反向：表里的词必须都能追溯到正则的某个形态。
+    ///
+    /// 防的是「表里塞了一个和正则完全无关的词」。这类多余词在当前实现下**无害**
+    /// （守卫过近似只是多跑一趟正则），但它会掩盖「表与正则已经分家」这件事 ——
+    /// 今天多一个词，明天就可能少一个词，而少的那次是泄漏。
+    ///
+    /// 判据用**子串**：允许 `client-secret`（它是 `client[_-]?secret` 的一个具体形态）
+    /// 这类合法过近似，只拦完全追溯不到的词。
+    func testEveryTableEntryTracesBackToTheRegex() {
+        let pattern = DiagnosticRedactor.sensitiveAssignmentPatternForTesting.pattern
+        let forms = Self.keywordFamilies(inPattern: pattern).flatMap { $0 }
+        XCTAssertFalse(forms.isEmpty, "没能从正则里抽出关键词形态")
+
+        let unrelated = DiagnosticRedactor.assignmentKeywordsForTesting.filter { word in
+            !forms.contains { form in form.contains(word) }
+        }
+        XCTAssertTrue(
+            unrelated.isEmpty,
+            "守卫表里有正则完全认不得的词（表与正则已分家）：\(unrelated)")
+    }
+
+    /// 从 pattern 文本里抽出「表里应该有的」关键词形态。
+    ///
+    /// 关键词组是**第一个含 `|` 的非 `(?…)` 括号组**——正则开头还有 `(?i)`、
+    /// `("|')?` 这些组，直接取第一个括号会抓错。
+    /// 对每个分支展开成具体词：`access[_-]?token` 对应表里的
+    /// `access-token` / `access_token` / `accesstoken`，只要有一个就算同步。
+    private static func keywordFamilies(inPattern pattern: String) -> [Set<String>] {
+        var searchStart = pattern.startIndex
+        var group: Substring? = nil
+        while let open = pattern[searchStart...].firstIndex(of: "(") {
+            guard let close = pattern[open...].firstIndex(of: ")") else { break }
+            let inner = pattern[pattern.index(after: open)..<close]
+            // 跳过 `(?i)` 这类选项组，以及 `("|')?` 这种引号组（以引号开头）。
+            if inner.contains("|"), !inner.hasPrefix("?"), !inner.hasPrefix("\"") {
+                group = inner
+                break
+            }
+            searchStart = pattern.index(after: open)
+        }
+        guard let group else { return [] }
+        return group.split(separator: "|").compactMap { piece in
+            let text = String(piece)
+            if text.contains("[_-]?") {
+                let parts = text.components(separatedBy: "[_-]?")
+                guard parts.count == 2 else { return nil }
+                return [parts[0] + "-" + parts[1],
+                        parts[0] + "_" + parts[1],
+                        parts[0] + parts[1]]
+            }
+            if text.contains("[_-]") {
+                return [text.replacingOccurrences(of: "[_-]", with: "-"),
+                        text.replacingOccurrences(of: "[_-]", with: "_")]
+            }
+            return text.isEmpty ? nil : [text]
         }
     }
 

@@ -365,7 +365,11 @@ public final class DiagnosticLogger: @unchecked Sendable {
         // 一次构造：预留「头部 + 正文」的总长，避免 `+` 拼接产生第三份大字符串。
         // 正文的 `Data` 在 append 后立刻释放（不落局部变量），少一份与
         // `combined` 并存的大对象 —— 实测这一版 8 MiB 预算的尖峰是 32 MiB。
-        var combined = Data(capacity: header.utf8.count + (bodyByteBudget ?? 0))
+        // 预留「头部 + 正文总长」。正文总量由 backend 报（无预算时是全部文件之和）——
+        // 早先无预算路径只预留了头部长度，随后 append 几十 MB 会走几何扩容
+        // （多次 realloc + 整份拷贝），比旧实现的 `+` 拼接还多几次。
+        let capacity = header.utf8.count + (try backend.exportByteCount(byteBudget: bodyByteBudget))
+        var combined = Data(capacity: capacity)
         combined.append(contentsOf: header.utf8)
         combined.append(try backend.exportData(byteBudget: bodyByteBudget))
         return String(decoding: combined, as: UTF8.self)
@@ -622,6 +626,12 @@ private final class DiagnosticBackend: @unchecked Sendable {
         return directory.appendingPathComponent(name)
     }
 
+    /// 导出路径的少量诊断输出（走 OSLog，不经 `DiagnosticLogger`，避免与调用方重入）。
+    private func sinkLog(_ message: String, _ fields: [String: String]) {
+        let detail = fields.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+        sinkLogger.info("\(message) \(detail)")
+    }
+
     /// 目录里的全部诊断文件（含旧版 `diagnostics.jsonl*`，好让它们被同一套保留策略
     /// 自然淘汰），按修改时间从旧到新——写盘追加会让 mtime 单调前进。
     private func existingLogFiles() -> [(url: URL, size: Int, modified: Date)] {
@@ -835,6 +845,27 @@ private final class DiagnosticBackend: @unchecked Sendable {
         return output
     }
 
+    /// 将要导出的正文字节数（供调用方预留容量）。
+    ///
+    /// 无预算时是全部保留文件之和；有预算时按 `boundedTail` 的记账口径估算 ——
+    /// 它是**上界**（实际可能因按行对齐略少），用于 `Data(capacity:)` 足够。
+    func exportByteCount(byteBudget: Int?) throws -> Int {
+        try queue.sync {
+            let files = existingLogFiles()
+            guard let byteBudget else { return files.reduce(0) { $0 + $1.size } }
+            let budget = max(0, byteBudget)
+            var total = 0
+            var remaining = budget
+            for file in files.reversed() {
+                guard remaining > 0 else { break }
+                let take = min(file.size, remaining)
+                total += take
+                remaining -= take
+            }
+            return total
+        }
+    }
+
     /// 只保留**最新**的一段。
     ///
     /// 倒序（新 → 旧）累加，超预算的那个文件只取尾部并按行对齐，最后**按原升序输出**
@@ -845,26 +876,33 @@ private final class DiagnosticBackend: @unchecked Sendable {
     ) throws -> Data {
         guard budget > 0 else { return Data() }
 
-        // 1. 从新到旧挑出要保留的文件片段，边挑边算总量。
-        var picked: [(url: URL, skipLeadingBytes: Int)] = []
+        // **边读边按实际字节记账**（而不是先按 `file.size` 挑完再读）。
+        //
+        // 为什么不能按 `file.size` 记账：`readTail` 在非零偏移时会丢掉「残首行」，
+        // 而若那一段里**一个换行都没有**（归档最后一行被撕开、且残行比可用预算还长），
+        // 它会整段返回空。这时按 `file.size` 记的账已经把那笔预算扣掉了 ——
+        // 后面的（更旧的）文件明明还有额度却被整份跳过，排障价值无声缩水。
+        // 实测（审查给的复现）：3 文件 × 5190 B、budget=10480 时最旧那个被整份丢掉。
+        //
+        // 从新到旧读，读不出来的文件**不扣预算**。
+        var chunks: [Data] = []      // 新 → 旧
         var remaining = budget
         for file in files.reversed() {
             guard remaining > 0 else { break }
-            if file.size <= remaining {
-                picked.append((file.url, 0))
-                remaining -= file.size
-            } else {
-                // 这个文件只取尾部 `remaining` 字节（后面会按行对齐丢掉残首行）。
-                picked.append((file.url, file.size - remaining))
-                remaining = 0
+            let skip = max(0, file.size - remaining)
+            guard let chunk = try readTail(at: file.url, skipLeadingBytes: skip),
+                  !chunk.isEmpty else {
+                // 读不出来（文件被删/无权限/残行吃掉了整段）——不静默，留一条痕迹。
+                sinkLog("导出跳过不可读的日志文件", ["file": file.url.lastPathComponent])
+                continue
             }
+            chunks.append(chunk)
+            remaining -= chunk.count
         }
 
-        // 2. 按原升序（旧 → 新）输出。
-        var output = Data(capacity: budget)
-        for entry in picked.reversed() {
-            guard let chunk = try readTail(at: entry.url, skipLeadingBytes: entry.skipLeadingBytes)
-            else { continue }
+        // 按原升序（旧 → 新）输出。
+        var output = Data(capacity: budget - remaining)
+        for chunk in chunks.reversed() {
             output.append(chunk)
         }
         return output

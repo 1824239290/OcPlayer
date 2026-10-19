@@ -160,6 +160,72 @@ final class DiagnosticExportBudgetTests: XCTestCase {
         }
     }
 
+    // MARK: - 残尾文件不该吃掉预算（审查 S3 的复现）
+
+    /// **残行比可用预算还长时，那个文件读不出一行，就不该扣预算。**
+    ///
+    /// `readTail` 在非零偏移时会丢残首行；若丢掉之后**一个换行都没有**
+    /// （归档最后一行被撕开、且残行长度 ≥ 可用预算），它整段返回空。
+    /// 早先按 `file.size` 记账，那笔预算已经被扣掉 —— 后面的（更旧的）文件
+    /// 明明还有额度却被整份跳过，排障价值无声缩水。
+    ///
+    /// 构造要点：让**中间那个**文件以一条「比预算剩余额度还长的无换行残行」收尾。
+    /// 这样读它时拿到的整段没有换行 → 返回空 → 旧记账白扣一笔。
+    func testUnterminatedTailDoesNotConsumeBudget() throws {
+        let directory = try makeDirectory()
+        let names = ["diagnostics.jsonl", "diagnostics-2.jsonl", "diagnostics-3.jsonl"]
+
+        func record(_ index: Int, pad: Int = 200, newline: Bool = true) -> String {
+            let payload = String(repeating: "r", count: pad)
+            let line = "{\"timestamp\":\"2026-10-19T00:00:00.000Z\",\"level\":\"info\","
+                + "\"subsystem\":\"t\",\"category\":\"c\",\"message\":\"m\(index)\","
+                + "\"fields\":{\"pad\":\"\(payload)\"},\"session\":\"s\",\"sequence\":\(index)}"
+            return newline ? line + "\n" : line
+        }
+
+        func write(_ name: String, body: String) throws {
+            let url = directory.appendingPathComponent(name)
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.modificationDate: Date(timeIntervalSince1970: 1_700_000_000
+                    + Double(names.firstIndex(of: name) ?? 0))],
+                ofItemAtPath: url.path)
+        }
+
+        // 最旧：大量完整记录 —— 只有预算记账正确时才会被取到。
+        var oldest = ""
+        for i in 0..<30 { oldest += record(i) }
+        try write(names[0], body: oldest)
+
+        // 中间：一条**超长无换行残行**（比预算大得多）+ 前面若干完整记录。
+        var middle = ""
+        for i in 100..<103 { middle += record(i) }
+        middle += String(repeating: "X", count: 50_000)   // 无换行的残行
+        try write(names[1], body: middle)
+
+        // 最新：几条完整记录。
+        var newest = ""
+        for i in 200..<204 { newest += record(i) }
+        try write(names[2], body: newest)
+
+        let log = makeLogger(directory: directory)
+        let fullBytes = try log.exportData().count
+
+        // 预算足以覆盖「最新 + 最旧」，但**不足以**同时装下中间那 50 KB 残行。
+        let budget = fullBytes - 40_000
+        XCTAssertGreaterThan(budget, 0)
+
+        let text = try log.exportText(headerLines: ["# h"], bodyByteBudget: budget)
+        let bytes = body(of: text).utf8.count
+
+        // 若残尾白扣了预算，最旧那批记录会整批消失。
+        XCTAssertTrue(
+            body(of: text).contains("\"message\":\"m0\""),
+            "最旧的记录被丢掉了 —— 残尾文件白扣了预算（S3）。实测正文 \(bytes) 字节 / 预算 \(budget)")
+        XCTAssertTrue(body(of: text).contains("\"message\":\"m203\""), "最新记录必须保留")
+        XCTAssertLessThanOrEqual(bytes, budget + 1_024, "超出预算上限")
+    }
+
     // MARK: - 不加预算时行为不变
 
     /// `bodyByteBudget: nil` 必须与「不带该参数」**逐字节相同**，

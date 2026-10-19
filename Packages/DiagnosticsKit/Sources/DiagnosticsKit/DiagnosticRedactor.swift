@@ -36,17 +36,28 @@ enum DiagnosticRedactor {
     /// 则真的少做功，安全语义一字未改。
     static func redact(_ value: String) -> String {
         var result = value
-        // 先做**一次**小写折叠，供全部大小写不敏感守卫共用。
+        // 先做**一次**大小写折叠，供全部大小写不敏感守卫共用。
         //
         // ⚠️ 不要用 `String.range(of:options:.caseInsensitive)`：实测单次就要几微秒，
         // 而这里要问十几个关键词 —— 第一版那么写比不设守卫**慢 5 倍**
         // （短消息 38 µs vs 7.4 µs，1.2 KB 消息 2585 µs vs 97.8 µs）。
-        // 一次 `lowercased()` 是 O(n)，之后全是廉价的 UTF-8 子串查找。
         //
-        // 对 ASCII 而言小写折叠与正则里的 `(?i)` 等价；非 ASCII 上两者可能不同
-        // （如 `İ`），但那种字符不会出现在这些**路径 / 关键词字面量**里 ——
-        // 差分测试用含 emoji / 制表符 / 换行的语料覆盖了这一点。
-        let folded = result.lowercased()
+        // ## ⚠️ 必须用 ICU 折叠，**不能**用 `lowercased()`
+        //
+        // 守卫与正则必须是**同一个大小写视角**。`lowercased()` 与正则的 `(?i)`
+        // 用的**不是同一套折叠算法**，存在反例：U+017F `ſ`（长 s）在 ICU 的
+        // `(?i)` 里等于 `s`，而 `String.lowercased()` **不折叠它**。
+        // 于是 `ſecret=<凭据>` 这类输入守卫查不到关键词、整趟跳过，凭据明文留下
+        // （实测已复现，`redactWithoutGuards` 则正确抹掉）。
+        //
+        // `folding(options: .caseInsensitive)` 走的就是 ICU，与正则同一套：
+        // 穷举全部 1,114,112 个 Unicode 标量 × 26 个 ASCII 字母，两种视角
+        // **零分歧**（脚本见提交说明）。顺带它比 `lowercased()` 还快
+        // （1.24 KB 中文：9.6 µs vs 17.5 µs）。
+        //
+        // ⚠️ `locale` 必须是 `en_US_POSIX`：其他 locale 会做土耳其语 `I/ı` 之类
+        // 的语言相关折叠，反而偏离正则行为。
+        let folded = foldingForCaseInsensitiveMatch(result)
 
         if containsASCII(folded, "/users/") || containsASCII(folded, "/home/") {
             result = replace(result, using: patterns.userPath, with: "<user-path>")
@@ -88,6 +99,28 @@ enum DiagnosticRedactor {
     /// 测试用：`sensitiveAssignment` 的关键词表（守卫与正则必须同步，用例据此校验）。
     static var assignmentKeywordsForTesting: [String] { SensitivePatterns.assignmentKeywords }
 
+    /// 测试用：`sensitiveAssignment` 这趟**会不会被放行**（即守卫是否命中关键词）。
+    ///
+    /// 用例拿它逐词验证关键词表 —— 不能用「守卫版 ≠ 全跑版」判，因为正则会命中时
+    /// 两者结果本来就相同。
+    static func guardWouldRunAssignmentPassForTesting(_ text: String) -> Bool {
+        containsAnySensitiveKeyword(foldingForCaseInsensitiveMatch(text))
+    }
+
+    /// 测试用：**表里是否认得出这个词**（子串匹配，与守卫同口径）。
+    ///
+    /// 与 `guardWouldRunAssignmentPassForTesting` 的区别：后者问「整表是否命中」，
+    /// 拿它逐词验证会被其它词「顺带命中」而失去鉴别力（去掉 `passwd` 仍然全绿）。
+    /// 这条只问单个词。
+    static func containsSensitiveKeywordForTesting(_ keyword: String) -> Bool {
+        containsAnySensitiveKeyword(keyword.lowercased())
+    }
+
+    /// 测试用：`sensitiveAssignment` 的正则，供用例校验「表与正则双向同步」。
+    static var sensitiveAssignmentPatternForTesting: NSRegularExpression {
+        patterns.sensitiveAssignment
+    }
+
     /// `sensitiveAssignment` 的守卫：只要可能命中这条正则，必然含其中某个关键词。
     ///
     /// 必须与正则里的关键词表**同步**（`SensitivePatterns.sensitiveAssignment`）。
@@ -100,6 +133,16 @@ enum DiagnosticRedactor {
             return true
         }
         return false
+    }
+
+    /// 与正则 `(?i)` **同一套**的大小写折叠（ICU）。
+    ///
+    /// 抽成具名函数是为了让守卫与测试探针共用同一份实现 —— 两处各写一遍，
+    /// 就又会出现「守卫与正则视角不一致」那类反例（`ſ` 那次就是）。
+    static func foldingForCaseInsensitiveMatch(_ text: String) -> String {
+        // ⚠️ locale 必须是 `en_US_POSIX`：其他 locale 会做土耳其语 `I/ı` 之类的
+        // 语言相关折叠，反而偏离正则行为。
+        text.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     /// 无分配的子串搜索，**只用于 ASCII 针**。
@@ -270,6 +313,8 @@ private final class SensitivePatterns: @unchecked Sendable {
         "password", "passwd",
         "secret", "api_key", "api-key", "apikey", "x-api-key",
         "x-emby-token", "client_secret", "client-secret",
+        // `cookie` 同时覆盖正则里的 `set-cookie` —— 后者含前者，守卫按子串匹配，
+        // 所以 `set-cookie` 出现时 `cookie` 必然也命中。**不需要**单列 `set-cookie`。
         "cookie",
     ]
 

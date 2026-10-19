@@ -25,6 +25,58 @@
   - **一条与本改动相关、已在紧随其后一批里修掉的用例缺陷**：destination 换成 iPad 模拟器时 `AppModelAvatarTests.testTabIconBakesCircleSizeAndRenderingMode` 会红 —— 它断言烤出来的图标是 `AppModel.userAvatarPixelSize`（写死 `28 × 3 = 84`，@3x 口径），而 iPad 屏是 @2x，实测 56。功能无碍（图片自然尺寸仍是 28pt），是该用例只能在 @3x 机型上成立；CI 跑 iPhone 所以一直没暴露。修法与跑分见上面「`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷」那条。
   - **实拍判据（本次唯一靠推理定不了的一步）**：给 `TabView` 那层钉紧凑、把**内容**换回常规，标签栏会不会被内容顶回系统默认的顶部胶囊？先用最小探针 App 在 iPad Pro 13″ / iPadOS 26.3 模拟器确认（标签栏仍在底部 + 内容层读到 `.regular`），再用**真服务器 + 真账号**跑整机 A/B：同一个构建、同一台设备、同一条目，只把 `contentSizeClass` 临时换回 `shellSizeClass`（复现改动前形态）重建对照 —— **详情页** 290pt 通栏横幅 + 剧名居中 + 通栏播放条 ➜ 左竖版海报 + 横排元数据 + 小胶囊钮；**媒体库** 9 列小卡 ➜ 4 列大卡；**首页**与**设置**同为 iPad 档；底部标签栏在两种状态都在底部。截图与做法见 `Reports/ipad-content-layout-20261016/`（本地 gitignore 目录）。
 
+### 安全 / 正确性
+
+- **修掉两处「凭据明文进导出包」的脱敏泄漏**（都由第十批的守卫式跳过引入，独立审查 + 自查发现）。
+  - **① 内嵌 NUL**：守卫用 `withCString` + `strstr`，而 C 串在 `\0` 处截断 ——
+    「NUL 之后才出现的关键词」看不见，整趟跳过，凭据原样留下。
+    ```
+    输入      "prefix\0token=SUPERSECRET123"
+    修复前    "prefix\0token=SUPERSECRET123"   ← 泄漏
+    强制全跑  "prefix\0token=<redacted>"
+    ```
+    日志里出现 `\0` 不是天方夜谭：错误文本会插服务端响应体，畸形响应就带 NUL。
+    修法：`Array(utf8)` + `memmem`（显式长度）。试过四版逐版实测：
+    `strstr`（0.67 µs，截断）→ `strnstr`（仍截断）→ `memcmp` 循环（407 µs）→
+    **`memmem`（1.28 µs，正确）**。
+  - **② U+017F `ſ`（长 s）**：守卫用 `String.lowercased()` 折叠，而正则的 `(?i)`
+    走 **ICU** 折叠 —— 两者**不是同一套算法**。ICU 认为 `ſ` 等于 `s`，
+    `lowercased()` 不折叠它。于是 `ſecret=<凭据>`、`baſic <凭据>` 整趟跳过。
+    ```
+    输入      "ſecret=Zx9QwErTyUiOp42"
+    修复前    "ſecret=Zx9QwErTyUiOp42"   ← 泄漏
+    强制全跑  "ſecret=<redacted>"
+    ```
+    修法：换用**同一套 ICU 折叠** `folding(options: .caseInsensitive, locale: en_US_POSIX)`。
+    **穷举验证**：全部 1,114,112 个 Unicode 标量 × 26 个 ASCII 字母，
+    两种视角**零分歧**。顺带比 `lowercased()` 还快（1.24 KB 中文 9.6 vs 17.5 µs）。
+  - 两处都补了回归用例（含 6 种 NUL 位置、4 种 `ſ` 位置、字节级边界）。
+  - **教训**：差分测试用 300+ 条语料是绿的 —— 因为语料里既没有 NUL 也没有 `ſ`。
+    「语料要覆盖编码陷阱」比「语料要多」重要。
+
+- **关键词表与正则的同步现在有测试守着**（审查 S2）。
+  - 审查实测：去掉表里的 `passwd` / `client-secret` / `access-token` / `x-emby-token`，
+    **84 条用例全绿** —— 因为 `assignmentKeywordsForTesting` **全仓无人调用**，
+    注释声称的「用例据此校验同步性」并不存在。而表漏词的方向就是**真泄漏**。
+  - 补了**三个方向**的用例：
+    1. 表里每个词必须**单独**能被守卫查到（不能用「整表是否命中」判 —— 会被别的词顺带命中）；
+    2. 正则里每一族关键词必须在表里有形态（子串口径，允许 `cookie` 覆盖 `set-cookie`）；
+    3. 表里每个词必须能追溯到正则的某个形态（防「表与正则分家」，如塞进 `credential`）。
+  - 变异验证：去掉 `passwd`/`cookie`/`password` → 红；加无关词 `credential` → 红。
+    （`x-emby-token`/`access-token`/`client-secret` 去掉仍绿，因为表里的 `token`/`secret`
+    是它们的子串、本就冗余 —— 已在注释里写明这层关系。）
+
+- **导出预算的记账改成「按实际读到的字节数」**（审查 S3）。
+  - 早先按 `file.size` 记账，而 `readTail` 会额外丢掉残首行；若归档最后一行被撕开、
+    且残行比可用预算还长，整段读不出一个换行 → 返回空，**但那笔预算已经被扣掉**。
+    后面的（更旧的）文件明明还有额度却被整份跳过，排障价值无声缩水。
+  - 改成边读边按实际字节记账：读不出来的文件**不扣预算**，并留一条 OSLog 痕迹。
+  - 用例构造了「中间文件以 50 KB 无换行残行收尾」的场景，断言最旧那批记录仍在。
+    变异（读不出来也照扣）→ 红。
+  - 顺带修 O4：无预算路径的 `Data(capacity:)` 早先只预留头部长度，随后 append
+    几十 MB 会走几何扩容（多次 realloc + 整份拷贝），比旧实现的 `+` 拼接还多几次。
+    现在由 `exportByteCount` 给出正文总量一次预留。
+
 ### 性能
 
 - **诊断包导出：峰值内存 112 MiB → 32 MiB（−71%）**（性能审查清单 `P2-31` 前半）。
