@@ -94,19 +94,26 @@ jobs:
           SKIP_ERIKA_FETCH: "1"
         run: |
           set -euo pipefail
-          for root in .local-build/release .local-build/release-ios; do
-            mkdir -p "$root"
-          done
-          # `-resolvePackageDependencies` 只解析/克隆，**不编译**（几分钟内完成，
-          # 而完整 Release 构建要 480 s）—— 它产出的正是打包 job 需要的 checkouts。
+          # ⚠️ **路径必须带 `DerivedData` 这一层**。
+          #
+          # `xcodebuild -derivedDataPath X` 会把 `SourcePackages` 直接放在 `X/` 下
+          # —— 而打包脚本传的是 `-derivedDataPath "$BUILD_ROOT/DerivedData"`，
+          # 所以它们的 checkouts 在 `$BUILD_ROOT/DerivedData/SourcePackages`。
+          #
+          # 第一版这里写的是 `-derivedDataPath .local-build/release`（少一层），
+          # 产物落到 `.local-build/release/SourcePackages`，后面的 `cp` 必然
+          # `No such file or directory`、`set -e` 下整步失败 —— main 每次 push 都红。
+          # 实测确认（本机）：`-derivedDataPath X` → `X/SourcePackages`；
+          # `X/DerivedData/SourcePackages` **不存在**。
           xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS \
-            -derivedDataPath .local-build/release \
+            -derivedDataPath .local-build/release/DerivedData \
             -resolvePackageDependencies
+
+          # 只解析一次，然后复制给 iOS 那个根（两边 checkouts 内容相同）。
+          mkdir -p .local-build/release-ios/DerivedData
+          rm -rf .local-build/release-ios/DerivedData/SourcePackages
           cp -R .local-build/release/DerivedData/SourcePackages \
-                .local-build/release-ios/DerivedData/ 2>/dev/null || \
-            mkdir -p .local-build/release-ios/DerivedData && \
-            cp -R .local-build/release/DerivedData/SourcePackages \
-                  .local-build/release-ios/DerivedData/
+                .local-build/release-ios/DerivedData/SourcePackages
 
       - name: Cache release SPM checkouts (main only)
         if: github.ref == 'refs/heads/main'
@@ -184,12 +191,16 @@ jobs:
             -derivedDataPath .local-build/ci-test-ios \
             test
           test_elapsed=$(( $(date +%s) - test_start ))
-          total=$(( $(date +%s) - sim_start ))
-          echo "[BLD-08] xcodebuild test took ${test_elapsed}s, simulator+xcodebuild total ${total}s"
+          echo "[BLD-08] xcodebuild test took ${test_elapsed}s (预热 ${sim_ready}s)"
 
-          # ③ 预算告警：超过就显式标注（不 fail）。
-          if (( total > IOS_SIM_BUDGET_S )); then
-            echo "::warning title=iOS 模拟器开销超预算::[BLD-08] simulator+xcodebuild ${total}s > 预算 ${IOS_SIM_BUDGET_S}s（预热 ${sim_ready}s）—— 这段是 iOS 步波动的主因，见 BLD-08"
+          # ③ 预算告警：**只量预热那段**（`sim_ready`），不量整个 xcodebuild。
+          #
+          # 第一版比的是 `total`（预热 + 整个 xcodebuild test）—— 而 iOS 步本来
+          # 就 462–627 s，`>120` 恒成立，等于每次运行都告警，是纯噪声。
+          # 清单要观测的是「模拟器启动 + 装机」那 162–331 s 的静默段，预热正是兑它，
+          # 所以预算只能盯 `sim_ready`。
+          if (( sim_ready > IOS_SIM_BUDGET_S )); then
+            echo "::warning title=iOS 模拟器预热超预算::[BLD-08] 预热 ${sim_ready}s > 预算 ${IOS_SIM_BUDGET_S}s —— 见 BLD-08"
           fi
 
       - name: Run SwiftPM package tests
