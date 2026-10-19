@@ -204,6 +204,36 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
+      # `BLD-03`：打包 job 完全没有缓存 —— 每次 tag 都要重新 resolve + clone 全部
+      # SPM 依赖（实测 macOS 打包 480 s / iOS 368 s 里有一段是这个）。
+      #
+      # ⚠️ **只缓存 `SourcePackages`，不缓存整个 DerivedData**：
+      # - `package-*.sh` 要求 checkouts 存在（`SWIFTPM_CHECKOUTS=.../SourcePackages/checkouts`）；
+      # - 而编译产物（`Build/`）在 tag 构建上**本来就不能跨版本复用**（PR 门禁用 Debug，
+      #   与这里的 Release 不同配置），缓存它只是白占额度。
+      #
+      # ⚠️ **key 不带 `github.sha`、且必须从默认分支播种**：tag 上建的缓存条目
+      # 按 ref 隔离、**不能跨 tag 复用**（`BLD-04` 的四次校订结论）。所以：
+      # - key 只由 `Package.resolved` 哈希决定；
+      # - **播种点在 `test.yml`**（`Seed release SPM checkouts (main only)`，仅 main 分支），
+      #   它 resolve 一次并把两个平台的 checkouts 写进同一条 `spm-release-v1-…`。
+      # 两个 job 用**同一个 key**（同一条里放两个 path），因为播种步骤一次写两份。
+      - name: Restore SPM checkouts
+        uses: actions/cache@v4
+        with:
+          # ⚠️ **path 列表必须与播种步骤逐字一致**。
+          #
+          # `actions/cache` 的条目身份 = key + **version**，而 version 是 path 列表
+          # 的哈希。第一版 macos 只列一条、ios 列另一条、播种列两条 → 三个 version
+          # 全不同 → 两个 job **静默 miss**（不是「互相顶掉」，是各查各的、都查不到）。
+          # 所以三个地方都列**同样这两条**，version 才一致。
+          path: |
+            .local-build/release/DerivedData/SourcePackages
+            .local-build/release-ios/DerivedData/SourcePackages
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-pkg-v1-${{ runner.os }}-
+
       - name: Free disk space for packaging
         shell: bash
         run: |
@@ -306,6 +336,19 @@ jobs:
         uses: ./.github/actions/setup-erika
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
+
+      # `BLD-03`：同 macOS —— 只缓存 checkouts，key 不带 sha 以便从 `main` 播种。
+      - name: Restore SPM checkouts
+        uses: actions/cache@v4
+        with:
+          # path 列表与 macos job / 播种步骤**逐字一致**（见 macos job 那段注释：
+          # version 是 path 列表的哈希，不一致就必然 miss）。
+          path: |
+            .local-build/release/DerivedData/SourcePackages
+            .local-build/release-ios/DerivedData/SourcePackages
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-pkg-v1-${{ runner.os }}-
 
       - name: Free disk space for packaging
         shell: bash

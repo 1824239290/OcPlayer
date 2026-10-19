@@ -27,6 +27,72 @@
 
 ### 性能
 
+- **`BLD-01`：本地「先 build 再 package」不再重复编译第二遍（约省 450 s）**。
+  - 根因：`build-macos.sh` 的 `BUILD_DIR` **写死** `.local-build/current`，而
+    `package-macos.sh` 默认 `.local-build/release` —— 刚编译完的产物在新根里看不见，
+    打包要**从头再编一遍**。
+  - 修法：`build-macos.sh` 的 `BUILD_DIR` 支持环境变量覆盖，与 `package-*.sh` 的
+    `BUILD_ROOT` 对齐即可复用。用法示例（**必须绝对路径**）：
+    ```
+    BUILD_DIR="$PWD/.local-build/release" Scripts/build-macos.sh release
+    BUILD_ROOT="$PWD/.local-build/release" Scripts/package-macos.sh v0.2.1
+    ```
+  - **公平的收益表述**：旧流程 = build(≈480 s) + package(≈480 s) ≈ **960 s**；
+    新流程 = build(≈480 s) + package **增量 27 s（零编译，只做链接）** ≈ **507 s**。
+    省掉的是**第二次重复的全量编译**（≈450 s），**不是**「构建从 480 s 提速到 27 s」。
+  - **守卫**：`BUILD_DIR` 覆盖必然带来误删风险，所以先**规范化**再做前缀检查。
+    实测挡住的向量（全部 9 种）：`../..` 路径穿越、`nope/../../..`（中间组件不存在）、
+    `evil -> /tmp` 符号链接、尾斜杠形式、精确等于 `.local-build`、相近前缀
+    （`.local-buildX/`）、越界绝对路径、**相对路径**（对绝对前缀，fail-closed）。
+    实现：自写 `normalize_path`（macOS 的 `realpath` 没有 `-m`）+ `physical_path`
+    （解析已存在前缀的符号链接），然后再规范化一次。
+  - 记录：CI 里**不会**连跑这两个脚本（`release.yml` 只调 `package-*.sh`），
+    所以这是**本地开发流程**的收益，不影响 CI。
+
+- **`BLD-08`：iOS 测试步的「模拟器启动 + 装机」加了预热与预算告警**。
+  - 清单实测（PR #30 四次运行）：从编译完成到打出首条 App 日志之间**日志全静默**，
+    那段耗时 **185 / 162 / 331 / 181 s，波动 ±170 s** —— 它是 iOS 步波动的主因，
+    **不在编译里**，缓存对它完全无效（`BLD-02` 命中缓存后 iOS 步仍 534 s）。
+  - 现在做三件事：
+    1. `simctl boot` + `simctl bootstatus -b` 在 `xcodebuild` **之前**预热模拟器，
+       并把这段单独打点（`[BLD-08] simulator ready in Ns`）；
+    2. destination 改用 `id=<udid>` —— 跳过 `xcodebuild` 内部的机型解析/可用性探测；
+    3. 给**预热那段**加预算告警（`IOS_SIM_BUDGET_S=120`，超了打 `::warning`，
+       **不 fail**）。**只量 `sim_ready`，不量整个 `xcodebuild`** —— 第一版比的是
+       「预热 + 整个 xcodebuild test」，而 iOS 步本来就 462–627 s，`>120` 恒成立，
+       等于每次运行都告警、纯噪声。
+  - **本机实测**：冷启动 `boot + bootstatus` 仅 **8.9 s**；已 boot 时 0 s（幂等）。
+    CI 上那 162–331 s 的主要部分不是 boot 本身，而是**首次装机 + test runner 拉起 +
+    runner 磁盘冷缓存** —— 所以这里只做「预热 + 打点」，**没有声称能省掉那 170 s**；
+    真正的量化要等 CI 上跑几次看 `[BLD-08]` 那行数据。
+
+- **`BLD-03`：两个打包 job 补上 SPM checkouts 缓存（并解决「tag 缓存不能跨 tag 复用」）**。
+  - 清单已校订过三点，这里逐条落实：
+    ① 只缓存 `<root>/DerivedData/SourcePackages`（打包脚本要求 checkouts 存在），
+       **不缓存 `Build/`** —— Release 产物跨版本本来就不能复用，缓存它只是白占额度；
+    ② **tag 上建的缓存不能跨 tag 复用**（`BLD-04` 四次校订的结论）—— 所以只在
+       `release.yml` 里加缓存是**无效的**；
+    ③ 因此**播种点放在 `test.yml`**：新增「`Seed release SPM checkouts (main only)`」
+      步骤（**仅 `refs/heads/main`**），用 `xcodebuild -resolvePackageDependencies`
+       解析一次（不编译）并写进两个平台的 `SourcePackages`。
+  - **⚠️ 两个必须踩对的细节（第一版都错了，审查实测抓出）**：
+    ① **`-derivedDataPath X` 时 `SourcePackages` 在 `X/` 下，不是 `X/DerivedData/` 下**。
+       打包脚本传的是 `-derivedDataPath "$BUILD_ROOT/DerivedData"`，所以 checkouts 在
+       `$BUILD_ROOT/DerivedData/SourcePackages`。播种步骤必须传
+       `-derivedDataPath .local-build/release/DerivedData` 才与之一致 ——
+       第一版少写这一层，`cp` 必然 `No such file or directory`、`set -e` 下整步失败，
+       **main 每次 push 都会红**。
+    ② **同一 key 但 path 列表不同 = 必然静默 miss**（不是「互相顶掉」）：
+       `actions/cache` 的条目身份 = key + **version**，version 是 path 列表的哈希。
+       所以播种、macos job、ios job 三处的 `path:` **必须逐字相同**（都列两条）。
+       第一版三处各不相同 → 三个 version 全不同 → 两个 job 都 miss。
+  - **key 前缀选 `spm-pkg-`**，与既有的 `spm-test-`（`ci-test` + `Packages/*/.build`）、
+    `spm-release-`（`ci-release-test` + `Packages/*/.build`）三者互不冲突。
+  - **额度核算**：当前 **4.03 GiB / 10 GiB**（3 条），余 5.97 GiB；本地
+    `SourcePackages` 实测 **556 MB**（未压缩），新增一条压缩后约 0.6–0.9 GiB，安全。
+  - **收益边界（如实记录）**：只覆盖 resolve/clone 那一段，**省不掉 480 s / 368 s 的
+    编译本身**（PR 门禁是 Debug，与 Release 不同配置，本来也不能复用）。
+
 - **`P2-23`：`MetadataHydrator.home()` 从 4 次读事务合成 1 次（比例稳定在 −17% ~ −20%）**。
   - 改前四个独立 `await`（`libraries` + 三条 `rail`），每个都是一次 `database.read`。
     **读事务本身就要 ≈29–37 µs** —— 实测：4 个事务跑 4 条 trivial `SELECT 1` 要
