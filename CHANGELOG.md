@@ -6,6 +6,18 @@
 
 ### 修复
 
+- **`CORR-08` 补强：`ServerEndpointWiringTests` 的等待超时 3 s → 10 s**（`main` 上仍红过一次）。
+  - 2026-10-19 的 `main` 运行（`db23061`）红在
+    `testResolvedAddressIsPersistedAndPublished`，而**诊断信息已经正确打出**
+    「等待超时：后台探活/请求计数未在 3.0 seconds 内落地（实测 serverEndpointURL=…）」——
+    说明 `CORR-08` 的**可诊断性修复是生效的**，问题只剩**超时本身太紧**。
+  - 被等待的条件是「后台探活走完一次 mock 往返」，正常毫秒级；而那次 runner 上
+    同套件上一条用例跑了 **35.2 s**（本机 0.012 s），整机被拖慢一个量级。
+  - 代价只有「真失败时多等 7 s」；本套件总共 8 处等待，收益是不再让 runner 抖动变成假红。
+  - **不做的事（如实记录）**：没有把其余套件的 3 s 等待一并放宽 ——
+    查了 `main` 最近 10 次失败，只有本套件有可复现记录；盲目放宽会掩盖真实的「等不到」，
+    而且让真失败变慢。等哪套件真的在 CI 上出过假红再单独放宽。
+
 - **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。
 
 - **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。

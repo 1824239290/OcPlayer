@@ -194,13 +194,23 @@ final class ServerEndpointWiringTests: XCTestCase {
 
     /// 轮询等到条件成立；超时 `XCTFail`（带实测状态）后返回。
     ///
-    /// **必须显式失败**：静默返回会把「后台探活没在 3 s 内落地」伪装成下游那几条
+    /// **必须显式失败**：静默返回会把「后台探活没在超时内落地」伪装成下游那几条
     /// 完全看不懂的断言 —— CI 实测过一次（runner 被拖慢，上一条用例跑了 35 s），
     /// 报的是 `http://192.0.2.10:8096 ≠ http://100.64.1.20:8096`，看起来像地址决议
     /// 算错了，其实是夹具没等到。写法与 `PlayerHUDGatesTests` / `SkipPreferenceTests`
     /// 等处一致。
+    ///
+    /// ## ⚠️ 超时取 10 s，不是 3 s
+    ///
+    /// 3 s 时 `main` 仍红过一次（2026-10-19 的 `db23061`）：诊断信息已经正确打出
+    /// 「后台探活/请求计数未在 3.0 seconds 内落地」，说明 `CORR-08` 的**可诊断性**
+    /// 修复生效了，但**超时本身太紧** —— 条件是「后台探活走完一次 mock 往返」，
+    /// 正常毫秒级，而那次 runner 上一条用例跑了 35 s（整机被拖慢一个量级）。
+    ///
+    /// 放到 10 s 的代价只有「真失败时多等 7 s」，而这个套件总共只有 8 处等待；
+    /// 收益是不再让 runner 抖动变成假红。
     private func waitUntil(
-        timeout: Duration = .seconds(3),
+        timeout: Duration = .seconds(10),
         diagnostics: () -> String = { "" },
         file: StaticString = #filePath,
         line: UInt = #line,
