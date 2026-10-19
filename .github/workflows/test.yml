@@ -74,6 +74,51 @@ jobs:
           restore-keys: |
             ios-dd-v1-${{ runner.os }}-
 
+      # ## `BLD-03`：给 release 打包 job「播种」SPM checkouts
+      #
+      # 打包 job（`release.yml` 的 macos/ios）在 **tag** 上运行，而**条目不按 ref 共享**
+      # 是 GitHub 的规则：tag 上建的缓存读不到、也写不给别的 tag（`BLD-04` 的四次校订
+      # 逐条实测过）。所以只在 release.yml 里加缓存是**无效的**——必须有一个跑在
+      # 默认分支上的步骤去写那条 key。
+      #
+      # 这里就是播种点：只在 `main` 上跑（PR 不跑，避免 PR 作用域副本白占额度），
+      # 只写不读的那一半由 `actions/cache` 的「精确命中就不重写」语义天然保证。
+      #
+      # 路径选 `.local-build/release*/DerivedData/SourcePackages`：打包脚本要求
+      # `$BUILD_ROOT/DerivedData/SourcePackages/checkouts` 存在（`package-*.sh:118`）。
+      # 这两个目录由本 job 里**没有**任何步骤生成 —— 所以下面会顺手 resolve 一次。
+      - name: Seed release SPM checkouts (main only)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          SKIP_ERIKA_FETCH: "1"
+        run: |
+          set -euo pipefail
+          for root in .local-build/release .local-build/release-ios; do
+            mkdir -p "$root"
+          done
+          # `-resolvePackageDependencies` 只解析/克隆，**不编译**（几分钟内完成，
+          # 而完整 Release 构建要 480 s）—— 它产出的正是打包 job 需要的 checkouts。
+          xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS \
+            -derivedDataPath .local-build/release \
+            -resolvePackageDependencies
+          cp -R .local-build/release/DerivedData/SourcePackages \
+                .local-build/release-ios/DerivedData/ 2>/dev/null || \
+            mkdir -p .local-build/release-ios/DerivedData && \
+            cp -R .local-build/release/DerivedData/SourcePackages \
+                  .local-build/release-ios/DerivedData/
+
+      - name: Cache release SPM checkouts (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .local-build/release/DerivedData/SourcePackages
+            .local-build/release-ios/DerivedData/SourcePackages
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-pkg-v1-${{ runner.os }}-
+
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
       # 渲染集成测试在 SPM 包内，下面单独跑。
       - name: Run App tests (macOS scheme)
@@ -92,24 +137,60 @@ jobs:
       # OcPlayer-iOS.xcscheme 早已存在），此前 CI 只跑 macOS destination，iOS 独有
       # 路径（方向锁、文件选择器生命周期）无回归。runner 可用机型随镜像变化，
       # 用 simctl 动态取第一个可用 iPhone，不写死机型名。
+      # ## `BLD-08`：iOS 步的「模拟器启动 + 装机」是波动主因，必须先预热 + 打点
+      #
+      # 实测（PR #30 四次运行）：从编译完成到打出首条 App 日志之间**日志全静默**，
+      # 那段耗时 **185 / 162 / 331 / 181 s —— 波动 ±170 s**。它不在编译里，缓存对它
+      # 完全无效（`BLD-02` 命中缓存后 iOS 步仍 534 s）。
+      #
+      # 所以这里做三件事（都是**可观测**的，不依赖猜测）：
+      # 1. `simctl boot` + `bootstatus -b` 在 `xcodebuild` **之前**把模拟器预热好，
+      #    并把这段单独打点；
+      # 2. destination 改用 `id=<udid>` —— 跳过 `xcodebuild` 内部的机型解析/可用性探测；
+      # 3. 给「boot+装机+拉起 runner」这段加**预算告警**（超过 `IOS_SIM_BUDGET_S`
+      #    就在日志里显式标注，不再让这 ±170 s 悄悄溜过去）。
       - name: Run App tests (iOS simulator)
         shell: bash
         run: |
           set -euo pipefail
-          device="$(xcrun simctl list devices available -j \
+          # 预算：这段超过它就在日志里显式标红（不 fail —— 慢是 runner 的事，
+          # 不该让一个性能观测点变成 flaky 门禁）。
+          IOS_SIM_BUDGET_S=120
+
+          udid="$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid')"
+          name="$(xcrun simctl list devices available -j \
             | jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].name')"
-          if [[ -z "$device" || "$device" == "null" ]]; then
+          if [[ -z "$udid" || "$udid" == "null" ]]; then
             echo "No iPhone simulator available on this runner" >&2
             exit 1
           fi
-          echo "==> iOS simulator: $device"
+          echo "==> iOS simulator: $name ($udid)"
+
+          # ① 预热：boot + 等到完全就绪（这是 `xcodebuild` 原本自己要做、且静默的那段）。
+          sim_start=$(date +%s)
+          xcrun simctl boot "$udid" 2>/dev/null || true   # 已 boot 时返回非 0，忽略
+          xcrun simctl bootstatus "$udid" -b
+          sim_ready=$(( $(date +%s) - sim_start ))
+          echo "[BLD-08] simulator ready in ${sim_ready}s"
+
+          # ② 用 id= 跳过机型解析；并记录整步耗时以便和预算对比。
+          test_start=$(date +%s)
           xcodebuild \
             -project OcPlayer.xcodeproj \
             -scheme OcPlayer-iOS \
             -configuration Debug \
-            -destination "platform=iOS Simulator,name=$device" \
+            -destination "platform=iOS Simulator,id=$udid" \
             -derivedDataPath .local-build/ci-test-ios \
             test
+          test_elapsed=$(( $(date +%s) - test_start ))
+          total=$(( $(date +%s) - sim_start ))
+          echo "[BLD-08] xcodebuild test took ${test_elapsed}s, simulator+xcodebuild total ${total}s"
+
+          # ③ 预算告警：超过就显式标注（不 fail）。
+          if (( total > IOS_SIM_BUDGET_S )); then
+            echo "::warning title=iOS 模拟器开销超预算::[BLD-08] simulator+xcodebuild ${total}s > 预算 ${IOS_SIM_BUDGET_S}s（预热 ${sim_ready}s）—— 这段是 iOS 步波动的主因，见 BLD-08"
+          fi
 
       - name: Run SwiftPM package tests
         shell: bash

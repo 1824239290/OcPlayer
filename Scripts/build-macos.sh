@@ -16,7 +16,12 @@ erika_version_from_config() {
 }
 PROJECT="$ROOT/OcPlayer.xcodeproj"
 SCHEME="OcPlayer-macOS"
-BUILD_DIR="$ROOT/.local-build/current"
+# `BUILD_DIR` 可覆盖（`BLD-01`）：默认仍是 `.local-build/current`，但允许与
+# `package-*.sh` 的 `BUILD_ROOT` 对齐 —— 本地「先 build 再 package」时不会因为
+# 落到不同根而全量重编一遍。
+#
+# ⚠️ 覆盖只允许落在 `.local-build/` 之下（下面有守卫），避免把产物写到源码目录。
+BUILD_DIR="${BUILD_DIR:-$ROOT/.local-build/current}"
 DERIVED_DATA="$BUILD_DIR/DerivedData"
 export ERIKA_VERSION="${ERIKA_VERSION:-$(erika_version_from_config)}"
 
@@ -69,11 +74,19 @@ else
     echo "Skipping Erika fetch (SKIP_ERIKA_FETCH=1) — using Vendor as-is."
 fi
 
-# This path is intentionally fixed: every run replaces the previous local build.
-if [[ "$BUILD_DIR" != "$ROOT/.local-build/current" ]]; then
-    echo "Refusing to clean unexpected build directory: $BUILD_DIR" >&2
-    exit 1
-fi
+# 每次运行都整体替换上一次的本地构建（不做增量，避免配置串味）。
+#
+# 守卫：**只允许清 `.local-build/` 之下的路径**。原先是「必须恰好等于 current」，
+# 那样 `BUILD_DIR` 覆盖就没法用；放宽到前缀检查既保住防误删的初衷，又允许
+# 与 `package-*.sh` 对齐（`BLD-01`）。
+case "$BUILD_DIR" in
+    "$ROOT/.local-build"/*) ;;
+    *)
+        echo "Refusing to clean unexpected build directory: $BUILD_DIR" >&2
+        echo "（只允许 \$ROOT/.local-build/ 之下的路径）" >&2
+        exit 1
+        ;;
+esac
 
 echo "Cleaning previous build: $BUILD_DIR"
 rm -rf "$BUILD_DIR"

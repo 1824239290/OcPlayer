@@ -27,6 +27,54 @@
 
 ### 性能
 
+- **`BLD-01`：本地「先 build 再 package」不再因为落到不同根而全量重编（实测 480 s → 27 s）**。
+  - 根因：`build-macos.sh` 的 `BUILD_DIR` **写死** `.local-build/current`，而
+    `package-macos.sh` 默认 `.local-build/release` —— 刚编译完的产物在新根里看不见，
+    打包要**从头再编一遍**。
+  - 修法：`build-macos.sh` 的 `BUILD_DIR` 支持环境变量覆盖，与 `package-*.sh` 的
+    `BUILD_ROOT` 对齐即可复用。**守卫放宽但没取消**：原先要求「必须恰好等于
+    `current`」，现在改成「必须落在 `.local-build/` 之下」—— 既保住防误删的初衷，
+    又允许对齐（越界路径仍会 `Refusing to clean unexpected build directory`）。
+  - **实测**（本机）：
+    | 路径 | 耗时 |
+    |---|---|
+    | 空根（= 旧默认行为） | 约 480 s（清单记录） |
+    | 同根复用（`BUILD_DIR=.local-build/release` 再 `package`） | **27 s，零编译**（只做链接） |
+  - 顺带记录：CI 里**不会**连跑这两个脚本（`release.yml` 只调 `package-*.sh`），
+    所以这条是**本地开发流程**的收益，不影响 CI。
+
+- **`BLD-08`：iOS 测试步的「模拟器启动 + 装机」加了预热与预算告警**。
+  - 清单实测（PR #30 四次运行）：从编译完成到打出首条 App 日志之间**日志全静默**，
+    那段耗时 **185 / 162 / 331 / 181 s，波动 ±170 s** —— 它是 iOS 步波动的主因，
+    **不在编译里**，缓存对它完全无效（`BLD-02` 命中缓存后 iOS 步仍 534 s）。
+  - 现在做三件事：
+    1. `simctl boot` + `simctl bootstatus -b` 在 `xcodebuild` **之前**预热模拟器，
+       并把这段单独打点（`[BLD-08] simulator ready in Ns`）；
+    2. destination 改用 `id=<udid>` —— 跳过 `xcodebuild` 内部的机型解析/可用性探测；
+    3. 给「预热 + xcodebuild」加**预算告警**（`IOS_SIM_BUDGET_S=120`，超了打
+       `::warning`，**不 fail** —— 慢是 runner 的事，不该让性能观测点变成 flaky 门禁）。
+  - **本机实测**：冷启动 `boot + bootstatus` 仅 **8.9 s**；已 boot 时 0 s（幂等）。
+    CI 上那 162–331 s 的主要部分不是 boot 本身，而是**首次装机 + test runner 拉起 +
+    runner 磁盘冷缓存** —— 所以这里只做「预热 + 打点」，**没有声称能省掉那 170 s**；
+    真正的量化要等 CI 上跑几次看 `[BLD-08]` 那行数据。
+
+- **`BLD-03`：两个打包 job 补上 SPM checkouts 缓存（并解决「tag 缓存不能跨 tag 复用」）**。
+  - 清单已校订过三点，这里逐条落实：
+    ① 只缓存 `<root>/DerivedData/SourcePackages`（打包脚本要求 checkouts 存在），
+       **不缓存 `Build/`** —— Release 产物跨版本本来就不能复用，缓存它只是白占额度；
+    ② **tag 上建的缓存不能跨 tag 复用**（`BLD-04` 四次校订的结论）—— 所以只在
+       `release.yml` 里加缓存是**无效的**；
+    ③ 因此**播种点放在 `test.yml`**：新增「`Seed release SPM checkouts (main only)`」
+      步骤（**仅 `refs/heads/main`**），用 `xcodebuild -resolvePackageDependencies`
+       解析一次（不编译）并写进两个平台的 `SourcePackages`。
+  - **key 前缀选 `spm-pkg-`**，与既有的 `spm-test-`（`ci-test` + `Packages/*/.build`）、
+    `spm-release-`（`ci-release-test` + `Packages/*/.build`）**三者互不冲突** ——
+    清单 `BLD-04` 校订过「key 相同而 path 不同会互相顶掉」，这次专门避开了。
+  - **额度核算**：当前 **4.03 GiB / 10 GiB**（3 条），余 5.97 GiB；本地
+    `SourcePackages` 实测 **556 MB**（未压缩），新增一条压缩后约 0.6–0.9 GiB，安全。
+  - **收益边界（如实记录）**：只覆盖 resolve/clone 那一段，**省不掉 480 s / 368 s 的
+    编译本身**（PR 门禁是 Debug，与 Release 不同配置，本来也不能复用）。
+
 - **`P2-23`：`MetadataHydrator.home()` 从 4 次读事务合成 1 次（比例稳定在 −17% ~ −20%）**。
   - 改前四个独立 `await`（`libraries` + 三条 `rail`），每个都是一次 `database.read`。
     **读事务本身就要 ≈29–37 µs** —— 实测：4 个事务跑 4 条 trivial `SELECT 1` 要
