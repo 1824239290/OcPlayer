@@ -15,6 +15,64 @@ struct MetadataHydratorTests {
         return (MetadataHydrator(store: store, tenant: tenant), store, tenant, dir)
     }
 
+    // MARK: - 首页（P2-23：单次读事务）
+
+    /// **`homeSnapshotParts` 一次取回四份数据，与四个独立读结果逐字段一致。**
+    ///
+    /// 改前 `home()` 是四个独立 `await`，每次一个 `database.read`；读事务本身
+    /// ≈29–37 µs（实测）。合并后真实数据 A/B：**751.0 → 602.0 µs（省 19.8%）**。
+    ///
+    /// 这条钉的是**内容不能因合并而错**：漏读、串读（把 nextUp 读成 latest）、
+    /// 或某条 rail 解码失败拖垮整次读，都会在这里暴露。
+    @Test func homeSnapshotPartsMatchesIndividualReads() async throws {
+        let (_, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        try await store.saveLibraries([
+            MediaLibrary(id: "lib-1", name: "电影", collectionType: .movies),
+            MediaLibrary(id: "lib-2", name: "剧集", collectionType: .tvshows),
+        ], tenant: tenant)
+        try await store.saveRail([makeItem(id: "r1", name: "续播")], rail: "resume", tenant: tenant)
+        try await store.saveRail([makeItem(id: "n1", name: "下一集")], rail: "nextUp", tenant: tenant)
+        // latest 刻意不写 —— 验证「部分缺失不影响其它三项」。
+
+        let parts = await store.homeSnapshotParts(tenant: tenant)
+
+        let expectedLibraries = try await store.libraries(tenant: tenant).map(\.library)
+        #expect(parts.libraries.map(\.library) == expectedLibraries, "库列表必须与独立读一致")
+        #expect(parts.rails["resume"]?.items.map(\.id) == ["r1"])
+        #expect(parts.rails["nextUp"]?.items.map(\.id) == ["n1"])
+        #expect(parts.rails["latest"] == nil, "没写的 rail 必须是 nil，不能被别的 rail 顶替")
+    }
+
+    /// 空库时四份全空，不崩、不串。
+    @Test func homeSnapshotPartsOnEmptyCacheIsAllEmpty() async throws {
+        let (_, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        let parts = await store.homeSnapshotParts(tenant: tenant)
+        #expect(parts.libraries.isEmpty)
+        #expect(parts.rails.isEmpty)
+    }
+
+    /// 合并之后 `home()` 的对外语义**完全不变**：三条 rail 必须各归各位。
+    ///
+    /// 这条防的是「合并 SQL 时把 rail 名接错」（例如 `nextUp` 查成 `latest`）——
+    /// 那种错不会崩，只会让首页安静地显示错内容。
+    @Test func homeAfterMergeKeepsRailsDistinct() async throws {
+        let (hydrator, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        try await store.saveRail([makeItem(id: "resume-1", name: "续播")], rail: "resume", tenant: tenant)
+        try await store.saveRail([makeItem(id: "next-1", name: "下一集")], rail: "nextUp", tenant: tenant)
+        try await store.saveRail([makeItem(id: "latest-1", name: "最近")], rail: "latest", tenant: tenant)
+
+        let snapshot = try #require(await hydrator.home())
+        #expect(snapshot.resume.map(\.id) == ["resume-1"])
+        #expect(snapshot.nextUp.map(\.id) == ["next-1"])
+        #expect(snapshot.latest.map(\.id) == ["latest-1"])
+    }
+
     // MARK: - 首页
 
     /// `nil` = 从没缓存过（调用方保持原加载态）；这与「缓存过、但为空」是两回事。
