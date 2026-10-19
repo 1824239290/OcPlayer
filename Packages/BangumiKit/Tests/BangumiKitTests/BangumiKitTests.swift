@@ -812,6 +812,65 @@ struct BangumiDatabaseTests {
     }
 
     /// 收藏全量同步是权威来源：服务端确认没收藏（DTO 无 interest）时本地跟着清。
+    /// **批量落库（P2-24）语义必须与逐条一致。**
+    ///
+    /// 改前 `saveSubjects` 是 N+1：每条先 `fetchSubject`（单条 SELECT）再 upsert。
+    /// 改成「一次 `fetchSubjectsById` 批量读 + 逐条 upsert」后，实测 100 条更新
+    /// **31.2 → 16.8 ms（约 1.8×）**。
+    ///
+    /// 判据选择很关键：`eps` **不能**当判据（`update()` 对它无条件覆盖，DTO 没带时
+    /// 本地值本来就会被冲成 0，那是既有语义）；`interest` 才行（`update()` 对它
+    /// 是「带了才覆盖」）。
+    @Test func batchSaveSubjectsMatchesSingleSaveSemantics() async throws {
+        let db = try BangumiFixture.makeDatabase()
+        try await db.saveSubject(BangumiFixture.subject(id: 3000, eps: 12, epStatus: 5))
+        #expect(try await db.subject(id: 3000)?.interest != nil, "前置：本地已有收藏")
+
+        // 同批次里既有「更新」也有「新建」。
+        let updated = BangumiSubjectDTO(id: 3000, name: "批量更新", type: .anime)
+        let created = BangumiSubjectDTO(id: 3001, name: "批量新建", type: .anime)
+        try await db.saveSubjects([updated, created])
+
+        let afterUpdate = try await db.subject(id: 3000)
+        #expect(afterUpdate?.name == "批量更新", "已存在的条目必须走更新分支")
+        #expect(afterUpdate?.interest != nil,
+                "更新路径必须保留 DTO 未提供的本地收藏（interest）；丢了说明误走了「当新建」的重造分支")
+        #expect(try await db.subject(id: 3001)?.name == "批量新建", "新条目必须被插入")
+
+        // 权威路径：同批次缺失 interest 应清空本地收藏。
+        try await db.saveSubjects(
+            [BangumiSubjectDTO(id: 3000, name: "权威", type: .anime)],
+            authoritativeInterest: true)
+        let afterAuthoritative = try await db.subject(id: 3000)
+        #expect(afterAuthoritative?.name == "权威")
+        #expect(afterAuthoritative?.interest == nil, "权威批量路径仍须能清空收藏")
+    }
+
+    /// **同页重复 id：语义必须与逐条写一致。**
+    ///
+    /// 这是本批最容易悄悄改坏的一处。改前逐条写时，第二条能 `SELECT` 到第一条刚写入
+    /// 的值，于是 `update()` 里「非 nil 才覆盖」的字段（`images`）会**保留第一条的**；
+    /// 改成「页前一次性预读」后，第二条看到页前快照、走「新建」分支整条重造，把它冲掉。
+    ///
+    /// ⚠️ 判据必须选对：`name` 不行（两条都写了）；`interest` 不行（权威路径会清空）；
+    /// **`images` 才行**（「非 nil 才覆盖」，正落在两种实现的差异上）。
+    /// 实测（库中无 5200）：改前 `images="NEWFIRST"`、改后 `nil`。
+    @Test func batchSaveSubjectsDeduplicatesIDsKeepingEarlierOptionalFields() async throws {
+        let db = try BangumiFixture.makeDatabase()
+
+        var first = BangumiSubjectDTO(id: 5200, name: "先", type: .anime)
+        first.images = BangumiSubjectImages(large: "NEWFIRST")
+        // 第二条：同 id、**不带 images**（模拟分页重叠 / 重复推送）。
+        let second = BangumiSubjectDTO(id: 5200, name: "后", type: .anime)
+
+        try await db.saveSubjects([first, second])
+
+        let stored = try await db.subject(id: 5200)
+        #expect(stored?.name == "后", "同批次重复 id 应以最后一条为准")
+        #expect(stored?.images?.large == "NEWFIRST",
+                "前一条贡献的 images 必须保留；丢了说明批量预读把「非 nil 才覆盖」的字段冲掉")
+    }
+
     @Test func authoritativeMissingInterestClearsLocalCollection() async throws {
         let db = try BangumiFixture.makeDatabase()
         try await db.saveSubject(BangumiFixture.subject(id: 1200, eps: 12, epStatus: 5))
