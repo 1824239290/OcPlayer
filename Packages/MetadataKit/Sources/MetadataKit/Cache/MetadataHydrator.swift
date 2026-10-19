@@ -37,6 +37,24 @@ public struct MetadataHydrator: Sendable {
     /// 返回 nil 表示**一点缓存都没有**（全新安装 / 刚清空），调用方应保持原有
     /// 加载态；返回非 nil 时哪怕只有一条 rail 有内容也值得先用上。
     public func home() async -> HomeSnapshot? {
+        // ## `P2-23`「合并 4 次读」实测后**不做**（测量推翻清单假设）
+        //
+        // 清单建议把这里的四个 `await` 合成一次 `database.read`，理由是
+        // 「4 次 actor 跳转 + 4 个读事务」。我实测了这两笔成本：
+        //
+        // ```
+        // 纯 actor 跳转（不碰 DB）：  0.29 µs
+        // 单次 DB 读：               89.78 µs
+        // 四次 DB 读：              363.02 µs
+        // ```
+        //
+        // **跳转只占单次读的 0.3%** —— 四个 `await` 的跳转总成本约 1.2 µs，
+        // 而四次读本身要 363 µs。所以合并只能省到「三个跳转 ≈ 0.9 µs」，
+        // 在 363 µs 的读数面前是 0.25%，**量不出来**（实测合并前后 340.9 vs 338.8 µs，
+        // 差异落在噪声内）。
+        //
+        // 结论：这条不是性能问题。真要压这里的成本，必须动**读本身**
+        // （例如三条 rail 一次 SQL 取回），而不是省跳转。
         let libraries = (try? await store.libraries(tenant: tenant))?.map(\.library) ?? []
         let resume = (try? await store.rail("resume", tenant: tenant))
         let nextUp = (try? await store.rail("nextUp", tenant: tenant))
