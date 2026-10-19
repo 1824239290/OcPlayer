@@ -27,6 +27,20 @@ enum DanmakuLoadStatus: Equatable {
     case empty(title: String)
     case failed(message: String)
 
+    /// 给 HUD 用的完整显示文案：基础 `label` + 「匹配中/获取中」时的已等待秒数。
+    ///
+    /// `LIVE-01`：真实会话里弹幕首次装载要 11.1 s（其中 10.4 s 是网关往返），
+    /// 期间只显示静态的「正在匹配」会让用户以为卡死。这里把已等待时长带出去，
+    /// 用户能看到它**在动**，配合本来就有的「重新匹配」入口就能自己脱困。
+    func displayLabel(elapsedSeconds: Int) -> String {
+        switch self {
+        case .matching, .loadingComments:
+            elapsedSeconds > 0 ? "\(label) · \(elapsedSeconds)s" : label
+        default:
+            label
+        }
+    }
+
     var label: String {
         switch self {
         case .idle: "等待加载"
@@ -279,7 +293,26 @@ struct DanmakuPlaybackContext {
 @Observable
 final class DanmakuCoordinator {
 
-    private(set) var status: DanmakuLoadStatus = .idle
+    private(set) var status: DanmakuLoadStatus = .idle {
+        didSet { updateStatusTicker() }
+    }
+
+    /// 当前这次装载**已经开始多少秒**（`LIVE-01`）。
+    ///
+    /// ## 为什么需要它
+    ///
+    /// 真实会话实测：弹幕首次装载 **11.1 s**，其中 **10.4 s 是网关往返**
+    /// （+8.6 s 首次请求以 500 失败 → +11.1 s 重试成功）—— 不是 App 的计算。
+    /// 而 HUD 在这 11 秒里只显示一句静态的「正在匹配」，用户完全看不出
+    /// 「是在慢慢跑」还是「已经卡死」。
+    ///
+    /// 这里只在 `.matching` / `.loadingComments` 期间由一个每秒推进的任务维护；
+    /// 其它状态一律 0。UI 拿它显示「正在匹配 · 6s」并配「重新匹配」入口
+    /// （那个入口本来就有，见 `PlayerHUDActions`）。**不改超时**：
+    /// 实测首次请求 8.6 s 就返回了 500 错误，压超时并不能解决网关慢的问题。
+    private(set) var statusElapsedSeconds: Int = 0
+
+    @ObservationIgnored private var statusTicker: Task<Void, Never>?
     private(set) var currentMatch: DanmakuEpisodeMatch?
     /// 弹幕推导的片头提示（已注入当前播放会话）。
     private(set) var currentIntroHint: DanmakuIntroHint?
@@ -597,6 +630,28 @@ final class DanmakuCoordinator {
                 context: context,
                 durationMs: Self.elapsedMilliseconds(since: startedAt)
             )
+        }
+    }
+
+    /// 只在「匹配中 / 获取中」期间每秒推进 `statusElapsedSeconds`；其它状态停表清零。
+    ///
+    /// 用 `@ObservationIgnored` 的 Task 持有，避免把任务本身放进观察图。
+    private func updateStatusTicker() {
+        switch status {
+        case .matching, .loadingComments:
+            guard statusTicker == nil else { return }
+            statusElapsedSeconds = 0
+            statusTicker = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled, let self else { return }
+                    self.statusElapsedSeconds += 1
+                }
+            }
+        default:
+            statusTicker?.cancel()
+            statusTicker = nil
+            statusElapsedSeconds = 0
         }
     }
 

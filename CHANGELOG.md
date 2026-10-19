@@ -27,6 +27,56 @@
 
 ### 性能
 
+- **`LIVE-02`：补上冷启动那段 865 ms 的日志盲区**。
+  - 真实会话实测：`2 ms 应用启动` → **`867 ms 首页磁盘缓存预热`**，中间**一条日志都没有**，
+    诊断包无法归因这段花在哪（会话恢复？`ServerStore` 解码？SQLite 首次 attach？
+    `MetadataHydrator.home()` 的读？）。
+  - 新增两条打点：
+    - **「冷启动分段」**（`AppModel+Session.bootstrap`）：`setupMs`（Bangumi/Metadata 建库）、
+      `restoreMs`（档案解码 + 令牌读取/迁移）、`activateMs`（装配 + `MetadataCache` attach）、
+      `totalMs`，外加 `restored` 布尔（走 onboarding 时 `activateMs` 接近 0，
+      单看数字会误以为「装配很快」）。
+    - **「首页用磁盘缓存预热」加 `readMs`**：`hydrator.home()` 的读盘/解码耗时，
+      与 `activateMs` 相减就能把盲区拆干净。
+  - 用**单调时钟** `ContinuousClock` 而不是墙钟：墙钟会被 NTP / 用户改时间影响，
+    而冷启动耗时正是最容易被它污染的场景。
+  - 顺带记下两处踩坑：① 把整段写成一个大的字典字面量会让类型检查器超时
+    （`unable to type-check this expression in reasonable time`），必须拆成局部常量；
+    ② `Duration` 不能直接转 `Int64`，只能拆 `components`，抽了个 `elapsedMs(from:to:)`。
+
+- **`LIVE-03`：`MallocPressureRelief` 删掉误导指标 + 加「没收益就早退」**。
+  - 真实实测（5 次运行 × 四拍 +2s/+25s/+60s/+120s），`physFootprint` 变化 **≤0.1 MB**：
+    `350.0→350.0 · 367.2→367.2 · 336.0→336.0 · 325.5→325.5 · 330.8→330.7`
+    —— 后三拍基本是纯开销。
+  - **删掉 `mallocAllocatedBytes` 日志字段**：它读的是
+    `malloc_zone_statistics.size_allocated`（见 `ProcessFootprint.swift`），而
+    `malloc_zone_pressure_relief` 归还的是**空闲页**、**不改「已分配字节」** ——
+    那个指标**结构上不可能因 relief 而变**。给读者一个永远不动的数字判断
+    「relief 有没有用」，是误导。现在只打 `physFootprint` 前后值 + `reclaimed_bytes`。
+  - **早退**：某一拍回收量 < 1 MB 就不再安排后续拍（从「四拍固定开销」变成
+    「拍到没有可回收的页为止」）。阈值 1 MB 按实测噪声（≤0.1 MB）留了一个数量级余量。
+  - `perform` 改为返回回收字节数，供早退判据与日志共用。
+  - **⚠️ 保守选择**：没有直接删掉这 82 行（清单给的两个选项之一）。理由：
+    它仍是唯一一处主动归还空闲页的逻辑，而 `LIVE-04` 记着真实峰值 RSS 435 MB、
+    iOS jetsam 风险 —— 真到内存吃紧时它是有用的；删掉就再没有抓手。
+    现在改成「有收益才继续」，把确认无用的三拍省掉。
+  - 用例钉住核心证据：**`relief` 不改 `mallocAllocatedBytes`**（若哪天它真会改，
+    删字段就删错了，这条会红）。
+
+- **`LIVE-01`：弹幕匹配期间显示已等待时长（11 秒不再像卡死）**。
+  - 真实会话实测：弹幕首次装载 **11.1 s**，其中 **10.4 s 是网关往返**
+    （+8.6 s 首次请求以 500 失败 → +11.1 s 重试成功，`cache=HIT` 1.9 s）——
+    **不是 App 的计算**（同集第二次装载仅 575 ms）。
+  - **「重新匹配」入口其实已经有了**（`PlayerHUDActions` 的 `arrow.clockwise`），
+    任何状态都可用。所以清单说的「缺一个可操作状态」并不完全准确 ——
+    真正缺的是**进展感**：那 11 秒里 HUD 只显示静态的「正在匹配」，
+    用户分不出「在慢慢跑」还是「已卡死」。
+  - 新增 `statusElapsedSeconds`：只在 `.matching` / `.loadingComments` 期间由每秒
+    推进的任务维护，其它状态停表清零（`status` 的 `didSet` 驱动）。
+    UI 显示「正在匹配 · 6s」/「正在获取弹幕 · 9s」。
+  - **没有压超时**：实测首次请求 **8.6 s 就返回了 500 错误**（超时是 15 s），
+    说明瓶颈是网关慢/失败重试，压超时解决不了，反而会砍掉本该成功的请求。
+
 - **`P1-13`：iOS 触摸热路径不再每事件重算整个播放器根 body**。
   - `touchTranslation` 是 `@State`，而它**每个触摸事件都要写**（`handleTouchChanged`
     里两处），却**只在长按判定的 Task 里读一次**（判 `movementSlop`）。

@@ -187,7 +187,8 @@ struct DanmakuSelectionSheet: View {
                     Circle()
                         .fill(statusIndicatorColor)
                         .frame(width: 7, height: 7)
-                    Text("弹幕状态：\(danmakuModel.danmaku.status.label)")
+                    Text("弹幕状态：" + danmakuModel.danmaku.status.displayLabel(
+                        elapsedSeconds: danmakuModel.danmaku.statusElapsedSeconds))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

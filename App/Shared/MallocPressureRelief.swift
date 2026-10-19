@@ -38,17 +38,50 @@ enum MallocPressureRelief {
             for beat in beats {
                 try? await Task.sleep(for: .seconds(beat.interval))
                 guard !Task.isCancelled else { return }
-                await Task.detached { perform(reason: beat.label) }.value
+                let reclaimed = await Task.detached { perform(reason: beat.label) }.value
+                // `LIVE-03`：**某一拍没拿回任何页，就不再排后续拍**。
+                //
+                // 实测（5 次运行 × 四拍）footprint 变化 **≤0.1 MB**：
+                //   350.0→350.0 · 367.2→367.2 · 336.0→336.0 · 325.5→325.5 · 330.8→330.7
+                // 也就是说后三拍基本是纯开销（每拍要遍历全部 malloc zone）。
+                // 这个早退把「四拍固定开销」降成「拍到没有可回收的页为止」。
+                //
+                // 注意阈值不用 `> 0`：footprint 本来就会因别的原因小幅波动，
+                // 用一个「有意义的量」当判据（1 MB），避免噪声把早退挡住或误触发。
+                if reclaimed < Self.meaningfulReclaimBytes {
+                    playerLog.info(
+                        "malloc relief 早退 reason=\(beat.label) "
+                            + "本拍只回收 \(format(reclaimed))，后续拍不再安排",
+                        fields: [
+                            "reason": .string(beat.label),
+                            "reclaimed_bytes": .unsignedInteger(reclaimed),
+                        ])
+                    return
+                }
             }
         }
     }
+
+    /// 「这一拍真的拿回了点东西」的下限。小于它就认为没收益、提前收工。
+    ///
+    /// 1 MB 是按实测噪声定的：5 次运行的拍内变化都 ≤0.1 MB，留一个数量级的余量。
+    private static let meaningfulReclaimBytes: UInt64 = 1 << 20
 
     private static var stopTask: Task<Void, Never>?
 
     // MARK: - relief 本体（非隔离，后台线程执行）
 
-    /// 对进程内所有 malloc zone 做一次压力归还，前后各采一条 footprint 进诊断日志。
-    nonisolated private static func perform(reason: String) {
+    /// 对进程内所有 malloc zone 做一次压力归还，返回**拿回的字节数**（供早退判据用）。
+    ///
+    /// ## ⚠️ 不再打印 `mallocAllocatedBytes`（`LIVE-03`）
+    ///
+    /// 原先这条日志同时打 `进程 physFootprint` 与 `malloc size_allocated`。但后者读的是
+    /// `malloc_zone_statistics.size_allocated`（见 `ProcessFootprint.swift`），而
+    /// `malloc_zone_pressure_relief` 归还的是**空闲页**、**不改「已分配字节」** ——
+    /// 也就是说那个指标**结构上不可能因 relief 而变**。给读者一个永远不动的数字去判断
+    /// 「relief 有没有用」，是个误导。现在只打 footprint（reclaim 前后差值才是真信号）。
+    @discardableResult
+    nonisolated private static func perform(reason: String) -> UInt64 {
         let before = ProcessFootprint.current()
 
         var zonePointers: UnsafeMutablePointer<vm_address_t>?
@@ -64,16 +97,26 @@ enum MallocPressureRelief {
         }
 
         let after = ProcessFootprint.current()
+        // footprint 下降才有意义；若因别的原因涨了，差值为 0（不显示负回收）。
+        let reclaimed = before.physFootprintBytes > after.physFootprintBytes
+            ? before.physFootprintBytes - after.physFootprintBytes
+            : 0
         let message = "malloc relief reason=\(reason) "
-            + "进程 \(format(before.physFootprintBytes)) → \(format(after.physFootprintBytes)) · "
-            + "malloc \(format(before.mallocAllocatedBytes)) → \(format(after.mallocAllocatedBytes))"
+            + "进程 \(format(before.physFootprintBytes)) → \(format(after.physFootprintBytes))"
+            + "（回收 \(format(reclaimed))）"
         playerLog.info(message, fields: [
             "reason": .string(reason),
             "before_footprint_bytes": .unsignedInteger(before.physFootprintBytes),
-            "before_malloc_bytes": .unsignedInteger(before.mallocAllocatedBytes),
             "after_footprint_bytes": .unsignedInteger(after.physFootprintBytes),
-            "after_malloc_bytes": .unsignedInteger(after.mallocAllocatedBytes),
+            "reclaimed_bytes": .unsignedInteger(reclaimed),
         ])
+        return reclaimed
+    }
+
+    /// 测试用：跑一次 relief 并返回回收字节数（供 `AppTests` 验证「不改已分配字节」）。
+    @discardableResult
+    nonisolated static func relieveOnceForTesting() -> UInt64 {
+        perform(reason: "test")
     }
 
     private nonisolated static func format(_ bytes: UInt64) -> String {
