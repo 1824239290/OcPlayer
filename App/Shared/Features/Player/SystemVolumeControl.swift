@@ -58,13 +58,10 @@ private struct SystemVolumeControlRepresentable: UIViewRepresentable {
         // 目标与当前值同档时不该惊动系统。
         let raw = Float(min(max(volume, 0), 1))
         let target = PlayerPanGestureModel.quantizedVolume(raw)
-        guard abs(slider.value - target) > Self.halfStep else { return }
+        guard PlayerPanGestureModel.shouldWriteVolume(current: slider.value, target: target) else { return }
         slider.setValue(target, animated: false)
         slider.sendActions(for: .valueChanged)
     }
-
-    /// 见 `PlayerPanGestureModel.quantizedVolume`（放在跨平台纯逻辑文件里，便于测试）。
-    static let halfStep = PlayerPanGestureModel.volumeHalfStep
 
     private static func volumeSlider(in view: UIView) -> UISlider? {
         if let slider = view as? UISlider { return slider }

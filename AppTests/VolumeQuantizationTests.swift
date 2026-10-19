@@ -89,16 +89,72 @@ final class VolumeQuantizationTests: XCTestCase {
             PlayerPanGestureModel.volumeStep / 2, accuracy: 1e-6)
     }
 
-    /// **回归对照：老的 0.005 阈值在 1/16 量化下恒成立。**
+    // MARK: - 守卫本体（P1-14 真正改变行为的那几行）
+
+    /// **守卫必须用半档容差，不能用半档以外的值。**
     ///
-    /// 这条把「为什么原实现几乎每个事件都写」变成可执行的证据：
-    /// 量化后的目标与任意一档的差，只要不是恰好同档，就 **≥ 半档 = 0.03125**，
-    /// 而 0.03125 **远大于** 0.005 —— 所以老守卫永远放行。
-    func testLegacyThresholdWouldAlwaysFire() {
-        let legacyThreshold: Float = 0.005
+    /// ⚠️ 这组用例是补洞用的：原先 7 条只测 `quantizedVolume` 纯函数，而
+    /// **真正改变行为的是 `updateUIView` 里那 4 行守卫**（`abs(slider.value - target)
+    /// > 0.005` → 量化 + 半档容差）。独立审查实测：把守卫改回 `> 0.005`，
+    /// 那 7 条用例**全绿** —— 等于本批的核心改动零覆盖。
+    ///
+    /// 现在守卫抽成了 `PlayerPanGestureModel.shouldWriteVolume(current:target:)`，
+    /// 在 macOS 靶上可测。
+    func testGuardUsesHalfStepTolerance() {
         let step = PlayerPanGestureModel.volumeStep
-        // 相邻两档的差 = 1/16 = 0.0625，是旧阈值的 12.5 倍。
-        XCTAssertGreaterThan(step, legacyThreshold * 10,
-                             "1/16 远大于 0.005 —— 这就是「几乎每个事件都写」的根因")
+        let half = PlayerPanGestureModel.volumeHalfStep
+        let current = 5 * step
+
+        // 同档（差值 0）：不写。
+        XCTAssertFalse(PlayerPanGestureModel.shouldWriteVolume(current: current, target: current),
+                       "差值 0 不该写")
+
+        // 差一点不到半档：不写（否则一次滑动会反复写）。
+        XCTAssertFalse(
+            PlayerPanGestureModel.shouldWriteVolume(current: current, target: current + half * 0.99),
+            "不到半档不该写")
+
+        // 恰好半档：写（`>=`，边界包含）。
+        XCTAssertTrue(
+            PlayerPanGestureModel.shouldWriteVolume(current: current, target: current + half),
+            "恰好半档应该写")
+
+        // 超过半档：写。
+        XCTAssertTrue(
+            PlayerPanGestureModel.shouldWriteVolume(current: current, target: current + step),
+            "一整档必须写")
     }
-}
+
+    /// **回归：老的 `0.005` 阈值在半档语义下必然「几乎每次都写」。**
+    ///
+    /// 这条用**行为**证明，不是常量比大小：
+    /// 老守卫是「差 > 0.005 就写」，而半档是 0.03125 —— 于是「差在 0.005 与半档之间」
+    /// 这个区间里，老实现写、新实现不写。取这个区间里的一个值验两种判定相反。
+    func testLegacyThresholdWouldWriteWhereQuantizedGuardDoesNot() {
+        let step = PlayerPanGestureModel.volumeStep
+        let current = 5 * step
+        // 差 0.02：介于 0.005 与半档 0.03125 之间。
+        let target = current + 0.02
+
+        let legacyWouldWrite = abs(current - target) > 0.005
+        let quantizedWouldWrite = PlayerPanGestureModel.shouldWriteVolume(
+            current: current, target: target)
+
+        XCTAssertTrue(legacyWouldWrite, "老阈值（0.005）在这个差值下会写")
+        XCTAssertFalse(quantizedWouldWrite, "量化后的半档守卫不该写")
+        XCTAssertNotEqual(legacyWouldWrite, quantizedWouldWrite,
+                          "两种守卫在「0.005 ~ 半档」区间必须给出**相反**结论 —— 这正是老实现几乎每个事件都写的原因")
+    }
+
+    /// 守卫对**偏离网格**的 `current` 也成立（蓝牙 / AirPlay / 硬件音量键可能给非网格值）。
+    func testGuardHandlesOffGridCurrentValues() {
+        let step = PlayerPanGestureModel.volumeStep
+        let offGrid = 5 * step + 0.01   // 不算在 1/16 网格上
+        let target = 5 * step
+
+        // 偏差 0.01 < 半档 → 不写（避免为了一点偏移反复写）。
+        XCTAssertFalse(PlayerPanGestureModel.shouldWriteVolume(current: offGrid, target: target))
+        // 偏差到半档 → 吸附。
+        XCTAssertTrue(PlayerPanGestureModel.shouldWriteVolume(
+            current: offGrid, target: target + step))
+    }}

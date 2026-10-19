@@ -61,6 +61,28 @@ enum PlayerPanGestureModel {
         return (clamped / volumeStep).rounded() * volumeStep
     }
 
+    /// **是否该把 `target` 写进系统音量**（`P1-14` 的守卫本体）。
+    ///
+    /// 抽成纯函数是**为了让这段判定可测** —— 它原本嵌在
+    /// `SystemVolumeControl.updateUIView` 里，而后者在 `#if os(iOS)` 中，
+    /// macOS 测试靶根本编不进去。审查实测：把守卫改回老的 `> 0.005`，
+    /// 7 条只测 `quantizedVolume` 的用例**全绿** —— 也就是说
+    /// **本批真正改变行为的那 4 行零覆盖**。这个函数就是补那个洞。
+    ///
+    /// - Parameters:
+    ///   - current: 滑块当前值（系统音量，已在 1/16 网格上）。
+    ///   - target: 已经过 `quantizedVolume` 的目标值。
+    /// - Returns: 差值达到**半档**才写。
+    ///
+    /// ## 为什么是半档而不是「任何不等」
+    ///
+    /// `current` 可能因为蓝牙 / AirPlay / 硬件音量键而落在网格的**偏移**位置。
+    /// 用「差 ≥ 半档」判：偏移不到半档时**不动**（避免一次滑动反复写），
+    /// 到半档才吸附到最近的档 —— 这也切断了「写 → KVO 回声 → 再写」的放大环。
+    static func shouldWriteVolume(current: Float, target: Float) -> Bool {
+        abs(min(max(current, 0), 1) - target) >= volumeHalfStep
+    }
+
     static func verticalTarget(start: Double, translation: CGFloat, extent: CGFloat) -> Double {
         guard extent > 1 else { return start }
         return min(max(start - Double(translation / extent), 0), 1)
