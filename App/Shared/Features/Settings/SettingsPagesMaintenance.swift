@@ -271,12 +271,19 @@ struct DiagnosticsSection: View {
     /// 导出内容要读整份日志（可能几 MB），挪出主线程再回来开面板（同 refresh 的做法）。
     private func export() {
         Task {
-            let result: (text: String?, failure: String?) = await Task.detached {
-                do { return (try DiagnosticsExport.makeText(), nil) }
-                catch { return (nil, error.localizedDescription) }
+            // `makeText` 产字符串、`Data(text.utf8)` 是一次整份编码 —— 两者都在
+            // detached 上做完，主线程只负责开面板。改前那次编码在 `fileWrapper` 里
+            // （SwiftUI 主线程调用），导出瞬间会多一次主线程大块分配。
+            let result: (data: Data?, failure: String?) = await Task.detached {
+                do {
+                    let text = try DiagnosticsExport.makeText()
+                    return (Data(text.utf8), nil)
+                } catch {
+                    return (nil, error.localizedDescription)
+                }
             }.value
-            if let text = result.text {
-                exportDocument = DiagnosticExportDocument(text: text)
+            if let data = result.data {
+                exportDocument = DiagnosticExportDocument(data: data)
                 exportFailure = nil
                 isExporting = true
             } else {
