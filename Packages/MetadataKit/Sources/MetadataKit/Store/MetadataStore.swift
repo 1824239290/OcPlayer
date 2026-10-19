@@ -77,6 +77,66 @@ public actor MetadataStore {
         }
     }
 
+    /// 条目（可选带 rail 快照）**一次事务写完**。
+    ///
+    /// ## 为什么要单独这个方法
+    ///
+    /// `saveItems` 与 `saveRail` 各自开一个 `database.write` 事务。连写两次的话，
+    /// 进程在两次写之间被杀会留下「**新 rail + 旧条目**」的不一致快照 ——
+    /// 首页显示的条目详情与 rail 里的对不上。这是正确性问题，不只是性能。
+    ///
+    /// ## 编码仍在事务外
+    ///
+    /// 与 `saveItems`（`:67` 的注释）同一理由：payload 编码是纯 CPU，占着写事务做
+    /// 它会挡住别的写。所以两次编码都先做完，事务里只剩 upsert。
+    ///
+    /// - Parameter rail: `nil` 时等价于 `saveItems`。
+    public func saveItemsAndRail(
+        _ items: [MediaItem],
+        rail: String?,
+        tenant: TenantID,
+        now: Date = Date(),
+        progressFresh: Bool = true
+    ) throws {
+        guard !items.isEmpty else { return }
+        let timestamp = Int64(now.timeIntervalSince1970)
+        // 两次编码都在事务外。
+        let rows: [(MediaItem, Data)] = items.compactMap { item in
+            PayloadCodec.encode(item).map { (item, $0) }
+        }
+        let railPayload = rail.flatMap { _ in PayloadCodec.encode(RailSnapshot(items: items)) }
+        guard !rows.isEmpty || railPayload != nil else { return }
+        try database.write { db in
+            for (item, payload) in rows {
+                try Self.upsertItem(db, item: item, payload: payload, tenant: tenant,
+                                    timestamp: timestamp, progressFresh: progressFresh)
+            }
+            if let rail, let railPayload {
+                try Self.upsertRail(db, rail: rail, payload: railPayload,
+                                    tenant: tenant, timestamp: timestamp)
+            }
+        }
+    }
+
+    private static func upsertRail(
+        _ db: Database,
+        rail: String,
+        payload: Data,
+        tenant: TenantID,
+        timestamp: Int64
+    ) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO rail(tenant_id, rail, fetched_at, payload_version, payload)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(tenant_id, rail) DO UPDATE SET
+                  fetched_at = excluded.fetched_at,
+                  payload_version = excluded.payload_version,
+                  payload = excluded.payload
+                """,
+            arguments: [tenant.rawValue, rail, timestamp, Schema.payloadVersion, payload])
+    }
+
     private static func upsertItem(
         _ db: Database,
         item: MediaItem,
@@ -319,16 +379,8 @@ public actor MetadataStore {
         guard let payload = PayloadCodec.encode(RailSnapshot(items: items)) else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
         try database.write { db in
-            try db.execute(
-                sql: """
-                    INSERT INTO rail(tenant_id, rail, fetched_at, payload_version, payload)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(tenant_id, rail) DO UPDATE SET
-                      fetched_at = excluded.fetched_at,
-                      payload_version = excluded.payload_version,
-                      payload = excluded.payload
-                    """,
-                arguments: [tenant.rawValue, rail, timestamp, Schema.payloadVersion, payload])
+            try Self.upsertRail(db, rail: rail, payload: payload,
+                                tenant: tenant, timestamp: timestamp)
         }
     }
 

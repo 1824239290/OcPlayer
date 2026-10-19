@@ -164,8 +164,19 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         return Self.encoding(of: status)
     }
 
-    /// 输出细节（面格式 / 回退原因 / 有效 headroom）。与 `latestOutputEncoding`
-    /// 共用同一把锁与同一个 C 调用，同一帧里两个都读也不会调两次内核。
+    /// 输出细节（面格式 / 回退原因 / 有效 headroom）。
+    ///
+    /// **与 `latestOutputEncoding` 共用同一把锁，但各自调一次内核。**
+    /// 早先这里写「共用同一把锁与同一个 C 调用…不会调两次内核」——**后半句不成立**：
+    /// 两个属性各自走一遍 `currentOutputStatus()`（一次主锁 + 一次 `get_output_status`）。
+    ///
+    /// 实测后确认这**不是性能问题**，所以只改注释、不动实现：
+    /// 驱动这两个读点的是 `PlayerHUDChrome.swift` 的 `TimelineView(.periodic(by: 1))`
+    /// （**1 Hz**），且整块面板由 `showInfoPanel` 门控、**默认关闭** —— 真实速率
+    /// 约 3 次/秒且只在面板打开时。
+    ///
+    /// （清单原文按「100 ms 一次」估，是把 `PlayerTimeline.progress` 的 100 ms 发布
+    /// 张冠李戴了 —— 那条发布由 `PlayerHUDBottomDock` 消费，与本面板无关。）
     public var latestOutputSnapshot: PlaybackOutputSnapshot {
         guard let status = currentOutputStatus() else { return .unknown }
         return PlaybackOutputSnapshot(status)
@@ -451,6 +462,19 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             let loopBox = UncheckedSendableBox(value: renderLoop)
             setAttachedView(view)
             Task { @MainActor in
+                // **必须复核 surface 还是不是我们刚挂上的那个。**
+                //
+                // 这个 Task 跳到 `@MainActor` 之前有一段间隙，宿主可以在那里
+                // `detach()`（`ErikaEngine.detach` 不受让位契约保护，随时可调）。
+                // 不复核的后果：渲染线程在**已 detach 的 surface** 上继续 tick，
+                // 而且**无人 `stop()`** —— 帧驱动就这样漏下去，直到下一次 attach。
+                //
+                // 与 `restartRenderLoop`（本文件同款路径）保持一致：
+                // 它在 `Task { @MainActor }` 之前就先 `guard let view = storedAttachedView()`。
+                guard self.storedAttachedView() === viewBox.value else {
+                    PlaybackLog.warning("attach 让位收尾：surface 已被 detach，跳过启动帧驱动")
+                    return
+                }
                 loopBox.value.start(on: viewBox.value)
             }
         }

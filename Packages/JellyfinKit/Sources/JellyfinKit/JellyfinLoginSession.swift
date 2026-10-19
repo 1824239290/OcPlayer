@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 import Get
 import JellyfinAPI
@@ -39,7 +40,7 @@ public final class JellyfinLoginSession: ServerLoginSession {
                         }
                     }
                     continuation.finish()
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
                     continuation.finish()
                 } catch {
                     if case let APIError.unacceptableStatusCode(status) = error, status == 404 {

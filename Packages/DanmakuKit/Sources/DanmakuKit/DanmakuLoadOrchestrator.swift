@@ -221,7 +221,7 @@ public struct DanmakuLoadOrchestrator {
             var hashValue: String? = nil
             do {
                 hashValue = try await matchContext.mediaHash(session: session)
-            } catch is CancellationError {
+            } catch where CancellationClassifier.isCancellation(error) {
                 throw CancellationError()
             } catch {
                 fingerprintFailed = true
@@ -266,7 +266,7 @@ public struct DanmakuLoadOrchestrator {
                         ignoringCachedMatch: true,
                         persistingResult: false
                     )
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
                     throw CancellationError()
                 } catch {
                     tierError = error
@@ -288,7 +288,7 @@ public struct DanmakuLoadOrchestrator {
                         client: client,
                         budgetOpen: budgetOpen
                     )
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
                     throw CancellationError()
                 } catch {
                     tierError = error
@@ -311,7 +311,7 @@ public struct DanmakuLoadOrchestrator {
                         client: client,
                         budgetOpen: budgetOpen
                     )
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
                     throw CancellationError()
                 } catch {
                     tierError = error
@@ -334,7 +334,7 @@ public struct DanmakuLoadOrchestrator {
                         client: client,
                         budgetOpen: budgetOpen
                     )
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
                     throw CancellationError()
                 } catch {
                     tierError = error
@@ -414,7 +414,7 @@ public struct DanmakuLoadOrchestrator {
                 matchContext: matchContext,
                 forceRematch: forceRematch
             )
-        } catch is CancellationError {
+        } catch where CancellationClassifier.isCancellation(error) {
             return .failed(message: "已取消")
         } catch {
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }
@@ -611,7 +611,7 @@ public struct DanmakuLoadOrchestrator {
                 title: name,
                 introHint: introHint
             )
-        } catch is CancellationError {
+        } catch where CancellationClassifier.isCancellation(error) {
             return .failed(message: "已取消")
         } catch {
             guard await isCurrent(revision, cacheKey: cacheKey) else { return .failed(message: "播放已切换") }

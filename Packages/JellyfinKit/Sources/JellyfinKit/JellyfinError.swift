@@ -1,3 +1,4 @@
+import DiagnosticsKit
 import Foundation
 import Get
 
@@ -65,11 +66,13 @@ public struct JellyfinError: Error, LocalizedError {
         isCancellation(error) ? error : JellyfinError.wrap(error)
     }
 
-    /// 任务取消（CancellationError）与 URLSession 中断（URLError.cancelled）都算。
+    /// 任务取消（`CancellationError`）与 `URLSession` 中断（`URLError.cancelled`）都算。
+    ///
+    /// 实现委托给 `DiagnosticsKit.CancellationClassifier` —— 判据要**一个真源**，
+    /// 各包各抄一份必然漂移（本仓已因只认 `CancellationError` 而把正常取消记成
+    /// warning 过一次）。
     public static func isCancellation(_ error: any Error) -> Bool {
-        if error is CancellationError { return true }
-        let ns = error as NSError
-        return ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled
+        CancellationClassifier.isCancellation(error)
     }
 
     /// 连不上（DNS / 拒绝连接 / 断网）给出可操作的「检查地址」提示；

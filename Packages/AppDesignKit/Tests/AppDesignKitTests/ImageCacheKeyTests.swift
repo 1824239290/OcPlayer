@@ -606,6 +606,90 @@ final class ImagePipelineDiskFirstTests: XCTestCase {
     """)!
 }
 
+/// 网络层直接抛 `-999`（`URLError.cancelled`）的协议 —— 模拟「请求被取消」。
+///
+/// 存在的理由：`URLSession` 取消时抛的是 `URLError(.cancelled)`，**不是**
+/// `CancellationError`。用例要精确复现这个形态，才能验出「只认 CancellationError」
+/// 的站点会把正常取消当失败。
+final class CancelledProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.cancelled))
+    }
+
+    override func stopLoading() {}
+}
+
+/// 接线回归（清单 `CORR-07`）：**取消必须抛出取消，而不是被当成加载失败。**
+///
+/// 改前 `ImagePipeline.load` 写的是 `catch is CancellationError`，接不住
+/// `URLError(.cancelled)` —— 于是请求被取消时会掉进通用 `catch`，先试离线兜底、
+/// 再记一条「图片加载失败」warning，最后把 `URLError(-999)` 原样抛出去。
+/// 快速滚动列表时这天天发生，warning 把真正的故障淹掉。
+final class ImagePipelineCancellationTests: XCTestCase {
+
+    private func makePipeline() throws -> ImagePipeline {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Cancel-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return ImagePipeline(cacheDirectory: dir, protocolClasses: [CancelledProtocol.self])
+    }
+
+    /// 网络抛 `-999` 时，`load` 必须抛 `CancellationError`（而不是 `URLError`）。
+    func testCancelledRequestSurfacesAsCancellationError() async throws {
+        let pipeline = try makePipeline()
+        let url = URL(string: "http://h:8096/Items/a/Images/Thumb?maxWidth=720")!
+
+        do {
+            _ = try await pipeline.load(url, authHeader: nil)
+            XCTFail("取消的请求不该成功返回")
+        } catch is CancellationError {
+            // 期望路径：归一成取消。
+        } catch {
+            XCTFail("取消的请求抛出了 \(type(of: error))（\(error)）—— "
+                + "说明 `-999` 掉进了通用 catch、被当成了加载失败（CORR-07 回归）")
+        }
+    }
+
+    /// 对照：**真的失败**（超时）仍要原样抛出，不能被误判成取消。
+    ///
+    /// 这条防的是「为了让上一条绿而把判据放宽到所有 URLError」。
+    func testGenuineFailureIsNotSwallowedAsCancellation() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Timeout-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        TimeoutProtocol.install()
+        let pipeline = ImagePipeline(cacheDirectory: dir, protocolClasses: [TimeoutProtocol.self])
+        let url = URL(string: "http://h:8096/Items/b/Images/Thumb?maxWidth=720")!
+
+        do {
+            _ = try await pipeline.load(url, authHeader: nil)
+            XCTFail("超时的请求不该成功返回")
+        } catch is CancellationError {
+            XCTFail("超时被误判成了取消 —— 会吞掉真实故障")
+        } catch {
+            let ns = error as NSError
+            XCTAssertEqual(ns.code, NSURLErrorTimedOut, "失败必须原样透传")
+        }
+    }
+}
+
+/// 网络层抛超时的协议。
+final class TimeoutProtocol: URLProtocol {
+    static func install() {}
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.timedOut))
+    }
+
+    override func stopLoading() {}
+}
+
 /// 可控的 URLProtocol：`hang = true` 时**永不回调**（模拟连接挂起）。
 ///
 /// 用它而不是 `Task.sleep`：真正的风险是「等待网络返回」这个**顺序**问题，

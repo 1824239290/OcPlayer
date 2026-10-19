@@ -403,7 +403,7 @@ public actor BangumiAPIClient {
         let task = Task<CredentialSnapshot, Error> {
             do {
                 return try await refreshAccessToken(auth: auth, expectedGeneration: credentialGeneration)
-            } catch is CancellationError {
+            } catch where CancellationClassifier.isCancellation(error) {
                 if self.refreshGeneration != refreshGen {
                     throw BangumiError(ignore: "Token refresh cancelled")
                 }

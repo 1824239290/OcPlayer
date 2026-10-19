@@ -27,6 +27,59 @@
 
 ### 安全 / 正确性
 
+- **`CORR-03`：条目与 rail 现在真的在同一个事务里写**。
+  - `CachedMediaServer.record` 的注释一直声称「条目与 rail **必须同一次写**」，而实现是
+    `saveItems` + `saveRail` **两次 `await`、各自开事务**。进程在两次写之间被杀会留下
+    「**新 rail + 旧条目**」的不一致快照 —— 首页显示的条目详情与 rail 里的对不上。
+  - 新增 `MetadataStore.saveItemsAndRail`：**一个 `database.write`** 里既 upsert 条目又
+    写 rail。两次 payload 编码仍在**事务外**（沿用 `saveItems` 里那条注释的理由：
+    编码是纯 CPU，占着写事务会挡住别的写）。
+  - **判据不能只看「都写进去了」**（分开写也能都写进去）。用例用 SQLite 触发器让
+    **rail 那次写必然失败**，然后断言**条目也没落盘**：
+    同一事务 → 一起回滚 ✅；两个事务 → 条目已提交 ❌。
+    另配一条对照用例证明「分开写确实会留下条目」，说明判据有效。
+  - 变异验证：退回两次独立写 → 红。
+
+- **`CORR-04`：兜底 attach 启动帧驱动前复核 surface**。
+  - `finishOpening()` 的兜底路径 `setAttachedView(view)` 之后用
+    `Task { @MainActor in loop.start(on: view) }` 启动 —— 而跳 main actor 之前有一段
+    间隙，宿主可以在那里 `detach()`（`detach` 不受让位契约保护，随时可调）。
+  - 不复核的后果：渲染线程在**已 detach 的 surface** 上继续 tick，且**无人 `stop()`**
+    —— 帧驱动就这样漏下去直到下一次 attach。
+  - 改成与该文件已有的 `restartRenderLoop` 同款守卫：启动前
+    `guard storedAttachedView() === view`，不等则 warning + 返回。
+
+- **`CORR-07`：「取消不是失败」的判据收成**一个真源**，并修掉一处用户可见的日志噪声**。
+  - 正常取消有**两种类型**且不是同一个东西：`CancellationError`（`Task` 抛的）与
+    `URLError(.cancelled)`（`NSURLErrorDomain` 码 **-999**，`URLSession` 抛的）。
+    只写 `catch is CancellationError` 的站点**接不住第二种**。
+  - 最实在的一处是 `ImagePipeline.load`：请求被取消时 `-999` 掉进通用 `catch`，
+    先试离线兜底、再记一条**「图片加载失败」warning**，最后把 `URLError(-999)` 原样抛出。
+    快速滚动列表**天天发生**，warning 把真正的故障淹掉。
+  - 新增 `DiagnosticsKit.CancellationClassifier`（`isCancellation` / `normalized`）作为
+    **唯一真源** —— `AppDesignKit` / `DanmakuKit` / `BangumiKit` / `JellyfinKit`
+    **都依赖 `DiagnosticsKit`**，放这里才能各包共用而不漂移。
+    `JellyfinKit.JellyfinError.isCancellation` 改为委托到它（消除第二份实现）。
+  - 库内 **9 处** `catch is CancellationError` 换成 `catch where CancellationClassifier.isCancellation(error)`：
+    `ImagePipeline` 1 处、`DanmakuLoadOrchestrator` 7 处、`BangumiAPIClient` 1 处、
+    `JellyfinLoginSession` 1 处。
+  - **判据必须两头都钉**：既要有「`-999` 算取消」，也要有「超时/断网/连不上/DNS/
+    连接中断/同域不同码**都不算**取消」—— 放宽成「所有 URLError 都是取消」会吞掉真故障。
+  - 接线用例用 `URLProtocol` 直抛 `-999`，断言 `load` 抛的是 `CancellationError`
+    而不是 `URLError`；另配一条超时对照，确保没被放宽。变异（退回
+    `catch is CancellationError`）→ 红，报 `NSURLError Code=-999`。
+
+- **`CORR-06`：改掉一句不成立的注释**（清单自己判定「是注释准确性问题，不是性能问题」）。
+  - `ErikaEngine.latestOutputSnapshot` 原写「与 `latestOutputEncoding` 共用同一把锁与
+    同一个 C 调用…**不会调两次内核**」—— 后半句不成立：两者各自走一遍
+    `currentOutputStatus()`（一次主锁 + 一次 `get_output_status`）。
+  - 实测后确认不值得动实现：驱动这两个读点的是 `PlayerHUDChrome` 的
+    `TimelineView(.periodic(by: 1))`（**1 Hz**），且面板由 `showInfoPanel` 门控、
+    **默认关闭** —— 真实速率约 3 次/秒且只在面板打开时。所以只改注释。
+  - 顺带记录：清单原文按「100 ms 一次」估，是把 `PlayerTimeline.progress` 的 100 ms
+    发布张冠李戴了（那条由 `PlayerHUDBottomDock` 消费，与本面板无关）。
+
+
 - **修掉两处「凭据明文进导出包」的脱敏泄漏**（都由第十批的守卫式跳过引入，独立审查 + 自查发现）。
   - **① 内嵌 NUL**：守卫用 `withCString` + `strstr`，而 C 串在 `\0` 处截断 ——
     「NUL 之后才出现的关键词」看不见，整趟跳过，凭据原样留下。
