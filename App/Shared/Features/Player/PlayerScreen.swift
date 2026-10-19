@@ -84,16 +84,27 @@ struct PlayerScreen: View {
     /// 本触摸最近一次位移；长按定时器到点时判断「手指是否还停在原地」用。
     /// 当前触摸的累计位移。
     ///
-    /// ## ⚠️ 必须是 `@ObservationIgnored` 的引用容器，不能是 `@State`
+    /// ## 为什么是 `@State` **持有**一个不做观察的引用容器
     ///
     /// 它**只在长按判定的 Task 里读一次**（判 `movementSlop`），却**每个触摸事件
-    /// 都要写**。而 `@State` 的失效粒度是**整个视图**：一写就标脏 `PlayerScreen`，
-    /// 于是每次 `onChanged` 都让根 body 重算一遍 —— HUD 挂载时那一整棵 Glass 树
-    /// （11 面玻璃）跟着每个触摸事件重跑。
+    /// 都要写**。原来直接是 `@State private var touchTranslation: CGSize`，而
+    /// `@State` 的失效粒度是**整个视图**：一写就标脏 `PlayerScreen`，于是每次
+    /// `onChanged` 都让根 body 重算一遍 —— HUD 挂载时那一整棵 Glass 树（11 面玻璃）
+    /// 跟着每个触摸事件重跑。
     ///
-    /// 同文件 `panSession` 早就因为同一个原因换成了 `@Observable PlayerPanFeedback`
-    /// （见 `PlayerPanFeedback` 的注释），但 `touchTranslation` 当时漏了。
-    @ObservationIgnored private let touchTranslationStore = TouchTranslationStore()
+    /// ## ⚠️ 必须是 `@State`（而不是 `let`）
+    ///
+    /// `PlayerScreen` 是 **struct（值类型）**，每次 body 重算都会重新构造它。
+    /// 写成 `let touchTranslationStore = TouchTranslationStore()` 的话，**每次重算
+    /// 都新建一个空容器**，触摸位移直接丢光 —— 长按判定会永远读到 `.zero`。
+    ///
+    /// `@State` 的职责正是「跨 body 重算保住这个引用」。而
+    /// `TouchTranslationStore` **不是 `@Observable`**，所以写它的属性**不会**触发
+    /// 任何视图失效 —— 两者结合才是我们要的：**持久 + 不触发重算**。
+    ///
+    /// 同文件 `panFeedback`（`@State private var panFeedback = PlayerPanFeedback()`）
+    /// 是同一模式，区别只在于那个容器是 `@Observable`（供子视图观察）。
+    @State private var touchTranslationStore = TouchTranslationStore()
     /// 上一次轻点时刻（双击判定窗口）。
     @State private var lastTapDate: Date?
     /// 单击延迟任务：等双击窗口过期才切 HUD，第二击来了就取消。
