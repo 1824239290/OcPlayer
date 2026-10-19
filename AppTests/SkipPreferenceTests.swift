@@ -209,9 +209,23 @@ final class SkipPreferenceTests: XCTestCase {
     }
 
     /// 轮询等到条件成立；超时 `XCTFail`（带实测状态）后返回。
+    ///
+    /// ## ⚠️ 超时取 10 s，不是 3 s
+    ///
+    /// 3 s 时 `main` 在 2026-10-19 连红两次（`db23061`、`7b598c9`），都报
+    /// 「等待超时：引擎事件落到状态机（playing + 片长 + 位置）（实测
+    /// duration=0.0 seconds position=0.0 seconds）」—— 后面紧跟着看起来像
+    /// 「钳位算错」的断言失败（`[] ≠ [1197.0 seconds]`），其实只是**夹具没等到**。
+    ///
+    /// 被等待的是「引擎替身发出的事件落到状态机」，正常亚秒级；而 CI 上这条链路
+    /// 在同一次运行里能被拖到一个量级（`ServerEndpointWiringTests` 里同类问题实测
+    /// **35.25 s / 53.44 s**，本机 0.012 s）。
+    ///
+    /// 放到 10 s 的代价只有「真失败时多等 7 s」（本套件 2 处等待）；收益是不再让
+    /// runner 抖动伪装成「钳位算错」这类假 bug。
     private func waitUntil(
         _ description: String,
-        timeout: TimeInterval = 3,
+        timeout: TimeInterval = 10,
         file: StaticString = #filePath,
         line: UInt = #line,
         diagnostics: @MainActor () -> String = { "" },
