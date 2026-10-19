@@ -251,7 +251,12 @@ private struct RailResult {
     static func load(_ work: () async throws -> [MediaItem]) async -> RailResult {
         do {
             return RailResult(value: try await work(), failureDescription: nil)
-        } catch is CancellationError {
+        } catch where CancellationClassifier.isCancellation(error) {
+            // ⚠️ 必须用分类器，不能写 `catch is CancellationError`：
+            // `JellyfinServer.send` 取消时经 `wrapPreservingCancellation` **原样透传**
+            // 裸 `URLError(.cancelled)`（-999），它不是 `CancellationError`。
+            // 早先那样写会让「退出播放 → 继承取消」的三条 rail 请求全部掉进通用 catch，
+            // 把首页设成错误态、还刷三条「首页 rail 加载失败」warning。
             return RailResult(value: nil, failureDescription: nil)
         } catch let error as JellyfinError {
             return RailResult(value: nil, failureDescription: error.errorDescription,

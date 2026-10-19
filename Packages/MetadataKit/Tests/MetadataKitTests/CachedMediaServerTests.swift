@@ -19,6 +19,126 @@ struct CachedMediaServerTests {
         return (CachedMediaServer(wrapping: stub, store: store, tenant: tenant), stub, store, tenant, dir)
     }
 
+    // MARK: - 条目与 rail 的原子性（CORR-03）
+
+    /// **条目与 rail 必须在同一个事务里写。**
+    ///
+    /// `CachedMediaServer.record` 的注释一直声称「条目与 rail 必须同一次写」，
+    /// 而实现是 `saveItems` + `saveRail` 两次 `await`、**各自开事务** ——
+    /// 进程在两次写之间被杀会留下「新 rail + 旧条目」的不一致快照。
+    ///
+    /// 判据不能只看「都写进去了」（分开写也能都写进去）。这里用 SQLite 触发器
+    /// 让 **rail 那次写必然失败**，然后断言**条目也没落盘**：
+    /// - 同一事务 → rail 失败把条目一起回滚 → 条目查不到 ✅
+    /// - 两个事务 → 条目已经提交，rail 失败只影响自己 → 条目查得到 ❌
+    @Test func itemsAndRailAreWrittenInOneTransaction() async throws {
+        let (server, stub, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        // 让 rail 的写入必然失败。
+        try await store.database.write { db in
+            try db.execute(sql: """
+                CREATE TRIGGER rail_write_fails BEFORE INSERT ON rail
+                BEGIN SELECT RAISE(ABORT, 'rail write blocked for test'); END
+                """)
+        }
+
+        stub.resumeResult = .success([makeItem(id: "atomic-1", name: "原子")])
+        // `resumeItems()` 会写条目 + rail("resume")；rail 必失败，异常被 record 吞掉。
+        _ = try? await server.resumeItems()
+
+        // rail 必然没写进去（触发器拦住）。
+        #expect(try await store.rail("resume", tenant: tenant) == nil)
+
+        // 关键断言：条目也必须是**回滚**状态。若实现是两次独立事务，这里会查得到。
+        let cached = try await store.items(["atomic-1"], tenant: tenant)
+        #expect(
+            cached.isEmpty,
+            "rail 写失败后条目仍然落盘 —— 说明条目与 rail 不在同一个事务里（CORR-03 回归）")
+
+        // 反向对照：把触发器去掉后两者都能写进去（证明上面的失败确实来自触发器，
+        // 而不是别的原因让整条路径都不工作）。
+        try await store.database.write { db in
+            try db.execute(sql: "DROP TRIGGER rail_write_fails")
+        }
+        _ = try? await server.resumeItems()
+        #expect(try await store.rail("resume", tenant: tenant)?.items.map(\.id) == ["atomic-1"])
+        #expect(try await store.items(["atomic-1"], tenant: tenant).map { $0.item.id } == ["atomic-1"])
+    }
+
+    /// 对照：**分开写**确实会留下不一致快照（证明上一条用例的判据是有效的）。
+    ///
+    /// 直接调 `saveItems` 再调必然失败的 `saveRail`，断言条目**留下来了** ——
+    /// 这正是旧实现的行为，也是上一条用例要防住的东西。
+    @Test func separateWritesWouldLeaveItemsBehind() async throws {
+        let (_, _, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        try await store.database.write { db in
+            try db.execute(sql: """
+                CREATE TRIGGER rail_write_fails BEFORE INSERT ON rail
+                BEGIN SELECT RAISE(ABORT, 'rail write blocked for test'); END
+                """)
+        }
+
+        let item = makeItem(id: "separate-1", name: "分开写")
+        try await store.saveItems([item], tenant: tenant)
+        // 第二次写必然失败（触发器），且**不会**回滚第一次 —— 这正是旧实现的形状。
+        await #expect(throws: (any Error).self) {
+            try await store.saveRail([item], rail: "resume", tenant: tenant)
+        }
+
+        // 条目已提交 —— 与 rail 失败无关。这就是旧实现留下的「新条目 + 旧 rail」。
+        #expect(try await store.items(["separate-1"], tenant: tenant).map { $0.item.id } == ["separate-1"])
+        #expect(try await store.rail("resume", tenant: tenant) == nil)
+    }
+
+    /// **服务端说「这个 rail 没有内容」时，必须把磁盘上的旧 rail 清掉。**
+    ///
+    /// 「空 items + 非 nil rail」是一个**有意义的组合**，不是空操作：
+    /// `saveRail` 会写 `RailSnapshot(items: [])` 覆盖上一份。
+    /// 而 `MetadataHydrator.home()` 读 rail **没有任何新鲜度门槛** ——
+    /// 冷启动 / 离线时会把残留的过期条目当「继续观看」铺上首页。
+    ///
+    /// 回归背景：`saveItemsAndRail` 第一版写了 `guard !items.isEmpty else { return }`，
+    /// 把清空路径一刀切掉。独立审查端到端实测出「服务端返回空之后磁盘仍是旧 rail」。
+    @Test func emptyRailResponseClearsStaleRail() async throws {
+        let (server, stub, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        // 上次成功拉取：rail 里有内容。
+        stub.resumeResult = .success([makeItem(id: "stale", name: "过期")])
+        _ = try await server.resumeItems()
+        #expect(try await store.rail("resume", tenant: tenant)?.items.map(\.id) == ["stale"])
+
+        // 这次服务端说「没有续播」——空 items + 非 nil rail。
+        stub.resumeResult = .success([])
+        _ = try await server.resumeItems()
+
+        let after = try await store.rail("resume", tenant: tenant)
+        #expect(after != nil, "空响应也要写一份空快照（而不是什么都不写）")
+        #expect(after?.items.isEmpty == true,
+                "过期 rail 残留了 —— 首页会铺出早已看完的条目")
+    }
+
+    /// 直接钉 `saveItemsAndRail` 在「空 items + 非 nil rail」下的语义
+    /// （不走 `CachedMediaServer`，避免上面的用例只覆盖到一条链路）。
+    @Test func saveItemsAndRailWithEmptyItemsStillClearsRail() async throws {
+        let (_, _, store, tenant, dir) = try await makeFixture()
+        defer { dir.cleanUp() }
+
+        try await store.saveRail([makeItem(id: "old", name: "旧")], rail: "resume", tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.map(\.id) == ["old"])
+
+        try await store.saveItemsAndRail([], rail: "resume", tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.isEmpty == true,
+                "空 items 也必须覆盖 rail（否则旧快照永远清不掉）")
+
+        // `rail: nil` + 空 items 才是真正的空操作（不能把什么都写一遍）。
+        try await store.saveItemsAndRail([], rail: nil, tenant: tenant)
+        #expect(try await store.rail("resume", tenant: tenant)?.items.isEmpty == true)
+    }
+
     // MARK: - 写穿
 
     @Test func homeRailsArePersisted() async throws {

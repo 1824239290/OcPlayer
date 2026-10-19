@@ -388,7 +388,12 @@ public final class ImagePipeline: @unchecked Sendable {
                         throw CancellationError()
                     }
                     return image
-                } catch is CancellationError {
+                } catch where CancellationClassifier.isCancellation(error) {
+                    // ⚠️ 判据必须用分类器，不能写 `catch is CancellationError`：
+                    // `URLSession` 取消抛的是 `URLError(.cancelled)`（-999），
+                    // **不是** `CancellationError`。早先那样写会让快速滚动时的
+                    // 正常取消掉进下面的通用 catch、被记成「图片加载失败」warning，
+                    // 把真正的故障淹掉（`ImagePipelineTests` 有回归用例）。
                     throw CancellationError()
                 } catch {
                     // **离线兜底**：网络失败时读自有的字节缓存。

@@ -230,12 +230,13 @@ public struct CachedMediaServer: MediaServer {
     ///
     /// 条目与 rail **必须同一次写**：分开写的话，进程在两次写之间被杀会留下
     /// 「新 rail + 旧条目」的不一致快照，首页显示的条目详情与 rail 里的对不上。
+    ///
+    /// 这条注释早先与实现不符 ——`saveItems` 与 `saveRail` 是两次 `await`、
+    /// **各自开事务**。现在走 `MetadataStore.saveItemsAndRail`（一个 `database.write`），
+    /// 注释才真正成立。回归见 `CachedMediaServerTests.testItemsAndRailAreWrittenInOneTransaction`。
     private func record(items: [MediaItem], rail: String?) async {
         await record {
-            try await store.saveItems(items, tenant: tenant)
-            if let rail {
-                try await store.saveRail(items, rail: rail, tenant: tenant)
-            }
+            try await store.saveItemsAndRail(items, rail: rail, tenant: tenant)
         }
     }
 
