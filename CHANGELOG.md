@@ -6,18 +6,6 @@
 
 ### 修复
 
-- **`CORR-08` 补强：`ServerEndpointWiringTests` 的等待超时 3 s → 10 s**（`main` 上仍红过一次）。
-  - 2026-10-19 的 `main` 运行（`db23061`）红在
-    `testResolvedAddressIsPersistedAndPublished`，而**诊断信息已经正确打出**
-    「等待超时：后台探活/请求计数未在 3.0 seconds 内落地（实测 serverEndpointURL=…）」——
-    说明 `CORR-08` 的**可诊断性修复是生效的**，问题只剩**超时本身太紧**。
-  - 被等待的条件是「后台探活走完一次 mock 往返」，正常毫秒级；而那次 runner 上
-    同套件上一条用例跑了 **35.2 s**（本机 0.012 s），整机被拖慢一个量级。
-  - 代价只有「真失败时多等 7 s」；本套件总共 8 处等待，收益是不再让 runner 抖动变成假红。
-  - **不做的事（如实记录）**：没有把其余套件的 3 s 等待一并放宽 ——
-    查了 `main` 最近 10 次失败，只有本套件有可复现记录；盲目放宽会掩盖真实的「等不到」，
-    而且让真失败变慢。等哪套件真的在 CI 上出过假红再单独放宽。
-
 - **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。
 
 - **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。
@@ -38,6 +26,33 @@
   - **实拍判据（本次唯一靠推理定不了的一步）**：给 `TabView` 那层钉紧凑、把**内容**换回常规，标签栏会不会被内容顶回系统默认的顶部胶囊？先用最小探针 App 在 iPad Pro 13″ / iPadOS 26.3 模拟器确认（标签栏仍在底部 + 内容层读到 `.regular`），再用**真服务器 + 真账号**跑整机 A/B：同一个构建、同一台设备、同一条目，只把 `contentSizeClass` 临时换回 `shellSizeClass`（复现改动前形态）重建对照 —— **详情页** 290pt 通栏横幅 + 剧名居中 + 通栏播放条 ➜ 左竖版海报 + 横排元数据 + 小胶囊钮；**媒体库** 9 列小卡 ➜ 4 列大卡；**首页**与**设置**同为 iPad 档；底部标签栏在两种状态都在底部。截图与做法见 `Reports/ipad-content-layout-20261016/`（本地 gitignore 目录）。
 
 ### 性能
+
+- **`CORR-08` 补强：找到并修掉 `ServerEndpointWiringTests` 假红的**真因**（不是 runner 抖动）**。
+  - **现象**：`main` 在 2026-10-19（`db23061`）红在
+    `testResolvedAddressIsPersistedAndPublished`，报「等待超时 3.0 s」。
+    诊断信息本身是对的（`CORR-08` 的可诊断性修复生效），所以我第一版判断成了
+    「runner 太慢、放宽超时到 10 s」。
+  - **但那段慢的根因不是 runner**：核实 CI 日志发现，同套件的
+    `testCallbackFromReplacedSessionIsIgnored` 跑了 **macOS 35.25 s / iOS 53.44 s**，
+    而本机只要 **0.012 s** —— 慢 **4000 倍**。纯 runner 抖动不会这么规整。
+  - **真因**：`attachEndpoints` 末尾是 `Task { await directory.refresh() }` ——
+    一次 **fire-and-forget 的多地址探活**。而那条用例**没设
+    `MockURLProtocol.handler`**，于是这次后台探活落到真实网络路径、
+    每个候选地址各等一次默认超时；它还会**跨用例泄漏**，拖慢同套件后面的
+    `testResolvedAddressIsPersistedAndPublished`，让它的 3 s 等待假红。
+  - **修法**：① 给该用例设 mock handler；② 在清 handler 之前**显式等那次后台探活
+    落地**（判据用「探活计数 > 0」，不用固定 sleep —— 固定 sleep 是恒真断言，
+    探活整个坏掉时照样绿）。
+  - **实测**：`testCallbackFromReplacedSessionIsIgnored` **35.25 s / 53.44 s → 0.05 s**
+    （本机；多出的 0.04 s 就是新增的显式等待）。同套件其余用例不受影响
+    （`testPinnedAddressWins` 0.21 s、其余 0.008–0.05 s）。
+  - **超时放宽到 10 s 的理由也变了**：不再是「runner 抖就放宽」，而是
+    「这条链路上有一次后台探活，正常毫秒级、CI 上可能被拖到秒级」——
+    留余量，同时不掩盖「真的等不到」（真失败仍显式 `XCTFail` 并打出实测状态）。
+  - **不做的事（如实记录）**：没有把其余套件的 3 s 等待一并放宽
+    （`AppBackgroundPlaybackTests` / `PlayerHUDGatesTests` / `SkipPreferenceTests` /
+    `SubtitlePreferenceTests` 都是 3 s）—— 查了 `main` 最近 10 次失败，
+    只有本套件有可复现记录；盲目放宽会掩盖真实的「等不到」，还让真失败变慢。
 
 - **`BLD-01`：本地「先 build 再 package」不再重复编译第二遍（约省 450 s）**。
   - 根因：`build-macos.sh` 的 `BUILD_DIR` **写死** `.local-build/current`，而

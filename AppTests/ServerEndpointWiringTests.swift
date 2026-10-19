@@ -122,6 +122,27 @@ final class ServerEndpointWiringTests: XCTestCase {
         store.activate(profile, token: "tok-1")
         let app = AppModel(store: store)
 
+        // ⚠️ **必须给 mock 一个 handler**，而且必须等后台探活结束。
+        //
+        // `attachEndpoints` 末尾是 `Task { await directory.refresh() }` —— 一次
+        // **fire-and-forget** 的多地址探活。这条用例原本没设 handler：
+        //   - 本机：`MockURLProtocol` 无 handler 时立刻回 `unsupportedURL`，毫秒级；
+        //   - CI：那次探活还在飞，而 `defer { MockURLProtocol.handler = nil }`
+        //     已经把 handler 清掉（或根本没设，落到真实网络路径），于是每个候选地址
+        //     各等一次默认超时 —— 实测 **macOS 35.25 s / iOS 53.44 s**（本机 0.012 s）。
+        //
+        // 两个后果：① 这条用例本身慢得离谱；② 那个后台任务会**跨用例泄漏**，
+        // 拖慢同套件后面的 `testResolvedAddressIsPersistedAndPublished`，让它的
+        // 3 s 等待假红（`main` 在 `db23061` 就是这么红的）。
+        //
+        // 所以在 `defer` 清 handler 之前，先把这个后台探活等到落地。
+        let probes = Counter()
+        MockURLProtocol.handler = { request in
+            probes.increment()
+            return TestSupport.response(#"{"Id":"srv-1","ServerName":"home-nas"}"#,
+                                        status: 200, for: request.url!)
+        }
+
         // A 上线，然后又换成 B：A 的决议器若迟到回调，绝不能把界面/档案指回 A 的地址。
         // 两个会话都从 store 里的档案恢复，与真实路径同源。
         let configuration = TestSupport.mockedSessionConfiguration()
@@ -145,6 +166,11 @@ final class ServerEndpointWiringTests: XCTestCase {
         XCTAssertEqual(app.serverEndpointURL, otherProfile.baseURL, "旧会话的地址不该覆盖新会话")
         XCTAssertEqual(app.store.profiles.first(where: { $0.id == profile.id })?.baseURL, lan,
                        "也不该改档案")
+
+        // 等那次 fire-and-forget 探活落地，避免它跨用例泄漏（见方法开头那段注释）。
+        // 判据用「探活确实发生过」而不是固定 sleep —— 固定 sleep 会变成恒真断言。
+        await waitUntil(diagnostics: { "probes.count=\(probes.count)" }) { probes.count > 0 }
+        MockURLProtocol.handler = nil
     }
 
     /// 给 Emby 档案添加地址必须补 `/emby` 前缀（请求地址拼在 base 路径之后，缺前缀
