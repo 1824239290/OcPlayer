@@ -27,6 +27,31 @@
 
 ### 性能
 
+- **`P2-21`：MoviePilot 裸数组响应不再被解析两遍（**66.7 → 0.65 µs，103×**）**。
+  - 改前 `MPEnvelope.unwrap` 对**每一个**响应都先 `JSONSerialization.jsonObject`
+    全量解析（Foundation 的 `Any` 树：装箱 + `NSNumber`/`NSString`），带信封时再把
+    `data` 序列化回 `Data` 交给 `JSONDecoder` —— **一次响应解析两遍**。
+  - 改成先看**首个非空白字节**：`[` 不可能是信封（信封是对象）→ 直接原样返回，零解析。
+  - **实测**（7.6 KB 的 120 条任务列表，`downloadingTasks` 的实际形态）：
+    裸数组 **66.71 → 0.65 µs（103×）**；带信封路径 227 → 226 µs（不变，本就该解析）。
+  - **⚠️ 顺带修掉一个既有崩溃**：`JSONSerialization.data(withJSONObject:)` 只接受**容器**，
+    顶层 `String` / `NSNumber` 会抛 **NSInvalidArgumentException** —— 那是 ObjC 异常、
+    `try?` **接不住**，进程直接崩。`{"success":true,"data":"..."}` 这种形态在真实响应里
+    存在（新 API 返回裸字符串/数字时）。差分用例当场炸出来，加 `isValidJSONObject` 守卫。
+  - **等价性靠差分测试**：15 条语料的「浅判定版 vs 改前参考实现」逐字节比对
+    （含 `[]`、前缀空白、`data` 为 `null`/标量/嵌套、非 JSON、空数据）。
+    变异（去掉浅判定）→ 红；变异（去掉 `isValidJSONObject` 守卫）→ 红。
+
+- **`P2-26`：请求体编码器提成静态量**。
+  - 实测每次现建 `JSONEncoder` 多花 **2.08 µs**（5.68 vs 3.60 µs，小的 Codable 体）；
+    而 Bangumi 那条路径还在**重试闭包内部** —— 一次失败就重复构造。
+  - `BangumiAPIClient` / `MoviePilotAPIClient`（都是 `public actor`，所以标 `nonisolated`）
+    与 `EmbySession` 各提一个 `private static let encoder`。
+  - **只改 encoder 不改 decoder**：实测 `JSONDecoder` 的新建开销只有 **0.1 µs**
+    （3.32 vs 3.22），不值得动 —— 不做无收益的改动。
+
+### 性能
+
 - **`P1-05`：探活会话复用**（`ServerProbe`）。
   - 改前每次 `probe` 都「copy 配置 → 新建 `URLSession` → `defer invalidateAndCancel`」。
     两个代价：① 每次现建会话；② **`invalidateAndCancel` 让连接池当场作废** ——
