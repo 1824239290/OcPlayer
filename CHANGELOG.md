@@ -1,3 +1,30 @@
+# Changelog
+
+项目变更记录。未发布内容集中在 `[Unreleased]`，提交前应同步更新用户可见行为和验证入口。
+
+## [Unreleased]
+
+### 修复
+
+- **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。
+
+- **测试不再读写开发者本机的真实数据与偏好**（处理上一轮 iPad 验收时发现的隔离缺口）。
+  - **现象**：`AppTests` 跑在 **App 宿主进程**里（`TEST_HOST = OcPlayer.app`），宿主照常装配真实存储与真实偏好 —— 跑完一次 macOS 全量用例，`~/Library/Application Support/OcPlayer/` 下 `credentials.json`、`Media.sqlite-wal`、`Bangumi.sqlite-wal` 与真实偏好 plist 的 mtime 全落在测试窗口内。逐键比对确认凭据**内容没坏**（只是 JSON 键序被重排），但一个会写开发机凭据文件的测试套件迟早会把它写坏。
+  - **开关**：环境变量 `OCPLAYER_ISOLATED_STORAGE=1`，收在 `OcPlayerStorage.isIsolated`。打开后存储根 → `临时目录/OcPlayerAutomation`（凭据 / 各 sqlite / 图片缓存 / 弹幕 / 字幕），App 偏好默认域 → 隔离根下的独立 plist（`UserDefaults(suiteName:)` 认「像路径的名字」，于是也不在 `~/Library/Preferences` 留垃圾）。生产不设它 → 默认域仍是 `.standard`，行为零变化。
+  - **接线**：新增 `OcPlayerStorage.defaultPreferences` 作为 App 偏好默认域的单一入口 —— `ServerStore(defaults:)`（App 侧默认参数）、`AppModel(preferences:)`、`BangumiStore.shared`、`MoviePilotStore.shared`、`DandanplaySettingsStore`、`AppUpdateChecker.shared`、`HomeRailPresence`、`DiagnosticsSettings` 全走它；两个 scheme 的 TestAction 设上变量。包内 `init(defaults:)` 的公开默认值**没动**（只改包内单例的构造点），对外 API 不变。
+  - **踩到的坑（已写进 scheme 注释）**：TestAction 的 `shouldUseLaunchSchemeArgsEnv` 原本是 `YES`，含义是「测试沿用 **Run 动作**的参数与环境变量」—— 于是加在 TestAction 里的隔离变量被**静默忽略**，第一次复跑真实文件照写。两个 scheme 的 Run 动作本来就没有参数/环境变量，改成 `NO` 不丢东西。**以后往 TestAction 加变量，先确认这一位。**
+  - **边界（写在 `defaultPreferences` 的类型注释里）**：视图层 50 处 `@AppStorage` 仍读 `.standard`（那些键只在用户真去点开关时才写，测试不点）→ 隔离运行下真实偏好 plist 的 **mtime 仍会被刷一次，但内容逐值一致**（`defaults export` hash 不变）。日志目录此前已由 `RuntimeEnvironment.isRunningTests` 隔离（写临时目录），不在本次范围。
+  - **验证**：跑前跑后对真实数据目录（mtime + 凭据逐键 hash）与真实偏好域（导出 hash）做快照 —— macOS 全量用例期间**数据目录 diff 为空**，测试产物全部落在 `临时目录/OcPlayerAutomation`（`Danmaku/`、`ImageCache/`、`Subtitles/`、`preferences.plist`）。跑分：iOS 596 条 0 失败、macOS 578 通过 / 0 失败 / 18 跳过；被改动的三个包（DiagnosticsKit / BangumiKit / MoviePilotKit）包测试各自通过。
+
+- **`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷**（上一轮 iPad 实拍时暴露）：用例把烤出来的标签栏头像断言成 `userAvatarPixelSize`（＝按 @3x 估的 84px），而 `tabIcon(from:)` 按**屏幕 scale** 栅格化 —— iPad 是 @2x、实测 56px，于是把 destination 换成 iPad 模拟器当场红（CI 一直跑 iPhone，所以一直没暴露）。位图的**自然尺寸**两档都对（都是 28pt），功能无碍。改成「像素数 = 点尺寸 × 屏幕 scale」＋「烤图密度与 `UIGraphicsImageRendererFormat.default().scale` 一致」；顺带把 `userAvatarPixelSize` 与 `tabIcon` 里两处「正好 28pt @3x = 84px」的表述改成两档都写明 —— 那个常量是**取图下采样预算**，不是烤图尺寸。
+
+- **iPad 只让标签栏走 iPhone 形态，内容全部回 iPad 版式**（用户口径：「**tabview 保留 iPhone 样式的，但其他所有都保持 iPad 的**，这是 iPad 端的目标」）。上一条「iPad 整个走 iPhone 版式」做过头了：外壳为了让标签栏落到底部，把 `TabView` 整棵子树的 `horizontalSizeClass` 钉成了紧凑档，而**环境是向下继承的** —— 页面读到的也成了紧凑档，于是 iPad 上首页 rail、媒体库（13″ 横屏 **12 列**）、详情页（290pt 通栏横幅 + 通栏播放钮 + 20pt 留白，即「iPad 端怎么详情页也变成了 iPhone 的样式了」）、设置卡片全被降级成放大版 iPhone。
+  - **口径按「层」切开**：同一个纯函数 `ShellSizeClass.resolved(idiom:actual:layer:)` 有两个 `Layer` —— `TabView` **自己那一层**（`.tabBar`）iPad 恒紧凑（标签栏因此落到底部，这是钉尺寸类的唯一目的），**内容那一层**（`.pageContent`）原样返回设备真实宽度。
+  - **实现**：`TabView` 那层保留 `.environment(\.horizontalSizeClass, shellSizeClass)`；每个 Tab 的内容挂 `.pageContentSizeClass(contentSizeClass)` 换回真实值（Tab 根页与 `appRoutes()` 推出来的页都在这棵子树里，新增页面不用各自补）。横向留白 `contentLeading` 同步改回跟**内容**层走（iPad 52pt / iPhone 22pt）—— 内容不降级，留白也不该降级，否则会出现「iPad 版式 + iPhone 留白」的错位。
+  - **验证**：`ShellSizeClassTests` 改写为 4 条 —— 标签栏层 iPad 恒紧凑（常规 / 分屏紧凑 / nil 三种输入）；内容层 iPad 原样（`.regular` 保持、分屏 `.compact` 也不是被强制的）；iPhone 两层都不动；外加一条**渲染探针**用例，把「外壳紧凑档已继承下来 → 内容层换回真实值」这条链原样搭出来（含反证：不挂内容层那一句读到的就是紧凑档），从视图体内读回实际生效的值（`ImageRenderer`）。判据取渲染后实际生效的环境值而不是常量：iPad 版式的全部分叉（rail 尺寸、网格列数、详情页头部与留白）都由它决定。跑分：`OcPlayer-iOS`（iPhone 17 模拟器）**596 条 0 失败**、`OcPlayer-macOS` **578 通过 / 0 失败 / 18 跳过**。
+  - **一条与本改动相关、已在紧随其后一批里修掉的用例缺陷**：destination 换成 iPad 模拟器时 `AppModelAvatarTests.testTabIconBakesCircleSizeAndRenderingMode` 会红 —— 它断言烤出来的图标是 `AppModel.userAvatarPixelSize`（写死 `28 × 3 = 84`，@3x 口径），而 iPad 屏是 @2x，实测 56。功能无碍（图片自然尺寸仍是 28pt），是该用例只能在 @3x 机型上成立；CI 跑 iPhone 所以一直没暴露。修法与跑分见上面「`AppModelAvatarTests` 只能在 @3x 机型上过的既有缺陷」那条。
+  - **实拍判据（本次唯一靠推理定不了的一步）**：给 `TabView` 那层钉紧凑、把**内容**换回常规，标签栏会不会被内容顶回系统默认的顶部胶囊？先用最小探针 App 在 iPad Pro 13″ / iPadOS 26.3 模拟器确认（标签栏仍在底部 + 内容层读到 `.regular`），再用**真服务器 + 真账号**跑整机 A/B：同一个构建、同一台设备、同一条目，只把 `contentSizeClass` 临时换回 `shellSizeClass`（复现改动前形态）重建对照 —— **详情页** 290pt 通栏横幅 + 剧名居中 + 通栏播放条 ➜ 左竖版海报 + 横排元数据 + 小胶囊钮；**媒体库** 9 列小卡 ➜ 4 列大卡；**首页**与**设置**同为 iPad 档；底部标签栏在两种状态都在底部。截图与做法见 `Reports/ipad-content-layout-20261016/`（本地 gitignore 目录）。
+
 ### 性能
 
 - **`P2-24`：Bangumi 批量落库从 N+1 改成一次批量读（31.2 → 16.8 ms，1.9×）**。
@@ -8,6 +35,10 @@
     只是 `saveSubjects` 没用 —— 复用后 SELECT 从 N 次降到 1 次，
     **31.20 → 16.84 ms（1.9×）**，每条 168 µs。
   - 顺带覆盖同批次内既有「更新」也有「新建」、以及重复 id 的情形。
+  - **坑**：我一开始拿 `eps` 当「更新 vs 新建」的判据，结果正常版本也红 ——
+    `update()` 对 `eps` 是**无条件覆盖**（`if eps != item.eps { eps = item.eps }`），
+    DTO 没带 eps 时本地值本来就会被冲成 0，那是**既有语义**、与批量读无关。
+    改用 `interest`（`update()` 对它才是「带了才覆盖」）作判据，变异才真正被抓到。
 
 - **`P2-23`「合并 `MetadataHydrator.home()` 的 4 次读」——实测后不做（测量推翻清单假设）**。
   - 清单说这是「4 次 actor 跳转 + 4 个读事务」，建议合成一次 `database.read`。
@@ -24,7 +55,6 @@
     （实测合并前后 340.9 vs 338.8 µs，差异在噪声内）。
   - 结论：**这条不是性能问题**。真要压这里的成本必须动**读本身**（例如三条 rail 一次
     SQL 取回），而不是省跳转。已在代码里留注释记下这次测量，避免后人重做一遍。
-
 
 - **`P2-21`：MoviePilot 裸数组响应不再被解析两遍（**66.6 → 0.27 µs，244×**）**。
   - 改前 `MPEnvelope.unwrap` 对**每一个**响应都先 `JSONSerialization.jsonObject`
