@@ -54,7 +54,10 @@ public struct ServerProbe: Sendable {
     var inject: (@Sendable (URL) async -> ServerProbeResult?)?
 
     public init(timeout: TimeInterval = 2, sessionConfiguration: URLSessionConfiguration = .default) {
-        self.timeout = timeout
+        // ⚠️ `timeout` 是缓存键的一部分，**必须是有限正数**：NaN 做键永不命中
+        // （每次新建会话、键表无界增长），负数 / infinity 会被 URLSession 接受但行为诡异。
+        // 生产固定 2，只有测试或未来 API 可能传坏值 —— 在这里夹住最省心。
+        self.timeout = (timeout.isFinite && timeout > 0) ? timeout : 2
         self.sessionConfiguration = sessionConfiguration
     }
 
@@ -104,13 +107,21 @@ public struct ServerProbe: Sendable {
             return nil
         }
 
-        let configuration = sessionConfiguration.copy() as! URLSessionConfiguration
-        configuration.timeoutIntervalForRequest = timeout
-        configuration.timeoutIntervalForResource = timeout
-        // 探活要的是「现在通不通」：等网络恢复是请求层的事，不是这里的事。
-        configuration.waitsForConnectivity = false
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
+        // 会话**复用**，不每次新建。
+        //
+        // 早先是「copy 一份配置 → 新建 URLSession → defer invalidateAndCancel」。
+        // 两个代价：
+        // ① 每次探活都要现建会话（内部起配置/队列/连接池）；
+        // ② `invalidateAndCancel` 让**连接池当场作废** —— 于是每次探活都重新付
+        //    DNS + TCP + TLS 握手。而探活延迟正是「挑最快地址」判据（`latency`）的
+        //    输入，握手成本混进去就等于**判据本身被污染**（各地址的握手成本不同，
+        //    尤其局域网 vs Tailscale vs 反代）。
+        //
+        // 现在按 `timeout` 缓存会话：同一 timeout 的多次探活共用连接池，
+        // 第二次起是 TCP/TLS 复用，延迟更接近「真实往返」。
+        // 窗口极窄：`ServerProbe.timeout` 是构造时定的，全 App 只有一个取值。
+        let session = Self.sessionCache.session(
+            configuration: sessionConfiguration, timeout: timeout)
 
         var request = URLRequest(url: target)
         request.httpMethod = "GET"
@@ -160,6 +171,98 @@ public struct ServerProbe: Sendable {
     }
 
     // MARK: - 给 UI 用的组合口
+
+    /// 探活会话缓存。
+    ///
+    /// 为什么需要缓存：见 `request(...)` 里那段注释 —— 每次新建并
+    /// `invalidateAndCancel` 会让连接池当场作废，探活延迟里混进 DNS + TCP + TLS，
+    /// 而那个延迟正是「挑最快地址」的判据输入。
+    ///
+    /// ## ⚠️ 键必须含**配置指纹**，不能只有 timeout
+    ///
+    /// 第一版只按 `timeout` 做键，于是「同 timeout、不同 `sessionConfiguration`」
+    /// 会拿到第一次建的那个会话 —— 而 `sessionConfiguration` 正是测试注入口
+    /// （塞 `URLProtocol`）。审查实测：两个配置分别挂 ProtoA / ProtoB、同 timeout=2
+    /// 各探一次 → `r1=A r2=A`，第二个配置**完全没生效**。
+    ///
+    /// 生产上这还意味着「改了配置（证书 / 代理）从第二次起无声失效」。
+    ///
+    /// 指纹取**测试与生产都会变的那几项**；`protocolClasses` 用 `ObjectIdentifier`
+    /// 集合（`URLProtocol` 子类身份）。这与会话的真实行为相关，不是随意字符串。
+    ///
+    /// `@unchecked Sendable`：内部全用锁保护，`URLSession` 本身线程安全。
+    private final class SessionCache: @unchecked Sendable {
+        private struct Key: Hashable {
+            let timeout: TimeInterval
+            let protocolClasses: Set<ObjectIdentifier>
+            let waitsForConnectivity: Bool
+            let allowsCellularAccess: Bool
+
+            init(configuration: URLSessionConfiguration, timeout: TimeInterval) {
+                self.timeout = timeout
+                self.protocolClasses = Set((configuration.protocolClasses ?? []).map(ObjectIdentifier.init))
+                self.waitsForConnectivity = configuration.waitsForConnectivity
+                self.allowsCellularAccess = configuration.allowsCellularAccess
+            }
+        }
+
+        private let lock = NSLock()
+        private var sessions: [Key: URLSession] = [:]
+        private var createdSessions = 0
+
+        func resetCreationCount() {
+            lock.lock()
+            createdSessions = 0
+            lock.unlock()
+        }
+
+        var creationCount: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return createdSessions
+        }
+
+        func session(configuration: URLSessionConfiguration, timeout: TimeInterval) -> URLSession {
+            let key = Key(configuration: configuration, timeout: timeout)
+            lock.lock()
+            defer { lock.unlock() }
+            if let existing = sessions[key] { return existing }
+            let copy = configuration.copy() as! URLSessionConfiguration
+            copy.timeoutIntervalForRequest = timeout
+            copy.timeoutIntervalForResource = timeout
+            // 探活要的是「现在通不通」：等网络恢复是请求层的事，不是这里的事。
+            copy.waitsForConnectivity = false
+            let session = URLSession(configuration: copy)
+            sessions[key] = session
+            createdSessions += 1
+            return session
+        }
+
+        /// 测试用：清掉缓存（让用例从一个干净会话开始）。
+        func reset() {
+            lock.lock()
+            let all = sessions.values
+            sessions.removeAll()
+            lock.unlock()
+            for session in all { session.invalidateAndCancel() }
+        }
+    }
+
+    private static let sessionCache = SessionCache()
+
+    /// 测试用：清空会话缓存。
+    static func resetSessionCacheForTesting() {
+        sessionCache.reset()
+    }
+
+    /// 测试用：**新建过几个会话**（用于证明复用）。
+    static var sessionCreationCountForTesting: Int {
+        sessionCache.creationCount
+    }
+
+    static func resetSessionCreationCounterForTesting() {
+        sessionCache.resetCreationCount()
+    }
 
     /// 响应体像不像一台媒体服务器。`/System/Info/Public` 在两家产品上都会给出
     /// 这四个字段，所以「四个全空」只能说明这不是我们认识的对端（空 JSON 对象、
