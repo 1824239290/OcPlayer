@@ -49,10 +49,22 @@
   - **超时放宽到 10 s 的理由也变了**：不再是「runner 抖就放宽」，而是
     「这条链路上有一次后台探活，正常毫秒级、CI 上可能被拖到秒级」——
     留余量，同时不掩盖「真的等不到」（真失败仍显式 `XCTFail` 并打出实测状态）。
-  - **不做的事（如实记录）**：没有把其余套件的 3 s 等待一并放宽
-    （`AppBackgroundPlaybackTests` / `PlayerHUDGatesTests` / `SkipPreferenceTests` /
-    `SubtitlePreferenceTests` 都是 3 s）—— 查了 `main` 最近 10 次失败，
-    只有本套件有可复现记录；盲目放宽会掩盖真实的「等不到」，还让真失败变慢。
+
+- **`SkipPreferenceTests` 的 3 s 等待同样放宽到 10 s（有 CI 真凭据，不是预防性改动）**。
+  - `main` 在 2026-10-19 **连红两次**（`db23061`、`7b598c9`）都指向本套件：
+    ```
+    等待超时：引擎事件落到状态机（playing + 片长 + 位置）
+    （实测 state=playing duration=0.0 seconds position=0.0 seconds）
+    ```
+    后面紧跟着看起来像「钳位算错」的断言失败（`[] ≠ [1197.0 seconds]`）——
+    其实只是**夹具没等到**，与钳位逻辑无关。
+  - 被等待的是「引擎替身发出的事件落到状态机」，正常亚秒级；而同一批 CI 运行时，
+    同类链路（`ServerEndpointWiringTests`）实测被拖到 **35.25 s / 53.44 s**（本机 0.012 s）。
+  - 放宽到 10 s：代价只有「真失败时多等 7 s」（本套件 2 处等待），
+    收益是不再让 runner 抖动伪装成「钳位算错」这种假 bug。
+  - **仍不动的**：`AppBackgroundPlaybackTests` / `PlayerHUDGatesTests` /
+    `SubtitlePreferenceTests` 保持 3 s —— `main` 最近 12 次失败里没有它们的记录。
+    一次只改有证据的那一处。
 
 - **`BLD-01`：本地「先 build 再 package」不再重复编译第二遍（约省 450 s）**。
   - 根因：`build-macos.sh` 的 `BUILD_DIR` **写死** `.local-build/current`，而
