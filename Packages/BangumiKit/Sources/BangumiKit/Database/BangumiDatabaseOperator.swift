@@ -386,10 +386,47 @@ public actor BangumiDatabaseOperator {
             //
             // 本文件已经有 `fetchSubjectsById`（`IN (...)` 批量读、按 id 建字典），
             // 只是这里没用 —— 复用它，SELECT 从 N 次降到 1 次。
-            let existing = try fetchSubjectsById(in: db, items.map(\.id))
+            // ⚠️ **同页重复 id 必须先去重（保留最后一条）**。
+            //
+            // 改前逐条写：第二条能 `SELECT` 到第一条刚写入的值，于是 `update()` 里
+            // 「非 nil 才覆盖」的字段（`images` / `interest`）会**保留**第一条贡献的。
+            // 改用「页前一次性预读」后，第二条看到的仍是页前快照 —— 走「新建」分支
+            // `BangumiSubject(item)` 整条重造，把第一条的 `images` / `interest` 冲掉。
+            //
+            // 实测（库中无 5100，本页 `[DTO(images:"NEWFIRST", interest:3),
+            // DTO(images:nil, interest:nil)]`）：
+            //   改前 → images="NEWFIRST"、interest=3（后一条缺字段，保留前一条的）
+            //   改后 → images=nil、interest=nil（被重造冲掉）
+            //
+            // 生产路径传 `authoritativeInterest: true` 会掩盖 interest 的差异，
+            // 但 `images` 的差异仍在。去重后两条语义一致（都以前一条的写入结果为准，
+            // 即「以本页最后一条的内容为最终状态」）。
+            // 去重**不能简单丢弃**前面的条目：改前逐条写时，第一条会**先落库**，
+            // 第二条 `update()` 里「非 nil 才覆盖」的字段会保留第一条贡献的
+            // （例如 `images`）。只留最后一条会让那些字段从未被写入。
+            //
+            // 所以按「后覆盖前」合并：后面的条目覆盖前面的，但**只覆盖它自己非 nil 的
+            // 可选字段**（与 `update()` 的语义一致）。这样合并成一条后再走一次
+            // update/insert，结果与逐条写等价。
+            var order: [Int] = []
+            var merged: [Int: BangumiSubjectDTO] = [:]
             for item in items {
+                if var existingDTO = merged[item.id] {
+                    existingDTO.mergeFromLaterDuplicate(item)
+                    merged[item.id] = existingDTO
+                } else {
+                    merged[item.id] = item
+                    order.append(item.id)
+                }
+            }
+            let deduped = order.compactMap { merged[$0] }
+
+            let existing = try fetchSubjectsById(in: db, deduped.map(\.id))
+            for item in deduped {
                 let subject: BangumiSubject
-                if var found = existing[item.id] {
+                if let found = existing[item.id] {
+                    // `BangumiSubject` 是 class，`update` 直接改引用指向的对象，
+                    // 不需要（也不该）声明成 `var`。
                     found.update(item, authoritativeInterest: authoritativeInterest)
                     subject = found
                 } else {
@@ -1032,5 +1069,39 @@ extension BangumiEpisode {
             if status != 0 { status = 0 }
             if collectedAt != 0 { collectedAt = 0 }
         }
+    }
+}
+
+
+extension BangumiSubjectDTO {
+    /// 同页面重复 id 的合并：把 `later` 的非 nil 可选字段覆盖到当前值上。
+    ///
+    /// 只在 `saveSubjects` 去重时用。语义对齐 `BangumiSubject.update(_:authoritativeInterest:)`：
+    /// **`images` / `interest` 是「非 nil 才覆盖」**，其余字段后写覆盖前写。
+    ///
+    /// 这样「同页重复 id」合并成一条后再落库，与改前「逐条写、每条都能读到前一条结果」
+    /// 等价 —— 尤其是前一条贡献的可选字段不会被后一条的 nil 冲掉。
+    mutating func mergeFromLaterDuplicate(_ later: BangumiSubjectDTO) {
+        // 可选字段：later 带了才覆盖。
+        if let images = later.images { self.images = images }
+        if let interest = later.interest { self.interest = interest }
+        // 其余（值类型 / 数组 / 基本类型）按后写覆盖前写 —— 与 `update()` 的无条件覆盖一致。
+        airtime = later.airtime
+        collection = later.collection
+        eps = later.eps
+        infobox = later.infobox
+        info = later.info
+        locked = later.locked
+        metaTags = later.metaTags
+        tags = later.tags
+        name = later.name
+        nameCN = later.nameCN
+        nsfw = later.nsfw
+        platform = later.platform
+        rating = later.rating
+        series = later.series
+        summary = later.summary
+        type = later.type
+        volumes = later.volumes
     }
 }
