@@ -181,6 +181,66 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
         }
     }
 
+    /// **内嵌 NUL 不能挡住脱敏。**
+    ///
+    /// 这是本轮自查发现并修掉的**真实凭据泄漏**：第一版守卫用
+    /// `withCString` + `strstr`，而 C 串在内嵌 `\0` 处截断 ——
+    /// 「NUL 之后才出现的关键词」看不见，于是整趟跳过、凭据原样留在导出包里。
+    ///
+    /// ```
+    /// 输入      "prefix\0token=SUPERSECRET123"
+    /// 修复前    "prefix\0token=SUPERSECRET123"   ← 泄漏
+    /// 修复后    "prefix\0token=<redacted>"
+    /// ```
+    ///
+    /// 日志里出现 `\0` 不是天方夜谭：错误文本会插进服务端响应体，
+    /// 而某些畸形响应就带 NUL。
+    func testEmbeddedNULDoesNotBypassRedaction() {
+        let secret = "SUPERSECRETNUL123"
+        let inputs = [
+            "prefix\u{0}token=\(secret)",
+            "\u{0}token=\(secret)",
+            "a\u{0}b\u{0}c password=\(secret)",
+            "before\u{0}Authorization: Bearer \(secret)",
+            "p\u{0}https://h.example.com/a?token=\(secret)",
+        ]
+        for input in inputs {
+            let guarded = DiagnosticRedactor.redact(input)
+            let unguarded = DiagnosticRedactor.redactWithoutGuards(input)
+            // 判据一：守卫不得改变输出（漏判会让这里不等）。
+            XCTAssertEqual(
+                guarded, unguarded,
+                "含 NUL 的输入守卫与全跑结果不一致（守卫漏判）：\(input.debugDescription)")
+            // 判据二：凡是带触发关键词的输入，凭据都必须消失。
+            XCTAssertFalse(
+                guarded.contains(secret),
+                "含 NUL 时凭据漏进脱敏结果：\(guarded.debugDescription)")
+        }
+    }
+
+    /// 守卫在我实际会遇到的**所有** C 串陷阱下都要与全跑一致。
+    ///
+    /// 除 NUL 外还有两个已知的字节级坑：
+    /// - 空字符串 / 只有 NUL：不能因「针比文本长」之类的边界判断错而漏；
+    /// - 极长文本（> 1024）：确认不是只在短样本上成立。
+    func testGuardMatchesUnguardedOnByteLevelEdgeCases() {
+        let cases: [String] = [
+            "",
+            "\u{0}",
+            "\u{0}\u{0}\u{0}",
+            String(repeating: "a", count: 5_000) + " token=SECRET",
+            String(repeating: "媒体", count: 2_000) + " password=SECRET",
+            "token", // 只有针本身
+            "/users/",
+        ]
+        for input in cases {
+            XCTAssertEqual(
+                DiagnosticRedactor.redact(input),
+                DiagnosticRedactor.redactWithoutGuards(input),
+                "边界输入下守卫改变了输出：\(input.prefix(40).debugDescription)")
+        }
+    }
+
     /// JWT 必须被抹掉（`eyJ…` 是 base64url 里 `{"` 的编码）。
     func testJWTIsRedacted() {
         let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."
