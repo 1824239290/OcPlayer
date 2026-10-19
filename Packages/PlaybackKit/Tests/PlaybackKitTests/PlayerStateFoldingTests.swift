@@ -331,19 +331,28 @@ final class PlayerStateFoldingTests: XCTestCase {
     }
 
     /// 收回之前又进缓冲：不收回、也不重新计上沿——不来回闪。
+    ///
+    /// ⚠️ **时序必须留足抖动余量**。原版用 `minVisible = 80ms` + `sleep(20ms)` 重进，
+    /// 本机 20/20 通过，但 CI runner 一次调度抖动就可能把「20ms 后重进」推过 80ms
+    /// 的收回时刻 —— 那时重进已不在窗口内，用例前提失效、末断言必红
+    /// （2026-10-19 PR #38 的 CI 就是这么红的，同一轮还伴随 SQLite `disk I/O error`）。
+    ///
+    /// 改法两条：① 窗口放大到 **400ms**；② 重进**不 sleep**，紧跟着 `false` 同步发出
+    /// —— 两次 `emit` 之间没有 await，调度再慢也不会插进收回定时器。
+    /// 判据不变：再 `sleep(600ms)` 越过 400ms 的收回时刻，仍必须保持显示。
     func testReenterDuringMinVisibleDoesNotBlink() async throws {
         let engine = FakePlaybackEngine()
-        let state = makeSustainedState()
+        let state = makeSustainedState(minVisible: .milliseconds(400))
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
         engine.emit(.bufferingChanged(true))
         try await waitUntil("持续缓冲置位") { state.isBufferingSustained }
 
+        // 两次 emit 之间**不留 await**：重进必然落在最短可见窗口内。
         engine.emit(.bufferingChanged(false))
-        try await Task.sleep(for: .milliseconds(20))
         engine.emit(.bufferingChanged(true))
-        try await Task.sleep(for: .milliseconds(150))   // 越过本该收回的时刻
+        try await Task.sleep(for: .milliseconds(600))   // 越过本该收回的时刻
 
         XCTAssertTrue(state.isBufferingSustained, "期间再进缓冲：保持显示，不闪")
     }
