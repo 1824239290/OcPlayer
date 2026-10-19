@@ -27,6 +27,38 @@
 
 ### 性能
 
+- **`P1-13`：iOS 触摸热路径不再每事件重算整个播放器根 body**。
+  - `touchTranslation` 是 `@State`，而它**每个触摸事件都要写**（`handleTouchChanged`
+    里两处），却**只在长按判定的 Task 里读一次**（判 `movementSlop`）。
+  - **`@State` 的失效粒度是整个视图**：一写就标脏 `PlayerScreen`，于是每次
+    `onChanged` 都让根 body 重算一遍 —— HUD 挂载时那一整棵 Glass 树（11 面玻璃）
+    跟着每个触摸事件重跑。
+  - 同文件的 `panSession` 早就因为同一原因换成了 `@Observable PlayerPanFeedback`
+    （见该类型注释），但 `touchTranslation` 当时漏了。
+  - **修法**：移到 `@ObservationIgnored` 的 `TouchTranslationStore`（`@MainActor`
+    引用容器）。写入不再触发任何视图失效，长按判定从容器读当前值。
+  - 顺带核对：`panAreaSize` 虽然也是 `@State`，但它**只在尺寸变化时写**（不是
+    每事件），不构成热路径问题 —— 不改。
+
+- **`P1-14`：iOS 音量纵滑不再每个事件都穿进程写系统音量**。
+  - `MPVolumeView` 的系统音量是 **1/16 量化**的（步长 0.0625），而纵滑手势给的是
+    连续 `0...1`。原先的守卫是「`abs(slider.value - value) > **0.005**` 就写」——
+    **0.005 远小于 1/16**：`MPVolumeView` 会把写入值自己取整，`slider.value` 读回来
+    是取整后的值，于是下一次比较「差」仍大于 0.005，**几乎每个触摸事件都通过守卫**。
+  - 一次 1 秒纵滑 ≈ **数百次跨进程系统音量写入**，再经 KVO + 主 actor Task 回写。
+  - **修法**：先把目标**量化到 1/16 档位**，再用**半档容差**（0.03125）比较。
+    档内连续拖动**一次都不写**，写入次数从 O(事件数) 降到 O(跨越的档数)。
+  - 量化逻辑放在**跨平台纯逻辑文件** `PlayerPanGestures.swift`
+    （`PlayerPanGestureModel.quantizedVolume`）而不是 `SystemVolumeControl`
+    —— 后者在 `#if os(iOS)` 里，macOS 测试靶根本编不进去、没法测。
+  - 用例 7 条：落在 1/16 整数倍、越界夹住、**档内恒定**、**跨档必变**、
+    半档边界语义、半档 = 步长一半、以及「旧的 0.005 阈值在 1/16 量化下恒成立」
+    （把根因变成可执行证据）。
+  - **变异验证**：去掉量化（直接返回 clamped）→ **3 条用例红**。
+  - **⚠️ 写用例时自己错了一次**：最初拿 `4.9 档` 与 `5.1 档` 断言「跨档必变」，
+    结果跑出来相同 —— 因为档位边界在 **±0.5 档**，4.9 与 5.1 都在第 5 档内。
+    改成 4.4 / 5.6 后才正确，并单独加了一条用例钉住「±0.5 档边界」这个语义。
+
 - **`CORR-08` 补强：找到并修掉 `ServerEndpointWiringTests` 假红的**真因**（不是 runner 抖动）**。
   - **现象**：`main` 在 2026-10-19（`db23061`）红在
     `testResolvedAddressIsPersistedAndPublished`，报「等待超时 3.0 s」。
