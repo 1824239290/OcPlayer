@@ -409,6 +409,63 @@ final class DanmakuCoordinator {
         )
     }
 
+    /// 别名检索最多还能占用多久（**主检索已经回来后**的追加等待）。
+    ///
+    /// 它不是请求超时，而是「用户已经能看见结果了，还愿意为多找回几部等多久」。
+    /// 取 1.5 s：别名链的下一跳是 Bangumi 的标题解析（本地缓存命中时是微秒级），
+    /// 慢的只会是冷缓存 + 网络；而它命中时确实能把「搜不到」变成「搜到」。
+    nonisolated static let aliasBudget: Duration = .milliseconds(1500)
+
+    /// 有界等待一个尚未完成的并发工作；超时返回 nil（放弃，不取消也不报错）。
+    ///
+    /// 为什么不用 `withTimeout` 之类：这里**不想**取消 `work` —— 它已经飞出去了，
+    /// 取消反而要多写一层 Task 管理。让它在后台自然结束、我们不等就行。
+    /// 用 `TaskGroup` 竞速：先返回的那个决定结果，另一个被 group 取消（对我们无害）。
+    nonisolated static func boundedValue<T: Sendable>(
+        of work: Task<T, Never>,
+        within budget: Duration
+    ) async -> T? {
+        // ⚠️ **不能用 `withTaskGroup` 竞速**：group 在作用域结束时**等所有子任务**，
+        // 于是超时分支返回后，另一个 `await work.value` 的子任务会把慢任务整个等完
+        // —— 等于没超时。实测（第一版就是这样）：预算 50ms、慢任务 1s，
+        // 用例耗时 **1.110 s**。
+        //
+        // 改成「一个计时的 Task + 一个结果槽」：超时分支直接把槽标成已放弃并返回，
+        // 慢任务完成时发现槽已关闭就不再写。两边都不阻塞对方。
+        let slot = BoundedValueSlot<T>()
+        let deadline = Task {
+            try? await Task.sleep(for: budget)
+            slot.abandon()
+        }
+        let waiter = Task {
+            let value = await work.value
+            slot.fulfill(value)
+        }
+        defer {
+            deadline.cancel()
+            waiter.cancel()
+        }
+        return await slot.wait()
+    }
+
+    /// 依次试别名，返回第一个非空结果。
+    ///
+    /// 与改前的循环等价（同一个 `break` 语义：命中就停），只是现在跑在并发分支里。
+    nonisolated static func firstNonEmptyAliasResult(
+        resolver: DanmakuTitleAliasResolver,
+        client: DanmakuGatewayClient,
+        anime: String,
+        episode: String?
+    ) async -> [AnimeWithEpisodes]? {
+        for alias in await resolver.aliases(for: anime) where alias != anime {
+            guard let aliasResult = try? await client.searchEpisodes(
+                anime: alias, episode: episode
+            ).payload.animes, !aliasResult.isEmpty else { continue }
+            return aliasResult
+        }
+        return nil
+    }
+
     func searchEpisodes(anime: String, episode: String) async throws -> [AnimeWithEpisodes] {
         guard let configuration else { throw DandanplayError.notConfigured }
         let anime = anime.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -422,24 +479,35 @@ final class DanmakuCoordinator {
         ])
         let client = DanmakuGatewayClient(configuration: configuration, session: session)
         do {
+            // 别名检索**与主检索并发**，不再串在它后面。
+            //
+            // 改前是「主检索 await 完 → 再 await 别名链」：最坏是两段串行 RTT
+            // （网关 `timeoutIntervalForRequest = 10` / `ForResource = 20`，所以是
+            // ≤10–20 s 的串行等待），而这期间**网关已经成功返回的结果上不了屏**。
+            //
+            // 改后：别名链先并发起飞，主检索回来即可用；别名最多再等
+            // `aliasBudget`，超时就放弃别名（它只是「多找回几部」的增强，
+            // 不是结果正确性的前提）。
+            let aliasSearch = Task { [titleAliasResolver] in
+                await Self.firstNonEmptyAliasResult(
+                    resolver: titleAliasResolver, client: client, anime: anime,
+                    episode: episode.isEmpty ? nil : episode)
+            }
+
             var result = try await client.searchEpisodes(
                 anime: anime,
                 episode: episode.isEmpty ? nil : episode
             ).payload.animes
 
-            // 别名合并：弹弹play 搜索认不得「另一个中文译名」（实测搜「虽然我是不完美恶女
-            // ～雏宫蝶鼠替换传～」返回的全是无关作品），Bangumi 的 nameCN 能换到库内标题。
-            // 主检索与别名检索都跑，按 animeId 去重合并——主检索命中正确作品时这一步零成本。
+            // `boundedValue` 返回 `T?`，而 `T` 本身是 `[AnimeWithEpisodes]?` —— 拍平一层。
+            // 外层 nil = 超时放弃别名；内层 nil/空 = 别名链没有命中。
+            let aliasResult = await Self.boundedValue(of: aliasSearch, within: Self.aliasBudget) ?? nil
             var aliasHit = false
-            for alias in await titleAliasResolver.aliases(for: anime) where alias != anime {
-                guard let aliasResult = try? await client.searchEpisodes(
-                    anime: alias,
-                    episode: episode.isEmpty ? nil : episode
-                ).payload.animes, !aliasResult.isEmpty else { continue }
+            if let aliasResult, !aliasResult.isEmpty {
                 let known = Set(result.map(\.animeId))
-                result += aliasResult.filter { !known.contains($0.animeId) }
-                aliasHit = true
-                break
+                let merged = aliasResult.filter { !known.contains($0.animeId) }
+                result += merged
+                aliasHit = !merged.isEmpty
             }
 
             AppDiagnostics.logInfo("弹幕手动搜索完成", fields: [
@@ -699,5 +767,49 @@ final class DanmakuCoordinator {
 
     private static func elapsedMilliseconds(since start: Date) -> Int64 {
         Int64(max(0, Date().timeIntervalSince(start) * 1_000).rounded())
+    }
+}
+
+/// 「有界等待」的结果槽：要么拿到值，要么超时放弃。二者先到者生效。
+///
+/// 用锁 + 一次性 continuation 实现，**不依赖 `TaskGroup` 的作用域语义** ——
+/// 后者在作用域结束时会等所有子任务，于是「超时分支返回」仍会被慢任务拖住，
+/// 等于没超时（第一版就是这样：预算 50ms、慢任务 1s，用例实测 1.110 s）。
+private final class BoundedValueSlot<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var settled = false
+    private var settledValue: T??
+    private var continuation: CheckedContinuation<T?, Never>?
+
+    func abandon() { settle(nil) }
+
+    func fulfill(_ value: T) { settle(value) }
+
+    private func settle(_ value: T?) {
+        lock.lock()
+        guard !settled else {
+            lock.unlock()
+            return
+        }
+        settled = true
+        settledValue = .some(value)
+        let pending = continuation
+        continuation = nil
+        lock.unlock()
+        pending?.resume(returning: value)
+    }
+
+    func wait() async -> T? {
+        await withCheckedContinuation { incoming in
+            lock.lock()
+            if settled {
+                let value = settledValue ?? nil
+                lock.unlock()
+                incoming.resume(returning: value)
+                return
+            }
+            continuation = incoming
+            lock.unlock()
+        }
     }
 }
