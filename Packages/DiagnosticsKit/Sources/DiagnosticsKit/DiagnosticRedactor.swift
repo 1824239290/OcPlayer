@@ -52,35 +52,69 @@ enum DiagnosticRedactor {
         //
         // `folding(options: .caseInsensitive)` 走的就是 ICU，与正则同一套：
         // 穷举全部 1,114,112 个 Unicode 标量 × 26 个 ASCII 字母，两种视角
-        // **零分歧**（脚本见提交说明）。顺带它比 `lowercased()` 还快
-        // （1.24 KB 中文：9.6 µs vs 17.5 µs）。
+        // **零分歧**。顺带它比 `lowercased()` 还快（1.24 KB 中文：9.6 vs 17.5 µs）。
+        let foldedBytes = Array(foldingForCaseInsensitiveMatch(result).utf8)
+        // 原始字节只在需要时算（`://` 与 `eyJ` 两趟是**大小写敏感**的，不能看折叠串）。
         //
-        // ⚠️ `locale` 必须是 `en_US_POSIX`：其他 locale 会做土耳其语 `I/ı` 之类
-        // 的语言相关折叠，反而偏离正则行为。
-        let folded = foldingForCaseInsensitiveMatch(result)
-
-        if containsASCII(folded, "/users/") || containsASCII(folded, "/home/") {
+        // ⚠️ 干草堆 bytes **只转一次**：`containsASCII` 早先是「每次调用各转一遍
+        // 干草堆与针」，而关键词表有 18 个词 —— 短消息整条脱敏因此从 7.44 µs
+        // 涨到 11.63 µs（比不设守卫还慢）。针也全部预计算成静态量。
+        if contains(foldedBytes, Self.needleUsers) || contains(foldedBytes, Self.needleHome) {
             result = replace(result, using: patterns.userPath, with: "<user-path>")
         }
-        if containsASCII(folded, "/var/mobile") {
+        if contains(foldedBytes, Self.needleVarMobile) {
             result = replace(result, using: patterns.appContainerPath, with: "<app-container-path>")
         }
-        if result.contains("://") {
+        if contains(Array(result.utf8), Self.needleSchemeSeparator) {
             result = redactURLs(result)
         }
-        if containsASCII(folded, "bearer") || containsASCII(folded, "basic") {
+        if contains(foldedBytes, Self.needleBearer) || contains(foldedBytes, Self.needleBasic) {
             result = replace(result, using: patterns.authorization, with: "$1 <redacted>")
         }
-        if containsAnySensitiveKeyword(folded) {
+        if containsAnySensitiveKeyword(foldedBytes) {
             // $1..$4 = 开引号 / key / 闭引号 / 分隔符；只换值，保留周边形态。
             result = replace(result, using: patterns.sensitiveAssignment, with: "$1$2$3$4<redacted>")
         }
         // JWT 模式无 `(?i)`：`eyJ` 是 base64url 里 `{"` 的编码，恰好大小写敏感。
-        if containsASCII(result, "eyJ") {
+        if contains(Array(result.utf8), Self.needleJWT) {
             result = replace(result, using: patterns.jwt, with: "<redacted-token>")
         }
         return result
     }
+
+    /// 子串搜索（显式长度，**不受内嵌 NUL 影响**）。
+    ///
+    /// ⚠️ 不能用 `strstr` / `strnstr`：它们按 C 串语义在内嵌 `\0` 处停下，
+    /// 于是「NUL 之后才出现的关键词」看不见 —— 第一版就是这么写的，
+    /// 实测**漏脱敏**（`"prefix\0token=…"` 里凭据明文留下）。
+    private static func contains(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
+        guard !needle.isEmpty, needle.count <= haystack.count else { return false }
+        return haystack.withUnsafeBufferPointer { haystackBuffer in
+            needle.withUnsafeBufferPointer { needleBuffer in
+                guard let haystackBase = haystackBuffer.baseAddress,
+                      let needleBase = needleBuffer.baseAddress else { return false }
+                return memmem(haystackBase, haystackBuffer.count,
+                              needleBase, needleBuffer.count) != nil
+            }
+        }
+    }
+
+    // MARK: - 预计算的 ASCII 针
+    //
+    // 全部提成静态量：每次 `Array(needle.utf8)` 都是一次小分配，而关键词表有 18 个词、
+    // 每条日志都要问一遍。实测这一层就是短消息脱敏从 7.44 → 11.63 µs 的元凶。
+
+    private static let needleUsers = Array("/users/".utf8)
+    private static let needleHome = Array("/home/".utf8)
+    private static let needleVarMobile = Array("/var/mobile".utf8)
+    private static let needleSchemeSeparator = Array("://".utf8)
+    private static let needleBearer = Array("bearer".utf8)
+    private static let needleBasic = Array("basic".utf8)
+    private static let needleJWT = Array("eyJ".utf8)
+
+    /// 关键词表的字节形态（小写）。
+    private static let assignmentKeywordBytes: [[UInt8]] =
+        SensitivePatterns.assignmentKeywords.map { Array($0.utf8) }
 
     /// 测试用参考实现：**强制跑完全部六趟**，不带任何守卫。
     ///
@@ -104,7 +138,7 @@ enum DiagnosticRedactor {
     /// 用例拿它逐词验证关键词表 —— 不能用「守卫版 ≠ 全跑版」判，因为正则会命中时
     /// 两者结果本来就相同。
     static func guardWouldRunAssignmentPassForTesting(_ text: String) -> Bool {
-        containsAnySensitiveKeyword(foldingForCaseInsensitiveMatch(text))
+        containsAnySensitiveKeyword(Array(foldingForCaseInsensitiveMatch(text).utf8))
     }
 
     /// 测试用：**表里是否认得出这个词**（子串匹配，与守卫同口径）。
@@ -113,7 +147,7 @@ enum DiagnosticRedactor {
     /// 拿它逐词验证会被其它词「顺带命中」而失去鉴别力（去掉 `passwd` 仍然全绿）。
     /// 这条只问单个词。
     static func containsSensitiveKeywordForTesting(_ keyword: String) -> Bool {
-        containsAnySensitiveKeyword(keyword.lowercased())
+        containsAnySensitiveKeyword(Array(keyword.lowercased().utf8))
     }
 
     /// 测试用：`sensitiveAssignment` 的正则，供用例校验「表与正则双向同步」。
@@ -127,9 +161,8 @@ enum DiagnosticRedactor {
     /// 漏一个就是那一类凭据不再被脱敏 —— 所以宁可过近似。
     ///
     /// - Parameter folded: **已经 `lowercased()` 过**的文本（关键词表全是小写）。
-    private static func containsAnySensitiveKeyword(_ folded: String) -> Bool {
-        for keyword in SensitivePatterns.assignmentKeywords
-        where containsASCII(folded, keyword) {
+    private static func containsAnySensitiveKeyword(_ foldedBytes: [UInt8]) -> Bool {
+        for keyword in assignmentKeywordBytes where contains(foldedBytes, keyword) {
             return true
         }
         return false
@@ -140,10 +173,18 @@ enum DiagnosticRedactor {
     /// 抽成具名函数是为了让守卫与测试探针共用同一份实现 —— 两处各写一遍，
     /// 就又会出现「守卫与正则视角不一致」那类反例（`ſ` 那次就是）。
     static func foldingForCaseInsensitiveMatch(_ text: String) -> String {
-        // ⚠️ locale 必须是 `en_US_POSIX`：其他 locale 会做土耳其语 `I/ı` 之类的
-        // 语言相关折叠，反而偏离正则行为。
-        text.folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        text.folding(options: [.caseInsensitive], locale: Self.foldingLocale)
     }
+
+    /// 折叠用的固定 locale。
+    ///
+    /// ⚠️ 必须是 `en_US_POSIX`：其他 locale 会做土耳其语 `I/ı` 之类的语言相关折叠，
+    /// 反而偏离正则行为。
+    ///
+    /// ⚠️ **必须提成静态量**：每次现构造 `Locale(identifier:)` 很贵 —— 实测短消息
+    /// （6 个汉字）的整条脱敏从 **7.44 µs 涨到 11.60 µs**，比不设守卫还慢。
+    /// 提升后回到 5 µs 量级。
+    private static let foldingLocale = Locale(identifier: "en_US_POSIX")
 
     /// 无分配的子串搜索，**只用于 ASCII 针**。
     ///
