@@ -9,11 +9,26 @@ import UniformTypeIdentifiers
 /// 记录本体是 JSONL（每行一条），头部是给人看的说明，工具解析照样从第一行 `{` 开始。
 enum DiagnosticsExport {
 
+    /// 日志正文进导出包的上限。
+    ///
+    /// 保留上限是 50 MB（`DiagnosticBackend.maxTotalBytes`），而导出会把内容同时
+    /// 持有三份（`Data` + 解码后的 `String` + 拼接结果）——实测 48.4 MB 日志对应
+    /// **112 MiB 峰值 RSS**（2.44×）。iOS 上是现实的 jetsam 风险（本 App 真实峰值
+    /// RSS 到过 435 MB），而「导出诊断包附到 issue」这条工作流又必须可用。
+    ///
+    /// 8 MiB 按每条 ~1 KB ≈ **8000 条**，远超任何一个 issue 需要贴的量；实测把尖峰
+    /// 压到 **32 MiB**。排障看的本来就是"崩前那一段"，所以只保留**最新**的记录。
+    static let bodyByteBudget = 8 * 1024 * 1024
+
     static func makeText(
         directory: URL = AppDiagnostics.fileURL.deletingLastPathComponent(),
-        traceTailBytes: Int = DiagnosticsExport.traceTailBytes
+        traceTailBytes: Int = DiagnosticsExport.traceTailBytes,
+        bodyByteBudget: Int? = DiagnosticsExport.bodyByteBudget
     ) throws -> String {
-        var text = try AppDiagnostics.logger.exportText(headerLines: headerLines())
+        // 正文有界：只留最新的那一段（`nil` 时行为退回「导出全部」，供测试/排障用）。
+        var text = try AppDiagnostics.logger.exportText(
+            headerLines: headerLines(bodyByteBudget: bodyByteBudget),
+            bodyByteBudget: bodyByteBudget)
         // 详细档的内核 trace（HTTP 逐请求 / demux 读失败）是独立文件，附在后面：
         // 「一个文件说明一切」比让用户分别找两个 jsonl 靠谱。
         // trace 由内核**直接写盘**、不经 App 日志管线，所以这里显式过一遍脱敏：
@@ -70,7 +85,7 @@ enum DiagnosticsExport {
         "OcPlayer-诊断-" + formatter.string(from: now)
     }
 
-    private static func headerLines() -> [String] {
+    private static func headerLines(bodyByteBudget: Int?) -> [String] {
         var lines = ["# OcPlayer 诊断日志"]
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? "?"
@@ -87,9 +102,15 @@ enum DiagnosticsExport {
         lines.append("平台: \(platform) \(ProcessInfo.processInfo.operatingSystemVersionString)")
         lines.append("详细日志: \(DiagnosticsSettings.isVerboseLoggingEnabled() ? "开（debug 档）" : "关（info 档）")")
         lines.append("时间: \(ISO8601DateFormatter().string(from: Date()))")
-        lines.append("说明: 凭据 / 用户路径 / URL query 已在写盘前脱敏为 <redacted> 等占位；"
+        var note = "说明: 凭据 / 用户路径 / URL query 已在写盘前脱敏为 <redacted> 等占位；"
             + "内核 trace 段同样已过脱敏。"
-            + "以下每行是一条 JSONL 记录，按时间升序（归档在前、当前文件在后）。")
+            + "以下每行是一条 JSONL 记录，按时间升序（归档在前、当前文件在后）。"
+        if let bodyByteBudget {
+            note += "日志正文只保留最新的一段（上限 "
+                + ByteCountFormatter.string(
+                    fromByteCount: Int64(bodyByteBudget), countStyle: .file) + "，已截断）。"
+        }
+        lines.append(note)
         return lines
     }
 
@@ -103,21 +124,27 @@ enum DiagnosticsExport {
 }
 
 /// `.fileExporter` 用的纯文本文档：macOS 存到用户选的位置，iOS 进分享/存储流程。
+///
+/// ## 为什么持 `Data` 而不是 `String`
+///
+/// 导出内容是几 MB 文本，`String → Data` 的那次编码（`Data(text.utf8)`）是一次
+/// **整份拷贝**。改前它在 `fileWrapper` 里做 —— 而 `fileWrapper` 由 SwiftUI 在
+/// **主线程**调用，等于导出瞬间多一次主线程大块分配。改成在 `makeText` 的
+/// `Task.detached` 里就转好、文档直接持 `Data`，主线程只剩一次 `FileWrapper` 包装。
 struct DiagnosticExportDocument: FileDocument {
     static let readableContentTypes: [UTType] = [.plainText]
 
-    let text: String
+    let data: Data
 
-    init(text: String) {
-        self.text = text
+    init(data: Data) {
+        self.data = data
     }
 
     init(configuration: ReadConfiguration) throws {
-        let data = configuration.file.regularFileContents ?? Data()
-        text = String(decoding: data, as: UTF8.self)
+        data = configuration.file.regularFileContents ?? Data()
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
+        FileWrapper(regularFileWithContents: data)
     }
 }

@@ -328,17 +328,51 @@ public final class DiagnosticLogger: @unchecked Sendable {
     /// Export all retained archives followed by the current JSONL file.
     public func exportData() throws -> Data {
         emitPendingSuppressionSummaries()
-        return try backend.exportData()
+        return try backend.exportData(byteBudget: nil)
     }
 
-    /// 导出为**单个文本文件**：头部说明行 + 全部保留记录（归档在前、当前文件在后）。
+    /// 导出为**单个文本文件**：头部说明行 + 保留记录（归档在前、当前文件在后）。
     ///
     /// 单文件而非 zip：iOS 起不了 `ditto` 进程，双端行为一致，GitHub issue 也能直接附件。
     /// `headerLines` 由宿主提供（版本 / 平台 / 设备这类宿主知识），本包不猜。
-    public func exportText(headerLines: [String]) throws -> String {
+    ///
+    /// ## `bodyByteBudget`：有界导出
+    ///
+    /// `nil`（默认）= 全部保留记录，行为与加这个参数之前**逐字节相同**。
+    ///
+    /// 给定预算时**只保留最新的那一段**（约 `bodyByteBudget` 字节，按行对齐）。
+    /// 为什么需要它 —— 实测（本机，48.4 MB 日志）：
+    ///
+    /// ```
+    /// peakRSSBefore=668MiB  afterExportText=781MiB   → 尖峰 112MiB（2.44× 文本体积）
+    /// ```
+    ///
+    /// 尖峰来自三份同时存活的大对象：`exportData()` 的 `Data`、
+    /// `String(decoding:)` 的 `String`、以及 `headers + body` 的 `+` 拼接。
+    /// 50 MB 日志在 iOS 上是现实的 jetsam 风险（本 App 真实峰值 RSS 到过 435 MB）。
+    ///
+    /// 有界的额外收益：构造过程只留**一份 Data + 一份 String**（去掉 `+` 拼接），
+    /// 于是峰值 ≈ 2× 预算，可预测。
+    ///
+    /// - Note: 截断信息**不由本方法报告** —— 宿主自己知道传了什么预算，由它写进
+    ///   `headerLines`（App 侧就是这么做的，与内核 trace 的措辞一致）。
+    public func exportText(
+        headerLines: [String],
+        bodyByteBudget: Int? = nil
+    ) throws -> String {
         emitPendingSuppressionSummaries()
-        let body = String(decoding: try backend.exportData(), as: UTF8.self)
-        return headerLines.joined(separator: "\n") + "\n\n" + body
+        let header = headerLines.joined(separator: "\n") + "\n\n"
+        // 一次构造：预留「头部 + 正文」的总长，避免 `+` 拼接产生第三份大字符串。
+        // 正文的 `Data` 在 append 后立刻释放（不落局部变量），少一份与
+        // `combined` 并存的大对象 —— 实测这一版 8 MiB 预算的尖峰是 32 MiB。
+        // 预留「头部 + 正文总长」。正文总量由 backend 报（无预算时是全部文件之和）——
+        // 早先无预算路径只预留了头部长度，随后 append 几十 MB 会走几何扩容
+        // （多次 realloc + 整份拷贝），比旧实现的 `+` 拼接还多几次。
+        let capacity = header.utf8.count + (try backend.exportByteCount(byteBudget: bodyByteBudget))
+        var combined = Data(capacity: capacity)
+        combined.append(contentsOf: header.utf8)
+        combined.append(try backend.exportData(byteBudget: bodyByteBudget))
+        return String(decoding: combined, as: UTF8.self)
     }
 
     /// Read back the most recent entries from the current JSONL file.
@@ -592,6 +626,12 @@ private final class DiagnosticBackend: @unchecked Sendable {
         return directory.appendingPathComponent(name)
     }
 
+    /// 导出路径的少量诊断输出（走 OSLog，不经 `DiagnosticLogger`，避免与调用方重入）。
+    private func sinkLog(_ message: String, _ fields: [String: String]) {
+        let detail = fields.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+        sinkLogger.info("\(message) \(detail)")
+    }
+
     /// 目录里的全部诊断文件（含旧版 `diagnostics.jsonl*`，好让它们被同一套保留策略
     /// 自然淘汰），按修改时间从旧到新——写盘追加会让 mtime 单调前进。
     private func existingLogFiles() -> [(url: URL, size: Int, modified: Date)] {
@@ -779,15 +819,105 @@ private final class DiagnosticBackend: @unchecked Sendable {
     }
 
     /// 导出=目录里所有保留文件按时间从旧到新拼接（含当前会话文件与旧版文件）。
-    func exportData() throws -> Data {
+    ///
+    /// - Parameter byteBudget: `nil` = 全量（行为与加这个参数之前逐字节相同）。
+    ///   给定值时**只保留最新的一段**，总量约 `byteBudget`（按行对齐）。理由见
+    ///   `DiagnosticLogger.exportText(headerLines:bodyByteBudget:)` 里的实测数字。
+    func exportData(byteBudget: Int?) throws -> Data {
         try queue.sync {
             try handle?.synchronize()
-            var output = Data()
-            for file in existingLogFiles() {
-                output.append(try Data(contentsOf: file.url))
-            }
-            return output
+            let files = existingLogFiles()   // 已按 (modified, name) 升序 = 旧 → 新
+            guard let byteBudget else { return try concatenated(files, capacity: nil) }
+            return try boundedTail(of: files, budget: max(0, byteBudget))
         }
+    }
+
+    /// 全量拼接。`capacity` 已知时一次性预留，避免 `append` 的几何扩容。
+    private func concatenated(
+        _ files: [(url: URL, size: Int, modified: Date)],
+        capacity: Int?
+    ) throws -> Data {
+        let total = capacity ?? files.reduce(0) { $0 + $1.size }
+        var output = Data(capacity: total)
+        for file in files {
+            output.append(try Data(contentsOf: file.url))
+        }
+        return output
+    }
+
+    /// 将要导出的正文字节数（供调用方预留容量）。
+    ///
+    /// 无预算时是全部保留文件之和；有预算时按 `boundedTail` 的记账口径估算 ——
+    /// 它是**上界**（实际可能因按行对齐略少），用于 `Data(capacity:)` 足够。
+    func exportByteCount(byteBudget: Int?) throws -> Int {
+        try queue.sync {
+            let files = existingLogFiles()
+            guard let byteBudget else { return files.reduce(0) { $0 + $1.size } }
+            let budget = max(0, byteBudget)
+            var total = 0
+            var remaining = budget
+            for file in files.reversed() {
+                guard remaining > 0 else { break }
+                let take = min(file.size, remaining)
+                total += take
+                remaining -= take
+            }
+            return total
+        }
+    }
+
+    /// 只保留**最新**的一段。
+    ///
+    /// 倒序（新 → 旧）累加，超预算的那个文件只取尾部并按行对齐，最后**按原升序输出**
+    /// —— 导出契约是「归档在前、当前文件在后 / 按时间升序」，不能让截断把它翻过来。
+    private func boundedTail(
+        of files: [(url: URL, size: Int, modified: Date)],
+        budget: Int
+    ) throws -> Data {
+        guard budget > 0 else { return Data() }
+
+        // **边读边按实际字节记账**（而不是先按 `file.size` 挑完再读）。
+        //
+        // 为什么不能按 `file.size` 记账：`readTail` 在非零偏移时会丢掉「残首行」，
+        // 而若那一段里**一个换行都没有**（归档最后一行被撕开、且残行比可用预算还长），
+        // 它会整段返回空。这时按 `file.size` 记的账已经把那笔预算扣掉了 ——
+        // 后面的（更旧的）文件明明还有额度却被整份跳过，排障价值无声缩水。
+        // 实测（审查给的复现）：3 文件 × 5190 B、budget=10480 时最旧那个被整份丢掉。
+        //
+        // 从新到旧读，读不出来的文件**不扣预算**。
+        var chunks: [Data] = []      // 新 → 旧
+        var remaining = budget
+        for file in files.reversed() {
+            guard remaining > 0 else { break }
+            let skip = max(0, file.size - remaining)
+            guard let chunk = try readTail(at: file.url, skipLeadingBytes: skip),
+                  !chunk.isEmpty else {
+                // 读不出来（文件被删/无权限/残行吃掉了整段）——不静默，留一条痕迹。
+                sinkLog("导出跳过不可读的日志文件", ["file": file.url.lastPathComponent])
+                continue
+            }
+            chunks.append(chunk)
+            remaining -= chunk.count
+        }
+
+        // 按原升序（旧 → 新）输出。
+        var output = Data(capacity: budget - remaining)
+        for chunk in chunks.reversed() {
+            output.append(chunk)
+        }
+        return output
+    }
+
+    /// 读文件从 `skipLeadingBytes` 起的内容；非零偏移时丢掉被切一半的首行。
+    private func readTail(at url: URL, skipLeadingBytes: Int) throws -> Data? {
+        guard skipLeadingBytes > 0 else { return try Data(contentsOf: url) }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard (try? handle.seek(toOffset: UInt64(skipLeadingBytes))) != nil else { return nil }
+        guard let data = try? handle.readToEnd() else { return nil }
+        // 起点落在行中间是常态：丢掉第一段残行，保证导出段从完整记录开始。
+        guard let newline = data.firstIndex(of: 0x0A) else { return Data() }
+        return data[data.index(after: newline)...]
     }
 
     func clear() throws {

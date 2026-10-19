@@ -93,7 +93,14 @@ final class DiagnosticsExportTests: XCTestCase {
             .write(to: traceURL, atomically: true, encoding: .utf8)
 
         let text = try DiagnosticsExport.makeText(directory: directory)
-        XCTAssertFalse(text.contains("已截断"))
+        // 只断言**内核 trace 段**没被截断。日志正文现在默认有 8 MiB 上限，
+        // 头部会写一条「日志正文只保留最新的一段…已截断」，那是另一件事 ——
+        // 用「trace 标题行不含『已截断』」把它和正文那段区分开。
+        let traceHeading = text
+            .split(separator: "\n")
+            .first { $0.hasPrefix("# 内核 trace：") }
+        let heading = try XCTUnwrap(traceHeading.map(String.init), "没有找到内核 trace 段")
+        XCTAssertFalse(heading.contains("已截断"), "小 trace 不该被截断：\(heading)")
         XCTAssertTrue(text.contains("stage=head_request"))
     }
 
