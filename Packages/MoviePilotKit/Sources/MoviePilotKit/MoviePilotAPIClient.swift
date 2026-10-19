@@ -33,17 +33,21 @@ enum MPEnvelope {
               object.keys.contains("success"),
               let inner = object["data"]
         else { return data }
-        // `data` 为 NSNull 时不该退回原始信封（那会让下游把信封当负载解析）。
-        if inner is NSNull { return data }
         // ⚠️ `JSONSerialization.data(withJSONObject:)` 只接受**容器**（数组/字典）；
-        // 顶层的 `String` / `NSNumber` 会抛 **NSInvalidArgumentException**，
-        // 而那是 ObjC 异常、`try?` **接不住** —— 进程直接崩。
+        // 顶层的 `String` / `NSNumber` / `NSNull` 会抛 **NSInvalidArgumentException**，
+        // 而那是 ObjC 异常、`try?` **接不住** —— App 里直接崩（实测 exit 134）。
         //
-        // 这不是理论问题：`{"success":true,"data":"..."}` 这种形态在真实响应里存在
-        // （新 API 返回裸字符串/数字时）。差分用例
-        // `testShallowCheckIsBehaviourallyIdenticalToTheOldImplementation` 当场炸出。
-        // 非容器就当「不是可剥的信封」，原样返回。
-        guard JSONSerialization.isValidJSONObject(inner) else { return data }
+        // 这不是理论问题：`{"success":true,"data":"..."}` / `data:null` 这两种形态在
+        // 真实响应里存在（新 API 返回裸字符串 / 无内容时）。改前它们在**信封路径**上
+        // 必崩 —— 本批顺带修掉的**两个既有崩溃**。
+        //
+        // ⚠️ **守卫必须 O(1)**：早先我写的是 `JSONSerialization.isValidJSONObject(inner)`，
+        // 而它是**深遍历** —— 实测 7.6 KB 的 120 对象数组要 **72.35 µs**，
+        // 比整个 `data(withJSONObject:)`（84.59 µs）只少一点。于是信封主路径被拖慢
+        // 19%–58%（审查实测 5.4/7.6/15.5 KB 与 1.1 MB 四档），而代码注释自己说
+        // 「大多数路由都会自动包信封」——**净负收益**。
+        // `is NSArray` / `is NSDictionary` 是纯类型判断：实测 **0.03 µs（2410×）**。
+        guard inner is NSArray || inner is NSDictionary else { return data }
         return (try? JSONSerialization.data(withJSONObject: inner)) ?? data
     }
 }

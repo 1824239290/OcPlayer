@@ -93,11 +93,13 @@ final class MPEnvelopeTests: XCTestCase {
         }
     }
 
-    /// **等价性黄金**：一批真实形态的输入，浅判定版与「无浅判定」的参考实现逐字节相同。
+    /// **等价性黄金**：一批真实形态的输入，浅判定版与「不做浅判定的等价实现」逐字节相同。
     ///
-    /// 参考实现就是改前的样子（先 `JSONSerialization` 再判信封）。这条防的是
-    /// 「为了快而改变了行为」—— 那类改动最危险，因为只在特定响应形态下才暴露。
-    func testShallowCheckIsBehaviourallyIdenticalToTheOldImplementation() {
+    /// ⚠️ 这个参考实现**不是**改前的原始代码 —— 它刻意保留了本批新增的两个守卫
+    /// （非容器退回、`NSNull` 退回），因为那两个是**修崩溃**的，不该出现在差分基准里
+    /// （否则基准自己也会崩）。所以这条只证明「浅判定不改变行为」，
+    /// **不覆盖**崩溃修复 —— 崩溃修复由 `testScalarDataPayloadDoesNotCrash` 单独钉。
+    func testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation() {
         func reference(_ data: Data) -> Data {
             guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object.keys.contains("success"),
@@ -125,11 +127,16 @@ final class MPEnvelopeTests: XCTestCase {
             "   ",
             "not json",
         ]
-        for raw in corpus {
-            let input = Data(raw.utf8)
+        // BOM / UTF-16 前缀的裸数组：浅判定认不出（首字节不是 `[`），但输出必须与
+        // 参考实现一致（两者都退回原样，因为 `isValidJSONObject` 对数组为 true、
+        // 会剥壳 —— 这里故意只断言**一致性**，不假设走哪条路径）。
+        var bomArray = Data([0xEF, 0xBB, 0xBF])
+        bomArray.append(Data(#"[{"a":1}]"#.utf8))
+        let corpusData: [Data] = corpus.map { Data($0.utf8) } + [bomArray]
+        for input in corpusData {
             XCTAssertEqual(
                 MPEnvelope.unwrap(input), reference(input),
-                "浅判定改变了行为：输入 \(raw.prefix(60))")
+                "浅判定改变了行为：输入 \(String(decoding: input, as: UTF8.self).prefix(60))")
         }
     }
 }

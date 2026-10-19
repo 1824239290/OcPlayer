@@ -27,30 +27,50 @@
 
 ### 性能
 
-- **`P2-21`：MoviePilot 裸数组响应不再被解析两遍（**66.7 → 0.65 µs，103×**）**。
+- **`P2-21`：MoviePilot 裸数组响应不再被解析两遍（**66.6 → 0.27 µs，244×**）**。
   - 改前 `MPEnvelope.unwrap` 对**每一个**响应都先 `JSONSerialization.jsonObject`
     全量解析（Foundation 的 `Any` 树：装箱 + `NSNumber`/`NSString`），带信封时再把
     `data` 序列化回 `Data` 交给 `JSONDecoder` —— **一次响应解析两遍**。
   - 改成先看**首个非空白字节**：`[` 不可能是信封（信封是对象）→ 直接原样返回，零解析。
-  - **实测**（7.6 KB 的 120 条任务列表，`downloadingTasks` 的实际形态）：
-    裸数组 **66.71 → 0.65 µs（103×）**；带信封路径 227 → 226 µs（不变，本就该解析）。
-  - **⚠️ 顺带修掉一个既有崩溃**：`JSONSerialization.data(withJSONObject:)` 只接受**容器**，
-    顶层 `String` / `NSNumber` 会抛 **NSInvalidArgumentException** —— 那是 ObjC 异常、
-    `try?` **接不住**，进程直接崩。`{"success":true,"data":"..."}` 这种形态在真实响应里
-    存在（新 API 返回裸字符串/数字时）。差分用例当场炸出来，加 `isValidJSONObject` 守卫。
-  - **等价性靠差分测试**：15 条语料的「浅判定版 vs 改前参考实现」逐字节比对
-    （含 `[]`、前缀空白、`data` 为 `null`/标量/嵌套、非 JSON、空数据）。
-    变异（去掉浅判定）→ 红；变异（去掉 `isValidJSONObject` 守卫）→ 红。
+  - **实测**（7.6 KB 的 120 条任务列表 = `downloadingTasks` 的实际形态，与改前实现并排跑）：
+    裸数组 **66.61 → 0.27 µs（244×）**；带信封 **163.2 → 153.0 µs（快 7%）**。
+  - **⚠️ 顺带修掉两个既有崩溃**：`JSONSerialization.data(withJSONObject:)` 只接受**容器**，
+    顶层 `String` / `NSNumber` / `NSNull` 会抛 **NSInvalidArgumentException** ——
+    那是 ObjC 异常、`try?` **接不住**，App 里直接崩（独立可执行实测 exit 134）。
+    `{"success":true,"data":"..."}` 与 `data:null` 两种形态在真实响应里都存在。
+    XCTest 里同一异常表现为**测试失败**而非进程崩溃，所以差分会看到红色失败。
+  - **⚠️ 第一版守卫选错了，被审查实测推翻**：我用的
+    `JSONSerialization.isValidJSONObject(inner)` 是**深遍历** —— 实测 7.6 KB 的
+    120 对象数组要 **72.35 µs**（而整个 `data(withJSONObject:)` 才 84.59 µs），
+    于是**信封主路径被拖慢 19%–58%**（审查实测 5.4 / 7.6 / 15.5 KB 与 1.1 MB 四档），
+    而代码注释自己说「大多数路由都会自动包信封」—— 那是**净负收益**。
+    改成纯类型判断 `inner is NSArray || inner is NSDictionary`：实测 **0.03 µs（2410×）**，
+    与 payload 大小无关。修完信封路径也变快 7%。
+  - **等价性靠差分测试**：16 条语料（含前缀空白、BOM、`data` 为 `null`/标量/嵌套、
+    非 JSON、空数据）与参考实现逐字节比对。参考实现**刻意保留了本批新增的守卫**
+    （否则基准自己会崩），所以它只证明「浅判定不改变行为」，
+    **崩溃修复由 `testScalarDataPayloadDoesNotCrash` 单独钉**。
+    变异（去掉 `is NSArray` 守卫）→ 红（崩溃/失败）。
+  - **更正一句错的**：初版 CHANGELOG 写「变异（去掉浅判定）→ 红」—— **不成立**，
+    去掉浅判定后 10 条用例**全绿**（它们都是输出等价断言，观测不到快路径）。
+    快路径的收益只能靠基准测，不能靠功能用例钉。
 
 - **`P2-26`：请求体编码器提成静态量**。
-  - 实测每次现建 `JSONEncoder` 多花 **2.08 µs**（5.68 vs 3.60 µs，小的 Codable 体）；
-    而 Bangumi 那条路径还在**重试闭包内部** —— 一次失败就重复构造。
-  - `BangumiAPIClient` / `MoviePilotAPIClient`（都是 `public actor`，所以标 `nonisolated`）
-    与 `EmbySession` 各提一个 `private static let encoder`。
-  - **只改 encoder 不改 decoder**：实测 `JSONDecoder` 的新建开销只有 **0.1 µs**
-    （3.32 vs 3.22），不值得动 —— 不做无收益的改动。
-
-### 性能
+  - 代码本身安全（审查并发实测：8 线程 × 500 次共享实例 encode，0 错误、0 字节差异，
+    TSan 无报告；10 000 次抛异常后再 encode 输出与全新实例逐字节一致）。
+  - **⚠️ 但初版引用的数字错了约 20 倍**：我写「每次现建多花 2.08 µs」，审查实测
+    `JSONEncoder()` 是 **126 ns**、`JSONDecoder()` 是 **134 ns**；encode 小 Codable 体
+    fresh 1.522 µs vs shared 1.420 µs（**只差 102 ns**）。所以
+    「encoder 2.08 / decoder 0.1，二十倍不对称」这个论据**不成立**
+    （我那次量到的是首轮未预热的值）。改 encoder 的决定本身无害（少一次分配），
+    但**实际收益是百纳秒级**，不是微秒级。
+  - 真正值得改的是「**每请求新建**」这件事本身（分配 + 首用初始化），
+    而不是某个夸张的倍数。全仓还有 4 个同类高频站点未提
+    （`AniSkipIDResolver` / `AnimeSkipClient` / `GatewayClient` / `PayloadCodec`），
+    留给后续批次。
+  - `JSONEncoder` **确实持有可变状态**（`outputFormatting` / `dateEncodingStrategy` 等
+    open var），SDK 只是标了 `@unchecked Sendable`。当前安全的**前提是「初始化后从不修改」**——
+    注释已按这个口径写，将来任何调用点改配置都会跨请求串台并引入竞争。
 
 - **`P1-05`：探活会话复用**（`ServerProbe`）。
   - 改前每次 `probe` 都「copy 配置 → 新建 `URLSession` → `defer invalidateAndCancel`」。
