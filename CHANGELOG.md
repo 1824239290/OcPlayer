@@ -27,6 +27,54 @@
 
 ### 性能
 
+- **`P1-13`：iOS 触摸热路径不再每事件重算整个播放器根 body**。
+  - `touchTranslation` 是 `@State`，而它**每个触摸事件都要写**（`handleTouchChanged`
+    里两处），却**只在长按判定的 Task 里读一次**（判 `movementSlop`）。
+  - **`@State` 的失效粒度是整个视图**：一写就标脏 `PlayerScreen`，于是每次
+    `onChanged` 都让根 body 重算一遍 —— HUD 挂载时那一整棵 Glass 树（11 面玻璃）
+    跟着每个触摸事件重跑。同文件的 `panSession` 早就因为同一原因换成了
+    `@Observable PlayerPanFeedback`，但 `touchTranslation` 当时漏了。
+  - **修法**：`@State private var touchTranslationStore = TouchTranslationStore()`
+    —— `@State` 负责**跨 body 重算保住引用**，而容器**不是 `@Observable`**，
+    所以写它的属性**不触发任何视图失效**。两者结合才是目标形态：持久 + 不重算。
+  - **⚠️ 第一版写成 `@ObservationIgnored private let`，是阻断级错误**：
+    `PlayerScreen` 是 struct，每次 body 重算都会重新构造它，那个 `let` 属性
+    **每次重算都新建一个空容器** → 触摸位移丢光 → 长按 `movementSlop` 判定永远
+    读到 `.zero`（2x 长按失效）。独立审查用 SwiftUI 探针实测复现
+    （`INIT store#0` → 重算 → `INIT store#1` → 长按读 `store#0` 的 0.0）。
+    已改成 `@State` 持有，注释里写明「为什么必须是 `@State` 而不是 `let`」。
+  - 顺带核对：`panAreaSize` 虽然也是 `@State`，但它**只在尺寸变化时写**（不是
+    每事件），不构成热路径问题 —— 不改。
+
+- **`P1-14`：iOS 音量纵滑不再每个事件都穿进程写系统音量**。
+  - `MPVolumeView` 的系统音量是 **1/16 量化**的（步长 0.0625），而纵滑手势给的是
+    连续 `0...1`。原先的守卫是「`abs(slider.value - value) > **0.005**` 就写」——
+    **0.005 远小于 1/16**：`MPVolumeView` 会把写入值自己取整，`slider.value` 读回来
+    是取整后的值，于是下一次比较「差」仍大于 0.005，**绝大多数触摸事件都通过守卫**。
+  - 一次 1 秒纵滑 ≈ **数百次跨进程系统音量写入**，再经 KVO + 主 actor Task 回写。
+  - **修法**：先把目标**量化到 1/16 档位**，再用**半档容差**（0.03125）比较。
+    档内连续拖动**一次都不写**，写入次数从 O(事件数) 降到 O(跨越的档数)。
+    顺带切断了「写 → KVO 回声 → 再进 `updateUIView` → 再写」的放大环。
+  - 量化与守卫都放在**跨平台纯逻辑文件** `PlayerPanGestures.swift`
+    （`quantizedVolume` / `shouldWriteVolume`）而不是 `SystemVolumeControl`
+    —— 后者在 `#if os(iOS)` 里，macOS 测试靶根本编不进去、没法测。
+  - **⚠️ 第一版只把 `quantizedVolume` 抽出来测，守卫仍嵌在 `updateUIView` 里
+    —— 结果本批真正改变行为的那 4 行零覆盖**：独立审查实测「把守卫改回 `> 0.005`，
+    7 条用例**全绿**」。现在守卫也抽成纯函数 `shouldWriteVolume(current:target:)`，
+    补 3 条行为用例（同档不写 / 恰好半档写 / 偏差网格值），删掉一条恒真的同义反复。
+    验红：守卫改回 `> 0.005` → **3 条用例红**（此前全绿）。
+  - 用例 9 条：1/16 倍数、越界夹住、**档内恒定**、**跨档必变**、±0.5 档边界、
+    半档 = 步长一半、**守卫的半档语义**、**老 0.005 与半档在中间区间结论相反**、
+    **偏离网格的 `current`**。
+  - **⚠️ 「1/16 量化」是无 Apple 文档支撑的经验假设**（只查到社区惯例）。
+    修复的正确性建立在「`slider.value` 与本函数的网格同相」上：同相时差值必是
+    1/16 的整数倍、半档容差永不落进死区。若某个输出（蓝牙 / AirPlay / 未来 iOS）
+    报更细或偏移的粒度，恰好半档时该档会**永不写入**。需真机采样
+    `AVAudioSession.outputVolume` 才能定论 —— 本机无 iOS 真机，**未验证**。
+  - **⚠️ 写用例时自己错了一次**：最初拿 `4.9 档` 与 `5.1 档` 断言「跨档必变」，
+    跑出来相同 —— 因为档位边界在 **±0.5 档**，4.9 与 5.1 都在第 5 档内。
+    改成 4.4 / 5.6 后才正确，并单独加一条用例钉住这个边界语义。
+
 - **`CORR-08` 补强：找到并修掉 `ServerEndpointWiringTests` 假红的**真因**（不是 runner 抖动）**。
   - **现象**：`main` 在 2026-10-19（`db23061`）红在
     `testResolvedAddressIsPersistedAndPublished`，报「等待超时 3.0 s」。

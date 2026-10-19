@@ -82,7 +82,29 @@ struct PlayerScreen: View {
     /// 一次触摸的起点（nil = 手指不在屏上）。单击/双击/长按全靠它计时判定。
     @State private var touchStart: TouchStart?
     /// 本触摸最近一次位移；长按定时器到点时判断「手指是否还停在原地」用。
-    @State private var touchTranslation: CGSize = .zero
+    /// 当前触摸的累计位移。
+    ///
+    /// ## 为什么是 `@State` **持有**一个不做观察的引用容器
+    ///
+    /// 它**只在长按判定的 Task 里读一次**（判 `movementSlop`），却**每个触摸事件
+    /// 都要写**。原来直接是 `@State private var touchTranslation: CGSize`，而
+    /// `@State` 的失效粒度是**整个视图**：一写就标脏 `PlayerScreen`，于是每次
+    /// `onChanged` 都让根 body 重算一遍 —— HUD 挂载时那一整棵 Glass 树（11 面玻璃）
+    /// 跟着每个触摸事件重跑。
+    ///
+    /// ## ⚠️ 必须是 `@State`（而不是 `let`）
+    ///
+    /// `PlayerScreen` 是 **struct（值类型）**，每次 body 重算都会重新构造它。
+    /// 写成 `let touchTranslationStore = TouchTranslationStore()` 的话，**每次重算
+    /// 都新建一个空容器**，触摸位移直接丢光 —— 长按判定会永远读到 `.zero`。
+    ///
+    /// `@State` 的职责正是「跨 body 重算保住这个引用」。而
+    /// `TouchTranslationStore` **不是 `@Observable`**，所以写它的属性**不会**触发
+    /// 任何视图失效 —— 两者结合才是我们要的：**持久 + 不触发重算**。
+    ///
+    /// 同文件 `panFeedback`（`@State private var panFeedback = PlayerPanFeedback()`）
+    /// 是同一模式，区别只在于那个容器是 `@Observable`（供子视图观察）。
+    @State private var touchTranslationStore = TouchTranslationStore()
     /// 上一次轻点时刻（双击判定窗口）。
     @State private var lastTapDate: Date?
     /// 单击延迟任务：等双击窗口过期才切 HUD，第二击来了就取消。
@@ -450,7 +472,7 @@ struct PlayerScreen: View {
         if let existing = touchStart {
             if value.startLocation == existing.location {
                 // 同一触摸在延续（startLocation 在拖动开始时就固定了）。
-                touchTranslation = value.translation
+                touchTranslationStore.translation = value.translation
                 classifyPanIfNeeded(at: value)
                 return
             }
@@ -465,7 +487,7 @@ struct PlayerScreen: View {
         // 不落盘，手指还在屏上、重拖成本≈0。
         cancelPendingPanCommit()
         touchStart = TouchStart(date: Date(), location: value.startLocation)
-        touchTranslation = value.translation
+        touchTranslationStore.translation = value.translation
         scheduleHoldDetection()
     }
 
@@ -475,9 +497,10 @@ struct PlayerScreen: View {
         holdTask = Task { @MainActor in
             try? await Task.sleep(for: TouchLimits.holdDuration)
             guard !Task.isCancelled else { return }
+            let translation = touchTranslationStore.translation
             guard touchStart != nil,
-                  abs(touchTranslation.width) < TouchLimits.movementSlop,
-                  abs(touchTranslation.height) < TouchLimits.movementSlop,
+                  abs(translation.width) < TouchLimits.movementSlop,
+                  abs(translation.height) < TouchLimits.movementSlop,
                   panFeedback.session == nil,
                   !controller.isHoldFastForwarding
             else { return }
@@ -569,7 +592,7 @@ struct PlayerScreen: View {
         cancelPendingPanCommit()
         lastTapDate = nil
         touchStart = nil
-        touchTranslation = .zero
+        touchTranslationStore.translation = .zero
         panFeedback.session = nil
         if controller.isHoldFastForwarding {
             controller.endHoldFastForward()
@@ -581,7 +604,7 @@ struct PlayerScreen: View {
         holdTask = nil
         let start = touchStart
         touchStart = nil
-        touchTranslation = .zero
+        touchTranslationStore.translation = .zero
 
         // 长按 2x 中抬指：收尾恢复原速（与 macOS 右箭头共用 controller 状态机）。
         if controller.isHoldFastForwarding {
@@ -1068,6 +1091,19 @@ private struct PlayerMouseTrackingView: NSViewRepresentable {
 @Observable
 final class PlayerPanFeedback {
     var session: PlayerPanSession?
+}
+
+/// 当前触摸的累计位移（`P1-13`）。
+///
+/// **故意不是 `@Observable`**：它每触摸事件都写、但只在长按判定的 Task 里读一次。
+/// 让它参与观察，等于把「每个触摸事件」变成「整个 `PlayerScreen.body` 重算」——
+/// HUD 挂载时那棵 Glass 树（11 面玻璃）会跟着每个事件重跑。
+///
+/// 用 `@MainActor` 是因为所有读写都在触摸回调与 `Task { @MainActor }` 里
+/// （SwiftUI 手势回调与视图更新都在主 actor）。
+@MainActor
+final class TouchTranslationStore {
+    var translation: CGSize = .zero
 }
 
 #if os(iOS)

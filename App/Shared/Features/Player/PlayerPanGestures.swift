@@ -34,6 +34,55 @@ enum PlayerPanGestureModel {
     }
 
     /// 纵滑映射：满屏高 = 全量程（0…1），上滑（translation 为负）增大。
+    // MARK: - 系统音量量化（`P1-14`）
+
+    /// `MPVolumeView` 的系统音量是 **1/16 量化**的（`volumeStep`）。
+    ///
+    /// 放在这个跨平台纯逻辑文件里，而不是 `SystemVolumeControl`（`#if os(iOS)`）——
+    /// 后者在 macOS 测试靶上根本编不进去，量化逻辑就没法测。
+    static let volumeStep: Float = 1 / 16
+
+    /// 半档容差：目标与当前值差不到半档，就算「已经在这一档」，不写系统音量。
+    static let volumeHalfStep: Float = volumeStep / 2
+
+    /// 把连续值量化到最近的 1/16 档位。
+    ///
+    /// ## 为什么必须量化后再写
+    ///
+    /// 原先的守卫是「`abs(slider.value - value) > 0.005` 就写」—— 而 **0.005 远小于
+    /// 1/16 = 0.0625**。`MPVolumeView` 会把写入值自己取整，`slider.value` 读回来是
+    /// 取整后的值，于是下一次比较「差」仍大于 0.005，**几乎每个触摸事件都通过守卫**：
+    /// 一次 1 秒纵滑就是数百次跨进程系统音量写入 + KVO + 主 actor Task 回写。
+    ///
+    /// 量化到同一档后，档内连续拖动**一次都不写**；写入次数从 O(事件数) 降到
+    /// O(跨越的档数)。
+    static func quantizedVolume(_ value: Float) -> Float {
+        let clamped = min(max(value, 0), 1)
+        return (clamped / volumeStep).rounded() * volumeStep
+    }
+
+    /// **是否该把 `target` 写进系统音量**（`P1-14` 的守卫本体）。
+    ///
+    /// 抽成纯函数是**为了让这段判定可测** —— 它原本嵌在
+    /// `SystemVolumeControl.updateUIView` 里，而后者在 `#if os(iOS)` 中，
+    /// macOS 测试靶根本编不进去。审查实测：把守卫改回老的 `> 0.005`，
+    /// 7 条只测 `quantizedVolume` 的用例**全绿** —— 也就是说
+    /// **本批真正改变行为的那 4 行零覆盖**。这个函数就是补那个洞。
+    ///
+    /// - Parameters:
+    ///   - current: 滑块当前值（系统音量，已在 1/16 网格上）。
+    ///   - target: 已经过 `quantizedVolume` 的目标值。
+    /// - Returns: 差值达到**半档**才写。
+    ///
+    /// ## 为什么是半档而不是「任何不等」
+    ///
+    /// `current` 可能因为蓝牙 / AirPlay / 硬件音量键而落在网格的**偏移**位置。
+    /// 用「差 ≥ 半档」判：偏移不到半档时**不动**（避免一次滑动反复写），
+    /// 到半档才吸附到最近的档 —— 这也切断了「写 → KVO 回声 → 再写」的放大环。
+    static func shouldWriteVolume(current: Float, target: Float) -> Bool {
+        abs(min(max(current, 0), 1) - target) >= volumeHalfStep
+    }
+
     static func verticalTarget(start: Double, translation: CGFloat, extent: CGFloat) -> Double {
         guard extent > 1 else { return start }
         return min(max(start - Double(translation / extent), 0), 1)
