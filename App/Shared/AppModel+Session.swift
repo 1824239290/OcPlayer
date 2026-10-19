@@ -12,11 +12,17 @@ extension AppModel {
         // `LIVE-02`：冷启动有一段 **865 ms 的日志盲区**（2 ms 的「应用启动」→ 867 ms 的
         // 「首页用磁盘缓存预热」之间一条日志都没有），诊断包里完全看不出这段花在哪。
         //
-        // 这里按段打点，四段正好覆盖盲区的候选来源：
-        //   setup   —— Bangumi / Metadata 建库（异步，通常不阻塞）
-        //   restore —— `MediaServerFactory.restore`（档案解码 + 令牌读取/迁移）
-        //   attach  —— `activate(server:)` 内的装配（含 `MetadataCache` attach）
-        //   cache   —— `hydrateBrowserDataFromCache` 的真正读盘（`hydrator.home()`）
+        // 这里按段打点，覆盖盲区的候选来源：
+        //   setupKickoffMs —— **只是「发起」** Bangumi / Metadata 建库的耗时
+        //   restoreMs      —— `MediaServerFactory.restore`（档案解码 + 令牌读取/迁移）
+        //   activateMs     —— `activate(server:)` 内的装配（含 `MetadataCache` attach）
+        //   cache readMs   —— `hydrateBrowserDataFromCache` 的真正读盘（`hydrator.home()`）
+        //
+        // ⚠️ **`setupKickoffMs` 不是「建库花了多久」**：`bangumi.setup()` /
+        // `metadata.setup()` 内部是 `Task.detached` 建库后**立即返回**，所以这个数
+        // 通常≈0。真正等库发生在 `activate` 的 `metadata.wrap`（已计入 `activateMs`）。
+        // 第一版把它叫 `setupMs` 并在注释里写「建库」，是**错的**，已更正 ——
+        // 名字和注释都会误导后来人，所以连字段名一起改了。
         //
         // 用单调时钟 `ContinuousClock`：墙钟会被 NTP / 用户改时间影响，
         // 冷启动耗时正是最容易被它污染的场景。
@@ -88,12 +94,12 @@ extension AppModel {
         let activateDone = launchClock.now
         // 逐个算成局部常量再装字典：直接写成一个大的字典字面量会让类型检查器超时
         // （实测 `unable to type-check this expression in reasonable time`）。
-        let setupMs = elapsedMs(from: launchStart, to: setupDone)
+        let setupKickoffMs = elapsedMs(from: launchStart, to: setupDone)
         let restoreMs = elapsedMs(from: restoreStart, to: restoreDone)
         let activateMs = elapsedMs(from: restoreDone, to: activateDone)
         let totalMs = elapsedMs(from: launchStart, to: activateDone)
         var launchFields: [String: DiagnosticValue] = [:]
-        launchFields["setupMs"] = .integer(setupMs)
+        launchFields["setupKickoffMs"] = .integer(setupKickoffMs)
         launchFields["restoreMs"] = .integer(restoreMs)
         launchFields["activateMs"] = .integer(activateMs)
         launchFields["totalMs"] = .integer(totalMs)

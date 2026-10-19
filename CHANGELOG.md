@@ -32,50 +32,61 @@
     诊断包无法归因这段花在哪（会话恢复？`ServerStore` 解码？SQLite 首次 attach？
     `MetadataHydrator.home()` 的读？）。
   - 新增两条打点：
-    - **「冷启动分段」**（`AppModel+Session.bootstrap`）：`setupMs`（Bangumi/Metadata 建库）、
-      `restoreMs`（档案解码 + 令牌读取/迁移）、`activateMs`（装配 + `MetadataCache` attach）、
+    - **「冷启动分段」**（`bootstrap`）：`setupKickoffMs`、`restoreMs`、`activateMs`、
       `totalMs`，外加 `restored` 布尔（走 onboarding 时 `activateMs` 接近 0，
       单看数字会误以为「装配很快」）。
-    - **「首页用磁盘缓存预热」加 `readMs`**：`hydrator.home()` 的读盘/解码耗时，
-      与 `activateMs` 相减就能把盲区拆干净。
-  - 用**单调时钟** `ContinuousClock` 而不是墙钟：墙钟会被 NTP / 用户改时间影响，
-    而冷启动耗时正是最容易被它污染的场景。
+    - **「首页用磁盘缓存预热」加 `readMs`**：`hydrator.home()` 的读盘/解码耗时。
+  - 用**单调时钟** `ContinuousClock` 而不是墙钟：墙钟会被 NTP / 用户改时间污染。
+  - **⚠️ 第一版把第一段叫 `setupMs` 并在注释里写「建库」，是错的**：
+    `bangumi.setup()` / `metadata.setup()` 内部是 `Task.detached` 建库后**立即返回**，
+    所以那个数通常≈0，根本不是「建库花了多久」。真正等库发生在 `activate` 的
+    `metadata.wrap`（已计入 `activateMs`）。审查实测确认（mock 里 detached 建库 865 ms
+    → `setupMs = 0 ms`）。已把字段改名为 **`setupKickoffMs`**，注释写明它只是「发起」。
   - 顺带记下两处踩坑：① 把整段写成一个大的字典字面量会让类型检查器超时
     （`unable to type-check this expression in reasonable time`），必须拆成局部常量；
-    ② `Duration` 不能直接转 `Int64`，只能拆 `components`，抽了个 `elapsedMs(from:to:)`。
+    ② `Duration` 不能直接转 `Int64`，只能拆 `components`，抽了 `elapsedMs(from:to:)`。
 
-- **`LIVE-03`：`MallocPressureRelief` 删掉误导指标 + 加「没收益就早退」**。
-  - 真实实测（5 次运行 × 四拍 +2s/+25s/+60s/+120s），`physFootprint` 变化 **≤0.1 MB**：
-    `350.0→350.0 · 367.2→367.2 · 336.0→336.0 · 325.5→325.5 · 330.8→330.7`
-    —— 后三拍基本是纯开销。
-  - **删掉 `mallocAllocatedBytes` 日志字段**：它读的是
-    `malloc_zone_statistics.size_allocated`（见 `ProcessFootprint.swift`），而
-    `malloc_zone_pressure_relief` 归还的是**空闲页**、**不改「已分配字节」** ——
-    那个指标**结构上不可能因 relief 而变**。给读者一个永远不动的数字判断
-    「relief 有没有用」，是误导。现在只打 `physFootprint` 前后值 + `reclaimed_bytes`。
-  - **早退**：某一拍回收量 < 1 MB 就不再安排后续拍（从「四拍固定开销」变成
-    「拍到没有可回收的页为止」）。阈值 1 MB 按实测噪声（≤0.1 MB）留了一个数量级余量。
-  - `perform` 改为返回回收字节数，供早退判据与日志共用。
-  - **⚠️ 保守选择**：没有直接删掉这 82 行（清单给的两个选项之一）。理由：
-    它仍是唯一一处主动归还空闲页的逻辑，而 `LIVE-04` 记着真实峰值 RSS 435 MB、
-    iOS jetsam 风险 —— 真到内存吃紧时它是有用的；删掉就再没有抓手。
-    现在改成「有收益才继续」，把确认无用的三拍省掉。
-  - 用例钉住核心证据：**`relief` 不改 `mallocAllocatedBytes`**（若哪天它真会改，
-    删字段就删错了，这条会红）。
+- **`LIVE-03`：relief 的日志读数改对了；「没收益就早退」**被评估并否决**（我此前加了，已撤销）**。
+  - 真实实测（四拍 +2s/+25s/+60s/+120s），`physFootprint` 变化 **≤0.1 MB**，
+    后三拍看起来是纯开销 —— 我据此加了「某拍回收 < 1 MB 就不再排后续拍」的早退。
+  - **⚠️ 这是一个我自造并已撤销的错误优化**：这个函数**自己的注释**就写着
+    「+2s/+25s 时内核媒体会话尚未释放完，relief 无页可收」，`+60s/+120s` 才是收内核尾巴的。
+    也就是说**前两拍本来就该是 0** —— 拿第一拍的结果决定要不要排后两拍，判据逻辑上无效。
+  - **成本实测才是决定性证据**：一次全 zone relief sweep = **58 ns**，一次 `TASK_VM_INFO`
+    = **1.18 µs**。省下的是**纳秒级**，而丢掉的是「几百 MB 内核尾巴」这个功能存在的理由。
+    → **四拍原样保留。** 这也说明清单 `LIVE-03` 里「省掉三次无用的 zone 遍历」这个
+    预期收益**基于错误的成本模型**（把 58 ns 当成可观开销），不值得为它冒风险。
+  - **日志读数改对**：原来同时打 `physFootprint` 与 `malloc size_allocated`，两者都不是
+    「这一拍到底拿回多少」的好读数。现在报 **`malloc_zone_pressure_relief` 的返回值**
+    （`malloc.h` 语义是 "number of bytes released"），footprint 只留作对照。
+  - **⚠️ 一处我说错并已更正**：我曾断言 `size_allocated`「结构上不可能因 relief 而变」。
+    审查指出这不成立 —— `size_allocated` 语义是 "reserved in memory"，而 relief 做的是
+    munmap，munmap 可以降低 reserved VM。删该字段的**真实理由**只是「它作为本拍收益的
+    读数不好用」，不是「它必然不动」。
+  - 同时删掉了自造的 `MallocPressureReliefTests`：那条断言「relief 不改已分配字节」在本机
+    **恒真**（relief 到处返回 0，把它整个删掉 delta 仍是 0），无法失败，留着是假保护。
 
 - **`LIVE-01`：弹幕匹配期间显示已等待时长（11 秒不再像卡死）**。
   - 真实会话实测：弹幕首次装载 **11.1 s**，其中 **10.4 s 是网关往返**
-    （+8.6 s 首次请求以 500 失败 → +11.1 s 重试成功，`cache=HIT` 1.9 s）——
-    **不是 App 的计算**（同集第二次装载仅 575 ms）。
-  - **「重新匹配」入口其实已经有了**（`PlayerHUDActions` 的 `arrow.clockwise`），
-    任何状态都可用。所以清单说的「缺一个可操作状态」并不完全准确 ——
-    真正缺的是**进展感**：那 11 秒里 HUD 只显示静态的「正在匹配」，
-    用户分不出「在慢慢跑」还是「已卡死」。
-  - 新增 `statusElapsedSeconds`：只在 `.matching` / `.loadingComments` 期间由每秒
-    推进的任务维护，其它状态停表清零（`status` 的 `didSet` 驱动）。
-    UI 显示「正在匹配 · 6s」/「正在获取弹幕 · 9s」。
-  - **没有压超时**：实测首次请求 **8.6 s 就返回了 500 错误**（超时是 15 s），
+    （+8.6 s 首次请求以 500 失败 → +11.1 s 重试成功）——**不是 App 的计算**
+    （同集第二次装载仅 575 ms）。
+  - **「重新匹配」入口其实已经有了**（`PlayerHUDActions` 的 `arrow.clockwise`，任何状态可点），
+    所以清单说的「缺一个可操作状态」并不完全准确 —— 真正缺的是**进展感**：那 11 秒里
+    HUD 只显示静态的「正在匹配」，用户分不出「在慢慢跑」还是「已卡死」。
+  - 新增 `statusElapsedSeconds`，UI 显示「正在匹配 · 6s」。**只在**
+    `.matching` / `.loadingComments` 期间推进，其它状态停表清零。
+  - **⚠️ 第一版是「每秒 tick +1」，已改掉**：审查实测主 actor 阻塞 5 s 只 +1 —— 
+    而那正是最需要它准确的场景（卡顿时少算）。现在存 `statusStartedAt`（单调时钟），
+    每次 tick 用**墙钟差值**重算秒数，卡顿后下一次 tick 会直接跳到真实已用时长。
+  - 另外两处细节：① `matching → loadingComments` 连跳时**保留原起点**（否则秒数被打回 0、
+    看起来像重新开始）；② 加 `deinit` 兜底 cancel ticker（协调器被整个释放时没人做状态迁移）。
+  - **没有压超时**：实测首次请求 **8.6 s 就返回了 500 错误**（超时设的是 15 s），
     说明瓶颈是网关慢/失败重试，压超时解决不了，反而会砍掉本该成功的请求。
+  - **⚠️ 已知局限**：这个计数只在「更多 → 弹幕」面板与「选择弹幕」sheet 里可见，
+    **常驻 HUD 没有变化**。若目标是「不翻菜单就能看到在动」，本改动到不了 —— 需要
+    另做常驻指示，本批没做。
+  - **失效代价有界**：`DanmakuCoordinator` 是 `@Observable`，每秒变一次会让**读它的视图**
+    每秒重算；当前唯一读它的是那个条件构建的弹幕面板 / sheet，不是常驻 HUD。
 
 - **`P1-13`：iOS 触摸热路径不再每事件重算整个播放器根 body**。
   - `touchTranslation` 是 `@State`，而它**每个触摸事件都要写**（`handleTouchChanged`
