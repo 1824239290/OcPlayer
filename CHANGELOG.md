@@ -27,6 +27,23 @@
 
 ### 性能
 
+- **CI flaky：`DanmakuCacheTests.testStaleMemoryDoesNotDeleteFileWrittenElsewhere` 的 TTL 余量不足**。
+  - 现象：PR #46 的 CI 红在这个用例（三处断言全红），**本机同一条 0.136 s 通过**；
+    而本批改动完全没碰 `DanmakuKit`。
+  - 根因：这条用例有**两段时间**需要余量，而且方向相反：
+    ① **等内存条目过期**：`stale` 自己的 TTL 必须**小于** `Task.sleep` 时长，
+       否则 `comments(for:)` 直接命中内存、走不到磁盘路径；
+    ② **读盘上那份新数据时不能判它过期**：`diskComments` 用的是 **`self.commentsTTL`**
+       （即 `stale` 的 TTL）去判**盘上文件的 `fetchedAt`**，而那份文件是 `other`
+       刚写的（`now - fetchedAt ≈ 0`）—— 所以这个 TTL 反而要**足够大**以吸收 CI 抖动。
+  - 原值 `0.05 s TTL + 120 ms sleep`：②只有一个 **50 ms** 余量，慢 runner 上不够。
+    改成 `0.5 s TTL + 800 ms sleep`：①300 ms 余量、②500 ms 余量。
+  - **⚠️ 我第一次改错了方向**：把 TTL 改成 `0.001 s`（以为「余量 = sleep − TTL，越大越好」），
+    结果 ② 的余量从 50 ms 缩到 **1 ms**，全量跑时反而立刻红（203 条里 3 失败）。
+    弄清 ② 的机制后才改对。
+  - 变异验证：把「内存过期时删盘上文件」重新引回去（即这个用例防的原 bug）→ **红**。
+    说明放宽时间余量没有让它失去判别力。
+
 - **`LIVE-02`：补上冷启动那段 865 ms 的日志盲区**。
   - 真实会话实测：`2 ms 应用启动` → **`867 ms 首页磁盘缓存预热`**，中间**一条日志都没有**，
     诊断包无法归因这段花在哪（会话恢复？`ServerStore` 解码？SQLite 首次 attach？

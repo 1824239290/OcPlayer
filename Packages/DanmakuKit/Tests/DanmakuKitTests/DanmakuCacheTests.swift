@@ -293,11 +293,28 @@ final class DanmakuCacheTests: XCTestCase {
     func testStaleMemoryDoesNotDeleteFileWrittenElsewhere() async throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
-        let stale = DanmakuCache(directory: dir, commentsTTL: 0.05)
+        // ## ⚠️ TTL 与 sleep 的余量要给足（CI 实测假红过）
+        //
+        // 这里有两段时间都需要余量，方向还相反：
+        //
+        // ① **等内存条目过期**：`stale` 自己的 TTL 必须**小于** sleep 时长，
+        //    否则 `comments(for:)` 直接命中内存、根本走不到磁盘路径。
+        //    要求：`sleep >= staleTTL × 数倍`。
+        // ② **stale 读盘上那份新数据时不能判它过期**：`diskComments` 用的是
+        //    **`self.commentsTTL`**（即 `stale` 的 TTL）去判**盘上文件的
+        //    `fetchedAt`** —— 而那份文件是 `other` 刚写的（`now - fetchedAt ≈ 0`）。
+        //    要求：`staleTTL >= 两次操作之间的抖动 × 数倍`。
+        //
+        // 合起来：`staleTTL` 要**足够大**以吸收 CI 抖动，又要**足够小**以让 sleep 等得过期。
+        //
+        // 原值是 0.05 s TTL + 120 ms sleep：②只有一个 50 ms 的余量，CI 的慢 runner
+        // 上不够 —— 实测 `main` 的 PR #46 那次假红（三处断言全红，本机同一条 0.136 s 通过）。
+        // 现在 0.5 s TTL + 800 ms sleep：①有 300 ms 余量、②有 500 ms 余量。
+        let stale = DanmakuCache(directory: dir, commentsTTL: 0.5)
         defer { try? FileManager.default.removeItem(at: dir) }
 
         await stale.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "old")], for: 7)
-        try await Task.sleep(for: .milliseconds(120))
+        try await Task.sleep(for: .milliseconds(800))
 
         // 另一实例在同一目录写入新数据（生产里是预览 / 重建 AppModel）。
         let other = DanmakuCache(directory: dir, commentsTTL: 3600)
