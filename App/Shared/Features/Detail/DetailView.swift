@@ -639,7 +639,40 @@ struct DetailView: View {
     private var metaRow: some View {
         let base = colorScheme == .light ? Color.black : Color.white
         return HStack(spacing: 9) {
-            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
+            // `P2-18`：**身份用内容，不用下标**。
+            //
+            // ## 这是「正确性 / 身份稳定性」，**不是**性能修复
+            //
+            // 审查明确指出（并核实了）：这条**没有任何可测量的性能收益** ——
+            // 4 个 `Text` 的 `HStack` 无论用哪种 id 都无感；注释早先写的
+            // 「与 `Motion.standard` 翻转动画叠加会抖」也**没有录屏或计数证据**，
+            // 而且那段翻转发生时 `metaParts` 本就不变。
+            //
+            // 保留它的理由是**身份语义本身**：`metaParts` 是动态拼的
+            // （年份 / 类型 / 时长 / 季数），**任一字段缺失会让后面元素整体前移**。
+            // 用下标当身份时，前移等于「第 N 个元素换成了别的内容」—— SwiftUI
+            // 会把它当作不同元素重建。这不是 bug（结果照样对），而是**让视图身份
+            // 与数据身份脱节**的坏习惯：任何按位置做的状态/动画/测量都会跟着漂。
+            //
+            // 分隔符仍用 `index > 0`（位置信息确实需要），但**身份**用内容 ——
+            // 两者解耦是关键。
+            //
+            // ## 唯一性前提（必须成立，否则 `ForEach` 收到重复 id = 未定义行为）
+            //
+            // 这四类内容的**文本形态互斥**：
+            //   年份  "2024"（纯数字）
+            //   类型  "科幻 / 剧情"（含 " / " 分隔）
+            //   时长  "1 小时 23 分" / "45 分钟"（含「小时」或「分钟」）
+            //   季数  "2 季"（含「季」）
+            // 所以 `id: \.element`（纯内容）唯一且稳定。
+            // `MetaPartsShapeTests` 用穷举把这条前提钉住了（年份 1900–2100 ×
+            // 时长 1–300 分钟 × 季数 1–20 逐对求交集）。
+            //
+            // ⚠️ 若将来往 `metaParts` 里加**同形态**的字段（例如再来一个纯数字），
+            // 这条就破了 —— 那时必须把身份改成结构化形式
+            // （`struct ID: Hashable { text; occurrence }`），**不要靠字符串拼 "#序号"**
+            // （第一版就是那么做的，审查实测 `["A","A","A#1"]` 会产生重复 id）。
+            ForEach(Array(metaParts.enumerated()), id: \.element) { index, part in
                 if index > 0 {
                     Text("·").foregroundStyle(base.opacity(0.4))
                 }
