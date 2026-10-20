@@ -302,6 +302,11 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
     /// open 看门狗时长。默认 60s；测试注入缩短。
     static var openWatchdogTimeout: Duration = .seconds(60)
+
+    /// 看门狗的**默认值**，`nonisolated` 供 App 层在非隔离上下文对齐时限
+    /// （避免 loading 比看门狗先撤）。测试可以改 `openWatchdogTimeout`，
+    /// 但那个值只在主 actor 内可读 —— App 层的时限用这个默认值算即可。
+    nonisolated static let openWatchdogDefault: Duration = .seconds(60)
     /// Changes as soon as a new request is presented, before its engine opens.
     var sourceGeneration: UInt64 = 0
     /// 最近一次请求（出错重试用）。
