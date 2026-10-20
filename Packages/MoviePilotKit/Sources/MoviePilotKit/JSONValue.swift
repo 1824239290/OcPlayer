@@ -59,16 +59,35 @@ extension JSONValue {
         switch any {
         case is NSNull:
             self = .null
-        case let value as Bool:
-            self = .bool(value)
-        case let value as NSNumber:
-            self = .number(value.doubleValue)
         case let value as String:
             self = .string(value)
         case let value as [Any]:
             self = .array(value.map(JSONValue.init(any:)))
         case let value as [String: Any]:
             self = .object(value.mapValues(JSONValue.init(any:)))
+        case let value as NSNumber:
+            // ## ⚠️ 布尔判定**不能**用 `as? Bool`（这是一处修掉的既有 bug）
+            //
+            // `JSONSerialization` 给出的数字是 `NSNumber`，而 Swift 的
+            // `NSNumber` → `Bool` 桥接对 **0 和 1 也成立**：实测
+            // `NSNumber(value: 0) as? Bool` 得到 `false`、`1` 得到 `true`。
+            //
+            // 原先这里先 `case let value as Bool`，于是 JSON 里**任何 `0`/`1` 数字**
+            // 都会被当成布尔：`{"seeders":0}` → `.bool(false)`，而
+            // `JSONValue.boolValue == nil` 之外的 accessor 全部失效 ——
+            // 具体地 `intValue` / `doubleValue` 都返回 `nil`（它们只认 `.number`）。
+            //
+            // 生产影响：SSE 资源搜索把 `torrent_info` 整对象经 `init(any:)` 转成
+            // `MPTorrent.raw`，于是 `seeders` / `size` 取到 **0 或 1** 的那些条目
+            // 字段直接**消失**（`raw["seeders"]?.intValue == nil`）。
+            //
+            // 正确判据要问 CoreFoundation 的**真实类型**：只有 `__NSCFBoolean`
+            // 才是布尔，普通数字 `NSNumber` 不是。
+            if CFGetTypeID(value) == CFBooleanGetTypeID() {
+                self = .bool(value.boolValue)
+            } else {
+                self = .number(value.doubleValue)
+            }
         default:
             self = .null
         }

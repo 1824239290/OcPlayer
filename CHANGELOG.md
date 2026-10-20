@@ -27,6 +27,53 @@
 
 ### 性能
 
+- **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」—— 实测 28.47 ms → 7.92 ms（3.6×，省 20.6 ms / 243 KB）**。
+  - `MPMediaInfo` / `MPDownloadTask` / `MPSubscribe` / `MPSite` 都不是 `Codable`
+    —— 它们要的是原始 `[String: JSONValue]`（下载时整个对象原样回传服务端）。
+    原路径是：
+    1. `unwrap(data)` → `JSONSerialization.jsonObject`（**全量解析成 Any 树**）
+    2. → `JSONSerialization.data(withJSONObject:)`（**再序列化回 Data**）
+    3. → `JSONDecoder().decode([[String: JSONValue]].self, ...)`（**第二遍全量解析**，
+       且是 `try?` 瀑布：每个值依次 `try?` Bool / Double / String / Array / Object）
+    **一份数据解析三遍。**
+  - `JSONValue` 的瀑布解码单独测就有 **44.62 ms / 243 KB**（300 个对象），
+    是等效扁平 `Codable`（2.30 ms）的 **19.4×**、`JSONSerialization`（8.48 ms）的 **5.3×**。
+  - **修法**：新增 `MPEnvelope.unwrapObjects(_:)` —— **只解析一遍**：
+    `JSONSerialization` 拿 `Any` 树，剥信封后直接 `JSONValue(any:)` 转换。
+    4 个调用点（`searchMedia` / `sites` / `downloadingTasks` / `subscribes`）切过去。
+  - **实测（同一个 243 KB 信封响应）**：28.47 ms → **7.92 ms（3.6×，省 20.6 ms）**。
+  - **为什么这条值得（不像前几批的微秒级）**：`downloadingTasks()` 在下载页是
+    **5 秒轮询**的（`DownloadsPollingPolicy`），所以这 20 ms 是**每 5 秒一次的
+    持续开销**，而不是一次性。前面回退的那几条都是「每次操作只付一次」的量级。
+  - 用例 18 条（`EnvelopeObjectsTests` 11 + `JSONValueAnyInitTests` 7），
+    核心是**用旧路径当 oracle**：同一份 data 跑「unwrap + JSONDecoder 瀑布」与
+    「unwrapObjects」，结果必须逐字段相等（覆盖裸数组 / 信封 / 0-1 数字 / 各种数字
+    形态 / 布尔 / 嵌套 / 空容器 / 非数组负载抛错 / 非法 JSON 抛错）。
+    变异（新路径里 `init(any:)` 不判布尔）→ **2 条用例红**。
+
+- **顺带修掉一个既有正确性 bug：`JSONValue.init(any:)` 把 JSON 数字 `0`/`1` 当成布尔**。
+  - Swift 的 `NSNumber` → `Bool` 桥接**对 0 和 1 也成立**：实测
+    `NSNumber(value: 0) as? Bool` 得到 `false`、`1` 得到 `true`。
+  - 而 `init(any:)` 原先**先** `case let value as Bool`，于是 JSON 里任何 `0`/`1`
+    数字都变成 `.bool(...)`。而 `JSONValue.intValue` / `doubleValue` **只认 `.number`**
+    —— 这些字段于是变成 `nil`。
+  - **生产影响**：SSE 资源搜索用 `torrentRaw.mapValues(JSONValue.init(any:))` 把整个
+    `torrent_info` 收进 `MPTorrent.raw`。于是 `seeders` / `size` 取到 **0 或 1** 的
+    资源，那些字段**直接消失**（`raw["seeders"]?.intValue == nil`）。
+  - **修法**：布尔判定改问 CoreFoundation 的**真实类型** ——
+    `CFGetTypeID(value) == CFBooleanGetTypeID()`（只有 `__NSCFBoolean` 才是布尔，
+    普通数字 `NSNumber` 不是）。
+  - 用例钉住：数字 0/1 必须是 `.number` 且 `intValue` 可读；真布尔仍是 `.bool`
+    且 `intValue` 为 nil；其它数字、字符串、null、数组、嵌套照常；
+    以及**真实形态**（`seeders: 0` 的资源对象字段不丢）。
+  - **变异验证：把实现改回原始的 `case let value as Bool` → 3 条用例红。**
+
+- **`P2-15`（详情页选集轨道每 body O(n) 复制）实测量级太小，不改**。
+  - 实测 `Array(slots.reversed())` + `itemsIdentity` 哈希合计：
+    n=24 → **0.43 µs**、n=100 → 1.92 µs、n=500 → 8.86 µs、n=1000 → **17.9 µs**。
+  - n=1000（比现实中的长番还多）也只有 17.9 µs —— 与上一批回退的几条同一个量级，
+    **按同一标准不改**。
+
 - **`P2-18`：详情页 `metaRow` 的 `ForEach` 身份改用内容（**正确性修复，不是性能修复**）**。
   - `metaParts` 是动态拼的（年份 / 类型 / 时长 / 季数），**任一字段缺失会让后面元素
     整体前移**。原实现用 `\.offset`（下标）当身份 —— 前移等于「第 N 个元素换成了

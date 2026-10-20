@@ -22,8 +22,8 @@ extension MoviePilotAPIClient {
         )
         let data = try await requestData(request)
         // v3 的 ResponseAPIRouter 自动信封 + 裸返回两种都要兼容。
-        let items = try Self.plainDecoder.decode(
-            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        // `P2-22`：一次解析（原先 JSONSerialization + 回序列化 + JSONDecoder 瀑布 = 三遍）。
+        let items = try MPEnvelope.unwrapObjects(data)
         return items.map(MPMediaInfo.init(raw:))
     }
 
@@ -31,8 +31,7 @@ extension MoviePilotAPIClient {
     public func sites() async throws -> [MPSite] {
         let request = MPRequest(path: "/api/v1/site/")
         let data = try await requestData(request)
-        let items = try Self.plainDecoder.decode(
-            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        let items = try MPEnvelope.unwrapObjects(data)
         return items.map(MPSite.init(raw:))
     }
 
@@ -58,8 +57,8 @@ extension MoviePilotAPIClient {
     public func downloadingTasks() async throws -> [MPDownloadTask] {
         let request = MPRequest(path: "/api/v1/download/")
         let data = try await requestData(request)
-        let items = try Self.plainDecoder.decode(
-            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        // `P2-22`：一次解析。这条尤其值得 —— 下载页 **5 秒轮询**它。
+        let items = try MPEnvelope.unwrapObjects(data)
         return items.map(MPDownloadTask.init(raw:))
     }
 
@@ -86,8 +85,7 @@ extension MoviePilotAPIClient {
     public func subscribes() async throws -> [MPSubscribe] {
         let request = MPRequest(path: "/api/v1/subscribe/")
         let data = try await requestData(request)
-        let items = try Self.plainDecoder.decode(
-            [[String: JSONValue]].self, from: MPEnvelope.unwrap(data))
+        let items = try MPEnvelope.unwrapObjects(data)
         return items.map(MPSubscribe.init(raw:))
     }
 
