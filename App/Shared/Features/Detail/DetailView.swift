@@ -639,11 +639,29 @@ struct DetailView: View {
     private var metaRow: some View {
         let base = colorScheme == .light ? Color.black : Color.white
         return HStack(spacing: 9) {
-            ForEach(Array(metaParts.enumerated()), id: \.offset) { index, part in
-                if index > 0 {
+            // `P2-18`：**不要用 `\.offset` 当身份**。
+            //
+            // `metaParts` 是动态拼出来的：年份 / 类型 / 时长 / 季数，任一缺失就会让
+            // 后面的元素**整体前移**。用位置当 id 时，前移会让 SwiftUI 认为
+            // 「第 1 个元素换成了别的内容」—— 身份全变 → 重建而不是复用，
+            // 表现为多余的视图重建，且与 `Motion.standard` 的翻转动画叠加时容易抖。
+            //
+            // 改用**内容**当身份：这四个字段的形态天然不同（纯数字年份 / 类型串 /
+            // "1小时23分" / "N 季"），撞车概率极低。
+            //
+            // 分隔符用 `index > 0` 判（位置信息仍然需要），但**身份**用内容 ——
+            // 两者解耦才是这次的修法：位置会漂移，内容不会。
+            //
+            // ⚠️ 唯一性问题：`ForEach` 收到**重复 id** 是未定义行为。理论上
+            // 「年份」与「类型串」都可能是纯数字从而撞车，所以不能直接用
+            // `id: \.element`（纯内容）。这里给每项包一个「内容 + 该内容在数组里
+            // 的出现序号」的身份：**首次出现**的项身份仍是它自己（前移不影响），
+            // 重复项才有附加序号。
+            ForEach(Self.identified(metaParts), id: \.id) { entry in
+                if entry.index > 0 {
                     Text("·").foregroundStyle(base.opacity(0.4))
                 }
-                Text(part).foregroundStyle(base.opacity(0.78))
+                Text(entry.text).foregroundStyle(base.opacity(0.78))
             }
             if let rating = model.displayRating {
                 Label(String(format: "%.1f", rating), systemImage: "star.fill")
@@ -670,6 +688,24 @@ struct DetailView: View {
         // 切换对它们零影响；外链徽章后到，插在行尾不动别人。
         .opacity(model.detail == nil ? 0 : 1)
         .motion(Motion.standard, value: model.detail != nil)
+    }
+
+    /// `P2-18`：给 `metaParts` 的每一项算一个**稳定身份**。
+    ///
+    /// 身份 = 内容（首次出现）+ 「内容#出现序号」（重复出现）。
+    /// 这样：
+    /// - 正常情况（内容互不相同）→ 身份就是内容本身，**前面某项缺失不会让后面项的身份变化**；
+    /// - 内容真重复时 → 仍有唯一 id，不会喂给 `ForEach` 重复 id。
+    ///
+    /// `index` 保留给分隔符用（位置信息仍然需要，只是不再当身份）。
+    nonisolated static func identified(_ parts: [String]) -> [(id: String, index: Int, text: String)] {
+        var seen: [String: Int] = [:]
+        return parts.enumerated().map { index, text in
+            let occurrence = seen[text, default: 0]
+            seen[text] = occurrence + 1
+            let id = occurrence == 0 ? text : "\(text)#\(occurrence)"
+            return (id, index, text)
+        }
     }
 
     private var metaParts: [String] {

@@ -27,6 +27,41 @@
 
 ### 性能
 
+- **`P2-17`（部分）：`ISO8601DateFormatter` 从「每次新建」改成静态共用 —— 实测 71.2 µs → 1.03 µs（69×）**。
+  - `DiagnosticsExport` 的导出头里是 `\(ISO8601DateFormatter().string(from: Date()))`，
+    **每次导出都新建一个 formatter**。本机 `-O` 实测：
+
+    | 写法 | 耗时 |
+    |---|---|
+    | `ISO8601DateFormatter()` 每次新建 | **71.204 µs** |
+    | 共用实例 | **1.034 µs** |
+
+    69 倍 —— `ISO8601DateFormatter` 构造要建 ICU 里的 ISO 日历与时区规则。
+  - 提成 `nonisolated(unsafe) private static let`（`ISO8601DateFormatter` 不是 `Sendable`，
+    Swift 6 会报并发安全；其 `string(from:)` 按 Apple 文档可跨线程用）。
+
+- **`P2-18`：详情页 `metaRow` 的 `ForEach` 不再用 `\.offset` 当身份**。
+  - `metaParts` 是动态拼的（年份 / 类型 / 时长 / 季数），**任一字段缺失会让后面元素整体前移**；
+    用下标当身份时，前移等于「身份全变」→ SwiftUI 重建而不是复用，
+    与 `Motion.standard` 的翻转动画叠加时容易抖。
+  - 修法：身份改用**内容**（位置仍用于分隔符 `index > 0`，两者解耦）。
+  - **唯一性**：`ForEach` 收到**重复 id** 是未定义行为，而「年份」与「类型串」理论上
+    都可能是纯数字从而撞车。所以新增 `DetailView.identified(_:)`：身份 = 内容（首次出现）
+    + `内容#序号`（重复出现）—— 首个出现保持无后缀身份，前移不影响它。
+  - 用例 8 条：身份等于内容、**前面缺一项时后面身份不变**（核心判据，`.offset` 版本必错）、
+    缺中间项同理、重复内容仍唯一、首个出现保持裸身份、全重复、index 与 id 解耦、空数组。
+  - 变异验证：① 改回 `id: \.offset` → 红；② 去掉重复内容的序号后缀 → **3 条用例红**。
+
+- **`P2-17` 的另一半（`ByteCountFormatter`）实测无收益，已回退**。
+  - 原以为 `ByteCountFormatter.string(fromByteCount:countStyle:)`（静态便捷方法，每次新建
+    formatter）比共用实例慢。第一次测到 4.153 → 3.104 µs（25%），据此改了三处。
+  - **但用 `-O` 复测（同一进程、充分 warmup）两者无差异**：2.046 vs 2.068 µs，
+    新写法还略慢。之前那个 25% 是 warmup 不足 / 未开优化造成的**假象**。
+  - 而且即使有 25%，一屏 40 行的总量也只有 **81 µs/帧**（一帧预算 16 700 µs）——
+    量级上根本无关紧要。
+  - → **三处 `ByteCountFormatter` 改动全部回退**，只保留 ISO8601 那处（69 倍是真的）。
+  - 教训同上一批：**性能收益必须用 `-O` + 充分 warmup 测**，且要问「这个量级值不值得改」。
+
 - **`P2-01` / `P2-03` / `P2-04` / `P2-05`：实现后**全部回退**，理由都是「机制假设被实测推翻」。**
   - 这一批我按清单做了四处「少挂材质 / 少挂投影 / 去掉玻璃容器 / 骨架屏减块」的优化，
     独立审查用 `NSHostingView` + `bitmapImageRepForCachingDisplay` 的 2x 离屏快照
