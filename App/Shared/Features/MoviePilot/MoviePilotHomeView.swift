@@ -1100,20 +1100,7 @@ private struct MoviePilotMediaGlassCard: View {
             Spacer(minLength: 8)
 
             // 操作区：液态玻璃胶囊交互组
-            //
-            // ## `P2-03`：**不再为每张卡单开 `GlassEffectContainer`**
-            //
-            // 这个容器里只装同一 `HStack` 内的 2–3 个胶囊按钮：**融合域小到没有融合收益**
-            // （玻璃融合要相邻元素互相取样才有意义），但每开一个容器就要付一次
-            // **离屏玻璃合成**——一屏十几张卡就是十几次，滚动时每帧重做。
-            //
-            // 已去掉容器，直接摆按钮：每个胶囊仍是独立玻璃（`.liquidGlassCapsule`
-            // 自带），只是不再有一个「容器」层去额外合成一遍。
-            //
-            // ⚠️ 若将来这里的操作按钮会随滚动**形变/合并**（`glassEffectID` 配对），
-            // 那时才需要真正的容器 —— 但那时应该把它提到**列表外层**共用一个，
-            // 而不是每张卡各开一个。
-            Group {
+            GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 8) {
                     // 订阅菜单
                     Menu {

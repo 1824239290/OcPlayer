@@ -184,32 +184,11 @@ public struct MediaArtwork<Overlay: View>: View {
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
             }
         }
-        // ## `P2-04`：`.shadow` **只在需要时挂**
-        //
-        // `.shadow(radius: 0)` 看起来「没有阴影」，但它仍然会走一次图层合成路径
-        // （SwiftUI 为投影单独建一层），滚动时每张卡都付这份成本。
-        //
-        // 这里改成条件挂载：不要阴影时**完全不修饰**，宁可让 `some View` 的类型
-        // 擦除成 `AnyView` 也要省掉那层 —— 网格里一屏十几张卡，这是每帧的成本。
-        //
-        // 用 `.compositingGroup()` 把上面那几层合成一次再投影：否则投影会对
-        // **每个子层**各做一遍（`shadow` 默认作用于内容树的每个可绘制层）。
-        .modifier(ArtworkShadow(shadowed: shadowed))
-    }
-
-    /// `shadowed` 为假时**不加任何修饰**（而不是加一个 radius 0 的投影）。
-    private struct ArtworkShadow: ViewModifier {
-        let shadowed: Bool
-
-        func body(content: Content) -> some View {
-            if shadowed {
-                content
-                    .compositingGroup()
-                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
-            } else {
-                content
-            }
-        }
+        .shadow(
+            color: .black.opacity(shadowed ? 0.08 : 0),
+            radius: shadowed ? 3 : 0,
+            y: shadowed ? 1 : 0
+        )
     }
 
     /// 自适应盒子：量到列宽之前先铺一块和「加载中」同一色的中性灰，量到再起图。
