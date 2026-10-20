@@ -23,6 +23,23 @@ struct BangumiCalendarView: View {
     @State private var selectedWeekdayID: Int = todayBangumiWeekdayID
     @State private var showAllDays = false
     @State private var searchKeyword = ""
+
+    /// 搜索过滤**结果**（`P2-11`）。
+    ///
+    /// 原先 `filteredDays` 是 computed property：**每次 body 都全表扫一遍**做
+    /// `lowercased().contains`（100–300 条 × name/nameCN/summary 三处），而
+    /// `displayDays` 又调它一次 —— 每敲一个字符至少两趟全表。
+    ///
+    /// 现在改成 `@State`，由 `.task(id:)` 在关键词变化时算一次。
+    ///
+    /// - Note: `nil` 表示「还没算过」，此时按未过滤处理（首帧不该闪空列表）。
+    @State private var filteredDaysCache: (keyword: String, days: [BangumiCalendarDayDTO])?
+
+    /// 可搜索文本的**预计算小写缓存**（按 `days` 内容失效）。
+    ///
+    /// 原实现的 `lowercased()` 在**每次过滤**里对每条条目重做一遍 —— 而它只取决于
+    /// `days`，与关键词无关。缓存后每次过滤只比较已小写的字符串。
+    @State private var searchableIndex: [Int: String] = [:]
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var loadError: String?
@@ -58,19 +75,99 @@ struct BangumiCalendarView: View {
         days.reduce(0) { $0 + $1.items.count }
     }
 
-    /// 搜索过滤后的天数数据
+    /// 搜索过滤后的天数数据（`P2-11`：读 `filteredDaysCache`，不再每 body 全表扫）。
+    ///
+    /// ⚠️ **缓存带关键词**：`.task(id: searchKeyword)` 是异步的，改关键词后至少有一帧
+    /// 还在读旧 cache。第一版只存 `[DTO]`，于是那一帧会**显示上一个关键词的结果**
+    /// （清空搜索时更明显：闪一下上一次的过滤结果）。
+    ///
+    /// 现在缓存里记着它是用哪个关键词算的；读到不匹配就**当场算一份**（同步，O(n)
+    /// 但只在这一帧发生一次），既不会闪旧数据，也不会长期退化成每 body 全表扫。
     private var filteredDays: [BangumiCalendarDayDTO] {
-        let trimmed = searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmed = normalizedKeyword
         guard !trimmed.isEmpty else { return days }
-        return days.compactMap { day in
+        if let cached = filteredDaysCache, cached.keyword == trimmed {
+            return cached.days
+        }
+        return Self.filter(days: days, keyword: trimmed, index: searchableIndex)
+    }
+
+    /// 去掉首尾空白后的小写关键词（过滤与缓存键都用它，避免两处规则不一致）。
+    private var normalizedKeyword: String {
+        searchKeyword.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    /// 计算一遍过滤结果并写进缓存。由 `.task(id:)` 在关键词 / 数据变化时调用。
+    private func recomputeFilteredDays() {
+        let trimmed = normalizedKeyword
+        guard !trimmed.isEmpty else {
+            filteredDaysCache = nil      // 无关键词 = 不过滤（省掉一份拷贝）
+            return
+        }
+        filteredDaysCache = (
+            trimmed,
+            Self.filter(days: days, keyword: trimmed, index: searchableIndex)
+        )
+    }
+
+    /// 过滤的**唯一实现**：`filteredDays` 的即时路径与 `recomputeFilteredDays` 共用，
+    /// 避免两处规则漂移。
+    ///
+    /// - Parameter index: 预计算的小写文本索引（键是 `item.id`）。缺项时当场算一份，
+    ///   这样即使索引还没建好（`days` 刚换、`.task` 尚未跑），结果也是对的。
+    nonisolated private static func filter(
+        days: [BangumiCalendarDayDTO],
+        keyword: String,
+        index: [Int: String]
+    ) -> [BangumiCalendarDayDTO] {
+        days.compactMap { day in
             let matched = day.items.filter { item in
-                item.name.lowercased().contains(trimmed) ||
-                item.nameCN.lowercased().contains(trimmed) ||
-                (item.summary?.lowercased().contains(trimmed) ?? false)
+                let haystack = index[item.id] ?? searchableText(of: item)
+                return haystack.contains(keyword)
             }
             guard !matched.isEmpty else { return nil }
             return BangumiCalendarDayDTO(weekday: day.weekday, items: matched)
         }
+    }
+
+    /// 重建可搜索文本索引（name / nameCN / summary 小写后拼成一个串）。
+    private func rebuildSearchableIndex() {
+        var index: [Int: String] = [:]
+        for day in days {
+            for item in day.items {
+                index[item.id] = Self.searchableText(of: item)
+            }
+        }
+        searchableIndex = index
+    }
+
+    /// 测试用：暴露纯逻辑（`filter` / `searchableText`）而不必构造整个视图。
+    ///
+    /// 这两个函数是 `private static`；`P2-11` 的三层缓存全靠它们，
+    /// 而它们本身没有副作用、也不需要视图树 —— 直接暴露给 `@testable` 用。
+    nonisolated static func searchableTextForTesting(_ item: BangumiCalendarItemDTO) -> String {
+        searchableText(of: item)
+    }
+
+    nonisolated static func filterForTesting(
+        days: [BangumiCalendarDayDTO],
+        keyword: String,
+        index: [Int: String]
+    ) -> [BangumiCalendarDayDTO] {
+        filter(days: days, keyword: keyword, index: index)
+    }
+
+    /// 三条可搜索字段拼成一个小写串。
+    ///
+    /// 拼成一个串而不是存三个字段：`contains` 只关心「有没有」，拼起来结果等价，
+    /// 却省掉两次独立的 `contains` 调用与三次属性读取。
+    nonisolated private static func searchableText(of item: BangumiCalendarItemDTO) -> String {
+        var text = item.name.lowercased()
+        text += "\u{1F}" + item.nameCN.lowercased()
+        if let summary = item.summary {
+            text += "\u{1F}" + summary.lowercased()
+        }
+        return text
     }
 
     /// 当前选中展示的分组
@@ -110,6 +207,29 @@ struct BangumiCalendarView: View {
             }
         }
         .searchable(text: $searchKeyword, prompt: "在每日放送中搜索番剧")
+        // `P2-11`：关键词变化时才重算过滤结果（原先挂在 body 里，每个按键至少两趟全表）。
+        //
+        // 两条 `.task(id:)` 分工：数据变了重建小写索引，关键词变了重算过滤。
+        //
+        // ⚠️ **`id:` 必须用 `days` 本身，不能用 `days.count`**。
+        //
+        // 第一版用了 `days.count`，理由是「DTO 没实现 Hashable 等价性」——**那理由是错的**，
+        // `BangumiCalendarDayDTO` 明确是 `Hashable`。而 `getCalendar` 的契约就是
+        // 「按周一至周日 **7 天**分组」，所以 `days.count` **恒等于 7**：
+        // 刷新日历后数据整体换了一批、`count` 还是 7，`.task` **不会重跑** →
+        // `searchableIndex` 一直是旧的那份 → 搜索要么命中 0 条，要么**用旧名字命中新条目**，
+        // 而且搜索态下一直显示旧结果，直到用户改关键词。
+        //
+        // 审查实测（SwiftUI 探针）：内容 `[1,2,3]` → `[9,2,3]` 时 `runs` 仍为 1；
+        // 只有 count 变化才重跑。
+        .task(id: days) {
+            rebuildSearchableIndex()
+            recomputeFilteredDays()
+        }
+        .task(id: searchKeyword) {
+            if searchableIndex.isEmpty, !days.isEmpty { rebuildSearchableIndex() }
+            recomputeFilteredDays()
+        }
         .navigationTitle("每日放送")
         #if os(macOS)
         .navigationSubtitle(subtitleText)
