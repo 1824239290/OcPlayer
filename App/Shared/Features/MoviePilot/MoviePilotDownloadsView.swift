@@ -383,7 +383,10 @@ private struct DownloadTaskCard: View {
                 .controlSize(.small)
                 .frame(width: 30, height: 30)
         } else {
-            GlassEffectContainer(spacing: 8) {
+            // `P2-03`：同 `MoviePilotHomeView` 的搜索卡 —— 容器里只有同一 `HStack`
+            // 内的按钮，融合域太小、没有融合收益，却每张卡各付一次离屏玻璃合成。
+            // 去掉容器，按钮各自仍是独立玻璃（`.liquidGlassCapsule` 自带）。
+            Group {
                 HStack(spacing: 8) {
                     Button(action: onTogglePause) {
                         Image(systemName: task.isPaused ? "play.fill" : "pause.fill")

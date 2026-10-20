@@ -50,7 +50,24 @@ private struct HoverRowHighlight: ViewModifier {
         return content
             // 提亮填充要叠在磨砂底**之上**、内容之下：background 链先声明的更贴内容。
             .background(active ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear), in: shape)
-            .background(.ultraThinMaterial, in: shape)
+            // ## `P2-01`：材质**只在悬停时挂**
+            //
+            // `.ultraThinMaterial` 是**离屏模糊**：一屏十几行就是十几次，滚动时每帧重做。
+            // 原来这一行是无条件挂的（只有上面那层填充受 `active` 控制），于是
+            // **每一行、每一帧都在做一次离屏模糊**，无论是否悬停。
+            //
+            // 现在分两支：悬停时挂材质（要那份磨砂观感）；不悬停时用**同色系的纯色近似**
+            // —— 纯色不触发离屏模糊，成本接近零。
+            //
+            // 颜色取 `BackgroundStyle` 的近似值（白/黑低透明度），在深浅两种外观下
+            // 与磨砂底观感接近；悬停时才切到真材质，用户看到的那一行仍是磨砂的。
+            .background {
+                if active {
+                    shape.fill(.ultraThinMaterial)
+                } else {
+                    shape.fill(Color.primary.opacity(0.04))
+                }
+            }
             .overlay(
                 shape
                     .strokeBorder(
