@@ -387,7 +387,8 @@ struct PlayerHUDExpandedActionCard: View {
             PlayerHUDToggleMenuRow(
                 icon: "text.alignleft",
                 title: "启用弹幕",
-                badge: danmakuModel.danmaku.status.label,
+                badge: danmakuModel.danmaku.status.displayLabel(
+                    elapsedSeconds: danmakuModel.danmaku.statusElapsedSeconds),
                 isOn: Binding(
                     get: { controller.danmakuEnabled },
                     set: {

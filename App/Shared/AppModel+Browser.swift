@@ -126,7 +126,16 @@ extension AppModel {
         guard libraries.isEmpty, home.resume.isEmpty, home.nextUp.isEmpty, home.latest.isEmpty
         else { return }
         guard let hydrator = metadata.hydrator(for: server) else { return }
-        guard let cached = await hydrator.home() else { return }
+        // `LIVE-02`：`hydrator.home()` 是冷启动盲区里的最后一段（4 次读事务 + 解码），
+        // 单独打点 —— 它若占了 865 ms 里的大头，那 `P2-23` 的合并收益就值得继续做
+        // （那一批已把 4 次读合成 1 次，比例 −17%~−20%）。
+        let cacheClock = ContinuousClock()
+        let cacheStart = cacheClock.now
+        let cachedOptional = await hydrator.home()
+        let cacheElapsed = cacheClock.now - cacheStart
+        let cacheMs = Int64(cacheElapsed.components.seconds * 1000)
+            + Int64(cacheElapsed.components.attoseconds / 1_000_000_000_000_000)
+        guard let cached = cachedOptional else { return }
         guard sessionIsCurrent(generation, server: server) else { return }
 
         libraries = cached.libraries
@@ -140,6 +149,9 @@ extension AppModel {
             "resume": .integer(Int64(cached.resume.count)),
             "nextUp": .integer(Int64(cached.nextUp.count)),
             "latest": .integer(Int64(cached.latest.count)),
+            // `LIVE-02`：这次读盘/解码花了多久 —— 与「冷启动分段」的 activateMs 相减
+            // 就能把盲区拆干净。
+            "readMs": .integer(cacheMs),
         ])
     }
 

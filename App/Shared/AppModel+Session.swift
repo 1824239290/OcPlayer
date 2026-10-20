@@ -9,6 +9,35 @@ extension AppModel {
     /// 启动时调用：有档案 + token 就静默恢复，否则进 onboarding。
     func bootstrap() async {
         guard phase == .boot else { return }
+        // `LIVE-02`：冷启动有一段 **865 ms 的日志盲区**（2 ms 的「应用启动」→ 867 ms 的
+        // 「首页用磁盘缓存预热」之间一条日志都没有），诊断包里完全看不出这段花在哪。
+        //
+        // 这里按段打点，覆盖盲区的候选来源：
+        //   setupKickoffMs —— **只是「发起」** Bangumi / Metadata 建库的耗时
+        //   restoreMs      —— `MediaServerFactory.restore`（档案解码 + 令牌读取/迁移）
+        //   activateMs     —— `activate(server:)` 内的装配（含 `MetadataCache` attach）
+        //   cache readMs   —— `hydrateBrowserDataFromCache` 的真正读盘（`hydrator.home()`）
+        //
+        // ⚠️ **`setupKickoffMs` 不是「建库花了多久」**：`bangumi.setup()` /
+        // `metadata.setup()` 内部是 `Task.detached` 建库后**立即返回**，所以这个数
+        // 通常≈0。真正等库发生在 `activate` 的 `metadata.wrap`（已计入 `activateMs`）。
+        // 第一版把它叫 `setupMs` 并在注释里写「建库」，是**错的**，已更正 ——
+        // 名字和注释都会误导后来人，所以连字段名一起改了。
+        //
+        // 用单调时钟 `ContinuousClock`：墙钟会被 NTP / 用户改时间影响，
+        // 冷启动耗时正是最容易被它污染的场景。
+        let launchClock = ContinuousClock()
+        let launchStart = launchClock.now
+        /// 两个单调时钟点之间的毫秒数。
+        ///
+        /// `Duration` 不能直接转 `Int64`（没有那个 `init`），只能拆 components。
+        /// 抽成一个函数是为了避免每个调用点各写一遍那段拆分逻辑。
+        func elapsedMs(from start: ContinuousClock.Instant,
+                       to end: ContinuousClock.Instant) -> Int64 {
+            let d = end - start
+            return d.components.seconds * 1000
+                + d.components.attoseconds / 1_000_000_000_000_000
+        }
         // ⚠️ 测试宿主跑的是真实 App（`TEST_HOST = OcPlayer.app`），`RootView.task` 会照常
         // 调到这里。而 `MediaServerFactory.restore` 会读**真实**的服务器档案与令牌：
         // 于是跑一次测试就可能恢复出开发者本机的真实会话、连真实服务器，并因读取令牌
@@ -26,6 +55,7 @@ extension AppModel {
         bangumi.setup()
         // 媒体元数据库同样异步建库（与下面的会话恢复并行，不阻塞首屏）。
         metadata.setup()
+        let setupDone = launchClock.now
         // TMDB 补全服务挂在同一个库上。建库是异步的，所以这里等它完成再装配；
         // 等待发生在后台任务里，不阻塞首屏（TMDB 只是可选增强）。
         let metadataCoordinator = metadata
@@ -53,11 +83,30 @@ extension AppModel {
         await bangumi.applyGatewayConfiguration(bangumiGatewayConfiguration)
         // 网络路径变化 → 地址结论作废（下一个请求重新探活）。
         startEndpointMonitor()
-        if let restored = MediaServerFactory.restore(from: store) {
+        let restoreStart = launchClock.now
+        let restored = MediaServerFactory.restore(from: store)
+        let restoreDone = launchClock.now
+        if let restored {
             await activate(server: restored)
         } else {
             phase = .onboarding
         }
+        let activateDone = launchClock.now
+        // 逐个算成局部常量再装字典：直接写成一个大的字典字面量会让类型检查器超时
+        // （实测 `unable to type-check this expression in reasonable time`）。
+        let setupKickoffMs = elapsedMs(from: launchStart, to: setupDone)
+        let restoreMs = elapsedMs(from: restoreStart, to: restoreDone)
+        let activateMs = elapsedMs(from: restoreDone, to: activateDone)
+        let totalMs = elapsedMs(from: launchStart, to: activateDone)
+        var launchFields: [String: DiagnosticValue] = [:]
+        launchFields["setupKickoffMs"] = .integer(setupKickoffMs)
+        launchFields["restoreMs"] = .integer(restoreMs)
+        launchFields["activateMs"] = .integer(activateMs)
+        launchFields["totalMs"] = .integer(totalMs)
+        // 是否恢复了会话：没有档案时走 onboarding，`activateMs` 会接近 0，
+        // 单看数字会以为「装配很快」——记下这个布尔才看得懂。
+        launchFields["restored"] = .boolean(restored != nil)
+        AppDiagnostics.logInfo("冷启动分段", fields: launchFields)
     }
 
     // MARK: - 登录流程
