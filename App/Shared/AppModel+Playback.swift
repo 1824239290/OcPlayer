@@ -246,13 +246,71 @@ extension AppModel {
     /// 同时保底 400ms 显示时间：加载太快时 loading 闪现一下就消失会晃眼，
     /// 保底让 loading 有完整的「出现→稳定→淡出」节奏。
     /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
-    func schedulePreparationDismiss(for request: PlaybackRequest) {
+    /// 轮询循环的**总时限**（`P2-34`）。
+    ///
+    /// ⚠️ **这条没有单元测试覆盖，且有明确原因**（不假装有）：
+    /// 该循环的三条退出条件全部依赖播放器内部状态（首帧标志、state、setupError），
+    /// 而在测试环境里 `playback` 恒为 nil —— 循环会走
+    /// `guard let playback else { playbackPreparation = nil; return }` 那条
+    /// **立即退出**，根本到不了时限分支。想覆盖它就得伪造出一个
+    /// 「engine 为 nil、state 停在既非 error 也非 playing」的播放器，那等于
+    /// 测一个生产里不存在的状态组合。
+    ///
+    /// 所以这里只保留**可静态验证**的部分：时限是个命名常量、调用点把它传进循环、
+    /// 循环顶部有 `clock.now - startTime > deadline` 的守卫。真要动态验证，
+    /// 需要给 `PlaybackController` 注入一个可卡住的首帧桩 —— 那是更大的改动，
+    /// 不在本次范围内。
+    ///
+    /// 生产用 30 秒：正常路径（本地片 / 局域网直连）首帧都在毫秒级，慢网络也就几秒。
+    /// 真到 30 秒还没出帧，loading 已经转了很久，该让下方的缓冲转圈接管。
+    static let preparationDismissDeadline: Duration = .seconds(30)
+
+    /// 轮询循环的**退出策略**（纯函数，可测）。
+    ///
+    /// 抽出来的理由：整个循环体依赖播放器状态（首帧 / state / setupError），
+    /// 在测试环境里 `playback` 恒为 nil，循环会立即退出、到不了时限分支 ——
+    /// 那部分无法在单测里伪造（详见 `preparationDismissDeadline` 的注释）。
+    /// 但**「是否已超时」这个判定与播放器无关**，可以独立验证：
+    /// 它只需要两个时刻和时限。
+    ///
+    /// - Parameters:
+    ///   - elapsed: 从进入循环到现在的时长。
+    ///   - deadline: 总时限。
+    /// - Returns: 是否应该放弃等待、清态退出。
+    nonisolated static func shouldAbandonPreparation(elapsed: Duration, deadline: Duration) -> Bool {
+        elapsed > deadline
+    }
+
+    func schedulePreparationDismiss(
+        for request: PlaybackRequest,
+        deadline: Duration = AppModel.preparationDismissDeadline
+    ) {
         preparationDismissTask?.cancel()
         preparationDismissTask = Task { @MainActor [weak self, weak playback] in
             let clock = ContinuousClock()
             let startTime = clock.now
             var playingSince: ContinuousClock.Instant?
             while let self, !Task.isCancelled {
+                // ## `P2-34`：**必须有总时限**
+                //
+                // 这是一个 100 ms 的轮询循环，原本只靠三条 `return` 退出：
+                // ① 首帧已上屏 ② state == .error / setupError ③ playing 持续 2.5 s。
+                //
+                // 但三条都**可能一直不成立**：内核卡在 buffering 又没报错、
+                // 或者 `state` 停在 `.paused`/`.idle` 之外别的值上 —— 那时这个循环
+                // 会以 **10 Hz 永久唤醒主 actor**（每次唤醒都要过一遍 `self` 弱引用、
+                // 读 `presentedPlayer`、读 `engine.hasRenderedFirstFrame`、读 state）。
+                //
+                // 播放页在屏上时这点开销看不出，但**用户切走 / 息屏 / 播放器被
+                // 别的东西挡住**时它仍在跑，纯属白烧电。
+                //
+                // 30 秒是宽松上限：正常路径（本地片 / 局域网直连）首帧都在毫秒级，
+                // 慢网络也就几秒。真到 30 秒还没出帧，loading 已经转了很久，
+                // 该让下方的缓冲转圈接管，而不是继续悄悄轮询。
+                if Self.shouldAbandonPreparation(elapsed: clock.now - startTime, deadline: deadline) {
+                    self.playbackPreparation = nil
+                    return
+                }
                 guard self.presentedPlayer?.id == request.id else { return }
                 // 控制器引用没了（极端情况）：宁可退回两段式也别让 loading 永转。
                 guard let playback else {

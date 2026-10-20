@@ -27,6 +27,34 @@
 
 ### 性能
 
+- **`P2-34`：`schedulePreparationDismiss` 的 100 ms 轮询循环加了总时限（30 s）**。
+  - 那是一个**每 100 ms 唤醒一次主 actor** 的轮询循环，原本只靠三条 `return` 退出：
+    ① 首帧已上屏 ② `state == .error` / `setupError` ③ playing 持续 2.5 s。
+  - **三条都可能一直不成立**（内核卡在 buffering 又不报错、`state` 停在别的值上）——
+    那时这个循环会以 **10 Hz 永久唤醒主 actor**（每次唤醒都要过一遍 `self` 弱引用、
+    读 `presentedPlayer`、读 `engine.hasRenderedFirstFrame`、读 state）。
+    播放页在屏上看不出，但**用户切走 / 息屏 / 播放器被挡住时它仍在跑**。
+  - 修法：循环顶部加**总时限 30 s**（`preparationDismissDeadline`），到点清态退出。
+    30 s 是宽松上限：正常路径首帧在毫秒级，慢网络也就几秒；真到 30 s 还没出帧，
+    loading 已经转了很久，该让下方缓冲转圈接管。
+  - **可测性处理**：时限判定抽成纯函数
+    `shouldAbandonPreparation(elapsed:deadline:)`（`nonisolated`，与播放器状态无关），
+    循环里调用它。用例 4 条：超时必放弃、**边界严格大于**（写成 `>=` 会误伤卡点路径）、
+    **任何有限时限最终都会放弃**（「不会永久轮询」的形式化）、生产时限值合理（>5s 且 ≤120s）。
+  - **变异验证**：① 改成 `return false`（永不放弃）→ **2 条用例红**；
+    ② 改成 `>=`（边界错）→ `testBoundaryIsExclusive` 红。
+  - **⚠️ 我第一版写了一套假测试（已删除）**：试图直接观测「循环在时限后退出」，
+    但测试环境里 `playback` 恒为 nil —— 循环会走
+    `guard let playback else { playbackPreparation = nil; return }` **立即退出**，
+    根本到不了时限分支。我甚至写了一条 `XCTAssertNotNil(x == nil ? true : true)` 这种
+    永真占位断言。**假测试比没有测试更糟**，已整体删掉，改成上面的纯函数方案，
+    并在代码注释里写明「循环体那部分为什么不可单测」。
+
+- **`P2-30`（详情快照 LRU 读路径 O(n) 簿记）实测 0.65 µs，不改**。
+  - `noteSnapshotUse` 用 `removeAll { 谓词 }` 做全表扫描。实测 n=40（生产上限）：
+    **0.65 µs / 次**；n=100 → 1.64 µs；n=1000 → 9.30 µs。
+    生产 n 恒为 40，0.65 µs 与前面回退的几条同量级 —— 按同一标准不改。
+
 - **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」（**4.4–5.0×**，真实负载省 **0.6–1.6 ms**）**。
   - `MPMediaInfo` / `MPDownloadTask` / `MPSubscribe` / `MPSite` 都不是 `Codable`
     —— 它们要原始 `[String: JSONValue]`（下载时整个对象原样回传服务端）。
