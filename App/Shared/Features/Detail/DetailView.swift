@@ -639,29 +639,44 @@ struct DetailView: View {
     private var metaRow: some View {
         let base = colorScheme == .light ? Color.black : Color.white
         return HStack(spacing: 9) {
-            // `P2-18`：**不要用 `\.offset` 当身份**。
+            // `P2-18`：**身份用内容，不用下标**。
             //
-            // `metaParts` 是动态拼出来的：年份 / 类型 / 时长 / 季数，任一缺失就会让
-            // 后面的元素**整体前移**。用位置当 id 时，前移会让 SwiftUI 认为
-            // 「第 1 个元素换成了别的内容」—— 身份全变 → 重建而不是复用，
-            // 表现为多余的视图重建，且与 `Motion.standard` 的翻转动画叠加时容易抖。
+            // ## 这是「正确性 / 身份稳定性」，**不是**性能修复
             //
-            // 改用**内容**当身份：这四个字段的形态天然不同（纯数字年份 / 类型串 /
-            // "1小时23分" / "N 季"），撞车概率极低。
+            // 审查明确指出（并核实了）：这条**没有任何可测量的性能收益** ——
+            // 4 个 `Text` 的 `HStack` 无论用哪种 id 都无感；注释早先写的
+            // 「与 `Motion.standard` 翻转动画叠加会抖」也**没有录屏或计数证据**，
+            // 而且那段翻转发生时 `metaParts` 本就不变。
             //
-            // 分隔符用 `index > 0` 判（位置信息仍然需要），但**身份**用内容 ——
-            // 两者解耦才是这次的修法：位置会漂移，内容不会。
+            // 保留它的理由是**身份语义本身**：`metaParts` 是动态拼的
+            // （年份 / 类型 / 时长 / 季数），**任一字段缺失会让后面元素整体前移**。
+            // 用下标当身份时，前移等于「第 N 个元素换成了别的内容」—— SwiftUI
+            // 会把它当作不同元素重建。这不是 bug（结果照样对），而是**让视图身份
+            // 与数据身份脱节**的坏习惯：任何按位置做的状态/动画/测量都会跟着漂。
             //
-            // ⚠️ 唯一性问题：`ForEach` 收到**重复 id** 是未定义行为。理论上
-            // 「年份」与「类型串」都可能是纯数字从而撞车，所以不能直接用
-            // `id: \.element`（纯内容）。这里给每项包一个「内容 + 该内容在数组里
-            // 的出现序号」的身份：**首次出现**的项身份仍是它自己（前移不影响），
-            // 重复项才有附加序号。
-            ForEach(Self.identified(metaParts), id: \.id) { entry in
-                if entry.index > 0 {
+            // 分隔符仍用 `index > 0`（位置信息确实需要），但**身份**用内容 ——
+            // 两者解耦是关键。
+            //
+            // ## 唯一性前提（必须成立，否则 `ForEach` 收到重复 id = 未定义行为）
+            //
+            // 这四类内容的**文本形态互斥**：
+            //   年份  "2024"（纯数字）
+            //   类型  "科幻 / 剧情"（含 " / " 分隔）
+            //   时长  "1 小时 23 分" / "45 分钟"（含「小时」或「分钟」）
+            //   季数  "2 季"（含「季」）
+            // 所以 `id: \.element`（纯内容）唯一且稳定。
+            // `MetaPartsShapeTests` 用穷举把这条前提钉住了（年份 1900–2100 ×
+            // 时长 1–300 分钟 × 季数 1–20 逐对求交集）。
+            //
+            // ⚠️ 若将来往 `metaParts` 里加**同形态**的字段（例如再来一个纯数字），
+            // 这条就破了 —— 那时必须把身份改成结构化形式
+            // （`struct ID: Hashable { text; occurrence }`），**不要靠字符串拼 "#序号"**
+            // （第一版就是那么做的，审查实测 `["A","A","A#1"]` 会产生重复 id）。
+            ForEach(Array(metaParts.enumerated()), id: \.element) { index, part in
+                if index > 0 {
                     Text("·").foregroundStyle(base.opacity(0.4))
                 }
-                Text(entry.text).foregroundStyle(base.opacity(0.78))
+                Text(part).foregroundStyle(base.opacity(0.78))
             }
             if let rating = model.displayRating {
                 Label(String(format: "%.1f", rating), systemImage: "star.fill")
@@ -688,24 +703,6 @@ struct DetailView: View {
         // 切换对它们零影响；外链徽章后到，插在行尾不动别人。
         .opacity(model.detail == nil ? 0 : 1)
         .motion(Motion.standard, value: model.detail != nil)
-    }
-
-    /// `P2-18`：给 `metaParts` 的每一项算一个**稳定身份**。
-    ///
-    /// 身份 = 内容（首次出现）+ 「内容#出现序号」（重复出现）。
-    /// 这样：
-    /// - 正常情况（内容互不相同）→ 身份就是内容本身，**前面某项缺失不会让后面项的身份变化**；
-    /// - 内容真重复时 → 仍有唯一 id，不会喂给 `ForEach` 重复 id。
-    ///
-    /// `index` 保留给分隔符用（位置信息仍然需要，只是不再当身份）。
-    nonisolated static func identified(_ parts: [String]) -> [(id: String, index: Int, text: String)] {
-        var seen: [String: Int] = [:]
-        return parts.enumerated().map { index, text in
-            let occurrence = seen[text, default: 0]
-            seen[text] = occurrence + 1
-            let id = occurrence == 0 ? text : "\(text)#\(occurrence)"
-            return (id, index, text)
-        }
     }
 
     private var metaParts: [String] {
