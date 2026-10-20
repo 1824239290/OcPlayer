@@ -13,10 +13,20 @@ struct HomeSectionsSettingsView: View {
     private var layout: HomeSectionLayout { HomeSectionPreference.decode(homeSectionsRaw) }
 
     var body: some View {
-        Form {
+        // `P2-14`：`layout` 是 computed property，**每次访问都完整 decode 一遍**
+        // （`HomeSectionPreference.decode`：trim / split / 逐 token / Set 构造 /
+        // `allCases.filter`）。原先这一屏在同一次 body 里读了它 **≥17 次**
+        // （ForEach 一次 + 每行 `firstIndex`/`isVisible`/`count` 各一次）。
+        //
+        // 这里 hoist 成局部常量：一次 body 只 decode **一次**，各行共用。
+        // ⚠️ **只 hoist 读路径**：写路径（`moveHomeSection` / 开关的 `set`）必须
+        // 保留「现读现取」—— 那是防「连着拨两个开关时拿旧快照互相覆盖」的
+        // （见 `sectionVisibilityBinding` 的注释）。
+        let layout = layout
+        return Form {
             Section {
                 ForEach(layout.order) { section in
-                    homeSectionRow(section)
+                    homeSectionRow(section, layout: layout)
                 }
             } footer: {
                 Text("上下按钮调整顺序；开关只控制首页是否显示，关掉的栏目会留在这里，随时可以再打开（位置不变）。")
@@ -36,7 +46,7 @@ struct HomeSectionsSettingsView: View {
     /// 再打开。换位不改变其余条目的相对顺序，所以移动已关闭的行不影响首页观感。
     ///
     /// 上下按钮热区 44×44：原来挤在 2pt 间距里，iPhone 上误触率高。
-    private func homeSectionRow(_ section: HomeSection) -> some View {
+    private func homeSectionRow(_ section: HomeSection, layout: HomeSectionLayout) -> some View {
         let index = layout.order.firstIndex(of: section)
         let isVisible = layout.isVisible(section)
         return HStack(spacing: 14) {
@@ -69,7 +79,7 @@ struct HomeSectionsSettingsView: View {
             }
             .buttonStyle(.borderless)
 
-            Toggle("", isOn: sectionVisibilityBinding(section))
+            Toggle("", isOn: sectionVisibilityBinding(section, current: layout))
             .neutralSwitch()
                 .labelsHidden()
                 .accessibilityLabel("在首页显示\(section.title)")
@@ -84,9 +94,16 @@ struct HomeSectionsSettingsView: View {
     ///
     /// set 里现取 `layout`（@AppStorage 每次都读盘），所以连着拨两个开关不会
     /// 拿旧快照互相覆盖。
-    private func sectionVisibilityBinding(_ section: HomeSection) -> Binding<Bool> {
+    private func sectionVisibilityBinding(
+        _ section: HomeSection,
+        current: HomeSectionLayout
+    ) -> Binding<Bool> {
         Binding(
-            get: { layout.isVisible(section) },
+            // `get` 用本次 body hoist 的那份（与显示一致，且省一次 decode）。
+            get: { current.isVisible(section) },
+            // `set` **必须现读**：`@AppStorage` 每次都读盘，写回时基于最新值才不会
+            // 拿旧快照覆盖另一个刚被拨动的开关。换成 hoist 的 `current` 就会重新引入
+            // 「连拨两个开关互相覆盖」的 bug。
             set: { homeSectionsRaw = HomeSectionPreference.encode(layout.setting(section, visible: $0)) }
         )
     }

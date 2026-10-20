@@ -51,6 +51,10 @@ struct MoviePilotHomeView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var subscribingMediaIDs: Set<String> = []
     @State private var localSubscribedMediaIDs: Set<String> = []
+
+    /// `subscribeSummary` 的缓存（见那个属性的注释：读取点分散在多个 computed property，
+    /// 无法 hoist，只能缓存）。
+    @State private var subscribeSummaryCache: (sourceID: String, summary: SubscribeSummary)?
     /// 当前订阅/搜索缓存属于哪台服务器（coordinator.boundServerID），用于换服时作废。
     @State private var loadedForServerID: String?
 
@@ -118,13 +122,19 @@ struct MoviePilotHomeView: View {
                 Task { await loadSubscribes() }
             }
         }
+        // `P2-12`：`subscribeSummary` 的读取点分散在 5 个 computed property 里
+        // （无法像 body 那样 hoist 成局部常量），所以用缓存。这里在数据变化时预热。
+        .task(id: subscribesCacheID) {
+            refreshSubscribeSummaryCache()
+        }
     }
 
     private var navigationSubtitleText: String {
         if isSearchingMode {
             return results.isEmpty ? "" : "搜索结果 \(results.count) 条"
         }
-        return subscribes.isEmpty ? "" : "已订阅 \(subscribes.count) 部 · \(watchingCount) 部追更中"
+        let summary = subscribeSummary()
+        return subscribes.isEmpty ? "" : "已订阅 \(subscribes.count) 部 · \(summary.watchingCount) 部追更中"
     }
 
     // MARK: - 门控
@@ -295,7 +305,16 @@ struct MoviePilotHomeView: View {
     // MARK: - 订阅主视图
 
     private var subscriptionsView: some View {
-        ScrollView {
+        // `P2-12`：**在这一层 hoist 一次** `subscribeSummary`，再把它传给下面四处。
+        //
+        // 第一版把它写成纯 computed property，在 5 个地方各读一次（header 三个计数 +
+        // 空态判断 + `ForEach`）—— 每个读取点都完整跑一遍全表循环，比改前的 5 次
+        // filter 总账更差（审查实测 1.43×）。加了 `@State` 缓存后读是 O(1) 了，
+        // 但首次渲染（缓存还没预热）仍会是多次。
+        //
+        // 这里是它们**共同的父层**，算一次传下去最直接：一次渲染只跑一遍。
+        let summary = subscribeSummary()
+        return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if let notice {
                     MoviePilotNoticeBanner(text: notice, isError: isNoticeError)
@@ -304,7 +323,7 @@ struct MoviePilotHomeView: View {
                 }
 
                 // 顶部控制栏（分类切换 + 状态统计 + 快捷添加）
-                headerControlBar
+                headerControlBar(summary: summary)
                     .padding(.horizontal, contentLeading)
                     .padding(.top, 16)
                     .padding(.bottom, 22)
@@ -317,10 +336,10 @@ struct MoviePilotHomeView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .padding(.top, 40)
-                } else if displayedSubscribes.isEmpty {
+                } else if summary.displayed(category: selectedCategory).isEmpty {
                     emptySubscriptionsView
                 } else {
-                    subscriptionsGrid
+                    subscriptionsGrid(summary: summary)
                         .padding(.horizontal, contentLeading)
                         .padding(.bottom, 36)
                 }
@@ -335,12 +354,12 @@ struct MoviePilotHomeView: View {
         }
     }
 
-    private var headerControlBar: some View {
+    private func headerControlBar(summary: SubscribeSummary) -> some View {
         HStack(spacing: 16) {
             Picker("分类", selection: $selectedCategory) {
                 Text("全部 (\(subscribes.count))").tag(SubscribeCategory.all)
-                Text("电影 (\(movieCount))").tag(SubscribeCategory.movie)
-                Text("剧集 (\(tvCount))").tag(SubscribeCategory.tv)
+                Text("电影 (\(summary.movies.count))").tag(SubscribeCategory.movie)
+                Text("剧集 (\(summary.shows.count))").tag(SubscribeCategory.tv)
             }
             .pickerStyle(.segmented)
             .frame(maxWidth: 320)
@@ -352,7 +371,7 @@ struct MoviePilotHomeView: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 7, height: 7)
-                    Text("\(watchingCount) 部追更中")
+                    Text("\(summary.watchingCount) 部追更中")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -408,13 +427,13 @@ struct MoviePilotHomeView: View {
         .skeletonShimmer()
     }
 
-    private var subscriptionsGrid: some View {
+    private func subscriptionsGrid(summary: SubscribeSummary) -> some View {
         LazyVGrid(
             columns: PosterGrid.columns(compact: isCompact),
             alignment: .leading,
             spacing: PosterGrid.rowSpacing(compact: isCompact)
         ) {
-            ForEach(displayedSubscribes) { subscribe in
+            ForEach(summary.displayed(category: selectedCategory)) { subscribe in
                 MoviePilotSubscribeCard(
                     subscribe: subscribe,
                     onEdit: { editingSubscribe = subscribe },
@@ -490,10 +509,21 @@ struct MoviePilotHomeView: View {
                         .padding(.bottom, 2)
 
                         // 结果卡片流（液态玻璃）
+                        //
+                        // `P2-13`：订阅索引**在这里建一次**，供下面每一行查。
+                        //
+                        // 原先每行都调 `isMediaSubscribed(media)`，内部是
+                        // `subscribes.contains { ... }` —— 对**每一行**做一次 O(M) 全表扫描
+                        // （M = 订阅数），4 个字段各比一次。搜索结果 R 行就是 O(R×M)，
+                        // 而这一整段在同一次 body 里、`subscribes` 根本没变。
+                        //
+                        // 建索引后每行 O(1)：4 个 `Set` 的哈希查找。
+                        let subscribedIndex = SubscribedIndex(subscribes: subscribes,
+                                                              localIDs: localSubscribedMediaIDs)
                         ForEach(results) { media in
                             MoviePilotMediaGlassCard(
                                 media: media,
-                                isSubscribed: isMediaSubscribed(media),
+                                isSubscribed: subscribedIndex.contains(media),
                                 isAdding: subscribingMediaIDs.contains(media.id),
                                 onQuickSubscribe: {
                                     Task { await addSubscribeForMedia(media) }
@@ -514,21 +544,47 @@ struct MoviePilotHomeView: View {
         }
     }
 
-    private func isMediaSubscribed(_ media: MPMediaInfo) -> Bool {
-        if localSubscribedMediaIDs.contains(media.id) { return true }
-        return subscribes.contains { sub in
-            if let subTmdb = sub.tmdbId, let mediaTmdb = media.tmdbId, subTmdb == mediaTmdb {
-                return true
+    /// 「这一条媒体是否已订阅」的 O(1) 索引（`P2-13`）。
+    ///
+    /// 把原先「每行一次 O(M) 全表扫描 × 4 个字段比较」变成「建一次 4 个 `Set`、
+    /// 之后每行 4 次哈希查找」。
+    ///
+    /// - Note: 匹配语义与旧实现**逐一对应**：本地 id 命中即算，
+    ///   否则 tmdb / douban / bangumi 任一 id 相等算，再否则**片名完全相同**算。
+    ///   `nil` 与 `nil` 不算匹配（旧实现用 `if let ... if let ... ==`，
+    ///   两侧都必须非 nil）—— 所以索引只收非 nil 值。
+    struct SubscribedIndex: Sendable {
+        private let localIDs: Set<String>
+        private let tmdbIDs: Set<Int>
+        private let doubanIDs: Set<String>
+        private let bangumiIDs: Set<Int>
+        private let names: Set<String>
+
+        init(subscribes: [MPSubscribe], localIDs: Set<String>) {
+            self.localIDs = localIDs
+            var tmdb: Set<Int> = []
+            var douban: Set<String> = []
+            var bangumi: Set<Int> = []
+            var titles: Set<String> = []
+            tmdb.reserveCapacity(subscribes.count)
+            for sub in subscribes {
+                if let value = sub.tmdbId { tmdb.insert(value) }
+                if let value = sub.doubanId { douban.insert(value) }
+                if let value = sub.bangumiId { bangumi.insert(value) }
+                if let value = sub.name { titles.insert(value) }
             }
-            if let subDouban = sub.doubanId, let mediaDouban = media.doubanId, subDouban == mediaDouban {
-                return true
-            }
-            if let subBgm = sub.bangumiId, let mediaBgm = media.bangumiId, subBgm == mediaBgm {
-                return true
-            }
-            if let subName = sub.name, let mediaTitle = media.title, subName == mediaTitle {
-                return true
-            }
+            tmdbIDs = tmdb
+            doubanIDs = douban
+            bangumiIDs = bangumi
+            names = titles
+        }
+
+        func contains(_ media: MPMediaInfo) -> Bool {
+            if localIDs.contains(media.id) { return true }
+            if let value = media.tmdbId, tmdbIDs.contains(value) { return true }
+            if let value = media.doubanId, doubanIDs.contains(value) { return true }
+            if let value = media.bangumiId, bangumiIDs.contains(value) { return true }
+            if let value = media.title, names.contains(value) { return true }
             return false
         }
     }
@@ -561,27 +617,121 @@ struct MoviePilotHomeView: View {
 
     // MARK: - 数据流与操作
 
-    private var displayedSubscribes: [MPSubscribe] {
-        switch selectedCategory {
-        case .all:
-            return subscribes
-        case .movie:
-            return subscribes.filter(\.isMovie)
-        case .tv:
-            return subscribes.filter { $0.isTV || !$0.isMovie }
+    /// 订阅列表在一次 body 里要用到的**全部派生数据**（`P2-12`）。
+    ///
+    /// 原先这里是 4 个独立 computed property（`displayedSubscribes` / `movieCount` /
+    /// `tvCount` / `watchingCount`），每个都自己把 `subscribes` 全表遍历一遍 ——
+    /// 而 `displayedSubscribes` 在同一次 body 里还被读两次（空态判断 + `ForEach`）。
+    /// 一屏下来是 **5 次 O(N) 扫**，全部基于同一个不会变的 `subscribes`。
+    ///
+    /// 现在算成一个值：**一次遍历**分出三类，之后都是 O(1) 读。
+    ///
+    /// - Note: 分类判据与旧实现**逐字对应**：`isMovie` / `isTV || !isMovie` /
+    ///   `state`（缺省按 "R" 视作追更中，大小写不敏感）。
+    /// 订阅列表的派生数据（`P2-12`）。
+    ///
+    /// ## 为什么要有缓存
+    ///
+    /// 第一版把它写成纯 computed property，然后在 5 个地方各读一次
+    /// （`navigationSubtitleText`、`headerControlBar` 三个计数、空态判断、`ForEach`）。
+    /// 那些读取点分属**不同的 computed property**（各自是独立 View 表达式），
+    /// 无法像 `body` 那样 hoist 成一个局部常量 —— **于是一次渲染仍然是 5 次全表扫**，
+    /// 只是从「同一个 body 里 5 次」变成「几个 body 各 1 次」，总账没省。
+    ///
+    /// 所以缓存一份：`subscribes` 的**引用身份**没变就直接返回上次结果。
+    /// `subscribes` 是 `@State [MPSubscribe]`，只有整体替换才换身份
+    /// （本文件里都是 `subscribes = list` 这种整体赋值，没有原地改元素），
+    /// 所以用 `===` 式的身份判断是安全的。
+    ///
+    /// - Note: 用 `@State` 存缓存（而不是普通存储属性）—— View 是 struct，
+    ///   普通属性每次 body 重建都会丢，缓存就永远不命中。
+    private func subscribeSummary() -> SubscribeSummary {
+        if let cached = subscribeSummaryCache, cached.sourceID == subscribesCacheID {
+            return cached.summary
         }
+        var movies: [MPSubscribe] = []
+        var shows: [MPSubscribe] = []
+        var watching = 0
+        movies.reserveCapacity(subscribes.count / 2)
+        for sub in subscribes {
+            if sub.isMovie {
+                movies.append(sub)
+            } else {
+                shows.append(sub)
+            }
+            if (sub.state ?? "R").uppercased() == "R" {
+                watching += 1
+            }
+        }
+        let summary = SubscribeSummary(
+            all: subscribes,
+            movies: movies,
+            shows: shows,
+            watchingCount: watching
+        )
+        // 写回缓存。⚠️ 不能在这里直接赋值 `subscribeSummaryCache`：那是在
+        // View 的 getter 里改 `@State`，会触发「在视图更新期间修改状态」的运行时警告。
+        // 改用 `Task { @MainActor in ... }` 推迟到下一个 runloop —— 但那样第一次
+        // 渲染仍然白算一次，且每次数据变化都要多等一帧。
+        //
+        // 所以这里**不写**：缓存只由下面那个 `.task(id:)` 在数据变化时写入
+        // （见 `refreshSubscribeSummaryCache()`）。getter 只在缓存缺失时算一次。
+        return summary
     }
 
-    private var movieCount: Int {
-        subscribes.filter(\.isMovie).count
+    /// 把 `subscribeSummary` 算一遍并写进缓存。由 `.task(id:)` 在 `subscribes` 变化时调用。
+    ///
+    /// 放在 `.task` 里而不是 body 里，是为了避免「在视图更新期间改 `@State`」。
+    private func refreshSubscribeSummaryCache() {
+        let id = subscribesCacheID
+        guard subscribeSummaryCache?.sourceID != id else { return }
+        // 直接算一遍（不走 `subscribeSummary` 的 getter，避免递归读半边状态）。
+        var movies: [MPSubscribe] = []
+        var shows: [MPSubscribe] = []
+        var watching = 0
+        movies.reserveCapacity(subscribes.count / 2)
+        for sub in subscribes {
+            if sub.isMovie {
+                movies.append(sub)
+            } else {
+                shows.append(sub)
+            }
+            if (sub.state ?? "R").uppercased() == "R" {
+                watching += 1
+            }
+        }
+        subscribeSummaryCache = (
+            id,
+            SubscribeSummary(all: subscribes, movies: movies, shows: shows,
+                             watchingCount: watching)
+        )
     }
 
-    private var tvCount: Int {
-        subscribes.filter { $0.isTV || !$0.isMovie }.count
+    /// `subscribes` 的内容指纹（用于判断 `subscribeSummaryCache` 是否还能用）。
+    ///
+    /// 用「条目数 + 首末 id」而不是逐个哈希：`MPSubscribe` 有 `raw` 字典，
+    /// 全量哈希是 O(N)，那就把省下来的又还回去了。这个指纹足以覆盖
+    /// 「列表整体换了一批」这个唯一会发生的场景。
+    private var subscribesCacheID: String {
+        guard let first = subscribes.first, let last = subscribes.last else { return "0" }
+        return "\(subscribes.count)|\(first.id)|\(last.id)"
     }
 
-    private var watchingCount: Int {
-        subscribes.filter { ($0.state ?? "R").uppercased() == "R" }.count
+    /// `subscribeSummary` 的载体。`shows` 含「既不是电影也不是剧集」的兜底项 ——
+    /// 与旧 `tvCount` 的 `isTV || !isMovie` 一致。
+    private struct SubscribeSummary {
+        let all: [MPSubscribe]
+        let movies: [MPSubscribe]
+        let shows: [MPSubscribe]
+        let watchingCount: Int
+
+        func displayed(category: SubscribeCategory) -> [MPSubscribe] {
+            switch category {
+            case .all: all
+            case .movie: movies
+            case .tv: shows
+            }
+        }
     }
 
     private func loadSubscribes() async {

@@ -27,6 +27,72 @@
 
 ### 性能
 
+- **`P2-13`：MoviePilot 搜索结果「是否已订阅」从每行 O(M) 全表扫改成 O(1)**。
+  - 原先每行都调 `isMediaSubscribed(media)`，内部是 `subscribes.contains { ... }`
+    —— 对**每一行**做一次 O(M) 全表扫描（M = 订阅数），4 个字段各比一次。
+    搜索结果 R 行就是 O(R×M)，而这一整段在同一次 body 里、`subscribes` 根本没变。
+  - 修法：新增 `SubscribedIndex`，在 `ForEach` 前**建一次** 5 个 `Set`
+    （本地 id / tmdb / douban / bangumi / 片名），之后每行哈希查找。
+  - 用例 13 条：逐字段语义 + **`nil` 与 `nil` 不算匹配**（旧实现要求两侧非 nil，
+    若索引把缺失字段收成默认值，会变成「所有无 tmdb 的媒体都算已订阅」）
+    + **大小写必须敏感**（旧实现是精确等值）+ **空串行为与旧实现一致**
+    + 订阅侧只有 `title` 字段时的回退 + 重复值 + **用旧实现当 oracle 的穷举对照**。
+  - 变异验证：片名判据从「完全相同」改成「包含」→ **红**。
+  - ⚠️ 记两次**无效变异**：① 把「订阅侧 `nil` 字段收成 0」当变异 → 绿，因为媒体侧
+    取不到字段时根本不会去查那个 Set，变异不产生行为差异；② 审查实测把索引与查询
+    都改成 `lowercased()` → 当初 9 条全绿，因为 fixture 没有「只差大小写」的样本。
+    后者已补 `testTitleMatchIsCaseSensitive`。
+
+- **`P2-12`：订阅页的派生数据不再一次渲染算 6 遍**。
+  - 原先 4 个独立 computed property（`displayedSubscribes` 被读 2 次 +
+    `movieCount` / `tvCount` / `watchingCount`），一次渲染 **5 次全表 filter**。
+  - **⚠️ 我第一版改错了，反而更慢**：把 4 个属性合并成一个纯 computed property
+    `subscribeSummary` 后，读取点变成 5 个（header 三个计数 + 空态判断 + `ForEach`）——
+    每次访问都完整跑一遍循环，macOS 上 **6 次**、且每次新建两个数组。
+    独立审查用微基准实测：旧 0.178 s vs 新 0.254 s（N=2000，2000 次渲染）
+    —— **慢 1.43 倍**。这是我自己引入的回归。
+  - 正确修法（两步）：① 在 `subscriptionsView`（那些读取点的**共同父层**）hoist
+    一次，把 summary 当参数传给 `headerControlBar` / `subscriptionsGrid`；
+    ② 加 `@State` 缓存（`subscribes` 的内容指纹变了才重算），覆盖
+    `navigationSubtitleText` 那种跨 computed property 的读取点。
+  - 分类语义与旧实现逐字对应（`isMovie` / `isTV || !isMovie` / `state` 缺省按 "R"
+    且大小写不敏感）—— 审查逐条核过。
+
+- **`P2-14`：设置 → 首页栏目不再一次 body decode 17 次**。
+  - `layout` 是 computed property，每次访问都完整跑 `HomeSectionPreference.decode`
+    （trim / split / 逐 token / Set 构造 / `allCases.filter`）。这一屏一次 body
+    读了它 **≥17 次**。
+  - 修法：`body` 开头 hoist 成局部常量，一次 body 只 decode **一次**。
+  - **⚠️ 只 hoist 读路径**：写路径（`moveHomeSection` / 开关的 `set`）保留现读现取 ——
+    那是防「连拨两个开关时拿旧快照互相覆盖」的（原作者注释专门说明了这点）。
+    开关的 `get` 用本次 hoist 的那份，`set` 仍现读。
+  - 审查用 swiftc 实测确认 `let layout = layout` 这种遮蔽写法语义正确、无自引用。
+
+- **`P2-11`：日历页搜索不再每敲一个字扫两遍全表并重复 `lowercased()`**。
+  - `filteredDays` 是 computed property：每次 body 全表扫（100–300 条 ×
+    name/nameCN/summary 三处 `lowercased().contains`），而 `displayDays` 又调它一次
+    → 每敲一个字至少两趟全表。
+  - 修法三层：① 结果进 `@State` 缓存，由 `.task(id:)` 变化时算一次；
+    ② `lowercased()` 产物**预计算成索引**（只取决于 `days`、与关键词无关）；
+    ③ 三条字段拼成一个串（`contains` 只关心「有没有」，等价但省两次调用）。
+  - **⚠️ 第一版的缓存失效条件写错了，会造成「永久过期」**：我用
+    `.task(id: days.count)` 当数据变更信号，理由是「DTO 没实现 Hashable 等价性」
+    —— **那理由是错的**，`BangumiCalendarDayDTO` 明确是 `Hashable`。而
+    `getCalendar` 的契约就是「按周一至周日 **7 天**分组」，`days.count` **恒为 7**：
+    刷新日历后数据整体换了一批、`count` 还是 7，`.task` **不重跑** →
+    搜索要么命中 0 条、要么**用旧名字命中新条目**，且搜索态下一直显示旧结果。
+    独立审查用 SwiftUI 探针实测（内容 `[1,2,3]` → `[9,2,3]` 时 `runs` 仍为 1）。
+    已把 `id:` 改成 `days` 本身。
+  - 另一处：缓存改成**带关键词**的。`.task(id: searchKeyword)` 是异步的，
+    改关键词后至少一帧还在读旧 cache —— 第一版只存 `[DTO]`，那一帧会显示
+    **上一个关键词的结果**（清空搜索时闪一下）。现在读到关键词不匹配就当场算一份。
+  - 用例 7 条：三条字段都可搜、大小写不敏感、**字段间不串味**（`\u{1F}` 分隔符）、
+    过滤只留命中且丢空天、**索引路径与即时路径结果必须一致**、
+    以及**空关键词会被清空**（`String.contains("")` 返回 **false**，所以调用方
+    必须自己 guard —— 这条我最初断言写反了，是实测纠正的）。
+  - 顺带：`filter` / `searchableText` 标了 `nonisolated` —— 它们是纯函数，
+    而 `View` 的静态成员默认受主 actor 隔离，从非隔离测试上下文调用会失败。
+
 - **CI flaky：`DanmakuCacheTests.testStaleMemoryDoesNotDeleteFileWrittenElsewhere` 的 TTL 余量不足**。
   - 现象：PR #46 的 CI 红在这个用例（三处断言全红），**本机同一条 0.136 s 通过**；
     而本批改动完全没碰 `DanmakuKit`。
