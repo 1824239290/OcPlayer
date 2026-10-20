@@ -81,15 +81,29 @@ struct EnvelopeObjectsTests {
     }
 
     /// 信封里是**非数组**（例如裸字符串 / null）应抛错，而不是崩。
-    @Test func nonArrayPayloadThrows() {
-        #expect(throws: (any Error).self) {
-            try MPEnvelope.unwrapObjects(Data(#"{"success":true,"data":"hello"}"#.utf8))
-        }
-        #expect(throws: (any Error).self) {
-            try MPEnvelope.unwrapObjects(Data(#"{"success":true,"data":null}"#.utf8))
-        }
-        #expect(throws: (any Error).self) {
-            try MPEnvelope.unwrapObjects(Data(#"{"success":true,"data":{"a":1}}"#.utf8))
+    ///
+    /// 断言**具体错误类型与文案**，不只断言「抛了错」：旧路径抛的是 `DecodingError`
+    /// （UI 会显示英文），新路径抛 `MoviePilotError.generic`（中文，是改善）。
+    /// 只写 `throws: (any Error).self` 的话，将来谁把这里改成 `try?` / 静默返回空数组
+    /// 都测不出来。
+    @Test func nonArrayPayloadThrowsTypedError() {
+        for payload in [#""hello""#, "null", #"{"a":1}"#, "42"] {
+            let data = Data(#"{"success":true,"data":\#(payload)}"#.utf8)
+            #expect(throws: MoviePilotError.self) {
+                try MPEnvelope.unwrapObjects(data)
+            }
+            do {
+                _ = try MPEnvelope.unwrapObjects(data)
+                Issue.record("payload=\(payload) 应该抛错")
+            } catch let error as MoviePilotError {
+                guard case .generic(let message) = error else {
+                    Issue.record("错误应是 .generic，实际 \(error)")
+                    return
+                }
+                #expect(message == "响应不是对象数组", "错误文案应明确，实际 \(message)")
+            } catch {
+                Issue.record("错误类型不对：\(type(of: error))")
+            }
         }
     }
 
@@ -117,10 +131,19 @@ struct EnvelopeObjectsTests {
         #expect(try MPEnvelope.unwrapObjects(Data(#"{"success":true,"data":[]}"#.utf8)).isEmpty)
     }
 
-    /// 非法 JSON 应抛错。
-    @Test func malformedJSONThrows() {
-        #expect(throws: (any Error).self) {
-            try MPEnvelope.unwrapObjects(Data("{not json".utf8))
+    /// 非法 JSON 应抛错，且是**明确类型**。
+    @Test func malformedJSONThrowsTypedError() {
+        do {
+            _ = try MPEnvelope.unwrapObjects(Data("{not json".utf8))
+            Issue.record("非法 JSON 应该抛错")
+        } catch let error as MoviePilotError {
+            guard case .generic(let message) = error else {
+                Issue.record("错误应是 .generic，实际 \(error)")
+                return
+            }
+            #expect(message == "响应不是合法 JSON", "实际 \(message)")
+        } catch {
+            Issue.record("错误类型不对：\(type(of: error))")
         }
     }
 }

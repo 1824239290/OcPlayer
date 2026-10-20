@@ -27,39 +27,37 @@
 
 ### 性能
 
-- **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」—— 实测 **98.98 ms → 21.69 ms（4.6×，省 77.3 ms / 232 KB）**（包测试构建，即真实 Debug 口径）**。
+- **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」（**4.4–5.0×**，真实负载省 **0.6–1.6 ms**）**。
   - `MPMediaInfo` / `MPDownloadTask` / `MPSubscribe` / `MPSite` 都不是 `Codable`
-    —— 它们要的是原始 `[String: JSONValue]`（下载时整个对象原样回传服务端）。
+    —— 它们要原始 `[String: JSONValue]`（下载时整个对象原样回传服务端）。
     原路径是：
     1. `unwrap(data)` → `JSONSerialization.jsonObject`（**全量解析成 Any 树**）
     2. → `JSONSerialization.data(withJSONObject:)`（**再序列化回 Data**）
     3. → `JSONDecoder().decode([[String: JSONValue]].self, ...)`（**第二遍全量解析**，
        且是 `try?` 瀑布：每个值依次 `try?` Bool / Double / String / Array / Object）
     **一份数据解析三遍。**
-  - `JSONValue` 的瀑布解码单独测就有 **44.62 ms / 243 KB**（300 个对象），
-    是等效扁平 `Codable`（2.30 ms）的 **19.4×**、`JSONSerialization`（8.48 ms）的 **5.3×**。
   - **修法**：新增 `MPEnvelope.unwrapObjects(_:)` —— **只解析一遍**：
     `JSONSerialization` 拿 `Any` 树，剥信封后直接 `JSONValue(any:)` 转换。
     4 个调用点（`searchMedia` / `sites` / `downloadingTasks` / `subscribes`）切过去。
-  - **实测（同一个 232 KB 信封响应，包测试 Debug 口径）**：98.98 ms → **21.69 ms
-    （4.6×，省 77.3 ms）**。
-    （早先用 `-O` 独立 bench 测到 28.47 → 7.92 ms / 3.6×；两个口径倍数相近，
-    绝对值差在优化级别 —— 以 Debug 那个数为准，因为 App 就是 Debug/Release
-    里 Debug 更常见于开发期，Release 下两者的比例仍成立。）
-  - **为什么这条值得（不像前几批的微秒级）**：`downloadingTasks()` 在下载页是
-    **5 秒轮询**的（`DownloadsPollingPolicy`），所以这 20 ms 是**每 5 秒一次的
-    持续开销**，而不是一次性。前面回退的那几条都是「每次操作只付一次」的量级。
-  - **⚠️ 第一版实现有一处**语义不等价**，已修**：数组里混进非对象元素时
-    （`[{"a":1}, "oops", 5]`），旧路径 `JSONDecoder.decode([[String: JSONValue]].self, ...)`
-    **抛 `DecodingError`**，而我第一版写的 `compactMap { $0 as? [String: Any] }`
-    实测会**静默返回 1 个元素、丢掉 2 个** —— 那等于把「服务端返回畸形数据」伪装成
-    「一切正常，只是少了几个条目」。已改成逐个严格校验（任一项非对象即抛错），
-    与旧路径一致；变异（改回 `compactMap`）→ 用例红。
-  - 用例 20 条（`EnvelopeObjectsTests` 13 + `JSONValueAnyInitTests` 7），
-    核心是**用旧路径当 oracle**：同一份 data 跑「unwrap + JSONDecoder 瀑布」与
-    「unwrapObjects」，结果必须逐字段相等（覆盖裸数组 / 信封 / 0-1 数字 / 各种数字
-    形态 / 布尔 / 嵌套 / 空容器 / 非数组负载抛错 / 非法 JSON 抛错）。
-    变异（新路径里 `init(any:)` 不判布尔）→ **2 条用例红**。
+  - **实测（按真实负载分档，包测试 Debug 口径）**：
+
+    | 场景 | 大小 | 旧 | 新 | 倍数 | 省 |
+    |---|---|---|---|---|---|
+    | **真实下载页（10 任务）** | 3.6 KB | 0.78 ms | 0.17 ms | 4.5× | **0.60 ms** |
+    | 下载页极端（50 任务） | 17.9 KB | 3.50 ms | 0.71 ms | 5.0× | 2.80 ms |
+    | **真实搜索（24 条）** | 15.6 KB | 2.07 ms | 0.47 ms | 4.4× | **1.59 ms** |
+    | 搜索极端（100 条） | 65.3 KB | 8.59 ms | 1.96 ms | 4.4× | 6.63 ms |
+
+  - **⚠️ 一处我先前夸大的数字，已更正**：我最初写「28.47 → 7.92 ms / 省 20.6 ms」
+    「98.98 → 21.69 ms / 省 77.3 ms」——那些用的是**合成的 232–243 KB / 300 对象**
+    负载，而**真实下载页只有 10 个任务约 3.6 KB**。审查指出后重测：真实负载只省
+    **0.6 ms**（下载页）/ **1.6 ms**（搜索）。
+    倍数（4.4–5.0×）是真的，但**绝对值必须按真实负载报** —— 否则就是在用
+    合成负载给改动贴金。
+  - **那为什么还保留**：① 倍数真实、无风险；② 它同时是下面那个正确性 bug 的
+    依赖路径（新路径走 `JSONValue(any:)`，必须先把 `init(any:)` 修对）；
+    ③ 真实负载 0.6 ms 虽小，但下载页是 **5 秒轮询**，且这条路径也在**搜索结果**
+    与**订阅列表**上（各 1.6 ms）。**不声称它是大收益** —— 按真实量级记账。
 
 - **顺带修掉一个既有正确性 bug：`JSONValue.init(any:)` 把 JSON 数字 `0`/`1` 当成布尔**。
   - Swift 的 `NSNumber` → `Bool` 桥接**对 0 和 1 也成立**：实测
