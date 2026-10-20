@@ -93,6 +93,30 @@ struct EnvelopeObjectsTests {
         }
     }
 
+    /// **数组里混进非对象元素必须抛错，不能静默丢弃。**
+    ///
+    /// 旧路径 `JSONDecoder.decode([[String: JSONValue]].self, ...)` 遇到
+    /// `[{"a":1}, "oops", 5]` 会抛 `DecodingError`。第一版实现用了 `compactMap`，
+    /// 实测同样输入会**静默返回 1 个元素、丢掉 2 个** —— 那等于把「服务端返回畸形
+    /// 数据」伪装成「一切正常，只是少了几个条目」。
+    @Test func nonObjectElementsThrowInsteadOfBeingDropped() {
+        let mixed = Data(#"[{"a":1}, "oops", 5]"#.utf8)
+        #expect(throws: (any Error).self) {
+            try MPEnvelope.unwrapObjects(mixed)
+        }
+        // 对照：旧路径确实抛错（这条同时证明「严格」才是旧语义）
+        #expect(throws: (any Error).self) {
+            try Self.oracleDecoder.decode(
+                [[String: JSONValue]].self, from: MPEnvelope.unwrap(mixed))
+        }
+    }
+
+    /// 空数组仍然是成功（不是错误）。
+    @Test func emptyArraySucceeds() throws {
+        #expect(try MPEnvelope.unwrapObjects(Data("[]".utf8)).isEmpty)
+        #expect(try MPEnvelope.unwrapObjects(Data(#"{"success":true,"data":[]}"#.utf8)).isEmpty)
+    }
+
     /// 非法 JSON 应抛错。
     @Test func malformedJSONThrows() {
         #expect(throws: (any Error).self) {

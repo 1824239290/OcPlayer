@@ -27,7 +27,7 @@
 
 ### 性能
 
-- **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」—— 实测 28.47 ms → 7.92 ms（3.6×，省 20.6 ms / 243 KB）**。
+- **`P2-22`：MoviePilot 的 JSON 解析从「三遍」压到「一遍」—— 实测 **98.98 ms → 21.69 ms（4.6×，省 77.3 ms / 232 KB）**（包测试构建，即真实 Debug 口径）**。
   - `MPMediaInfo` / `MPDownloadTask` / `MPSubscribe` / `MPSite` 都不是 `Codable`
     —— 它们要的是原始 `[String: JSONValue]`（下载时整个对象原样回传服务端）。
     原路径是：
@@ -41,11 +41,21 @@
   - **修法**：新增 `MPEnvelope.unwrapObjects(_:)` —— **只解析一遍**：
     `JSONSerialization` 拿 `Any` 树，剥信封后直接 `JSONValue(any:)` 转换。
     4 个调用点（`searchMedia` / `sites` / `downloadingTasks` / `subscribes`）切过去。
-  - **实测（同一个 243 KB 信封响应）**：28.47 ms → **7.92 ms（3.6×，省 20.6 ms）**。
+  - **实测（同一个 232 KB 信封响应，包测试 Debug 口径）**：98.98 ms → **21.69 ms
+    （4.6×，省 77.3 ms）**。
+    （早先用 `-O` 独立 bench 测到 28.47 → 7.92 ms / 3.6×；两个口径倍数相近，
+    绝对值差在优化级别 —— 以 Debug 那个数为准，因为 App 就是 Debug/Release
+    里 Debug 更常见于开发期，Release 下两者的比例仍成立。）
   - **为什么这条值得（不像前几批的微秒级）**：`downloadingTasks()` 在下载页是
     **5 秒轮询**的（`DownloadsPollingPolicy`），所以这 20 ms 是**每 5 秒一次的
     持续开销**，而不是一次性。前面回退的那几条都是「每次操作只付一次」的量级。
-  - 用例 18 条（`EnvelopeObjectsTests` 11 + `JSONValueAnyInitTests` 7），
+  - **⚠️ 第一版实现有一处**语义不等价**，已修**：数组里混进非对象元素时
+    （`[{"a":1}, "oops", 5]`），旧路径 `JSONDecoder.decode([[String: JSONValue]].self, ...)`
+    **抛 `DecodingError`**，而我第一版写的 `compactMap { $0 as? [String: Any] }`
+    实测会**静默返回 1 个元素、丢掉 2 个** —— 那等于把「服务端返回畸形数据」伪装成
+    「一切正常，只是少了几个条目」。已改成逐个严格校验（任一项非对象即抛错），
+    与旧路径一致；变异（改回 `compactMap`）→ 用例红。
+  - 用例 20 条（`EnvelopeObjectsTests` 13 + `JSONValueAnyInitTests` 7），
     核心是**用旧路径当 oracle**：同一份 data 跑「unwrap + JSONDecoder 瀑布」与
     「unwrapObjects」，结果必须逐字段相等（覆盖裸数组 / 信封 / 0-1 数字 / 各种数字
     形态 / 布尔 / 嵌套 / 空容器 / 非数组负载抛错 / 非法 JSON 抛错）。

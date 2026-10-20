@@ -98,7 +98,25 @@ enum MPEnvelope {
         guard let array = payload as? [Any] else {
             throw MoviePilotError.generic("响应不是对象数组")
         }
-        return array.compactMap { $0 as? [String: Any] }.map { $0.mapValues(JSONValue.init(any:)) }
+        // ## ⚠️ 不能用 `compactMap`（会**静默丢弃**非对象元素）
+        //
+        // 旧路径是 `JSONDecoder.decode([[String: JSONValue]].self, ...)`：数组里混进
+        // 任何非对象元素（`[{"a":1}, "oops", 5]`）都会**抛 `DecodingError`**。
+        //
+        // 第一版这里写的是 `compactMap { $0 as? [String: Any] }` —— 实测同样输入会
+        // **静默返回 1 个元素、丢掉 2 个**。那等于把「服务端返回了畸形数据」变成
+        // 「一切正常，只是少了几个条目」，问题被埋掉。
+        //
+        // 所以这里逐个严格校验：任一项不是对象就抛错，与旧路径一致。
+        var result: [[String: JSONValue]] = []
+        result.reserveCapacity(array.count)
+        for element in array {
+            guard let object = element as? [String: Any] else {
+                throw MoviePilotError.generic("响应数组里存在非对象元素")
+            }
+            result.append(object.mapValues(JSONValue.init(any:)))
+        }
+        return result
     }
 }
 
