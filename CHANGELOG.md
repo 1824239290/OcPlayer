@@ -27,6 +27,47 @@
 
 ### 性能
 
+- **`P2-33`：侧车字幕从「N 条串行往返」改成「有界并发取、按原序串行挂」。**
+  - 原实现 `for subtitle in subtitles { try await downloadSubtitle(subtitle) }` ——
+    **N 条字幕 = N 个串行网络往返**。局域网单次往返几十毫秒、跨网几百毫秒；
+    一集挂 4–8 条（zh-Hans / zh-Hant / en / ja…）时首屏要多等好几百毫秒，
+    而且那段时间字幕菜单是空的。
+  - **修法**：新增 `downloadExternalSubtitles(_:limit:download:)` —— 默认 **4 路并发**
+    （命名常量 `externalSubtitleConcurrency`），但**返回数组严格按入参顺序**。
+  - **为什么顺序不能乱**：挂载顺序决定内核里的轨道序号，也决定「上次选的字幕
+    （按 id 记住的偏好）」指向哪一条 —— 乱了就会选到别的语言上。
+  - 语义三条都保留：**顺序**、**失败隔离**、**取消**（父任务取消后不再派发新任务）。
+  - **⚠️ 审查抓到 3 条，全部成立并已修**：
+    ① **测试仍与生产接线脱钩（第三次同类问题）**：9 条用例全在测 helper
+       `downloadExternalSubtitles`，`AppTests` 里 `loadExternalSubtitles` 引用 **0** 次。
+       更隐蔽的是**默认值 `limit: 4` 从未被执行**（用例全都显式传 `limit:`）——
+       把它改成 **1（生产等价串行）用例仍全绿**。
+       **修法**：把 4 提成命名常量 `externalSubtitleConcurrency`，并补两条用例 ——
+       `testProductionConcurrencyDefaultIsFour`（断言常量值）与
+       `testDefaultLimitActuallyRunsConcurrently`（**不传 `limit`**，走生产默认值，
+       8 条 × 60 ms 须 < 420 ms）。已反向验证：**常量改成 1 → 红**。
+    ② **换片取消会刷 warning**：一次取消打 **4 条**「下载外挂字幕失败」（等于在飞数）。
+       旧实现 `catch is CancellationError { return }` 是 0 日志。违反仓库口径
+       （`EmbySession`「取消不是故障，不记请求失败」）。
+       **修法**：`catch` 里先用 `CancellationClassifier.isCancellation(error)` 判断，
+       是取消就直接 rethrow、不打日志。
+    ③ **耗时断言会假红**：原阈值 350 ms。审查实测**低 QoS 调度下**
+       （`taskpolicy -b`，CI 上常见）同样的 4 路并发会涨到 **318 ms**，
+       叠加忙进程后 10/10 全部 ≥350 ms（min 358.9 / p50 449.1）—— 假红。
+       已放宽到 **420 ms**（串行下界 480、最慢实测并发 320，留出安全间隔）。
+  - **⚠️ 一条已知的覆盖边界（不假装覆盖）**：接线级用例（真的驱动
+    `loadExternalSubtitles`）没写 —— 它需要完整的播放会话就绪状态
+    （`waitUntilSourceReady` + `activePlaybackIdentity` + `isSourceReady`），
+    而能驱动它的 `GatedFakeEngine` fixture 是 `PlaybackControllerOpenTests` 里的
+    `private` 嵌套类型，跨文件用不了。**「生产循环用的是并发版」这一点由代码评审保障**，
+    本批只钉住了「helper 是并发且有序」+「生产默认值确实是 4 且真的被用上」。
+  - 用例 9 条：**并发性**（8×60 ms < 420 ms）、**顺序**（故意逆序完成）、
+    **失败隔离**、**并发上限**（峰值须 ≤2 且 ≥2）、**默认值常量**、
+    **默认值真的被执行**、空输入、非法 `limit`、`limit` 大于条数时钳到条数。
+  - **本轮工作方式改成「先反向验证再写正向用例」**，抓到 4 个变异：
+    改回串行 → 红；按完成顺序收集 → 红；去掉并发上限 → 红；**默认值改成 1 → 红**。
+
+
 - **`P2-32`：`nowPlayingInfo` 从「每秒跨进程写一次」降到「约 10 秒一次」。**
   - `nowPlayingInfo` 的 setter 会**跨进程同步**。原实现「快照 != 上次就发」，而快照含
     **整秒位置** —— 播放中位置每秒变一次，就等于**每秒一次写入**。但系统本来就按

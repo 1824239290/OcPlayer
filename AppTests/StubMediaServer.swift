@@ -189,8 +189,25 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     }
 
     func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment] { [] }
-    func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] { [] }
-    func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL { URL(fileURLWithPath: "/dev/null") }
+    /// 侧车字幕列表（`P2-33` 的接线级用例要注入）。
+    var externalSubtitlesResult: [ExternalSubtitle] = []
+
+    /// 单条字幕下载桩：默认直接成功。用例注入延迟 / 失败 / 计数。
+    ///
+    /// `@Sendable`：`P2-33` 的下载闭包是 `@Sendable`，这里要能被它捕获。
+    var downloadSubtitleHandler: @Sendable (ExternalSubtitle) async throws -> URL = {
+        URL(fileURLWithPath: "/tmp/stub-\($0.index).srt")
+    }
+
+    func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
+        count("externalSubtitles")
+        return externalSubtitlesResult
+    }
+
+    func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL {
+        count("downloadSubtitle")
+        return try await downloadSubtitleHandler(subtitle)
+    }
     func mediaFileInfo(itemID: String) async throws -> MediaFileInfo? { nil }
 
     /// `PlaybackInfo` 的构造是包内收口的（只有包自己该造它），替身不越权去造一个。

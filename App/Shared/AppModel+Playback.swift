@@ -896,6 +896,76 @@ extension AppModel {
         return subtitle.codec.uppercased()
     }
 
+    /// 侧车字幕的**有界并发**下载（`P2-33`）。
+    ///
+    /// ## 为什么要它
+    ///
+    /// 原实现是 `for subtitle in subtitles { try await downloadSubtitle(...) }` ——
+    /// **N 条字幕 = N 个串行网络往返**。局域网单次往返几十毫秒、跨网几百毫秒，
+    /// 一集挂 4–8 条字幕（zh-Hans / zh-Hant / en / ja …）时首屏要多等好几百毫秒，
+    /// 而且这段时间里字幕菜单是空的。
+    ///
+    /// 现在并发取（默认 4 路），**但返回数组严格按入参顺序** ——
+    /// 挂载顺序决定内核里的轨道序号，乱序会让「字幕 N」在菜单里对不上，
+    /// 而且用户上次选的那条（按 id 记住的偏好）会指到别的语言上。
+    ///
+    /// ## 语义
+    ///
+    /// - **顺序**：`files[i]` 一定对应 `subtitles[i]`（失败的格子是 nil）。
+    /// - **失败隔离**：某条下载失败只让那一格是 nil，不影响其它条。
+    /// - **取消**：父任务取消后不再派发新任务，已在飞的会自己抛错；返回时
+    ///   `Task.isCancelled` 为真，调用方据此提前收尾。
+    ///
+    /// - Parameters:
+    ///   - subtitles: 待下载的侧车字幕。
+    ///   - limit: 并发上限（至少 1）。
+    ///   - download: 单条下载动作（生产里是 `server.downloadSubtitle`，测试注入桩）。
+    /// 侧车字幕的**默认并发上限**。
+    ///
+    /// 提到命名常量是审查建议：第一版把 `4` 写死在默认参数里，而**7 条用例全都
+    /// 显式传 `limit:`**，默认值一次都没被执行过 —— 把它改成 1（生产等价串行）
+    /// 测试仍全绿。现在这个常量有自己的断言。
+    static let externalSubtitleConcurrency = 4
+
+    static func downloadExternalSubtitles<Element: Sendable>(
+        _ subtitles: [Element],
+        limit: Int = AppModel.externalSubtitleConcurrency,
+        download: @escaping @Sendable (Element) async throws -> URL
+    ) async -> [URL?] {
+        var files = [URL?](repeating: nil, count: subtitles.count)
+        guard !subtitles.isEmpty else { return files }
+        let width = min(max(1, limit), subtitles.count)
+
+        await withTaskGroup(of: (index: Int, file: URL?).self) { group in
+            var next = 0
+            // 先填满窗口。
+            while next < width {
+                let index = next
+                let subtitle = subtitles[index]
+                group.addTask {
+                    guard !Task.isCancelled else { return (index, nil) }
+                    return (index, try? await download(subtitle))
+                }
+                next += 1
+            }
+            // 每完成一个就补一个，维持窗口宽度（有界并发）。
+            for await result in group {
+                files[result.index] = result.file
+                // 取消后不再派发新的：已取消的任务继续拉字幕没有意义。
+                if next < subtitles.count, !Task.isCancelled {
+                    let index = next
+                    let subtitle = subtitles[index]
+                    group.addTask {
+                        guard !Task.isCancelled else { return (index, nil) }
+                        return (index, try? await download(subtitle))
+                    }
+                    next += 1
+                }
+            }
+        }
+        return files
+    }
+
     /// Jellyfin 侧车字幕（`.zh.srt` 这类不在容器里的）：列出 → 逐条下载 → 喂给内核。
     /// 整批装载结束后按偏好校正一次字幕选择（见 `endExternalSubtitleBatch`）。
     func loadExternalSubtitles(
@@ -931,23 +1001,42 @@ extension AppModel {
             // 少关一次 flag 就是这一整片再也不按偏好选字幕。
             playback.beginExternalSubtitleBatch()
             defer { playback.endExternalSubtitleBatch(for: source) }
-            for subtitle in subtitles {
-                guard !Task.isCancelled else { return }
-                let file: URL
+            // `P2-33`：**并发取、串行挂**。
+            //
+            // 原实现逐条 `await`，N 条字幕 = N 个串行往返。现在默认 4 路并发，
+            // 但返回数组仍按入参顺序 —— 挂载顺序决定内核轨道序号，也决定
+            // 「上次选的字幕（按 id 记的偏好）」指向哪一条，乱了就会选错语言。
+            //
+            // 日志放在闭包里而不是循环里：单条的失败原因（`error`）只有这里拿得到，
+            // 而结果数组里失败只有 nil。
+            let files = await Self.downloadExternalSubtitles(subtitles) { subtitle in
                 do {
-                    file = try await server.downloadSubtitle(subtitle)
-                } catch is CancellationError {
-                    return
+                    return try await server.downloadSubtitle(subtitle)
                 } catch {
+                    // **取消不是故障**（与 `EmbySession` 的口径一致）：换片 / 关播放器时
+                    // 在飞的那几条会一起被取消，若照样打 warning，一次换片就会刷出
+                    // 等于并发数的「下载外挂字幕失败」——噪音，而且会把真正的失败淹掉。
+                    //
+                    // ⚠️ 第一版这里只有 catch-all，审查实测一次取消打 **4 条** warning
+                    // （等于在飞数）；改成用仓库已有的 `CancellationClassifier` 区分。
+                    if CancellationClassifier.isCancellation(error) {
+                        throw error   // 让它变成 nil，由调用方按「跳过」处理
+                    }
                     // 单条下载失败跳过下一条，但留日志——静默的话用户只看到
                     // 「明明有字幕却挂不上」。
-                    AppDiagnostics.logWarning("下载外挂字幕失败 item=\(itemID) track=\(subtitle.index) error=\(error)")
-                    continue
+                    AppDiagnostics.logWarning(
+                        "下载外挂字幕失败 item=\(itemID) track=\(subtitle.index) error=\(error)")
+                    throw error
                 }
+            }
+            guard !Task.isCancelled,
+                  self.activePlaybackIdentity == identity else { return }
+            // 挂载仍**严格按原数组顺序**串行执行。
+            for (subtitle, file) in zip(subtitles, files) {
+                guard !Task.isCancelled else { return }
+                guard let file else { continue }   // 失败已在闭包里记过日志
                 // 下载的字幕进了受管目录：捎带触发一次限额维护（日定时器也会兜底）。
                 AppDiagnostics.requestStorageMaintenance()
-                guard !Task.isCancelled,
-                      self.activePlaybackIdentity == identity else { return }
                 // 名字和语言都喂过去：内核不带这些元数据，靠 App 层映射在菜单里显示。
                 let name = Self.subtitleDisplayName(for: subtitle)
                 guard playback.addExternalSubtitle(fileURL: file, name: name, for: source) else { return }
