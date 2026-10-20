@@ -27,6 +27,79 @@
 
 ### 性能
 
+- **`P2-38`（其一）：`FileHash.head16MiBMD5(from:)` 原先**真的会把整部电影下载下来**。**
+  - 这是**真缺陷，不只是性能**。旧实现是
+    `let (data, response) = try await session.data(for: request)` ——
+    **`data(for:)` 会把整个响应体读完才返回**，而「服务器有没有老实按 Range 返回」
+    是在**之后**才校验的。服务器一旦忽略 `Range` 返回 `200 + 整个文件`，
+    就会先把整部电影（几 GB 到几十 GB）**读进内存**，然后才抛 `rangeUnsupported`。
+    旧注释写的 "this method can never download an entire movie"
+    **在传输层根本不成立** —— 它只是「不会把整部电影拿来算哈希」。
+  - **修法**：改用 `URLSessionDataDelegate` 驱动 —— **响应头一到就决策**
+    （`didReceive response`），不合格立刻 `.cancel`，响应体一个字节都不会被消费；
+    合格才下传，且累计量硬顶在 16 MiB + 1（超了 cancel 并报 `readFailed`）。
+    内存占用与流量从此都有**硬上限**，与服务器行不行善无关。
+  - **为什么不用 `session.bytes(for:)`**：那是 `AsyncSequence<UInt8>`，要按字节迭代
+    1600 万次异步跳（旧注释也记着这条路「慢几个数量级」）。也不用 `data(for:)`：
+    它读完整个 body 才返回。delegate 是唯一两者兼顾的路。
+  - 判定逻辑抽成纯函数 `RangePolicy.decide(statusCode:contentRange:expectedFileSize:)`，
+    可表驱动测试；生产路径在 `didReceive response` 里调它，
+    所以「决策」与「收字节」是同一个时刻。
+  - **测试**（`FileHashRangePolicyTests`，7 条）：
+    · 判定表 4 条 —— 合法 206（大/小文件）、`200` 且整文件 ≤16 MiB 才接受、
+      **`200` 且大小未知必须拒绝**（这条就是「不能下整部电影」的判据）、
+      6 种畸形/意外 `Content-Range`、其它状态码原样报出；
+    · **「不碰 body」的硬证据**：桩先给响应头 + 第一块 body，再每 0.3 s 慢慢发
+      （共约 3 s）。修好后 **0.006 s** 返回；退回 `data(for:)` 是 **3.08 s**。
+    · 对照组：`200` 且整文件确实很小 → **要**把 body 收下来并算对哈希
+      （防止「为了不读 body 连该读的也不读」）。
+  - **⚠️ 一条测试方法学的坑（记录下来）**：`URLProtocol` 会把响应头**缓冲到第一块
+    body 到达时**才投递（实测头与 body 同时到）。所以「头到了、body 永不来」的桩
+    **测不出**立即取消 —— 那是在测 mock 的缓冲。桩必须「先给一小块、再慢慢发」。
+  - **⚠️ 我自己在改的过程中引入了第二个回归，自查发现并修掉**：换成 delegate +
+    `dataTask` 之后，**`Task.cancel` 的传递断了** —— 旧实现用 `session.data(for:)`，
+    它天然响应取消；新实现没有把取消传给 `dataTask`，父任务取消后会一直跑到下载结束。
+    实测 **3.08 s**（应 <1.5 s）。而调用方
+    `DanmakuLoadOrchestrator.mediaHash` 是**显式处理取消**的
+    （`catch where CancellationClassifier.isCancellation(error) { throw CancellationError() }`），
+    传不下去那段代码就成了死码 —— 换片 / 关页时会白等一轮完整下载。
+    **修法**：`withTaskCancellationHandler` 的 `onCancel` 里
+    `collector.cancelForParentTask()` + `task.cancel()`；collector 用一个
+    `cancelledByParent` 标记把错误映射成 `CancellationError`（而不是 `readFailed`）——
+    否则调用方会分不清「取消」与「真故障」。
+    用例 `testParentTaskCancellationStopsTheRequest` 钉住它：取消后总耗时从 **3.47 s**
+    降到 **0.115 s**（整组 8 条）。
+  - **⚠️ 审查又抓到 3 条，全部成立并已修**：
+    ① **`cancelledByParent` 在锁外读 —— 真数据竞争**：`cancelForParentTask()` 由
+       `withTaskCancellationHandler` 的 onCancel 在**另一条线程**写，
+       而 `didCompleteWithError` 在 `lock.unlock()` **之后**才读它 —— 无同步的并发访问，
+       Swift 6 下是 UB。最坏把「已完成」翻成「已取消」，或把取消读丢成 `readFailed`
+       （调用方会把后者当**故障**而不是静默）。已改成**锁内捕获**。
+    ② **`bodyLimit` 硬顶零测试覆盖**：把它改成 `if false`，本包其余用例**全绿**（实测）。
+       这是「内存/流量硬上限」的核心防线，只被注释保护不够。
+       已补 `testOversizedBodyIsCutOffByHardLimit`：合法 `206` 声明收 16 MiB、
+       实际 100 MiB 一直发，断言 **2 秒内**抛 `readFailed`（不设限要 ~5 秒）。
+    ③ **取消→`CancellationError` 的映射无断言**：删掉那个 `else if` 之后
+       取消用例**仍绿**（它只断言 `threw`，不校验类型）。而
+       `DanmakuLoadOrchestrator` 依赖 `CancellationClassifier` 区分取消/故障 ——
+       退化成 `readFailed` 会让换片那次被记成真故障。已补 `error is CancellationError` 断言。
+  - **顺带修掉审查指出的一个潜在窗口**：`attach` 的 `finished` 分支原先不看取消 ——
+    若 `didComplete` 抢在 `attach` 之前完成，取消会当 `(nil, empty)` 返回，
+    `expectedFileSize == 0` 时甚至返回空文件的 MD5。已在该分支也抛 `CancellationError`。
+  - **⚠️ 又踩了一次「耗时断言在 CI 上假红」**：`bodyLimit` 那条我第一版断言
+    「2 秒内抛错」—— 本地 0.91 s 稳定，**CI 上 3.03 s 直接红**
+    （GitHub runner 慢 + 调度抖动）。这已经是这个演进方向上**第三次**
+    被耗时断言咬到（前两次是 `P2-33` 并发用例、以及本次的取消用例）。
+    **改法**：断言**桩实际发出去的字节数 / 块数**，不用耗时 ——
+    硬顶生效时桩会停在 ~17 块，没有硬顶会发满 100 块；
+    拒绝用例同理停在 1–3 块（共 11 块）。这是**确定性**的，与机器快慢无关。
+    改完在 8 个 `yes` 进程压满 8 核的情况下复跑：**0.551 s 稳定通过**。
+  - **反向验证**：① 退回 `data(for:)` → **红**（桩发满整个 body）；
+    ② 去掉 `withTaskCancellationHandler` → **红**；
+    ③ 去掉 `bodyLimit` 硬顶 → **红**（桩发满 100 块）；
+    ④ 去掉取消→`CancellationError` 映射 → **红**。
+    DanmakuKit 全量 **212 条 0 失败**。
+
 - **`P2-33`：侧车字幕从「N 条串行往返」改成「有界并发取、按原序串行挂」。**
   - 原实现 `for subtitle in subtitles { try await downloadSubtitle(subtitle) }` ——
     **N 条字幕 = N 个串行网络往返**。局域网单次往返几十毫秒、跨网几百毫秒；
