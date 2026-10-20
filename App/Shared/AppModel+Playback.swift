@@ -248,37 +248,84 @@ extension AppModel {
     /// 用 request id 绑定：换片 / 重开时旧任务自动失效，不会提前或延后撤别人的 loading。
     /// 轮询循环的**总时限**（`P2-34`）。
     ///
-    /// ⚠️ **这条没有单元测试覆盖，且有明确原因**（不假装有）：
-    /// 该循环的三条退出条件全部依赖播放器内部状态（首帧标志、state、setupError），
-    /// 而在测试环境里 `playback` 恒为 nil —— 循环会走
-    /// `guard let playback else { playbackPreparation = nil; return }` 那条
-    /// **立即退出**，根本到不了时限分支。想覆盖它就得伪造出一个
-    /// 「engine 为 nil、state 停在既非 error 也非 playing」的播放器，那等于
-    /// 测一个生产里不存在的状态组合。
+    /// ## ⚠️ 必须**大于**打开看门狗
     ///
-    /// 所以这里只保留**可静态验证**的部分：时限是个命名常量、调用点把它传进循环、
-    /// 循环顶部有 `clock.now - startTime > deadline` 的守卫。真要动态验证，
-    /// 需要给 `PlaybackController` 注入一个可卡住的首帧桩 —— 那是更大的改动，
-    /// 不在本次范围内。
+    /// 看门狗（`PlaybackController.openWatchdogTimeout`，60 s）是 open 阶段的真实上限，
+    /// 到点会报「连接媒体服务器超时」并撤 loading。
     ///
-    /// 生产用 30 秒：正常路径（本地片 / 局域网直连）首帧都在毫秒级，慢网络也就几秒。
-    /// 真到 30 秒还没出帧，loading 已经转了很久，该让下方的缓冲转圈接管。
-    static let preparationDismissDeadline: Duration = .seconds(30)
+    /// **第一版我把这里设成了 30 s，那是一个回归**：30 s 到点只撤 loading、
+    /// `presentedPlayer` 不动 → 露出 `PlayerScreen`，而此时首帧没出、state 还是
+    /// `.opening`/`.ready` —— **`showsBufferingIndicator` 只对 `.playing` 为真**，
+    /// 所以那 30 秒是**纯黑屏、无转圈、无文案**，直到 60 s 看门狗才出错误徽章。
+    /// 等于把一个「有反馈的等待」变成了「无反馈的黑屏」。
+    ///
+    /// 现在取看门狗 + 30 s 余量：正常路径 loading 一直有反馈；真到 90 s 还没结果，
+    /// 看门狗的错误徽章早已出现，这个循环只是兜底收尾。
+    nonisolated static var preparationDismissDeadline: Duration {
+        PlaybackController.openWatchdogDefault + .seconds(30)
+    }
 
-    /// 轮询循环的**退出策略**（纯函数，可测）。
+    /// 轮询循环的**单步决策**（纯函数，可表驱动测试）。
     ///
-    /// 抽出来的理由：整个循环体依赖播放器状态（首帧 / state / setupError），
-    /// 在测试环境里 `playback` 恒为 nil，循环会立即退出、到不了时限分支 ——
-    /// 那部分无法在单测里伪造（详见 `preparationDismissDeadline` 的注释）。
-    /// 但**「是否已超时」这个判定与播放器无关**，可以独立验证：
-    /// 它只需要两个时刻和时限。
+    /// ## 为什么把整个判定抽出来
     ///
-    /// - Parameters:
-    ///   - elapsed: 从进入循环到现在的时长。
-    ///   - deadline: 总时限。
-    /// - Returns: 是否应该放弃等待、清态退出。
-    nonisolated static func shouldAbandonPreparation(elapsed: Duration, deadline: Duration) -> Bool {
-        elapsed > deadline
+    /// 第一版我只抽了 `elapsed > deadline` 这一条，结果是：**把循环里对它的调用
+    /// 整段删掉，4 条用例仍然全绿** —— 测试完全不在生产路径上（审查实测）。
+    /// 只测一个布尔表达式等于在测 `>` 运算符。
+    ///
+    /// 现在抽的是**完整决策**：循环的每一个退出分支都在这里，循环体只剩
+    /// 「取状态 → 调它 → 按结果清态返回」。
+    ///
+    /// ## ⚠️ 覆盖边界（不假装覆盖得更多）
+    ///
+    /// 表驱动用例覆盖的是**这个函数里的分支逻辑**（哪条先判、各返回什么）。
+    /// 它**不覆盖「循环是否真的调用了它」** —— 审查实测过：把循环里对它的调用
+    /// 整段删掉，用例仍然全绿。要覆盖那一层，得给 `PlaybackController` 注入
+    /// 一个可卡住首帧的桩、让循环真的跑起来，那需要改 `AppModel.playback` 的类型
+    /// （现在是具体类型不是协议），成本远超本次范围。
+    ///
+    /// 所以这里的诚实表述是：**分支逻辑有测试、接线没有**。接线靠代码评审保障
+    /// （这点在 PR 说明里也写明了）。
+    nonisolated static func preparationDismissDecision(
+        isCurrentRequest: Bool,
+        hasPlayback: Bool,
+        hasRenderedFirstFrame: Bool,
+        state: PlaybackState,
+        hasSetupError: Bool,
+        playingSince: Duration?,
+        elapsed: Duration,
+        deadline: Duration
+    ) -> PreparationDismissDecision {
+        // 换片 / 关闭：loading 已不归我管。
+        guard isCurrentRequest else { return .stop }
+        // 控制器没了（极端情况）：宁可退回两段式也别让 loading 永转。
+        guard hasPlayback else { return .clearLoading }
+        // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
+        if hasRenderedFirstFrame { return .clearLoading }
+        // 内核打开失败 / App 层 setupError：撤 loading，让错误徽章接管。
+        if state == .error || hasSetupError { return .clearLoading }
+        // 纯音频 / 首帧迟迟不来的兜底：playing 持续够久仍无帧就放行。
+        if state == .playing, let since = playingSince,
+           elapsed - since > Self.playingWithoutFrameGrace {
+            return .clearLoading
+        }
+        // `P2-34`：总时限兜底 —— 上面每一条都可能一直不成立
+        // （`.ready` 饿死、loading 期间被暂停在首帧前…），没有这条就是永久轮询。
+        if elapsed > deadline { return .clearLoading }
+        return .wait
+    }
+
+    /// `.playing` 但迟迟没有首帧时，等多久就放行（交给下方缓冲转圈）。
+    nonisolated static let playingWithoutFrameGrace: Duration = .seconds(2.5)
+
+    /// `preparationDismissDecision` 的返回：继续等 / 清掉 loading / 直接停（不动 UI）。
+    enum PreparationDismissDecision: Equatable {
+        /// 继续下一轮轮询。
+        case wait
+        /// 清掉准备态并结束。
+        case clearLoading
+        /// 结束但**不动**准备态（loading 已归别的请求管）。
+        case stop
     }
 
     func schedulePreparationDismiss(
@@ -291,66 +338,52 @@ extension AppModel {
             let startTime = clock.now
             var playingSince: ContinuousClock.Instant?
             while let self, !Task.isCancelled {
-                // ## `P2-34`：**必须有总时限**
-                //
-                // 这是一个 100 ms 的轮询循环，原本只靠三条 `return` 退出：
-                // ① 首帧已上屏 ② state == .error / setupError ③ playing 持续 2.5 s。
-                //
-                // 但三条都**可能一直不成立**：内核卡在 buffering 又没报错、
-                // 或者 `state` 停在 `.paused`/`.idle` 之外别的值上 —— 那时这个循环
-                // 会以 **10 Hz 永久唤醒主 actor**（每次唤醒都要过一遍 `self` 弱引用、
-                // 读 `presentedPlayer`、读 `engine.hasRenderedFirstFrame`、读 state）。
-                //
-                // 播放页在屏上时这点开销看不出，但**用户切走 / 息屏 / 播放器被
-                // 别的东西挡住**时它仍在跑，纯属白烧电。
-                //
-                // 30 秒是宽松上限：正常路径（本地片 / 局域网直连）首帧都在毫秒级，
-                // 慢网络也就几秒。真到 30 秒还没出帧，loading 已经转了很久，
-                // 该让下方的缓冲转圈接管，而不是继续悄悄轮询。
-                if Self.shouldAbandonPreparation(elapsed: clock.now - startTime, deadline: deadline) {
-                    self.playbackPreparation = nil
-                    return
-                }
-                guard self.presentedPlayer?.id == request.id else { return }
-                // 控制器引用没了（极端情况）：宁可退回两段式也别让 loading 永转。
-                guard let playback else {
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 首帧已上屏 → 无论当前 state（哪怕已被暂停）都可以撤 loading。
-                if playback.engine?.hasRenderedFirstFrame == true {
-                    // 保底 400ms：加载太快时 loading 闪现即消失会晃眼。
+                // 400 ms 保底：加载太快时 loading 闪现即消失会晃眼。这条要**先**判，
+                // 否则它会与下面的决策重复实现「已出帧」这件事。
+                let hasFrame = playback?.engine?.hasRenderedFirstFrame == true
+                if hasFrame, clock.now - startTime < .milliseconds(400) {
                     // 这个等待要响应取消（换片/关闭）：吞掉取消错误的话，任务会在
                     // 别人已经接管 loading 之后醒来再改状态。
-                    if clock.now - startTime < .milliseconds(400) {
-                        do {
-                            try await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
-                        } catch {
-                            return
-                        }
-                    }
-                    // 等待期间可能已换片：只有仍是本 request 的 loading 才归我撤。
-                    guard self.presentedPlayer?.id == request.id else { return }
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 内核打开失败 / App 层 setupError：撤 loading，让错误徽章接管。
-                if playback.state.state == .error || playback.setupError != nil {
-                    self.playbackPreparation = nil
-                    return
-                }
-                // 纯音频 / 首帧迟迟不来的兜底：playing 持续 2.5s 仍无帧就放行，
-                // 交给 PlayerScreen 的缓冲转圈（surface 已垫黑，不会白闪）。
-                if playback.state.state == .playing {
-                    let since = playingSince ?? clock.now
-                    playingSince = since
-                    if clock.now - since > .seconds(2.5) {
-                        self.playbackPreparation = nil
+                    do {
+                        try await Task.sleep(until: startTime + .milliseconds(400), clock: clock)
+                    } catch {
                         return
                     }
+                }
+
+                // 在 `.playing` 且无帧时记录起点（2.5 s 宽限的锚点）。
+                let state = playback?.state.state ?? .idle
+                if state == .playing {
+                    if playingSince == nil { playingSince = clock.now }
                 } else {
                     playingSince = nil
                 }
+
+                // ## `P2-34`：所有退出分支都在这个纯函数里
+                //
+                // 循环体只负责取状态 + 按决策执行 —— 这样**表驱动用例覆盖的就是
+                // 生产逻辑本身**，任何一条分支被删或改错都会被抓住。
+                // （第一版只抽了「是否超时」一条，导致把调用整段删掉测试仍全绿。）
+                let decision = Self.preparationDismissDecision(
+                    isCurrentRequest: self.presentedPlayer?.id == request.id,
+                    hasPlayback: playback != nil,
+                    hasRenderedFirstFrame: hasFrame,
+                    state: state,
+                    hasSetupError: playback?.setupError != nil,
+                    playingSince: playingSince.map { $0 - startTime },
+                    elapsed: clock.now - startTime,
+                    deadline: deadline
+                )
+                switch decision {
+                case .wait:
+                    break
+                case .clearLoading:
+                    self.playbackPreparation = nil
+                    return
+                case .stop:
+                    return
+                }
+
                 do {
                     try await Task.sleep(for: .milliseconds(100))
                 } catch {
