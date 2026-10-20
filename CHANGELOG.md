@@ -27,6 +27,78 @@
 
 ### 性能
 
+- **`P2-38`（其二）：弹幕 `p` 字段解析快 7.6×（**生产路径** `entries` 省 13.6 ms / 万条）。**
+  - `DanmakuJSONConverter.fields(from:)` 原先两处白付：
+    ① `p.split(separator: ",", omittingEmptySubsequences: false)` —— 按 **Character**
+       （字素簇）切分并**分配整个 `[Substring]` 数组**，而 `p` 有 8 段
+       （`userId` / 时间戳 / 校验串…）**我们一个都不看**。实测 **1173 ns/条**，占 ~80%。
+    ② `comment.m.trimmingCharacters(in: .whitespacesAndNewlines)` —— 结果**被丢弃**
+       （只为判空，返回值用的还是原文），却为**每一条弹幕**分配一个新字符串。
+       实测 **63.9 ns/条**。
+  - **修法**：按 **UTF-8 字节**扫到第 2 个逗号就停（前三段一定是 ASCII 数字），
+    再构造三个短 `String`（≤15 字节走小字符串优化、不落堆）；判空改成
+    **`unicodeScalars` + `CharacterSet.whitespacesAndNewlines`**（零分配）。
+    后面那些可能含非 ASCII 的段（用户昵称之类）**根本不会被读到**。
+  - **端到端实测（release，1 万条弹幕，真实生产函数）**：
+
+    | 函数 | 旧 | 新 | 提速 | 节省 |
+    |---|---|---|---|---|
+    | **`entries(from:)`（生产路径）** | 15.70 ms | **2.07 ms** | **7.6×** | **13.63 ms** |
+    | `erikaJSON(from:)`（**当前版本不调用**） | 31.09 ms | 17.62 ms | 1.76× | 13.47 ms |
+
+    单条 `fields`：**~1300 ns → ~200 ns**。
+  - **⚠️ 审查抓到 2 条阻断级，全部成立，已按它的方案修**：
+    ① **判空写法不等价（我自己只抓到一半）**：我先发现了 `Character.isWhitespace`
+       与 `CharacterSet.whitespacesAndNewlines` 差 **U+200B** 一个码位并补上了，
+       但**漏了更隐蔽的一层** —— `isWhitespace` 判的是**整个字素簇**，而
+       `trimmingCharacters` 按 **scalar** 裁。于是 `" " + U+0301`（空格 + 组合符）
+       旧实现 trim 后剩 `U+0301` → **接受**，而 `isWhitespace` 认为整个簇是空白 → **拒绝**。
+       随机字素簇 20 万条差分实测 **265 条不一致**。
+       **审查给出了更好的解**：`unicodeScalars.contains(where: { !CharacterSet
+       .whitespacesAndNewlines.contains($0) })` —— 同集合、同粒度，
+       穷举单码位 + 20 万随机簇 **差异 0**，而且只要 **20.2 ns/条**
+       （比我的写法 72.8 ns 还快 3.6×，因为 `Character` 迭代要先做字素簇边界分析）。
+       已采用，并删掉了那个 `zeroWidthSpace` 常量。
+    ② **「与 `split` 完全等价」不成立**：`split` 按**字素簇**切，而字节扫描按字节切 ——
+       逗号紧跟 Extend 类字符（组合符 / VS16 / ZWJ）时会少一个切分点。
+       实测 `p = "1,1,100,\u{0301}5"` 旧实现 nil、新实现接受 `(1,1,100)`；
+       20 万条含组合符随机输入 **11 条差异**，去掉组合符后 **0 条**，方向**单向**
+       （只会多收、不会丢）。已把结论从「完全等价」改成**如实记录这个差异**：
+       `p` 第 3 段之后是 userId / 时间戳 / hex，那些位置出现「逗号追组合符」
+       在真实数据里不成立，且多收不会让正常弹幕丢失。
+  - **⚠️ 审查还纠正了我的一个事实错误**：我原先拿 `erikaJSON` 当头条，但
+    `PlaybackController.danmakuPayloadFormat` **恒为 `.overlay`**
+    （源码注释：「当前版本内核弹幕被禁用，恒为 overlay」）→ `json: nil` →
+    **`erikaJSON` 在生产里从不被调用**。头条已换成真正跑的 `entries`。
+  - 另外按审查建议去掉了 `@inline(__always)`（private、单调用点、含循环，无必要）。
+  - **语义验证**：穷举单码位 0x10FFFF + 随机字素簇 20 万条 → 判空**差异 0**。
+    用例 8 条覆盖：不足三段 / 空段 / 多余段 / 非 ASCII 尾段 / 数值校验 /
+    正文判空 / 零宽空格 / 输出不 trim。
+  - **⚠️ 这批用例不守性能**（守性能要写耗时断言，而耗时断言已在 CI 咬过我三次）。
+    **性能只有实测支撑**：本机 release 构建、1 万条真实长度弹幕、多次取均值。
+  - **下一块更大的石头（本批未做）**：审查实测
+    `DanmakuIntroDetector.detect` **126.4 ms / 万条**（新 `entries` 的 64×），
+    而且就在 `payload()` 里 `entries` **之前**跑；其中 `commentTime` 与 `commentUID`
+    每条**又来两次全量 `p.split`** + 一次 `trimmingCharacters` 分配
+    （`split` ~0.88 µs/次 ⇒ 约 17.6 ms，占 detect ~14%）。同一个 `p`、同一个调用栈邻居，
+    应作为下一条处理。
+
+- **剩余 `P2` 条目：逐条实测后判定不改（保持与之前 `P2-15/17/30` 同一标准）**
+  - 本批把剩下 9 条全部做了**忠实复刻基准**（本机 release、warmup + 多次取均值）。
+
+    | 条目 | 实测 | 判定 |
+    |---|---|---|
+    | `P2-19` 地址表每行重算 | `list()`（n=3）**5.13 µs/行**；单次归一化 2.40 µs | 不改（与已回退的 `P2-30` ~5 µs 同量级） |
+    | `P2-20` 每张图重建 `URLComponents` | **1.46 µs/张** | 不改 |
+    | `P2-27` `isConfigured` 派生链 | 全链 **1.41 µs**（URL 归一化 0.95 + 2 次凭据读各 0.30） | 不改 |
+    | `P2-28` `stableContentHash` 兜底 | **4.70 µs/次**（18 字段订阅） | 不改（且只在主键与名称都缺失时才走） |
+    | `P2-10` 章节三个 computed 一次 body 读 6 次 | 500 集时 **2.71 µs/body** | 不改（`filter` 单次 1.72 µs） |
+    | `P2-06` 首页 `.motion` 挂在根 `ScrollView` | — | 不改：动画**范围**问题，不是可基准化的计算量；清单自己已按 `REJ-01` 降级 |
+    | `P2-07` 两个常挂载不可见玻璃面板 | — | 不改：需 Instruments 确认 `opacity 0` 子树是否真被剔除，本仓无该手段 |
+    | `P2-16` `ExpandableOverview` 布局两遍 | — | 不改：SwiftUI 布局成本无法在单测里测；清单建议的 `measured` 门控会改变「量到前不出按钮」的时序，属行为改动 |
+    | `P2-08` 弹幕 sheet 整面 Liquid Glass | — | 不改：清单自己标注「属视觉决策，非纯性能项」 |
+    | `P2-29` 合集封面观察粒度错配 | — | **留待后续**：这是 `@Observable` 依赖粒度问题（一次写让所有读它的卡片重算），量级取决于可视卡片数与写入次数，**无法用本机基准代表**；要量它得在真机用 Instruments 的 SwiftUI 模板 |
+
 - **`P2-38`（其一）：`FileHash.head16MiBMD5(from:)` 原先**真的会把整部电影下载下来**。**
   - 这是**真缺陷，不只是性能**。旧实现是
     `let (data, response) = try await session.data(for: request)` ——
