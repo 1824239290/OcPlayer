@@ -27,6 +27,48 @@
 
 ### 性能
 
+- **`P2-32`：`nowPlayingInfo` 从「每秒跨进程写一次」降到「约 10 秒一次」。**
+  - `nowPlayingInfo` 的 setter 会**跨进程同步**。原实现「快照 != 上次就发」，而快照含
+    **整秒位置** —— 播放中位置每秒变一次，就等于**每秒一次写入**。但系统本来就按
+    `playbackRate` 自行外推进度（`MPNowPlayingInfoCenter.h` 原文：
+    "the elapsed time will be automatically extrapolated … updating this property
+    frequently is not required (or recommended)"），那些写入几乎没有信息量。
+  - **修法**：把重发判据抽成纯函数 `needsRepublish`，只在四种情况下真写：
+    ① **首次**；② **内容变化**（标题 / 副标题 / 时长 / 速率 —— 暂停恢复、变速、换集）；
+    ③ **seek**（实际位置偏离「按上次发布外推的位置」超过容差）；
+    ④ **心跳**（距上次发布满 10 s，把系统外推可能的漂移收回来）。
+    正常播放时只命中心跳 → **写入量从 1 Hz 降到 0.1 Hz**。
+  - **⚠️ 第一版被审查抓到 4 条，全部成立并已修**：
+    ① **阻断级：9 条用例全都不经过 `publish()`** —— 把 `publish` 里对判据的调用
+       整段删掉，用例**仍然全绿**。测试等于在测「一个可能与生产无关的函数」。
+       **修法**：给 `PlaybackNowPlayingCenter` 加了两个注入接缝
+       `writeNowPlaying` / `writePlaybackState`（默认写系统，测试换计数器桩），
+       于是用例能**真的驱动 `publish()` 并数「写了几次」**。已验：删掉接线 → **红**。
+    ② **`rate != 1` 的外推一次都没测**：把 `last.rate * elapsed` 改成 `elapsed`，
+       当时 9 条全绿。而 `rate=2` 在生产里可达（长按快进 `applyRate(2.0)`）。
+       已补 `testTwoTimesPlaybackExtrapolatesWithRate`；变异 → 红。
+    ③ **暂停中的小 seek 永远收不回来**（不是「最多 10 s」）：心跳**不是定时器** ——
+       `publish()` 的触发源只有「1 Hz 的 displayPosition」（仅播放中变化）、state 变化、
+       元数据变化。暂停后进度 tick 停了 → 再也不会有 `publish()` → 心跳永远不响。
+       原 2 s 容差下，暂停中拖 1.9 s（90 s 短片的滑条约 8 pt）会一直停在旧值。
+       **修法**：暂停（`rate == 0`）时容差**归零**（没有外推误差可混淆，任何位移都是用户操作）。
+       已补 `testPausedSmallSeekWritesImmediately`（走真实 `publish()`）；变异 → 红。
+    ④ **时间基准/时钟不可注入导致计数测试无意义**：测试里 `publish()` 循环瞬间跑完、
+       `systemUptime` 几乎不动 → 心跳永不触发、seek 判据反而每几秒误触发，
+       实测跑出 **1201 次**这种数字。加了 `now: () -> TimeInterval` 注入点后正常。
+  - **⚠️ 顺带更正两处我先前的表述**：
+    · 注释里曾说「心跳先判是为了避免用过去很久的外推做 seek 判定」——
+      审查实测**顺序不可观测**（两个分支都 `return true`、无副作用），
+      已改成实话「顺序不影响结果，放前面只是短路」。
+    · `systemUptime` 不是「系统运行时长」——它**扣除睡眠**（本机实测差约 239 s）。
+      对本案恰好正确（睡眠时媒体位置也不动），注释已补。
+  - 用例 14 条：**8 条走真实 `publish()`**（首次 / 内容变化 / 暂停 / seek / 30 秒只写 4 次 /
+    一小时约 361 次 / 暂停小 seek / inactive 清空），
+    6 条测纯函数边界（rate=2 外推 / 精确基准 / 暂停容差 / 心跳三档 / 常量 / inactive）。
+  - **变异验证**：删接线 → 红；丢 rate 因子 → 红；暂停容差回 2 s → 红；
+    恢复每秒都发 → 红；心跳改 1 s → 红。
+
+
 - **`BLD-05`（Release 开 LTO）：A/B 实测后**不采纳**，但**理由与清单原文都错了，已重写**。**
   - 清单建议「试 `YES_THIN` 并 A/B 体积与链接耗时」。本批做了 A/B：
 
