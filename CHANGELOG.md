@@ -83,6 +83,92 @@
     （`split` ~0.88 µs/次 ⇒ 约 17.6 ms，占 detect ~14%）。同一个 `p`、同一个调用栈邻居，
     应作为下一条处理。
 
+- **修掉 `DanmakuCacheTests` 的 CI 假红（第二次，`CORR` 类）**。
+  - PR #60 的 CI 挂在 `testStaleMemoryDoesNotDeleteFileWrittenElsewhere`：
+    `("nil") is not equal to ("Optional("fresh")")` + 「内存快照过期不得删除盘上文件」。
+    **本批 diff 完全没碰 `DanmakuKit`**（`git diff main...HEAD --stat` 可证），
+    本地复跑全绿 —— 是**既有的 CI flaky**，不是这批引入的回归。
+  - **为什么会假红**：这条用例要同时满足**两个方向相反的时间约束** ——
+    ① 内存条目必须过期（`sleep > staleTTL`，才会走到磁盘路径）；
+    ② 盘上那份不能被判过期（「`other` 写完 → `stale` 读」的间隔 `< staleTTL`）。
+    前两版取 `staleTTL = 0.05` / `0.5` 秒，约束 ② 的预算只有 50 / 500 ms ——
+    慢 runner 上一次调度抖动就击穿，于是 `stale` 的 `diskComments` **合法地**
+    认为那份也过期（同一 TTL 配置下它确实过期了）→ 删掉文件 →
+    三条断言全红，与产品 bug 的表现**一模一样**。
+  - **修法**：`staleTTL = 3 s`、`sleep = 4 s`。
+    约束 ① 有 1 s 余量；约束 ② 的窗口从 0.5 s 提到 **3 s（宽 6 倍）**。
+    代价是这条用例要跑 **4 秒**，但它是**确定性**的，不再靠赌 CI 的调度运气。
+  - **⚠️ 我第一次改写是错的，也记下来**：我试过 `staleTTL = 0.001`（想用「极小 TTL」
+    避开长 sleep）—— 那是**根本不成立**的路子：1 ms 的实例会**合法地**认为盘上那份
+    过期并删除（产品行为如此）。CI 当场把它打回来（第二次失败）。
+    教训：这条用例的时间约束是**双向**的，「取更小的 TTL」只会让约束 ② 更糟。
+  - **双向验证**：
+    · 回退成修前 bug（内存过期就直接删文件）→ **红**（仍能抓住原 bug）；
+    · **12 个 `yes` 进程压满 CPU** 下复跑 → **稳定通过**（4.27 s）。
+
+- **`P2-10`：`BangumiChapterSection` 的三个章节分类从- **`P2-10`：`BangumiChapterSection` 的三个章节分类从「一次 body 扫 6 遍」改成「扫一遍」。**
+  - 与 `P2-09` **同形状、不同文件**（清单原文就注明「同形状、不同文件」）：
+    三个独立 computed property 各含一次 `episodes.filter`，而 `episodeContent`
+    一次 body 里读了 **3–6 次**（三个 `if !xxx.isEmpty` + 三次 `episodeGrid(xxx)`）。
+    1000 集时就是 3–6 遍全量 filter + 同样多份临时数组（DTO **384 B**），
+    而 `body` 会随 `isLoading` / `loadError` / 进度标记变化反复重算。
+    （审查实测每 body 的谓词调用数：空 **0**、只有本篇 **4000（4 遍）**、
+    本篇+SP **5000（5 遍）**、三组都非空 **6000（6 遍）**）
+  - **修法**：直接复用上一批为 `P2-09` 抽出来的包函数
+    `Array<BangumiEpisodeDTO>.partitionedByEpisodeType()`，
+    `episodeContent` 开头取一次 `EpisodePartition`，6 处读取全走
+    `parts.isEmpty(for:)` / `parts.episodes(for:)`。**没有新增任何分区逻辑**，
+    等价性由 `P2-09` 的 6 条包用例（含「与旧三个 filter 逐条等价」「tab 映射正确」）继续守着。
+  - **⚠️ 顺带修掉一处既有误用**：`episodeContent` 上的 `@ViewBuilder` 其实是空转 ——
+    它只包着一个 `VStack` 表达式。而我为了写 `let parts` 加了显式 `return` 之后，
+    编译器直接警告：
+    > `application of result builder 'ViewBuilder' disabled by explicit 'return' statement`
+
+    这说明 builder 根本没起作用。已去掉该标记（单表达式 `some View` 语义不变），
+    并用**真实 5 分支结构**（`ErrorNotice` + `LazyVGrid` + 两个带标题的 Tuple +
+    末尾 `Text`）做动态类型对照，新旧完整类型字符串**逐字相同**。
+    （第一版我用的是简化模型 `VStack<TupleView<(Text, Optional<Text>)>>`，
+    结论对但证据偏弱；审查指出后已用真实结构重验。）
+  - **⚠️ 我自己发现并补上了一个防线缺口**：改完后虽然只分区一次，但视图里仍要手写
+    三段 `if !parts.isEmpty(for: .x) { 标题; grid }` —— **把 `.main` 写成 `.sp`
+    编译器不会报**（两边都是 `[BangumiEpisodeDTO]`），也没有视图测试能抓。
+    这与上批 `P2-09` 踩的坑同型（那次是 `parts.main` / `parts.sp` 接反）。
+  - **补法**：把「哪三组、什么顺序、每组标题、组内是什么」也收敛进包里 ——
+    新增 `EpisodePartition.displayGroups`（+ `DisplayGroup` 描述结构）。
+    视图只写：
+    ```swift
+    ForEach(parts.displayGroups) { group in
+        if let title = group.title { Text(title)… }
+        episodeGrid(group.episodes)
+    }
+    ```
+    顺序（本篇 → SP → 其他）、标题（本篇无、SP「SP」、其他「其他」）、
+    **空组不出现**全部由包决定，并有用例钉住。
+  - **用例 7 条**（包内，新增 1 条 `displayGroupsMatchLegacyStructure`）：
+    `displayGroups` 的顺序 / 标题 / 空组省略 / 组内元素全部断言。
+  - **反向变异验证（4 个，全部抓红）**：SP 排到本篇之前 / 本篇也带标题 /
+    空组也出现 / **SP 组里放 other 的数据**（就是「接线接错」那一类）。
+  - **实测收益（release，真实 DTO 384 B，只测分类不含视图构造）**：
+
+    | 场景 | 旧 | 新 | 提速 |
+    |---|---|---|---|
+    | 混合 1000 集（三组都有） | 410.37 µs | **63.82 µs** | **6.43×** |
+    | 全本篇 1000 集 | 285.14 µs | **65.25 µs** | **4.37×** |
+    | 1 集 | 0.42 µs | 0.13 µs | 3.29× |
+    | 空 | 0.01 µs | 0.01 µs | 持平（10 ns 噪声，不算回退） |
+
+    `MemoryLayout<EpisodePartition>.size` = **24 B**（3 个 Array 头）。
+  - **⚠️ 一处我说错、审查更正的**：「`isEmpty(for:)` / `count(for:)` 是为了省数组拷贝」
+    —— 这个前提**不成立**。`episodes(for:)` 返回的是存储的 Array，只是 retain（COW），
+    实测 `parts.episodes(for: .main)` 与 `parts.main` 的 buffer 地址**相同**，
+    `.isEmpty` 本来就 O(1)。这层 API 的价值是**便利与可测**，不是性能。
+  - **⚠️ 另一处：不该把分区缓存进 `@State`**。`episodes` 有 **4 个写点**
+    （`load()` 两处清空、`readLocal` 的 `episodes = cachedEpisodes`、sheet 重新关联的清空），
+    且 `readLocal` 还会被播放结束的失效通知再次调用 —— 缓存要在 4 处同步失效，
+    漏一处就显示错组（正是 generation 计数在防的那类漂移）。
+    1000 集一次 body 才 65 µs，body 本来只在状态变化时重算，不值得冒这个风险。
+  - 包内合计 **78 条 0 失败**。
+
 - **`P2-09`：Bangumi 详情页的三个章节分类从「一次 body 扫 3–7 遍」改成「扫一遍」。**
   - 原先是三个独立 computed property，各含一次 `episodes.filter`：
     ```swift

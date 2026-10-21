@@ -83,6 +83,48 @@ public struct EpisodePartition: Sendable, Equatable {
 
     /// 三个列表加总（应当等于原数组长度；用例拿它守「不漏条目」）。
     public var totalCount: Int { main.count + sp.count + other.count }
+
+    /// 一个分区在 UI 上的**完整描述**：该显示哪几组、每组什么标题、组内是什么。
+    ///
+    /// ## 为什么要有它（而不是让视图自己拼）
+    ///
+    /// 视图原先（`P2-10` 之前）是三个 computed property，改完后虽然只分区一次，
+    /// 但仍然要在视图里手写三段 `if !parts.isEmpty(for: .x) { 标题; grid }` ——
+    /// **把 `.main` 写成 `.sp` 编译器不会报**（两边都是 `[BangumiEpisodeDTO]`），
+    /// 也没有视图测试能抓。这是「测试没接上生产路径」的同型缺口。
+    ///
+    /// 现在视图只写：
+    /// ```swift
+    /// ForEach(parts.displayGroups) { group in
+    ///     if let title = group.title { Text(title)… }
+    ///     episodeGrid(group.episodes)
+    /// }
+    /// ```
+    /// 而「哪三组、按什么顺序、每组标题是什么」由这里决定，**可以被单测断言**。
+    ///
+    /// ## 顺序与标题（必须与旧实现一致）
+    ///
+    /// 旧实现固定顺序：本篇（无标题）→ SP（标题 "SP"）→ 其他（标题 "其他"）。
+    /// 空组**不出现**（三处 `if !xxx.isEmpty`）。这里用 `title == nil` 表示「无标题」。
+    public var displayGroups: [DisplayGroup] {
+        var groups: [DisplayGroup] = []
+        if !main.isEmpty { groups.append(DisplayGroup(tab: .main, title: nil, episodes: main)) }
+        if !sp.isEmpty { groups.append(DisplayGroup(tab: .sp, title: "SP", episodes: sp)) }
+        if !other.isEmpty {
+            groups.append(DisplayGroup(tab: .other, title: "其他", episodes: other))
+        }
+        return groups
+    }
+
+    /// UI 上的一组：哪个 tab、要不要标题、组内条目。
+    public struct DisplayGroup: Identifiable, Equatable, Sendable {
+        public let tab: EpisodeTab
+        /// nil = 不显示分组标题（本篇就是这种）。
+        public let title: String?
+        public let episodes: [BangumiEpisodeDTO]
+
+        public var id: EpisodeTab { tab }
+    }
 }
 
 extension Array where Element == BangumiEpisodeDTO {
