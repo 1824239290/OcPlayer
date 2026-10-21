@@ -288,46 +288,53 @@ final class DanmakuCacheTests: XCTestCase {
 
     /// **内存快照过期不能拿去删文件**：盘上那份可能已被另一个实例刷新过。
     ///
-    /// 修前实测：A（TTL 0.05）写 7 → 等待过期 → B（TTL 3600）刷新写 7 →
-    /// A 读一次就把 B 刚写的新文件删了，之后全新实例 C 也读不到。
+    /// 修前实测：A 的内存条目过期 → A 读一次 → 把 B 刚写进去的新文件删掉。
+    /// 修法：内存过期时**只丢内存、落到磁盘路径继续判断**（`diskComments` 按
+    /// **盘上自己的** `fetchedAt` 决定返回还是删除）。
+    ///
+    /// ## ⚠️ 这条用例在 CI 上假红过两次（PR #46、PR #60），原因与修法
+    ///
+    /// **要同时满足两个方向相反的时间约束**：
+    /// 1. **内存条目必须过期** → `sleep > staleTTL`（`comments(for:)` 才会走到磁盘路径）；
+    /// 2. **盘上那份不能被判过期** → 「`other` 写完 → `stale` 读」的间隔 `< staleTTL`。
+    ///
+    /// 前两版取 `staleTTL = 0.05` / `0.5` 秒：约束 2 的预算只有 50 / 500 ms，
+    /// 慢 runner 上一次 GC 抖动就击穿 → `stale` 的 `diskComments` 也认为那份过期 →
+    /// **合法地删掉**（产品行为本身没错：同一个 TTL 配置下它确实过期了）→
+    /// 三条断言全红，与产品 bug 的表现**一模一样**。
+    ///
+    /// **现在的取法**：`staleTTL = 3 s`、`sleep = 4 s`。
+    /// - 约束 1：4 s > 3 s，1 s 余量；
+    /// - 约束 2：3 s 的窗口，比原来宽 6 倍。
+    ///
+    /// 代价是这条用例要跑 4 秒 —— 但它是**确定性**的，不再靠赌 CI 的调度运气。
+    /// （第一版改写我试过 `staleTTL = 0.001`：那是错的 —— 1 ms 的实例会**合法地**
+    /// 认为盘上那份过期并删除，产品行为如此，所以那条路子根本不成立。）
     func testStaleMemoryDoesNotDeleteFileWrittenElsewhere() async throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ocp-danmaku-cache-\(UUID().uuidString)", isDirectory: true)
-        // ## ⚠️ TTL 与 sleep 的余量要给足（CI 实测假红过）
-        //
-        // 这里有两段时间都需要余量，方向还相反：
-        //
-        // ① **等内存条目过期**：`stale` 自己的 TTL 必须**小于** sleep 时长，
-        //    否则 `comments(for:)` 直接命中内存、根本走不到磁盘路径。
-        //    要求：`sleep >= staleTTL × 数倍`。
-        // ② **stale 读盘上那份新数据时不能判它过期**：`diskComments` 用的是
-        //    **`self.commentsTTL`**（即 `stale` 的 TTL）去判**盘上文件的
-        //    `fetchedAt`** —— 而那份文件是 `other` 刚写的（`now - fetchedAt ≈ 0`）。
-        //    要求：`staleTTL >= 两次操作之间的抖动 × 数倍`。
-        //
-        // 合起来：`staleTTL` 要**足够大**以吸收 CI 抖动，又要**足够小**以让 sleep 等得过期。
-        //
-        // 原值是 0.05 s TTL + 120 ms sleep：②只有一个 50 ms 的余量，CI 的慢 runner
-        // 上不够 —— 实测 `main` 的 PR #46 那次假红（三处断言全红，本机同一条 0.136 s 通过）。
-        // 现在 0.5 s TTL + 800 ms sleep：①有 300 ms 余量、②有 500 ms 余量。
-        let stale = DanmakuCache(directory: dir, commentsTTL: 0.5)
         defer { try? FileManager.default.removeItem(at: dir) }
 
+        let staleTTL: TimeInterval = 3
+        let stale = DanmakuCache(directory: dir, commentsTTL: staleTTL)
         await stale.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "old")], for: 7)
-        try await Task.sleep(for: .milliseconds(800))
+
+        // 约束 1：等 `stale` 的内存条目过期（4 s > 3 s）。
+        try await Task.sleep(for: .milliseconds(4_000))
 
         // 另一实例在同一目录写入新数据（生产里是预览 / 重建 AppModel）。
-        let other = DanmakuCache(directory: dir, commentsTTL: 3600)
+        let other = DanmakuCache(directory: dir, commentsTTL: 3_600)
         await other.setComments([DanmakuComment(p: "0.5,1,16777215,u", m: "fresh")], for: 7)
 
-        // stale 的内存里是过期旧条目；它读一次**不能**把新文件删掉。
+        // 约束 2：立刻读 —— `stale` 的 `diskComments` 现在用**盘上那份的** `fetchedAt`
+        // 判断（≈ 0 秒前），在 3 s TTL 内 → 必须返回 fresh，且**不能删文件**。
         let viaStale = await stale.comments(for: 7)
         XCTAssertEqual(viaStale?.first?.m, "fresh", "读到盘上那份新数据，而不是 nil")
 
         let url = dir.appendingPathComponent("comments-7.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path),
                       "内存快照过期不得删除盘上文件")
-        let freshReader = DanmakuCache(directory: dir, commentsTTL: 3600)
+        let freshReader = DanmakuCache(directory: dir, commentsTTL: 3_600)
         let onDisk = await freshReader.comments(for: 7)
         XCTAssertEqual(onDisk?.first?.m, "fresh")
     }

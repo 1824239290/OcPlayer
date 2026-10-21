@@ -133,6 +133,49 @@ struct EpisodePartitionTests {
         #expect(parts.other.map(\.id) == [3, 5, 8, 9, 10])
     }
 
+    /// **`displayGroups` 必须与旧视图的手写结构逐条一致。**
+    ///
+    /// 旧视图（`P2-10` 之前）是手写的三段：
+    /// ```swift
+    /// if !mainEpisodes.isEmpty { episodeGrid(mainEpisodes) }        // 本篇：无标题
+    /// if !spEpisodes.isEmpty { Text("SP"); episodeGrid(spEpisodes) } // SP：有标题
+    /// if !otherEpisodes.isEmpty { Text("其他"); … }                  // 其他：有标题
+    /// ```
+    /// 这条把「顺序 / 哪些组出现 / 每组标题 / 组内元素」全部钉住 ——
+    /// 视图现在只 `ForEach(parts.displayGroups)`，把 `.main` 写成 `.sp` 编译器不报，
+    /// 这层映射由本用例守。
+    @Test("displayGroups 的顺序、标题与空组省略")
+    func displayGroupsMatchLegacyStructure() {
+        // 三组都非空
+        let all: [BangumiEpisodeDTO] = [
+            episode(1, .main), episode(2, .sp), episode(3, .other),
+            episode(4, .main), episode(5, .op),
+        ]
+        let groups = all.partitionedByEpisodeType().displayGroups
+        #expect(groups.count == 3, "三组都非空时应有三组")
+        #expect(groups.map(\.tab) == [.main, .sp, .other], "顺序必须是 本篇 → SP → 其他")
+        #expect(groups[0].title == nil, "本篇不带分组标题（旧实现就是直接 episodeGrid）")
+        #expect(groups[1].title == "SP")
+        #expect(groups[2].title == "其他")
+        #expect(groups[0].episodes.map(\.id) == [1, 4])
+        #expect(groups[1].episodes.map(\.id) == [2])
+        #expect(groups[2].episodes.map(\.id) == [3, 5])
+
+        // 只有本篇：只出现一组，且无标题
+        let onlyMain = [episode(1, .main), episode(2, .main)].partitionedByEpisodeType()
+        #expect(onlyMain.displayGroups.count == 1)
+        #expect(onlyMain.displayGroups[0].tab == .main)
+        #expect(onlyMain.displayGroups[0].title == nil)
+
+        // SP 与 other 都空：仍只出现本篇那一组
+        #expect([BangumiEpisodeDTO]().partitionedByEpisodeType().displayGroups.isEmpty,
+                "空分区不该出现任何组")
+        // 只有 SP 与其他、没有本篇：两组，顺序仍是 SP → 其他
+        let noMain = [episode(1, .sp), episode(2, .other)].partitionedByEpisodeType()
+        #expect(noMain.displayGroups.map(\.tab) == [.sp, .other])
+        #expect(noMain.displayGroups.map(\.title) == ["SP", "其他"])
+    }
+
     @Test("空数组与单一分类")
     func edgeCases() {
         let empty = [BangumiEpisodeDTO]().partitionedByEpisodeType()

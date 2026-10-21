@@ -54,10 +54,17 @@ struct BangumiChapterSection: View {
         return item.seriesID ?? item.id
     }
 
-    private var mainEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .main } }
-    private var spEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .sp } }
-    private var otherEpisodes: [BangumiEpisodeDTO] {
-        episodes.filter { $0.type != .main && $0.type != .sp }
+    /// 三个分类**一次扫完**（`P2-10`，与 `P2-09` 同款）。
+    ///
+    /// 原先三个独立 computed property 各含一次 `episodes.filter`，而 `episodeContent`
+    /// 一次 body 里把它们读了 **6 次**：三个 `if !xxx.isEmpty` + 三次 `episodeGrid(xxx)`。
+    /// 1000 集时就是 6 遍全量 filter + 6 个临时数组（DTO 384 B），
+    /// 而 `body` 会随 `isLoading` / `loadError` / 进度标记变化反复重算。
+    ///
+    /// 逻辑复用 `BangumiKit` 的 `Array<BangumiEpisodeDTO>.partitionedByEpisodeType()`
+    /// （`P2-09` 时抽出来的纯函数，已有等价性用例守着）。
+    private var partitionedEpisodes: EpisodePartition {
+        episodes.partitionedByEpisodeType()
     }
 
     var body: some View {
@@ -184,26 +191,29 @@ struct BangumiChapterSection: View {
 
     // MARK: - 已关联内容
 
-    @ViewBuilder
     private var episodeContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // 一次分区，后面 6 处读取全走 `parts`（`P2-10`）。
+        //
+        // 注：这里**去掉了 `@ViewBuilder`**。它原本只包着一个 `VStack` 表达式，
+        // 加了也是空转；而一旦为了写 `let parts` 而加显式 `return`，
+        // 编译器会警告「application of result builder 'ViewBuilder' disabled by
+        // explicit 'return' statement」—— 那说明 builder 根本没起作用。
+        // 去掉标记后语义不变（单表达式 `some View`），警告也消失。
+        let parts = partitionedEpisodes
+        return VStack(alignment: .leading, spacing: 10) {
             if let loadError {
                 ErrorNotice(loadError) { loadToken += 1 }
             }
-            if !mainEpisodes.isEmpty {
-                episodeGrid(mainEpisodes)
-            }
-            if !spEpisodes.isEmpty {
-                Text("SP")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                episodeGrid(spEpisodes)
-            }
-            if !otherEpisodes.isEmpty {
-                Text("其他")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                episodeGrid(otherEpisodes)
+            // 「哪三组、什么顺序、每组标题」由 `EpisodePartition.displayGroups` 决定，
+            // 视图不再手写 tab —— 把 `.main` 写成 `.sp` 编译器不会报（两边同类型），
+            // 所以那层映射必须留在可测的包里。
+            ForEach(parts.displayGroups) { group in
+                if let title = group.title {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                episodeGrid(group.episodes)
             }
             if episodes.isEmpty, !isLoading {
                 Text("该条目暂无章节")
