@@ -5,8 +5,8 @@ import XCTest
 
 /// 氛围池的装载与生命周期。
 ///
-/// 这套用例守的是一条**只在冷启动抢跑时才出错**的路径：池子装不上 → `homeAmbience`
-/// 恒 nil → iOS 上所有自垫背景的页面整个会话停在纯色底（macOS 靠整窗层不显，
+/// 这套用例守的是一条**只在冷启动抢跑时才出错**的路径：池子装不上 →
+/// `currentAmbienceTarget` 恒 nil → iOS 上所有自垫背景的页面整个会话停在纯色底（macOS 靠整窗层不显，
 /// 所以这病在 Mac 上根本看不见）。实机判例见 `BackdropCarouselTriggerTests` 头注释。
 ///
 /// 判据里的「不记账」是这套逻辑的命门：装载失败时**不能**推进 `ambienceLoadedGeneration`，
@@ -75,7 +75,7 @@ final class AmbiencePoolTests: XCTestCase {
         XCTAssertEqual(app.ambiencePool.count, AmbiencePool.poolSize, "池子上限是随机池大小")
         XCTAssertEqual(app.ambienceLoadedGeneration, app.sessionGeneration, "装载成功才记账")
         XCTAssertEqual(app.ambienceLoadedEndpoint, server.profile.baseURL.absoluteString)
-        XCTAssertNotNil(app.homeAmbience, "池子就绪要立刻声明当前那张，页面才拿得到背景")
+        XCTAssertNotNil(app.currentAmbienceTarget.url, "池子就绪要立刻声明当前那张，页面才拿得到背景")
         XCTAssertEqual(server.callCount("randomBackdropItems"), 1)
     }
 
@@ -136,7 +136,7 @@ final class AmbiencePoolTests: XCTestCase {
 
         XCTAssertTrue(app.ambiencePool.isEmpty)
         XCTAssertNil(app.ambienceLoadedGeneration, "失败绝不能记账，否则这个会话再也不会重试")
-        XCTAssertNil(app.homeAmbience)
+        XCTAssertNil(app.currentAmbienceTarget.url)
 
         // 首页数据到位 = 一次补救机会：触发键变化后重跑，这回服务器给了图。
         server.randomBackdropResult = .success([item("m1")])
@@ -178,7 +178,7 @@ final class AmbiencePoolTests: XCTestCase {
         XCTAssertEqual(Set(app.ambiencePool.map(\.id)), ["m1", "m2"])
     }
 
-    /// 服务器与首页都没有 item：池空，且**不留** `homeAmbience`。
+    /// 服务器与首页都没有 item：池空，且**不留**当前取图三元组。
     func testEmptyEverythingLeavesNoAmbience() async {
         let server = StubMediaServer()
         server.randomBackdropResult = .success([])
@@ -187,7 +187,7 @@ final class AmbiencePoolTests: XCTestCase {
         await app.loadAmbiencePoolIfNeeded()
 
         XCTAssertNil(app.currentAmbienceItem)
-        XCTAssertNil(app.homeAmbience)
+        XCTAssertNil(app.currentAmbienceTarget.url)
         XCTAssertNil(app.ambienceLoadedGeneration)
     }
 
@@ -246,13 +246,13 @@ final class AmbiencePoolTests: XCTestCase {
         let app = makeApp(server: server)
         app.home = AppModel.HomeData(resume: [], nextUp: [], latest: [item("m2")])
         await app.loadAmbiencePoolIfNeeded()
-        XCTAssertNotNil(app.homeAmbience)
+        XCTAssertNotNil(app.currentAmbienceTarget.url)
 
         app.signOut()
 
         XCTAssertTrue(app.ambiencePool.isEmpty)
         XCTAssertNil(app.ambienceLoadedGeneration)
-        XCTAssertNil(app.homeAmbience)
+        XCTAssertNil(app.currentAmbienceTarget.url)
         XCTAssertFalse(app.homeHasAmbienceFallback, "首页数据也随会话清了")
     }
 
@@ -287,16 +287,17 @@ final class AmbiencePoolTests: XCTestCase {
         XCTAssertNil(app.currentAmbienceItem)
     }
 
-    /// `publishCurrentAmbience` 在空池时**不清**已有声明：上一张仍然可用
-    /// （URL 未变、缓存命中），清了反而让正在看它的页面闪一下纯色底。
-    func testPublishKeepsPreviousAmbienceWhenPoolIsEmpty() async {
+    /// `publishCurrentAmbience` 在空池时**是空操作**（不崩、不改任何状态）。
+    ///
+    /// 这个函数原先唯一的作用是给一个 `homeAmbience` 属性赋值 —— 而那属性
+    /// **生产零读点**（审查实测），已删除，于是函数变成 no-op。
+    /// 保留它是因为它是「推进后同步」的语义锚点，且有用例驱动它。
+    func testPublishIsNoOpWhenPoolIsEmpty() async {
         let app = makeApp()
-        let previous = WindowAmbience(url: URL(string: "https://example.com/a.jpg"), authHeader: nil)
-        app.homeAmbience = previous
-
+        let before = app.ambienceIndex
         app.publishCurrentAmbience()
-
-        XCTAssertEqual(app.homeAmbience, previous)
+        XCTAssertEqual(app.ambienceIndex, before, "空池时不该改动 index")
+        XCTAssertNil(app.currentAmbienceTarget.url, "空池时没有可用的取图三元组")
     }
 
     /// `currentAmbienceItem` 按池长取模，池子缩短时不会越界。
@@ -313,3 +314,126 @@ final class AmbiencePoolTests: XCTestCase {
                        app.currentAmbienceItem?.id)
     }
 }
+
+// MARK: - `P2-36`：换片循环的唤醒精度
+
+/// `P2-36`：氛围轮播的 `Task.sleep` 必须有 **tolerance**，且间隔是标定值。
+///
+/// ## 这组用例为什么能守住生产路径
+///
+/// 第一版我只断言了两个常量（容差 > 0 且 < 间隔一半）。审查实测指出那是**空转**：
+/// 把循环里的 `tolerance:` 参数整个删掉，没有任何断言会红，而且编译零警告 ——
+/// 因为那些断言只读常量，**根本跑不到循环那一行**（要跑进去得先装好池、
+/// 过 `reduceMotion` 闸、再等 12 秒）。
+///
+/// 现在通过 `AmbiencePool.sleepForSwap` 这个可注入钩子（与 `AmbienceImageWarmup.warm`
+/// 同款）把那次等待换成「记录参数并立刻返回」，于是用例能跑进循环，
+/// 直接断言**生产代码传下去的 interval / tolerance 是什么**。
+///
+/// ## 语义（实测，不是推测）
+///
+/// `Task.sleep(for:tolerance:)` 的 tolerance 是**绝对时长、单边 —— 只会晚不会早**。
+/// 实测 `12 s + 容差 3 s` 实际睡 14.87 s；`200 ms + 容差 3 s` 跑 20 次，
+/// min 2.91 / avg 3.00 / max 3.10 s，无一次早醒。所以**不存在「容差太大导致
+/// 两次唤醒被攒成一次、观感跳片」这回事**（我第一版注释这么写过，是错的）。
+/// 真实代价只是「同一张图最多停 ~15 s」，一轮 96 s → 96–120 s。
+final class AmbienceRotationCadenceTests: XCTestCase {
+
+    @MainActor private static var recorded: [(interval: Duration, tolerance: Duration)] = []
+    /// 注入的 sleep 立刻返回，循环会**不断转**；用这个标志让它只记第一次。
+    @MainActor private static var stopAfterFirst = false
+
+    override func setUp() async throws {
+        await MainActor.run { Self.recorded = [] }
+    }
+
+    /// **核心判据：循环真的把 interval 与 tolerance 传下去了。**
+    ///
+    /// 缺了这条，「删掉 `tolerance:` 参数」不会有任何断言变红（审查实测）。
+    @MainActor
+    func testRotationLoopPassesIntervalAndTolerance() async {
+        let app = AppModel()
+        app.phase = .ready
+        app.server = StubMediaServer()
+        // 池子要有 ≥2 项才进循环（`ambiencePool` 是 internal，用例可直塞）。
+        app.ambiencePool = [Self.item("a"), Self.item("b")]
+        app.ambienceIndex = 0
+
+        // 预热阶段会真的走 `ImagePipeline`（会发网络请求、`stub.local` 的 DNS
+        // 还可能拖住用例）—— 也注入掉，只保留「记录 sleep 实参」这一个观测点。
+        let originalWarm = AmbienceImageWarmup.warm
+        AmbienceImageWarmup.warm = { _, _, _ in }
+        defer { AmbienceImageWarmup.warm = originalWarm }
+
+        Self.recorded = []
+        Self.stopAfterFirst = false
+        let original = AmbiencePool.sleepForSwap
+        AmbiencePool.sleepForSwap = { interval, tolerance in
+            // ⚠️ **必须真的挂起**，不能立刻返回。
+            //
+            // 第一版写成「记完就 return」——于是 `while !Task.isCancelled` 会以
+            // CPU 满载速度狂转（sleep 立即返回 = 循环体没有让出点），
+            // 而 `Task.sleep(10ms)` 的轮询与本循环争用 MainActor，
+            // 结果是整个测试 App 卡在 99.7% CPU 不结束（实测）。
+            //
+            // 第一轮：记录参数，然后挂起很久（循环停在这个 await 上，
+            // 主 actor 空闲，测试得以继续并 cancel）。
+            // 后续轮：也不再记录，直接挂起。
+            if !Self.stopAfterFirst {
+                Self.stopAfterFirst = true
+                Self.recorded.append((interval, tolerance))
+            }
+            // 挂起到被取消（最长 60 s 兜底，防用例挂了之后永不返回）。
+            try? await Task.sleep(for: .seconds(60))
+        }
+        defer {
+            AmbiencePool.sleepForSwap = original
+            Self.stopAfterFirst = false
+        }
+
+        // 用一个会被取消的 Task 跑循环：拿到记录后 cancel。
+        let task = Task { await app.warmUpAndRotateAmbience() }
+        // 等记录出现（最多 2 s）。
+        let deadline = Date().addingTimeInterval(2)
+        while !Self.stopAfterFirst, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        task.cancel()
+        _ = await task.value
+
+        XCTAssertEqual(Self.recorded.count, 1, "循环应只进入一次等待")
+        XCTAssertEqual(Self.recorded.first?.interval, AmbiencePool.swapInterval,
+                       "循环传的 interval 必须是标定值")
+        XCTAssertEqual(
+            Self.recorded.first?.tolerance, AmbiencePool.swapTolerance,
+            "循环**必须**把 tolerance 传下去 —— 这是本改动的全部内容")
+    }
+
+    /// 容差必须 > 0（否则等于精确唤醒，本改动没意义）且停留上限别太离谱。
+    ///
+    /// 上界理由**不是**「太大导致跳片」（错的说法，见类型注释：tolerance 只晚不早，
+    /// 串行循环里不可能跳片），而是「同一张图的停留上限」——3 s 容差 → 最多停 15 s。
+    @MainActor
+    func testSwapToleranceIsSane() {
+        let interval = AmbiencePool.swapInterval
+        let tolerance = AmbiencePool.swapTolerance
+        XCTAssertGreaterThan(tolerance, .zero, "没有容差等于精确唤醒，本改动没意义")
+        XCTAssertLessThanOrEqual(
+            interval + tolerance, .seconds(20),
+            "同一张图最多停 \(interval + tolerance)；超过 20 s 就肉眼可感了")
+    }
+
+    /// 间隔与池子大小是标定值（12 s × 8 ≈ 一轮 96 s / 最坏 120 s）。
+    @MainActor
+    func testSwapIntervalStaysAtCalibratedValue() {
+        XCTAssertEqual(AmbiencePool.swapInterval, .seconds(12))
+        XCTAssertEqual(AmbiencePool.poolSize, 8, "池子大小 × 12s ≈ 一轮 96s")
+    }
+
+    private static func item(_ id: String) -> MediaItem {
+        var item = MediaItem(id: id, name: id, kind: .movie)
+        item.backdropImageTag = "tag-\(id)"
+        return item
+    }
+}
+

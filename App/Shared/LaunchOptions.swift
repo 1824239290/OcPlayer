@@ -58,7 +58,7 @@ enum LaunchOptions {
     }
 
     /// `OCPLAYER_SECTION_SWITCH_SECONDS=<秒>`：配合上面的变量，先留首页跑轮播
-    /// （homeAmbience 要轮播加载后才非 nil），到点再切到目标分区。
+    /// （取图三元组要等轮播装载后才非 nil），到点再切到目标分区。
     static var sectionSwitchSeconds: Double? {
         guard initialSection != nil else { return nil }
         return ProcessInfo.processInfo.environment["OCPLAYER_SECTION_SWITCH_SECONDS"]

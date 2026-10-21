@@ -7,7 +7,7 @@ import SwiftUI
 ///
 /// 页面透明透显整窗氛围底（与 MoviePilot 首页同一张背景图）：macOS 常规布局
 /// 靠 AppShell 根节点垫的首页轮播，页面不画任何底；iOS / 紧凑布局整窗层到不了
-/// 屏幕，自垫 `app.homeAmbience`（轮播当前那张，与 MoviePilot Tab 同源）。
+/// 屏幕，自垫 `app.currentAmbienceTarget`（轮播当前那张，与 MoviePilot Tab 同源）。
 /// 不走系统 List——它的实底会把氛围层挡死；卡片流与资源搜索页同一套玻璃语言。
 struct MoviePilotDownloadsView: View {
     @Environment(AppModel.self) private var app

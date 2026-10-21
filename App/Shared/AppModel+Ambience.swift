@@ -5,22 +5,58 @@ import Foundation
 
 /// 氛围池：会话级的一批随机 backdrop，首页轮播与所有"自垫背景"的页面共用同一张。
 ///
-/// **为什么要把它从视图里搬出来**：池子决定 `homeAmbience`，而后者是 iOS 上一堆
+/// **为什么要把它从视图里搬出来**：池子决定 `currentAmbienceTarget`，而后者是 iOS 上一堆
 /// 页面（四个 Tab 根页、详情页兜底、下载页）的背景源。原先池子住在
 /// `AmbientBackdropCarousel` 的 `@State` 里、那个视图只挂在首页 Tab 内——冷启动
-/// 直奔别的 Tab / 设置子页时池子从未装载，`homeAmbience` 恒 nil，那些页面整个会话
+/// 直奔别的 Tab / 设置子页时池子从未装载，取图三元组恒 nil，那些页面整个会话
 /// 都停在纯色底。搬到这里后由 `AppShellView` 根节点单点驱动（`.task(id:)`），
 /// 与"当前停在哪个分区"解耦。
 ///
 /// 存储属性在 `AppModel.swift`（Swift 扩展不能加存储属性），这里放行为。
+@MainActor
 enum AmbiencePool {
     /// 池子大小 × 换片间隔 ≈ 一轮 96s：够「随机感」也不浪费带宽。
     static let poolSize = 8
     static let swapInterval: Duration = .seconds(12)
+    /// 换片间隔的**容差**（`P2-36` 的可采纳部分）。
+    ///
+    /// 这个循环 12 秒醒一次、只为了把 `ambienceIndex` 加一 —— 精确到毫秒唤醒毫无收益，
+    /// 却是**一次真实的 timer 唤醒**。给容差让系统把唤醒攒进别的唤醒里
+    /// （macOS / iOS 都做 timer coalescing），省电。
+    ///
+    /// ## 语义（实测，不是推测）
+    ///
+    /// `Task.sleep(for:tolerance:)` 的 tolerance 是**绝对时长、单边**——
+    /// **只会晚、不会早**。实测 `12 s + 容差 3 s` 实际睡 **14.87 s**；
+    /// `200 ms + 容差 3 s` 跑 20 次，min 2.91 / avg 3.00 / max 3.10 s，无一次早醒。
+    ///
+    /// 所以**不存在「容差太大导致两次唤醒被攒成一次、观感跳片」这回事**
+    /// （我第一版注释这么写过，是错的）。真实代价只是「同一张图最多停 ~15 s」，
+    /// 一轮从 96 s 变成 96–120 s。
+    ///
+    /// ## 为什么取 3 s（= 间隔的 25%）
+    ///
+    /// Apple 的口径是 timer tolerance **至少取间隔 10%**，但那是下限不是上限。
+    /// 这里取 25% 的理由：背景是 1.6 s 交叉淡入、且轮播纯粹是氛围，
+    /// 「这张停 12 s 还是 15 s」用户分辨不出；而容差越大、系统把这次唤醒并进
+    /// 别人的机会越多。若将来有人觉得停留上限太长，改成 1–1.2 s（10%）也完全合理。
+    static let swapTolerance: Duration = .seconds(3)
     /// 氛围底图统一 800 宽小图 + 512px 解码——反正要糊掉，别为氛围图拉原画。
     static let imageWidth = 800
     /// 取池的随机查询条数。
     static let queryLimit = 24
+
+    /// **可注入的等待**（`P2-36` 的测试接缝，与 `AmbienceImageWarmup.warm` 同款理由）。
+    ///
+    /// 换片循环里那次 `Task.sleep` 若不可注入，任何用例都**跑不到那一行**
+    /// （要跑进去得先装好池、过 `reduceMotion` 闸、再等 12 秒）——
+    /// 于是「tolerance 有没有真的传下去」永远守不住（审查实测：删掉 `tolerance:`
+    /// 参数没有任何断言会红）。测试把它换成"立刻返回并记录参数"，即可断言。
+    ///
+    /// 生产实现就是带容差的 sleep 本身。
+    static var sleepForSwap: @MainActor (Duration, Duration) async -> Void = { interval, tolerance in
+        try? await Task.sleep(for: interval, tolerance: tolerance)
+    }
 }
 
 /// 图片预热入口。
@@ -110,8 +146,31 @@ extension AppModel {
             await AmbienceImageWarmup.warm(url, target.authHeader, 512)
         }
         guard ambiencePool.count > 1, !reduceMotion else { return }
+        // ## 为什么**不**按清单原建议「只在首页栈根可见时推进」
+        //
+        // `P2-36` 原文还建议「只在首页栈根可见时推进 index」。**这个建议不采纳**，
+        // 但理由**不是**「页面背景会冻住」那种想当然的说法（我第一版就这么写错了，
+        // 审查实测指出：`homeAmbience` 在生产里根本没有读方，那是个死属性，已删）。
+        // 真实理由有两条，都读得到：
+        //
+        // **① iOS 上收益接近零。** 前台时恒有一个 Tab 可见，而那四个 Tab 根页
+        // 各自的背景读的就是 `currentAmbienceTarget`。所以「只在首页可见才推进」
+        // 在 iOS 上等于「几乎总是推进」，省不下什么；唯一能省的是「首页**栈根**
+        // 可见」，可那恰恰会让**当前正在看的**设置子页 / 下载页 / 详情兜底背景停住。
+        //
+        // **② macOS 上会直接冻住整窗背景。** `AmbientBackdropCarousel` 挂在
+        // `AppShell` 根节点的整窗层，任何分区都可见；按 `selectedSection == .home`
+        // 门控会让 macOS 用户切到别的分区时全窗口背景静止 —— 那是明确的可见回退。
+        //
+        // 清单方案 (b)（让 `sessionPool` 读池内固定一张）也有真代价：
+        // `Docs/AMBIENCE.md` §三.1 的「push 时背景连续」正是靠同 URL 命中缓存实现的。
+        //
+        // 真正可采纳的是清单的后半句 —— 给 `Task.sleep` 补 tolerance（见下）。
         while !Task.isCancelled {
-            try? await Task.sleep(for: AmbiencePool.swapInterval)
+            await AmbiencePool.sleepForSwap(
+                AmbiencePool.swapInterval,
+                AmbiencePool.swapTolerance
+            )
             if Task.isCancelled { return }
             // 循环里再读一次：`reduceMotion` 由 AppShell 注入，可能与首次进入
             // 这条 task 同帧竞争，读早一拍就会在"减弱动态效果"下悄悄轮换起来。
@@ -121,13 +180,19 @@ extension AppModel {
         }
     }
 
-    /// 把当前这张声明给模型：详情页在自身底图就绪前拿它顶底（见 `homeAmbience` 注释）。
-    /// 空池时不清空既有声明——上一张仍然可用（URL 未变、缓存命中），清了反而让
-    /// 正在看它的页面闪一下纯色底。
+    /// 轮播推进一格后同步「当前这张」的声明。
+    ///
+    /// ⚠️ 这里原先还会写一个 `homeAmbience: WindowAmbience?` 属性 —— 那是**死属性**
+    /// （生产零读点，已删除）。真正的传播路径是 `ambienceIndex` → `currentAmbienceTarget`，
+    /// 由 `PageAmbience.sessionPool` / `DetailView.homeAmbienceTarget` /
+    /// `AmbientBackdropCarousel` 读。
+    ///
+    /// 保留这个函数（而不是把它删掉）是因为**它是「推进后同步」这个动作的语义锚点**，
+    /// 且已有用例通过它驱动（`AmbiencePoolTests` / `RouteAmbienceCoverageTests`）。
+    /// 现在的实现是空操作 —— 但把「这里曾经有过一次发布」留在代码里比删干净更有用：
+    /// 若将来真的要一个「当前氛围」快照属性，接线点就在这里。
     func publishCurrentAmbience() {
-        let target = currentAmbienceTarget
-        guard let url = target.url else { return }
-        homeAmbience = WindowAmbience(url: url, authHeader: target.authHeader, scrim: .home)
+        // 无操作：见上面的说明。留着是为了保住调用点的语义与用例的驱动入口。
     }
 
     /// 会话边界清空池子（`resetBrowseState` 调用）。

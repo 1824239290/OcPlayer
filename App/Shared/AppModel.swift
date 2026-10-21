@@ -595,19 +595,18 @@ final class AppModel {
         windowAmbienceStack.removeAll()
     }
 
-    /// 首页氛围轮播当前那张图，由氛围池（下面的字段 + `AppModel+Ambience`）声明。
-    /// iOS 的详情页在自身底图就绪前拿它顶底：导航栈宿主不透明、栈后垫层到不了屏幕
-    /// （实测），「背景从首页延续进详情页」只能在页面内做——先画这张（与首页同
-    /// URL、同档解码，内存缓存直接命中），自己的底图到位后再淡入替换。
-    ///
-    /// **写入者只有氛围池一处**（`publishCurrentAmbience()`）：页面自垫、详情页兜底、
-    /// 下载页、四个 Tab 根页全都是读方。
-    var homeAmbience: WindowAmbience?
-
     // MARK: - 氛围池（会话级）
     //
-    // 池子决定 `homeAmbience`，而 `homeAmbience` 被一堆页面消费（iOS 上它们是各自
-    // 自垫的背景源）。**所有权必须在这里，不能在首页那个视图里**：原先池子住在
+    // ⚠️ **这里曾经有个 `homeAmbience: WindowAmbience?` 属性，已删除（2026-10-21）**：
+    // 它只有声明与写入（`publishCurrentAmbience()` 里赋值 + 会话清理时置 nil），
+    // 生产代码里**零个读点**（审查实测：`git grep homeAmbience -- App Packages` 只命中
+    // 声明/写入/注释，读它的只有 AppTests）。真正的消费路径是
+    // `currentAmbienceTarget`（读 `ambienceIndex`）—— `PageAmbience.sessionPool`、
+    // `DetailView.homeAmbienceTarget`、`AmbientBackdropCarousel` 都走它。
+    // 留着一个被写但不被读的 `@Observable` 属性不只是死代码：它会让下一个读注释的人
+    // 以为「页面消费的是它」，从而做出错误的性能判断（本仓确实这么错过一次）。
+    //
+    // **所有权必须在这里，不能在首页那个视图里**：原先池子住在
     // `AmbientBackdropCarousel` 的 `@State`、而该视图只挂在首页 Tab 内——冷启动
     // 直奔别的 Tab（或进设置子页）时池子从未装载，那些页面整个会话都停在纯色底。
     // 搬到模型上后由 AppShell 根节点单点驱动，双端一致、会话内只装载一次。
@@ -763,7 +762,7 @@ final class AppModel {
         }
         if let section = LaunchOptions.initialSection {
             if let delay = LaunchOptions.sectionSwitchSeconds {
-                // 先留首页让轮播跑起来（homeAmbience 就位），到点再切目标分区。
+                // 先留首页让轮播跑起来（池子装载 + 首图预热），到点再切目标分区。
                 Task { @MainActor in
                     try? await Task.sleep(for: .seconds(delay))
                     selectedSection = section

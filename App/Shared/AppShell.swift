@@ -98,7 +98,7 @@ struct AppShellView: View {
             .background { windowAmbienceLayer }
             #endif
             // 氛围池驱动：**双端唯一装载点**。放在这里（而不是首页那个视图里）是
-            // 因为池子产的 `homeAmbience` 被一堆页面消费——挂在首页 Tab 内时，
+            // 因为池子产的取图三元组被一堆页面消费——挂在首页 Tab 内时，
             // 冷启动直奔别的 Tab / 进设置子页就没人为它装载，那些页面整个会话都停在
             // 纯色底。触发键变化（换会话 / 换地址 / 首页数据到位可补救）会自动重跑。
             .task(id: app.ambienceTrigger) { await app.runAmbienceCarousel() }

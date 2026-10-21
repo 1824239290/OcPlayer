@@ -98,14 +98,19 @@ final class RouteAmbienceCoverageTests: XCTestCase {
 
     /// 首页轮播那张与各页自垫的那张必须是**同一张**：跨页背景连续就靠这个
     /// （同 URL 已在内存缓存里，push 首帧即可画）。
-    func testSessionPoolTargetMatchesHomeAmbience() {
+    ///
+    /// ⚠️ 这条断言原先比的是 `app.homeAmbience` —— 那个属性**生产零读点**
+    /// （审查实测），已删除。真实链路是 `ambienceIndex` → `currentAmbienceTarget`
+    /// → `AmbienceTarget.sessionPool`，所以改成比这两者。
+    func testSessionPoolTargetMatchesCurrentAmbience() {
         let app = appWithPool()
-        app.publishCurrentAmbience()
-        guard let target = AmbienceTarget.sessionPool(app), let published = app.homeAmbience else {
-            return XCTFail("池子就绪时该同时拿到 target 与已发布的声明")
+        guard let target = AmbienceTarget.sessionPool(app) else {
+            return XCTFail("池子就绪时应拿到 sessionPool target")
         }
-        XCTAssertEqual(target.url, published.url)
-        XCTAssertEqual(target.authHeader, published.authHeader)
+        let current = app.currentAmbienceTarget
+        XCTAssertNotNil(current.url)
+        XCTAssertEqual(target.url, current.url)
+        XCTAssertEqual(target.authHeader, current.authHeader)
     }
 
     /// 详情页的 target 用 `.detail` 遮罩、且声明 `ownsArt`（它有自己的主体图，
