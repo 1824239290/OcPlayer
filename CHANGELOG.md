@@ -83,6 +83,63 @@
     （`split` ~0.88 µs/次 ⇒ 约 17.6 ms，占 detect ~14%）。同一个 `p`、同一个调用栈邻居，
     应作为下一条处理。
 
+- **`P2-09`：Bangumi 详情页的三个章节分类从「一次 body 扫 3–7 遍」改成「扫一遍」。**
+  - 原先是三个独立 computed property，各含一次 `episodes.filter`：
+    ```swift
+    private var mainEpisodes  { episodes.filter { $0.type == .main } }
+    private var spEpisodes    { episodes.filter { $0.type == .sp } }
+    private var otherEpisodes { episodes.filter { $0.type != .main && $0.type != .sp } }
+    ```
+    `episodesSection` 一次 body 里把它们读了 **3–7 次**（取决于 sp / other 是否为空）：
+    外层 `if !spEpisodes.isEmpty || !otherEpisodes.isEmpty` 会**短路**，实际 1–2 次；
+    Picker 里 0–5 次；`currentList` 的 switch 1 次。
+
+    | sp 空 | other 空 | 读取次数 |
+    |---|---|---|
+    | ✓ | ✓ | 3（不进 Picker） |
+    | ✓ | ✗ | 5 |
+    | ✗ | ✓ | 6 |
+    | ✗ | ✗ | 7 |
+
+    1000 集时一次 body 要扫 3000–7000 个元素、建同样多份临时数组（DTO **384 B**），
+    而 `body` 会因 `updatingEpisodeID` / `isLoading` 变化反复重算。
+  - **修法**：分区逻辑抽成 `BangumiKit` 的 `Array<BangumiEpisodeDTO>.partitionedByEpisodeType()`
+    （一次 `for` 扫完、只建三个数组），**连「tab → 列表」的映射一起**放进包的
+    `EpisodePartition` 结构（`episodes(for:)` / `count(for:)` / `isEmpty(for:)`）。
+  - **`EpisodeTab` 也从视图搬进了包里**：映射在视图里的话，把 `parts.sp` 接成 `parts.main`
+    编译器**不会报**（两边都是 `[BangumiEpisodeDTO]`），只有用户会发现「点 SP 显示本篇」。
+    搬进包之后用例能直接断言映射。
+  - **等价性**：第三条原先写 `type != .main && type != .sp` —— `BangumiEpisodeType` 有
+    7 个 case（main/sp/op/ed/trailer/mad/other），也就是后 5 个**全部**归「其他」。
+    新实现用 `switch` 的 `default` 承接，逐条等价。
+  - **实测收益（release，真实 `BangumiEpisodeDTO` 384 B，1000 集，200 次取最优）**：
+
+    | | 耗时 |
+    |---|---|
+    | 旧（3 次读取，最短路径） | **98.94 µs** |
+    | 旧（7 次读取，最长路径） | **225.90 µs** |
+    | **新（一次 for）** | **44.94 µs** |
+    | **提速** | **2.20×（3 读）～ 5.03×（7 读）** |
+
+  - **用例 6 条**（`BangumiKit`，swift-testing）：七种 case 全覆盖（并断言
+    `allCases.count == 7` 作绊线）/ **与旧三个 filter 逐条等价（比整个元素，不只比 id）** /
+    **tab → 列表映射正确** / 分类内部保持原顺序（夹具让 other 段**逆 rawValue**）/
+    空数组与单一分类 / 1000 集大输入。
+  - **反向变异验证（5 个，全部抓红）**：拷贝后改字段 / 整体按 type 排序 /
+    **tab 映射接错** / `default` 漏条目 / `op` 错并进本篇。
+  - **⚠️ 我在这批里犯的三个错，都被审查抓出来并已修正**：
+    ① **把读取次数写成「8 次」是错的** —— 外层 OR 会短路，实际是 **3–7 次**。
+       这个错误同时写进了代码注释、CHANGELOG 和 commit message，属立项依据出错。
+    ② **第一版「实测收益」表是错的**：我的基准里 `old()` 跑了 `8 × 3 = 24` 次 filter
+       （8 是读取次数、3 是分类数，两者不能相乘），把旧值高估约 3 倍，
+       于是喊出「22×」。用真实 DTO 重测后是 **2.20–5.03×**。
+    ③ **第一版测试只比 `.id` 不比元素内容** —— 「拷贝后改字段」的变异全绿；
+       且**顺序用例的夹具在每类内部本来就是升序**，抓不到「整体按 type 排序」。
+       两处都已改。
+  - **这是「测试没接上生产路径」的第 4 次**（前三次：`P2-34`、`P2-32`、`P2-33`）。
+    这次的解法是把映射搬进可测的包，而不是继续在视图里靠命名。
+
+
 - **`P1-06`：`TMDbBatch.enrichAll` 从全串行改成 **4 路有界并发**（弱网下 1.6–3.5×）。**
   - 原实现是 `for item in items { await performRefresh(item) }` —— **完全串行**。
     而 `TMDbRateLimiter` 的配置是 `maxConcurrent: 4, minimumInterval: 0.12`

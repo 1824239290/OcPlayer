@@ -42,17 +42,15 @@ struct BangumiSubjectDetailView: View {
 
     private var currentRating: Int { subject?.interest?.rate ?? 0 }
 
-    private enum EpisodeTab: String, CaseIterable, Identifiable {
-        case main = "本篇"
-        case sp = "SP"
-        case other = "其他"
-
-        var id: String { rawValue }
+    /// 三个分类一次扫完（`P2-09`）。
+    ///
+    /// 逻辑落在 `BangumiKit` 的 `Array<BangumiEpisodeDTO>.partitionedByEpisodeType()`，
+    /// **连「tab → 列表」的映射一起**（`EpisodePartition.episodes(for:)`）——
+    /// 视图只负责把 `selectedEpisodeTab` 传进去。这样映射本身有用例守着，
+    /// 不会出现「点 SP 显示本篇」而测试全绿的情况。
+    private var partitionedEpisodes: EpisodePartition {
+        episodes.partitionedByEpisodeType()
     }
-
-    private var mainEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .main } }
-    private var spEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type == .sp } }
-    private var otherEpisodes: [BangumiEpisodeDTO] { episodes.filter { $0.type != .main && $0.type != .sp } }
 
     private var displayedSubjectName: String {
         if let sub = subject {
@@ -451,7 +449,10 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
     // MARK: - 章节选集区域
 
     private var episodesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // 一次分区；后面所有读取都走 `parts` 的 API（`P2-09`）。
+        // 「tab → 列表」的映射也在包里，用例断言得到（见 `EpisodePartitionTests`）。
+        let parts = partitionedEpisodes
+        return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("章节列表")
                     .font(.headline)
@@ -467,14 +468,17 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 Spacer()
 
                 // 分组 Tab 切换
-                if !spEpisodes.isEmpty || !otherEpisodes.isEmpty {
+                if !parts.isEmpty(for: .sp) || !parts.isEmpty(for: .other) {
                     Picker("章节分类", selection: $selectedEpisodeTab) {
-                        Text("本篇 (\(mainEpisodes.count))").tag(EpisodeTab.main)
-                        if !spEpisodes.isEmpty {
-                            Text("SP (\(spEpisodes.count))").tag(EpisodeTab.sp)
+                        Text(EpisodeTab.main.title(count: parts.count(for: .main)))
+                            .tag(EpisodeTab.main)
+                        if !parts.isEmpty(for: .sp) {
+                            Text(EpisodeTab.sp.title(count: parts.count(for: .sp)))
+                                .tag(EpisodeTab.sp)
                         }
-                        if !otherEpisodes.isEmpty {
-                            Text("其他 (\(otherEpisodes.count))").tag(EpisodeTab.other)
+                        if !parts.isEmpty(for: .other) {
+                            Text(EpisodeTab.other.title(count: parts.count(for: .other)))
+                                .tag(EpisodeTab.other)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -482,13 +486,7 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 }
             }
 
-            let currentList: [BangumiEpisodeDTO] = {
-                switch selectedEpisodeTab {
-                case .main: return mainEpisodes
-                case .sp: return spEpisodes
-                case .other: return otherEpisodes
-                }
-            }()
+            let currentList = parts.episodes(for: selectedEpisodeTab)
 
             Group {
                 if currentList.isEmpty {
