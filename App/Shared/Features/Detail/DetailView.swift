@@ -57,7 +57,7 @@ struct DetailView: View {
         if model.hasBackdrop { return true }
         // 初版数据缺 tag 的剧集（「继续播放/接下来看」进来的占位剧集——分集没有
         // 自己的场布图，借不到 tag）：详情未落地前先按氛围布局渲染，别闪老横幅。
-        // 背景有首页轮播图兜底（homeAmbience，没就绪时 BackdropAmbienceView 整体
+        // 背景有轮播当前那张兜底（homeAmbienceTarget，没就绪时 BackdropAmbienceView 整体
         // 不渲染、落回纯色底，头部文字本就按外观自适应，仍可读），首帧观感与从
         // 库列表进入完全一致；详情落地后确无场布图的罕见剧集再交叉淡入切老横幅。
         if model.detail == nil, model.shown.kind == .series { return true }

@@ -41,7 +41,7 @@ struct BackdropCarouselTrigger: Hashable {
 ///
 /// 装载与换片循环**不在这里**——池子的所有权与驱动都在模型侧
 /// （`AppModel+Ambience`，由 `AppShellView` 根节点单点驱动）。这么分是因为池子
-/// 不只服务首页：`homeAmbience` 还要给 iOS 上所有"自垫背景"的页面当图源，而原先
+/// 不只服务首页：轮播当前那张还要给 iOS 上所有"自垫背景"的页面当图源，而原先
 /// 池子住在该视图的 `@State` 里、视图只挂在首页 Tab 内——冷启动直奔别的 Tab 时
 /// 那些页面整个会话都是纯色底。渲染仍留在原位（macOS 在整窗层、iOS 在首页 Tab 内），
 /// 只是改成读模型。

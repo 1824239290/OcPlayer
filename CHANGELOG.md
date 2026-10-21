@@ -27,6 +27,54 @@
 
 ### 性能
 
+- **`P2-36`：氛围轮播补 tolerance；同时删掉一个**被写了却没人读**的死属性。**
+  - **采纳**：换片循环每 12 秒醒一次、只为把 `ambienceIndex` 加一 —— 精确唤醒毫无收益，
+    却是一次真实的 timer 唤醒。已补 `swapTolerance = 3 s`，让系统把唤醒攒进别的唤醒里
+    （macOS / iOS 都做 timer coalescing），省电。
+  - **⚠️ 审查抓到 1 条阻断级 + 5 条应修，其中阻断级是我写成「理由」的一条错误事实**：
+    我原来在代码/CHANGELOG/commit 里写「`homeAmbience` 是 iOS 上所有自垫背景页面的图源，
+    所以不能只在首页推进」。**这个前提是错的** —— 审查实测
+    `git grep homeAmbience -- App Packages` 只命中声明 / 写入 / 注释，
+    **零个生产读点**（读它的只有 AppTests）。真正被所有自垫背景页消费的是
+    `currentAmbienceTarget`（读 `ambienceIndex`）。
+  - **处置**：**删掉 `homeAmbience` 死属性**（`AppModel.swift`），
+    `publishCurrentAmbience()` 保留为有注释的 no-op（它是「推进后同步」的语义锚点，
+    且已有用例通过它驱动），并把 6 处引用它的过时注释全部改成真实链路
+    （`AppModel` / `AppShell` / `DetailView` / `AmbientBackdropCarousel` /
+    `MoviePilotDownloadsView` / `LaunchOptions`）。
+  - **「不采纳清单另一半建议」的结论保留，但理由换成真的**：
+    ① **iOS 上收益接近零** —— 前台时恒有一个 Tab 可见，而四个 Tab 根页各自读的就是
+    `currentAmbienceTarget`；唯一能省的是「首页**栈根**可见」，可那会让**当前正在看的**
+    设置子页 / 下载页 / 详情兜底背景停住。
+    ② **macOS 上会冻住整窗背景** —— `AmbientBackdropCarousel` 挂在 `AppShell` 根节点
+    整窗层，任何分区都可见；按 `selectedSection == .home` 门控会让 macOS 用户切到别的
+    分区时全窗口背景静止。
+    清单方案 (b)（`sessionPool` 读固定一张）也有真代价：`Docs/AMBIENCE.md` §三.1 的
+    「push 时背景连续」正是靠同 URL 命中缓存实现的。
+  - **⚠️ 我另外两处写错、审查更正的**：
+    ① **「容差太大会把两次唤醒攒成一次、观感跳片」是错的**。实测 tolerance 是
+    **绝对时长、单边（只晚不早）**：`12 s + 容差 3 s` 实际睡 **14.87 s**；
+    `200 ms + 容差 3 s` 跑 20 次 min 2.91 / avg 3.00 / max 3.10 s，无一次早醒。
+    串行循环里相邻换片永远 ≥ 12 s，**不可能跳片**。真实代价只是「同一张最多停 ~15 s」，
+    一轮 96 s → 96–120 s。注释与用例已改。
+    ② **第一版 2 条用例是空转的** —— 只读两个常量，把循环里的 `tolerance:` 参数
+    整个删掉也不会有断言变红（审查实测）。已加**可注入的 `AmbiencePool.sleepForSwap`
+    钩子**（与 `AmbienceImageWarmup.warm` 同款），用例现在能真正跑进循环、
+    断言「生产代码传下去的 interval / tolerance 是什么」。
+  - **用例 3 条，反向变异 2 个全部抓红**：
+    · tolerance 传成 `swapInterval`（传错）→ **红**
+    · tolerance 传成 `.zero`（等于没容差）→ **红**
+    另外 `testSwapToleranceIsSane` 守「容差 > 0 且停留上限 ≤ 20 s」；
+    `testSwapIntervalStaysAtCalibratedValue` 守 12 s / poolSize 8 这两个标定值。
+  - **⚠️ 写用例时我自己踩的坑**：注入的 sleep 第一版「记完就 return」，
+    于是 `while !Task.isCancelled` 以 CPU 满载速度狂转（没有让出点），
+    测试 App 卡在 99.7% CPU 不结束。改成「记完后真的挂起 60 s」才让主 actor 空闲、
+    取消得以执行。
+  - **顺带修掉 `main` 上的一处 CHANGELOG 损坏**：上一批的强制推送在 `P2-10` 标题上留下
+    **重复拼接**（`…从- **\`P2-10\`…从「…」。**`），且里面还写着已被更正的「6 遍」。
+    两者都已修好（现为「3–6 遍」）。**注意：我上一版 commit 里声称「已加自动检查」——
+    那句话不成立**（仓库里没有该检查），本批已把它从描述里删掉。
+
 - **`P2-38`（其二）：弹幕 `p` 字段解析快 7.6×（**生产路径** `entries` 省 13.6 ms / 万条）。**
   - `DanmakuJSONConverter.fields(from:)` 原先两处白付：
     ① `p.split(separator: ",", omittingEmptySubsequences: false)` —— 按 **Character**
@@ -106,7 +154,7 @@
     · 回退成修前 bug（内存过期就直接删文件）→ **红**（仍能抓住原 bug）；
     · **12 个 `yes` 进程压满 CPU** 下复跑 → **稳定通过**（4.27 s）。
 
-- **`P2-10`：`BangumiChapterSection` 的三个章节分类从- **`P2-10`：`BangumiChapterSection` 的三个章节分类从「一次 body 扫 6 遍」改成「扫一遍」。**
+- **`P2-10`：`BangumiChapterSection` 的三个章节分类从「一次 body 扫 3–6 遍」改成「扫一遍」。**
   - 与 `P2-09` **同形状、不同文件**（清单原文就注明「同形状、不同文件」）：
     三个独立 computed property 各含一次 `episodes.filter`，而 `episodeContent`
     一次 body 里读了 **3–6 次**（三个 `if !xxx.isEmpty` + 三次 `episodeGrid(xxx)`）。

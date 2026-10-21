@@ -273,7 +273,6 @@ extension AppModel {
         // 氛围池同理：池里的条目与图片 URL 都取自旧服务器。清完触发键变化，
         // AppShellView 的 `.task(id:)` 会为新会话自动重装。
         resetAmbiencePool()
-        homeAmbience = nil
         pendingMoviePilotQuery = nil
         // 在飞的「淡出 → 落地」闭包属于旧会话，代次自增使其作废（见 beginRouteExit）。
         invalidatePendingRouteExit()
