@@ -186,7 +186,8 @@ struct BangumiChapterSection: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         // 与 MoviePilot / 媒体信息区块同一档半透明填充，透出海报氛围底
-        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        // 2026-10-22：与下载页同一套液态玻璃
+        .liquidGlassCard()
     }
 
     // MARK: - 已关联内容

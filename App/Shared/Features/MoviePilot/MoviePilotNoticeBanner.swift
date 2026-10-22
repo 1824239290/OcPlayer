@@ -30,7 +30,7 @@ struct MoviePilotNoticeBanner: View {
             .font(.callout)
             .foregroundStyle(tint)
             .padding(12)
-            .liquidGlassCard(cornerRadius: 14)
+            .liquidGlassCard()
         } else {
             Label(text, systemImage: icon)
                 .foregroundStyle(tint)

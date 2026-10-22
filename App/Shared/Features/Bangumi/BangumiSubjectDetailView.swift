@@ -269,7 +269,8 @@ struct BangumiSubjectDetailView: View {
             }
         }
         .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius + 4))
+        // 2026-10-22：与下载页同一套液态玻璃
+        .liquidGlassCard()
     }
 
     /// MoviePilot 下载快捷入口（集成停用时整块隐藏）。
@@ -441,7 +442,8 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                // 2026-10-22：与下载页同一套液态玻璃
+                .liquidGlassCard()
             }
         }
     }
@@ -512,7 +514,8 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                         }
                     }
                     .padding(12)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                    // 2026-10-22：与下载页同一套液态玻璃
+                    .liquidGlassCard()
                 }
             }
             .id(selectedEpisodeTab)
@@ -549,7 +552,8 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
                         }
                         .padding(8)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+                        // 2026-10-22：与下载页同一套液态玻璃
+                        .liquidGlassCard(cornerRadius: Metrics.glassNestedRadius)
                     }
                 }
             }
@@ -612,7 +616,8 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 6))
+        // 2026-10-22：与下载页同一套液态玻璃
+        .liquidGlassCard(cornerRadius: Metrics.glassNestedRadius)
     }
 
     // MARK: - 工具栏

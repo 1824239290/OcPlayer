@@ -46,21 +46,18 @@ struct ServersView: View {
         // 刻意「读了不用」：这一行让 body 依赖 addressRevision。
         let _ = addressRevision
 
-        Form {
-            Section {
-                ForEach(app.store.profiles) { profile in
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection {
+                ForEach(Array(app.store.profiles.enumerated()), id: \.element.id) { index, profile in
+                    if index > 0 { SettingsGlassDivider() }
                     row(for: profile)
                 }
             } footer: {
                 Text("正在使用的服务器不能删除；想删它先退出 Jellyfin 登录。默认启动的服务器带星标。展开一行可以管理这台服务器的多个地址。")
             }
-            .settingsCard()
         }
-        // 行底走 `settingsCard()`（iOS 的 grouped 行底是系统不透明白，会把氛围图挡死；
-        // `scrollContentBackground(.hidden)` 只管列表底、管不到行底，见
-        // `settingsCard()` 的类型注释）。
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         // 氛围底：本页是**呈现式叶子页**（`navigationDestination(isPresented:)`），
         // 不在 `appRouteView` 上，所以要单独挂（统一入口，iOS 自垫 / macOS 靠整窗层）。
         .pageAmbience(AmbienceTarget.sessionPool(app))

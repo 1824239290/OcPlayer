@@ -49,9 +49,10 @@ struct PlaybackKernelSection: View {
     }
 
     var body: some View {
-        Section("播放内核") {
+        // 2026-10-22（B 方案）：一段 = 一张液态玻璃卡，页面承载是 ScrollView 卡片流。
+        SettingsGlassSection("播放内核") {
             if available.count > 1 {
-                Picker("内核", selection: kernelBinding) {
+                SettingsPickerRow("内核", selection: kernelBinding) {
                     ForEach(available) { descriptor in
                         Text(title(descriptor)).tag(descriptor.id)
                     }
@@ -64,7 +65,9 @@ struct PlaybackKernelSection: View {
                     .foregroundStyle(.orange)
             }
 
-            Picker("画质增强", selection: upscalerBinding) {
+            SettingsGlassDivider()
+
+            SettingsPickerRow("画质增强", selection: upscalerBinding) {
                 ForEach(PlaybackUpscalerMode.allCases, id: \.self) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -87,6 +90,7 @@ struct PlaybackKernelSection: View {
                     icon: "exclamationmark.triangle.fill",
                     tint: .orange
                 )
+                .settingsCardCompact()
             }
 
             if let pendingSwitch, let selected {
@@ -98,9 +102,9 @@ struct PlaybackKernelSection: View {
                     // 跟着正文一起走中性前景色；警告档仍然是橙（语义色，见上一条）。
                     tint: Color.primary.opacity(0.55)
                 )
+                .settingsCardCompact()
             }
         }
-        .settingsCard()
         .onAppear {
             selectedKernelID = PlaybackEngineRegistry.selected?.id
         }

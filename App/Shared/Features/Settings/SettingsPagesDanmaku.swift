@@ -10,13 +10,18 @@ struct DanmakuSettingsView: View {
     @State private var isEditingGateway = false
 
     var body: some View {
-        Form {
-            Section {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection {
                 Toggle("自动加载弹幕", isOn: Binding(
                     get: { danmakuModel.danmaku.isAutoLoadingEnabled },
                     set: { app.setDanmakuAutoLoadingEnabled($0) }
                 ))
                 .neutralSwitch()
+                SettingsGlassDivider()
+                // **例外（保留原样）**：网关行是「标题 + 值 + 配置按钮」的组合行，
+                // 不是单个 Picker/TextField/Button，原样作为一行放进卡内。
                 HStack {
                     Text("网关")
                     Spacer()
@@ -32,16 +37,14 @@ struct DanmakuSettingsView: View {
                 if !danmakuModel.dandanplayIsConfigured {
                     SettingsNote("未配置网关时不请求网络弹幕，播放不受影响。")
                 }
-                TextField("anime-skip Client ID（可选）", text: Binding(
+                SettingsGlassDivider()
+                SettingsTextRow("anime-skip Client ID（可选）", text: Binding(
                     get: { danmakuModel.animeSkipClientID },
                     set: { danmakuModel.animeSkipClientID = $0 }
                 ))
                 SettingsNote("填入后启用 anime-skip 跳过片头源（在 anime-skip.com 注册获取）。TheIntroDB 免密钥自动启用。")
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .sheet(isPresented: $isEditingGateway) {
             DanmakuGatewayEntrySheet(
                 initialURL: danmakuModel.dandanplayGatewayURLString,

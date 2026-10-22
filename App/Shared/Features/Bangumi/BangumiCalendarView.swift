@@ -456,7 +456,8 @@ struct BangumiCalendarView: View {
                             Spacer()
                         }
                         .padding(10)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                        // 2026-10-22：与下载页同一套液态玻璃
+                        .liquidGlassCard()
                     }
                 }
                 .padding(.horizontal, contentLeading)

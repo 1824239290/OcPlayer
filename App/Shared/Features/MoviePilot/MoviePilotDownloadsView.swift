@@ -151,7 +151,7 @@ struct MoviePilotDownloadsView: View {
                 .buttonStyle(.bordered)
         }
         .padding(14)
-        .liquidGlassCard(cornerRadius: 16)
+        .liquidGlassCard()
     }
 
     // MARK: - 动作
@@ -373,7 +373,7 @@ private struct DownloadTaskCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 16)
+        .liquidGlassCard()
     }
 
     @ViewBuilder

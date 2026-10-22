@@ -242,10 +242,19 @@ public struct SettingsNote: View {
     public var body: some View {
         Text(text)
             .font(.caption)
-            .foregroundStyle(.tertiary)
+            // **玻璃上说明小字的对比度**（2026-10-22 真机实测，iPhone 17 Pro 播放页最明显）：
+            // 改造前它压在 `Form` 的实色行底上，`.tertiary` 也读得清；换成玻璃后底色变成
+            // 会透出氛围图的半透面、且玻璃自己会把底提亮，`.tertiary`（前景色 ~30%）
+            // 直接糊成一片。改到 `.secondary`（~60%）仍然偏淡——于是这里用**显式不透明度
+            // 而不是语义层级**：`primary` 的 0.82 在合成后的绝对差明显高于 `.secondary`，
+            // 而且深浅两种外观下方向都对（深色=白 82%、浅色=黑 82%）。
+            // 判据是「看不看得清」，不是「语义层级听起来对不对」。
+            .foregroundStyle(.primary.opacity(0.82))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.leading, SettingsMetrics.separatorLeading)
             .listRowSeparator(.hidden)
+            // 卡内（`SettingsGlassCard`）是附注不是操作行：不抬最小行高、不加行内边距。
+            .settingsCardCompact()
     }
 }
 
@@ -266,9 +275,12 @@ public extension View {
     /// 后者会把说明性的 caption 行一起抬起来，而 caption 是挂在控件下面的小字，
     /// 抬起来就成了一格空行。行高只给「真的是一行操作」的行。
     ///
-    /// macOS 上 `rowContentMinHeight` 为 0，等于直通原生表单密度。
+    /// **2026-10-22（玻璃卡片流，B 方案）**：卡内那一行不再是 List 的行，
+    /// `settingsRowInsets()` 声明的 `listRowInsets` 变成 no-op，行距改由承载层
+    /// `SettingsGlassCard` 施加。这里给**内容最小高 = 整行热区**（iOS 44 / macOS 30，
+    /// 见 `cardRowMinHeight`）；两者叠加后行距是 iOS 58 / macOS 42。
     func settingsRow() -> some View {
-        frame(minHeight: SettingsMetrics.rowContentMinHeight)
+        frame(minHeight: SettingsMetrics.cardRowMinHeight)
     }
 
     /// 设置页复合行的**行内边距**：与 `settingsRow()` 配对使用，负责把内容高与

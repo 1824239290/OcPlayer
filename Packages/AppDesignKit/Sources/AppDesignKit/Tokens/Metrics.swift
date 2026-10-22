@@ -20,8 +20,27 @@ public enum Metrics {
     /// 165 / 240 ≈ 0.69 同一口径（同排比剧照卡小一档）。
     public static let latestWidth: CGFloat = 230
     public static let cardRadius: CGFloat = 10
+
+    // MARK: - 液态玻璃圆角（2026-10-22 全站统一）
+
+    /// **内容卡的统一圆角**：全站所有 `liquidGlassCard` 都用它，不再按页面各写 10/12/14/16/18。
+    ///
+    /// 取 16 是因为用户口径把「MoviePilot 下载队列的卡」定为基准（那边本来就是 16）；
+    /// 统一之后切页时卡片圆角不会跳，视觉上才像同一套语言。
+    public static let glassCardRadius: CGFloat = 16
+
+    /// **嵌在玻璃卡里的次级小卡**（信息格 / 统计格 / 选集网格）的圆角。
+    ///
+    /// 取 8 而不是同样 16：外层卡 16 + 内边距 8 的同心圆角正好收敛到 8（Apple 的
+    /// 同心圆角规则），内层再画 16 会显得「圆角套圆角、里外不平行」。
+    /// 也用于纯色底的小格（如选集格），让它们与玻璃小卡的轮廓一致。
+    public static let glassNestedRadius: CGFloat = 8
     /// 选集卡圆角。比 `cardRadius` 略小，选集卡在详情页里尺寸更小、更密集，
     /// 和海报/剧照卡用同一个圆角会显得偏圆。`EpisodeSelectCard` 在用。
+    ///
+    /// **2026-10-22 与 `glassNestedRadius` 对齐成同一个值**：选集格与玻璃卡里的
+    /// 次级小卡在页面上是同一档「嵌套小卡」，两者圆角若不同，并排时轮廓会打架。
+    /// 两个名字都留着（语义不同：一个是选集格，一个是嵌套小卡），值锁死在 8。
     public static let episodeCardRadius: CGFloat = 8
     public static let railSpacing: CGFloat = 22
     /// Rail 标题与内容行之间的间距。

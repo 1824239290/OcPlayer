@@ -35,13 +35,16 @@ struct SubtitleAppearanceSection: View {
     private static let unsetPlaceholder = Color.white
 
     var body: some View {
-        Section {
-            Picker("位置", selection: alignmentBinding) {
+        // 2026-10-22（B 方案）：一段 = 一张液态玻璃卡，页面承载是 ScrollView 卡片流。
+        SettingsGlassSection("字幕外观") {
+            SettingsPickerRow("位置", selection: alignmentBinding) {
                 Text("不设置").tag(0)
                 ForEach(Self.alignmentOptions, id: \.value) { option in
                     Text(option.label).tag(option.value)
                 }
             }
+
+            SettingsGlassDivider()
 
             Stepper(value: marginBinding, in: 0...200, step: 10) {
                 KeyValueRow(
@@ -50,16 +53,23 @@ struct SubtitleAppearanceSection: View {
                 )
             }
 
+            SettingsGlassDivider()
+
             colorRow(
                 label: "字幕颜色",
                 stored: $storedPrimaryColor,
                 key: SettingsKeys.subtitlePrimaryColor
             )
+
+            SettingsGlassDivider()
+
             colorRow(
                 label: "描边颜色",
                 stored: $storedOutlineColor,
                 key: SettingsKeys.subtitleOutlineColor
             )
+
+            SettingsGlassDivider()
 
             Stepper(value: outlineBinding, in: 0...32, step: 1) {
                 KeyValueRow(
@@ -69,6 +79,8 @@ struct SubtitleAppearanceSection: View {
                         : String(format: "%.0f", storedOutlineWidth)
                 )
             }
+
+            SettingsGlassDivider()
 
             HStack {
                 Toggle("加粗", isOn: boldBinding)
@@ -80,6 +92,8 @@ struct SubtitleAppearanceSection: View {
                         .font(.caption)
                 }
             }
+
+            SettingsGlassDivider()
 
             Toggle("覆盖字幕自带样式", isOn: $overridesEnabled)
             .neutralSwitch()
@@ -96,9 +110,8 @@ struct SubtitleAppearanceSection: View {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
                 }
+                .settingsCardCompact()
             }
-        } header: {
-            Text("字幕外观")
         } footer: {
             // 「上面改过的项 / 以上设置」说的是整段控件怎么配合，不是某一个控件的注解 → 段脚。
             // 段脚收的是字面量，`**替换**` 照旧按 Markdown 出粗体（SettingsNote 收 String，会画成星号）。
@@ -106,7 +119,6 @@ struct SubtitleAppearanceSection: View {
                  ? "已打开：上面改过的项会**替换**字幕自带的排版，包括 ASS 特效字体。"
                  : "关闭时以上设置只用于填补字幕没指定的部分，片源自带的排版与特效字体原样保留。")
         }
-        .settingsCard()
         .onAppear { syncBoldFromDefaults() }
     }
 

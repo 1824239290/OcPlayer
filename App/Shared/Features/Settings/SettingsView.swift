@@ -30,23 +30,22 @@ struct SettingsView: View {
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
 
     var body: some View {
-        Form {
-            // 分段表在 `SettingsHub`（唯一事实源）：新增子页漏挂 hub 会被
-            // `SettingsHubGroupingTests` 当场拦下，不再靠「记得改这里」。
+        // **2026-10-22（B 方案：玻璃卡片流）**：设置页整体脱离 `Form`，改成
+        // `ScrollView` + 玻璃卡片流——与 MoviePilot 下载页同一套承载。分段表仍在
+        // `SettingsHub`（唯一事实源），每段 = 一张 `SettingsGlassCard`。
+        SettingsGlassPage {
             ForEach(SettingsHub.groups) { group in
-                Section(group.title) {
-                    ForEach(group.subpages, id: \.self) { subpage in
+                SettingsGlassSection(group.title) {
+                    ForEach(Array(group.subpages.enumerated()), id: \.element) { index, subpage in
+                        if index > 0 { SettingsGlassDivider() }
                         hubRow(subpage, value: value(for: subpage))
                     }
                 }
-                .settingsCard()
             }
 
             TMDbAttributionFooter()
         }
-        .scrollContentBackground(.hidden)
         .navigationTitle("设置")
-        .settingsSectionSpacing()
         #if !os(macOS)
         // iPhone / iPad：Tab 根页不挂大标题——「设置」已写在底部 Tab 上，顶部再挂
         // 一遍只白占一截（与首页同一口径，见 HomeView 顶部注释）。子页不受影响：
@@ -54,7 +53,6 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         #endif
-        .formStyle(.grouped)
     }
 
     /// 每行的值预览。集中在一处、按子页穷举分派——原先值是**逐个行手写**在各自的
@@ -154,72 +152,38 @@ struct SettingsView: View {
 /// 不参与分组，所以不挂 `settingsCard()`，也不该长得像一行可点的设置项。
 struct TMDbAttributionFooter: View {
     var body: some View {
-        Section {
-            VStack(spacing: 10) {
-                Image("tmdb-logo")
-                    // **保持品牌配色**（`.original`）：这是 TMDB 的官方字标，
-                    // 与详情页「在 TMDB 打开」同一条口径——改色等于改品牌标识。
-                    .renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 96)
-                    // 署名是装饰性文案，读屏念一遍商标名没有意义（文字里已经说明
-                    // 用了 TMDB API）；与行图标同一条无障碍口径。
-                    .accessibilityHidden(true)
+        VStack(spacing: 10) {
+            Image("tmdb-logo")
+                // **保持品牌配色**（`.original`）：这是 TMDB 的官方字标，
+                // 与详情页「在 TMDB 打开」同一条口径——改色等于改品牌标识。
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 96)
+                // 署名是装饰性文案，读屏念一遍商标名没有意义（文字里已经说明
+                // 用了 TMDB API）；与行图标同一条无障碍口径。
+                .accessibilityHidden(true)
 
-                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            // 卡片之外的页脚：行底透明 + 无分隔线，别长成一行设置项。
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
+            Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 }
 
-// MARK: - 分段卡底（iOS）
+// MARK: - 已退役的旧卡底
 
-extension View {
-    /// 设置分段的**卡底**。**iOS 专用**：iOS 的 grouped 行底是系统不透明白
-    /// （`scrollContentBackground(.hidden)` 只管列表底，管不到行底），会把垫在页面里的
-    /// 氛围图挡死；macOS 的分组玻璃本来就近乎零填充、观感正确，直通不动。
-    ///
-    /// **必须挂在每个 Section 上**：行底是逐行的 trait，挂在 Form 上不生效
-    /// （Form 自己是容器，写在它外面的值传不到行）。`insetGrouped` 的段背景是
-    /// **连续**的——从标题一直包到页脚——所以逐行铺同一个半透明色，观感就是一张整卡，
-    /// 圆角与首尾行形状都由系统给，不必自绘（自绘就会跟系统那套圆角体系打架）。
-    ///
-    /// **2026-10-13 改口径：从「全透」改成「半透明卡」。** 改前这里是 `Color.clear`，
-    /// 理由是 material / glassEffect 都自带一层模式色纱，跟 `.home` 遮罩叠出来是死白。
-    /// 用户拿对照产品（Rex）的设置页截图给的口径是「我们的显得很粗糙」——逐像素量下来
-    /// 主因就是**根本没有卡**：行直接压在模糊氛围图上，分段只剩空气。Rex 的卡实测是
-    /// 页面 lum 49.7 → 卡内 71.6（Δ≈22，反解 `白 ≈10%`），**纯色叠加**没有那层模式色纱，
-    /// 于是「有卡片边界」与「氛围图仍透出来」两件事同时成立。
-    func settingsCard() -> some View {
-        #if os(iOS)
-        listRowBackground(SettingsCardFill())
-        #else
-        self
-        #endif
-    }
-
-    /// 设置页的**段间距**：上一张卡底 → 段标题 ink 顶的目标 ≈40pt（对照产品实测 40.7pt）。
-    ///
-    /// **`listSectionSpacing` 没有 macOS 可用性**（iOS 17+ / watchOS 10+），
-    /// 所以这里必须分平台——macOS 的分组表单自带段间距，直通即可。
-    /// 子页刻意不施加：它们一个屏装得下的段更多，收紧段距会把「一块一块」的分组
-    /// 读成「一大块」（hub 只有三段，收紧才显得利落）。
-    @ViewBuilder
-    func settingsSectionSpacing() -> some View {
-        #if os(iOS)
-        listSectionSpacing(SettingsMetrics.sectionSpacing)
-        #else
-        self
-        #endif
-    }
-}
+// 2026-10-13 的 `settingsCard()`（iOS `listRowBackground(SettingsCardFill())` 半透明纯色
+// 叠加）与 `settingsSectionSpacing()`（`listSectionSpacing`）随 B 方案一并退役：
+// 设置页不再走 `Form`，卡底由 `SettingsGlassCard` 承担、段间距由
+// `SettingsGlassPage` 的 VStack spacing 承担。
+//
+// 为什么退役而不是留着：逐行 `listRowBackground` 在 macOS 上**根本不被执行**
+// （诊断页连不透明品红都不画），在 iOS 上逐行各画一块会出接缝——两条都实测过，
+// 理由与截图在 `SettingsGlassCard` 的类型注释里。旧实现的实测数据（亮色透出度
+// 0.27 → 0.70、卡内外亮度差 +35 等）保留在 `SettingsMetrics.cardFill*` 与
+// `SettingsCardFill` 的注释里，作为「为什么当年选了纯色而不是 material」的记录。

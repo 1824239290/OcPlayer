@@ -13,15 +13,23 @@ struct AboutSettingsView: View {
     @State private var showLicenses = false
 
     var body: some View {
-        Form {
-            Section {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        // 本页只有一段（版本 / 检查更新 / 开源许可证），段标题留空。
+        SettingsGlassPage {
+            SettingsGlassSection {
                 KeyValueRow(label: "版本", value: AppVersion.displayString)
+                SettingsGlassDivider()
                 UpdateCheckRow(
                     checker: updateChecker,
                     onShowRelease: { release in
                         presentedRelease = release
                     }
                 )
+                SettingsGlassDivider()
+                // **例外（保留原样）**：这是个「自定义 label」的按钮——`LabeledContent`
+                // 右侧还带「N 个项目」的值，`SettingsActionRow` 表达不了这一行，
+                // 原样放进卡内（整行热区已由 `.buttonStyle(.plain)` + 行高承载）。
                 Button {
                     app.pushPresented { showLicenses = true }
                 } label: {
@@ -32,10 +40,7 @@ struct AboutSettingsView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .navigationDestination(isPresented: $showLicenses) {
             OpenSourceLicensesView()
                 .appShellBackChrome(title: "开源许可证", presented: $showLicenses)

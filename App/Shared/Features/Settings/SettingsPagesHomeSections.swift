@@ -1,3 +1,4 @@
+import AppDesignKit
 import SwiftUI
 
 /// 设置 → 首页栏目：首页各栏的顺序与显隐。
@@ -23,18 +24,18 @@ struct HomeSectionsSettingsView: View {
         // 保留「现读现取」—— 那是防「连着拨两个开关时拿旧快照互相覆盖」的
         // （见 `sectionVisibilityBinding` 的注释）。
         let layout = layout
-        return Form {
-            Section {
-                ForEach(layout.order) { section in
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        return SettingsGlassPage {
+            SettingsGlassSection {
+                ForEach(Array(layout.order.enumerated()), id: \.element) { index, section in
+                    if index > 0 { SettingsGlassDivider() }
                     homeSectionRow(section, layout: layout)
                 }
             } footer: {
                 Text("上下按钮调整顺序；开关只控制首页是否显示，关掉的栏目会留在这里，随时可以再打开（位置不变）。")
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
     }
 
     // MARK: - 栏目行

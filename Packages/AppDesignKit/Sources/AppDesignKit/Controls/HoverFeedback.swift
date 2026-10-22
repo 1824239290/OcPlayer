@@ -39,24 +39,33 @@ public extension View {
 ///
 /// 和 `hoverLift`（放大 + 投影，给海报/剧照网格卡用）区分开：
 /// 行式卡片放大 1.055 会撑出列表边界、和邻居重叠，不适合。
-/// 底用 `.ultraThinMaterial`（同 MoviePilotResourceView 的氛围页卡片）：
-/// 透出整窗氛围图，与设置页 Form 分组底的半透明观感一致；
-/// 悬停在其上做填充提亮 + accentColor 描边。
+///
+/// **底 = 液态玻璃**（2026-10-22 随「全站内容卡统一为下载页同一套玻璃」一起改）：
+/// 原先是 `.ultraThinMaterial`（扁平磨砂，没有边缘高光与折射）。换成玻璃后只剩一个
+/// 约束——**悬停反馈不能再用一层填充**：玻璃会把它当背景吃掉（实测 `primary .08`
+/// 在玻璃上不可见，同 `AppShellSectionGroup.segmentBackground` 的记录），而且
+/// 「玻璃上再叠玻璃/材质」违反 WWDC25 323 的取样规则。所以悬停信号改走
+/// **accent 描边 + 极轻的内容层提亮**（`content` 层的 `.background` 在玻璃之下，
+/// 会被玻璃盖住，因此提亮挂在 `overlay` 里的形状填充上——它画在玻璃之上）。
 private struct HoverRowHighlight: ViewModifier {
     let active: Bool
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: Metrics.cardRadius)
         return content
-            // 提亮填充要叠在磨砂底**之上**、内容之下：background 链先声明的更贴内容。
-            .background(active ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.clear), in: shape)
-            .background(.ultraThinMaterial, in: shape)
+            .liquidGlassCard(isInteractive: active)
+            .overlay(
+                shape
+                    .fill(Color.primary.opacity(active ? 0.06 : 0))
+                    .allowsHitTesting(false)
+            )
             .overlay(
                 shape
                     .strokeBorder(
-                        active ? Color.accentColor.opacity(0.3) : Color.clear,
+                        active ? Color.accentColor.opacity(0.35) : Color.clear,
                         lineWidth: 1
                     )
+                    .allowsHitTesting(false)
             )
     }
 }

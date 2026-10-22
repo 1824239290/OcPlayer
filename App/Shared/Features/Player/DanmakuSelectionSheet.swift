@@ -64,7 +64,7 @@ struct DanmakuSelectionSheet: View {
         #if os(macOS)
         .frame(minWidth: 500, idealWidth: 560, minHeight: 460, idealHeight: 520)
         #endif
-        .liquidGlassCard(cornerRadius: 24)
+        .liquidGlassCard()
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)

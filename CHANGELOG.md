@@ -6,6 +6,82 @@
 
 ### 改动
 
+- **全站内容卡统一为原生 Liquid Glass（基准是 MoviePilot 下载队列那套 `liquidGlassCard`；用户点名的搜索结果页卡片原先用的是 `.ultraThinMaterial` / 纯色底，观感相近但原语不同，本次一并收编）；设置页为此整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流（A 方案先试后被否，B 方案落地）**
+  （用户口径：「moviepilot 的搜索结果、下载队列里面的这个是玻璃的效果，你再看看我们的设置、bangumi 等等都不是玻璃的效果，
+  我想让他们都跟下载列表的一样，使用玻璃效果的」；看到 A 方案实机效果后追加：「现在效果太差了，你上方案 B 吧」）。
+  - **实现（先把散落的卡片收编到同一原语，再换设置页承载）**：
+    - **内容卡统一**：Bangumi 四页（`BangumiHomeView` / `BangumiCalendarView` / `BangumiSubjectDetailView` /
+      `BangumiChapterSection`）与详情页 `DetailMediaInfoSection` 的内容卡，从 `.ultraThinMaterial` / `.fill.quaternary`
+      换成 `liquidGlassCard`；MoviePilot 资源页原先**三处各说各话**——
+      `MoviePilotResourceView` 媒体卡是 `.ultraThinMaterial` + 0.12 手绘描边、同文件种子卡是 `primary .04`
+      纯色 + 0.08 描边、`MoviePilotResourceSection` 入口卡是 `.fill.quaternary`——三处收编到同一原语。
+      `HoverFeedback.swift` 的 `hoverRowHighlight` 底也从 `.ultraThinMaterial` 换成玻璃，**悬停信号因此改道**：
+      玻璃会把叠上去的填充当背景吃掉（实测 `primary .08` 在玻璃上不可见），所以提亮改成 overlay 里的内容层
+      6% `primary` 填充 + accent 0.35 描边，交互态由 `liquidGlassCard(isInteractive:)` 自己给。
+    - **圆角统一（2026-10-22 追加口径「圆角统一一下」）**：`liquidGlassCard` 的圆角默认值改成新 token
+      `Metrics.glassCardRadius = 16`，全站**顶层内容卡**一律用它、调用点不再各写一个数——原先散落着
+      10（`Metrics.cardRadius`）/ 12 / 14 / 16 / 18 / 24 六档，同一张卡在不同页里轮廓会跳。**嵌套在玻璃卡里的
+      次级小卡**用另一个 token `Metrics.glassNestedRadius = 8`（同心圆角：外层 16 + 内边距 8 收敛到 8，
+      内层再画 16 会「圆角套圆角、里外不平行」），Bangumi 条目详情的「作品信息」格 / 收藏统计格、资源页种子卡
+      归这一档；`Metrics.episodeCardRadius` 也锁到同值 8（选集格与嵌套小卡在页面上是同一档，并排时圆角不能打架）。
+      无圆角字面量残留：`grep "liquidGlassCard(cornerRadius: [0-9]"` 为空。
+    - **B 方案（设置页）**：新增 `Packages/AppDesignKit/Sources/AppDesignKit/Controls/SettingsGlassCard.swift`——
+      `SettingsGlassPage`（`ScrollView` + 卡片流 + `contentLeading` 留白 + `pageMaxContentWidth` 居中）、
+      `SettingsGlassSection`（段标题 + 一整块玻璃卡 + 段脚）、`SettingsGlassCard`（`liquidGlassCard` + 0.5pt 描边，
+      **行高由承载层统一施加**，调用点不用逐行补）。`SettingsCardRowLayout` 把卡内子视图分三档行角色：
+      `row`（操作行抬到最小行高：iOS 44 → 行距 58；macOS 30 → 行距 42）、`note`（附注只留 4pt）、`inline`（分隔线零间隙）。
+      行件重写 `Form` 专有的「标题 + 行尾控件」形态：`SettingsRow` / `SettingsPickerRow` / `SettingsTextRow` /
+      `SettingsFieldRow`（带 `textContentType` / 禁自动更正等链式修饰的输入行：行形态交给原语、控件原样传入）/
+      `SettingsActionRow`。`settingsToggleStyle()` 补一个坑：macOS 的 `Toggle` 脱离 `Form` 后会退化成
+      **复选框**，这里做成行尾开关（iOS no-op）。`SettingsGlassDivider` 自绘 1 物理像素线、leading inset 对齐文字左缘
+      （`Divider()` 的取向由父栈决定，在自定义 `Layout` 里会失效，故自绘）。
+    - **迁完的范围**：设置 hub、10 个子页、管理服务器、开源许可证详情全部换成 `SettingsGlassPage` / `SettingsGlassSection`；
+      `OpenSourceLicensesView` 的**条目列表仍是系统 `List`**（没换成玻璃卡片流，只摘掉旧的 `settingsCard()` 行底），
+      真正换承载的是它的详情页。`settingsCard()` /
+      `settingsSectionSpacing()` / 旧卡底原语 `SettingsCardFill` 及其令牌 `cardFillDarkOpacity` / `cardFillLightOpacity`
+      与三条钉它们的不透明度用例**一并退役删除**（`Packages/AppDesignKit/Controls/SettingsCard.swift` 已删）；
+      `SettingsMetrics` 新增卡相关令牌：`cardContentInset` 16 / `cardContentVerticalInset` 6 / `cardCornerRadius` 16 /
+      `cardRowMinHeight` / `sectionHeaderSpacing` / `sectionHeaderInset` / `pageTopInset` / `pageBottomInset` /
+      `pageMaxContentWidth` / `cardTrailingFieldMaxWidth`；macOS 的 `rowVerticalInset` 由 0 改 6，与 `cardRowMinHeight` 30
+      合成 42pt 行距；`SettingsNavRow` 走的 `settingsRow()` 内容最小高也同步换成 `cardRowMinHeight`（它仍负责 Button 热区），
+      与承载层叠加后行距不变。**同一张卡只有一层玻璃**：卡内小件（图标、按钮、色板）保持纯色 tint，不再叠玻璃——玻璃不能取样玻璃。
+  - **A→B 的判例（先试 A，实机后被否，不是「A 再修修」）**：A 方案是保留 `Form`、把每个 `Section` 的内容包成
+    `SettingsGlassCard`（一段 = 一个 List 行 = 一整块玻璃）。工装 `/tmp/glass-spike`（macOS 26.6 (25G72) + Xcode 27.1；
+    iOS 26.3 模拟器、iPhone 17 Pro 运行时）逐页截图 + 像素判据给出三条硬结论：① **macOS 的 grouped `Form` 根本不执行
+    `.listRowBackground`**——诊断页连不透明品红都不画，A 组与纯 `Form` 对照组**全帧 98.6% 的像素完全一致**；这也正是仓库里
+    `settingsCard()` 当年只能写 `#if os(iOS)` 的真正原因。② **iOS 能画，但逐行各画一块**——行界出 **3px 暗线**
+    （luma **233.5 → 216.6**）、圆角缝里透出原始氛围底、系统分隔线压在玻璃顶上，相邻两行的独立玻璃拼不回「一张卡」
+    （玻璃不能取样玻璃）。③ **macOS 上 `Form` 自己给 section 加 13–14pt 侧缩进**，卡比目标窄 **26pt**；负 padding 会裁字
+    （「媒体服务器」缺首字）、负 `listRowInsets` 被接受但不生效。两边都做不到「一整段一张玻璃」→ 设置页整体换承载。
+  - **代价（认下来的）**：丢掉 `Form` 的键盘焦点漫游、List 的行分组无障碍语义、`DisclosureGroup` 的原生行样式
+    （控件仍可用，只是不再是 Form 行那套观感）、`Picker` / `TextField` 的系统行尾布局（改由行件显式给出，
+    也就多了一层「漏一个样式就长歪」的风险）。
+  - **已知取舍（浅色下比旧卡更实）**：玻璃在浅色下等效不透明度 **0.60–0.65**、透出度 **0.35–0.44**，而原先
+    「白 0.30」的透出度是 **0.70**——即浅色下这次比旧纯色卡更不透明。深色下 `.regular` 会把卡往下压 **−48.8**、
+    `.clear` 更透（**+23.4**）；最终仍取 `.regular` 与下载页保持一致，浅色偏实这点作为**已知取舍**记录，本轮不再调档。
+  - **真机实测补丁（装机后立刻暴露、离屏测试与模拟器都测不出）**：装机到 iPhone 17 Pro（真机）后，设置页有**两处
+    可读性问题**，都是「玻璃不是实心底」带来的、改造前在 `Form` 的实色行底上不存在：
+    ① **段标题**（`.secondary` + `.footnote`）压在**氛围照片**上——实测「网络缓冲」那一行字与底只差
+    **~2 luma**，等于消失；改成 `.primary`（与首页/MoviePilot 压在氛围图上的栏标题同一口径）后恢复。
+    ② **卡内说明小字**（`SettingsNote` / 段脚）原来是 `.tertiary`——压在玻璃上直接糊成一片，提到
+    `.secondary` 仍偏淡（玻璃自己会把底提亮，前景与底的绝对差被压缩），最终用**显式 `primary` +
+    0.82 不透明度**（不用语义层级：`.secondary` 是「前景 60%」且会被玻璃二次稀释）。
+    两处都写进 `SettingsNote` / `SettingsGlassSection` 的注释，标明「判据是看不看得清，不是语义层级听起来对不对」。
+    这条同时说明**离屏 UI 测试的方法论上限**：`glassEffect` 不进离屏渲染，合成后的对比度只能在真机上量
+    （见 `AppTests/SettingsLayoutTests` 类注释）。
+  - **被推翻的旧判例**：① 2026-10-13「设置界面『向 Rex 靠』」里的「**为什么不用 material / glassEffect**」一节
+    （本次插入前 `CHANGELOG.md:2058-2061`）——那条的论据是「亮色透出度 0.37 < 白 0.30 的 0.70」，比较对象是 material、
+    且默认接受了「白 0.30 纯色卡」这个前提；本次用户明确要求换玻璃，A 方案又实测证明「卡」在 `Form` 里做不出来，故改判。
+    ② 同条末尾「**未做**：Liquid Glass 卡片（本仓规格要求『用户明确要求才上』）」（本次插入前 `CHANGELOG.md:2072`）——
+    **本次即该明确要求**，前提已满足。行号按插入前文件计（本条目插在 `[Unreleased]` 顶部，之后行号整体下移）。
+  - **验证**（可复现的判据与入口）：① 工装逐页像素：A vs 纯 `Form` 全帧 **98.6%** 像素相同、iOS 行界 **3px** 暗线
+    （luma **233.5 → 216.6**）、macOS 卡窄 **26pt**（`Form` 段侧缩进 **13–14pt**）；② **孪生对照**——工装页 J＝`Form` 承载 /
+    K＝`ScrollView` 承载、同一段内容：iOS 上卡 bbox 完全一致、卡内 RGB 差 **< 1/255**、卡外与纯氛围底
+    **mean|diff| = 0.00**（记在 `SettingsGlassCard.swift` 文件头）；③ 观感数据见上（0.60–0.65 / 0.35–0.44 / 0.70 / −48.8 / +23.4）；
+    ④ **氛围回归闸门不变**：承载换了、氛围挂载点没换，`Scripts/verify-ambience.sh --pages ios.settings` 的判据与期望值不变
+    （见 `Docs/AMBIENCE.md` §二/§四，本次只补注、判据未改）；⑤ 本轮是纯视图层重排，未新增业务逻辑与新用例；
+    旧 `AppTests/SettingsLayoutTests` 对 `Form` 的前提已不成立，适配与两端构建/全量跑分随本批另记（本条不写未经实跑的数字）。
+
 - **导航栏图标统一成「选中 = 品牌原色 / 未选中 = 灰」（Bangumi、MoviePilot、首页头像三格，iOS + macOS）**
   （用户口径：两个 logo 现在只有「选中白一点 / 未选中灰一点」，要改成和首页一样 —— 选中是 SVG 原本的
   logo 色、未选中是灰；随后追加「这个也要改哦，macOS 端的」；问清范围后确认「三格统一」）。

@@ -73,21 +73,6 @@ final class SettingsRhythmTests: XCTestCase {
             "内边距为 0 时行距等于内容高，无法同时满足「够高」与「热区够大」")
     }
 
-    /// 卡底不透明度：暗色 0.10（Rex 反解值 ≈0.098）、亮色 **0.30**。
-    ///
-    /// 亮色从 0.75 降到 0.30 的**理由在 `testCardFillStaysTranslucent`**（那条量的是
-    /// 「氛围图透出多少」，这条只钉数值）。两条都不得为 0——那是改前的「没有卡」。
-    func testCardFillOpacitiesStayVisible() {
-        XCTAssertEqual(SettingsMetrics.cardFillDarkOpacity, 0.10, accuracy: 0.005)
-        XCTAssertEqual(
-            SettingsMetrics.cardFillLightOpacity, 0.30, accuracy: 0.005,
-            "亮色 0.30：改前 0.75 只让 26% 的彩色透过来（用户口径「白底实心」），0.30 是 70%。"
-            + "别再往上加——亮色页面底色本就接近白，加白换来的边界很有限"
-            + "（实测 0.75→0.30 亮度差只掉 2 点），代价却是氛围图被盖死")
-        XCTAssertGreaterThan(SettingsMetrics.cardFillDarkOpacity, 0, "0 = 又退回「没有卡」")
-        XCTAssertGreaterThan(SettingsMetrics.cardFillLightOpacity, 0, "0 = 又退回「没有卡」")
-    }
-
     /// 系统自带行内边距是**历史观测值**（我们声明 `listRowInsets` 之后它已被替换）。
     ///
     /// 留着它是因为「为什么改成 44+14」靠它解释：**44 + 14 = 58 = 28 + 30**——
@@ -162,112 +147,6 @@ final class SettingsRhythmTests: XCTestCase {
             "图标 ink 的通道极差是 \(spread)，说明它不是单色（`.primary` 应为近白）："
             + "对照产品的行图标是白色单色，用系统强调色是「看着廉价」的直接来源之一")
     }
-
-    /// 卡底必须**真的比卡外亮**，且**不能亮成死白**——两档都量。
-    ///
-    /// 死白那一档是本仓踩过的判例：material / glassEffect 自带一层模式色纱，
-    /// 跟 `.home` 遮罩叠出来就是死白，所以卡底走纯色叠加。这里把「纯色叠加在
-    /// 灰底上」的结果量出来，钉住「有边界、但没盖死」。
-    ///
-    /// 注意这是**合成场景**：真 `Form` 里的卡底由
-    /// `AppTests/SettingsLayoutTests` 在 iOS 模拟器上验（那份才是端到端的）。
-    func testCardFillShowsBoundaryWithoutWashingOut() throws {
-        for scheme in [ColorScheme.dark, .light] {
-            let base: Color = scheme == .dark ? Color(white: 0.20) : Color(white: 0.78)
-            let composition = ZStack {
-                base
-                SettingsCardFill()
-                    .frame(width: 120, height: 100)
-            }
-            .frame(width: 300, height: 200)
-            .environment(\.colorScheme, scheme)
-
-            let image = try render(composition)
-            let sides = try RenderedRow.sideLuminance(in: image, cardWidth: 120, scale: scale)
-            let delta = sides.inside - sides.outside
-            XCTAssertGreaterThanOrEqual(
-                delta, 8,
-                "\(scheme) 卡底与卡外的亮度差只有 \(delta)（<8 就看不出卡片边界）")
-            XCTAssertLessThanOrEqual(
-                sides.inside, 252,
-                "\(scheme) 卡底亮度 \(sides.inside) 已经贴到白（死白那一档）——"
-                + "氛围图会被盖死")
-        }
-    }
-
-
-    /// **卡底必须是「玻璃」而不是「实心」**：氛围图的彩色要能透过来。
-    ///
-    /// 用户口径（2026-10-13）：「白天模式的时候跟 bangumi 那边的透明度差距有点大，
-    /// 设置页的已经变成白底实心了。人家 rex 也是做成的玻璃状态的。」
-    ///
-    /// 判据取「**同位置**盖卡 / 不盖卡两次渲染的卡内色度之比」——不能拿卡外当分母：
-    /// 氛围底是斜向渐变，拿卡外比会把「那个位置的底色本来就不饱和」误算成
-    /// 「卡底洗掉了颜色」（第一版就是这么得到 >1 的假读数的）。
-    ///
-    /// 这条正是原测试集的缺口：改前只断言「卡内外亮度差 ≥8」，而白 0.75 的亮度差
-    /// 高达 +48、**轻松通过**——它牺牲的恰恰是透明度。现在把透明度本身钉住。
-    func testCardFillStaysTranslucent() throws {
-        for (scheme, minimumRetention) in [
-            (ColorScheme.light, 0.60),
-            (.dark, 0.80),
-        ] {
-            let retention = try measureChromaRetention(scheme: scheme)
-            XCTAssertGreaterThanOrEqual(
-                retention, minimumRetention,
-                "\(scheme) 下氛围图只有 \(Int(retention * 100))% 的彩色透得过来"
-                + "（下限 \(Int(minimumRetention * 100))%）：卡底已经成了「实心底」，"
-                + "与「氛围背景铺满全部界面」这条设计打架。"
-                + "调低 `cardFill\(scheme == .light ? "Light" : "Dark")Opacity`。")
-        }
-    }
-
-    /// 「氛围图透出度」= 卡内色度 ÷ **同位置无卡时**的色度。
-    ///
-    /// 底图用多色渐变 + `.home` 同量级遮罩合成（亮色白雾 0.55 / 暗色黑纱 0.28），
-    /// 与 `BackdropAmbienceView.home` 同一档，所以量出来的比例接近真机。
-    private func measureChromaRetention(scheme: ColorScheme) throws -> Double {
-        let size = CGSize(width: 300, height: 200)
-        let cardWidth: CGFloat = 240
-
-        func backdropLayer() -> some View {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.95, green: 0.60, blue: 0.68),
-                        Color(red: 0.52, green: 0.70, blue: 0.96),
-                        Color(red: 0.98, green: 0.84, blue: 0.50),
-                    ],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-                .blur(radius: 30)
-                scheme == .light
-                    ? Color.white.opacity(0.55)
-                    : Color.black.opacity(0.28)
-            }
-        }
-
-        let baseline = try render(
-            ZStack { backdropLayer() }
-                .frame(width: size.width, height: size.height)
-                .environment(\.colorScheme, scheme)
-        )
-        let covered = try render(
-            ZStack {
-                backdropLayer()
-                SettingsCardFill()
-                    .frame(width: cardWidth, height: size.height)
-                    .environment(\.colorScheme, scheme)
-            }
-            .frame(width: size.width, height: size.height)
-            .environment(\.colorScheme, scheme)
-        )
-
-        let baseChroma = try RenderedRow.medianChroma(in: baseline, scale: scale, cardWidth: cardWidth)
-        let coveredChroma = try RenderedRow.medianChroma(in: covered, scale: scale, cardWidth: cardWidth)
-        return coveredChroma / max(baseChroma, 0.5)
-    }
-
 
     // MARK: - 品牌图缩放（纯函数）
 
@@ -384,51 +263,6 @@ enum RenderedRow {
             }
         }
         return sawInk ? spread : nil
-    }
-
-    /// 卡区（水平居中、宽 `cardWidth`）的中位色度——「有没有彩色透过来」的判据。
-    static func medianChroma(in image: CGImage, scale: CGFloat, cardWidth: CGFloat) throws -> Double {
-        let (bytes, width, height) = try pixels(image)
-        let cardPx = Int(cardWidth * scale)
-        let left = max((width - cardPx) / 2, 0) + Int(10 * scale)
-        let right = min(left + cardPx - Int(20 * scale), width)
-        var vals: [Double] = []
-        for y in (height / 4)..<(height * 3 / 4) {
-            for x in left..<right {
-                let o = (y * width + x) * 4
-                let r = Double(bytes[o]), g = Double(bytes[o + 1]), b = Double(bytes[o + 2])
-                vals.append(max(r, max(g, b)) - min(r, min(g, b)))
-            }
-        }
-        guard !vals.isEmpty else { throw XCTSkip("卡区采样为空") }
-        vals.sort()
-        return vals[vals.count / 2]
-    }
-
-    /// 卡内 / 卡外的平均亮度（卡水平居中，宽 `cardWidth`）。
-    static func sideLuminance(in image: CGImage, cardWidth: CGFloat, scale: CGFloat)
-        throws -> (inside: Double, outside: Double) {
-        let (bytes, width, height) = try pixels(image)
-        let cardPx = Int(cardWidth * scale)
-        let left = max((width - cardPx) / 2, 0)
-        let right = min(left + cardPx, width)
-        var insideTotal = 0.0, outsideTotal = 0.0
-        var insideCount = 0, outsideCount = 0
-        let midY = height / 2
-        for x in 0..<width {
-            let offset = (midY * width + x) * 4
-            let luma = Double(Int(bytes[offset]) + Int(bytes[offset + 1]) + Int(bytes[offset + 2])) / 3
-            // 两侧各留 12px 安全边：卡片圆角与抗锯齿不参与。
-            if x >= left + 12, x < right - 12 {
-                insideTotal += luma; insideCount += 1
-            } else if x < left - 12 || x >= right + 12 {
-                outsideTotal += luma; outsideCount += 1
-            }
-        }
-        return (
-            inside: insideCount > 0 ? insideTotal / Double(insideCount) : 0,
-            outside: outsideCount > 0 ? outsideTotal / Double(outsideCount) : 0
-        )
     }
 
     private static func pixels(_ image: CGImage) throws -> ([UInt8], Int, Int) {

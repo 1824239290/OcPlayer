@@ -1,3 +1,4 @@
+import AppDesignKit
 import Foundation
 import SwiftUI
 
@@ -398,7 +399,6 @@ struct OpenSourceLicensesView: View {
                 Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 Erika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
                     .foregroundStyle(.secondary)
             }
-            .settingsCard()
 
             ForEach(OpenSourceLicenseCatalog.groups) { group in
                 Section(group.title) {
@@ -410,12 +410,10 @@ struct OpenSourceLicensesView: View {
                         }
                     }
                 }
-                .settingsCard()
             }
         }
-        // 行底 / 列表底都要处理：iOS 的 grouped 行底是系统不透明白，会把氛围图挡死
-        // （`scrollContentBackground(.hidden)` 只管列表底，管不到行底——见
-        // `settingsCard()` 的注释）。
+        // 2026-10-22：这一页是**条目列表**，保留系统 `List` 行（不套液态玻璃卡）；
+        // 列表底透明，让氛围图垫在下面。
         .scrollContentBackground(.hidden)
         // 本页是**呈现式叶子页**，不在 `appRouteView` 上，氛围底要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
@@ -452,39 +450,42 @@ private struct OpenSourceLicenseDetailView: View {
     @State private var bundledText: String?
 
     var body: some View {
-        Form {
-            Section("项目") {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection("项目") {
                 LabeledContent("名称", value: component.name)
                 if let version = component.version {
+                    SettingsGlassDivider()
                     LabeledContent("版本", value: version)
                 }
+                SettingsGlassDivider()
                 LabeledContent("许可证", value: component.license)
+                SettingsGlassDivider()
+                // **例外（保留 `Link` 原样）**：`SettingsActionRow` 收的是闭包而不是
+                // URL，`Link` 本身就是整行操作，原样放进卡内（行高由承载层给）。
                 Link(destination: component.homepage) {
                     Label("项目主页", systemImage: "arrow.up.right.square")
                 }
+                SettingsGlassDivider()
                 Link(destination: component.licenseURL) {
                     Label("许可证说明", systemImage: "doc.text")
                 }
             }
-            .settingsCard()
 
-            Section("用途") {
+            SettingsGlassSection("用途") {
                 Text(component.purpose)
                     .textSelection(.enabled)
             }
-            .settingsCard()
 
             if let bundledText {
-                Section("随包许可证文本") {
+                SettingsGlassSection("随包许可证文本") {
                     Text(bundledText)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
                 }
-                .settingsCard()
             }
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         // 本页是从「开源许可证」列表里 NavigationLink 推上来的深层页（不在 `Route`
         // 上），氛围底同样要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
