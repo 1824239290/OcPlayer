@@ -93,9 +93,9 @@ public extension View {
 /// 的职责，散到 11 个页面的几十个调用点上必然漏；`Layout` 能一次性给所有子视图，
 /// 且紧凑件可以用 `LayoutValueKey` 精确豁免。
 struct SettingsCardRowLayout: Layout {
-    /// 行内容最小高（iOS 44 = 热区 / macOS 28 = 原表单行距）。
+    /// 行内容最小高（iOS 44 = HIG 热区 / macOS 30）。
     private var minHeight: CGFloat { SettingsMetrics.cardRowMinHeight }
-    /// 行上下内边距（iOS 7 / macOS 0），与最小高合成行距 58。
+    /// 行上下内边距（iOS 7 / macOS 6），与最小高合成行距（iOS 58 / macOS 42）。
     private var verticalInset: CGFloat { SettingsMetrics.rowVerticalInset }
 
     private func naturalSize(_ subview: LayoutSubview, width: CGFloat) -> CGSize {
@@ -180,6 +180,11 @@ public struct SettingsGlassCard<Content: View>: View {
     }
 
     public var body: some View {
+        // **调用点要给非空内容**：卡本体挂着 `cardContentVerticalInset` 与玻璃，
+        // 零行时仍会画出一条 12pt 高的全宽玻璃条。`Layout` 侧已让零子视图的尺寸归零，
+        // 但 padding + glassEffect 还在，所以**必须由调用点判空**（`ServersView` 的
+        // profiles 为空那段就是这么处理的）。这里不做「悄悄变 EmptyView」的兜底：
+        // 那样会让「明明写了内容却没显示」变成静默失败，比一条空条更难查。
         SettingsCardRowLayout {
             content
         }

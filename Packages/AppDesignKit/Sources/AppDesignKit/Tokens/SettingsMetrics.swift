@@ -106,7 +106,7 @@ public enum SettingsMetrics {
     /// 真正钉住渲染结果的是 `AppTests/SettingsLayoutTests.testRowPitchMatchesReferenceRhythm`
     /// （iOS，量真像素）与 `SettingsGlassMetricsTests.testMacRowModelMatchesTheDocumentedNumbers`
     /// （macOS，钉常量绝对值）。别再拿这条算式当「已验证」的证据。
-    public static var rowPitch: CGFloat { rowContentMinHeight + rowVerticalInset * 2 }
+    public static var rowPitch: CGFloat { cardRowMinHeight + rowVerticalInset * 2 }
 
     /// 图标列宽与图标-文字间距。
     ///

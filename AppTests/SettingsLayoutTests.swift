@@ -774,20 +774,50 @@ final class SettingsGlassMetricsTests: XCTestCase {
             FileManager.default.enumerator(at: features, includingPropertiesForKeys: nil),
             "扫不到 App/Shared/Features：路径变了，这条守卫要跟着改")
 
-        let banned = ["ultraThinMaterial", "thinMaterial", "regularMaterial", "thickMaterial"]
+        // 覆盖 `.bar` 与全部 material 档：**只列 `ultraThinMaterial` 会漏掉
+        // `.background(.bar)` 这类「同属材质、写法不同」的退路**（2026-10-22 复审指出）。
+        let banned = [
+            "ultraThinMaterial", "thinMaterial", "regularMaterial", "thickMaterial",
+            "ultraThickMaterial", ".bar)",
+        ]
+        // 显式豁免：**chrome（浮动/吸附控件）不是内容卡**，用材质是正当的。
+        // 在那一行前面加 `// glass-guard-exempt: <理由>` 即可（必须写理由，方便以后复核）。
+        let exemptMarker = "glass-guard-exempt:"
         var offenders: [String] = []
         for case let file as URL in enumerator where file.pathExtension == "swift" {
             guard let text = try? String(contentsOf: file, encoding: .utf8) else {
                 XCTFail("读不到 \(file.lastPathComponent)：守卫失效，别让它静默跳过")
                 continue
             }
-            for (index, line) in text.components(separatedBy: .newlines).enumerated() {
+            let lines = text.components(separatedBy: .newlines)
+            for (index, line) in lines.enumerated() {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 // 注释里提到旧材质名是**记录**，不是用法。
                 if trimmed.hasPrefix("//") || trimmed.hasPrefix("///") || trimmed.hasPrefix("*") {
                     continue
                 }
                 guard let hit = banned.first(where: { trimmed.contains($0) }) else { continue }
+                // 豁免有两种写法，都认：
+                //  ① **同行尾部注释**：`.background(.bar)   // glass-guard-exempt: 理由`
+                //  ② **上方连续注释块**：豁免说明写在用法正上方（可能好几行）
+                // 为什么要支持两种：① 最不容易失效（链式调用中间常隔着实参行，
+                // 向上扫会在那里断掉——2026-10-22 review 就复现了这次失败）；
+                // ② 便于写多行理由。
+                if line.contains(exemptMarker) { continue }
+                var scan = index - 1
+                var exempted = false
+                while scan >= 0 {
+                    let above = lines[scan].trimmingCharacters(in: .whitespaces)
+                    if above.isEmpty {
+                        scan -= 1
+                        continue
+                    }
+                    guard above.hasPrefix("//") || above.hasPrefix("*") || above.hasPrefix("/*")
+                    else { break }
+                    if above.contains(exemptMarker) { exempted = true; break }
+                    scan -= 1
+                }
+                if exempted { continue }
                 offenders.append("\(file.lastPathComponent):\(index + 1) 用了 \(hit)")
             }
         }
@@ -816,14 +846,23 @@ final class SettingsGlassMetricsTests: XCTestCase {
             for line in text.components(separatedBy: .newlines) {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if trimmed.hasPrefix("//") || trimmed.hasPrefix("///") { continue }
-                if trimmed.contains(".liquidGlassCard(") || trimmed.contains(".liquidGlassCapsule(") {
-                    count += 1
-                }
+                // **要数全「玻璃原语」这一族**，不能只数两个（2026-10-22 review 指出）：
+                // 只数 `liquidGlassCard` / `liquidGlassCapsule` 的话，把 Bangumi 行卡
+                // （`hoverRowHighlight`）、登录面板（`glassPanel`）、HUD（裸 `glassEffect`）
+                // 全改回纯色，这条守卫依然绿。地板同步抬到 40（实测 32 card/capsule
+                // + 2 hoverRowHighlight + 1 glassPanel + 11 裸 glassEffect ≈ 46）。
+                let isGlassCall = trimmed.contains(".liquidGlassCard(")
+                    || trimmed.contains(".liquidGlassCapsule(")
+                    || trimmed.contains(".hoverRowHighlight(")
+                    || trimmed.contains(".glassPanel(")
+                    || trimmed.contains(".glassEffect(")
+                if isGlassCall { count += 1 }
             }
         }
         XCTAssertGreaterThanOrEqual(
-            count, 24,
-            "全仓玻璃调用点只剩 \(count) 处（地板 24）：内容卡可能被换回了纯色/material。"
+            count, 40,
+            "全仓玻璃原语调用点只剩 \(count) 处（地板 40）：内容卡可能被换回了纯色/material。"
             + "UI 统一成液态玻璃是 2026-10-22 的用户口径，别默默回退。")
+        // 上界只作提示不当断言：玻璃数量应随功能增长，涨了不该红。
     }
 }

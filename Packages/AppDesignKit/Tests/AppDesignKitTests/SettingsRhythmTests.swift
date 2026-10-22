@@ -48,15 +48,39 @@ final class SettingsRhythmTests: XCTestCase {
             "44 + 7×2 = 58（对照产品 Rex 实测 57.8pt）")
     }
 
-    /// 行距 = 内容高 + 我们自己声明的上下内边距。
+    /// 行距 = 卡内行最小高 + 上下内边距——**两个平台各自的绝对值**。
     ///
-    /// 这条是**算式本身**（两侧都可随平台不同），与上一条的绝对值互补。
-    func testRowPitchComposesFromContentAndInsets() {
+    /// 这条本意是「算式本身」（两侧同源、单看恒真），所以它**不能**当验证用；
+    /// 真正管用的是下面分平台的绝对值断言 + `AppTests` 里量真像素的那条。
+    ///
+    /// **2026-10-22 review 抓出的坑**：这条原来写的是 `rowContentMinHeight +
+    /// rowVerticalInset*2`。macOS 的 `rowContentMinHeight` 是 0（Form 时代「交给系统撑」
+    /// 的语义），于是包测试在 macOS 上算出 **12**，而产品实际行距是 `cardRowMinHeight`
+    /// (30) + 6×2 = **42**——两边都不报错，因为断言自己就用了错的基准。
+    func testRowPitchComposesFromCardRowHeightAndInsets() {
         XCTAssertEqual(
             SettingsMetrics.rowPitch,
-            SettingsMetrics.rowContentMinHeight + SettingsMetrics.rowVerticalInset * 2,
+            SettingsMetrics.cardRowMinHeight + SettingsMetrics.rowVerticalInset * 2,
             accuracy: 0.01,
             "行距必须由「内容高 + 上下内边距」算出来，不能另写一个数")
+    }
+
+    /// 卡内行模型的**分平台绝对值**。
+    ///
+    /// 这两组数决定「一行看起来多高」：iOS 44 + 7×2 = 58（对照产品 Rex 实测 57.8）、
+    /// macOS 30 + 6×2 = 42（Form 时代实测 28，玻璃卡里 42 才有下载页的量感）。
+    /// 包测试在 CI 里只跑 macOS，所以 **macOS 那组必须在这里钉死**——否则改坏了
+    /// 只有肉眼能发现（`AppTests` 的渲染判据是 iOS-only）。
+    func testCardRowTierMatchesEachPlatform() {
+        #if os(macOS)
+        XCTAssertEqual(SettingsMetrics.cardRowMinHeight, 30, accuracy: 0.01)
+        XCTAssertEqual(SettingsMetrics.rowVerticalInset, 6, accuracy: 0.01)
+        XCTAssertEqual(SettingsMetrics.rowPitch, 42, accuracy: 0.01)
+        #else
+        XCTAssertEqual(SettingsMetrics.cardRowMinHeight, 44, accuracy: 0.01)
+        XCTAssertEqual(SettingsMetrics.rowVerticalInset, 7, accuracy: 0.01)
+        XCTAssertEqual(SettingsMetrics.rowPitch, 58, accuracy: 0.01)
+        #endif
     }
 
     /// 内容高不能低于最小点击区，内边距不能为 0。
