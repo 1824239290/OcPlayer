@@ -49,8 +49,8 @@ struct BangumiEpisodeCell: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)
-            .background(fill, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(border, lineWidth: 1))
+            .background(fill, in: RoundedRectangle(cornerRadius: Metrics.glassNestedRadius))
+            .overlay(RoundedRectangle(cornerRadius: Metrics.glassNestedRadius).strokeBorder(border, lineWidth: 1))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

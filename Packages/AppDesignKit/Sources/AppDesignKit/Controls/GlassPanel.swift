@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// ## 为什么不是 `liquidGlassCard`
 ///
-/// `liquidGlassCard` 是给内容卡片用的（不透明感更强、圆角 18、`.regular` 玻璃）。
+/// `liquidGlassCard` 是给内容卡片用的（不透明感更强、圆角 `Metrics.glassCardRadius`、
+/// `.regular` 玻璃）。
 /// 登录面板要的是另一种东西：它**浮在一张照片上**，需要更薄的材质、更明显的顶底
 /// 亮度差，以及沿上边缘的一道镜面高光——那道高光是「这是一块玻璃」唯一的视觉线索。
 /// 两者是两种语义，各留各的实现。

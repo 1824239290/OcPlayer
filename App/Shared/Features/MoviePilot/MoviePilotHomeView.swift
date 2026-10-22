@@ -1164,6 +1164,6 @@ private struct MoviePilotMediaGlassCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard(cornerRadius: 18, isInteractive: false)
+        .liquidGlassCard()
     }
 }

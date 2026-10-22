@@ -35,9 +35,10 @@ struct PlaybackSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section("网络缓冲") {
-                Picker("网络预读缓冲", selection: Binding(
+        // 2026-10-22（B 方案）：设置页统一走 `ScrollView` + 玻璃卡片流（同下载页承载）。
+        SettingsGlassPage {
+            SettingsGlassSection("网络缓冲") {
+                SettingsPickerRow("网络预读缓冲", selection: Binding(
                     get: { readAheadMiB },
                     set: { storedReadAheadMiB = $0 }
                 )) {
@@ -49,7 +50,9 @@ struct PlaybackSettingsView: View {
                 // 对应带宽门槛：深度只影响内存占用与抗卡顿能力，弱网下无需刻意调小。
                 SettingsNote("数值越大越能抗带宽抖动，内存占用相应增加。内核用持久流预取，弱网下无需刻意调小。")
 
-                Picker("回退缓冲", selection: Binding(
+                SettingsGlassDivider()
+
+                SettingsPickerRow("回退缓冲", selection: Binding(
                     get: { backBufferMiB },
                     set: { storedBackBufferMiB = $0 }
                 )) {
@@ -61,16 +64,21 @@ struct PlaybackSettingsView: View {
                 // 高码率片源想随意回退 10 秒需要 ~89 MB。低码率番剧默认档已够数分钟。
                 SettingsNote("已播内容保留在缓存里，回退落在这段内不发网络请求。高码率片源建议调大（16 MiB 在 70 Mbps 下只够回退约 2 秒）。")
             }
-            .settingsCard()
 
-            // 这一段的说明解释的是**整段**（三个控件如何配合），所以放 footer——
-            // iOS 设置里段级解释的标准位置：卡片下方的那段留白，不会把卡片内部切开。
-            Section {
+            // 这一段的说明解释的是**整段**（三个控件如何配合），所以放段脚——
+            // 卡片下方的那段留白，不会把卡片内部切开。
+            SettingsGlassSection("跳过片头与片尾") {
                 Toggle("跳过片头", isOn: $skipIntroEnabled)
                 .neutralSwitch()
+
+                SettingsGlassDivider()
+
                 Toggle("跳过片尾", isOn: $skipOutroEnabled)
                 .neutralSwitch()
-                Picker("片尾保留", selection: Binding(
+
+                SettingsGlassDivider()
+
+                SettingsPickerRow("片尾保留", selection: Binding(
                     get: { outroRetentionSeconds },
                     set: { storedOutroRetention = $0 }
                 )) {
@@ -79,15 +87,12 @@ struct PlaybackSettingsView: View {
                     }
                 }
                 .disabled(!skipOutroEnabled)
-            } header: {
-                Text("跳过片头与片尾")
             } footer: {
                 Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 3 秒。")
             }
-            .settingsCard()
 
-            Section {
-                Picker("默认字幕语言", selection: Binding(
+            SettingsGlassSection("字幕") {
+                SettingsPickerRow("默认字幕语言", selection: Binding(
                     get: { subtitleLanguage },
                     set: { storedSubtitleLanguage = $0.rawValue }
                 )) {
@@ -96,17 +101,12 @@ struct PlaybackSettingsView: View {
                     }
                 }
                 SettingsNote("打开新片源时按这里的偏好挑字幕轨：有中文字幕就自动切过去（用不到第一条外语字幕），没有中文则保持片源自带的默认选择。在播放器里自己选过之后，本片不再自动改动。")
-            } header: {
-                Text("字幕")
             }
-            .settingsCard()
 
             SubtitleAppearanceSection()
 
             PlaybackKernelSection()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
     }
 
     private static func label(for preference: SubtitleLanguagePreference) -> String {

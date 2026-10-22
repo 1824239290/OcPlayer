@@ -42,12 +42,17 @@
 | 首页 / MoviePilot / Bangumi / 设置（Tab 根页） | section | 有背景 | ✅ `pageAmbience` |
 | 搜索 Tab 根页 | route | 有背景 | ✅ 补（原先整页纯色，而 Tab 栏玻璃底下能透出氛围图） |
 | 媒体库网格页 / Bangumi 个人 / 收藏列表 / 条目详情 / 每日放送 | route | 有背景 | ✅ `appRouteView` 的 `.routeAmbience(route)` 一处覆盖 |
-| 设置 10 个子页 | route | 有背景 | ✅ 同上（path 路由，无需逐页登记） |
-| 管理服务器 / 开源许可证 | route | 有背景 | ✅ 呈现式页各自挂 `pageAmbience` + 行底透明 |
+| 设置 10 个子页 | route | 有背景 | ✅ 同上（path 路由，无需逐页登记；2026-10-22 承载变更见下） |
+| 管理服务器 / 开源许可证 | route | 有背景 | ✅ 呈现式页各自挂 `pageAmbience`；管理服务器已改玻璃卡片流，开源许可证保留系统 `List` 但**行底显式清空**（`listRowBackground(.clear)`，iOS grouped 行底是系统实色） |
 | 详情页 / 资源搜索页 / 下载管理页 | route | 有背景 | ✅ 自有主体图（`ownsArt`） |
 | 引导页（未登录） | excluded | — | 会话未建立，没有图可用 |
 | 播放器 | excluded | — | 画面本身即内容 |
 | sheet / 弹窗 / 菜单 | excluded | — | 系统材质浮动层，底下垫图看不见 |
+
+**2026-10-22 设置页换了承载、挂载点没变**：设置 Tab 根页、10 个设置子页、管理服务器与开源许可证详情页
+从 `Form` 改成 `ScrollView` + 玻璃卡片流（`SettingsGlassPage`），但氛围底色仍由原来的三处给——Tab 根页
+`pageAmbience`、设置子页走 `appRouteView` 的 `.routeAmbience(route)`、两个呈现式页各自挂 `pageAmbience`。
+所以上表这几行的 `gate` / 期望值不变，`Scripts/verify-ambience.sh --pages ios.settings` 的判据与期望值同样不变。
 
 ---
 
@@ -72,6 +77,12 @@
 | 5 个 Tab 根页（`AppShell.compactTabs`） | 首页（轮播组件）/ Bangumi / MoviePilot / 设置 / 搜索 | ✅ 后四个走 `pageAmbience` |
 | `navigationDestination(isPresented:)` 调用点 | 管理服务器 / 开源许可证 / 下载管理 / 资源搜索 | ✅ 四处各自挂着 |
 | `DetailView` | 详情页（预热 + 兜底淡入 + 未就绪声明 nil） | ✅ 走 `pageAmbience(ownsArt: true)` |
+| 设置页（**2026-10-22 承载变更**） | 设置 Tab 根页 + 10 个子页 + 管理服务器 + 开源许可证详情页 | ✅ **挂载点与上表完全一致**：Tab 根页 `pageAmbience` / 子页 `.routeAmbience(route)` / 两个呈现式页各自挂；`Form` → `ScrollView` + 玻璃卡片流只换内容承载，不动这一层 |
+
+**卡换成玻璃后，采样位置要按新卡缘复核**：设置页的卡现在是整块玻璃（浅色下等效不透明度 0.60–0.65），
+「卡内 vs 卡外」这类采样若落在卡上，色度会被玻璃压掉——验收台的判据本身不改（见 §五），但如果把采样区
+调进/调出卡缘，回归时按新卡缘重新核对一遍期望；设置页当前的内容左右留白（`contentLeading`）没变，
+`--pages ios.settings` 仍以留白区为主。
 
 **新增页面时的规则**：① 凡是进 `Route` 的页面由 `.routeAmbience` **自动覆盖**，不用登记；
 ② 呈现式页面（`isPresented`）必须单独挂 `pageAmbience`；③ 根部是状态视图

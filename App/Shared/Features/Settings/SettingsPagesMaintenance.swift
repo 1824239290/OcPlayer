@@ -11,39 +11,38 @@ struct MaintenanceSettingsView: View {
     @AppStorage(SettingsKeys.danmakuDiagnostics) private var danmakuDiagnosticsEnabled = false
 
     var body: some View {
-        Form {
-            Section("缓存") {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection("缓存") {
+                // 两个嵌套的独立 View（各自多根，卡内自动平铺成多行），内部结构不动。
                 ImageCacheSettingsRow()
+                SettingsGlassDivider()
                 MetadataCacheSettingsRow()
             }
-            .settingsCard()
 
-            Section {
+            SettingsGlassSection("配置备份与多端同步") {
+                // 嵌套独立 View：多根自动平铺成多行（导出 / 恢复 / 状态提示）。
                 ConfigBackupSection()
-            } header: {
-                Text("配置备份与多端同步")
             } footer: {
                 // 不用 `**粗体**`：多个字面量相加得到的是 String，`Text(String)` 不解析
                 // markdown，星号会原样画出来。
                 Text("把 TMDB Key、播放偏好等设置导出成一个文件，可存进 iCloud 云盘或隔空投送（AirDrop）给其他设备。"
                      + "备份文件里是明文 TMDB Key（不含服务器地址与账号密码），请勿公开分享。")
             }
-            .settingsCard()
 
-            Section {
+            SettingsGlassSection("日志与诊断") {
+                // 嵌套独立 View：多根自动平铺成多行（详细日志 / 日志文件 / 记录数 /
+                // 最近记录 / 导出 / 清空），内部结构不动。
                 DiagnosticsSection()
+                SettingsGlassDivider()
                 Toggle("弹幕诊断日志", isOn: $danmakuDiagnosticsEnabled)
                 .neutralSwitch()
                 SettingsNote("排查弹幕时间轴错位等问题时再开，平时保持关闭。")
-            } header: {
-                Text("日志与诊断")
             } footer: {
                 Text("日志写入 \(AppDiagnostics.fileURL.path)，含脱敏后的 token / 路径信息；需要完整上下文请导出后发送。")
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
     }
 }
 
@@ -55,7 +54,9 @@ private struct ImageCacheSettingsRow: View {
     @State private var confirmClear = false
 
     var body: some View {
-        LabeledContent("图片缓存", value: usageText)
+        // 2026-10-22：`LabeledContent` 脱离 `Form` 后不再有「标签左 / 值右」的行形态
+        // （SwiftUI 只在列表容器里给它那个排版），换成已有的 `KeyValueRow`。
+        KeyValueRow(label: "图片缓存", value: usageText)
             .onAppear(perform: refresh)
 
         Button(role: .destructive) {
@@ -115,7 +116,8 @@ private struct MetadataCacheSettingsRow: View {
     @State private var confirmClear = false
 
     var body: some View {
-        LabeledContent("媒体元数据缓存", value: usageText)
+        // 同 `ImageCacheSettingsRow`：脱离 Form 后 `LabeledContent` 会左贴紧凑排。
+        KeyValueRow(label: "媒体元数据缓存", value: usageText)
             .onAppear { app.metadata.refreshSize() }
 
         HStack {
@@ -247,6 +249,7 @@ struct DiagnosticsSection: View {
             Text(exportFailure)
                 .font(.caption)
                 .foregroundStyle(.red)
+                .settingsCardCompact()
         }
 
         Button(role: .destructive) {
@@ -404,6 +407,7 @@ private struct ConfigBackupSection: View {
             Text(statusNotice)
                 .font(.caption)
                 .foregroundStyle(isError ? .red : .secondary)
+                .settingsCardCompact()
         }
     }
 

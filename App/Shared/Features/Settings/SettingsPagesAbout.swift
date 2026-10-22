@@ -13,29 +13,38 @@ struct AboutSettingsView: View {
     @State private var showLicenses = false
 
     var body: some View {
-        Form {
-            Section {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        // 本页只有一段（版本 / 检查更新 / 开源许可证），段标题留空。
+        SettingsGlassPage {
+            SettingsGlassSection {
                 KeyValueRow(label: "版本", value: AppVersion.displayString)
+                SettingsGlassDivider()
                 UpdateCheckRow(
                     checker: updateChecker,
                     onShowRelease: { release in
                         presentedRelease = release
                     }
                 )
+                SettingsGlassDivider()
+                // 「标题 + 行尾值 + 可整行点」——`SettingsActionRow` 表达不了行尾值，
+                // 所以自己拼一行：`HStack` + `Spacer` 保住「标签左 / 值右」的读法，
+                // `maxHeight: .infinity` 让热区吃掉整行高（脱离 `Form` 后没有系统行底兜底）。
                 Button {
                     app.pushPresented { showLicenses = true }
                 } label: {
-                    LabeledContent(
-                        "开源许可证",
-                        value: "\(OpenSourceLicenseCatalog.componentCount) 个项目"
-                    )
+                    HStack(spacing: 8) {
+                        Text("开源许可证")
+                        Spacer(minLength: 8)
+                        Text("\(OpenSourceLicenseCatalog.componentCount) 个项目")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .navigationDestination(isPresented: $showLicenses) {
             OpenSourceLicensesView()
                 .appShellBackChrome(title: "开源许可证", presented: $showLicenses)

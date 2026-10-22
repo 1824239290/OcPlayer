@@ -110,7 +110,8 @@ struct DetailMediaInfoSection: View {
         .padding(12)
         // 与 MoviePilot 区块同一档半透明填充：详情页的信息卡都透出海报氛围底，
         // 不用 `.background.secondary`（那是不透明灰，在氛围底上会糊成一块）。
-        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        // 2026-10-22：与下载页同一套液态玻璃
+        .liquidGlassCard()
     }
 
     private func mediaGroups(_ info: MediaFileInfo) -> [(title: String, rows: [(label: String, value: String)])] {

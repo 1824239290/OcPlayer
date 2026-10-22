@@ -165,11 +165,8 @@ struct MoviePilotResourceView: View {
             Spacer()
         }
         .padding(16)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
-        )
+        // 2026-10-22：与下载页同一套液态玻璃（原 `.ultraThinMaterial` 扁平磨砂）。
+        .liquidGlassCard()
     }
 
     // MARK: - 搜索控件
@@ -259,7 +256,7 @@ struct MoviePilotResourceView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .liquidGlassCard(cornerRadius: 16)
+                .liquidGlassCard()
             } else if let searchError {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -272,7 +269,7 @@ struct MoviePilotResourceView: View {
                         .buttonStyle(.bordered)
                 }
                 .padding(14)
-                .liquidGlassCard(cornerRadius: 16)
+                .liquidGlassCard()
             } else if displayed.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: hasSearched ? "line.3.horizontal.decrease.circle" : "arrow.down.circle")
@@ -289,7 +286,7 @@ struct MoviePilotResourceView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
-                .liquidGlassCard(cornerRadius: 16)
+                .liquidGlassCard()
             }
 
             // 种子卡片流（懒加载窗口：只物化前 displayLimit 条，触底哨兵续载）
@@ -504,14 +501,8 @@ private struct MoviePilotTorrentGlassCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
+        // 2026-10-22：与下载页同一套液态玻璃（原 `primary .04` 纯色底）。
+        .liquidGlassCard()
     }
 
     }

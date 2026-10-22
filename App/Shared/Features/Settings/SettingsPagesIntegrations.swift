@@ -20,9 +20,12 @@ struct JellyfinSettingsView: View {
     @State private var confirmSignOut = false
 
     var body: some View {
-        Form {
-            Section("当前服务器") {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection("当前服务器") {
                 KeyValueRow(label: "名称", value: app.server?.profile.serverName ?? "—")
+                SettingsGlassDivider()
                 KeyValueRow(
                     label: "地址",
                     value: (app.serverEndpointURL ?? app.server?.profile.baseURL)?.absoluteString ?? "—"
@@ -31,11 +34,10 @@ struct JellyfinSettingsView: View {
                     serverAddressNote(profile)
                 }
             }
-            .settingsCard()
 
             if !app.store.profiles.isEmpty {
-                Section("启动") {
-                    Picker("启动时默认服务器", selection: defaultServerBinding) {
+                SettingsGlassSection("启动") {
+                    SettingsPickerRow("启动时默认服务器", selection: defaultServerBinding) {
                         Text("上次使用的服务器").tag(String?.none)
                         ForEach(app.store.profiles) { profile in
                             Text(profile.serverName + " · " + profile.kind.displayName)
@@ -44,36 +46,31 @@ struct JellyfinSettingsView: View {
                     }
                     SettingsNote("打开 App 时优先连接这台。")
                 }
-                .settingsCard()
             }
 
-            Section {
+            SettingsGlassSection {
                 // 换服务器不等于退出登录：`ServerStore` 是按 profile 存的，
                 // 回登录流程连另一台就行，旧档案还在（登录页上「先不登录」可以退回来）。
-                Button {
+                SettingsActionRow("管理服务器…", systemImage: "list.bullet") {
                     app.pushPresented { showServers = true }
-                } label: {
-                    Label("管理服务器…", systemImage: "list.bullet")
                 }
-                .buttonStyle(.plain)
-                Button {
+                SettingsGlassDivider()
+                SettingsActionRow(
+                    app.server == nil ? "连接服务器…" : "连接其它服务器…",
+                    systemImage: "arrow.left.arrow.right"
+                ) {
                     app.reconnectFlow()
-                } label: {
-                    Label(
-                        app.server == nil ? "连接服务器…" : "连接其它服务器…",
-                        systemImage: "arrow.left.arrow.right"
-                    )
                 }
-                Button(role: .destructive) {
+                SettingsGlassDivider()
+                SettingsActionRow(
+                    "退出 Jellyfin",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    role: .destructive
+                ) {
                     confirmSignOut = true
-                } label: {
-                    Label("退出 Jellyfin", systemImage: "rectangle.portrait.and.arrow.right")
                 }
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .onAppear {
             selectedDefaultServerID = app.store.defaultServerID
             // 自动化深链（Debug-only）：`OCPLAYER_START_ROUTE=settings.jellyfin.servers`
@@ -138,20 +135,26 @@ struct BangumiSettingsView: View {
     @State private var confirmSignOut = false
 
     var body: some View {
-        Form {
-            Section {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection {
                 Toggle("启用 Bangumi", isOn: $bangumiEnabled)
                 .neutralSwitch()
                 if bangumiEnabled {
+                    SettingsGlassDivider()
                     KeyValueRow(label: "账号", value: bangumiAccountText)
                     if bangumi.isAuthenticated {
+                        SettingsGlassDivider()
                         // 退出登录原先只有 Bangumi 分区「我的」页顶栏一个出口：要退得先
                         // 切到那个分区、再进个人页，设置页里找不到——与 Jellyfin /
                         // MoviePilot 的出口位置对齐，这里补一个。
-                        Button(role: .destructive) {
+                        SettingsActionRow(
+                            "退出 Bangumi",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            role: .destructive
+                        ) {
                             confirmSignOut = true
-                        } label: {
-                            Label("退出 Bangumi", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     } else {
                         // 未登录时它就是「账号」行的注解（登录入口在哪儿），不是整段的说明。
@@ -161,10 +164,7 @@ struct BangumiSettingsView: View {
                     SettingsNote("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
                 }
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .confirmationDialog(
             "退出 Bangumi？",
             isPresented: $confirmSignOut,
@@ -199,18 +199,25 @@ struct MoviePilotSettingsView: View {
     @State private var confirmSignOut = false
 
     var body: some View {
-        Form {
-            Section {
+        // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
+        // ——与 MoviePilot 下载页同一套承载；一段 = 一张 `SettingsGlassSection`。
+        SettingsGlassPage {
+            SettingsGlassSection {
                 Toggle("启用 MoviePilot", isOn: $moviepilotEnabled)
                 .neutralSwitch()
                 if moviepilotEnabled {
+                    SettingsGlassDivider()
                     KeyValueRow(label: "地址", value: moviepilot.store.serverURLString ?? "—")
+                    SettingsGlassDivider()
                     KeyValueRow(label: "用户", value: moviepilot.profile?.name
                         ?? (moviepilot.store.username.isEmpty ? "—" : moviepilot.store.username))
+                    SettingsGlassDivider()
                     KeyValueRow(label: "状态", value: moviePilotStatusText)
-                    Button(moviePilotActionButtonTitle) {
+                    SettingsGlassDivider()
+                    SettingsActionRow(moviePilotActionButtonTitle) {
                         isEditingMoviePilot = true
                     }
+                    SettingsGlassDivider()
                     // 默认关：密码不落盘。打开后存进凭据文件（已排除备份），
                     // 换来 JWT 8 天过期后的静默重登。
                     Toggle("记住密码（令牌过期后免重输）", isOn: Binding(
@@ -221,20 +228,20 @@ struct MoviePilotSettingsView: View {
                         + "到期后需要重新输入一次。打开此项会把密码存到本机凭据文件"
                         + "（已排除 iCloud / Time Machine 备份）。")
                     if moviepilot.isAuthenticated {
-                        Button(role: .destructive) {
+                        SettingsGlassDivider()
+                        SettingsActionRow(
+                            "退出 MoviePilot",
+                            systemImage: "rectangle.portrait.and.arrow.right",
+                            role: .destructive
+                        ) {
                             confirmSignOut = true
-                        } label: {
-                            Label("退出 MoviePilot", systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     }
                 } else {
                     SettingsNote("关闭后顶栏与详情页的 MoviePilot 入口会隐藏；服务器配置保留。")
                 }
             }
-            .settingsCard()
         }
-        .scrollContentBackground(.hidden)
-        .formStyle(.grouped)
         .sheet(isPresented: $isEditingMoviePilot) {
             MoviePilotServerSheet(
                 initialURL: moviepilot.store.serverURLString ?? "",

@@ -52,7 +52,8 @@ public enum SettingsMetrics {
     /// 因为声明 `listRowInsets` 会把横向一起替换（实测照抄后横向逐像素一致）。
     public static var rowContentMinHeight: CGFloat {
         #if os(macOS)
-        // macOS 走原生分组表单的密度，不跟着手机抬。
+        // macOS 走原生分组表单的密度，不跟着手机抬。设置页改玻璃卡片流（B 方案）后，
+        // 卡内行高由 `cardRowMinHeight` 给，这里保持 0 让仍在 `Form` 里的页面不变。
         0
         #else
         // HIG 最小点击区：低于此值会出现「行看着很高、点在空白处没反应」。
@@ -65,9 +66,16 @@ public enum SettingsMetrics {
     /// 代价与收益：一旦声明 `listRowInsets`，**系统的行内边距就被整体替换**
     /// （横向也在内），所以水平值必须照抄系统那档（`rowLeadingInset`）。收益是
     /// 「内容高 ↔ 内边距」可以互相置换——同样 58pt 的总行距，能把 44pt 给热区。
+    ///
+    /// **2026-10-22（B 方案）macOS 从 0 改成 6**：设置页脱离 `Form` 后没有系统行内边距，
+    /// macOS 的卡内行距完全由这里决定（30 + 6×2 = 42）。全仓已无 `Form` 页面消费这两个
+    /// 令牌，所以这次改动不会带偏别处。
     public static var rowVerticalInset: CGFloat {
         #if os(macOS)
-        0
+        // B 方案（2026-10-22）：设置页脱离 `Form` 后，卡内行不再有系统那套行内边距，
+        // 行距完全由这里定。30（内容高）+ 6×2 = 42pt——改造前 macOS 分组表单实测
+        // 行距 28pt 在玻璃卡里偏挤，42 才有下载页那种「一行」的量感。
+        6
         #else
         iOSRowVerticalInset
         #endif
@@ -91,9 +99,14 @@ public enum SettingsMetrics {
     /// 以及让「为什么改用 44+14」这件事有据可查（44 + 14 = 58 = 28 + 30，行距分毫未动）。
     public static let systemRowInsets: CGFloat = 30
 
-    /// 用户**实际看到**的行距（行心 → 行心）。对照产品 Rex 实测 57.8pt。
-    /// `SettingsLayoutTests` 会渲染真 `Form` 并量出来交叉验证这条模型。
-    public static var rowPitch: CGFloat { rowContentMinHeight + rowVerticalInset * 2 }
+    /// 卡内**操作行**的行距（行心 → 行心）。iOS 44 + 7×2 = **58**（对照产品 Rex 实测
+    /// 57.8pt）；macOS 30 + 6×2 = **42**。
+    ///
+    /// 注意它是由「内容高 + 上下内边距」算出来的**模型值**，两侧同源、单看它恒真——
+    /// 真正钉住渲染结果的是 `AppTests/SettingsLayoutTests.testRowPitchMatchesReferenceRhythm`
+    /// （iOS，量真像素）与 `SettingsGlassMetricsTests.testMacRowModelMatchesTheDocumentedNumbers`
+    /// （macOS，钉常量绝对值）。别再拿这条算式当「已验证」的证据。
+    public static var rowPitch: CGFloat { cardRowMinHeight + rowVerticalInset * 2 }
 
     /// 图标列宽与图标-文字间距。
     ///
@@ -136,43 +149,73 @@ public enum SettingsMetrics {
         #endif
     }
 
-    /// 分段卡的填充不透明度（纯白叠加，**不用 material / glassEffect**）。
-    ///
-    /// ## 两个值 + 为什么亮色从 0.75 降到 0.30（2026-10-13 三改）
-    ///
-    /// 用户口径：「夜间模式的效果可以，白天模式的时候跟 Bangumi 那边的透明度差距有点大，
-    /// 设置页的已经变成白底实心了。人家 Rex 也是做成的玻璃状态的。」
-    ///
-    /// 量化确认（探针把同一块合成氛围底在**同一采样区**「盖卡 / 不盖卡」两次渲染后相除，
-    /// 而不是拿卡外当分母——氛围底本身不均匀，那样会把「这个位置的底色本来就不饱和」
-    /// 误算成「卡底洗掉了颜色」）：
-    ///
-    /// | 亮色卡底 | 氛围图透出度 | 卡内外亮度差 |
-    /// | --- | --- | --- |
-    /// | 白 0.75（改前） | **0.27** ← 「白底实心」 | +48 |
-    /// | 白 0.40 | 0.60 | +38 |
-    /// | 白 0.30（现值） | **0.70** | +35 |
-    /// | 白 0.20 | 0.80 | +32 |
-    /// | 暗色 0.10（现值，用户认可） | **0.90** | +53 |
-    ///
-    /// 关键事实：**亮色页面的底色已经被 `.home` 遮罩压到接近白（实测 lum 212 / 255），
-    /// 白卡叠上去的「上限」本来就只有 43 的亮度差**——实测把 0.75 降到 0.30，亮度差
-    /// 只从 +15 掉到 +13（几乎无损），而透出度从 0.27 涨到 0.70（一倍半）。
-    /// 所以「靠加白来换边界」在亮色下是**极不划算**的：代价是氛围图被盖死，
-    /// 收益只有 2 点亮度差。边界交给系统那套段结构表达就够了。
-    ///
-    /// ## 为什么不用 material / glassEffect
-    ///
-    /// 两者都**降低**透出度：实测亮色下 `ultraThinMaterial` / `thinMaterial` 只有 0.50、
-    /// `regularMaterial` 与 `glassEffect(.regular)` 只有 0.37——比「白 0.30」的 0.70 更不透明
-    /// （本仓早先就记过这笔：material 自带一层模式色纱）。而它们唯一能提供的**模糊**
-    /// 在这里是多余的：衬底的氛围图**本身就已经被 `BackdropAmbienceView` 模糊过**
-    /// （radius 14–20 + scale 1.12），再糊一层肉眼看不出差别，只剩那层纱的代价。
-    /// Rex 的「玻璃感」也是纯半透明叠加、没有模糊——观感来自**透**，不是来自糊。
-    public static let cardFillDarkOpacity: Double = 0.10
-    public static let cardFillLightOpacity: Double = 0.30
-
     /// 段间距：上一张卡底 → 段标题 ink 顶的目标（Rex 实测 40.7pt）。
     /// 由 `listSectionSpacing` 施加，只在 hub 上收紧；子页保持系统默认。
     public static let sectionSpacing: CGFloat = 28
+
+    // MARK: - 玻璃分段卡 / 卡片流（2026-10-22，B 方案）
+
+    /// 玻璃卡**内部内容**距卡缘的横向缩进（卡内左右留白）。
+    /// 16 与 MoviePilot 下载任务卡的内边距同档，也与改造前 iOS 行内容距卡缘的 16 一致。
+    public static var cardContentInset: CGFloat { 16 }
+
+    /// 玻璃卡内容区距卡顶/卡底的纵向留白（行自己已带上下内边距，这里补一档呼吸位）。
+    public static var cardContentVerticalInset: CGFloat { 6 }
+
+    /// 玻璃卡圆角——直接用全站统一 token（`Metrics.glassCardRadius` = 16），
+    /// 不再单独维护一个值：用户口径「与下载页同一套玻璃」的第一层落点就是圆角一致。
+    public static var cardCornerRadius: CGFloat { Metrics.glassCardRadius }
+
+    /// 卡内**操作行**的内容最小高（也就是整行热区）：iOS 44（HIG 最小点击区）、
+    /// macOS 30（比原状表单行 28 略松，玻璃卡里太密会显得脏）。
+    /// 行距 = 它 + 上下各 `rowVerticalInset` = iOS 58 / macOS 42。
+    public static var cardRowMinHeight: CGFloat {
+        #if os(macOS)
+        30
+        #else
+        iOSRowContentMinHeight
+        #endif
+    }
+
+    /// 卡内**附注**（说明小字）的上下留白：比操作行小得多，让附注读起来是「上一行的注解」
+    /// 而不是独立一格。
+    public static var cardNoteVerticalPadding: CGFloat { 4 }
+
+    /// 段标题 → 卡片顶的间距（iOS 设置口径 ≈8pt）。
+    public static var sectionHeaderSpacing: CGFloat { 8 }
+
+    /// 段标题 / 段脚相对卡缘的横向余量（标题比卡内文字再外扩一点点，读起来是「段的标题」）。
+    public static var sectionHeaderInset: CGFloat { 4 }
+
+    /// 设置页（ScrollView 卡片流）滚动内容的上下内边距。
+    ///
+    /// **底部要够**：iOS 26 的标签栏是**悬浮玻璃胶囊**，它压住的是一条视觉浮层、
+    /// 不一定算进 `safeAreaInsets`——只留 56 时最后一整张卡会被压在胶囊底下
+    /// （实测 iPhone 17 Pro：设置页「应用」段的卡片直接被 Tab 栏盖住）。
+    /// 96 是「胶囊高 + 与内容之间一档呼吸位」的量。
+    public static var pageTopInset: CGFloat { 16 }
+    public static var pageBottomInset: CGFloat {
+        #if os(macOS)
+        56
+        #else
+        96
+        #endif
+    }
+
+    /// 卡内行尾输入框的最大宽度：更宽的行里输入框不跟着无限拉长，
+    /// 保住「标签在左、值在右」的阅读顺序。
+    public static var cardTrailingFieldMaxWidth: CGFloat { 260 }
+
+    /// 设置页内容列的最大宽度。
+    ///
+    /// 设置页是一列文字行，卡片横铺到 1300pt 会读不动；改造前 `Form` 的窄列
+    /// （1440 窗口里卡宽约 700）正是这个原因。macOS 窗口更宽，给 780；
+    /// iOS iPad 全屏也只到 760 就够（iPhone 上远达不到，等于 no-op）。
+    public static var pageMaxContentWidth: CGFloat {
+        #if os(macOS)
+        780
+        #else
+        720
+        #endif
+    }
 }

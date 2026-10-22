@@ -114,7 +114,8 @@ struct MoviePilotResourceSection: View {
                 }
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                // 2026-10-22：与下载页同一套液态玻璃（原 `.fill.quaternary` 纯色底）。
+                .liquidGlassCard()
             }
             .buttonStyle(.plain)
 

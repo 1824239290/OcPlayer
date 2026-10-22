@@ -5,8 +5,9 @@ import SwiftUI
 /// Bangumi 功能区首页 = 动画进度管理（在看条目 + 展开的章节网格）。
 ///
 /// 与 OcPlayer 设计系统对齐：
-/// - 卡片用 `.ultraThinMaterial` 磨砂底 + `cardRadius` 圆角：透出整窗氛围图，
-///   与设置页 Form 分组底的半透明观感一致（原 `.background.secondary` 实心底会把氛围图挡死）
+/// - 卡片用 `liquidGlassCard`（默认圆角 = `Metrics.glassCardRadius` 16）：透出整窗氛围图。
+///   2026-10-22 从 `.ultraThinMaterial` / `.background.secondary` 收编到玻璃原语，
+///   与设置页、MoviePilot 下载页同一套；卡内小件仍走纯色 tint（玻璃不能取样玻璃）
 /// - 间距用 `railSpacing` / `contentLeading`（同 HomeView）
 /// - 进度条用共享 `CardProgressTrack`（原与 StillCard 各自一份）
 /// - 章节格子是共用组件 `BangumiEpisodeCell`（单击标记，右键切其它状态）
@@ -396,7 +397,8 @@ struct BangumiHomeView: View {
                         Spacer()
                     }
                     .padding(12)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                    // 2026-10-22：与下载页同一套液态玻璃
+                    .liquidGlassCard()
                 }
             }
             .padding(.horizontal, contentLeading)
@@ -426,7 +428,8 @@ struct BangumiHomeView: View {
                         }
                     }
                     .padding(12)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+                    // 2026-10-22：与下载页同一套液态玻璃
+                    .liquidGlassCard()
                 }
             }
             .padding(.horizontal, contentLeading)
@@ -622,7 +625,8 @@ private struct ProgressCard: View {
             }
         }
         .padding(12)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
+        // 2026-10-22：与下载页同一套液态玻璃
+        .liquidGlassCard()
     }
 
     private var header: some View {

@@ -34,10 +34,14 @@ struct BangumiCollectionListView: View {
         }
         .navigationTitle("我的\(subjectType.description)")
         .safeAreaInset(edge: .top) {
+            // 吸附在顶部的分段选择条：**这是 chrome（浮动控件）不是内容卡**，
+            // 所以保留系统 `.bar` 材质，没有跟着内容卡一起换玻璃——吸附条要的是
+            // 「滚到它底下时内容被压住」的系统行为，换成 glassEffect 反而要在滚动
+            // 边缘做二次处理。若将来要统一观感，改这里一处即可。
             collectionTypePicker
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(.bar)
+                .background(.bar)   // glass-guard-exempt: 吸附式分段条是 chrome，不是内容卡
         }
         .task(id: subjectType.rawValue) {
             if loader == nil {
