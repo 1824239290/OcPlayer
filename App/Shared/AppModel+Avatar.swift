@@ -2,7 +2,16 @@ import AppDesignKit
 import Foundation
 import JellyfinKit
 #if canImport(UIKit)
+import CoreImage
 import UIKit
+
+/// 头像「去饱和」那一张图共用的 Core Image 上下文。
+///
+/// 建一次就够（每次新建是毫秒级开销），而这条路只在头像变化时跑一次；放文件作用域
+/// 而不是 `AppModel` 的静态属性，是因为它是纯粹的渲染细节、没有理由挂到模型上。
+private let avatarGrayContext: CIContext = {
+    CIContext(options: [.workingColorSpace: CGColorSpaceCreateDeviceRGB()])
+}()
 #endif
 
 /// 当前账号头像的装载。
@@ -75,6 +84,42 @@ extension AppModel {
                                   width: drawn.width, height: drawn.height))
         }
         return rendered.withRenderingMode(.alwaysOriginal)
+        #else
+        return image
+        #endif
+    }
+
+    /// 未选中态的标签栏头像：把 `tabIcon(from:)` 烤好的那张**去饱和**，尺寸 / 圆形 /
+    /// `alwaysOriginal` 全部沿用。
+    ///
+    /// 用户口径（2026-10-22）：标签栏里「首页」那一格也要像 macOS 药丸那样
+    /// **选中彩色 / 未选中灰**。iOS 没有 SwiftUI 侧的状态感知（`Tab` 只吃一张图，
+    /// `.grayscale` / `.saturation` 这些绘制修饰符在交给标签栏前就被丢掉），所以灰色
+    /// 那一张必须在**位图阶段**做出来，再由 `UITabBarItem` 的 `image`（未选中）/
+    /// `selectedImage`（选中）按状态用（见 `TabBarBrandIconBridge`）。
+    ///
+    /// 与 macOS 药丸的 `.grayscale(1)` 同口径：**只抽饱和度、不动亮度**（不是压暗，
+    /// 也不是调不透明度）——那是量出来的：头像亮度由图片内容决定，压暗在浅色玻璃上
+    /// 读不出来（理由见 `SectionAvatarIcon` 的类型注释）。
+    ///
+    /// 用 Core Image 的 `CIColorControls(saturation: 0)` 而不是 `CIColorMonochrome`：
+    /// 后者会再乘一次亮度系数，实测洋红 `#F70098` 被压成 **63/255**（细节全糊掉），
+    /// 而 `CIColorControls` 保亮度、只去色相。`CIContext` 复用同一个静态实例
+    /// （每次新建是毫秒级开销，而这只在头像变化时跑一次）。
+    static func grayscaleTabIcon(from image: PlatformImage) -> PlatformImage? {
+        #if canImport(UIKit)
+        guard let cgImage = image.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        guard let filter = CIFilter(name: "CIColorControls") else { return nil }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(0, forKey: kCIInputSaturationKey)
+        guard let output = filter.outputImage,
+              let gray = avatarGrayContext.createCGImage(output, from: output.extent)
+        else { return nil }
+        // 尺寸 / scale 照抄源图（28pt），渲染模式必须还是 `alwaysOriginal`——
+        // 否则标签栏会把它当模板图染成一坨纯色。
+        return UIImage(cgImage: gray, scale: image.scale, orientation: image.imageOrientation)
+            .withRenderingMode(.alwaysOriginal)
         #else
         return image
         #endif

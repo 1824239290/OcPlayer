@@ -4,6 +4,51 @@
 
 ## [Unreleased]
 
+### 改动
+
+- **导航栏图标统一成「选中 = 品牌原色 / 未选中 = 灰」（Bangumi、MoviePilot、首页头像三格，iOS + macOS）**
+  （用户口径：两个 logo 现在只有「选中白一点 / 未选中灰一点」，要改成和首页一样 —— 选中是 SVG 原本的
+  logo 色、未选中是灰；随后追加「这个也要改哦，macOS 端的」；问清范围后确认「三格统一」）。
+  - **macOS（顶栏药丸，纯 SwiftUI）**：`AppShellSectionGroup.Segment.Icon.brand` 从 `(String, side)`
+    扩成 `(name:colorName:side:)`，新增 `SectionBrandIcon` 按状态切
+    `.renderingMode(isSelected ? .original : .template)`。Bangumi 的彩色是另一份渐变资产
+    （`bangumi-logo-color`，同一 viewBox 的同一 glyph），MoviePilot 的彩色本来就在同一个 SVG 里
+    （`colorName == name`，只换渲染模式）。**资产层一个字没动** —— 两个 imageset 的
+    `template-rendering-intent` 仍留给设置页行图标与详情页外链用。未选中态与改动前**逐像素同款**
+    （模板 + `.secondary`），只有选中那一格从单色变成品牌色。
+  - **iOS（底部标签栏）**：SwiftUI 的 `Tab` 只吃一张图，**没有任何 SwiftUI 侧的表达方式**（三条实测
+    否证见下），只能下到 `UITabBarItem`。新增 `App/Shared/TabBarBrandIconBridge.swift`：一个挂在
+    `TabView.background` 上的 `UIViewControllerRepresentable`，找到宿主 `UITabBarController`，按**标题**
+    把三个槽位的 `image`（模板，吃系统未选中色）/ `selectedImage`（品牌原色，`alwaysOriginal`）换掉。
+    标签栏本身仍是系统那一个 —— 几何、玻璃底、搜索栏展开、iPad 尺寸类适配、无障碍全不动，没有自绘标签栏。
+  - **首页头像也一起纳入**：iOS 原先头像两态都是彩色（选中反馈只靠系统玻璃胶囊），现在未选中用
+    `AppModel.grayscaleTabIcon(from:)` 烤一张去饱和的位图（Core Image `CIColorControls(saturation:0)`，
+    **只抽饱和度不动亮度**，与 macOS 药丸 `.grayscale(1)` 同口径）。头像没设的账号不接管，仍走系统
+    `house.fill`（它本来就靠前景色亮暗区分两态）。
+  - **三条被实测否证的 SwiftUI 路子（写进注释与 Reports，别再试）**：① label 里套
+    `.grayscale` / `.saturation` / `.opacity` / `if isSelected` —— 标签栏只取底层位图，绘制修饰符在交给
+    标签栏前就被丢掉（探针实测加与不加逐像素相同；条件视图还会画出黑圆角块，这是既有实拍约束）；
+    ② label 里套 `.renderingMode(.original)` 能保色但**两态都彩色**（标签栏不对 `alwaysOriginal` 灰化）；
+    ③ `Tab(..., image:)` 传彩色资产同理两态都彩色。
+  - **踩到的三个坑（每个都实拍复现过）**：① **注入的图会被 SwiftUI 重置** —— 头像到达会换掉
+    `compactTabs` 的「有无头像」两条分支，标签栏项被重建 / 被重置回 label 那张彩色图，而
+    `updateUIViewController` 是在**之前**调的。→ `viewDidAppear` 与 `updateUIViewController` 里各排一串
+    **有界**补拍（0.1 / 0.3 / 0.8 / 1.6 / 3.0 s），全部结束即停，不是常驻轮询。
+    ② **不能拿「实例是否同一个」判断要不要写**：`UITabBarItem` 的 setter 会**拷贝**图片，写进去的对象
+    与读出来永远不是同一实例 → 每次调用都判成「没生效」（日志里 `applied=0`，图其实换好了）。
+    ③ **也不能拿关联对象当「已接管」记号**：SwiftUI 会**复用同一个** `UITabBarItem`、只把 `image` 重置回
+    彩色，对象没变、记号还在 → 判成「已接管」，首页那格又变回彩色（浅色外观实拍抓到）。最终是
+    **无条件重设**，代价可忽略（只在标签栏相关的更新时调用，不是每帧）。
+  - **验证**：新增 `SectionBrandIconTests`（5 条，`ImageRenderer` 真渲染 App 真实资产量像素：选中态通道
+    极差 0.63 / 0.61、未选中 ≤0.001、两态外接框同尺寸）、`AppModelAvatarTests` 新增 1 条（灰化头像去饱和
+    但亮度不变 + 仍裁圆 + 仍 `alwaysOriginal`）、`TabBarBrandSlotTests`（3 条，钉住「哪些标题被接管」）。
+    **端到端链路验收**：给模拟器喂一个本机假 Jellyfin（`/Users/Me` 带头像 tag + `/UserImage` 吐测试头像），
+    用 Debug-only 的 `OCPLAYER_START_SECTION` 深链直落四个分区逐张实拍 —— iPhone 17 Pro / 深色：首页选中
+    头像彩色、Bangumi 选中洋红 `(254,91,161)`、MoviePilot 选中紫色渐变、设置选中时首页头像灰化（通道极差
+    254 → 0）；浅色外观四个状态同样逐格取样、iPad Pro 13″（标签栏在底部）各拍一张。截图与做法见
+    `Reports/tab-icon-color-20261022/`（本地 gitignore 目录）。跑分：macOS `OcPlayerTests` **699 通过 /
+    0 失败 / 18 跳过**（共 717）、`OcPlayerTests-iOS` **721 通过 / 0 失败**。
+
 ### 修复
 
 - **「后退 10 秒 / 前进 10 秒」每次都把进度条甩到片尾**（用户 2026-10-17 报的现场：播放中按后退 10 秒，进度条直接跳到结尾）。`PlaybackController.skip(by:)` 的落点单位混了：`state.position` 是 µs，`target = position.microseconds + seconds * 1_000_000` 也是 µs，但片尾安全边际那次改动把它**当成秒**去跟（秒口径的）`duration` 取 min —— `clampedBeforeEnd(540_749_000, duration: 1426.45)` = `min(5.4e8, 1423.45)` = **1423.45**，于是**任何一次** ±10 秒都落到「片长 − 3s」。实机日志逐字对上（`~/Library/Logs/OcPlayer/diagnostics-20261017-143331-a8b3cdfa.jsonl`，FX战士久留美 S01E03 / duration 1426s）：`kind=skip from_ms=540749 to_ms=1423450`，紧跟着 `PlayerState -> stopped`；同一会话里 4 次 skip 的 `to_ms` 全是 `1423450`，而同一时段的 `scrub`（走 `seek(toFraction:)`，µs 口径自洽）落点一切正常。引入点是 `b40608c`（2026-10-13，把四散口径收成 `clampedBeforeEnd` 的那次），**未进任何 tag**（`v0.2.1` 之后才有），此前 v0.2.1 及更早的 `min(target, duration − 500_000)` 两侧都是 µs、其实是对的。**修法**：先把位置换算成秒，钳完再一次性 `seek(to: .seconds(landing))`，全链路只留一个口径。**验证**：`SkipPreferenceTests` 新增 4 条（后退/前进各 10s 的精确落点、片头不落负值、越过片尾仍钳到片长 − 3s），其中后退那条直接用实机数值 `duration=1426.450s / position=540.749s → 530.749s` 钉死；macOS 全量用例全绿。

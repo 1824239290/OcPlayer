@@ -153,6 +153,92 @@ final class AppModelAvatarTests: XCTestCase {
         let row = height - 1 - y
         return Double(pixels[(row * width + x) * 4 + 3]) / 255
     }
+
+    /// 一张饱和度拉满的合成图（洋红），用来量「灰化到底有没有把颜色抽掉」。
+    private static func saturatedImage(size: CGSize) -> PlatformImage {
+        let width = Int(size.width), height = Int(size.height)
+        let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: 0.95, green: 0.10, blue: 0.55, alpha: 1))
+        context.fill(CGRect(origin: .zero, size: size))
+        return UIImage(cgImage: context.makeImage()!)
+    }
+
+    /// 不透明像素（alpha > 200）的平均饱和度 / 平均亮度（0…1）。
+    private static func meanSaturation(of image: CGImage) -> Double {
+        let channels = opaqueChannels(of: image)
+        guard !channels.isEmpty else { return 0 }
+        let total = channels.reduce(0.0) { sum, channel in
+            let (r, g, b) = channel
+            let maxC = max(r, g, b), minC = min(r, g, b)
+            return sum + (maxC == 0 ? 0 : (maxC - minC) / maxC)
+        }
+        return total / Double(channels.count)
+    }
+
+    private static func meanLuminance(of image: CGImage) -> Double {
+        let channels = opaqueChannels(of: image)
+        guard !channels.isEmpty else { return 0 }
+        let total = channels.reduce(0.0) { sum, channel in
+            let (r, g, b) = channel
+            return sum + 0.2126 * r + 0.7152 * g + 0.0722 * b
+        }
+        return total / Double(channels.count)
+    }
+
+    private static func opaqueChannels(of image: CGImage) -> [(Double, Double, Double)] {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = CGContext(
+            data: &pixels, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var result: [(Double, Double, Double)] = []
+        for i in stride(from: 0, to: pixels.count, by: 4) where pixels[i + 3] > 200 {
+            result.append((Double(pixels[i]) / 255,
+                           Double(pixels[i + 1]) / 255,
+                           Double(pixels[i + 2]) / 255))
+        }
+        return result
+    }
+
+    /// 未选中态的头像：**只抽饱和度、不动亮度**，并且尺寸 / 圆形 / `alwaysOriginal` 全部沿用。
+    ///
+    /// 这一张是 iOS 标签栏「首页」那一格的未选中图（见 `TabBarBrandIconBridge`）——用户口径
+    /// 要求它和 macOS 药丸一样「未选中灰」。四条判据缺一不可：
+    /// * 饱和度 ≈ 0：洋红源图必须真的变成灰；
+    /// * 平均亮度与源图同一量级：**不是压暗 / 降不透明**（那条路在浅色玻璃上读不出来，
+    ///   理由见 `SectionAvatarIcon`）；
+    /// * 四角仍透明：Core Image 重绘不能把圆形裁切吃掉；
+    /// * 渲染模式仍是 `alwaysOriginal`：否则标签栏会把它当模板图染成一坨纯色。
+    func testGrayscaleTabIconDropsSaturationAndKeepsEverythingElse() throws {
+        let icon = AppModel.tabIcon(from: Self.saturatedImage(size: CGSize(width: 200, height: 200)))
+        let gray = try XCTUnwrap(AppModel.grayscaleTabIcon(from: icon))
+
+        XCTAssertEqual(gray.size.width, icon.size.width, accuracy: 0.5)
+        XCTAssertEqual(gray.size.height, icon.size.height, accuracy: 0.5)
+        XCTAssertEqual(gray.scale, icon.scale, "重绘不能顺手改屏幕 scale")
+        XCTAssertEqual(gray.renderingMode, .alwaysOriginal,
+                       "模板渲染会把灰色头像染成一坨纯色")
+
+        let sourceCG = try XCTUnwrap(icon.cgImage)
+        let grayCG = try XCTUnwrap(gray.cgImage)
+        XCTAssertGreaterThan(Self.meanSaturation(of: sourceCG), 0.7, "源图本身应该是高饱和的")
+        XCTAssertLessThan(Self.meanSaturation(of: grayCG), 0.05, "未选中态必须去色")
+        XCTAssertEqual(Self.meanLuminance(of: grayCG), Self.meanLuminance(of: sourceCG),
+                       accuracy: 0.06, "只抽饱和度、不动亮度：不能被压成一张暗图")
+
+        XCTAssertEqual(Self.alpha(of: grayCG, x: 1, y: 1), 0, accuracy: 0.02, "左上角必须仍被裁掉")
+        XCTAssertEqual(Self.alpha(of: grayCG, x: grayCG.width - 2, y: grayCG.height - 2), 0,
+                       accuracy: 0.02, "右下角必须仍被裁掉")
+        XCTAssertEqual(Self.alpha(of: grayCG, x: grayCG.width / 2, y: grayCG.height / 2), 1,
+                       accuracy: 0.02, "中心必须还有图")
+    }
     #endif
 
     /// 服务端上这个账号**没有**头像（多数账号如此）：不发取图请求，模型留空，
