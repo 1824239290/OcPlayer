@@ -228,7 +228,14 @@ struct AppShellView: View {
     /// sheet——播放器覆盖层不再被遮住。
     ///
     /// 强调色不在这里管：整棵树吃 `RootView` 根节点钉的那一个中性 tint，标签栏
-    /// 选中色与内容侧是**同一个来源**，新增 Tab 不需要补任何一句。
+    /// 未选中项的灰与内容侧是**同一个来源**，新增 Tab 不需要补任何一句。
+    ///
+    /// **但「选中 = 原色」那三格是例外**（用户口径 2026-10-22：首页头像、Bangumi、
+    /// MoviePilot 三格要统一成「选中彩色 / 未选中灰」）：SwiftUI 的 `Tab` 只吃一张图、
+    /// 且不吃 label 上的绘制修饰符，两态图只能由 `compactLayout` 背景里那层
+    /// `TabBarBrandIconBridge` 塞进 `UITabBarItem.image` / `.selectedImage`。
+    /// 所以下面两个品牌 Tab 的 `image:` 仍然传**模板**资产（那是注入没赶上时的回落态，
+    /// 也是未选中态本身）；本文件里不需要再写任何彩色资产。
     ///
     /// **每个 Tab 的内容都挂 `.pageContentSizeClass(contentSizeClass)`**：外壳在
     /// `compactLayout` 里为了标签栏把尺寸类钉成了紧凑档（见那里的注释），内容必须换成
@@ -262,6 +269,10 @@ struct AppShellView: View {
         //
         // 两个分支的 `value` 都是 `.home`：头像到位只是标签栏那一格换个图标，
         // 选中分区与内容栈都不受影响。
+        //
+        // **头像那一格的「选中原色 / 未选中灰化」不在这里表达**：label 里只能放一张
+        // 彩色位图（上面第 1 条约束：条件视图会画出黑块），灰化后的那张由
+        // `TabBarBrandIconBridge` 在标签栏侧按状态替换（它同样接管下面两个品牌 Tab）。
         if let avatar = app.userAvatarImage {
             Tab(value: AppModel.Section.home) {
                 homeTabRoot
@@ -367,10 +378,15 @@ struct AppShellView: View {
         // 顺带解决的一件事：顶部胶囊**只渲染文字、把图标丢掉了**，所以头像在 iPad 上
         // 原本根本看不到（见 `AppModel+Avatar.swift`）；底部栏有图标，头像就出来了。
         .environment(\.horizontalSizeClass, shellSizeClass)
+        // 品牌图标 / 首页头像的「选中=原色、未选中=灰」：SwiftUI 的 `Tab` 只吃一张图，
+        // 两态图只能从 UIKit 侧塞进 `UITabBarItem.image` / `.selectedImage`（为什么必须
+        // 这样、以及实拍验证见 `TabBarBrandIconBridge`）。挂在 background 上：它只负责
+        // 找到宿主标签栏并换图，不参与布局，也不接管设置 / 搜索这些非品牌槽位。
+        .background { TabBarBrandIconBridge(avatar: app.userAvatarImage) }
         // 标签栏的选中色**继承** `RootView` 根节点钉的中性 tint（`.primary`）：
-        // 选中项变白（深色）/ 黑（浅色），与顶栏药丸同一套语言，系统自带的玻璃
-        // 选中底保留（iOS 26 的悬浮玻璃标签栏）。这里不再单独钉一遍——两处钉同一
-        // 个值只会制造"改了一处忘了另一处"的机会。
+        // 未选中的 glyph 依旧是系统灰；选中项的品牌图 / 头像则由上面那层换成原色
+        // （它们不吃 tint）。系统自带的玻璃选中底保留（iOS 26 的悬浮玻璃标签栏）。
+        // 这里不再单独钉一遍——两处钉同一个值只会制造"改了一处忘了另一处"的机会。
         //
         // 两条走过弯路的路子，别再试：
         //   * `UITabBar.appearance().tintColor = .label` —— iOS 26 的玻璃标签栏

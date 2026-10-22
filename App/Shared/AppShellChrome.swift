@@ -60,7 +60,14 @@ struct AppShellNavigationToolbarContent: ToolbarContent {
 // MARK: - 分区图标组
 
 /// 分区切换组：一个玻璃圆角容器装若干纯图标按钮，当前分区**只靠图标自己的表现**
-/// 区分（glyph 走前景色亮暗，头像那一格走饱和度，见 `SectionAvatarIcon`）。
+/// 区分：
+/// * SF Symbol / 未选中的品牌图：前景色亮暗（选中 `.primary` / 未选中 `.secondary`）；
+/// * 有头像时首页那一格：饱和度（选中原色 / 未选中灰化，见 `SectionAvatarIcon`）；
+/// * 选中的品牌图（Bangumi / MoviePilot）：品牌原色（见 `SectionBrandIcon`）。
+///
+/// 三种信号不打架：它们各自只出现在「自己那一格是当前页」时才最亮/最有色，其余格
+/// 一律退回中性灰。用户口径（2026-10-22）：品牌 logo 也要像首页头像那样，
+/// **选中=彩色原图、未选中=灰**（iOS 标签栏同步改成同一套，见 `TabBarBrandIconBridge`）。
 ///
 /// 容器玻璃只上**一层**（挂在整组上），组内按钮用内容层的半透明填充表示
 /// hover / 选中：给玻璃上 tint 会顺着 `GlassEffectContainer` 的取样区域晕开，
@@ -79,9 +86,13 @@ struct AppShellSectionGroup: View {
         /// 图标来源：SF Symbol、品牌矢量图（Assets.xcassets imageset），或当前账号头像。
         enum Icon {
             case symbol(String)
+            /// 品牌图：未选中用 `name`（模板渲染，吃前景色）；选中用 `colorName` 的
+            /// **品牌原色**（`.renderingMode(.original)`）。两者是同一个官方 glyph；
+            /// Bangumi 有单独的渐变版资产，MoviePilot 的彩色直接存在同一个 SVG 里
+            /// （`colorName == name`，只是渲染模式不同）。
             /// `side`：品牌图渲染边长（pt）。各 SVG 在 viewBox 里的留白不同，
             /// 统一边长会显得一大一小，按图逐个标定。
-            case brand(String, side: CGFloat)
+            case brand(name: String, colorName: String, side: CGFloat)
             /// 首页那一格：当前账号的头像。没设头像时回落 `house.fill`
             /// （回落发生在 `segmentIcon` 里，不在段定义里——段是静态的）。
             case avatar
@@ -98,10 +109,16 @@ struct AppShellSectionGroup: View {
     static func makeSegments(bangumiEnabled: Bool, moviepilotEnabled: Bool) -> [Segment] {
         var segments: [Segment] = [Segment(section: .home, title: "首页", icon: .avatar)]
         if moviepilotEnabled {
-            segments.append(Segment(section: .moviepilot, title: "MoviePilot", icon: .brand("moviepilot-logo", side: 18)))
+            segments.append(Segment(
+                section: .moviepilot, title: "MoviePilot",
+                icon: .brand(name: "moviepilot-logo", colorName: "moviepilot-logo", side: 18)
+            ))
         }
         if bangumiEnabled {
-            segments.append(Segment(section: .bangumi, title: "Bangumi", icon: .brand("bangumi-logo", side: 20)))
+            segments.append(Segment(
+                section: .bangumi, title: "Bangumi",
+                icon: .brand(name: "bangumi-logo", colorName: "bangumi-logo-color", side: 20)
+            ))
         }
         segments.append(Segment(section: .settings, title: "设置", icon: .symbol("gearshape")))
         return segments
@@ -164,8 +181,8 @@ struct AppShellSectionGroup: View {
     }
 
     /// SF Symbol 走字体渲染；品牌图是矢量 imageset，按标定边长缩放对齐
-    /// 13pt Symbol 的视觉体量。两个 logo 均为模板渲染（见 imageset），
-    /// 与 SF Symbol 一样跟随 primary/secondary 前景色。
+    /// 13pt Symbol 的视觉体量。品牌图**未选中**走模板渲染（跟随 secondary 前景色），
+    /// **选中**换成品牌原色（见 `SectionBrandIcon`）。
     ///
     /// 头像那一格是**位图**，既不吃 `foregroundStyle` 也不吃模板渲染，所以它的选中态
     /// 走另一条通道（饱和度），见 `SectionAvatarIcon`。
@@ -175,11 +192,9 @@ struct AppShellSectionGroup: View {
         case .symbol(let name):
             Image(systemName: name)
                 .font(.system(size: 13, weight: .semibold))
-        case .brand(let name, let side):
-            Image(name)
-                .resizable()
-                .scaledToFit()
-                .frame(width: side, height: side)
+        case .brand(let name, let colorName, let side):
+            SectionBrandIcon(name: name, colorName: colorName,
+                             isSelected: isSelected, side: side)
         case .avatar:
             if let avatar = app.userAvatarImage {
                 SectionAvatarIcon(image: avatar, isSelected: isSelected)
@@ -192,8 +207,9 @@ struct AppShellSectionGroup: View {
     }
 
     private func segmentBackground(isSelected: Bool, isHovering: Bool) -> AnyShapeStyle {
-        // 选中态只靠前景色亮暗区分（选中 .primary / 未选中 .secondary），不画
-        // 背景底——用户确认过不要蓝色的选中底。hover 保留浅色底。
+        // 选中态不画强调色底（用户确认过不要蓝色的选中底）：glyph 靠前景色亮暗，
+        // 品牌图 / 头像靠**自己的颜色信号**（见 `SectionBrandIcon` / `SectionAvatarIcon`）。
+        // hover 保留浅色底。
         // macOS 工具栏的 Liquid Glass 会把低 alpha 的内容填充当「背景」吃掉
         // （实测 primary 0.08 不可见），hover 档按玻璃上可见的下限取。
         if isHovering { return AnyShapeStyle(Color.primary.opacity(0.14)) }
@@ -247,6 +263,48 @@ struct SectionAvatarIcon: View {
             // 加与不加逐值相同，0.897 vs 0.897），而 `.grayscale()` 生效（0.762 → 0.000）。
             // 这一格唯一的选中信号就是它，必须能被渲染用例钉住。
             .grayscale(isSelected ? 0 : 1)
+    }
+}
+
+// MARK: - 品牌图标
+
+/// 药丸里的品牌图标（Bangumi / MoviePilot）：**选中 = 品牌原色，未选中 = 单色模板**。
+///
+/// ## 为什么资产层不动、只在这一层切渲染模式
+///
+/// 两个 imageset 都带 `template-rendering-intent`（Bangumi 另有一份渐变版
+/// `bangumi-logo-color`），因为设置页行图标、详情页外链、药丸未选中态这些地方
+/// 都要求单色。把 `template-rendering-intent` 从 imageset 里删掉会**同时**改掉那些
+/// 地方；所以「彩色」只发生在**当前分区是它**时，由 `.renderingMode(.original)`
+/// 在这一层按状态切换。
+///
+/// `.original` 能覆盖 imageset 的模板意图（实测：`Image("moviepilot-logo")`
+/// 加 `.original` 后渲染成 SVG 里原本的紫色渐变，而不是一坨前景色）——MoviePilot
+/// 的彩色本来就在同一个 SVG 里，所以 `colorName == name`；Bangumi 的单色线稿
+/// 与渐变版共用同一 glyph，`colorName` 换成 `bangumi-logo-color`。
+///
+/// ## 与未选中态的衔接
+///
+/// 未选中仍走模板渲染 + 父层的 `.secondary`（与 SF Symbol 一致），所以**没选中时
+/// 和改动前逐像素同款**；只有选中那一格从「白/黑单色」变成品牌色。两张图的几何
+/// 完全一致（同一 viewBox / 同一 `side`），切换不会跳尺寸。
+struct SectionBrandIcon: View {
+    /// 未选中用的资产：单色模板（吃 `foregroundStyle`）。
+    let name: String
+    /// 选中用的资产：品牌原色。与 `name` 指向同一份资产时也成立（只是渲染模式不同）。
+    let colorName: String
+    let isSelected: Bool
+    /// 渲染边长（pt）。各 SVG 在 viewBox 里的留白不同，按图逐个标定（18 / 20）。
+    let side: CGFloat
+
+    var body: some View {
+        Image(isSelected ? colorName : name)
+            // **必须紧跟 `Image`**：`.renderingMode` 是 `Image` 自己的方法，放到
+            // `.resizable()` 之后类型已擦成 `some View`（编译不过）。
+            .renderingMode(isSelected ? .original : .template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: side, height: side)
     }
 }
 
