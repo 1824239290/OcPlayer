@@ -184,6 +184,9 @@ struct TMDbAttributionFooter: View {
 //
 // 为什么退役而不是留着：逐行 `listRowBackground` 在 macOS 上**根本不被执行**
 // （诊断页连不透明品红都不画），在 iOS 上逐行各画一块会出接缝——两条都实测过，
-// 理由与截图在 `SettingsGlassCard` 的类型注释里。旧实现的实测数据（亮色透出度
-// 0.27 → 0.70、卡内外亮度差 +35 等）保留在 `SettingsMetrics.cardFill*` 与
-// `SettingsCardFill` 的注释里，作为「为什么当年选了纯色而不是 material」的记录。
+// 理由与实测数字写在 `SettingsGlassCard` 的文件头。
+//
+// 旧实现（`SettingsCardFill` + `cardFillDarkOpacity` / `cardFillLightOpacity`）的代码
+// 与注释**已随本批一起删除**，只在 `CHANGELOG.md` 的 2026-10-13 条目里留了记录
+// （那份记录解释了「当年为什么选纯色而不是 material」：亮色透出度 0.37 < 白 0.30 的
+// 0.70）。要看历史请翻 CHANGELOG，不要在这里找那个原语——它已经不存在了。

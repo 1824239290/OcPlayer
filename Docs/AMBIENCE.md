@@ -43,7 +43,7 @@
 | 搜索 Tab 根页 | route | 有背景 | ✅ 补（原先整页纯色，而 Tab 栏玻璃底下能透出氛围图） |
 | 媒体库网格页 / Bangumi 个人 / 收藏列表 / 条目详情 / 每日放送 | route | 有背景 | ✅ `appRouteView` 的 `.routeAmbience(route)` 一处覆盖 |
 | 设置 10 个子页 | route | 有背景 | ✅ 同上（path 路由，无需逐页登记；2026-10-22 承载变更见下） |
-| 管理服务器 / 开源许可证 | route | 有背景 | ✅ 呈现式页各自挂 `pageAmbience` + 行底透明 |
+| 管理服务器 / 开源许可证 | route | 有背景 | ✅ 呈现式页各自挂 `pageAmbience`；管理服务器已改玻璃卡片流，开源许可证保留系统 `List` 但**行底显式清空**（`listRowBackground(.clear)`，iOS grouped 行底是系统实色） |
 | 详情页 / 资源搜索页 / 下载管理页 | route | 有背景 | ✅ 自有主体图（`ownsArt`） |
 | 引导页（未登录） | excluded | — | 会话未建立，没有图可用 |
 | 播放器 | excluded | — | 画面本身即内容 |

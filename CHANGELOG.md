@@ -20,10 +20,14 @@
       6% `primary` 填充 + accent 0.35 描边，交互态由 `liquidGlassCard(isInteractive:)` 自己给。
     - **圆角统一（2026-10-22 追加口径「圆角统一一下」）**：`liquidGlassCard` 的圆角默认值改成新 token
       `Metrics.glassCardRadius = 16`，全站**顶层内容卡**一律用它、调用点不再各写一个数——原先散落着
-      10（`Metrics.cardRadius`）/ 12 / 14 / 16 / 18 / 24 六档，同一张卡在不同页里轮廓会跳。**嵌套在玻璃卡里的
-      次级小卡**用另一个 token `Metrics.glassNestedRadius = 8`（同心圆角：外层 16 + 内边距 8 收敛到 8，
-      内层再画 16 会「圆角套圆角、里外不平行」），Bangumi 条目详情的「作品信息」格 / 收藏统计格、资源页种子卡
-      归这一档；`Metrics.episodeCardRadius` 也锁到同值 8（选集格与嵌套小卡在页面上是同一档，并排时圆角不能打架）。
+      10（`Metrics.cardRadius`）/ 12 / 14 / 16 / 18 / 24 六档，同一张卡在不同页里轮廓会跳。
+      另立**「小格档」**`Metrics.glassNestedRadius = 8`：给**尺寸明显更小、密集排布**的次级格子用
+      （Bangumi 条目详情的「作品信息」格与「全站收藏概况」统计格 —— 都是 `EqualRowHeightGrid` /
+      `LazyVGrid` 里的 40–60pt 高小格，用 16 会圆得过头）；`Metrics.episodeCardRadius` 也锁到同值 8
+      （选集格与上述小格在页面上是同一档密度，并排时圆角不能打架）。
+      **注意这 8 不是一个「同心圆角」公式算出来的**（16 + 内边距 8 → 8）：那些小格并不嵌在玻璃卡内部，
+      而是直接排在页面级的 VStack 里；资源页的种子卡与资源入口卡用的都是默认 16（它们是列表里的顶层卡）。
+      所以两个 token 的判据是**元素尺寸**（顶层卡 16 / 密集小格 8），不是嵌套层级。
       无圆角字面量残留：`grep "liquidGlassCard(cornerRadius: [0-9]"` 为空。
     - **B 方案（设置页）**：新增 `Packages/AppDesignKit/Sources/AppDesignKit/Controls/SettingsGlassCard.swift`——
       `SettingsGlassPage`（`ScrollView` + 卡片流 + `contentLeading` 留白 + `pageMaxContentWidth` 居中）、

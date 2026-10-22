@@ -65,8 +65,10 @@ struct DanmakuSelectionSheet: View {
         .frame(minWidth: 500, idealWidth: 560, minHeight: 460, idealHeight: 520)
         #endif
         .liquidGlassCard()
+        // 半径与 `liquidGlassCard()` 同源：卡圆角 2026-10-22 统一到
+        // `Metrics.glassCardRadius`(16)，这里若继续写 24，描边会在四角浮在卡内。
         .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            RoundedRectangle(cornerRadius: Metrics.glassCardRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
         }
         .padding(16)

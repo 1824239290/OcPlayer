@@ -51,7 +51,11 @@ private struct HoverRowHighlight: ViewModifier {
     let active: Bool
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Metrics.cardRadius)
+        // **半径必须与玻璃卡一致**：早先这里是 `Metrics.cardRadius`(10)，而下面
+        // `liquidGlassCard()` 的圆角是 `Metrics.glassCardRadius`(16)——两形状不同半径时，
+        // 悬停填充与 accent 描边会在四角**露出玻璃卡之外**、描边与卡缘错位
+        // （2026-10-22 review 抓出：「圆角统一」只改了玻璃，没改这层 overlay）。
+        let shape = RoundedRectangle(cornerRadius: Metrics.glassCardRadius, style: .continuous)
         return content
             .liquidGlassCard(isInteractive: active)
             .overlay(

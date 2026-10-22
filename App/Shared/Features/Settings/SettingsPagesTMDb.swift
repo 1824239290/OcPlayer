@@ -138,7 +138,9 @@ struct TMDbSettingsView: View {
                 }
 
                 SettingsGlassSection("数据") {
-                    LabeledContent("已补全条目", value: "\(tmdb.linkedCount)")
+                    // 脱离 `Form` 后 `LabeledContent` 会左贴紧凑排，用 `KeyValueRow` 保住
+                    // 「标签左 / 值右」的读法。
+                    KeyValueRow(label: "已补全条目", value: "\(tmdb.linkedCount)")
 
                     SettingsGlassDivider()
 

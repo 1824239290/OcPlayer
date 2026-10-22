@@ -27,16 +27,20 @@ struct AboutSettingsView: View {
                     }
                 )
                 SettingsGlassDivider()
-                // **例外（保留原样）**：这是个「自定义 label」的按钮——`LabeledContent`
-                // 右侧还带「N 个项目」的值，`SettingsActionRow` 表达不了这一行，
-                // 原样放进卡内（整行热区已由 `.buttonStyle(.plain)` + 行高承载）。
+                // 「标题 + 行尾值 + 可整行点」——`SettingsActionRow` 表达不了行尾值，
+                // 所以自己拼一行：`HStack` + `Spacer` 保住「标签左 / 值右」的读法，
+                // `maxHeight: .infinity` 让热区吃掉整行高（脱离 `Form` 后没有系统行底兜底）。
                 Button {
                     app.pushPresented { showLicenses = true }
                 } label: {
-                    LabeledContent(
-                        "开源许可证",
-                        value: "\(OpenSourceLicenseCatalog.componentCount) 个项目"
-                    )
+                    HStack(spacing: 8) {
+                        Text("开源许可证")
+                        Spacer(minLength: 8)
+                        Text("\(OpenSourceLicenseCatalog.componentCount) 个项目")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }

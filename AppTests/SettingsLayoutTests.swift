@@ -51,10 +51,15 @@ final class SettingsLayoutTests: XCTestCase {
     /// 测试**显式注入**的页面横向留白。
     ///
     /// 产品里由 `AppShellView` 按尺寸类注入（compact = 22 / 常规 = 52），默认值是
-    /// `Metrics.contentInset`（52）。这里注入 16 而不是依赖默认值：判据「卡缘 = 留白值」
-    /// 与产品默认值解耦——产品改默认留白不该让这条测试跟着改，测试要钉的是
-    /// 「卡缘跟着 `contentLeading` 走」这件事本身。
-    private let contentLeading: CGFloat = 16
+    /// `Metrics.contentInset`（52）。这里注入一个**与产品任何取值都不重合、也不是旧
+    /// `Form` 行内边距**的数字：
+    ///
+    /// * 取 16 是错的（2026-10-22 review 抓出）：16 恰好是改造前 `Form` 的行内容内边距、
+    ///   `cardContentInset` 也是 16，于是「读到了注入的 `contentLeading`」与「某处硬编码
+    ///   了 16」在这条判据上**无法区分**——判据看起来在验 env，实际可能什么都没验。
+    /// * 取 **37**：不等于 16 / 22 / 52 / 任何一个卡内边距或图标列宽，卡缘只要等于 37
+    ///   就只可能是真的读了环境值。
+    private let contentLeading: CGFloat = 37
 
     /// 测试注入的页面底色（离屏玻璃不出图，见类注释：底色是已知量才能量描边）。
     private var pageBaseDark: Color { Color(white: 0.20) }
@@ -710,5 +715,115 @@ private struct SettingsBitmap {
         ) else { return ([], 0, 0) }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         return (bytes, width, height)
+    }
+}
+
+// MARK: - 跨平台常量（不受 iOS-only 类级 skip 影响）
+
+/// 常量级断言：**两个平台都能跑**，所以单独开一个类。
+///
+/// 为什么不挂在 `SettingsLayoutTests` 里：那个类的 `setUpWithError` 在 macOS 上整份
+/// `XCTSkip`（那 10 条渲染判据用的是紧凑版式，macOS 走常规版式、读数不同）。XCTest 的
+/// 类级 skip 会**连坐该类所有用例**，于是「macOS 的行模型常量」放进去就永远不执行——
+/// 2026-10-22 review 正是抓到 macOS 侧（30 / 6 / 42 / 780 / 56）零断言。
+@MainActor
+final class SettingsGlassMetricsTests: XCTestCase {
+    /// macOS 的行模型：卡内操作行 30 + 上下各 6 = 行距 42；内容列上限 780；底部 56。
+    ///
+    /// 这些数只被 `SettingsCardRowLayout` 消费，改坏了没有渲染用例能发现（macOS 端
+    /// 的渲染判据不在本仓测试里），所以这里把绝对值钉死。
+    func testMacRowModelMatchesTheDocumentedNumbers() {
+        #if os(macOS)
+        XCTAssertEqual(SettingsMetrics.cardRowMinHeight, 30, accuracy: 0.01,
+                       "macOS 卡内操作行最小高 30（比原表单行 28 略松）")
+        XCTAssertEqual(SettingsMetrics.rowVerticalInset, 6, accuracy: 0.01,
+                       "macOS 行上下内边距 6（`Form` 时代是 0——行距由系统给）")
+        XCTAssertEqual(
+            SettingsMetrics.rowPitch, 42, accuracy: 0.01,
+            "macOS 行距 = 30 + 6×2 = 42：`Form` 时代实测 28，玻璃卡里 42 才有下载页那种量感")
+        XCTAssertEqual(SettingsMetrics.pageMaxContentWidth, 780, accuracy: 0.01,
+                       "macOS 设置页内容列上限 780：窗口再宽也不横铺")
+        XCTAssertEqual(SettingsMetrics.pageBottomInset, 56, accuracy: 0.01)
+        #else
+        XCTAssertEqual(SettingsMetrics.pageMaxContentWidth, 720, accuracy: 0.01)
+        #endif
+    }
+
+    /// 「内容卡必须是玻璃，不能退回 material / 实底」——**源码级守卫**。
+    ///
+    /// 为什么需要它：退役的 `testCardFillStaysTranslucent` 原本量「氛围图透出度」
+    /// （亮 ≥0.60 / 暗 ≥0.80），换成玻璃后那条**无法**用像素方式重建——`glassEffect`
+    /// 需要窗口合成器，离屏 `layer.render` 里画不出来（见 `SettingsLayoutTests` 类注释）。
+    /// 于是「卡是不是玻璃」这件事在离屏测试里**完全没有守卫**：把 `liquidGlassCard()`
+    /// 换成 `.background(.regularMaterial)`，10 条渲染用例照样全绿。
+    ///
+    /// 折中的守卫：**全仓内容卡不许再出现 material 底**。
+    /// * `App/Shared/Features` 下 `ultraThinMaterial` / `thinMaterial` / `regularMaterial`
+    ///   / `thickMaterial` 计数必须为 0（2026-10-22 收编后实际就是 0，只剩注释提及）；
+    /// * 允许扫到注释里的历史说明（`// … .ultraThinMaterial …`），因为那是记录而不是用法。
+    ///
+    /// 边界：抓不到「换成 `.background(Color.white)`」这种非 material 的实底——所以
+    /// **真机截图的视觉终审仍是唯一完整闸门**，这条只是拦住最可能的重构回退。
+    func testNoMaterialCardBackgroundsRemainInFeatures() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // AppTests/
+            .deletingLastPathComponent()   // repo root
+        let features = repoRoot.appendingPathComponent("App/Shared/Features")
+
+        let enumerator = try XCTUnwrap(
+            FileManager.default.enumerator(at: features, includingPropertiesForKeys: nil),
+            "扫不到 App/Shared/Features：路径变了，这条守卫要跟着改")
+
+        let banned = ["ultraThinMaterial", "thinMaterial", "regularMaterial", "thickMaterial"]
+        var offenders: [String] = []
+        for case let file as URL in enumerator where file.pathExtension == "swift" {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+                XCTFail("读不到 \(file.lastPathComponent)：守卫失效，别让它静默跳过")
+                continue
+            }
+            for (index, line) in text.components(separatedBy: .newlines).enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                // 注释里提到旧材质名是**记录**，不是用法。
+                if trimmed.hasPrefix("//") || trimmed.hasPrefix("///") || trimmed.hasPrefix("*") {
+                    continue
+                }
+                guard let hit = banned.first(where: { trimmed.contains($0) }) else { continue }
+                offenders.append("\(file.lastPathComponent):\(index + 1) 用了 \(hit)")
+            }
+        }
+
+        XCTAssertTrue(
+            offenders.isEmpty,
+            "内容卡必须走玻璃原语（`liquidGlassCard` / `glassPanel` / `hoverRowHighlight`），"
+            + "不许退回 material。发现 \(offenders.count) 处：\n" + offenders.joined(separator: "\n"))
+    }
+
+    /// 玻璃原语仍在被广泛使用（防止「没人用但测试还绿」）。
+    ///
+    /// 与上一条互补：上一条防「退回 material」，这一条防「玻璃调用点被整体删掉/替换成
+    /// 纯色」——只要全仓玻璃调用点数量掉下地板就红。地板取 24（2026-10-22 实测 32，
+    /// 留 8 个的余量给以后可能的重构删减），不是精确值，所以刻意设成 `<` 而不是 `==`。
+    func testGlassPrimitiveCallSitesDoNotRegress() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appDir = repoRoot.appendingPathComponent("App")
+
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: appDir, includingPropertiesForKeys: nil))
+        var count = 0
+        for case let file as URL in enumerator where file.pathExtension == "swift" {
+            guard let text = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            for line in text.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("//") || trimmed.hasPrefix("///") { continue }
+                if trimmed.contains(".liquidGlassCard(") || trimmed.contains(".liquidGlassCapsule(") {
+                    count += 1
+                }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(
+            count, 24,
+            "全仓玻璃调用点只剩 \(count) 处（地板 24）：内容卡可能被换回了纯色/material。"
+            + "UI 统一成液态玻璃是 2026-10-22 的用户口径，别默默回退。")
     }
 }

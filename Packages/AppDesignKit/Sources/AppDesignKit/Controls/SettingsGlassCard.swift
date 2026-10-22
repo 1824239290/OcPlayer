@@ -1,43 +1,46 @@
 import SwiftUI
 
-// MARK: - 设置页的「一段 = 一张玻璃卡」
+// MARK: - 设置页的玻璃卡片流（B 方案）
 //
-// ## 为什么不是 `listRowBackground(glass)`
+// 这个文件提供**两件事**，读之前先分清：
+//   ① `SettingsGlassCard`：一张玻璃卡 + 卡内行高模型（`SettingsCardRowLayout`）；
+//   ② `SettingsGlassPage` / `SettingsGlassSection`：设置页的**承载**——`ScrollView`
+//      卡片流，与 MoviePilot 下载页同一套。
 //
-// 两条都实测过（2026-10-22 工装，macOS 26.6 + iOS 26.3 模拟器）：
+// ## 为什么设置页整体脱离了 `Form`（而不是留在 Form 里换卡底）
 //
-// * **macOS**：grouped `Form` 根本不执行 `listRowBackground`——连不透明品红都不画
-//   （诊断页 A 组与对照组逐像素相同，全帧 98.6% 像素相等）。这也是仓库里
-//   `settingsCard()` 一直写 `#if os(iOS)` 的真正原因。
-// * **iOS**：能画，但**逐行各画一块**——行界出现 3px 暗线、圆角缝里透出原始氛围底
-//   （实测 luma 233.5 → 216.6），且系统分隔线压在玻璃上。玻璃不能取样玻璃，
-//   相邻两行的独立玻璃也拼不回「一张卡」。
+// 两条路都实测过（2026-10-22 工装，macOS 26.6 + iOS 26.3 模拟器），结论是
+// **`Form` 里做不出「一整段一张玻璃卡」**：
 //
-// ## 正解：把**整段**包成一行
+// * **逐行 `.listRowBackground(glass)`**：macOS 的 grouped `Form` 根本不执行这个修饰符
+//   ——连不透明品红都不画（诊断页 A 组与纯 Form 对照组逐像素相同、全帧 98.6% 像素相等；
+//   这也是仓库里 `settingsCard()` 当年只能写 `#if os(iOS)` 的真正原因）。iOS 能画，但
+//   **逐行各画一块**：行界出 3px 暗线（luma 233.5 → 216.6）、圆角缝里透出原始氛围底、
+//   系统分隔线压在玻璃上。玻璃不能取样玻璃，相邻两行的独立玻璃拼不回「一张卡」。
+// * **一段塞成一行**（`Section { SettingsGlassCard { … } }`）：玻璃能画出来，iOS 上与
+//   下载页卡片逐像素等价；但 **macOS 的 `Form` 自己给 section 加 13–14pt 侧缩进**，
+//   卡比目标窄 26pt，负 padding 会裁字、负 `listRowInsets` 被接受但不生效。
 //
-// `Section { SettingsGlassCard { 各行 } }`——一段只剩**一行**，玻璃挂在行内容上，
-// 再用 `listRowInsets(0)` + `listRowBackground(.clear)` + `listRowSeparator(.hidden)`
-// 摘掉系统那层行底与分隔线。工装实测（页 J/K 孪生对照）：iOS 上与本仓
-// MoviePilot 下载页的 ScrollView 卡片**逐像素级等价**——卡 bbox 完全一致、
-// 卡内 RGB 差 < 1/255、卡外与纯氛围底 `mean|diff| = 0.00`。
-//
-// macOS 上同样成立，唯一差异：grouped `Form` 自己给 section 加了约 13–14pt 侧缩进，
-// 所以卡会比 ScrollView 版窄 26pt（负 padding 会裁字、负 `listRowInsets` 不生效，
-// 两条都试过）。设置页本来就是居中的窄列，这个缩进接受。
+// 两条都做不到「两端一致的整段玻璃」→ 设置页整体换承载（`SettingsGlassPage`），
+// 这也是用户在看到第一版实机效果后拍板的方向（「现在效果太差了，你上方案 B 吧」）。
+// `SettingsGlassCard` 上仍保留 `listRowInsets` / `listRowBackground` / `listRowSeparator`
+// 三个修饰符：在 `ScrollView` 里它们是 no-op，留着是为了这个「卡」原语在 `Form` 里也能
+// 直接放（未迁移的页面或将来的 sheet 可以用）。
 //
 // ## 行高从哪来（`SettingsCardRowLayout`）
 //
 // 卡片里不再是 List 的行，系统那套「行内边距 + 行最小高」全没了，行会挤成自然高度
-// （Toggle 只有 ~22pt），行距从 58 掉到 22——既难看也丢热区。
+// （`Toggle` 只有 ~22pt），行距从 58 掉到 22——既难看也丢热区。
 //
 // 逐个调用点补 `.settingsRow()` 是可行的，但设置页有 11 个页面、29 个分段、几十个
 // 控件行，逐个补既容易漏（漏一处就那一行矮一截），也把「行高」这件承载层的事散进
 // 业务代码。这里改用自定义 `Layout`：**每个直接子视图自动获得行最小高与行内边距**，
-// 只有显式声明 `settingsCardCompact()` 的子视图（说明文字、分隔线）例外。
+// 只有显式声明排布角色（`settingsCardCompact()` / `settingsCardInline()`）的子视图例外。
 //
-// 于是调用点只写内容，行高由承载层统一给——`SettingsNavRow` 里那个
-// `settingsRow()`（44pt 热区）仍然有用（它给 Button 的 frame），两者叠加后
-// 行距仍是 `44 + 7×2 = 58`，与改造前逐值相同。
+// 于是调用点只写内容，行高由承载层统一给——`SettingsNavRow` 里那个 `settingsRow()`
+// 仍然有用（它给 `Button` 的 frame = 热区），两者叠加后的行距：
+// **iOS 44 + 7×2 = 58**（对照产品 Rex 实测 57.8）、**macOS 30 + 6×2 = 42**
+// （`Form` 时代实测 28，玻璃卡里 42 才有下载页那种量感）。
 
 // MARK: - 紧凑子视图标记
 
@@ -53,7 +56,7 @@ enum SettingsCardRole: Equatable {
     var verticalPadding: CGFloat {
         switch self {
         case .row: SettingsMetrics.rowVerticalInset
-        case .note: 4
+        case .note: SettingsMetrics.cardNoteVerticalPadding
         case .inline: 0
         }
     }
@@ -82,8 +85,9 @@ public extension View {
 
 /// 玻璃卡内部的纵向行布局：逐行按「最小行高 + 上下行内边距」排布。
 ///
-/// 只做两件事：① 每行高度 = `max(自然高, rowContentMinHeight) + 2 × rowVerticalInset`；
-/// ② 宽度吃满提案，内容在行内**垂直居中**（与原系统行的对齐一致）。
+/// 只做两件事：① 每行高度 = `max(自然高, cardRowMinHeight) + 2 × 行角色内边距`
+/// （row 档 iOS 58 / macOS 42；note 档只留 4pt；inline 档 0）；
+/// ② 宽度吃满提案，行内容在行框内按角色对齐。
 ///
 /// 为什么不用 `VStack(spacing: 0)` + 逐行 `.settingsRow()`：见文件头——行高是承载层
 /// 的职责，散到 11 个页面的几十个调用点上必然漏；`Layout` 能一次性给所有子视图，
@@ -109,6 +113,9 @@ struct SettingsCardRowLayout: Layout {
         let width = proposal.width ?? subviews
             .map { $0.sizeThatFits(.unspecified).width }
             .max() ?? 0
+        // **零行时高度必须是 0**：否则卡上那层 `cardContentVerticalInset`（上下各 6）
+        // 会留下一条 12pt 的玻璃空条（`ServersView` 的 profiles 为空时会走到）。
+        guard !subviews.isEmpty else { return .zero }
         var height: CGFloat = 0
         for subview in subviews {
             let role = subview[SettingsCardRoleKey.self]
@@ -129,11 +136,18 @@ struct SettingsCardRowLayout: Layout {
             let role = subview[SettingsCardRoleKey.self]
             let padding = role.verticalPadding
             let content = contentHeight(naturalSize(subview, width: bounds.width), role: role)
-            // **提案给足行内容高**（不是自然高）：按钮这类可点击行据此把 frame 撑到
-            // 整行高，热区才是「整行」而不只是文字那 16pt——macOS 上实测差一倍。
+            // **锚点必须是 `.leading`（垂直居中），不是 `.topLeading`**。
+            //
+            // 2026-10-22 review 抓出的真 bug：`place(proposal:)` 里的 height 只是**提案**，
+            // 不强制子视图尺寸——`Text` / `Toggle` / 没显式 frame 的 `Button` 一律按自己的
+            // 自然高绘制。所以 `anchor: .topLeading` 会把行内容**贴在行顶**：`Toggle`
+            // 自然高 ~22pt、行内容高 iOS 44 / macOS 30，于是它在 iOS 上偏上 11pt、
+            // 分隔线看起来贴着下一行。hub 那 10 行因为 `SettingsNavRow` 自带
+            // `settingsRow()`（minHeight = 行内容高）恰好填满，把这个 bug 掩盖了——
+            // 所以只有渲染过子页（有 Toggle / Picker）才看得出来。
             subview.place(
-                at: CGPoint(x: bounds.minX, y: y + padding),
-                anchor: .topLeading,
+                at: CGPoint(x: bounds.minX, y: y + padding + content / 2),
+                anchor: .leading,
                 proposal: ProposedViewSize(width: bounds.width, height: content)
             )
             y += content + padding * 2
@@ -381,6 +395,9 @@ public struct SettingsFieldRow<Field: View>: View {
     public var body: some View {
         SettingsRow(title) {
             field
+                // 与 `SettingsTextRow` 同口径：长值从**头部**溢出（尾部可见）——
+                // 输入 URL / API Key 时尾部才是用户在核对的那截。
+                .multilineTextAlignment(.trailing)
                 .frame(maxWidth: SettingsMetrics.cardTrailingFieldMaxWidth, alignment: .trailing)
         }
     }
@@ -416,7 +433,11 @@ public struct SettingsActionRow: View {
                 Text(title)
                 Spacer(minLength: 8)
             }
-            // 整行热区：按钮的 frame 就是点击范围，不铺满会出现「点行中间没反应」。
+            // **整行热区**：`Button` 的 frame 就是点击范围。承载层给的是「行内容高」
+            // （iOS 44 / macOS 30）的提案，但提案**不强制**尺寸——必须自己写
+            // `maxHeight: .infinity` 才会吃掉整行高，否则热区只有文字那 16–22pt
+            // （2026-10-22 review 抓出：只写 `contentShape` 是不够的）。
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

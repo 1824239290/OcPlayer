@@ -66,6 +66,10 @@ public enum SettingsMetrics {
     /// 代价与收益：一旦声明 `listRowInsets`，**系统的行内边距就被整体替换**
     /// （横向也在内），所以水平值必须照抄系统那档（`rowLeadingInset`）。收益是
     /// 「内容高 ↔ 内边距」可以互相置换——同样 58pt 的总行距，能把 44pt 给热区。
+    ///
+    /// **2026-10-22（B 方案）macOS 从 0 改成 6**：设置页脱离 `Form` 后没有系统行内边距，
+    /// macOS 的卡内行距完全由这里决定（30 + 6×2 = 42）。全仓已无 `Form` 页面消费这两个
+    /// 令牌，所以这次改动不会带偏别处。
     public static var rowVerticalInset: CGFloat {
         #if os(macOS)
         // B 方案（2026-10-22）：设置页脱离 `Form` 后，卡内行不再有系统那套行内边距，
@@ -95,8 +99,13 @@ public enum SettingsMetrics {
     /// 以及让「为什么改用 44+14」这件事有据可查（44 + 14 = 58 = 28 + 30，行距分毫未动）。
     public static let systemRowInsets: CGFloat = 30
 
-    /// 用户**实际看到**的行距（行心 → 行心）。对照产品 Rex 实测 57.8pt。
-    /// `SettingsLayoutTests` 会渲染真 `Form` 并量出来交叉验证这条模型。
+    /// 卡内**操作行**的行距（行心 → 行心）。iOS 44 + 7×2 = **58**（对照产品 Rex 实测
+    /// 57.8pt）；macOS 30 + 6×2 = **42**。
+    ///
+    /// 注意它是由「内容高 + 上下内边距」算出来的**模型值**，两侧同源、单看它恒真——
+    /// 真正钉住渲染结果的是 `AppTests/SettingsLayoutTests.testRowPitchMatchesReferenceRhythm`
+    /// （iOS，量真像素）与 `SettingsGlassMetricsTests.testMacRowModelMatchesTheDocumentedNumbers`
+    /// （macOS，钉常量绝对值）。别再拿这条算式当「已验证」的证据。
     public static var rowPitch: CGFloat { rowContentMinHeight + rowVerticalInset * 2 }
 
     /// 图标列宽与图标-文字间距。
@@ -167,6 +176,10 @@ public enum SettingsMetrics {
         iOSRowContentMinHeight
         #endif
     }
+
+    /// 卡内**附注**（说明小字）的上下留白：比操作行小得多，让附注读起来是「上一行的注解」
+    /// 而不是独立一格。
+    public static var cardNoteVerticalPadding: CGFloat { 4 }
 
     /// 段标题 → 卡片顶的间距（iOS 设置口径 ≈8pt）。
     public static var sectionHeaderSpacing: CGFloat { 8 }

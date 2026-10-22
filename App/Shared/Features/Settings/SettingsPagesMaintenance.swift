@@ -54,7 +54,9 @@ private struct ImageCacheSettingsRow: View {
     @State private var confirmClear = false
 
     var body: some View {
-        LabeledContent("图片缓存", value: usageText)
+        // 2026-10-22：`LabeledContent` 脱离 `Form` 后不再有「标签左 / 值右」的行形态
+        // （SwiftUI 只在列表容器里给它那个排版），换成已有的 `KeyValueRow`。
+        KeyValueRow(label: "图片缓存", value: usageText)
             .onAppear(perform: refresh)
 
         Button(role: .destructive) {
@@ -114,7 +116,8 @@ private struct MetadataCacheSettingsRow: View {
     @State private var confirmClear = false
 
     var body: some View {
-        LabeledContent("媒体元数据缓存", value: usageText)
+        // 同 `ImageCacheSettingsRow`：脱离 Form 后 `LabeledContent` 会左贴紧凑排。
+        KeyValueRow(label: "媒体元数据缓存", value: usageText)
             .onAppear { app.metadata.refreshSize() }
 
         HStack {
