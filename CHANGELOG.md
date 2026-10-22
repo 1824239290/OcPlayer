@@ -39,15 +39,24 @@
     ③ **也不能拿关联对象当「已接管」记号**：SwiftUI 会**复用同一个** `UITabBarItem`、只把 `image` 重置回
     彩色，对象没变、记号还在 → 判成「已接管」，首页那格又变回彩色（浅色外观实拍抓到）。最终是
     **无条件重设**，代价可忽略（只在标签栏相关的更新时调用，不是每帧）。
-  - **验证**：新增 `SectionBrandIconTests`（5 条，`ImageRenderer` 真渲染 App 真实资产量像素：选中态通道
-    极差 0.63 / 0.61、未选中 ≤0.001、两态外接框同尺寸）、`AppModelAvatarTests` 新增 1 条（灰化头像去饱和
-    但亮度不变 + 仍裁圆 + 仍 `alwaysOriginal`）、`TabBarBrandSlotTests`（3 条，钉住「哪些标题被接管」）。
+  - **验证**：新增 `SectionBrandIconTests`（8 条，`ImageRenderer` 真渲染 App 真实资产量像素：选中态通道
+    极差 0.63 / 0.61、未选中在**纯绿探针前景色**下必须变成探针色（证明模板语义，而不只是「是单色」）、
+    生产上下文的单色、两态外接框同尺寸、`makeSegments` 的资产接线、三个资产可解析）、
+    `AppModelAvatarTests` 新增 1 条（灰化头像去饱和但亮度不变 + 仍裁圆 + 仍 `alwaysOriginal`）、
+    `TabBarBrandSlotTests`（3 条，钉住「哪些标题被接管」）。
+    **用例本身做了反向变异复验**（故意改坏看红不红），据此补掉三个漏抓面：① 未选中判据原先是「平均
+    通道极差≈0」，Bangumi 的 SVG 自带 `#e6e6e6` 浅灰，误用 `.original` 时**照样绿** —— 改用纯绿探针
+    前景色后同一条变异 3 条红（详见 commit `ee3a1a6` / 本节下方）；② 所有渲染用例都直接构造
+    `SectionBrandIcon`，把 `makeSegments` 里 Bangumi 的 `colorName` 改回单色资产时 6 条**全绿**
+    （渲染对、配置错）—— 补接线用例；③ `Image` 不可失败，资产名写错只渲染成空 —— 补资产可解析用例。
     **端到端链路验收**：给模拟器喂一个本机假 Jellyfin（`/Users/Me` 带头像 tag + `/UserImage` 吐测试头像），
     用 Debug-only 的 `OCPLAYER_START_SECTION` 深链直落四个分区逐张实拍 —— iPhone 17 Pro / 深色：首页选中
     头像彩色、Bangumi 选中洋红 `(254,91,161)`、MoviePilot 选中紫色渐变、设置选中时首页头像灰化（通道极差
-    254 → 0）；浅色外观四个状态同样逐格取样、iPad Pro 13″（标签栏在底部）各拍一张。截图与做法见
-    `Reports/tab-icon-color-20261022/`（本地 gitignore 目录）。跑分：macOS `OcPlayerTests` **699 通过 /
-    0 失败 / 18 跳过**（共 717）、`OcPlayerTests-iOS` **721 通过 / 0 失败**。
+    254 → 0）；浅色外观四个状态同样逐格取样、iPad Pro 13″（标签栏在底部）各拍一张。macOS 侧还做了
+    **装机验收**：`SKIP_ERIKA_FETCH=1 Scripts/build-macos.sh debug`（v0.2.1 Build 598）用 `ditto` 覆盖到
+    `/Applications/OcPlayer.app`，再直落四个分区实拍药丸。截图与做法见 `Reports/tab-icon-color-20261022/`
+    （本地 gitignore 目录）。跑分：macOS `OcPlayerTests` **701 通过 / 0 失败 / 18 跳过**（唯一用例 719）、
+    `OcPlayerTests-iOS` **724 通过 / 0 失败**。
 
 ### 修复
 
