@@ -8,6 +8,8 @@ import AppKit
 #endif
 
 struct PlayerHUDBottomDock: View {
+    @Environment(\.playerChromeInsets) private var chromeInsets
+
     let isNarrow: Bool
     let playbackID: String
     let title: String
@@ -26,7 +28,9 @@ struct PlayerHUDBottomDock: View {
                 onInteractionChanged: onInteractionChanged
             )
         }
-        .padding(.horizontal, isNarrow ? 16 : 28)
+        // 水平与顶栏同口径让位侧边灵动岛/圆角禁区；垂直方向 home indicator 已被
+        // persistentSystemOverlays(.hidden) 藏掉、无实体遮挡，底距维持原值。
+        .padding(.horizontal, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
         .padding(.bottom, isNarrow ? 16 : 28)
         .frame(maxWidth: .infinity)
     }

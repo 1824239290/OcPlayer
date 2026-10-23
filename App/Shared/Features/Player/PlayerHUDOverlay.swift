@@ -9,6 +9,8 @@ import AppKit
 #endif
 
 struct PlayerHUDOverlay: View {
+    @Environment(\.playerChromeInsets) private var chromeInsets
+
     let isNarrow: Bool
     let playbackID: String
     let title: String
@@ -94,7 +96,8 @@ struct PlayerHUDOverlay: View {
                         onUserInteraction: onUserInteraction
                     )
                 }
-                .padding(.trailing, isNarrow ? 16 : 28)
+                // 侧边让位横屏灵动岛/圆角禁区（约 59pt）；无禁区机型维持 16/28。
+                .padding(.trailing, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
                 .padding(.bottom, isNarrow ? 90 : 106)
             }
         }
@@ -124,6 +127,8 @@ struct PlayerHUDReadabilityScrim: View {
 }
 
 struct PlayerHUDTopBar: View {
+    @Environment(\.playerChromeInsets) private var chromeInsets
+
     let isNarrow: Bool
     let isFullscreen: Bool
     let onClose: () -> Void
@@ -141,7 +146,7 @@ struct PlayerHUDTopBar: View {
                 onUserInteraction: onUserInteraction
             )
         }
-        .padding(.horizontal, isNarrow ? 16 : 28)
+        .padding(.horizontal, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
         .padding(.top, topPadding)
     }
 
@@ -153,7 +158,9 @@ struct PlayerHUDTopBar: View {
         // 按钮悬停/点击会被条带窗口截走（issue #4），同样整体让到条带之下。
         return isFullscreen ? 56 : 58
         #else
-        return isNarrow ? 14 : 22
+        // iOS：让位灵动岛/状态栏带（竖屏窗口期）后保留原有呼吸间距；横屏
+        // insets.top == 0，与旧的固定 14/22 完全一致（见 PlayerChromeMetrics）。
+        return PlayerChromeMetrics.topBarTopPadding(chromeInsets, isNarrow: isNarrow)
         #endif
     }
 

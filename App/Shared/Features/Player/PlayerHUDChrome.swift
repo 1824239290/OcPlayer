@@ -92,6 +92,7 @@ struct PlayerHUDPanel<SurfaceShape: Shape, Content: View>: View {
 /// 顺带让进度行跟上整秒；其余字段仍是 observable，变化即时反映。
 struct PlayerHUDInfoPanel: View {
     @Environment(PlaybackController.self) private var controller
+    @Environment(\.playerChromeInsets) private var chromeInsets
 
     let title: String
     let kicker: String
@@ -166,8 +167,10 @@ struct PlayerHUDInfoPanel: View {
             .frame(maxWidth: 340, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, isNarrow ? 16 : 28)
-        .padding(.top, isNarrow ? 70 : 82)
+        // 顶距原值 70/82 是避开顶栏的手算值，顶栏让位灵动岛后跟着平移
+        // （见 PlayerChromeMetrics.infoPanelTopPadding）。
+        .padding(.horizontal, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
+        .padding(.top, PlayerChromeMetrics.infoPanelTopPadding(chromeInsets, isNarrow: isNarrow))
         .allowsHitTesting(false)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("播放信息")
