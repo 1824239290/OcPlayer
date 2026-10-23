@@ -1,5 +1,6 @@
 import Foundation
 import JellyfinKit
+import PlaybackKit
 
 // 上报协议 `PlaybackReporting` 由 JellyfinKit 提供（只有那 3 条方法）：
 // 协调器只依赖它需要的契约，测试替身不必实现整个 `MediaServer`。
@@ -86,8 +87,12 @@ final class PlaybackReportingCoordinator {
 
     private static func isReachedEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
+        // 阈值与播放状态层共用 `PlayerState.endOfStreamToleranceSeconds`（片尾 EOF 临时兜底）：
+        // 那边把片尾窗口内的内核错误折叠成 `.stopped`，这里必须用同一个窗口把它认成「播完」，
+        // 否则会变成「没有错误徽章、也不连播/退出」的静默卡死。
         return snapshot.durationSeconds > 0
-            && snapshot.positionSeconds >= snapshot.durationSeconds - 2
+            && snapshot.positionSeconds
+                >= snapshot.durationSeconds - PlayerState.endOfStreamToleranceSeconds
     }
 
     /// 终态里「已经播到文件尾」的判定（心跳分支用）。
@@ -104,7 +109,8 @@ final class PlaybackReportingCoordinator {
     ///
     /// 此前只认 `.stopped`，于是这种片尾错误被算成 `reachedEnd=false`：既不连播也不退出，
     /// 只剩错误徽章（那次日志里报错后 18 秒内唯一的动作是用户手动关闭）。
-    /// 位置判据与 `.stopped` 共用 `isReachedEnd`（片长 − 2 s 以内），片中的真错误不受影响。
+    /// 位置判据与 `.stopped` 共用 `isReachedEnd`（`PlayerState.endOfStreamToleranceSeconds`
+    /// 窗口以内），片中的真错误不受影响。
     private static func isEndOfStream(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot, isReachedEnd(snapshot: snapshot) else { return false }
         return snapshot.state == .stopped || snapshot.state == .error
@@ -115,7 +121,15 @@ final class PlaybackReportingCoordinator {
     /// 进入（关播放器 / 换控制器 / 退后台），此刻把片尾的 `.error` 也当成播完，会在用户
     /// 正拆台的时候反过来触发连播——`AppModel.playback` 的 didSet 里 `stop()` 甚至跑在
     /// `clearPlaybackSessionState()`（它会清 `activePlaybackIdentity`）之前。
-    /// 片尾错误的兜底只放在心跳分支：那里还守着 `isCurrent`，用户先关了就不会误触发。
+    ///
+    /// ⚠️ 2026-10-23 起「只认 `.stopped`」不再等价于「只认干净收尾」：`PlayerState` 的片尾
+    /// EOF 临时兜底会把片尾窗口内的 `.error` 直接折叠成 `.stopped`（见
+    /// `PlayerState.endOfStreamToleranceSeconds`），所以片尾错误现在也会走到这条路径上。
+    /// 兜底靠的是下游的 `activePlaybackIdentity` 守卫：正常关闭/退后台都先
+    /// `finishReporting()` → `clearPlaybackSessionState()` 清掉 identity，`onTerminal` 的
+    /// `guard activePlaybackIdentity == identity` 必然拒绝；唯一「先 stop 后清 identity」的
+    /// 调用点是 `AppModel.playback` 的 didSet，而它只在注入时跑一次。若将来新增
+    /// 「播放中把 `AppModel.playback` 换成新控制器」的路径，需要重新评估这里。
     private static func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
         return snapshot.state == .stopped && isReachedEnd(snapshot: snapshot)

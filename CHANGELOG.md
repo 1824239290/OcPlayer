@@ -6,6 +6,15 @@
 
 ### 改动
 
+- **片尾自然播完不再报 EOF：内核在片尾把「跨 EOF 的读」报成致命错误时，播放状态层直接按自然结束收口（临时兜底，根因在内核侧尚未修）**
+  （用户口径：「现在片尾自然结束的时候会报 EOF，你看看有没有办法暂时处理一下」）。
+  - **根因**：Erika v0.2.1 在请求边界跨过文件末尾时会间歇把「读到文件尾」报成致命错误（2026-10-09 iPad / 2026-10-12 桌面实测 `av_read_frame: Input/output error (-5)`，也见过 `audio output stalled at EOF`）——内核落 `playback_fatal`，事件流给到 `.failed` 或 `.stateChanged(.error)`。于是**自然播完**反而进 `.error`：UI 弹「播放出错」徽章、诊断记一条 error、`session.end` 的 `error_count` 被污染。上一轮修复（`13b5431`）只在**上报层**把片尾 `.error` 认成「播完」，保证连播/退出能发生；错误徽章与错误计数仍会短暂/持续出现，用户看到的「报 EOF」正是这一层。
+  - **临时兜底（本次）**：`PlaybackKit.PlayerState` 新增 `endOfStreamToleranceSeconds = 2.0`，`apply(.failed)` 与 `apply(.stateChanged(.error))` 两条路都过同一道折叠——**片长已知且位置已进末尾 2 s 窗口**时，内核错误按自然结束收口成 `.stopped`：不置 `lastError`、不计 `errorCount`、不弹错误徽章；诊断每会话最多两条（两个标记分开记：`.stateChanged(.error)` 先到时先留一条不带 `code`/`message` 的，随后 `.failed` 带内核原文到达时再补一条细节行，避免把归因凭据抑制掉），字段 `code` / `message` / `position_ms` / `duration_ms` / `tolerance_s`，连续重发的错误风暴仍按 `lastFailedEventKey` 去重。判据**只看位置、不看错误文案**（文案跨内核版本会变，位置稳定：三次实机现场全部落在片尾前 0.4–0.5 s）；片长未知（0 = 直播 / duration 还没到）或位置还在 0（短片开头就出错）时不折叠，照旧报错——否则 `duration ≤ 2 s` 的片子会在 `position=0` 时满足 `0 + tolerance >= duration`，把**开头**的真故障也折叠成「播完了」。
+  - **一处口径，不许分叉**：`PlaybackReportingCoordinator.isReachedEnd` 里写死的 `- 2` 改成引用 `PlayerState.endOfStreamToleranceSeconds`。折叠出的 `.stopped` 必须被上报层认成「播完」，否则会变成「没有错误徽章、也不连播/退出」的静默卡死。
+  - **删除条件**：根因在内核侧（跨 EOF 的读应返回干净 EOF / 短读，而不是 EIO），等上游 Erika 修掉、升 `Config/Erika.version` 后，连同 `isAtEndOfStream` 与两处调用点一起删（常量注释里已写明）。
+  - **验证**：`PlayerStateFoldingTests` 新增 10 条——片尾 `.failed` 折叠成 `.stopped` 且 `lastError=nil` / `errorCount=0`、片中 `.failed` 仍 `.error`、片长未知仍 `.error`、片尾 `.stateChanged(.error)` 同样折叠、状态迁移先到而 `.failed` 后到时保持 `.stopped`（内核原文不被抑制、状态不翻回）、容差边界（位置 = 片长 − 2 s，`>=` 命中）、窗口外 1 ms 仍报错、短片在 `position=0` 时不折叠、50 条错误风暴不改状态不计数、`reset()` 清折叠标记；`Scripts/clean.sh` → `swift test --package-path Packages/PlaybackKit` 全量 67 条 XCTest + 2 条 swift-testing 全绿，跑完再 `Scripts/clean.sh`（独立核验员复跑同一冻结树，并用「`>=` 改 `>`」反向验证确认恰有一条边界用例变红）。
+  - **实机复核（2026-10-23，本机 Build 608 + 两台真机开发签名 Release，两条路都跑到了）**：①**macOS** 把进度条快速拖到片尾，内核确实又报 fatal（`code=3`、`playback error: demux worker error: ffmpeg error in av_read_frame: Input/output error (-5)`，位置 1424.715 s / 片长 1425.024 s）——兜底当场命中（两条 warning：一条带内核原文、一条来自先到的 `.stateChanged(.error)`），随后 `PlayerState -> stopped`、UI 全程无错误徽章、`session.end` 的 `error_count=0`，直接连播下一集并标记 Bangumi 已看；②同一操作在 **iPad mini 5** 上这次是干净收尾（内核 `decoder_eof_drain stage=complete` → `.stopped` → 连播），根本没有进折叠分支。结论：fatal 与干净 EOF 两条路都能正常连播，折叠只在需要时生效。
+
 - **详情页选集区：「剧集」标题位改成选季控件；选集轨道按每 30 集切一个分区，长番不用再横着翻几百张卡**
   （用户口径：截图红框「剧集」→「红框选集改成右侧那个季的选框」；「做一个每三十集一个小分区一样，方便多集的番剧不用翻的很麻烦」）。
   - **标题位 = 选季**：`DetailView.seasonBar` 左侧的 `Text("剧集")` 删除，换成新的 `seasonSelector`——多季时就是原先右侧那个季菜单胶囊（当前季名 + `chevron.up.chevron.down`）搬到标题位，单季退回季名纯文本（不给只有一项的死下拉），季数据未到时用「选集」兜底；右侧原季菜单随之删除，同一件事不留两个入口，正序/倒序仍在右侧。
