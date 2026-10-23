@@ -315,3 +315,69 @@ struct EpisodePlaceholderCard: View {
         return parts.joined(separator: "，")
     }
 }
+
+// MARK: - 每 30 集一个分区（分区选择条）
+
+/// 详情页选集的分区条：一季超过 30 集时出现在轨道上方，配合「轨道只渲染当前分区」使用。
+///
+/// 它只管「有哪些分区、当前哪个、点了哪个」——轨道顺序、选中态都不在这里。
+/// 点分区**不改选中集**：分区是浏览维度，顶部播放钮播的仍是选中集（与改动前一致）。
+struct EpisodeChunkBar: View {
+    /// 已按展示顺序排好的分区（倒序时整体反着来）。
+    let chunks: [EpisodeChunk]
+    /// 当前分区序号（是 `EpisodeChunk.index`，不是数组下标——倒序时两者不同向）。
+    let activeIndex: Int
+    /// 排序方向。翻转时 `chunks` 整体反序而 `activeIndex` 不变，当前胶囊可能被甩出
+    /// 视野——所以要按它再锚定一次（不能只监听 `activeIndex`）。
+    let sortAscending: Bool
+    /// 左缘留白：与轨道内容左缘对齐（调用方传 `\.contentLeading`）。
+    let leadingInset: CGFloat
+    var onSelect: (EpisodeChunk) -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(chunks) { chunk in
+                        Button {
+                            onSelect(chunk)
+                        } label: {
+                            OptionChip(title: chunk.rangeLabel, selected: chunk.index == activeIndex)
+                        }
+                        .buttonStyle(.plain)
+                        .help(chunk.accessibilityLabel)
+                        .accessibilityLabel(chunk.accessibilityLabel)
+                        .accessibilityAddTraits(
+                            chunk.index == activeIndex ? [.isButton, .isSelected] : .isButton
+                        )
+                        .id(chunk.index)
+                    }
+                }
+                .padding(.horizontal, leadingInset)
+                .padding(.vertical, 2)
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            // 「自动停在选中集那一段」不能只发生在数据上：分区多到一屏放不下时
+            // （千集长番 ~37 段），当前段还得滚进视野，否则用户在条上根本看不见它。
+            .onAppear { scroll(to: activeIndex, proxy: proxy, animated: false) }
+            .onChange(of: activeIndex) { _, newValue in
+                scroll(to: newValue, proxy: proxy, animated: true)
+            }
+            .onChange(of: sortAscending) { _, _ in
+                // 反序后当前胶囊可能落在屏外，立刻重新锚定（不带动画，避免和轨道重建抢拍）。
+                scroll(to: activeIndex, proxy: proxy, animated: false)
+            }
+        }
+    }
+
+    private func scroll(to index: Int, proxy: ScrollViewProxy, animated: Bool) {
+        guard chunks.contains(where: { $0.index == index }) else { return }
+        if animated, !reduceMotion {
+            withAnimation(Motion.standard) { proxy.scrollTo(index, anchor: .center) }
+        } else {
+            proxy.scrollTo(index, anchor: .center)
+        }
+    }
+}

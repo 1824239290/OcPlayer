@@ -6,6 +6,15 @@
 
 ### 改动
 
+- **详情页选集区：「剧集」标题位改成选季控件；选集轨道按每 30 集切一个分区，长番不用再横着翻几百张卡**
+  （用户口径：截图红框「剧集」→「红框选集改成右侧那个季的选框」；「做一个每三十集一个小分区一样，方便多集的番剧不用翻的很麻烦」）。
+  - **标题位 = 选季**：`DetailView.seasonBar` 左侧的 `Text("剧集")` 删除，换成新的 `seasonSelector`——多季时就是原先右侧那个季菜单胶囊（当前季名 + `chevron.up.chevron.down`）搬到标题位，单季退回季名纯文本（不给只有一项的死下拉），季数据未到时用「选集」兜底；右侧原季菜单随之删除，同一件事不留两个入口，正序/倒序仍在右侧。
+  - **每 30 集一个分区**：新增纯策略 `MetadataKit.EpisodeChunker` / `EpisodeChunk`（`Packages/MetadataKit/Sources/MetadataKit/Episodes/EpisodeChunks.swift`）——顺序切分、保序不丢格（`chunk(slots).flatMap(\.slots)` 与输入逐位相等）；分区标签取段内**实际存在的**首尾集号（`1-30`、`1001-1030`，只剩一集的尾段写 `61`），整段都是无 `IndexNumber` 的本地条目时才退回轨道位置号。`DetailViewModel.rebuildEpisodeSlots()` 改成单一出口：`episodeSlots` 与 `episodeChunks` 一起赋值（含「关掉占位」的早退分支），两者不可能漂开。
+  - **单条轨道只渲染当前 ≤30 格**：新增 `EpisodeChunkBar`（`DetailComponents.swift`，胶囊复用 `AppDesignKit.OptionChip`），一季超过 30 集时出现在轨道上方；点分区只换轨道内容，**不改选中集**（顶部播放钮播的仍是选中集），分区胶囊只负责浏览。倒序时分区顺序与段内顺序一起反，等价于改动前的「整条轨道反转」。
+  - **浏览状态是纯值类型**：`EpisodeChunkNavigation`（展示哪些分区 / 当前哪一段 / 渲染哪些格 / 手点越界忽略 / 倒序反序）收在 `MetadataKit` 与 `EpisodeChunker` 同文件，视图只剩 `@State` 一个字段与接线——这段是本次风险最高的逻辑，放在包里才能脱离 SwiftUI 单测（6 条用例）。
+  - **落点与滚动**：默认停在选中集（VM 的 `preferredEpisodeID`，通常是第一个未看完的）所在分区，分区条会自动把当前段滚进视野（千集长番 ≈37 段时必须在屏内）；手点分区后只浏览，选中集一变（换季 / 点卡 / 播放回填）就回到「跟随选中集」。轨道身份 = 季 + 当前分区，变化时重建 `HoverArrowHScroll`，横向偏移归零——否则会停在上一分区的偏移上（点 31-60 却先看到 60）。
+  - **验证**：`swift test --package-path Packages/MetadataKit --filter EpisodeChunkTests`（16 条纯策略用例：切点边界 0/30/31/61、保序、占位集号进标签、乱序 min/max 兜底、无编号兜底、非正 size、分区浏览状态的跟随/手点越界/倒序反序/越界渲染）+ `xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination 'platform=macOS' -derivedDataPath .local-build/current/DerivedData test -skip-testing:OcPlayerTests/DanmakuOverlaySpawnCostTests`（App 全量 705 条全绿、0 失败、19 skip；计时敏感的 `DanmakuOverlaySpawnCostTests` 在并行满载时会因机器争用超时，空载单跑 3 条全过）+ 新增 `OcPlayerTests/DetailEpisodeChunkTests`（3 条接线用例：35 集切两段且与轨道逐位一致、关占位早退分支照样切、≤30 集只有一段）。
+
 - **全站内容卡统一为原生 Liquid Glass（基准是 MoviePilot 下载队列那套 `liquidGlassCard`；用户点名的搜索结果页卡片原先用的是 `.ultraThinMaterial` / 纯色底，观感相近但原语不同，本次一并收编）；设置页为此整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流（A 方案先试后被否，B 方案落地）**
   （用户口径：「moviepilot 的搜索结果、下载队列里面的这个是玻璃的效果，你再看看我们的设置、bangumi 等等都不是玻璃的效果，
   我想让他们都跟下载列表的一样，使用玻璃效果的」；看到 A 方案实机效果后追加：「现在效果太差了，你上方案 B 吧」）。

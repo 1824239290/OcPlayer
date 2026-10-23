@@ -16,7 +16,8 @@ extension Color {
 }
 
 /// 详情页：背景横幅 + 元数据 + 播放键 + 简介 + 演员 + 类似推荐；
-/// 剧集额外有季选择器和横向选集（点选中，顶部主按钮开播）。
+/// 剧集额外有季选择器（就在选集区的标题位）和按 30 集分段的横向选集
+/// （点选中，顶部主按钮开播）。
 struct DetailView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -44,6 +45,13 @@ struct DetailView: View {
 
     /// 选集排序偏好跨启动保留：长剧倒序从最新一集看起，不用从头翻。
     @AppStorage(SettingsKeys.episodeSortAscending) private var episodesAscending = true
+
+    /// 选集分区的浏览状态（展示哪些分区、当前哪一段、渲染哪些格）。
+    ///
+    /// 纯值计算收在 `EpisodeChunkNavigation`（`MetadataKit`，可脱离 SwiftUI 单测），
+    /// 视图只留这一个 `@State` 字段与接线。只活在本次停留里：换季 / 换条目重建视图
+    /// 即清空，不落盘——分区是浏览位置，不是偏好（与 `episodesAscending` 不同类）。
+    @State private var chunkNav = EpisodeChunkNavigation()
 
     init(item: MediaItem) {
         self.item = item
@@ -885,11 +893,14 @@ struct DetailView: View {
         .padding(.top, 20)
     }
 
-    // MARK: - 剧集：季 + 横向选集
+    // MARK: - 剧集：季 + 按 30 集分段的横向选集
 
+    /// 选集区标题行：**标题位就是选季控件**（用户口径：把原先「剧集」那两个字的位置
+    /// 换成右侧那个季选框），右侧只留正序/倒序。原右侧的季菜单随之删除——同一件事
+    /// 不该有两个入口。
     private var seasonBar: some View {
         HStack(spacing: 14) {
-            Text("剧集").font(.title3.weight(.bold))
+            seasonSelector
             Spacer()
             if model.episodeSlots.count > 1 {
                 Button {
@@ -908,32 +919,6 @@ struct DetailView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if model.seasons.count > 1 {
-                Menu {
-                    ForEach(model.seasons) { season in
-                        Button {
-                            model.selectSeason(season.id)
-                        } label: {
-                            if season.id == model.selectedSeasonID {
-                                Label(season.name, systemImage: "checkmark")
-                            } else {
-                                Text(season.name)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(model.selectedSeasonName)
-                            .font(.subheadline.weight(.medium))
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(.tint)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.tint.opacity(0.12), in: Capsule())
-                }
-            }
         }
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 26)
@@ -943,6 +928,43 @@ struct DetailView: View {
             async let episodes: Void = model.loadEpisodes()
             async let seasonTMDb: Void = model.loadSeasonOverlay()
             _ = await (episodes, seasonTMDb)
+        }
+    }
+
+    /// 标题位的季入口：多季时是季选择菜单，单季时退回季名纯文本
+    /// （不给只有一个选项的下拉），季数据未到时用「选集」兜底。
+    @ViewBuilder
+    private var seasonSelector: some View {
+        if model.seasons.count > 1 {
+            Menu {
+                ForEach(model.seasons) { season in
+                    Button {
+                        model.selectSeason(season.id)
+                    } label: {
+                        if season.id == model.selectedSeasonID {
+                            Label(season.name, systemImage: "checkmark")
+                        } else {
+                            Text(season.name)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(model.selectedSeasonName)
+                        .font(.subheadline.weight(.medium))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.tint)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.tint.opacity(0.12), in: Capsule())
+            }
+            .help("切换季")
+            .accessibilityLabel("切换季，当前 \(model.selectedSeasonName)")
+        } else {
+            Text(model.seasons.isEmpty ? "选集" : model.selectedSeasonName)
+                .font(.title3.weight(.bold))
         }
     }
 
@@ -968,8 +990,30 @@ struct DetailView: View {
                     .padding(.horizontal, detailHorizontalInset)
                     .transition(.section)
             } else {
-                episodePickerRail
-                    .transition(.section)
+                VStack(alignment: .leading, spacing: 0) {
+                    // 一季超过 30 集才出分区条：普通季（≤30 集）的观感与改动前完全一致。
+                    if model.episodeChunks.count > 1 {
+                        EpisodeChunkBar(
+                            chunks: displayedChunks,
+                            activeIndex: activeChunkIndex,
+                            sortAscending: episodesAscending,
+                            leadingInset: contentLeading
+                        ) { chunk in
+                            chunkNav.browsedIndex = chunk.index
+                        }
+                        // 换季重建分区条：否则上一条的横向偏移会留下，当前分区可能在屏外。
+                        .id(model.selectedSeasonID ?? "-")
+                    }
+                    episodePickerRail
+                        // 换分区 / 换季重建轨道：SwiftUI 不会因为 items 变短自动把横向
+                        // 偏移归零，不重建就会停在上一分区的偏移上（点 31-60 却先看到 60）。
+                        .id(railIdentity)
+                        .transition(.section)
+                }
+                // 整块（分区条 + 轨道）在「loading → 内容」这类翻转里淡入；分区之间的
+                // 淡入淡出由上面那条轨道自己的 `.transition` 负责（子视图在父视图插入时
+                // 用父的过渡，不会叠成两段动画）。
+                .transition(.section)
             }
         }
         // 切季时旧选集淡出 → loading 淡入 → 新选集淡入，不再三处硬切。
@@ -979,20 +1023,53 @@ struct DetailView: View {
         .motion(Motion.standard, value: model.isLoadingEpisodes)
         .motion(Motion.standard, value: model.episodes.count)
         .motion(Motion.standard, value: model.episodeSlots.isEmpty)
+        // 分区切换也走同一作用域：旧段淡出、新段淡入、胶囊高亮跟着动。
+        .motion(Motion.standard, value: activeChunkIndex)
+        // 选中集变了就回到「跟随选中集」：手点分区只是浏览，选中态一变仍以选中集为准。
+        // 段内点卡时两者指向同一分区，等于无变化。
+        .onChange(of: model.selectedSeasonID) { _, _ in chunkNav.followSelection() }
+        .onChange(of: model.selectedEpisodeID) { _, _ in chunkNav.followSelection() }
     }
 
-    /// 选集展示顺序：排序只影响横向条，不动 `model.episodes`、`episodeSlots` 与选中态。
-    private var displayedSlots: [EpisodeSlot] {
-        episodesAscending ? model.episodeSlots : Array(model.episodeSlots.reversed())
+    /// 分区条的展示顺序：与轨道同一个方向（倒序 = 段序与段内顺序一起反，
+    /// 等价于改动前「整条轨道反转」的观感，标签仍是同一批集号区间）。
+    private var displayedChunks: [EpisodeChunk] {
+        chunkNav.displayedChunks(model.episodeChunks, ascending: episodesAscending)
+    }
+
+    /// 当前分区（`EpisodeChunk.index`）：用户手点过就听用户的；否则跟随选中集；
+    /// 都没有（还没选中）时落在**第一个展示出来的**分区（倒序即最后一段）。
+    private var activeChunkIndex: Int {
+        chunkNav.activeIndex(
+            in: model.episodeChunks,
+            selectedEpisodeID: model.selectedEpisodeID,
+            ascending: episodesAscending)
+    }
+
+    /// 轨道身份：换季 / 换分区 / 翻排序时重建，横向滚动位置回到段首。
+    ///
+    /// 排序也算身份：正序↔倒序是把同一段**镜像**一遍，偏移量不变就会停在镜像后的
+    /// 中段（点 31-60 却先看到 45）——重置回段首或选中集才是可预期的。
+    private var railIdentity: String {
+        "\(model.selectedSeasonID ?? "-")-\(activeChunkIndex)-\(episodesAscending)"
+    }
+
+    /// 当前分区要渲染的格子（≤30 张）。排序只影响展示顺序，不动 `model.episodes`、
+    /// `episodeSlots`、`episodeChunks` 与选中态。
+    private var railSlots: [EpisodeSlot] {
+        chunkNav.railSlots(in: model.episodeChunks, activeIndex: activeChunkIndex,
+                           ascending: episodesAscending)
     }
 
     /// 横向选集 + 两侧悬浮箭头（鼠标靠近才显示；VoiceOver 下常显）。
     ///
     /// 每一格按类型分派：库里有 → 可选可播的分集卡；库里没有 → 不可点的占位卡。
-    /// `scrollToID` 仍是选中集的 id（永远是本地条目），占位的 id 与它不同形，不会误滚。
+    /// `scrollToID` 仍是选中集的 id（永远是本地条目），**照传不误**：分区过滤后
+    /// `HoverArrowHScroll` 自己会判定「该 id 不在本段 items 里就忽略」，占位的 id
+    /// 与它也不同形，不会误滚。
     private var episodePickerRail: some View {
         HoverArrowHScroll(
-            items: displayedSlots,
+            items: railSlots,
             scrollStep: 4,
             contentLeading: contentLeading,
             edgeReserve: 28,
