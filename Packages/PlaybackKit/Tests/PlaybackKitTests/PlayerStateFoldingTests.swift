@@ -107,6 +107,202 @@ final class PlayerStateFoldingTests: XCTestCase {
         try await waitUntil("回退文案") { state.lastError == "内核错误 code=4" }
     }
 
+    // MARK: - 片尾 EOF 临时兜底（根因在内核侧，见 endOfStreamToleranceSeconds）
+
+    /// 自然播到文件尾时内核把「跨 EOF 的读」报成致命错误：按自然结束收口，
+    /// 不置 `lastError`、不计 `errorCount`——错误徽章与「重试」都不该出现。
+    func testEndOfStreamFailureFoldsToStopped() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1472)))
+        engine.emit(.positionChanged(.milliseconds(1_471_512)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1472) && state.position == .milliseconds(1_471_512)
+        }
+
+        engine.emit(.failed(code: 3, message: "ffmpeg error in av_read_frame: Input/output error (-5)"))
+        try await waitUntil("片尾错误折叠成 stopped") { state.state == .stopped }
+
+        XCTAssertNil(state.lastError, "片尾 EOF 不是播放失败：不该给 UI 一个错误文案")
+        XCTAssertEqual(state.sessionStats.errorCount, 0, "错误计数不该被片尾假错误污染")
+    }
+
+    /// 片中（离片尾还远）的错误照旧：错误徽章 + 「重试」那条路一个字都不能变。
+    func testMidStreamErrorStillFails() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(100)))
+        engine.emit(.positionChanged(.seconds(31)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(100) && state.position == .seconds(31)
+        }
+
+        engine.emit(.failed(code: 3, message: "HTTP 401"))
+        try await waitUntil("片中错误仍落 error") { state.state == .error }
+        XCTAssertEqual(state.lastError, "HTTP 401")
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 片长未知（0 = 直播 / duration 还没到）：拿不到分母就不猜，照旧报错。
+    func testUnknownDurationDoesNotFoldError() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.failed(code: 3, message: "HTTP 401"))
+        try await waitUntil("无片长时错误照旧") { state.state == .error }
+        XCTAssertEqual(state.lastError, "HTTP 401")
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 有的现场只有状态迁移、没有错误事件：`.stateChanged(.error)` 也要过同一道折叠。
+    func testEndOfStreamStateChangedErrorFoldsToStopped() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1422)))
+        engine.emit(.positionChanged(.milliseconds(1_421_587)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1422) && state.position == .milliseconds(1_421_587)
+        }
+
+        engine.emit(.stateChanged(.error))
+        try await waitUntil("状态错误也折叠成 stopped") { state.state == .stopped }
+        XCTAssertNil(state.lastError)
+    }
+
+    /// 状态迁移先到、`.failed` 后到（内核两张面孔都出现）：后者带的内核原文不能被
+    /// 「已经记过一条」抑制掉，但状态也不该被翻回 `.error`。
+    func testStateFoldThenFailureKeepsStoppedAndOriginalMessage() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1472)))
+        engine.emit(.positionChanged(.milliseconds(1_471_512)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1472) && state.position == .milliseconds(1_471_512)
+        }
+
+        engine.emit(.stateChanged(.error))
+        try await waitUntil("先折叠成 stopped") { state.state == .stopped }
+        engine.emit(.failed(code: 3, message: "ffmpeg error in av_read_frame: Input/output error (-5)"))
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertEqual(state.state, .stopped, "迟到的 .failed 不该把自然结束翻回 error")
+        XCTAssertNil(state.lastError, "自然结束不该带错误文案")
+        XCTAssertEqual(state.sessionStats.errorCount, 0, "两张面孔都不算播放失败")
+    }
+
+    /// 容差边界：位置恰好落在「片长 − 容差」上就算站在文件尾（用 `>=`，不是 `>`）。
+    func testEndOfStreamBoundaryIsInclusive() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        let tolerance = PlayerState.endOfStreamToleranceSeconds
+        engine.emit(.durationChanged(.seconds(100)))
+        engine.emit(.positionChanged(.seconds(100 - tolerance)))
+        try await waitUntil("边界位置到位") {
+            state.duration == .seconds(100)
+                && state.position == .seconds(100 - tolerance)
+        }
+
+        engine.emit(.failed(code: 3, message: "audio output stalled at EOF"))
+        try await waitUntil("边界上的片尾错误也折叠") { state.state == .stopped }
+        XCTAssertNil(state.lastError)
+    }
+
+    /// 片尾窗口外的位置差一点点不算：容差不能宽到把真错误吞掉。
+    func testJustOutsideToleranceStillFails() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        let tolerance = PlayerState.endOfStreamToleranceSeconds
+        engine.emit(.durationChanged(.seconds(100)))
+        engine.emit(.positionChanged(.seconds(100 - tolerance) - .milliseconds(1)))
+        try await waitUntil("窗口外位置到位") {
+            state.duration == .seconds(100)
+                && state.position == .seconds(100 - tolerance) - .milliseconds(1)
+        }
+
+        engine.emit(.failed(code: 3, message: "片中的真错误"))
+        try await waitUntil("窗口外的错误仍落 error") { state.state == .error }
+        XCTAssertEqual(state.lastError, "片中的真错误")
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 片长 ≤ 容差的短片、位置还在 0（解码起不来 / 源打不开）：没有「已经播到末尾」
+    /// 这回事，不能被 `0 + tolerance >= duration` 误折叠成「播完了」。
+    func testShortClipAtZeroPositionDoesNotFold() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1)))
+        try await waitUntil("片长到位") { state.duration == .seconds(1) }
+
+        engine.emit(.failed(code: 3, message: "打开失败"))
+        try await waitUntil("短片开头错误照旧") { state.state == .error }
+        XCTAssertEqual(state.lastError, "打开失败")
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 错误风暴：片尾这条 `.failed` 逐帧重发也不能改状态或重复计数。
+    func testEndOfStreamFailureStormStaysQuiet() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1472)))
+        engine.emit(.positionChanged(.milliseconds(1_471_900)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1472) && state.position == .milliseconds(1_471_900)
+        }
+
+        for _ in 0..<50 {
+            engine.emit(.failed(code: 3, message: "Input/output error (-5)"))
+        }
+        try await waitUntil("风暴下仍是 stopped") { state.state == .stopped }
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(state.state, .stopped, "错误风暴不该把状态翻回 error")
+        XCTAssertEqual(state.sessionStats.errorCount, 0)
+        XCTAssertNil(state.lastError)
+    }
+
+    /// `reset()` 要一并把「本会话已落过片尾兜底诊断」的标记清掉（换源后重新计一次）。
+    func testResetClearsEndOfStreamFoldState() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(100)))
+        engine.emit(.positionChanged(.seconds(99)))
+        try await waitUntil("位置到位") { state.position == .seconds(99) }
+        engine.emit(.failed(code: 3, message: "Input/output error (-5)"))
+        try await waitUntil("折叠成 stopped") { state.state == .stopped }
+
+        state.reset()
+        XCTAssertNil(state.lastError)
+        XCTAssertEqual(state.sessionStats.errorCount, 0)
+    }
+
     /// 错误风暴里同一条 `.failed` 逐帧重发：lastError 同值不该再次发布
     ///（否则 HUD / 进度订阅被无谓连坐失效）。
     func testSameLastErrorDoesNotRePublish() async throws {
