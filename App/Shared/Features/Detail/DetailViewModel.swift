@@ -31,6 +31,12 @@ final class DetailViewModel {
     ///
     /// 存成派生状态而不是计算属性：一千集的季每次 body 求值都重排一次是白费。
     private(set) var episodeSlots: [EpisodeSlot] = []
+    /// 选集轨道的分区（默认每 30 集一段，见 `EpisodeChunker`）。
+    ///
+    /// 视图渲染分区条与当前段，而不是自己在 body 里切：与 `episodeSlots` 同一个理由——
+    /// 一千集的季每次 body 求值都重切一遍是白费。它与 `episodeSlots` 恒由同一个出口
+    /// （`rebuildEpisodeSlots`）一起重算，两者永远对同一份 slots 成立。
+    private(set) var episodeChunks: [EpisodeChunk] = []
     /// 本次停留期间已经拉过的季 → 集列表。来回切季不重拉、不闪 loading。
     /// `load()`（换条目）时整体清空。
     var episodesBySeason: [String: [MediaItem]] = [:]
@@ -785,22 +791,27 @@ final class DetailViewModel {
         bangumiCandidates = candidates
     }
 
-    /// 重算选集轨道。
+    /// 重算选集轨道与其分区。
     ///
     /// 三个输入各自 `didSet` 调用（本地集、季叠加层、兜底候选），所以「TMDB 数据晚到」
     /// 「切季」「播放后刷新」都不需要各自记得再算一次——少一处调用点就少一处漏算。
+    /// 分区与轨道收在**同一个出口**重算：视图拿分区去切 `episodeSlots`，两者分开写
+    /// 迟早会漂，漂一格就是「点了 31-60 却看到 1-30」。
     private func rebuildEpisodeSlots() {
-        // 关掉开关 = 退回加占位之前的行为（`episodes` 就是全部）。
-        guard app?.tmdb.showPlaceholders ?? true else {
-            episodeSlots = episodes.map(EpisodeSlot.local)
-            return
+        let slots: [EpisodeSlot]
+        if app?.tmdb.showPlaceholders ?? true {
+            slots = EpisodeSlotBuilder.build(
+                seasonNumber: selectedSeason?.seasonNumber,
+                local: episodes,
+                primary: tmdbSeasonOverlay?.episodeCandidates ?? [],
+                fallback: bangumiCandidates,
+                now: Date())
+        } else {
+            // 关掉开关 = 退回加占位之前的行为（`episodes` 就是全部）。
+            slots = episodes.map(EpisodeSlot.local)
         }
-        episodeSlots = EpisodeSlotBuilder.build(
-            seasonNumber: selectedSeason?.seasonNumber,
-            local: episodes,
-            primary: tmdbSeasonOverlay?.episodeCandidates ?? [],
-            fallback: bangumiCandidates,
-            now: Date())
+        episodeSlots = slots
+        episodeChunks = EpisodeChunker.chunk(slots)
     }
 
     /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
