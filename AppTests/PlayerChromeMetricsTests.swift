@@ -58,4 +58,16 @@ final class PlayerChromeMetricsTests: XCTestCase {
         let tiny = EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 0)
         XCTAssertEqual(PlayerChromeMetrics.sidePadding(tiny, isNarrow: false), 28)
     }
+
+    // MARK: - 底部不进任何公式（契约钉死）
+
+    /// home indicator 已被 `persistentSystemOverlays(.hidden)` 藏掉、无实体遮挡，
+    /// 底部锚点维持原常量。钉死这一点，防将来「顺手」给底部也加让位造成双重让位。
+    func testBottomInsetNeverEntersFormulas() {
+        let bottomHeavy = EdgeInsets(top: 0, leading: 0, bottom: 34, trailing: 0)
+        XCTAssertEqual(PlayerChromeMetrics.topBarTopPadding(bottomHeavy, isNarrow: false), 22)
+        XCTAssertEqual(PlayerChromeMetrics.sidePadding(bottomHeavy, isNarrow: false), 28)
+        XCTAssertEqual(PlayerChromeMetrics.infoPanelTopPadding(bottomHeavy, isNarrow: false), 82)
+        XCTAssertEqual(PlayerChromeMetrics.osdTopPadding(bottomHeavy), 14)
+    }
 }

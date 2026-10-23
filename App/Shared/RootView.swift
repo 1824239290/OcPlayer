@@ -64,7 +64,14 @@ struct RootView: View {
         // 播放锁横屏时这里会跟着重排出新值（横屏顶部归零、侧边变灵动岛禁区）。
         .onGeometryChange(for: EdgeInsets.self) { proxy in
             proxy.safeAreaInsets
-        } action: { chromeInsets = $0 }
+        } action: { insets in
+            // macOS 不接系统 insets：窗口样式（windowStyle 等）将来若给出非零值，
+            // 那属于窗口布局语义、不该混进 HUD 让位——结构性保持恒零
+            // （PlayerChromeMetrics 对 macOS 的「恒零退化」承诺因此成立）。
+            #if os(iOS)
+            chromeInsets = insets
+            #endif
+        }
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
