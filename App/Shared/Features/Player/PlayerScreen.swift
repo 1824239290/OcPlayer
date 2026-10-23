@@ -47,6 +47,11 @@ struct PlayerScreen: View {
     /// 覆盖层出现时要打开的源；nil = 空画面（引擎失败等极端情况）。
     let request: PlaybackRequest?
 
+    /// RootView 在 ignoresSafeArea 之外读到的系统安全区（灵动岛/圆角禁区）。
+    /// 注入 `\.playerChromeInsets` 供 HUD 各锚点让位（见 PlayerChromeMetrics）；
+    /// macOS 恒 .zero。
+    var chromeInsets: EdgeInsets = EdgeInsets()
+
     @State private var hudVisibility = PlayerHUDVisibilityCoordinator()
     @State private var showInfoPanel = false
     @State private var isImportingSubtitle = false
@@ -231,7 +236,7 @@ struct PlayerScreen: View {
                     HStack {
                         Spacer(minLength: 0)
                         PlayerSkipPromptView()
-                            .padding(.trailing, isNarrow ? 16 : 28)
+                            .padding(.trailing, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
                             .padding(.bottom, skipBottomPadding)
                     }
                 }
@@ -271,6 +276,9 @@ struct PlayerScreen: View {
         // HUD 只在播放器子树使用 dark scheme；系统 Glass、Menu、Slider 和语义前景色
         // 因此走同一套解析，不会把底层 AppShell 的外观一并切换。
         .environment(\.colorScheme, .dark)
+        // 本树整体 ignoresSafeArea 后安全区已归零，把外层读到的真实值发给
+        // HUD 锚点（顶栏 / 信息面板 / 动作簇 / OSD …）做系统 chrome 让位。
+        .environment(\.playerChromeInsets, chromeInsets)
         .onGeometryChange(for: Bool.self) { proxy in
             proxy.size.width < 560
         } action: { isNarrow = $0 }
@@ -829,7 +837,7 @@ struct PlayerScreen: View {
         if hudIsFullscreen { return 56 }
         return 58
         #else
-        return isNarrow ? 14 : 22
+        return PlayerChromeMetrics.topBarTopPadding(chromeInsets, isNarrow: isNarrow)
         #endif
     }
 
@@ -1115,6 +1123,7 @@ private struct PlayerPanFeedbackOverlay: View {
     let playbackID: String
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.playerChromeInsets) private var chromeInsets
 
     var body: some View {
         ZStack {
@@ -1126,7 +1135,7 @@ private struct PlayerPanFeedbackOverlay: View {
                         panFeedback: feedback,
                         onInteractionChanged: onInteractionChanged
                     )
-                    .padding(.horizontal, isNarrow ? 16 : 28)
+                    .padding(.horizontal, PlayerChromeMetrics.sidePadding(chromeInsets, isNarrow: isNarrow))
                     .padding(.bottom, isNarrow ? 16 : 28)
                 }
                 .allowsHitTesting(false)
@@ -1139,7 +1148,7 @@ private struct PlayerPanFeedbackOverlay: View {
                         systemImage: "sun.max.fill",
                         value: session.verticalValue
                     )
-                    .padding(.top, 14)
+                    .padding(.top, PlayerChromeMetrics.osdTopPadding(chromeInsets))
                     Spacer(minLength: 0)
                 }
             }

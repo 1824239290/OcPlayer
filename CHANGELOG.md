@@ -6,6 +6,13 @@
 
 ### 改动
 
+- **iOS 播放 HUD 让位灵动岛/屏幕圆角：横屏侧边与竖屏窗口期顶部的控件不再画进系统禁区**
+  （用户口径：「现在播放界面的 HUD 会有内容被灵动岛遮挡的情况，你看看怎么做适配」）。
+  - **根因**：播放覆盖层整体无参 `.ignoresSafeArea()`（RootView）后子树内安全区归零，HUD 各锚点全是固定常量（顶距 14/22、水平 16/28、信息面板 70/82）——灵动岛机型横屏侧边禁区 62pt、竖屏（进播放锁横屏生效前的窗口期）顶部药丸带 62pt，顶栏两端 / 音量胶囊 / 底部进度条 / 右下动作簇 / 跳过按钮 / 信息面板都画进禁区；macOS 分支同位置有系统 chrome 让位（56/58），iOS 分支没有对应处理。
+  - **方案**：结构不动（视频/黑底/弹幕照常全屏 bleed）。`RootView` 在 ignoresSafeArea 之外用 `onGeometryChange` 读 `safeAreaInsets`（转屏自动更新；macOS 不接值、结构性保持恒零），经 `\.playerChromeInsets` 环境值注入 PlayerScreen 子树；`PlayerChromeMetrics` 纯函数公式——顶部锚点 = `insets.top + 原呼吸值`，水平锚点 = `max(insets.leading, insets.trailing, 原值)`，**insets 全零时精确退化到原常量**（无刘海机型 / macOS 零回归）。垂直底距不动：home indicator 已被 `persistentSystemOverlays(.hidden)` 藏掉、无实体遮挡（单测钉死 bottom 不进公式，防将来双重让位）。
+  - **验证**：`PlayerChromeMetricsTests` 5 条（零值回归把 8 个旧常量全部钉死 / 竖屏顶部平移 / 横屏侧让位 / 不对称取宽侧 / bottom 不进公式）；iOS + macOS scheme 全量测试绿；模拟器实测（iPhone 17 Pro，Debug 自检通道启动即播）横屏 insets = `top 0 / bottom 20 / leading = trailing 62`（`statusBarHidden` 下侧边禁区不归零）、竖屏 `top 62 / bottom 34`；像素级前后对比（GLM-5.3-Flash 审图，@3x）：四个侧边元素从 84px（28pt）全部让位至 186px（=62pt）±1px、左右对称、顶部元素不动；真机（iPhone 17）手测通过。
+  - **未含**：弹幕层水平避让（横屏弹幕从侧边滑入会穿过灵动岛区域）与 HUD 是两套布局，另行处理。
+
 - **片尾自然播完不再报 EOF：内核在片尾把「跨 EOF 的读」报成致命错误时，播放状态层直接按自然结束收口（临时兜底，根因在内核侧尚未修）**
   （用户口径：「现在片尾自然结束的时候会报 EOF，你看看有没有办法暂时处理一下」）。
   - **根因**：Erika v0.2.1 在请求边界跨过文件末尾时会间歇把「读到文件尾」报成致命错误（2026-10-09 iPad / 2026-10-12 桌面实测 `av_read_frame: Input/output error (-5)`，也见过 `audio output stalled at EOF`）——内核落 `playback_fatal`，事件流给到 `.failed` 或 `.stateChanged(.error)`。于是**自然播完**反而进 `.error`：UI 弹「播放出错」徽章、诊断记一条 error、`session.end` 的 `error_count` 被污染。上一轮修复（`13b5431`）只在**上报层**把片尾 `.error` 认成「播完」，保证连播/退出能发生；错误徽章与错误计数仍会短暂/持续出现，用户看到的「报 EOF」正是这一层。

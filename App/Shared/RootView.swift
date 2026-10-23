@@ -16,6 +16,10 @@ struct RootView: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
     @State private var updateChecker = AppUpdateChecker.shared
+    /// RootView 自身的系统安全区（灵动岛 / 圆角 / home indicator 禁区）。播放覆盖层
+    /// 整体 `.ignoresSafeArea()` 全屏 bleed 后子树内读不到它，从这层读出来经
+    /// PlayerScreen 注入给 HUD 锚点做让位（见 PlayerChromeMetrics）。
+    @State private var chromeInsets: EdgeInsets = EdgeInsets()
 
     var body: some View {
         Group {
@@ -56,13 +60,25 @@ struct RootView: View {
         // Toggle（绿→蓝）、菜单式 Picker 取值（灰→蓝）、圆形不定 ProgressView（灰→蓝）、
         // 工具栏按钮（label→蓝）、`.bordered` 底（中性→蓝）一起换了色。
         .tint(Color.primary)
+        // 安全区要在 ignoresSafeArea 之外读：RootView 本体处于正常安全区内，
+        // 播放锁横屏时这里会跟着重排出新值（横屏顶部归零、侧边变灵动岛禁区）。
+        .onGeometryChange(for: EdgeInsets.self) { proxy in
+            proxy.safeAreaInsets
+        } action: { insets in
+            // macOS 不接系统 insets：窗口样式（windowStyle 等）将来若给出非零值，
+            // 那属于窗口布局语义、不该混进 HUD 让位——结构性保持恒零
+            // （PlayerChromeMetrics 对 macOS 的「恒零退化」承诺因此成立）。
+            #if os(iOS)
+            chromeInsets = insets
+            #endif
+        }
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
         #endif
         .overlay {
             if let request = app.presentedPlayer {
-                PlayerScreen(request: request)
+                PlayerScreen(request: request, chromeInsets: chromeInsets)
                     .ignoresSafeArea()
                     // 红绿灯（macOS）/ Home 指示条（iOS）也藏，退出播放自动回来
                     .persistentSystemOverlays(.hidden)
