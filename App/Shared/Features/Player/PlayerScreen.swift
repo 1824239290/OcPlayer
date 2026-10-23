@@ -59,7 +59,7 @@ struct PlayerScreen: View {
     // 右下角功能面板当前展开的 Tab（nil = 收起）。跳过按钮层据此让位：
     // 面板打开时跳过钮由 HUD 簇浮动到面板上方，这里的独立实例隐藏。
     @State private var expandedActionTab: PlayerHUDActionTab?
-    // 展开面板内容的自然高度（面板内实测回传），面板打开时跳过钮抬到其上方。
+    // 展开面板卡片的可见总高（面板内实测回传，含子菜单头部、超上限截断），面板打开时跳过钮抬到其上方。
     @State private var panelContentHeight: CGFloat = .zero
     @State private var screenshotToast: String?
     @State private var screenshotToastToken: UUID?
