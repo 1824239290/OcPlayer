@@ -64,7 +64,7 @@ enum PlayerHUDPanelMetrics {
 /// 同一个 `GlassEffectContainer` 内共享取样区域（玻璃不能取样玻璃）。
 struct PlayerHUDActionCluster: View {
     @Binding var expandedTab: PlayerHUDActionTab?
-    // 面板内容自然高度（卡片内实测回传），供 PlayerScreen 把跳过钮抬到面板上方。
+    // 面板卡片可见总高（卡片内实测回传），供 PlayerScreen 把跳过钮抬到面板上方。
     @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
@@ -249,8 +249,8 @@ struct PlayerHUDExpandedActionCard: View {
 
     let tab: PlayerHUDActionTab
 
-    // 面板内容自然高度（本视图内实测）。Binding 归 PlayerScreen 所有：
-    // 跳过按钮层用它计算「面板上方空位」的锚点。
+    // 面板卡片**可见总高**（含子菜单头部、超出上限按上限截；实测口径见 panelBody）。
+    // Binding 归 PlayerScreen 所有：跳过按钮层用它计算「面板上方空位」的锚点。
     @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
@@ -265,6 +265,9 @@ struct PlayerHUDExpandedActionCard: View {
     let onUserInteraction: () -> Void
 
     @State private var submenu: PlayerHUDPanelSubmenu?
+    /// 内容裸自然高度（不含子菜单头部、不截上限）：只驱动 panelBody 的滚动分支判定。
+    /// 回写给 PlayerScreen 的 binding 是另一套口径（见 panelBody 镜像回写），不能混用。
+    @State private var contentNaturalHeight: CGFloat = 0
 
     /// 面板**卡片**的高度上限（含子菜单头部）：与簇的承载框共用同一份预算
     /// （`PlayerHUDPanelMetrics`），保证卡片永远装得进承载框。
@@ -307,13 +310,20 @@ struct PlayerHUDExpandedActionCard: View {
     /// 不能只给 ScrollView 套 `frame(maxHeight:)`——ScrollView 是贪婪布局，
     /// 两三行的小面板也会被撑满。这里用隐藏镜像（fixedSize 实测自然高度）
     /// 驱动分支，不依赖 ViewThatFits 在 GlassEffectContainer 内的提案表现。
+    ///
+    /// 实测值分两个口径回写：
+    /// - 滚动判定用**裸内容高**（不含子菜单头部、不截上限），存本地 `contentNaturalHeight`。
+    ///   若拿截断值判定，截断值恒 ≤ 上限，滚动分支就永远进不去。
+    /// - 跳过钮锚点用**卡片可见总高**回写 binding：含子菜单头部，超出卡片上限按上限截。
+    ///   二级页只回内容高会缺头部 46pt，按钮停在面板顶内叠住右上角；滚动时可见卡片
+    ///   只有上限高，回自然高会让按钮飘到面板上方一截。
     @ViewBuilder
     private func panelBody(_ content: some View) -> some View {
         let padded = content
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
         Group {
-            if panelContentHeight > maxPanelContentHeight {
+            if contentNaturalHeight > maxPanelContentHeight {
                 ScrollView(.vertical, showsIndicators: false) {
                     padded
                 }
@@ -326,8 +336,11 @@ struct PlayerHUDExpandedActionCard: View {
             padded
                 .fixedSize(horizontal: false, vertical: true)
                 .hidden()
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) {
-                    panelContentHeight = $0
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                    contentNaturalHeight = height
+                    panelContentHeight = min(
+                        height + (submenu == nil ? 0 : PlayerHUDPanelMetrics.submenuHeaderHeight),
+                        maxCardHeight)
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)

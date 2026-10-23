@@ -19,7 +19,7 @@ struct PlayerHUDOverlay: View {
 
     // 状态归 PlayerScreen：跳过按钮层要据它让位（面板打开时跳过钮浮到面板上方）。
     @Binding var expandedTab: PlayerHUDActionTab?
-    // 面板内容自然高度（簇内卡片实测），透传给 PlayerScreen 计算跳过钮锚点。
+    // 面板卡片可见总高（簇内卡片实测，含子菜单头部），透传给 PlayerScreen 计算跳过钮锚点。
     @Binding var panelContentHeight: CGFloat
 
     @Binding var isImportingSubtitle: Bool
