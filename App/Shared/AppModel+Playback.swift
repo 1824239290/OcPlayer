@@ -552,6 +552,9 @@ extension AppModel {
     @discardableResult
     func playbackDidEnterBackground() -> Task<Void, Never>? {
         #if os(iOS)
+        // 自动画中画（设置开关门控）：必须先于挂起决策——start() 同步进纹理档
+        // 并置 isEngaged，beginSystemSuspension 据此走 `.pip` 模式而不是仅音频档。
+        playback?.pipCoordinator.handleSceneBackground()
         backgroundResumeIntent = playback?.beginSystemSuspension() ?? false
         #endif
         guard let report = playbackReporting?.reportBackgroundSnapshot() else { return nil }

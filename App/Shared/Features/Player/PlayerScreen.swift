@@ -161,6 +161,16 @@ struct PlayerScreen: View {
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
             }
+            #if os(iOS)
+            // 画中画的 displayLayer 锚点：零尺寸、不可命中，但必须在 window 树内
+            // （`AVPictureInPictureController.isPictureInPicturePossible` 依赖它）。
+            if controller.engine != nil {
+                PipHostView(layer: controller.pipCoordinator.displayLayer)
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            #endif
             playerGestureLayer
 
             // 缓冲指示：判据是迟滞后的 UI 缓冲态（单帧饿数据不闪转圈，真值见 state.isBuffering）。

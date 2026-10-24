@@ -1,3 +1,4 @@
+import ErikaKit
 import PlaybackKit
 import Foundation
 import Observation
@@ -19,14 +20,19 @@ struct PlayerHUDBottomDock: View {
     let onInteractionChanged: (PlayerHUDInteraction, Bool) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
-            PlayerHUDTitleBlock(title: title, kicker: kicker, isNarrow: isNarrow)
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: isNarrow ? 10 : 14) {
+                PlayerHUDTitleBlock(title: title, kicker: kicker, isNarrow: isNarrow)
 
-            PlayerHUDTimeline(
-                playbackID: playbackID,
-                panFeedback: panFeedback,
-                onInteractionChanged: onInteractionChanged
-            )
+                PlayerHUDTimeline(
+                    playbackID: playbackID,
+                    panFeedback: panFeedback,
+                    onInteractionChanged: onInteractionChanged
+                )
+            }
+            #if os(iOS)
+            PlayerPipEntryButton()
+            #endif
         }
         // 水平与顶栏同口径让位侧边灵动岛/圆角禁区；垂直方向 home indicator 已被
         // persistentSystemOverlays(.hidden) 藏掉、无实体遮挡，底距维持原值。
@@ -35,6 +41,38 @@ struct PlayerHUDBottomDock: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+#if os(iOS)
+/// 底部坞右下角的画中画入口（系统支持且在播/暂停时显示；点按切纹理档并启动系统 PiP）。
+private struct PlayerPipEntryButton: View {
+    @Environment(PlaybackController.self) private var controller
+
+    private var shows: Bool {
+        PipCoordinator.isSupported
+            && controller.engine is ErikaEngine
+            && (controller.state.state == .playing || controller.state.state == .paused)
+    }
+
+    var body: some View {
+        if shows {
+            Button {
+                controller.pipCoordinator.start()
+            } label: {
+                Image(systemName: "pip.enter")
+                    .symbolRenderingMode(.monochrome)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(PlayerHUDPalette.primary)
+                    .frame(width: 40, height: 40)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.pressScale)
+            .glassEffect(.regular.interactive(), in: Circle())
+            .help("画中画")
+            .accessibilityLabel("画中画")
+        }
+    }
+}
+#endif
 
 struct PlayerHUDTitleBlock: View {
     let title: String

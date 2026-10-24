@@ -1,6 +1,7 @@
 import CoreGraphics
 import DanmakuKit
 import DiagnosticsKit
+import ErikaKit
 import Foundation
 import ImageIO
 import JellyfinKit
@@ -331,6 +332,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     /// 这次前后台往返用的哪条策略。进后台时选定，回前台按它退回——
     /// 不能只看当前状态猜：后台档期间用户可能在锁屏上按过暂停。
+    #if os(iOS)
+    /// iOS 系统画中画协调器（displayLayer / AVPictureInPictureController 常驻，
+    /// 跨会话复用；每次 `prepareEngine` 换绑状态源）。
+    let pipCoordinator = PipCoordinator()
+    #endif
+
     @ObservationIgnored private var suspensionMode: SuspensionMode = .none
 
     private enum SuspensionMode {
@@ -340,6 +347,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         case audioOnly
         /// 内核没有后台档：进程被挂起前主动暂停，回前台 play() 解开。
         case paused
+        /// 画中画正活跃（iOS）：帧驱动停在纹理档，回前台时关 PiP 并还原全屏。
+        case pip
     }
 
     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
@@ -463,6 +472,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
             state.onTracksRefreshed = { [weak self] in
                 self?.applySubtitlePreferenceIfNeeded()
             }
+            // 播放收口（自然播完 / 错误折叠成 stopped）时关掉系统 PiP 窗口。
+            state.onPlaybackStopped = { [weak self] in
+                #if os(iOS)
+                self?.pipCoordinator.handlePlaybackStopped()
+                #endif
+            }
+            #if os(iOS)
+            // PiP 的 displayLayer / controller 常驻，每次会话换绑引擎状态源。
+            pipCoordinator.bind(to: self)
+            #endif
             self.engine = engine
             setupError = nil
             // 创建 config 里的 headroom 取自工厂时刻的屏幕查询；探针若已报过
@@ -1076,6 +1095,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func stopPlayback() {
         playerLog.info("stopPlayback hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
+        #if os(iOS)
+        // 用户退出播放：PiP 窗口（若还开着）一并收掉，didStop 里的档位还原幂等。
+        pipCoordinator.handlePlaybackStopped()
+        #endif
         // 会话收尾先落一条内核原始计数器快照，**必须在下面的 engine?.stop() 之前**：
         // 内核自 v0.2.1 起在 stop 时释放 HTTP 缓存与队列，而统计里有些量反映的正是
         // 那一段（音频时钟欠载、背压丢帧、解码后端构成）。落在 stop 之后等于记录一个
@@ -1274,6 +1297,15 @@ final class PlaybackController: DanmakuPlaybackHosting {
         guard let engine else { return false }
 
         if type(of: engine).supportsBackgroundAudio {
+            // PiP 正在接管（已活跃或 start 刚发出还没回调 didStart）：帧驱动停在
+            // 纹理档，切去仅音频档会把 PiP 画面掐死——什么都不动，回前台走 `.pip` 还原。
+            #if os(iOS)
+            if pipCoordinator.isEngaged {
+                suspensionMode = .pip
+                PlaybackLog.append("系统进后台：画中画接管中，保持纹理档")
+                return true
+            }
+            #endif
             engine.setBackgroundAudioOnly(true)
             suspensionMode = .audioOnly
             PlaybackLog.append("系统进后台：切到仅音频推进档，保持播放")
@@ -1313,9 +1345,18 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if case .audioOnly = mode {
             engine?.setBackgroundAudioOnly(false)
         }
+        #if os(iOS)
+        if case .pip = mode {
+            // 回前台自动还原全屏（YouTube / B 站同款行为）：退纹理档把画面交还
+            // metal layer，再收 PiP 窗口（didStop 里的 endTextureRendering 幂等）。
+            (engine as? ErikaEngine)?.endTextureRendering()
+            pipCoordinator.stop()
+            PlaybackLog.append("系统回前台：退出画中画还原全屏")
+        }
+        #endif
         guard resumePlaying, engineIsActive else { return false }
         switch mode {
-        case .audioOnly:
+        case .audioOnly, .pip:
             // 后台档里没暂停过，所以这里**没有** play() 要补：切回渲染档即可，
             // 内核在随后第一帧渲染 tick 里自行 flush 解码器 + 回关键帧恢复视频。
             // 只要它没落进错误态就还能接着用。
@@ -1370,6 +1411,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         } catch {
             setupError = "\(error)"
         }
+        #if os(iOS)
+        pipCoordinator.notePlaybackControlsChanged()
+        #endif
     }
 
     func seek(toFraction fraction: Double) {
@@ -1377,6 +1421,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let micros = Double(state.duration.microseconds) * min(max(fraction, 0), 1)
         recordSeek(toSeconds: micros / 1_000_000, kind: "scrub")
         try? engine.seek(to: .microseconds(Int64(micros)))
+        #if os(iOS)
+        pipCoordinator.notePlaybackControlsChanged()
+        #endif
     }
 
     func skip(by seconds: Double) {
@@ -1397,6 +1444,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let landing = max(0, target)
         recordSeek(toSeconds: landing, kind: "skip")
         try? engine.seek(to: .seconds(landing))
+        #if os(iOS)
+        pipCoordinator.notePlaybackControlsChanged()
+        #endif
     }
 
     /// 视为用户主动意图的 seek 类型（片头学习数据源）。auto（跳过按钮）与

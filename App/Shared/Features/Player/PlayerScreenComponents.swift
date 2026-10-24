@@ -1,6 +1,30 @@
 import AppDesignKit
+import AVFoundation
 import PlaybackKit
 import SwiftUI
+
+#if os(iOS)
+/// 画中画 displayLayer 的锚点视图：layer 常驻子层，宿主视图零尺寸不影响布局。
+/// `AVSampleBufferDisplayLayer` 挂在 window 树内（哪怕不可见）是 PiP 启动的前提。
+struct PipHostView: UIViewRepresentable {
+    let layer: AVSampleBufferDisplayLayer
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        view.layer.addSublayer(layer)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        // layer 常驻（跨会话复用），只在尺寸变化时对齐 frame。
+        if layer.frame != uiView.bounds {
+            layer.frame = uiView.bounds
+        }
+    }
+}
+#endif
 
 /// 播放准备态的全屏 loading 层：解析地址中（转圈 + 标题 + 取消）/ 解析失败（错误 + 重试）。
 /// 一处定义两处复用——RootView 的准备态覆盖层，与 PlayerScreen 内部 opening/idle 态。

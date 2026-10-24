@@ -20,6 +20,11 @@ struct PlaybackSettingsView: View {
     /// PlaybackPreferences 同 key，播放中改动即生效（提示按钮每拍进度重读）。
     @AppStorage(SettingsKeys.skipIntro) private var skipIntroEnabled = true
     @AppStorage(SettingsKeys.skipOutro) private var skipOutroEnabled = true
+    #if os(iOS)
+    /// 画中画：退出 App 自动进小窗（默认开）。与 `PipCoordinator` 同 key，
+    /// 每次播放会话开始时读一遍。
+    @AppStorage(SettingsKeys.autoPictureInPicture) private var autoPipEnabled = true
+    #endif
     @AppStorage(SettingsKeys.outroRetentionSeconds) private var storedOutroRetention = 10
     private var outroRetentionSeconds: Int {
         PlaybackPreferences.outroRetentionOptionsSeconds.contains(storedOutroRetention)
@@ -90,6 +95,15 @@ struct PlaybackSettingsView: View {
             } footer: {
                 Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 3 秒。")
             }
+
+            #if os(iOS)
+            SettingsGlassSection("画中画") {
+                Toggle("退出 App 时自动进入画中画", isOn: $autoPipEnabled)
+                    .neutralSwitch()
+            } footer: {
+                Text("播放中把 App 切到后台，画面自动挪进系统小窗继续播放；播放器里的画中画按钮不受此开关影响，随时可手动进入。关闭后小窗里的声音仍会继续（走后台播放）。改动从下一次播放生效。")
+            }
+            #endif
 
             SettingsGlassSection("字幕") {
                 SettingsPickerRow("默认字幕语言", selection: Binding(

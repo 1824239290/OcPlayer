@@ -1,6 +1,9 @@
 import CErika
+import CoreMedia
+import CoreVideo
 import DiagnosticsKit
 import Foundation
+import Metal
 import PlaybackKit
 import QuartzCore
 import SwiftUI
@@ -55,14 +58,26 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     private let renderLoop: RenderLoop
     private let continuation: AsyncStream<PlayerEvent>.Continuation
 
-    // MARK: 后台档位（改这块前先读 setBackgroundAudioOnly）
+    // MARK: 帧驱动档位（改这块前先读 setBackgroundAudioOnly / beginTextureRendering）
 
-    /// 后台档位状态。独立小锁：渲染线程每帧要在**进主锁之前**判档位，
+    /// 帧驱动的三态：谁来驱动 `render_tick`、渲染到哪里。
+    ///
+    /// - `display`：前台常态，`CADisplayLink` 驱动，渲染进宿主视图的 `CAMetalLayer`。
+    /// - `audioOnly`：后台音频档，定时器驱动 `audio_only_tick`（内核挂起视频解码）。
+    /// - `texture`：画中画档，定时器驱动 `render_tick`，渲染进宿主自有纹理
+    ///   （`FrameSurfacePool` 的 IOSurface），逐帧回调给上层喂 `AVSampleBufferDisplayLayer`。
+    enum FrameDrive: Equatable {
+        case display
+        case audioOnly
+        case texture
+    }
+
+    /// 档位状态。独立小锁：渲染线程每帧要在**进主锁之前**判档位，
     /// 而切档发生在主线程，不能用主锁保护（主锁会被 open 长持）。
     private let backgroundLock = NSLock()
-    private var _backgroundAudioOnly = false
-    /// 后台档的音频推进定时器；非后台档时为 nil。
-    private var backgroundTimer: DispatchSourceTimer?
+    private var _frameDrive: FrameDrive = .display
+    /// 后台档 / 画中画档共用的帧推进定时器；非定时器档位时为 nil。
+    private var frameDriveTimer: DispatchSourceTimer?
     /// 定时器队列。**不能复用渲染线程**：那条线程跑的是 `CADisplayLink` 的 runloop，
     /// 后台没有 vsync，它跟着一起停摆。
     private static let backgroundQueueLabel = "dev.jumusu.OcPlayer.audio-only"
@@ -80,6 +95,28 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
     /// 真正使用指针只在主 actor 里（`RenderLoop.start`）。
     private weak var _attachedView: PlatformView?
 
+    /// 最近一次成功 attach 的 metal layer 参数。画中画档退出时要用**同一组参数**
+    /// 把 layer 挂回去（`endTextureRendering`），存几何而不存指针之外的东西。
+    private var _attachedMetalSurface: AttachedMetalSurface?
+    struct AttachedMetalSurface {
+        let layerToken: UInt64
+        let pixelWidth: Int
+        let pixelHeight: Int
+        let scale: Double
+    }
+
+    /// 画中画档的帧池与回调。只在档位切换点（主线程）创建 / 清空，
+    /// 定时器队列只读这两个引用（创建发生在起定时器之前，happens-before 成立）。
+    private var framePool: FrameSurfacePool?
+    private var textureFrameHandler: (@Sendable (CVPixelBuffer, CMTime) -> Void)?
+    /// 画中画档的「上一拍已渲染视频帧数」。只被定时器队列访问，用于判断
+    /// 这一拍内核有没有真的渲染出**新**帧（暂停 / buffering 时 render_tick
+    /// 返回成功但不产新帧，不判断就会拿旧纹理重复喂显示层）。
+    private var lastTextureRenderedVideoFrames: UInt64 = 0
+    /// 入队到显示的提前量（秒）：sample buffer 的 PTS 用 host clock，
+    /// 给显示层留出排程余量；与 `step` 传给内核的呈现时刻同源。
+    private static let texturePresentationLeadSeconds: Double = 0.1
+
     private func storedAttachedView() -> PlatformView? {
         backgroundLock.lock()
         defer { backgroundLock.unlock() }
@@ -91,6 +128,12 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         backgroundLock.lock()
         _attachedView = view
         backgroundLock.unlock()
+    }
+
+    private var frameDrive: FrameDrive {
+        backgroundLock.lock()
+        defer { backgroundLock.unlock() }
+        return _frameDrive
     }
 
     // MARK: open 让位契约（改 open / stop / detach 前先读）
@@ -254,8 +297,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     deinit {
         renderLoop.stop()
-        // 后台档的定时器要显式取消：handler 虽是 weak self，但定时器本身会活到 cancel。
-        stopBackgroundTimer()
+        // 定时器档位（后台音频 / 画中画）要显式取消：handler 虽是 weak self，
+        // 但定时器本身会活到 cancel。
+        stopFrameDriveTimer()
         continuation.finish()
     }
 
@@ -295,6 +339,11 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             throw error
         }
         PlaybackLog.info("attach 成功 size=\(pixelWidth)x\(pixelHeight) scale=\(scale)")
+        backgroundLock.lock()
+        _attachedMetalSurface = AttachedMetalSurface(
+            layerToken: raw, pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale
+        )
+        backgroundLock.unlock()
         setAttachedView(view)
         renderLoop.start(on: view)
     }
@@ -313,6 +362,15 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
             try withLock {
                 try presenter.resizeSurface(pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale)
             }
+            // 画中画档退档要用最新几何把 layer 挂回去，这里跟着刷新。
+            backgroundLock.lock()
+            if _attachedMetalSurface != nil {
+                _attachedMetalSurface = AttachedMetalSurface(
+                    layerToken: _attachedMetalSurface!.layerToken,
+                    pixelWidth: pixelWidth, pixelHeight: pixelHeight, scale: scale
+                )
+            }
+            backgroundLock.unlock()
         } catch {
             PlaybackLog.error("resize_surface 失败 size=\(pixelWidth)x\(pixelHeight) scale=\(scale) error=\(error)",
                               throttle: Self.resizeThrottle)
@@ -334,6 +392,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         }
         renderLoop.stop()
         setAttachedView(nil)
+        backgroundLock.lock()
+        _attachedMetalSurface = nil
+        backgroundLock.unlock()
         do {
             try withLock { try presenter.detachSurface() }
             PlaybackLog.info("detach surface 成功")
@@ -484,7 +545,9 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     // MARK: - 后台档位
 
-    /// 进后台（`true`）/ 回前台（`false`）切换帧驱动。
+    // MARK: - 帧驱动档位
+
+    /// 进后台（`true`）/ 回前台（`false`）切换后台音频档。
     ///
     /// **为什么要切**：后台没有 vsync，`CADisplayLink` 不再回调；而进程靠
     /// `UIBackgroundModes: audio` + `.playback` 会话活着，必须有人继续推进音频，
@@ -499,54 +562,163 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     ///
     /// 幂等：重复进/退档直接返回，不会反复重建定时器。
     public func setBackgroundAudioOnly(_ active: Bool) {
+        setFrameDrive(active ? .audioOnly : .display)
+    }
+
+    /// 进画中画档：surface 换成宿主纹理，定时器驱动 `render_tick`，
+    /// 内核每渲染出**新**视频帧就回调 `onFrame(pixelBuffer, pts)`。
+    ///
+    /// - PTS 与 host clock（`CACurrentMediaTime`）同源、已含入队提前量，
+    ///   上层直接喂 `AVSampleBufferDisplayLayer` 的 controlTimebase 即可；
+    /// - 暂停 / buffering 期间内核不产新帧（`rendered_video_frames` 不涨），
+    ///   不回调，显示层自然停在最后一帧；
+    /// - 从后台音频档直接进也行：内核在 `render_tick` 路径里经
+    ///   `try_resume_video_decode` 自动恢复视频解码（与退后台档同一条路）。
+    ///
+    /// `pixelWidth/Height` 是离屏渲染尺寸（像素，上层按视频宽高比与 PiP 预算定）。
+    /// open 在飞时返回 `false` 丢弃。主线程调用（档位切换要求，见 `setFrameDrive`）。
+    @discardableResult
+    public func beginTextureRendering(
+        pixelWidth: Int,
+        pixelHeight: Int,
+        onFrame: @escaping @Sendable (CVPixelBuffer, CMTime) -> Void
+    ) -> Bool {
+        guard !dropControlDuringOpen("beginTextureRendering") else { return false }
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            PlaybackLog.error("beginTextureRendering：取不到系统 Metal device")
+            return false
+        }
+        do {
+            let pool = try FrameSurfacePool(pixelWidth: pixelWidth, pixelHeight: pixelHeight, device: device)
+            backgroundLock.lock()
+            framePool = pool
+            textureFrameHandler = onFrame
+            backgroundLock.unlock()
+            // 只被定时器队列读；此时定时器还没起，写发生在 happens-before 之前。
+            lastTextureRenderedVideoFrames = 0
+        } catch {
+            PlaybackLog.error("beginTextureRendering：帧池创建失败 error=\(error)")
+            return false
+        }
+        setFrameDrive(.texture)
+        let entered = frameDrive == .texture
+        if entered {
+            PlaybackLog.info("进画中画档：渲染进宿主纹理 \(pixelWidth)x\(pixelHeight)")
+        }
+        return entered
+    }
+
+    /// 退画中画档：surface 挂回 metal layer，帧驱动交回 `CADisplayLink`。
+    /// 幂等；不在画中画档时只清理帧池。主线程调用。
+    public func endTextureRendering() {
+        setFrameDrive(.display)
         backgroundLock.lock()
-        guard _backgroundAudioOnly != active else {
+        framePool = nil
+        textureFrameHandler = nil
+        backgroundLock.unlock()
+    }
+
+    /// 三态档位切换的唯一落点。**主线程调用**：`restartRenderLoop` 要摸视图，
+    /// `renderLoop.stop()` 的 join 也不该发生在定时器线程上。
+    ///
+    /// 步骤固定为「停旧驱动 → 换 surface → 起新驱动」，中间允许出现短暂无驱动
+    /// （进档停 `RenderLoop` 本来就要等渲染线程退出）。每一步失败都记日志后继续
+    /// ——档位语义已翻（`_frameDrive` 先改），旧驱动的迟到回调全部被 `step` 闸门丢弃，
+    /// 尽力把新档位拉起来比「停在中间态」好。
+    private func setFrameDrive(_ next: FrameDrive) {
+        backgroundLock.lock()
+        let previous = _frameDrive
+        guard previous != next else {
             backgroundLock.unlock()
             return
         }
-        _backgroundAudioOnly = active
+        _frameDrive = next
+        let pool = framePool
+        let metalSurface = _attachedMetalSurface
         backgroundLock.unlock()
 
-        if active {
+        switch previous {
+        case .display:
             // 等渲染线程退出（内部最长等 1s），之后不会再有人调 render_tick。
             renderLoop.stop()
-            startBackgroundTimer()
-            PlaybackLog.info("进后台档：帧驱动交给定时器，内核将挂起视频解码")
-        } else {
-            stopBackgroundTimer()
+        case .audioOnly, .texture:
+            stopFrameDriveTimer()
+        }
+
+        // 进出 texture 档都要换 surface（一个 presenter 同一时刻只有一个 surface）。
+        if next == .texture || previous == .texture {
+            do {
+                try withLock {
+                    try presenter.detachSurface()
+                    if next == .texture, let pool {
+                        try presenter.attachFlutterTexture(
+                            pixelWidth: pool.pixelWidth, pixelHeight: pool.pixelHeight, scale: 1
+                        )
+                    } else if let metalSurface {
+                        try presenter.attachMetalLayer(
+                            metalSurface.layerToken,
+                            pixelWidth: metalSurface.pixelWidth,
+                            pixelHeight: metalSurface.pixelHeight,
+                            scale: metalSurface.scale
+                        )
+                    }
+                }
+            } catch {
+                PlaybackLog.error("档位切换换 surface 失败 \(previous) → \(next) error=\(error)")
+            }
+        }
+
+        switch next {
+        case .display:
             restartRenderLoop()
-            PlaybackLog.info("退后台档：帧驱动交回 CADisplayLink，内核在渲染帧里恢复视频解码")
+            PlaybackLog.info("帧驱动档位 → display（CADisplayLink + metal layer）")
+        case .audioOnly:
+            startFrameDriveTimer(audioOnly: true)
+            PlaybackLog.info("帧驱动档位 → audioOnly（内核将挂起视频解码）")
+        case .texture:
+            startFrameDriveTimer(audioOnly: false)
         }
     }
 
-    private var isBackgroundAudioOnly: Bool {
-        backgroundLock.lock()
-        defer { backgroundLock.unlock() }
-        return _backgroundAudioOnly
-    }
-
-    /// 后台档的音频推进：16ms 一拍（≈60Hz，与内核的音频泵一致）。
+    /// 定时器档位的帧推进：16ms 一拍（≈60Hz，与内核的音频泵一致）。
     /// leeway 给 4ms —— 后台不追求画面级时序，让系统有机会合并唤醒省电。
-    private func startBackgroundTimer() {
+    private func startFrameDriveTimer(audioOnly: Bool) {
         let timer = DispatchSource.makeTimerSource(queue: backgroundQueue)
         timer.schedule(deadline: .now(), repeating: .milliseconds(16), leeway: .milliseconds(4))
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            self.step(presentationTime: CACurrentMediaTime(), audioOnly: true)
+            if audioOnly {
+                self.step(presentationTime: CACurrentMediaTime(), audioOnly: true)
+            } else {
+                self.stepTexture()
+            }
         }
         timer.resume()
         backgroundLock.lock()
-        backgroundTimer = timer
+        frameDriveTimer = timer
         backgroundLock.unlock()
     }
 
-    private func stopBackgroundTimer() {
+    private func stopFrameDriveTimer() {
         backgroundLock.lock()
-        let timer = backgroundTimer
-        backgroundTimer = nil
+        let timer = frameDriveTimer
+        frameDriveTimer = nil
         backgroundLock.unlock()
         // cancel 是异步的：已经在跑的 handler 会走完，由 step 的档位闸门丢弃。
         timer?.cancel()
+    }
+
+    /// 画中画档的一拍：取可写槽位 → 走 `step` 主干（纹理交给内核 + render_tick +
+    /// 事件抽干 + 统计）。槽位全在飞时丢这一拍——丢帧优于覆写显示层还持有的画面。
+    private func stepTexture() {
+        guard frameDrive == .texture else { return }
+        backgroundLock.lock()
+        let pool = framePool
+        backgroundLock.unlock()
+        guard let slot = pool?.acquire() else { return }
+        // 呈现时刻 = host clock + 入队提前量；sample buffer 的 PTS 与它同一值。
+        step(presentationTime: CACurrentMediaTime() + Self.texturePresentationLeadSeconds,
+             textureSlot: slot)
     }
 
     /// 回前台重启帧驱动。`RenderLoop.start` 要摸视图，只能在主线程做。
@@ -554,7 +726,7 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// `surface_is_ready()` 不成立而保持挂起，等下一次 attach 自己把帧驱动带起来。
     private func restartRenderLoop() {
         guard let view = storedAttachedView() else {
-            PlaybackLog.warning("退后台档时没有已挂载的 surface，帧驱动未重启")
+            PlaybackLog.warning("退定时器档位时没有已挂载的 surface，帧驱动未重启")
             return
         }
         let viewBox = UncheckedSendableBox(value: view)
@@ -1188,25 +1360,44 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
     /// `presentationDelay` 是这一帧到显示目标的延迟（见 `RenderLoop`）：非 nil 时
     /// 走 `render_tick_with_timing`，字幕与渲染上下文按同一个显示目标时刻采样。
     /// 后台档用不到它（没有显示目标）。
+    ///
+    /// `textureSlot` 非 nil 时是画中画档的一拍：先把宿主纹理交给内核再
+    /// `render_tick`（`erika.h` 的调用契约），内核渲染出**新**视频帧时出锁后回调。
     private func step(presentationTime: Double,
                       presentationDelay: Double? = nil,
-                      audioOnly: Bool = false) {
+                      audioOnly: Bool = false,
+                      textureSlot: FrameSurfacePool.Slot? = nil) {
         // 档位闸门：切档与 tick 来自不同线程，迟到的回调必须丢掉。
         //  - 退出后台档后迟到的定时器回调若放行，会把内核刚解开的视频解码又挂起；
         //  - 后台档期间若还有 render_tick 在跑（例如期间重新 attach 起了渲染线程），
-        //    放行等于把刚挂起的解码立刻解开，这一档就白切了。
-        guard audioOnly == isBackgroundAudioOnly else { return }
+        //    放行等于把刚挂起的解码立刻解开，这一档就白切了；
+        //  - 画中画档同理：迟到的 display tick 会写进已换掉的 metal layer，
+        //    迟到的 texture 拍会把帧回调给已退出的档位。
+        let expected: FrameDrive = audioOnly ? .audioOnly : (textureSlot != nil ? .texture : .display)
+        guard expected == frameDrive else { return }
         var pending: [PlayerEvent] = []
         // 锁内只攒失败、不落盘；`emitFailures` 在 unlock 之后统一发。见 `RenderFailure`。
         var failures: [RenderFailure] = []
+        // 画中画档：这一拍内核有没有渲染出**新**视频帧（暂停 / buffering 时没有）。
+        var deliveredTextureFrame = false
 
         lock.lock()
         var memorySnapshot: ErikaMemorySnapshot?
         var outputStatus: ErikaOutputStatus?
         do {
-            let stats = audioOnly
-                ? try presenter.audioOnlyTick()
-                : try presenter.renderTick(at: presentationTime, presentationDelay: presentationDelay)
+            let stats: ErikaPresenterStats
+            if audioOnly {
+                stats = try presenter.audioOnlyTick()
+            } else if let textureSlot {
+                try presenter.setFlutterTextureBuffer(textureSlot.texture)
+                stats = try presenter.renderTick(at: presentationTime)
+            } else {
+                stats = try presenter.renderTick(at: presentationTime, presentationDelay: presentationDelay)
+            }
+            if let textureSlot, stats.rendered_video_frames > lastTextureRenderedVideoFrames {
+                lastTextureRenderedVideoFrames = stats.rendered_video_frames
+                deliveredTextureFrame = true
+            }
             statsLock.lock()
             _latestStats = stats
             statsLock.unlock()            // 每 5s 采一次内核内存，渲染线程时间基准，形成整段播放的内存时间线。
@@ -1250,6 +1441,17 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
         // 失败日志出锁才发：插值 / 6 趟正则 × 3 段 / OSLog / 入队都不该占着主锁。
         // 顺序仍在 `.failed` 事件 yield 之前，时间线与改动前一致。
         Self.emitFailures(failures)
+        // 画中画档的新帧回调：出锁后执行（上层要封装 sample buffer 入队，不该占主锁）。
+        // PTS 与传给内核的呈现时刻同一值（host clock + 入队提前量），显示层按它排程。
+        if deliveredTextureFrame, let slot = textureSlot {
+            backgroundLock.lock()
+            let handler = textureFrameHandler
+            backgroundLock.unlock()
+            handler?(
+                slot.pixelBuffer,
+                CMTime(seconds: presentationTime, preferredTimescale: 6_000_000)
+            )
+        }
         // footprint / 日志不在主锁内做（纯进程读数 + 拼串，5s 一次也该让渲染不受扰）。
         publishMemorySample(memorySnapshot, reason: "tick")
         publishOutputStatus(outputStatus)

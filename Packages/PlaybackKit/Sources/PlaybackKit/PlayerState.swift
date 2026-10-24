@@ -196,6 +196,10 @@ public final class PlayerState {
     /// 实现方必须**幂等**——选轨本身会再推一次 `trackSelectionChanged` → 再刷新。
     @ObservationIgnored public var onTracksRefreshed: (() -> Void)?
 
+    /// 状态**收口到** `.stopped` 时回调一次（主 actor，同步；含片尾 EOF 折叠路径）。
+    /// iOS 的画中画用它关掉系统窗口——PiP 窗口不会自己跟着内核 stopped 收。
+    @ObservationIgnored public var onPlaybackStopped: (() -> Void)?
+
     /// 换源 / 手动选轨后由 `PlaybackController` 显式调用。
     public func refreshTracks(from engine: any PlaybackEngine) {
         guard let all = try? engine.tracks() else { return }
@@ -239,6 +243,7 @@ public final class PlayerState {
             if state != folded {
                 state = folded
                 recordStateTransition(folded)
+                if folded == .stopped { onPlaybackStopped?() }
             }
         case .positionChanged(let value):
             timeline.setPosition(value)
@@ -362,6 +367,7 @@ public final class PlayerState {
         if state != .stopped {
             state = .stopped
             recordStateTransition(.stopped)
+            onPlaybackStopped?()
         }
     }
 

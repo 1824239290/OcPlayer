@@ -1,5 +1,6 @@
 import CErika
 import Foundation
+import Metal
 import PlaybackKit
 
 /// Erika 内核的错误。`ErikaStatus` 非 Ok/NoEvent 时，内核把可读信息写在**线程局部**槽位里，
@@ -127,6 +128,46 @@ public final class ErikaPresenter {
 
     public func detachSurface() throws {
         try ErikaError.check(erika_presenter_detach_surface(handle))
+    }
+
+    // MARK: - Flutter 纹理通路（PiP 喂帧）
+
+    /// 把渲染目标从 `CAMetalLayer` 换成宿主自有的 GPU 纹理（iOS 画中画的帧来源）。
+    ///
+    /// 与 `attach_metal_layer` 同级：一个 presenter 同一时刻只有一个 surface，
+    /// 切换前必须先 `detachSurface()`。`textureID` 在 Flutter 宿主里是 registrar 的
+    /// 纹理 id，这里只用它标识 surface，恒传 1。
+    func attachFlutterTexture(pixelWidth: Int, pixelHeight: Int, scale: Double) throws {
+        try ErikaError.check(
+            erika_presenter_attach_flutter_texture(
+                handle,
+                Self.flutterTextureKind,
+                1,
+                UInt32(pixelWidth),
+                UInt32(pixelHeight),
+                scale
+            )
+        )
+    }
+
+    /// 每次 `render_tick` 之前把本帧要写入的宿主纹理交给内核
+    /// （`erika.h`：before every render_tick, select the host-owned GPU target）。
+    /// `rawTexture` 是 `id<MTLTexture>`（BGRA8Unorm）的裸指针，纹理归宿主所有。
+    func setFlutterTextureBuffer(_ texture: MTLTexture) throws {
+        let raw = UInt64(UInt(bitPattern: Unmanaged.passUnretained(texture).toOpaque()))
+        try ErikaError.check(
+            erika_presenter_set_flutter_texture_buffer(
+                handle, raw, UInt32(texture.width), UInt32(texture.height)
+            )
+        )
+    }
+
+    private static var flutterTextureKind: ErikaFlutterTextureKind {
+        #if os(macOS)
+        ErikaFlutterTextureKind_MacOsTextureRegistrar
+        #else
+        ErikaFlutterTextureKind_IosTextureRegistrar
+        #endif
     }
 
     // MARK: - 帧驱动与事件

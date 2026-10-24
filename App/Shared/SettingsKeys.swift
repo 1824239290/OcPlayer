@@ -15,6 +15,8 @@ enum SettingsKeys {
     static let skipIntro = "dev.jumusu.ocplayer.playback.skipIntro"
     /// 跳过片尾开关（默认开）。片尾标记与末 90 秒保底提示一并受控。
     static let skipOutro = "dev.jumusu.ocplayer.playback.skipOutro"
+    /// iOS 画中画：退出 App 时自动进小窗（默认开）。设置页 ↔ `PipCoordinator`。
+    static let autoPictureInPicture = "dev.jumusu.ocplayer.playback.autoPictureInPicture"
     /// 保底跳过片尾的保留秒数（片长 − 该值为落点；0 = 不保留，默认 10）。
     static let outroRetentionSeconds = "dev.jumusu.ocplayer.playback.outroRetentionSeconds"
     /// 默认字幕语言偏好（中文优先·简体为默认）。设置页 ↔ `PlaybackPreferences`
