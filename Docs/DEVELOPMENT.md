@@ -26,7 +26,7 @@ Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板
 Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 750 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
-Scripts/package-macos.sh v0.2.1  # 本地打包，产出与 CI 相同的 dist/ 产物
+Scripts/package-macos.sh v0.2.2  # 本地打包，产出与 CI 相同的 dist/ 产物
 Scripts/package-ios.sh           # iOS 打包；不带参数时版本号从 Config/App.xcconfig 读取
 Scripts/verify-ambience.sh       # 氛围背景逐页验收（截图 + 客观判定）；见 Docs/AMBIENCE.md
 ```
