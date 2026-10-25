@@ -55,6 +55,11 @@ private struct MacLaunchTicker: View {
     let colorScheme: ColorScheme
 
     @State private var now = Date.now
+    // 存在结构体属性上意味着父级（LaunchExperienceView.body）每次求值都会生成
+    // 一个新 timer：旧值随旧结构体丢弃、订阅被 onReceive 换到新值上，旧的随之
+    // 失效——无泄漏，但会重排一拍。当前父级只依赖 colorScheme 与 presenter
+    // 引用、几乎不求值，可以这么写；若日后给它加了会变化的依赖，把 timer 挪进
+    // onAppear 里显式管理。
     private let timer = Timer.publish(every: 1.0 / 60.0, on: .main, in: .common).autoconnect()
     private let timeline = LaunchTimeline()
 

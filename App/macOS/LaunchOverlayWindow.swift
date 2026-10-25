@@ -22,8 +22,12 @@ import SwiftUI
 ///
 /// ## 实现要点
 ///
-/// * 子窗口（`addChildWindow`）：随主窗口移动 / 缩放 / 最小化 / 全屏自动跟随，
-///   生命周期跟着主窗口；
+/// * 子窗口（`addChildWindow`）：自动随主窗口移动 / 最小化 / Space 切换跟随，
+///   生命周期跟着主窗口；**尺寸与全屏状态不自动跟**——`didResize` / 进出全屏
+///   通知里同步 frame 与圆角（全屏无圆角）。`ignoresMouseEvents` 让用户能穿过
+///   覆盖层拖主窗口边缘，这条同步就是为那个瞬间兜底的。
+/// * 主窗口 willClose 即拆链撤窗：子窗口虽会随父 orderOut，但单例还持着整条
+///   窗口链（hosting controller 又强持 presenter），不摘会滞留到进程退出。
 /// * `isOpaque = false` + 透明底：交棒淡出的是**内容**（启动层自身的 opacity），
 ///   内容透明处直接露出主窗口；
 /// * `ignoresMouseEvents`：纯展示，绝不拦点击（与窗口内 overlay 的
@@ -37,10 +41,22 @@ final class LaunchOverlayWindow {
     private weak var parent: NSWindow?
     private weak var hostView: NSView?
 
-    /// 盖到主窗口上。主窗口找不到（窗口尚未建好）时静默跳过——下一帧的
+    /// 覆盖层需要跟随的主窗口状态变化通知（尺寸 / 进出全屏）。
+    private static let parentFrameSyncNotifications: [Notification.Name] = [
+        NSWindow.didResizeNotification,
+        NSWindow.didEnterFullScreenNotification,
+        NSWindow.didExitFullScreenNotification,
+    ]
+
+    /// 盖到主窗口上。主窗口找不到（窗口尚未建好）时记一条可诊断的 warning 并
+    /// 跳过——静默失败会让「动画没播」在生产日志里无迹可寻；下一帧的
     /// `isVisible` 变化/onAppear 兜底会再试。
     func present(presenter: LaunchPresenter) {
-        guard window == nil, let parent = Self.mainWindow() else { return }
+        guard window == nil else { return }
+        guard let parent = Self.mainWindow() else {
+            AppDiagnostics.logWarning("启动覆盖窗口未找到主窗口，本次 present 跳过")
+            return
+        }
         let rect = parent.frame
         let radius = Self.cornerRadius(of: parent)
         let overlay = NSWindow(
@@ -77,6 +93,15 @@ final class LaunchOverlayWindow {
         window = overlay
         self.parent = parent
         self.hostView = host
+        let center = NotificationCenter.default
+        for name in Self.parentFrameSyncNotifications {
+            center.addObserver(
+                self, selector: #selector(syncFrameToParent), name: name, object: parent)
+        }
+        // object: nil：除主窗口外也兜住「覆盖窗口自身被关」的旁路。
+        center.addObserver(
+            self, selector: #selector(handleWindowWillClose),
+            name: NSWindow.willCloseNotification, object: nil)
         presenter.onExitStart = { [weak self] in self?.beginHandoff() }
         presenter.onExitScheduled = { [weak self] exitStartMs, timelineStart in
             self?.scheduleHandoff(exitStartMs: exitStartMs, timelineStart: timelineStart)
@@ -86,6 +111,23 @@ final class LaunchOverlayWindow {
         if let exitStartMs = presenter.scheduledExitStartMs {
             scheduleHandoff(exitStartMs: exitStartMs, timelineStart: presenter.startDate)
         }
+    }
+
+    /// 覆盖层跟随主窗口：同步 frame 与圆角。幂等，重复调用无害。
+    @objc private func syncFrameToParent() {
+        guard let window, let parent else { return }
+        window.setFrame(parent.frame, display: false)
+        let radius = Self.cornerRadius(of: parent)
+        if let hostView, hostView.layer?.cornerRadius != radius {
+            hostView.layer?.cornerRadius = radius
+        }
+    }
+
+    /// 主窗口（或覆盖窗口自身）要关：立刻拆链，防止单例滞留已关窗口。
+    @objc private func handleWindowWillClose(_ note: Notification) {
+        guard let closing = note.object as? NSWindow,
+              closing === parent || closing === window else { return }
+        dismiss()
     }
 
     /// **预提交**交棒淡出：给 contentView 的根层挂一个 `beginTime` 指向未来的
@@ -140,9 +182,15 @@ final class LaunchOverlayWindow {
         window.styleMask.contains(.fullScreen) ? 0 : 26
     }
 
-    /// 交棒淡出结束（启动层 opacity 已到 0）时撤除覆盖层。
+    /// 交棒淡出结束（启动层 opacity 已到 0）时撤除覆盖层；主窗口关闭时也走这里
+    /// 拆链（willClose），单例不滞留已关窗口。重复调用幂等。
     func dismiss() {
         guard let window else { return }
+        let center = NotificationCenter.default
+        for name in Self.parentFrameSyncNotifications {
+            center.removeObserver(self, name: name, object: nil)
+        }
+        center.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
         parent?.removeChildWindow(window)
         window.orderOut(nil)
         self.window = nil
@@ -150,11 +198,14 @@ final class LaunchOverlayWindow {
         hostView = nil
     }
 
-    /// 主窗口 = `Window("OcPlayer", id: "main")` 的那扇。覆盖窗口自身 title 为空，
-    /// 不会被这个条件误匹配。
+    /// 主窗口 = `Window("OcPlayer", id: "main")` 的那扇。依次按 SwiftUI 场景标识
+    /// （`id:` 若落在 `NSWindow.identifier`）、窗口标题匹配，最后退到 key 窗口；
+    /// 覆盖窗口自身 title 为空，不会被误匹配。
     private static func mainWindow() -> NSWindow? {
         let shared = NSApplication.shared
-        return shared.windows.first { $0.title == "OcPlayer" && $0.contentViewController != nil }
-            ?? shared.keyWindow
+        return shared.windows.first {
+            $0.contentViewController != nil
+                && ($0.identifier?.rawValue == "main" || $0.title == "OcPlayer")
+        } ?? shared.keyWindow
     }
 }

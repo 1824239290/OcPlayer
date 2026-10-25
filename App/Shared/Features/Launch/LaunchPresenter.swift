@@ -18,6 +18,9 @@ import SwiftUI
 /// 「底色先行」真实存在）；`contentBecameReady()` 由 `RootView` 在 phase 离开
 /// `.boot` 时调用，退场任务据此调度。bootstrap 未就绪就**永远呼吸等待**——
 /// 退场只由数据就绪驱动，不看时间上限（3.5s 未就绪会记一条诊断）。
+///
+/// 可测性：时间轴零点经 `beginForTesting(at:)` 注入、三个就绪信号都带 `now:`
+/// 注入（默认 `.now`），`LaunchPresenterTests` 用固定日期钉状态机，不靠真等。
 @MainActor
 @Observable
 final class LaunchPresenter {
@@ -98,7 +101,13 @@ final class LaunchPresenter {
             return
         }
         Self.hasPlayedThisProcess = true
-        startDate = .now
+        startTimeline(at: .now)
+    }
+
+    /// 时间轴起表（`begin` 门控通过后与测试入口 `beginForTesting` 共用）：
+    /// 起零点、补放早到信号、起呼吸等待看门狗。
+    private func startTimeline(at date: Date) {
+        startDate = date
         isVisible = true
         AppDiagnostics.logInfo("启动动画开始", fields: [
             "reduceMotion": .boolean(reduceMotion),
@@ -106,7 +115,10 @@ final class LaunchPresenter {
         ])
         // begin 之前 phase 就翻了（onAppear 与 .task 的竞态兜底）。
         if pendingReady {
-            contentBecameReady(expectAmbience: pendingExpectAmbience, expectHome: pendingExpectHome)
+            contentBecameReady(
+                expectAmbience: pendingExpectAmbience,
+                expectHome: pendingExpectHome,
+                now: date)
             return
         }
         // 呼吸等待是设计，但等待时长要能从诊断里看出来。
@@ -121,8 +133,9 @@ final class LaunchPresenter {
     /// - Parameters:
     ///   - expectAmbience: 有会话（预期首页有氛围图）→ 交棒前等氛围池就绪。
     ///   - expectHome: 有会话（落在首页）→ 交棒前等首页脱离骨架期。
+    ///   - now: 信号到达时刻（注入点；生产走默认 `.now`）。
     ///   两个门控共享 `ambienceHoldCap` 上限；onboarding / 本地播放都不等。
-    func contentBecameReady(expectAmbience: Bool, expectHome: Bool = false) {
+    func contentBecameReady(expectAmbience: Bool, expectHome: Bool = false, now: Date = .now) {
         guard started else {
             pendingReady = true
             pendingExpectAmbience = expectAmbience
@@ -133,22 +146,22 @@ final class LaunchPresenter {
         idleWatchdog?.cancel()
         holdForAmbience = expectAmbience
         holdForHome = expectHome
-        let now = max(0, Date.now.timeIntervalSince(startDate) * 1000)
+        let nowMs = max(0, now.timeIntervalSince(startDate) * 1000)
         // 信号比内容就绪先到的（缓存命中）：补记就绪时刻。
         if expectAmbience && pendingAmbienceReady {
             pendingAmbienceReady = false
-            ambienceReadyAtMs = now
+            ambienceReadyAtMs = nowMs
         }
         if expectHome && pendingHomeReady {
             pendingHomeReady = false
-            homeReadyAtMs = now
+            homeReadyAtMs = nowMs
         }
         if let readyOverride = readyOverrideMs {
             // 截图旋钮：把「数据就绪」钉在指定时刻（与时间轴冻结配合，能拍到
             // 呼吸等待态——真实机器的 bootstrap 太快，抓不到这一段）。
             readyAtMs = readyOverride
         } else {
-            readyAtMs = now
+            readyAtMs = nowMs
         }
         scheduleDismiss()
     }
@@ -156,7 +169,7 @@ final class LaunchPresenter {
     /// 氛围池就绪（池子非空 = 首图已预热）：把退场提前到「就绪 + 一拍」。
     /// **迟到不回卷**——若此刻已过当前退场起点（氛围等超时、交棒已开始），
     /// 忽略本次信号，维持按上限的退场。
-    func ambienceBecameReady() {
+    func ambienceBecameReady(now: Date = .now) {
         // hold 标志还没立起来（内容未就绪/还没 begin）就先存信号，等
         // contentBecameReady 来补——这个信号只有 onChange 这一次，丢了就全等上限。
         guard holdForAmbience else {
@@ -164,7 +177,7 @@ final class LaunchPresenter {
             return
         }
         guard started, isVisible, ambienceReadyAtMs == nil else { return }
-        let now = max(0, Date.now.timeIntervalSince(startDate) * 1000)
+        let nowMs = max(0, now.timeIntervalSince(startDate) * 1000)
         guard let pendingStart = timeline.exitStart(
             readyAt: readyAtMs,
             ambienceReadyAt: nil,
@@ -172,20 +185,20 @@ final class LaunchPresenter {
             holdForAmbience: true,
             holdForHome: holdForHome,
             reduceMotion: reduceMotion),
-            now < pendingStart else { return }
-        ambienceReadyAtMs = now
+            nowMs < pendingStart else { return }
+        ambienceReadyAtMs = nowMs
         scheduleDismiss()
     }
 
     /// 首页脱离骨架期（有内容可看 / 空库空态 / 错误态）：与氛围池同一套
     /// 「迟到不回卷、早到先存后补」的门控语义。
-    func homeBecameReady() {
+    func homeBecameReady(now: Date = .now) {
         guard holdForHome else {
             pendingHomeReady = true
             return
         }
         guard started, isVisible, homeReadyAtMs == nil else { return }
-        let now = max(0, Date.now.timeIntervalSince(startDate) * 1000)
+        let nowMs = max(0, now.timeIntervalSince(startDate) * 1000)
         guard let pendingStart = timeline.exitStart(
             readyAt: readyAtMs,
             ambienceReadyAt: ambienceReadyAtMs,
@@ -193,8 +206,8 @@ final class LaunchPresenter {
             holdForAmbience: holdForAmbience,
             holdForHome: true,
             reduceMotion: reduceMotion),
-            now < pendingStart else { return }
-        homeReadyAtMs = now
+            nowMs < pendingStart else { return }
+        homeReadyAtMs = nowMs
         scheduleDismiss()
     }
 
@@ -215,8 +228,14 @@ final class LaunchPresenter {
         scheduledExitStartMs = exitStart
         dismissTask?.cancel()
         onExitScheduled?(exitStart, startDate)
+        // 排定发生在信号到达时刻，时间轴已经走过一段：退场时刻是时间轴**绝对**
+        // 时刻，睡之前必须减掉已走过的量——直接睡 exitStart 会把信号时刻叠加
+        // 进去，收尾（撤除 overlay/覆盖窗口、记「启动动画结束」）整体迟到
+        // readyAt 那么多（慢 bootstrap 时数秒）。
+        let elapsedAtScheduleMs = max(0, Date.now.timeIntervalSince(startDate) * 1000)
         dismissTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(Int(exitStart.rounded(.up))))
+            try? await Task.sleep(
+                for: .milliseconds(Int(max(0, exitStart - elapsedAtScheduleMs).rounded(.up))))
             guard let self, !Task.isCancelled, self.dismissDeadlineMs == deadline else { return }
             // 交棒开始：先给覆盖窗口一次「撤掉底色兜底」的机会，再等淡出走完。
             self.onExitStart?()
@@ -226,7 +245,9 @@ final class LaunchPresenter {
             // 字段逐个装再合字典：大字典字面量会让类型检查器超时
             // （与 bootstrap 的「冷启动分段」同款坑，见 AppModel+Session）。
             var fields: [String: DiagnosticValue] = [:]
-            fields["durationMs"] = .integer(Int64(deadline))
+            // 实测墙钟时长（时间轴收官 + 任务抖动），不是排定值——排定值会掩盖
+            // 调度本身的延迟，这条日志就是用来复诊延迟的。
+            fields["durationMs"] = .integer(Int64(max(0, Date.now.timeIntervalSince(self.startDate) * 1000)))
             fields["readyMs"] = self.readyAtMs.map { .integer(Int64($0)) } ?? .string("未就绪")
             fields["ambienceMs"] = self.ambienceReadyAtMs.map { .integer(Int64($0)) } ?? .string(self.holdForAmbience ? "超时未就绪" : "无会话")
             fields["homeMs"] = self.homeReadyAtMs.map { .integer(Int64($0)) } ?? .string(self.holdForHome ? "超时未就绪" : "不等首页")
@@ -246,3 +267,26 @@ final class LaunchPresenter {
         AppDiagnostics.logInfo("启动动画跳过", fields: ["reason": .string(reason)])
     }
 }
+
+// MARK: - 测试支撑（仅 Debug 构建，生产路径勿用）
+
+#if DEBUG
+extension LaunchPresenter {
+    /// 重置进程级「已播」标记。只有 `LaunchPresenterTests` 在 setUp 里调：
+    /// 静态标记跨用例存活，不重置的话第一个播放用例之后其余用例全走「已播」跳过。
+    static func resetPlaybackGateForTesting() {
+        hasPlayedThisProcess = false
+    }
+
+    /// 绕过「测试宿主 / 进程已播」门控直起时间轴。门控读的是进程级环境
+    /// （XCTest 宿主、静态标记），单元测试无法也不应伪造；生产一律走
+    /// `begin(reduceMotion:)`。`at` 注入时间轴零点，配合各信号方法的 `now:`
+    /// 参数即可用固定日期钉状态机。
+    func beginForTesting(reduceMotion: Bool = false, at date: Date = .now) {
+        guard !started else { return }
+        started = true
+        self.reduceMotion = reduceMotion
+        startTimeline(at: date)
+    }
+}
+#endif
