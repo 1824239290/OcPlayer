@@ -371,6 +371,19 @@ final class AppModel {
     /// 同一会话内可能同时发生下拉刷新和设置切换；只有最新一次首页请求可以写回。
     var homeLoadGeneration: UInt64 = 0
 
+    /// 会话内的**首次**首页加载是否已收官（成败皆算，见 `loadHome`）。
+    /// 启动动画的交棒门控用它区分「还没开始加载」与「加载完了但没内容」：
+    /// boot 期两者都是三条 rail 全空，只有它能把后者从骨架等待里摘出来。
+    /// 会话边界（`resetBrowseState`）复位。
+    var homeInitialLoadDone = false
+
+    /// 启动动画的「首页就绪」信号：首页不再处于骨架期。
+    /// 有内容（含磁盘缓存预热先行）或首次加载已收官（空库空态 / 整页错误态）都算——
+    /// 这些状态下交棒过去都不会露骨架。boot 期两者皆无 → false（还没开始等）。
+    var homeContentLoaded: Bool {
+        hasAnyHomeContent || homeInitialLoadDone
+    }
+
     // MARK: - 弹幕设置（弹弹play 网关）
 
     /// 弹幕域模型（协调器 + 网关设置），独立环境注入：播放器 / 设置页里只看弹幕的视图

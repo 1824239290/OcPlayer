@@ -211,6 +211,13 @@ extension AppModel {
         }
         if let items = latestRail.value { home.latest = items }
 
+        // 会话内首次加载收官（成败皆算）：启动动画的交棒在等这个——
+        // 骨架期（无缓存又没拿到数据）不交棒，否则揭过去是一页空白。
+        if sessionIsCurrent(generation, server: server),
+           homeLoadGeneration == loadGeneration {
+            homeInitialLoadDone = true
+        }
+
         let rails = [resumeRail, nextUpRail, latestRail]
         let allSucceeded = rails.allSatisfy { $0.value != nil }
         let anyConnectivityFailure = rails.contains { $0.failureIsConnectivity }

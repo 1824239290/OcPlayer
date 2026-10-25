@@ -73,6 +73,12 @@ enum AmbienceImageWarmup {
 
 extension AppModel {
 
+    /// 池子是否就绪（非空 = 随机查询已返回、首图已预热，首页背景随时可显示）。
+    /// 启动动画用它做交棒信号：池子没就绪就多等一拍，别让首页裸着见人。
+    var ambiencePoolReady: Bool {
+        !ambiencePool.isEmpty
+    }
+
     /// 氛围池驱动入口：装载（必要时）→ 预热 → 换片循环。**双端唯一驱动点**。
     ///
     /// 由 `AppShellView` 的 `.task(id: ambienceTrigger)` 调用：触发键一变就重跑，
