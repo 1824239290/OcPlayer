@@ -115,35 +115,6 @@ public final class PlayerState {
     /// `.failed`，不去重的话主线程和诊断日志会被错误风暴刷爆（实测 6302 条）。
     private var lastFailedEventKey: String?
 
-    /// 片尾 EOF 临时兜底是否已经落过**带 code/message** 的诊断（每会话一次：错误风暴下
-    /// 日志不能跟着刷）。
-    private var reportedEndOfStreamFold = false
-    /// 是否落过只有状态迁移（`.stateChanged(.error)`、没有错误事件）的兜底诊断。
-    /// 与上一条分开记：状态迁移先到时先留一条，随后 `.failed` 带着内核原文到达时
-    /// 还要再留一条细节行，不能因为「已经记过」就把 code/message 丢掉。
-    private var reportedEndOfStreamStateFold = false
-
-    /// 认为「已经站在文件尾」的位置容差（秒）。
-    ///
-    /// ⚠️ **临时兜底，根因在内核侧、尚未修**：Erika v0.2.1 在请求边界跨过文件末尾时，
-    /// 会间歇把「读到文件尾」报成致命错误（实测 `av_read_frame: Input/output error (-5)`，
-    /// 也见过 `audio output stalled at EOF`），事件流给到 `.failed` / `.stateChanged(.error)`。
-    /// 于是**自然播完**反而进 `.error`：UI 弹「播放出错」徽章、诊断记一条 error，上报链路
-    /// 只能靠 `PlaybackReportingCoordinator.isEndOfStream` 再兜成「播完」。
-    ///
-    /// 这里在折叠层直接兜住：片长末尾窗口内的内核错误按自然结束（`.stopped`）收口，
-    /// 不置 `lastError`、不计 `errorCount`，只落一条 warning 诊断留痕。判据只看**位置**
-    /// 不看错误文案——文案跨内核版本会变，位置是稳定信号（三次实机现场全部落在片尾前
-    /// 0.4–0.5 s）。
-    ///
-    /// 与 `PlaybackReportingCoordinator.isReachedEnd` 共用同一口径（那边直接引用本常量）。
-    /// 两处阈值**不能分叉**：折叠出的 `.stopped` 必须能被上报层认成「播完」，否则会变成
-    /// 「没有错误徽章、也不连播/退出」的静默卡死。
-    ///
-    /// **删除条件**：等上游 Erika 把跨 EOF 的读改成干净 EOF / 短读、升
-    /// `Config/Erika.version` 之后，连同 `isAtEndOfStream` 与两处调用点一起删。
-    public nonisolated static let endOfStreamToleranceSeconds: Double = 2.0
-
     /// 独立时间轴快照：高频 progress/position 封装在此，隔离其它观察者。
     public let timeline = PlayerTimeline()
 
@@ -216,8 +187,6 @@ public final class PlayerState {
         subtitleTracks = []
         lastError = nil
         lastFailedEventKey = nil
-        reportedEndOfStreamFold = false
-        reportedEndOfStreamStateFold = false
         sessionStats = PlaybackSessionStats()
         sessionStarted = false
         bufferingStartedAt = nil
@@ -232,13 +201,9 @@ public final class PlayerState {
             // 内核卡进坏状态时会逐帧重发同一事件；@Observable 的写入即使同值
             // 也会触发观察者，同值直接丢（上次错误风暴被 .failed 去重救场，
             // 这里把其余事件类型一并防住）。
-            //
-            // 片尾的 `.stateChanged(.error)` 与 `.failed` 是同一个内核缺陷的两张面孔
-            //（有的现场只给状态迁移、没有错误事件），所以这里也要过同一道折叠。
-            let folded = foldEndOfStreamError(value)
-            if state != folded {
-                state = folded
-                recordStateTransition(folded)
+            if state != value {
+                state = value
+                recordStateTransition(value)
             }
         case .positionChanged(let value):
             timeline.setPosition(value)
@@ -278,15 +243,6 @@ public final class PlayerState {
             // 同一条错误只记一次：内核卡死时 .failed 会逐帧重发，去重前一次
             // EOF stall 刷了 6302 条日志、主线程被事件轰炸到假死。
             let key = "\(code)|\(message ?? "")"
-            // 片尾临时兜底（判据与理由见 endOfStreamToleranceSeconds）：自然播到文件尾时
-            // 内核把「跨 EOF 的读」报成致命错误，这不是播放失败。按自然结束收口，**不置
-            // `lastError` / 不计 `errorCount`**——错误徽章与「重试」都不该出现。
-            // 去重键照记：内核坏态下这条会逐帧重发，warning 也不能跟着刷屏。
-            if isAtEndOfStream {
-                lastFailedEventKey = key
-                foldEndOfStreamError(code: code, message: message)
-                return
-            }
             if key != lastFailedEventKey {
                 lastFailedEventKey = key
                 sessionStats.errorCount += 1
@@ -301,67 +257,6 @@ public final class PlayerState {
             if state != .error { state = .error }
             let newError = message ?? "内核错误 code=\(code)"
             if lastError != newError { lastError = newError }
-        }
-    }
-
-    // MARK: - 片尾 EOF 临时兜底（根因在内核侧，见 endOfStreamToleranceSeconds）
-
-    /// 当前位置是否已经站在文件尾窗口内。片长未知（0，直播 / 尚未拿到 duration）时不成立
-    /// ——拿不到分母就不猜，宁可照旧报错。
-    ///
-    /// 还要求 `position > 0`：没有位置就没有「已经播到末尾」这回事。否则片长 ≤ 容差的
-    /// 短片（duration ≤ 2 s）在 position=0 时会满足 `0 + tolerance >= total`，把**开头**
-    /// 的致命错误（解码起不来 / 源打不开）也折叠成「播完了」，那是在掩盖真故障。
-    private var isAtEndOfStream: Bool {
-        let total = timeline.duration.microseconds
-        guard total > 0, timeline.position > .zero else { return false }
-        let tolerance = Int64(Self.endOfStreamToleranceSeconds * 1_000_000)
-        return timeline.position.microseconds + tolerance >= total
-    }
-
-    /// 把「片尾窗口内的内核错误」折叠成自然结束：状态收口到 `.stopped`，诊断每会话只落
-    /// 一条（保留 `code` / `message` / 位置，便于确认是不是同一个 EOF 缺陷）。
-    ///
-    /// 只动状态与错误展示，**不伪造成功**：`session.end` 里 `error_count` 保持 0 是刻意的
-    ///（这次收尾在用户视角就是「看完了」），内核错误的原始证据留在下面这条 warning 里。
-    private func foldEndOfStreamError(_ candidateState: PlaybackState) -> PlaybackState {
-        guard candidateState == .error, isAtEndOfStream else { return candidateState }
-        // 只有状态迁移、没有错误事件：留一条不带 code/message 的诊断；随后若有 `.failed`
-        // 带着内核原文到达，还会再补一条细节行（两个标记分开记，见属性注释）。
-        if !reportedEndOfStreamStateFold {
-            reportedEndOfStreamStateFold = true
-            logEndOfStreamFold(code: nil, message: nil)
-        }
-        applyEndOfStreamStop()
-        return .stopped
-    }
-
-    private func foldEndOfStreamError(code: Int32, message: String?) {
-        // 内核原文是归因的唯一凭据，不能因为状态迁移那条先到就丢掉：这里独立记一次。
-        if !reportedEndOfStreamFold {
-            reportedEndOfStreamFold = true
-            logEndOfStreamFold(code: code, message: message)
-        }
-        applyEndOfStreamStop()
-    }
-
-    private func logEndOfStreamFold(code: Int32?, message: String?) {
-        PlaybackLog.warning(
-            "片尾内核报错按自然结束处理（临时兜底）",
-            fields: [
-                "code": .integer(Int64(code ?? -1)),
-                "message": .string(message ?? "nil"),
-                "position_ms": .integer(timeline.position.microseconds / 1000),
-                "duration_ms": .integer(timeline.duration.microseconds / 1000),
-                "tolerance_s": .double(Self.endOfStreamToleranceSeconds),
-            ]
-        )
-    }
-
-    private func applyEndOfStreamStop() {
-        if state != .stopped {
-            state = .stopped
-            recordStateTransition(.stopped)
         }
     }
 

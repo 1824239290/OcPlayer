@@ -145,11 +145,12 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
         XCTAssertTrue(terminalEvents.isEmpty)
     }
 
-    /// 回归：内核在片尾把「读到文件末尾」报成致命错误时，也必须按「播完」触发终态，
-    /// 否则既不连播也不退出、只剩错误徽章。现场见 `isEndOfStream` 的注释。
+    /// 回归（兜底拆除后）：片尾的 `.error` **不再**被认成「播完」——内核 v0.3.0
+    /// （上游 #169）起尾读按 EOF 干净收口，能到这里的错误都是真错误：徽章该露、
+    /// 连播不该触发。谁要是把 `.error` 重新接进终态判定，这条会红。
     @MainActor
-    func testEndOfStreamErrorSignalsTerminalWithReachedEnd() async {
-        // 实测现场：位置 1471.512s / 时长 1472s（片长 − 0.488s）。
+    func testEndOfStreamErrorSignalsTerminalWithoutReachedEnd() async {
+        // 实测现场同款位置：1471.512s / 时长 1472s（片长 − 0.488s）。
         let source = TestPlaybackStateSource(snapshot: .error(position: 1471.512, duration: 1472))
         let reporter = TestPlaybackReporter()
         let coordinator = PlaybackReportingCoordinator(
@@ -168,7 +169,7 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
         )
         await waitUntil { terminalEvents.count == 1 }
 
-        XCTAssertEqual(terminalEvents, [.init(requestID: requestID, reachedEnd: true)])
+        XCTAssertEqual(terminalEvents, [.init(requestID: requestID, reachedEnd: false)])
         XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
     }
 

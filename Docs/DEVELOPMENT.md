@@ -54,7 +54,7 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **v0.3.0**，相对 v0.2.1 与本 App 相关的变化：
 
-- **片尾尾读语义修复**（上游 #169，我们报的 #163）：最后 4 MiB 内未送达的普通 HTTP 尾部 range 按 EOF 处理，不再报 fatal `av_read_frame -5`。`PlayerState.endOfStreamToleranceSeconds` 的片尾折叠兜底（PR #68）因此进入可拆除状态，待单独立项拆（见该常量注释的删除条件）。
+- **片尾尾读语义修复**（上游 #169，我们报的 #163）：最后 4 MiB 内未送达的普通 HTTP 尾部 range 按 EOF 处理，不再报 fatal `av_read_frame -5`。App 侧三层兜底已随之拆除：`PlayerState` 的片尾折叠（原 `endOfStreamToleranceSeconds`，PR #68）、上报层把片尾 `.error` 认成播完的分支（原 `isEndOfStream`）、以及 3 s 尾部安全边际（恢复为 0.5 s 防线 `tailGuardSeconds`，只为防 seek 越过 EOF 的「audio output stalled at EOF」错误风暴——那个内核行为 0.3.0 没修）。
 - **字幕/弹幕超采样默认开启**：字形按 2x 栅格化。C ABI **没有**关闭开关（上游 `danmaku_config_from_c` 写死透传 Rust 侧默认值；46 个 invoke_json 方法也未暴露；上游 main 同样没有）。实测代价见下方探针一节。已知崩溃面：内核超采样 glyph atlas 横向单行铺、宽度 ∝ 同屏字形总量 × 2，高密度 CJK 字幕（同屏数百字形）会顶过 Metal 16384 纹理上限直接 MTL 断言 abort——待报上游。
 - **软件视频解码默认多线程**（frame + slice threading，FFmpeg 自选核数；open/seek 后首帧最多延后 N 个 packet）。运行期 env `ERIKA_VIDEO_DECODE_THREADS=1` 可回单线程。
 - **新 C API（均未接入，备案）**：`erika_export_frame` / frame export session（按媒体时间出 RGBA/PNG，HDR 自动 BT.2390 色调映射）；诊断三件套 `erika_log_read_json` / `erika_presenter_get_diagnostics_json` / `invokeJson('listMethods')`（可选符号，宿主应 dlsym 解析）；presenter JSON `chapters` 方法（容器章节）；解码器 hwaccel 半路失败转软解的事件上报。

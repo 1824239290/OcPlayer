@@ -84,22 +84,22 @@ final class SkipPreferenceTests: XCTestCase {
             position: 1150, duration: 1200, retentionSeconds: 30), 1170)
         XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
             position: 1150, duration: 1200, retentionSeconds: 5), 1195,
-            "高于尾部边际的档位原样生效")
+            "高于尾部防线的档位原样生效")
     }
 
-    func testEndCreditsSkipTargetZeroRetentionClampsToTailMargin() {
-        // 不保留也不能贴到片尾尽头：最后几秒的落点会让内核在文件末尾做同步
-        // 读取，读失败即 fatal（Erika v0.2.1 实测）。统一钳到片长 − 3s。
+    func testEndCreditsSkipTargetZeroRetentionClampsToTailGuard() {
+        // 不保留也不能贴到片尾尽头：防线只为防 seek 越过 EOF 的错误风暴
+        // （「尾读 fatal」已随内核 v0.3.0 修复）。统一钳到片长 − 0.5s。
         XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
-            position: 1150, duration: 1200, retentionSeconds: 0), 1197)
+            position: 1150, duration: 1200, retentionSeconds: 0), 1199.5)
         XCTAssertEqual(PlaybackController.endCreditsSkipTarget(
-            position: 1150, duration: 1200, retentionSeconds: 2), 1197,
-            "低于尾部边际的档位按边际兜底")
+            position: 1150, duration: 1200, retentionSeconds: 2), 1198,
+            "高于防线的档位原样生效，不再被厚边际吞掉")
     }
 
     func testClampedBeforeEndKeepsUnknownDurationUntouched() {
         XCTAssertEqual(PlaybackController.clampedBeforeEnd(1199.5, duration: 0), 1199.5)
-        XCTAssertEqual(PlaybackController.clampedBeforeEnd(1199.5, duration: 1200), 1197)
+        XCTAssertEqual(PlaybackController.clampedBeforeEnd(1199.5, duration: 1200), 1199.5)
         XCTAssertEqual(PlaybackController.clampedBeforeEnd(1150, duration: 1200), 1150)
     }
 
@@ -292,7 +292,7 @@ final class SkipPreferenceTests: XCTestCase {
         XCTAssertEqual(seconds(engine.seeks[0]), 0, accuracy: 0.0005, "不落到负时间")
     }
 
-    func testSkipForwardClampsToTailMargin() async throws {
+    func testSkipForwardClampsToTailGuard() async throws {
         let engine = SeekRecordingEngine()
         let controller = try await makeController(
             engine: engine, duration: .seconds(1200), position: .seconds(1195))
@@ -300,8 +300,8 @@ final class SkipPreferenceTests: XCTestCase {
         controller.skip(by: 10)
 
         XCTAssertEqual(engine.seeks.count, 1)
-        XCTAssertEqual(seconds(engine.seeks[0]), 1197, accuracy: 0.0005,
-                       "越过片尾时钳到片长 − 3s 尾部边际")
+        XCTAssertEqual(seconds(engine.seeks[0]), 1199.5, accuracy: 0.0005,
+                       "越过片尾时钳到片长 − 0.5s 尾部防线")
     }
 
     func testPerformSkipSeeksToDurationMinusDefaultRetention() async throws {
@@ -322,15 +322,15 @@ final class SkipPreferenceTests: XCTestCase {
 
         controller.performSkip()
 
-        XCTAssertEqual(engine.seeks, [.seconds(1197)], "不保留时钳在片长 − 3s 尾部边际")
+        XCTAssertEqual(engine.seeks, [.seconds(1199.5)], "不保留时钳在片长 − 0.5s 尾部防线")
     }
 
     // MARK: - 片尾标记（MediaSegments / 章节启发式）落点
 
-    func testPerformSkipMarkClampsToTailMargin() async throws {
-        // 实战形态：Outro 段的 endTicks 恰是片长（1442.048s 片源 → 旧口径落到
-        // 1441.548s、距文件尾 70 KB，内核尾部同步读失败即 fatal）。落点必须钳出
-        // 最后 3 秒。
+    func testPerformSkipMarkClampsToTailGuard() async throws {
+        // 实战形态：Outro 段的 endTicks 恰是片长（1442.048s 片源，旧口径曾落到
+        // 1441.548s、距文件尾 70 KB——当年的尾读 fatal 已随内核 v0.3.0 修复，
+        // 防线收窄到 0.5s，只为防 seek 越过 EOF 的错误风暴）。
         let engine = SeekRecordingEngine()
         let controller = try await makeController(
             engine: engine, duration: .seconds(1200), position: .seconds(1150))
@@ -338,7 +338,7 @@ final class SkipPreferenceTests: XCTestCase {
 
         controller.performSkip()
 
-        XCTAssertEqual(engine.seeks, [.seconds(1197)], "标记终点在尾巴内：钳到片长 − 3s")
+        XCTAssertEqual(engine.seeks, [.seconds(1199.5)], "标记终点在尾巴内：钳到片长 − 0.5s")
     }
 
     func testPerformSkipMarkEndInsideFileUntouched() async throws {
