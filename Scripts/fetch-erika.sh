@@ -259,6 +259,12 @@ PLATFORM_MACCATALYST = 6
 
 data = open(src, "rb").read()
 if data[:8] != b"!<arch>\n":
+    # universal 包是「fat 容器里套 ar 归档」，本修复只处理 thin 归档（默认
+    # arm64；x64 也是 thin）。给一条能直接照做的信息，别掉进 xcodebuild 的
+    # 「unable to determine the platform / multiple platforms」。
+    if data[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca") or len(data) >= 4:
+        sys.exit("macOS 内核包是 universal(fat) 归档，本脚本的 Catalyst 声明修复"
+                 "暂不支持；请用 ERIKA_MACOS_ARCH=arm64（或 x64）重跑")
     sys.exit("不是 ar 归档")
 out = [data[:8]]
 pos = 8
