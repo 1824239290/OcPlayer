@@ -176,8 +176,8 @@ struct ErikaPerfProbeTests {
             let now = CACurrentMediaTime()
             let stats = try presenter.renderTick(at: now + 1.0 / 120,
                                                  presentationDelay: 1.0 / 120)
-            fwrite("\(stats.last_render_micros) \(stats.last_render_current_micros)\n",
-                   1, 48, renderFile)
+            let renderLine = "\(stats.last_render_micros) \(stats.last_render_current_micros)\n"
+            fwrite(renderLine, 1, renderLine.utf8.count, renderFile)
             while let event = try presenter.pollEvent() {
                 if case .failed = event { failures += 1 }
             }
@@ -252,7 +252,7 @@ struct ErikaPerfProbeTests {
         ===== 探针汇总（mode=\(mode), \(Int(seconds))s, 字幕轨 id=\(subtitleTrackID), tracks=\(tracks)）=====
         进程 CPU 核数: p50=\(String(format: "%.3f", p(0.5))) p95=\(String(format: "%.3f", p(0.95))) max=\(String(format: "%.3f", cores.last ?? 0))
         内核 render_tick 总耗时 µs（含等呈现）: p50=\(rp(0.5)) p95=\(rp(0.95)) p99=\(rp(0.99)) max=\(renderMicros.last ?? 0)
-        内核 render_tick 纯工作 µs: p50=\(rc(0.5)) p95=\(rc(0.95)) p99=\(rc(0.99)) max=\(currentMicros.last ?? 0)
+        内核自报 current µs（0.3.0 与总耗时同值，不是纯净工作时间，仅供跨版本对比）: p50=\(rc(0.5)) p95=\(rc(0.95)) p99=\(rc(0.99)) max=\(currentMicros.last ?? 0)
         物理内存峰值: \(String(format: "%.1f", Double(maxFootprint) / 1048576)) MB
         终态计数: decoded=\(finalStats.decoded_video_frames) rendered=\(finalStats.rendered_video_frames) \
         overlay=\(finalStats.overlay_frames) sw=\(finalStats.software_video_frames) hw=\(finalStats.hardware_video_frames)
