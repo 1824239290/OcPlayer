@@ -77,6 +77,28 @@ enum LaunchOptions {
             .flatMap(LaunchRoute.parse)
     }
 
+    /// 启动动画的自动化通道：
+    /// 任一自检进场（`OCPLAYER_START_SECTION` / `OCPLAYER_START_ROUTE` /
+    /// `OCPLAYER_SELFTEST_FILE`）或显式 `OCPLAYER_LAUNCH_ANIMATION=0` → 跳过启动动画。
+    /// 验收台的逐页截图不能第一秒拍在标志上，所以这些通道一律静默跳过。
+    static var suppressesLaunchAnimation: Bool {
+        if ProcessInfo.processInfo.environment["OCPLAYER_LAUNCH_ANIMATION"] == "0" { return true }
+        return initialSection != nil || initialRoute != nil || fileFromEnvironment != nil
+    }
+
+    /// `OCPLAYER_LAUNCH_FREEZE_MS=<毫秒>`：把启动动画时间轴钉在该时刻（逐帧截图，
+    /// 与 HTML 预览的拖动时间轴同一套分镜常量）。冻结态永不自动撤除。
+    static var launchFreezeMs: Double? {
+        ProcessInfo.processInfo.environment["OCPLAYER_LAUNCH_FREEZE_MS"].flatMap(Double.init)
+    }
+
+    /// `OCPLAYER_LAUNCH_READY_MS=<毫秒>`：把「启动数据就绪」钉在该时刻。
+    /// 真机 bootstrap 太快（本机 ~60ms），抓不到呼吸等待态——配
+    /// `OCPLAYER_LAUNCH_FREEZE_MS=1300` + 本旋钮 2600 即可拍「慢启动呼吸」。
+    static var launchReadyMs: Double? {
+        ProcessInfo.processInfo.environment["OCPLAYER_LAUNCH_READY_MS"].flatMap(Double.init)
+    }
+
     private static var providedTokenMatches: Bool {
         ProcessInfo.processInfo.environment["OCPLAYER_SELFTEST_TOKEN"] == expectedToken
     }

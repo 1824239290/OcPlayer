@@ -25,6 +25,15 @@
 	<!-- Bangumi OAuth：client_id / client_secret 只在 OcPlay 网关，客户端不持有；
 	     授权回调 scheme 固定为 ocplayer（见下方 CFBundleURLTypes），
 	     网关换 token 后 App 处理 ocplayer://oauth/callback 回调。 -->
+	<!-- iOS 系统启动屏：只配底色（LaunchBackground colorset，与启动动画层同一块底），
+	     不放图——标志由启动动画层自己画，系统启动屏只需保证「消失前的最后一块颜色 =
+	     首帧颜色」，全程无白闪。注意与 pbxproj 的 INFOPLIST_KEY_UILaunchScreen_Generation
+	     互斥（已置 NO），两边都开会互相覆盖。 -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
 	<!-- 更新检查的 GitHub 仓库：仓库挪窝只改这里，AppUpdateChecker 从 Bundle 读取。 -->
 	<key>GitHubRepoOwner</key>
 	<string>1824239290</string>

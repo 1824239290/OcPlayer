@@ -15,6 +15,11 @@ struct RootView: View {
     @Environment(PlaybackController.self) private var controller
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// 启动动画状态机（门控/时钟/撤除都在 presenter，见 LaunchPresenter）。
+    @State private var launch = LaunchPresenter()
+    /// iOS 预热可能在后台把 UI 建出来：后台不动画，激活再起表。
+    @State private var launchAwaitingScene = false
     @State private var updateChecker = AppUpdateChecker.shared
     /// RootView 自身的系统安全区（灵动岛 / 圆角 / home indicator 禁区）。播放覆盖层
     /// 整体 `.ignoresSafeArea()` 全屏 bleed 后子树内读不到它，从这层读出来经
@@ -25,13 +30,11 @@ struct RootView: View {
         Group {
             switch app.phase {
             case .boot:
-                VStack(spacing: 12) {
-                    Image(systemName: "cat.fill")
-                        .font(.system(size: 40))
-                    ProgressView().controlSize(.small)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .transition(.section)
+                // 占位与启动动画层同一块底（见 LaunchBackdrop）：系统启动屏 →
+                // 首帧 → 交棒全程无跳色。标志与编排都在最上层的动画 overlay 里。
+                LaunchBackdrop()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.section)
             case .onboarding:
                 OnboardingView()
                     .transition(.section)
@@ -74,6 +77,10 @@ struct RootView: View {
         }
         #if os(macOS)
         // 播放时藏掉窗口工具栏（侧栏收缩钮 / 标题都住在里面），内容铺满整个窗口
+        // 启动动画**不**藏窗口工具栏（试过藏，回退了）：退场时 hidden→visible 会触发
+        // NSToolbar 重建，实测顶栏比首页晚 ~1s 才出现（用户可见的「导航胶囊/搜索框
+        // 迟到」）。全程可见的代价只是启动期顶栏条目在 phase 就绪（~100ms）时就位，
+        // 玻璃条透出的就是启动底色，深浅色都连续。
         .toolbar((app.presentedPlayer == nil && app.playbackPreparation == nil) ? .visible : .hidden, for: .windowToolbar)
         #endif
         .overlay {
@@ -127,6 +134,47 @@ struct RootView: View {
             guard let profileID = note.object as? String else { return }
             app.handleAuthenticationRequired(profileID: profileID)
         }
+        .onAppear {
+            beginLaunchWhenSceneActive()
+            // 氛围池/首页可能在挂载前就已就绪（缓存命中）：onChange 不为初始值
+            // 触发，补一拍（两个信号 presenter 内部都会先存后补，早到不丢）。
+            if app.ambiencePoolReady {
+                launch.ambienceBecameReady()
+            }
+            if app.homeContentLoaded {
+                launch.homeBecameReady()
+            }
+            #if os(macOS)
+            // begin 与 isVisible 变化发生在同一回合，onChange 可能先于窗口就绪：
+            // 这里补一拍（present 自身幂等，窗口已存在则跳过）。
+            if launch.isVisible {
+                LaunchOverlayWindow.shared.present(presenter: launch)
+            }
+            #endif
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            launch.updateReduceMotion(newValue)
+        }
+        .onChange(of: app.phase) { _, phase in
+            // 启动数据就绪 → 启动动画开始交棒（begin 之前就绪则 presenter 内部兜底）。
+            // 有会话才等氛围池与首页骨架（onboarding / 本地播放没有这些可等）。
+            if phase != .boot {
+                launch.contentBecameReady(expectAmbience: app.server != nil, expectHome: app.server != nil)
+            }
+        }
+        .onChange(of: app.ambiencePoolReady) { _, ready in
+            // 氛围池就绪（池子非空 = 首图已预热）→ 撤掉品牌帧交棒。
+            if ready {
+                launch.ambienceBecameReady()
+            }
+        }
+        .onChange(of: app.homeContentLoaded) { _, ready in
+            // 首页脱离骨架期（有内容可看 / 空库空态 / 错误态）→ 才允许交棒，
+            // 否则揭过去是一页空白（用户实测：logo 退场时首页还没加载好）。
+            if ready {
+                launch.homeBecameReady()
+            }
+        }
         .task {
             app.playback = controller
             // 媒体键 / 控制中心的回调装一次就够（命令中心是全局单例）。
@@ -161,6 +209,10 @@ struct RootView: View {
             case .background:
                 _ = app.playbackDidEnterBackground()
             case .active:
+                if launchAwaitingScene {
+                    launchAwaitingScene = false
+                    beginLaunchWhenSceneActive()
+                }
                 // iOS 从挂起里回来：内核的音频出口 / 解码会话未必撑得过来，
                 // 由 AppModel 按离开前的意图续播（或静默重建）。
                 app.playbackDidEnterForeground()
@@ -183,6 +235,35 @@ struct RootView: View {
         #endif
         .sheet(item: $updateChecker.promptRelease) { release in
             UpdateReleaseSheet(release: release)
+        }
+        // 启动动画：macOS 用**窗口级覆盖层**（主窗口的工具栏/红绿灯全程不碰，
+        // 交棒时整窗揭开，没有任何 chrome 跳变，见 LaunchOverlayWindow）；iOS 用
+        // 窗口内 overlay（系统 chrome 没有这个问题）。自检通道整体跳过，不会盖住
+        // 自动化画面；纯展示不拦点击，交棒完成后由 presenter 撤除。
+        #if os(macOS)
+        .onChange(of: launch.isVisible) { _, visible in
+            if visible {
+                LaunchOverlayWindow.shared.present(presenter: launch)
+            } else {
+                LaunchOverlayWindow.shared.dismiss()
+            }
+        }
+        #else
+        .overlay {
+            if launch.isVisible {
+                LaunchExperienceView(presenter: launch)
+                    .ignoresSafeArea()
+            }
+        }
+        #endif
+    }
+
+    /// 启动动画进场：激活态立即起表；后台（iOS 预热）攒到激活。
+    private func beginLaunchWhenSceneActive() {
+        if scenePhase == .active {
+            launch.begin(reduceMotion: reduceMotion)
+        } else {
+            launchAwaitingScene = true
         }
     }
 
