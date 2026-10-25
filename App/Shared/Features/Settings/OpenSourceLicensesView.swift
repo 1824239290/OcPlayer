@@ -31,10 +31,10 @@ enum OpenSourceLicenseCatalog {
             components: [
                 component(
                     id: "erika",
-                    name: "Erika",
+                    name: "liberika",
                     license: "MPL-2.0",
                     purpose: "Rust 播放内核，负责音视频解码、字幕与弹幕渲染。打包时使用最新正式版；确切版本见随包 MANIFEST。",
-                    homepage: "https://github.com/AimesSoft/Erika",
+                    homepage: "https://github.com/AimesSoft/liberika",
                     licenseURL: "https://www.mozilla.org/MPL/2.0/",
                     bundledLicensePaths: [
                         "THIRD_PARTY_LICENSES/erika/MANIFEST.txt",

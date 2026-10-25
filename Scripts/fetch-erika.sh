@@ -9,9 +9,10 @@
 set -euo pipefail
 
 MACOS_ARCH="${ERIKA_MACOS_ARCH:-arm64}"
-# 内核来源仓库。默认上游；需要跟踪未合并的内核改动时可设 ERIKA_REPO 指向
+# 内核来源仓库。默认上游（0.3.0 起上游更名 liberika，C ABI 仍为 erika_*）；
+# 需要跟踪未合并的内核改动时可设 ERIKA_REPO 指向
 # fork（如 ERIKA_REPO=1824239290/Erika），配合对应 tag 使用。
-REPO="${ERIKA_REPO:-AimesSoft/Erika}"
+REPO="${ERIKA_REPO:-AimesSoft/liberika}"
 
 usage() {
   echo "用法: Scripts/fetch-erika.sh [latest|tag]" >&2
@@ -239,6 +240,76 @@ rm -f "$VENDOR/erika-$TAG.sha256.tmp"
 
 MAC_LIB="$WORK/$MAC_PKG/lib/liberika_capi.a"
 MAC_INC="$WORK/$MAC_PKG/include"
+
+# v0.3.0 起官方 macos zip 的 liberika_capi.a 里，285 个 compiler-rt 对象
+#（Rust compiler_builtins 产物）同时携带 macOS 与 MACCATALYST 两条
+# LC_BUILD_VERSION，xcodebuild -create-xcframework 因此把整个 .a 判成「多平台」
+# 拒收。此处把对象里的 Catalyst 平台声明原地改写成等长（24B）的 LC_UUID：
+# 结构合法、不挪数据偏移、对象本体与全部符号保留（实测 ranlib 后成员数与符号
+# 总数与原档分毫不差；改 LC_SOURCE_VERSION 会被 ranlib 整个丢成员，勿用）。
+# 老 tag 无此问题（检出 0 处时不落盘、原样沿用）。
+strip_catalyst_build_version() {
+  local src="$1" dst="$2"
+  python3 - "$src" "$dst" <<'PY'
+import struct, sys
+
+src, dst = sys.argv[1], sys.argv[2]
+LC_BUILD_VERSION, LC_UUID = 0x32, 0x1B
+PLATFORM_MACCATALYST = 6
+
+data = open(src, "rb").read()
+if data[:8] != b"!<arch>\n":
+    sys.exit("不是 ar 归档")
+out = [data[:8]]
+pos = 8
+patched = 0
+while pos + 60 <= len(data):
+    hdr = data[pos:pos + 60]
+    name = hdr[0:16].decode("ascii", "replace").rstrip()
+    size = int(hdr[48:58])
+    body = bytearray(data[pos + 60:pos + 60 + size])
+    pos = pos + 60 + size + (size & 1)
+    if name.startswith("__.SYMDEF"):
+        continue  # 符号表交给 ranlib 重建
+    if name.startswith("#1/"):
+        namelen = int(name[3:])
+        real = bytes(body[:namelen]).rstrip(b"\x00")
+        body = body[namelen:]
+    else:
+        real = name.encode("ascii", "replace")
+    if len(body) >= 32 and struct.unpack_from("<I", body, 0)[0] == 0xFEEDFACF:
+        sizeofcmds = struct.unpack_from("<I", body, 20)[0]
+        off, end = 32, 32 + sizeofcmds
+        while off + 8 <= end:
+            cmd, cmdsize = struct.unpack_from("<II", body, off)
+            if cmdsize < 8 or off + cmdsize > end:
+                break
+            if cmd == LC_BUILD_VERSION and cmdsize == 24 and \
+               struct.unpack_from("<I", body, off + 8)[0] == PLATFORM_MACCATALYST:
+                struct.pack_into("<II", body, off, LC_UUID, 24)
+                struct.pack_into("<QQ", body, off + 8, 0, 0)
+                patched += 1
+            off += cmdsize
+    payload = real + bytes(body)
+    out.append(b"#1/" + str(len(real)).encode().ljust(13)
+               + b"0".ljust(12) + b"0".ljust(6) + b"0".ljust(6)
+               + b"100644".ljust(8) + str(len(payload)).encode().ljust(10)
+               + b"`\n" + payload + (b"\n" if len(payload) & 1 else b""))
+if patched == 0:
+    sys.exit(2)  # 无 Catalyst 声明，保持原样（不落盘）
+open(dst, "wb").write(b"".join(out))
+print(f"· 改写 Catalyst 平台声明 {patched} 处（→LC_UUID）", file=sys.stderr)
+PY
+}
+
+# python 退出 0 = 确有改写且已落盘；退出 2 = 无需改写（保持原档）。任何其他
+# 退出码都让整个 fetch 失败，绝不拿半成品合成。
+PATCHED_MAC_LIB="$WORK/$MAC_PKG/lib/liberika_capi.macos-only.a"
+if command -v python3 >/dev/null && strip_catalyst_build_version "$MAC_LIB" "$PATCHED_MAC_LIB"; then
+  ranlib "$PATCHED_MAC_LIB"
+  echo "· macOS .a 含 Catalyst 平台声明，已改写为纯 macOS"
+  MAC_LIB="$PATCHED_MAC_LIB"
+fi
 
 # 先保留旧 iOS 切片（macOS-only release 时复用），再重建 xcframework。
 SAVED_IOS=""

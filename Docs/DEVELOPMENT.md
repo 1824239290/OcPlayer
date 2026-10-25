@@ -50,9 +50,20 @@ swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|Playba
 
 CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 11 个 SPM 包（10 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
 
-## Erika 内核
+## liberika 内核（原 Erika）
 
-内核取自上游 [AimesSoft/Erika](https://github.com/AimesSoft/Erika) 官方 release `v0.2.1`（钉点唯一事实源是 `Config/Erika.version`）：**资源回收**——关闭 / 切换媒体 / seek 时取消旧的网络读取，销毁播放器时等待后台 worker 退出并释放连接与线程，`stop()` 释放 HTTP 缓存与队列占用（保留从头重播能力）；**预读窗口**修复——预取不再跨越条带边界继续读取，窗口按配置生效；**解码**恢复硬件解码不可用时的软件回退（WMV/WMA、8/10-bit AV1）并修正 P010 插值精度；以及供 iOS 弹幕/字幕同步用的新 C API `erika_presenter_render_tick_with_timing`（**已接入**：`RenderLoop` 每帧把 `CADisplayLink` 的「到显示目标延迟」交给 `ErikaEngine`，走 `render_tick_with_timing`；延迟先按内核的 ±0.25 s 硬约束夹过，超界或非有限则退回无 timing 的 `render_tick`）。v0.2.0 引入的 **持久流预取**（worker 持有开放式 GET（`bytes=锚点-`），源站每个 worker 只 seek 一次、背压就是 TCP 本身，替代旧版每 4 MiB 付一次连接 + TLS + TTFB 的分块链；预取窗口按 worker 生产偏移对绝对边界自我节流，不随播放时长增长；回退预算可调 `http_back_buffer_bytes`（0 = 默认 16 MiB），回退落在已播缓存内不发网络请求）仍是当前播放路径的基础——那批改动先在 fork [1824239290/Erika](https://github.com/1824239290/Erika) 上先行、已随 v0.2.0 全部合入上游，钉点自 v0.2.0 起回到官方（公网慢源 A/B 口径不变：开播 13.2 秒、78.3 秒播放零卡顿）。
+内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **v0.3.0**，相对 v0.2.1 与本 App 相关的变化：
+
+- **片尾尾读语义修复**（上游 #169，我们报的 #163）：最后 4 MiB 内未送达的普通 HTTP 尾部 range 按 EOF 处理，不再报 fatal `av_read_frame -5`。`PlayerState.endOfStreamToleranceSeconds` 的片尾折叠兜底（PR #68）因此进入可拆除状态，待单独立项拆（见该常量注释的删除条件）。
+- **字幕/弹幕超采样默认开启**：字形按 2x 栅格化。C ABI **没有**关闭开关（上游 `danmaku_config_from_c` 写死透传 Rust 侧默认值；46 个 invoke_json 方法也未暴露；上游 main 同样没有）。实测代价见下方探针一节。已知崩溃面：内核超采样 glyph atlas 横向单行铺、宽度 ∝ 同屏字形总量 × 2，高密度 CJK 字幕（同屏数百字形）会顶过 Metal 16384 纹理上限直接 MTL 断言 abort——待报上游。
+- **软件视频解码默认多线程**（frame + slice threading，FFmpeg 自选核数；open/seek 后首帧最多延后 N 个 packet）。运行期 env `ERIKA_VIDEO_DECODE_THREADS=1` 可回单线程。
+- **新 C API（均未接入，备案）**：`erika_export_frame` / frame export session（按媒体时间出 RGBA/PNG，HDR 自动 BT.2390 色调映射）；诊断三件套 `erika_log_read_json` / `erika_presenter_get_diagnostics_json` / `invokeJson('listMethods')`（可选符号，宿主应 dlsym 解析）；presenter JSON `chapters` 方法（容器章节）；解码器 hwaccel 半路失败转软解的事件上报。
+- **官方 macos zip 的 .a 带有 MACCATALYST 平台声明**：285 个 compiler-rt 对象各带 macOS 与 MACCATALYST 两条 `LC_BUILD_VERSION`，`xcodebuild -create-xcframework` 会把整个 .a 判成「多平台」拒收。`fetch-erika.sh` 里的 `strip_catalyst_build_version` 把 Catalyst 声明原地改写成等长的 `LC_UUID`（结构合法、对象与符号全保留；改 `LC_SOURCE_VERSION` 会被 ranlib 丢成员，勿用）。老 tag（≤ v0.2.1）无此问题，该步骤自动跳过。
+- v0.2.1 及更早的既有能力（资源回收、预读窗口、`render_tick_with_timing` 已接入 `RenderLoop`、v0.2.0 持久流预取仍是播放路径基础——那批改动先在 fork [1824239290/Erika](https://github.com/1824239290/Erika) 上先行、已随 v0.2.0 全部合入上游）不变。
+
+### 内核性能探针（`ErikaPerfProbeTests`）
+
+env 门控（`ERIKA_PERF_PROBE=1` 才跑），同一把尺子量不同内核 tag 的渲染成本：进程 CPU（getrusage 差分）、物理内存峰值（`ProcessFootprint`）、每 tick 内核渲染耗时、内核 stderr 告警。场景 A = 合成 720p H.264 + 外挂密集 CJK ASS（本地、确定性）；场景 B = 真实片源（`ERIKA_PERF_MODE=remote`，URL/token 经 env 注入）。完整变量表见该文件头注释。v0.2.1 → v0.3.0 的实测结论（2026-10-25，M 系 Mac）：同屏 ≤2 条 CJK ASS 时超采样代价约 **+22%（真实片源）～ +70%（合成 worst-case）** 的进程 CPU p50、+11～17 MB 内存；采样产物落在 `ERIKA_PERF_OUT` 指定的前缀。
 
 ## 弹幕
 
