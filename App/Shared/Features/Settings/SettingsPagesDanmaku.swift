@@ -1,13 +1,25 @@
 import AppDesignKit
 import DanmakuKit
+import PlaybackKit
 import SwiftUI
 
-/// 设置 → 弹幕：自动加载、弹弹play 网关与 anime-skip 跳过片头源。
+/// 设置 → 弹幕：自动加载、弹弹play 网关、anime-skip 跳过片头源与弹幕渲染路线。
 struct DanmakuSettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(DanmakuModel.self) private var danmakuModel
 
     @State private var isEditingGateway = false
+
+    /// 弹幕渲染路线（true = App 层 overlay）。与 `PlaybackPreferences` 同一 key；
+    /// 用 @AppStorage 而不是裸 Binding 读，保证 HUD / 别处改值也能刷新。
+    @AppStorage(SettingsKeys.danmakuUseOverlayRenderer)
+    private var useOverlayRenderer = false
+
+    /// 内核自己没有弹幕渲染器时不给这个开关：那种情况下 overlay 是唯一选择，
+    /// 摆一个假开关比没有更糟。
+    private var kernelSupportsDanmaku: Bool {
+        PlaybackEngineRegistry.selected?.supportsKernelDanmaku == true
+    }
 
     var body: some View {
         // 2026-10-22（B 方案）：设置页整体脱离 `Form`，改成 `ScrollView` + 玻璃卡片流
@@ -43,6 +55,19 @@ struct DanmakuSettingsView: View {
                     set: { danmakuModel.animeSkipClientID = $0 }
                 ))
                 SettingsNote("填入后启用 anime-skip 跳过片头源（在 anime-skip.com 注册获取）。TheIntroDB 免密钥自动启用。")
+            }
+
+            // 渲染路线跟着弹幕偏好走（原先在「设置 → 播放」的「播放内核」卡里）。
+            // 内核自带渲染器时才出现，理由见 `kernelSupportsDanmaku`。
+            if kernelSupportsDanmaku {
+                SettingsGlassSection("弹幕渲染") {
+                    Toggle("用内核渲染弹幕", isOn: Binding(
+                        get: { !useOverlayRenderer },
+                        set: { useOverlayRenderer = !$0 }
+                    ))
+                    .neutralSwitch()
+                    SettingsNote("开 = 内核内置渲染器（随视频合成，截图带弹幕）；关 = App 层渲染（DanmakuRenderKit）。改动从下一次播放开始生效。")
+                }
             }
         }
         .sheet(isPresented: $isEditingGateway) {

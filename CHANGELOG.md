@@ -6,6 +6,10 @@
 
 ### 改动
 
+- **「用内核渲染弹幕」开关从「设置 → 播放」的「播放内核」卡挪到「设置 → 弹幕」页**
+  （用户口径：「把设置-播放的那个内核弹幕设置项，放到 弹幕 那一栏上」）。
+  - 渲染路线本来就是弹幕偏好，和内核选择不是一回事，放在弹幕页才找得到；播放页只留内核 / 画质增强。
+  - 判定与行为不变：仅当前所选内核 `supportsKernelDanmaku` 时出现，写同一个 `PlaybackPreferences.danmakuUseOverlayRenderer` key，改动从下一次播放开始生效；`Docs/DEVELOPMENT.md` 的渲染路线一节同步改了入口位置。
 - **片尾自然播完不再被误判成「播放出错」：内核 v0.3.0 修好尾读语义后，App 侧三层 EOF 兜底整体拆除**
   （根因来自内核：Erika v0.2.1 在请求边界跨过文件末尾时会把「读到文件尾」间歇报成 fatal `av_read_frame: Input/output error (-5)`，自然播完反而进 `.error`；上游 liberika v0.3.0 把最后 4 MiB 内未送达的 HTTP 尾部 range 按 EOF 处理，我们报的 #163 已随上游 #169 修复）。
   - **拆掉的三层兜底**：①`PlayerState` 的片尾折叠（PR #68 引入）：片尾窗口内的 `.failed` / `.stateChanged(.error)` 不再折叠成 `.stopped`——片尾真错误恢复置 `lastError`、计 `errorCount`、露出错误徽章；②上报层的 `isEndOfStream` 删除：心跳与 `stop()` 统一走只认 `.stopped` 的 `isNaturalEnd`（「位置 ≥ 片长 − 2 s」的干净收尾容差保留，它先于 EOF 兜底存在），片尾的 `.error` 不再触发连播；③尾部安全边际 3 s → **0.5 s**（`tailGuardSeconds`）：只保留「防 seek 越过/贴住 EOF 触发内核 `audio output stalled at EOF` 错误风暴（逐帧重发 `.failed`，实测一次刷 6302 条）」这一条理由，「尾读 fatal」的理由已随内核修复消失。

@@ -69,7 +69,7 @@ env 门控（`ERIKA_PERF_PROBE=1` 才跑），同一把尺子量不同内核 tag
 
 ### 渲染路线
 
-双路线并存，由 `PlaybackController.resolveOverlayDanmakuRoute()` 决定：所选内核不支持内核弹幕时强制 overlay，否则听用户偏好（`danmakuUseOverlayRenderer`，**默认内核渲染**），设置页「播放内核」区与 HUD「合并重复」开关可改，改动在下一次播放生效（与内核选择一起在 `prepareEngine()` 锁定）。
+双路线并存，由 `PlaybackController.resolveOverlayDanmakuRoute()` 决定：所选内核不支持内核弹幕时强制 overlay，否则听用户偏好（`danmakuUseOverlayRenderer`，**默认内核渲染**），设置 → 弹幕 页的「用内核渲染弹幕」开关与 HUD「合并重复」开关可改，改动在下一次播放生效（与内核选择一起在 `prepareEngine()` 锁定）。
 
 - **内核渲染**（Erika DFM+）：随视频合成、截图带弹幕。2026-08～10 曾因「在屏弹幕跳轨」整体禁用——根因是转换器给每条弹幕合成的 `id`（内核拿它当 stable_tracks 的 key，重排时轨道偏好互相顶掉）；修复 = 转换器不再输出 `id`（见 `DanmakuJSONConverter.erikaJSON` 的说明）。随 liberika v0.3.0 换装恢复。若真机复现跳轨，把 `PlaybackPreferences.danmakuUseOverlayRenderer` 默认值翻回 true 即可（一行）。
 - **App 层 overlay**（`DanmakuRenderKit`）：视频画面上方独立绘制，与内核解码/合成解耦，截图不带弹幕；轨道模型入轨后不换轨，结构上不会有重排换轨。
