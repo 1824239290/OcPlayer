@@ -514,6 +514,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// loaders use this boundary to invalidate work for the previous source even
     /// if the new engine has not been created yet.
     func prepareForPresentation(_ request: PlaybackRequest) {
+        // 渲染路线快照必须在这里就刷新，不能等 `prepareEngine()`：弹幕编排器在
+        // engine 就绪**之前**就会读 `danmakuPayloadFormat` 产出载荷
+        // （`DanmakuLoadOrchestrator` 里 payload 先于 waitUntilReady），而
+        // `prepareEngine()` 要到 PlayerScreen 的 `.task` 才跑。快照若停在上一次
+        // 播放的路线（冷启动时甚至停在 init 的 overlay 默认），载荷就会按错误格式
+        // 产出：内核路线缺 JSON → 本集弹幕静默缺失；overlay 路线白算一份全量 JSON。
+        // `prepareEngine()` 仍会再解析一次（与内核一起锁定的语义不变）。
+        usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         guard expectedRequestID != request.id else { return }
         openingAttempt?.cancel()
         openingWatchdogTask?.cancel()

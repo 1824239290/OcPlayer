@@ -6,6 +6,15 @@
 
 ### 改动
 
+- **内核弹幕渲染路线恢复：默认改回内核内置渲染器（liberika DFM+），设置 → 弹幕 页可切回 App 层渲染**
+  （2026-08-25 因「在屏弹幕跳轨」被整体禁用，根因已定位并修复）。
+  - **根因**：转换器当年给每条弹幕合成 `id`，内核拿它当 shell `stable_tracks` 的 key，viewport 重排时个别弹幕的轨道偏好互相顶掉 → 单独几条突然换位置。**修复 = 转换器不再输出 `id`**（匿名条目内核不保留逐条轨道记忆，重排时整体重排；考证见 `DanmakuJSONConverter.erikaJSON` 的注释）。随 liberika v0.3.0 换装恢复本判定。
+  - **路线判定**：`resolveOverlayDanmakuRoute()` 回到真判定——所选内核不支持内置弹幕渲染器时强制 overlay（否则弹幕会静默消失），否则听偏好 **`danmakuUseOverlayRenderer`（默认 false = 内核渲染）**；路线与内核一起在 `prepareEngine()` 锁定，改动下一次播放生效。另补一处易漏时序：`prepareForPresentation()` 会先刷新一次路线快照——弹幕编排器在引擎就绪**之前**就按 `danmakuPayloadFormat` 产载荷，只靠 `prepareEngine()` 刷新会让冷启动首播/翻转开关后的首播按旧路线产载荷（内核路线缺 JSON → 本集弹幕静默缺失）。
+  - **用户可见**：①默认弹幕由内核渲染，与视频同一渲染管线（画面截图两条路线都不含弹幕——内核截图契约排除在屏评论）；②HUD「过滤与显示规则 → 合并重复」入口恢复（仅内核渲染路线出现，overlay 渲染器不实现 merge）；③HUD 字号调节对内核路线生效（此前只喂 overlay，恢复后内核路线成默认会让它变成死操作）——应用层 pt 按比例映射到内核字号（100% = 内核自己的 30 逻辑 px，视觉零变化）；④设置 → 弹幕 页的「弹幕渲染」卡承载路线开关（位置调整见下一条）。
+  - **风险与回退**：内核渲染的 DFM+ 轨道模型与 overlay 不同（可能观感差异）；若真机复现跳轨，把 `PlaybackPreferences.danmakuUseOverlayRenderer` 默认值翻回 true 即可（一行），或让用户在该开关里切回 App 层渲染。
+  - **测试**：`testDanmakuRouteFollowsPreference`（偏好 true/false 两向）、「内核不支持弹幕时强制 overlay」保留、新增 `testDanmakuRouteRefreshesAtPresentation`（换片后快照跟设置刷新）、`DanmakuKernelFontSizeTests`（比例映射 + ≥1 夹紧）；装载侧缺 JSON 载荷由静默跳过改为 warning 留痕。
+  - **随本批次一起合入**：另含「用内核渲染弹幕」开关从设置 → 播放 挪到设置 → 弹幕（独立提交）。
+
 - **「用内核渲染弹幕」开关从「设置 → 播放」的「播放内核」卡挪到「设置 → 弹幕」页**
   （用户口径：「把设置-播放的那个内核弹幕设置项，放到 弹幕 那一栏上」）。
   - 渲染路线本来就是弹幕偏好，和内核选择不是一回事，放在弹幕页才找得到；播放页只留内核 / 画质增强。

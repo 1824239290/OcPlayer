@@ -3,7 +3,7 @@ import Foundation
 /// 已装载进内核的一条弹幕轨道。
 ///
 /// ⚠️ 只有**内核内置弹幕渲染器**才会有这个东西。App 层 overlay 路线
-/// （`DanmakuRenderKit`，当前默认）不经过内核，`danmakuTracks()` 恒为空。
+/// （`DanmakuRenderKit`，设置 → 弹幕 可切）不经过内核，`danmakuTracks()` 恒为空。
 public struct DanmakuTrackInfo: Identifiable, Hashable, Sendable {
     public let id: UInt64
     public let enabled: Bool

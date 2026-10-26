@@ -179,7 +179,7 @@ public protocol PlaybackEngine: AnyObject, Sendable {
     /// 内核是否自带弹幕渲染器。
     ///
     /// `false` 时下面那组方法全部走本协议的默认空实现，适配器什么都不用写；
-    /// 设置页也据此隐藏「内核弹幕渲染」开关。App 层 overlay 路线不依赖这组能力。
+    /// 设置 → 弹幕 页据此隐藏「用内核渲染弹幕」开关。App 层 overlay 路线不依赖这组能力。
     static var supportsKernelDanmaku: Bool { get }
 
     func clearDanmaku() throws

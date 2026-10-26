@@ -122,7 +122,13 @@ struct OcPlayerApp: App {
     /// 全局两件套：会话/浏览状态 + 播放控制。
     /// 放 App 层：命令行 / 「用 OcPlayer 打开」这类外部入口要在窗口之外也能喂文件。
     @State private var appModel = AppModel()
-    @State private var controller = PlaybackController()
+    /// 在 `init()` 里、`PlaybackEngineAssembly.registerAll()` **之后**创建：
+    /// `PlaybackController.init()` 会立刻解析一次弹幕渲染路线（读注册表 + 偏好），
+    /// 而属性默认值在 `init()` 体之前求值——那时注册表还是空的，解析结果恒为
+    /// overlay，与真实默认（内核渲染）不符。第一次 `prepareEngine()` 虽然会纠正，
+    /// 但那段窗口里弹幕编排器可能已经按错误路线产出载荷（见 `prepareForPresentation`
+    /// 里的说明）。所以声明不给默认值，在 init 里显式赋值。
+    @State private var controller: PlaybackController
     #if os(macOS)
     @NSApplicationDelegateAdaptor(MacApplicationDelegate.self) private var appDelegate
     #endif
@@ -146,6 +152,8 @@ struct OcPlayerApp: App {
         // 注册表现取当前选择。见 PlaybackEngineAssembly（唯一认识具体内核的地方）。
         // 测试也依赖它（`PlaybackControllerOpenTests.tearDown` 用真实注册表复位）。
         PlaybackEngineAssembly.registerAll()
+        // 注册表就绪之后再建控制器：init 里的路线解析才是对的。
+        _controller = State(initialValue: PlaybackController())
         AppDiagnostics.recordLaunch()
         // ⚠️ 测试宿主跑在与生产**同一个二进制**里（`TEST_HOST = OcPlayer.app`），
         // 所以这段启动路径在跑测试时也会执行。**更新检查必须跳过**：那是真实的

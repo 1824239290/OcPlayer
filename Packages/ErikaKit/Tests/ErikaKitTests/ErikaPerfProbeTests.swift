@@ -26,6 +26,7 @@ import PlaybackKit
 /// - `ERIKA_PERF_PROBE=1`          总开关（缺省不跑）
 /// - `ERIKA_PERF_MODE`             `local`（默认）/ `remote`
 /// - `ERIKA_PERF_URL` / `ERIKA_PERF_AUTH`   remote 模式的媒体地址与 Authorization 头
+/// - `ERIKA_PERF_UA`                remote 模式的自定义 User-Agent（部分服务器按 UA 拒流）
 /// - `ERIKA_PERF_SEEK`             remote 模式起播位置秒（默认 600）
 /// - `ERIKA_PERF_SECONDS`          采样时长秒（默认 90）
 /// - `ERIKA_PERF_CUE_SPACING`      场景 A 的 cue 间隔秒（默认 1.0；调小可复现 atlas 超限崩溃）
@@ -47,11 +48,22 @@ struct ErikaPerfProbeTests {
         let mode = env["ERIKA_PERF_MODE"] ?? "local"
 
         // 内核日志走进程 stderr：先把 fd 2 摘到文件里，跑完恢复，报告时再读。
+        // `defer` 兜住「中途 throw / 提前 return」的每条路径——只在末尾手工恢复的
+        // 写法会让一次 assertion 失败把整个进程的 stderr 永久重定向走。
         let stderrPath = outPrefix + "-stderr.log"
-        let stderrFile = fopen(stderrPath, "w")
+        guard let stderrFile = fopen(stderrPath, "w") else {
+            Issue.record("无法创建 \(stderrPath)（检查 ERIKA_PERF_OUT 前缀所在目录）")
+            return
+        }
         fflush(nil)
         let savedStderr = dup(2)
         dup2(fileno(stderrFile), 2)
+        defer {
+            fflush(stderrFile)
+            dup2(savedStderr, 2)
+            close(savedStderr)
+            fclose(stderrFile)
+        }
 
         var cleanupPaths: [String] = []
         var mediaSource: PlaybackSource
@@ -114,7 +126,6 @@ struct ErikaPerfProbeTests {
             Thread.sleep(forTimeInterval: 1.0 / 60)
         }
         guard duration != nil, tracks.video > 0 else {
-            dup2(savedStderr, 2)
             fatalError("open 未落地：tracks=\(tracks) failure=\(failure ?? "nil")")
         }
 
@@ -153,7 +164,6 @@ struct ErikaPerfProbeTests {
             Thread.sleep(forTimeInterval: 1.0 / 60)
         }
         guard firstFrame else {
-            dup2(savedStderr, 2)
             fatalError("90 秒内没等到首帧：failure=\(failure ?? "nil")")
         }
 
@@ -208,10 +218,8 @@ struct ErikaPerfProbeTests {
         }
 
         let finalStats = try presenter.stats()
-        fflush(samplesFile); fflush(renderFile); fflush(stderrFile)
-        dup2(savedStderr, 2)
-        close(savedStderr)
-        fclose(samplesFile); fclose(renderFile); fclose(stderrFile)
+        fflush(samplesFile); fflush(renderFile)
+        fclose(samplesFile); fclose(renderFile)
 
         // ---- 汇总 ----
         // 内核 stderr 可能混入非 UTF-8 字节，一律 lossy 解码，别让汇总自己炸掉。

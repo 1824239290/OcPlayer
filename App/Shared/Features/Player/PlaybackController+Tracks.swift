@@ -16,8 +16,9 @@ extension PlaybackController {
         return track.displayTitle
     }
 
-    /// 弹幕是否已装载。当前恒走 overlay 渲染（内核轨道恒为空），所以不能只看
-    /// `danmakuTracks`——HUD 的时间偏移区块显隐要一并看 overlay 的数据。
+    /// 弹幕是否已装载。两条路线各管一半：内核渲染看 `danmakuTracks`，overlay 看
+    /// `danmakuOverlay.hasComments`——HUD 的时间偏移区块显隐必须两者都看，否则换了
+    /// 路线就会漏判（overlay 路线下内核轨道恒为空、反过来也成立）。
     var hasDanmakuLoaded: Bool {
         !danmakuTracks.isEmpty || danmakuOverlay.hasComments
     }

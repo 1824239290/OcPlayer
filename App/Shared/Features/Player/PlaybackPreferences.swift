@@ -160,7 +160,8 @@ enum PlaybackPreferences {
     /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay，false = 内核内置
     /// 渲染器（**默认**）。改动在下一次播放生效（与内核选择一起在
     /// `PlaybackController.prepareEngine()` 锁定，中途翻转会出双份弹幕）。
-    /// 曾随内核弹幕禁用（43832df）删除、随恢复一并回来；key 不变，用户旧选择仍在。
+    /// 历史：43832df（2026-08-25）起路线强制作废、本属性停止读取，79a0de5 连同死代码
+    /// 删除；随内核弹幕恢复一并回来，key 不变，用户旧选择仍在。
     static var danmakuUseOverlayRenderer: Bool {
         get { storedBool(forKey: SettingsKeys.danmakuUseOverlayRenderer, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuUseOverlayRenderer) }

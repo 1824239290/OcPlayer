@@ -66,7 +66,7 @@ struct DanmakuSettingsView: View {
                         set: { useOverlayRenderer = !$0 }
                     ))
                     .neutralSwitch()
-                    SettingsNote("开 = 内核内置渲染器（随视频合成，截图带弹幕）；关 = App 层渲染（DanmakuRenderKit）。改动从下一次播放开始生效。")
+                    SettingsNote("开 = 内核内置渲染器（与画面同一渲染管线）；关 = App 层渲染（DanmakuRenderKit）。两条路线的画面截图都不含弹幕。改动从下一次播放开始生效。")
                 }
             }
         }

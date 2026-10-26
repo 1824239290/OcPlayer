@@ -35,7 +35,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
         version: ErikaVersion.tag,
         summary: "Rust · FFmpeg · libass · Metal",
         supportsKernelDanmaku: true,
-        // 别在这里重复弹幕开关自己的说明——设置页两行紧挨着，会读成同一句话说两遍。
+        // 别在这里重复弹幕渲染路线的说明——设置页另有「用内核渲染弹幕」开关承载它。
         notes: "宿主驱动渲染：CAMetalLayer + CADisplayLink，画面由 App 逐帧驱动。"
             + "MPL-2.0，静态链接 LGPL 的 FFmpeg / libass。"
     )

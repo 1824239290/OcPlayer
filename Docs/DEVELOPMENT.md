@@ -63,15 +63,15 @@ CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme �
 
 ### 内核性能探针（`ErikaPerfProbeTests`）
 
-env 门控（`ERIKA_PERF_PROBE=1` 才跑），同一把尺子量不同内核 tag 的渲染成本：进程 CPU（getrusage 差分）、物理内存峰值（`ProcessFootprint`）、每 tick 内核渲染耗时、内核 stderr 告警。场景 A = 合成 720p H.264 + 外挂密集 CJK ASS（本地、确定性）；场景 B = 真实片源（`ERIKA_PERF_MODE=remote`，URL/token 经 env 注入）。完整变量表见该文件头注释。v0.2.1 → v0.3.0 的实测结论（2026-10-25，M 系 Mac）：同屏 ≤2 条 CJK ASS 时超采样代价约 **+22%（真实片源）～ +70%（合成 worst-case）** 的进程 CPU p50、+11～17 MB 内存；采样产物落在 `ERIKA_PERF_OUT` 指定的前缀。
+env 门控（`ERIKA_PERF_PROBE=1` 才跑），同一把尺子量不同内核 tag 的渲染成本：进程 CPU（getrusage 差分）、物理内存峰值（`ProcessFootprint`）、每 tick 内核渲染耗时、内核 stderr 告警。场景 A = 合成 720p H.264 + 外挂密集 CJK ASS（本地、确定性）；场景 B = 真实片源（`ERIKA_PERF_MODE=remote`，URL/token 经 env 注入）。完整变量表见该文件头注释（含 remote 模式的 `ERIKA_PERF_UA`）。v0.2.1 → v0.3.0 的实测结论（2026-10-25，M 系 Mac）：同屏 ≤2 条 CJK ASS 时超采样代价约 **+22%（真实片源）～ +70%（合成 worst-case）** 的进程 CPU p50、+11～19 MB 内存；采样产物落在 `ERIKA_PERF_OUT` 指定的前缀。
 
 ## 弹幕
 
 ### 渲染路线
 
-双路线并存，由 `PlaybackController.resolveOverlayDanmakuRoute()` 决定：所选内核不支持内核弹幕时强制 overlay，否则听用户偏好（`danmakuUseOverlayRenderer`，**默认内核渲染**），设置 → 弹幕 页的「用内核渲染弹幕」开关与 HUD「合并重复」开关可改，改动在下一次播放生效（与内核选择一起在 `prepareEngine()` 锁定）。
+双路线并存，由 `PlaybackController.resolveOverlayDanmakuRoute()` 决定：所选内核不支持内核弹幕时强制 overlay，否则听用户偏好（`danmakuUseOverlayRenderer`，**默认内核渲染**）。设置 → 弹幕 页的「用内核渲染弹幕」开关改路线，改动在下一次播放生效（与内核选择一起在 `prepareEngine()` 锁定；`prepareForPresentation()` 也会先刷新一次快照，因为弹幕编排器在引擎就绪前就要按路线产载荷）。HUD「过滤与显示规则 → 合并重复」是**内核配置**，拨了即时生效，且只在渲染路线为内核时出现（overlay 渲染器不实现 merge）。
 
-- **内核渲染**（Erika DFM+）：随视频合成、截图带弹幕。2026-08～10 曾因「在屏弹幕跳轨」整体禁用——根因是转换器给每条弹幕合成的 `id`（内核拿它当 stable_tracks 的 key，重排时轨道偏好互相顶掉）；修复 = 转换器不再输出 `id`（见 `DanmakuJSONConverter.erikaJSON` 的说明）。随 liberika v0.3.0 换装恢复。若真机复现跳轨，把 `PlaybackPreferences.danmakuUseOverlayRenderer` 默认值翻回 true 即可（一行）。
+- **内核渲染**（liberika DFM+）：随视频合成、与画面同一渲染管线（画面截图两条路线都不含弹幕——内核的截图契约明确排除在屏评论）。2026-08～10 曾因「在屏弹幕跳轨」整体禁用——根因是转换器给每条弹幕合成的 `id`（内核拿它当 stable_tracks 的 key，重排时轨道偏好互相顶掉）；修复 = 转换器不再输出 `id`（见 `DanmakuJSONConverter.erikaJSON` 的说明）。随 liberika v0.3.0 换装恢复。若真机复现跳轨，把 `PlaybackPreferences.danmakuUseOverlayRenderer` 默认值翻回 true 即可（一行）。
 - **App 层 overlay**（`DanmakuRenderKit`）：视频画面上方独立绘制，与内核解码/合成解耦，截图不带弹幕；轨道模型入轨后不换轨，结构上不会有重排换轨。
 
 注：早期的「弹幕定位导致内核把完整视频读进内存」是另一个问题，已随内核 0.1.9 修掉，与路线无关。

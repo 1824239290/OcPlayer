@@ -163,6 +163,42 @@ final class PlayerStateFoldingTests: XCTestCase {
         XCTAssertEqual(state.sessionStats.errorCount, 1)
     }
 
+    /// 只有状态迁移、没有错误事件（内核的另一张面孔）：`.stateChanged(.error)` 必须
+    /// 原样落 `.error`。拆折叠时这条路径的断言随折叠用例一起删掉了，补回来——谁都
+    /// 不想再看到「状态层悄悄吞掉 error」。
+    func testStateChangedErrorLandsInError() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1422)))
+        engine.emit(.positionChanged(.milliseconds(1_421_587)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1422) && state.position == .milliseconds(1_421_587)
+        }
+
+        engine.emit(.stateChanged(.error))
+        try await waitUntil("状态错误原样落地") { state.state == .error }
+    }
+
+    /// `reset()` 要清掉上一会话的错误残留（`lastError` / `errorCount`）：换源后
+    /// 新片源不该带着上一集的错误徽章与计数开始。
+    func testResetClearsErrorResidue() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.failed(code: 3, message: "Input/output error (-5)"))
+        try await waitUntil("错误落地") { state.state == .error }
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+
+        state.reset()
+        XCTAssertNil(state.lastError)
+        XCTAssertEqual(state.sessionStats.errorCount, 0)
+    }
+
     /// 错误风暴：同一条 `.failed` 逐帧重发（实测一次刷了 6302 条）只计一次、
     /// lastError 不重复发布——去重与折叠无关，拆兜底后这条守卫必须还在。
     func testIdenticalErrorStormCountsOnce() async throws {

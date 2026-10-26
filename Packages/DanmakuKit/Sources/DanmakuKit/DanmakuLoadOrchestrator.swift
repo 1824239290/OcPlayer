@@ -25,7 +25,7 @@ public protocol DanmakuPlaybackHosting {
     /// 返回值为真时，错误由实现方抛出。
     ///
     /// `entries` 是 overlay 渲染路线的输入（结构直传，播放器侧零解析）；`json` 只给
-    /// 内核弹幕轨路线用（当前停用）。两者由 `DanmakuService` 在同一执行器上产出。
+    /// 内核弹幕轨路线用。两者由 `DanmakuService` 在同一执行器上按 `danmakuPayloadFormat` 产出。
     func replaceDanmaku(
         uuid: UUID,
         entries: [DanmakuJSONParser.Entry],
@@ -38,9 +38,10 @@ public protocol DanmakuPlaybackHosting {
 }
 
 public extension DanmakuPlaybackHosting {
-    /// 默认取 `.overlay` —— 与默认偏好一致（渲染路线默认内核渲染，但**忘记实现
-    /// 这个属性的接入方**自报 overlay 最安全：`PlaybackController` 自己实现了本
-    /// 属性并按真实路线返回；这里只兜底那些没有弹幕装载需求的宿主）。
+    /// 默认取 `.overlay`（**不是**生产默认）：`PlaybackController` 自己实现了本属性并
+    /// 按真实路线返回；这里的默认值只兜底「忘记实现它」的接入方——不产出内核 JSON
+    /// 最安全，免得白算一份 MB 级字符串。模板方法必须**在这里的实现与生产路线之间
+    /// 选，而不是按全局偏好猜**：偏好可以随时改，接入方没法跟着变。
     ///
     /// 此前默认是 `.both`，于是忘记实现的接入方会白算一份全量 `erikaJSON`
     /// （把所有弹幕重新编码成 MB 级字符串），而那份产物没人用。
