@@ -31,7 +31,7 @@ public final class ErikaEngine: PlaybackEngine, @unchecked Sendable {
 
     public static let descriptor = PlaybackEngineDescriptor(
         id: "erika",
-        displayName: "Erika",
+        displayName: "liberika",
         version: ErikaVersion.tag,
         summary: "Rust · FFmpeg · libass · Metal",
         supportsKernelDanmaku: true,

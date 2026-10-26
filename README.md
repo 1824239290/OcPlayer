@@ -56,7 +56,7 @@ Bangumi / MoviePilot 不用可在设置里停用,入口会全部隐藏。
 
 ```bash
 Scripts/bootstrap.sh      # 可选:生成本地 Secrets.xcconfig 模板(不覆盖已有文件)
-Scripts/fetch-erika.sh    # 拉取播放内核 Erika(约 750MB,不入库)
+Scripts/fetch-erika.sh    # 拉取播放内核 liberika(约 750MB,不入库)
 Scripts/build-macos.sh    # 构建 macOS Debug;加 release 参数构建 Release
 ```
 

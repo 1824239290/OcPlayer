@@ -2,10 +2,10 @@ import AppDesignKit
 import Foundation
 import SwiftUI
 
-/// App 的 SwiftPM 依赖图或随 Erika 二进制分发的开源组件。
+/// App 的 SwiftPM 依赖图或随 liberika 二进制分发的开源组件。
 ///
-/// 版本固定的 SwiftPM 项目与 `Package.resolved` 对齐；Erika 及其原生依赖随每次打包
-/// 解析到的正式版变化，因此不在源码里写死版本号。
+/// 版本固定的 SwiftPM 项目与 `Package.resolved` 对齐；liberika 及其原生依赖随包固定
+/// （钉点见 `Config/Erika.version`），确切版本由随包 MANIFEST 给出。
 struct OpenSourceComponent: Identifiable, Sendable {
     let id: String
     let name: String
@@ -33,7 +33,7 @@ enum OpenSourceLicenseCatalog {
                     id: "erika",
                     name: "liberika",
                     license: "MPL-2.0",
-                    purpose: "Rust 播放内核，负责音视频解码、字幕与弹幕渲染。打包时使用最新正式版；确切版本见随包 MANIFEST。",
+                    purpose: "Rust 播放内核，负责音视频解码、字幕与弹幕渲染。随包固定版本（钉点见 Config/Erika.version）；确切版本见随包 MANIFEST。",
                     homepage: "https://github.com/AimesSoft/liberika",
                     licenseURL: "https://www.mozilla.org/MPL/2.0/",
                     bundledLicensePaths: [
@@ -83,7 +83,7 @@ enum OpenSourceLicenseCatalog {
                     name: "DanmakuKit（DanmakuRenderKit）",
                     version: "1.6.0",
                     license: "MIT",
-                    purpose: "vendored 的弹幕渲染层（qyz777/DanmakuKit）：轨道模型「入轨时追击判定、入轨后不换轨」，取代 Erika 内核 DFM+ 弹幕子系统。",
+                    purpose: "vendored 的弹幕渲染层（qyz777/DanmakuKit）：轨道模型「入轨时追击判定、入轨后不换轨」，取代 liberika 内核 DFM+ 弹幕子系统。",
                     homepage: "https://github.com/qyz777/DanmakuKit",
                     licenseURL: "https://opensource.org/license/mit",
                     bundledLicensePaths: [
@@ -243,13 +243,13 @@ enum OpenSourceLicenseCatalog {
         ),
         OpenSourceComponentGroup(
             id: "erika-runtime",
-            title: "Erika 内置组件",
+            title: "liberika 内置组件",
             components: [
                 component(
                     id: "ffmpeg",
                     name: "FFmpeg",
                     license: "LGPL-3.0",
-                    purpose: "音视频封装、解封装与编解码；Erika 使用禁用 GPL 组件的 LGPL profile 构建。",
+                    purpose: "音视频封装、解封装与编解码；liberika 使用禁用 GPL 组件的 LGPL profile 构建。",
                     homepage: "https://ffmpeg.org",
                     licenseURL: "https://www.gnu.org/licenses/lgpl-3.0.html",
                     bundledLicensePaths: [
@@ -338,7 +338,7 @@ enum OpenSourceLicenseCatalog {
                     id: "droid-sans-fallback",
                     name: "Droid Sans Fallback",
                     license: "Apache-2.0",
-                    purpose: "Erika 内置的字幕回退字体。",
+                    purpose: "liberika 内置的字幕回退字体。",
                     homepage: "https://android.googlesource.com/platform/frameworks/base/+/master/data/fonts/",
                     licenseURL: "https://www.apache.org/licenses/LICENSE-2.0",
                     bundledLicensePaths: [
@@ -350,7 +350,7 @@ enum OpenSourceLicenseCatalog {
                     id: "artcnn",
                     name: "ArtCNN",
                     license: "MIT",
-                    purpose: "Erika 内置的图像放大模型权重。",
+                    purpose: "liberika 内置的图像放大模型权重。",
                     homepage: "https://github.com/Artoriuz/ArtCNN",
                     licenseURL: "https://opensource.org/license/mit",
                     bundledLicensePaths: [
@@ -396,7 +396,7 @@ struct OpenSourceLicensesView: View {
     var body: some View {
         List {
             Section {
-                Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 Erika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
+                Text("OcPlayer 依赖与使用以下开源项目与社区服务。代码依赖随发布包附带许可证文本与 liberika 原生依赖通知；社区服务条目附项目主页与数据来源说明。")
                     .foregroundStyle(.secondary)
             }
             // **行底必须显式清空**：iOS 的 grouped `List` 行底是系统实色（

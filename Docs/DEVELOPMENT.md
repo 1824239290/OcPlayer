@@ -23,7 +23,7 @@
 
 ```bash
 Scripts/bootstrap.sh             # 可选：生成本地 Secrets.xcconfig 模板，不会覆盖已有文件
-Scripts/fetch-erika.sh           # 解析并拉取最新 Erika，生成 Erika.xcframework（不入库，约 750 MB）
+Scripts/fetch-erika.sh           # 解析并拉取 liberika 内核，生成 Erika.xcframework（不入库，约 750 MB）
 Scripts/build-macos.sh           # 检查最新内核，清理上次产物并构建 macOS Debug
 Scripts/build-macos.sh release   # Release 构建
 Scripts/package-macos.sh v0.2.2  # 本地打包，产出与 CI 相同的 dist/ 产物

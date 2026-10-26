@@ -6,6 +6,14 @@
 
 ### 改动
 
+- **播放内核换装 liberika v0.3.0（原 Erika）：片尾尾读不再报假 EOF，字幕/弹幕字形改为 2× 超采样，软件解码默认多线程**
+  （上游 0.3.0 起仓库更名 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)，C ABI 仍为 `erika_*`）。
+  - **钉点**：`Config/Erika.version` v0.2.1 → **v0.3.0**，`Scripts/erika-v0.3.0.sha256` 存官方两包哈希（macos-arm64 + ios，下载时逐包校验）；`erika.h` 与 `ErikaVersion.swift` 随 tag 重写入库（头文件纯新增：帧导出 / 诊断 JSON / chapters / hwaccel 回退事件，既有签名与结构体布局未动）。
+  - **fetch-erika.sh 两处基建**：①v0.3.0 的官方 macOS `.a` 里有 285 个 compiler-rt 对象同时带 macOS 与 MACCATALYST 两条 `LC_BUILD_VERSION`，`xcodebuild -create-xcframework` 会把整个归档判成「多平台」拒收——新增 `strip_catalyst_build_version` 把 Catalyst 声明原地改写成等长的 `LC_UUID`（结构合法、对象与符号全保留；改 `LC_SOURCE_VERSION` 会被 ranlib 丢成员，注释里写明勿用），老 tag 检出 0 处自动跳过；②改写后 macOS 切片改名 `liberika_capi.macos-only.a`，「已就绪」快路径跟着认新名字——否则每次构建都会重解包 ~320 MB、重建 ~780 MB xcframework，并刷新 `erika.h` 触发 ErikaKit 全量重编。失败语义也收紧：改写脚本除 0/2 之外的退出码一律中止 fetch（不再把错误吞进 `if` 条件、拿未改写的归档去合成）。
+  - **用户可见影响**：①**字幕与弹幕字形按 2× 栅格化**（上游默认开启、C ABI 无关闭开关）——同屏 ≤2 条 CJK 字幕时进程 CPU 约 +22%（真实片源）～+70%（合成最坏场景）、内存 +11～19 MB，字形更锐利；已知风险：高密度 CJK 字幕（同屏数百字形）会把超采样 glyph atlas 顶过 Metal 16384 纹理上限、直接 MTL 断言 abort，待报上游；②**软件视频解码默认多线程**（硬解不受影响；软解片源 open/seek 后首帧可能略延后，可用 `ERIKA_VIDEO_DECODE_THREADS=1` 回单线程）；③片尾尾读语义修复带来的行为变化见「拆除片尾 EOF 兜底」一条。
+  - **性能探针**：新增 `ErikaPerfProbeTests`（env 门控 `ERIKA_PERF_PROBE=1`，CI 与普通测试零开销直通），同一把尺子量不同 tag 的进程 CPU / 内存 / 每 tick 内核渲染耗时；本地合成场景与远程真片源（`ERIKA_PERF_URL` / `ERIKA_PERF_AUTH`）两种模式，实测数据见 `Docs/DEVELOPMENT.md` 内核章节。
+  - **验证**：CI `macOS + iOS tests` 绿（含 v0.3.0 内核下载、哈希校验、Catalyst 改写与 xcframework 合成）；本机 `SKIP_ERIKA_FETCH=1 Scripts/build-macos.sh debug` 通过；ErikaKit 全量 65 用例绿。
+
 - **iOS MoviePilot 搜索结果卡整体错乱：标签被压成逐字竖排、两个胶囊只剩 `+` / 🔍、标题截成「药屋少女的…」——动作区移出信息行、独占卡片底部整宽**
   （用户口径：「moviepilot 搜索番剧得到的结果在手机上会这样，完全混乱，你看看修改一下 UI 排布」；方案 A 经效果演示确认后实施）。
   - **根因**：卡内宽 330pt（402 − 页面留白 22×2 − 卡内边距 14×2），而 `HStack` 里同时放入了刚性海报（`MediaArtwork(width: 76)`）、可压缩文字列、`Spacer(minLength: 8)` 与两个自带 14pt 水平内边距的胶囊——账面 `76 + 16 + 124 + 8 + 49 + 8 + 49 = 330` **刚好塞满**，所以不溢出、不报错，SwiftUI 只是按负空间分配**把 `Text` 静默压掉**：4 枚 `PillChip` 被压到 16 / 51 / 16 / 16pt（中文无空格可断 → 逐字竖排，真机上是三根 156pt 高的「纺锤形竖条」），胶囊文案压成 0 宽（只剩图标），标题 `.lineLimit(1)` 截断。原文全文无 `fixedSize` / `layoutPriority`。

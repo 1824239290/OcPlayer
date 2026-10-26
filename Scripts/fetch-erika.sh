@@ -158,11 +158,21 @@ ios_slices_ready() {
     && [[ -f "$OUT/ios-arm64_x86_64-simulator/liberika_capi-sim.a" ]]
 }
 
+# macOS 切片是否已就绪：v0.3.0 起官方 macOS .a 要经 Catalyst 声明改写后才能合成
+# xcframework，切片文件名随之变成 `liberika_capi.macos-only.a`；老 tag 仍是
+# `liberika_capi.a`。两个名字都要认——只认前者会让快路径永不命中，于是每次构建都
+# 重新解包 ~320 MB、重建 ~780 MB xcframework，还会刷新 erika.h 的 mtime 触发
+# ErikaKit 全量重编。
+mac_slice_ready() {
+  [[ -f "$OUT/$MAC_SLICE/liberika_capi.a" ]] \
+    || [[ -f "$OUT/$MAC_SLICE/liberika_capi.macos-only.a" ]]
+}
+
 # macOS-only tag：ready 判定不要求 iOS manifest / 切片，但 macOS 必须齐。
 if [[ -d "$OUT" ]] \
   && [[ -f "$VERSION_MARKER" ]] \
   && [[ "$(<"$VERSION_MARKER")" == "$TAG" ]] \
-  && [[ -f "$OUT/$MAC_SLICE/liberika_capi.a" ]] \
+  && mac_slice_ready \
   && ( [[ "$IOS_AVAILABLE" == false ]] || ios_slices_ready ) \
   && manifest_matches "$MAC_MANIFEST" "$MAC_PKG" \
   && ( [[ "$IOS_AVAILABLE" == false ]] || manifest_matches "$IOS_MANIFEST" "$IOS_PKG" ) \
@@ -262,7 +272,8 @@ if data[:8] != b"!<arch>\n":
     # universal 包是「fat 容器里套 ar 归档」，本修复只处理 thin 归档（默认
     # arm64；x64 也是 thin）。给一条能直接照做的信息，别掉进 xcodebuild 的
     # 「unable to determine the platform / multiple platforms」。
-    if data[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca") or len(data) >= 4:
+    if data[:4] in (b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+                    b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"):
         sys.exit("macOS 内核包是 universal(fat) 归档，本脚本的 Catalyst 声明修复"
                  "暂不支持；请用 ERIKA_MACOS_ARCH=arm64（或 x64）重跑")
     sys.exit("不是 ar 归档")
@@ -310,12 +321,32 @@ PY
 
 # python 退出 0 = 确有改写且已落盘；退出 2 = 无需改写（保持原档）。任何其他
 # 退出码都让整个 fetch 失败，绝不拿半成品合成。
+#
+# ⚠️ 不能用 `if strip_catalyst_build_version …; then`：函数放在 if 条件里时
+# `set -e` 不生效，python 的报错退出会被静默吞掉，然后拿**未改写**的 .a 去合成，
+# 最终由 xcodebuild 抛出那句晦涩的「多平台」错误——正是本修复要消灭的症状。
 PATCHED_MAC_LIB="$WORK/$MAC_PKG/lib/liberika_capi.macos-only.a"
-if command -v python3 >/dev/null && strip_catalyst_build_version "$MAC_LIB" "$PATCHED_MAC_LIB"; then
-  ranlib "$PATCHED_MAC_LIB"
-  echo "· macOS .a 含 Catalyst 平台声明，已改写为纯 macOS"
-  MAC_LIB="$PATCHED_MAC_LIB"
+if ! command -v python3 >/dev/null; then
+  echo "✗ 缺少 python3：v0.3.0 的 macOS .a 需要先改写 Catalyst 平台声明才能合成 xcframework" >&2
+  exit 1
 fi
+patch_rc=0
+strip_catalyst_build_version "$MAC_LIB" "$PATCHED_MAC_LIB" || patch_rc=$?
+case "$patch_rc" in
+  0)
+    # `-D` 不写 mtime/uid/gid，同一个 zip 反复解包得到逐字节相同的产物。
+    ranlib -D "$PATCHED_MAC_LIB"
+    echo "· macOS .a 含 Catalyst 平台声明，已改写为纯 macOS"
+    MAC_LIB="$PATCHED_MAC_LIB"
+    ;;
+  2)
+    : # 检出 0 处（≤ v0.2.1 的老 tag），原样沿用
+    ;;
+  *)
+    echo "✗ Catalyst 平台声明改写失败（退出码 $patch_rc），不拿半成品合成 xcframework" >&2
+    exit 1
+    ;;
+esac
 
 # 先保留旧 iOS 切片（macOS-only release 时复用），再重建 xcframework。
 SAVED_IOS=""
