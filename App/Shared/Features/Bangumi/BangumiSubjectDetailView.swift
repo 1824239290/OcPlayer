@@ -448,15 +448,23 @@ struct BangumiSubjectDetailView: View {
             }
         } label: {
             actionCapsule(tint: statusTint, isActive: currentInterestType != .none, compressible: compressible) {
-                if updatingStatus {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: currentInterestType.icon)
-                        .foregroundStyle(currentInterestType == .none ? Color.secondary : statusTint)
-                    Text(currentInterestType == .none ? "加入收藏" : currentInterestType.description(subject?.type))
-                        .font(.callout.weight(.medium))
-                        .lineLimit(1)
-                }
+                // 保存中的转圈**叠在图标位上**，而不是把整条 label 换成转圈：
+                // 收藏/评分都是真实网络往返（几百 ms ~ 2s），旧写法让胶囊从 ~94–126pt
+                // 塌成 ~52pt，旁边的评分胶囊和进度文案跟着平移。`.opacity` 与 `.overlay`
+                // 都不参与布局，宽度因此恒定——沿用 `PrimaryActionButton` 的
+                // 「标签原地变形、尺寸不变」口径。
+                Image(systemName: currentInterestType.icon)
+                    .foregroundStyle(currentInterestType == .none ? Color.secondary : statusTint)
+                    .opacity(updatingStatus ? 0 : 1)
+                    .overlay {
+                        if updatingStatus {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+
+                Text(currentInterestType == .none ? "加入收藏" : currentInterestType.description(subject?.type))
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
             }
         }
         .menuStyle(.borderlessButton)
@@ -504,21 +512,24 @@ struct BangumiSubjectDetailView: View {
             }
         } label: {
             actionCapsule(tint: BangumiStatusColor.rating, isActive: currentRating > 0, compressible: compressible) {
-                if updatingRating {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: currentRating > 0 ? "star.fill" : "star")
-                        .foregroundStyle(currentRating > 0 ? BangumiStatusColor.rating : Color.secondary)
-
-                    if currentRating > 0 {
-                        Text("\(currentRating)分")
-                            .font(.callout.weight(.medium).monospacedDigit())
-                            .foregroundStyle(BangumiStatusColor.rating)
-                    } else {
-                        Text("评分")
-                            .font(.callout.weight(.medium))
-                            .foregroundStyle(.secondary)
+                // 同收藏胶囊：转圈叠在星标位上，胶囊宽度不变（见上一条注释）。
+                Image(systemName: currentRating > 0 ? "star.fill" : "star")
+                    .foregroundStyle(currentRating > 0 ? BangumiStatusColor.rating : Color.secondary)
+                    .opacity(updatingRating ? 0 : 1)
+                    .overlay {
+                        if updatingRating {
+                            ProgressView().controlSize(.small)
+                        }
                     }
+
+                if currentRating > 0 {
+                    Text("\(currentRating)分")
+                        .font(.callout.weight(.medium).monospacedDigit())
+                        .foregroundStyle(BangumiStatusColor.rating)
+                } else {
+                    Text("评分")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
