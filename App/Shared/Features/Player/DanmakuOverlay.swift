@@ -14,13 +14,14 @@ typealias PlatformFont = UIFont
 
 /// App 层弹幕 overlay（见 Packages/DanmakuRenderKit/PROVENANCE.md）。
 ///
-/// 为什么不用内核弹幕的旧因已定位:转换器给每条弹幕合成稳定唯一 `id`,内核拿它当
-/// shell stable_tracks 的 key,viewport 重排时个别弹幕的轨道偏好互相顶掉 → 单独几条
-/// 突然换位置(跳轨)。去掉 `id` 后跳轨曾消失过一次,但内核 DFM+ 的滑窗重排问题
-/// 再次出现,当前版本**禁用内核弹幕渲染,一律走本 overlay**:DanmakuRenderKit 的
-/// 轨道模型是入轨时「追击判定」、入轨后不换轨,结构上不会有重排换轨。
-/// `PlaybackController.resolveOverlayDanmakuRoute()` 当前恒 true,内核修复后恢复
-/// 旧判定（内核支持则听偏好,不支持则强制 overlay）。
+/// 与内核弹幕（DFM+）的关系：当年「在屏弹幕跳轨」的根因已定位为转换器合成的
+/// `id`——内核拿它当 shell stable_tracks 的 key,viewport 重排时个别弹幕的轨道
+/// 偏好互相顶掉 → 单独几条突然换位置。修复 = **不再输出 `id`**（`erikaJSON`
+/// 有完整说明：匿名条目不保留逐条轨道记忆,重排时整体重排）。内核弹幕路线随
+/// liberika v0.3.0 换装恢复（`resolveOverlayDanmakuRoute()` 回到「内核支持则
+/// 听偏好,不支持则强制 overlay」,默认内核渲染）。本 overlay 是「关」的那条
+/// 路线;它的轨道模型是入轨时「追击判定」、入轨后不换轨,结构上不会有重排换轨。
+/// 若内核弹幕真机复现跳轨,把偏好默认值翻回 overlay 即可。
 ///
 /// 时间桥：内核每帧发 positionChanged（`PlaybackEngine.latestMediaTime`），本控制器
 /// 30Hz 采样它决定谁出场。暂停/缓冲＝媒体时间冻结 → 冻结检测暂停视图动画；

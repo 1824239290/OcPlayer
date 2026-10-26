@@ -42,13 +42,19 @@ final class PlaybackEngineSelectionTests: XCTestCase {
         XCTAssertFalse(erika?.summary.isEmpty ?? true)
     }
 
-    /// 内核弹幕渲染当前版本被禁用：路线一律是 overlay（`resolveOverlayDanmakuRoute`
-    /// 恒 true）。恢复旧判定（内核支持则听偏好）时改回本测试。
-    func testDanmakuRouteIsForcedToOverlayWhileKernelDanmakuDisabled() {
+    /// 内核支持弹幕时路线听用户偏好（默认 false = 内核渲染）。
+    func testDanmakuRouteFollowsPreference() {
         PlaybackEngineAssembly.registerAll()
 
-        XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer,
-                      "内核弹幕禁用期间不能回到内核渲染")
+        let original = PlaybackPreferences.danmakuUseOverlayRenderer
+        defer { PlaybackPreferences.danmakuUseOverlayRenderer = original }
+
+        PlaybackPreferences.danmakuUseOverlayRenderer = true
+        XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer)
+
+        PlaybackPreferences.danmakuUseOverlayRenderer = false
+        XCTAssertFalse(PlaybackController().usesOverlayDanmakuRenderer,
+                       "默认（false）= 内核渲染")
     }
 
     /// 内核**不支持**内核弹幕时强制 overlay——否则弹幕会静默消失（内核收下数据

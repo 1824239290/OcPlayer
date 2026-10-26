@@ -38,11 +38,12 @@ public protocol DanmakuPlaybackHosting {
 }
 
 public extension DanmakuPlaybackHosting {
-    /// 默认取 `.overlay` —— 与当前生产路线一致（内核弹幕因滑窗重排跳轨被禁用，
-    /// `PlaybackController.resolveOverlayDanmakuRoute()` 恒走 overlay）。
+    /// 默认取 `.overlay` —— 与默认偏好一致（渲染路线默认内核渲染，但**忘记实现
+    /// 这个属性的接入方**自报 overlay 最安全：`PlaybackController` 自己实现了本
+    /// 属性并按真实路线返回；这里只兜底那些没有弹幕装载需求的宿主）。
     ///
-    /// 此前默认是 `.both`，于是**忘记实现这个属性的接入方**会白算一份全量
-    /// `erikaJSON`（把所有弹幕重新编码成 MB 级字符串），而那份产物没人用。
+    /// 此前默认是 `.both`，于是忘记实现的接入方会白算一份全量 `erikaJSON`
+    /// （把所有弹幕重新编码成 MB 级字符串），而那份产物没人用。
     /// 默认值应当等于「生产实际在用什么」，而不是「两者都算保险」。
     var danmakuPayloadFormat: DanmakuPayloadFormat { .overlay }
 }

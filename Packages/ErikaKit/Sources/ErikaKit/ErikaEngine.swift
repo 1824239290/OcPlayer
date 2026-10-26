@@ -818,10 +818,11 @@ private struct UncheckedSendableBox<T>: @unchecked Sendable {
 
     // MARK: - 内核内置弹幕（DFM+）
 
-    // 弹幕入口在 open 期间全部让位：当前版本弹幕统一走 App 层 overlay
-    // （usesOverlayDanmakuRenderer 恒 true），open 后宿主会用快照统一装载，
-    // 中途让位登记没有意义，丢弃 + 日志即可。恢复内核弹幕后，装载入口
-    // （loadDanmaku / addDanmakuTrack / clearDanmaku）需要评估改成登记补做。
+    // 弹幕入口在 open 期间全部让位（丢弃 + 日志）。装载时序由宿主保证：弹幕编排器
+    // 先 `waitUntilReady` 等源就绪、再经 `PlaybackController.withReadyEngine`
+    // （isSourceReady 门）进来，正常流程不会在 open 在飞时触达这里——这里的丢弃
+    // 只是防御性兜底，不需要登记补做。若将来出现绕过宿主门禁的直连调用方，再评估
+    // 「登记补做」。
 
     /// Replace all current danmaku with one anonymous Bilibili XML source.
     public func loadDanmaku(fileURI: String) throws {

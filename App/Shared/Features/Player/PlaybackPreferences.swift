@@ -157,6 +157,15 @@ enum PlaybackPreferences {
         UserDefaults.standard.set(Int(value), forKey: key)
     }
 
+    /// 弹幕渲染路线：true = App 层 DanmakuRenderKit overlay，false = 内核内置
+    /// 渲染器（**默认**）。改动在下一次播放生效（与内核选择一起在
+    /// `PlaybackController.prepareEngine()` 锁定，中途翻转会出双份弹幕）。
+    /// 曾随内核弹幕禁用（43832df）删除、随恢复一并回来；key 不变，用户旧选择仍在。
+    static var danmakuUseOverlayRenderer: Bool {
+        get { storedBool(forKey: SettingsKeys.danmakuUseOverlayRenderer, default: false) }
+        set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuUseOverlayRenderer) }
+    }
+
     static var danmakuEnabled: Bool {
         get { storedBool(forKey: SettingsKeys.danmakuEnabled, default: true) }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.danmakuEnabled) }

@@ -17,6 +17,11 @@ struct PlaybackKernelSection: View {
     /// 坏值按「关闭」显示（与 `PlaybackPreferences` 的读取校验一致）。
     @AppStorage(SettingsKeys.lumaUpscaler)
     private var storedUpscaler = PlaybackUpscalerMode.off.rawValue
+
+    /// 弹幕渲染路线（true = App 层 overlay）。与 `PlaybackPreferences` 同一 key；
+    /// 用 @AppStorage 而不是裸 Binding 读，保证别处改值也能刷新。
+    @AppStorage(SettingsKeys.danmakuUseOverlayRenderer)
+    private var useOverlayRenderer = false
     private var upscaler: PlaybackUpscalerMode {
         PlaybackUpscalerMode(rawValue: storedUpscaler) ?? .off
     }
@@ -103,6 +108,19 @@ struct PlaybackKernelSection: View {
                     tint: Color.primary.opacity(0.55)
                 )
                 .settingsCardCompact()
+            }
+
+            // 内核自己没有弹幕渲染器时不给这个开关：那种情况下 overlay 是唯一选择，
+            // 摆一个假开关比没有更糟。
+            if selected?.supportsKernelDanmaku == true {
+                SettingsGlassDivider()
+
+                Toggle("用内核渲染弹幕", isOn: Binding(
+                    get: { !useOverlayRenderer },
+                    set: { useOverlayRenderer = !$0 }
+                ))
+                .neutralSwitch()
+                SettingsNote("开 = 内核内置渲染器（随视频合成，截图带弹幕）；关 = App 层渲染（DanmakuRenderKit）。与内核选择一样，改动从下一次播放开始生效。")
             }
         }
         .onAppear {

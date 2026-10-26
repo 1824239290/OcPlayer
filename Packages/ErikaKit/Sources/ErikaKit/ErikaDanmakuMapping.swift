@@ -2,12 +2,13 @@ import CErika
 import Foundation
 import PlaybackKit
 
-// Erika 内置弹幕渲染器（DFM+）的 C 映射与 presenter 侧调用。
+// Erika 内核内置弹幕渲染器（DFM+）的 C 映射与 presenter 侧调用。
 //
-// ⚠️ 当前版本内核弹幕渲染因滑窗重排跳轨问题被禁用：App 一律走 **App 层 overlay**
-// （`DanmakuRenderKit`），这条内核路径只是保留实现。恢复内核渲染时把
-// `PlaybackController.resolveOverlayDanmakuRoute()` 改回听用户偏好（并重加
-// 设置页开关与偏好 key）即可。
+// 渲染路线由 `PlaybackController.resolveOverlayDanmakuRoute()` 决定（内核支持则
+// 听用户偏好，默认内核渲染；不支持则强制 overlay）。本路径 2026-08～10 曾因
+// 「滑窗重排跳轨」被整体禁用，根因（转换器合成 id → 内核 stable_tracks 键冲突）
+// 修复（不再输出 id）后随 liberika v0.3.0 换装恢复。若真机复现跳轨，把偏好
+// 默认值翻回 overlay 即可。
 
 extension DanmakuTrackInfo {
     init(_ raw: ErikaDanmakuTrackInfo) {

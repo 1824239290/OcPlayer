@@ -58,8 +58,13 @@ extension PlaybackController {
                     )
                     return
                 }
-                // 内核路线（当前停用）：需要 Erika JSON 串。
-                guard let json else { return }
+                // 内核路线（内核渲染偏好 + 所选内核支持时走这里）：需要 Erika JSON 串。
+                guard let json else {
+                    // 路线在装载中途被改 / 载荷按 overlay 格式产出时会走到这里：
+                    // 静默跳过会让「弹幕没出来」查无实据，至少留一条。
+                    playerLog.warning("内核弹幕路线缺少 JSON 载荷，本次装载跳过")
+                    return
+                }
                 // 先应用渲染偏好再装载：偏好里的布局字段（displayArea/block 等）和
                 // 全局偏移一旦变化会触发内核重排。放在 addDanmakuTrack 之前设置，
                 // 让 add 那一次重排同时吸收偏好变更，避免装载后再次改配置触发第二次
@@ -170,6 +175,11 @@ extension PlaybackController {
         danmakuFontSize = size.clamped(PlaybackPreferences.danmakuFontSizeRange)
         PlaybackPreferences.danmakuFontSize = danmakuFontSize
         if usesOverlayDanmakuRenderer { danmakuOverlay.update { $0.fontSize = danmakuFontSize } }
+        updateDanmakuConfig {
+            $0.fontSize = Self.kernelFontSize(
+                forScale: danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize
+            )
+        }
     }
 
     func adjustDanmakuOffset(by seconds: Double) {
