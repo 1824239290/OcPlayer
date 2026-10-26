@@ -76,25 +76,17 @@ struct MoviePilotHomeView: View {
 
     var body: some View {
         Group {
-            switch moviepilot.integrationState {
-            case .unconfigured:
-                gate(
-                    "未配置 MoviePilot",
-                    icon: "arrow.down.circle",
-                    hint: "在 设置 → MoviePilot 填写服务器地址与账号"
-                )
-            case .loggedOut:
-                // 登出与令牌失效（没记住密码时静默重登失败）都落这里：地址与用户名
-                // 还在，缺的只是登录，所以给的是「重新登录」而不是「去设置」。
-                gate(
-                    "未登录",
-                    icon: "person.crop.circle.badge.exclamationmark",
-                    hint: "MoviePilot 尚未登录或登录状态已失效，重新登录后即可管理订阅与下载",
-                    allowsRelogin: true
-                )
-            case .ready:
-                mainContent
+            #if OCPLAYER_SELFTEST
+            // 自检通道（Debug-only）：结果卡验收台**必须绕过登录门控**——它的存在意义
+            // 就是「不接服务器也能看真实渲染」，所以判在 `integrationState` 之前。
+            if MoviePilotCardPreviewStage.isRequested {
+                MoviePilotCardPreviewStage()
+            } else {
+                integrationGatedContent
             }
+            #else
+            integrationGatedContent
+            #endif
         }
         .navigationTitle("MoviePilot")
         #if os(macOS)
@@ -126,6 +118,30 @@ struct MoviePilotHomeView: View {
         // （无法像 body 那样 hoist 成局部常量），所以用缓存。这里在数据变化时预热。
         .task(id: subscribesCacheID) {
             refreshSubscribeSummaryCache()
+        }
+    }
+
+    /// 未配置 / 未登录 / 就绪三态的正常入口（自检通道绕开它，见 `body`）。
+    @ViewBuilder
+    private var integrationGatedContent: some View {
+        switch moviepilot.integrationState {
+        case .unconfigured:
+            gate(
+                "未配置 MoviePilot",
+                icon: "arrow.down.circle",
+                hint: "在 设置 → MoviePilot 填写服务器地址与账号"
+            )
+        case .loggedOut:
+            // 登出与令牌失效（没记住密码时静默重登失败）都落这里：地址与用户名
+            // 还在，缺的只是登录，所以给的是「重新登录」而不是「去设置」。
+            gate(
+                "未登录",
+                icon: "person.crop.circle.badge.exclamationmark",
+                hint: "MoviePilot 尚未登录或登录状态已失效，重新登录后即可管理订阅与下载",
+                allowsRelogin: true
+            )
+        case .ready:
+            mainContent
         }
     }
 
@@ -1025,145 +1041,5 @@ private struct MoviePilotSubscribeCard: View {
             )
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.2), radius: 3, y: 1)
-    }
-}
-
-// MARK: - 媒体搜索结果液态玻璃卡片
-
-private struct MoviePilotMediaGlassCard: View {
-    let media: MPMediaInfo
-    let isSubscribed: Bool
-    let isAdding: Bool
-    let onQuickSubscribe: () -> Void
-    let onConfigureSubscribe: () -> Void
-    var onOpenResource: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            // 2:3 标准胶片海报
-            MediaArtwork(
-                url: media.posterURL,
-                shape: .poster,
-                width: 76,
-                cornerRadius: 12,
-                cornerStyle: .continuous,
-                // TMDB 的海报惯例就是 2:3：给它兜底比例，加载前那一帧也严丝合缝。
-                nominalRatio: 2.0 / 3.0
-            )
-            // 封面投影比通用原语默认为重，保留原观感。
-            .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
-
-            // 媒体主要元信息
-            VStack(alignment: .leading, spacing: 6) {
-                Text(media.title ?? "未知条目")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                // 标签行（类型 / 年份 / 评分 / 源）
-                HStack(spacing: 6) {
-                    if let type = media.type, !type.isEmpty {
-                        PillChip(type, font: .caption2.weight(.medium))
-                    }
-
-                    if let year = media.titleYear ?? media.year, !year.isEmpty {
-                        PillChip(year, font: .caption2.monospacedDigit())
-                    }
-
-                    if let rating = media.voteAverage, rating > 0 {
-                        RatingPill(score: Double(rating), style: .capsule)
-                    }
-
-                    if let source = media.mediaSource, !source.isEmpty {
-                        PillChip(
-                            source.uppercased(),
-                            role: .custom(.secondary),
-                            font: .system(size: 9, weight: .bold)
-                        )
-                    }
-                }
-
-                if let overview = media.overview, !overview.isEmpty {
-                    Text(overview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .lineSpacing(2)
-                } else if !media.subtitle.isEmpty {
-                    Text(media.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            // 操作区：液态玻璃胶囊交互组
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    // 订阅菜单
-                    Menu {
-                        Button {
-                            onQuickSubscribe()
-                        } label: {
-                            Label("快捷加入订阅", systemImage: "plus.circle")
-                        }
-                        .disabled(isSubscribed || isAdding)
-
-                        Button {
-                            onConfigureSubscribe()
-                        } label: {
-                            Label("配置规则并订阅…", systemImage: "slider.horizontal.3")
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            if isAdding {
-                                ProgressView().controlSize(.small)
-                            } else if isSubscribed {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.green)
-                                Text("已订阅")
-                                    .foregroundStyle(.green)
-                            } else {
-                                Image(systemName: "plus")
-                                Text("订阅")
-                            }
-                        }
-                        .font(.subheadline.weight(.medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlassCapsule(
-                        tint: isSubscribed ? Color.green.opacity(0.15) : nil,
-                        isInteractive: !isSubscribed && !isAdding
-                    )
-                    .disabled(isSubscribed || isAdding)
-
-                    // 查资源入口
-                    Button {
-                        onOpenResource()
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "magnifyingglass")
-                            Text("查资源")
-                        }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlassCapsule(
-                        tint: Color.accentColor.opacity(0.22),
-                        isInteractive: true
-                    )
-                }
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .liquidGlassCard()
     }
 }

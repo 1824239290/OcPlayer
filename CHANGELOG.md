@@ -6,6 +6,16 @@
 
 ### 改动
 
+- **iOS MoviePilot 搜索结果卡整体错乱：标签被压成逐字竖排、两个胶囊只剩 `+` / 🔍、标题截成「药屋少女的…」——动作区移出信息行、独占卡片底部整宽**
+  （用户口径：「moviepilot 搜索番剧得到的结果在手机上会这样，完全混乱，你看看修改一下 UI 排布」；方案 A 经效果演示确认后实施）。
+  - **根因**：卡内宽 330pt（402 − 页面留白 22×2 − 卡内边距 14×2），而 `HStack` 里同时放入了刚性海报（`MediaArtwork(width: 76)`）、可压缩文字列、`Spacer(minLength: 8)` 与两个自带 14pt 水平内边距的胶囊——账面 `76 + 16 + 124 + 8 + 49 + 8 + 49 = 330` **刚好塞满**，所以不溢出、不报错，SwiftUI 只是按负空间分配**把 `Text` 静默压掉**：4 枚 `PillChip` 被压到 16 / 51 / 16 / 16pt（中文无空格可断 → 逐字竖排，真机上是三根 156pt 高的「纺锤形竖条」），胶囊文案压成 0 宽（只剩图标），标题 `.lineLimit(1)` 截断。原文全文无 `fixedSize` / `layoutPriority`。
+  - **改法（方案 A · 两段式）**：紧凑档（`horizontalSizeClass == .compact`）把动作区**移出那一行**，独占卡片底部整宽 330pt；文字列因此拿到 238pt。标签行由裸 `HStack` 改 `FlowLayout(spacing: 6)`（`AppDesignKit` 既有原语）并逐枚 `.fixedSize()`；标题紧凑档 2 行；胶囊文案 `.lineLimit(1) + .fixedSize(horizontal: true, vertical: false)`（与 `BangumiSubjectDetailView.actionCapsule` 同款）；动作条用 `ViewThatFits` 三档兜大字号（并排 → 堆叠 → 堆叠且放行压缩），且**刻意放在 `GlassEffectContainer` 外层**——容器内的提案行为不稳（`PlayerHUDActions` 有记录）。常规档（iPad 834 / macOS 最小窗 960）版式不变，只补不压缩兜底。卡高 ≈262 → ≈186pt。整卡从 `MoviePilotHomeView.swift`（1297 行）抽到独立文件 `MoviePilotMediaGlassCard.swift`。
+  - **顺带的无障碍修补**：海报 `.accessibilityHidden(true)`（装饰图，片名在信息列）、信息列 `.combine`、两枚胶囊各自补 `accessibilityLabel` / `Hint`、卡片 `.accessibilityElement(children: .contain)`；此前 `MediaArtwork` / `RemoteImage` 全仓无 a11y 标注，读屏会把图片、四个 chip、两个按钮拆成七段朗读。
+  - **验证**：iOS / macOS 两个 scheme 均 BUILD SUCCEEDED；**iOS 全量 863 条、macOS 746 条测试全绿（0 失败）**。新增 `MoviePilotMediaCardLayoutTests` 6 条几何钉子（`ImageRenderer` 量卡高：紧凑档 ≤200（推导值 186 + 14）/ 常规档收紧到 ≤155（142 + 13）/ 窄宽两档各带绝对上界 / **`sparse == full` 等式钉子**（极简内容与完整内容必须等高，因为海报 114pt 恒定主导信息段）/ 已订阅态不改几何 / AX 档只增不缩 + 动作条高度近 2×——最后两条 `#if os(iOS)` 门控，因 macOS 的 Dynamic Type 不驱动 AppKit 字体缩放，实测两侧恒等 182pt，跑在 mac 上只会假红）；`MoviePilotMediaCardSnapshotTests` 明确定位为**导出工具而非回归测试**（仅渲染写盘、无基线比对，唯一断言是「高度 > 40」；未设 `OCPLAYER_SNAPSHOT_DIR` 时整类 `XCTSkip`，避免被当成视觉防护计入绿灯）。
+  - **测试有效性做过注入式反向验证（不是推测）**：把紧凑档动作区塞回信息行（只回退结构、保留 `fixedSize` + `FlowLayout`——未来最可能的重构形态），只跑该类 → `testCompactCardShapeMatchesSparseContent` 与 `testCompactCardHeightIndependentOfActionRowWidth` **均变红**；而单靠 `height ≤ 200` 会漏判（≈202 刚好越过边界），这也正是必须加等式钉子的原因。结论已写进测试类注释。
+  - **新增 Debug-only 验收台** `MoviePilotCardPreviewStage`（`SIMCTL_CHILD_OCPLAYER_MOVIEPILOT_CARDS=1`，绕过登录门控，因搜索结果本就要连真服务器），在 iPhone 17 Pro 模拟器实机截图核对：紧凑档文字列拿满、标签平铺、两胶囊文案完整；AX3 以上动作条自动降级为各占一行、无一字被吞。AX 字号下标题再放一档到 3 行（此前 2 行仍会截成「药屋少女的…」）。
+  - **未含**：`MoviePilotResourceView` 种子卡（`:426-506`，6 枚 chip + 下载按钮同行，同构高风险）与 `BangumiHomeView.SearchResultRow`（`:798-879`，中风险）用同一套「左图 + 中文字 + 右按钮」结构，窄屏 + 大字号下同样可能被压；`PillChip` 原语本身（26 处调用点）缺防压缩，建议之后同批收口。
+
 - **iOS Bangumi 详情页头部「收藏状态 / 我的评分」两个胶囊只显示图标、文案被压成 0（截图里只剩「👁」「☆」和一个压扁的箭头）；紧凑宽度动作区改为整卡宽度，胶囊文案不再被压成 0**
   （用户口径：「iOS 的 bangumi 的详情页里面再看的选项框、评分选项框这两个显示有问题。iOS 端的布局可能需要你重新设计一下」）。
   - **根因**：两个胶囊原先放在信息列里，iPhone 17 Pro 上信息列只剩 ≈206pt（卡片内宽 326 − 封面 100 − 间距 20），同一行还要挤带 `.frame(maxWidth: .infinity)` 的「已看 x/y 话」。HStack 宽度不够时按默认压缩顺序先截 `Text`（字号不变、宽度归零），于是两个胶囊的文案各被压成 0、箭头被压成一条竖线——宽度越窄越明显，Dynamic Type 一放大必现。
