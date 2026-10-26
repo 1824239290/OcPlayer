@@ -304,6 +304,34 @@ final class SkipPreferenceTests: XCTestCase {
                        "越过片尾时钳到片长 − 0.5s 尾部防线")
     }
 
+    /// 拖动条拖到最右端（fraction = 1）也走尾部防线：落点必须留在片长 − 0.5s
+    /// 以内，别把内核送进「audio output stalled at EOF」错误风暴。这条与
+    /// `skip(by:)` 共用 `clampedBeforeEnd`，此前漏钳的正是 scrub 这条路。
+    func testScrubToEndClampsToTailGuard() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(600))
+
+        controller.seek(toFraction: 1)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 1199.5, accuracy: 0.0005,
+                       "拖到最右端时钳到片长 − 0.5s 尾部防线")
+    }
+
+    /// 片长很短（不足防线）时退化为 0，不产生负落点。
+    func testScrubToEndOnShortClipClampsToZero() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .milliseconds(400), position: .milliseconds(100))
+
+        controller.seek(toFraction: 1)
+
+        XCTAssertEqual(engine.seeks.count, 1)
+        XCTAssertEqual(seconds(engine.seeks[0]), 0, accuracy: 0.0005,
+                       "片长 < 防线时落点退化为 0")
+    }
+
     func testPerformSkipSeeksToDurationMinusDefaultRetention() async throws {
         let engine = SeekRecordingEngine()
         let controller = try await makeController(

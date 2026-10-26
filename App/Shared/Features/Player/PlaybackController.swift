@@ -1374,17 +1374,22 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func seek(toFraction fraction: Double) {
         guard let engine, state.duration > .zero else { return }
-        let micros = Double(state.duration.microseconds) * min(max(fraction, 0), 1)
-        recordSeek(toSeconds: micros / 1_000_000, kind: "scrub")
-        try? engine.seek(to: .microseconds(Int64(micros)))
+        let duration = Double(state.duration.microseconds) / 1_000_000
+        // 拖动条能拖到最右端（fraction = 1）：落点同样要留在片长 − tailGuardSeconds
+        // 以内，理由与 `skip(by:)` 同一条防线——seek 越过 EOF 会触发内核的
+        // 「audio output stalled at EOF」错误风暴，而 3 s 厚边际退场后这条防线是
+        // 唯一拦它的地方。片长不足防线时退化为 0（与 clampedBeforeEnd 一致）。
+        let target = Self.clampedBeforeEnd(duration * min(max(fraction, 0), 1), duration: duration)
+        recordSeek(toSeconds: target, kind: "scrub")
+        try? engine.seek(to: .seconds(target))
     }
 
     func skip(by seconds: Double) {
         guard let engine else { return }
         // 落点统一到「秒」口径再钳：`position` 是 µs，而 `duration` 与
         // `clampedBeforeEnd` 都是秒。混用过一次——`target` 还是 µs 就被当成秒
-        // 去跟「片长 − 3s」取 min，于是**每一次** ±10s 都落到片长 − 3s
-        // （2026-10-17 实机：duration=1426s、位置 540.749s，按后退 10 秒，
+        // 去跟「片长 − 尾部防线」取 min（当时是 3 s），于是**每一次** ±10s 都落到
+        // 片长 − 3 s（2026-10-17 实机：duration=1426s、位置 540.749s，按后退 10 秒，
         // 日志 `kind=skip from_ms=540749 to_ms=1423450`，进度条直接跳结尾）。
         var target = Double(state.position.microseconds) / 1_000_000 + seconds
         // 别越过片长：seek 到 EOF 之后内核会进「audio output stalled at EOF」

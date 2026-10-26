@@ -6,6 +6,13 @@
 
 ### 改动
 
+- **片尾自然播完不再被误判成「播放出错」：内核 v0.3.0 修好尾读语义后，App 侧三层 EOF 兜底整体拆除**
+  （根因来自内核：Erika v0.2.1 在请求边界跨过文件末尾时会把「读到文件尾」间歇报成 fatal `av_read_frame: Input/output error (-5)`，自然播完反而进 `.error`；上游 liberika v0.3.0 把最后 4 MiB 内未送达的 HTTP 尾部 range 按 EOF 处理，我们报的 #163 已随上游 #169 修复）。
+  - **拆掉的三层兜底**：①`PlayerState` 的片尾折叠（PR #68 引入）：片尾窗口内的 `.failed` / `.stateChanged(.error)` 不再折叠成 `.stopped`——片尾真错误恢复置 `lastError`、计 `errorCount`、露出错误徽章；②上报层的 `isEndOfStream` 删除：心跳与 `stop()` 统一走只认 `.stopped` 的 `isNaturalEnd`（「位置 ≥ 片长 − 2 s」的干净收尾容差保留，它先于 EOF 兜底存在），片尾的 `.error` 不再触发连播；③尾部安全边际 3 s → **0.5 s**（`tailGuardSeconds`）：只保留「防 seek 越过/贴住 EOF 触发内核 `audio output stalled at EOF` 错误风暴（逐帧重发 `.failed`，实测一次刷 6302 条）」这一条理由，「尾读 fatal」的理由已随内核修复消失。
+  - **用户可见变化**：①片尾若真出内核错误，现在会如实弹错误徽章、不连播（这正是修复后的语义，内核不该再在片尾报错）；②「跳过片尾 / 不保留」的落点从片长 − 3 s 变为片长 − 0.5 s——不保留与 0–2 s 短保留档的落点比原先晚 2.5 s（片尾多播约 2.5 秒后自然收口），设置页文案同步改成「停在片尾前 0.5 秒」；③进度条拖到最右端（`seek(toFraction: 1)`）也补上同一道防线，此前只有跳过/章节/续播路径钳落点。
+  - **测试**：`PlayerStateFoldingTests` 删掉 8 条折叠用例，新增「片尾错误不再折叠」「同一错误风暴只计一次（去重与折叠无关，必须存活）」；`PlaybackReportingCoordinatorTests` 片尾错误用例断言翻转（`reachedEnd` true → false），防止有人把 `.error` 重新接进终态判定；`SkipPreferenceTests` 5 条断言 3 s → 0.5 s 并更名 `tailGuard`，新增 2 条 scrub 落点用例。
+  - **回退**：若真机再次出现片尾误报 EOF，把内核钉点退回 v0.2.1 并恢复 PR #68 的折叠逻辑即可（`Config/Erika.version` + 该 PR revert）。
+
 - **播放内核换装 liberika v0.3.0（原 Erika）：片尾尾读不再报假 EOF，字幕/弹幕字形改为 2× 超采样，软件解码默认多线程**
   （上游 0.3.0 起仓库更名 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)，C ABI 仍为 `erika_*`）。
   - **钉点**：`Config/Erika.version` v0.2.1 → **v0.3.0**，`Scripts/erika-v0.3.0.sha256` 存官方两包哈希（macos-arm64 + ios，下载时逐包校验）；`erika.h` 与 `ErikaVersion.swift` 随 tag 重写入库（头文件纯新增：帧导出 / 诊断 JSON / chapters / hwaccel 回退事件，既有签名与结构体布局未动）。
