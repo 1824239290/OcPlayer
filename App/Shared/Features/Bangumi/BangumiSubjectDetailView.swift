@@ -84,7 +84,7 @@ struct BangumiSubjectDetailView: View {
     }
 
     /// 收藏状态胶囊的域色：想看紫 / 在看蓝 / 看过绿 / 搁置橙 / 抛弃灰，
-    /// 与日历、收藏列表用的是同一套 `BangumiStatusColor.collection`。
+    /// 与日历页、本页收藏统计格用的是同一套 `BangumiStatusColor.collection`。
     private var statusTint: Color {
         BangumiStatusColor.collection(currentInterestType)
     }
@@ -268,14 +268,31 @@ struct BangumiSubjectDetailView: View {
     }
 
     /// 常规宽度（macOS / iPad）的动作行：收藏状态 + 我的评分 + 进度 + 下载，一行排开。
+    ///
+    /// 窗口偏窄时一行放不下（iPhone SE 横屏报 regular、macOS 拖窄 + 大字号），
+    /// 进度退到第二行——胶囊依旧 fixedSize，失败模式是换行而不是截字或出界。
     private var wideActionRow: some View {
-        HStack(spacing: 10) {
-            statusSelectorMenu
-            ratingMenu
-            watchProgressLabel
-            Spacer(minLength: 8)
-            if moviepilotEnabled {
-                moviePilotButton
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                statusSelectorMenu()
+                ratingMenu()
+                watchProgressLabel
+                Spacer(minLength: 8)
+                if moviepilotEnabled {
+                    moviePilotButton
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    statusSelectorMenu()
+                    ratingMenu()
+                    Spacer(minLength: 8)
+                    if moviepilotEnabled {
+                        moviePilotButton
+                    }
+                }
+                watchProgressLabel
             }
         }
     }
@@ -290,13 +307,17 @@ struct BangumiSubjectDetailView: View {
     /// 1. 动作区搬出信息列、铺满卡片（封面下方），可用宽度从 ~200pt 涨到 ~326pt；
     /// 2. 胶囊 `fixedSize`，任何宽度下都不允许压掉文案（见 `actionCapsule`）；
     /// 3. `ViewThatFits` 兜住大字号：一行放不下就把进度换行，再放不下就各占一行。
+    ///
+    /// 已知行为：三档是结构不同的分支，选中档变化会重建 `Menu` 实例——若恰有弹层
+    /// 开着（现实触发链只有 `BangumiProgressInvalidation` → 进度文案变化这一条），
+    /// 打开中的弹层会被连带关掉；业务状态都在父视图，不受影响。
     private var compactActionArea: some View {
         VStack(alignment: .leading, spacing: 10) {
             ViewThatFits(in: .horizontal) {
                 // ① 默认：两个胶囊 + 进度（靠右）
                 HStack(spacing: 8) {
-                    statusSelectorMenu
-                    ratingMenu
+                    statusSelectorMenu()
+                    ratingMenu()
                     Spacer(minLength: 8)
                     watchProgressLabel
                 }
@@ -304,16 +325,17 @@ struct BangumiSubjectDetailView: View {
                 // ② 大字号：进度降到第二行
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        statusSelectorMenu
-                        ratingMenu
+                        statusSelectorMenu()
+                        ratingMenu()
                     }
                     watchProgressLabel
                 }
 
-                // ③ 超大字号：各占一行（胶囊已 fixedSize，横向不会再被压）
+                // ③ 最终兜底（连换行都放不下，如 iPad 1/3 分栏 + 超大字号）：各占一行。
+                // 胶囊在这里放行压缩——出省略号也好过画出玻璃卡边界。
                 VStack(alignment: .leading, spacing: 8) {
-                    statusSelectorMenu
-                    ratingMenu
+                    statusSelectorMenu(compressible: true)
+                    ratingMenu(compressible: true)
                     watchProgressLabel
                 }
             }
@@ -351,13 +373,15 @@ struct BangumiSubjectDetailView: View {
 
     /// 动作胶囊（收藏状态 / 我的评分共用）：图标 + 文案 + 展开箭头。
     ///
-    /// `.fixedSize(horizontal: true, vertical: false)` 不是可选项：胶囊里是 `Text`，
-    /// HStack 宽度不够时的默认压缩顺序会先把文案截断（字号不变、宽度归零），
-    /// 屏幕上就只剩图标——线上那张截图正是如此。钉住本征宽度后，放不下由外层
-    /// `ViewThatFits` 换成多行，而不是静默吞掉文字。
+    /// 默认 `.fixedSize` 钉住本征宽度：胶囊里是 `Text`，HStack 宽度不够时的默认
+    /// 压缩顺序会先把文案截成 0（字号不变、只剩图标）——线上那张截图正是如此。
+    /// 钉住之后，放不下由外层 `ViewThatFits` 换行兜底。`compressible` 只给「连换行
+    /// 都放不下」的最终兜底档用：此时回到可压缩（出省略号），因为 fixedSize 在那
+    /// 一档的失败模式是画出卡片边界，比截字更糟。
     private func actionCapsule<Content: View>(
         tint: Color,
         isActive: Bool,
+        compressible: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(spacing: 6) {
@@ -366,6 +390,7 @@ struct BangumiSubjectDetailView: View {
             Image(systemName: menuChevronGlyph)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -377,7 +402,7 @@ struct BangumiSubjectDetailView: View {
             Capsule().strokeBorder(isActive ? AnyShapeStyle(tint.opacity(0.4)) : AnyShapeStyle(.clear))
         )
         .contentShape(Capsule())
-        .fixedSize(horizontal: true, vertical: false)
+        .fixedSize(horizontal: !compressible, vertical: false)
     }
 
     /// 下拉箭头：iOS 用单个 `chevron.down`（系统菜单观感），macOS 保留双箭头
@@ -408,7 +433,7 @@ struct BangumiSubjectDetailView: View {
 
     // MARK: - 收藏状态菜单
 
-    private var statusSelectorMenu: some View {
+    private func statusSelectorMenu(compressible: Bool = false) -> some View {
         Menu {
             ForEach(BangumiCollectionType.allTypes()) { type in
                 Button {
@@ -422,7 +447,7 @@ struct BangumiSubjectDetailView: View {
                 }
             }
         } label: {
-            actionCapsule(tint: statusTint, isActive: currentInterestType != .none) {
+            actionCapsule(tint: statusTint, isActive: currentInterestType != .none, compressible: compressible) {
                 if updatingStatus {
                     ProgressView().controlSize(.small)
                 } else {
@@ -454,7 +479,7 @@ struct BangumiSubjectDetailView: View {
         (1, "(1) 不忍直视"),
     ]
 
-    private var ratingMenu: some View {
+    private func ratingMenu(compressible: Bool = false) -> some View {
         Menu {
             Section("我的评分") {
                 ForEach(Self.ratingLabels, id: \.score) { item in
@@ -478,7 +503,7 @@ struct BangumiSubjectDetailView: View {
                 }
             }
         } label: {
-            actionCapsule(tint: BangumiStatusColor.rating, isActive: currentRating > 0) {
+            actionCapsule(tint: BangumiStatusColor.rating, isActive: currentRating > 0, compressible: compressible) {
                 if updatingRating {
                     ProgressView().controlSize(.small)
                 } else {
