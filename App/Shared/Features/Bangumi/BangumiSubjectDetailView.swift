@@ -83,6 +83,12 @@ struct BangumiSubjectDetailView: View {
         subject?.interest?.type ?? initialSubject?.interest?.type ?? .none
     }
 
+    /// 收藏状态胶囊的域色：想看紫 / 在看蓝 / 看过绿 / 搁置橙 / 抛弃灰，
+    /// 与日历页、本页收藏统计格用的是同一套 `BangumiStatusColor.collection`。
+    private var statusTint: Color {
+        BangumiStatusColor.collection(currentInterestType)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.railSpacing) {
@@ -150,127 +156,263 @@ struct BangumiSubjectDetailView: View {
     // MARK: - 头部区域
 
     private var headerBanner: some View {
-        HStack(alignment: .top, spacing: 20) {
-            // 海报封面（iPhone 紧凑宽度略缩，给信息列留宽度）
-            RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 600)
-                .aspectRatio(2 / 3, contentMode: .fill)
-                .frame(width: sizeClass == .compact ? 100 : 130,
-                       height: sizeClass == .compact ? 150 : 195)
-                .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Metrics.cardRadius)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 20) {
+                coverArtwork
 
-            // 信息列
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(displayedSubjectName)
-                        .font(.title2.weight(.bold))
-                        .lineLimit(2)
-                        .textSelection(.enabled)
+                // 信息列：标题 / 徽章 / 全站评分。
+                VStack(alignment: .leading, spacing: 8) {
+                    titleBlock
+                    badgeRow
+                    ratingSummary
 
-                    if let original = originalSubjectName {
-                        Text(original)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .textSelection(.enabled)
+                    // 常规宽度（macOS / iPad 全屏）信息列够宽，动作就留在信息列里、
+                    // 靠底与封面下沿对齐；iPhone 紧凑宽度走封面下方的整宽动作区。
+                    if sizeClass != .compact {
+                        Spacer(minLength: 4)
+                        wideActionRow
                     }
                 }
+            }
 
-                // 标签属性徽章行：iPhone 紧凑宽度下不换行会横向溢出，统一走 FlowLayout 自动换行
-                FlowLayout(spacing: 6) {
-                    let type = subject?.type ?? initialSubject?.type ?? .none
-                    if type != .none {
-                        PillChip(type.description, systemImage: type.icon)
-                    }
-                    if let platform = subject?.platform, !platform.typeCN.isEmpty {
-                        PillChip(platform.typeCN)
-                    }
-                    if let airdate = subject?.airtime.date, !airdate.isEmpty {
-                        PillChip(airdate)
-                    }
-                    if let eps = subject?.eps, eps > 0 {
-                        PillChip("\(eps) 话")
-                    }
-                }
-
-                // 评分与排名
-                if let rating, rating.score > 0 {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .font(.subheadline)
-                                .foregroundStyle(.orange)
-                            Text(String(format: "%.1f", rating.score))
-                                .font(.title3.weight(.bold).monospacedDigit())
-                                .foregroundStyle(.primary)
-                        }
-
-                        if rating.rank > 0 {
-                            Text("#\(rating.rank)")
-                                .font(.caption.weight(.bold))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
-                                .foregroundStyle(.orange)
-                        }
-
-                        if rating.total > 0 {
-                            Text("(\(rating.total) 人评分)")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-
-                Spacer(minLength: 4)
-
-                // 操作行：收藏状态 + 我的评分 + MoviePilot 下载。
-                // iPhone 紧凑宽度下四个元素挤一行必溢出，拆成两行：
-                // 第一行放两个胶囊菜单 + 进度文字，第二行放 MoviePilot 按钮。
-                if sizeClass == .compact {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            statusSelectorMenu
-                            ratingMenu
-                            if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none,
-                               interest.epStatus > 0 {
-                                Text("已看 \(interest.epStatus)/\(subject?.eps ?? 0) 话")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        if moviepilotEnabled {
-                            moviePilotButton
-                        }
-                    }
-                } else {
-                    HStack(spacing: 10) {
-                        statusSelectorMenu
-                        ratingMenu
-                        if bangumi.isAuthenticated, let interest = subject?.interest, interest.type != .none {
-                            if interest.epStatus > 0 {
-                                Text("已看 \(interest.epStatus)/\(subject?.eps ?? 0) 话")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        if moviepilotEnabled {
-                            moviePilotButton
-                        }
-                    }
-                }
+            if sizeClass == .compact {
+                compactActionArea
             }
         }
         .padding(16)
         // 2026-10-22：与下载页同一套液态玻璃
         .liquidGlassCard()
+    }
+
+    /// 海报封面（iPhone 紧凑宽度略缩，给信息列留宽度）。
+    private var coverArtwork: some View {
+        RemoteImage(url: coverURL, authHeader: nil, maxPixelSize: 600)
+            .aspectRatio(2 / 3, contentMode: .fill)
+            .frame(width: sizeClass == .compact ? 100 : 130,
+                   height: sizeClass == .compact ? 150 : 195)
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Metrics.cardRadius)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+    }
+
+    /// 标题区：中文主标题 + 原文副标题。
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(displayedSubjectName)
+                .font(.title2.weight(.bold))
+                .lineLimit(2)
+                .textSelection(.enabled)
+
+            if let original = originalSubjectName {
+                Text(original)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    /// 标签属性徽章行：iPhone 紧凑宽度下不换行会横向溢出，统一走 FlowLayout 自动换行。
+    private var badgeRow: some View {
+        FlowLayout(spacing: 6) {
+            let type = subject?.type ?? initialSubject?.type ?? .none
+            if type != .none {
+                PillChip(type.description, systemImage: type.icon)
+            }
+            if let platform = subject?.platform, !platform.typeCN.isEmpty {
+                PillChip(platform.typeCN)
+            }
+            if let airdate = subject?.airtime.date, !airdate.isEmpty {
+                PillChip(airdate)
+            }
+            if let eps = subject?.eps, eps > 0 {
+                PillChip("\(eps) 话")
+            }
+        }
+    }
+
+    /// 全站评分与排名。
+    @ViewBuilder
+    private var ratingSummary: some View {
+        if let rating, rating.score > 0 {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                    Text(String(format: "%.1f", rating.score))
+                        .font(.title3.weight(.bold).monospacedDigit())
+                        .foregroundStyle(.primary)
+                }
+
+                if rating.rank > 0 {
+                    Text("#\(rating.rank)")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.orange.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+                        .foregroundStyle(.orange)
+                }
+
+                if rating.total > 0 {
+                    Text("(\(rating.total) 人评分)")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    /// 常规宽度（macOS / iPad）的动作行：收藏状态 + 我的评分 + 进度 + 下载，一行排开。
+    ///
+    /// 窗口偏窄时一行放不下（iPhone SE 横屏报 regular、macOS 拖窄 + 大字号），
+    /// 进度退到第二行——胶囊依旧 fixedSize，失败模式是换行而不是截字或出界。
+    private var wideActionRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                statusSelectorMenu()
+                ratingMenu()
+                watchProgressLabel
+                Spacer(minLength: 8)
+                if moviepilotEnabled {
+                    moviePilotButton
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    statusSelectorMenu()
+                    ratingMenu()
+                    Spacer(minLength: 8)
+                    if moviepilotEnabled {
+                        moviePilotButton
+                    }
+                }
+                watchProgressLabel
+            }
+        }
+    }
+
+    /// iPhone 紧凑宽度的动作区：**整条铺满卡片宽度**，放在封面/标题下方。
+    ///
+    /// 线上问题（2026-10-26 截图）：这两个胶囊原先和信息列里的「已看 x/y 话」挤同一行，
+    /// 而那句文案还带着 `.frame(maxWidth: .infinity)`。iPhone 上信息列只剩约 200pt
+    /// （卡片内宽 ≈ 326pt − 封面 100 − 间距 20），两个胶囊的本征宽度就要 ~190pt，
+    /// 于是 HStack 按默认压缩顺序先把 `Text` 截成 0——屏幕上只剩「👁」「☆」两个图标
+    /// 和压扁的箭头，用户完全看不出这两个框是什么。现在：
+    /// 1. 动作区搬出信息列、铺满卡片（封面下方），可用宽度从 ~200pt 涨到 ~326pt；
+    /// 2. 胶囊 `fixedSize`，任何宽度下都不允许压掉文案（见 `actionCapsule`）；
+    /// 3. `ViewThatFits` 兜住大字号：一行放不下就把进度换行，再放不下就各占一行。
+    ///
+    /// 已知行为：三档是结构不同的分支，选中档变化会重建 `Menu` 实例——若恰有弹层
+    /// 开着（现实触发链只有 `BangumiProgressInvalidation` → 进度文案变化这一条），
+    /// 打开中的弹层会被连带关掉；业务状态都在父视图，不受影响。
+    private var compactActionArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                // ① 默认：两个胶囊 + 进度（靠右）
+                HStack(spacing: 8) {
+                    statusSelectorMenu()
+                    ratingMenu()
+                    Spacer(minLength: 8)
+                    watchProgressLabel
+                }
+
+                // ② 大字号：进度降到第二行
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        statusSelectorMenu()
+                        ratingMenu()
+                    }
+                    watchProgressLabel
+                }
+
+                // ③ 最终兜底（连换行都放不下，如 iPad 1/3 分栏 + 超大字号）：各占一行。
+                // 胶囊在这里放行压缩——出省略号也好过画出玻璃卡边界。
+                VStack(alignment: .leading, spacing: 8) {
+                    statusSelectorMenu(compressible: true)
+                    ratingMenu(compressible: true)
+                    watchProgressLabel
+                }
+            }
+
+            if moviepilotEnabled {
+                moviePilotButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 「已看 x/y 话」。
+    ///
+    /// 总数未知（连载中 `eps == 0`）时只报已看话数——之前直接除 `subject?.eps ?? 0`
+    /// 会渲染出「已看 1/0 话」这种读不通的文案。
+    @ViewBuilder
+    private var watchProgressLabel: some View {
+        if let watchProgressText {
+            Text(watchProgressText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private var watchProgressText: String? {
+        guard bangumi.isAuthenticated,
+              let interest = subject?.interest,
+              interest.type != .none,
+              interest.epStatus > 0
+        else { return nil }
+        let total = subject?.eps ?? 0
+        return total > 0 ? "已看 \(interest.epStatus)/\(total) 话" : "已看 \(interest.epStatus) 话"
+    }
+
+    /// 动作胶囊（收藏状态 / 我的评分共用）：图标 + 文案 + 展开箭头。
+    ///
+    /// 默认 `.fixedSize` 钉住本征宽度：胶囊里是 `Text`，HStack 宽度不够时的默认
+    /// 压缩顺序会先把文案截成 0（字号不变、只剩图标）——线上那张截图正是如此。
+    /// 钉住之后，放不下由外层 `ViewThatFits` 换行兜底。`compressible` 只给「连换行
+    /// 都放不下」的最终兜底档用：此时回到可压缩（出省略号），因为 fixedSize 在那
+    /// 一档的失败模式是画出卡片边界，比截字更糟。
+    private func actionCapsule<Content: View>(
+        tint: Color,
+        isActive: Bool,
+        compressible: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 6) {
+            content()
+
+            Image(systemName: menuChevronGlyph)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            isActive ? AnyShapeStyle(tint.opacity(0.18)) : AnyShapeStyle(.fill.tertiary),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule().strokeBorder(isActive ? AnyShapeStyle(tint.opacity(0.4)) : AnyShapeStyle(.clear))
+        )
+        .contentShape(Capsule())
+        .fixedSize(horizontal: !compressible, vertical: false)
+    }
+
+    /// 下拉箭头：iOS 用单个 `chevron.down`（系统菜单观感），macOS 保留双箭头
+    /// （桌面端「上下都能收」的既有观感）。
+    private var menuChevronGlyph: String {
+        #if os(macOS)
+        "chevron.up.chevron.down"
+        #else
+        "chevron.down"
+        #endif
     }
 
     /// MoviePilot 下载快捷入口（集成停用时整块隐藏）。
@@ -291,7 +433,7 @@ struct BangumiSubjectDetailView: View {
 
     // MARK: - 收藏状态菜单
 
-    private var statusSelectorMenu: some View {
+    private func statusSelectorMenu(compressible: Bool = false) -> some View {
         Menu {
             ForEach(BangumiCollectionType.allTypes()) { type in
                 Button {
@@ -305,29 +447,25 @@ struct BangumiSubjectDetailView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                if updatingStatus {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: currentInterestType.icon)
-                }
+            actionCapsule(tint: statusTint, isActive: currentInterestType != .none, compressible: compressible) {
+                // 保存中的转圈**叠在图标位上**，而不是把整条 label 换成转圈：
+                // 收藏/评分都是真实网络往返（几百 ms ~ 2s），旧写法让胶囊从 ~94–126pt
+                // 塌成 ~52pt，旁边的评分胶囊和进度文案跟着平移。`.opacity` 与 `.overlay`
+                // 都不参与布局，宽度因此恒定——沿用 `PrimaryActionButton` 的
+                // 「标签原地变形、尺寸不变」口径。
+                Image(systemName: currentInterestType.icon)
+                    .foregroundStyle(currentInterestType == .none ? Color.secondary : statusTint)
+                    .opacity(updatingStatus ? 0 : 1)
+                    .overlay {
+                        if updatingStatus {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+
                 Text(currentInterestType == .none ? "加入收藏" : currentInterestType.description(subject?.type))
                     .font(.callout.weight(.medium))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                currentInterestType == .none ? AnyShapeStyle(.fill.tertiary) : AnyShapeStyle(.tint.opacity(0.18)),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().strokeBorder(
-                    currentInterestType == .none ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.tint.opacity(0.4))
-                )
-            )
         }
         .menuStyle(.borderlessButton)
         .disabled(updatingStatus || !bangumi.isAuthenticated)
@@ -349,7 +487,7 @@ struct BangumiSubjectDetailView: View {
         (1, "(1) 不忍直视"),
     ]
 
-    private var ratingMenu: some View {
+    private func ratingMenu(compressible: Bool = false) -> some View {
         Menu {
             Section("我的评分") {
                 ForEach(Self.ratingLabels, id: \.score) { item in
@@ -373,13 +511,16 @@ struct BangumiSubjectDetailView: View {
                 }
             }
         } label: {
-            HStack(spacing: 5) {
-                if updatingRating {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: currentRating > 0 ? "star.fill" : "star")
-                        .foregroundStyle(currentRating > 0 ? BangumiStatusColor.rating : Color.secondary)
-                }
+            actionCapsule(tint: BangumiStatusColor.rating, isActive: currentRating > 0, compressible: compressible) {
+                // 同收藏胶囊：转圈叠在星标位上，胶囊宽度不变（见上一条注释）。
+                Image(systemName: currentRating > 0 ? "star.fill" : "star")
+                    .foregroundStyle(currentRating > 0 ? BangumiStatusColor.rating : Color.secondary)
+                    .opacity(updatingRating ? 0 : 1)
+                    .overlay {
+                        if updatingRating {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
 
                 if currentRating > 0 {
                     Text("\(currentRating)分")
@@ -390,22 +531,7 @@ struct BangumiSubjectDetailView: View {
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
-
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                currentRating > 0 ? AnyShapeStyle(BangumiStatusColor.rating.opacity(0.12)) : AnyShapeStyle(.fill.tertiary),
-                in: Capsule()
-            )
-            .overlay(
-                Capsule().strokeBorder(
-                    currentRating > 0 ? AnyShapeStyle(BangumiStatusColor.rating.opacity(0.35)) : AnyShapeStyle(Color.clear)
-                )
-            )
         }
         .menuStyle(.borderlessButton)
         .disabled(updatingRating || !bangumi.isAuthenticated)
