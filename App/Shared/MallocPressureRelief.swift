@@ -14,7 +14,7 @@ import Foundation
 /// 只碰空闲页，不影响任何存活分配；对没有压力 relief 语义的 zone 是 no-op。
 ///
 /// **两拍调度**（`scheduleAfterStop`）：内核 destroy 不 join demux 线程（上游
-/// AimesSoft/Erika#125），那个线程最多还能带着 HTTP 缓冲活 20 秒（fetch 重试预算）。
+/// AimesSoft/liberika#125），那个线程最多还能带着 HTTP 缓冲活 20 秒（fetch 重试预算）。
 /// 第一拍（2s）回收 presenter 析构立刻释放的页；第二拍（25s）等 demux 线程尾巴退出后
 /// 再收一次。每拍前后各采一条进程 footprint，`diagnostics.jsonl` 里直接看 relief 拿回多少。
 @MainActor
@@ -39,7 +39,7 @@ enum MallocPressureRelief {
     ///
     /// 拍位依据真机实测（2026-08-28）：+2s/+25s 时内核媒体会话尚未释放完（malloc 仍 200MB
     /// 在册，relief 无页可收）；vmmap 显示释放发生在之后一分钟内——内核 demux/prefetch
-    /// 线程不 join、单次 HTTP 读最长阻塞 60s（上游 AimesSoft/Erika#125），析构链条要等它。
+    /// 线程不 join、单次 HTTP 读最长阻塞 60s（上游 AimesSoft/liberika#125），析构链条要等它。
     /// 因此补 +60s/+120s 两拍：前两拍收 Swift 侧立释放的页，后两拍收内核尾巴释放完的页。
     /// 多拍是幂等 no-op（没有空闲页时 pressure_relief 立即返回），代价可忽略。
     static func scheduleAfterStop() {

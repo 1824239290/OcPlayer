@@ -4,7 +4,7 @@
   <img src="Docs/images/home.jpg" alt="OcPlayer 首页:媒体库、继续观看与海报氛围背景" width="880">
 </p>
 
-为 Jellyfin / Emby 打造的原生播放器,SwiftUI 双端(macOS 为主,iOS / iPadOS 同源)。播放内核是 Rust 写的 [Erika](https://github.com/AimesSoft/Erika)(内置 FFmpeg 解码 + libass 字幕渲染),弹幕接入弹弹play,另集成 Bangumi 追番与 MoviePilot 找片 / 下载 / 订阅。
+为 Jellyfin / Emby 打造的原生播放器,SwiftUI 双端(macOS 为主,iOS / iPadOS 同源)。播放内核是 Rust 写的 [liberika](https://github.com/AimesSoft/liberika)(原名 Erika,内置 FFmpeg 解码 + libass 字幕渲染),弹幕接入弹弹play,另集成 Bangumi 追番与 MoviePilot 找片 / 下载 / 订阅。
 
 <p align="center">
   <img src="Docs/images/detail.jpg" alt="详情页:海报、剧集列表与演员" width="428">
@@ -56,7 +56,7 @@ Bangumi / MoviePilot 不用可在设置里停用,入口会全部隐藏。
 
 ```bash
 Scripts/bootstrap.sh      # 可选:生成本地 Secrets.xcconfig 模板(不覆盖已有文件)
-Scripts/fetch-erika.sh    # 拉取播放内核 Erika(约 750MB,不入库)
+Scripts/fetch-erika.sh    # 拉取播放内核 liberika(约 750MB,不入库)
 Scripts/build-macos.sh    # 构建 macOS Debug;加 release 参数构建 Release
 ```
 
@@ -75,7 +75,7 @@ iOS 用 `Scripts/package-ios.sh` 打包(版本号从 `Config/App.xcconfig` 读�
 
 ## 致谢
 
-- [Erika](https://github.com/AimesSoft/Erika) —— Rust 播放内核(FFmpeg / libass)
+- [liberika](https://github.com/AimesSoft/liberika) —— Rust 播放内核(FFmpeg / libass,原名 Erika)
 - [DanmakuKit](https://github.com/qyz777/DanmakuKit)(vendored 为 DanmakuRenderKit)—— 弹幕渲染
 - [弹弹play](https://www.dandanplay.com/) —— 弹幕数据
 - [Bangumi](https://bgm.tv/) / [MoviePilot](https://github.com/jxxghp/MoviePilot) —— 追番与找片

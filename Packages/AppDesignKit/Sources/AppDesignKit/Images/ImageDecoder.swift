@@ -81,13 +81,15 @@ public final class ImageDecoder: @unchecked Sendable {
                         return
                     }
                     self.enterDecode()
-                    defer { self.leaveDecode() }
-                    if let image = Self.decodeSynchronously(data, maxPixelSize: maxPixelSize) {
-                        continuation.resume(returning: image)
-                    } else {
-                        // nil = 数据确实解不出位图，是**真失败**，与取消区分开。
-                        continuation.resume(returning: nil)
-                    }
+                    let image = Self.decodeSynchronously(data, maxPixelSize: maxPixelSize)
+                    // **先记账、再唤醒等待方**：反过来（`defer { leaveDecode() }`）会让
+                    // 被 resume 的调用方先跑起来、在 `completed` 还没自增时读到它 ——
+                    // 批末那一条永远可能少 1（`ImageDecoderTests` 实测 23 ≠ 24，CI 上
+                    // 按运行时机随机复现）。计数是给测试/诊断看的观测面，必须反映
+                    // 「调用方拿到结果时这次解码已经记完」。
+                    self.leaveDecode()
+                    // nil = 数据确实解不出位图，是**真失败**，与取消区分开。
+                    continuation.resume(returning: image)
                 }
             }
         } onCancel: {
