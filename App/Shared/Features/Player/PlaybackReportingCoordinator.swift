@@ -85,51 +85,30 @@ final class PlaybackReportingCoordinator {
         pendingStoppedReport = precedingStoppedReport
     }
 
+    /// 干净收尾时 position 常停在片长前零点几秒（最后一帧的呈现位置不必恰好等于
+    /// 片长），用这个窗口把「位置贴着片长的 `.stopped`」认成播完。
+    ///
+    /// ⚠️ 这只是**位置**容差，与错误处理无关：片尾的「读越 EOF 报 fatal」内核缺陷
+    /// 已随 liberika v0.3.0 修复（上游 #169，尾读按 EOF 干净收口），曾经的
+    /// `isEndOfStream`（把片尾窗口内的 `.error` 也认成播完）随 `PlayerState`
+    /// 的折叠兜底一并拆除——片尾真错误现在就该露徽章、不该触发连播。
+    private static let naturalEndPositionSlackSeconds: Double = 2.0
+
     private static func isReachedEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
-        // 阈值与播放状态层共用 `PlayerState.endOfStreamToleranceSeconds`（片尾 EOF 临时兜底）：
-        // 那边把片尾窗口内的内核错误折叠成 `.stopped`，这里必须用同一个窗口把它认成「播完」，
-        // 否则会变成「没有错误徽章、也不连播/退出」的静默卡死。
         return snapshot.durationSeconds > 0
             && snapshot.positionSeconds
-                >= snapshot.durationSeconds - PlayerState.endOfStreamToleranceSeconds
+                >= snapshot.durationSeconds - naturalEndPositionSlackSeconds
     }
 
-    /// 终态里「已经播到文件尾」的判定（心跳分支用）。
-    ///
-    /// `.stopped` 是引擎干净收尾；`.error` 也要认，因为内核在片尾会**间歇性**把
-    /// 「读到文件末尾」报成致命错误，而不是干净 EOF：
-    ///
-    /// 实测（2026-10-09，iPad mini 5 / iPadOS 26.6.2 / OcPlayer 0.2.1 / Erika v0.2.1，
-    /// `我的朋友很少 S1E5`，1472 s 片源）——最后一次成功读取停在距文件尾 **3966 字节**
-    /// 处，下一次跨过 EOF 的读直接给出 `av_read_frame: Input/output error (-5)`，内核落
-    /// `playback_fatal`、App 状态进 `.error`。对照同一天另一次收尾：最后一次 range 恰好
-    /// 读到 EOF（919287807 + 81988 = 文件长度 919369795）→ `decoder_eof_drain complete`
-    /// → `.stopped` → 连播/退出照常。差别只在请求边界是否跨过 EOF。
-    ///
-    /// 此前只认 `.stopped`，于是这种片尾错误被算成 `reachedEnd=false`：既不连播也不退出，
-    /// 只剩错误徽章（那次日志里报错后 18 秒内唯一的动作是用户手动关闭）。
-    /// 位置判据与 `.stopped` 共用 `isReachedEnd`（`PlayerState.endOfStreamToleranceSeconds`
-    /// 窗口以内），片中的真错误不受影响。
-    private static func isEndOfStream(snapshot: PlaybackReportSnapshot?) -> Bool {
-        guard let snapshot, isReachedEnd(snapshot: snapshot) else { return false }
-        return snapshot.state == .stopped || snapshot.state == .error
-    }
-
-    /// `stop()` 收口时是否该按「自然播完」触发终态事件。
-    /// 与心跳分支共用「位置在末尾」的判据，但**只认 `.stopped`**：这条路径由宿主主动
-    /// 进入（关播放器 / 换控制器 / 退后台），此刻把片尾的 `.error` 也当成播完，会在用户
-    /// 正拆台的时候反过来触发连播——`AppModel.playback` 的 didSet 里 `stop()` 甚至跑在
+    /// `stop()` 收口时是否该按「自然播完」触发终态事件。心跳分支共用同一判据。
+    /// **只认 `.stopped`**：这条路径可能由宿主主动进入（关播放器 / 换控制器 /
+    /// 退后台），把 `.error` 也当成播完，会在用户正拆台的时候反过来触发连播——
+    /// `AppModel.playback` 的 didSet 里 `stop()` 甚至跑在
     /// `clearPlaybackSessionState()`（它会清 `activePlaybackIdentity`）之前。
-    ///
-    /// ⚠️ 2026-10-23 起「只认 `.stopped`」不再等价于「只认干净收尾」：`PlayerState` 的片尾
-    /// EOF 临时兜底会把片尾窗口内的 `.error` 直接折叠成 `.stopped`（见
-    /// `PlayerState.endOfStreamToleranceSeconds`），所以片尾错误现在也会走到这条路径上。
-    /// 兜底靠的是下游的 `activePlaybackIdentity` 守卫：正常关闭/退后台都先
-    /// `finishReporting()` → `clearPlaybackSessionState()` 清掉 identity，`onTerminal` 的
-    /// `guard activePlaybackIdentity == identity` 必然拒绝；唯一「先 stop 后清 identity」的
-    /// 调用点是 `AppModel.playback` 的 didSet，而它只在注入时跑一次。若将来新增
-    /// 「播放中把 `AppModel.playback` 换成新控制器」的路径，需要重新评估这里。
+    /// 唯一「先 stop 后清 identity」的调用点是 `AppModel.playback` 的 didSet，
+    /// 而它只在注入时跑一次。若将来新增「播放中把 `AppModel.playback` 换成新控制器」
+    /// 的路径，需要重新评估这里。
     private static func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
         return snapshot.state == .stopped && isReachedEnd(snapshot: snapshot)
@@ -262,7 +241,7 @@ final class PlaybackReportingCoordinator {
                     guard self.isCurrent(activeSession) else { return }
                     self.session = nil
                     self.heartbeatTask = nil
-                    let reachedEnd = Self.isEndOfStream(snapshot: snapshot)
+                    let reachedEnd = Self.isNaturalEnd(snapshot: snapshot)
                     self.triggerTerminalIfNeeded(session: activeSession, reachedEnd: reachedEnd)
                     return
                 }

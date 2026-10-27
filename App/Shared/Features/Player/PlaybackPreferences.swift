@@ -267,13 +267,14 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.skipOutro) }
     }
 
-    /// 保底跳过片尾的保留档位（秒）。0 = 不保留（实际落点仍受 3 s 尾部安全边际
-    /// 约束，见 `PlaybackController.endOfFileMarginSeconds`）。
+    /// 保底跳过片尾的保留档位（秒）。0 = 不保留（实际落点仍受 0.5 s 尾部防线
+    /// 约束，见 `PlaybackController.tailGuardSeconds`）。
     static let outroRetentionOptionsSeconds: [Int] = [0, 5, 10, 15, 20, 30]
-    /// 保底跳过片尾的保留秒数：落点 = 片长 − max(该值, 尾部安全边际)，默认 10（原
+    /// 保底跳过片尾的保留秒数：落点 = 片长 − max(该值, 尾部防线)，默认 10（原
     /// 20 过长，会错过下一集自动接续的黄金窗口且拖到黑屏；存量用户没有旧值需要
-    /// 兼容——20 从未落盘）。低于安全边际的档位（0/5 以下）按 3 s 兜底：贴片尾的
-    /// 落点会让内核在文件末尾做同步读取，读失败即 fatal（Erika v0.2.1 实测）。
+    /// 兼容——20 从未落盘）。低于防线的档位（0/5 以下）按 0.5 s 兜底：防线只为
+    /// 防 seek 越过 EOF 的「audio output stalled at EOF」错误风暴；曾经更厚的
+    /// 3 s 边际是给「尾读 fatal」的，已随内核 v0.3.0（上游 #169）修复而退场。
     /// 只作用于「末 90 秒保底」；服务端 MediaSegments / 章节启发式给出的片尾标记
     /// 有精确区间终点，按标记终点跳，不吃这个设置。
     static var outroRetentionSeconds: Int {

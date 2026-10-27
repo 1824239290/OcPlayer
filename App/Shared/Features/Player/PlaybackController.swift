@@ -1374,22 +1374,28 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     func seek(toFraction fraction: Double) {
         guard let engine, state.duration > .zero else { return }
-        let micros = Double(state.duration.microseconds) * min(max(fraction, 0), 1)
-        recordSeek(toSeconds: micros / 1_000_000, kind: "scrub")
-        try? engine.seek(to: .microseconds(Int64(micros)))
+        let duration = Double(state.duration.microseconds) / 1_000_000
+        // 拖动条能拖到最右端（fraction = 1）：落点同样要留在片长 − tailGuardSeconds
+        // 以内，理由与 `skip(by:)` 同一条防线——seek 越过 EOF 会触发内核的
+        // 「audio output stalled at EOF」错误风暴，而 3 s 厚边际退场后这条防线是
+        // 唯一拦它的地方。片长不足防线时退化为 0（与 clampedBeforeEnd 一致）。
+        let target = Self.clampedBeforeEnd(duration * min(max(fraction, 0), 1), duration: duration)
+        recordSeek(toSeconds: target, kind: "scrub")
+        try? engine.seek(to: .seconds(target))
     }
 
     func skip(by seconds: Double) {
         guard let engine else { return }
         // 落点统一到「秒」口径再钳：`position` 是 µs，而 `duration` 与
         // `clampedBeforeEnd` 都是秒。混用过一次——`target` 还是 µs 就被当成秒
-        // 去跟「片长 − 3s」取 min，于是**每一次** ±10s 都落到片长 − 3s
-        // （2026-10-17 实机：duration=1426s、位置 540.749s，按后退 10 秒，
+        // 去跟「片长 − 尾部防线」取 min（当时是 3 s），于是**每一次** ±10s 都落到
+        // 片长 − 3 s（2026-10-17 实机：duration=1426s、位置 540.749s，按后退 10 秒，
         // 日志 `kind=skip from_ms=540749 to_ms=1423450`，进度条直接跳结尾）。
         var target = Double(state.position.microseconds) / 1_000_000 + seconds
         // 别越过片长：seek 到 EOF 之后内核会进「audio output stalled at EOF」
         // 错误风暴（逐帧重发 .failed，实测一次刷了 6302 条），画面冻结假死。
-        // 边际口径见 endOfFileMarginSeconds。
+        // 口径见 tailGuardSeconds（0.5 s：仅防越过 EOF；「尾读 fatal」已随内核
+        // v0.3.0 修复，不再需要更厚的边际）。
         if state.duration > .zero {
             let duration = Double(state.duration.microseconds) / 1_000_000
             target = Self.clampedBeforeEnd(target, duration: duration)
@@ -1452,35 +1458,34 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
-    /// seek 落点距片尾的安全边际（秒）：任何「跳到接近片尾」的落点都不许进入
-    /// 最后这几秒。
+    /// seek 落点距片尾的最小间隔（秒）：落点不许贴到/越过片长。
     ///
-    /// 0.5s 落点（旧口径）会让内核在文件**末尾那几 KB** 上做同步读取；那次读
-    /// 空/断时 Erika v0.2.1 把「文件结束」报成 `av_read_frame: Input/output
-    /// error (-5)` 的 fatal，播放器直接进 `.error`（2026-10-12 实测复现，逐字
-    /// 一致；同形态问题在 2026-10-09 的 iPad 片尾也出现过）。3s 在常见码率下
-    /// 约 1.5–4 MiB，被默认 2 MiB 预读窗口覆盖——尾读在播到片尾前就完成，不再
-    /// 有「临门一脚」的同步读。
-    static let endOfFileMarginSeconds: Double = 3.0
+    /// seek 越过（或恰好落到）EOF 会让内核进「audio output stalled at EOF」错误
+    /// 风暴（逐帧重发 `.failed`，实测一次刷了 6302 条），画面冻结假死——这道
+    /// 0.5 s 防线只为它存在。曾经是 3 s（PR #25）：当年 Erika v0.2.1 会把「片尾
+    /// 最后几 KB 的尾读读空/断」报成 fatal EIO，3 s 让尾读提前落进预读窗口规避；
+    /// liberika v0.3.0（上游 #169）把未送达的尾部 range 按 EOF 处理后，3 s 的
+    /// 理由消失，恢复旧口径 0.5 s。
+    static let tailGuardSeconds: Double = 0.5
 
-    /// 把 seek 落点钳到「片长 − 安全边际」以内；片长未知（0）时不钳。
+    /// 把 seek 落点钳到「片长 − tailGuardSeconds」以内；片长未知（0）时不钳。
     /// 跳过提示本身要求片长已就位（`ChapterSession.prompt` 的守卫），这里是
     /// 防御性兜底。
     static func clampedBeforeEnd(_ target: Double, duration: Double) -> Double {
         guard duration > 0 else { return target }
-        return min(target, max(duration - endOfFileMarginSeconds, 0))
+        return min(target, max(duration - tailGuardSeconds, 0))
     }
 
     /// 保底片尾跳过落点（纯函数便于单测）：片长 − 保留秒数（设置可选 0–30s，
-    /// 默认 10），不小于当前位置（不往回跳）；保留低于安全边际（含 0 = 不保留）
-    /// 时按 `endOfFileMarginSeconds` 兜底，与 `clampedBeforeEnd` 同一道防线。
+    /// 默认 10），不小于当前位置（不往回跳）；保留低于尾部防线（含 0 = 不保留）
+    /// 时按 `tailGuardSeconds` 兜底，与 `clampedBeforeEnd` 同一道防线。
     static func endCreditsSkipTarget(
         position: Double,
         duration: Double,
         retentionSeconds: Int
     ) -> Double {
-        // 保留档位低于安全边际（含 0 = 不保留）时按边际兜底，不贴片尾。
-        let flooredRetention = max(Double(retentionSeconds), endOfFileMarginSeconds)
+        // 保留档位低于尾部防线（含 0 = 不保留）时按 0.5 s 兜底。
+        let flooredRetention = max(Double(retentionSeconds), tailGuardSeconds)
         return max(duration - flooredRetention, position)
     }
 
@@ -1515,8 +1520,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         let target: Double
         switch prompt {
         case .mark(let mark):
-            // 与 skip(by:) 同一道防线:落点贴片尾会让内核在文件末尾做同步读取，
-            // 读失败即 fatal（见 endOfFileMarginSeconds）。
+            // 与 skip(by:) 同一道防线:落点不贴到/越过片长（见 tailGuardSeconds）。
             let duration = Double(state.duration.microseconds) / 1_000_000
             let markEnd = mark.endSeconds
             target = Self.clampedBeforeEnd(markEnd, duration: duration)
@@ -1524,7 +1528,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.info("跳过 \(mark.kind) → \(target)s")
             if target < markEnd {
                 PlaybackLog.info(
-                    "落点被尾部边际钳制 end=\(markEnd)s 边际=\(Self.endOfFileMarginSeconds)s"
+                    "落点被尾部防线钳制 end=\(markEnd)s 防线=\(Self.tailGuardSeconds)s"
                 )
             }
         case .endCredits(let position):
@@ -1537,7 +1541,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             chapterSession.noteEndCreditsSkipped()
             PlaybackLog.info(
                 "保底跳过片尾 → \(target)s 保留=\(PlaybackPreferences.outroRetentionSeconds)s"
-                    + " 边际=\(Self.endOfFileMarginSeconds)s"
+                    + " 防线=\(Self.tailGuardSeconds)s"
             )
         }
         recordSeek(toSeconds: max(0, target), kind: "auto")

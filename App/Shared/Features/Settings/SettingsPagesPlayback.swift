@@ -88,7 +88,7 @@ struct PlaybackSettingsView: View {
                 }
                 .disabled(!skipOutroEnabled)
             } footer: {
-                Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 3 秒。")
+                Text("播放到片头/片尾时出现「跳过」按钮；片尾保留指保底跳过后停在片尾结束前多久，不保留也会停在片尾前 0.5 秒。")
             }
 
             SettingsGlassSection("字幕") {
