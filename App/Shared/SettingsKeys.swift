@@ -59,8 +59,9 @@ enum SettingsKeys {
     static let danmakuBlockTop = "dev.jumusu.ocplayer.danmaku.blockTop"
     static let danmakuBlockBottom = "dev.jumusu.ocplayer.danmaku.blockBottom"
     static let danmakuBlockScroll = "dev.jumusu.ocplayer.danmaku.blockScroll"
-    /// 「合并重复」：当前只写内核弹幕配置（渲染恒走 overlay，HUD 入口已撤），
-    /// key 保留，内核弹幕恢复时连同 HUD 入口一起恢复。
+    /// 弹幕渲染路线（true = App 层 overlay，false = 内核渲染；默认内核）。
+    static let danmakuUseOverlayRenderer = "dev.jumusu.ocplayer.danmaku.useOverlayRenderer"
+    /// 「合并重复」：内核弹幕配置，仅内核渲染路线生效（overlay 不实现 merge）。
     static let danmakuMergeDuplicates = "dev.jumusu.ocplayer.danmaku.mergeDuplicates"
     static let danmakuAllowStacking = "dev.jumusu.ocplayer.danmaku.allowStacking"
     static let danmakuFontSize = "dev.jumusu.ocplayer.danmaku.fontSize"

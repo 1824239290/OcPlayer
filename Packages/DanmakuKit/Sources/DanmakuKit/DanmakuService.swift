@@ -9,7 +9,7 @@ public enum DanmakuPayloadFormat: Sendable, Equatable {
 /// A renderer-ready comment payload resolved from the permanent match and TTL cache.
 ///
 /// `entries` 是 overlay 渲染器的直接输入（结构直传，装载侧不再解 JSON）；
-/// `json` 只服务内核弹幕轨（`ErikaEngine.addDanmakuTrack`，当前路线停用中）。
+/// `json` 只服务内核弹幕轨（`ErikaEngine.addDanmakuTrack`，内核渲染路线用）。
 /// 两者判据一致、都由本 actor 产出，主线程不做转换。
 public struct DanmakuPayload: Sendable, Equatable {
     public let match: DanmakuEpisodeMatch

@@ -11,7 +11,7 @@ public struct PlaybackEngineDescriptor: Identifiable, Hashable, Sendable {
     public let version: String?
     /// 一行技术构成，如「Rust · FFmpeg · libass · Metal」。
     public let summary: String
-    /// 是否自带弹幕渲染器。设置页据此决定要不要显示「内核弹幕渲染」开关。
+    /// 是否自带弹幕渲染器。设置 → 弹幕 页据此决定要不要显示「用内核渲染弹幕」开关。
     public let supportsKernelDanmaku: Bool
     /// 补充说明（许可证、成熟度、已知限制），设置页作为脚注显示。可空。
     public let notes: String?

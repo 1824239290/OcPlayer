@@ -205,10 +205,6 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// **在 `prepareEngine()` 里跟内核一起锁定**，播放期间不变：中途翻转会让
     /// 同一条弹幕数据同时进内核和 overlay（双份弹幕）。设置页改动因此在
     /// 下一次播放生效，和换内核的语义一致。
-    ///
-    /// **当前版本一律 true**：内核弹幕因跳轨问题被禁用，详见
-    /// `resolveOverlayDanmakuRoute()`。恢复内核渲染后，此处语义回到
-    /// 「所选内核不支持内核弹幕时强制 overlay，否则听用户偏好」。
     private(set) var usesOverlayDanmakuRenderer: Bool
 
     var danmakuPayloadFormat: DanmakuPayloadFormat {
@@ -221,12 +217,20 @@ final class PlaybackController: DanmakuPlaybackHosting {
         engine?.descriptor ?? PlaybackEngineRegistry.selected
     }
 
-    /// 当前版本统一强制 overlay：内核 DFM+ 的滑窗重排仍会让在屏弹幕跳轨，
-    /// 内核弹幕渲染暂时禁用。内核修复后恢复旧判定：内核不支持弹幕时强制
-    /// overlay，否则听用户偏好（「走 overlay 还是内核」的偏好 key 曾挂在
-    /// `PlaybackPreferences`，随无效入口清理一并删了，恢复时重加）。
+    /// 弹幕渲染路线：内核不支持内核弹幕时强制 overlay（否则弹幕会静默消失），
+    /// 否则听用户偏好（默认内核渲染）。
+    ///
+    /// 历史：内核 DFM+ 滑窗重排曾让在屏弹幕跳轨，2026-08-25（43832df）起强制
+    /// overlay、偏好读写随死代码清理（79a0de5）删除。根因定位为转换器当年给每条
+    /// 弹幕合成的 `id`——内核拿它当 stable_tracks 的 key，重排时个别弹幕的轨道
+    /// 偏好互相顶掉。修复 = **不再输出 `id`**（`DanmakuJSONConverter.erikaJSON`
+    /// 有完整说明），随内核 v0.3.0 换装恢复本判定；真机若复现跳轨，把默认值翻回
+    /// overlay 即可。
     private static func resolveOverlayDanmakuRoute() -> Bool {
-        true
+        guard let descriptor = PlaybackEngineRegistry.selected,
+              descriptor.supportsKernelDanmaku
+        else { return true }
+        return PlaybackPreferences.danmakuUseOverlayRenderer
     }
 
     init() {
@@ -453,8 +457,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     @discardableResult
     func prepareEngine() -> (any PlaybackEngine)? {
         if let engine { return engine }
-        // 内核和弹幕路线必须一起锁。当前版本内核弹幕被禁用，恒为 overlay；
-        // 恢复内核渲染后回到「所选内核不支持内核弹幕时强制 overlay」的旧判定。
+        // 内核和弹幕路线必须一起锁：路线判定读「所选内核 + 用户偏好」。
         usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         do {
             let engine = try PlaybackEngineRegistry.makeSelected()
@@ -511,6 +514,14 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// loaders use this boundary to invalidate work for the previous source even
     /// if the new engine has not been created yet.
     func prepareForPresentation(_ request: PlaybackRequest) {
+        // 渲染路线快照必须在这里就刷新，不能等 `prepareEngine()`：弹幕编排器在
+        // engine 就绪**之前**就会读 `danmakuPayloadFormat` 产出载荷
+        // （`DanmakuLoadOrchestrator` 里 payload 先于 waitUntilReady），而
+        // `prepareEngine()` 要到 PlayerScreen 的 `.task` 才跑。快照若停在上一次
+        // 播放的路线（冷启动时甚至停在 init 的 overlay 默认），载荷就会按错误格式
+        // 产出：内核路线缺 JSON → 本集弹幕静默缺失；overlay 路线白算一份全量 JSON。
+        // `prepareEngine()` 仍会再解析一次（与内核一起锁定的语义不变）。
+        usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         guard expectedRequestID != request.id else { return }
         openingAttempt?.cancel()
         openingWatchdogTask?.cancel()
@@ -1043,6 +1054,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         var mergeDuplicates: Bool
         var allowStacking: Bool
         var globalOffsetSeconds: Double
+        /// 字号比例（1.0 = 基准 22pt）。内核字号是逻辑 px（基准 30），单位不同，
+        /// 按比例映射到内核默认值上——见 `kernelFontSize(forScale:)`。
+        var fontScale: Double
     }
 
     /// 主线程采集当前偏好为快照。
@@ -1056,7 +1070,20 @@ final class PlaybackController: DanmakuPlaybackHosting {
             blockScroll: danmakuBlockScroll,
             mergeDuplicates: danmakuMergeDuplicates,
             allowStacking: danmakuAllowStacking,
-            globalOffsetSeconds: danmakuGlobalOffsetSeconds)
+            globalOffsetSeconds: danmakuGlobalOffsetSeconds,
+            fontScale: danmakuFontSize / PlaybackPreferences.danmakuBaseFontSize)
+    }
+
+    /// 内核弹幕字号基准（逻辑 px）：liberika v0.3.0 `danmaku/typography.rs`
+    /// `DEFAULT_CONFIG_FONT_SIZE = 30`。应用层的字号偏好是 pt（基准 22pt），两者
+    /// 单位不同，映射按**比例**走——100% 时原样下发 30（等于内核自己的默认值，
+    /// 视觉零变化），200% → 60。内核升级若改了默认值，这里跟着改；偏差只影响
+    /// 非 100% 档位的绝对大小，不影响用户可调的相对范围。
+    nonisolated static let kernelReferenceDanmakuFontSize: Float = 30
+
+    /// 字号比例 → 内核 font_size（纯函数便于单测；夹到 ≥1 与内核 sanitize 口径一致）。
+    nonisolated static func kernelFontSize(forScale scale: Double) -> Float {
+        max(1, kernelReferenceDanmakuFontSize * Float(scale))
     }
 
     /// 弹幕偏好 → 引擎的唯一映射（open 队列闭包与实例路径共用）。
@@ -1070,6 +1097,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         config.blockScroll = prefs.blockScroll
         config.mergeDuplicates = prefs.mergeDuplicates
         config.allowStacking = prefs.allowStacking
+        config.fontSize = Self.kernelFontSize(forScale: prefs.fontScale)
         try engine.setDanmakuConfig(config)
         try engine.setDanmakuGlobalOffset(.seconds(prefs.globalOffsetSeconds))
     }

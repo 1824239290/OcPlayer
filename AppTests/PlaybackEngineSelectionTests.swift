@@ -42,13 +42,47 @@ final class PlaybackEngineSelectionTests: XCTestCase {
         XCTAssertFalse(erika?.summary.isEmpty ?? true)
     }
 
-    /// 内核弹幕渲染当前版本被禁用：路线一律是 overlay（`resolveOverlayDanmakuRoute`
-    /// 恒 true）。恢复旧判定（内核支持则听偏好）时改回本测试。
-    func testDanmakuRouteIsForcedToOverlayWhileKernelDanmakuDisabled() {
+    /// 内核支持弹幕时路线听用户偏好（默认 false = 内核渲染）。
+    func testDanmakuRouteFollowsPreference() {
         PlaybackEngineAssembly.registerAll()
 
-        XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer,
-                      "内核弹幕禁用期间不能回到内核渲染")
+        let original = PlaybackPreferences.danmakuUseOverlayRenderer
+        defer { PlaybackPreferences.danmakuUseOverlayRenderer = original }
+
+        PlaybackPreferences.danmakuUseOverlayRenderer = true
+        XCTAssertTrue(PlaybackController().usesOverlayDanmakuRenderer)
+
+        PlaybackPreferences.danmakuUseOverlayRenderer = false
+        XCTAssertFalse(PlaybackController().usesOverlayDanmakuRenderer,
+                       "默认（false）= 内核渲染")
+    }
+
+    /// 路线快照必须在 `prepareForPresentation()` 就跟着设置刷新，不能等
+    /// `prepareEngine()`：弹幕编排器在引擎就绪**之前**就会读 `danmakuPayloadFormat`
+    /// 产出载荷（`DanmakuLoadOrchestrator` 里 payload 先于 waitUntilReady），而
+    /// `prepareEngine()` 要到 PlayerScreen 的 `.task` 才跑。快照若停在上一次播放
+    /// 的路线，载荷就会按错误格式产出——内核路线缺 JSON 时本集弹幕静默缺失。
+    func testDanmakuRouteRefreshesAtPresentation() {
+        PlaybackEngineAssembly.registerAll()
+
+        let original = PlaybackPreferences.danmakuUseOverlayRenderer
+        defer { PlaybackPreferences.danmakuUseOverlayRenderer = original }
+
+        PlaybackPreferences.danmakuUseOverlayRenderer = false
+        let controller = PlaybackController()
+        controller.prepareForPresentation(
+            PlaybackRequest(title: "第 1 集", uri: "https://example.invalid/1.mkv"))
+        XCTAssertFalse(controller.usesOverlayDanmakuRenderer,
+                       "内核路线：prepareForPresentation 后快照就应是 overlay=false")
+
+        // 用户在设置里翻到 overlay，下一次播放（新的 request）必须立刻按新偏好
+        // 产出载荷，而不是沿用上一播的路线。
+        PlaybackPreferences.danmakuUseOverlayRenderer = true
+        controller.prepareForPresentation(
+            PlaybackRequest(title: "第 2 集", uri: "https://example.invalid/2.mkv"))
+        XCTAssertTrue(controller.usesOverlayDanmakuRenderer,
+                      "换片后快照要跟着设置刷新成 overlay=true")
+        XCTAssertEqual(controller.danmakuPayloadFormat, .overlay)
     }
 
     /// 内核**不支持**内核弹幕时强制 overlay——否则弹幕会静默消失（内核收下数据

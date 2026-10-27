@@ -157,7 +157,7 @@ struct PlayerScreen: View {
                 hudVisibility.hideOnPointerExit()
             }
             #endif
-            // 弹幕一律走 App 层 overlay（内核弹幕当前版本被禁用）。垫在视频之上、手势层之下。
+            // overlay 路线（用户选了 App 层渲染 / 内核不支持弹幕）才挂。垫在视频之上、手势层之下。
             if controller.usesOverlayDanmakuRenderer {
                 DanmakuOverlayHost(controller: controller.danmakuOverlay)
             }
