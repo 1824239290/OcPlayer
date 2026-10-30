@@ -110,6 +110,26 @@ final class MirrorSettingsTests: XCTestCase {
                        "镜像：API")
     }
 
+    /// **「（镜像）」标记只在实际生效时出现**：hub 上那个标记存在的理由就是
+    /// 「别让用户以为线路已改」，所以「开关开着但地址空 / 填错」必须判成未生效
+    /// ——那时域包已经退回官方了。
+    func testMirrorActiveRequiresParseableAddress() {
+        XCTAssertFalse(MirrorSettings.bangumiMirrorActive(enabled: false, rawValue: "bangumi.lat"))
+        XCTAssertFalse(MirrorSettings.bangumiMirrorActive(enabled: true, rawValue: ""))
+        XCTAssertFalse(MirrorSettings.bangumiMirrorActive(enabled: true, rawValue: "https://"))
+        XCTAssertTrue(MirrorSettings.bangumiMirrorActive(enabled: true, rawValue: "bangumi.lat"))
+
+        XCTAssertFalse(MirrorSettings.tmdbMirrorActive(
+            enabled: true, apiRawValue: "", imageRawValue: ""))
+        XCTAssertFalse(MirrorSettings.tmdbMirrorActive(
+            enabled: true, apiRawValue: "https://", imageRawValue: "https://"))
+        // 两项独立：只填一项也算生效（另一项走官方）。
+        XCTAssertTrue(MirrorSettings.tmdbMirrorActive(
+            enabled: true, apiRawValue: "https://api.tmdb.org/3", imageRawValue: ""))
+        XCTAssertTrue(MirrorSettings.tmdbMirrorActive(
+            enabled: true, apiRawValue: "", imageRawValue: "https://image.tmdb.org/t/p"))
+    }
+
     // MARK: - 输入校验
 
     func testEmptyInputIsNotAProblem() {

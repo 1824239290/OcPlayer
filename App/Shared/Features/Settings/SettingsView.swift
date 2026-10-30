@@ -28,10 +28,16 @@ struct SettingsView: View {
     @AppStorage(ClientIdentity.customUserAgentKey) private var customUserAgent = ""
     /// 首页栏目：只用于值预览，编辑在「首页栏目」子页。
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
-    /// 镜像开关：只用于值预览（「已启用」后面挂一个镜像标记），编辑在各自子页里
+    /// 镜像配置：只用于值预览（「已启用」后面挂一个镜像标记），编辑在各自子页里
     /// ——Bangumi 的镜像在 Bangumi 页、TMDB 的在 TMDB 页（用户 2026-10-30 口径）。
+    ///
+    /// **地址也要读**：只看开关会把「开了但没填/填错」也标成镜像，而那种情况下域包
+    /// 其实已经退回官方（判定见 `MirrorSettings.*MirrorActive`）。
     @AppStorage(SettingsKeys.bangumiMirrorEnabled) private var bangumiMirrorEnabled = false
+    @AppStorage(SettingsKeys.bangumiMirrorRootDomain) private var bangumiMirrorRoot = ""
     @AppStorage(SettingsKeys.tmdbMirrorEnabled) private var tmdbMirrorEnabled = false
+    @AppStorage(SettingsKeys.tmdbMirrorAPIBaseURL) private var tmdbMirrorAPIBase = ""
+    @AppStorage(SettingsKeys.tmdbMirrorImageBaseURL) private var tmdbMirrorImageBase = ""
 
     var body: some View {
         // **2026-10-22（B 方案：玻璃卡片流）**：设置页整体脱离 `Form`，改成
@@ -96,7 +102,9 @@ struct SettingsView: View {
         let base: String
         if let profile = bangumi.profile { base = profile.name }
         else { base = bangumi.isAuthenticated ? "已登录" : "未登录" }
-        return bangumiMirrorEnabled ? base + "（镜像）" : base
+        let mirrored = MirrorSettings.bangumiMirrorActive(
+            enabled: bangumiMirrorEnabled, rawValue: bangumiMirrorRoot)
+        return mirrored ? base + "（镜像）" : base
     }
 
     /// 三态取自 `integrationState`，与分区首页同一判据（见子页同名注释）。
@@ -109,10 +117,14 @@ struct SettingsView: View {
         }
     }
 
-    /// TMDB：配了 Key 才算启用；镜像开着时补一个标记（同 `bangumiValue`）。
+    /// TMDB：配了 Key 才算启用；镜像**实际生效**时补一个标记（同 `bangumiValue`）。
     private var tmdbValue: String {
         guard app.tmdb.isConfigured else { return "未启用" }
-        return tmdbMirrorEnabled ? "已启用（镜像）" : "已启用"
+        let mirrored = MirrorSettings.tmdbMirrorActive(
+            enabled: tmdbMirrorEnabled,
+            apiRawValue: tmdbMirrorAPIBase,
+            imageRawValue: tmdbMirrorImageBase)
+        return mirrored ? "已启用（镜像）" : "已启用"
     }
 
     private var danmakuValue: String {

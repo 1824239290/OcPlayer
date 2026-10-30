@@ -57,6 +57,22 @@ enum MirrorSettings {
             : nil
     }
 
+    /// 镜像**是否真的在生效**（开关开 **且** 地址能解析）。
+    ///
+    /// 与「开关是否打开」是两件事：地址留空 / 填错时域包会静默退回官方，此时仍然
+    /// 往 hub 上挂「（镜像）」就是在撒谎——而这个标记存在的全部理由恰恰是
+    /// 「别让用户以为线路已经改了」。所以判定必须走这条，不看裸开关。
+    static func bangumiMirrorActive(enabled: Bool, rawValue: String) -> Bool {
+        enabled && BangumiDomains.normalizedRootDomain(rawValue) != nil
+    }
+
+    /// TMDB 同理：两项里**至少一项**能解析就算在生效（另一项独立退回官方）。
+    static func tmdbMirrorActive(enabled: Bool, apiRawValue: String, imageRawValue: String) -> Bool {
+        guard enabled else { return false }
+        return TMDbEndpointSettings.normalizedAPIBase(apiRawValue) != nil
+            || TMDbEndpointSettings.normalizedImageBase(imageRawValue) != nil
+    }
+
     /// Bangumi 一行摘要（设置 hub 的值预览 / 段落注解共用）。
     ///
     /// 三种状态要分得开：`nil` = 开关没开（官方直连）；`"已启用（未填地址）"` = 开了

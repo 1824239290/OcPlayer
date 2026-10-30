@@ -346,6 +346,32 @@ final class ConfigBackupTests: XCTestCase {
         XCTAssertEqual(target.string(forKey: SettingsKeys.bangumiMirrorRootDomain), "legacy.example")
     }
 
+    /// 缺键 / 第一版单开关形态的 `mirror` 段都要能读——否则整份配置导不进来。
+    ///
+    /// 用户手里的备份是实体文件：`Codable` 合成解码器缺一个键就抛，代价是顶层
+    /// `decode` 整体失败（连 TMDB Key、播放偏好都一起丢），远比少搬一段严重。
+    func testMirrorSectionToleratesLegacyAndPartialJSON() throws {
+        // 第一版（未发布）的单开关形态：只有 `enabled`。
+        let legacy = """
+        {"formatVersion":1,"exportedAt":"2026-10-30T00:00:00Z","appVersion":"0.2.2",
+         "mirror":{"enabled":true,"bangumiRootDomain":"bangumi.lat"}}
+        """
+        let legacyBackup = try ConfigBackupCoordinator.decode(Data(legacy.utf8))
+        XCTAssertEqual(legacyBackup.mirror?.bangumiEnabled, true, "认 legacy 的 enabled")
+        XCTAssertEqual(legacyBackup.mirror?.tmdbEnabled, true)
+        XCTAssertEqual(legacyBackup.mirror?.bangumiRootDomain, "bangumi.lat")
+
+        // 只有地址、没有开关字段：按「关」处理，不抛。
+        let partial = """
+        {"formatVersion":1,"exportedAt":"2026-10-30T00:00:00Z","appVersion":"0.2.2",
+         "mirror":{"tmdbAPIBaseURL":"https://api.tmdb.org/3"}}
+        """
+        let partialBackup = try ConfigBackupCoordinator.decode(Data(partial.utf8))
+        XCTAssertEqual(partialBackup.mirror?.bangumiEnabled, false)
+        XCTAssertEqual(partialBackup.mirror?.tmdbEnabled, false)
+        XCTAssertEqual(partialBackup.mirror?.tmdbAPIBaseURL, "https://api.tmdb.org/3")
+    }
+
     func testInvalidJSONThrows() {
         XCTAssertThrowsError(try ConfigBackupCoordinator.decode(Data())) { error in
             XCTAssertEqual(error as? ConfigBackupError, .emptyData)

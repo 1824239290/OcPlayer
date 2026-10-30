@@ -87,6 +87,32 @@ struct MirrorBackupConfig: Codable, Sendable, Equatable {
     /// `dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL`。
     var tmdbImageBaseURL: String?
 
+    /// **容错解码**：`Codable` 合成的解码器要求每个非可选键都在，缺一个就抛
+    /// `keyNotFound` —— 而这里抛出的代价是**整份配置导不进来**（顶层 `decode` 直接
+    /// 失败），不只是镜像这一段丢了。备份是用户手里的实体文件，宁可少搬一段也不要
+    /// 整份报废，所以两个开关按「缺 = 关」处理。
+    ///
+    /// 顺带认第一版（未发布）的单开关形态 `enabled`：那一版只在开发机上存在过，
+    /// 但用户手上可能真有一份导出的 JSON，认它一行代码的成本远低于解释「为什么
+    /// 你的备份坏了」。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // 第一版的单开关放在**另一个键类型**里读：把 `enabled` 塞进 `CodingKeys`
+        // 会让合成的 `encode(to:)` 对不上属性、整个类型不再 Encodable。
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+            .decodeIfPresent(Bool.self, forKey: .enabled)
+        bangumiEnabled = try container.decodeIfPresent(Bool.self, forKey: .bangumiEnabled) ?? legacy ?? false
+        bangumiRootDomain = try container.decodeIfPresent(String.self, forKey: .bangumiRootDomain)
+        tmdbEnabled = try container.decodeIfPresent(Bool.self, forKey: .tmdbEnabled) ?? legacy ?? false
+        tmdbAPIBaseURL = try container.decodeIfPresent(String.self, forKey: .tmdbAPIBaseURL)
+        tmdbImageBaseURL = try container.decodeIfPresent(String.self, forKey: .tmdbImageBaseURL)
+    }
+
+    /// 第一版（未发布）的单开关：`{"enabled": true, ...}`。只读，永不写出。
+    private enum LegacyCodingKeys: String, CodingKey {
+        case enabled
+    }
+
     init(
         bangumiEnabled: Bool = false,
         bangumiRootDomain: String? = nil,
