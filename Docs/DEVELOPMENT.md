@@ -113,11 +113,41 @@ env 门控（`ERIKA_PERF_PROBE=1` 才跑），同一把尺子量不同内核 tag
 2. **TMDB 不做语言回退。** `language=zh-CN` 时没翻译的字段返回**空串**（不是 nil），判定必须用「非空」。且只补缺、不整包替换。
 3. **缓存期不得超过 6 个月**（TMDB 条款）。`TMDbPreferences.maxCacheDays = 180`，不要调大。
 
+### 镜像源（Bangumi 页 / TMDB 页各自的「镜像源」段）
+
+国内网络直连 `api.bgm.tv` / `lain.bgm.tv` / `api.themoviedb.org` / `image.tmdb.org` 不可达时，
+用户填自己的镜像地址，不必挂全局代理。**镜像不是独立子页**，而是跟着它服务的那一家走
+（2026-10-30 用户口径：谁的镜像放谁的栏位里）——找 Bangumi 的连接设置只去 Bangumi 页，
+TMDB 同理。两个开关也各自独立（镜像按线路配，两家常是不同的提供方）：
+
+| 键（`SettingsKeys`） | 读取方 | 说明 |
+| --- | --- | --- |
+| `bangumi.mirrorEnabled` | `BangumiURL.domains` | Bangumi 开关；关掉直连官方 |
+| `bangumi.mirrorRootDomain` | `BangumiURL.domains` | 根域 → `api.` / `lain.` / `next.` / 主站四个域名 |
+| `tmdb.mirrorEnabled` | `TMDbEndpointSettings.endpoints` | TMDB 开关；关掉直连官方 |
+| `tmdb.mirrorAPIBaseURL` | `TMDbEndpointSettings.endpoints` | 补 `/3`；已有路径原样用 |
+| `tmdb.mirrorImageBaseURL` | `TMDbImageSize.url` | 补 `/t/p`；粘进来的档位段会被吃掉 |
+
+要点：
+
+* **改完即生效**，没有「保存」按钮：读路径每次现取键（`UserDefaults` 读是 0.3 µs 级），
+  `BangumiKit.ImageURLStringCache` 以镜像值当代次标签，值一变旧条目整表作废。
+* **每一项单独退化**：地址非法 / 留空只让该项回到官方，不牵连另一项。
+* `DisplayMetadata.isTMDbImage` 的 host 判据跟着图片根走——写死官方域名的话，
+  镜像模式下每张海报都会被判成「服务端图」，把 Jellyfin 的 token 发给镜像 CDN。
+* Bangumi 的 **OAuth 授权页**也会改走镜像主站（`BangumiURL.mainSiteURL`）：登录是唯一
+  必须由浏览器完成的一步，API 镜像好了而 `bgm.tv` 打不开时用户仍然登不进去。
+* 「在浏览器中打开」的入口（条目详情 / 每日放送 / 详情页外链）走 `BangumiURL.main`，
+  同理不该指向打不开的域名。
+* 镜像**不是内置清单**：可用性随网络与时间变化，UI 只给可编辑地址 + 一个示例按钮。
+* 「恢复官方直连」也是**两处各一个**（只清自家那几个键），互不越界。
+
 ### 分层
 
 | 类型 | 职责 |
 | --- | --- |
-| `TMDbClient` | 纯网络：详情 / 一季 / 搜索，限流 + 重试 |
+| `TMDbClient` | 纯网络：详情 / 一季 / 搜索，限流 + 重试；API 根来自 `endpointProvider()`（每次现取） |
+| `TMDbEndpointSettings` / `TMDbEndpoints` | 镜像地址解析与生效端点（纯函数，`MetadataKit` 内可离线测） |
 | `TMDbMatcher` | 匹配与打分（ProviderIds → 搜索），**不碰网络**（搜索入口是注入的闭包） |
 | `MetadataStore+TMDB` | 落库：实体全局共享、对应按租户隔离 |
 | `TMDbEnricher` | 串起来：匹配 → 拉取 → 落库 → 只读叠加 |

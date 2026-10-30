@@ -1,4 +1,5 @@
 import AppDesignKit
+import BangumiKit
 import JellyfinKit
 import SwiftUI
 
@@ -164,6 +165,12 @@ struct BangumiSettingsView: View {
                     SettingsNote("关闭后顶栏与详情页的 Bangumi 入口会隐藏；登录状态与条目关联保留。")
                 }
             }
+
+            // 镜像源就在**这一页**（用户 2026-10-30 口径：谁的镜像放谁的栏位里）。
+            // 只作用于 Bangumi；TMDB 的镜像在 TMDB 页，两家开关各管各的。
+            if bangumiEnabled {
+                BangumiMirrorSection()
+            }
         }
         .confirmationDialog(
             "退出 Bangumi？",
@@ -184,6 +191,84 @@ struct BangumiSettingsView: View {
     private var bangumiAccountText: String {
         if let profile = bangumi.profile { return profile.name }
         return bangumi.isAuthenticated ? "已登录" : "未登录"
+    }
+}
+
+// MARK: - Bangumi 镜像源
+
+/// 「设置 → Bangumi → 镜像源」：只改 Bangumi 的线路（`api.` / `lain.` / `next.` / 主站）。
+///
+/// ## 为什么单独成段而不是塞进上面那张卡
+///
+/// 上面那张卡回答「Bangumi 这个集成开着吗、我登录了吗」；这一段回答「它的包去哪儿取」。
+/// 混在同一张卡里，用户拨完开关划下去会以为自己在改账号设置。
+///
+/// ## 没有保存按钮
+///
+/// `@AppStorage` 写的就是 `BangumiURL.domains` 读的那两个键：**下一个请求即生效**
+/// （图片 URL 走代次缓存，改完旧条目自动作废，见 `ImageURLStringCache`）。
+struct BangumiMirrorSection: View {
+    @AppStorage(SettingsKeys.bangumiMirrorEnabled) private var enabled = false
+    @AppStorage(SettingsKeys.bangumiMirrorRootDomain) private var rootDomain = ""
+
+    var body: some View {
+        SettingsGlassSection("镜像源") {
+            Toggle("使用镜像源", isOn: $enabled)
+                .neutralSwitch()
+            SettingsNote(enabled
+                ? "Bangumi 的条目、收藏、章节与封面都改走镜像；登录授权页也走镜像主站。"
+                : "当前直连官方域名（api.bgm.tv / lain.bgm.tv）。国内连不上时打开它并填镜像根域。")
+
+            if enabled {
+                SettingsGlassDivider()
+                SettingsFieldRow("镜像根域") {
+                    TextField(
+                        "Bangumi 镜像根域",
+                        text: $rootDomain,
+                        prompt: Text("例：\(MirrorSettings.bangumiPresetRootDomain)")
+                    )
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                    #if os(macOS)
+                    .textFieldStyle(.roundedBorder)
+                    #endif
+                    .labelsHidden()
+                }
+                if let problem = MirrorSettings.bangumiProblem(rootDomain) {
+                    MirrorProblemLabel(problem)
+                }
+                SettingsGlassDivider()
+                // 展示的是**域包真正会用的值**（不是输入框原文）：一眼看出「我填的地址被
+                // 规范化成了什么」，也是镜像填错时最快的自查入口。
+                KeyValueRow(label: "当前 API", value: domains.api)
+                SettingsGlassDivider()
+                KeyValueRow(label: "当前图床", value: domains.image)
+                SettingsGlassDivider()
+                SettingsActionRow("填入示例 \(MirrorSettings.bangumiPresetRootDomain)") {
+                    rootDomain = MirrorSettings.bangumiPresetRootDomain
+                }
+                SettingsGlassDivider()
+                SettingsActionRow("恢复官方直连", role: .destructive) {
+                    // 先清键（域包立刻回官方），再让本页的 `@AppStorage` 与磁盘对齐。
+                    MirrorSettings.resetBangumi()
+                    enabled = false
+                    rootDomain = ""
+                }
+            }
+        } footer: {
+            Text("只填「根域」（可带端口）：API 走 api.<根域>、图床走 lain.<根域>、"
+                 + "next 接口走 next.<根域>、主站链接与登录授权页走 <根域>。"
+                 + "镜像至少要提供 api. 与 lain. 两个子域，否则条目能搜到、封面会裂。"
+                 + "这里的改动不改登录态，也不影响 TMDB 的线路。")
+        }
+    }
+
+    /// 域包真正会用的四个域名（开关关 / 地址非法 → 官方）。
+    private var domains: BangumiDomains {
+        MirrorSettings.bangumiDomains(enabled: enabled, rawValue: rootDomain)
     }
 }
 

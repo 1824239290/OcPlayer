@@ -6,6 +6,22 @@
 
 ### 改动
 
+- **新增自填镜像源：Bangumi 与 TMDB 的命中地址可改走镜像，国内网络不必再挂全局代理**
+  （用户口径：「我们使用到了 bangumi 和 tmdb，但中国大陆的网络在没有代理的情况下会无法连接，你去设置里添加一个使用镜像源的选项吧，然后再完成项目对自定义镜像源的支持」；
+  位置口径：「设置里的位置放到他们自己的栏位里面，比如 bangumi 的镜像源设置放到 bangumi 栏位里，tmdb 的同理」）。
+  - **为什么需要**：`api.bgm.tv` / `lain.bgm.tv` / `api.themoviedb.org` / `image.tmdb.org` 在国内直连不通，表现为 Bangumi 分区空白、封面全裂、TMDB 补全静默失败。此前唯一的出口是给整机挂代理——对只看番的用户门槛太高。
+  - **位置**：镜像**不是独立子页**，而是跟着它服务的那一家走——「设置 → Bangumi」页内一段「镜像源」（Bangumi 开关 + 根域输入框 + `bangumi.lat` 示例 + 当前 API/图床两行 + 恢复官方直连），「设置 → TMDB 元数据补全」页内一段「镜像源」（TMDB 开关 + API/图片两个输入框 + `api.tmdb.org/3` 示例 + 当前 API/图片两行 + 恢复官方直连）。找 Bangumi 的连接设置只去 Bangumi 页，TMDB 同理；两页各有一句「不影响另一家的线路」把边界说清。TMDB 那段刻意放在 `isConfigured` 闸门**之外**——镜像正是「连不上才需要改」的东西，只在配好 Key 之后才出现等于让用户先撞一次墙。
+  - **两个开关，不是总开关**：`bangumi.mirrorEnabled` / `tmdb.mirrorEnabled` 是**两个键**。镜像按线路配，两家镜像常是不同的提供方，共用一个开关只是巧合；合并键的症状会是「只想关 TMDB 的镜像，Bangumi 也跟着断」。两个「恢复官方直连」也各清自家那几个键，互不越界。
+  - **hub 值预览**：Bangumi 行在「已登录 / 昵称」后挂「（镜像）」，TMDB 行在「已启用」后挂「（镜像）」——镜像配错的第一症状是「首页空白但设置说已登录」，把线路状态摆到一级页能省掉一轮「是不是代理没开」的试错。标记的判据是**真正生效**（开关开 **且** 地址能解析），不是裸开关：地址留空 / 填错时域包已退回官方，此时还挂「（镜像）」就是在撒谎——而这个标记存在的全部理由恰恰是别让用户以为线路改了。
+  - **交互**：没有保存按钮——`@AppStorage` 写的就是域包读的那几个键，**下一个请求即生效**。地址可留空（= 该项走官方），非法值不拦保存、按官方处理并在框下给橙色提示（拦住输入会让用户卡在一个填错的框里出不去，静默退回官方才是可用的降级）。
+  - **Bangumi 侧**（`Packages/BangumiKit`）：`BangumiURL` 新增 `mirrorEnabledKey` / `mirrorRootDomainKey` / `activeMirrorRootDomain` 与纯解析 `resolvedMirrorRootDomain(enabled:rawValue:)`；根域按既有约定派生 `api.` / `lain.` / `next.` / 主站四个域名（可带端口，自建反代可用）。读路径仍每次现采样（不记忆化），`ImageURLStringCache` 以镜像值当代次标签，改完地址旧条目整表作废。**顺带修掉一条登录死路**：`buildOAuthURL()` 返回的授权页改走镜像主站（`BangumiURL.mainSiteURL`，路径与 `client_id` / `redirect_uri` / `state` 原样保留）——API 镜像好了而 `bgm.tv` 打不开时用户仍然登不进去。
+  - **TMDB 侧**（`Packages/MetadataKit`）：新增 `TMDbEndpoints`（API 根 + 图片根的值类型）与 `TMDbEndpointSettings`（读键 + 纯解析）。`TMDbClient` 的 API 根改为构造时注入的 `endpointProvider()`（**每次请求现取**，已装好的客户端不用重启就跟着改）；`TMDbImageSize.url` 默认读设置、另给显式 `endpoints:` 重载；图片根只填域名时补 `/t/p`，用户直接粘一张带档位的图会自动把档位段吃掉，否则会拼出 `…/w500/w342/xx.jpg`。**安全相关**：`DisplayMetadata.isTMDbImage` 的 host 判据跟着图片根走——原先写死 `image.tmdb.org`，镜像模式下每张海报都会被判成「服务端图」，把 Jellyfin 的 `Authorization` 发给镜像 CDN。
+  - **第三方入口同源**：「在浏览器中打开」的三处（Bangumi 条目详情工具栏、每日放送工具栏、详情页外链图标）改走 `BangumiURL.main`——指向打不开的域名等于一个必然失败的按钮。
+  - **图片防盗链**（`Packages/AppDesignKit`）：`ImagePipeline.makeRequest` 的 Bangumi 图床判据从 `host.contains("bgm.tv")` 换成 `bangumiReferer(forHost:)`：官方 `lain.bgm.tv` 仍发 `Referer: https://bgm.tv/`；镜像 `lain.<根域>` 推 `https://<根域>/`（含端口），否则镜像若沿用官方防盗链策略会整面 403；顺带堵掉 `bgm.tv.evil.example` 这类伪装域被当成官方图床的漏洞。
+  - **配置备份**：新增 `mirror` 模块（后加模块，老文件解码为 nil、导入时不动目标设备），五个键一起搬（两个开关 + 三个地址）；导入是**整段覆盖**（含清空），避免留下「开关开着、地址是上一台设备的」这种自相矛盾状态；维护页的导入确认弹窗同步列出「镜像源（Bangumi / TMDB 各自的线路）」。该段的解码**刻意容错**：`Codable` 合成解码器缺一个键就抛，代价是整份配置导不进来（连 TMDB Key、播放偏好一起丢），所以两个开关按「缺 = 关」处理，并认第一版单开关形态的 `enabled`。
+  - **测试**：`BangumiMirrorSettingsTests`（11 条，swift-testing：键字面量、开关/空值/非法值三种退化、根域派生四域名与端口、授权页改写与官方逐字返回）、`TMDbEndpointSettingsTests`（16 条：键字面量、两个根的规范化与非法值、逐项独立退化、客户端真的打到镜像 host、图片 host 判据随端点翻转）、`BangumiImageRefererTests`（7 条：官方 / 镜像 / 端口 / 伪装域）、`MirrorKeyContractTests` + `MirrorSettingsTests`（App 层：跨包键名逐个比对、**两个开关必须是两个键**、五行值预览互不串台、输入校验、两处复位各清自家键且不越界、镜像不再是子页且 `settings.mirror` 解析为 nil）、`ConfigBackupTests` 新增三条（五个键的镜像往返 + 老备份不动镜像 + 缺键/legacy 单开关形态容错）。同时把三处**依赖开发机偏好**的断言改成按生效端点拼期望值（`CollectionDetailTests` / `MetadataCacheIntegrationTests` / `DetailExternalLinksTests`）、包内 TMDB 用例统一显式传 `endpoints: .official`——否则本机一开镜像，这些用例会在正确的实现上变红。
+  - **验证**：`Scripts/clean.sh` → `SKIP_ERIKA_FETCH=1 Scripts/build-macos.sh debug` 通过（Build 618）；`xcodebuild test`（macOS）目标用例全绿；包测试 MetadataKit 63 条、BangumiKit 89 条、AppDesignKit 145 条全绿。
+  - **未含**：不做镜像探测与自动切换（可用性随网络与时间变化，内置任何一份清单都会在失效后变成误导）；不改 `next.bgm.tv` 的网关路径（弹弹play 网关是另一条链路，不受镜像影响）。
 - **内核弹幕渲染路线恢复：默认改回内核内置渲染器（liberika DFM+），设置 → 弹幕 页可切回 App 层渲染**
   （2026-08-25 因「在屏弹幕跳轨」被整体禁用，根因已定位并修复）。
   - **根因**：转换器当年给每条弹幕合成 `id`，内核拿它当 shell `stable_tracks` 的 key，viewport 重排时个别弹幕的轨道偏好互相顶掉 → 单独几条突然换位置。**修复 = 转换器不再输出 `id`**（匿名条目内核不保留逐条轨道记忆，重排时整体重排；考证见 `DanmakuJSONConverter.erikaJSON` 的注释）。随 liberika v0.3.0 换装恢复本判定。

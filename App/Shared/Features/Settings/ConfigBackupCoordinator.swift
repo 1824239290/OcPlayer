@@ -17,6 +17,8 @@ struct BackupSummary: Sendable, Equatable {
     var hasPlayback: Bool
     var hasDanmaku: Bool
     var hasGeneral: Bool
+    /// 备份里带镜像源配置（设置 → 镜像源的四个键）。
+    var hasMirror: Bool
     var exportedAtFormatted: String
     var deviceName: String?
 }
@@ -116,6 +118,14 @@ enum ConfigBackupCoordinator {
             episodeSortAscending: defaults.bool(forKey: SettingsKeys.episodeSortAscending, default: true)
         )
 
+        let mirrorConfig = MirrorBackupConfig(
+            bangumiEnabled: defaults.object(forKey: SettingsKeys.bangumiMirrorEnabled) as? Bool ?? false,
+            bangumiRootDomain: rawString(in: defaults, key: SettingsKeys.bangumiMirrorRootDomain),
+            tmdbEnabled: defaults.object(forKey: SettingsKeys.tmdbMirrorEnabled) as? Bool ?? false,
+            tmdbAPIBaseURL: rawString(in: defaults, key: SettingsKeys.tmdbMirrorAPIBaseURL),
+            tmdbImageBaseURL: rawString(in: defaults, key: SettingsKeys.tmdbMirrorImageBaseURL)
+        )
+
         return AppConfigBackup(
             formatVersion: formatVersion,
             exportedAt: Date(),
@@ -124,7 +134,8 @@ enum ConfigBackupCoordinator {
             tmdb: tmdbConfig,
             playback: playbackConfig,
             danmaku: danmakuConfig,
-            general: generalConfig
+            general: generalConfig,
+            mirror: mirrorConfig
         )
     }
 
@@ -200,6 +211,16 @@ enum ConfigBackupCoordinator {
             }
         }
 
+        if let config = backup.mirror {
+            // 整段覆盖（含清空）：镜像是一条线路的自洽描述，缺项时留旧值会让
+            // 「开关开着、地址是上一台设备的」这种状态冒出来。
+            defaults.set(config.bangumiEnabled, forKey: SettingsKeys.bangumiMirrorEnabled)
+            writeOptionalString(config.bangumiRootDomain, key: SettingsKeys.bangumiMirrorRootDomain, into: defaults)
+            defaults.set(config.tmdbEnabled, forKey: SettingsKeys.tmdbMirrorEnabled)
+            writeOptionalString(config.tmdbAPIBaseURL, key: SettingsKeys.tmdbMirrorAPIBaseURL, into: defaults)
+            writeOptionalString(config.tmdbImageBaseURL, key: SettingsKeys.tmdbMirrorImageBaseURL, into: defaults)
+        }
+
         if let config = backup.general {
             defaults.set(config.bangumiEnabled, forKey: SettingsKeys.bangumiEnabled)
             defaults.set(config.moviepilotEnabled, forKey: SettingsKeys.moviepilotEnabled)
@@ -207,6 +228,24 @@ enum ConfigBackupCoordinator {
             if let sections = config.homeSections, !sections.isEmpty {
                 defaults.set(sections, forKey: SettingsKeys.homeSections)
             }
+        }
+    }
+
+    // MARK: - 小工具
+
+    /// 只取「用户显式设过」的字符串：空串 / 全空白 = 没设过（导出成 nil）。
+    private static func rawString(in defaults: UserDefaults, key: String) -> String? {
+        guard let raw = defaults.string(forKey: key) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// nil = 清掉这个键（回到「没设过」= 官方），不保留目标设备上的旧值。
+    private static func writeOptionalString(_ value: String?, key: String, into defaults: UserDefaults) {
+        if let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
         }
     }
 
@@ -279,6 +318,7 @@ enum ConfigBackupCoordinator {
             hasPlayback: backup.playback != nil,
             hasDanmaku: backup.danmaku != nil,
             hasGeneral: backup.general != nil,
+            hasMirror: backup.mirror != nil,
             exportedAtFormatted: formatter.string(from: backup.exportedAt),
             deviceName: backup.deviceName
         )

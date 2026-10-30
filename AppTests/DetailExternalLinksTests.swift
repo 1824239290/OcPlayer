@@ -1,5 +1,6 @@
-@testable import OcPlayer
+import BangumiKit
 import CoreModel
+@testable import OcPlayer
 import XCTest
 
 /// 详情页外部站点链接（Bangumi / TMDB）的解析。
@@ -94,9 +95,13 @@ final class DetailExternalLinksTests: XCTestCase {
     }
 
     func testBangumiURL() {
+        // 期望值按当前生效的主站拼（镜像源会换掉它）——写死 `bgm.tv` 会让
+        // 「镜像已启用」的开发机上整条变红，而这里要钉的是路径与边界。
+        XCTAssertEqual(
+            ExternalMetadataLinks.bangumiURL(subjectID: 42)?.path, "/subject/42")
         XCTAssertEqual(
             ExternalMetadataLinks.bangumiURL(subjectID: 42)?.absoluteString,
-            "https://bgm.tv/subject/42")
+            BangumiURL.main(path: "subject/42").absoluteString)
         XCTAssertNil(ExternalMetadataLinks.bangumiURL(subjectID: nil))
         XCTAssertNil(ExternalMetadataLinks.bangumiURL(subjectID: 0))
         XCTAssertNil(ExternalMetadataLinks.bangumiURL(subjectID: -1))

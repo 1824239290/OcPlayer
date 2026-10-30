@@ -70,6 +70,26 @@ enum SettingsKeys {
     /// 诊断日志：详细（debug）档开关。关（默认）= 只落 info 及以上（状态迁移 / 失败）；
     /// 开 = 连守卫与中间态一起落盘，排障用。见 `DiagnosticsSettings`。
     static let diagnosticsVerbose = "dev.jumusu.ocplayer.diagnostics.verbose"
+    // MARK: - 镜像源（设置 → 镜像源）
+
+    /// Bangumi 镜像**开关**（默认关）。设置页在「设置 → Bangumi → 镜像源」里拨。
+    ///
+    /// ⚠️ 这些键由**域包直接读**（`BangumiURL.mirrorEnabledKey` /
+    /// `TMDbEndpointSettings.mirrorEnabledKey`）——App 只负责写。两侧字面量必须逐字
+    /// 一致，`MirrorKeyContractTests` 会逐个比对（写错一个字就是「开关拨了没反应」）。
+    ///
+    /// **两家各管各的**：镜像按线路配，Bangumi 与 TMDB 常常是两个不同的镜像提供方，
+    /// 用同一个开关只是巧合，不是约束。
+    static let bangumiMirrorEnabled = "dev.jumusu.ocplayer.bangumi.mirrorEnabled"
+    /// Bangumi 镜像根域（String，空 = 官方）。读到它的地方：`BangumiURL.domains`。
+    static let bangumiMirrorRootDomain = "dev.jumusu.ocplayer.bangumi.mirrorRootDomain"
+    /// TMDB 镜像**开关**（默认关）。设置页在「设置 → TMDB → 镜像源」里拨。
+    static let tmdbMirrorEnabled = "dev.jumusu.ocplayer.tmdb.mirrorEnabled"
+    /// TMDB API 镜像根（String，空 = 官方）。读到它的地方：`TMDbEndpointSettings`。
+    static let tmdbMirrorAPIBaseURL = "dev.jumusu.ocplayer.tmdb.mirrorAPIBaseURL"
+    /// TMDB 图片镜像根（String，空 = 官方）。读到它的地方：`TMDbImageSize.url`。
+    static let tmdbMirrorImageBaseURL = "dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL"
+
     /// 更新检查：上一次拿到结果的时间（timeIntervalSince1970），自动检查的 24h 节流依据。
     static let updateLastCheckedAt = "dev.jumusu.ocplayer.update.lastCheckedAt"
     /// 更新检查：用户选择忽略提醒的版本号。

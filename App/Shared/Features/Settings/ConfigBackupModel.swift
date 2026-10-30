@@ -38,6 +38,9 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
     var playback: PlaybackBackupConfig?
     var danmaku: DanmakuBackupConfig?
     var general: GeneralBackupConfig?
+    /// 镜像源（`SettingsKeys.bangumiMirrorEnabled` 等五个键）。**后加的模块**：
+    /// 老文件没有这一段，解码成 nil，导入时保持目标设备现状。
+    var mirror: MirrorBackupConfig?
 
     init(
         formatVersion: Int = 1,
@@ -47,7 +50,8 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
         tmdb: TMDbBackupConfig? = nil,
         playback: PlaybackBackupConfig? = nil,
         danmaku: DanmakuBackupConfig? = nil,
-        general: GeneralBackupConfig? = nil
+        general: GeneralBackupConfig? = nil,
+        mirror: MirrorBackupConfig? = nil
     ) {
         self.formatVersion = formatVersion
         self.exportedAt = exportedAt
@@ -57,6 +61,70 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
         self.playback = playback
         self.danmaku = danmaku
         self.general = general
+        self.mirror = mirror
+    }
+}
+
+/// 镜像源（设置 → Bangumi / TMDB 各自的「镜像源」段，共五个键）。
+///
+/// 五件事一起搬，因为它们描述的是**两条线路**：只搬开关不搬地址，目标设备会带着
+/// 自己的旧地址打开镜像；只搬地址不搬开关，用户以为迁过去了其实没有。
+///
+/// **开关是两个**（`bangumi.mirrorEnabled` / `tmdb.mirrorEnabled`）：镜像按线路配，
+/// 两家常常是不同的提供方，共用一个开关只是巧合。
+///
+/// 地址为空时存 nil（而不是空串）：语义上「没设过」与「设成空」相同（都走官方），
+/// 但 nil 让导出的 JSON 更干净、也避免下游把空串当坏值。
+struct MirrorBackupConfig: Codable, Sendable, Equatable {
+    /// `dev.jumusu.ocplayer.bangumi.mirrorEnabled`。
+    var bangumiEnabled: Bool
+    /// `dev.jumusu.ocplayer.bangumi.mirrorRootDomain`（原始输入，不做规范化）。
+    var bangumiRootDomain: String?
+    /// `dev.jumusu.ocplayer.tmdb.mirrorEnabled`。
+    var tmdbEnabled: Bool
+    /// `dev.jumusu.ocplayer.tmdb.mirrorAPIBaseURL`。
+    var tmdbAPIBaseURL: String?
+    /// `dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL`。
+    var tmdbImageBaseURL: String?
+
+    /// **容错解码**：`Codable` 合成的解码器要求每个非可选键都在，缺一个就抛
+    /// `keyNotFound` —— 而这里抛出的代价是**整份配置导不进来**（顶层 `decode` 直接
+    /// 失败），不只是镜像这一段丢了。备份是用户手里的实体文件，宁可少搬一段也不要
+    /// 整份报废，所以两个开关按「缺 = 关」处理。
+    ///
+    /// 顺带认第一版（未发布）的单开关形态 `enabled`：那一版只在开发机上存在过，
+    /// 但用户手上可能真有一份导出的 JSON，认它一行代码的成本远低于解释「为什么
+    /// 你的备份坏了」。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // 第一版的单开关放在**另一个键类型**里读：把 `enabled` 塞进 `CodingKeys`
+        // 会让合成的 `encode(to:)` 对不上属性、整个类型不再 Encodable。
+        let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
+            .decodeIfPresent(Bool.self, forKey: .enabled)
+        bangumiEnabled = try container.decodeIfPresent(Bool.self, forKey: .bangumiEnabled) ?? legacy ?? false
+        bangumiRootDomain = try container.decodeIfPresent(String.self, forKey: .bangumiRootDomain)
+        tmdbEnabled = try container.decodeIfPresent(Bool.self, forKey: .tmdbEnabled) ?? legacy ?? false
+        tmdbAPIBaseURL = try container.decodeIfPresent(String.self, forKey: .tmdbAPIBaseURL)
+        tmdbImageBaseURL = try container.decodeIfPresent(String.self, forKey: .tmdbImageBaseURL)
+    }
+
+    /// 第一版（未发布）的单开关：`{"enabled": true, ...}`。只读，永不写出。
+    private enum LegacyCodingKeys: String, CodingKey {
+        case enabled
+    }
+
+    init(
+        bangumiEnabled: Bool = false,
+        bangumiRootDomain: String? = nil,
+        tmdbEnabled: Bool = false,
+        tmdbAPIBaseURL: String? = nil,
+        tmdbImageBaseURL: String? = nil
+    ) {
+        self.bangumiEnabled = bangumiEnabled
+        self.bangumiRootDomain = bangumiRootDomain
+        self.tmdbEnabled = tmdbEnabled
+        self.tmdbAPIBaseURL = tmdbAPIBaseURL
+        self.tmdbImageBaseURL = tmdbImageBaseURL
     }
 }
 

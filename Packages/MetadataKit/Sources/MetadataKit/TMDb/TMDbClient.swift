@@ -46,7 +46,12 @@ public enum TMDbError: Error, Equatable {
 ///    而不是每集一个请求——这是控制配额的关键。
 public struct TMDbClient: Sendable {
 
-    public static let baseURL = URL(string: "https://api.themoviedb.org/3")!
+    /// 官方 API 根（镜像未设置时的常值）。
+    ///
+    /// **请求实际用的根不是它**：是构造时注入的 `endpointProvider()`，生产实现每次
+    /// 请求现读 `TMDbEndpointSettings`（设置 → 镜像源 改完即时生效）。这个名字保留
+    /// 下来只是为了给「官方是谁」一个可引用的常量（文档、默认值、回退值）。
+    public static let baseURL = TMDbEndpoints.official.apiBaseURL
 
     /// 详情一次性带回来的关联块：演员表 / 图片 / 外部 id（IMDb）/ 分级。
     /// 用 `append_to_response` 把 4 个请求压成 1 个。
@@ -57,18 +62,26 @@ public struct TMDbClient: Sendable {
     private let limiter: TMDbRateLimiter
     private let retryPolicy: RetryPolicy
     private let logger: DiagnosticLogger
+    /// 每次请求现取生效端点。**不是构造时快照**：设置页改镜像地址后，
+    /// 已经装好的客户端（`TMDbCoordinator` 在 attach 时建一次）也要立刻跟上，
+    /// 否则用户得重启 App 才生效。
+    private let endpointProvider: @Sendable () -> TMDbEndpoints
 
     public init(
         session: URLSession,
         credentials: any TMDbCredentialProviding,
         limiter: TMDbRateLimiter = TMDbRateLimiter(),
-        retryPolicy: RetryPolicy = RetryPolicy(attempts: 3)
+        retryPolicy: RetryPolicy = RetryPolicy(attempts: 3),
+        endpointProvider: (@Sendable () -> TMDbEndpoints)? = nil
     ) {
         self.credentials = credentials
         self.client = HTTPClient(session: session, category: "TMDB")
         self.limiter = limiter
         self.retryPolicy = retryPolicy
         self.logger = NetworkLog.logger(category: "TMDB")
+        // 不传就用生产实现（读 `UserDefaults`）。包内用例一律显式传，
+        // 于是「镜像生效」这件事可以离线断言，且不受本机偏好影响。
+        self.endpointProvider = endpointProvider ?? { TMDbEndpointSettings().endpoints }
     }
 
     /// 是否已配置（未配置时所有方法都抛 `.notConfigured`，调用方应据此整体跳过）。
@@ -165,7 +178,8 @@ public struct TMDbClient: Sendable {
         guard let key = credentials.apiKey() else { throw TMDbError.notConfigured }
 
         var components = URLComponents(
-            url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+            url: endpointProvider().apiBaseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false)
         var query = extraQuery
         query.append(URLQueryItem(name: "language", value: language))
         var headers: [String: String] = ["Accept": "application/json"]

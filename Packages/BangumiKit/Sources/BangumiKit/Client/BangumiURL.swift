@@ -103,6 +103,23 @@ public struct BangumiDomains: Hashable, Sendable {
 
 /// URL 构建入口。
 public enum BangumiURL {
+    // MARK: - 镜像源（App 设置页与本包之间的唯一契约）
+
+    /// Bangumi 镜像**开关**（Bool）。设置页在「设置 → Bangumi → 镜像源」里写它。
+    ///
+    /// 与 TMDB 的开关**各管各的**（不是同一个键）：镜像按线路配，两家镜像往往
+    /// 是两个不同的提供方，同时开、同时关只是巧合而不是约束。
+    /// `AppTests.MirrorKeyContractTests` 钉住本常量与 `SettingsKeys` 逐字相等
+    /// （写错一个字就是「开关拨了没反应」）。
+    public static let mirrorEnabledKey = "dev.jumusu.ocplayer.bangumi.mirrorEnabled"
+
+    /// 镜像**根域**（String）。形如 `bangumi.lat` 或 `https://bangumi.lat/`，
+    /// 解析时只取 host（+ 端口）：API 走 `api.<root>`、图床走 `lain.<root>`、
+    /// 网关走 `next.<root>`、主站走 `<root>`（见 `BangumiDomains(mirrorRootDomain:)`）。
+    ///
+    /// 缺键 / 空串 / 解析不出 host / 总开关关闭 → 官方域名（语义退化到未配置）。
+    public static let mirrorRootDomainKey = "dev.jumusu.ocplayer.bangumi.mirrorRootDomain"
+
     /// 官方域名（镜像未设置时的常值）。
     ///
     /// ## 这里**故意没有**记忆化（实测结论，与清单建议相反）
@@ -113,17 +130,19 @@ public enum BangumiURL {
     /// - `BangumiDomains(mirrorRootDomain:)` 本体：**0.55 µs**（nil，提前返回 `.official`）/ **2.0 µs**（已设镜像）
     /// - NSLock 加解锁一对：**~0.01 µs**（无争用）
     ///
-    /// **镜像未设置（= 当前现实，见下）**：记忆化 0.559 vs 不缓存 0.547 µs —— 净收益为零。
+    /// **镜像未设置**：记忆化 0.559 vs 不缓存 0.547 µs —— 净收益为零。
     /// **已设镜像**：记忆化 0.656 vs 不缓存 1.996 µs —— 约 **3×** 收益。
     ///
-    /// 所以这不是「永远不该缓存」，而是**当前形态下不值得**：镜像键全仓只有读、没有写，
-    /// 走的是 `nil` 那条提前返回的廉价分支。**若将来接上镜像写入口，应重开这个决定。**
+    /// 所以这不是「永远不该缓存」，而是**当前形态下不值得**：镜像写入口（设置 → 镜像源）
+    /// 只在用户改设置时写一次，读路径每次采样——而这正是图片 URL 缓存代次失效的前提
+    /// （见 `ImageURLStringCache`）。若真要把 `domains` 提成静态量，**必须同时给它
+    /// 一条「镜像变更」失效通路**，否则改完设置要重启才生效。
     ///
     /// 另外：`domains` 的主要调用点是 `api` / `next` / `main`（BangumiServices 与
     /// AuthService 共 10 处），只有 1 处在 `imageURLString` 内部 —— 早先这里写反了。
     /// （`BangumiSubjectImages.resized` 那处是死代码，全仓无调用者。）
     public static nonisolated var domains: BangumiDomains {
-        BangumiDomains(mirrorRootDomain: mirrorRootDomain)
+        BangumiDomains(mirrorRootDomain: activeMirrorRootDomain)
     }
 
     /// `imageURLString` 的进程级记忆化（见该函数注释）。
@@ -162,24 +181,27 @@ public enum BangumiURL {
     /// 是 `URLComponents(string:)` 解析与重建。所以只记忆化 `domains`（清单的建议）
     /// 最多省 15%，等于没修。真正省下的是把整条返回值缓存起来。
     public static nonisolated func imageURLString(from rawValue: String) -> String {
-        imageURLString(from: rawValue, mirror: mirrorRootDomain)
+        imageURLString(from: rawValue, mirror: activeMirrorRootDomain)
     }
 
-    /// 带显式镜像的实现。生产入口把 `mirrorRootDomain` 传进来；
+    /// 带显式镜像的实现。生产入口把 `activeMirrorRootDomain` 传进来；
     /// 用例也能用任意镜像值驱动它，从而验证「代次标签与计算用同一个值」这条语义
     /// （不必去改 `UserDefaults.standard` 的全局键 —— 那在并行测试下会串台）。
     ///
-    /// ⚠️ 生产入口那一行**必须**传 `mirrorRootDomain`：传 `nil` 就等于关掉失效
+    /// ⚠️ 生产入口那一行**必须**传 `activeMirrorRootDomain`：传 `nil` 就等于关掉失效
     /// （审查的 N12 变异正是这个）。
     ///
-    /// **这条在测试里抓不到，是已知限制**：镜像键全仓只有读、没有写，测试环境里
-    /// `mirrorRootDomain` 恒为 `nil`，所以「传 `mirrorRootDomain`」与「传 `nil`」
-    /// 结果完全相同 —— 任何用例都无法区分。能测的只有「`compose` 用了传进来的值」
+    /// **这条在包测试里抓不到，是已知限制**：并行跑用例时不能改全局键（会串台），
+    /// 所以包内环境里 `activeMirrorRootDomain` 恒为 `nil`，「传 `activeMirrorRootDomain`」
+    /// 与「传 `nil`」结果完全相同 —— 包内用例只能测到「`compose` 用了传进来的值」
     /// （`entryPointUsesInjectedMirrorForBothTagAndComposition` 钉住了这条）。
+    /// 「总开关 / 空值 / 非法值 → 官方」的判定由纯函数
+    /// `resolvedMirrorRootDomain(enabled:rawValue:)` 单独覆盖（设置页写键之后的真实
+    /// 生效路径就是它）。
     ///
     /// 真正的防线是**结构**而不是测试：入口那一行是唯一的采样点，改它等于改语义，
-    /// 代码评审必须看住。若将来接上镜像写入口，务必同时补一条「设了镜像后入口
-    /// 返回镜像域名」的用例（届时它就能抓到这个变异了）。
+    /// 代码评审必须看住。App 侧另有一条端到端钉子
+    /// （`AppTests.MirrorSettingsTests` 断言设置页写下的键与两个包读的键是同一批）。
     static nonisolated func imageURLString(from rawValue: String, mirror: String?) -> String {
         // 代次标签与计算**用同一个 mirror 值**（参数进来的那个）。早先 compose 内部
         // 又走 `BangumiURL.domains` 重读一次 UserDefaults，两次读之间镜像若改变，
@@ -225,12 +247,49 @@ public enum BangumiURL {
 
     /// 测试用：按当前镜像重算（等价于生产路径的一次未命中计算）。
     static nonisolated func composeImageURLStringWithCurrentMirror(from rawValue: String) -> String {
-        composeImageURLString(from: rawValue, mirror: mirrorRootDomain)
+        composeImageURLString(from: rawValue, mirror: activeMirrorRootDomain)
     }
 
-    private static nonisolated var mirrorRootDomain: String? {
-        // 镜像根域由 App 层在启动时写入；默认 nil 即官方域名。
-        UserDefaults.standard.string(forKey: "dev.jumusu.ocplayer.bangumi.mirrorRootDomain")
+    /// 生效中的镜像根域：**总开关关闭 / 缺键 / 空值 / 非法值一律 nil**（= 官方域名）。
+    ///
+    /// 每次调用都现读 `UserDefaults`（读路径是 0.3 µs 级，见 `domains` 注释）：
+    /// 设置页改完即时生效，不需要重启；`imageURLString` 以它当代次标签，
+    /// 值一变旧缓存条目自动作废（见 `ImageURLStringCache`）。
+    public static nonisolated var activeMirrorRootDomain: String? {
+        let defaults = UserDefaults.standard
+        return resolvedMirrorRootDomain(
+            enabled: defaults.bool(forKey: mirrorEnabledKey),
+            rawValue: defaults.string(forKey: mirrorRootDomainKey))
+    }
+
+    /// 纯解析（用例直接驱动，不碰全局键）：三个退化条件各一条。
+    static nonisolated func resolvedMirrorRootDomain(enabled: Bool, rawValue: String?) -> String? {
+        guard enabled else { return nil }
+        return BangumiDomains.normalizedRootDomain(rawValue)
+    }
+
+    /// 由**用户浏览器**打开的主站页面（今天只有 OAuth 授权页）改走镜像主站。
+    ///
+    /// 为什么单独一条：登录是整条链路里唯一必须由浏览器完成的一步。`api.` / `lain.`
+    /// 都镜像好了、`bgm.tv` 却打不开的话，用户仍然登不进去——镜像了 API 却登不了录，
+    /// 等于没用。所以授权页的 host 换成根域，**路径与查询原样保留**
+    /// （`client_id` / `redirect_uri` / `state` 都在查询里，换 host 不改语义）。
+    ///
+    /// 官方路线原样返回（不重写、不改 scheme）。
+    public static nonisolated func mainSiteURL(forOfficial url: URL) -> URL {
+        rewrittenMainSiteURL(url, mirrorRootDomain: activeMirrorRootDomain)
+    }
+
+    /// 显式镜像版本（用例直接驱动，不碰全局键）。
+    static nonisolated func rewrittenMainSiteURL(_ url: URL, mirrorRootDomain: String?) -> URL {
+        guard let root = mirrorRootDomain,
+              let target = BangumiDomains.hostAndPort(from: root),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url }
+        components.scheme = HTTPS
+        components.host = target.host
+        components.port = target.port
+        return components.url ?? url
     }
 }
 

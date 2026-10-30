@@ -132,7 +132,9 @@ public actor BangumiAPIClient {
         guard let url = URL(string: payload.authorizeUrl), !payload.authorizeUrl.isEmpty else {
             throw BangumiError(notice: "网关返回的授权地址无效")
         }
-        return url
+        // 镜像模式下改走镜像主站：授权页是唯一由用户浏览器打开的地址，
+        // `bgm.tv` 打不开的话镜像了 API 也登不进去（见 `BangumiURL.mainSiteURL`）。
+        return BangumiURL.mainSiteURL(forOfficial: url)
     }
 
     public func exchangeForAccessToken(code: String, state: String) async throws -> UInt64 {

@@ -623,14 +623,14 @@ public final class ImagePipeline: @unchecked Sendable {
         let targetURL = url
         var request = URLRequest(url: targetURL)
         request.cachePolicy = .returnCacheDataElseLoad
-        if let host = targetURL.host, host.contains("bgm.tv") {
+        if let host = targetURL.host, let referer = Self.bangumiReferer(forHost: host) {
             // bgm 图床按浏览器 UA + Referer 防盗链；其它图源（含自家 Jellyfin）用项目统一 UA，
             // 别把假 UA 无条件下发给所有图片请求（与服务端指纹约定不一致，也容易被当爬虫）。
             request.setValue(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
                 forHTTPHeaderField: "User-Agent"
             )
-            request.setValue("https://bgm.tv/", forHTTPHeaderField: "Referer")
+            request.setValue(referer, forHTTPHeaderField: "Referer")
         } else {
             request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         }
@@ -638,6 +638,24 @@ public final class ImagePipeline: @unchecked Sendable {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    /// Bangumi 图床的 Referer：官方 `lain.bgm.tv` 与**任意镜像** `lain.<root>` 都成立。
+    ///
+    /// 判据只认图床形态（`lain.` 前缀）与官方主站域：镜像模式下 host 变成
+    /// `lain.bangumi.lat`，若还按老写法 `host.contains("bgm.tv")` 判，就**不再发**
+    /// Referer——镜像若沿用了官方防盗链策略会直接 403，整面海报裂成占位块。
+    /// 反过来，主站域按「去掉 `lain.` 的那一段」推：`lain.bangumi.lat` → `https://bangumi.lat/`。
+    ///
+    /// 返回值同时是「要不要用浏览器 UA」的开关（nil = 非 Bangumi 图源）。
+    static func bangumiReferer(forHost host: String) -> String? {
+        let lowered = host.lowercased()
+        if lowered.hasPrefix("lain.") {
+            let root = String(lowered.dropFirst("lain.".count))
+            if !root.isEmpty { return "https://\(root)/" }
+        }
+        if lowered == "bgm.tv" || lowered.hasSuffix(".bgm.tv") { return "https://bgm.tv/" }
+        return nil
     }
 
     private func fetch(_ request: URLRequest, cacheKey: String, maxPixelSize: Int? = nil) async throws -> PlatformImage? {

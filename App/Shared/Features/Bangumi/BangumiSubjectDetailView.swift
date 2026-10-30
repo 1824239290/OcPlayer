@@ -752,9 +752,9 @@ withAnimation(reduceMotion ? nil : Motion.standard) {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
             Button {
-                if let url = URL(string: "https://bgm.tv/subject/\(subjectID)") {
-                    openURL(url)
-                }
+                // 走 `BangumiURL.main` 而不是字面量 `bgm.tv`：镜像模式下主站也不可达，
+                // 「在浏览器中打开」不该把用户送到一个打不开的域名上。
+                openURL(BangumiURL.main(path: "subject/\(subjectID)"))
             } label: {
                 Image(systemName: "safari")
             }
