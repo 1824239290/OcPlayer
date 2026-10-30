@@ -290,6 +290,62 @@ final class ConfigBackupTests: XCTestCase {
 
     // MARK: - 损坏文件防御
 
+    // MARK: - 镜像源：导出 → 序列化 → 恢复
+
+    /// 镜像源是**后加**的模块：导出要把五个键一起带走，恢复要整段覆盖
+    /// （包括把目标设备上的旧地址清掉，否则会留下「开关开着、地址是上一台机器的」
+    /// 这种自相矛盾的状态）。两家的开关各自独立搬。
+    func testExportAndImportMirrorConfig() throws {
+        let source = try makeDefaults("mirror-source")
+        // 只开 Bangumi 的镜像、只填它的根域；TMDB 的开关保持关闭。
+        source.set(true, forKey: SettingsKeys.bangumiMirrorEnabled)
+        source.set("bangumi.lat", forKey: SettingsKeys.bangumiMirrorRootDomain)
+        source.set("https://api.tmdb.org/3", forKey: SettingsKeys.tmdbMirrorAPIBaseURL)
+        // 图片地址留空 → 导出成 nil（不是空串）
+        let original = TMDbCoordinator(defaults: source)
+
+        let backup = ConfigBackupCoordinator.makeBackup(tmdb: original, defaults: source)
+        XCTAssertEqual(backup.mirror?.bangumiEnabled, true)
+        XCTAssertEqual(backup.mirror?.bangumiRootDomain, "bangumi.lat")
+        XCTAssertEqual(backup.mirror?.tmdbEnabled, false)
+        XCTAssertEqual(backup.mirror?.tmdbAPIBaseURL, "https://api.tmdb.org/3")
+        XCTAssertNil(backup.mirror?.tmdbImageBaseURL)
+        XCTAssertTrue(ConfigBackupCoordinator.summary(of: backup).hasMirror)
+
+        let decoded = try ConfigBackupCoordinator.decode(ConfigBackupCoordinator.encode(backup))
+        XCTAssertEqual(decoded.mirror, backup.mirror, "镜像模块要能原样往返")
+
+        let target = try makeDefaults("mirror-target")
+        target.set("https://stale.example/t/p", forKey: SettingsKeys.tmdbMirrorImageBaseURL)
+        target.set(true, forKey: SettingsKeys.tmdbMirrorEnabled)
+        ConfigBackupCoordinator.applyBackup(
+            decoded, tmdb: TMDbCoordinator(defaults: target), defaults: target)
+
+        XCTAssertEqual(target.bool(forKey: SettingsKeys.bangumiMirrorEnabled), true)
+        XCTAssertEqual(target.string(forKey: SettingsKeys.bangumiMirrorRootDomain), "bangumi.lat")
+        XCTAssertEqual(target.bool(forKey: SettingsKeys.tmdbMirrorEnabled), false,
+                       "备份里 TMDB 镜像关着，目标设备不该被它自己的旧开关覆盖")
+        XCTAssertEqual(target.string(forKey: SettingsKeys.tmdbMirrorAPIBaseURL), "https://api.tmdb.org/3")
+        XCTAssertNil(target.object(forKey: SettingsKeys.tmdbMirrorImageBaseURL),
+                     "备份里没有图片地址时，目标设备的旧地址必须被清掉")
+    }
+
+    /// 老备份（没有 mirror 段）导入时不能动目标设备的镜像设置。
+    func testOldBackupWithoutMirrorLeavesMirrorSettingsUntouched() throws {
+        let target = try makeDefaults("mirror-legacy")
+        target.set(true, forKey: SettingsKeys.bangumiMirrorEnabled)
+        target.set("legacy.example", forKey: SettingsKeys.bangumiMirrorRootDomain)
+
+        let backup = AppConfigBackup(
+            formatVersion: 1, exportedAt: Date(), appVersion: "0.2.1",
+            general: GeneralBackupConfig())
+        ConfigBackupCoordinator.applyBackup(
+            backup, tmdb: TMDbCoordinator(defaults: target), defaults: target)
+
+        XCTAssertEqual(target.bool(forKey: SettingsKeys.bangumiMirrorEnabled), true)
+        XCTAssertEqual(target.string(forKey: SettingsKeys.bangumiMirrorRootDomain), "legacy.example")
+    }
+
     func testInvalidJSONThrows() {
         XCTAssertThrowsError(try ConfigBackupCoordinator.decode(Data())) { error in
             XCTAssertEqual(error as? ConfigBackupError, .emptyData)

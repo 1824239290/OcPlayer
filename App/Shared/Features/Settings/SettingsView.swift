@@ -28,6 +28,10 @@ struct SettingsView: View {
     @AppStorage(ClientIdentity.customUserAgentKey) private var customUserAgent = ""
     /// 首页栏目：只用于值预览，编辑在「首页栏目」子页。
     @AppStorage(SettingsKeys.homeSections) private var homeSectionsRaw = HomeSectionPreference.defaultRaw
+    /// 镜像开关：只用于值预览（「已启用」后面挂一个镜像标记），编辑在各自子页里
+    /// ——Bangumi 的镜像在 Bangumi 页、TMDB 的在 TMDB 页（用户 2026-10-30 口径）。
+    @AppStorage(SettingsKeys.bangumiMirrorEnabled) private var bangumiMirrorEnabled = false
+    @AppStorage(SettingsKeys.tmdbMirrorEnabled) private var tmdbMirrorEnabled = false
 
     var body: some View {
         // **2026-10-22（B 方案：玻璃卡片流）**：设置页整体脱离 `Form`，改成
@@ -65,7 +69,7 @@ struct SettingsView: View {
         case .jellyfin: jellyfinValue
         case .bangumi: bangumiValue
         case .moviepilot: moviePilotValue
-        case .tmdb: app.tmdb.isConfigured ? "已启用" : "未启用"
+        case .tmdb: tmdbValue
         case .network: customUserAgent.isEmpty ? "默认 UA" : "自定义 UA"
         case .playback: PlaybackEngineRegistry.selected?.displayName
         case .danmaku: danmakuValue
@@ -84,10 +88,15 @@ struct SettingsView: View {
 
     /// 以 `isAuthenticated` 为准（登录的唯一门控信号），与子页口径一致：
     /// 资料没拉回来时显示「已登录」而不是误报「未登录」。
+    ///
+    /// 镜像开着时在后面挂一个「镜像」标记：镜像配错时的第一症状是「首页空白但设置说
+    /// 已登录」，把线路状态摆到一级页能省掉一轮「是不是代理没开」的试错。
     private var bangumiValue: String {
         guard bangumiEnabled else { return "已关闭" }
-        if let profile = bangumi.profile { return profile.name }
-        return bangumi.isAuthenticated ? "已登录" : "未登录"
+        let base: String
+        if let profile = bangumi.profile { base = profile.name }
+        else { base = bangumi.isAuthenticated ? "已登录" : "未登录" }
+        return bangumiMirrorEnabled ? base + "（镜像）" : base
     }
 
     /// 三态取自 `integrationState`，与分区首页同一判据（见子页同名注释）。
@@ -98,6 +107,12 @@ struct SettingsView: View {
         case .loggedOut: "未登录"
         case .ready: "已登录"
         }
+    }
+
+    /// TMDB：配了 Key 才算启用；镜像开着时补一个标记（同 `bangumiValue`）。
+    private var tmdbValue: String {
+        guard app.tmdb.isConfigured else { return "未启用" }
+        return tmdbMirrorEnabled ? "已启用（镜像）" : "已启用"
     }
 
     private var danmakuValue: String {

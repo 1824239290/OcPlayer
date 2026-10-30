@@ -485,6 +485,9 @@ private struct ConfigBackupSection: View {
         if summary.hasGeneral {
             items.append("• 常规偏好")
         }
+        if summary.hasMirror {
+            items.append("• 镜像源（Bangumi / TMDB 各自的线路）")
+        }
         let fromDevice = summary.deviceName.map { "（来自 \($0)）" } ?? ""
         return "导出时间: \(summary.exportedAtFormatted)\(fromDevice)\n\n包含内容:\n"
             + items.joined(separator: "\n")

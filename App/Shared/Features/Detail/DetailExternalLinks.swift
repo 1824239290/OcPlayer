@@ -74,9 +74,12 @@ enum ExternalMetadataLinks {
     }
 
     /// Bangumi 条目地址（与 App 内 Bangumi 条目页的「在浏览器中打开」同源）。
+    ///
+    /// 走 `BangumiURL.main`（= 镜像开启时的镜像主站）：国内直连 `bgm.tv` 不通时，
+    /// 这个图标点进去也得能打开，否则它只是一个必然失败的按钮。
     static func bangumiURL(subjectID: Int?) -> URL? {
         guard let subjectID, subjectID > 0 else { return nil }
-        return URL(string: "https://bgm.tv/subject/\(subjectID)")
+        return BangumiURL.main(path: "subject/\(subjectID)")
     }
 
     /// 详情页要展示的链接（Bangumi 在前，与页内区块顺序一致）。

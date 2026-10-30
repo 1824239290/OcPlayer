@@ -285,35 +285,54 @@ public enum DisplayMetadata {
     ///
     /// - Parameter requestedWidth: 调用点希望的最大宽度（如 400）；
     ///   TMDB 只认固定档位，故按 `TMDbImageSize` 映射。
+    /// - Parameter endpoints: 图片根。默认**现读设置**（镜像源），调用点照旧不用管；
+    ///   包内用例显式传 `.official`，于是断言与开发机上的镜像偏好无关。
     public static func posterURL(
         serverURL: URL?,
         overlay: TMDbOverlay?,
         requestedWidth: Int,
-        policy: TMDbImagePolicy
+        policy: TMDbImagePolicy,
+        endpoints: TMDbEndpoints = TMDbEndpointSettings().endpoints
     ) -> URL? {
         if serverURL != nil, !policy.replacesExisting { return serverURL }
         guard let overlay else { return serverURL }
         // TMDB 图**免鉴权**（CDN 不校验），所以取 URL 时不需要 auth 头；
         // 调用点传 authHeader 时应对 TMDB URL 传 nil，否则会给 CDN 发无意义的凭证。
-        return TMDbImageSize.url(path: overlay.posterPath, requestedWidth: requestedWidth) ?? serverURL
+        return TMDbImageSize.url(
+            path: overlay.posterPath,
+            size: TMDbImageSize.nearest(to: requestedWidth),
+            endpoints: endpoints) ?? serverURL
     }
 
     public static func backdropURL(
         serverURL: URL?,
         overlay: TMDbOverlay?,
         requestedWidth: Int,
-        policy: TMDbImagePolicy
+        policy: TMDbImagePolicy,
+        endpoints: TMDbEndpoints = TMDbEndpointSettings().endpoints
     ) -> URL? {
         if serverURL != nil, !policy.replacesExisting { return serverURL }
         guard let overlay else { return serverURL }
-        return TMDbImageSize.url(path: overlay.backdropPath, requestedWidth: requestedWidth) ?? serverURL
+        return TMDbImageSize.url(
+            path: overlay.backdropPath,
+            size: TMDbImageSize.nearest(to: requestedWidth),
+            endpoints: endpoints) ?? serverURL
     }
 
     /// 该 URL 是否来自 TMDB（决定要不要带服务端认证头）。
     ///
     /// 单独一个判断而不是在各调用点写 `url.host == "image.tmdb.org"`：
     /// 给 CDN 发 Jellyfin 的 `Authorization` 头既无意义、也把凭证多送一处。
+    ///
+    /// **host 必须跟设置里的图片根走**（镜像源）：写死官方域名的话，镜像模式下
+    /// 每张海报都会被判成「服务端图」，于是把 Jellyfin 的 token 发给镜像 CDN。
     public static func isTMDbImage(_ url: URL?) -> Bool {
-        url?.host == "image.tmdb.org"
+        isTMDbImage(url, endpoints: TMDbEndpointSettings().endpoints)
+    }
+
+    /// 显式端点版本（包内用例 / 需要固定判据的调用方）。
+    public static func isTMDbImage(_ url: URL?, endpoints: TMDbEndpoints) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host == endpoints.imageHost
     }
 }

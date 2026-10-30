@@ -13,6 +13,15 @@ import XCTest
 @MainActor
 final class CollectionDetailTests: XCTestCase {
 
+    /// 按**当前生效的图片根**拼 TMDB 图片地址（镜像源会换掉 host/前缀）。
+    /// 用例里不写死 `image.tmdb.org`：设了镜像的开发机上写死必红，
+    /// 而这里真正要钉的是「哪张图、哪个档位」。
+    static func tmdbImageURL(_ path: String, size: String) -> String {
+        TMDbEndpointSettings().endpoints.imageURL(
+            path: "/\(path)", size: TMDbImageSize(rawValue: size) ?? .w500
+        )?.absoluteString ?? ""
+    }
+
     private var directory: URL!
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -316,7 +325,10 @@ final class CollectionDetailTests: XCTestCase {
         await model.load()
 
         let url = app.collectionPosterURL(for: box, width: 400)
-        XCTAssertEqual(url?.absoluteString, "https://image.tmdb.org/t/p/w500/eva-poster.jpg",
+        // 期望值按**当前生效的图片根**拼（镜像源会换掉它）：这里要钉的是
+        // 「网格卡拿到的是 TMDB 合集海报、且 width 400 → w500」，不是官方 CDN 的
+        // 字面量——写死字面量会让设了镜像的开发机整片变红。
+        XCTAssertEqual(url?.absoluteString, Self.tmdbImageURL("eva-poster.jpg", size: "w500"),
                        "网格卡应拿到 TMDB 合集海报")
     }
 
@@ -343,7 +355,7 @@ final class CollectionDetailTests: XCTestCase {
         await app.resolveCollectionArtworkIfNeeded(for: box)
 
         XCTAssertEqual(app.collectionPosterURL(for: box, width: 400)?.absoluteString,
-                       "https://image.tmdb.org/t/p/w500/eva-poster.jpg",
+                       Self.tmdbImageURL("eva-poster.jpg", size: "w500"),
                        "width 400 取不小于它的最小档 = w500")
         XCTAssertEqual(stub.callCount("itemsPage"), 1, "列一次成员")
         XCTAssertTrue(app.collectionArtworkAttempted.contains(box.id))

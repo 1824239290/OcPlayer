@@ -255,9 +255,16 @@ public enum TMDbImageSize: String, Sendable, CaseIterable {
     ///
     /// **免鉴权**：图片 CDN 不需要 key，也不带我们的 Authorization 头
     /// （所以 `RemoteImage` 调用时 `authHeader` 传 nil）。
+    ///
+    /// **图片根来自设置（镜像源）**：`TMDbEndpointSettings` 每次现读键，改完即时生效；
+    /// 用例要钉镜像时用 `url(path:size:endpoints:)` 显式注入，不碰全局键。
     public static func url(path: String?, size: TMDbImageSize) -> URL? {
-        guard let path, !path.isEmpty else { return nil }
-        return URL(string: "https://image.tmdb.org/t/p/\(size.rawValue)\(path)")
+        url(path: path, size: size, endpoints: TMDbEndpointSettings().endpoints)
+    }
+
+    /// 显式端点版本（包内用例 / 需要固定端点的调用方）。
+    public static func url(path: String?, size: TMDbImageSize, endpoints: TMDbEndpoints) -> URL? {
+        endpoints.imageURL(path: path, size: size)
     }
 
     /// 按请求宽度直接拼 URL 的便捷入口。

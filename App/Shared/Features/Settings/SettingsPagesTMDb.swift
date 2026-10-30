@@ -66,8 +66,14 @@ struct TMDbSettingsView: View {
                 // 去哪儿申请 Key、能不能直连，都是整段的说明而不是某个控件的注解 → 段脚，
                 // 两句相加成一个 Text。
                 Text("在 themoviedb.org 的账户设置里生成（免费）。v3 API Key 与 v4 Read Access Token 都支持，粘贴哪个都行。"
-                     + "需要能直连 api.themoviedb.org，图片走 image.tmdb.org（国内网络通常需要代理）。")
+                     + "默认直连 api.themoviedb.org、图片走 image.tmdb.org；国内连不上时不必挂全局代理——"
+                     + "用下面那张「镜像源」卡改线路即可，Key 与语言设置都不用动。")
             }
+
+            // 镜像源在**这一页**（用户 2026-10-30 口径：谁的镜像放谁的栏位里），
+            // 且刻意**放在 `isConfigured` 闸门之外**：镜像正是「连不上才需要改」的东西，
+            // 只在配好 Key 之后才出现等于让用户先撞一次墙再找开关。
+            TMDbMirrorSection()
 
             // 刻意**放在 `isConfigured` 闸门之外**：这一项的兜底来源是 Bangumi 章节，
             // 没配 TMDB key 但关联了 Bangumi 的用户同样会看到占位卡，也该找得到这个开关。
@@ -252,5 +258,100 @@ struct TMDbSettingsView: View {
         }
         return "上次：新补 \(result.enriched) · 跳过 \(result.skipped)"
             + " · 匹配不上 \(result.unmatched) · 失败 \(result.failed)"
+    }
+}
+
+// MARK: - TMDB 镜像源
+
+/// 「设置 → TMDB 元数据补全 → 镜像源」：只改 TMDB 的线路（API 根 + 图片根）。
+///
+/// 与 Bangumi 的镜像段同构（同一条「谁的镜像放谁的栏位」口径），差异只在
+/// TMDB 有**两个**根：API 与图片 CDN 是两个域名，镜像也可能只反代了其中一个，
+/// 所以两项各自独立退化——只填 API 时图片继续直连官方，不牵连。
+///
+/// 没有保存按钮：`@AppStorage` 写的就是 `TMDbEndpointSettings` 读的那三个键，
+/// 而客户端的端点提供方是**每次请求现取**的，下一个请求即生效。
+struct TMDbMirrorSection: View {
+    @AppStorage(SettingsKeys.tmdbMirrorEnabled) private var enabled = false
+    @AppStorage(SettingsKeys.tmdbMirrorAPIBaseURL) private var apiBase = ""
+    @AppStorage(SettingsKeys.tmdbMirrorImageBaseURL) private var imageBase = ""
+
+    var body: some View {
+        SettingsGlassSection("镜像源") {
+            Toggle("使用镜像源", isOn: $enabled)
+                .neutralSwitch()
+            SettingsNote(enabled
+                ? "TMDB 的 API 请求与海报/背景图都改走镜像；匹配、语言与缓存策略一概不变。"
+                : "当前直连官方域名（api.themoviedb.org / image.tmdb.org）。国内连不上时打开它并填镜像地址。")
+
+            if enabled {
+                SettingsGlassDivider()
+                SettingsFieldRow("API 地址") {
+                    TextField(
+                        "TMDB API 地址",
+                        text: $apiBase,
+                        prompt: Text("例：\(MirrorSettings.tmdbPresetAPIBase)")
+                    )
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                    #if os(macOS)
+                    .textFieldStyle(.roundedBorder)
+                    #endif
+                    .labelsHidden()
+                }
+                if let problem = MirrorSettings.tmdbAPIProblem(apiBase) {
+                    MirrorProblemLabel(problem)
+                }
+                SettingsGlassDivider()
+                SettingsFieldRow("图片地址") {
+                    TextField(
+                        "TMDB 图片地址",
+                        text: $imageBase,
+                        prompt: Text("例：\(MirrorSettings.tmdbPresetImageBase)")
+                    )
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    #endif
+                    #if os(macOS)
+                    .textFieldStyle(.roundedBorder)
+                    #endif
+                    .labelsHidden()
+                }
+                if let problem = MirrorSettings.tmdbImageProblem(imageBase) {
+                    MirrorProblemLabel(problem)
+                }
+                SettingsGlassDivider()
+                // 规范化之后的**实际请求地址**：镜像填得对不对，看这两行最快。
+                KeyValueRow(label: "当前 API", value: endpoints.apiBaseURL.absoluteString)
+                SettingsGlassDivider()
+                KeyValueRow(label: "当前图片", value: endpoints.imageBaseURL.absoluteString)
+                SettingsGlassDivider()
+                SettingsActionRow("填入官方备用域 \(MirrorSettings.tmdbPresetAPIBase)") {
+                    apiBase = MirrorSettings.tmdbPresetAPIBase
+                }
+                SettingsGlassDivider()
+                SettingsActionRow("恢复官方直连", role: .destructive) {
+                    MirrorSettings.resetTMDb()
+                    enabled = false
+                    apiBase = ""
+                    imageBase = ""
+                }
+            }
+        } footer: {
+            Text("两项都可以留空——留空的那一项走官方。API 地址填到「版本段」：只填域名会自动补 /3，"
+                 + "填了路径就原样使用（镜像可挂在 /tmdb/3 这类前缀下）。图片地址填到「尺寸段之前」："
+                 + "只填域名会自动补 /t/p；直接粘一张图也会自动把 /w500 这类档位段去掉。"
+                 + "两项各自独立；这里的改动不影响 Bangumi 的线路。")
+        }
+    }
+
+    /// 域包真正会用的两个根（开关关 / 单项非法 → 该项官方）。
+    private var endpoints: TMDbEndpoints {
+        MirrorSettings.tmdbEndpoints(enabled: enabled, apiRawValue: apiBase, imageRawValue: imageBase)
     }
 }

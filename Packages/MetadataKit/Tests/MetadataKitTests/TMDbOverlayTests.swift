@@ -238,7 +238,8 @@ final class TMDbOverlayTests: XCTestCase {
         let policy = TMDbImagePolicy()
 
         XCTAssertEqual(DisplayMetadata.posterURL(serverURL: server, overlay: o,
-                                                 requestedWidth: 400, policy: policy)?.host,
+                                                 requestedWidth: 400, policy: policy,
+                                                 endpoints: .official)?.host,
                        "image.tmdb.org", "默认 TMDB 优先：服务端有图也用 TMDB")
     }
 
@@ -252,7 +253,8 @@ final class TMDbOverlayTests: XCTestCase {
                                                  requestedWidth: 400, policy: policy), server,
                        "服务端有图 → 保留服务端")
         let tmdb = DisplayMetadata.posterURL(serverURL: nil, overlay: o,
-                                            requestedWidth: 400, policy: policy)
+                                            requestedWidth: 400, policy: policy,
+                                            endpoints: .official)
         XCTAssertEqual(tmdb?.absoluteString, "https://image.tmdb.org/t/p/w500/p.jpg",
                        "服务端缺图 → 用 TMDB，且按宽度映射档位（400→w500）")
     }
@@ -261,7 +263,8 @@ final class TMDbOverlayTests: XCTestCase {
         let server = URL(string: "http://server/x.jpg")!
         let o = overlay()
         let url = DisplayMetadata.posterURL(serverURL: server, overlay: o, requestedWidth: 400,
-                                            policy: TMDbImagePolicy(replacesExisting: true))
+                                            policy: TMDbImagePolicy(replacesExisting: true),
+                                            endpoints: .official)
         XCTAssertEqual(url?.host, "image.tmdb.org", "允许顶替时应换成 TMDB 图")
     }
 
@@ -270,7 +273,8 @@ final class TMDbOverlayTests: XCTestCase {
         let o = overlay(entity: entity(poster: nil))
         let server = URL(string: "http://server/x.jpg")!
         XCTAssertEqual(DisplayMetadata.posterURL(serverURL: server, overlay: o, requestedWidth: 400,
-                                                 policy: TMDbImagePolicy(replacesExisting: true)),
+                                                 policy: TMDbImagePolicy(replacesExisting: true),
+                                                 endpoints: .official),
                        server)
         XCTAssertNil(DisplayMetadata.posterURL(serverURL: nil, overlay: o, requestedWidth: 400,
                                               policy: TMDbImagePolicy()))
@@ -279,15 +283,17 @@ final class TMDbOverlayTests: XCTestCase {
     func testBackdropFollowsSameRule() {
         let o = overlay()
         let url = DisplayMetadata.backdropURL(serverURL: nil, overlay: o, requestedWidth: 1600,
-                                             policy: TMDbImagePolicy())
+                                             policy: TMDbImagePolicy(), endpoints: .official)
         XCTAssertEqual(url?.absoluteString, "https://image.tmdb.org/t/p/original/b.jpg")
     }
 
     /// 识别 TMDB 图：决定要不要带服务端认证头（给 CDN 发 Jellyfin 凭证无意义且多送一处）。
     func testIdentifiesTMDbImages() {
-        XCTAssertTrue(DisplayMetadata.isTMDbImage(URL(string: "https://image.tmdb.org/t/p/w500/x.jpg")))
-        XCTAssertFalse(DisplayMetadata.isTMDbImage(URL(string: "http://192.168.1.1:8096/Items/x/Images/Primary")))
-        XCTAssertFalse(DisplayMetadata.isTMDbImage(nil))
+        XCTAssertTrue(DisplayMetadata.isTMDbImage(
+            URL(string: "https://image.tmdb.org/t/p/w500/x.jpg"), endpoints: .official))
+        XCTAssertFalse(DisplayMetadata.isTMDbImage(
+            URL(string: "http://192.168.1.1:8096/Items/x/Images/Primary"), endpoints: .official))
+        XCTAssertFalse(DisplayMetadata.isTMDbImage(nil, endpoints: .official))
     }
 
     // MARK: - 实体键

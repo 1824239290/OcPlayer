@@ -546,7 +546,11 @@ final class MetadataCacheIntegrationTests: XCTestCase {
         let withStill = EpisodePlaceholder(number: 27, seasonNumber: 3,
                                            stillPath: "/s27.jpg", reason: .notInLibrary)
         let tmdb = model.placeholderThumbTarget(for: withStill, width: 400)
-        XCTAssertEqual(tmdb.url?.absoluteString, "https://image.tmdb.org/t/p/w500/s27.jpg")
+        XCTAssertEqual(
+            tmdb.url?.absoluteString,
+            TMDbEndpointSettings().endpoints.imageURL(
+                path: "/s27.jpg", size: .w500)?.absoluteString,
+            "剧照走 TMDB 图片根（镜像开启时是镜像地址），档位 w500")
         XCTAssertNil(tmdb.authHeader)
     }
 

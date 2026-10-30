@@ -473,9 +473,8 @@ struct BangumiCalendarView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             Button {
-                if let url = URL(string: "https://bgm.tv/calendar") {
-                    openURL(url)
-                }
+                // 同详情页：镜像模式下主站跟着换（见 `BangumiURL.main`）。
+                openURL(BangumiURL.main(path: "calendar"))
             } label: {
                 Image(systemName: "safari")
             }

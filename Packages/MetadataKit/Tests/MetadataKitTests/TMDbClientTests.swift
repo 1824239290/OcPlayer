@@ -321,11 +321,12 @@ final class TMDbClientTests: XCTestCase {
     }
 
     func testImageURLUsesPlaceholderFreeCDN() {
-        let url = TMDbImageSize.url(path: "/abc.jpg", size: .w500)
+        // 显式传官方端点：默认重载会读**设置**（镜像源），断言不该依赖开发机偏好。
+        let url = TMDbImageSize.url(path: "/abc.jpg", size: .w500, endpoints: .official)
         XCTAssertEqual(url?.absoluteString, "https://image.tmdb.org/t/p/w500/abc.jpg")
         // 空 path / nil 一律不产出 URL（分集常缺 still_path）
-        XCTAssertNil(TMDbImageSize.url(path: nil, size: .w500))
-        XCTAssertNil(TMDbImageSize.url(path: "", size: .w500))
+        XCTAssertNil(TMDbImageSize.url(path: nil, size: .w500, endpoints: .official))
+        XCTAssertNil(TMDbImageSize.url(path: "", size: .w500, endpoints: .official))
     }
 }
 

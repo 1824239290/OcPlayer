@@ -38,6 +38,9 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
     var playback: PlaybackBackupConfig?
     var danmaku: DanmakuBackupConfig?
     var general: GeneralBackupConfig?
+    /// 镜像源（`SettingsKeys.bangumiMirrorEnabled` 等五个键）。**后加的模块**：
+    /// 老文件没有这一段，解码成 nil，导入时保持目标设备现状。
+    var mirror: MirrorBackupConfig?
 
     init(
         formatVersion: Int = 1,
@@ -47,7 +50,8 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
         tmdb: TMDbBackupConfig? = nil,
         playback: PlaybackBackupConfig? = nil,
         danmaku: DanmakuBackupConfig? = nil,
-        general: GeneralBackupConfig? = nil
+        general: GeneralBackupConfig? = nil,
+        mirror: MirrorBackupConfig? = nil
     ) {
         self.formatVersion = formatVersion
         self.exportedAt = exportedAt
@@ -57,6 +61,44 @@ struct AppConfigBackup: Codable, Sendable, Equatable {
         self.playback = playback
         self.danmaku = danmaku
         self.general = general
+        self.mirror = mirror
+    }
+}
+
+/// 镜像源（设置 → Bangumi / TMDB 各自的「镜像源」段，共五个键）。
+///
+/// 五件事一起搬，因为它们描述的是**两条线路**：只搬开关不搬地址，目标设备会带着
+/// 自己的旧地址打开镜像；只搬地址不搬开关，用户以为迁过去了其实没有。
+///
+/// **开关是两个**（`bangumi.mirrorEnabled` / `tmdb.mirrorEnabled`）：镜像按线路配，
+/// 两家常常是不同的提供方，共用一个开关只是巧合。
+///
+/// 地址为空时存 nil（而不是空串）：语义上「没设过」与「设成空」相同（都走官方），
+/// 但 nil 让导出的 JSON 更干净、也避免下游把空串当坏值。
+struct MirrorBackupConfig: Codable, Sendable, Equatable {
+    /// `dev.jumusu.ocplayer.bangumi.mirrorEnabled`。
+    var bangumiEnabled: Bool
+    /// `dev.jumusu.ocplayer.bangumi.mirrorRootDomain`（原始输入，不做规范化）。
+    var bangumiRootDomain: String?
+    /// `dev.jumusu.ocplayer.tmdb.mirrorEnabled`。
+    var tmdbEnabled: Bool
+    /// `dev.jumusu.ocplayer.tmdb.mirrorAPIBaseURL`。
+    var tmdbAPIBaseURL: String?
+    /// `dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL`。
+    var tmdbImageBaseURL: String?
+
+    init(
+        bangumiEnabled: Bool = false,
+        bangumiRootDomain: String? = nil,
+        tmdbEnabled: Bool = false,
+        tmdbAPIBaseURL: String? = nil,
+        tmdbImageBaseURL: String? = nil
+    ) {
+        self.bangumiEnabled = bangumiEnabled
+        self.bangumiRootDomain = bangumiRootDomain
+        self.tmdbEnabled = tmdbEnabled
+        self.tmdbAPIBaseURL = tmdbAPIBaseURL
+        self.tmdbImageBaseURL = tmdbImageBaseURL
     }
 }
 
