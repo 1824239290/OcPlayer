@@ -6,6 +6,19 @@
 
 ### 改动
 
+- **详情页「在 MoviePilot 找资源」不再自己搜：改为跳到 MoviePilot 分区的搜索结果页，由用户挑条目后再「查资源」**
+  （用户口径三条：「详情页里的那个使用 moviepilot 找片点击后是直接搜索，其他地方的逻辑都是先调用 moviepilot 的搜索媒体，然后我手动选择 themoviedb 的或者 douban 的再开始搜索。详情页那种情况的话下载会导致 moviepilot 自动刮削缺 tmdbid 等等问题。所以你需要修改一下这个地方。」→「但我之前的风格不是这样的啊？」→「不应该出弹窗，而是直接去到 moviepilot 的搜索番剧的结果页面」）
+  - **根因**：资源搜索页下载时把 `MPMediaInfo.raw` **原样**回传成 `/download/` 的 `media_in`，MoviePilot 服务端靠里面的 `media_source` / `media_id` / `tmdb_id` 去刮削、改名、入库。详情页此前有两条近道：①条目带 `tmdbID` 时**本地拼**一个 `MPMediaInfo`（只有 `media_source` / `media_id` / `tmdb_id` / `title` / `type` / `year`，`poster_path`、`overview`、评分全缺，回来的媒体对象只有「我们自己以为的形状」）；②没有 `tmdbID` 时按标题搜一次后 `first { 年份吻合 } ?? first` **自动挑第一个**——而 `/media/search` 是多源聚合，第一条由服务端 `SEARCH_SOURCE` 决定，挑到 Douban 条目时对象里根本没有 `tmdb_id`。两条都会让下载后的自动刮削缺编号甚至认错条目。
+  - **最终改法（第三轮定稿）：详情页不产出任何媒体对象**。入口卡只做两件事——把片名写进 `AppModel.pendingMoviePilotQuery`、`switchSection(.moviepilot)`；MoviePilot 首页原有的消费点（`MoviePilotHomeView` 的 `.task(id: boundServerID)`）取走关键词、调 `/media/search`、渲染多源候选列表。用户在那页自己挑 TMDB / Douban 条目、点该条的「查资源」进站点资源搜索。**这条链与 Bangumi 详情页那颗「MoviePilot下载」完全同源**（同一个通道、同一个消费点），也是 MoviePilot 分区本来就有的原生动线。`MoviePilotResourceSection` 因此从「有状态的两级流程」退回到无状态：没有 `picked` / `isPicking` / sheet / `navigationDestination`，`DetailView` 的 `isResourcePresented` 与 `.coveredByPresented` 一并删除。
+  - **为什么不做弹窗选源**（第二轮方案，已被否）：用户口径明确「不应该出弹窗，而是直接去到 moviepilot 的搜索番剧的结果页面」。弹窗是同一个 `/media/search` 的二次包装，却新造了一套列表 UI（海报行、推荐标记、编号摘要），既与 MoviePilot 分区那页重复，又多一层「点了关掉才落地」的时序（`onDismiss` 里 `pushPresented`）。跳页方案让详情页只依赖既有组件。
+  - **版面沿用原样式**（第二轮口径「但我之前的风格不是这样的啊？」）：入口卡仍是那张液态玻璃卡（`.padding(12)` / `spacing: 3` / `.liquidGlassCard()` / `chevron.forward` 用 `.tertiary`），与改造前带 tmdbID 条目看到的那张卡逐项一致，也与详情页整页内容件（Bangumi 章节区、媒体信息）同源。第一版曾把它换成 `neutralProminentButton()` 实心黑胶囊——而改造前只有**缺 tmdbID 的罕见条目**才走那颗按钮，等于把多数条目的观感换掉了。`neutralProminentButton()` 在详情页这一处不再使用；其余 6 处（MoviePilot 首页门控 2 + 空态 1、Bangumi 首页 2、Bangumi 登录 1）都是门控 / 空态页上真正的实底主行动，原样保留。
+  - **顺带的搜索页改造**：①`MoviePilotHomeView` 消费 `pendingMoviePilotQuery` 时**同时写 `keyword`**（此前只写 `submittedKeyword`，会出现「有结果但搜索框空着」的错位；从详情页跳进来尤其显眼）；②搜索结果按 `MoviePilotMediaRanking.candidates(...)` 重排成 **TMDB 源优先**——`/media/search` 的顺序由服务端 `SEARCH_SOURCE` 配置决定，Douban 条目可能排第一，而 MoviePilot 的刮削链路以 `tmdb_id` 为锚点。这里**只调整展示顺序、不替用户选择**，每张卡仍是服务端返回的完整对象。
+  - **排序口径收进包里**（`MoviePilotKit/MoviePilotMediaRanking.swift`，纯函数可测）：同分按服务端原序；`tmdb_id` 与条目编号一致 +1000、TMDB 源 +100、年份吻合 +30、带 `tmdb_id` +10、类型吻合 +5；「推荐」门槛 100（只有 TMDB 源命中才够格）。`MPMediaInfo.sourceSummary` 把「这条会回传什么编号」写成一行文案，资源搜索页对缺 TMDB 编号的条目给橙色提示。
+  - **测试**：`MoviePilotKit` 全量 **77** 条绿（新增 `MoviePilotMediaRankingTests` 7 条：服务端把 Douban 排前面时 TMDB 源仍排第一且只有它被推荐、编号精确命中压过其它 TMDB 结果、年份/类型只微调顺序但**不**产生推荐、同分保持原序、`recommended` 在只有 Douban 候选时返回 nil、`sourceSummary` 四档取值、年份解析接受 `2023-09-29` 且优先 `title_year`）；`AppDesignKit` **148** 条绿；macOS scheme **773 通过 / 0 失败 / 19 跳过**。
+  - **文案收口（第四、五轮）**：先按用户口径「按钮下的那些描述可以去掉」删掉了我新加的两行解释（「跳到 MoviePilot 搜「片名」…」「选中的条目会随下载一起回传…」）；随后用户指出「好像少了什么」——删多了，把**改造前那句原有说明**也一并带走了。现在卡片回到「标题 + 一行说明」的原始形状：标题 `搜索站点资源并下载`、说明 `按标题搜、可选站点；下载完成后 MoviePilot 自动整理入库，稍后出现在媒体库`，两者都**逐字沿用改造前**。我那两句流程解释不再回来——这一步只需要说明「点下去会发生什么、结果落在哪」，不必复述跳页路线。编号回传仍有兜底：资源搜索页对缺 TMDB 编号的条目会当场给橙色提示。
+  - **未含**：不给资源搜索页加「换源」按钮（回 MoviePilot 页换即可）。
+
+
 - **新增自填镜像源：Bangumi 与 TMDB 的命中地址可改走镜像，国内网络不必再挂全局代理**
   （用户口径：「我们使用到了 bangumi 和 tmdb，但中国大陆的网络在没有代理的情况下会无法连接，你去设置里添加一个使用镜像源的选项吧，然后再完成项目对自定义镜像源的支持」；
   位置口径：「设置里的位置放到他们自己的栏位里面，比如 bangumi 的镜像源设置放到 bangumi 栏位里，tmdb 的同理」）。

@@ -161,6 +161,20 @@ struct MoviePilotResourceView: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(2)
                 }
+
+                // 下载时 media 会原样回传成 `media_in`，MoviePilot 靠它里面的
+                // `tmdb_id` 刮削；没有编号的条目（多半是 Douban / Bangumi 源）
+                // 下载后刮削会缺字段——进页面就说清，别等入库了才发现。
+                if media.tmdbId == nil {
+                    Label {
+                        Text("这条没有 TMDB 编号，下载完成后 MoviePilot 的自动刮削可能缺字段。换一条 TMDB 来源的条目可以避免。")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer()
         }

@@ -53,6 +53,19 @@ public struct MPMediaInfo: Sendable, Equatable, Identifiable {
         return URL(string: "https://image.tmdb.org/t/p/w500\(poster)")
     }
 
+    /// 回传编号摘要（选源面板用）：来源 + 该源的主键。
+    ///
+    /// 下载时 `raw` 原样回传成 `media_in`，MoviePilot 就是靠这几个编号去刮削的，
+    /// 所以「这条会带回什么编号」必须如实摆在候选人行里——缺 TMDB 编号那一条
+    /// 下载后刮削会缺字段，用户得看得见。
+    public var sourceSummary: String {
+        let source = (mediaSource ?? "?").uppercased()
+        if let tmdbId { return "来源 \(source) · TMDB 编号 \(tmdbId)" }
+        if let doubanId, !doubanId.isEmpty { return "来源 \(source) · 豆瓣编号 \(doubanId)" }
+        if let bangumiId { return "来源 \(source) · Bangumi 编号 \(bangumiId)" }
+        return "来源 \(source) · 没有外部编号"
+    }
+
     /// 一行式副标题：类型 · 年份 · 评分。
     public var subtitle: String {
         var parts: [String] = []

@@ -282,9 +282,12 @@ struct MoviePilotHomeView: View {
                 resetServerScopedState()
                 loadedForServerID = moviepilot.boundServerID
             }
-            // Bangumi 详情页「MoviePilot下载」带过来的搜索词：取走即清，发起一次搜索。
+            // Bangumi / Jellyfin 详情页「在 MoviePilot 找资源」带过来的搜索词：
+            // 取走即清，发起一次搜索。`keyword` 也要一起设——搜索框显示的是它，
+            // 只设 `submittedKeyword` 会出现「有结果但搜索框空着」的错位。
             if let pending = app.pendingMoviePilotQuery {
                 app.pendingMoviePilotQuery = nil
+                keyword = pending
                 submittedKeyword = pending
                 search()
             }
@@ -776,7 +779,11 @@ struct MoviePilotHomeView: View {
             do {
                 let found = try await MoviePilotAPIClient.shared.searchMedia(title: trimmed)
                 guard generation == searchGeneration else { return }
-                results = found
+                // TMDB 源排前面：MoviePilot 的刮削链路以 `tmdb_id` 为锚点，
+                // 而 `/media/search` 是多源聚合、顺序由服务端 `SEARCH_SOURCE` 配置
+                // 决定（Douban 条目可能排第一）。这里只调整**展示顺序**，不替用户
+                // 做选择——每张卡仍是服务端返回的完整对象（见 `MoviePilotMediaRanking`）。
+                results = MoviePilotMediaRanking.candidates(found).map(\.media)
             } catch {
                 guard generation == searchGeneration else { return }
                 searchError = (error as? MoviePilotError) ?? .generic("\(error)")
