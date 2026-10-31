@@ -282,18 +282,19 @@ struct MoviePilotHomeView: View {
                 resetServerScopedState()
                 loadedForServerID = moviepilot.boundServerID
             }
-            // Bangumi / Jellyfin 详情页「在 MoviePilot 找资源」带过来的搜索词：
-            // 取走即清，发起一次搜索。`keyword` 也要一起设——搜索框显示的是它，
-            // 只设 `submittedKeyword` 会出现「有结果但搜索框空着」的错位。
-            if let pending = app.pendingMoviePilotQuery {
-                app.pendingMoviePilotQuery = nil
-                keyword = pending
-                submittedKeyword = pending
-                search()
-            }
+            // Bangumi / Jellyfin 详情页「在 MoviePilot 找资源」带过来的搜索词。
+            consumePendingQuery(app.pendingMoviePilotQuery)
             if subscribes.isEmpty {
                 await loadSubscribes()
             }
+        }
+        // 兜底消费点：`pendingMoviePilotQuery` 原本只有上面 `.task(id:)` 一处消费，
+        // 而那处只在视图出生 / 换绑服务器时跑。若本页当时**已经在树上**（iOS Tab
+        // 保活、或将来从 MoviePilot 自己的栈里 push 一个详情页再点入口），写入不会
+        // 触发 `.task`，词就一直挂着不生效。`.onChange` 补上这一拍；两处都靠
+        // 「取走即清」保证不会重复消费。
+        .onChange(of: app.pendingMoviePilotQuery) { _, pending in
+            consumePendingQuery(pending)
         }
         .sheet(isPresented: $isPresentingAddSheet) {
             MoviePilotSubscribeSheet(mode: .add(media: sheetMedia)) {
@@ -751,6 +752,23 @@ struct MoviePilotHomeView: View {
             case .tv: shows
             }
         }
+    }
+
+    /// 取走详情页带来的搜索词并发起一次搜索。
+    ///
+    /// 两个入口共用：`.task(id: boundServerID)`（视图出生 / 换绑服务器）与
+    /// `.onChange(of: app.pendingMoviePilotQuery)`（本页已在树上时）。两边都不判空
+    /// 之外的重复：**取走即清**，第二个入口读到的已经是 nil。
+    ///
+    /// `keyword` 必须一起设——搜索框显示的是它，只设 `submittedKeyword` 会出现
+    /// 「有结果但搜索框空着」的错位（从详情页跳进来尤其显眼）。
+    private func consumePendingQuery(_ pending: String?) {
+        guard let pending else { return }
+        app.pendingMoviePilotQuery = nil
+        guard !pending.isEmpty else { return }
+        keyword = pending
+        submittedKeyword = pending
+        search()
     }
 
     private func loadSubscribes() async {

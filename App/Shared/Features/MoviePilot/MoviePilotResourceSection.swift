@@ -36,14 +36,16 @@ struct MoviePilotResourceSection: View {
 
     let item: MediaItem
 
-    /// 交给 MoviePilot 分区的搜索词（`/media/search` 的 `title`）。
+    /// 交给 MoviePilot 分区的搜索词（`/media/search` 的 `title`）—— 就是条目名。
     ///
-    /// 用条目名而不是原名：MoviePilot 的搜索是多源聚合、对中文名匹配很好，而
-    /// 原名列（`originalTitle`）常常是日文假名，反而搜不到条目。
+    /// 旧的无 tmdbID 路径也是拿 `item.name` 去搜，语义未变。这里**不**改用
+    /// `originalTitle`：MoviePilot 是中文多源聚合、对条目名匹配很好，而原名多半是
+    /// 日文假名，反而搜不到条目。
+    ///
+    /// `MediaItem.name` 是非可选 `String`，只在极端情况下（服务端给了空串）会是
+    /// 空白；那种条目没有可搜的词，`body` 里 `!query.isEmpty` 会让整块不渲染。
     private var query: String {
-        let name = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !name.isEmpty { return name }
-        return item.originalTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        item.name.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -84,8 +86,8 @@ struct MoviePilotResourceSection: View {
     /// 「点下去会发生什么、结果落在哪」。
     private var entryCard: some View {
         Button {
-            app.pendingMoviePilotQuery = query
-            app.switchSection(.moviepilot)
+            // 走 `openMoviePilotSearch`：它在切换被转场丢弃时不会留下孤儿关键词。
+            app.openMoviePilotSearch(query)
         } label: {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {

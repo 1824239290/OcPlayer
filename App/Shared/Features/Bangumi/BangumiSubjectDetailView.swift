@@ -419,10 +419,8 @@ struct BangumiSubjectDetailView: View {
     private var moviePilotButton: some View {
         Button {
             let query = subject?.nameCN.isEmpty == false ? (subject?.nameCN ?? "") : (subject?.name ?? "")
-            if !query.isEmpty {
-                app.pendingMoviePilotQuery = query
-                app.switchSection(.moviepilot)
-            }
+            // 与 Jellyfin 详情页走同一个入口：转场途中被丢弃时不留孤儿关键词。
+            app.openMoviePilotSearch(query)
         } label: {
             Label("MoviePilot下载", systemImage: "arrow.down.circle")
                 .font(.callout.weight(.medium))

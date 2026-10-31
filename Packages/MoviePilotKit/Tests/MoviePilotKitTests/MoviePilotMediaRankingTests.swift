@@ -21,10 +21,15 @@ final class MoviePilotMediaRankingTests: XCTestCase {
         if let tmdb {
             raw["tmdb_id"] = .number(Double(tmdb))
             raw["media_id"] = .string("tmdb:\(tmdb)")
-        } else {
-            raw["media_id"] = .string("\(source):\(title)")
         }
         if let douban { raw["douban_id"] = .string(douban) }
+        // 非 TMDB 条目的 `media_id` 必须带上各自的主键：早先写成
+        // `"\(source):\(title)"`，同源同名的几条会算出**完全相同的 id**
+        // （`douban:Frieren`），真喂给 `ForEach` 就是重复身份。
+        if raw["media_id"] == nil {
+            let key = douban ?? "\(source):\(title)"
+            raw["media_id"] = .string("\(source):\(key)")
+        }
         return MPMediaInfo(raw: raw)
     }
 
@@ -76,6 +81,9 @@ final class MoviePilotMediaRankingTests: XCTestCase {
         XCTAssertEqual(
             Set([first, second, third].map(MoviePilotMediaRanking.score)).count, 1,
             "三条同分，排序必须只靠原序")
+        XCTAssertEqual(
+            Set([first, second, third].map(\.id)).count, 3,
+            "fixture 自己的 id 必须互不相同，否则上面那条断言可能只是碰巧成立")
     }
 
     func testEmptyInputIsEmpty() {
