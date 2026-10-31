@@ -107,28 +107,181 @@ final class PlayerStateFoldingTests: XCTestCase {
         try await waitUntil("回退文案") { state.lastError == "内核错误 code=4" }
     }
 
-    // MARK: - 错误处理（片尾不再折叠：内核 v0.3.0 起尾读按 EOF 干净收口，兜底已拆）
+    // MARK: - 片尾陈旧读错误（内核 AVIO 错误闸门）的窄口径折叠
 
-    /// 片尾窗口内的内核错误**不再**按自然结束折叠（临时兜底已随内核修复拆除）：
-    /// 原样落 `.error`、置 `lastError`、计 `errorCount`——真错误就该露徽章；
-    /// 连播/退出由上报层只认 `.stopped` 的 `isNaturalEnd` 把关。
-    func testEndOfStreamErrorIsNoLongerFolded() async throws {
+    /// 现场原文（设备日志 2026-10-31 09:12:19，药屋少女 S3E53）：一次 seek 打断的读
+    /// 把 EIO 永久锁进 `AVIOContext.error`，播到 EOF 时先拿到它。这条必须按自然收尾
+    /// 折叠：不露徽章、不计 `errorCount`（否则 `session.end` 汇总里凭空多一条错）。
+    func testTailStaleIOErrorFoldsToNaturalStop() async throws {
         let engine = FakePlaybackEngine()
         let state = PlayerState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
-        engine.emit(.durationChanged(.seconds(1472)))
-        engine.emit(.positionChanged(.milliseconds(1_471_512)))
+        engine.emit(.durationChanged(.milliseconds(1_442_176)))
+        engine.emit(.positionChanged(.milliseconds(1_441_690)))
         try await waitUntil("片长与位置到位") {
-            state.duration == .seconds(1472) && state.position == .milliseconds(1_471_512)
+            state.duration == .milliseconds(1_442_176)
+                && state.position == .milliseconds(1_441_690)
+        }
+
+        engine.emit(.failed(
+            code: 3,
+            message: "playback error: demux worker error: source error: "
+                + "ffmpeg error in av_read_frame: Input/output error (-5); "
+                + "custom AVIO read at offset 6296469 failed earlier: source read cancelled"
+        ))
+        try await waitUntil("折叠成自然收尾") { state.state == .stopped }
+
+        XCTAssertNil(state.lastError, "假报不该留下错误徽章")
+        XCTAssertEqual(state.sessionStats.errorCount, 0, "假报不计入会话错误数")
+    }
+
+    /// 判据本身（纯函数）：只认「片尾 + av_read_frame 的 -5」，别的一概不认。
+    func testStaleIOErrorPredicate() {
+        let duration = Duration.milliseconds(1_442_176)
+        let tail = Duration.milliseconds(1_441_690)
+        let stale = "ffmpeg error in av_read_frame: Input/output error (-5)"
+
+        XCTAssertTrue(PlayerState.isStaleIOErrorInTail(
+            message: stale, position: tail, duration: duration))
+        XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
+            message: nil, position: tail, duration: duration))
+        XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
+            message: stale, position: tail, duration: .zero), "片长未知不折叠（直播）")
+        XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
+            message: stale, position: .seconds(1_000), duration: duration), "片中不折叠")
+        XCTAssertTrue(PlayerState.isInTailWindow(position: tail, duration: duration))
+        XCTAssertFalse(PlayerState.isInTailWindow(position: .seconds(1_000), duration: duration))
+        XCTAssertFalse(PlayerState.isInTailWindow(position: tail, duration: .zero), "片长未知不算片尾")
+        XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
+            message: "HTTP 401", position: tail, duration: duration), "别家的错不折叠")
+        XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
+            message: "ffmpeg error in av_read_frame: Invalid data found when processing input (-1094995529)",
+            position: tail, duration: duration), "不是 -5 不折叠")
+        // 认错误码而不是认英文：`av_strerror` 随 locale 变，认文本会在非英文环境里失效。
+        XCTAssertTrue(PlayerState.isStaleIOErrorInTail(
+            message: "ffmpeg error in av_read_frame: 输入/输出错误 (-5)",
+            position: tail, duration: duration), "本地化的 EIO 文案照样认")
+    }
+
+    /// 片尾窗口外同样的文案：那是真的读坏了，照旧报错。
+    func testStaleIOErrorOutsideTailWindowStillFails() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1_442)))
+        engine.emit(.positionChanged(.seconds(1_000)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1_442) && state.position == .seconds(1_000)
         }
 
         engine.emit(.failed(code: 3, message: "ffmpeg error in av_read_frame: Input/output error (-5)"))
-        try await waitUntil("片尾错误照旧落 error") { state.state == .error }
-
-        XCTAssertEqual(state.lastError, "ffmpeg error in av_read_frame: Input/output error (-5)")
+        try await waitUntil("片中照旧落 error") { state.state == .error }
         XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 片尾窗口内**别的**错误（EOF stall 风暴等）照旧报错：折叠只认这一次的签名，
+    /// 不能退回到「片尾任何错误都算播完」。
+    func testNonStaleTailErrorStillFails() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.seconds(1_472)))
+        engine.emit(.positionChanged(.milliseconds(1_471_512)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .seconds(1_472) && state.position == .milliseconds(1_471_512)
+        }
+
+        engine.emit(.failed(code: 3, message: "audio output stalled at EOF: no more frames"))
+        try await waitUntil("片尾其它错误照旧落 error") { state.state == .error }
+        XCTAssertEqual(state.lastError, "audio output stalled at EOF: no more frames")
+        XCTAssertEqual(state.sessionStats.errorCount, 1)
+    }
+
+    /// 内核同一件事会推两条事件：`.failed` 折叠之后紧跟的 `.stateChanged(.error)`
+    /// 不许把状态翻回错误态（否则徽章照弹、连播照断）。
+    func testStateChangedErrorAfterFoldStaysStopped() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.milliseconds(1_442_176)))
+        engine.emit(.positionChanged(.milliseconds(1_441_690)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .milliseconds(1_442_176)
+                && state.position == .milliseconds(1_441_690)
+        }
+
+        engine.emit(.failed(
+            code: 3,
+            message: "ffmpeg error in av_read_frame: Input/output error (-5)"
+        ))
+        try await waitUntil("先折叠") { state.state == .stopped }
+
+        engine.emit(.stateChanged(.error))
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(state.state, .stopped, "折叠之后的孪生 .error 不许翻盘")
+        XCTAssertNil(state.lastError)
+    }
+
+    /// **已经真失败过的会话不许被折叠救回来**：先到的那条真错误（这里用 EOF stall
+    /// 风暴的文案）已经落进 `.error`，随后那条片尾陈旧读错误若把它翻成 `.stopped`，
+    /// 上报层就会当成自然播完、在一集明明失败的情况下连播下一集。
+    func testStaleTailIOErrorDoesNotResurrectFailedSession() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.milliseconds(1_442_176)))
+        engine.emit(.positionChanged(.milliseconds(1_441_690)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .milliseconds(1_442_176)
+        }
+
+        engine.emit(.failed(code: 3, message: "audio output stalled at EOF: no more frames"))
+        try await waitUntil("先真失败") { state.state == .error }
+
+        engine.emit(.failed(
+            code: 3,
+            message: "ffmpeg error in av_read_frame: Input/output error (-5)"
+        ))
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(state.state, .error, "真失败过的会话不许被折叠翻回 stopped")
+        XCTAssertEqual(state.lastError, "audio output stalled at EOF: no more frames",
+                       "先到的真错误才是徽章该显示的那条，别被 failed earlier 的旧伤盖掉")
+        XCTAssertEqual(state.sessionStats.errorCount, 1, "回声不算新的一次错误")
+    }
+
+    /// 事件重复投递不该重复折叠（日志里那条 warning 只写一次）。
+    func testRepeatedTailStaleIOErrorFoldsOnce() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.milliseconds(1_442_176)))
+        engine.emit(.positionChanged(.milliseconds(1_441_690)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .milliseconds(1_442_176)
+        }
+
+        for _ in 0..<20 {
+            engine.emit(.failed(
+                code: 3,
+                message: "ffmpeg error in av_read_frame: Input/output error (-5)"
+            ))
+        }
+        try await Task.sleep(for: .milliseconds(120))
+        XCTAssertEqual(state.state, .stopped)
+        XCTAssertEqual(state.sessionStats.errorCount, 0)
+        XCTAssertNil(state.lastError)
     }
 
     /// 片中（离片尾还远）的错误照旧：错误徽章 + 「重试」那条路一个字都不能变。

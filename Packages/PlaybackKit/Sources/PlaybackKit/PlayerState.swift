@@ -115,6 +115,17 @@ public final class PlayerState {
     /// `.failed`，不去重的话主线程和诊断日志会被错误风暴刷爆（实测 6302 条）。
     private var lastFailedEventKey: String?
 
+    /// 已经折叠过一次「片尾陈旧读错误」（见 `isStaleIOErrorInTail`）。
+    ///
+    /// 内核在同一件事上会先后推两条事件（`.failed` 之后紧跟 `.stateChanged(.error)`），
+    /// 折叠掉第一条之后，第二条不许把状态再翻回错误态；否则徽章照样弹、
+    /// `isNaturalEnd` 照样不成立，连播还是断在这里。
+    private var foldedStaleTailIOFailure = false
+
+    /// 片尾窗口：位置落在「片长 − 2 s」以内就算片尾。与上报层
+    /// `naturalEndPositionSlackSeconds` 同一口径。
+    nonisolated static let tailFailureWindow: Duration = .seconds(2)
+
     /// 独立时间轴快照：高频 progress/position 封装在此，隔离其它观察者。
     public let timeline = PlayerTimeline()
 
@@ -187,6 +198,7 @@ public final class PlayerState {
         subtitleTracks = []
         lastError = nil
         lastFailedEventKey = nil
+        foldedStaleTailIOFailure = false
         sessionStats = PlaybackSessionStats()
         sessionStarted = false
         bufferingStartedAt = nil
@@ -198,6 +210,12 @@ public final class PlayerState {
     func apply(_ event: PlayerEvent) {
         switch event {
         case .stateChanged(let value):
+            // 片尾那条陈旧读错误的内核侧孪生事件：`.failed` 已按自然收尾折叠
+            // （见 `.failed` 分支），这里不许把状态再翻回 `.error`。
+            if value == .error, foldedStaleTailIOFailure,
+               Self.isInTailWindow(position: timeline.position, duration: timeline.duration) {
+                return
+            }
             // 内核卡进坏状态时会逐帧重发同一事件；@Observable 的写入即使同值
             // 也会触发观察者，同值直接丢（上次错误风暴被 .failed 去重救场，
             // 这里把其余事件类型一并防住）。
@@ -243,6 +261,40 @@ public final class PlayerState {
             // 同一条错误只记一次：内核卡死时 .failed 会逐帧重发，去重前一次
             // EOF stall 刷了 6302 条日志、主线程被事件轰炸到假死。
             let key = "\(code)|\(message ?? "")"
+            // 片尾的陈旧读错误不是这一次的错（机理见 `isStaleIOErrorInTail`）。
+            if Self.isStaleIOErrorInTail(
+                message: message,
+                position: timeline.position,
+                duration: timeline.duration
+            ) {
+                // **会话已经真失败**：先到的那条真错误（EOF stall 风暴、HTTP 4xx）
+                // 才是这一集的死因。两条都不许动——把状态翻回 `.stopped` 会让上报层
+                // 当成自然播完、在一集明明失败的情况下连播下一集；盖掉 `lastError`
+                // 则会把用户看到的徽章换成这条带 `failed earlier` 的误导文案。
+                guard state != .error else { return }
+
+                // 会话还活着：按自然收尾折叠成 `.stopped`。上报层只认 `.stopped` +
+                // 贴片长的 `isNaturalEnd`，于是本集照常结束、连播不断、不露错误徽章，
+                // `errorCount` 也不计这条假报——它不该进 `session.end` 汇总。
+                if key != lastFailedEventKey {
+                    lastFailedEventKey = key
+                    foldedStaleTailIOFailure = true
+                    PlaybackLog.warning(
+                        "片尾陈旧读错误按自然收尾处理（内核 AVIO 错误闸门，待 liberika 修）",
+                        fields: [
+                            "code": .integer(Int64(code)),
+                            "message": .string(message ?? "nil"),
+                            "position_ms": .integer(timeline.position.microseconds / 1000),
+                            "duration_ms": .integer(timeline.duration.microseconds / 1000),
+                        ]
+                    )
+                }
+                if state != .stopped {
+                    state = .stopped
+                    recordStateTransition(.stopped)
+                }
+                return
+            }
             if key != lastFailedEventKey {
                 lastFailedEventKey = key
                 sessionStats.errorCount += 1
@@ -258,6 +310,43 @@ public final class PlayerState {
             let newError = message ?? "内核错误 code=\(code)"
             if lastError != newError { lastError = newError }
         }
+    }
+
+    /// 识别「片尾的陈旧读错误」：内核在一次 seek 打断读之后，那条 EIO 会被 FFmpeg
+    /// 永久锁进 `AVIOContext.error`（`avio_seek` 只清 `eof_reached`，从不清 `error`），
+    /// 于是此后**第一次读到 0 字节**（自然播完 / 跳到片尾）拿到的是这条陈旧 EIO
+    /// 而不是 EOF → `av_read_frame` = -5 → demux worker 判 fatal。
+    ///
+    /// 判据刻意收得很窄，只认两件事同时成立：
+    /// ① 片长已知且位置已贴到片尾（`tailFailureWindow` 以内）；
+    /// ② 文案是 `av_read_frame` 的 EIO——内核格式为
+    ///    `ffmpeg error in av_read_frame: {av_strerror(-5)} (-5)`。
+    ///
+    /// 认 `(-5)` 而不是认 `Input/output error`：`av_strerror` 走 `strerror`，
+    /// 一旦宿主进程设了 locale 就是本地化文本，认英文会把这条兜底在非英文环境里
+    /// 变成死代码。`av_read_frame` + `(-5)` 已经是这个事件的全部身份。
+    ///
+    /// 别的错误（HTTP 4xx、解码器故障、EOF stall 风暴）即便落在片尾也照样报错。
+    ///
+    /// **代价是已知且被接受的**：片尾最后 2 s 内真的发生 I/O 故障（例如断网）也会
+    /// 落进这个签名、被当成自然收尾——那一集剩下的内容本就不足 2 s，误判的后果
+    /// 小于「每集播完都因内核缺陷报错」。
+    nonisolated static func isStaleIOErrorInTail(
+        message: String?,
+        position: Duration,
+        duration: Duration
+    ) -> Bool {
+        guard let message,
+              isInTailWindow(position: position, duration: duration),
+              message.contains("av_read_frame"),
+              message.contains("(-5)")
+        else { return false }
+        return true
+    }
+
+    /// 位置是否已经贴到片尾（`tailFailureWindow` 以内）。片长未知（0）时不算片尾。
+    nonisolated static func isInTailWindow(position: Duration, duration: Duration) -> Bool {
+        duration > .zero && position >= duration - tailFailureWindow
     }
 
     /// 状态迁移的副作用：首帧近似点 + 播放时长累计。
