@@ -53,6 +53,20 @@ public struct MPMediaInfo: Sendable, Equatable, Identifiable {
         return URL(string: "https://image.tmdb.org/t/p/w500\(poster)")
     }
 
+    /// 回传编号摘要：来源 + 该源的主键，例如「来源 DOUBAN · 豆瓣编号 35593344」。
+    ///
+    /// 下载时 `raw` 原样回传成 `media_in`，MoviePilot 就是靠这几个编号去刮削的，
+    /// 所以「这条会带回什么编号」得让用户看得见。现用在资源搜索页那条
+    /// 「没有 TMDB 编号」的提示里——只说「没有编号」时用户无从判断该不该换，
+    /// 看到具体是豆瓣编号才知道该回上一页挑 TMDB 那条。
+    public var sourceSummary: String {
+        let source = (mediaSource ?? "?").uppercased()
+        if let tmdbId { return "来源 \(source) · TMDB 编号 \(tmdbId)" }
+        if let doubanId, !doubanId.isEmpty { return "来源 \(source) · 豆瓣编号 \(doubanId)" }
+        if let bangumiId { return "来源 \(source) · Bangumi 编号 \(bangumiId)" }
+        return "来源 \(source) · 没有外部编号"
+    }
+
     /// 一行式副标题：类型 · 年份 · 评分。
     public var subtitle: String {
         var parts: [String] = []

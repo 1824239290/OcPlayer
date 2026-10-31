@@ -111,8 +111,12 @@ final class AppModel {
     /// 「媒体库」选择面板加载失败时展示；成功加载后清空。
     var librariesError: String?
 
-    /// Bangumi 详情页「MoviePilot下载」待消费的搜索词。详情页只放词 + 切分区，
-    /// MoviePilot 首页出现后取走并清空（视图不重建就不会丢）。
+    /// 详情页「在 MoviePilot 找资源」待消费的搜索词（写入方：Bangumi 条目详情、
+    /// Jellyfin 详情页的 MoviePilot 区块）。
+    ///
+    /// 详情的入口只放词 + 切分区，MoviePilot 首页出现后取走并清空。
+    /// **不要直接赋值**——走 `openMoviePilotSearch(_:)`：转场途中被丢弃的那次点击
+    /// 会留下一个孤儿关键词，用户下次自己进分区时会莫名发起一次搜索。
     var pendingMoviePilotQuery: String?
 
     /// 媒体库网格分页缓存的键：**库 + 搜索词**（空串 = 浏览页）。
@@ -856,14 +860,35 @@ final class AppModel {
 
     /// 分区切换（顶栏药丸）：常规布局走与 push 相同的两段式——当前页淡出后
     /// 再换分区；compact（iPhone Tab）系统自带切换动画，直切。
-    func switchSection(_ section: Section) {
+    @discardableResult
+    func switchSection(_ section: Section) -> Bool {
         if isCompact || reduceMotion || section == selectedSection {
             selectedSection = section
-            return
+            return true
         }
-        beginRouteExit { [weak self] in
+        return beginRouteExit { [weak self] in
             self?.selectedSection = section
         }
+    }
+
+    /// 切到 MoviePilot 分区并按关键词搜一次（详情页入口的唯一通道）。
+    ///
+    /// **顺序是「先确认分区切得过去、再放词」**：`beginRouteExit` 在两段式转场
+    /// 途中会丢弃这次调用（`guard !routeExiting`），若先把词写进
+    /// `pendingMoviePilotQuery`，那次被丢弃的点击就会留下一个**孤儿关键词**——
+    /// 用户下次自己进 MoviePilot 分区时，页面会莫名发起一次他并没有要求的搜索。
+    ///
+    /// - Returns: 关键词已排入队列时为 true；空关键词或切换被丢弃时为 false。
+    @discardableResult
+    func openMoviePilotSearch(_ query: String) -> Bool {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        guard switchSection(.moviepilot) else { return false }
+        // 落在 `switchSection` 之后：常规布局里它只是排了个 0.45s 后的落地任务，
+        // 关键词会先于 MoviePilot 首页出现而就位；compact / reduceMotion 下
+        // `selectedSection` 已经改好，而 SwiftUI 的下一轮 body 求值晚于本次调用。
+        pendingMoviePilotQuery = trimmed
+        return true
     }
 
     private func push(_ route: Route) {
@@ -912,12 +937,16 @@ final class AppModel {
     /// 两个方向的节奏**同拍**：淡出 0.45s → 落地 → 0.05s 前置帧 → 淡入 0.45s。
     /// 落地（不论 push 建页还是 pop 撤页）都用禁动画 transaction，没有系统
     /// 过渡参与，恢复拍不需要为谁多等。
-    func beginRouteExit(land: @escaping @MainActor () -> Void) {
+    /// - Returns: 这次换页被**接受**（已在当帧落地或已排队）时为 true；
+    ///   转场途中被 `guard !routeExiting` 丢弃时为 false——调用方据此决定
+    ///   要不要回滚它顺手写下的其他状态（见 `openMoviePilotSearch`）。
+    @discardableResult
+    func beginRouteExit(land: @escaping @MainActor () -> Void) -> Bool {
         if isCompact || reduceMotion {
             land()
-            return
+            return true
         }
-        guard !routeExiting else { return }
+        guard !routeExiting else { return false }
         routeExiting = true
         // 会话代次快照：淡出期间若发生登出/换服/401（`resetBrowseState` 会自增），
         // 这次换页的意图属于**旧会话**，落地必须作废——否则旧服务器的
@@ -933,6 +962,7 @@ final class AppModel {
             try? await Task.sleep(for: .seconds(Motion.restoreDelay))
             routeExiting = false
         }
+        return true
     }
 
     /// iOS 端当前选中 Tab 对应的导航路径数组。

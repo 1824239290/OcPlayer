@@ -37,11 +37,10 @@ struct DetailView: View {
     @State private var isUpdatingPlayed = false
     @State private var playedActionError: String?
 
-    /// 详情页内嵌 MoviePilot 区块呈现「资源搜索」页的落地开关。状态提在这里
-    /// （而不是区块里）：呈现式页面不在 path 上，CoveredPageHider 看不见这层
-    /// 覆盖，落地期间要整页隐去、别透过透显的资源搜索页漏出（见
-    /// `coveredByPresented`）；声明条目也在本页身上，隐去时保持活着。
-    @State private var isResourcePresented = false
+    // 这里曾有一个 `isResourcePresented`：详情页的 MoviePilot 区块自己呈现「资源搜索」页时，
+    // 要靠它把整页隐去（呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖）。
+    // 现在那个区块只把片名交给 `pendingMoviePilotQuery`、切到 MoviePilot 分区，详情页
+    // 不再呈现任何页面，开关随之删除（见 `MoviePilotResourceSection` 的类型注释）。
 
     /// 选集排序偏好跨启动保留：长剧倒序从最新一集看起，不用从头翻。
     @AppStorage(SettingsKeys.episodeSortAscending) private var episodesAscending = true
@@ -196,7 +195,7 @@ struct DetailView: View {
                         onCandidatesLoaded: { model.acceptBangumiCandidates($0) }
                     )
                 }
-                MoviePilotResourceSection(item: model.shown, showResource: $isResourcePresented)
+                MoviePilotResourceSection(item: model.shown)
                 if !model.displayCast.isEmpty { castRail }
                 // 当前选中集（电影为自身）的文件级媒体信息。
                 // 合集传 nil：它是容器，服务端对它的 `MediaSources` 恒为空
@@ -248,8 +247,6 @@ struct DetailView: View {
         //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
         //     图已就绪，不会先灰一块再可见地补加载。
         .pageAmbience(ambienceTarget)
-        // 呈现「资源搜索」页期间整页隐去（见 isResourcePresented 注释）。
-        .coveredByPresented($isResourcePresented)
         .task(id: item.id) {
             model.attach(app)
             await model.load()

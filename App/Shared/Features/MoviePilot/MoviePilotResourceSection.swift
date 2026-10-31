@@ -1,15 +1,31 @@
 import AppDesignKit
 import CoreModel
-import MoviePilotKit
 import SwiftUI
 
-/// 详情页内嵌的 MoviePilot 下载区块（与 BangumiChapterSection 同级同款头）。
+/// 详情页内嵌的 MoviePilot 下载入口（与 BangumiChapterSection 同级同款头）。
 ///
-/// - 条目带 TmdbId：直接按 tmdb 源拼出媒体键，免匹配直达资源列表
-/// - 没有 TmdbId：按标题搜一次元数据兜底匹配（优先年份吻合的结果）
-/// - 下载之后什么都不做：整理 / 刮削 / 入库 Jellyfin 全部归 MoviePilot 服务端
+/// ## 只有一个动作：跳到 MoviePilot 分区的搜索结果页
 ///
-/// 未登录 MoviePilot 时整块不出现，详情页不弹引导。
+/// 点这张卡 → 把片名交给 `AppModel.pendingMoviePilotQuery` 并 `switchSection(.moviepilot)`，
+/// MoviePilot 首页随即按该关键词调 `/media/search`、列出多源候选（截图那一页），
+/// 用户**自己挑** TMDB / Douban 条目、点那一条的「查资源」进站点资源搜索。
+///
+/// 这条链与 Bangumi 详情页那颗「MoviePilot下载」**完全同源**（同一个
+/// `pendingMoviePilotQuery` 通道、同一个消费点），也是 MoviePilot 分区里的原生动线。
+///
+/// ## 为什么不再在详情页里自己搜、自己拼
+///
+/// 资源搜索页下载时把 `MPMediaInfo.raw` **原样**回传成 `/download/` 的 `media_in`，
+/// MoviePilot 服务端靠里面的 `media_source` / `media_id` / `tmdb_id` 去刮削、改名、
+/// 入库。详情页曾经有两条近道——①带 `tmdbID` 时**本地拼**一个 `MPMediaInfo`
+/// （海报 / 简介 / 评分全缺）；②没有 `tmdbID` 时按标题搜一次后
+/// `first { 年份吻合 } ?? first` **自动挑第一个**（多源聚合里挑到 Douban 条目时
+/// 对象里没有 `tmdb_id`）。两条都会让下载后的自动刮削缺编号。
+///
+/// 现在详情页**不产出任何媒体对象**：选中哪一条完全由用户在 MoviePilot 搜索结果页
+/// 决定，那儿每一张卡就是服务端返回的完整对象。
+///
+/// - 未登录 MoviePilot 时整块不出现，详情页不弹引导。
 struct MoviePilotResourceSection: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(AppModel.self) private var app
@@ -20,37 +36,28 @@ struct MoviePilotResourceSection: View {
 
     let item: MediaItem
 
-    /// 资源搜索页走 pushPresented 两段式（淡出后落地）。落地开关由详情页持有：
-    /// 呈现期间详情页要整页隐去（`coveredByPresented`），状态必须在宿主身上。
-    @Binding var showResource: Bool
-
-    @State private var fallbackMedia: MPMediaInfo?
-    @State private var isMatching = false
-    @State private var errorText: String?
-    @State private var matchGeneration: UInt64 = 0
+    /// 交给 MoviePilot 分区的搜索词（`/media/search` 的 `title`）—— 就是条目名。
+    ///
+    /// 旧的无 tmdbID 路径也是拿 `item.name` 去搜，语义未变。这里**不**改用
+    /// `originalTitle`：MoviePilot 是中文多源聚合、对条目名匹配很好，而原名多半是
+    /// 日文假名，反而搜不到条目。
+    ///
+    /// `MediaItem.name` 是非可选 `String`，只在极端情况下（服务端给了空串）会是
+    /// 空白；那种条目没有可搜的词，`body` 里 `!query.isEmpty` 会让整块不渲染。
+    private var query: String {
+        item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
-        if moviepilotEnabled, moviepilot.isAuthenticated {
+        if moviepilotEnabled, moviepilot.isAuthenticated, !query.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.top, 26)
                     .padding(.bottom, 12)
-                sectionBody
+                entryCard
                     .padding(.bottom, 4)
             }
             .padding(.horizontal, contentLeading)
-            .task(id: item.id) { fallbackMedia = nil; errorText = nil }
-            .navigationDestination(isPresented: $showResource) {
-                if let media = resolvedMedia {
-                    MoviePilotResourceView(media: media)
-                        .id(media.id)
-                        // `presented:`：呈现式页面不在 `path` 上，返回键得自己关
-                        // presentation（见 AppModel.popPresented）。
-                        .appShellBackChrome(
-                            title: media.title ?? "资源搜索", presented: $showResource
-                        )
-                }
-            }
         }
     }
 
@@ -60,126 +67,49 @@ struct MoviePilotResourceSection: View {
         HStack(spacing: 10) {
             Text("MoviePilot")
                 .font(.title3.weight(.bold))
-            if let title = resolvedMedia?.title, title != item.name {
-                Text(title)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
             Spacer()
         }
     }
 
-    // MARK: - 主体
+    // MARK: - 入口卡
 
-    private var resolvedMedia: MPMediaInfo? {
-        directMedia ?? fallbackMedia
-    }
-
-    /// TmdbId 直连：一次网络都不用，天然可信。
-    private var directMedia: MPMediaInfo? {
-        guard let tmdb = item.tmdbID, let id = Double(tmdb) else { return nil }
-        var raw: [String: JSONValue] = [
-            "media_source": .string("tmdb"),
-            "media_id": .string("tmdb:\(tmdb)"),
-            "tmdb_id": .number(id),
-            "title": .string(item.name),
-            "type": .string(item.kind == .movie ? "电影" : "电视剧"),
-        ]
-        if let year = item.year {
-            raw["year"] = .string(String(year))
-            raw["title_year"] = .string(String(year))
-        }
-        return MPMediaInfo(raw: raw)
-    }
-
-    @ViewBuilder
-    private var sectionBody: some View {
-        if let media = resolvedMedia {
-            Button {
-                app.pushPresented { showResource = true }
-            } label: {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("搜索站点资源并下载")
-                            .font(.callout.weight(.medium))
-                        Text("按标题搜、可选站点；下载完成后 MoviePilot 自动整理入库，稍后出现在媒体库")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.forward")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                // 2026-10-22：与下载页同一套液态玻璃（原 `.fill.quaternary` 纯色底）。
-                .liquidGlassCard()
-            }
-            .buttonStyle(.plain)
-
-            // 兜底匹配出来的结果允许换（TmdbId 直连不提供——它就是这条目本身）。
-            if fallbackMedia != nil {
-                Button("匹配得不对？重新匹配") {
-                    fallbackMedia = nil
-                }
-                .font(.caption)
-                .buttonStyle(.borderless)
-                .padding(.top, 6)
-            }
-        } else if isMatching {
+    /// 标题 + 一行说明。
+    ///
+    /// 说明文案**沿用改造前那句**（`搜索站点资源并下载` 卡下方的原文），它讲的是
+    /// 用户关心的结果：「按标题搜、可选站点；下载完成后 MoviePilot 自动整理入库，
+    /// 稍后出现在媒体库」。
+    ///
+    /// 2026-10-31 两轮口径：先按「按钮下的那些描述可以去掉」删掉了我新加的两行
+    /// 解释（「跳到 MoviePilot 搜「片名」…」「选中的条目会随下载一起回传…」），
+    /// 随后用户指出「好像少了什么」——删多了，把**原有这一句**也带走了。现在只留
+    /// 原句，我那两句解释不再回来：它们是流程说明，而这一步只需要告诉用户
+    /// 「点下去会发生什么、结果落在哪」。
+    private var entryCard: some View {
+        Button {
+            // 走 `openMoviePilotSearch`：它在切换被转场丢弃时不会留下孤儿关键词。
+            app.openMoviePilotSearch(query)
+        } label: {
             HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text("正在按标题匹配 MoviePilot 条目…")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 8)
-        } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    Task { await matchByTitle() }
-                } label: {
-                    Label("在 MoviePilot 找资源", systemImage: "magnifyingglass")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("搜索站点资源并下载")
                         .font(.callout.weight(.medium))
-                }
-                .neutralProminentButton()
-                Text("这个条目没有 Tmdb 编号，先按标题匹配一次。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let errorText {
-                    Text(errorText)
+                    Text("按标题搜、可选站点；下载完成后 MoviePilot 自动整理入库，稍后出现在媒体库")
                         .font(.caption)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
                 }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.forward")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.bottom, 4)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // 2026-10-22：与下载页同一套液态玻璃（原 `.fill.quaternary` 纯色底）。
+            // 详情页整页的内容件（Bangumi 章节区、媒体信息）都是这一套，入口卡跟随。
+            .liquidGlassCard()
         }
-    }
-
-    // MARK: - 兜底匹配
-
-    private func matchByTitle() async {
-        matchGeneration &+= 1
-        let generation = matchGeneration
-        isMatching = true
-        errorText = nil
-        defer { if generation == matchGeneration { isMatching = false } }
-        do {
-            let results = try await MoviePilotAPIClient.shared.searchMedia(title: item.name)
-            guard generation == matchGeneration else { return }
-            guard !results.isEmpty else {
-                errorText = "没有按「\(item.name)」搜到条目，去「MoviePilot」页换个关键词试试。"
-                return
-            }
-            // 优先年份吻合；都没有就取第一个（多源聚合的第一名通常是最佳猜测）。
-            fallbackMedia = results.first { media in
-                media.year == item.year.map(String.init)
-            } ?? results.first
-        } catch {
-            guard generation == matchGeneration else { return }
-            errorText = MoviePilotError.userMessage(of: error)
-        }
+        .buttonStyle(.plain)
     }
 }

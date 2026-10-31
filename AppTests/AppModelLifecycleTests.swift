@@ -70,6 +70,56 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertEqual(app.phase, .onboarding)
     }
 
+    /// 回归（孤儿关键词）：`openMoviePilotSearch` 必须**先确认分区切得过去、再放词**。
+    ///
+    /// 两段式转场途中 `beginRouteExit` 会丢弃调用（`guard !routeExiting`）。早先
+    /// 详情页（Bangumi 与 Jellyfin 两处）都是「先写 `pendingMoviePilotQuery`
+    /// 再 `switchSection`」，那次被丢弃的点击会留下一个没人消费的关键词：分区没切、
+    /// 词还在，用户下次自己进 MoviePilot 时会莫名发起一次他并没有要求的搜索。
+    @MainActor
+    func testOpenMoviePilotSearchLeavesNoOrphanQueryWhenSwitchIsDropped() {
+        let app = AppModel()
+        app.phase = .ready
+        app.isCompact = false
+        app.reduceMotion = false
+
+        // 第一次点击：真正发起（转场开始，routeExiting 置真）。
+        XCTAssertTrue(app.openMoviePilotSearch("第一次"))
+        XCTAssertEqual(app.pendingMoviePilotQuery, "第一次")
+
+        // 转场尚未结束时的第二次点击：被丢弃，且**不许**留下关键词残留。
+        app.pendingMoviePilotQuery = nil          // 模拟首页已消费
+        XCTAssertFalse(app.openMoviePilotSearch("被丢弃的那次"))
+        XCTAssertNil(
+            app.pendingMoviePilotQuery,
+            "切换被丢弃时不能留下孤儿关键词——用户下次自己进分区会莫名搜这个")
+    }
+
+    /// 同分区早退也要能消费：`switchSection` 回到同一分区时是同步落地（返回 true），
+    /// 关键词照常排队。这条钉住「返回 true 才写词」不会把同分区那条路一起挡掉。
+    @MainActor
+    func testOpenMoviePilotSearchWorksWhenAlreadyOnMoviePilotSection() {
+        let app = AppModel()
+        app.phase = .ready
+        app.selectedSection = .moviepilot
+
+        XCTAssertTrue(app.openMoviePilotSearch("  芙莉莲  "))
+        XCTAssertEqual(
+            app.pendingMoviePilotQuery, "芙莉莲",
+            "关键词要 trim；同分区早退也必须排进队列")
+    }
+
+    /// 空关键词不排入队列（避免整块入口消失后仍留下一个 `""` 触发一次空搜索）。
+    @MainActor
+    func testOpenMoviePilotSearchRejectsBlankQuery() {
+        let app = AppModel()
+        app.phase = .ready
+        app.selectedSection = .moviepilot
+
+        XCTAssertFalse(app.openMoviePilotSearch("   "))
+        XCTAssertNil(app.pendingMoviePilotQuery)
+    }
+
     /// 回归（声明被覆盖丢失）：详情页（声明 D）呈现资源搜索页（声明 R）后返回，
     /// 单值声明会被 R 的 onDisappear 清成 nil，D 已被覆盖、详情页不会再补发——
     /// 返回详情页背景照样丢。声明必须按栈恢复：离屏摘掉自己的条目、栈顶回到 D。
