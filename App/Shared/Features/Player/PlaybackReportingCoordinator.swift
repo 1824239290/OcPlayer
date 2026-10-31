@@ -88,10 +88,17 @@ final class PlaybackReportingCoordinator {
     /// 干净收尾时 position 常停在片长前零点几秒（最后一帧的呈现位置不必恰好等于
     /// 片长），用这个窗口把「位置贴着片长的 `.stopped`」认成播完。
     ///
-    /// ⚠️ 这只是**位置**容差，与错误处理无关：片尾的「读越 EOF 报 fatal」内核缺陷
-    /// 已随 liberika v0.3.0 修复（上游 #169，尾读按 EOF 干净收口），曾经的
-    /// `isEndOfStream`（把片尾窗口内的 `.error` 也认成播完）随 `PlayerState`
-    /// 的折叠兜底一并拆除——片尾真错误现在就该露徽章、不该触发连播。
+    /// ⚠️ 这只是**位置**容差，与错误处理无关。这一层仍然只认 `.stopped`：曾经的
+    /// `isEndOfStream`（把片尾窗口内的 `.error` 也认成播完）已随 PR #74 拆除，
+    /// 片尾的真错误照旧露徽章、不触发连播。
+    ///
+    /// 唯一的例外在**上游的 `PlayerState`**：那次拆除的理由是「内核 v0.3.0 之后
+    /// 片尾不该再报错（上游 #169 尾读按 EOF 收口）」，而 2026-10-31 的真机日志
+    /// 证明还有一条**不同层**的片尾 fatal——一次 seek 打断的读把 EIO 永久锁进
+    /// FFmpeg 的 `AVIOContext.error`，之后首次读到 0 字节拿到的就是那条旧伤
+    /// （`1824239290/Erika#4`）。`PlayerState.isStaleIOErrorInTail` 只对这一个
+    /// 签名（片尾 + `av_read_frame` 的 `-5`）做折叠、且仅在会话尚未真失败时生效，
+    /// 折叠后交出的是 `.stopped`，所以这一层不用改判据。
     private static let naturalEndPositionSlackSeconds: Double = 2.0
 
     private static func isReachedEnd(snapshot: PlaybackReportSnapshot?) -> Bool {

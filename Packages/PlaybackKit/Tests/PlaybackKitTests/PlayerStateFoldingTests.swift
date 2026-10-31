@@ -157,8 +157,12 @@ final class PlayerStateFoldingTests: XCTestCase {
         XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
             message: "HTTP 401", position: tail, duration: duration), "别家的错不折叠")
         XCTAssertFalse(PlayerState.isStaleIOErrorInTail(
-            message: "ffmpeg error in av_read_frame: Invalid data found when processing input",
+            message: "ffmpeg error in av_read_frame: Invalid data found when processing input (-1094995529)",
             position: tail, duration: duration), "不是 -5 不折叠")
+        // 认错误码而不是认英文：`av_strerror` 随 locale 变，认文本会在非英文环境里失效。
+        XCTAssertTrue(PlayerState.isStaleIOErrorInTail(
+            message: "ffmpeg error in av_read_frame: 输入/输出错误 (-5)",
+            position: tail, duration: duration), "本地化的 EIO 文案照样认")
     }
 
     /// 片尾窗口外同样的文案：那是真的读坏了，照旧报错。
@@ -224,6 +228,35 @@ final class PlayerStateFoldingTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(80))
         XCTAssertEqual(state.state, .stopped, "折叠之后的孪生 .error 不许翻盘")
         XCTAssertNil(state.lastError)
+    }
+
+    /// **已经真失败过的会话不许被折叠救回来**：先到的那条真错误（这里用 EOF stall
+    /// 风暴的文案）已经落进 `.error`，随后那条片尾陈旧读错误若把它翻成 `.stopped`，
+    /// 上报层就会当成自然播完、在一集明明失败的情况下连播下一集。
+    func testStaleTailIOErrorDoesNotResurrectFailedSession() async throws {
+        let engine = FakePlaybackEngine()
+        let state = PlayerState()
+        let task = state.start(consuming: engine)
+        defer { task.cancel() }
+
+        engine.emit(.durationChanged(.milliseconds(1_442_176)))
+        engine.emit(.positionChanged(.milliseconds(1_441_690)))
+        try await waitUntil("片长与位置到位") {
+            state.duration == .milliseconds(1_442_176)
+        }
+
+        engine.emit(.failed(code: 3, message: "audio output stalled at EOF: no more frames"))
+        try await waitUntil("先真失败") { state.state == .error }
+
+        engine.emit(.failed(
+            code: 3,
+            message: "ffmpeg error in av_read_frame: Input/output error (-5)"
+        ))
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(state.state, .error, "真失败过的会话不许被折叠翻回 stopped")
+        XCTAssertEqual(state.lastError, "audio output stalled at EOF: no more frames",
+                       "先到的真错误才是徽章该显示的那条，别被 failed earlier 的旧伤盖掉")
+        XCTAssertEqual(state.sessionStats.errorCount, 1, "回声不算新的一次错误")
     }
 
     /// 事件重复投递不该重复折叠（日志里那条 warning 只写一次）。

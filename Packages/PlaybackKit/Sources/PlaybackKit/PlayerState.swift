@@ -261,15 +261,21 @@ public final class PlayerState {
             // 同一条错误只记一次：内核卡死时 .failed 会逐帧重发，去重前一次
             // EOF stall 刷了 6302 条日志、主线程被事件轰炸到假死。
             let key = "\(code)|\(message ?? "")"
-            // 片尾的陈旧读错误不是这一次的错（机理见 `isStaleIOErrorInTail`）：
-            // 按自然收尾折叠成 `.stopped`。上报层只认 `.stopped` + 贴片长的
-            // `isNaturalEnd`，于是本集照常结束、连播不断、不露错误徽章，
-            // `errorCount` 也不计这条假报——它不该进 `session.end` 汇总。
+            // 片尾的陈旧读错误不是这一次的错（机理见 `isStaleIOErrorInTail`）。
             if Self.isStaleIOErrorInTail(
                 message: message,
                 position: timeline.position,
                 duration: timeline.duration
             ) {
+                // **会话已经真失败**：先到的那条真错误（EOF stall 风暴、HTTP 4xx）
+                // 才是这一集的死因。两条都不许动——把状态翻回 `.stopped` 会让上报层
+                // 当成自然播完、在一集明明失败的情况下连播下一集；盖掉 `lastError`
+                // 则会把用户看到的徽章换成这条带 `failed earlier` 的误导文案。
+                guard state != .error else { return }
+
+                // 会话还活着：按自然收尾折叠成 `.stopped`。上报层只认 `.stopped` +
+                // 贴片长的 `isNaturalEnd`，于是本集照常结束、连播不断、不露错误徽章，
+                // `errorCount` 也不计这条假报——它不该进 `session.end` 汇总。
                 if key != lastFailedEventKey {
                     lastFailedEventKey = key
                     foldedStaleTailIOFailure = true
@@ -311,13 +317,20 @@ public final class PlayerState {
     /// 于是此后**第一次读到 0 字节**（自然播完 / 跳到片尾）拿到的是这条陈旧 EIO
     /// 而不是 EOF → `av_read_frame` = -5 → demux worker 判 fatal。
     ///
-    /// 判据刻意收得很窄，只认三件事同时成立：
+    /// 判据刻意收得很窄，只认两件事同时成立：
     /// ① 片长已知且位置已贴到片尾（`tailFailureWindow` 以内）；
-    /// ② 文案是 `av_read_frame` 的 `Input/output error (-5)`；
-    /// ③ 触发它的是一次被 seek 打断的读（内核会在同一句里带
-    ///    `failed earlier: source read cancelled`，但那句可能缺，所以只作参考不作前提）。
+    /// ② 文案是 `av_read_frame` 的 EIO——内核格式为
+    ///    `ffmpeg error in av_read_frame: {av_strerror(-5)} (-5)`。
+    ///
+    /// 认 `(-5)` 而不是认 `Input/output error`：`av_strerror` 走 `strerror`，
+    /// 一旦宿主进程设了 locale 就是本地化文本，认英文会把这条兜底在非英文环境里
+    /// 变成死代码。`av_read_frame` + `(-5)` 已经是这个事件的全部身份。
     ///
     /// 别的错误（HTTP 4xx、解码器故障、EOF stall 风暴）即便落在片尾也照样报错。
+    ///
+    /// **代价是已知且被接受的**：片尾最后 2 s 内真的发生 I/O 故障（例如断网）也会
+    /// 落进这个签名、被当成自然收尾——那一集剩下的内容本就不足 2 s，误判的后果
+    /// 小于「每集播完都因内核缺陷报错」。
     nonisolated static func isStaleIOErrorInTail(
         message: String?,
         position: Duration,
@@ -326,7 +339,7 @@ public final class PlayerState {
         guard let message,
               isInTailWindow(position: position, duration: duration),
               message.contains("av_read_frame"),
-              message.contains("Input/output error (-5)")
+              message.contains("(-5)")
         else { return false }
         return true
     }
