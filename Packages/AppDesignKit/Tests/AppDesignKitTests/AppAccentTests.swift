@@ -68,10 +68,19 @@ final class AppAccentTests: XCTestCase {
 
     /// 返回（出现最多的颜色 = 底，与其对比度最高的常见颜色 = 文字，对比度）。
     /// 少见颜色当抗锯齿边缘丢掉，避免拿一个过渡像素当"文字色"。
-    private func fillAndInk(_ buffer: [UInt8], minCount: Int = 30)
+    ///
+    /// - Parameter alphaThreshold: 低于它的像素视为**透明背景**跳过。渲染真实
+    ///   `Button` 时内容 bounds 外是透明的，`ImageRenderer` 把 alpha=0 存成
+    ///   `rgb(0,0,0)`——不跳过的话深色模式那张图里「出现最多的颜色」会是那块
+    ///   假黑背景而不是按钮填充（实测：深色按钮底色被量成 luma 0.0）。
+    ///   **阈值取 128 而不是 250**：`borderedProminent` 的实底自带约 5% 的透明度，
+    ///   实测填充像素 alpha 是 **242**，按 250 过滤会把按钮本身也丢干净，最后只剩
+    ///   白字参与统计（出现过「底=字=255,255,255、对比度 1:1」的假红）。
+    private func fillAndInk(_ buffer: [UInt8], minCount: Int = 30, alphaThreshold: Int = 0)
         -> (fill: (Int, Int, Int), ink: (Int, Int, Int), ratio: Double) {
         var histogram: [Int: Int] = [:]
         for index in stride(from: 0, to: buffer.count, by: 4) {
+            guard Int(buffer[index + 3]) >= alphaThreshold else { continue }
             let key = (Int(buffer[index]) << 16) | (Int(buffer[index + 1]) << 8) | Int(buffer[index + 2])
             histogram[key, default: 0] += 1
         }
@@ -122,5 +131,66 @@ final class AppAccentTests: XCTestCase {
         let lightLuma = relativeLuminance(light.0, light.1, light.2)
         XCTAssertGreaterThan(darkLuma, 0.5, "深色模式的实底应当是亮的")
         XCTAssertLessThan(lightLuma, 0.5, "浅色模式的实底应当是暗的")
+    }
+
+    // MARK: - `neutralProminentButton()` 本体
+
+    /// 渲染**真正的** `neutralProminentButton()`（不是复刻配方）。
+    ///
+    /// 复刻品那三条用例守的是「`solid` + `onSolid` 这套配方本身没问题」，但它们
+    /// 量不到扩展方法里那两句修饰符的**组合顺序**——2026-10-30 的现场正是如此：
+    /// `buttonStyle(.borderedProminent)` 之后再 `.foregroundStyle(...)` 在 macOS 26
+    /// 上不生效，浅色模式渲染出黑底黑字（`rgb(8,8,8)` 底 / `rgb(0,0,0)` 字），
+    /// 而三条复刻用例全绿。所以这里必须走真实 API。
+    private func renderProminentButton(_ scheme: ColorScheme) -> CGImage? {
+        let content = Button {} label: {
+            Label("在 MoviePilot 找资源", systemImage: "magnifyingglass")
+                .font(.system(size: 15, weight: .medium))
+        }
+        .neutralProminentButton()
+        // 复刻 App 根节点：`RootView` 钉的是 `.tint(.primary)`，也就是当初触发
+        // 这个 bug 的环境。
+        .tint(.primary)
+        .environment(\.colorScheme, scheme)
+
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 1
+        return renderer.cgImage
+    }
+
+    func testNeutralProminentButtonIsReadableInLightMode() throws {
+        let buffer = try pixels(of: XCTUnwrap(renderProminentButton(.light)))
+        let measured = fillAndInk(buffer, alphaThreshold: 128)
+        XCTAssertGreaterThanOrEqual(
+            measured.ratio, 4.5,
+            "浅色下 neutralProminentButton() 的文字与底对比度只有 "
+                + "\(String(format: "%.2f", measured.ratio)):1"
+                + "（底 \(measured.fill)、字 \(measured.ink)）"
+                + "——`.foregroundStyle` 补反色字的写法在 borderedProminent 上不生效，"
+                + "改走 `.tint(AppAccent.solidTint)` 让系统算对比度。"
+        )
+    }
+
+    func testNeutralProminentButtonIsReadableInDarkMode() throws {
+        let buffer = try pixels(of: XCTUnwrap(renderProminentButton(.dark)))
+        let measured = fillAndInk(buffer, alphaThreshold: 128)
+        XCTAssertGreaterThanOrEqual(
+            measured.ratio, 4.5,
+            "深色下 neutralProminentButton() 的文字与底对比度只有 "
+                + "\(String(format: "%.2f", measured.ratio)):1"
+                + "（底 \(measured.fill)、字 \(measured.ink)）"
+        )
+    }
+
+    /// 实底按钮在两种外观下必须**反色**（浅色黑底、深色白底），与 `solid` 同口径。
+    func testNeutralProminentButtonFlipsWithColorScheme() throws {
+        let dark = fillAndInk(
+            try pixels(of: XCTUnwrap(renderProminentButton(.dark))), alphaThreshold: 128).fill
+        let light = fillAndInk(
+            try pixels(of: XCTUnwrap(renderProminentButton(.light))), alphaThreshold: 128).fill
+        XCTAssertGreaterThan(
+            relativeLuminance(dark.0, dark.1, dark.2), 0.5, "深色模式的实底按钮应当是亮的")
+        XCTAssertLessThan(
+            relativeLuminance(light.0, light.1, light.2), 0.5, "浅色模式的实底按钮应当是暗的")
     }
 }
