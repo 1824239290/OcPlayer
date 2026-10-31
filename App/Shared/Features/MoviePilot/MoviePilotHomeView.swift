@@ -783,7 +783,7 @@ struct MoviePilotHomeView: View {
                 // 而 `/media/search` 是多源聚合、顺序由服务端 `SEARCH_SOURCE` 配置
                 // 决定（Douban 条目可能排第一）。这里只调整**展示顺序**，不替用户
                 // 做选择——每张卡仍是服务端返回的完整对象（见 `MoviePilotMediaRanking`）。
-                results = MoviePilotMediaRanking.candidates(found).map(\.media)
+                results = MoviePilotMediaRanking.sortedForDisplay(found)
             } catch {
                 guard generation == searchGeneration else { return }
                 searchError = (error as? MoviePilotError) ?? .generic("\(error)")

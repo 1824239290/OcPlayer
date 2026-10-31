@@ -1,26 +1,22 @@
 import XCTest
 @testable import MoviePilotKit
 
-/// 详情页「先搜媒体 → 手动选源」的候选排序。
+/// `/media/search` 结果的展示排序。
 ///
-/// 这套打分存在的理由只有一条：**别让用户（或旧代码的自动挑选）拿到没有
-/// `tmdb_id` 的条目**。所以这里的用例全是「同名多源回来，谁排在前面」，
-/// 而不是展示层字段的宽容解析（那在 `MoviePilotModelsTests` / `MoviePilotSearchTests`）。
+/// 这套排序存在的理由只有一条：**别让 Douban 条目排在最前面挡住 TMDB 那条**。
+/// 挑到没有 `tmdb_id` 的条目时，它会原样回传给 `/download/`，MoviePilot 下载
+/// 完成后的自动刮削就缺编号。所以用例全是「同名多源回来，谁排在前面」。
 final class MoviePilotMediaRankingTests: XCTestCase {
 
     private func media(
         source: String,
         title: String = "Frieren",
         tmdb: Int? = nil,
-        douban: String? = nil,
-        bangumi: Int? = nil,
-        year: String? = nil,
-        type: String = "电视剧"
+        douban: String? = nil
     ) -> MPMediaInfo {
         var raw: [String: JSONValue] = [
             "media_source": .string(source),
             "title": .string(title),
-            "type": .string(type),
         ]
         if let tmdb {
             raw["tmdb_id"] = .number(Double(tmdb))
@@ -29,102 +25,71 @@ final class MoviePilotMediaRankingTests: XCTestCase {
             raw["media_id"] = .string("\(source):\(title)")
         }
         if let douban { raw["douban_id"] = .string(douban) }
-        if let bangumi { raw["bangumi_id"] = .number(Double(bangumi)) }
-        if let year { raw["year"] = .string(year) }
         return MPMediaInfo(raw: raw)
     }
 
-    // MARK: - 排序
-
-    func testTMDBResultOutranksDoubanEvenWhenServerReturnsDoubanFirst() {
+    func testTMDBSourceOutranksDoubanEvenWhenServerReturnsDoubanFirst() {
         let douban = media(source: "douban", douban: "35593344")
         let tmdb = media(source: "tmdb", tmdb: 209867)
-        let ranked = MoviePilotMediaRanking.candidates([douban, tmdb])
 
-        XCTAssertEqual(ranked.map(\.media.mediaSource), ["tmdb", "douban"])
-        XCTAssertEqual(ranked.first?.isRecommended, true, "TMDB 源应当被推荐")
-        XCTAssertEqual(ranked.last?.isRecommended, false, "缺 TMDB 编号的 Douban 条目不该被推荐")
-        XCTAssertEqual(ranked.last?.isMissingTMDBID, true)
-        XCTAssertEqual(ranked.first?.isMissingTMDBID, false)
+        let sorted = MoviePilotMediaRanking.sortedForDisplay([douban, tmdb])
+        XCTAssertEqual(sorted.map(\.mediaSource), ["tmdb", "douban"])
+        XCTAssertEqual(sorted.first?.tmdbId, 209867)
     }
 
-    func testExactTMDBIDMatchOutranksOtherTMDBResults() {
-        let otherTMDB = media(source: "tmdb", tmdb: 111, year: "2019")
-        let matched = media(source: "tmdb", tmdb: 222, year: "2023")
-        let ranked = MoviePilotMediaRanking.candidates([otherTMDB, matched], year: 2023, tmdbID: "222")
-
-        XCTAssertEqual(ranked.first?.media.tmdbId, 222)
-        XCTAssertGreaterThan(ranked[0].score, ranked[1].score)
+    /// 服务端本来就排对了的时候不能被排乱（幂等）。
+    func testAlreadySortedInputIsUnchanged() {
+        let tmdb = media(source: "tmdb", tmdb: 1)
+        let douban = media(source: "douban", douban: "2")
+        XCTAssertEqual(
+            MoviePilotMediaRanking.sortedForDisplay([tmdb, douban]).map(\.mediaSource),
+            ["tmdb", "douban"])
     }
 
-    func testYearAndTypeOnlyNudgeOrderButDoNotRecommend() {
-        let wrongYear = media(source: "douban", douban: "1", year: "1999")
-        let rightYear = media(source: "douban", douban: "2", year: "2023")
-        let ranked = MoviePilotMediaRanking.candidates(
-            [wrongYear, rightYear], year: 2023, type: "电视剧")
+    /// 两个都不是 TMDB 源时，带 `tmdb_id` 的在前（个别源的适配器会补齐编号）。
+    func testNonTMDBResultWithIdentifierRanksHigher() {
+        let bare = media(source: "bangumi")
+        let enriched = MPMediaInfo(raw: [
+            "media_source": .string("douban"),
+            "title": .string("Frieren"),
+            "douban_id": .string("3"),
+            "tmdb_id": .number(4242),
+        ])
 
-        XCTAssertEqual(ranked.first?.media.doubanId, "2")
-        XCTAssertEqual(ranked.first?.isRecommended, false, "纯 Douban 候选不该被推荐（会缺 tmdb_id）")
-        XCTAssertNil(
-            MoviePilotMediaRanking.recommended([wrongYear, rightYear], year: 2023, type: "电视剧"),
-            "没有 TMDB 源命中时不给推荐，选择权交给用户")
+        let sorted = MoviePilotMediaRanking.sortedForDisplay([bare, enriched])
+        XCTAssertEqual(sorted.first?.tmdbId, 4242)
+        XCTAssertGreaterThan(
+            MoviePilotMediaRanking.score(enriched),
+            MoviePilotMediaRanking.score(bare),
+            "带 tmdb_id 的条目应当排在没有任何编号的条目前面")
     }
 
+    /// 同分必须保持服务端原序（`sorted` 本身不保证稳定性，这里钉住显式下标比较）。
     func testTiesKeepServerOrder() {
         let first = media(source: "douban", douban: "1")
         let second = media(source: "douban", douban: "2")
         let third = media(source: "douban", douban: "3")
-        let ranked = MoviePilotMediaRanking.candidates([first, second, third])
 
-        XCTAssertEqual(ranked.map(\.media.doubanId), ["1", "2", "3"])
-        XCTAssertEqual(Set(ranked.map(\.score)).count, 1, "三条同分，排序必须只靠原序")
+        XCTAssertEqual(
+            MoviePilotMediaRanking.sortedForDisplay([first, second, third]).map(\.doubanId),
+            ["1", "2", "3"])
+        XCTAssertEqual(
+            Set([first, second, third].map(MoviePilotMediaRanking.score)).count, 1,
+            "三条同分，排序必须只靠原序")
     }
 
-    // MARK: - 推荐
-
-    func testRecommendedPrefersTMDBSourceAndFallsBackToNil() {
-        let douban = media(source: "douban", douban: "1")
-        let tmdb = media(source: "tmdb", tmdb: 209867)
-        XCTAssertEqual(MoviePilotMediaRanking.recommended([douban, tmdb])?.tmdbId, 209867)
-
-        XCTAssertNil(MoviePilotMediaRanking.recommended([]), "空结果不该编出推荐")
-        XCTAssertNil(MoviePilotMediaRanking.recommended([douban]))
+    func testEmptyInputIsEmpty() {
+        XCTAssertTrue(MoviePilotMediaRanking.sortedForDisplay([]).isEmpty)
     }
 
-    // MARK: - 展示口径
-
-    func testSourceSummaryNamesTheIdentifierThatWillBeSentBack() {
-        let tmdb = media(source: "tmdb", tmdb: 209867)
+    /// 排序**只**调整顺序，不增删条目、不改内容——每张卡都是服务端返回的完整对象。
+    func testSortingDoesNotAlterMediaObjects() {
         let douban = media(source: "douban", douban: "35593344")
-        let bangumi = media(source: "bangumi", bangumi: 400602)
-        let bare = media(source: "bangumi")
+        let tmdb = media(source: "tmdb", tmdb: 209867)
+        let sorted = MoviePilotMediaRanking.sortedForDisplay([douban, tmdb])
 
-        XCTAssertEqual(
-            MoviePilotMediaRanking.candidates([tmdb]).first?.sourceSummary,
-            "来源 TMDB · TMDB 编号 209867")
-        XCTAssertEqual(
-            MoviePilotMediaRanking.candidates([douban]).first?.sourceSummary,
-            "来源 DOUBAN · 豆瓣编号 35593344")
-        XCTAssertEqual(
-            MoviePilotMediaRanking.candidates([bangumi]).first?.sourceSummary,
-            "来源 BANGUMI · Bangumi 编号 400602")
-        XCTAssertEqual(
-            MoviePilotMediaRanking.candidates([bare]).first?.sourceSummary,
-            "来源 BANGUMI · 没有外部编号")
-    }
-
-    func testYearParsingAcceptsFullDateAndPrefersTitleYear() {
-        var raw: [String: JSONValue] = [
-            "media_source": .string("tmdb"),
-            "tmdb_id": .number(1),
-            "year": .string("2023"),
-            "title_year": .string("2023-09-29"),
-        ]
-        let dated = MPMediaInfo(raw: raw)
-        XCTAssertEqual(MoviePilotMediaRanking.year(of: dated), 2023)
-
-        raw.removeValue(forKey: "title_year")
-        XCTAssertEqual(MoviePilotMediaRanking.year(of: MPMediaInfo(raw: raw)), 2023)
-        XCTAssertNil(MoviePilotMediaRanking.year(of: MPMediaInfo(raw: ["title": .string("x")])))
+        XCTAssertEqual(sorted.count, 2)
+        XCTAssertEqual(Set(sorted.map(\.id)), Set([douban.id, tmdb.id]))
+        XCTAssertEqual(sorted.first { $0.mediaSource == "tmdb" }, tmdb)
     }
 }

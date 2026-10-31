@@ -165,9 +165,16 @@ struct MoviePilotResourceView: View {
                 // 下载时 media 会原样回传成 `media_in`，MoviePilot 靠它里面的
                 // `tmdb_id` 刮削；没有编号的条目（多半是 Douban / Bangumi 源）
                 // 下载后刮削会缺字段——进页面就说清，别等入库了才发现。
+                //
+                // 顺带把**它实际带的编号**写出来（`sourceSummary`）：只说「没有
+                // TMDB 编号」时用户无从判断该不该换，看到「豆瓣编号 35593344」
+                // 才知道这条是豆瓣源、换 TMDB 那条即可。
                 if media.tmdbId == nil {
                     Label {
-                        Text("这条没有 TMDB 编号，下载完成后 MoviePilot 的自动刮削可能缺字段。换一条 TMDB 来源的条目可以避免。")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("没有 TMDB 编号，下载完成后 MoviePilot 的自动刮削可能缺字段。")
+                            Text("\(media.sourceSummary)。换一条 TMDB 来源的条目可以避免。")
+                        }
                     } icon: {
                         Image(systemName: "exclamationmark.triangle.fill")
                     }
