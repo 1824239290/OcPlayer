@@ -425,6 +425,12 @@ struct OpenSourceLicensesView: View {
         // 本页是**呈现式叶子页**，不在 `appRouteView` 上，氛围底要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle("开源许可证")
+        // 呈现式叶子页不走 `appShellBackChrome`（保留系统返回键），顶栏材质要自己
+        // 摘：否则全 App 就剩这两页顶栏还是一条洗白的带子（同款注释见 `AppShell` 的
+        // `RegularBackChrome` / `AppShellChrome.appShellChrome`）。
+        #if os(macOS)
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        #endif
     }
 }
 

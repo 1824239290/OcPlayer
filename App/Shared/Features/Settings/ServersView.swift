@@ -68,6 +68,12 @@ struct ServersView: View {
         // 不在 `appRouteView` 上，所以要单独挂（统一入口，iOS 自垫 / macOS 靠整窗层）。
         .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle("管理服务器")
+        // 呈现式叶子页不走 `appShellBackChrome`（保留系统返回键），顶栏材质要自己
+        // 摘：否则全 App 就剩这两页顶栏还是一条洗白的带子（同款注释见 `AppShell` 的
+        // `RegularBackChrome` / `AppShellChrome.appShellChrome`）。
+        #if os(macOS)
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        #endif
         .confirmationDialog(
             "删除服务器？",
             isPresented: Binding(
