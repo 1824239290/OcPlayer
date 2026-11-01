@@ -6,6 +6,15 @@
 
 ### 改动
 
+- **修「首页 / Bangumi（在看+搜索）顶栏纯白、丢失透明」——`.home` scrim 从窗口顶就压 0.55 白雾 + 系统窗口工具栏材质提亮去饱和，把顶栏玻璃底下的氛围图洗成了白条；详情页 / MoviePilot 资源搜索页因为「自带浓色主体图 + 自己摘了材质」才没这事**
+  （用户口径：「bangumi的搜索结果页面顶栏为什么是纯白，丢失了透明的效果」→ 复查补充：「moviepilot的搜索都没这种情况，首页的和bangumi的就出这个问题了」）
+  - **像素取证（用户实拍截图 + `Scripts/ambience-probe.swift` 分条带，CGImage.cropping 直读避开 y 轴翻转坑）**：工具栏条带（top 区域）色度中位 **5（阈值 6，判 `flat`＝纯色）**，同一窗口内容顶左缘色度 **35**——条带与内容之间一条断崖。跨换图两帧顶栏色相跟随氛围图（绿图 11 / 暖图 28）证明「玻璃采样整窗氛围层」的机制没坏，白是叠出来的。
+  - **三层来源与对应修法**：① `.home` scrim 顶部第一档 0.55 白（浅色）正压在顶栏条带上 → 重塑为「顶栏条带以下才起满雾」：顶档 0.25（夜间 0.10）、0.12 处爬到满档 0.66/0.48——内容顶（继续观看标题 / chips 行，≈0.10-0.13 窗高）雾度与改前几乎一致，可读性不变；② 其余页面都吃系统默认工具栏材质的洗白（详情页一直自己 `.toolbarBackground(.hidden)` 所以没事）→ 在 `appShellChrome()`（分区根页）与 `RegularBackChrome`（全部 push/呈现页，所有路由页与下载管理都经它）两处收口补同一句，Mac 限定；③ 轮播层 `AmbientBackdropCarousel()` 在调用点补 `.ignoresSafeArea()`，与声明层同一待遇——堵住「页面 ignoresSafeArea 用法改变继承安全区 → 图被裁到工具栏以下」这个记载过的塌陷家族的暴露面。
+  - **改后实测（同探针同区域）**：Bangumi 进度页 top **`flat`→`image`、5→11**，跨换图第二帧 **28**；首页 **14**；详情页 **36**（观感不变）。目视核对：粉/绿两帧顶栏均与内容连续、无白带；资源搜索页经 `RegularBackChrome` 同步摘材质，观感方向与详情页一致（更透）。
+  - **iOS 一并生效**：`.home` 档双端共用，iOS 顶部雾同步变薄（与 Liquid Glass 导航栏的透是同一方向），刻意不做平台分叉；`.detail` 档（详情页白字头部压底）不动。
+  - **未改**：氛围池查询与轮播节奏、`.detail` scrim、任何测试（`RouteAmbienceCoverageTests` 只钉 scrim 档位语义、不钉数值）。
+  - **验证**：macOS Debug 构建 + `OCPLAYER_START_SECTION=bangumi|home` / `OCPLAYER_START_ROUTE=detail` 逐页 `screencapture -l` + `ambience-probe --regions top,left --json`（数值见上）；全量 `xcodebuild test`（macOS scheme）**793 通过 / 0 失败 / 19 跳过（812 总数）**。深色模式用 `-AppleInterfaceStyle Dark` 进程级覆盖实拍：top 色度 **63**（深夜蓝图透进条带、玻璃件与文字可读），stops 0.10/0.48 直接可用。
+
 - **修「MoviePilot 资源搜索结果还是没懒加载：一次性铺一堆液态玻璃、滚动卡顿」——卡片流被 `VStack` 包住，`LazyVStack` 眼里只有一个子视图；60 条窗口首帧就整块建完、当帧被 footer 顶到 120，且触底续载从未生效**
   （用户口径：「moviepilot 的搜索结果显示还是没有进行懒加载，一次性展示太多了，一堆液态玻璃在那会出现卡顿的状况，你调研一下列表懒加载那些实现方案」）
   - **现场（代码事实）**：`MoviePilotResourceView` 的 `ScrollView` 里是 `LazyVStack(spacing: 18)`（`:60`），但里面**只放了 `torrentsSection(displayed:)` 一个子视图**（`:92`）；而 `torrentsSection` 返回的是 `VStack(spacing: 12)`（`:244`），把「资源」标题、状态卡、`ForEach(displayed.prefix(displayLimit))` 与 footer 全包在里面。上一批（`d0b9c55`）加的 60 条窗口因此**从未生效**。

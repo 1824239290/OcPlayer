@@ -432,7 +432,12 @@ struct AppShellView: View {
     @ViewBuilder
     private var windowAmbienceLayer: some View {
         ZStack(alignment: .top) {
+            // 调用点显式退出安全区，与下面声明层的待遇对齐：`BackdropAmbienceView`
+            // 内部虽有自己的 `ignoresSafeArea`，但页面自身的 ignoresSafeArea 用法会
+            // 改变本层继承到的安全区、让内部的失效（见下方声明层的注释）——轮播层
+            // 是所有不声明氛围的页面的唯一底，塌到顶栏以下整条顶栏就露出窗口底色。
             AmbientBackdropCarousel()
+                .ignoresSafeArea()
 
             ZStack {
                 if let ambience = app.windowAmbience {
@@ -681,6 +686,12 @@ private struct RegularBackChrome: ViewModifier {
                     .toolbar { toolbarItem }
             }
         }
+        #if os(macOS)
+        // push/呈现页的顶栏材质同样摘除（与分区根页 `appShellChrome`、详情页同一
+        // 套）：这些页在 macOS 上透的是整窗氛围层，默认材质会把条带洗白。所有
+        // 路由页都经 `appShellBackChrome` 落到这里，新增页不用记得补。
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        #endif
     }
 
     /// 呈现式页面自己画离场淡出：它不在路由出口（`appRouteView`）上，没人替它挂

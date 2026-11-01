@@ -77,11 +77,17 @@ struct BackdropAmbienceView: View {
                 )
             case .home:
                 // 全屏均衡档：夜间黑纱、日间白雾，底部渐隐回页面底色。
+                //
+                // 顶部留一档薄雾、到 ~0.12（≈顶栏条带下缘）才爬到满雾：雾从窗口顶
+                // 就压满（旧值 0.55/0.28 起）会把顶栏玻璃底下的图洗成白条——轮播页
+                // （首页 / Bangumi / MoviePilot 首页）顶栏读作「纯白」的主因。内容区
+                // 的雾度不变：继续观看标题 / chips 行都在 0.10-0.13 高度，此处雾度
+                // 仍到达满档。`.detail` 档不动（详情页白字头部靠它压底）。
                 let tint: Color = light ? .white : .black
                 LinearGradient(
                     stops: [
-                        .init(color: tint.opacity(light ? 0.55 : 0.28), location: 0),
-                        .init(color: tint.opacity(light ? 0.66 : 0.48), location: 0.45),
+                        .init(color: tint.opacity(light ? 0.25 : 0.10), location: 0),
+                        .init(color: tint.opacity(light ? 0.66 : 0.48), location: 0.12),
                         .init(color: Color.pageBackground.opacity(0.88), location: 0.85),
                         .init(color: Color.pageBackground, location: 1),
                     ],
