@@ -323,6 +323,11 @@ extension View {
         toolbar {
             AppShellNavigationToolbarContent()
         }
+        // 顶栏材质摘除（与详情页 `.toolbarBackground(.hidden, for: .windowToolbar)`
+        // 同一套）：默认材质会把玻璃底下的氛围图提亮/去饱和，轮播页顶栏因此读作
+        // 一条「洗白的带子」。分区根页的内容不延伸进顶栏，条带里透的是整窗氛围层
+        // （见 `AppShell.windowAmbienceLayer`），摘掉材质即恢复详情页式的透明观感。
+        .toolbarBackground(.hidden, for: .windowToolbar)
         #else
         toolbar {
             ToolbarItem(placement: .principal) {
