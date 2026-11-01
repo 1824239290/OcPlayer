@@ -17,10 +17,15 @@ struct MoviePilotResourceView: View {
     /// 重算（recomputeDisplayed），不随每次 body 求值重排——关键词输入、进度
     /// 文案、下载按钮状态这些高频求值不再触发全量过滤+排序。
     @State private var displayed: [MPTorrent] = []
-    /// 懒加载窗口：一次只物化前 displayLimit 条进 ForEach，触底续载一批。
-    /// 全量结果仍在内存（筛选候选聚合与下载原样回传需要），但视图 diff、
-    /// 卡片状态与滚动簿记只随窗口走，几千条结果不再把页面顶爆。
-    @State private var displayLimit = Self.displayPageSize
+    /// 懒加载窗口：一次只物化前 `revealWindow.shownCount(total:)` 条进 ForEach，
+    /// 触底续载一窗。全量结果仍在内存（筛选候选聚合与下载原样回传需要），但视图
+    /// diff、卡片状态与滚动簿记只随窗口走，几千条结果不再把页面顶爆。
+    ///
+    /// - Important: 窗口只管**条数**。要让「条数」真的等于「物化行数」，卡片流还
+    ///   必须是 `LazyVStack` 的**直接子视图**（见 `MoviePilotTorrentList` 的类型
+    ///   注释：被 `VStack` 包一层，`LazyVStack` 会把整块当一个子视图一次求值，
+    ///   窗口等于没设）。
+    @State private var revealWindow = TorrentRevealWindow()
     @State private var isSearching = false
     @State private var progressText: String?
     @State private var hasSearched = false
@@ -46,9 +51,6 @@ struct MoviePilotResourceView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    /// 懒加载窗口步长：触底一次续载这么多条。
-    private static let displayPageSize = 60
-
     init(media: MPMediaInfo) {
         self.media = media
         _keyword = State(initialValue: media.title ?? "")
@@ -57,39 +59,46 @@ struct MoviePilotResourceView: View {
     var body: some View {
         Group {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    // 1. 媒体悬浮卡片（Hero Glass Banner）
-                    heroGlassCard
+                // ## 这个 `LazyVStack` 里**只许放直子视图**
+                //
+                // 2026-11-01：列表被一整块 `VStack(spacing: 12)` 包着（「资源」标题 +
+                // 状态卡 + 卡片流 + footer 全在里头），于是 `LazyVStack` 眼里只有
+                // **一个**子视图 —— 它一次就把那块算完：首帧把 60 条全建出来（探针
+                // 实测 60/60），footer 的 `onAppear` 又在**同一帧**把窗口顶到 120，
+                // 进页面立刻是 120 张液态玻璃卡；而这一整块是 eager 的、footer 从不
+                // 离开视图树，`onAppear` 只发一次，所以之后再滚到底也**不会**续载。
+                // 用户看到的就是「一堆玻璃一次性铺出来、滚动卡顿，滚到底也不动」。
+                //
+                // 现在页头、标题、状态、卡片流各自是直子视图；卡片流收在
+                // `MoviePilotTorrentList` 里，那个类型的 body **顶层平铺**（ForEach +
+                // `if`），没有包任何布局容器。间距逐项对账（改造前 → 改造后）：
+                //
+                // | 位置 | 改造前 | 改造后 |
+                // | --- | --- | --- |
+                // | 页头内部三块之间 | 18（`LazyVStack` spacing） | 18（`pageHeader` 内部 spacing） |
+                // | 页头最后一块 →「资源」 | 18 + 4 | 12 + 10（标题的 `.padding(.top, 10)`） |
+                // | 「资源」→ 状态卡 / 第一张卡 | 12（内层 `VStack` spacing） | 12（本层 spacing） |
+                // | 卡与卡之间 | 12 | 12 |
+                // | 最后一张卡 → footer | 12 | 12 |
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    // 1. 页头：媒体悬浮卡 + 搜索框 + 筛选排序 + 提示条
+                    pageHeader
 
-                    // 2. 搜索框与控制条（Search & Controls）
-                    searchAndControlBar
+                    // 2. 「资源」标题与计数
+                    torrentsHeader
+                        .padding(.top, 10)
 
-                    // 3. 筛选与排序行（Filters & Sort）
-                    if !torrents.isEmpty || filters.isActive {
-                        MoviePilotTorrentFilterBar(
-                            filters: Binding(
-                                get: { filters },
-                                set: { filters = $0; recomputeDisplayed() }
-                            ),
-                            options: filterOptions,
-                            sortField: Binding(
-                                get: { sortField },
-                                set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
-                            ),
-                            sortAscending: Binding(
-                                get: { sortAscending },
-                                set: { sortAscending = $0; recomputeDisplayed() }
-                            )
-                        )
-                    }
+                    // 3. 状态卡（搜索中 / 出错 / 空态，三者择一）
+                    torrentsStatus
 
-                    // 4. 状态提示条
-                    if let notice {
-                        MoviePilotNoticeBanner(text: notice, isError: isNoticeError, glassCard: true)
-                    }
-
-                    // 5. 资源列表（Torrents List）
-                    torrentsSection(displayed: displayed)
+                    // 4. 卡片流 + 触底续载（直子视图，懒加载真正生效的地方）
+                    MoviePilotTorrentList(
+                        displayed: displayed,
+                        window: revealWindow,
+                        addingDownloadID: addingDownloadID,
+                        onDownload: { addDownload($0) },
+                        onReveal: { revealMore() }
+                    )
                 }
                 .padding(.horizontal, contentLeading)
                 .padding(.top, 16)
@@ -101,6 +110,11 @@ struct MoviePilotResourceView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .refreshable { await search().value }
+            #if OCPLAYER_SELFTEST
+            // 自检通道：不接服务器也能把「几千条结果 + 液态玻璃卡」这一屏摆出来
+            // （`OCPLAYER_MOVIEPILOT_TORRENTS=<条数>`，见 `installTorrentFixtureIfRequested`）。
+            .task { installTorrentFixtureIfRequested() }
+            #endif
             .navigationDestination(isPresented: $navigateToDownloads) {
                 MoviePilotDownloadsView()
                     // 与 MoviePilot 首页那个入口同款顶栏（此前只有系统返回键，
@@ -234,112 +248,137 @@ struct MoviePilotResourceView: View {
             field: sortField,
             ascending: sortAscending
         )
+        // 结果变少（筛选 / 排序 / 新批次替换）时窗口收敛回数据上界；不回落到一页
+        // 以下——窗口是「用户滚到多深」的记忆，放开筛选不该把他弹回顶部。
+        revealWindow.clamp(total: displayed.count)
     }
 
-    // MARK: - 资源列表与空态
+    // MARK: - 页头（hero / 搜索 / 筛选 / 提示）
 
-    @ViewBuilder
-    private func torrentsSection(displayed: [MPTorrent]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text("资源")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
+    /// 页头三块 + 提示条。四件固定内容，不是列表，所以照旧收在一个 `VStack` 里
+    /// ——它作为 `LazyVStack` 的**一个**直子视图出现，只影响自己这一块（惰性没有
+    /// 意义：它们本来就在首屏）。间距沿用改造前的 18。
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // 媒体悬浮卡片（Hero Glass Banner）
+            heroGlassCard
 
-                if filters.isActive, displayed.count != torrents.count {
-                    Text("\(displayed.count) / \(torrents.count)")
-                        .font(.footnote.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.fill.quaternary, in: Capsule())
-                } else if !torrents.isEmpty {
-                    Text("\(torrents.count)")
-                        .font(.footnote.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.fill.quaternary, in: Capsule())
-                }
+            // 搜索框与控制条（Search & Controls）
+            searchAndControlBar
 
-                Spacer()
-            }
-            .padding(.top, 4)
-
-            if isSearching {
-                HStack(spacing: 12) {
-                    ProgressView().controlSize(.regular)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(progressText ?? "正在搜索各站点资源…")
-                            .foregroundStyle(.primary)
-                            .font(.callout.weight(.medium))
-                        if !torrents.isEmpty {
-                            Text("已收到 \(torrents.count) 条，边搜边出——可以直接挑选下载")
-                                .foregroundStyle(.secondary)
-                                .font(.caption)
-                        }
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .liquidGlassCard()
-            } else if let searchError {
-                HStack(spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
-                    Text(searchError)
-                        .foregroundStyle(.red)
-                        .font(.callout)
-                    Spacer()
-                    Button(UIStrings.retry) { search() }
-                        .buttonStyle(.bordered)
-                }
-                .padding(14)
-                .liquidGlassCard()
-            } else if displayed.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: hasSearched ? "line.3.horizontal.decrease.circle" : "arrow.down.circle")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.secondary)
-                    Text(hasSearched
-                         ? (filters.isActive
-                            ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
-                            : "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。")
-                         : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
-                .liquidGlassCard()
-            }
-
-            // 种子卡片流（懒加载窗口：只物化前 displayLimit 条，触底哨兵续载）
-            let window = displayed.prefix(displayLimit)
-            ForEach(window) { torrent in
-                MoviePilotTorrentGlassCard(
-                    torrent: torrent,
-                    isAdding: addingDownloadID == torrent.id,
-                    onDownload: { addDownload(torrent) }
+            // 筛选与排序行（Filters & Sort）
+            if !torrents.isEmpty || filters.isActive {
+                MoviePilotTorrentFilterBar(
+                    filters: Binding(
+                        get: { filters },
+                        set: { filters = $0; recomputeDisplayed() }
+                    ),
+                    options: filterOptions,
+                    sortField: Binding(
+                        get: { sortField },
+                        set: { sortFieldRaw = $0.rawValue; recomputeDisplayed() }
+                    ),
+                    sortAscending: Binding(
+                        get: { sortAscending },
+                        set: { sortAscending = $0; recomputeDisplayed() }
+                    )
                 )
             }
 
-            if displayed.count > window.count {
-                lazyLoadFooter(shown: window.count, total: displayed.count)
+            // 状态提示条（下载结果 / 失败）
+            if let notice {
+                MoviePilotNoticeBanner(text: notice, isError: isNoticeError, glassCard: true)
             }
         }
     }
 
-    /// 触底续载：哨兵滚进视野就扩一批窗口；文案同时交代剩余量。
-    /// 反复滚出/滚回会重复触发，min 钳制保证幂等。
-    private func lazyLoadFooter(shown: Int, total: Int) -> some View {
-        Text("已展示 \(shown) / \(total) 条，继续下滑加载更多")
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 8)
-            .onAppear {
-                displayLimit = min(displayLimit + Self.displayPageSize, total)
+    // MARK: - 资源列表与空态
+
+    /// 「资源」标题 + 数量徽章。
+    ///
+    /// 上方的 `.padding(.top, 10)` 是间距补偿：改造前这段挂在卡片流所在的
+    /// `VStack(spacing: 12)` 顶上、还自带 `.padding(.top, 4)`，与页头之间是 18 + 4；
+    /// 现在它在 `LazyVStack(spacing: 12)` 里，12 + 10 才是同一个 22。
+    private var torrentsHeader: some View {
+        HStack(spacing: 8) {
+            Text("资源")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.primary)
+
+            if filters.isActive, displayed.count != torrents.count {
+                Text("\(displayed.count) / \(torrents.count)")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.fill.quaternary, in: Capsule())
+            } else if !torrents.isEmpty {
+                Text("\(torrents.count)")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.fill.quaternary, in: Capsule())
             }
+
+            Spacer()
+        }
+    }
+
+    /// 状态卡：搜索中 / 出错 / 空态，三者择一（都不成立时不占位）。
+    @ViewBuilder
+    private var torrentsStatus: some View {
+        if isSearching {
+            HStack(spacing: 12) {
+                ProgressView().controlSize(.regular)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(progressText ?? "正在搜索各站点资源…")
+                        .foregroundStyle(.primary)
+                        .font(.callout.weight(.medium))
+                    if !torrents.isEmpty {
+                        Text("已收到 \(torrents.count) 条，边搜边出——可以直接挑选下载")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard()
+        } else if let searchError {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text(searchError)
+                    .foregroundStyle(.red)
+                    .font(.callout)
+                Spacer()
+                Button(UIStrings.retry) { search() }
+                    .buttonStyle(.bordered)
+            }
+            .padding(14)
+            .liquidGlassCard()
+        } else if displayed.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: hasSearched ? "line.3.horizontal.decrease.circle" : "arrow.down.circle")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                Text(hasSearched
+                     ? (filters.isActive
+                        ? "筛掉了全部 \(torrents.count) 条结果，放宽条件试试。"
+                        : "没有搜到资源。换个关键词（比如加 S02 / 第2季）、或调整站点再试。")
+                     : "点击「搜索」开始；关键词已按剧名预填，可自行修改。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+            .liquidGlassCard()
+        }
+    }
+
+    /// 触底续载一窗：窗口只增不减、有界（夹在 `total` 以内）。
+    private func revealMore() {
+        revealWindow.reveal(total: displayed.count)
     }
 
     // MARK: - 动作
@@ -365,7 +404,7 @@ struct MoviePilotResourceView: View {
         // 展示序列、筛选候选与懒加载窗口一并打回首页大小。
         displayed = []
         filterOptions = TorrentFilterEngine.Options()
-        displayLimit = Self.displayPageSize
+        revealWindow.reset()
         searchTask = Task {
             let (updates, continuation) = AsyncStream.makeStream(
                 of: SearchStreamEvent.self,
@@ -421,6 +460,70 @@ struct MoviePilotResourceView: View {
         return searchTask ?? Task {}
     }
 
+    #if OCPLAYER_SELFTEST
+    /// 自检夹具：`OCPLAYER_MOVIEPILOT_TORRENTS=<条数>` 时灌入合成结果，绕过整条搜索链路。
+    ///
+    /// 与 `MoviePilotCardPreviewStage` 同一套 `simctl launch` 用法（`SIMCTL_CHILD_` 前缀
+    /// 转发环境变量）。存在的理由是这条缺陷**只在「很多条真结果 + 真液态玻璃」下显形**：
+    /// 探针能量出「物化了多少行」，但量不出「一屏玻璃卡滚起来卡不卡」，那必须在真机上看。
+    ///
+    /// ```
+    /// SIMCTL_CHILD_OCPLAYER_START_SECTION=moviepilot \
+    /// SIMCTL_CHILD_OCPLAYER_MOVIEPILOT_TORRENTS=1000 \
+    ///   xcrun simctl launch <udid> dev.jumusu.OcPlayer
+    /// ```
+    private func installTorrentFixtureIfRequested() {
+        guard let raw = ProcessInfo.processInfo.environment["OCPLAYER_MOVIEPILOT_TORRENTS"],
+              let count = Int(raw), count > 0 else { return }
+        let fixtures = (0..<count).map(Self.syntheticTorrent(index:))
+        torrents = fixtures
+        hasSearched = true
+        isSearching = false
+        progressText = nil
+        searchError = nil
+        filterOptions = TorrentFilterEngine.options(fixtures)
+        revealWindow.reset()
+        recomputeDisplayed()
+        AppDiagnostics.logInfo("自检：资源搜索页灌入 \(count) 条合成结果（OCPLAYER_MOVIEPILOT_TORRENTS）")
+    }
+
+    /// 复刻真实 SSE 元素的字段形态（`torrent_info` + `meta_info`），不是随便捏几条标题：
+    /// 卡片会读 title / description / site_name / size / seeders / labels / date_elapsed，
+    /// 标签行的宽度与换行只有在这些字段都齐的时候才和线上一致。
+    private static func syntheticTorrent(index: Int) -> MPTorrent {
+        let sites = ["馒头", "憨憨", "彩虹岛", "Audiences", "PTer"]
+        let teams = ["LoliHouse", "ANi", "SweetSub", "NC-Raws", "Kirara"]
+        let pix = ["1080p", "2160p"]
+        let encode = ["x265", "H264", "AV1"]
+        let episode = index % 24 + 1
+        let season = index / 24 + 1
+        let site = sites[index % sites.count]
+        let team = teams[index % teams.count]
+        return MPTorrent(
+            raw: [
+                "title": .string("药屋少女的呢喃 S\(String(format: "%02d", season))E\(String(format: "%02d", episode)) [\(pix[index % 2])][\(encode[index % 3])][\(team)]"),
+                "description": .string("第 \(episode) 话 · \(team) 压制 · Web 源"),
+                "enclosure": .string("https://example.invalid/torrent/\(index).torrent"),
+                "page_url": .string("https://example.invalid/detail/\(index)"),
+                "site_name": .string(site),
+                "size": .number(Double(1_200_000_000 + index * 7_300_000)),
+                "seeders": .number(Double(index % 97)),
+                "peers": .number(Double(index % 13)),
+                "date_elapsed": .string("\(index % 30 + 1) 天前"),
+                "downloadvolumefactor": .number(index % 4 == 0 ? 0 : 1),
+                "labels": .array([index % 5 == 0 ? .string("中字") : .string("简繁")]),
+            ],
+            meta: [
+                "season_episode": .string("S\(String(format: "%02d", season))E\(String(format: "%02d", episode))"),
+                "resource_team": .string(team),
+                "video_encode": .string(encode[index % 3]),
+                "resource_pix": .string(pix[index % 2]),
+                "edition": .string(index % 3 == 0 ? "BluRay" : "WEB-DL"),
+            ]
+        )
+    }
+    #endif
+
     private func addDownload(_ torrent: MPTorrent) {
         addingDownloadID = torrent.id
         notice = nil
@@ -443,6 +546,82 @@ struct MoviePilotResourceView: View {
 private enum SearchStreamEvent: Sendable {
     case batch([MPTorrent], MPSearchProgress)
     case failure(String)
+}
+
+// MARK: - 卡片流（这个 body 顶层平铺，是懒加载生效的唯一写法）
+
+/// 种子资源卡片流 + 触底哨兵。
+///
+/// ## 🔴 body 顶层**不许**包 `VStack`
+///
+/// `LazyVStack` 是按**直接子视图**决定物化哪些的：一个视图的 body 顶层平铺多个
+/// 视图，它们各自算一个子视图；但 body 顶层若是一个**布局容器**（`VStack` /
+/// `LazyVStack` / `Group` 之外的堆叠），那个容器会被当成**一个**子视图整体求值，
+/// 里面所有行一次性建出来，`revealWindow` 的条数直接失去意义。
+///
+/// 2026-11-01 本机探针（800pt 高窗口、60pt 行、`LazyVStack` 内容）实测：
+///
+/// | 结构 | 首帧物化行数 | footer 触发 |
+/// | --- | --- | --- |
+/// | `VStack` 包住 ForEach（改造前的现状） | **120** | 1 次（首帧，此后不再触发） |
+/// | body 顶层平铺（现在这样） | **7** | 0（滚到才触发） |
+///
+/// 也就是说：把这里改回 `VStack { ForEach … }`，退化的不是「省一点」，而是
+/// 首帧又铺满一屏玻璃卡、并且续载彻底失效。`AppTests/MoviePilotTorrentListLazinessTests`
+/// 用真实宿主窗口把这个判据钉住了（含反向验证）。
+///
+/// ## footer 的 `.id(window.limit)`
+///
+/// 窗口每涨一窗，footer 换一次身份。**实测口径（2026-11-01）**：在当前结构下把它
+/// 去掉，`MoviePilotTorrentListLazinessTests` 仍然全绿 —— 因为 `LazyVStack` 本来就会
+/// 把滚出视口的 footer 摘下来、滚回来时重新 `onAppear`。改造前那版「只触发一次」
+/// **不是**身份的问题，是上面那条：`VStack` 包住的整块是 eager 的，footer 从头到尾
+/// 都在树上，`onAppear` 自然只发一次。
+///
+/// 保留它的理由是把语义钉在「露了多少条」上，而不是「系统这次有没有把 footer 摘下来」：
+/// 官方文档明确说滚出屏的 subview 不会被立刻移除，会保留若干个更新周期。窗口一变就换
+/// 身份，续载时机就与这条内部策略无关。
+///
+/// - Note: 一窗 60 行 ≈ 5000pt，远大于任何视口，所以续载后 footer 一定被顶出视口，
+///   不会出现「涨一窗→footer 仍在视口→又涨一窗」的连锁。
+struct MoviePilotTorrentList: View {
+    let displayed: [MPTorrent]
+    let window: TorrentRevealWindow
+    let addingDownloadID: String?
+    let onDownload: (MPTorrent) -> Void
+    let onReveal: () -> Void
+
+    /// 行「进入视图树」的回调。**只给测试用**：`LazyVStack` 的物化是内部行为，
+    /// 外部唯一能观察到的信号就是行自身的 `onAppear`。
+    /// - Important: 生产调用点必须传 `nil`（多了它只是多一次空闭包调用，但语义上
+    ///   生产没有理由关心这个）。
+    var onRowAppear: ((String) -> Void)? = nil
+
+    var body: some View {
+        ForEach(displayed.prefix(window.shownCount(total: displayed.count))) { torrent in
+            MoviePilotTorrentGlassCard(
+                torrent: torrent,
+                isAdding: addingDownloadID == torrent.id,
+                onDownload: { onDownload(torrent) }
+            )
+            .onAppear { onRowAppear?(torrent.id) }
+        }
+
+        if window.hasMore(total: displayed.count) {
+            revealFooter(total: displayed.count)
+                .id(window.limit)
+        }
+    }
+
+    /// 触底哨兵：滚进视野就续载一窗，文案同时交代剩余量。
+    private func revealFooter(total: Int) -> some View {
+        Text("已展示 \(window.shownCount(total: total)) / \(total) 条，继续下滑加载更多")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 8)
+            .onAppear { onReveal() }
+    }
 }
 
 // MARK: - 种子资源液态玻璃卡片
