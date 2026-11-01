@@ -80,23 +80,47 @@ final class MoviePilotTorrentListLazinessTests: XCTestCase {
 
     /// 复刻 SSE 元素的字段形态：卡片读 title / description / site_name / size /
     /// seeders / labels / date_elapsed，字段齐了行高才与线上同量级（≈90pt）。
+    ///
+    /// - Note: **刻意拆成「字符串先算好 → 字典逐项赋值」**，不用一个大字典字面量。
+    ///   CI 的 Xcode 26.6 在那个写法上直接 `unable to type-check this expression in
+    ///   reasonable time`（9 个异构 `JSONValue` 元素 × 4 处字符串插值，全部要参与
+    ///   重载推断）；本机 Xcode 27.1 的类型检查器更快，本地全绿也照样会在 CI 红。
     private static func torrents(_ count: Int) -> [MPTorrent] {
-        (0..<count).map { index in
-            MPTorrent(
-                raw: [
-                    "title": .string("药屋少女的呢喃 S01E\(String(format: "%02d", index % 24 + 1)) [1080p][x265][LoliHouse]"),
-                    "description": .string("第 \(index % 24 + 1) 话 · LoliHouse 压制 · Web 源"),
-                    "enclosure": .string("https://example.invalid/t/\(index).torrent"),
-                    "site_name": .string("馒头"),
-                    "size": .number(Double(1_200_000_000 + index * 7_300_000)),
-                    "seeders": .number(Double(index % 97)),
-                    "date_elapsed": .string("\(index % 30 + 1) 天前"),
-                    "downloadvolumefactor": .number(index % 4 == 0 ? 0 : 1),
-                    "labels": .array([.string("简繁")]),
-                ],
-                meta: ["resource_pix": .string("1080p"), "resource_team": .string("LoliHouse")]
-            )
+        var result: [MPTorrent] = []
+        result.reserveCapacity(count)
+        for index in 0..<count {
+            result.append(torrent(at: index))
         }
+        return result
+    }
+
+    private static func torrent(at index: Int) -> MPTorrent {
+        let episode = index % 24 + 1
+        let title = "药屋少女的呢喃 S01E" + String(format: "%02d", episode)
+            + " [1080p][x265][LoliHouse]"
+        let description = "第 " + String(episode) + " 话 · LoliHouse 压制 · Web 源"
+        let enclosure = "https://example.invalid/t/" + String(index) + ".torrent"
+        let elapsed = String(index % 30 + 1) + " 天前"
+        let size = Double(1_200_000_000 + index * 7_300_000)
+        let seeders = Double(index % 97)
+        let volumeFactor: Double = index % 4 == 0 ? 0 : 1
+
+        var raw: [String: JSONValue] = [:]
+        raw["title"] = .string(title)
+        raw["description"] = .string(description)
+        raw["enclosure"] = .string(enclosure)
+        raw["site_name"] = .string("馒头")
+        raw["size"] = .number(size)
+        raw["seeders"] = .number(seeders)
+        raw["date_elapsed"] = .string(elapsed)
+        raw["downloadvolumefactor"] = .number(volumeFactor)
+        raw["labels"] = .array([.string("简繁")])
+
+        var meta: [String: JSONValue] = [:]
+        meta["resource_pix"] = .string("1080p")
+        meta["resource_team"] = .string("LoliHouse")
+
+        return MPTorrent(raw: raw, meta: meta)
     }
 
     // MARK: - 宿主窗口
