@@ -6,6 +6,28 @@
 
 ### 改动
 
+- **修「MoviePilot 资源搜索结果还是没懒加载：一次性铺一堆液态玻璃、滚动卡顿」——卡片流被 `VStack` 包住，`LazyVStack` 眼里只有一个子视图；60 条窗口首帧就整块建完、当帧被 footer 顶到 120，且触底续载从未生效**
+  （用户口径：「moviepilot 的搜索结果显示还是没有进行懒加载，一次性展示太多了，一堆液态玻璃在那会出现卡顿的状况，你调研一下列表懒加载那些实现方案」）
+  - **现场（代码事实）**：`MoviePilotResourceView` 的 `ScrollView` 里是 `LazyVStack(spacing: 18)`（`:60`），但里面**只放了 `torrentsSection(displayed:)` 一个子视图**（`:92`）；而 `torrentsSection` 返回的是 `VStack(spacing: 12)`（`:244`），把「资源」标题、状态卡、`ForEach(displayed.prefix(displayLimit))` 与 footer 全包在里面。上一批（`d0b9c55`）加的 60 条窗口因此**从未生效**。
+  - **根因（SwiftUI 的懒不是「按行」是「按直接子视图」）**：`LazyVStack` 只按**直子视图**决定物化哪些，铺满可视区就停；一个视图的 body 顶层若是一个**布局容器**，那个容器会被当成**一个**子视图整体求值，里面所有行一次性建出来。WWDC26「Dive into lazy stacks and scrolling with SwiftUI」明确讲了这条（并给了「body 顶层平铺多个视图时仍分别懒加载」的对照）。
+  - **本机探针实测（`Reports/moviepilot-list-lazy-loading-20261101/probe/`，只依赖 SwiftUI/AppKit，可直接 `swiftc` 跑）**：400×800 窗口、60pt 行、60 条窗口——
+    | 结构 | 首帧物化行数 | footer 触发 | 窗口 |
+    | --- | --- | --- | --- |
+    | `VStack` 包住 ForEach（改造前） | **60 行一次建完** | 1 次（首帧） | 60 → **120** |
+    | body 顶层平铺（现在） | **7 行** | 0 次 | 60 |
+    | 滚到底之后（改造前） | 仍是 60 | **永远停在 1 次** | 120，再也不动 |
+    | 滚到底之后（现在） | 每滚一次多一屏 | 每触底一次 | 60 → 120 → 180 |
+    另一个探针确认「抽成独立 `View` 是安全的」，**前提是 body 顶层平铺**：一旦包一层 `VStack`，立刻退回 120 行。
+  - **修法**：①卡片流抽成 `MoviePilotTorrentList`，它的 **body 顶层平铺**（`ForEach` + `if` 两个子视图，不包任何布局容器）；②`MoviePilotResourceView` 的 `LazyVStack` 改放**直子视图**——页头（hero + 搜索 + 筛选 + 提示，收在一个 `VStack(spacing: 18)` 里，全在首屏、惰性无意义）/「资源」标题 / 状态卡 / 卡片流；③窗口语义收进 `TorrentRevealWindow`（纯值类型）：`shownCount` / `hasMore` / `reveal`（每次 +60、夹到 total）/ `clamp`（结果变少后收敛、不落到一页以下——窗口是「用户滚到多深」的记忆，放开筛选不该把人弹回顶部）/ `reset`。
+  - **间距逐项对账（没有一处靠「看起来差不多」）**：页头内部三块之间 18 → 18（`pageHeader` 内部 spacing）；页头末块 →「资源」18 + 4 → 12 + 10；「资源」→ 状态卡/首卡 12 → 12；卡与卡之间 12 → 12；末卡 → footer 12 → 12。
+  - **footer 的 `.id(window.limit)` 与实测口径**：**反向验证时把它去掉，测试仍然全绿** —— 说明「改造后续载只触发一次」的真因**不是**身份，而是 `VStack` 包住的整块是 eager 的、footer 从头到尾都在树上。`.id` 保留（把续载时机钉在「露了多少条」上，不依赖系统「滚出屏的 subview 保留几个更新周期」这条内部策略），但注释按实测结论重写，不写没验证过的因果。
+  - **测试**：新增 `TorrentRevealWindowTests`（**14 条**：首窗、不足一窗、触底 +60、夹到 total、全露完后幂等、clamp 缩到 5 条仍保底一页、clamp 在窗口中间收敛、空数据、reset、hasMore 边界、`pageSize <= 0` 兜底、负 total）与 `MoviePilotTorrentListLazinessTests`（**3 条**，**真实宿主窗口** + 500 条夹具，用行自身 `onAppear` 计数当「物化了多少行」的判据：首帧 ≤12 行、连续触底的窗口序列必须是 `[60, 120, 180]`、结果不足一窗时 footer 不出现）。**反向验证**：把 `MoviePilotTorrentList.body` 包回 `VStack(spacing: 12)`，首帧物化立刻变 **500 行**（窗口首帧被推到 total），3 条里 2 条变红（`XCTAssertLessThanOrEqual failed: ("500") is greater than ("12")`）。macOS scheme **812 通过 / 0 失败 / 19 跳过**（新增 17 条）。
+  - **一个测量坑记在用例里**：「滚到底」不能用一次 `scroll(to: maxY)` 复刻——`LazyVStack` 的文档高度是**估算值**，新行落位会把它抬高，「底」一直在移动；一次跳底只会命中当时的估算底，之后内容长出来就停在那儿（实测：真实宿主窗口里第二页永远触发不到）。用例改成**一帧 400pt 地连续推**，与真实滚动同构。
+  - **调试入口**：`#if OCPLAYER_SELFTEST` 新增 `OCPLAYER_MOVIEPILOT_TORRENTS=<n>`，灌 n 条字段形态复刻真实 SSE 元素的合成结果（`torrent_info` + `meta_info`），不接服务器就能把「一千条 + 液态玻璃」这一屏摆出来看；与既有 `OCPLAYER_MOVIEPILOT_CARDS` 同一套 `SIMCTL_CHILD_` 用法。
+  - **未改**：媒体搜索结果页（`MoviePilotHomeView.searchResultsView`）与下载管理页的 `ForEach` **本来就是 `LazyVStack` 的直接子视图**（探针同构结构只物化 7 行），不动；液态玻璃观感、数据模型、`MoviePilotKit` 包 API 一律不动——这次卡顿的量级来自**物化数量**，不是玻璃本身。
+  - **调研结论（为什么不是别的方案）**：`List` 会挡死整窗氛围（本仓库 `MoviePilotDownloadsView` 已有判例）；`PagedListLoader` 那套 offset 分页不适用——`/api/v1/search/title/stream` 是 SSE 全量流，没有 offset 可分；`onScrollTargetVisibilityChange` 留作兜底（先把官方推荐的 footer `onAppear` 哨兵跑通，实测触发时机已稳定）；`drawingGroup()` 明确不能用（会截断 `ignoresSafeArea` 且玻璃无法采样被栅格化的背景）。
+  - **验证**：`Scripts/clean.sh` → macOS Debug 构建通过（Build 629）；全量 `xcodebuild test` 812/0/19；首屏人工核对（`Reports/moviepilot-list-lazy-loading-20261101/first-screen-after.png`：402×874 下只铺 4 张卡，不是全部）。
+
 - **修「明明是最新版 liberika，播到片尾还是弹播放出错、也不连播」：一次 seek 打断的读把 EIO 永久锁进 FFmpeg 的 `AVIOContext.error`，读到 EOF 时先拿到它——App 侧按自然收尾做窄口径折叠**
   （用户口径：「去查手机上的 OcPlayer，为什么明明是最新版修改过的 liberika 还是播完会有报错」+ 手机截图：S3E53 · 24:02，`playback error: demux worker error: … av_read_frame … Input/output error (-5); custom AVIO read at offset 6296469 failed earlier: source read canceled`）
   - **现场**（iPhone 17 / iOS 26.6.2 / OcPlayer 0.2.2 (621) / liberika v0.3.0；日志用 `xcrun devicectl device copy from --device … --domain-type appDataContainer --domain-identifier dev.jumusu.OcPlayer --source Library/Logs/OcPlayer` 直接拉回，不用碰设备）：`药屋少女的呢喃 S3E53`（片长 1442.176 s）**09:05:23.424** `open()` → **09:05:24.533** 续播 `seek 0 → 933.474 s`，**13 ms 后**内核 stderr 落 `[matroska,webm @ 0x11bb99b80] Read error`（在途读被 interrupt 打断，用户看不见）→ 正常播 7 分钟 → **09:12:18.977** 自动跳过 credits 到 1441.676 s（被 0.5 s 尾部防线钳在 1442.176−0.5）→ **09:12:19.165** `playback_fatal: demux worker error: source error: ffmpeg error in av_read_frame: Input/output error (-5); custom AVIO read at offset 6296469 failed earlier: source read cancelled`，位置 1441.690 s → `.error`、无连播，7 秒后用户手动关。对照：同一份日志 11:53 的会话也有两次 seek（含片尾跳过），`error_count=0`、`.stopped` 干净收尾——那两次 worker 没在途读，interrupt 没打到东西。
