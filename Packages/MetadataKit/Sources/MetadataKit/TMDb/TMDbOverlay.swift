@@ -138,8 +138,19 @@ public struct TMDbOverlay: Sendable, Equatable {
     ///
     /// 但**占位名**（`第 N 集` / `Episode N`）无论开关如何都该被 TMDB 顶掉——
     /// 那不是「用户的元数据」，是服务端没数据的表现，留着它等于白白浪费 TMDB 数据。
+    ///
+    /// **占位判断是双向的**：TMDB 自己也会给占位名——在播新番未播出集的「第 N 集」、
+    /// zh-CN 翻译缺失时回落出的本地化占位（实测《学生会也有洞！》2026-10-07 拉的季
+    /// 缓存里 S1E3-12 全是「第 N 集」，而服务器后来为已播集刮到了真名；TMDB 占位
+    /// 顶掉真名，观感就是「明明有名称，一刷新就没了」）。TMDB 值本身是占位时，
+    /// 它不比服务器的真名更可信——真名在服务器手里就保住服务器。
     public func displayEpisodeTitle(number: Int, serverValue: String, preferTMDb: Bool) -> String {
         guard let tmdb = episode(number: number)?.name, !tmdb.isEmpty else { return serverValue }
+        if Self.isPlaceholderEpisodeName(tmdb) {
+            // 占位对占位（两侧都还没数据）维持原样返回 TMDB 值，与 preferTMDb=true
+            // 时的既有行为一致；服务器是**真名**则保住服务器。
+            return Self.isPlaceholderEpisodeName(serverValue) ? tmdb : serverValue
+        }
         if preferTMDb { return tmdb }
         if serverValue.isEmpty { return tmdb }
         return Self.isPlaceholderEpisodeName(serverValue) ? tmdb : serverValue

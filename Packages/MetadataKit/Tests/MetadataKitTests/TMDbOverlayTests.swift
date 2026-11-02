@@ -160,6 +160,26 @@ final class TMDbOverlayTests: XCTestCase {
                        "TMDB 的标题")
     }
 
+    /// **占位判断是双向的**：TMDB 自己也会给占位名（在播新番未播出集、zh-CN 翻译缺失
+    /// 的回落），它不该顶掉服务器的真名——实测《学生会也有洞！》缓存里 S1E5 是
+    /// 「第 5 集」而服务器刮到了三段式真名，TMDB 占位顶掉真名，观感即「有名称、
+    /// 一刷新就没了」。
+    func testTMDbPlaceholderDoesNotReplaceRealServerTitle() {
+        let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 5, name: "Episode 5")])
+        let real = "《学生会集训！！》《梅与绽绽大作战！！》《因伞而聚的雨和梅》"
+        // 核心回归：无论开关如何，服务器的真名都要保住
+        XCTAssertEqual(o.displayEpisodeTitle(number: 5, serverValue: real, preferTMDb: true), real)
+        XCTAssertEqual(o.displayEpisodeTitle(number: 5, serverValue: real, preferTMDb: false), real)
+        // 两侧都是占位：维持 TMDB 值（与 preferTMDb=true 的既有行为一致）。
+        // 两侧刻意用**不同形态**的占位（TMDB 英文 / 服务端中文），断言才分得清
+        // 返回的是哪一边——上一版两侧同名「第 5 集」，断言锁不住这个分支。
+        XCTAssertEqual(o.displayEpisodeTitle(number: 5, serverValue: "第 5 集", preferTMDb: true),
+                       "Episode 5")
+        // TMDB 是占位、服务器名为空（空串也判占位）：只能用 TMDB 的占位，不能弄空标题
+        XCTAssertEqual(o.displayEpisodeTitle(number: 5, serverValue: "", preferTMDb: false),
+                       "Episode 5")
+    }
+
     /// 服务端名字为空 → 用 TMDB。
     func testEmptyServerEpisodeNameUsesTMDb() {
         let o = seasonOverlay(episodes: [EpisodeEntry(episodeNumber: 1, name: "TMDB 标题")])

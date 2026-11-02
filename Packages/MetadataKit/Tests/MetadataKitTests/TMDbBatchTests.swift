@@ -178,6 +178,44 @@ final class TMDbBatchTests: XCTestCase {
         XCTAssertFalse(requested.contains { $0.contains("/season/") })
     }
 
+    /// 在播季的**旧长缓存**批量补全也要回源（按 fetchedAt 的回源窗口判，不只看
+    /// expires_at——这条路径的卖点就是「不用一个个点开」）；播完的季照旧跳过。
+    /// 一个用例两侧对称锁住 `isFresh` 在 batch 路径的行为。
+    func testBatchRefetchesStaleAiringSeasonButSkipsFinishedOne() async throws {
+        var requested: [String] = []
+        let enricher = makeEnricher { path in
+            requested.append(path)
+            if path.hasSuffix("/tv/71785") { return (200, Self.tvWithSeasonsJSON) }
+            if path.contains("/season/") { return (200, Self.seasonJSON) }
+            return (404, Data())
+        }
+        var show = MediaItem(id: "s1", name: "阿松", kind: .series)
+        show.tmdbID = "71785"
+        let tenDaysAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        let longLifetime: TimeInterval = 90 * 24 * 60 * 60
+        // 季 1：在播（还有未播集），10 天前写下的 90 天长缓存 → 也要回源
+        try await store.saveTMDbPayload(
+            .season(TMDbSeason(seasonNumber: 1, episodes: [
+                EpisodeEntry(episodeNumber: 1, airDate: "2020-01-01"),
+                EpisodeEntry(episodeNumber: 2, airDate: "2999-12-31"),
+            ])),
+            key: .season(tvID: 71785, number: 1), language: "zh-CN",
+            lifetime: longLifetime, now: tenDaysAgo)
+        // 季 2：播完（全部已播且超季终宽限），同样 10 天前的 90 天长缓存 → 跳过
+        try await store.saveTMDbPayload(
+            .season(TMDbSeason(seasonNumber: 2, episodes: [
+                EpisodeEntry(episodeNumber: 1, airDate: "2020-01-01"),
+                EpisodeEntry(episodeNumber: 2, airDate: "2020-03-31"),
+            ])),
+            key: .season(tvID: 71785, number: 2), language: "zh-CN",
+            lifetime: longLifetime, now: tenDaysAgo)
+
+        _ = await enricher.enrichAll(items: [show], tenant: tenant)
+
+        XCTAssertTrue(requested.contains { $0.contains("/season/1") }, "在播季超窗应回源")
+        XCTAssertFalse(requested.contains { $0.contains("/season/2") }, "完结季的旧长缓存照旧跳过")
+    }
+
     // MARK: - 取消
 
     /// 取消后：**已处理的都已落库**（可续），未处理的跳过，`wasCancelled` 为真。

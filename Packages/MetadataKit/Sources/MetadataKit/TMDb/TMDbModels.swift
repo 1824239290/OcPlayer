@@ -189,6 +189,47 @@ public struct EpisodeEntry: Sendable, Equatable, Codable {
     }
 }
 
+public extension TMDbSeason {
+    /// 在播判据的季终宽限（天）：最后一集播出后 N 天内，季仍按「在播」处理。
+    ///
+    /// 不给宽限的话，「还有未播集」一过季终日整季就被判定型、回归常规缓存期，
+    /// 而季终集的集名/翻译往往要滞后几天才补（TMDB 侧实测播出后数小时到一天，
+    /// 滞后的翻译更常见）——季终集恰好是最想让用户看到真名的一集。
+    static let airingGraceDays = 7
+
+    /// 是否「在播 / 还在变」。
+    ///
+    /// 三档，从宽到严：
+    /// - 空季（数据还没进）或存在**未定档**（`airDate == nil`）或**解析不出**的集
+    ///   → 在播。未知 ≠ 已播，保守按还要刷处理（与 `TMDbAirDate`「解析不出一律
+    ///   nil」的口径衔接）。
+    /// - 存在未播出集（播出日 ≥ 今天）→ 在播。播出日**恰为今天**算未播（当晚才播）。
+    /// - 季终宽限：最后一集播出后 `airingGraceDays` 天内 → 仍算在播（见上）。
+    ///
+    /// 全部集已定档、已播出且超出宽限 → 定型，回归常规缓存期。
+    ///
+    /// 日期一律走 `TMDbAirDate.parse`（本地时区、共享 parser），**不做字符串字典序
+    /// 比较**——坏日期（「2026-13-45」）字典序下会按任意方向误判成未来/过去。
+    var isAiring: Bool {
+        if episodes.isEmpty { return true }
+        let now = Date()
+        if episodes.contains(where: { episode in
+            guard let air = TMDbAirDate.parse(episode.airDate) else { return true }
+            return air >= Self.startOfToday(now)
+        }) { return true }
+        if let last = episodes.compactMap({ TMDbAirDate.parse($0.airDate) }).max(),
+           now.timeIntervalSince(last) < TimeInterval(Self.airingGraceDays * 24 * 60 * 60) {
+            return true
+        }
+        return false
+    }
+
+    /// 本地时区的当日零点（`TMDbAirDate.parse` 就是本地时区口径，比较必须对齐）。
+    private static func startOfToday(_ date: Date) -> Date {
+        Calendar.current.startOfDay(for: date)
+    }
+}
+
 // MARK: - 搜索结果
 
 /// 标题搜索结果的一项。用于没有 `ProviderIds["Tmdb"]` 时的兜底匹配。
