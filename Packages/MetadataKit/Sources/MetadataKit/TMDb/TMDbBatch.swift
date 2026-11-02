@@ -249,10 +249,13 @@ extension TMDbEnricher {
         var fetched = 0
         for season in entity.seasons {
             if Task.isCancelled { break }
-            // 已有且未过期的季直接跳过（与条目同样靠数据库判断，天然可续）。
+            // 新鲜就不动（与条目同样靠数据库判断，天然可续）。判据走共享的
+            // `isFresh`：在播季的旧长缓存（expires_at 还远）也要按天回源——
+            // 这条路径的卖点就是「不用一个个点开」，只看 expires_at 会把在播番
+            // 的旧占位数据一直当最新。
             let key = TMDbEntityKey.season(tvID: tvID, number: season.seasonNumber)
             if let seasonCached = try? await store.tmdbPayload(key: key, language: language),
-               !seasonCached.isExpired() {
+               TMDbEnricher.isFresh(seasonCached) {
                 continue
             }
             if await fetchAndStore(key: key, language: language) { fetched += 1 }

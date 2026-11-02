@@ -340,6 +340,163 @@ final class TMDbEnricherTests: XCTestCase {
         XCTAssertEqual(counter.value, 1)
     }
 
+    /// 在播判定：未定档/解析不出的日期 = 未知 = 在播；有未播集（含恰为今天）在播；
+    /// 季终宽限期内（最后一集播出后 `airingGraceDays` 天）在播；全部播出且超宽限
+    /// 才定型；空季 = 数据不全 = 在播。日期一律走 `TMDbAirDate.parse` 口径（本地
+    /// 时区），坏日期不能按字典序误判。
+    func testSeasonAiringDetection() {
+        func season(_ episodes: [EpisodeEntry]) -> TMDbSeason {
+            TMDbSeason(seasonNumber: 1, episodes: episodes)
+        }
+        // 还有未来集
+        XCTAssertTrue(season([EpisodeEntry(episodeNumber: 1, airDate: dayString(-30)),
+                              EpisodeEntry(episodeNumber: 2, airDate: dayString(7))]).isAiring)
+        // 恰为今天（当晚才播）= 未播
+        XCTAssertTrue(season([EpisodeEntry(episodeNumber: 1, airDate: dayString(0))]).isAiring)
+        // 未定档（nil）= 未知 = 在播
+        XCTAssertTrue(season([EpisodeEntry(episodeNumber: 1, airDate: dayString(-30)),
+                              EpisodeEntry(episodeNumber: 2, airDate: nil)]).isAiring)
+        // 解析不出的坏日期（TMDbAirDate 口径）= 未知 = 在播，不许按字典序误判
+        XCTAssertTrue(season([EpisodeEntry(episodeNumber: 1, airDate: "2026-13-45")]).isAiring)
+        // 季终宽限：最后一集昨天播出 → 仍在播（翻译补齐的尾巴期）
+        XCTAssertTrue(season([EpisodeEntry(episodeNumber: 1, airDate: dayString(-30)),
+                              EpisodeEntry(episodeNumber: 2, airDate: dayString(-1))]).isAiring)
+        // 全部已播且超宽限 = 定型
+        XCTAssertFalse(season([EpisodeEntry(episodeNumber: 1, airDate: "2020-01-01"),
+                               EpisodeEntry(episodeNumber: 2, airDate: "2020-03-31")]).isAiring)
+        // 最后一集播出时间刚过宽限天数 → 定型
+        XCTAssertFalse(season([EpisodeEntry(
+            episodeNumber: 1,
+            airDate: dayString(-(TMDbSeason.airingGraceDays + 1)))]).isAiring)
+        // 空季 = 数据不全 = 在播
+        XCTAssertTrue(season([]).isAiring)
+    }
+
+    /// 本地时区口径的「N 天后」日期串（与 `TMDbAirDate.parse` 的解析口径对称）。
+    private func dayString(_ offsetDays: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let day = Calendar.current.date(byAdding: .day, value: offsetDays, to: Date())!
+        return formatter.string(from: day)
+    }
+
+    /// 共享新鲜判据 `isFresh`：在播季按 fetchedAt 的回源窗口判（**与落库的
+    /// expires_at 解耦**——审查抓出来的坑：把 expires_at 缩成 1 天会被每日维护
+    /// 当死数据删掉）；完结季/非季载荷只看 expires_at。
+    func testFreshnessJudgement() {
+        let day = 24 * 60 * 60.0
+        func cached(_ payload: TMDbEntityPayload, fetchedAgo: TimeInterval,
+                    expiresIn: TimeInterval) -> CachedTMDbPayload {
+            CachedTMDbPayload(payload: payload,
+                              fetchedAt: Date().addingTimeInterval(-fetchedAgo),
+                              expiresAt: Date().addingTimeInterval(expiresIn))
+        }
+        let airing = TMDbEntityPayload.season(TMDbSeason(seasonNumber: 1, episodes: [
+            EpisodeEntry(episodeNumber: 1, airDate: "2999-12-31")]))
+        let finished = TMDbEntityPayload.season(TMDbSeason(seasonNumber: 2, episodes: [
+            EpisodeEntry(episodeNumber: 1, airDate: "2020-01-01"),
+            EpisodeEntry(episodeNumber: 2, airDate: "2020-03-31")]))
+        // 在播 + 拉取时间超窗 → 不新鲜（旧长缓存也要回源）
+        XCTAssertFalse(TMDbEnricher.isFresh(cached(airing, fetchedAgo: 10 * day, expiresIn: 90 * day)),
+                       "在播季超窗应回源，哪怕 expires_at 还远")
+        // 在播 + 窗口内 → 新鲜（窗口内不重复请求）
+        XCTAssertTrue(TMDbEnricher.isFresh(cached(airing, fetchedAgo: 0.5 * day, expiresIn: 90 * day)))
+        // 完结季：只看 expires_at——fetchedAt 再旧也不提前回源，超期才回源
+        XCTAssertTrue(TMDbEnricher.isFresh(cached(finished, fetchedAgo: 10 * day, expiresIn: 90 * day)))
+        XCTAssertFalse(TMDbEnricher.isFresh(cached(finished, fetchedAgo: 10 * day, expiresIn: -day)))
+    }
+
+    /// 在播季落库的 expires_at 也写**常规期**：「按天回源」由读侧 `isFresh`（按
+    /// fetchedAt）实现。若把 expires_at 缩成 1 天，每日存储维护会按它物理删行，
+    /// 在播季数据被清掉后离线/先读后补就拿不到任何叠加数据了。
+    func testAiringSeasonStoresRegularExpiry() async throws {
+        let enricher = makeEnricher { path in
+            path.contains("/season/") ? (200, Self.airingSeasonJSON) : (404, Data())
+        }
+        let key = TMDbEntityKey.season(tvID: 100, number: 1)
+        try await enricher.fetchAndStore(key: key)
+        let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+        let cached = try XCTUnwrap(stored)
+        let span = cached.expiresAt.timeIntervalSince(cached.fetchedAt)
+        XCTAssertEqual(span, TimeInterval(90 * 24 * 60 * 60), accuracy: 5,
+                       "在播季也应写常规缓存期（默认 90 天），不是 1 天")
+    }
+
+    /// 旧版本写下的**长缓存**在播季：拉取时间超过在播窗口后仍要回源。
+    /// 这是救活存量——修复前落库的 expires_at 写到几个月后，只看它永不刷新。
+    func testStaleAiringSeasonWithLongCacheStillRefetches() async throws {
+        let counter = CallCounter()
+        let enricher = makeEnricher { _ in
+            counter.increment()
+            return (200, Self.airingSeasonJSON)
+        }
+        let link = TMDbLink(itemID: "series", entityKey: .tv(100),
+                            source: .providerID, confidence: 1.0, linkedAt: Date())
+        let season = TMDbSeason(seasonNumber: 1, episodes: [
+            EpisodeEntry(episodeNumber: 1, name: "第 1 集", airDate: "2026-10-01"),
+            EpisodeEntry(episodeNumber: 2, name: "第 2 集", airDate: "2999-12-31"),
+        ])
+        let tenDaysAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        try await store.saveTMDbPayload(.season(season), key: .season(tvID: 100, number: 1),
+                                        language: "zh-CN", lifetime: 90 * 24 * 60 * 60,
+                                        now: tenDaysAgo)
+        let didFetch = await enricher.refreshSeason(seriesLink: link, seasonNumber: 1)
+        XCTAssertTrue(didFetch, "expires 未到但已过在播窗口，应回源")
+        XCTAssertEqual(counter.value, 1)
+        // 刷下来的新数据（仍在播）在窗口内不重复刷
+        let again = await enricher.refreshSeason(seriesLink: link, seasonNumber: 1)
+        XCTAssertFalse(again)
+        XCTAssertEqual(counter.value, 1)
+    }
+
+    /// 播完的季：旧长缓存不回源（只看 expires_at），与在播季的按天回源互为反面——
+    /// 若 `isFresh` 的在播守卫被误删（完结季也按 fetchedAt 判），这条会红。
+    func testFinishedSeasonWithLongCacheSkipsRefetch() async throws {
+        let counter = CallCounter()
+        let enricher = makeEnricher { _ in
+            counter.increment()
+            return (200, Self.airingSeasonJSON)
+        }
+        let link = TMDbLink(itemID: "series", entityKey: .tv(100),
+                            source: .providerID, confidence: 1.0, linkedAt: Date())
+        let finished = TMDbSeason(seasonNumber: 1, episodes: [
+            EpisodeEntry(episodeNumber: 1, name: "第一集", airDate: "2020-01-01"),
+            EpisodeEntry(episodeNumber: 2, name: "第二集", airDate: "2020-03-31"),
+        ])
+        let tenDaysAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        try await store.saveTMDbPayload(.season(finished), key: .season(tvID: 100, number: 1),
+                                        language: "zh-CN", lifetime: 90 * 24 * 60 * 60,
+                                        now: tenDaysAgo)
+        let didFetch = await enricher.refreshSeason(seriesLink: link, seasonNumber: 1)
+        XCTAssertFalse(didFetch, "完结季的旧长缓存照旧跳过")
+        XCTAssertEqual(counter.value, 0)
+    }
+
+    /// 季终宽限：最后一集昨天播出 → 整季仍按在播处理，超窗的长缓存照样回源。
+    /// 不给宽限的话，季终集播出次日整季就被判定型，季终集占位名锁进常规缓存期——
+    /// 恰好是最想让用户看到真名的一集。
+    func testSeasonFinaleWithinGraceStillRefetches() async throws {
+        let counter = CallCounter()
+        let enricher = makeEnricher { _ in
+            counter.increment()
+            return (200, Self.airingSeasonJSON)
+        }
+        let link = TMDbLink(itemID: "series", entityKey: .tv(100),
+                            source: .providerID, confidence: 1.0, linkedAt: Date())
+        let justEnded = TMDbSeason(seasonNumber: 1, episodes: [
+            EpisodeEntry(episodeNumber: 1, name: "第一集", airDate: dayString(-30)),
+            EpisodeEntry(episodeNumber: 2, name: "第二集", airDate: dayString(-1)),
+        ])
+        let tenDaysAgo = Date().addingTimeInterval(-10 * 24 * 60 * 60)
+        try await store.saveTMDbPayload(.season(justEnded), key: .season(tvID: 100, number: 1),
+                                        language: "zh-CN", lifetime: 90 * 24 * 60 * 60,
+                                        now: tenDaysAgo)
+        let didFetch = await enricher.refreshSeason(seriesLink: link, seasonNumber: 1)
+        XCTAssertTrue(didFetch, "季终宽限内的旧长缓存应回源")
+        XCTAssertEqual(counter.value, 1)
+    }
+
     /// 非 `.tv` 的 link（电影）不该被当成剧来查季。
     func testSeasonOverlayRejectsNonTVLink() async throws {
         let enricher = makeEnricher { _ in (200, Self.season2JSON) }
@@ -521,6 +678,13 @@ final class TMDbEnricherTests: XCTestCase {
     static let seasonJSON = Data(#"""
     {"season_number":1,"name":"第 1 季","overview":"第一季简介","poster_path":"/s1.jpg",
      "episodes":[{"episode_number":1,"name":"电气少年","still_path":"/st1.jpg"}]}
+    """#.utf8)
+
+    /// 在播季：还有一集播在遥远的未来。
+    static let airingSeasonJSON = Data(#"""
+    {"season_number":1,"name":"在播季","episodes":[
+      {"episode_number":1,"name":"第一集","air_date":"2026-10-01"},
+      {"episode_number":2,"name":"第二集","air_date":"2999-12-31"}]}
     """#.utf8)
 }
 

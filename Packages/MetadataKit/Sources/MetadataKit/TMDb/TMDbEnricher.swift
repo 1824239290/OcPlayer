@@ -99,12 +99,49 @@ public actor TMDbEnricher {
         guard await client.isConfigured else { return false }
         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
-        // 已有且未过期 → 不动。
+        // 已有且新鲜 → 不动。新鲜判据是共享的 `isFresh`（在播季按 fetchedAt 的
+        // 回源窗口判，其余按 expires_at）——别在这里各写一份，库级补全与
+        // `performRefresh` 的早退用的是同一份。
         if let cached = try? await store.tmdbPayload(key: key, language: preferences.language),
-           !cached.isExpired() {
+           Self.isFresh(cached) {
             return false
         }
         return await fetchAndStore(key: key)
+    }
+
+    /// 在播季的回源窗口（天）。
+    ///
+    /// 周更番每播一集，集名与翻译就在 TMDB 侧补一集（实测播出后数小时到一天内），
+    /// 而电影/剧级的标题、海报几个月都不变——所以**在播季按天回源，其余按用户
+    /// 设置的常规缓存期**。1 天 = 下一次打开详情页就能拿到刚补的翻译，请求量
+    /// 最多每天一次每番。
+    ///
+    /// ⚠️ 这是**回源窗口，不是缓存期**：落库的 `expires_at` 恒写常规期。若把
+    /// expires_at 也缩成 1 天，每日存储维护（`evictExpiredTMDbEntities` 按
+    /// expires_at 物理删行）会把还在追的季数据当死数据删掉——离线 / TMDB 不可达
+    /// 时详情页就什么叠加数据都没了（审查抓出来的坑）。「何时回源」与「何时删除」
+    /// 必须解耦，本常量只管前者。
+    public static let airingSeasonRefreshDays = 1
+
+    static var airingSeasonLifetime: TimeInterval {
+        TimeInterval(airingSeasonRefreshDays) * 24 * 60 * 60
+    }
+
+    /// 缓存是否「足够新鲜、不必回源」——**三条回源路径的唯一判据**（`refreshSeason`、
+    /// `performRefresh`、批量补全的 `enrichSeasons`）。加新回源路径时用它，别各写一份：
+    /// 上一版只接在 `refreshSeason`，库级补全仍按 expires_at 跳过在播季的旧缓存，
+    /// 审查抓出来过。
+    ///
+    /// - 常规载荷（电影/剧/合集/播完的季）：看 `expires_at`。
+    /// - 在播季：按 `fetchedAt + 回源窗口` 判。旧版本写下的长缓存（expires_at 到
+    ///   几个月后）也照样按时回源，否则 TMDB 侧后来补的集名永远进不来
+    ///   （《学生会也有洞！》踩到的坑：10-07 开播时拉的「第 N 集」占位，TMDB 一周
+    ///   内补了真名，90 天缓存却把它锁到 2027 年）。
+    static func isFresh(_ cached: CachedTMDbPayload) -> Bool {
+        if case .season(let season) = cached.payload, season.isAiring {
+            return Date().timeIntervalSince(cached.fetchedAt) < Self.airingSeasonLifetime
+        }
+        return !cached.isExpired()
     }
 
     // MARK: - 合集（BoxSet）
@@ -307,10 +344,12 @@ public actor TMDbEnricher {
         guard await client.isConfigured else { return .noMatch }
         let language = preferences.language
 
-        // ① 已有对应且数据够新 → 不动。
+        // ① 已有对应且数据够新 → 不动。新鲜判据与 `refreshSeason` / 批量补全共用
+        // `isFresh`（在播季按 fetchedAt 判）——matcher 会为集/季条目产出季键，这条
+        // 早退也会遇到季载荷，不能只看 expires_at。
         if let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant),
            let cached = try? await store.tmdbPayload(key: link.entityKey, language: language),
-           !cached.isExpired() {
+           Self.isFresh(cached) {
             return .skipped
         }
 
@@ -399,6 +438,9 @@ public actor TMDbEnricher {
             case .collection(let id):
                 payload = .entity(try await client.collection(id: id, language: language))
             }
+            // 缓存期恒为用户设置的常规期——在播季的「按天回源」由读侧的共享判据
+            // `isFresh`（按 fetchedAt）实现，与落库的 expires_at 解耦（见
+            // `airingSeasonRefreshDays` 的注释：缩 expires_at 会被每日维护删数据）。
             try await store.saveTMDbPayload(payload, key: key, language: language,
                                            lifetime: preferences.cacheLifetime)
             lastFailure = nil
