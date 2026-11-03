@@ -793,7 +793,15 @@ struct PlayerScreen: View {
         hudVisibility.cancel()
         hudVisibility.hide()
         // 绑定本次关闭的 request：延迟 dismiss 期间若用户已开新片，不能误清新 presentedPlayer。
-        let closingID = request?.id
+        //
+        // ⚠️ 必须取**实时**的 `app.presentedPlayer`，不能用视图上的 `request`：
+        // 键盘监听在 `.onAppear` 只装一次（`installKeyMonitor` 里 `guard keyMonitor == nil`），
+        // 闭包按值捕获了**首集那一版** PlayerScreen 结构体，`request` 因此冻在首集。
+        // 自动连播后屏上已是第二集（presented = B），此处若取到 A：
+        // `shouldDismiss(presented: B, closing: A)` = false → 提前 return →
+        // `isClosing` 永远停在 true → 之后 ESC / × 全被 `guard !isClosing` 吞掉，
+        // 引擎不停、画面继续播，只剩强退（2026-11-03 实际事故）。
+        let closingID = app.presentedPlayer?.id
         // 先触发窗口还原动画，画面还活着、跟着窗口一起缩回去（与打开时的
         // 展开动画对称）；缩完再停引擎、退出播放器——不会出现「播放器没了，
         // 窗口自己在动」的不连贯。停播若是同步做，画面第 0ms 就黑掉，
@@ -805,19 +813,29 @@ struct PlayerScreen: View {
         Task { @MainActor in
             // 窗口弹性动画约 0.18-0.2s，等它带着画面缩完再停引擎。
             try? await Task.sleep(for: .seconds(0.25))
-            guard !Task.isCancelled else { return }
+            // ⚠️ `isClosing` 是**一次性开关**：下面每条「不 dismiss 就返回」的路径都必须
+            // 把它复位。否则一次误判就把整个关闭通道焊死——再按 ESC 会被开头的
+            // `guard !isClosing` 直接吞掉，而引擎还在播（2026-11-03 实际事故）。
+            guard !Task.isCancelled else {
+                isClosing = false
+                return
+            }
             // 停播前确认屏上还是被关的这片：PlaybackController 是全局共享单例，
             // 延迟停播不能误停用户在这 0.25s 内新开的片。closingID 为 nil
             // 保持老行为（照常停引擎，只是不 dismiss）。
             if let closingID,
                !PlayerClosePolicy.shouldDismiss(presentedID: app.presentedPlayer?.id, closingID: closingID) {
+                isClosing = false
                 return
             }
             controller.stopPlayback()
             guard PlayerClosePolicy.shouldDismiss(
                 presentedID: app.presentedPlayer?.id,
                 closingID: closingID
-            ) else { return }
+            ) else {
+                isClosing = false
+                return
+            }
             app.dismissPlayer()
         }
     }
