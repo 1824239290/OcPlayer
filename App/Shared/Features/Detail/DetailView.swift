@@ -264,6 +264,25 @@ struct DetailView: View {
     }
     #endif
 
+    #if DEBUG
+    /// 🔬 探针专用：**屏幕上真正显示的那张头图** URL，含「未就绪回落氛围池」这一步。
+    ///
+    /// 为什么不直接用 `backdropTarget`：那个只给本条目自己的图、`url == nil` 时**不回落**，
+    /// 所以它永远记不到氛围池兜底图。而 2026-11-03 的归档证据与
+    /// `verify-backdrop-urls.py` 的判据都是「① 池兜底 → ③ TMDB、② 本条目服务端图 0 次」，
+    /// **必须能记到池图**，否则新旧日志无法比对、脚本也判不出 ①。
+    ///
+    /// 平台分叉照抄两处既有取图逻辑，不新造语义：
+    /// * macOS：`artTarget`（1600 档，`url == nil` 时回落氛围池）—— 与归档证据同口径；
+    /// * iOS：与 `ambienceTarget` 同一表达式（未就绪用氛围池、就绪用本条目 800 档）。
+    private var probedBackdropURL: URL? {
+        #if os(macOS)
+        return artTarget.url
+        #else
+        return (model.isAmbienceReady ? backdropTarget : homeAmbienceTarget).url
+        #endif
+    }
+    #endif
 
     var body: some View {
         Group {
@@ -301,6 +320,39 @@ struct DetailView: View {
         //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
         //     图已就绪，不会先灰一块再可见地补加载。
         .pageAmbience(ambienceTarget)
+        #if DEBUG
+        // 🔬 探针·详情页头图 —— **排查专用，日常请勿依赖**。
+        //
+        // 用途：复核「同一条目先后上屏两张图」（背景图闪烁）。每次**屏幕上那张头图**
+        // 的 URL 变化记一条，三个字段合起来才回答得了「换了没有、换的时候解析完了没有、
+        // TMDB 补上了没有」：
+        //   url        屏幕上实际显示的头图 URL（`nil` = 还没有图）
+        //   resolved   `backdropLatch` 是否已锁定终态来源
+        //   hasOverlay TMDB 叠加层是否已到（剧集级）
+        //
+        // ## ⚠️ 口径：含「未就绪回落到氛围池」这一步，与 `backdropTarget` **不同**
+        //
+        // 取图走 `probedBackdropURL`，它含「本条目还没图时先画氛围池那张」的回落，
+        // 记的是**屏幕上真正显示的那张**；而 `backdropTarget` 只给本条目自己的图、
+        // 不回落。两者不可混用：
+        //   * 2026-11-03 那次归档证据就是这个口径（`Reports/ambience-flash-20261103/`），
+        //     判据是「① 池兜底 → ③ TMDB、② 本条目服务端图 0 次」；
+        //   * 若改成只记 `backdropTarget`，日志里**永远不会出现池兜底图**，
+        //     `verify-backdrop-urls.py` 会判不出 ①，新旧日志也无法比对。
+        //
+        // ## 已知局限（别用它证它证不了的事）
+        //   * 只在 DEBUG 编进来，Release 一行都不生成；
+        //   * 挂在 `.onChange` 上，**采不到「首帧那一下」**——页面第一次画出来时
+        //     `initial: true` 那一跳才是首帧，之后才是变化跳。`detailLanded` 这类
+        //     「内容何时落地」的信号在这里结构性采不到，所以本探针**不带该字段**。
+        .onChange(of: probedBackdropURL, initial: true) { _, newURL in
+            AppDiagnostics.logWarning("探针·详情页头图", fields: [
+                "url": .string(newURL?.absoluteString ?? "nil"),
+                "resolved": .boolean(model.isBackdropSourceResolved),
+                "hasOverlay": .boolean(model.tmdbOverlay != nil),
+            ])
+        }
+        #endif
         .task(id: item.id) {
             model.attach(app)
             await model.load()
