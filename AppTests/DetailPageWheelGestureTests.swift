@@ -1,6 +1,10 @@
 import XCTest
 @testable import OcPlayer
 
+// `DetailPagePager` 整体位于 `DetailPageFlip.swift` 的 `#if os(macOS)` 内，
+// 这组用例必须同样限定平台 —— 否则 iOS scheme 编译时找不到该类型（CI 上真实发生过）。
+#if os(macOS)
+
 /// 「一轮新的滚动动作」判据（`DetailPagePager.isNewScrollGesture`）。
 ///
 /// ## 为什么要有这组用例
@@ -135,3 +139,5 @@ final class DetailPageWheelGestureTests: XCTestCase {
             timestamp: 100.119, lastTimestamp: 100.000))
     }
 }
+
+#endif  // os(macOS)
