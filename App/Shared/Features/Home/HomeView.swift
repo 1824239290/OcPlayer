@@ -1,5 +1,6 @@
 import AppDesignKit
 import CoreModel
+import MetadataKit
 import SwiftUI
 
 /// 首页：按设置「首页栏目」的顺序渲染 继续观看 / 接下来看 / 最近添加 / 媒体库。
@@ -580,16 +581,12 @@ struct HomeSearchContent: View {
         }
 
         do {
-            let page = try await server.itemsPage(
-                parentID: nil,
-                kinds: [.movie, .series],
-                recursive: true,
-                startIndex: reset ? 0 : searchNextStartIndex,
-                limit: Self.searchPageSize,
-                sort: nil,
-                watchState: nil,
-                searchTerm: term
-            )
+            let descriptor = MediaPageDescriptor(
+                parentID: nil, kinds: [.movie, .series], recursive: true,
+                sort: nil, watchState: nil, searchTerm: term)
+            guard let page = try await app.metadata.refreshPage(
+                descriptor, startIndex: reset ? 0 : searchNextStartIndex,
+                limit: Self.searchPageSize) else { return }
             guard !Task.isCancelled, activeSearchID == loadID else { return }
             // 会话已换（搜索在途时切了服务器）：本词结果作废。清空搜索词回到
             // rails——留着词的话 searchLanded 永远是 false，会一直卡在骨架屏。
@@ -597,16 +594,11 @@ struct HomeSearchContent: View {
                 query = ""
                 return
             }
-            if reset {
-                searchResults = page.items
-            } else {
-                // 防御服务端重复页：按 id 去重追加。
-                var existing = Set(searchResults.map(\.id))
-                searchResults += page.items.filter { existing.insert($0.id).inserted }
-            }
-            searchTotalCount = page.totalRecordCount
-            searchNextStartIndex = (reset ? 0 : searchNextStartIndex) + page.items.count
-            searchLastPageWasFull = page.items.count >= Self.searchPageSize
+            // 仓储返回的是该查询的累计页（已按 id 去重），视图不再维护第二份分页。
+            searchResults = page.value.items
+            searchTotalCount = page.value.totalCount
+            searchNextStartIndex = page.value.nextStartIndex
+            searchLastPageWasFull = page.value.lastPageWasFull
             searchLanded = true
         } catch is CancellationError {
             return

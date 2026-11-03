@@ -1,15 +1,12 @@
 import CoreModel
 import Foundation
 import JellyfinKit
+import MetadataKit
 @testable import OcPlayer
 import XCTest
 
-/// 详情页**点击预取**：`openDetail` 在 push 的同时发 item/季/集请求并落快照，
-/// 进页 `load()` 读到 TTL 内的新快照后零请求秒出（TTL 语义见 `DetailSnapshotTTLTests`）。
-///
-/// 这里钉四件事：请求形态与并行度（series 一轮拉齐 item+季+集）、in-flight 去重
-/// （连点不重发）、按 kind 分流（电影只发 item、合集带成员页）、快照足够新时
-/// 预取直接免了。预取失败静默（进页 load() 兜底）属于网络层行为，不在此覆盖。
+/// 详情页点击预取：预取与进页刷新共用仓储的同一个单飞任务，
+/// 因此「预取一轮、进页再一轮」的重复请求在结构上不存在。
 @MainActor
 final class DetailPrefetchTests: XCTestCase {
 
@@ -30,7 +27,6 @@ final class DetailPrefetchTests: XCTestCase {
         if let suiteName { defaults?.removePersistentDomain(forName: suiteName) }
     }
 
-    /// 与 `DetailLoadCancellationTests.makeApp` 同构。
     private func makeApp() async throws -> (AppModel, StubMediaServer) {
         let app = AppModel(
             tmdb: TMDbCoordinator(defaults: try XCTUnwrap(defaults), sessionConfiguration: nil),
@@ -59,93 +55,88 @@ final class DetailPrefetchTests: XCTestCase {
                   seriesID: "s-1", seasonNumber: 1, episodeNumber: number)
     }
 
-    /// 等一条预取落地（任务完成后从 `detailPrefetchTasks` 撤槽）。
-    private func awaitPrefetch(_ app: AppModel, id: String) async {
-        await app.detailPrefetchTasks[id]?.value
-        await Task.yield()
+    private func cachedDetail(_ app: AppModel, id: String) async -> MediaDetailContent? {
+        await app.metadata.cachedDetail(itemID: id)?.value
     }
 
-    /// series：一轮并行拉齐 item + 季 + 首选季的集，落成进页可直接 TTL 命中的快照。
-    func testSeriesPrefetchFetchesItemSeasonsEpisodesAndStoresSnapshot() async throws {
+    /// series：一轮拉齐 item + 季 + 首选季的集，并写进仓储。
+    func testSeriesPrefetchFetchesItemSeasonsAndEpisodes() async throws {
         let (app, stub) = try await makeApp()
         stub.itemResult = .success(series())
         stub.seasonsResult = .success([season()])
         stub.episodesResult = .success([episode(id: "e-1", number: 1)])
 
-        app.openDetail(series())
-        await awaitPrefetch(app, id: "s-1")
+        let task = try XCTUnwrap(app.prefetchDetail(for: series()))
+        await task.value
 
         XCTAssertEqual(stub.callCount("item"), 1)
         XCTAssertEqual(stub.callCount("seasons"), 1)
-        XCTAssertEqual(stub.callCount("episodes"), 1, "首选季的集应在预取时一并拉下")
-        let snapshot = try XCTUnwrap(app.detailSnapshot(for: "s-1"), "预取结果应写进快照表")
-        XCTAssertEqual(snapshot.detail.name, "学生会也存活！")
-        XCTAssertEqual(snapshot.selectedSeasonID, "se-1", "默认季与进页同一套判断")
-        XCTAssertEqual(snapshot.episodesBySeason["se-1"]?.map(\.id), ["e-1"])
-        // 预取完成后撤槽：下一次 openDetail 不会被 in-flight 表挡住。
-        XCTAssertNil(app.detailPrefetchTasks["s-1"])
+        XCTAssertEqual(stub.callCount("episodes"), 1)
+        let snapshotValue = await cachedDetail(app, id: "s-1")
+        let snapshot = try XCTUnwrap(snapshotValue)
+        XCTAssertEqual(snapshot.item.name, "学生会也存活！")
+        XCTAssertEqual(snapshot.episodesSeasonID, "se-1")
+        XCTAssertEqual(snapshot.episodes.map(\.id), ["e-1"])
     }
 
-    /// in-flight 去重：预取未完成时再次点击同一条（快速连点 / 双入口），不重发。
+    /// in-flight 去重：预取在途时再次点击同一条，不重发。
     func testInFlightPrefetchIsDeduplicated() async throws {
         let (app, stub) = try await makeApp()
         stub.itemResult = .success(series())
         stub.seasonsResult = .success([season()])
 
-        app.openDetail(series())
-        let first = try XCTUnwrap(app.detailPrefetchTasks["s-1"])
-        app.openDetail(series()) // 预取仍在途
+        let first = try XCTUnwrap(app.prefetchDetail(for: series()))
+        try await Task.sleep(for: .milliseconds(20))
+        let second = try XCTUnwrap(app.prefetchDetail(for: series()))
         await first.value
+        await second.value
 
         XCTAssertEqual(stub.callCount("item"), 1, "连点不应重复发预取请求")
-        XCTAssertEqual(stub.callCount("seasons"), 1)
     }
 
-    /// 快照已在 TTL 内（刚从这条详情返回）：预取直接免了，一个请求都不发。
-    func testFreshSnapshotSkipsPrefetch() async throws {
+    /// 已经确认过的详情再点一次：仓储内存命中，零网络。
+    func testFreshPrefetchSkipsNetwork() async throws {
         let (app, stub) = try await makeApp()
-        app.storeDetailSnapshot(
-            .init(detail: series(), seasons: [season()], similar: [],
-                  selectedSeasonID: "se-1", episodesBySeason: ["se-1": []]),
-            for: "s-1")
+        stub.itemResult = .success(series())
+        stub.seasonsResult = .success([season()])
 
-        app.openDetail(series())
-        try await Task.sleep(for: .milliseconds(20))
-        await awaitPrefetch(app, id: "s-1")
+        await app.prefetchDetail(for: series())?.value
+        let before = stub.callCount("item")
+        await app.prefetchDetail(for: series())?.value
 
-        XCTAssertEqual(stub.callCount("item"), 0, "TTL 内的快照不需要预取")
-        XCTAssertEqual(stub.callCount("seasons"), 0)
+        XCTAssertEqual(stub.callCount("item"), before, "内存已确认的详情不再预取")
     }
 
-    /// 电影：只发详情一发。不该有季/集的试探请求。
-    func testMoviePrefetchFetchesItemOnly() async throws {
+    /// 电影：只发详情，不白拉季列表。
+    func testMoviePrefetchFetchesOnlyItem() async throws {
         let (app, stub) = try await makeApp()
-        stub.itemResult = .success(MediaItem(id: "m-1", name: "沙丘 2", kind: .movie))
+        let movie = MediaItem(id: "m-1", name: "沙丘 2", kind: .movie)
+        stub.itemResult = .success(movie)
 
-        app.openDetail(MediaItem(id: "m-1", name: "沙丘 2", kind: .movie))
-        await awaitPrefetch(app, id: "m-1")
+        await app.prefetchDetail(for: movie)?.value
 
         XCTAssertEqual(stub.callCount("item"), 1)
         XCTAssertEqual(stub.callCount("seasons"), 0)
-        XCTAssertEqual(stub.callCount("episodes"), 0)
-        XCTAssertEqual(try XCTUnwrap(app.detailSnapshot(for: "m-1")).detail.name, "沙丘 2")
+        let snapshotValue = await cachedDetail(app, id: "m-1")
+        let snapshot = try XCTUnwrap(snapshotValue)
+        XCTAssertEqual(snapshot.item.name, "沙丘 2")
     }
 
-    /// 合集：详情 + 第一页成员（成员区与合集背景兜底的输入）。
+    /// 合集：详情 + 第一页成员一起落仓储（背景兜底与成员区都靠它）。
     func testBoxSetPrefetchFetchesMembers() async throws {
         let (app, stub) = try await makeApp()
-        let member = MediaItem(id: "m-1", name: "福音战士新剧场版：Q", kind: .movie)
-        stub.itemResult = .success(MediaItem(id: "box-1", name: "EVA 系列", kind: .boxSet))
-        stub.itemsPageByParent["box-1"] = MediaItemsPage(
-            items: [member], startIndex: 0, totalRecordCount: 1)
+        let box = MediaItem(id: "box-1", name: "EVA", kind: .boxSet)
+        stub.itemResult = .success(box)
+        stub.itemsPageResult = .success(MediaItemsPage(
+            items: [MediaItem(id: "m-1", name: "序", kind: .movie)], startIndex: 0,
+            totalRecordCount: 1))
 
-        app.openDetail(MediaItem(id: "box-1", name: "EVA 系列", kind: .boxSet))
-        await awaitPrefetch(app, id: "box-1")
+        await app.prefetchDetail(for: box)?.value
 
         XCTAssertEqual(stub.callCount("item"), 1)
-        XCTAssertEqual(stub.callCount("itemsPage"), 1, "合集成员应经 itemsPage 第一页拉下")
-        XCTAssertEqual(stub.lastItemsPageQuery?.parentID, "box-1")
-        let snapshot = try XCTUnwrap(app.detailSnapshot(for: "box-1"))
+        XCTAssertEqual(stub.callCount("itemsPage"), 1)
+        let snapshotValue = await cachedDetail(app, id: "box-1")
+        let snapshot = try XCTUnwrap(snapshotValue)
         XCTAssertEqual(snapshot.collectionMembers.map(\.id), ["m-1"])
     }
 }

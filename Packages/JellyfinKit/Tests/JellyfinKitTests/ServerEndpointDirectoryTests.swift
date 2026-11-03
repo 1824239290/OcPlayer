@@ -9,7 +9,7 @@ import XCTest
 /// `ServerProbeTests` 覆盖。
 final class ServerEndpointDirectoryTests: XCTestCase {
 
-    private let lan = URL(string: "http://192.168.5.107:8096")!
+    private let lan = URL(string: "http://192.168.100.107:8096")!
     private let tailscale = URL(string: "http://100.64.1.20:8096")!
 
     /// 线程安全的收集盒：决议器的变更回调是 `@Sendable`，捕获并修改局部 var

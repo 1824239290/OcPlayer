@@ -189,9 +189,9 @@ struct MetadataStoreTests {
     /// 否则换个网络首页缓存就"空"了。
     @Test func tenantIgnoresBaseURL() {
         var lan = makeProfile()
-        lan.baseURL = URL(string: "http://192.168.5.107:8096")!
+        lan.baseURL = URL(string: "http://192.168.100.107:8096")!
         var tailscale = makeProfile()
-        tailscale.baseURL = URL(string: "http://100.127.128.96:8096")!
+        tailscale.baseURL = URL(string: "http://100.64.1.96:8096")!
         #expect(TenantID(profile: lan) == TenantID(profile: tailscale))
     }
 

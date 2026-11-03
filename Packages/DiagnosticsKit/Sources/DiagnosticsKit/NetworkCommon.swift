@@ -28,6 +28,16 @@ public enum NetworkLog {
             "请求成功 path=\(path) duration_ms=\(Int(duration * 1000))")
     }
 
+    /// 取消是控制流，不是故障：记 debug，别让「搜索防抖取消」把诊断日志刷成一片红。
+    public static func requestCancelled(
+        category: String,
+        path: String,
+        duration: TimeInterval
+    ) {
+        logger(category: category).debug(
+            "请求取消 path=\(path) duration_ms=\(Int(duration * 1000))")
+    }
+
     public static func requestFailed(
         category: String,
         path: String,

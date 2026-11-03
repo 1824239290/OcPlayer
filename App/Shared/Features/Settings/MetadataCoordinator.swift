@@ -5,19 +5,19 @@ import JellyfinKit
 import MetadataKit
 import Observation
 
-/// App 层的元数据缓存协调器：建库、包装服务器、供离线读。
+/// 媒体数据面的 App 层宿主：开库、维护，以及为当前会话提供唯一的 `MediaRepository`。
 ///
-/// 与 `BangumiCoordinator` 同款职责划分：域包（`MetadataKit`）只懂存储与协议，
-/// 路径、生命周期、与 `AppModel` 的接线留在 App 层。
+/// 视图不再直接调用 `MediaServer` 的媒体读方法，也不再各自持有详情 / 分页缓存。
+/// 首页、详情、预取、库页与进度写回全部经这里转发到仓储；缓存写入、租户隔离、
+/// 同键单飞与 SQLite 读写都收在 `MediaRepository` 内部。
 ///
-/// **测试下不建库**：`setup()` 只在 `AppModel.bootstrap()` 里调，而 bootstrap 在
-/// 测试宿主下整段跳过（见 `AppModel+Session`）。未 setup 时 `wrap()` 原样返回内层
-/// 服务器，于是测试行为与引入本模块之前完全一致、也不会碰真实 Application Support。
+/// 建库失败时仓储退化为**内存模式**：读取与刷新协议不变，只是不落盘。
+/// 因此 App 不需要「有库走缓存、无库直走服务器」的第二套实现。
 @MainActor
 @Observable
 final class MetadataCoordinator {
 
-    /// 当前是否可用（建库完成）。false 时所有缓存功能降级为「直通」。
+    /// 当前是否可用（建库完成）。false 时仓储仍可用，只是不落盘。
     private(set) var isReady = false
     /// 建库失败的原因（供设置页/诊断展示）。
     private(set) var setupError: String?
@@ -26,20 +26,19 @@ final class MetadataCoordinator {
 
     @ObservationIgnored private var store: MetadataStore?
     @ObservationIgnored private var setupTask: Task<Void, Never>?
-    @ObservationIgnored private var currentTenant: TenantID?
+    @ObservationIgnored private var databaseDirectory: URL?
+    @ObservationIgnored private var activeServer: (any MediaServer)?
+    @ObservationIgnored private var activeServerIdentifier: ObjectIdentifier?
+    @ObservationIgnored private var repository: MediaRepository?
 
     init() {}
 
     // MARK: - 建库
 
     /// 启动时调用一次，异步建库（不阻塞主线程）。
-    ///
-    /// - Parameter directory: 数据根目录；nil = `OcPlayerStorage.defaultRoot`。
-    ///   测试传临时目录。
     func setup(directory: URL? = nil) {
         guard setupTask == nil else { return }
         let root = directory ?? OcPlayerStorage.defaultRoot
-        // 目录只是路径，先记下来做体积统计；真正的建库在后台线程。
         databaseDirectory = root
         setupTask = Task.detached(priority: .userInitiated) {
             do {
@@ -52,8 +51,6 @@ final class MetadataCoordinator {
                 }
             } catch {
                 AppDiagnostics.logError("媒体元数据库建库失败 error=\(error)")
-                // 失败必须复位 setupTask：否则 guard setupTask == nil 短路，
-                // 重启前再也无法重试。
                 await MainActor.run {
                     self.setupTask = nil
                     self.setupError = "元数据缓存初始化失败：\(error)"
@@ -62,7 +59,7 @@ final class MetadataCoordinator {
         }
     }
 
-    /// 等建库完成（写穿路径用；未 setup 时立刻返回 false）。
+    /// 等建库完成（仓储创建用）。未 setup 时立即返回 false。
     func waitUntilReady() async -> Bool {
         if isReady { return true }
         guard let setupTask else { return false }
@@ -70,63 +67,170 @@ final class MetadataCoordinator {
         return isReady
     }
 
-    @ObservationIgnored private var databaseDirectory: URL?
+    // MARK: - 当前会话
 
-    // MARK: - 包装
-
-    /// 把真实服务器包成写穿缓存版本。
-    ///
-    /// 未就绪时**原样返回内层**：缓存是可选增强，不该因为建库失败就让整个 App 不能用
-    /// （磁盘满 / 权限异常都可能建库失败）。
-    func wrap(_ server: any MediaServer) async -> any MediaServer {
-        guard await waitUntilReady(), let store else { return server }
-        let tenant = TenantID(profile: server.profile)
-        currentTenant = tenant
-        do {
-            try await store.touchTenant(tenant, profile: server.profile)
-        } catch {
-            AppDiagnostics.logWarning("租户登记失败（不影响使用）", fields: ["error": .string("\(error)")])
+    /// 会话落地 / 换服 / 登出时调用。服务器实例变化即丢弃旧仓储的内存投影，
+    /// 磁盘内容按租户隔离，仍归同一台服务器复用。
+    func setActiveServer(_ server: (any MediaServer)?) {
+        let identifier = server.map { ObjectIdentifier($0 as AnyObject) }
+        if identifier != activeServerIdentifier {
+            let retired = repository
+            activeServer = server
+            activeServerIdentifier = identifier
+            repository = nil
+            if let retired {
+                // 旧会话的在途请求可能在登出后才回来；先关写盘闸门再放手。
+                Task { await retired.shutdown() }
+            }
         }
-        return CachedMediaServer(wrapping: server, store: store, tenant: tenant)
     }
 
-    // MARK: - 离线读
-
-    /// 当前租户的存储句柄（供 `MetadataHydrator` 用）；未就绪时为 nil。
-    var activeStore: MetadataStore? { store }
-
-    /// 某个服务器的租户 id。
-    func tenant(for server: any MediaServer) -> TenantID {
-        TenantID(profile: server.profile)
+    /// 当前会话的媒体数据仓储。未接服务器时为 nil。
+    func currentRepository() async -> MediaRepository? {
+        guard let server = activeServer else { return nil }
+        if let repository { return repository }
+        _ = await waitUntilReady()
+        let repo = MediaRepository(server: server, store: store)
+        repository = repo
+        return repo
     }
 
-    /// 离线读句柄。未建库时返回 nil——调用方按「没有缓存」处理即可。
-    ///
-    /// 租户**现算**而不是复用 `currentTenant`：详情页可能在会话切换的瞬间被渲染，
-    /// 用传进来的服务器档案算才不会读到上一台的缓存。
-    func hydrator(for server: any MediaServer) -> MetadataHydrator? {
-        guard let store else { return nil }
-        return MetadataHydrator(store: store, tenant: TenantID(profile: server.profile))
+    /// 测试与维护用：当前仓储（不创建）。
+    var repositoryIfReady: MediaRepository? { repository }
+
+    // MARK: - 读入口（全部转发仓储）
+
+    func cachedHome() async -> MediaSnapshot<MediaHomeContent>? {
+        await currentRepository()?.cachedHome()
+    }
+
+    func refreshHome() async -> MediaHomeRefresh? {
+        await currentRepository()?.refreshHome()
+    }
+
+    func cachedItem(itemID: MediaItem.ID) async -> MediaSnapshot<MediaItem>? {
+        await currentRepository()?.cachedItem(itemID: itemID)
+    }
+
+    func refreshItem(itemID: MediaItem.ID) async throws -> MediaItem? {
+        try await currentRepository()?.refreshItem(itemID: itemID)
+    }
+
+    func cachedDetail(itemID: MediaItem.ID) async -> MediaSnapshot<MediaDetailContent>? {
+        await currentRepository()?.cachedDetail(itemID: itemID)
+    }
+
+    func refreshDetail(
+        itemID: MediaItem.ID,
+        kindHint: MediaItem.Kind?
+    ) async throws -> MediaDetailRefresh? {
+        try await currentRepository()?.refreshDetail(itemID: itemID, kindHint: kindHint)
+    }
+
+    func prefetchDetail(itemID: MediaItem.ID, kindHint: MediaItem.Kind?) async {
+        await currentRepository()?.prefetchDetail(itemID: itemID, kindHint: kindHint)
+    }
+
+    func cachedEpisodes(
+        seriesID: MediaItem.ID,
+        seasonID: MediaItem.ID
+    ) async -> MediaSnapshot<[MediaItem]>? {
+        await currentRepository()?.cachedEpisodes(seriesID: seriesID, seasonID: seasonID)
+    }
+
+    func refreshEpisodes(
+        seriesID: MediaItem.ID,
+        seasonID: MediaItem.ID
+    ) async throws -> [MediaItem]? {
+        try await currentRepository()?.refreshEpisodes(seriesID: seriesID, seasonID: seasonID)
+    }
+
+    func cachedPage(
+        _ descriptor: MediaPageDescriptor,
+        limit: Int
+    ) async -> MediaSnapshot<MediaPageContent>? {
+        await currentRepository()?.cachedPage(descriptor, limit: limit)
+    }
+
+    func refreshPage(
+        _ descriptor: MediaPageDescriptor,
+        startIndex: Int,
+        limit: Int
+    ) async throws -> MediaSnapshot<MediaPageContent>? {
+        try await currentRepository()?.refreshPage(
+            descriptor, startIndex: startIndex, limit: limit)
+    }
+
+    func cachedCollectionMembers(
+        itemID: MediaItem.ID
+    ) async -> MediaSnapshot<MediaPageContent>? {
+        await currentRepository()?.cachedCollectionMembers(itemID: itemID)
+    }
+
+    func refreshCollectionMembers(
+        itemID: MediaItem.ID,
+        startIndex: Int = 0
+    ) async throws -> MediaSnapshot<MediaPageContent>? {
+        try await currentRepository()?.refreshCollectionMembers(
+            itemID: itemID, startIndex: startIndex)
+    }
+
+    func similar(itemID: MediaItem.ID, limit: Int) async throws -> [MediaItem] {
+        try await currentRepository()?.similar(itemID: itemID, limit: limit) ?? []
+    }
+
+    // MARK: - 写入口
+
+    @discardableResult
+    func markPlayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState? {
+        try await currentRepository()?.markPlayed(itemID: itemID)
+    }
+
+    @discardableResult
+    func markUnplayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState? {
+        try await currentRepository()?.markUnplayed(itemID: itemID)
+    }
+
+    func recordPlaybackProgress(
+        itemID: MediaItem.ID,
+        positionSeconds: Double,
+        durationSeconds: Double?,
+        played: Bool
+    ) async {
+        await currentRepository()?.recordPlaybackProgress(
+            itemID: itemID, positionSeconds: positionSeconds,
+            durationSeconds: durationSeconds, played: played)
+    }
+
+    func applyPlayState(_ state: MediaItem.PlayState, forItemID itemID: MediaItem.ID) async {
+        await currentRepository()?.applyPlayState(
+            state, forItemID: itemID, persistToStore: true)
+    }
+
+    /// 清空当前会话内存投影（不清磁盘）。
+    func invalidateMemory() async {
+        await repository?.invalidateMemory()
     }
 
     // MARK: - 维护
 
-    /// 刷新体积统计（含 WAL；数据库体积会随写入增长，设置页要显示最新值）。
+    var activeStore: MetadataStore? { store }
+
     func refreshSize() {
         guard let databaseDirectory else { return }
         databaseBytes = MetadataCache.sizeInBytes(at: databaseDirectory)
     }
 
-    /// 清空当前租户的缓存（设置页「清空」）。返回是否成功。
     @discardableResult
     func clearCurrentTenant() async -> Bool {
         guard let store else { return false }
         do {
-            if let tenant = currentTenant {
-                try await store.clear(tenant: tenant)
+            if let server = activeServer {
+                try await store.clear(tenant: TenantID(profile: server.profile))
             } else {
                 try await store.clearAll()
             }
+            await repository?.invalidateMemory()
             refreshSize()
             return true
         } catch {
@@ -136,20 +240,6 @@ final class MetadataCoordinator {
     }
 
     /// 跑一次淘汰 + 回收磁盘。维护定时器调它。
-    ///
-    /// 两条上限**互相独立**，各自都能单独生效：
-    ///
-    /// 1. **条数**：超过 3 万条就删到 3 万。
-    /// 2. **体积**：超过 200 MB 就删掉当前条数的 **10%**（最旧的优先）再 `VACUUM`。
-    ///
-    /// 第二道刻意按「当前条数的比例」而不是「删到条数上限的 90%」：实测每条约 1 KB，
-    /// 3 万条的条数上限折合才 ≈30 MB，**永远先于 200 MB 触发**——写成「删到 27000 条」
-    /// 的话，体积那一道在条数未超限时恒为空操作（等于上限形同虚设）。按比例删则与
-    /// 条数解耦：无论库里多少条，只要体积真的超了就会腾出空间。
-    /// - Parameter maxItems: 条数上限（默认 `Eviction.maxItems`）。参数化是为了
-    ///   **可测**：真实上限是 3 万条 / 200 MB，用例不可能真写到那个量级，
-    ///   而「体积那一道到底会不会触发」恰恰是曾经写错过的逻辑（见下）。
-    /// - Parameter maxBytes: 体积上限（默认 `Eviction.maxBytes`）。
     func runMaintenance(
         maxItems: Int = Eviction.maxItems,
         maxBytes: Int64 = Eviction.maxBytes
@@ -163,7 +253,6 @@ final class MetadataCoordinator {
                 let bytes = MetadataCache.sizeInBytes(at: databaseDirectory)
                 if bytes > maxBytes {
                     let current = try await store.itemCount()
-                    // 至少删 1 条：否则 current 很小时 target == current，又成了空操作。
                     let target = max(0, current - max(1, current / 10))
                     try await store.evictItems(keepingAtMost: target)
                     try await store.vacuum()

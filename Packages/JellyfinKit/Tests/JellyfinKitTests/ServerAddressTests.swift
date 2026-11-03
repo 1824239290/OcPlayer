@@ -9,7 +9,7 @@ final class ServerAddressTests: XCTestCase {
     // MARK: - 分类
 
     func testClassifiesPrivateIPv4AsLAN() {
-        for text in ["http://192.168.5.107:8096", "http://10.0.0.4:8096",
+        for text in ["http://192.168.100.107:8096", "http://10.0.0.4:8096",
                      "http://172.16.3.9:8096", "http://172.31.255.1:8096",
                      "http://127.0.0.1:8096", "http://169.254.1.1:8096"] {
             XCTAssertEqual(ServerAddress.classify(url(text)), .lan, "\(text) 应是局域网")

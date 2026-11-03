@@ -1,17 +1,13 @@
 import CoreModel
 import Foundation
 import JellyfinKit
+import MetadataKit
 @testable import OcPlayer
 import XCTest
 
-/// 详情快照的 TTL 短路：快照足够新（本次会话刚拉过 / 点击预取刚落）时，
-/// 重进详情页**零请求**原位渲染——「重进秒开」的手感来自这条短路。
-///
-/// 与 SWR 的分工：SWR（快照旧于 TTL）保证「有内容但不闪骨架屏」，网络照发；
-/// TTL 短路（快照新于 TTL）连网络都不发。**磁盘快照不参与 TTL**——`loadFromDisk`
-/// 构造快照时把 `fetchedAt` 置 `.distantPast`，磁盘来源（上次会话写穿的）一律走
-/// SWR 网络确认，该语义由 `MetadataCacheIntegrationTests.testDetailPrefersNetworkOverCache`
-/// 钉住（磁盘数据 + 网络成功 → 必须用网络覆盖）。
+/// 详情页 stale-while-revalidate 的仓储语义：
+/// 内存快照（本会话已确认）零请求；磁盘快照先渲染但必须再走网络确认；
+/// 本地已看写回同时更新仓储与 SQLite。
 @MainActor
 final class DetailSnapshotTTLTests: XCTestCase {
 
@@ -32,7 +28,6 @@ final class DetailSnapshotTTLTests: XCTestCase {
         if let suiteName { defaults?.removePersistentDomain(forName: suiteName) }
     }
 
-    /// 与 `DetailLoadCancellationTests.makeApp` 同构。
     private func makeApp() async throws -> (AppModel, StubMediaServer) {
         let app = AppModel(
             tmdb: TMDbCoordinator(defaults: try XCTUnwrap(defaults), sessionConfiguration: nil),
@@ -61,69 +56,99 @@ final class DetailSnapshotTTLTests: XCTestCase {
                   seriesID: "s-1", seasonNumber: 1, episodeNumber: number)
     }
 
-    private func storeSnapshot(_ app: AppModel, fetchedAt: Date = Date()) {
-        app.storeDetailSnapshot(
-            .init(detail: series(), seasons: [season()], similar: [],
-                  selectedSeasonID: "se-1",
-                  episodesBySeason: ["se-1": [episode(id: "e-1", number: 1)]],
-                  fetchedAt: fetchedAt),
-            for: "s-1")
+    private func seedDisk(_ app: AppModel) async throws {
+        let store = try XCTUnwrap(app.metadata.activeStore)
+        let tenant = TenantID(profile: try XCTUnwrap(app.server).profile)
+        try await store.saveItems(
+            [series(), season(), episode(id: "e-1", number: 1)], tenant: tenant)
     }
 
-    /// TTL 内的快照：load() 零网络，整页状态来自快照（含默认季与选中集恢复）。
-    func testFreshSnapshotSkipsNetwork() async throws {
+    /// 本会话已确认的详情：进页零请求，整页状态来自仓储内存。
+    func testFreshRepositoryDetailSkipsNetwork() async throws {
         let (app, stub) = try await makeApp()
-        storeSnapshot(app)
+        stub.itemResult = .success(series())
+        stub.seasonsResult = .success([season()])
+        stub.episodesResult = .success([episode(id: "e-1", number: 1)])
+        await app.metadata.prefetchDetail(itemID: "s-1", kindHint: .series)
+        let itemCalls = stub.callCount("item")
+        let seasonCalls = stub.callCount("seasons")
+        let episodeCalls = stub.callCount("episodes")
 
-        // 模拟「点击 → 预取落快照 → 进页」：全新的 VM 实例走 load()。
         let model = DetailViewModel(item: series())
         model.attach(app)
         await model.load()
 
-        XCTAssertEqual(stub.callCount("item"), 0, "TTL 内不该再发详情请求")
-        XCTAssertEqual(stub.callCount("seasons"), 0, "TTL 内不该再发季请求")
+        XCTAssertEqual(stub.callCount("item"), itemCalls, "内存快照内不该再发详情请求")
+        XCTAssertEqual(stub.callCount("seasons"), seasonCalls)
+        XCTAssertEqual(stub.callCount("episodes"), episodeCalls)
         XCTAssertNil(model.loadError)
         XCTAssertFalse(model.isLoading)
         XCTAssertEqual(model.displayName, "学生会也存活！")
-        XCTAssertEqual(model.selectedSeasonID, "se-1", "默认季应从快照恢复")
-        XCTAssertEqual(model.episodes.map(\.id), ["e-1"], "集列表应从快照恢复")
-        XCTAssertEqual(model.selectedEpisodeID, "e-1", "默认选中集应从快照恢复")
-        XCTAssertNil(model.staleNotice, "TTL 短路不是离线展示")
+        XCTAssertEqual(model.selectedSeasonID, "se-1")
+        XCTAssertEqual(model.episodes.map(\.id), ["e-1"])
+        XCTAssertEqual(model.selectedEpisodeID, "e-1")
+        XCTAssertNil(model.staleNotice, "会话内确认过的内容不是离线展示")
     }
 
-    /// 超 TTL 的快照：照常走 SWR 网络刷新（快照先行渲染，网络回来原位覆盖）。
-    func testExpiredSnapshotStillRefreshes() async throws {
+    /// 磁盘快照先渲染，但网络必须再确认一次（离线兜底不牺牲新鲜度）。
+    func testDiskDetailRendersFirstThenConfirmsWithNetwork() async throws {
         let (app, stub) = try await makeApp()
-        storeSnapshot(app, fetchedAt: Date().addingTimeInterval(-AppModel.detailSnapshotTTL - 10))
+        try await seedDisk(app)
         stub.itemResult = .success(series())
         stub.seasonsResult = .success([season()])
+        stub.episodesResult = .success([episode(id: "e-1", number: 1)])
 
         let model = DetailViewModel(item: series())
         model.attach(app)
         await model.load()
 
-        XCTAssertEqual(stub.callCount("item"), 1, "过 TTL 必须重新确认服务端数据")
+        XCTAssertEqual(stub.callCount("item"), 1, "磁盘来源必须网络确认")
         XCTAssertEqual(stub.callCount("seasons"), 1)
+        XCTAssertEqual(stub.callCount("episodes"), 1)
         XCTAssertEqual(model.selectedSeasonID, "se-1")
+        XCTAssertEqual(model.episodes.map(\.id), ["e-1"])
     }
 
-    /// 本地写回（播放返回时的已看状态同步）会重新 storeSnapshot、刷新时间戳——
-    /// 也就是续期 TTL。否则「看完一集回详情」5 分钟后重进会白白退化成 SWR 全量刷新。
-    func testLocalWriteBackRenewsTTL() async throws {
+    /// 网络失败时磁盘内容留在屏幕上，并给出离线/过期提示。
+    func testDiskContentSurvivesFailedRefreshWithStaleNotice() async throws {
         let (app, stub) = try await makeApp()
-        storeSnapshot(app, fetchedAt: Date().addingTimeInterval(-4 * 60))
+        try await seedDisk(app)
+        stub.itemResult = .failure(JellyfinError(.noNetwork))
+        stub.seasonsResult = .failure(JellyfinError(.noNetwork))
+        stub.episodesResult = .failure(JellyfinError(.noNetwork))
 
         let model = DetailViewModel(item: series())
         model.attach(app)
-        await model.load() // TTL 命中：零网络，状态来自快照
-        XCTAssertEqual(stub.callCount("item"), 0)
+        await model.load()
 
-        model.applyPlayState(.init(played: true, percentage: 1, positionSeconds: 0), toItemID: "s-1")
+        XCTAssertEqual(model.displayName, "学生会也存活！", "失败不得清空磁盘内容")
+        XCTAssertNil(model.loadError, "有内容时不落整页错误")
+        XCTAssertNotNil(model.staleNotice)
+        XCTAssertTrue(model.staleNotice?.causedByConnectivity == true)
+    }
 
-        let refreshed = try XCTUnwrap(app.detailSnapshot(for: "s-1"))
-        XCTAssertEqual(
-            refreshed.fetchedAt.timeIntervalSinceNow, 0, accuracy: 30,
-            "本地写回应刷新快照时间戳（续期 TTL）")
-        XCTAssertTrue(refreshed.detail.playState?.played ?? false, "已看状态应写回快照")
+    /// 本地已看写回：仓储内存 + SQLite 同一拍更新。
+    func testLocalPlayStateWriteBackUpdatesRepositoryAndStore() async throws {
+        let (app, stub) = try await makeApp()
+        try await seedDisk(app)
+        stub.itemResult = .success(series())
+        stub.seasonsResult = .success([season()])
+        stub.episodesResult = .success([episode(id: "e-1", number: 1)])
+        let model = DetailViewModel(item: series())
+        model.attach(app)
+        await model.load()
+
+        let state = MediaItem.PlayState(played: true, percentage: 1, positionSeconds: 120)
+        await model.applyPlayState(state, toItemID: "e-1")
+
+        let detailValue = await app.metadata.cachedDetail(itemID: "s-1")?.value
+        let detail = try XCTUnwrap(detailValue)
+        XCTAssertEqual(detail.episodes.first?.playState, state)
+
+        let store = try XCTUnwrap(app.metadata.activeStore)
+        let tenant = TenantID(profile: try XCTUnwrap(app.server).profile)
+        let cached = try await store.item("e-1", tenant: tenant)
+        XCTAssertEqual(cached?.item.playState, state)
+        XCTAssertNotNil(cached?.progressFetchedAt)
     }
 }

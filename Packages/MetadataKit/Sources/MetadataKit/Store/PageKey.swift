@@ -16,6 +16,29 @@ import JellyfinKit
 /// 各段一律用类型的 `rawValue`（都是 String 枚举），**不拼 `String(describing:)`**：
 /// 后者会把调试格式写进缓存键，将来给类型加字段或改实现就静默产生新键，
 /// 旧缓存全部失配（等于每次升级都白缓存一遍）。
+/// 不含分页窗口的页查询。用于一次 SQL 取回同一查询的全部连续页。
+public struct PageQuery: Hashable, Sendable {
+    public var parentID: String
+    public var kinds: String
+    public var sortKey: String
+    public var watchState: String
+    public var searchTerm: String
+
+    public init(
+        parentID: String?,
+        kinds: [MediaItem.Kind]?,
+        sort: MediaItemsSort?,
+        watchState: MediaItemsWatchState?,
+        searchTerm: String?
+    ) {
+        self.parentID = parentID ?? ""
+        self.kinds = (kinds ?? []).map(\.rawValue).sorted().joined(separator: ",")
+        self.sortKey = sort.map { "\($0.field.rawValue):\($0.ascending ? "asc" : "desc")" } ?? ""
+        self.watchState = watchState?.rawValue ?? ""
+        self.searchTerm = searchTerm ?? ""
+    }
+}
+
 public struct PageKey: Hashable, Sendable {
     public var parentID: String
     public var kinds: String

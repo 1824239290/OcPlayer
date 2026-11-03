@@ -1,6 +1,7 @@
 import AppDesignKit
 import CoreModel
 import JellyfinKit
+import MetadataKit
 import SwiftUI
 
 /// 媒体库网格页：海报墙。电影库直接铺电影，剧集库铺剧集。
@@ -184,6 +185,7 @@ struct LibraryView: View {
                 // 非空时清，onChange 会顺带把取页键切回浏览页。
                 if !searchText.isEmpty { searchText = "" }
             }
+            await hydrateFromRepositoryIfNeeded()
             await loadIfNeeded()
         }
     }
@@ -435,6 +437,29 @@ struct LibraryView: View {
         app.clearLibraryPage(for: library.id, searchTerm: currentPageSearchTerm)
     }
 
+    /// 冷启动 / 视图重建：先从仓储恢复磁盘页，再决定要不要请求。
+    /// 这里写入 `AppModel.libraryPages` 的只是**当前视图的渲染投影**；
+    /// 权威副本在仓储（内存 + SQLite），跨视图重建与冷启动都从它恢复。
+    private func hydrateFromRepositoryIfNeeded() async {
+        guard items.isEmpty, app.server != nil else { return }
+        let term = currentPageSearchTerm
+        let descriptor = MediaPageDescriptor(
+            parentID: library.id,
+            kinds: itemKinds,
+            recursive: true,
+            sort: MediaItemsSort(field: sortField, ascending: sortAscending),
+            watchState: watchState,
+            searchTerm: term.isEmpty ? nil : term)
+        guard let cached = await app.metadata.cachedPage(descriptor, limit: Self.pageSize) else {
+            return
+        }
+        app.cacheLibraryPage(
+            .init(items: cached.value.items, totalCount: cached.value.totalCount,
+                  nextStartIndex: cached.value.nextStartIndex,
+                  lastPageWasFull: cached.value.lastPageWasFull),
+            for: library.id, searchTerm: term)
+    }
+
     /// 切到这个库时：缓存里已经有内容就直接用，不重新请求。
     /// 视图实例在两个库之间是复用的（同一个 `case .library` 分支），
     /// 所以这里要顺手把上一个库残留的加载/错误态清掉。
@@ -458,7 +483,7 @@ struct LibraryView: View {
     }
 
     private func load(reset: Bool) async {
-        guard let server = app.server else {
+        guard app.server != nil else {
             isLoading = false
             isLoadingMore = false
             return
@@ -471,7 +496,6 @@ struct LibraryView: View {
         // 只信启动这次请求时还生效的那个词：防抖窗口里用户又改了词的话，这个请求
         // 的结果属于旧词，不能写进（已经切到新词的）当前格。
         let term = currentPageSearchTerm
-        let key = AppModel.LibraryPageKey(libraryID: libraryID, searchTerm: term)
         let kinds = itemKinds
         let startIndex = reset ? 0 : nextStartIndex
 
@@ -497,30 +521,23 @@ struct LibraryView: View {
         }
 
         do {
-            let page = try await server.itemsPage(
+            let descriptor = MediaPageDescriptor(
                 parentID: libraryID,
                 kinds: kinds,
                 recursive: true,
-                startIndex: startIndex,
-                limit: Self.pageSize,
                 sort: MediaItemsSort(field: sortField, ascending: sortAscending),
                 watchState: watchState,
                 // 用启动时的 `term` 而不是 `isSearching ? searchText : nil`：后者会在
                 // await 期间被改词影响，让「第一个词的结果」落到「第二个词的格子」里。
-                searchTerm: term.isEmpty ? nil : term
-            )
+                searchTerm: term.isEmpty ? nil : term)
+            guard let page = try await app.metadata.refreshPage(
+                descriptor, startIndex: startIndex, limit: Self.pageSize) else { return }
             guard !Task.isCancelled, activeLoadID == loadID else { return }
-            var cached = reset ? AppModel.LibraryPage() : (app.libraryPages[key] ?? .init())
-            if reset {
-                cached.items = page.items
-            } else {
-                // 防御服务端重复页：按 id 去重追加。
-                var existing = Set(cached.items.map(\.id))
-                cached.items.append(contentsOf: page.items.filter { existing.insert($0.id).inserted })
-            }
-            cached.totalCount = page.totalRecordCount
-            cached.nextStartIndex = startIndex + page.items.count
-            cached.lastPageWasFull = page.items.count >= Self.pageSize
+            var cached = AppModel.LibraryPage()
+            cached.items = page.value.items
+            cached.totalCount = page.value.totalCount
+            cached.nextStartIndex = page.value.nextStartIndex
+            cached.lastPageWasFull = page.value.lastPageWasFull
             app.cacheLibraryPage(cached, for: libraryID, searchTerm: term)
             loadError = nil
         } catch is CancellationError {

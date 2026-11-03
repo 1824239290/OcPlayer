@@ -48,7 +48,7 @@ final class DiagnosticRedactorGuardTests: XCTestCase {
             "/private/var/mobile/Containers/Data/Application/ABC/tmp",
             // URL
             "GET https://media.example.com/Items/abc/Images/Primary?maxWidth=400&tag=dead",
-            "http://192.168.5.107:8096/Items/1/Images/Backdrop?tag=t",
+            "http://192.168.100.107:8096/Items/1/Images/Backdrop?tag=t",
             "https://user:pass@host.example.com/path?x=1",
             "see http://example.com/a.",
             "HTTPS://UPPER.EXAMPLE.COM/PATH?Q=1",        // 大小写边界

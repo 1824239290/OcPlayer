@@ -37,6 +37,14 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var itemResult: Result<MediaItem, any Error>?
     var seasonsResult: Result<[MediaItem], any Error> = .success([])
     var episodesResult: Result<[MediaItem], any Error> = .success([])
+    /// 观测钩子：`item(_:)` **进入时**在主 actor 上回调一次。
+    ///
+    /// 存在的唯一理由是给「顺序」类断言一个观测点：详情取数发生在
+    /// `DetailViewModel.load()` 的中段，正好落在「背景图来源已解析」与
+    /// 「详情内容落地」之间。用它才能证明解析确实**早于**取数与上屏，
+    /// 而不是只证明「被调用过」（2026-11-03 review 指出旧断言名不副实）。
+    /// 默认 nil = 生产等价，零行为。
+    var onItemCall: (@MainActor () -> Void)?
     /// 库页 / 合集成员查询：nil = 空页。用例据此注入成员列表。
     var itemsPageResult: Result<MediaItemsPage, any Error>?
     /// 按 `parentID` 分派的页（优先于 `itemsPageResult`）。
@@ -113,6 +121,7 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
 
     func item(_ id: String) async throws -> MediaItem {
         count("item")
+        if let onItemCall { await MainActor.run { onItemCall() } }
         if let itemResult { return try itemResult.get() }
         return MediaItem(id: id, name: id, kind: .movie)
     }

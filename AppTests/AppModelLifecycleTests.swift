@@ -49,11 +49,6 @@ final class AppModelLifecycleTests: XCTestCase {
         app.cacheLibraryPage(
             AppModel.LibraryPage(items: [MediaItem(id: "m1", name: "电影", kind: .movie)], totalCount: 1),
             for: "lib-1")
-        app.storeDetailSnapshot(
-            AppModel.DetailSnapshot(detail: MediaItem(id: "s1", name: "剧", kind: .series),
-                                    seasons: [], similar: [], selectedSeasonID: nil,
-                                    episodesBySeason: [:]),
-            for: "s1")
         app.pushWindowAmbience(
             id: UUID(),
             WindowAmbience(url: URL(string: "https://old.example/a.jpg"), authHeader: "Bearer old"))
@@ -64,7 +59,7 @@ final class AppModelLifecycleTests: XCTestCase {
         XCTAssertNil(app.server, "内存里的 server 必须一起丢掉，否则会渲染旧服务器首页")
         XCTAssertTrue(app.libraries.isEmpty)
         XCTAssertTrue(app.home.resume.isEmpty)
-        XCTAssertNil(app.detailSnapshot(for: "s1"), "详情快照按 item id 索引，跨服务器会撞 id")
+        XCTAssertNil(app.metadata.repositoryIfReady, "会话重置必须卸载旧服务器的数据仓储")
         XCTAssertNil(app.windowAmbience, "氛围图带着旧服务器的 authHeader")
         XCTAssertNil(app.pendingMoviePilotQuery)
         XCTAssertEqual(app.phase, .onboarding)
@@ -198,45 +193,6 @@ final class AppModelLifecycleTests: XCTestCase {
 
         XCTAssertEqual(app.navPath(for: .bangumi).count, 2, "两个入口都必须进 Bangumi Tab 自己的栈")
         XCTAssertTrue(app.path.isEmpty, "compact 下共享栈不得被写入（只写不读 = 死按钮）")
-    }
-
-    /// 回归：快照超限曾整份 `removeAll()`，连刚写入的那条一起丢——第 41 次进入
-    /// 详情页立刻退回冷骨架屏，SWR 的收益变成随机的。现在只淘汰最旧的。
-    func testDetailSnapshotEvictionKeepsTheJustStoredEntry() {
-        let app = AppModel()
-        let limit = AppModel.detailSnapshotLimit
-
-        for index in 0...limit {   // 写 limit+1 条，必定触发一次淘汰
-            let id = "subject-\(index)"
-            app.storeDetailSnapshot(
-                AppModel.DetailSnapshot(detail: MediaItem(id: id, name: "条目\(index)", kind: .series),
-                                        seasons: [], similar: [], selectedSeasonID: nil,
-                                        episodesBySeason: [:]),
-                for: id)
-        }
-
-        XCTAssertNotNil(app.detailSnapshot(for: "subject-\(limit)"), "刚写入的快照不得被本次淘汰带走")
-        XCTAssertNil(app.detailSnapshot(for: "subject-0"), "最旧的应被淘汰")
-        XCTAssertLessThanOrEqual(app.detailSnapshots.count, limit)
-    }
-
-    /// 读快照要刷新使用顺序，否则「刚看过的页」会被后续新页挤掉（与 LRU 相反）。
-    func testDetailSnapshotReadRefreshesRecency() {
-        let app = AppModel()
-        let limit = AppModel.detailSnapshotLimit
-
-        func snapshot(_ id: String) -> AppModel.DetailSnapshot {
-            AppModel.DetailSnapshot(detail: MediaItem(id: id, name: id, kind: .series),
-                                    seasons: [], similar: [], selectedSeasonID: nil,
-                                    episodesBySeason: [:])
-        }
-
-        for index in 0..<limit { app.storeDetailSnapshot(snapshot("s\(index)"), for: "s\(index)") }
-        _ = app.detailSnapshot(for: "s0")                     // 重新「看过」最旧的那条
-        app.storeDetailSnapshot(snapshot("new"), for: "new")  // 触发一次淘汰
-
-        XCTAssertNotNil(app.detailSnapshot(for: "s0"), "刚读过的条目应被保留")
-        XCTAssertNil(app.detailSnapshot(for: "s1"), "应淘汰此后最旧的条目")
     }
 
     func testPresentLocalFileSetsPreparationWithoutTouchingHomeError() {

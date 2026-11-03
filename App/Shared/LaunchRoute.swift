@@ -13,6 +13,18 @@ enum LaunchRoute: Equatable {
     case library
     /// 第一个带 backdrop 的首页条目详情页（push）——氛围图正是从条目 backdrop 来的。
     case detail
+    /// 同 `detail`，但只认**剧集**（`kind == .series`）。
+    ///
+    /// 存在的理由：剧集详情页与电影详情页是两个模板（选集带 / 季选择器只在剧集页出现），
+    /// 验收台要能分别进场截图，不能总落在第一部片上碰运气。
+    case detailSeries
+    /// 指定条目 id 的详情页（push；`detail.item.<id>`）。
+    ///
+    /// 存在的理由：`detail` / `detail.series` 只认「首页第一条带背景图的」，具体落到哪部片
+    /// 取决于服务端 rail 顺序 —— 而有些回归必须**钉住某一部片**才能复现（2026-11-03
+    /// 背景闪图：只有「服务端图 + TMDB 图都存在」的条目才会走那条路径，随机落到别的片
+    /// 就等于没测）。有了它，验收脚本可以指名复测同一部。
+    case detailItem(id: String)
     /// Bangumi 个人页（push）。
     case bangumiProfile
     /// 每日放送（push）。
@@ -37,6 +49,8 @@ enum LaunchRoute: Equatable {
     ///
     ///     library                                    第一个媒体库网格页
     ///     detail                                     第一个带 backdrop 的首页条目详情
+    ///     detail.series                              同上，但只认剧集（选集带 / 季选择器）
+    ///     detail.item.<条目id>                       指定条目的详情页（回归要钉住某一部片时用）
     ///     bangumi.profile                            我的
     ///     bangumi.calendar                           每日放送
     ///     bangumi.subject.<id>                       Bangumi 条目详情
@@ -57,6 +71,14 @@ enum LaunchRoute: Equatable {
             return .library
         case "detail" where parts.count == 1:
             return .detail
+        case "detail" where parts.count == 2 && parts[1] == "series":
+            return .detailSeries
+        case "detail" where parts.count == 3 && parts[1] == "item":
+            // 条目 id 大小写敏感（Jellyfin/Emby 的 id 是 32 位十六进制，大小写不统一）：
+            // 上面 `parts` 整体小写化了，这里必须回到原文按 `.` 重新切一次。
+            let rawParts = trimmed.split(separator: ".")
+            guard rawParts.count == 3, !rawParts[2].isEmpty else { return nil }
+            return .detailItem(id: String(rawParts[2]))
         case "search" where parts.count == 1:
             return .search
         case "bangumi":

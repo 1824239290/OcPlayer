@@ -20,7 +20,14 @@ final class DetailViewModel {
 
     // MARK: - 数据状态
 
-    var detail: MediaItem?
+    var detail: MediaItem? {
+        didSet {
+            // 详情落地是「迟到补锁」的一个正式时点：列表带来的条目常常不带 backdrop
+            // tag，解析那一刻因此算不出图、什么都没锁。详情一落地 tag 就有了，这里补锁。
+            // 见 `lockBackdropTargetsIfNeeded()`。
+            lockBackdropTargetsIfNeeded()
+        }
+    }
     var seasons: [MediaItem] = []
     /// 库内分集（服务端事实）。**占位永远不进这个数组**——它会流进播放、已看标记、
     /// 连播与详情快照，混进假条目就等于每一处都要再加一道「这是不是真的」判断。
@@ -78,11 +85,12 @@ final class DetailViewModel {
     /// 详情页据此在简介下方摆一行「离线 · 数据更新于 X 前」。
     private(set) var staleNotice: StaleContentNotice?
 
-    /// 磁盘快照的写入时间（仅用于文案里的「更新于 X 前」）。
+    /// 当前展示内容的写入时间（仓储快照时间，用于「更新于 X 前」）。
     private var cachedContentFetchedAt: Date?
-
-    /// 哪些季的集来自磁盘（网络恢复后要重新拉，见 `loadFromDisk`）。
-    private var diskHydratedSeasons: Set<String> = []
+    /// 详情快照的会话内新鲜度。与仓储内存快照配合：磁盘来源一律视为需要网络确认。
+    static let detailFreshness: TimeInterval = 5 * 60
+    /// 合集成员上一页是否满页（总数未知时判断还能不能翻）。
+    private var membersLastPageWasFull = false
 
     /// 氛围底图（800 宽 backdrop + 512 解码）是否已进 pipeline 缓存。
     /// 视图只在就绪后才声明整窗/页内氛围——氛围层不再以灰占位淡入、
@@ -105,7 +113,54 @@ final class DetailViewModel {
     /// 是**独立存储**而不是把 TMDB 字段写进 `detail`：服务端数据是「当前事实」，
     /// TMDB 是可选增强，混在一起后「关掉 TMDB」就得把改过的字段改回去——而那时
     /// 已经不知道原值了（见 `TMDbOverlay` 的类型注释）。
-    private(set) var tmdbOverlay: TMDbOverlay?
+    private(set) var tmdbOverlay: TMDbOverlay? {
+        didSet {
+            // 后台补齐到 TMDB 图时的「迟到补锁」时点：解析那一刻本机没有 TMDB 缓存
+            // 的话，这是唯一还能拿到最终那张的机会。同样是首次非空即锁、之后不改口。
+            lockBackdropTargetsIfNeeded()
+        }
+    }
+
+    /// 首帧背景图用的 overlay 是否已经读过（真/假决定 `backdropTarget` 能不能锁定）。
+    ///
+    /// 为什么需要这个标志：锁定必须发生在**解析完成之后**，否则详情还没落地时
+    /// `shown` 是列表条目、`resolveBackdropTarget` 可能给出 nil 或服务端图，
+    /// 早早锁死就永远看不到 TMDB 那张了。见 `backdropTarget(width:)`。
+    var isBackdropSourceResolved: Bool { backdropLatch.isResolved }
+
+    /// 「先解析、再上屏、之后锁定」的状态机（语义与实测来历见 `BackdropSourceLatch`）。
+    ///
+    /// `@ObservationIgnored`：它是**内部解析状态**，不是视图要观察的东西（视图要的是最终
+    /// URL）。不标的话，任何写入都会被 `@Observable` 记成对象变更 —— 这正是 2026-11-03
+    /// 详情页死循环的成因之一，见 `backdropTarget(width:)` 的说明。
+    @ObservationIgnored
+    private var backdropLatch = BackdropSourceLatch()
+
+    /// 解析完成后锁定的取图目标，键为 URL 宽度档（800 / 1600 …）。
+    ///
+    /// 只在 `resolveBackdropSource()` 里写（那里一次性算好全部宽度档），
+    /// `backdropTarget(width:)` **只读不写** —— 见那个函数的「必须是纯函数」说明。
+    @ObservationIgnored
+    private var lockedBackdropTargets: [Int: BackdropSourceLatch.Target] = [:]
+
+    /// `backdropTarget` 会被视图按这些宽度档取值；解析时一次性全部锁好。
+    private static let backdropWidthBuckets: [Int] = {
+        var buckets: Set<Int> = [800, 1600]
+        buckets.insert(DetailAmbienceImage.urlWidth)
+        return buckets.sorted()
+    }()
+
+    /// 观测钩子：详情内容**落地上屏那一刻**（`applyDetailContent` 第一行）回调一次。
+    ///
+    /// 存在的唯一理由是给「先解析、再上屏」那条顺序断言一个观测点：`applyDetailContent`
+    /// 是详情内容进入各展示状态的唯一入口（内存命中、磁盘命中、网络刷新三条分支都经过），
+    /// 因此「它被调用的那一刻 `isBackdropSourceResolved` 已经是 true」才是顺序本身，
+    /// 而不是「`resolveBackdropSource()` 被调用过」那种名不副实的断言（2026-11-03 review）。
+    ///
+    /// **默认 nil = 生产等价、零行为**。`@ObservationIgnored`：与 `backdropLatch` 同理，
+    /// 挂观测钩子不该让视图因为「测试脚手架字段变了」而重算。
+    @ObservationIgnored
+    var onApplyDetailContent: (@MainActor () -> Void)?
 
     /// 当前**选中那一季**的 TMDB 叠加数据（含该季每一集的标题/简介）。
     ///
@@ -249,7 +304,54 @@ final class DetailViewModel {
     }
 
     /// 背景（氛围）取图目标，规则同上。
+    ///
+    /// ## 为什么要在本页存续期内**锁定**第一张解析出来的图
+    ///
+    /// TMDB 图片策略默认是「优先顶替服务端已有的图」（`TMDbPreferences.replaceExistingImages`
+    /// 默认 true），而 `tmdbOverlay` 是**异步**到的：`overlay(for:)` 虽然只是磁盘读、不发
+    /// 网络，但它仍然要等一次 async 跳转。于是默认顺序变成：
+    ///
+    ///   ① 详情内容先落地 → 按「服务端 backdrop」上屏
+    ///   ② 几十~几百毫秒后 overlay 到达 → `backdropTarget` 返回值换成 TMDB 图
+    ///   ③ `RemoteImage` 按新 URL 交叉淡入
+    ///
+    /// 用户看到的就是「背景先出来一张，然后马上被另一张顶掉」——同一条目的两张不同背景
+    /// 图（2026-11-03 实测：赛博朋克：边缘行者先服务端 backdrop、后被 TMDB key art 顶替，
+    /// 探针三条 URL 依次为 氛围池兜底图 → 服务端 backdrop → `image.tmdb.org`）。
+    ///
+    /// **这不是数据层给了两份数据**：数据侧只有一条规则（TMDB 优先），是渲染顺序把一条
+    /// 规则的两个阶段都画了出来。修法在渲染层：解析完成后的第一张非空图即锁定，
+    /// 本页之后不再因迟到数据改口——迟到的 TMDB 数据仍然会落库，**下次进页**直接命中缓存，
+    /// 于是「要么一次画对、要么这次先画服务端图但绝不中途换脸」。
+    ///
+    /// 锁定只对**非空**结果生效：解析完成前 `own` 可能还是 nil（详情未落地 / 列表条目
+    /// 不带 backdrop tag），这时视图会走氛围池兜底图（`DetailView.artTarget`），
+    /// 那条路径是设计上的「背景延续」，不受这里锁定。
+    /// ## 这个函数**必须是纯函数**（2026-11-03 死循环事故）
+    ///
+    /// 2026-11-03 曾把 `backdropLatch.target(for:)`（`mutating`）直接接在这里，导致
+    /// 详情页死循环、CPU 100%、窗口出不来。成因是一条完整的自激链：
+    ///
+    /// 1. `DetailViewModel` 是 `@Observable`；`backdropLatch` 是它的普通存储属性；
+    /// 2. 视图 `DetailView.artTarget`（计算属性）在 body 求值路径上调用本函数；
+    /// 3. 本函数若写 `backdropLatch`，`@Observable` 就登记一次对象变更；
+    /// 4. `.onChange(of: artTarget.url, initial: true)` 每次 body 求值都要重算 `artTarget`
+    ///    以比较新旧值 ⇒ 又回到第 3 步。
+    ///
+    /// 结论：**body 求值期间不许改状态**。所以解析（会改状态的唯一时点）全部挪进
+    /// `resolveBackdropSource()`，结果存进 `lockedBackdropTargets`；本函数只读不写。
     func backdropTarget(width: Int) -> (url: URL?, authHeader: String?) {
+        // 解析完成前一律不给本条目的图，让视图回落氛围池兜底图（设计上的「背景延续」）。
+        guard backdropLatch.isResolved else { return (nil, nil) }
+        // 解析完成后读缓存；缓存未命中时**只算不写**。
+        if let cached = lockedBackdropTargets[width] {
+            return (cached.url, cached.authHeader)
+        }
+        return resolveBackdropTarget(width: width)
+    }
+
+    /// 真正的取图规则（未加锁定）。`backdropTarget` 是它的带锁定版本。
+    private func resolveBackdropTarget(width: Int) -> (url: URL?, authHeader: String?) {
         let policy = app?.tmdbImagePolicy ?? TMDbImagePolicy()
         let serverTarget = shown.imageTarget(app?.server, kind: .backdrop, width: width)
         let url = DisplayMetadata.backdropURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
@@ -263,6 +365,62 @@ final class DetailViewModel {
         // 只在合集上生效：电影/剧集缺背景图时不该擅自拿别人的图。
         let fallback = collectionBackdropFallback(width: width)
         return (fallback.url, fallback.authHeader)
+    }
+
+    /// 首帧取图用的 TMDB overlay 预读。
+    ///
+    /// `overlay(for:)` **不发网络**（只查 link + 磁盘 payload），代价是一次 async 跳转；
+    /// 但它若排在 `load()` 末尾，详情内容会先按服务端图上屏、随后被 TMDB 图顶掉。
+    /// 所以这里在**任何会触发背景图绘制的内容落地之前**先读一次。
+    ///
+    /// 读不到（未配置 TMDB / 没有对应 / 没缓存）不算失败：策略自然回落到服务端图，
+    /// 之后 `loadTMDbOverlay` 的后台补齐照常进行。
+    ///
+    /// **不是 private**：它是「背景图解析完成」这个状态转换的唯一入口，用例要能直接
+    /// 驱动到解析后的状态（见 `CollectionDetailTests` 的两条背景来源用例）。
+    /// 生产调用点只有 `load()` 的第一句——顺序本身就是修复的一部分，别挪。
+    ///
+    /// ## 它是**唯一**会写背景图状态的地方
+    ///
+    /// 解析结果在这里一次性算进 `lockedBackdropTargets`，`backdropTarget(width:)` 只读。
+    /// 这是 2026-11-03 死循环事故的修复方式：把「会改状态的时刻」从 body 求值路径上摘出来。
+    func resolveBackdropSource() async {
+        // `app` 为 nil（未 `attach`）时也必须置位：否则 latch 永远不 resolved，
+        // 页面会永久停在氛围池兜底图、本条目的图永远不出且不报错 —— 那是可见的功能退化。
+        // 这里宁可「这次不给本条目图」，也不留一个永久卡死的状态。
+        if let app {
+            tmdbOverlay = await app.tmdbOverlay(for: item)
+        }
+        backdropLatch.markResolved()
+        lockBackdropTargetsIfNeeded()
+    }
+
+    /// 对**尚未锁定**的宽度档做一次性锁定：首次算到非空图就锁住，之后不再改口。
+    ///
+    /// ## 为什么还留一个「迟到补锁」入口（2026-11-03 review 补的第 3 条）
+    ///
+    /// 解析发生在 `load()` 第一句，那一刻 `shown` 还是列表带来的条目。若它没有
+    /// backdrop tag、本机也没有 TMDB 缓存，`resolveBackdropTarget` 返回 nil，于是
+    /// **什么都不锁**——锁窗口在解析那一刻就永久关闭了。之后详情落地（服务端图出现）、
+    /// 后台 TMDB 补齐（TMDB 图出现）都会让 `backdropTarget` 现算出不同的图，服务端图
+    /// 被 TMDB 顶掉，闪图原样回归。
+    ///
+    /// 旧的 `BackdropSourceLatch` 靠「解析后第一张非空图即锁定」挡住这一种；纯函数化
+    /// 之后必须有人接这一棒。接棒的时点只能是**已有的状态变更点**（`detail` /
+    /// `tmdbOverlay` 的 `didSet`），绝不能放回 body 求值路径——那正是死循环的成因。
+    ///
+    /// **已锁的档不覆盖**：锁定语义是「本页第一次算到的那张就是这张」，重新加载也
+    /// 不改口。这正是 `BackdropSourceLatch` 文档里「本页不再因迟到数据改口」那条。
+    private func lockBackdropTargetsIfNeeded() {
+        guard backdropLatch.isResolved else { return }
+        for width in Self.backdropWidthBuckets where lockedBackdropTargets[width] == nil {
+            let resolved = resolveBackdropTarget(width: width)
+            // 只锁非空：算不出图时留给下一个时点（详情落地 / TMDB 补齐）。
+            guard resolved.url != nil else { continue }
+            lockedBackdropTargets[width] = BackdropSourceLatch.Target(
+                url: resolved.url, authHeader: resolved.authHeader
+            )
+        }
     }
 
     /// 合集背景兜底：第一个**带背景图**的成员。非合集 / 没有这样的成员时返回 nil。
@@ -339,45 +497,39 @@ final class DetailViewModel {
     // MARK: - 加载
 
     func load() async {
-        guard let app, let server = app.server else { return }
+        guard let app, app.server != nil else { return }
+        // **先读 overlay，再预热 / 上屏**：`overlay(for:)` 是纯磁盘读（不发网络），
+        // 排在后面会让详情内容先按服务端 backdrop 画出首帧、随后被 TMDB 图顶掉
+        // （见 `backdropTarget(width:)` 的锁定说明）。这里先把它读进 `tmdbOverlay`
+        // 并锁好各宽度档，于是第一次绘制就已经是「按 TMDB 优先策略算好的那张」。
+        //
+        // 顺序本身就是修复的一部分：`resolveBackdropSource()` 必须排在**任何会让
+        // 详情内容落地 / 触发背景图绘制**的语句之前，它是唯一会写背景图状态的地方。
+        await resolveBackdropSource()
+        // 解析完成后 `backdropTarget` 才有值；预热紧跟其后，首帧直接命中缓存。
         prewarmAmbience()
+
         // 重进页 = 新一轮访问，补拉预算清零。
         episodeReloadAttemptCount = 0
-        // 兜底候选是**按季**的，且由 Bangumi 区块在出现时重新递上来。这里先清空，
-        // 免得重新进页时用上一轮（可能是另一季）的章节算出错号的占位卡。
+        // 兜底候选是**按季**的，且由 Bangumi 区块在出现时重新递上来。
         bangumiCandidates = []
-        // 点击预取在途：等它落地再读快照。点击到进页通常不到一秒，预取大概率
-        // 已就位；即便没完，等它也省掉与预取并发的一轮重复请求（预取失败静默，
-        // 这里等到空结果后照常走自己的路径）。等待期间视图显示骨架屏，与无预取
-        // 时一致。
-        if let prefetch = app.detailPrefetchTasks[item.id] {
-            await prefetch.value
-        }
-        // stale-while-revalidate：有快照先原位渲染（不置 nil、不闪骨架屏），
-        // 重拉成功后原位覆盖；失败则静默保留快照内容（SWR 语义，错误条只服务首拉）。
-        var snapshot = app.detailSnapshot(for: item.id)
-        // 内存里没有（冷启动 / 首次进这条）就下探磁盘：离线时这是唯一的内容来源。
-        // 放在内存快照之后、网络之前——顺序即优先级：内存最新 → 磁盘次之 → 网络。
-        if snapshot == nil, let cached = await loadFromDisk(server: server) {
-            snapshot = cached
-        }
-        if let snapshot {
-            applySnapshot(snapshot)
-            // TTL 内 = 网络刚刚确认过（本次会话刚拉过 / 点击预取刚落）：整页原位
-            // 渲染、零请求直接返回。「重进秒开」的手感来自这条短路；过了 TTL 走
-            // 下面的 SWR 刷新，语义不变。TMDB 照读本地缓存（refresh 有自己的
-            // 过期策略，命中时不会发网络）。
-            if snapshot.isFresh {
+
+        // stale-while-revalidate 的唯一缓存入口：仓储内存命中即渲染；磁盘来源
+        // 也先渲染，但一律再走网络确认（`MediaSnapshot.isFresh` 对磁盘恒 false）。
+        let cached = await app.metadata.cachedDetail(itemID: item.id)
+        if let cached {
+            applyDetailContent(cached.value)
+            cachedContentFetchedAt = cached.fetchedAt
+            if cached.isFresh(ttl: Self.detailFreshness) {
                 isLoading = false
                 loadError = nil
                 staleNotice = nil
                 await loadTMDbOverlay()
+                await loadSeasonOverlay()
                 return
             }
-        }
-
-        isLoading = snapshot == nil
-        if snapshot == nil {
+        } else {
+            isLoading = true
             loadError = nil
             detail = nil
             seasons = []
@@ -394,130 +546,91 @@ final class DetailViewModel {
             membersLoadError = nil
         }
 
-        // Similar recommendations are optional and may be unavailable on
-        // servers with that endpoint disabled. Keep the required detail path
-        // independent so a recommendation failure cannot blank the page.
-        async let similarItems = server.similar(itemID: item.id, limit: 12)
+        async let similarItems = (try? await app.metadata.similar(itemID: item.id, limit: 12)) ?? []
         var failure: (any Error)?
         do {
-            if shown.kind == .series {
-                // 取数编排（item∥季并行、季失败不连累详情、取消归一）与点击预取
-                // 同一段链，见 `AppModel.fetchDetailAndSeasons`。kind 从手上已有的
-                // 条目（列表条目 / SWR 快照）预判，兜底在 else 分支以详情响应的
-                // kind 补拉。点击预取把这条链提前到转场瞬间，这里是预取没赶上时的保底。
-                let fetched = try await AppModel.fetchDetailAndSeasons(server: server, item: item)
-                guard !Task.isCancelled else { return }
-                detail = fetched.detail
-                // 完整详情的图 tag 可能与列表页快照不同：换图重预热（同 URL 时直接命中短路）。
-                prewarmAmbience()
-                if !fetched.seasons.isEmpty {
-                    seasons = fetched.seasons
-                    selectedSeasonID = app.preferredSeasonID(in: fetched.seasons, seriesID: fetched.detail.id)
-                    // 元数据已确认是新的：把来自磁盘的季集缓存作废，让 `loadEpisodes`
-                    // 重新拉一次。不清的话，几天前拉的集列表会一直显示到用户手动切季。
-                    for seasonID in diskHydratedSeasons {
-                        episodesBySeason[seasonID] = nil
-                    }
-                    diskHydratedSeasons = []
-                }
-                if let seasonsFailure = fetched.seasonsFailure {
-                    failure = seasonsFailure
-                    if snapshot == nil {
-                        loadError = (seasonsFailure as? JellyfinError)?.errorDescription
-                            ?? "\(seasonsFailure)"
-                    }
-                }
-            } else {
-                let loadedDetail = try await server.item(item.id)
-                guard !Task.isCancelled else { return }
-                detail = loadedDetail
-                prewarmAmbience()
-                // 预判失误的兜底：手上的条目不是 series、详情却是（极罕见——
-                // 列表 Type 缺失或快照 kind 过期）。串行补拉一次，失败静默：
-                // 季区空着总好过整页报错。
-                if loadedDetail.kind == .series,
-                   let loadedSeasons = try? await server.seasons(seriesID: item.id),
-                   !loadedSeasons.isEmpty {
-                    seasons = loadedSeasons
-                    selectedSeasonID = app.preferredSeasonID(in: loadedSeasons, seriesID: loadedDetail.id)
-                }
+            let refreshed = try await app.metadata.refreshDetail(
+                itemID: item.id, kindHint: item.kind)
+            guard !Task.isCancelled, let refreshed else { return }
+            applyDetailContent(refreshed.snapshot.value)
+            cachedContentFetchedAt = refreshed.snapshot.fetchedAt
+            if let seasonsFailure = refreshed.failures["seasons"] {
+                failure = JellyfinError(.other(seasonsFailure.message))
+                if cached == nil { loadError = seasonsFailure.message }
             }
+            if let episodesFailure = refreshed.failures["episodes"], cached == nil {
+                episodeLoadError = episodesFailure.message
+            }
+            if let membersFailure = refreshed.failures["members"] {
+                membersLoadError = membersFailure.message
+            }
+            // 仓储默认准备第一季非特别篇；应用偏好可能选另一季，晚一步补上。
+            if shown.kind == .series, let selectedSeasonID,
+               selectedSeasonID != refreshed.snapshot.value.episodesSeasonID,
+               episodesBySeason[selectedSeasonID] == nil {
+                await loadEpisodes()
+            }
+            prewarmAmbience()
+        } catch where JellyfinError.isCancellation(error) {
+            // 取消不是错误，但加载态必须收尾（否则页面永远停在骨架屏）。
+            isLoading = false
+            return
         } catch let e as JellyfinError {
             failure = e
-            if snapshot == nil { loadError = e.errorDescription }
-        } catch where JellyfinError.isCancellation(error) {
-            // 同上：取消不置 failure / loadError。
+            if cached == nil { loadError = e.errorDescription }
         } catch {
             failure = error
-            if snapshot == nil { loadError = "\(error)" }
+            if cached == nil { loadError = "\(error)" }
         }
         isLoading = false
-        similar = (try? await similarItems) ?? similar
-        // 合集成员：与详情/季同一条「网络为准」的路径，失败**不**影响整页
-        // （合集照样能展示标题与成员以外的信息，成员区自己出错误条 + 重试）。
-        // 放在 `storeSnapshot()` 之前，快照才带得上第一页成员。
-        if shown.kind == .boxSet {
-            await loadMembers(reset: true)
-        }
-        // 有内容 + 刷新失败 = 正在展示缓存。没内容时（snapshot == nil）走的是既有的
-        // 整页错误态，不该再叠一条提示。
-        if let failure, snapshot != nil {
+        similar = await similarItems
+        if let failure, cached != nil {
             staleNotice = StaleContentNotice(
                 fetchedAt: cachedContentFetchedAt,
                 causedByConnectivity: (failure as? JellyfinError)?.isConnectivityFailure ?? false)
         } else {
             staleNotice = nil
         }
-        storeSnapshot()
 
-        // TMDB 补全：**放在所有服务端路径之后**，且不 await 网络——
-        // 它在后台补齐，补到后只更新 overlay、不动服务端数据。
-        //
-        // 顺序讲究：先读已有 overlay（立即渲染），再触发 refresh。若先 refresh
-        // 再读，离线或慢网络下详情页会白等一次网络才有 TMDB 数据。
         await loadTMDbOverlay()
-        // 季数据**必须在这里触发**，不能只靠视图上的 `.task(id: selectedSeasonID)`：
-        // 实测那个 task 只在页面初现时跑了一次，而那一刻 `seasons` 还是空的
-        // （诊断日志：与 `/Seasons` 请求同一秒，`selectedSeason` 为 nil），
-        // 之后 id 变化并没有再触发它。放在这里则 `seasons` 与 `selectedSeasonID`
-        // 都已就位，且**晚于 `loadTMDbOverlay`**——季数据要靠父剧的对应来定位，
-        // 而那条对应正是上一步刚建起来的。
         await loadSeasonOverlay()
-        // 合集：**必须晚于 `loadMembers`**（成员是它定位 TMDB 合集的输入，
-        // 见 `TMDbEnricher.refreshCollection`），也晚于 `loadTMDbOverlay`（先读后补）。
         await loadCollectionOverlay()
     }
 
-    /// 快照落到各展示状态（内存 / 磁盘两条来源合流后的共同路径；TTL 短路与
-    /// SWR 刷新前都先走这里）。
-    private func applySnapshot(_ snapshot: AppModel.DetailSnapshot) {
-        detail = snapshot.detail
-        seasons = snapshot.seasons
-        similar = snapshot.similar
-        selectedSeasonID = snapshot.selectedSeasonID
-        episodesBySeason = snapshot.episodesBySeason
-        // 合集成员也走快照：再次进入同一合集先出内容，网络回来原位覆盖。
-        collectionMembers = snapshot.collectionMembers
-        if let seasonID = snapshot.selectedSeasonID,
-           let cached = snapshot.episodesBySeason[seasonID] {
+    /// 仓储详情 → 各展示状态。内存与磁盘两条来源合流后的唯一落点。
+    private func applyDetailContent(_ content: MediaDetailContent) {
+        // 观测钩子必须在**第一行**：这一刻才是「内容即将上屏」，晚于任何状态写入都会
+        // 让「上屏时已解析」这条顺序断言失去判别力（见 `onApplyDetailContent`）。
+        if let onApplyDetailContent { onApplyDetailContent() }
+        detail = content.item
+        seasons = content.seasons
+        collectionMembers = content.collectionMembers
+        collectionMembersTotalCount = content.collectionMembersTotalCount
+        membersNextStartIndex = content.collectionMembers.count
+
+        if let seasonID = content.episodesSeasonID, !content.episodes.isEmpty {
+            episodesBySeason[seasonID] = content.episodes
+        }
+        let preferred = app?.preferredSeasonID(in: content.seasons, seriesID: content.item.id)
+        if selectedSeasonID == nil || !(content.seasons.contains { $0.id == selectedSeasonID }) {
+            selectedSeasonID = preferred ?? content.episodesSeasonID
+        }
+        guard let seasonID = selectedSeasonID else { return }
+        if let cached = episodesBySeason[seasonID] {
             episodes = cached
             let restored = selectedEpisodeBySeason[seasonID]
                 .flatMap { id in cached.contains { $0.id == id } ? id : nil }
-                ?? app?.preferredEpisodeID(in: cached, seriesID: snapshot.detail.id)
+                ?? app?.preferredEpisodeID(in: cached, seriesID: content.item.id)
             selectedEpisodeID = restored
             episodeScrollFocusID = restored
+        } else {
+            episodes = []
+            selectedEpisodeID = nil
+            episodeScrollFocusID = nil
         }
     }
 
-    /// 「先读缓存立即渲染 → 缺数据/过期时后台补 → 真补到了再重读一次」三段式的
-    /// 唯一实现：合集 / 条目 / 季三条 TMDB overlay 链路曾各写一份（仅定位输入与
-    /// 落点不同，连注释都互相引用）。
-    ///
-    /// - `read`：读已有数据（缓存命中时同步就绪，立即渲染）。
-    /// - `refresh`：后台补齐，返回「是否真的落库了新数据」（`RefreshOutcome.didFetch`
-    ///   语义——命中缓存 / TMDB 上没有 / 请求失败都不需要重读）。
-    /// - `apply`：overlay 落点（条目/合集是同一个 `tmdbOverlay`，季是另一个属性）。
-    /// - `onRefreshed`：补到后的附带动作（重预热氛围、同步合集海报给网格卡）。
+    /// 「先读缓存立即渲染 → 后台补齐 → 真补到了再重读一次」：TMDB overlay 三条链共用。
     private func refreshOverlayThenReload<Overlay>(
         read: () async -> Overlay,
         refresh: () async -> Bool,
@@ -534,15 +647,8 @@ final class DetailViewModel {
     }
 
     /// 合集的 TMDB 数据：先读已有（立即渲染），再后台补，补到后重读一次。
-    ///
-    /// 定位靠**成员**：合集在服务端没有可用的 `ProviderIds["Tmdb"]`，TMDB 合集 id
-    /// 是从成员电影的 `belongs_to_collection` 反查出来的。所以成员还没加载出来时
-    /// （离线首进、成员请求失败）本方法什么都不做，页面退回「服务端图 + 成员背景
-    /// 兜底」，不会卡在任何等待上。
     func loadCollectionOverlay() async {
         guard let app, shown.kind == .boxSet else { return }
-        // 海报路径顺手递给网格卡：「先点开详情、再回合集库」这一趟零请求，
-        // 卡片不用自己再解析一遍（见 `AppModel.collectionArtwork`）。
         await refreshOverlayThenReload(
             read: { await app.tmdbOverlay(for: self.shown) },
             refresh: {
@@ -552,48 +658,39 @@ final class DetailViewModel {
                 tmdbOverlay = overlay
                 app.noteCollectionArtwork(itemID: shown.id, posterPath: overlay?.posterPath)
             },
-            // 背景图可能刚从「无」变成 TMDB 那张：重预热（同 URL 时直接命中短路）。
             onRefreshed: { prewarmAmbience() }
         )
     }
 
-    /// 合集成员。
-    ///
-    /// 查询形态用 `MediaServer.collectionMembers(of:)`——**三条硬约束（`recursive: false`、
-    /// 不传 `includeItemTypes`、年份升序）与它们的服务端依据都收在那一个方法里**，
-    /// 库网格卡的封面解析走的是同一个方法；这里再写一份就是下一个漂移点。
-    /// 本方法只额外负责**分页**（一页 200 条，`totalRecordCount` 大于已加载数才给
-    /// 「加载更多」）。结果会被 `CachedMediaServer` 写进条目表与页缓存，不需要另加缓存路径。
+    /// 合集成员：仓储恢复累计页，翻页只请求新窗口。
     func loadMembers(reset: Bool) async {
-        guard let server = app?.server, shown.kind == .boxSet else { return }
+        guard let app, shown.kind == .boxSet else { return }
         if reset {
             isLoadingMembers = true
             membersLoadError = nil
         }
         defer { isLoadingMembers = false }
 
+        if reset {
+            // 详情刷新已经带回首屏成员：直接用仓储内存，不再重复请求。
+            if let cached = await app.metadata.cachedCollectionMembers(itemID: shown.id),
+               cached.source == .memory {
+                applyMembersPage(cached.value)
+                membersLoadError = nil
+                return
+            }
+        }
         let startIndex = reset ? 0 : membersNextStartIndex
         do {
-            let page = try await server.collectionMembers(of: shown.id, startIndex: startIndex)
+            let page = try await app.metadata.refreshCollectionMembers(
+                itemID: shown.id, startIndex: startIndex)
             guard !Task.isCancelled else { return }
-            if reset {
-                collectionMembers = page.items
-            } else {
-                // 防御服务端重复页：按 id 去重追加（与库页翻页同一口径）。
-                var existing = Set(collectionMembers.map(\.id))
-                collectionMembers += page.items.filter { existing.insert($0.id).inserted }
+            if let page {
+                applyMembersPage(page.value)
             }
-            collectionMembersTotalCount = page.totalRecordCount
-            membersNextStartIndex = startIndex + page.items.count
             membersLoadError = nil
-            storeSnapshot()
-            // 成员到位可能**第一次**让合集有背景图（TMDB 没对应时用第一个成员的图，
-            // 见 `collectionBackdropFallback`）。`load()` 里那两次预热都排在成员加载之前，
-            // 赶不上这一档，所以这里补一次（同 URL 会直接短路，不会重复解码）。
             if reset { prewarmAmbience() }
         } catch where JellyfinError.isCancellation(error) {
-            // 取消不是失败：翻页/离页的取消不该挂错误条（判据缺口见
-            // `loadEpisodes` 同款修复的注释）。
             return
         } catch let e as JellyfinError {
             membersLoadError = e.errorDescription
@@ -602,63 +699,31 @@ final class DetailViewModel {
         }
     }
 
-    /// 还有没拉完的成员（服务端给了总数且大于已加载数）。
-    var hasMoreMembers: Bool {
-        guard shown.kind == .boxSet else { return false }
-        guard let total = collectionMembersTotalCount else { return false }
-        return collectionMembers.count < total
+    private func applyMembersPage(_ page: MediaPageContent) {
+        collectionMembers = page.items
+        collectionMembersTotalCount = page.totalCount
+        membersNextStartIndex = page.nextStartIndex
+        membersLastPageWasFull = page.lastPageWasFull
     }
 
-    /// 读已有 TMDB 数据并触发后台补齐。
-    ///
-    /// 失败/未配置一律静默：TMDB 是可选增强，任何问题都不该影响详情页。
+    /// 还有没拉完的成员：优先服务端总数；没有总数时按上一页是否满页判断。
+    var hasMoreMembers: Bool {
+        guard shown.kind == .boxSet else { return false }
+        if let total = collectionMembersTotalCount {
+            return collectionMembers.count < total
+        }
+        return membersLastPageWasFull
+    }
+
+    /// 读已有 TMDB 数据并触发后台补齐。失败/未配置一律静默。
     private func loadTMDbOverlay() async {
         guard let app else { return }
         await refreshOverlayThenReload(
             read: { await app.tmdbOverlay(for: self.shown) },
             refresh: { await app.refreshTMDb(for: self.shown) },
             apply: { self.tmdbOverlay = $0 },
-            // overlay 变了 → 背景图可能从「服务端没有 → 用 TMDB」变成另一个 URL，
-            // 重新预热一次氛围层（URL 未变时 `prewarmedAmbienceURL` 会直接短路）。
             onRefreshed: { prewarmAmbience() }
         )
-    }
-
-    /// 从磁盘缓存装载详情（冷启动 / 离线时的内容来源）。
-    ///
-    /// 返回 `AppModel.DetailSnapshot` 而不是包里的类型：后面的渲染路径只认这一种
-    /// 快照，内存与磁盘两条来源在 `load()` 里就合流了，调用方不必区分。
-    ///
-    /// 同时记下**哪些季的集来自磁盘**（`diskHydratedSeasons`）：那些集可能是几天前
-    /// 拉的，网络恢复后要重新拉一次。不记的话，`loadEpisodes` 会因为
-    /// `episodesBySeason` 已有内容而永远不刷新它们。
-    private func loadFromDisk(server: any MediaServer) async -> AppModel.DetailSnapshot? {
-        guard let hydrator = app?.metadata.hydrator(for: server) else { return nil }
-        guard let cached = await hydrator.detail(itemID: item.id) else { return nil }
-
-        diskHydratedSeasons = Set([cached.seasons.first?.id].compactMap { $0 })
-        let preferred = cached.seasons.first { $0.seasonNumber != 0 }?.id ?? cached.seasons.first?.id
-        var episodesBySeason: [String: [MediaItem]] = [:]
-        if let preferred {
-            episodesBySeason[preferred] = cached.episodes
-        }
-        // 离线标识：这是磁盘内容，网络还没确认过。真正决定「显示离线提示」的
-        // 是**网络刷新失败**（见下方 catch），这里只记下它的时间供文案用。
-        cachedContentFetchedAt = cached.fetchedAt
-
-        return AppModel.DetailSnapshot(
-            detail: cached.item,
-            seasons: cached.seasons,
-            // 推荐不缓存（每次不同、价值低），保持内存里的旧值。
-            similar: similar,
-            selectedSeasonID: preferred,
-            episodesBySeason: episodesBySeason,
-            // 磁盘快照**不参与 TTL**（fetchedAt 置远古）：它是「上一次会话写穿的」，
-            // 写穿时刻可能就在几秒前（刚离页就杀 App 重启）也可能在几天前，而 TTL
-            // 短路的收益只在本会话内（预取 / 会话内重进）——为那点收益放过磁盘旧
-            // 数据不值，磁盘来源一律走 SWR 网络确认。文案用的真实磁盘时间单独记在
-            // `cachedContentFetchedAt`（见上），不受这里影响。
-            fetchedAt: .distantPast)
     }
 
     /// 预热当前条目的氛围底图：与 `BackdropAmbienceView` / 整窗层完全同参
@@ -703,7 +768,7 @@ final class DetailViewModel {
     }
 
     func loadEpisodes() async {
-        guard let server = app?.server, shown.kind == .series, let seasonID = selectedSeasonID else {
+        guard let app, shown.kind == .series, let seasonID = selectedSeasonID else {
             episodes = []
             selectedEpisodeID = nil
             episodeScrollFocusID = nil
@@ -716,7 +781,7 @@ final class DetailViewModel {
             episodes = cached
             let restored = selectedEpisodeBySeason[seasonID]
                 .flatMap { id in cached.contains { $0.id == id } ? id : nil }
-                ?? app?.preferredEpisodeID(in: cached, seriesID: shown.id)
+                ?? app.preferredEpisodeID(in: cached, seriesID: shown.id)
             selectedEpisodeID = restored
             episodeScrollFocusID = restored
             isLoadingEpisodes = false
@@ -724,9 +789,24 @@ final class DetailViewModel {
             episodeReloadAttemptCount = 0
             return
         }
-        episodes = []
-        selectedEpisodeID = nil
-        episodeScrollFocusID = nil
+        // 磁盘 / 内存投影先上屏；磁盘来源继续走网络确认。
+        if let cached = await app.metadata.cachedEpisodes(seriesID: shown.id, seasonID: seasonID) {
+            episodesBySeason[seasonID] = cached.value
+            episodes = cached.value
+            let restored = app.preferredEpisodeID(in: cached.value, seriesID: shown.id)
+            selectedEpisodeID = restored
+            episodeScrollFocusID = restored
+            if cached.source == .memory {
+                isLoadingEpisodes = false
+                episodeLoadError = nil
+                episodeReloadAttemptCount = 0
+                return
+            }
+        } else {
+            episodes = []
+            selectedEpisodeID = nil
+            episodeScrollFocusID = nil
+        }
         isLoadingEpisodes = true
         episodeLoadError = nil
         defer {
@@ -735,25 +815,20 @@ final class DetailViewModel {
             }
         }
         do {
-            let loaded = try await server.episodes(seriesID: shown.id, seasonID: seasonID)
+            guard let loaded = try await app.metadata.refreshEpisodes(
+                seriesID: shown.id, seasonID: seasonID) else { return }
             guard !Task.isCancelled, selectedSeasonID == seasonID else { return }
             episodesBySeason[seasonID] = loaded
             episodes = loaded
-            let preferred = app?.preferredEpisodeID(in: loaded, seriesID: shown.id)
+            let preferred = app.preferredEpisodeID(in: loaded, seriesID: shown.id)
             selectedEpisodeID = preferred
             episodeScrollFocusID = preferred
             episodeLoadError = nil
             episodeReloadAttemptCount = 0
-            storeSnapshot()
         } catch let e as JellyfinError {
             guard selectedSeasonID == seasonID else { return }
             episodeLoadError = e.errorDescription
         } catch where JellyfinError.isCancellation(error) {
-            // 取消分两种来路：结构化取消抛 `CancellationError`；URLSession 任务被取消
-            // 抛的是 `URLError`（NSURLErrorDomain, -999），与前者**无子型关系**，
-            // `is CancellationError` 接不住（2026-10-11 实测：集列表挂出 -999 裸 dump，
-            // 且那次访问再无任何重试）。切季 / 离页 / 页面层重建的取消都不是错误，
-            // 不写错误条；但这次确实没拉到，排一次静默补拉（换季/已有数据则不补）。
             scheduleEpisodeReloadAfterCancellation(seasonID: seasonID)
         } catch {
             guard selectedSeasonID == seasonID else { return }
@@ -816,33 +891,29 @@ final class DetailViewModel {
 
     /// 播放退出/结束回传落库后静默刷新详情与选集（不重置骨架屏、不打断页面浏览）。
     func reloadAfterPlayback() async {
-        guard let server = app?.server else { return }
-        if let loaded = try? await server.item(item.id) {
+        guard let app else { return }
+        if let loaded = try? await app.metadata.refreshItem(itemID: item.id) {
             detail = loaded
         }
-        if shown.kind == .series {
-            // 只回填当前季：其他季的缓存不包含本次播放的那一集，清空整份
-            // episodesBySeason 只会让切季时白拉一遍、闪一下 loading。
-            if let seasonID = selectedSeasonID {
-                if let loaded = try? await server.episodes(seriesID: shown.id, seasonID: seasonID) {
-                    episodesBySeason[seasonID] = loaded
-                    episodes = loaded
-                    if let currentID = selectedEpisodeID, loaded.contains(where: { $0.id == currentID }) {
-                        // 保持选中集，其 playState 已经更新为最新的
-                    } else {
-                        let preferred = app?.preferredEpisodeID(in: loaded, seriesID: shown.id)
-                        selectedEpisodeID = preferred
-                        episodeScrollFocusID = preferred
-                    }
+        if shown.kind == .series, let seasonID = selectedSeasonID {
+            if let loaded = try? await app.metadata.refreshEpisodes(
+                seriesID: shown.id, seasonID: seasonID) {
+                episodesBySeason[seasonID] = loaded
+                episodes = loaded
+                if let currentID = selectedEpisodeID,
+                   loaded.contains(where: { $0.id == currentID }) {
+                    // 保持选中集，其 playState 已由仓储写回最新值。
+                } else {
+                    let preferred = app.preferredEpisodeID(in: loaded, seriesID: shown.id)
+                    selectedEpisodeID = preferred
+                    episodeScrollFocusID = preferred
                 }
             }
         }
-        storeSnapshot()
     }
 
-    /// 写回某条的已看状态：详情 + 当前选集 + 每季缓存三处同步，
-    /// 缓存不改的话切走再切回来「已看过」的勾又变回去。
-    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) {
+    /// 已看状态写回：先更新仓储（内存全部投影 + SQLite），再同步本页展示值。
+    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) async {
         if var current = detail, current.id == id {
             current.playState = state
             detail = current
@@ -854,16 +925,7 @@ final class DetailViewModel {
             guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
             episodesBySeason[seasonID]?[index].playState = state
         }
-        storeSnapshot()
+        await app?.metadata.applyPlayState(state, forItemID: id)
     }
 
-    /// 把当前内容写进跨进入快照（SWR 的「stale」来源）。
-    private func storeSnapshot() {
-        guard let app, let detail else { return }
-        app.storeDetailSnapshot(
-            .init(detail: detail, seasons: seasons, similar: similar,
-                  selectedSeasonID: selectedSeasonID, episodesBySeason: episodesBySeason,
-                  collectionMembers: collectionMembers),
-            for: item.id)
-    }
 }

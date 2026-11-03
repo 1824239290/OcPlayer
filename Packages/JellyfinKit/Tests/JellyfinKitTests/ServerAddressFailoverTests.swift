@@ -22,7 +22,7 @@ final class ServerAddressFailoverTests: XCTestCase {
         var all: [String] { lock.withLock { hosts } }
     }
 
-    private let lan = URL(string: "http://192.168.5.107:8096")!
+    private let lan = URL(string: "http://192.168.100.107:8096")!
     private let tailscale = URL(string: "http://100.64.1.20:8096")!
 
     private func makeStore() -> ServerStore {
@@ -45,7 +45,7 @@ final class ServerAddressFailoverTests: XCTestCase {
 
     /// 探活脚本：局域网那条只在**第一次**探活时报可达（首轮决议因此选它），
     /// 之后报不可达 —— 等价于「结论是刚才在家里探出来的，人已经出门」。
-    private func installExpiringProbe(on store: ServerStore, lanHost: String = "192.168.5.107") -> Counter {
+    private func installExpiringProbe(on store: ServerStore, lanHost: String = "192.168.100.107") -> Counter {
         let lanProbes = Counter()
         store.probeTimeout = 0.2
         store.probeOverride = { url in
@@ -73,7 +73,7 @@ final class ServerAddressFailoverTests: XCTestCase {
         let hosts = Recorder()
         try await TestSupport.withMock { request in
             hosts.record(request.url?.host ?? "?")
-            if request.url?.host == "192.168.5.107" {
+            if request.url?.host == "192.168.100.107" {
                 throw URLError(.cannotConnectToHost)
             }
             return MockURLProtocol.ok(
@@ -84,7 +84,7 @@ final class ServerAddressFailoverTests: XCTestCase {
             XCTAssertEqual(libraries.map(\.id), ["lib-1"], "换址后这次请求必须成功")
         }
 
-        XCTAssertEqual(hosts.all, ["192.168.5.107", "100.64.1.20"],
+        XCTAssertEqual(hosts.all, ["192.168.100.107", "100.64.1.20"],
                        "先在原地址上试、失败后立刻在新地址上重试一次")
         XCTAssertEqual(store.endpointDirectory(for: profile).currentURL, tailscale,
                        "决议器要记住换过的地址（写回档案由 App 层在主线程做）")
@@ -97,7 +97,7 @@ final class ServerAddressFailoverTests: XCTestCase {
         store.activate(profile, token: "tok-1")
         store.probeTimeout = 0.2
         store.probeOverride = { url in
-            ServerProbeResult(url: url, latency: url.host == "192.168.5.107" ? 0.005 : 0.05,
+            ServerProbeResult(url: url, latency: url.host == "192.168.100.107" ? 0.005 : 0.05,
                               serverID: "srv-1")
         }
         let savedPolicy = JellyfinServer.browseRetryPolicy
@@ -123,7 +123,7 @@ final class ServerAddressFailoverTests: XCTestCase {
             }
         }
 
-        XCTAssertEqual(Set(hosts.all), ["192.168.5.107"], "5xx 是服务器答了话，不该换地址")
+        XCTAssertEqual(Set(hosts.all), ["192.168.100.107"], "5xx 是服务器答了话，不该换地址")
     }
 
     /// 回归：主机名候选在那条网络里**解析不了**（`-1003 cannotFindHost`）也必须换址。
@@ -169,7 +169,7 @@ final class ServerAddressFailoverTests: XCTestCase {
 
     func testEmbyRequestFailsOverToReachableAlternate() async throws {
         let store = makeStore()
-        let profile = profile(baseURL: URL(string: "http://192.168.5.107:8096/emby")!, kind: .emby)
+        let profile = profile(baseURL: URL(string: "http://192.168.100.107:8096/emby")!, kind: .emby)
         store.activate(profile, token: "tok-1")
         _ = installExpiringProbe(on: store)
 
@@ -180,7 +180,7 @@ final class ServerAddressFailoverTests: XCTestCase {
         let hosts = Recorder()
         try await TestSupport.withMock { request in
             hosts.record(request.url?.host ?? "?")
-            if request.url?.host == "192.168.5.107" {
+            if request.url?.host == "192.168.100.107" {
                 throw URLError(.cannotConnectToHost)
             }
             XCTAssertEqual(request.url?.path, "/emby/Users/u1/Views")
@@ -192,7 +192,7 @@ final class ServerAddressFailoverTests: XCTestCase {
             XCTAssertEqual(libraries.map(\.id), ["lib-1"])
         }
 
-        XCTAssertEqual(hosts.all, ["192.168.5.107", "100.64.1.20"])
+        XCTAssertEqual(hosts.all, ["192.168.100.107", "100.64.1.20"])
     }
 
     // MARK: - 没有备选可换时
@@ -224,7 +224,7 @@ final class ServerAddressFailoverTests: XCTestCase {
             }
         }
 
-        XCTAssertEqual(Set(hosts.all), ["192.168.5.107"])
+        XCTAssertEqual(Set(hosts.all), ["192.168.100.107"])
         XCTAssertEqual(store.profiles[0].baseURL, lan, "换不动就保持原地址")
     }
 }

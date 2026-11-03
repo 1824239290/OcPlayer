@@ -3,6 +3,7 @@ import CoreModel
 import DiagnosticsKit
 import Foundation
 import JellyfinKit
+import MetadataKit
 
 /// 首页三条 Rail 上一次加载时的「有无内容」记录，跨启动保留。
 ///
@@ -57,15 +58,12 @@ extension AppModel {
 
     /// 会话落地（登录 / 启动恢复 / 切换服务器）。
     ///
-    /// `async` 是因为**写穿缓存要在任何请求之前包好**：`metadata.wrap` 先等建库完成
-    /// 再返回装饰器，若这里同步返回、稍后再替换 `server`，首屏那批请求就会漏写缓存。
-    /// 建库失败时 `wrap` 原样返回内层服务器（缓存是可选增强，不该拖垮登录）。
+    /// 只把服务器实例交给数据面，不再在这里包装缓存装饰器：仓储自己等库就绪，
+    /// 建库失败退化为内存模式。首屏任务与头像任务并行启动。
     func activate(server: any MediaServer) async {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
-        // 包装必须在「赋值给 self.server」之前完成：下面立刻就会发首屏请求。
-        let cached = await metadata.wrap(server)
-        self.server = cached
+        self.server = server
         // 记下本会话的图片缓存身份。**唯一**的会话落地点（登录 / 启动恢复 / 切换服务器）
         // 就是这里，所以只在这一处记；登录页在没有 token 时靠它复原海报的缓存键。
         // 刻意不在登出时清除——见 `ImageCacheIdentityStore`。
@@ -73,21 +71,19 @@ extension AppModel {
             identity: ImagePipeline.cacheIdentity(authHeader: server.authorizationHeader),
             tenant: server.profile.id
         )
-        // 地址决议接线要跟会话走：决议器选中新地址时把结论写回档案、并刷新界面。
-        // 决议器读的是 `profile`，装饰器原样透传，接线不受影响。
-        attachEndpoints(to: cached)
-        // 换会话就丢掉上个会话的分页缓存：条目 id 只在那台服务器里有意义。
+        attachEndpoints(to: server)
+        // 换会话就丢掉上个会话的分页投影：条目 id 只在那台服务器里有意义。
         libraryPages = [:]
         phase = .ready
         let generation = sessionGeneration
         initialDataTask = Task { [weak self] in
-            await self?.loadInitialData(server: cached, generation: generation)
+            await self?.loadInitialData(server: server, generation: generation)
         }
         // 头像单独一条任务，不搭首屏那趟车：它只喂首页 Tab 的图标，不该拖慢首屏；
         // 而首屏任务会被下拉刷新 / 重试重建，头像没必要跟着重来一遍。
         userAvatarTask?.cancel()
         userAvatarTask = Task { [weak self] in
-            await self?.loadUserAvatar(server: cached, generation: generation)
+            await self?.loadUserAvatar(server: server, generation: generation)
         }
     }
 
@@ -101,78 +97,44 @@ extension AppModel {
         await reloadBrowserData(server: server, generation: generation)
     }
 
-    /// 重载首页和侧栏依赖的媒体库。断网后的重试必须同时恢复两部分数据。
+    /// 重载首页和侧栏依赖的媒体库。一次仓储刷新同时返回两部分，不再各发一轮。
     func reloadBrowserData() async {
         guard let server else { return }
         await reloadBrowserData(server: server, generation: sessionGeneration)
     }
 
     func reloadBrowserData(server: any MediaServer, generation: Int) async {
-        async let libs: Void = loadLibraries(server: server, generation: generation)
-        async let home: Void = loadHome(server: server, generation: generation)
-        _ = await (libs, home)
+        await loadHome(server: server, generation: generation)
     }
 
     /// 冷启动时先把磁盘上的首页内容填进来（离线也有东西看）。
     ///
-    /// 在 `activate` 之后、真正发请求之前调：命中的话首屏立刻有内容，随后的网络
-    /// 刷新原位覆盖（与详情页同一套 stale-while-revalidate）。没缓存就什么都不做，
-    /// 保持原有的骨架屏路径。
-    ///
-    /// **只在内存为空时填**：`reloadBrowserData`（下拉刷新 / 重试）也会走到这里，
-    /// 那时内存里已经是内容了，不该被磁盘上的旧版本盖回去。
+    /// **只在内存为空时填**：下拉刷新 / 重试也会走到这里，那时页面已有内容，
+    /// 不该被磁盘旧版本盖回去。
     func hydrateBrowserDataFromCache(server: any MediaServer, generation: Int) async {
         guard sessionIsCurrent(generation, server: server) else { return }
         guard libraries.isEmpty, home.resume.isEmpty, home.nextUp.isEmpty, home.latest.isEmpty
         else { return }
-        guard let hydrator = metadata.hydrator(for: server) else { return }
-        // `LIVE-02`：`hydrator.home()` 是冷启动盲区里的最后一段（4 次读事务 + 解码），
-        // 单独打点 —— 它若占了 865 ms 里的大头，那 `P2-23` 的合并收益就值得继续做
-        // （那一批已把 4 次读合成 1 次，比例 −17%~−20%）。
         let cacheClock = ContinuousClock()
         let cacheStart = cacheClock.now
-        let cachedOptional = await hydrator.home()
+        guard let cached = await metadata.cachedHome() else { return }
         let cacheElapsed = cacheClock.now - cacheStart
         let cacheMs = Int64(cacheElapsed.components.seconds * 1000)
             + Int64(cacheElapsed.components.attoseconds / 1_000_000_000_000_000)
-        guard let cached = cachedOptional else { return }
         guard sessionIsCurrent(generation, server: server) else { return }
 
-        libraries = cached.libraries
-        // 与网络路径同样的去重语义（半集会被 Resume 与 NextUp 同时返回）。
-        home.resume = cached.resume
-        home.nextUp = Self.deduplicatedNextUp(cached.nextUp, resume: cached.resume)
-        home.latest = cached.latest
+        libraries = cached.value.libraries
+        home.resume = cached.value.resume
+        home.nextUp = cached.value.nextUp
+        home.latest = cached.value.latest
         // 记下缓存时间：网络刷新失败时用它渲染「更新于 X 前」。
         home.cachedFetchedAt = cached.fetchedAt
         AppDiagnostics.logInfo("首页用磁盘缓存预热", fields: [
-            "resume": .integer(Int64(cached.resume.count)),
-            "nextUp": .integer(Int64(cached.nextUp.count)),
-            "latest": .integer(Int64(cached.latest.count)),
-            // `LIVE-02`：这次读盘/解码花了多久 —— 与「冷启动分段」的 activateMs 相减
-            // 就能把盲区拆干净。
+            "resume": .integer(Int64(cached.value.resume.count)),
+            "nextUp": .integer(Int64(cached.value.nextUp.count)),
+            "latest": .integer(Int64(cached.value.latest.count)),
             "readMs": .integer(cacheMs),
         ])
-    }
-
-    func loadLibraries(server: any MediaServer, generation: Int) async {
-        do {
-            let loaded = try await server.userViews()
-            guard sessionIsCurrent(generation, server: server) else { return }
-            libraries = loaded
-            librariesError = nil
-        } catch let error as JellyfinError {
-            guard sessionIsCurrent(generation, server: server) else { return }
-            // 保留旧列表（若有），只暴露错误文案供侧栏/重试使用。
-            librariesError = error.errorDescription
-            AppDiagnostics.logWarning("媒体库列表加载失败", fields: [
-                "error": .string(error.errorDescription ?? "\(error)"),
-            ])
-        } catch {
-            guard sessionIsCurrent(generation, server: server) else { return }
-            librariesError = "\(error)"
-            AppDiagnostics.logWarning("媒体库列表加载异常", fields: ["error": .string("\(error)")])
-        }
     }
 
     func loadHome() async {
@@ -192,51 +154,48 @@ extension AppModel {
                 home.isLoading = false
             }
         }
-        // 三条 rail 各自独立成败。以前这里是 `try await (a, b, c)` 一个元组收口，
-        // **任何一条失败就把三条全丢**、整页白屏——而实测一台公网中转服务器
-        // 中位 370ms、长尾到 22s、偶尔整条挂掉，另外两条其实已经拿到内容了。
-        async let resume = RailResult.load { try await server.resumeItems() }
-        async let nextUp = RailResult.load { try await server.nextUp() }
-        async let latest = RailResult.load { try await server.latestItems(limit: 24) }
-        let (resumeRail, nextUpRail, latestRail) = await (resume, nextUp, latest)
 
+        // 仓储内部四路并行、同键单飞：同一时刻只存在一轮首页请求，
+        // 失败分区自动沿用上一份内容。
+        guard let refreshed = await metadata.refreshHome() else { return }
         guard sessionIsCurrent(generation, server: server),
               homeLoadGeneration == loadGeneration
         else { return }
 
-        // 成功的 rail 覆盖；失败的保留上一次的内容，不清空。
-        if let items = resumeRail.value { home.resume = items }
-        if let items = nextUpRail.value {
-            home.nextUp = Self.deduplicatedNextUp(items, resume: home.resume)
-        }
-        if let items = latestRail.value { home.latest = items }
+        applyHomeContent(refreshed.snapshot.value)
+        let failures = refreshed.failures
 
-        // 会话内首次加载收官（成败皆算）：启动动画的交棒在等这个——
-        // 骨架期（无缓存又没拿到数据）不交棒，否则揭过去是一页空白。
-        if sessionIsCurrent(generation, server: server),
-           homeLoadGeneration == loadGeneration {
-            homeInitialLoadDone = true
+        if let libraryFailure = failures["libraries"] {
+            librariesError = libraryFailure.message
+        } else {
+            librariesError = nil
         }
 
-        let rails = [resumeRail, nextUpRail, latestRail]
-        let allSucceeded = rails.allSatisfy { $0.value != nil }
-        let anyConnectivityFailure = rails.contains { $0.failureIsConnectivity }
-        // 三条**全**挂才算这一页失败。`HomeView` 本来也只在 latest 为空时展示
-        // 整页错误态，所以部分失败时这里置 error 只会白白遮住已经拿到的内容。
-        if rails.allSatisfy({ $0.value == nil && $0.failureDescription != nil }) {
-            home.error = rails.compactMap(\.failureDescription).first
+        let railNames = ["resume": "继续观看", "nextUp": "接下来看", "latest": "最近添加"]
+        let failedRails = railNames.compactMap { key, label -> (String, MediaFailure)? in
+            guard let failure = failures[key] else { return nil }
+            return (label, failure)
         }
-        // 只要有一条没刷新成功，页面上的内容就有一半是旧的（三条 rail 是一个整体），
-        // 所以按「有失败就标」处理，而全部成功才清掉缓存标记。
-        if allSucceeded {
+        // 三条 rail 全挂才算整页失败；部分失败时页面已经有内容。
+        if failedRails.count == railNames.count {
+            home.error = failedRails.first?.1.message
+        }
+        if failures.isEmpty {
             home.cachedFetchedAt = nil
             home.refreshFailureWasConnectivity = false
         } else {
-            home.refreshFailureWasConnectivity = anyConnectivityFailure
+            home.cachedFetchedAt = refreshed.snapshot.fetchedAt
+            home.refreshFailureWasConnectivity = failedRails.contains { $0.1.isConnectivity }
         }
-        for (name, failure) in zip(["继续观看", "接下来看", "最近添加"], rails) {
-            guard let failure = failure.failureDescription else { continue }
-            AppDiagnostics.logWarning("首页 rail 加载失败 rail=\(name)", fields: ["error": .string(failure)])
+        for (label, failure) in failedRails {
+            AppDiagnostics.logWarning("首页 rail 加载失败 rail=\(label)", fields: [
+                "error": .string(failure.message),
+            ])
+        }
+
+        if sessionIsCurrent(generation, server: server),
+           homeLoadGeneration == loadGeneration {
+            homeInitialLoadDone = true
         }
 
         // 记下这次的 Rail 组成，供下次首屏骨架决定铺几条。
@@ -247,42 +206,16 @@ extension AppModel {
         )
         let changed = home.railPresence != presence
         home.railPresence = presence
-        // 低频变化的三位布尔掩码，只在翻转时写盘（原先每次加载成功都同步写）。
-        // 写进**注入的**偏好域：测试用隔离 suite，否则并行跑用例时会和别的类
-        // 抢同一个键（见 `AppModel.init` 的说明）。
         if changed {
             presence.persist(to: preferences)
         }
     }
-}
 
-/// 一条 rail 的加载结果：成功带内容，失败带文案。
-///
-/// **不抛**：首页三条 rail 是并列的三份数据，一条挂掉不该把另外两条一起丢掉。
-/// 取消不算失败（值与被判定文案都为空），避免换会话时把过期请求的取消报成错误。
-private struct RailResult {
-    var value: [MediaItem]?
-    var failureDescription: String?
-    /// 这次失败是不是「连不上」（决定用户看到的提示说不说「离线」）。
-    var failureIsConnectivity = false
-    /// 取消不算失败（值与被判定文案都为空），避免换会话时把过期请求的取消报成错误。
-
-    static func load(_ work: () async throws -> [MediaItem]) async -> RailResult {
-        do {
-            return RailResult(value: try await work(), failureDescription: nil)
-        } catch where CancellationClassifier.isCancellation(error) {
-            // ⚠️ 必须用分类器，不能写 `catch is CancellationError`：
-            // `JellyfinServer.send` 取消时经 `wrapPreservingCancellation` **原样透传**
-            // 裸 `URLError(.cancelled)`（-999），它不是 `CancellationError`。
-            // 早先那样写会让「退出播放 → 继承取消」的三条 rail 请求全部掉进通用 catch，
-            // 把首页设成错误态、还刷三条「首页 rail 加载失败」warning。
-            return RailResult(value: nil, failureDescription: nil)
-        } catch let error as JellyfinError {
-            return RailResult(value: nil, failureDescription: error.errorDescription,
-                              failureIsConnectivity: error.isConnectivityFailure)
-        } catch {
-            return RailResult(value: nil, failureDescription: "\(error)")
-        }
+    private func applyHomeContent(_ content: MediaHomeContent) {
+        libraries = content.libraries
+        home.resume = content.resume
+        home.nextUp = content.nextUp
+        home.latest = content.latest
     }
 }
 
