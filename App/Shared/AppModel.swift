@@ -603,6 +603,12 @@ final class AppModel {
                     precedingStoppedReport: pendingPlaybackReportingHandoff
                 )
                 pendingPlaybackReportingHandoff = nil
+                // L1：打开失败的确定性命中点在控制器内部（失败落地的同一刻），
+                // 不靠 loading 撤销循环轮询 —— 那条路最多要等一个轮询间隔，
+                // 而换源的体感直接取决于这个延迟。
+                playback.onOpenFailure = { [weak self] requestID, kind in
+                    self?.handlePlaybackOpenFailure(requestID: requestID, kind: kind)
+                }
             } else {
                 playbackReporting = nil
             }
@@ -632,6 +638,17 @@ final class AppModel {
     var activePlaybackIdentity: ActivePlaybackIdentity?
     /// 覆盖层正在播放的条目（HUD 标题 / 继续观看用）；退出 / 换片时随上报一起清。
     var nowPlayingItem: MediaItem?
+
+    // MARK: - L1 自动换源
+
+    /// 本条请求已经自动换过几次源。用户重新发起播放（`play()`）时归零。
+    var sourceFailoverCount = 0
+    /// 本轮已试过的源与各自的失败类别，按发生顺序。
+    ///
+    /// 全失败时要靠它说清「试过哪几条、各自什么原因」——这句话决定用户下一步
+    /// 该点「重试」还是「换片」。只记最后一次错误是不够的：第一条网络超时、
+    /// 第二条 403，与两条都是超时，处理方式完全不同。
+    var sourceFailoverAttempts: [(sourceID: String?, kind: PlaybackOpenErrorKind)] = []
     /// 连播解析出的「下一集」；HUD「Continue Watching」复用它，nil = 没有下一集。
     var nextEpisode: MediaItem?
     var nextEpisodeTask: Task<Void, Never>?
