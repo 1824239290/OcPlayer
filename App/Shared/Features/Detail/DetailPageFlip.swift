@@ -73,6 +73,10 @@ final class DetailPagePager {
     /// 发生在非顶部，此后全是 `.changed`；只有新一次手势的 `.began` 才落在顶部。
     /// 鼠标滚轮没有 phase 信息，每一格本身就是独立动作，永远算「新的一次」。
     @ObservationIgnored private var flipArmed = false
+    /// 上一发参与裁决的滚轮事件时刻（单调时钟，秒）。
+    ///
+    /// 用来识别「新的一轮滚动动作」，见 `beginsNewScrollGesture(_:)`。
+    @ObservationIgnored private var lastWheelEventAt: TimeInterval = 0
     @ObservationIgnored private var transitioningUntil = Date.distantPast
     @ObservationIgnored private var monitor: Any?
     @ObservationIgnored private weak var hostWindow: NSWindow?
@@ -84,6 +88,61 @@ final class DetailPagePager {
 
     /// 第二页是否停在顶部。留 2pt 容差:吸附后 offset 会是 -0.0001 这类浮点毛刺。
     var isBodyAtTop: Bool { bodyOffsetY <= 2 }
+
+    /// 判定「这一发滚轮是否开启了一轮新的滚动动作」（有权翻回第一页）。
+    ///
+    /// ## 为什么不能只看设备特征
+    ///
+    /// 原判据是 `phase.contains(.began) || !hasPreciseScrollingDeltas` —— 前者认触控板
+    /// 的手势相位，后者认「没有相位 = 传统鼠标」。这条在装了 **Mos**（鼠标滚轮平滑工具）
+    /// 的机器上**两个分支同时为假**，于是 `flipArmed` 永远是 false，第二页再也翻不回第一页：
+    ///
+    /// 实测（Mos 4.2.1，`/tmp/wheelprobe`）：Mos 把一格滚轮摊成一串
+    /// `hasPreciseScrollingDeltas == true`、`phase == []`、`momentumPhase == []` 的连续事件
+    /// （`dy` 由 1 递增到峰值再衰减回 0）。它既不是传统鼠标（precise 为真），
+    /// 也不是标准触控板手势（没有 phase）——恰好漏过原来那两条分支。
+    ///
+    /// ## 现在怎么判
+    ///
+    /// 按**时间间隔**：与上一发事件隔了 `wheelGestureGap` 以上，就算新的一轮。
+    /// 三种输入都读得通，且不依赖任何设备标签：
+    ///
+    /// - 传统鼠标：两格之间通常 >100ms，每格都算新动作（行为与改动前一致）。
+    /// - 触控板：手势内事件间隔只有几毫秒，不会误判成新动作；真正的 `.began` 仍优先命中。
+    /// - Mos：平滑流内间隔约 16ms（60Hz）不会误判，停手后下一轮才算新动作。
+    ///
+    /// 回放的那串惯性衰减事件被夹在同一串里，同样不会触发翻回。
+    private func beginsNewScrollGesture(_ event: NSEvent) -> Bool {
+        Self.isNewScrollGesture(phaseBegan: event.phase.contains(.began),
+                                phaseIsEmpty: event.phase.isEmpty,
+                                timestamp: event.timestamp,
+                                lastTimestamp: lastWheelEventAt)
+    }
+
+    /// `beginsNewScrollGesture` 的纯值内核（可单测）。
+    ///
+    /// - Parameters:
+    ///   - phaseBegan: 事件 phase 含 `.began`。
+    ///   - phaseIsEmpty: 事件 phase 为空（传统鼠标 / Mos 平滑流）。
+    ///   - timestamp: 本事件的单调时钟时刻（`NSEvent.timestamp`）。
+    ///   - lastTimestamp: 上一发事件的时刻；0 表示还没收过事件。
+    /// `nonisolated`：纯值、无状态，测试与非隔离上下文都能直接调。
+    nonisolated static func isNewScrollGesture(phaseBegan: Bool,
+                                   phaseIsEmpty: Bool,
+                                   timestamp: TimeInterval,
+                                   lastTimestamp: TimeInterval) -> Bool {
+        // 系统真的给了手势相位：以它为准（触控板）。
+        if phaseBegan { return true }
+        // 相位存在但不是 began：同一串手势的中段，不是新动作。
+        if !phaseIsEmpty { return false }
+        // 没有相位（传统鼠标 / Mos 平滑流）：按时间间隔区分。
+        guard lastTimestamp > 0 else { return true }  // 第一发总是新一轮
+        return timestamp - lastTimestamp >= wheelGestureGap
+    }
+
+    /// 「新一轮滚动动作」的最小间隔（秒）。60Hz 的平滑流约 16ms 一发，取 120ms
+    /// 留足余量：既不会把一串拆散，也不会把用户明确的两下动作并成一串。
+    nonisolated private static let wheelGestureGap: TimeInterval = 0.12
 
     /// 时序缩放:降低动态效果时压成 ~25ms,等价于硬切。
     private var speed: Double { reduceMotion ? 40 : 1 }
@@ -198,6 +257,11 @@ final class DetailPagePager {
         // 否则一格滚轮永远攒不到翻页阈值;触控板本来就是 pt,原样用。
         let advance = event.hasPreciseScrollingDeltas ? raw : raw * 10
 
+        // 「这一发是否开启了一轮新的滚动动作」必须在更新时刻**之前**算，
+        // 且只对真正参与裁决的竖向滚轮算（横向、惯性回放不算）。
+        let startsNewGesture = beginsNewScrollGesture(event)
+        lastWheelEventAt = event.timestamp
+
         switch page {
         case .art:
             if abs(advance) > 0.01 {
@@ -260,9 +324,13 @@ final class DetailPagePager {
                 return true
             }
 
-            // 触控板：本次手势的 `.began` 落在顶部 = 新的一次滚动手势 → 武装。
-            // 鼠标滚轮：没有 phase 信息，每一格都是独立动作 → 直接武装。
-            if event.phase.contains(.began) || !event.hasPreciseScrollingDeltas {
+            // 新一轮滚动动作 = 有权翻回第一页。
+            //
+            // 原判据 `phase.contains(.began) || !hasPreciseScrollingDeltas` 在装了 Mos
+            // 的机器上两个分支同时为假（Mos 发的是一串 precise + 无 phase 的事件），
+            // 导致 `flipArmed` 永远 false、第二页翻不回第一页。改成按时间间隔识别，
+            // 判据细节见 `beginsNewScrollGesture(_:)`。
+            if startsNewGesture {
                 flipArmed = true
             }
 
