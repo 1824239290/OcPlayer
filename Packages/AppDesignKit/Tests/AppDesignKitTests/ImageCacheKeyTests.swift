@@ -19,8 +19,8 @@ final class ImageCacheKeyTests: XCTestCase {
 
     /// 同一路径、**不同 host** → 同一个规范化键（这就是本修复的全部目的）。
     func testSamePathOnDifferentHostsSharesKey() {
-        let lan = ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.5.107"), authHeader: "Tok=\"a\"")
-        let wan = ImageCacheKey.canonicalURL(for: mediaURL(host: "100.127.128.96"), authHeader: "Tok=\"a\"")
+        let lan = ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.100.107"), authHeader: "Tok=\"a\"")
+        let wan = ImageCacheKey.canonicalURL(for: mediaURL(host: "100.64.1.96"), authHeader: "Tok=\"a\"")
         let reverse = ImageCacheKey.canonicalURL(for: mediaURL(host: "nas.example.com"), authHeader: "Tok=\"a\"")
 
         XCTAssertNotNil(lan)
@@ -31,9 +31,9 @@ final class ImageCacheKeyTests: XCTestCase {
     /// 规范化后 host 被换成占位符，**原地址不再出现在键里**。
     func testCanonicalKeyDropsOriginalHost() throws {
         let key = try XCTUnwrap(
-            ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.5.107"), authHeader: nil))
+            ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.100.107"), authHeader: nil))
         XCTAssertEqual(key.host, ImageCacheKey.placeholderHost)
-        XCTAssertFalse(key.absoluteString.contains("192.168.5.107"))
+        XCTAssertFalse(key.absoluteString.contains("192.168.100.107"))
         // 路径与查询原样保留（否则会串图）
         XCTAssertEqual(key.path, "/Items/abc123/Images/Thumb")
         XCTAssertTrue(key.query?.contains("maxWidth=720") == true)
@@ -85,9 +85,9 @@ final class ImageCacheKeyTests: XCTestCase {
         func avatar(host: String, tag: String = "av-7") -> URL {
             URL(string: "http://\(host):8096/UserImage?userId=user-9&tag=\(tag)")!
         }
-        let lan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107"),
+        let lan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107"),
                                                            authHeader: "UserId=\"user-9\""))
-        let wan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "100.127.128.96"),
+        let wan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "100.64.1.96"),
                                                            authHeader: "UserId=\"user-9\""))
         XCTAssertEqual(lan, wan, "换地址必须共键")
         XCTAssertEqual(lan.host, ImageCacheKey.placeholderHost)
@@ -97,12 +97,12 @@ final class ImageCacheKeyTests: XCTestCase {
         // 换了头像（tag 变）必须换键，否则用户会一直看到旧头像。
         XCTAssertNotEqual(
             lan,
-            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107", tag: "av-8"),
+            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107", tag: "av-8"),
                                        authHeader: "UserId=\"user-9\""))
         // 同一台服务器上的两个账号不能互看缓存。
         XCTAssertNotEqual(
             lan,
-            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.5.107"),
+            ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107"),
                                        authHeader: "UserId=\"other\""))
     }
 
@@ -264,8 +264,8 @@ final class ImageCacheKeyTests: XCTestCase {
     /// **端到端（真 URLCache）**：从局域网地址存进去，用 Tailscale 地址取出来能命中。
     func testCacheHitAcrossAddresses() throws {
         let cache = try makeCache()
-        let lan = mediaURL(host: "192.168.5.107")
-        let wan = mediaURL(host: "100.127.128.96")
+        let lan = mediaURL(host: "192.168.100.107")
+        let wan = mediaURL(host: "100.64.1.96")
 
         cache.storeCachedResponse(response(url: lan), for: request(lan))
         let hit = cache.cachedResponse(for: request(wan))
@@ -306,8 +306,8 @@ final class ImageCacheKeyTests: XCTestCase {
     /// 「规范化后的键在清空后一定查不到」。
     func testClearAllInvalidatesLookups() throws {
         let cache = try makeCache()
-        let lan = mediaURL(host: "192.168.5.107")
-        let wan = mediaURL(host: "100.127.128.96")
+        let lan = mediaURL(host: "192.168.100.107")
+        let wan = mediaURL(host: "100.64.1.96")
         cache.storeCachedResponse(response(url: lan), for: request(lan))
         XCTAssertNotNil(cache.cachedResponse(for: request(wan)))
 

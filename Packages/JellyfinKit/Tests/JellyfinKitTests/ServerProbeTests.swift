@@ -131,11 +131,11 @@ final class ServerProbeTests: XCTestCase {
 
     /// 「档案里的 baseURL 是家里那条，人已经出门」：并发探活要挑出唯一可达的那条。
     func testFirstReachableSkipsUnreachableAddresses() async throws {
-        let lan = URL(string: "http://192.168.5.107:8096")!
+        let lan = URL(string: "http://192.168.100.107:8096")!
         let tailscale = URL(string: "http://100.64.1.20:8096")!
 
         try await TestSupport.withMock { request in
-            if request.url?.host == "192.168.5.107" {
+            if request.url?.host == "192.168.100.107" {
                 throw URLError(.cannotConnectToHost)
             }
             return MockURLProtocol.ok(#"{"Id":"srv-1"}"#, for: request.url!)
@@ -149,7 +149,7 @@ final class ServerProbeTests: XCTestCase {
     }
 
     func testFirstReachableReturnsNilWhenNothingAnswers() async throws {
-        let lan = URL(string: "http://192.168.5.107:8096")!
+        let lan = URL(string: "http://192.168.100.107:8096")!
         try await TestSupport.withMock { request in
             throw URLError(.cannotConnectToHost)
         } with: {

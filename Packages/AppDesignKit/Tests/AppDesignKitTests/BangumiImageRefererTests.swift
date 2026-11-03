@@ -39,7 +39,7 @@ final class BangumiImageRefererTests: XCTestCase {
     /// 非 Bangumi 图源一个头都不加（TMDB CDN / 自家 Jellyfin 用项目统一 UA）。
     func testOtherHostsAreUntouched() {
         XCTAssertNil(ImagePipeline.bangumiReferer(forHost: "image.tmdb.org"))
-        XCTAssertNil(ImagePipeline.bangumiReferer(forHost: "192.168.5.107"))
+        XCTAssertNil(ImagePipeline.bangumiReferer(forHost: "192.168.100.107"))
         XCTAssertNil(ImagePipeline.bangumiReferer(forHost: "ocplayer.invalid"))
     }
 

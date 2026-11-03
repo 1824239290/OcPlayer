@@ -294,7 +294,7 @@ final class ServerStoreTests: XCTestCase {
 
     // MARK: - 多地址（同一台服务器多个入口）
 
-    private let lanAddress = URL(string: "http://192.168.5.107:8096")!
+    private let lanAddress = URL(string: "http://192.168.100.107:8096")!
     private let tailscaleAddress = URL(string: "http://100.64.1.20:8096")!
 
     private func multiAddressProfile(
@@ -353,7 +353,7 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertTrue(store.addAddress(tailscaleAddress, to: id))
         XCTAssertFalse(store.addAddress(URL(string: "http://100.64.1.20:8096/")!, to: id),
                        "尾斜杠版本是同一个入口，不能再加一条")
-        XCTAssertFalse(store.addAddress(URL(string: "http://192.168.5.107:8096")!, to: id),
+        XCTAssertFalse(store.addAddress(URL(string: "http://192.168.100.107:8096")!, to: id),
                        "与当前生效地址相同的不进备选列表")
 
         XCTAssertEqual(store.profiles[0].addresses.map(\.url), [tailscaleAddress])
@@ -426,7 +426,7 @@ final class ServerStoreTests: XCTestCase {
     func testLegacyProfileJSONWithoutAddressFieldsDecodes() throws {
         let legacy = """
         [{"id":"a1b2c3d4e5f60718293a4b5c6d7e8f90:user-9","serverName":"home-nas",
-          "baseURL":"http:\\/\\/192.168.5.107:8096","userID":"user-9",
+          "baseURL":"http:\\/\\/192.168.100.107:8096","userID":"user-9",
           "userName":"jumusu","serverVersion":"10.9.11","kind":"jellyfin"}]
         """
         let profiles = try JSONDecoder().decode([ServerProfile].self, from: Data(legacy.utf8))
@@ -437,7 +437,7 @@ final class ServerStoreTests: XCTestCase {
         XCTAssertEqual(profiles[0].resolvedServerID, "a1b2c3d4e5f60718293a4b5c6d7e8f90",
                        "服务器 ID 从档案 id 前缀恢复")
         XCTAssertEqual(profiles[0].allAddresses.map(\.url),
-                       [URL(string: "http://192.168.5.107:8096")!])
+                       [URL(string: "http://192.168.100.107:8096")!])
     }
 
     /// 老版本在服务器没报 Id 时拿 host / 整个地址串拼过档案 id：那些前缀是主机名 /
@@ -445,7 +445,7 @@ final class ServerStoreTests: XCTestCase {
     /// 校验都对不上：添加地址误报「另一台服务器」，启动换址则静默失效（全 nil 后
     /// 回落到 baseURL，连报错都没有）。
     func testResolvedServerIDRejectsHostFallbackPrefixes() {
-        for host in ["nas", "nas.local", "192.168.5.107", "http", "media.example.com"] {
+        for host in ["nas", "nas.local", "192.168.100.107", "http", "media.example.com"] {
             let fallback = ServerProfile(id: "\(host):u1", serverName: "nas",
                                          baseURL: lanAddress, userID: "u1")
             XCTAssertNil(fallback.resolvedServerID, "「\(host)」是 host 兜底值，不是服务器 Id")
