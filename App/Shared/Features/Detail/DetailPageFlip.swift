@@ -71,7 +71,8 @@ final class DetailPagePager {
     ///
     /// 触控板必须按**手势**判定，不能按事件：一路滚到顶的那串事件里 `.began`
     /// 发生在非顶部，此后全是 `.changed`；只有新一次手势的 `.began` 才落在顶部。
-    /// 鼠标滚轮没有 phase 信息，每一格本身就是独立动作，永远算「新的一次」。
+    /// 传统鼠标（非精确增量）没有 phase，每一格本身就是独立动作，永远算「新的一次」。
+    /// 判断统一收在 `beginsNewScrollGesture(_:)`。
     @ObservationIgnored private var flipArmed = false
     /// 上一发参与裁决的滚轮事件时刻（单调时钟，秒）。
     ///
@@ -91,30 +92,27 @@ final class DetailPagePager {
 
     /// 判定「这一发滚轮是否开启了一轮新的滚动动作」（有权翻回第一页）。
     ///
-    /// ## 为什么不能只看设备特征
+    /// ## 要同时伺候三种输入
     ///
-    /// 原判据是 `phase.contains(.began) || !hasPreciseScrollingDeltas` —— 前者认触控板
-    /// 的手势相位，后者认「没有相位 = 传统鼠标」。这条在装了 **Mos**（鼠标滚轮平滑工具）
-    /// 的机器上**两个分支同时为假**，于是 `flipArmed` 永远是 false，第二页再也翻不回第一页：
+    /// 原判据是 `phase.contains(.began) || !hasPreciseScrollingDeltas`：前者认触控板的
+    /// 手势相位，后者认「非精确增量 = 传统鼠标，每格独立」。其中**后半条必须保留** ——
+    /// 传统鼠标两格之间的间隔能短到几十毫秒，光靠时间闸会把连着滚的两格并成一串。
     ///
-    /// 实测（Mos 4.2.1，`/tmp/wheelprobe`）：Mos 把一格滚轮摊成一串
-    /// `hasPreciseScrollingDeltas == true`、`phase == []`、`momentumPhase == []` 的连续事件
-    /// （`dy` 由 1 递增到峰值再衰减回 0）。它既不是传统鼠标（precise 为真），
-    /// 也不是标准触控板手势（没有 phase）——恰好漏过原来那两条分支。
+    /// 而这条判据在装了 **Mos**（鼠标滚轮平滑）时又不够用：实测（Mos 4.2.1）
+    /// Mos 把一格滚轮摊成一串 `hasPreciseScrollingDeltas == true`、`phase == []`、
+    /// `momentumPhase == []` 的连续事件（`dy` 由 1 递增到峰值再衰减回 0）。
+    /// 它既不像传统鼠标（precise 为真），也不像标准触控板手势（没有 phase）——
+    /// 两个分支同时为假，`flipArmed` 永远 false，第二页再也翻不回第一页。
     ///
-    /// ## 现在怎么判
+    /// ## 现在怎么判（三条互补，不重叠）
     ///
-    /// 按**时间间隔**：与上一发事件隔了 `wheelGestureGap` 以上，就算新的一轮。
-    /// 三种输入都读得通，且不依赖任何设备标签：
-    ///
-    /// - 传统鼠标：两格之间通常 >100ms，每格都算新动作（行为与改动前一致）。
-    /// - 触控板：手势内事件间隔只有几毫秒，不会误判成新动作；真正的 `.began` 仍优先命中。
-    /// - Mos：平滑流内间隔约 16ms（60Hz）不会误判，停手后下一轮才算新动作。
-    ///
-    /// 回放的那串惯性衰减事件被夹在同一串里，同样不会触发翻回。
+    /// - **非精确增量** → 新一轮。语义与改动前完全一致，不受 Mos 影响。
+    /// - **有 phase** → `.began` 是新一轮，其余是同手势中段（触控板，与改动前一致）。
+    /// - **精确增量 + 无 phase**（Mos 之类）→ 按时间间隔：与上一发隔 ≥ `wheelGestureGap` 才算新一轮。
     private func beginsNewScrollGesture(_ event: NSEvent) -> Bool {
         Self.isNewScrollGesture(phaseBegan: event.phase.contains(.began),
                                 phaseIsEmpty: event.phase.isEmpty,
+                                precise: event.hasPreciseScrollingDeltas,
                                 timestamp: event.timestamp,
                                 lastTimestamp: lastWheelEventAt)
     }
@@ -123,19 +121,23 @@ final class DetailPagePager {
     ///
     /// - Parameters:
     ///   - phaseBegan: 事件 phase 含 `.began`。
-    ///   - phaseIsEmpty: 事件 phase 为空（传统鼠标 / Mos 平滑流）。
+    ///   - phaseIsEmpty: 事件 phase 为空。
+    ///   - precise: `hasPreciseScrollingDeltas`；false = 传统鼠标的一格一跳。
     ///   - timestamp: 本事件的单调时钟时刻（`NSEvent.timestamp`）。
     ///   - lastTimestamp: 上一发事件的时刻；0 表示还没收过事件。
     /// `nonisolated`：纯值、无状态，测试与非隔离上下文都能直接调。
     nonisolated static func isNewScrollGesture(phaseBegan: Bool,
                                    phaseIsEmpty: Bool,
+                                   precise: Bool,
                                    timestamp: TimeInterval,
                                    lastTimestamp: TimeInterval) -> Bool {
-        // 系统真的给了手势相位：以它为准（触控板）。
+        // ① 非精确增量 = 传统鼠标的一格：每格都是独立动作。
+        //    不能受时间闸约束——连滚两格的间隔可能只有几十毫秒。
+        if !precise { return true }
+        // ② 有相位：以触控板的手势为准。
         if phaseBegan { return true }
-        // 相位存在但不是 began：同一串手势的中段，不是新动作。
         if !phaseIsEmpty { return false }
-        // 没有相位（传统鼠标 / Mos 平滑流）：按时间间隔区分。
+        // ③ 精确增量 + 无相位（Mos 之类的平滑流）：按时间间隔区分一轮。
         guard lastTimestamp > 0 else { return true }  // 第一发总是新一轮
         return timestamp - lastTimestamp >= wheelGestureGap
     }
@@ -257,8 +259,10 @@ final class DetailPagePager {
         // 否则一格滚轮永远攒不到翻页阈值;触控板本来就是 pt,原样用。
         let advance = event.hasPreciseScrollingDeltas ? raw : raw * 10
 
-        // 「这一发是否开启了一轮新的滚动动作」必须在更新时刻**之前**算，
-        // 且只对真正参与裁决的竖向滚轮算（横向、惯性回放不算）。
+        // 「这一发是否开启了一轮新的滚动动作」必须在更新时刻**之前**算（顺序易错，
+        // 见 `DetailPageWheelGestureTests`）。横向滚轮在上面第 245 行就已放行返回，
+        // 到不了这里；惯性与过渡期事件则会刷新时刻 —— 这是想要的：它们同样属于
+        // 用户这一串动作的延续，不该被当成「停了很久之后的新一轮」。
         let startsNewGesture = beginsNewScrollGesture(event)
         lastWheelEventAt = event.timestamp
 
