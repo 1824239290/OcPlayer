@@ -54,7 +54,13 @@ swift test --package-path Packages/<AppDesignKit|CoreModel|DiagnosticsKit|Playba
 - **BangumiKit、MetadataKit 与 ErikaKit 用 swift-testing，别对这三个包加 `--disable-swift-testing`**——会把它们的 swift-testing 套件静默跳过（ErikaKit 那 30 个用例全在里面，它另有 4 个 XCTest 文件，两套并存）。纯 XCTest 包不需要这个开关，输出末尾「0 tests in 0 suites」只是 swift-testing runner 空跑，XCTest 用例照常执行。
 - ErikaKit 里实例化 `ErikaPresenter` 的套件要 Metal 与真内核，无 GPU 的机器上会直接 hang 而不是报错，`--skip` 清单见 `.github/workflows/test.yml`。
 
-CI（`.github/workflows/`）在 push / PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 11 个 SPM 包（10 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
+CI（`.github/workflows/test.yml`）在 push / PR 上跑测试门禁——macOS scheme 与 iOS scheme 的 `OcPlayerTests`（同一份用例源码，两个 target）各跑一遍，加 11 个 SPM 包（10 个循环 + ErikaKit 单独一项，因为后者要按套件 `--skip` 掉依赖 GPU/真内核的用例）；iOS 机型用 `simctl` 动态取，不写死。语义化版本标签触发 Release 工作流。
+
+测试门禁是**三个并行 job**（`BLD-09`，2026-11-04 拆的）：`macos-apptests` / `ios-apptests` / `spm-packages`。三者互不依赖、各用各的 DerivedData 与 `.build`，所以墙钟取决于最慢的那个而不是三者之和——实测拆分前串行 **35m09s**，拆后暖态 **11m34s**（首轮缓存全冷 17m00s，是一次性成本）。**缓存 key 也随之分开**（`mac-dd-v1` / `ios-dd-v1` / `spm-test-v2`）：不同 job 用同一个 key 配不同 path 时，先保存的那个赢、另一个的内容被静默丢弃，所以这不是优化而是正确性要求。`Seed/Cache release SPM checkouts` 只留在 `macos-apptests` 一个 job 里（跑三份会互相顶掉 `spm-pkg-v1` 同一个 key）。
+
+> 改缓存 `path` 等于让该缓存**作废一次**：条目身份是 `(key, version)`，而 `version = sha256(paths|…)`。所以别指望「换 path 但沿用旧 key 前缀」能吃到旧缓存，那永远 miss（试过一次，见 `CHANGELOG` `BLD-09`）。
+>
+> **缓存 key 一律用显式路径，不要写 `**/…`**：`hashFiles` 靠 `@actions/glob` 匹配，它的 minimatch 配置是 `dot: true`，**`**` 会遍历进 `.local-build/`、`.build/` 这类点开头目录**。写 `**/Package.resolved` 就会把上一步 restore 出来的依赖锁文件也算进去，于是**同一个表达式在同一次运行里能算出不同的值**，key 变成「磁盘上留了什么」的函数（本仓实测过三个不同值，见 `CHANGELOG` `BLD-09`）。现统一写成 `hashFiles('<xcworkspace 那条>', 'Packages/*/Package.resolved')`——只覆盖 git 跟踪的那 4 个锁文件，顺序稳定、与 restore / resolve 无关。
 
 ## liberika 内核（原 Erika）
 

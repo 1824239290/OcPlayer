@@ -80,7 +80,7 @@ jobs:
           path: |
             .local-build/ci-release-test
             Packages/*/.build
-          key: spm-release-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-release-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
           restore-keys: |
             spm-release-v1-${{ runner.os }}-
 
@@ -230,7 +230,7 @@ jobs:
           path: |
             .local-build/release/DerivedData/SourcePackages
             .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
           restore-keys: |
             spm-pkg-v1-${{ runner.os }}-
 
@@ -346,7 +346,7 @@ jobs:
           path: |
             .local-build/release/DerivedData/SourcePackages
             .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
           restore-keys: |
             spm-pkg-v1-${{ runner.os }}-
 
