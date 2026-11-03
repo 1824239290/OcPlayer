@@ -34,6 +34,12 @@ Scripts/verify-ambience.sh       # 氛围背景逐页验收（截图 + 客观判
 - 内核版本唯一事实源是 `Config/Erika.version`，可用环境变量 `ERIKA_VERSION` 临时钉到其它 tag；已有同版本完整产物会复用。
 - `SKIP_ERIKA_FETCH=1` 让 `build-macos.sh` / `package-*.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 - macOS 构建必须用 `-scheme`，架构钉死 arm64。手动跑 `xcodebuild` 时请显式传 `-derivedDataPath`，不要写进全局 DerivedData。
+- **`Vendor/` 三个目录的保留策略（都在 `.gitignore` 里，只有 `Scripts/clean.sh --kernel` 才会清）**：
+  - `Vendor/downloads` —— 内核下载缓存（当前 6 个 zip，v0.2.0/v0.2.1/v0.3.0 × macOS-arm64+ios，约 912 MiB）
+  - `Vendor/extracted` —— `fetch-erika.sh` 的解压暂存区（约 1.1G），**默认保留**
+  - `Packages/ErikaKit/Vendor/Erika.xcframework` —— 内核产物（约 782 MiB），**默认保留**
+  > `Vendor/extracted` 默认保留是 **2026-11-03 的明确决定，不是遗漏**：磁盘余量充足（约 217 GiB），省这 1.1G 换来每次构建重新解压，不划算。**看到它不要当垃圾清，也不要再报一次。**
+  > 清理代价：`--kernel` 之后下次构建只重下当前 tag 的两个 zip（v0.3.0 共 323,115,942 字节 ≈ 308 MiB）并重新解压；**只删 `extracted` 而 `downloads/` 仍在时，只重解压、不下载**（`fetch-erika.sh:205-214` 命中缓存直接复用）。
 - Debug 配置带 `OCPLAYER_SELFTEST` 编译条件，提供一条自动化验收通道（见 `App/Shared/LaunchOptions.swift`）：`OCPLAYER_START_SECTION=home|bangumi|moviepilot|settings` 启动直落分区；`OCPLAYER_START_ROUTE=library` / `settings.playback` / `bangumi.calendar` 等直落某个 push 页或设置子页（语法见 `App/Shared/LaunchRoute.swift`）；`OCPLAYER_SELFTEST_FILE` + `OCPLAYER_SELFTEST_SECONDS` 可开窗播一段、打印 stats 后自退。Release 不编译这段代码。
 - **氛围背景的逐页验收**走 `Scripts/verify-ambience.sh`（判据在 `Scripts/ambience-probe.swift`，覆盖清单与判据口径见 [`AMBIENCE.md`](AMBIENCE.md)）：按契约逐页启动到目标页、截图、用「色度中位数 + 亮度方差 + 平均梯度」客观判定该页有没有氛围图。macOS 需要屏幕解锁（锁屏后 `screencapture` 只给黑图，脚本会直接拒绝）；iOS 模拟器容器里要有一个已登录会话。
 
