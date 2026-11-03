@@ -165,6 +165,18 @@
   - **iOS 系统启动屏**：新增 `LaunchBackground` colorset（双外观）+ `UILaunchScreen.UIColorName`，关掉空白生成屏（`INFOPLIST_KEY_UILaunchScreen_Generation=NO`）——系统启动屏消失前的最后一块颜色 = 首帧颜色，无白闪。
   - **验证**：`LaunchTimelineTests` 逐帧钉子（描边/交叉/退场 + 氛围 hold 与首页骨架 hold 的就绪/上限/双门控共享上限）+ `OcMarkTests` 6 条几何钉子（包内）+ `LaunchPresenterTests` 状态机钉子（早到先存后补 / 迟到不回卷 / 重排只提前 / 退场按时间轴钟触发的实时回归）全绿；macOS scheme 全量测试绿；真机流程验证——冻结帧核对（描边中段/完整标志/呼吸态）+ 屏录像逐帧核对开窗无 chrome、交棒交叉淡化（中段帧能同时看到舞台与首页成品）；iPhone / iPad 真机安装由用户实测 iOS 端通过；iOS 模拟器构建后 `plutil` 校验产物 `UILaunchScreen`。
 
+### 已知问题
+
+- **退出播放器后首页「继续观看」的进度可能短暂显示为退出前的旧值（慢网/上报超时才出现）——不是数据没写进去，是随后一次首页刷新用服务端旧值把它盖回去了**
+  - **机制（【复核】：静态读码，未用测试复现）**：`dismissPlayer()` 的顺序是 ①`finishReporting()` 里用 fire-and-forget 的 `Task { }` 调 `metadata.recordPlaybackProgress(...)` 写本地，②返回 `stopped`（Stopped 上报任务），③`dismissFollowUpTask` 先 `await stopped?.value` 再 `await loadHome()`。而 `stopped` 内部的 `PlaybackReportingCoordinator.performWithTimeout()` 是**到点无条件放行**——`reportTimeout` 默认 5s（`PlaybackReportingCoordinator.swift:134`），超时就 `work.cancel()` + `gate.resume()`，**不等上报真的完成**。于是上报慢于 5s 时 `loadHome()` 照跑，`MediaRepository.refreshHome()` 里 `content.resume = <服务端返回值>`（`MediaRepository+Home.swift:55`）会**整体覆盖** `applyPlayState` 刚写进 `homeEntry.resume` 的本地进度（`MediaRepository+Mutation.swift:77-83`）。正常网络下服务端已收到 Stopped，不显现。
+  - **影响面**：仅「首页继续观看的进度数字」这一处显示，服务端下次刷新即纠正；**不影响播放与选片逻辑**（自动连播走 `resolveNextEpisode` 的服务端有序窗口，不读本地 `played`）。
+  - **证伪方法（下一轮修前先把它变成确定性红）**：注入一个 `sleep > reportTimeout` 的慢 reporter，并把 `PlaybackReportingCoordinator.reportTimeout` 调短（该属性本就为测试留的）；退出播放器后立即断言 `home.resume` 里该条目的 `positionSeconds` 等于退出位置——**当前应红**；把 stub 的延迟去掉应转绿（否则说明测的不是这条路径）。
+  - **候选修法（未实施，不要照着直接改）**：`refreshHome` 合并本地 `playState`（通用修），或让本地回写参与 `stopped` 的等待（局部修）。
+
+- **`DanmakuKit` 内置的 `defaultAPIKey` 是「设计上公开」的，不要当泄漏去改**
+  - 位置：`Packages/DanmakuKit/Sources/DanmakuKit/DandanplaySettingsStore.swift:23`。
+  - 它随 App 分发、属公共额度，注释写在原地（「内置公共 API Key……开箱即用……属公共额度」）。**删掉或换成占位符会让所有用户的弹幕开箱失效**，而安全性没有变化——这是「看起来像漏洞、实际不能碰」的典型，写在这里免得下一轮又被当成新发现去修。
+
 ## [0.2.2] · 2026-10-24 · 全站 Liquid Glass 统一与设置页卡片流、选集选季分区、播放 HUD 让位灵动岛、片尾自然结束修复、批量性能优化
 
 ### 改动
