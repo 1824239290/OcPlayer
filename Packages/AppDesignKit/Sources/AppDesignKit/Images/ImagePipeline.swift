@@ -63,18 +63,26 @@ public final class ImagePipeline: @unchecked Sendable {
     /// 位图解码执行器（专用队列 + 并发上限）。见 `ImageDecoder`：解码不能就地同步做，
     /// 否则会占住 Swift 协作线程池的线程，拖慢全进程的 async 工作。
     private let decoder: ImageDecoder
+    /// 按 host 的失败熔断器。**只在网络这一步之前**生效（见 `load` 里的闸门）：
+    /// 内存命中在它之前返回，磁盘字节命中也在它之前返回，所以「断网但有缓存」
+    /// 照常出图，熔断不会把离线能力一起关掉。
+    private let breaker: ImageHostFailureBreaker
 
     /// - Parameter protocolClasses: 额外的 `URLProtocol`（供测试挡掉真实网络）。
     ///
     ///   存在的理由是**可测性**：这个类最要紧的行为之一是「缓存命中时不等网络」，
     ///   而验证它需要一个**永不返回**的网络——只有替换协议类才做得到。
     ///   生产调用不传，保持默认行为。
+    /// - Parameter breaker: host 级失败熔断器。测试传入阈值 1 / 冷却很短的小实例，
+    ///   才能在一次失败之后立刻观察「跳过网络」的结果。
     public init(
         cacheDirectory: URL? = nil,
         decoder: ImageDecoder = .shared,
-        protocolClasses: [AnyClass] = []
+        protocolClasses: [AnyClass] = [],
+        breaker: ImageHostFailureBreaker = ImageHostFailureBreaker()
     ) {
         self.decoder = decoder
+        self.breaker = breaker
         // `CanonicalImageURLCache` 而不是裸 `URLCache`：把键里的服务器地址抹掉，
         // 否则同一台服务器换入口（局域网 ↔ Tailscale）会把每张图再下一遍。
         // 见 `CanonicalImageURLCache` 的类型注释。
@@ -379,6 +387,20 @@ public final class ImagePipeline: @unchecked Sendable {
                     return image
                 }
 
+                // ② **熔断闸门**：严格放在「磁盘之后、网络之前」。
+                //
+                // 宿主连续失败到阈值之后，这里**立刻失败**而不是让每张图各自等一次
+                // 15 秒超时——那正是「服务器掉线 → 一墙海报排队超时」的成因。
+                // 位置很关键：放在磁盘检查之前会把离线出图一起掐掉，放在 fetch 里面
+                // 则会先构造请求、多走一层取消语义。半开探针的许可也由它发放。
+                guard self.breaker.shouldAllowRequest(for: url) else {
+                    Self.logger.info("图片宿主熔断：跳过网络请求", fields: [
+                        "url": .string(url.absoluteString),
+                        "host": .string(url.host ?? ""),
+                    ], throttle: Self.failureThrottle)
+                    throw ImageHostFailureBreaker.OpenCircuit(host: url.host ?? url.absoluteString)
+                }
+
                 let request = self.makeRequest(url, authHeader: authHeader)
                 do {
                     let image = try await self.fetch(request, cacheKey: key, maxPixelSize: maxPixelSize)
@@ -487,6 +509,9 @@ public final class ImagePipeline: @unchecked Sendable {
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
             defer { self.endRevalidation(cacheKey: cacheKey) }
+            // 熔断打开时后台刷新也一并让路：它本就可以跳过，没有理由在宿主故障时
+            // 还去排队领一次超时。半开探针的许可同样走这道闸门。
+            guard self.breaker.shouldAllowRequest(for: url) else { return }
             // 刷新失败（离线）完全静默：图已经在屏幕上，这不是错误。
             // 也别用它替换内存缓存——那会让用户眼前的图突然跳变。
             let request = self.makeRequest(url, authHeader: authHeader)
@@ -661,7 +686,27 @@ public final class ImagePipeline: @unchecked Sendable {
     private func fetch(_ request: URLRequest, cacheKey: String, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
         // 最后一个订阅者离开（视图消失 / 换 URL）或 clearCache 会取消底层任务，
         // 从这里抛 CancellationError，由调用方区分处理，别当成真正的失败。
-        let (data, response) = try await session.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            // 只有**真正的网络失败**才记账：取消（`URLError.cancelled` / 任务取消）
+            // 是视图走掉的常态，把它算成宿主故障会让正常滚动把服务器误判成下线。
+            if let url = request.url, CancellationClassifier.isCancellation(error) {
+                // 半开探针被取消 = 这次没有结论：释放探针位，否则该 host 会永久
+                // 卡在「冷却已过、但探针在途」上，之后所有请求都被拒。
+                breaker.releaseProbe(for: url)
+            } else if let url = request.url {
+                breaker.recordFailure(for: url)
+            }
+            throw error
+        }
+        // 宿主**应答了**：哪怕是非 200、哪怕字节解不出位图，也说明主机是活的，
+        // 必须复位连续失败计数——否则一次网络抖动之后要等满整个冷却窗口才恢复。
+        if let url = request.url {
+            breaker.recordSuccess(for: url)
+        }
         guard let httpResponse = response as? HTTPURLResponse else {
             Self.logger.warning("图片请求失败：无 HTTP 响应", fields: [
                 "url": .string(request.url?.absoluteString ?? "")

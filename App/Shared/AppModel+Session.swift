@@ -15,12 +15,12 @@ extension AppModel {
         // 这里按段打点，覆盖盲区的候选来源：
         //   setupKickoffMs —— **只是「发起」** Bangumi / Metadata 建库的耗时
         //   restoreMs      —— `MediaServerFactory.restore`（档案解码 + 令牌读取/迁移）
-        //   activateMs     —— `activate(server:)` 内的装配（含 `MetadataCache` attach）
-        //   cache readMs   —— `hydrateBrowserDataFromCache` 的真正读盘（`hydrator.home()`）
+        //   activateMs     —— `activate(server:)` 内的装配（数据面切换会话）
+        //   cache readMs   —— `hydrateBrowserDataFromCache` 的真正读盘（仓储 cachedHome）
         //
         // ⚠️ **`setupKickoffMs` 不是「建库花了多久」**：`bangumi.setup()` /
         // `metadata.setup()` 内部是 `Task.detached` 建库后**立即返回**，所以这个数
-        // 通常≈0。真正等库发生在 `activate` 的 `metadata.wrap`（已计入 `activateMs`）。
+        // 通常≈0。真正等库发生在仓储第一次取数（已计入 `activateMs` / 首屏加载）。
         // 第一版把它叫 `setupMs` 并在注释里写「建库」，是**错的**，已更正 ——
         // 名字和注释都会误导后来人，所以连字段名一起改了。
         //
@@ -266,10 +266,9 @@ extension AppModel {
         // 首页「首次加载收官」标记跟着会话走：新会话从骨架期重新等
         // （启动动画的交棒门控，见 `homeContentLoaded`）。
         homeInitialLoadDone = false
-        // 详情快照按 item id 索引，而 id 只在原服务器里有意义——两台同库的服务器
-        // 可能撞 id，留着会让新会话的详情页显示旧服务器的剧集。快照连同它的
-        // 最近使用顺序表一起清。
-        clearDetailSnapshots()
+        // 详情 / 分页等内存投影按 item id 索引，而 id 只在原服务器里有意义。
+        // `server = nil` 已让仓储卸载；这里再把可能残留的旧投影清一次。
+        Task { await metadata.invalidateMemory() }
         // 氛围图的 URL 里带着**旧服务器的 authHeader**：不清掉，新会话首屏会拿
         // 旧凭据去请求图片（既拿不到图，也把旧凭据用在了新会话上）。
         resetWindowAmbienceStack()

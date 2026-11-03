@@ -249,12 +249,22 @@ final class CollectionDetailTests: XCTestCase {
     }
 
     // MARK: - 背景图：三个来源的优先级
+    //
+    // 下面四条都必须先 `await model.resolveBackdropSource()` 再断言。
+    // 理由（2026-11-03「背景闪图」修复的语义）：`DetailViewModel.backdropTarget`
+    // 走 `BackdropSourceLatch`，**解析完成前一律返回 nil**（那条语义用来堵住
+    // 「app 已挂上、overlay 还没读回」那一帧把服务端图画出去的窗口）。
+    // 只 `attach` 不解析的话，四条拿到的都是 nil：
+    //   * 两条正向用例会假性失败（规则根本没被验到）；
+    //   * 两条「应当没有背景」的用例会**碰巧通过**（nil 是因为没解析，不是因为没图）。
+    // 所以这个序列属于被测行为的一部分，不是测试脚手架。
 
     /// 合集自己没有背景图（实测 `ImageTags: {}`）→ 用**第一个带图的成员**兜底。
     func testCollectionBackdropFallsBackToFirstMember() async throws {
         let (app, _, _) = try await makeApp()
         let model = DetailViewModel(item: boxSet())
         model.attach(app)
+        await model.resolveBackdropSource()
         model.collectionMembers = [
             member("m-1", backdrop: nil),
             member("m-2", backdrop: "bd-2"),
@@ -272,6 +282,7 @@ final class CollectionDetailTests: XCTestCase {
         let (app, _, _) = try await makeApp()
         let model = DetailViewModel(item: boxSet())
         model.attach(app)
+        await model.resolveBackdropSource()
         model.collectionMembers = [member("m-1", backdrop: nil)]
 
         XCTAssertFalse(model.hasBackdrop)
@@ -283,6 +294,7 @@ final class CollectionDetailTests: XCTestCase {
         let (app, _, _) = try await makeApp()
         let model = DetailViewModel(item: MediaItem(id: "m-1", name: "电影", kind: .movie))
         model.attach(app)
+        await model.resolveBackdropSource()
         model.collectionMembers = [member("m-2", backdrop: "bd-2")]
 
         XCTAssertFalse(model.hasBackdrop)
@@ -296,12 +308,184 @@ final class CollectionDetailTests: XCTestCase {
                              backdropImageTag: "server-bd")
         let model = DetailViewModel(item: item)
         model.attach(app)
+        await model.resolveBackdropSource()
         model.collectionMembers = [member("m-2", backdrop: "bd-2")]
 
         let target = model.backdropTarget(width: 800)
         XCTAssertTrue(target.url?.absoluteString.contains("server-bd") == true,
                       "实际: \(target.url?.absoluteString ?? "nil")")
         XCTAssertTrue(model.hasBackdrop)
+    }
+
+    /// 解析完成前**必须扣住**背景图（`nil`），解析后立刻给出。
+    ///
+    /// 这条钉的是「背景不闪」的接线本身：视图在 `attach` 之后、`load()` 的第一次
+    /// await 返回之前会渲染一帧，那时若 `backdropTarget` 提前给出服务端图，
+    /// 用户就会看到「服务端图 → TMDB 图」的二次顶替。把它改成恒返回 nil，
+    /// 这条立刻变红（「预期解析后就该给图」那一半）。
+    func testBackdropTargetIsWithheldUntilSourceResolved() async throws {
+        let (app, _, _) = try await makeApp()
+        let item = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
+                             backdropImageTag: "server-bd")
+        let model = DetailViewModel(item: item)
+        model.attach(app)
+
+        XCTAssertFalse(model.isBackdropSourceResolved)
+        XCTAssertNil(model.backdropTarget(width: 800).url,
+                     "解析完成前不该把本条目的图交给视图（否则会画出第一张再被顶掉）")
+
+        await model.resolveBackdropSource()
+        XCTAssertTrue(model.isBackdropSourceResolved)
+        XCTAssertTrue(model.backdropTarget(width: 800).url?.absoluteString.contains("server-bd") == true,
+                      "解析完成后必须立刻给出最终那张")
+    }
+
+    /// `load()` 必须在**内容提前 return 之前**解析完背景图来源。
+    ///
+    /// ## 这条用例的第一版名不副实（2026-11-03 审查实测，已重写）
+    ///
+    /// 第一版只断言「`load()` 跑完后 `isBackdropSourceResolved == true`」，并且走的是
+    /// **冷启动路径**（`cachedDetail` 返回 nil）。审查把 `await resolveBackdropSource()`
+    /// 从 `load()` 第一句挪到最后一句，它**照样全绿** —— 因为它没有任何顺序观测点：
+    /// 无论解析在开头还是结尾，函数返回时那个标志都是 true。
+    ///
+    /// ## 现在钉的是真正的生产回归：`cached.isFresh` 那条提前 `return`
+    ///
+    /// `load()` 命中「内存且新鲜」的快照时会在中途 `return`（不再走网络确认）。
+    /// 解析一旦被挪到这段 `return` **之后**，重进页就永远不会解析 ⇒ latch 永不置位
+    /// ⇒ `backdropTarget` 恒返回 nil ⇒ 页面永久停在氛围池**别的条目**的兜底图上，
+    /// 本条目的图一次都不出，而且不报错。这正是审查指出的那条失效路径。
+    ///
+    /// 所以这里必须先真的造出「新鲜内存快照」，否则用例会悄悄退化回冷启动路径、
+    /// 重新失去判别力 —— 中间那两条 `XCTAssert` 就是在守这件事本身。
+    ///
+    /// ## 它证伪不了什么（别把它当万能）
+    ///
+    /// 把解析挪到「内容落地之后、提前 return 之前」这种更窄的位置，这条抓不住：
+    /// 那种写法退回到「先画服务端图再换 TMDB 图」的闪图问题，由
+    /// `testBackdropTargetIsWithheldUntilSourceResolved`（解析前必须扣住）与
+    /// `testLateContentBackdropIsLockedOnce`（迟到补锁后不再改口）共同覆盖。
+    func testLoadResolvesBackdropSourceBeforeContent() async throws {
+        let (app, stub, _) = try await makeApp()
+        let item = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
+                             backdropImageTag: "server-bd")
+        stub.itemResult = .success(item)
+
+        // 先真跑一轮刷新，把快照写进仓储**内存**：`MediaSnapshot.isFresh` 要求
+        // `source != .disk`，从磁盘读回来的恒为 false，走不出提前 return 那条分支。
+        _ = try await app.metadata.refreshDetail(itemID: item.id, kindHint: .boxSet)
+        let seeded = await app.metadata.cachedDetail(itemID: item.id)
+        XCTAssertNotNil(seeded, "预热应当写回快照")
+        XCTAssertTrue(seeded?.isFresh(ttl: 60) == true,
+                      "必须命中「内存且新鲜」的快照，否则本用例退化回冷启动路径、失去判别力")
+
+        let model = DetailViewModel(item: item)
+        model.attach(app)
+
+        await model.load()
+
+        XCTAssertTrue(model.isBackdropSourceResolved,
+                      "load() 必须在命中新鲜快照后提前 return **之前**解析完背景来源")
+        XCTAssertNotNil(model.detail, "确实走了快照落地那条路径（不是冷启动）")
+        XCTAssertTrue(model.backdropTarget(width: 800).url?.absoluteString.contains("server-bd") == true,
+                      "解析完后本条目的图必须能取到，实际: \(model.backdropTarget(width: 800).url?.absoluteString ?? "nil")")
+    }
+
+    /// 解析那一刻没图可锁（`shown` 还是不带 tag 的列表条目）⇒ 详情落地时**补锁**，
+    /// 且之后不再改口。
+    ///
+    /// ## 这条守的是「锁窗口被关太早」那个退化（2026-11-03 审查发现）
+    ///
+    /// 把锁定逻辑从 `BackdropSourceLatch` 搬进 VM 之后，`lockBackdropTargetsIfNeeded()`
+    /// 只在 `resolveBackdropSource()` 那一刻算一次。而解析在 `load()` 第一句，那时
+    /// `shown` 还是列表带来的条目、常常没有 backdrop tag ⇒ 全返回 nil ⇒ **一个档都没锁**。
+    /// 之后缓存详情落地（服务端图出现）、后台 TMDB 补齐（TMDB 图出现）都会让
+    /// `backdropTarget` 现算出不同的图，服务端图被 TMDB 顶掉，**闪图原样回归**。
+    ///
+    /// 补锁挂在 `detail.didSet` / `tmdbOverlay.didSet` 上（既有状态变更点，不在 body
+    /// 求值路径上）。这条用例钉住两件事：
+    /// 1. 迟到落地的详情能把图补上（不是永久 nil）；
+    /// 2. 补锁之后再来一次详情变化也**不覆盖**已锁的值（「本页不改口」）。
+    ///
+    /// ## 判别力只来自第 3 条断言（审查变异实测，别被前两条骗了）
+    ///
+    /// 审查把 `detail.didSet` 里的补锁删掉做变异，结果：
+    /// - 第 1 条断言（解析时 nil）**仍绿**
+    /// - 第 2 条断言（详情落地后有图）**也仍绿** —— 因为 `backdropTarget` 缓存未命中时
+    ///   会走「现算不写」分支，碰巧算出同一张服务端图。**它不具判别力。**
+    /// - 只有第 3 条（换成 `server-bd-v2` 后必须仍是 `server-bd`）会红
+    ///
+    /// 所以第 2 条只是「接线通不通」的冒烟，**真正守补锁的是第 3 条**。
+    /// 改这个文件时别把第 3 条当成冗余删掉。
+    func testLateContentBackdropIsLockedOnce() async throws {
+        let (app, _, _) = try await makeApp()
+        // 列表带来的条目：没有 backdrop tag。
+        let landed = MediaItem(id: "box-1", name: "合集", kind: .boxSet)
+        let model = DetailViewModel(item: landed)
+        model.attach(app)
+        await model.resolveBackdropSource()
+
+        // 不具判别力的冒烟断言：删掉补锁它也会绿（见上面的变异记录）。
+        XCTAssertNil(model.backdropTarget(width: 800).url,
+                     "解析那一刻没有 tag，算不出图，本来就该是 nil")
+
+        // 详情落地：tag 出现。
+        model.detail = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
+                                 backdropImageTag: "server-bd")
+        // 冒烟：接线通不通。**不是**补锁的守护者（删掉补锁它仍绿）。
+        XCTAssertTrue(model.backdropTarget(width: 800).url?.absoluteString.contains("server-bd") == true,
+                      "详情落地必须补锁上服务端图，实际: \(model.backdropTarget(width: 800).url?.absoluteString ?? "nil")")
+
+        // 同一个页面里详情再变一次（换了个 tag）：已锁的档不覆盖。
+        // ↓ 这两条才是补锁的真正判别点（变异实验里唯一会红的）。
+        model.detail = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
+                                 backdropImageTag: "server-bd-v2")
+        XCTAssertTrue(model.backdropTarget(width: 800).url?.absoluteString.contains("server-bd") == true,
+                      "已锁的档不许因迟到数据改口，实际: \(model.backdropTarget(width: 800).url?.absoluteString ?? "nil")")
+        XCTAssertFalse(model.backdropTarget(width: 800).url?.absoluteString.contains("server-bd-v2") == true,
+                       "闪图的定义就是这一条：同一条目的两张图先后上屏")
+    }
+
+    /// 取详情那一刻，背景图来源必须**已经解析完**（顺序的真实观测点）。
+    ///
+    /// ## 观测点：`onApplyDetailContent`（上屏那一刻），不再是 `onItemCall`
+    ///
+    /// 早先用的是 `StubMediaServer.onItemCall`（`item()` 入口）。它在**内存未命中**时
+    /// 确实落在「解析之后、上屏之前」，方向对；但有两个坑（Review 2026-11-03 读
+    /// `MediaRepository+Detail.swift` 指出，已核）：
+    /// 1. **内存命中**路径 `cachedDetail` 直接返回、根本不调 `item` ⇒ 钩子零触发；
+    /// 2. stale 路径会触发**两次**（`cachedDetail` 一次 + `refreshDetail` 一次）。
+    /// 之前这条用例能过，只是因为 `makeApp()` 每次建全新临时目录、必然内存未命中 ——
+    /// 靠构造巧合，不是靠判据。
+    ///
+    /// 换成 `DetailViewModel.onApplyDetailContent`：`applyDetailContent` 是详情内容进入
+    /// 各展示状态的**唯一入口**，内存命中 / 磁盘命中 / 网络刷新三条分支 100% 经过，
+    /// 正好是「内容即将上屏」那一刻。它被调用的当下若 `isBackdropSourceResolved` 还是
+    /// false，说明解析排在了上屏之后 —— 正是闪图的成因路径（先画②服务端图，再换③TMDB 图）。
+    func testBackdropSourceResolvedBeforeDetailIsFetched() async throws {
+        let (app, stub, _) = try await makeApp()
+        let item = MediaItem(id: "box-1", name: "合集", kind: .boxSet,
+                             backdropImageTag: "server-bd")
+        stub.itemResult = .success(item)
+        let model = DetailViewModel(item: item)
+        model.attach(app)
+
+        // 内容上屏那一刻的现场快照（取首次：stale 路径会调两次）。
+        var observedAtApply: [(resolved: Bool, url: String?)] = []
+        model.onApplyDetailContent = {
+            observedAtApply.append((
+                model.isBackdropSourceResolved,
+                model.backdropTarget(width: 800).url?.absoluteString
+            ))
+        }
+
+        await model.load()
+
+        let first = try XCTUnwrap(observedAtApply.first, "详情内容应当至少上屏一次")
+        XCTAssertTrue(first.resolved,
+                      "内容上屏时背景图来源必须已解析完成（把 resolveBackdropSource() 挪到上屏之后即红）")
+        XCTAssertEqual(first.url?.contains("server-bd"), true,
+                       "内容上屏时 backdropTarget 就该给出最终那张，实际: \(first.url ?? "nil")")
     }
 
     // MARK: - 网格卡的封面（合集库）

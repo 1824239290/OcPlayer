@@ -52,6 +52,12 @@ struct DetailView: View {
     /// 即清空，不落盘——分区是浏览位置，不是偏好（与 `episodesAscending` 不同类）。
     @State private var chunkNav = EpisodeChunkNavigation()
 
+    #if os(macOS)
+    /// 本页的「整页翻页」状态机（见 `DetailPageFlip`）。只在 macOS 上存在：
+    /// 那套滚轮裁决依赖 `NSEvent` 本地监视器，iOS 的手势面是另一回事。
+    @State private var pager = DetailPagePager()
+    #endif
+
     init(item: MediaItem) {
         self.item = item
         _model = State(initialValue: DetailViewModel(item: item))
@@ -93,9 +99,31 @@ struct DetailView: View {
         app.currentAmbienceTarget
     }
 
-    /// 交给 `pageAmbience` 的氛围声明。无氛围布局（条目没有 backdrop 且不是
-    /// 待落地的剧集）时整页走老横幅布局，交给统一入口出兜底纯色底。
+    /// 交给 `pageAmbience` 的氛围声明。
+    ///
+    /// ## macOS：**不声明**整窗氛围（返回 nil）
+    ///
+    /// macOS 的第一页自己画头图（`DetailPageArt`：清晰剧照 + 可扩张的模糊块），
+    /// 整页是不透明的。再向整窗层声明一张同款模糊图，等于在同一块位置上放两层背景，
+    /// 而它们的时间线对不齐：
+    ///
+    ///   1. 点进详情 → 整窗层立刻开始用**新条目**的图做 1.6s 交叉淡入
+    ///   2. 页面自己的头图要等 `RemoteImage` 解码完（1600 宽那档）才画出来
+    ///   3. 中间这一拍：首页内容还在，整窗层已经换成新条目的糊图并压暗
+    ///   4. 头图画好再盖上去 → 肉眼就是「背景瞬间切换了一下」
+    ///
+    /// 抓帧实证：转场第 1 帧就是「首页仍在、整窗层已是赛博朋克糊图」。
+    /// 不声明之后整窗层保持首页轮播不动（被不透明的第一页完全盖住），
+    /// 背景只有一条时间线 —— 页面自己那张。
+    ///
+    /// ## iOS：照旧声明（`ownsArt: true`）
+    ///
+    /// iOS 的导航栈宿主不透明，整窗层到不了屏幕，页面本来就自己垫；那条链路上
+    /// 没有第二层背景，不存在这个竞争。
     private var ambienceTarget: AmbienceTarget? {
+        #if os(macOS)
+        return nil
+        #else
         guard isAmbientActive else { return nil }
         let target = model.isAmbienceReady ? backdropTarget : homeAmbienceTarget
         return AmbienceTarget(
@@ -105,8 +133,10 @@ struct DetailView: View {
             fade: model.isAmbienceReady ? Motion.ambient : Motion.fast,
             ownsArt: true
         )
+        #endif
     }
 
+    #if !os(macOS)
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
         horizontalSizeClass == .compact ? 260 : Metrics.bannerHeight
@@ -119,6 +149,7 @@ struct DetailView: View {
     private var playButtonWidth: CGFloat {
         horizontalSizeClass == .compact ? 200 : 228
     }
+    #endif
 
     /// 详情页屏幕边缘留白：紧凑宽度下为 20pt，保持全页对齐；iPad/Mac 沿用 contentLeading。
     private var detailHorizontalInset: CGFloat {
@@ -132,9 +163,187 @@ struct DetailView: View {
     /// 直接取 VM 的（同一个判断两处都要用，放在 VM 里可测）。
     private var selectedSeason: MediaItem? { model.selectedSeason }
 
+    // MARK: - 整页翻页布局（macOS）
+
+    #if os(macOS)
+    /// macOS 详情页**只有**翻页布局这一套。
+    ///
+    /// 以前这里还留着一个条件（有剧照才翻页、无剧照回退旧横幅），结果是同一页在
+    /// 两种版式之间来回切，进页时还会先闪一下旧横幅。旧横幅在 macOS 上已经整个删掉，
+    /// 无剧照的条目由 `DetailPageArt` 自己出占位底色 —— 版式只有一套，没有回退分支。
+    private var isFlippingActive: Bool {
+        guard !app.isCompact else { return false }
+        guard case .detail(let pushed)? = app.path.last else { return false }
+        return pushed.id == item.id
+    }
+    #endif
+
+    #if os(macOS)
+
+    /// 第一页清晰层取图（1600 宽那档）。
+    ///
+    /// 条目**还没有**背景图时（详情未落地 / 该条目缺图）回落到首页轮播那张：
+    /// 同一个 URL、同一档解码，内存缓存直接命中，推页首帧就有画面 —— 否则第一页
+    /// 会先空一拍（整窗层现在不再替它兜底了，见 `ambienceTarget`）。
+    private var artTarget: (url: URL?, authHeader: String?) {
+        let own = model.backdropTarget(width: 1600)
+        guard own.url == nil else { return own }
+        return app.currentAmbienceTarget
+    }
+
+    /// 第一页模糊层取图：**刻意用氛围层那一档**（800 宽 URL / 512 解码）。
+    /// `prewarmAmbience` 预热的就是这一份，推页首帧直接命中内存缓存 —— 模糊层不会
+    /// 先空一拍再补。用 1600 那档会换一个缓存键，等于把预热白做了。
+    /// 兜底规则同 `artTarget`。
+    private var artBlurTarget: (url: URL?, authHeader: String?) {
+        let own = model.backdropTarget(width: DetailAmbienceImage.urlWidth)
+        guard own.url == nil else { return own }
+        return app.currentAmbienceTarget
+    }
+
+
+    /// 三层自下而上：**常驻的头图/模糊背景** → 正文 → 第一页前景。
+    ///
+    /// 背景层自己会从「左糊右清」扫成「整幅全糊」，扫完之后就一直是第二页的固定
+    /// 背景（与 demo 的 HeroSharpBackground + HeroBlurBlock 同构）。它**不做透明度
+    /// 动画**：早先让它翻页后淡出、沉回整窗氛围层，结果 30pt 模糊淡成 20pt、
+    /// 中间还透出清晰图，肉眼就是一串闪烁。
+    private var flippedPages: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack(alignment: .top) {
+                DetailPageArt(
+                    viewport: size,
+                    target: artTarget,
+                    blurTarget: artBlurTarget,
+                    expanded: pager.blurExpanded
+                )
+                .allowsHitTesting(false)
+
+                detailScroll
+                    .opacity(pager.bodyVisible ? 1 : 0)
+                    .allowsHitTesting(pager.bodyVisible)
+
+                artPage(size: size)
+                    .opacity(pager.artForegroundVisible ? 1 : 0)
+                    .allowsHitTesting(pager.artForegroundVisible)
+            }
+            .frame(width: size.width, height: size.height)
+            .background {
+                // 把所在窗口报给状态机：滚轮监视器只裁决这个窗口的事件
+                DetailPageWindowAnchor { pager.attach(window: $0) }
+            }
+        }
+        // 第一页是整窗画面：顶栏浮在它上面（工具栏材质本页已摘）
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private func artPage(size: CGSize) -> some View {
+        DetailPageArtScreen(
+            viewport: size,
+            model: model,
+            server: app.server,
+            leadingInset: detailHorizontalInset,
+            playLabel: playButtonLabel,
+            playProgress: resumeProgress,
+            played: isPlayableMarkedPlayed,
+            canPlay: canPlayCurrent,
+            canTogglePlayed: canTogglePlayed,
+            isUpdatingPlayed: isUpdatingPlayed,
+            onPlay: playCurrent,
+            onTogglePlayed: { Task { await togglePlayed() } },
+            onSelectEpisode: { model.selectEpisode($0) },
+            onPlayEpisode: { episode in
+                model.selectEpisode(episode)
+                app.play(episode, resumeSeconds: episode.playState?.positionSeconds)
+            }
+        )
+        .frame(width: size.width, height: size.height)
+        // 空白区也要接住点击：否则点在标题下方会穿到被盖住的正文滚动区上
+        .contentShape(Rectangle())
+    }
+    #endif
+
+
     var body: some View {
+        Group {
+            #if os(macOS)
+            // macOS：本页就是两页（见 `DetailPageFlip`）——第一页头图 + 下部选集带，
+            // 滚一格整屏翻到正文。没有第二套版式，也不再回退旧横幅。
+            flippedPages
+            #else
+            detailScroll
+            #endif
+        }
+        .contentMargins(.top, 0, for: .scrollContent)
+        .ignoresSafeArea(edges: .top)
+        .navigationTitle(horizontalSizeClass == .compact ? "" : model.displayName)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
+        .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
+        #elseif os(macOS)
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        #endif
+        // 氛围背景：走统一入口 `pageAmbience`（平台分叉收在那一个修饰符里）。
+        // 本页是"自带主体图"的那一类（`ownsArt`）——macOS 上由它声明整窗层覆盖
+        // 首页轮播，iOS 上自己垫。
+        //
+        // 三处本页特有的语义都作为参数传进去，不复制渲染代码：
+        //   * **底图未就绪时先画首页轮播那张**（`isAmbienceReady` 为假）：iOS 的导航
+        //     栈宿主不透明，「背景延续」只能在页面内做——先画池子里那张（同 URL、
+        //     内存缓存命中、瞬时可画、与首页观感连续），自己的底图到位后由
+        //     `RemoteImage`（preserveCurrentImageOnReload）原位缓慢淡入替换。
+        //   * **两档淡入**：兜底那张是缓存命中、首帧就能画，用短淡入（默认的 1.6s
+        //     在推页那 0.35s 里只走到 ~25% 不透明度，观感等于没兜住）；换成自己那张
+        //     时仍走默认的缓慢渐变。
+        //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
+        //     图已就绪，不会先灰一块再可见地补加载。
+        .pageAmbience(ambienceTarget)
+        .task(id: item.id) {
+            model.attach(app)
+            await model.load()
+        }
+        #if os(macOS)
+        // 翻页状态机：滚轮监视器只在本页是栈顶且翻页布局生效时安装
+        // （macOS 26 上被盖页不发 onDisappear，靠 `app.path` 的深度判定）。
+        .onChange(of: isFlippingActive, initial: true) { _, active in
+            pager.reduceMotion = reduceMotion
+            pager.updateMonitor(active: active)
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            pager.reduceMotion = newValue
+        }
+        .onDisappear { pager.updateMonitor(active: false) }
+        #endif
+        .onChange(of: app.detailRefreshGeneration) { _, _ in
+            // 挂住任务：离页 / 换条目时取消，fire-and-forget 不再跑到旧页面上。
+            model.reloadAfterPlaybackTask?.cancel()
+            model.reloadAfterPlaybackTask = Task { await model.reloadAfterPlayback() }
+        }
+        .onDisappear {
+            model.reloadAfterPlaybackTask?.cancel()
+            // 真离页撤掉待补拉（被盖页 macOS 26 不发 onDisappear，被盖场景
+            // 补拉照跑——正是要救的场景）。
+            model.episodeReloadTask?.cancel()
+        }
+    }
+
+    // MARK: - 详情页正文（= 翻页布局里的第二页）
+
+    /// 原有的详情滚动区。翻页布局里它就是第二页，单独抽出来只为了给 `Group` 让位。
+    private var detailScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                #if os(macOS)
+                // macOS 上 `detailScroll` 只是翻页页的第二屏，头部在另一页上；
+                // 紧凑头部那套（`ambientCompactHeader` / `compactHeaderView`）是
+                // iPhone 专用，跟着 iOS 一起编译。
+                // 正文直接从简介起步，只留一段让开悬浮工具栏的顶距。
+                metadata
+                    .padding(.top, 44)
+                #else
                 if horizontalSizeClass == .compact {
                     ZStack(alignment: .top) {
                         if isAmbientActive {
@@ -164,6 +373,7 @@ struct DetailView: View {
                     .motion(Motion.standard, value: isAmbientActive)
                     metadata
                 }
+                #endif
                 if let loadError = model.loadError {
                     ErrorNotice(loadError)
                         .padding(.horizontal, detailHorizontalInset)
@@ -221,50 +431,26 @@ struct DetailView: View {
             // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
             // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
         }
-        .contentMargins(.top, 0, for: .scrollContent)
-        .ignoresSafeArea(edges: .top)
-        .navigationTitle(horizontalSizeClass == .compact ? "" : model.displayName)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
-        .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
-        #elseif os(macOS)
-        .toolbarBackground(.hidden, for: .windowToolbar)
+        #if os(macOS)
+        // 第二页的滚动位置：翻回第一页的判据（停在顶部 + 主动上滚）
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentOffset.y
+        } action: { _, newValue in
+            pager.bodyOffsetY = newValue
+        }
         #endif
-        // 氛围背景：走统一入口 `pageAmbience`（平台分叉收在那一个修饰符里）。
-        // 本页是"自带主体图"的那一类（`ownsArt`）——macOS 上由它声明整窗层覆盖
-        // 首页轮播，iOS 上自己垫。
-        //
-        // 三处本页特有的语义都作为参数传进去，不复制渲染代码：
-        //   * **底图未就绪时先画首页轮播那张**（`isAmbienceReady` 为假）：iOS 的导航
-        //     栈宿主不透明，「背景延续」只能在页面内做——先画池子里那张（同 URL、
-        //     内存缓存命中、瞬时可画、与首页观感连续），自己的底图到位后由
-        //     `RemoteImage`（preserveCurrentImageOnReload）原位缓慢淡入替换。
-        //   * **两档淡入**：兜底那张是缓存命中、首帧就能画，用短淡入（默认的 1.6s
-        //     在推页那 0.35s 里只走到 ~25% 不透明度，观感等于没兜住）；换成自己那张
-        //     时仍走默认的缓慢渐变。
-        //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
-        //     图已就绪，不会先灰一块再可见地补加载。
-        .pageAmbience(ambienceTarget)
-        .task(id: item.id) {
-            model.attach(app)
-            await model.load()
-        }
-        .onChange(of: app.detailRefreshGeneration) { _, _ in
-            // 挂住任务：离页 / 换条目时取消，fire-and-forget 不再跑到旧页面上。
-            model.reloadAfterPlaybackTask?.cancel()
-            model.reloadAfterPlaybackTask = Task { await model.reloadAfterPlayback() }
-        }
-        .onDisappear {
-            model.reloadAfterPlaybackTask?.cancel()
-            // 真离页撤掉待补拉（被盖页 macOS 26 不发 onDisappear，被盖场景
-            // 补拉照跑——正是要救的场景）。
-            model.episodeReloadTask?.cancel()
-        }
     }
 
-    // MARK: - 移动端（紧凑端）沉浸式头部与内容区
+    // MARK: - iOS 旧头部：紧凑端（iPhone / iPad 窄窗）
+    //
+    // **只在 iOS 上被使用**。macOS 详情页是翻页布局（见 `DetailPageFlip`）：
+    // 没有横幅、没有氛围头部、没有紧凑头部，这几段在 macOS 上既不可达、也不参与
+    // 编译（下面整段收在 `#if !os(macOS)` 里）。
+    //
+    // 之所以留在同一个文件而不是删掉：iPad / iPhone 现在仍然靠这套布局渲染详情页
+    // （翻页页那套滚轮裁决依赖 `NSEvent`，是 macOS 专属）。等 iOS 也换成翻页页，
+    // 这一段可以整段删除。
+#if !os(macOS)
 
     private var compactHeaderView: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -498,7 +684,27 @@ struct DetailView: View {
         .accessibilityValue(played ? "当前为已看完" : "当前为未看完")
     }
 
-    // MARK: - 桌面端顶部横幅（macOS / iPad 宽屏）
+    // MARK: - iOS 旧头部：氛围紧凑头部 / 标题
+
+    private var ambientCompactHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            compactBannerTitle
+                .padding(.horizontal, detailHorizontalInset)
+                .padding(.bottom, 8)
+                .frame(height: compactBannerHeight, alignment: .bottom)
+            compactContentStack
+        }
+    }
+
+    private var compactBannerTitle: some View {
+        // 紧凑宽度：艺术字 Logo 或居中文本标题
+        ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+    // MARK: - iOS 旧头部：横幅 / 氛围头部 / 播放钮 / 元数据行
+    //
+    // 与上面几段是同一套：iPad / iPhone 的详情页头部，macOS 不编译。
+
 
     private var banner: some View {
         ZStack {
@@ -598,16 +804,6 @@ struct DetailView: View {
     /// 两条头部的标题落在同一竖直位置，正文区起点两边也都是 `compactBannerHeight`。
     /// 顶边贴屏那版（`padding(.top, 52)`）会让艺术字 Logo 压进状态栏、离灵动岛只剩
     /// 几个点，底对齐后 Logo 顶边恒定落在 198pt 以下，离状态栏自然有余量。
-    private var ambientCompactHeader: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            compactBannerTitle
-                .padding(.horizontal, detailHorizontalInset)
-                .padding(.bottom, 8)
-                .frame(height: compactBannerHeight, alignment: .bottom)
-            compactContentStack
-        }
-    }
-
     @ViewBuilder
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
         // 条件用 `posterTarget` 的结果而不是 `primaryImageTag != nil`：
@@ -631,12 +827,6 @@ struct DetailView: View {
 
     private var bannerTitle: some View {
         ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 80, maxWidth: 420, fontSize: 28, adaptiveText: true)
-    }
-
-    private var compactBannerTitle: some View {
-        // 紧凑宽度：艺术字 Logo 或居中文本标题
-        ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
-            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     /// 元数据行：颜色跟随外观——横幅底部渐变与氛围布局都按模式垫
@@ -804,6 +994,7 @@ struct DetailView: View {
         .accessibilityValue(played ? "当前为已看完" : "当前为未看完")
         .accessibilityHint(played ? "轻点后恢复为未看" : "轻点后标记为已看完")
     }
+#endif
 
     private var playButtonLabel: String {
         if let playState = resumePlayState {
@@ -874,6 +1065,23 @@ struct DetailView: View {
 
     // MARK: - 简介与元信息
 
+    /// 第二页正文开头的简介。
+    ///
+    /// 剧集页优先给**当前选中那一集**的简介：翻到正文本来就是想看「这一集讲什么」，
+    /// 再读一遍整部剧的总简介没有信息量。该集没有简介（或只有空白）时回退到剧集
+    /// 自己的简介，一行都不空着。电影等其他类型直接用条目简介。
+    private var bodyOverview: String? {
+        if model.shown.kind == .series, let episode = selectedEpisode,
+           let text = model.displayEpisodeOverview(episode)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty {
+            return text
+        }
+        guard let text = model.displayOverview?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty
+        else { return nil }
+        return text
+    }
+
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 内容来自缓存（这次刷新失败）时先摆一行轻提示，再是正文。
@@ -881,7 +1089,7 @@ struct DetailView: View {
             if let notice = model.staleNotice {
                 StaleContentBanner(notice: notice)
             }
-            if let overview = model.displayOverview, !overview.isEmpty {
+            if let overview = bodyOverview {
                 ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)
             }
@@ -1261,19 +1469,19 @@ struct DetailView: View {
 
     /// 切换当前可播条目（电影 / 选中集）的已看状态，并写回本地详情与选集列表。
     private func togglePlayed() async {
-        guard !isUpdatingPlayed,
-              let target = playableItem,
-              let server = app.server
-        else { return }
+        guard !isUpdatingPlayed, let target = playableItem else { return }
         let markAsPlayed = !(target.playState?.played ?? false)
         isUpdatingPlayed = true
         playedActionError = nil
         defer { isUpdatingPlayed = false }
         do {
+            // 已看标记的唯一写入口是仓储：网络成功后同一拍更新所有内存投影与 SQLite。
             let state = markAsPlayed
-                ? try await server.markPlayed(itemID: target.id)
-                : try await server.markUnplayed(itemID: target.id)
-            model.applyPlayState(state, toItemID: target.id)
+                ? try await app.metadata.markPlayed(itemID: target.id)
+                : try await app.metadata.markUnplayed(itemID: target.id)
+            if let state {
+                await model.applyPlayState(state, toItemID: target.id)
+            }
         } catch let error as JellyfinError {
             playedActionError = error.errorDescription
         } catch {

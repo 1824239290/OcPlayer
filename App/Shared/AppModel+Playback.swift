@@ -473,14 +473,13 @@ extension AppModel {
 
     /// 剧集级 TMDB ID（TheIntroDB 跳过片头源用）。
     func seriesTmdbID(for seriesID: String) async -> Int? {
-        // 详情快照里就有 tmdbID（进过详情的剧集直接命中），别再为弹幕链路
-        // 全量重拉一遍详情（含 People/Genres，贵）。
-        if let snapshot = detailSnapshot(for: seriesID),
-           let tmdbID = snapshot.detail.tmdbID.flatMap(Int.init) {
+        // 仓储的条目投影里就有 tmdbID（进过详情的剧集直接命中），
+        // 不必为弹幕链路重拉一次含 People/Genres 的完整详情。
+        if let cached = await metadata.cachedItem(itemID: seriesID),
+           let tmdbID = cached.value.tmdbID.flatMap(Int.init) {
             return tmdbID
         }
-        guard let server else { return nil }
-        guard let item = try? await server.item(seriesID) else { return nil }
+        guard let item = try? await metadata.refreshItem(itemID: seriesID) else { return nil }
         return item.tmdbID.flatMap(Int.init)
     }
 
@@ -834,8 +833,22 @@ extension AppModel {
     /// 换片 / 退出播放器：补 Stopped 后停表。返回 Stopped 上报任务（供调用方等待落库）。
     @discardableResult
     func finishReporting() -> Task<Void, Never>? {
+        // 退出 / 换片时把这一刻的进度写回媒体数据面：首页 rail 与详情页立刻一致，
+        // 离线缓存也不必等下一次服务端刷新。服务端上报仍由 playbackReporting 负责。
+        let item = nowPlayingItem
+        let position = playback.map { Double($0.state.position.microseconds) / 1_000_000 } ?? 0
+        let duration = playback.map { Double($0.state.duration.microseconds) / 1_000_000 }
         clearPlaybackSessionState()
-        return playbackReporting?.stop()
+        let stopped = playbackReporting?.stop()
+        if let item, position > 0 {
+            let metadata = metadata
+            Task {
+                await metadata.recordPlaybackProgress(
+                    itemID: item.id, positionSeconds: position,
+                    durationSeconds: duration, played: false)
+            }
+        }
+        return stopped
     }
 
     func clearPlaybackSessionState() {

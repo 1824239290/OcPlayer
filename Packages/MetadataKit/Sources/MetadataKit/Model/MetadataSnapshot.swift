@@ -51,11 +51,23 @@ public struct CachedPage: Sendable {
     public var items: [MediaItem]
     public var totalRecordCount: Int?
     public var fetchedAt: Date
+    /// 分页窗口也随快照返回：仓储据此把多页恢复成一个连续列表。
+    /// 默认值仅为兼容旧测试构造点；生产读取总是填真实值。
+    public var startIndex: Int
+    public var limit: Int
 
-    public init(items: [MediaItem], totalRecordCount: Int?, fetchedAt: Date) {
+    public init(
+        items: [MediaItem],
+        totalRecordCount: Int?,
+        fetchedAt: Date,
+        startIndex: Int = 0,
+        limit: Int = 0
+    ) {
         self.items = items
         self.totalRecordCount = totalRecordCount
         self.fetchedAt = fetchedAt
+        self.startIndex = startIndex
+        self.limit = limit
     }
 }
 

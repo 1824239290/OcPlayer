@@ -6,6 +6,26 @@
 
 ### 改动
 
+- **修「打开详情页会闪一下另一张背景图，像是出来后马上被 tmdb 替代了」——不是数据层给了两份数据，是渲染顺序把「TMDB 优先」这一条规则的两个阶段都画了出来**
+  （用户口径：「他现在打开还是会有一瞬间闪另外一张背景图，也是赛博朋克的，感觉是出来后马上被tmdb的替代了一样，像是之前重构媒体数据之前的逻辑」）
+  - **实测现场**（Debug 深链 `OCPLAYER_START_ROUTE=detail.series` + 视图探针，`赛博朋克：边缘行者`）：一次进场出现**三张**背景图，URL 依次为 ① 氛围池兜底图（`Items/8fe73569…`）→ ② 本条目服务端 backdrop（`Items/082528dc…`）→ ③ `image.tmdb.org/t/p/original/3UbHGmu9…`；②→③ 间隔 **293 ms**，与数据层独立复现三次的 293/475/445 ms 一致。关键排除项：**三张都命中本地 blob 缓存、三个会话 TMDB 网络请求 = 0** ⇒ 不是图加载慢、不是缓存失效，是 `tmdbOverlay` 读回那一瞬 URL 被**二次决议**。
+  - **根因（两层）**：① TMDB 图片策略默认「优先顶替服务端已有的图」（`TMDbPreferences.replaceExistingImages` 默认 true，产品口径是「填了 key 就是想完整补全」），而 `overlay(for:)` 是 async（虽只查库不发网络），旧代码把它排在 `load()` 末尾 ⇒ 详情内容先按服务端图上屏、随后被 TMDB 图顶掉；② `DetailView.task` 是 `attach(app)`（同步）→ `await load()`，而解析在 `load()` 第一句 ⇒ 「app 已挂上、overlay 未读回」之间还有一帧会把②画出去，**只做「解析后锁定」堵不住这一帧**。
+  - **修法**：新增纯值状态机 `BackdropSourceLatch`——**解析完成前一律不给本条目的图**（视图回落氛围池兜底图，即既有的「背景延续」设计：同 URL、内存缓存命中、观感连续），**解析后按宽度档锁定第一张非空图**、本页不再因迟到数据改口；`load()` 第一句改为先 `await resolveBackdropSource()` 再预热。迟到的 TMDB 数据照常落库，**下次进页**第一帧就是 TMDB 那张。锁定/解析绝不能写在 body 求值路径上（`backdropTarget` 必须是纯函数），否则 `@Observable` 状态写入会与「视图读取 → 重新求值」形成自激环 —— 本仓实测过一次详情页死循环、CPU 100%、窗口出不来，成因与修法都记在 `DetailViewModel.backdropTarget(width:)` 的注释里。
+  - **修后判据（与直觉不同，写清楚免得下次误判）**：正确端点是**去重 2 张（①池兜底 → ③最终图）、②一帧都不出现**，不是 1 张。页面在详情落地前本来就该显示池子那张（背景延续），把它算成「闪」会得出错误结论；真正要消灭的是「**同一条目的两张不同图**先后上屏」。
+  - **反向验证**：`BackdropSourceLatch` 6 条用例全绿；审查用变异实验逐条打穿（拆掉「解析前返回空」→ `testReturnsEmptyBeforeResolved` 红；取消锁定 / nil 也入锁 / 忽略宽度档 / 凭证锁成 nil → 对应 4 条红），6 条**无一摆设**。`CollectionDetailTests` 补接线回归：解析前必须扣住背景图、解析完成后立刻给出最终图、迟到详情落地能补锁且**之后不再改口**、**取详情那一刻**（`StubMediaServer.onItemCall` 观测点）解析已完成且 `backdropTarget` 已是最终那张（把 `resolveBackdropSource()` 挪到取数之后即红）。原有 4 条背景来源用例（服务端优先 / 成员兜底 / 无图 / 非合集不借用）改为先解析再断言，保持原意，并在文件里写明「为什么解析这一步属于被测行为」。
+  - **没动的**：TMDB 图片策略默认值（产品口径，另开关可关）、`ImagePipeline` / `RemoteImage` / `ImageArrivalScheduler`（三者行为正确，不背这个锅）、PlaybackKit 与 MetadataKit。
+  - **已知代价**：`resolveBackdropSource()` 解析后若本机既无服务端 backdrop tag 也无 TMDB 缓存，本页会一直停在氛围池兜底图（正确行为），需要下一次进页、或详情/overlay **迟到落地时补锁**才出本条目图 —— 补锁挂在那两个既有状态变更点（`detail.didSet` / `tmdbOverlay.didSet`），不在 body 路径上。
+
+- **重构媒体数据面：把「SQLite 写穿 + App 内存详情快照 + 视图分页表 + 各处直连服务器」收敛成一个 `MediaRepository`，图片层补上「槽位 + 双键代次 + 帧到达调度」**
+  （用户口径：「对 OcPlayer 进行大改，把媒体数据管理混乱的情况修好」）
+  - **问题事实**：同一详情有三份真相（`MetadataKit` 条目、`AppModel.detailSnapshots`、`DetailViewModel` 状态），TTL 与写回口径各不相同；`page` 表只有测试读写，库分页冷启动必整套重拉；首页 / 详情 / 预取 / 库搜索各自发请求，取消与错误折叠逐处手写；播放结束只刷内存、不写 SQLite，首页与详情可能显示不同进度。
+  - **数据层**：`MetadataKit` 新增 `MediaRepository`（actor）——内存 LRU → `MetadataStore` → `MediaServer` 唯一读路径，`cached*` 给旧内容、`refresh*` 做同键单飞；库页 / 搜索页按「库 + 类型 + 排序 + 观看状态 + 搜索词 + 分页窗口」真实落盘并跨实例恢复；首页四条数据并行刷新、失败分区保留上一份；已看标记与播放退出进度走同一写入口，同步更新内存全部投影与 SQLite。建库失败退化为内存模式，不再保留第二套直连实现。
+  - **App 层**：`MetadataCoordinator` 变成数据面宿主（`app.server` 赋值即切换仓储会话）；删除 `AppModel.detailSnapshots` / `detailPrefetchTasks` / `detailSnapshotTTL`；预取与进页共用同一单飞任务；`DetailViewModel`、`LibraryView`、首页搜索、合集 / 库封面解析全部改走仓储；`CachedMediaServer` 与 `MetadataHydrator` 两个旧层删除（含其 500+ 行测试，行为由仓储用例接管）。
+  - **图片层**：`RemoteImage` 换 URL 不再先清空旧帧，成功必须「键 + 代次」双匹配才上屏；成功到达经 `ImageArrivalScheduler` 每帧批量放行；`ImagePipeline` 在「磁盘之后、网络之前」按 host 熔断，取消探针不钉死宿主。
+  - **测试**：`MetadataKit` 216 XCTest + 34 swift-testing；`AppDesignKit` 187；macOS scheme **789 通过 / 0 失败 / 19 跳过（808 总数）**。新增 `MediaRepositoryTests`（10 条：磁盘恢复 / 部分失败 / 单飞 / 分页合并 / 搜索分键 / 进度写回 / 无库降级）与图片层 39 条。
+  - **日志噪声**：共享 `HTTPClient` 把 URLSession 取消（`-999`）记成 `error`，Bangumi 搜索防抖每次取消都刷一条红；改为 `请求取消` 的 debug 级，真实传输失败仍是 error。
+  - **文档**：`Docs/MEDIA-DATA-PLANE.md`（问题清单与目标边界）。
+
 - **修「首页 / Bangumi（在看+搜索）顶栏纯白、丢失透明」——`.home` scrim 从窗口顶就压 0.55 白雾 + 系统窗口工具栏材质提亮去饱和，把顶栏玻璃底下的氛围图洗成了白条；详情页 / MoviePilot 资源搜索页因为「自带浓色主体图 + 自己摘了材质」才没这事**
   （用户口径：「bangumi的搜索结果页面顶栏为什么是纯白，丢失了透明的效果」→ 复查补充：「moviepilot的搜索都没这种情况，首页的和bangumi的就出这个问题了」）
   - **像素取证（用户实拍截图 + `Scripts/ambience-probe.swift` 分条带，CGImage.cropping 直读避开 y 轴翻转坑）**：工具栏条带（top 区域）色度中位 **5（阈值 6，判 `flat`＝纯色）**，同一窗口内容顶左缘色度 **35**——条带与内容之间一条断崖。跨换图两帧顶栏色相跟随氛围图（绿图 11 / 暖图 28）证明「玻璃采样整窗氛围层」的机制没坏，白是叠出来的。

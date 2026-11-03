@@ -68,7 +68,7 @@ extension AppModel {
                 self[keyPath: attempted].insert(id)
             }
         } catch where CancellationClassifier.isCancellation(error) {
-            // 同 `RailResult.load`：取消时不该记账、更不该记 warning。
+            // 取消时不该记账、更不该记 warning。
             return
         } catch {
             // 连列表都拉不到（离线 / 服务端出错）：不记账，下次进入可视区再试。
@@ -94,8 +94,15 @@ extension AppModel {
             inFlight: \.collectionArtworkInFlight,
             concurrency: Self.collectionArtworkConcurrency
         ) {
-            // 成员：1 个请求（`collectionMembers` 里那三条硬约束是唯一一份）。
-            let page = try await server.collectionMembers(of: item.id)
+            // 成员：仓储优先读已恢复的页，缺失才请求；查询形态仍由仓储唯一一份收口。
+            let page: MediaPageContent
+            if let cached = await metadata.cachedCollectionMembers(itemID: item.id) {
+                page = cached.value
+            } else if let refreshed = try await metadata.refreshCollectionMembers(itemID: item.id) {
+                page = refreshed.value
+            } else {
+                return false
+            }
             guard sessionIsCurrent(generation, server: server) else { return false }
             let outcome = await tmdb.refreshCollection(item: item, members: page.items,
                                                        tenant: tenant)
@@ -143,15 +150,15 @@ extension AppModel {
             inFlight: \.libraryCoverInFlight,
             concurrency: Self.libraryCoverConcurrency
         ) {
-            let top = try await server.itemsPage(
-                parentID: library.id,
-                kinds: nil,
-                recursive: true,
-                startIndex: 0,
-                limit: Self.libraryCoverItemLimit,
+            let descriptor = MediaPageDescriptor(
+                parentID: library.id, kinds: nil, recursive: true,
                 sort: MediaItemsSort(field: .name, ascending: true),
-                watchState: nil,
-                searchTerm: nil)
+                watchState: nil, searchTerm: nil)
+            guard let topPage = try await metadata.refreshPage(
+                descriptor, startIndex: 0, limit: Self.libraryCoverItemLimit) else {
+                return false
+            }
+            let top = topPage.value
             guard sessionIsCurrent(generation, server: server) else { return false }
 
             var posters = top.items.filter { $0.primaryImageTag != nil }
@@ -162,8 +169,10 @@ extension AppModel {
                 var perCollection: [[MediaItem]] = []
                 for box in top.items.prefix(Self.libraryCoverCollectionLimit) {
                     do {
-                        let members = try await server.collectionMembers(of: box.id, limit: 4).items
-                        perCollection.append(members.filter { $0.primaryImageTag != nil })
+                        let memberPage = try await metadata.refreshCollectionMembers(itemID: box.id)
+                        let members = memberPage?.value.items ?? []
+                        perCollection.append(
+                            members.prefix(4).filter { $0.primaryImageTag != nil })
                     } catch {
                         // **不能吞成「这个合集没海报」**：那会把一次断网记成「确定没有」，
                         // 库卡此后永久空白。标记后继续试下一个合集（前几个的海报仍然可用）。

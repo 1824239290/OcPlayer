@@ -24,6 +24,17 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var episodesResult: Result<[MediaItem], any Error> = .success([])
     var mediaFileInfoResult: Result<MediaFileInfo?, any Error> = .success(nil)
     var markPlayedResult: Result<MediaItem.PlayState, any Error>?
+    /// 库页 / 搜索页的整套行；按 startIndex/limit 切片返回，模拟真实分页服务端。
+    var itemsPageRows: [MediaItem] = []
+    /// 按搜索词隔离的行集。键为 searchTerm。
+    var itemsPageRowsBySearch: [String: [MediaItem]] = [:]
+    var itemsPageTotal: Int?
+    private let queryLock = NSLock()
+    private var _lastItemsPageQuery: ItemsPageQueryStub?
+    var lastItemsPageQuery: ItemsPageQueryStub? {
+        queryLock.lock(); defer { queryLock.unlock() }
+        return _lastItemsPageQuery
+    }
 
     /// 记录调用次数：用来断言「装饰器转发了几次、有没有多打请求」。
     ///
@@ -35,6 +46,7 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         counterLock.lock(); defer { counterLock.unlock() }
         return _callCounts
     }
+    func callCount(_ name: String) -> Int { callCounts[name] ?? 0 }
     private func count(_ name: String) {
         counterLock.lock(); defer { counterLock.unlock() }
         _callCounts[name, default: 0] += 1
@@ -88,14 +100,27 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     func chapters(itemID: String) async throws -> [JellyfinChapter] {
         count("chapters"); return []
     }
+    private func recordPageQuery(_ query: ItemsPageQueryStub) {
+        queryLock.lock()
+        _lastItemsPageQuery = query
+        queryLock.unlock()
+    }
+
     func itemsPage(
         parentID: String?, kinds: [MediaItem.Kind]?, recursive: Bool,
         startIndex: Int, limit: Int, sort: MediaItemsSort?,
         watchState: MediaItemsWatchState?, searchTerm: String?
     ) async throws -> MediaItemsPage {
         count("itemsPage")
+        recordPageQuery(ItemsPageQueryStub(
+            parentID: parentID, recursive: recursive, startIndex: startIndex,
+            limit: limit, searchTerm: searchTerm))
         if let itemsPageResult { return try itemsPageResult.get() }
-        return MediaItemsPage(items: [], startIndex: startIndex, totalRecordCount: 0)
+        let rows = searchTerm.flatMap { itemsPageRowsBySearch[$0] } ?? itemsPageRows
+        let slice = Array(rows.dropFirst(startIndex).prefix(limit))
+        return MediaItemsPage(
+            items: slice, startIndex: startIndex,
+            totalRecordCount: itemsPageTotal ?? rows.count)
     }
     func items(parentID: String?, kinds: [MediaItem.Kind]?, recursive: Bool, limit: Int) async throws -> [MediaItem] {
         count("items"); return []
@@ -168,6 +193,14 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     func reportPlaybackStopped(context: PlaybackSessionContext, positionSeconds: Double) async {
         count("reportPlaybackStopped")
     }
+}
+
+struct ItemsPageQueryStub: Sendable, Equatable {
+    var parentID: String?
+    var recursive: Bool
+    var startIndex: Int
+    var limit: Int
+    var searchTerm: String?
 }
 
 enum StubError: Error, Equatable {

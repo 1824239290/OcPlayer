@@ -32,10 +32,24 @@ extension AppModel {
             openLibrary(library)
 
         case .detail:
-            guard let item = firstBackdropItem() else {
+            guard let item = firstBackdropItem(where: { _ in true }) else {
                 return logLaunchRouteSkip("detail", reason: "首页没有带背景图的条目")
             }
             openDetail(item)
+
+        case .detailSeries:
+            guard let item = firstBackdropItem(where: { $0.kind == .series }) else {
+                return logLaunchRouteSkip("detail.series", reason: "首页没有带背景图的剧集")
+            }
+            openDetail(item)
+
+        case .detailItem(let id):
+            // 只给 id 与最小字段：详情页自己的 `load()` 会补齐完整条目（这正是它要测的
+            // 「列表条目缺 tag → 详情落地」那条路径）。kind 用 `.series` 是因为这个通道
+            // 是为「服务端图 + TMDB 图并存」那类剧集回归加的；电影同样能开，只是
+            // `isAmbientActive` 的占位分支不生效。
+            let cached = (home.resume + home.nextUp + home.latest).first { $0.id == id }
+            openDetail(cached ?? MediaItem(id: id, name: id, kind: .series))
 
         case .bangumiProfile:
             openBangumiProfile()
@@ -72,8 +86,8 @@ extension AppModel {
 
     /// 第一个**带 backdrop** 的首页条目：验收详情页氛围底时，条目自带图才有意义
     /// （没图的条目本来就回退清晰横幅，测了也说明不了问题）。
-    private func firstBackdropItem() -> MediaItem? {
-        (home.resume + home.nextUp + home.latest).first { $0.backdropImageTag != nil }
+    private func firstBackdropItem(where matches: (MediaItem) -> Bool) -> MediaItem? {
+        (home.resume + home.nextUp + home.latest).first { $0.backdropImageTag != nil && matches($0) }
     }
 
     private func logLaunchRouteSkip(_ target: String, reason: String) {
@@ -87,6 +101,8 @@ private extension LaunchRoute {
         switch self {
         case .library: "library"
         case .detail: "detail"
+        case .detailSeries: "detail.series"
+        case .detailItem(let id): "detail.item.\(id)"
         case .bangumiProfile: "bangumi.profile"
         case .bangumiCalendar: "bangumi.calendar"
         case .bangumiSubject(let id): "bangumi.subject.\(id)"

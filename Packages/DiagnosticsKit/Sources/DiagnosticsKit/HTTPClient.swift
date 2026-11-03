@@ -112,14 +112,26 @@ public struct HTTPClient: Sendable {
         do {
             (data, response) = try await session.data(for: urlRequest)
         } catch let error as URLError {
-            NetworkLog.requestFailed(
-                category: category, path: path, error: error,
-                duration: start.duration(to: .now).timeInterval)
+            if CancellationClassifier.isCancellation(error) {
+                NetworkLog.requestCancelled(
+                    category: category, path: path,
+                    duration: start.duration(to: .now).timeInterval)
+            } else {
+                NetworkLog.requestFailed(
+                    category: category, path: path, error: error,
+                    duration: start.duration(to: .now).timeInterval)
+            }
             throw HTTPTransportError.url(error)
         } catch {
-            NetworkLog.requestFailed(
-                category: category, path: path, error: error,
-                duration: start.duration(to: .now).timeInterval)
+            if CancellationClassifier.isCancellation(error) {
+                NetworkLog.requestCancelled(
+                    category: category, path: path,
+                    duration: start.duration(to: .now).timeInterval)
+            } else {
+                NetworkLog.requestFailed(
+                    category: category, path: path, error: error,
+                    duration: start.duration(to: .now).timeInterval)
+            }
             throw HTTPTransportError.other("\(error)")
         }
 

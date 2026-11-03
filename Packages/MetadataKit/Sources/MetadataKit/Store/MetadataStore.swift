@@ -18,7 +18,7 @@ public actor MetadataStore {
     let database: DatabasePool
 
     /// `library` 表的 payload 解码器。**共用一份**：`JSONDecoder()` 的构造要初始化
-    /// 内部的策略/容器状态，而这条读路径在冷启动首屏（`MetadataHydrator.home()`）上，
+    /// 内部的策略/容器状态，而这条读路径在冷启动首屏（`MediaRepository.cachedHome()`）上，
     /// 之前是「每行新建一个」。actor 隔离保证它只被串行访问。
     private let libraryDecoder = JSONDecoder()
 
@@ -102,12 +102,12 @@ public actor MetadataStore {
         //
         // 「空 items + 非 nil rail」是一个**有意义的组合**：服务端说「这个 rail 现在
         // 没有内容」时，`saveRail` 会把 `RailSnapshot(items: [])` 写进去、**清掉**上一份。
-        // 若在这里早退，磁盘会**原地保留过期 rail** —— 而 `MetadataHydrator.home()`
+        // 若在这里早退，磁盘会**原地保留过期 rail** —— 而仓储的冷启动读路径
         // 读 rail 无任何新鲜度门槛（`fetchedAt` 只参与 `dates.min()`），
         // 冷启动/离线就会把过期条目当「继续观看/接下来看/最近添加」铺上首页。
         //
         // 第一版就是那样写的，独立审查用端到端用例实测出「服务端返回空之后磁盘仍是
-        // 旧 rail」；回归见 `CachedMediaServerTests.emptyRailResponseClearsStaleRail`。
+        // 旧 rail」；回归见 `MediaRepositoryTests.testEmptyRailResponseClearsStaleRail`。
         guard !items.isEmpty || rail != nil else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
         // 两次编码都在事务外。
@@ -414,7 +414,7 @@ public actor MetadataStore {
     ///
     /// ## 为什么要这个方法（`P2-23` 实测数据）
     ///
-    /// `MetadataHydrator.home()` 原本是四个独立 `await`：
+    /// 冷启动首页读取原本是四个独立 `await`：
     /// `libraries` + `rail("resume")` + `rail("nextUp")` + `rail("latest")`。
     /// 每个都是一次 `database.read` —— 而**读事务本身就要 ≈29–37 µs**
     /// （实测：4 个事务跑 4 条 trivial 查询 147.0 µs，1 个事务跑 4 条 59.0 µs，
@@ -444,7 +444,7 @@ public actor MetadataStore {
     ///   部分**（例如库读得到、rail 表坏了：旧实现返回「2 个库 + 空 rails」的快照，
     ///   新实现整体失败）。
     ///
-    ///   所以这里抛错，由 `MetadataHydrator.home()` 决定怎么降级 —— 它现在
+    ///   所以这里抛错，由 `MediaRepository.cachedHome()` 决定怎么降级 —— 它现在
     ///   `guard let ... = try? await ...` **返回 nil**（保持调用方的骨架屏、等下次重试），
     ///   而不是吞掉错误当成「没有缓存」。
     /// 测试用：在写事务里跑任意 SQL（用于制造「读失败」这类异常状态）。
@@ -540,7 +540,38 @@ public actor MetadataStore {
             return CachedPage(
                 items: snapshot.items,
                 totalRecordCount: snapshot.totalRecordCount,
-                fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)))
+                fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)),
+                startIndex: key.startIndex,
+                limit: key.limit)
+        }
+    }
+
+    /// 同一查询的全部分页，按起点升序。仓储负责合并连续页与条目去重；
+    /// 这里只负责一次读事务取回，避免每页一次 SQLite round-trip。
+    public func pages(matching query: PageQuery, tenant: TenantID) throws -> [CachedPage] {
+        try database.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT start_index, limit_value, payload_version, payload, fetched_at FROM page
+                    WHERE tenant_id = ? AND parent_id = ? AND kinds = ? AND sort_key = ?
+                      AND watch_state = ? AND search_term = ?
+                    ORDER BY start_index, limit_value
+                    """,
+                arguments: [tenant.rawValue, query.parentID, query.kinds, query.sortKey,
+                            query.watchState, query.searchTerm])
+            return rows.compactMap { row in
+                guard let data = row["payload"] as Data?,
+                      let snapshot = PayloadCodec.decode(
+                        PageSnapshot.self, from: data, storedVersion: row["payload_version"])
+                else { return nil }
+                return CachedPage(
+                    items: snapshot.items,
+                    totalRecordCount: snapshot.totalRecordCount,
+                    fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)),
+                    startIndex: row["start_index"],
+                    limit: row["limit_value"])
+            }
         }
     }
 

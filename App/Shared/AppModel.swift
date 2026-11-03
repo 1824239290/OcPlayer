@@ -42,7 +42,11 @@ final class AppModel {
     var phase: Phase = .boot
 
     let store: ServerStore
-    var server: (any MediaServer)?
+    /// 当前服务器实例。**赋值即切换媒体数据仓储的会话归属**：仓储按服务器实例
+    /// 识别会话，换实例就丢弃旧内存投影，磁盘内容仍按租户复用。
+    var server: (any MediaServer)? {
+        didSet { metadata.setActiveServer(server) }
+    }
 
     /// 当前生效的服务器地址（地址决议器探活择优的结果）。
     ///
@@ -218,84 +222,6 @@ final class AppModel {
         libraryPages[LibraryPageKey(libraryID: libraryID, searchTerm: searchTerm)] = nil
     }
 
-    // MARK: - 详情页快照缓存（stale-while-revalidate）
-
-    /// 详情页跨进入的内容快照：再次进入同一详情先用快照即时渲染（不闪骨架屏），
-    /// 同时后台重拉并原位覆盖。快照都是小结构体，正常会话远到不了上限；
-    /// 超限整份清空（下次进入回到首拉行为，代价可忽略）。
-    struct DetailSnapshot {
-        var detail: MediaItem
-        var seasons: [MediaItem]
-        var similar: [MediaItem]
-        var selectedSeasonID: String?
-        var episodesBySeason: [String: [MediaItem]]
-        /// 合集成员（合集详情页的「合集内容」）。非合集条目恒为空。
-        /// 有默认值 → 既有构造点（磁盘快照 / 详情 VM）不必逐处补参数。
-        var collectionMembers: [MediaItem] = []
-        /// 快照写入时间（本会话内各次 `storeSnapshot` 都会刷新它）。TTL 短路
-        /// （`detailSnapshotTTL`）据此决定「这次进页要不要再问网络」。**磁盘快照
-        /// 不参与 TTL**（`loadFromDisk` 构造时置 `.distantPast`）：它是上一次会话
-        /// 写穿的，一律走 SWR 网络确认。
-        var fetchedAt: Date = Date()
-
-        /// TTL 内 = 网络刚刚确认过（进页零请求短路的判据）。判据只有这一份——
-        /// 此前同一句表达式散在预取与 VM 两处。
-        var isFresh: Bool {
-            Date().timeIntervalSince(fetchedAt) < AppModel.detailSnapshotTTL
-        }
-    }
-
-    static let detailSnapshotLimit = 40
-    /// 快照多新才算「不用再问网络」。Jellyfin 元数据变更频率低（刮削、已看状态），
-    /// 已看状态在播放返回时有本地同步（`applyPlayState` / `reloadAfterPlayback`
-    /// 都会重新 storeSnapshot、刷新时间戳），5 分钟窗口内唯一可能过期的是
-    /// 「在另一台设备上看完一集」这种并发改动，最终一致可接受。
-    /// nonisolated：`DetailSnapshot.isFresh` 在非隔离上下文也要读它。
-    nonisolated static let detailSnapshotTTL: TimeInterval = 5 * 60
-    var detailSnapshots: [MediaItem.ID: DetailSnapshot] = [:]
-    /// 快照的最近使用顺序（末尾最新）。淘汰时按它丢**最旧**的，而不是整份清空。
-    private var detailSnapshotRecency: [MediaItem.ID] = []
-    /// 点击预取的在途任务（按条目 id 去重；逻辑在 `AppModel+DetailPrefetch.swift`，
-    /// 存储属性按类注释的规矩集中在这里）。
-    var detailPrefetchTasks: [MediaItem.ID: Task<Void, Never>] = [:]
-
-    func storeDetailSnapshot(_ snapshot: DetailSnapshot, for id: MediaItem.ID) {
-        detailSnapshots[id] = snapshot
-        noteSnapshotUse(id)
-        // 超限只淘汰最旧的那些，**必须保留刚写入的这条**：整份 `removeAll()` 会把
-        // 为了提高"再次进入即时有内容"而刚存下的快照一起丢掉，于是第 41 次进入
-        // 详情页立刻退回冷骨架屏——SWR 的收益变成随机的。删到限额为止即可。
-        while detailSnapshots.count > Self.detailSnapshotLimit {
-            guard let oldest = detailSnapshotRecency.first else { break }
-            detailSnapshotRecency.removeFirst()
-            if oldest != id { detailSnapshots[oldest] = nil }
-        }
-    }
-
-    /// 读快照顺手刷新使用顺序：不刷新的话"最近看过的页"会被后续新页挤掉，
-    /// 与我们想要的 LRU 语义相反。
-    func detailSnapshot(for id: MediaItem.ID) -> DetailSnapshot? {
-        guard let snapshot = detailSnapshots[id] else { return nil }
-        noteSnapshotUse(id)
-        return snapshot
-    }
-
-    /// 顺序表的自愈：`detailSnapshots` 可能在别处被整体清掉（换会话），此时把
-    /// 悬空 id 一并剔除，避免淘汰时对着不存在的键空转。
-    private func noteSnapshotUse(_ id: MediaItem.ID) {
-        detailSnapshotRecency.removeAll { $0 == id || detailSnapshots[$0] == nil }
-        detailSnapshotRecency.append(id)
-    }
-
-    /// 会话边界用：快照与它的顺序表必须一起清，否则顺序表会留下悬空 id。
-    /// 在途预取一并取消——旧会话的预取不该把半截数据写进新会话的快照表。
-    func clearDetailSnapshots() {
-        for task in detailPrefetchTasks.values { task.cancel() }
-        detailPrefetchTasks = [:]
-        detailSnapshots = [:]
-        detailSnapshotRecency = []
-    }
-
     struct HomeData: Equatable {
         var resume: [MediaItem] = []
         var nextUp: [MediaItem] = []
@@ -319,13 +245,6 @@ final class AppModel {
     var home = HomeData()
 
     /// 首页当前该渲染哪一态。
-    ///
-    /// 抽到模型上而不是留在 `HomeView` 的 `if` 链里，是因为**这条判定错过一次**：
-    /// 原来用 `home.latest.isEmpty` 单独一条 rail 当「有没有内容」的判据，而服务器
-    /// 完全可以没有「最近添加」（`railPresence` 就是为这种情况存在的）——那种服务器
-    /// 上 `latest` 恒为空，于是**哪怕缓存里已经有内容，加载期间也一直显示骨架屏**
-    /// （实测离线冷启动：磁盘已读出 3+6 条，界面仍只转骨架）。判定留在视图里就
-    /// 没法为它写回归用例。
     enum HomePresentation: Equatable {
         /// 首次加载、且手上没有任何可显示的内容。
         case loading
@@ -353,19 +272,11 @@ final class AppModel {
     }
 
     /// 首页当前是否在展示「没刷新成功的缓存内容」。
-    ///
-    /// 判定只看**有没有内容**与**这次刷新有没有失败**，刻意**不看 `home.error`**：
-    /// `home.error` 在三条 rail 全挂时置位，而「断网冷启动」正是这个形态——磁盘上
-    /// 有内容、网络全挂、error 被置位。若在这里 guard `error == nil`，离线冷启动就会
-    /// 显示着缓存内容却**一个提示都没有**，用户完全不知道这是旧数据。
-    ///
-    /// 「该不该显示整页错误」是另一回事，由 `homePresentation` 决定：有内容时它
-    /// 总是 `.content`（此时本提示生效），没内容时才轮到错误页。
     var homeStaleNotice: StaleContentNotice? {
         // 首次加载中不提示（内容还没落地，提示会闪一下）。
         guard !home.isLoading else { return nil }
         // 有内容才有可标的对象。
-        guard !home.resume.isEmpty || !home.nextUp.isEmpty || !home.latest.isEmpty else { return nil }
+        guard hasAnyHomeContent else { return nil }
         // 这次刷新确实失败过（全部成功时下面两个标记都会被清掉）。
         guard home.cachedFetchedAt != nil || home.refreshFailureWasConnectivity else { return nil }
         return StaleContentNotice(
@@ -376,14 +287,9 @@ final class AppModel {
     var homeLoadGeneration: UInt64 = 0
 
     /// 会话内的**首次**首页加载是否已收官（成败皆算，见 `loadHome`）。
-    /// 启动动画的交棒门控用它区分「还没开始加载」与「加载完了但没内容」：
-    /// boot 期两者都是三条 rail 全空，只有它能把后者从骨架等待里摘出来。
-    /// 会话边界（`resetBrowseState`）复位。
     var homeInitialLoadDone = false
 
     /// 启动动画的「首页就绪」信号：首页不再处于骨架期。
-    /// 有内容（含磁盘缓存预热先行）或首次加载已收官（空库空态 / 整页错误态）都算——
-    /// 这些状态下交棒过去都不会露骨架。boot 期两者皆无 → false（还没开始等）。
     var homeContentLoaded: Bool {
         hasAnyHomeContent || homeInitialLoadDone
     }

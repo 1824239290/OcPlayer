@@ -15,8 +15,8 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
         .package(path: "../CoreModel"),
         .package(path: "../DiagnosticsKit"),
-        // 装饰器要 conform `MediaServer`，故依赖 JellyfinKit（连带 jellyfin-sdk-swift，
-        // 已在 SwiftPM 缓存里）。换来的是 `CachedMediaServer` 能在包内离线测试。
+        // `MediaRepository` 直接持有 `MediaServer`，故依赖 JellyfinKit（连带
+        // jellyfin-sdk-swift，已在 SwiftPM 缓存里），仓储可在包内离线测试。
         .package(path: "../JellyfinKit"),
     ],
     targets: [

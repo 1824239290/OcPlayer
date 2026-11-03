@@ -72,6 +72,32 @@ final class LaunchRouteTests: XCTestCase {
         }
     }
 
+    // MARK: - 指定条目的详情（`detail.item.<id>`）
+
+    /// 按验收台的需要指名某部片：随机落到别的条目等于没测。
+    func testParsesDetailItemWithID() {
+        XCTAssertEqual(
+            LaunchRoute.parse("detail.item.082528dc1e20cd9bd157c819d3bbf238"),
+            .detailItem(id: "082528dc1e20cd9bd157c819d3bbf238"))
+    }
+
+    /// **条目 id 大小写敏感**：Jellyfin/Emby 的 id 是十六进制串，服务端返回里大小写
+    /// 并不统一，整体小写化会把 id 改成另一个（查不到的）值 —— `detail.item` 必须保留原文。
+    func testDetailItemIDKeepsOriginalCase() {
+        XCTAssertEqual(
+            LaunchRoute.parse("detail.item.082528DC1e20cd9bd157c819d3bbf238"),
+            .detailItem(id: "082528DC1e20cd9bd157c819d3bbf238"),
+            "id 必须原样保留，不能被 parse 的逐段小写化改掉")
+        // 目标名本身仍大小写不敏感（人手敲的环境变量）。
+        XCTAssertEqual(LaunchRoute.parse("DETAIL.Item.abc123"), .detailItem(id: "abc123"))
+    }
+
+    func testRejectsMalformedDetailItemID() {
+        for text in ["detail.item", "detail.item.", "detail.item.a.b", "detail.item.."] {
+            XCTAssertNil(LaunchRoute.parse(text), "「\(text)」不该被解析成条目详情")
+        }
+    }
+
     // MARK: - 键的往返与稳定性
 
     /// 键是**写进脚本与 PAGES 表**的东西，必须稳定且唯一：改标题（`title`）不能
