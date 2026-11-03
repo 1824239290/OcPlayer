@@ -120,7 +120,9 @@ python3 -c "import sys;d=open(sys.argv[1],'rb').read();print(d.count(sys.argv[2]
 
 `push` / 发版 / 改 protocol 这类离开本机的动作，执行前要有一句可追溯的认领，**与 `git commit` 分开授权**。
 
-**2026-11-03 的教训**：13:26:05 有一次 `git push`（`git reflog show origin/main` → `update by push`），终态完全正确，但**没人认领**。调度的 Chief 在 13:28 报「已推送」的同时，还在群里问 Build「是不是你推的」；Player 和 Design 又各自去 reflog 里查是谁推的——**为一个两分钟前自己完成的动作，追了半小时。**
+**2026-11-03 的教训**：13:26:05 有一次 `git push`（`git reflog show origin/main` → `update by push`），终态完全正确，但**认领缺了关键字段**。调度的 Chief 在 13:28 报「已推送」，**却没说自己就是执行者**，反而在群里问 Build「是不是你推的」；Player 和 Design 又各自去 reflog 里查是谁推的——**为一个两分钟前自己完成的动作，追了半小时。**
+
+**这里的失败不是「忘了说」，是「说了但不完整」**：只有「推送发生过」这个结论，没有「谁推的、什么时候推的」这两个可核对的事实。
 
 错因不是记性，是**拿「我以为的现场」下结论，而现场在两分钟前已经被自己改变了**。
 
