@@ -95,6 +95,21 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
     var engine: (any PlaybackEngine)?
     var setupError: String?
+    /// `setupError` 的类别（L2）。只在**打开失败**时赋值；字幕 / 截图 / 续播定位
+    /// 这类「播起来之后」的失败留 nil —— 那条路的处理方式与开流失败无关。
+    ///
+    /// 与 `setupError` 在同一次赋值里写入（见 `finishOpenFailure`），两者永不脱节：
+    /// 徽章读 `setupError` 的文案，自动换源读 `setupErrorKind`。
+    var setupErrorKind: PlaybackOpenErrorKind?
+    /// open 失败的确定性通知（L1 自动换源用）。
+    ///
+    /// 为什么不复用 `setupError` 轮询：App 层发现 `setupError != nil` 靠的是
+    /// loading 撤销循环，那有**最多一个轮询间隔**的延迟，而且它的职责是撤 loading，
+    /// 不该兼职换源。这里在失败落地的同一刻回调，换源决策不用等。
+    ///
+    /// 回调只报「哪条请求、什么类别」，不报「该不该换」——还有没有候选、
+    /// 换几次，是 App 层的事（控制器不认识条目与媒体源列表）。
+    @ObservationIgnored var onOpenFailure: ((PlaybackRequest.ID, PlaybackOpenErrorKind) -> Void)?
     var currentTitle: String?
     /// Request-scoped synchronous source-open failure. Kept separate from
     /// setupError because subtitle/screenshot failures must not stop reporting.
@@ -468,6 +483,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             }
             self.engine = engine
             setupError = nil
+            setupErrorKind = nil
             // 创建 config 里的 headroom 取自工厂时刻的屏幕查询；探针若已报过
             // 更新的值（或工厂查询没拿到屏），创建后立即补推对齐。
             if let headroom = lastDisplayEDRHeadroom {
@@ -928,6 +944,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             PlaybackLog.append("open() 成功，补放 open 在飞期间的暂停意图 title=\(request.title)")
         }
         setupError = nil
+        setupErrorKind = nil
         activeSecurityScopeLease = attempt.scopeLease
         engineIsActive = true
         playerLog.info("open 成功 title=\(currentTitle ?? "?")")
@@ -960,14 +977,22 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
         // 引擎可能停在半开状态，直接丢弃重建；close 是终态，留着复用到下次 open 必失败。
         resetEngine()
+        // L2：分类必须在**写入 setupError 的这里**做，UI / 日志 / 换源三处读者
+        // 才拿到同一份判断（见 `PlaybackOpenErrorKind` 的说明）。
+        let kind = PlaybackOpenErrorKind.classify(message: error)
         failedRequestID = request.id
-        setupError = error
-        playerLog.error("open 失败 error=\(error) title=\(request.title)")
+        setupErrorKind = kind
+        setupError = kind.decorate(rawMessage: error)
+        playerLog.error("open 失败 kind=\(kind.rawValue) error=\(error) title=\(request.title)")
         PlaybackLog.event(.openDone, fields: [
             "ok": .boolean(false),
             "elapsed_ms": .integer(openElapsedMilliseconds()),
             "error": .string(error),
+            "kind": .string(kind.rawValue),
         ], level: .error)
+        // 换源决策交给 App 层：只有它知道这条请求还有没有备选、是不是该换。
+        // 先落错误态再回调，保证「即使换源也没救」时界面已经是正确的失败形态。
+        onOpenFailure?(request.id, kind)
     }
 
     /// open 成功但成果已被让位（open 期间用户取消/换片，收尾已补 stop）：释放作用域即可。
@@ -1195,6 +1220,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // stopPlayback() → dismissPlayer()，dismissPlayer 还要读 state.position 上报 Stopped。
         // 等下次 open 时自然会 reset。
         setupError = nil
+        setupErrorKind = nil
     }
 
     func releaseSecurityScopedResource() {

@@ -33,6 +33,11 @@ extension AppModel {
             return
         }
         cancelPlaybackOpen()
+        // 用户发起的播放 = 一轮新的候选序列，自动换源的计数与已试列表从这里归零。
+        // 换源（`handlePlaybackOpenFailure`）自己重播时**不走这里**，
+        // 所以计数只会被用户动作重置，不会因为换源一轮就白重置一次。
+        sourceFailoverCount = 0
+        sourceFailoverAttempts = []
         retryPlaybackItem = item
         playbackPreparation = .loading(title: item.name)
         AppDiagnostics.logInfo("play() 进入加载态", fields: ["title": .string(item.name)])
@@ -123,9 +128,32 @@ extension AppModel {
                 playSessionID: info.playSessionID
             )
             guard !Task.isCancelled else { return }
+            // L1：PlaybackInfo 本来就返回多份 MediaSource，此前选完就丢。
+            // 这里把「除了首选之外的其余源」解析成可直接开播的备用项。
+            // 任一备用源解析失败只跳过它自己（老服务端可能对某些源不给 streamURL），
+            // 不能因为一条坏源就让整次播放失败。
+            let alternates = info.mediaSources
+                .filter { $0.id != source?.id }
+                .compactMap { candidate -> PlaybackAlternate? in
+                    guard let candidateURI = try? server.streamURL(
+                        itemID: playableItem.id,
+                        mediaSourceID: candidate.id,
+                        playSessionID: info.playSessionID
+                    ) else { return nil }
+                    return PlaybackAlternate(
+                        id: candidate.id,
+                        label: candidate.name ?? candidate.id,
+                        uri: candidateURI,
+                        authHeader: server.authorizationHeader,
+                        sessionContext: info.sessionContext(
+                            itemID: playableItem.id,
+                            selectedSource: candidate
+                        )
+                    )
+                }
             presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
                             resumeSeconds: effectiveResume, item: playableItem,
-                            sessionContext: context)
+                            sessionContext: context, alternates: alternates)
         } catch {
             // PlaybackInfo 不可用（老版本 / 端点被关）时退回原来的直连 URL。
             if Task.isCancelled { return }
@@ -218,14 +246,16 @@ extension AppModel {
         authHeader: String?,
         resumeSeconds: Double?,
         item: MediaItem,
-        sessionContext: PlaybackSessionContext
+        sessionContext: PlaybackSessionContext,
+        alternates: [PlaybackAlternate] = []
     ) {
         let request = PlaybackRequest(
             title: title,
             uri: uri,
             authHeader: authHeader,
             resumeSeconds: resumeSeconds,
-            sessionContext: sessionContext
+            sessionContext: sessionContext,
+            alternates: alternates
         )
         playback?.prepareForPresentation(request)
         // URI 已就绪但内核未出帧：loading 层继续盖住 PlayerScreen，
@@ -238,6 +268,123 @@ extension AppModel {
         startReporting(item: item, resumeSeconds: resumeSeconds, request: request)
         startDanmaku(for: request, item: item)
         loadChapterMetadata(for: request, item: item)
+    }
+
+    // MARK: - L1 自动换源
+
+    /// 一次请求最多自动换几次源。
+    ///
+    /// 3 是**上限**不是目标：多版本条目正常只有 2–4 条，设 3 既覆盖常见情形，
+    /// 又能挡住「两个源互相拖累」时的反复横跳——那种情况下用户看到的是
+    /// 「转圈 → 报错 → 转圈」，而日志里因为每次都是新 request id，
+    /// 看起来像一串互不相关的新播放请求，最难定位。
+    static let maximumSourceFailovers = 3
+
+    /// 打开失败（控制器在同一刻回调，不等 loading 轮询）。
+    ///
+    /// ## 为什么不在这里 `await` 任何东西
+    ///
+    /// 这个回调从 `finishOpenFailure` 里同步发出，那一刻控制器正在收尾
+    /// （已 `resetEngine`、已落错误态）。在回调里直接重开会在同一个调用栈上
+    /// 叠一次 open，容易和新会话的收尾互相踩。所以只做决策，真正开播丢回主队列。
+    func handlePlaybackOpenFailure(
+        requestID: PlaybackRequest.ID,
+        kind: PlaybackOpenErrorKind
+    ) {
+        // 只处理当前这条请求：换片 / 退出后，旧请求的失败与现在的播放无关。
+        guard let request = presentedPlayer, request.id == requestID else { return }
+        // 先记账再决策：`sourceFailoverAttempts` 要能在「全失败」时说出
+        // 试过哪几条、各自哪一类。`.aborted` 也记——它是「用户自己取消的」，
+        // 与「源有问题」在事后看日志时是两件事。
+        sourceFailoverAttempts.append((sourceID: request.sessionContext?.mediaSourceID, kind: kind))
+        // 主动放弃不算失败（换片、用户取消）：不换源、不弹二次错误。
+        guard kind.allowsSourceFailover else {
+            AppDiagnostics.logInfo("open 失败但该类不换源", fields: [
+                "kind": .string(kind.rawValue),
+                "title": .string(request.title),
+            ])
+            return
+        }
+        guard sourceFailoverCount < Self.maximumSourceFailovers else {
+            finishManualSourceFailover(request: request, lastKind: kind)
+            return
+        }
+        guard !request.alternates.isEmpty else { return }
+        // 没有可播条目就没有「换源」这件事可言：presentPlayback 需要它来重建上报
+        // 与弹幕上下文。宁可按原样停在错误态，也不要带着空条目开出一条半残会话。
+        guard let item = nowPlayingItem ?? retryPlaybackItem else { return }
+
+        let next = request.alternates[0]
+        let remaining = Array(request.alternates.dropFirst())
+        sourceFailoverCount += 1
+
+        AppDiagnostics.logWarning("自动换源", fields: [
+            "title": .string(request.title),
+            "attempt": .integer(Int64(sourceFailoverCount)),
+            "from_source": .string(request.sessionContext?.mediaSourceID ?? "nil"),
+            "to_source": .string(next.id),
+            "kind": .string(kind.rawValue),
+            "remaining": .integer(Int64(remaining.count)),
+        ])
+
+        // 会话上下文是换源的要害：`sessionContext.mediaSourceID` 决定进度写到哪个源。
+        // 拿不到新源自己的上下文就宁可不换 —— 用旧上下文会「不崩不红、数据静默写错」。
+        guard let nextContext = next.sessionContext else {
+            finishManualSourceFailover(request: request, lastKind: kind)
+            return
+        }
+        // 换源 = 重开一条新请求（新 id、新 sessionContext、新上报会话），
+        // 不是在原请求里改 uri。原请求的会话已按正常流程收尾，Stopped 会带着
+        // 旧 mediaSourceID 正确落库——这正是「原地改 uri 会把进度写到错源」
+        // 那个坑的规避方式。
+        let failover = PlaybackRequest(
+            title: request.title,
+            uri: next.uri,
+            authHeader: next.authHeader,
+            resumeSeconds: request.resumeSeconds,
+            sessionContext: nextContext,
+            alternates: remaining
+        )
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            // 决策与开播之间可能已经换片 / 退出：再核一次，避免把用户已经
+            // 离开的片重新拉起来。
+            guard self.presentedPlayer?.id == requestID else { return }
+            self.presentPlayback(
+                title: failover.title,
+                uri: failover.uri,
+                authHeader: failover.authHeader,
+                resumeSeconds: failover.resumeSeconds,
+                item: item,
+                sessionContext: nextContext,
+                alternates: remaining
+            )
+        }
+    }
+
+    /// 候选源全部试完 / 超过上限：停在错误态，并把「试过哪几条、各自什么类」说清楚。
+    ///
+    /// 只报「播放失败」时用户无从判断下一步；报「已试 2 条：网络 / 鉴权」
+    /// 才能让他决定是重试（换网）还是换片（换源）。
+    private func finishManualSourceFailover(
+        request: PlaybackRequest,
+        lastKind: PlaybackOpenErrorKind
+    ) {
+        let tried = sourceFailoverAttempts
+        let summary: String
+        if tried.isEmpty {
+            summary = lastKind.label
+        } else {
+            let parts = tried.map { $0.kind.label }.joined(separator: " / ")
+            summary = "已试 \(tried.count) 条源：\(parts)"
+        }
+        playback?.setupError = summary
+        playback?.setupErrorKind = lastKind
+        AppDiagnostics.logWarning("自动换源已用尽", fields: [
+            "title": .string(request.title),
+            "tried": .integer(Int64(tried.count)),
+            "last_kind": .string(lastKind.rawValue),
+        ])
     }
 
     /// 等 playback 内核真正渲染出首帧再撤 loading 层：state 到 ready/playing 只代表
