@@ -7,8 +7,8 @@
 为 Jellyfin / Emby 打造的原生播放器,SwiftUI 双端(macOS 为主,iOS / iPadOS 同源)。播放内核是 Rust 写的 [liberika](https://github.com/AimesSoft/liberika)(原名 Erika,内置 FFmpeg 解码 + libass 字幕渲染),弹幕接入弹弹play,另集成 Bangumi 追番与 MoviePilot 找片 / 下载 / 订阅。
 
 <p align="center">
-  <img src="Docs/images/detail.jpg" alt="详情页:海报、剧集列表与演员" width="428">
-  <img src="Docs/images/player.png" alt="播放器:字幕与原生 HUD" width="428">
+  <img src="Docs/images/detail.jpg" alt="详情页:背景海报、简介、选集与演职员" width="428">
+  <img src="Docs/images/player.jpg" alt="播放器:原生 HUD、进度条与字幕" width="428">
 </p>
 
 ## 功能
