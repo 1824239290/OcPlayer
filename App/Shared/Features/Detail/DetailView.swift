@@ -4,6 +4,10 @@ import JellyfinKit
 import MetadataKit
 import SwiftUI
 
+#if os(iOS)
+import UIKit
+#endif
+
 extension Color {
     /// 页面底色（macOS 窗口底 / iOS 系统底），横幅渐隐要融进它。
     static var pageBackground: Color {
@@ -52,11 +56,28 @@ struct DetailView: View {
     /// 即清空，不落盘——分区是浏览位置，不是偏好（与 `episodesAscending` 不同类）。
     @State private var chunkNav = EpisodeChunkNavigation()
 
-    #if os(macOS)
-    /// 本页的「整页翻页」状态机（见 `DetailPageFlip`）。只在 macOS 上存在：
-    /// 那套滚轮裁决依赖 `NSEvent` 本地监视器，iOS 的手势面是另一回事。
+    /// 本页的「整页翻页」状态机（见 `DetailPageFlip`）。
+    ///
+    /// **所有平台都声明**：它是纯状态机（`DetailPagePager` 已跨平台），
+    /// 只有「滚轮监视器」那一段是 macOS 专属、收在 `DetailPageFlip` 内的 `#if` 里。
+    /// 会不会被用由 `detailLayoutStyle` 决定，不由这里的存在与否决定——
+    /// 声明成平台条件会让版式判定散回编译期，正是这次要消掉的东西。
     @State private var pager = DetailPagePager()
-    #endif
+
+    /// 当前 iPad（`UIDevice.userInterfaceIdiom == .pad`）。
+    /// macOS 上恒 false（那边由 `DetailLayoutStyle.resolve` 的编译期分支直接给 `.flip`）。
+    private var isPadDevice: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        false
+        #endif
+    }
+
+    /// 本页版式。**唯一的判定点**，所有版式分支都必须读它（见 `DetailLayoutStyle`）。
+    private var detailLayoutStyle: DetailLayoutStyle {
+        DetailLayoutStyle.resolve(isPad: isPadDevice, hSizeClass: horizontalSizeClass)
+    }
 
     init(item: MediaItem) {
         self.item = item
@@ -121,9 +142,8 @@ struct DetailView: View {
     /// iOS 的导航栈宿主不透明，整窗层到不了屏幕，页面本来就自己垫；那条链路上
     /// 没有第二层背景，不存在这个竞争。
     private var ambienceTarget: AmbienceTarget? {
-        #if os(macOS)
-        return nil
-        #else
+        if detailLayoutStyle == .flip { return nil }
+        #if os(iOS)
         guard isAmbientActive else { return nil }
         let target = model.isAmbienceReady ? backdropTarget : homeAmbienceTarget
         return AmbienceTarget(
@@ -133,6 +153,9 @@ struct DetailView: View {
             fade: model.isAmbienceReady ? Motion.ambient : Motion.fast,
             ownsArt: true
         )
+        #else
+        // macOS：flip 版式恒 nil（上面已 return），banner 版式在 macOS 上不存在。
+        return nil
         #endif
     }
 
@@ -163,10 +186,16 @@ struct DetailView: View {
     /// 直接取 VM 的（同一个判断两处都要用，放在 VM 里可测）。
     private var selectedSeason: MediaItem? { model.selectedSeason }
 
-    // MARK: - 整页翻页布局（macOS）
+    // MARK: - 整页翻页布局
 
-    #if os(macOS)
-    /// macOS 详情页**只有**翻页布局这一套。
+    /// 翻页版式下「本页是否在栈顶且可翻页」。
+    ///
+    /// 由 flip 版式消费：macOS 的滚轮监视器安装/摘除读它（那段在
+    /// `DetailPageFlip` 外层的 `#if os(macOS)` 里）；阶段 ① 起 iPad 的滚动联动也会读。
+    ///
+    /// 以前这里还留着一个条件（有剧照才翻页、无剧照回退旧横幅），结果是同一页在
+    /// 两种版式之间来回切，进页时还会先闪一下旧横幅。旧横幅在 macOS 上已经整个删掉，
+    /// 无剧照的条目由 `DetailPageArt` 自己出占位底色 —— 版式只有一套，没有回退分支。
     ///
     /// 以前这里还留着一个条件（有剧照才翻页、无剧照回退旧横幅），结果是同一页在
     /// 两种版式之间来回切，进页时还会先闪一下旧横幅。旧横幅在 macOS 上已经整个删掉，
@@ -176,9 +205,8 @@ struct DetailView: View {
         guard case .detail(let pushed)? = app.path.last else { return false }
         return pushed.id == item.id
     }
-    #endif
 
-    #if os(macOS)
+    // MARK: - 翻页版式的取图（flip 用，banner 不用）
 
     /// 第一页清晰层取图（1600 宽那档）。
     ///
@@ -230,8 +258,11 @@ struct DetailView: View {
             }
             .frame(width: size.width, height: size.height)
             .background {
-                // 把所在窗口报给状态机：滚轮监视器只裁决这个窗口的事件
+                #if os(macOS)
+                // 把所在窗口报给状态机：滚轮监视器只裁决这个窗口的事件。
+                // iOS 没有本地事件监视器（翻页走系统滚动），不需要这层回报。
                 DetailPageWindowAnchor { pager.attach(window: $0) }
+                #endif
             }
         }
         // 第一页是整窗画面：顶栏浮在它上面（工具栏材质本页已摘）
@@ -262,7 +293,6 @@ struct DetailView: View {
         // 空白区也要接住点击：否则点在标题下方会穿到被盖住的正文滚动区上
         .contentShape(Rectangle())
     }
-    #endif
 
     #if DEBUG
     /// 🔬 探针专用：**屏幕上真正显示的那张头图** URL，含「未就绪回落氛围池」这一步。
@@ -276,23 +306,24 @@ struct DetailView: View {
     /// * macOS：`artTarget`（1600 档，`url == nil` 时回落氛围池）—— 与归档证据同口径；
     /// * iOS：与 `ambienceTarget` 同一表达式（未就绪用氛围池、就绪用本条目 800 档）。
     private var probedBackdropURL: URL? {
-        #if os(macOS)
-        return artTarget.url
-        #else
+        // 按**版式**取，不按平台取：flip 版式屏幕上画的是 `artTarget`（含氛围池回落），
+        // banner 版式画的是 `ambienceTarget` 那条链。如果这里按 `#if os` 判，
+        // iPad 一切到 flip 就会「探针记 800 档不回落、屏幕画 1600 档含回落」，
+        // 日志与画面脱钩，`verify-backdrop-urls.py` 的 ① 池兜底图判据直接失效。
+        if detailLayoutStyle == .flip { return artTarget.url }
         return (model.isAmbienceReady ? backdropTarget : homeAmbienceTarget).url
-        #endif
     }
     #endif
 
     var body: some View {
         Group {
-            #if os(macOS)
-            // macOS：本页就是两页（见 `DetailPageFlip`）——第一页头图 + 下部选集带，
-            // 滚一格整屏翻到正文。没有第二套版式，也不再回退旧横幅。
-            flippedPages
-            #else
-            detailScroll
-            #endif
+            if detailLayoutStyle == .flip {
+                // 翻页版式：本页就是两页（见 `DetailPageFlip`）——第一页头图 + 下部选集带，
+                // 翻一屏到正文。没有第二套版式，也不再回退旧横幅。
+                flippedPages
+            } else {
+                detailScroll
+            }
         }
         .contentMargins(.top, 0, for: .scrollContent)
         .ignoresSafeArea(edges: .top)
@@ -389,14 +420,19 @@ struct DetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 #if os(macOS)
-                // macOS 上 `detailScroll` 只是翻页页的第二屏，头部在另一页上；
-                // 紧凑头部那套（`ambientCompactHeader` / `compactHeaderView`）是
-                // iPhone 专用，跟着 iOS 一起编译。
-                // 正文直接从简介起步，只留一段让开悬浮工具栏的顶距。
+                // macOS 上 `detailScroll` 只是翻页页的第二屏，头部在另一页上。
+                // **这一段必须留编译期**：下面 banner / 紧凑头部那几段实现在
+                // `#if !os(macOS)` 里，macOS 引用不到它们。
+                // 版式判定在 macOS 上恒为 `.flip`（见 `DetailLayoutStyle.resolve`），
+                // 所以这里不需要运行时分支，编译期裁剪等价且能编过。
                 metadata
                     .padding(.top, 44)
                 #else
-                if horizontalSizeClass == .compact {
+                if detailLayoutStyle == .flip {
+                    // iPad 阶段 ① 起会走到这里：翻页版式下第二页没有头部。
+                    metadata
+                        .padding(.top, 44)
+                } else if horizontalSizeClass == .compact {
                     ZStack(alignment: .top) {
                         if isAmbientActive {
                             ambientCompactHeader

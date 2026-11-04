@@ -1,15 +1,30 @@
-#if os(macOS)
 import AppDesignKit
-import AppKit
 import CoreModel
 import JellyfinKit
 import MetadataKit
 import Observation
 import SwiftUI
 
-// MARK: - 详情页「整页翻页」(macOS)
+#if os(macOS)
+import AppKit
+#endif
+
+// MARK: - 详情页「整页翻页」
 //
 // 效果取自 animeflip 那版 macOS 详情页:详情页自己分成两页。
+//
+// ## 跨平台边界（2026-11-04 起）
+//
+// 这个文件**不再是 macOS 独有**：视觉层（`DetailPageArt` / `DetailPageArtScreen` /
+// 选集带 / `DetailPagePager` 的状态机与动画编排）是纯 SwiftUI，iOS 也能编译。
+//
+// 只有两处是 macOS 专属 API，各自收在 `#if os(macOS)` 内：
+//   * `DetailPagePager` 的滚轮监视器（`NSEvent` / `NSWindow`）—— iOS 的翻页输入
+//     走系统滚动（见 `DetailLayoutStyle`），不需要也不可能有本地事件监视器；
+//   * `DetailPageWindowAnchor`（`NSViewRepresentable`）—— 只为把所在窗口报给监视器。
+//
+// **谁在哪个平台上真正用这套版式，由 `DetailLayoutStyle` 决定，不由这里的 `#if` 决定。**
+// 别把「能不能编译」和「会不会被用」混成一件事。
 //
 //   * **第一页** —— 详情页的头图页:整幅剧照打底(左半高斯模糊、右半清晰),
 //     LOGO / 标签 / 简介 / 播放钮浮在左侧,底部一条选集带。
@@ -79,8 +94,11 @@ final class DetailPagePager {
     /// 用来识别「新的一轮滚动动作」，见 `beginsNewScrollGesture(_:)`。
     @ObservationIgnored private var lastWheelEventAt: TimeInterval = 0
     @ObservationIgnored private var transitioningUntil = Date.distantPast
+    #if os(macOS)
+    /// 滚轮监视器句柄与所在窗口——**只有 macOS 有**（iOS 走系统滚动，无本地事件监视器）。
     @ObservationIgnored private var monitor: Any?
     @ObservationIgnored private weak var hostWindow: NSWindow?
+    #endif
 
     /// 第一页触发翻页的累计增量(pt)
     private let flipThreshold: CGFloat = 5
@@ -109,6 +127,7 @@ final class DetailPagePager {
     /// - **非精确增量** → 新一轮。语义与改动前完全一致，不受 Mos 影响。
     /// - **有 phase** → `.began` 是新一轮，其余是同手势中段（触控板，与改动前一致）。
     /// - **精确增量 + 无 phase**（Mos 之类）→ 按时间间隔：与上一发隔 ≥ `wheelGestureGap` 才算新一轮。
+    #if os(macOS)
     private func beginsNewScrollGesture(_ event: NSEvent) -> Bool {
         Self.isNewScrollGesture(phaseBegan: event.phase.contains(.began),
                                 phaseIsEmpty: event.phase.isEmpty,
@@ -116,6 +135,7 @@ final class DetailPagePager {
                                 timestamp: event.timestamp,
                                 lastTimestamp: lastWheelEventAt)
     }
+    #endif
 
     /// `beginsNewScrollGesture` 的纯值内核（可单测）。
     ///
@@ -195,6 +215,7 @@ final class DetailPagePager {
         transitioningUntil = .distantPast
     }
 
+    #if os(macOS)
     // MARK: - 滚轮
 
     /// 详情页所在窗口(由 `DetailPageWindowAnchor` 回报)。监视器只裁决这个窗口的事件,
@@ -353,8 +374,10 @@ final class DetailPagePager {
             return true // 顶部吞掉继续累计
         }
     }
+    #endif
 }
 
+#if os(macOS)
 /// 主线程独占的事件盒子。`NSEvent` 不是 `Sendable`,而 `MainActor.assumeIsolated`
 /// 的 body 必须是;事件监视器的 block 又保证只在主线程回调,所以这里显式声明
 /// 「不安全地视为 Sendable」,只用来把参数带进隔离域,不跨线程传递。
@@ -362,6 +385,7 @@ private final class MainThreadEventBox: @unchecked Sendable {
     let event: NSEvent
     init(_ event: NSEvent) { self.event = event }
 }
+#endif
 
 // MARK: - 头图:清晰剧照 + 可扩张的模糊块 + 外观自适应压雾
 struct DetailPageArt: View {
@@ -1281,6 +1305,7 @@ private struct DetailHeroEpisodeThumb: View {
 // MARK: - 窗口锚点
 
 /// 把详情页所在窗口回报给状态机:滚轮监视器只裁决这个窗口的事件。
+#if os(macOS)
 struct DetailPageWindowAnchor: NSViewRepresentable {
     let onResolve: (NSWindow?) -> Void
 
@@ -1304,4 +1329,5 @@ struct DetailPageWindowAnchor: NSViewRepresentable {
         }
     }
 }
+
 #endif
