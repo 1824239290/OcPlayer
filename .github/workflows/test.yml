@@ -12,11 +12,43 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+# ## `BLD-09`：测试门禁拆成三个**并行** job（2026-11-04）
+#
+# 拆之前是一个 job，三步串行。实测（#86 `41676015501`，34 分 27 秒）：
+#
+#   准备    Set up Erika 16 s · Cache SwiftPM 64 s · Cache iOS DD 27 s · Seed/Cache release 98 s
+#   测试①   Run App tests (macOS)        357 s
+#   测试②   Run App tests (iOS 模拟器)    805 s   ← 121 s 预热 + 422 s 编译 + ~112 s 用例 + 收尾
+#   测试③   Run SwiftPM package tests     706 s
+#   收尾    ~70 s
+#
+# 三步互不依赖：macOS 用本机产物、iOS 用模拟器、SwiftPM 是每个包各跑 `swift test`，
+# 而且**各自用各自的 DerivedData / `.build` 目录** —— 串行只是沿用了「一个 job」的历史形状。
+# 拆成三个 job 之后墙钟 = max(三者) + 准备。**实测两轮（PR #88 `41696040694`）**：
+#   首轮（三条缓存全冷）  17m00s   macOS 8m14s / iOS 14m24s / spm 16m59s  ← spm 是关键路径
+#   第二轮（三条全命中）  11m34s   macOS 4m01s / iOS 11m34s / spm 4m21s   ← iOS 是关键路径
+# 对照拆分前的 35m09s（`41676015501`）：暖态 **-67%**。首轮的冷启动是一次性的。
+#
+# **拆开后给缓存 key 分开不是优化，是正确性**：三个 job 跑在三台不同的 runner 上，各自
+# 恢复一份自己的副本。如果两条 `actions/cache` 用**同一个 key 但 path 不同**，谁先保存谁赢，
+# 另一个 job 那次构建的内容会被**静默丢掉**（日志只有一句 warning），下次照旧 miss。
+# 所以：`.local-build/ci-test` → `mac-dd-v1`，`Packages/*/.build` → `spm-test-v2`，
+# `.local-build/ci-test-ios` → `ios-dd-v1`（不变），三者互不重叠。
+#
+# 已知副作用（可接受，别当故障查）：
+# 1. Erika 内核那条 `erika-<os>-<arch>-<version>` 三个 job 都用。版本没变时是精确命中
+#    （只读不写）；**只有在 `Config/Erika.version` 改了的新提交上**三个 job 会同时 miss，
+#    于是各下载一次 ≈308 MiB 并抢着写同一个 key —— 只有一个能写成功，其余打印
+#    `Unable to reserve cache with key …` 的 **warning**（不是失败）。下次运行就回到精确命中。
+# 2. 三个 job 各付一次 checkout + setup-erika + cache restore ≈ 100 s。总 runner 分钟数
+#    比串行时多约 3 分钟，但墙钟少 18 分钟；公开仓库 runner 免费，只有并发额度成本。
+
 jobs:
-  macos:
-    name: macOS + iOS tests (AppTests + SwiftPM packages)
+  # ── 1/3  macOS AppTests ────────────────────────────────────────────────────
+  macos-apptests:
+    name: App tests (macOS)
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -39,40 +71,32 @@ jobs:
         with:
           erika-version: ${{ env.ERIKA_VERSION }}
 
-      # key **不要**带 github.sha：那样只有「同一次 run 重跑」才命中，每个 PR 都 miss
-      # 却照样 save 一条 2.6 GiB 快照，把 10 GB 仓库额度打成 LRU 抖动（实测曾同时躺着
-      # 3 条只差 sha 的僵尸条目）。去掉 sha 后主键稳定命中，条目回到每个 workflow 一条。
-      # 前缀 `spm-test-` 是必需的：release.yml 那个块缓存的是**不同路径**
-      # （ci-release-test），两边 key 若逐字相同会互相顶掉。`-v1-` 是留给将来的失效旋钮。
-      - name: Cache SwiftPM builds
-        uses: actions/cache@v4
-        with:
-          path: |
-            .local-build/ci-test
-            Packages/*/.build
-          key: spm-test-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
-          restore-keys: |
-            spm-test-v1-${{ runner.os }}-
-
-      # iOS 那步是 job 里唯一没有被缓存、且波动最大的一步（2026-10-17 两次运行实测
-      # 462 s ↔ 627 s，而同一次运行里命中缓存的 macOS 步只要 100 s）。它的耗时构成是
-      # 解析 ~57 s + 编译 ~403 s + 用例 ~110 s + 收尾 ~48 s，前两项正是 DerivedData 里
-      # 的东西 —— 本机同根实测：冷建 116 s → 改两个源文件后增量 14 s，体积 1.9 GB。
+      # macOS 测试的 DerivedData。拆 job 前它和 `Packages/*/.build` 合在 `spm-test-v1` 一条里
+      # （实测 2665 MiB）；现在各归各的，这条只服务 macOS 这一步 —— 胖了 / 坏了可以单独删掉，
+      # 不必连包构建的缓存一起丢。
       #
-      # **单独一条**而不是并进上面那条 `spm-test-`：它只服务 iOS 这一步，胖了 / 坏了
-      # 可以单独删掉，不必连 macOS 与包构建的缓存一起丢；key 前缀不同，两者不会互相顶掉。
-      # 主键同样只由 Package.resolved 决定 ⇒ 依赖没变的 PR 精确命中、且**命中的运行不会
-      # 再写一条新的**（见 PR #29 第二次运行的 `Cache hit occurred on the primary key,
-      # not saving cache`）。依赖变了的 PR 会新写一条 ~1.9 GB 的 PR 作用域副本，靠合并后
-      # 删 PR 副本回收（条目按 ref 隔离，详见 CHANGELOG BLD-04 条）。
-      # `-v1-` 是失效旋钮：换 runner 镜像 / Xcode 大版本时 bump。
-      - name: Cache iOS DerivedData
+      # key **不要**带 `github.sha`：那样只有「同一次 run 重跑」才命中，每个 PR 都 miss
+      # 却照样 save 一条快照，把 10 GB 仓库额度打成 LRU 抖动（实测曾同时躺着 3 条只差 sha
+      # 的僵尸条目）。主键只由 `Package.resolved` 决定 ⇒ 依赖没变的 PR 精确命中，且命中
+      # 的运行**不会再写一条新的**。`-v1-` 是留给将来的失效旋钮（换 runner 镜像 / Xcode 大版本时 bump）。
+      #
+      # ⚠️ **实测：「用旧 key 兜底一轮」这种做法命中不了，所以没有写。** 缓存条目的身份是 **(key, version)**
+      # 二元组，`version = sha256(paths|compression|salt)`（actions/toolkit
+      # `getCacheVersion`）。旧条目 `spm-test-v1` 的 path 是 `.local-build/ci-test` +
+      # `Packages/*/.build` 两条，本条只剩一条 ⇒ **version 不同 ⇒ 旧条目不可见**，
+      # 哪怕 key 前缀能对上。证据：拆分后第一次运行两处都打印
+      # `Cache not found for input keys: …spm-test-v1-macOS-`，而同期 `ios-dd-v1`
+      # （path 没变）能正常按前缀命中 main 上的旧条目。
+      # ⇒ 拆 job 的第一次运行必然是冷的（实测 macOS 步 8m14s vs 暖的 4m01s、
+      # spm 步 16m59s vs 暖的 4m21s），这是一次性成本，不能靠 fallback 绕过。
+      # 旧 `spm-test-v1` 条目（2665 MiB，含两条路径）因此已无用途，可直接删掉。
+      - name: Cache macOS DerivedData
         uses: actions/cache@v4
         with:
-          path: .local-build/ci-test-ios
-          key: ios-dd-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          path: .local-build/ci-test
+          key: mac-dd-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
           restore-keys: |
-            ios-dd-v1-${{ runner.os }}-
+            mac-dd-v1-${{ runner.os }}-
 
       # ## `BLD-03`：给 release 打包 job「播种」SPM checkouts
       #
@@ -83,6 +107,7 @@ jobs:
       #
       # 这里就是播种点：只在 `main` 上跑（PR 不跑，避免 PR 作用域副本白占额度），
       # 只写不读的那一半由 `actions/cache` 的「精确命中就不重写」语义天然保证。
+      # **只留在本 job 里**：三个 job 各跑一份会互相顶掉同一个 key（拆 job 后这是必须项）。
       #
       # 路径选 `.local-build/release*/DerivedData/SourcePackages`：打包脚本要求
       # `$BUILD_ROOT/DerivedData/SourcePackages/checkouts` 存在（`package-*.sh:118`）。
@@ -122,12 +147,12 @@ jobs:
           path: |
             .local-build/release/DerivedData/SourcePackages
             .local-build/release-ios/DerivedData/SourcePackages
-          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-pkg-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
           restore-keys: |
             spm-pkg-v1-${{ runner.os }}-
 
       # OcPlayer-macOS scheme 的 TestAction 只挂 OcPlayerTests（纯逻辑，不依赖内核/网络/GPU）；
-      # 渲染集成测试在 SPM 包内，下面单独跑。
+      # 渲染集成测试在 SPM 包内，由 `spm-packages` job 单独跑。
       - name: Run App tests (macOS scheme)
         shell: bash
         run: |
@@ -139,6 +164,62 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath .local-build/ci-test \
             test
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-macos
+          path: |
+            .local-build/ci-test/Logs
+            .local-build/ci-test/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+
+  # ── 2/3  iOS 模拟器 AppTests ──────────────────────────────────────────────
+  ios-apptests:
+    name: App tests (iOS simulator)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
+
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
+
+      # iOS 这一步是三个 job 里最慢的（805 s，也是拆完之后的**关键路径**）。它的耗时构成是
+      # 预热 ~101 s + 编译 ~422 s + 用例 ~110 s + 收尾 ~30 s，前两项正是 DerivedData 里的东西
+      # —— 本机同根实测：冷建 116 s → 改两个源文件后增量 14 s，体积 1.9 GB。
+      #
+      # **单独一条**而不是并进 macOS / 包测试那两条：它只服务 iOS 这一步，胖了 / 坏了
+      # 可以单独删掉，不必连 macOS 与包构建的缓存一起丢；key 前缀不同，三者不会互相顶掉。
+      # 主键只由 `Package.resolved` 决定 ⇒ 依赖没变的 PR 精确命中、且**命中的运行不会再写
+      # 一条新的**（见 PR #29 第二次运行的 `Cache hit occurred on the primary key, not saving
+      # cache`）。依赖变了的 PR 会新写一条 ~1.9 GB 的 PR 作用域副本，靠合并后删 PR 副本回收
+      # （条目按 ref 隔离，详见 CHANGELOG `BLD-04` 条）。`-v1-` 是失效旋钮：换 runner 镜像 /
+      # Xcode 大版本时 bump。
+      - name: Cache iOS DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .local-build/ci-test-ios
+          key: ios-dd-v1-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+          restore-keys: |
+            ios-dd-v1-${{ runner.os }}-
 
       # iOS 与 macOS 共用同一份 OcPlayerTests 源码（OcPlayerTests-iOS target +
       # OcPlayer-iOS.xcscheme 早已存在），此前 CI 只跑 macOS destination，iOS 独有
@@ -203,6 +284,67 @@ jobs:
             echo "::warning title=iOS 模拟器预热超预算::[BLD-08] 预热 ${sim_ready}s > 预算 ${IOS_SIM_BUDGET_S}s —— 见 BLD-08"
           fi
 
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-ios
+          path: |
+            .local-build/ci-test-ios/Logs
+            .local-build/ci-test-ios/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+
+  # ── 3/3  SwiftPM 包测试 ───────────────────────────────────────────────────
+  spm-packages:
+    name: SwiftPM package tests
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Resolve Erika version
+        id: erika-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(awk -F= '/^[[:space:]]*ERIKA_VERSION[[:space:]]*=/ {sub(/^[^=]*=[[:space:]]*/, ""); print; exit}' Config/Erika.version)"
+          if [[ -z "$version" ]]; then
+            echo "Config/Erika.version 里没有 ERIKA_VERSION= 行" >&2
+            exit 3
+          fi
+          echo "ERIKA_VERSION=$version" >> "$GITHUB_ENV"
+          echo "内核版本（来自 Config/Erika.version）: $version"
+
+      - name: Set up Erika kernel
+        uses: ./.github/actions/setup-erika
+        with:
+          erika-version: ${{ env.ERIKA_VERSION }}
+
+      # 每个包自己的 `.build/`。拆 job 前它和 macOS 的 `.local-build/ci-test` 合在
+      # `spm-test-v1` 一条里（实测 2665 MiB 是两条路径之和）；现在 path 收窄到只剩
+      # `Packages/*/.build`，改用 `spm-test-v2` 主键 —— **必须换 key**：同一个 key 配不同
+      # path 会让「命中就不重写」的语义把新内容永久丢掉（见文件头 `BLD-09`）。
+      #
+      # 前缀 `spm-test-` 是必需的：release.yml 那个块缓存的是**不同路径**
+      # （ci-release-test），两边 key 若逐字相同会互相顶掉。`-v2-` 是失效旋钮。
+      #
+      # ⚠️ **不要**加 `spm-test-v1-` 之类的「过渡 fallback」——实测过，永远不会命中：
+      # 缓存条目的身份是 **(key, version)**，`version = sha256(paths|compression|salt)`
+      # （actions/toolkit `getCacheVersion`）。旧条目的 path 是
+      # `.local-build/ci-test` + `Packages/*/.build` 两条，本条只剩一条 ⇒ version 不同
+      # ⇒ 旧条目不可见，哪怕 key 前缀对得上。证据：拆分后第一次运行打印
+      # `Cache not found for input keys: …spm-test-v1-macOS-`，而 path 没变的
+      # `ios-dd-v1` 同期能正常按前缀命中 main 上的旧条目。
+      # ⇒ 第一次运行必然冷编（实测本例 16m59s vs 暖的 4m21s），是一次性成本。
+      - name: Cache SwiftPM builds
+        uses: actions/cache@v4
+        with:
+          path: Packages/*/.build
+          key: spm-test-v2-${{ runner.os }}-${{ hashFiles('OcPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/*/Package.resolved') }}
+          restore-keys: |
+            spm-test-v2-${{ runner.os }}-
+
       - name: Run SwiftPM package tests
         shell: bash
         run: |
@@ -231,13 +373,3 @@ jobs:
             --skip ErikaRenderTests --skip ErikaSmokeTests --skip ErikaOpenFileTests \
             --skip ErikaHTTPHeaderTests --skip ErikaLifecycleTests --skip ErikaMemorySnapshotTests \
             --skip ErikaReadAheadBehaviorTests
-
-      - name: Upload test logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-logs
-          path: |
-            .local-build/ci-test/Logs
-            .local-build/ci-test/Logs/Test/*.xcresult
-          if-no-files-found: ignore

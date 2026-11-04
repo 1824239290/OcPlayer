@@ -6,6 +6,34 @@
 
 ### 改动
 
+- **CI 测试门禁拆成三个并行 job：墙钟 35 分 09 秒 → **9 分 02 秒 ~ 12 分 17 秒**（`BLD-09`）**
+  - **现场（实测 #86 `41676015501`，14:46:48 → 15:21:15）**：一个 job 里三步**串行** —— macOS AppTests **357 s**、iOS 模拟器 **805 s**、SwiftPM 包 **706 s**，加准备（Erika 16 s + SwiftPM 缓存 64 s + iOS 缓存 27 s + Seed/Cache release 98 s）与收尾约 70 s ⇒ **34 分 27 秒**。三条缓存**全部命中**，所以慢的不是拉依赖。
+  - **iOS 那 805 s 的构成（按日志时间戳）**：`simctl bootstatus` 预热 **101 s** → `xcodebuild test` 的编译段（16:46:44 → 16:53:46）**422 s** → 用例 ~112 s → 收尾 ~30 s。**命中缓存仍要编译 422 s**（PR 改了源码，增量重编 App target + 测试 target 是固有成本），因此这一刀不是「再修缓存」，而是**让三步同时跑**：三步产物互不重叠（macOS 用 `.local-build/ci-test`、iOS 用 `.local-build/ci-test-ios`、包测试用 `Packages/*/.build`），串行只是沿用了「一个 job」的历史形状。
+  - **拆法**：`macos` → `macos-apptests` / `ios-apptests` / `spm-packages`。三个 job 各自 checkout + `Resolve Erika version` + `setup-erika` + 自己的缓存，**不再有跨步依赖**；`Seed/Cache release SPM checkouts (main only)` 只留在 `macos-apptests`（跑三份会互相顶掉 `spm-pkg-v1` 同一个 key）。
+  - **缓存 key 必须分开（这条是正确性，不是优化）**：`mac-dd-v1`（path 仅 `.local-build/ci-test`，新增）、`spm-test-v2`（path 收窄为 `Packages/*/.build`；旧 `spm-test-v1` 是 `.local-build/ci-test` + `Packages/*/.build` 两条路径合在一条，实测 2665 MiB）、`ios-dd-v1` 不变。同一个 key 配不同 path 时 `actions/cache` 的「精确命中就不重写」语义会让**后写的内容被永久丢弃**（日志只有一句 warning）。
+  - **实测四轮（拆的是同一个 PR #88）**：
+
+    | | 墙钟（三 job 并发跨度） | macOS | iOS | SwiftPM | 关键路径 |
+    |---|---|---|---|---|---|
+    | 拆分前（`41676015501`） | **35m09s** | 357 s | 805 s | 706 s | 三步**串行** |
+    | 拆分后第 1 轮（缓存全冷） | **17m00s** | 8m14s | 14m24s | 16m59s | SwiftPM |
+    | 拆分后第 2 轮（缓存全命中） | **11m34s** | 4m01s | 11m34s | 4m21s | iOS |
+    | 第 3 轮（`hashFiles` 改完，`41773180683`） | **9m02s** | 3m33s | 9m02s | 4m10s | iOS |
+    | 最终树 `6f730ff`（`41774360339`） | **12m17s** | 3m57s | 12m17s | 4m29s | iOS |
+
+    **相对拆分前的 35m09s，暖态收益是 -65%~-74%**（`9m02s` → -74%、`12m17s` → -65%；单次运行的实际值就落在 9m02s ~ 12m17s 这个区间里，波动来自 iOS 模拟器预热与 runner 冷热，两轮之间差的 5m26s 则是首次造缓存的一次性成本）。第 2 轮三条缓存都是 `Cache hit occurred on the primary key …, not saving cache`（说明命中后不再重复写），无一条 `Unable to reserve cache` 告警。后续同类运行实测在 **9m02s ~ 12m17s** 之间波动，**关键路径始终是 iOS 步**（`41773180683` = 9m02s / iOS 9m02s；`41774360339` = 12m17s / iOS 12m17s；两轮 macOS 与 spm 都只要 3m33s~4m29s，三条缓存均精确命中）——差异来自 iOS 模拟器预热与 runner 冷热，不是流程问题。
+  - **「用旧 key 兜底一轮」这个想法是错的，已撤回（实测 + 源码核实）**：原计划让 `spm-test-v2` 的 `restore-keys` 带 `spm-test-v1-`，从旧条目里拿暖的 `Packages/*/.build`。**实测命中不了**——首轮日志打印 `Cache not found for input keys: …spm-test-v1-macOS-`，而同期 path 没变的 `ios-dd-v1` 能正常按前缀命中 main 上的旧条目，证明不是「PR 读不到 main」的问题。**根因是缓存条目的身份是 `(key, version)` 二元组，而 `version = sha256(paths|compression|salt)`**（actions/toolkit `getCacheVersion`，源码核实）：旧条目 path 是 `.local-build/ci-test` + `Packages/*/.build` 两条，新条目只剩一条 ⇒ **version 不同 ⇒ 旧条目根本不可见**，key 前缀能对上也没用。⇒ 两条新缓存的 `spm-test-v1-` fallback 已删除，注释里写明不要再加；冷启动就是拆分的必然成本，不能靠 fallback 绕过。
+  - **顺带扒出一个既有隐患并顺手治好**：同一个 `hashFiles('**/Package.resolved')` 表达式，在旧 workflow（单 job 串行）里**一次运行会算出三个不同的值**——`Cache SwiftPM builds` 求值 `9dfe529d`、`Cache iOS DerivedData` 求值 `19b319d7`、`Cache release SPM checkouts` 求值 `fae8c559`。因为 `hashFiles` 的匹配范围包含 `.local-build/` 里被上一步 restore 出来的 `SourcePackages/checkouts/*/Package.resolved`，**缓存 key 因此依赖「前面几步在磁盘上留下了什么」**，而不是只依赖锁文件。拆成三个 job 后三条 key 都只在 checkout 之后、任何 restore 之前求值，实测三条**全部是 `9dfe529d`**。⇒ 这个隐患不再存在。
+  - **额度**：拆分后条目 = `erika` 838 + `release` 741 + `ios-dd` 724 + `spm-test-v2` 1945 + `mac-dd-v1` 745 MiB ≈ **4.9 GiB / 10 GiB**（拆分是**分区**不是复制，总量与拆分前相当）。旧 `spm-test-v1`（2665 MiB）已无用途，可直接删。
+  - **`hashFiles` 改成显式路径（7 处：`test.yml` ×4、`release.yml` ×3），根治「key 依赖磁盘上留了什么」**：原写法 `hashFiles('**/Package.resolved')` 会**遍历进点开头目录**——`@actions/glob` 的 minimatch 选项是 `dot: true`（源码核实），所以 `**` 能走 `.local-build/` 与 `.build/`。改成两条显式路径后，匹配范围只可能是那 4 个被 git 跟踪的锁文件，与 restore / resolve 无关。
+    - **机制从【复核】升级为【实测】**：`_hashFiles` 只把各文件内容的 sha256 **按 glob 枚举顺序串接**再哈希一次，**不含路径**（源码核实）。本地用那 4 个文件的 sha256 串接，**逐位复现出新鲜的 `9dfe529d`**（顺序：`OcPlayer.xcodeproj/…` → `BangumiKit` → `JellyfinKit` → `MetadataKit`）；而 24 种排列**都无法**复现 `19b319d7` / `fae8c559` ⇒ 后两个必然包含了额外文件，只能来自 restore / resolve 落盘的东西。（此前用 Python `glob` 复现失败，是因为 Python 默认跳过点开头目录——与 `@actions/glob` 语义不同，所以那次「验不出」并不构成反证。）
+    - **这不是未来风险，是已经发生的错配**：release 工作流自己算的是新鲜值 `9dfe529d`，而 `test.yml` 的播种步骤在 `-resolvePackageDependencies` **之后**求值、算成 `fae8c559` ⇒ 实测 `40065759850` 里 release 的 `spm-pkg-v1` **从来没有精确命中过**，一直靠 `restore-keys` 前缀兜底（`Cache hit for restore-key: spm-pkg-v1-macOS-fae8c559…`）。换成显式路径后两边都只依赖那 4 个文件，**播种与读取终于算同一个 key**。
+    - **预测已在 CI 上验证（run `41773180683`）**：三条「checkout 后立刻求值」的 key 改完后**仍是 `9dfe529d`**，且全部 `Cache hit occurred on the primary key …, not saving cache`——即**这次改动没有让任何缓存失效**（`mac-dd-v1` / `ios-dd-v1` / `spm-test-v2` 全部精确命中，墙钟 9m02s）。`spm-pkg-v1` 只在 main 上跑（`Seed/Cache release` 有 `if: github.ref == 'refs/heads/main'`），**本次 PR 无从验证**；按预测它会从 `fae8c559` 变成 `9dfe529d`，旧条目（741 MiB）作废一次，**这正是要修的错配本身**——合并后第一次 main 运行才能看到该验证，届时以日志里的实际 key 为准。
+
+  - **顺带补了一个既有缺口**：旧的 `Upload test logs on failure` 只传 `.local-build/ci-test/Logs`（macOS 那个目录），**iOS 步失败时没有任何 artifact**（它的 xcresult 在 `ci-test-ios`）。现在按 job 分开传：`test-logs-macos` / `test-logs-ios`。
+  - **覆盖没有缩水（逐条核过，不是只看数）**：第 2 轮 macOS `862 条用例 / 843 passed / 0 failed / 19 skipped`，iOS `Executed 854 tests, with 3 tests skipped and 0 failures`——与拆分前 `41676015501` 的 iOS 数字**逐字相同**；macOS 我用用例名做集合 diff，两棵树相同（初次比对疑多一条 `PlayerVideoColorLabelTests.testTransferLabels`，复核是基线日志行被截断造成的假阳性）。三条测试命令（`xcodebuild`×2、`swift test`×11 含 ErikaKit 的 7 条 `--skip`）与拆分前**逐字一致**。
+  - **未做**：把 `spm-packages` 再按包拆细——暖态关键路径始终是 iOS（9m02s ~ 12m17s 全是它在决定墙钟），再拆包测试不减少墙钟，只增加缓存条目与 setup 开销。真正能再压的是 iOS 那 388 s 编译与 132 s 预热（`BLD-08` 的观测点继续保留）。
+
 - **修「打开详情页会闪一下另一张背景图，像是出来后马上被 tmdb 替代了」——不是数据层给了两份数据，是渲染顺序把「TMDB 优先」这一条规则的两个阶段都画了出来**
   （用户口径：「他现在打开还是会有一瞬间闪另外一张背景图，也是赛博朋克的，感觉是出来后马上被tmdb的替代了一样，像是之前重构媒体数据之前的逻辑」）
   - **实测现场**（Debug 深链 `OCPLAYER_START_ROUTE=detail.series` + 视图探针，`赛博朋克：边缘行者`）：一次进场出现**三张**背景图，URL 依次为 ① 氛围池兜底图（`Items/8fe73569…`）→ ② 本条目服务端 backdrop（`Items/082528dc…`）→ ③ `image.tmdb.org/t/p/original/3UbHGmu9…`；②→③ 间隔 **293 ms**，与数据层独立复现三次的 293/475/445 ms 一致。关键排除项：**三张都命中本地 blob 缓存、三个会话 TMDB 网络请求 = 0** ⇒ 不是图加载慢、不是缓存失效，是 `tmdbOverlay` 读回那一瞬 URL 被**二次决议**。
