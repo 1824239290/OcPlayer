@@ -254,40 +254,65 @@ struct DetailView: View {
     private var flipScrollPages: some View {
         GeometryReader { geo in
             let viewport = geo.size
-            ScrollView(.vertical) {
-                VStack(spacing: 0) {
-                    // 第一页：限高正好一个视口 —— 这样它自己就是一个对齐目标，
-                    // 松手时系统会把它吸附回整屏位置。
-                    artPage(size: viewport)
-                        .frame(width: viewport.width, height: viewport.height)
-                    // 第二页：正文。见 `detailBody` 的注释（不能是 ScrollView）。
-                    detailBody
-                        .frame(width: viewport.width, alignment: .leading)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    VStack(spacing: 0) {
+                        // 第一页：限高正好一个视口 —— 这样它自己就是一个对齐目标，
+                        // 松手时系统会把它吸附回整屏位置。
+                        artPage(size: viewport)
+                            .frame(width: viewport.width, height: viewport.height)
+                        // 第二页：正文。见 `detailBody` 的注释（不能是 ScrollView）。
+                        detailBody
+                            .frame(width: viewport.width, alignment: .leading)
+                            .id(Self.flipPreviewPage2Anchor)
+                    }
+                    .scrollTargetLayout()
                 }
-                .scrollTargetLayout()
-            }
-            .scrollTargetBehavior(.viewAligned)
-            .scrollIndicators(.hidden)
-            // 背景固定：不放进 ScrollView 里面，否则它会跟着内容一起滚走。
-            .background {
-                DetailPageArt(
-                    viewport: viewport,
-                    target: artTarget,
-                    blurTarget: artBlurTarget,
-                    expanded: pager.blurExpanded
-                )
-                .allowsHitTesting(false)
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                // 归一化到「滚过几屏」：0 = 停在第一页，1 = 第二页顶到视口顶部。
-                geometry.contentOffset.y / max(viewport.height, 1)
-            } action: { _, progress in
-                pager.applyScrollProgress(progress)
+                .scrollTargetBehavior(.viewAligned)
+                .scrollIndicators(.hidden)
+                .background {
+                    DetailPageArt(
+                        viewport: viewport,
+                        target: artTarget,
+                        blurTarget: artBlurTarget,
+                        expanded: pager.blurExpanded
+                    )
+                    .allowsHitTesting(false)
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    // 归一化到「滚过几屏」：0 = 停在第一页，1 = 第二页顶到视口顶部。
+                    geometry.contentOffset.y / max(viewport.height, 1)
+                } action: { _, progress in
+                    pager.applyScrollProgress(progress)
+                }
+                // 自检通道（Debug-only）：`OCPLAYER_DETAIL_FLIP_PAGE=2` 时把初始位置
+                // 放到**第二页顶部**。`simctl` 没有滚动 API，没有这段就截不到第二页——
+                // 只能截图第一页，等于「页 2 到底有没有渲染」根本没验。
+                //
+                // 不能改用 `.defaultScrollAnchor(.bottom)`：后者锚的是整段内容的末尾，
+                // 而第二页正文比一屏长得多，锚过去会落在所有区块之后的空白处
+                // （实测截出来是一张空图，看着像「页 2 没渲染」，其实只是滚过头了）。
+                //
+                // **只改初始位置，不改滚动行为**：吸附、手势、进度映射全部原样。
+                // 所以这条通道能证明「第二页在同一容器里且渲染正确」，
+                // **不能**证明「手势滑动与吸附手感」——后者仍要真机。
+                #if OCPLAYER_SELFTEST
+                .task {
+                    guard ProcessInfo.processInfo
+                        .environment["OCPLAYER_DETAIL_FLIP_PAGE"] == "2" else { return }
+                    // 等首帧布局完成再滚：锚点没进布局时 scrollTo 是空转。
+                    try? await Task.sleep(for: .milliseconds(400))
+                    proxy.scrollTo(Self.flipPreviewPage2Anchor, anchor: .top)
+                }
+                #endif
             }
         }
         // 第一页是整窗画面，顶栏浮在它上面（与 `flippedPages` 同一条理由）。
         .ignoresSafeArea(edges: .top)
     }
+
+    /// 第二页的滚动锚点标识。只在自检通道里被 `scrollTo` 用，但也无副作用。
+    private static let flipPreviewPage2Anchor = "detail-flip-page2"
     #endif
 
     /// 三层自下而上：**常驻的头图/模糊背景** → 正文 → 第一页前景。

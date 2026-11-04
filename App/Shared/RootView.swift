@@ -26,22 +26,46 @@ struct RootView: View {
     /// PlayerScreen 注入给 HUD 锚点做让位（见 PlayerChromeMetrics）。
     @State private var chromeInsets: EdgeInsets = EdgeInsets()
 
+    /// 按启动阶段选根页：有会话 → 主框架；没有 → 登录流程。
+    ///
+    /// 抽成属性只为让自检通道（`#if OCPLAYER_SELFTEST`）能在它之前插一层——
+    /// 判断顺序本身没变，仍是 `.boot` → `.onboarding` → `.ready`。
+    @ViewBuilder
+    private var phaseContent: some View {
+        switch app.phase {
+        case .boot:
+            // 占位与启动动画层同一块底（见 LaunchBackdrop）：系统启动屏 →
+            // 首帧 → 交棒全程无跳色。标志与编排都在最上层的动画 overlay 里。
+            LaunchBackdrop()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.section)
+        case .onboarding:
+            OnboardingView()
+                .transition(.section)
+        case .ready:
+            AppShellView()
+                .transition(.section)
+        }
+    }
+
     var body: some View {
         Group {
-            switch app.phase {
-            case .boot:
-                // 占位与启动动画层同一块底（见 LaunchBackdrop）：系统启动屏 →
-                // 首帧 → 交棒全程无跳色。标志与编排都在最上层的动画 overlay 里。
-                LaunchBackdrop()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            #if OCPLAYER_SELFTEST
+            // 自检通道（Debug-only）：iPad 详情页翻页版式验收台。
+            //
+            // **必须判在 `app.phase` 之前**：它存在的意义就是「不接服务器也能看真实
+            // 渲染」，而没有会话时 `phase == .onboarding`，登录页会挡住整个 AppShell。
+            // 正常入口也进不去详情页——`OCPLAYER_START_ROUTE=detail*` 要求首页已载入
+            // 带背景图的条目（见 `AppModel+LaunchRoute`），没服务器首页就是空的。
+            if DetailFlipPreviewStage.isRequested {
+                DetailFlipPreviewStage()
                     .transition(.section)
-            case .onboarding:
-                OnboardingView()
-                    .transition(.section)
-            case .ready:
-                AppShellView()
-                    .transition(.section)
+            } else {
+                phaseContent
             }
+            #else
+            phaseContent
+            #endif
         }
         .motion(Motion.slide, value: app.phase)
         // 全 App 的强调色语言 = **中性**：只用前景色亮暗差表达「选中 / 强调」，
