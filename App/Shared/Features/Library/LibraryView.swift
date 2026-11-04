@@ -241,16 +241,18 @@ struct LibraryView: View {
             LazyVStack(spacing: 0) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: gridSpacing) {
                     ForEach(items) { item in
-                        PosterCard(
-                            item: item,
-                            server: app.server,
-                            width: cardWidth,
-                            // 合集卡：服务端没有封面图（实测 `ImageTags: {}`），
-                            // 用解析出来的 TMDB 合集海报顶上；还没解析出来时是 nil，
-                            // 卡片显示「一叠海报」占位图标。
-                            posterOverride: app.collectionPosterURL(for: item, width: 400)
-                        ) {
-                            app.openDetail(item)
+                        DetailTransitionCard(list: "library.items", position: String(item.id), action: { source in app.openDetail(item, source: source) }) { open in
+                            PosterCard(
+                                item: item,
+                                server: app.server,
+                                width: cardWidth,
+                                // 合集卡：服务端没有封面图（实测 `ImageTags: {}`），
+                                // 用解析出来的 TMDB 合集海报顶上；还没解析出来时是 nil，
+                                // 卡片显示「一叠海报」占位图标。
+                                posterOverride: app.collectionPosterURL(for: item, width: 400)
+                            ) {
+                                open()
+                            }
                         }
                         // 卡片**进入可视区**时解析一次封面（有界、失败不重试）。
                         // 用 onAppear 而不是「进库时全量跑」：可见即需要，滚动扫过

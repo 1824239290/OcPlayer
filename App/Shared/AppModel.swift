@@ -336,12 +336,12 @@ final class AppModel {
     }
 
     enum Route: Hashable {
-        case detail(MediaItem)
+        case detail(MediaItem, source: DetailTransitionSource? = nil)
         /// 首页「媒体库」栏 → 单库网格页的 push 路由。
         case library(MediaLibrary)
         case bangumiProfile
         case bangumiCollectionList(BangumiSubjectType)
-        case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil)
+        case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil, source: DetailTransitionSource? = nil)
         case bangumiCalendar
         /// 设置 hub → 子页（见 `SettingsSubpage` 为何走 path 路由）。
         case settingsSubpage(SettingsSubpage)
@@ -358,12 +358,12 @@ final class AppModel {
 
     var selectedSection: Section = .home {
         didSet {
-            // 常规布局（Mac/iPad）切 Section 时清空共享栈；紧凑布局各 Tab 有独立栈，无需清。
+            // macOS 切 Section 时清空共享栈；iOS 各 Tab 有独立栈，无需清。
             if selectedSection != oldValue, !isCompact { path = [] }
         }
     }
 
-    /// Mac / iPad 的共享 push 栈。**外部只读**：写入口只有 `push` / `back` /
+    /// macOS 的共享 push 栈。**外部只读**：写入口只有 `push` / `back` /
     /// `handleStackPathChange` 三个。
     ///
     /// 这里踩过坑：`path` 与 `navPaths` 是两个真源（常规布局用前者、compact 各 Tab
@@ -374,7 +374,7 @@ final class AppModel {
     /// 变成"编译期报错"。
     private(set) var path: [Route] = []
 
-    /// iPhone 各 Tab 独立的导航路径——每个 Tab 一个栈，互不串。
+    /// iPhone / iPad 各 Tab 独立的导航路径——每个 Tab 一个栈，互不串。
     /// 之前 iPhone 走 `.sheet` 弹详情是因为多 Tab 共享一个 `path` 会互相踩；
     /// 现在分栈后详情页走 push，播放器覆盖层不再被 sheet 遮住。
     /// 同样 **外部只读**，视图经 `navPath(for:)` 取 binding。
@@ -391,7 +391,7 @@ final class AppModel {
         }
     }
 
-    /// 某个 Tab 的独立栈（系统 push / pop 写回 binding 的入口）。
+    /// 某个 Tab 的独立栈的落地写入；系统 binding 写回走 `handleNavPathChange`。
     func setNavPath(_ newValue: [Route], for section: Section) {
         switch section {
         case .home: navPaths.home = newValue
@@ -400,6 +400,19 @@ final class AppModel {
         case .settings: navPaths.settings = newValue
         case .search: navPaths.search = newValue
         }
+    }
+
+    /// iOS 直接接受系统的路径写回，让交互式返回的完成和取消由导航栈负责。
+    func handleNavPathChange(_ newValue: [Route], for section: Section) {
+        #if os(iOS)
+        setNavPath(newValue, for: section)
+        #else
+        guard newValue.count < navPath(for: section).count else {
+            setNavPath(newValue, for: section)
+            return
+        }
+        beginRouteExit { [weak self] in self?.setNavPath(newValue, for: section) }
+        #endif
     }
 
     /// 常规布局共享栈的写回入口：系统返回键 / 边缘滑动手势都会把**变短的** path
@@ -725,10 +738,10 @@ final class AppModel {
         isCompact = compact
     }
 
-    func openDetail(_ item: MediaItem) {
+    func openDetail(_ item: MediaItem, source: DetailTransitionSource? = nil) {
         // 点击瞬间预取（与 push 转场并行）：详情页秒开的数据来源。
         prefetchDetail(for: item)
-        push(.detail(item))
+        push(.detail(item, source: source))
     }
 
     /// 首页「媒体库」栏入口：push 到当前栈（`.library` 路由已在 `appRoutes()` 注册）。
@@ -736,8 +749,8 @@ final class AppModel {
         push(.library(library))
     }
 
-    func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil) {
-        push(.bangumiSubject(subjectID: id, initialSubject: initialSubject))
+    func openBangumiSubject(id: Int, initialSubject: BangumiSlimSubjectDTO? = nil, source: DetailTransitionSource? = nil) {
+        push(.bangumiSubject(subjectID: id, initialSubject: initialSubject, source: source))
     }
 
     /// Bangumi 个人主页。**必须走 push**（不能由视图直接改栈）：compact 布局下
@@ -781,17 +794,21 @@ final class AppModel {
         beginRouteExit(land: dismiss)
     }
 
-    /// 分区切换（顶栏药丸）：常规布局走与 push 相同的两段式——当前页淡出后
-    /// 再换分区；compact（iPhone Tab）系统自带切换动画，直切。
+    /// 分区切换：iOS 当帧切换；macOS 保留当前页淡出后落地的节奏。
     @discardableResult
     func switchSection(_ section: Section) -> Bool {
-        if isCompact || reduceMotion || section == selectedSection {
+        #if os(iOS)
+        landWithoutAnimation { selectedSection = section }
+        return true
+        #else
+        if section == selectedSection {
             selectedSection = section
             return true
         }
         return beginRouteExit { [weak self] in
             self?.selectedSection = section
         }
+        #endif
     }
 
     /// 切到 MoviePilot 分区并按关键词搜一次（详情页入口的唯一通道）。
@@ -808,7 +825,7 @@ final class AppModel {
         guard !trimmed.isEmpty else { return false }
         guard switchSection(.moviepilot) else { return false }
         // 落在 `switchSection` 之后：常规布局里它只是排了个 0.45s 后的落地任务，
-        // 关键词会先于 MoviePilot 首页出现而就位；compact / reduceMotion 下
+        // 关键词会先于 MoviePilot 首页出现而就位；reduceMotion 下
         // `selectedSection` 已经改好，而 SwiftUI 的下一轮 body 求值晚于本次调用。
         pendingMoviePilotQuery = trimmed
         return true
@@ -820,53 +837,44 @@ final class AppModel {
             if isCompact {
                 compactPath.append(route)
             } else {
-                // 落地禁动画：系统 push 滑动会与 routeExiting 复位的回弹淡入
-                // 叠加（页面边滑入边淡入，肉眼可见左移）；入场观感由两段式
-                // 唯一承担，与 pop 侧 `back()` 的禁动画落地对称。
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) { self.path.append(route) }
+                path.append(route)
             }
         }
     }
 
-    /// 返回上一层（自绘返回键）：与 push 对称的两段式——当前页淡出后再弹栈。
-    /// 系统返回键的 pop 是系统级滑出、不经 binding 拦不住，所以常规布局的
-    /// 返回键自绘（见 AppShellBackButton）；弹栈用禁动画 transaction 落地。
-    ///
-    /// **只管栈上的路由页**：呈现式页面（`navigationDestination(isPresented:)`）
-    /// 不在 `path` 里，`path` 为空时的返回是空操作——那种页面走 `popPresented`。
+    /// 返回上一层：iOS 由 NavigationStack 处理过渡，macOS 保留两段式淡出。
+    /// 呈现式页面不在路径中，由 `popPresented` 关闭。
     func back() {
-        guard !path.isEmpty else { return }
-        // 与 push 同一拍：弹栈落地同样禁动画，离场页随 path 变短**当帧移除**
-        // （实测 onDisappear 只比落地晚 ~10ms），恢复拍只留 0.05s 前置帧。
-        // 曾在此多等 Motion.exitSeconds：当年以为弹栈有系统过渡要遮、离场页
-        // 还在树里，实测无此事——白等 0.45s 只让落点页的淡入晚半拍，返回比
-        // 进入慢近一半（0.95s vs 1.4s）。
+        let section = selectedSection
+        guard !(isCompact ? navPath(for: section) : path).isEmpty else { return }
         beginRouteExit { [weak self] in
             guard let self else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { _ = self.path.removeLast() }
+            if isCompact {
+                var routes = navPath(for: section)
+                guard !routes.isEmpty else { return }
+                routes.removeLast()
+                setNavPath(routes, for: section)
+            } else {
+                guard !path.isEmpty else { return }
+                path.removeLast()
+            }
         }
     }
 
-    /// 两段式换页（push / pop / 分区切换共用）：点击后当前页先淡出
-    /// （`Motion.exit`），淡出完成再执行 `land` 落地，落点/新页由淡出层回弹
-    /// 淡入（新页以隐藏态出生，routeExiting 复位即它的入场——全站唯一入场
-    /// 机制）。compact（iPhone）系统动画本来就在，reduceMotion 直切，都不等待。
-    /// pop 侧由自绘返回键调用。
-    ///
-    /// 两个方向的节奏**同拍**：淡出 0.45s → 落地 → 0.05s 前置帧 → 淡入 0.45s。
-    /// 落地（不论 push 建页还是 pop 撤页）都用禁动画 transaction，没有系统
-    /// 过渡参与，恢复拍不需要为谁多等。
-    /// - Returns: 这次换页被**接受**（已在当帧落地或已排队）时为 true；
-    ///   转场途中被 `guard !routeExiting` 丢弃时为 false——调用方据此决定
-    ///   要不要回滚它顺手写下的其他状态（见 `openMoviePilotSearch`）。
+    /// push、pop 和呈现式页面的统一落地入口。
+    /// iOS 立即修改导航状态，保留系统缩放及交互式返回；macOS 先淡出再落地。
+    /// 减少动态效果时直接禁动画落地。
+    /// - Returns: 请求被接受时为 true；macOS 淡出期间的新请求返回 false。
     @discardableResult
     func beginRouteExit(land: @escaping @MainActor () -> Void) -> Bool {
-        if isCompact || reduceMotion {
-            land()
+        #if os(iOS)
+        // SwiftUI owns push/pop animation, including cancellable edge gestures.
+        // Never fade the navigation host: its background must remain opaque.
+        if reduceMotion { landWithoutAnimation(land) } else { land() }
+        return true
+        #else
+        if reduceMotion {
+            landWithoutAnimation(land)
             return true
         }
         guard !routeExiting else { return false }
@@ -879,13 +887,22 @@ final class AppModel {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(Motion.exitSeconds))
             guard generation == routeExitGeneration else { return }
-            land()
+            landWithoutAnimation(land)
             // 恢复前留出前置拍：新页（push 落地新建的视图）必须先以隐藏态
             // 提交一帧，routeExiting 复位的淡入才有 from-state。
             try? await Task.sleep(for: .seconds(Motion.restoreDelay))
+            guard generation == routeExitGeneration else { return }
             routeExiting = false
         }
         return true
+        #endif
+    }
+
+    /// macOS 落地或减少动态效果时，禁用状态修改触发的系统动画。
+    private func landWithoutAnimation(_ land: @MainActor () -> Void) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction, land)
     }
 
     /// iOS 端当前选中 Tab 对应的导航路径数组。
@@ -897,9 +914,9 @@ final class AppModel {
     /// 首页的续播条目通常是 Episode；详情入口应落到所属电视剧，而不是单集。
     /// 先复用首页已有的 Series 数据（最近添加 → 继续观看/接下来看里能带上的图），
     /// 没有缓存时用父级 ID 构造轻量占位，DetailView 随后会按该 ID 拉取完整详情、季和分集。
-    func openSeriesDetail(for item: MediaItem) {
+    func openSeriesDetail(for item: MediaItem, source: DetailTransitionSource? = nil) {
         guard let seriesID = item.seriesID else {
-            openDetail(item)
+            openDetail(item, source: source)
             return
         }
 
@@ -907,7 +924,7 @@ final class AppModel {
             $0.id == seriesID && $0.kind == .series
         }
         if let cachedSeries {
-            openDetail(cachedSeries)
+            openDetail(cachedSeries, source: source)
             return
         }
 
@@ -922,7 +939,7 @@ final class AppModel {
             thumbImageTag: related?.thumbImageTag ?? item.thumbImageTag,
             backdropImageTag: related?.backdropImageTag ?? item.backdropImageTag
         )
-        openDetail(series)
+        openDetail(series, source: source)
     }
 
     // MARK: - 派生

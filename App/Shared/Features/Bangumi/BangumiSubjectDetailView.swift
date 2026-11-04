@@ -196,6 +196,7 @@ struct BangumiSubjectDetailView: View {
                     .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+            .detailCoverSettlement()
     }
 
     /// 标题区：中文主标题 + 原文副标题。

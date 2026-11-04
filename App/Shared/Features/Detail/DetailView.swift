@@ -123,7 +123,7 @@ struct DetailView: View {
     /// 无剧照的条目由 `DetailPageArt` 自己出占位底色 —— 版式只有一套，没有回退分支。
     private var isFlippingActive: Bool {
         guard !app.isCompact else { return false }
-        guard case .detail(let pushed)? = app.path.last else { return false }
+        guard case .detail(let pushed, _)? = app.path.last else { return false }
         return pushed.id == item.id
     }
 
@@ -238,6 +238,9 @@ struct DetailView: View {
         .navigationTitle(horizontalSizeClass == .compact ? "" : model.displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        .detailNavigationDismissalBlocked(
+            detailLayoutStyle == .flip && pager.blocksNavigationDismissal
+        )
         .toolbarBackground(.hidden, for: .navigationBar)
         // 详情页保留底部标签栏；前景避让底栏，背景单独延伸到底栏后。
         .toolbarVisibility(.visible, for: .tabBar)
@@ -370,10 +373,8 @@ struct DetailView: View {
         .motion(Motion.standard, value: model.displayOverview == nil)
         .motion(Motion.standard, value: model.displayCast.isEmpty)
         .motion(Motion.standard, value: model.similar.isEmpty)
-        // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
-        // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
-        // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
-        // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
+        // iOS 入场由卡片缩放承担，macOS 保留路由淡入。
+        // 骨架块和 RemoteImage 的原位淡入负责内容加载，避免整页透明度脉冲。
     }
 
     /// banner 的完整页面，或翻页版式的独立正文页。
@@ -628,7 +629,7 @@ struct DetailView: View {
     /// 宽窗口：海报、标题和操作浮在整页氛围背景上。
     private var ambientHeader: some View {
         HStack(alignment: .bottom, spacing: 24) {
-            bannerPoster(width: 120, height: 180)
+            bannerPoster(width: 120, height: 180).detailCoverSettlement()
             VStack(alignment: .leading, spacing: 8) {
                 bannerTitle
                 metaRow
@@ -1207,8 +1208,10 @@ struct DetailView: View {
             }
             LazyVGrid(columns: memberColumns, alignment: .leading, spacing: memberGridSpacing) {
                 ForEach(model.collectionMembers) { member in
-                    PosterCard(item: member, server: app.server, width: memberCardWidth) {
-                        app.openDetail(member)
+                    DetailTransitionCard(list: "detail.members", position: String(member.id), action: { source in app.openDetail(member, source: source) }) { open in
+                        PosterCard(item: member, server: app.server, width: memberCardWidth) {
+                            open()
+                        }
                     }
                 }
             }
@@ -1269,12 +1272,14 @@ struct DetailView: View {
             // 卡宽必须显式给紧凑档 120：`Rail` 的紧凑高度（`posterRailHeight(compact:)`）
             // 就是按 120 算的，漏传会落到默认 178 —— 292pt 的卡塞进 267pt 的框，
             // 标题行被裁掉（与首页「最近添加」同一口径，见 `HomeView.posterWidth`）。
-            PosterCard(
-                item: item,
-                server: app.server,
-                width: isCompactWidth ? Metrics.compactPosterWidth : Metrics.posterWidth
-            ) {
-                app.openDetail(item)
+            DetailTransitionCard(list: "detail.similar", position: String(item.id), action: { source in app.openDetail(item, source: source) }) { open in
+                PosterCard(
+                    item: item,
+                    server: app.server,
+                    width: isCompactWidth ? Metrics.compactPosterWidth : Metrics.posterWidth
+                ) {
+                    open()
+                }
             }
         }
     }

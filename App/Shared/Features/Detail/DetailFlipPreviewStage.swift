@@ -33,11 +33,15 @@ import UIKit
 ///
 /// `OCPLAYER_DETAIL_FLIP=2` 只渲染判定结果（不挂 `DetailView`），用来在不看画面的
 /// 情况下核对档位——比如验证「iPad 分屏 = banner」时把窗口压窄再读这一屏。
+/// `OCPLAYER_DETAIL_FLIP=3` 从固定卡片进入同一个详情页，用于验收缩放返回与内部翻页的手势竞争。
 ///
 /// 整段只在 `OCPLAYER_SELFTEST`（Debug 配置定义）下存在，Release 构建里一个字都没有。
 struct DetailFlipPreviewStage: View {
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #if os(iOS)
+    @State private var gesturePath: [DetailTransitionSource] = []
+    #endif
 
     /// 请求的档位：`nil` = 没请求。
     static var requestedMode: String? {
@@ -79,17 +83,15 @@ struct DetailFlipPreviewStage: View {
                 // 只显示判定结果：不挂详情页，方便核对档位。
                 inspector
             } else {
-                // 走真实 TabView + NavigationStack 宿主，才能复现安全区域留白。
-                AppShellView()
-                    .task {
-                        app.selectedSection = .home
-                        #if os(iOS)
-                        app.setCompact(true)
-                        app.setNavPath([.detail(fixture)], for: .home)
-                        #else
-                        app.handleStackPathChange([.detail(fixture)])
-                        #endif
-                    }
+                #if os(iOS)
+                if Self.requestedMode == "3" {
+                    zoomGestureFixture
+                } else {
+                    shellFixture
+                }
+                #else
+                shellFixture
+                #endif
             }
         }
         // 注入档位（`OCPLAYER_DETAIL_FLIP_HSCLASS=compact|regular`）。
@@ -104,6 +106,46 @@ struct DetailFlipPreviewStage: View {
         // 真实拖拽分屏的观感只能人工验。
         .environment(\.horizontalSizeClass, injectedSizeClass ?? horizontalSizeClass)
     }
+
+    private var shellFixture: some View {
+        // 走真实 TabView + NavigationStack 宿主，才能复现安全区域留白。
+        AppShellView()
+            .task {
+                app.selectedSection = .home
+                #if os(iOS)
+                app.setCompact(true)
+                app.setNavPath([.detail(fixture)], for: .home)
+                #else
+                app.handleStackPathChange([.detail(fixture)])
+                #endif
+            }
+    }
+
+    #if os(iOS)
+    private var zoomGestureFixture: some View {
+        NavigationStack(path: $gesturePath) {
+            DetailTransitionCard(list: "detail-gesture-fixture", position: fixture.id) { source in
+                if let source { gesturePath.append(source) }
+            } card: { action in
+                Button(action: action) {
+                    Text("打开缩放详情验收")
+                        .font(.title2.bold())
+                        .frame(width: 300, height: 200)
+                        .foregroundStyle(.white)
+                        .background(.blue, in: RoundedRectangle(cornerRadius: 24))
+                }
+                .buttonStyle(.plain)
+            }
+            .navigationTitle("详情手势验收")
+            .navigationDestination(for: DetailTransitionSource.self) { source in
+                DetailView(item: fixture)
+                    .detailZoomTransition(source: source)
+                    .navigationTitle(fixture.name)
+            }
+        }
+        .detailTransitionScope(section: .home)
+    }
+    #endif
 
     /// 注入的尺寸类；`nil` = 用真实值。
     private var injectedSizeClass: UserInterfaceSizeClass? {
