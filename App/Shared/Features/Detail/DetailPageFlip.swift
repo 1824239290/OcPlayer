@@ -20,7 +20,7 @@ import AppKit
 //
 // 只有两处是 macOS 专属 API，各自收在 `#if os(macOS)` 内：
 //   * `DetailPagePager` 的滚轮监视器（`NSEvent` / `NSWindow`）—— iOS 的翻页输入
-//     走系统滚动（见 `DetailLayoutStyle`），不需要也不可能有本地事件监视器；
+//     走触控手势；第二页内部使用原生滚动；
 //   * `DetailPageWindowAnchor`（`NSViewRepresentable`）—— 只为把所在窗口报给监视器。
 //
 // **谁在哪个平台上真正用这套版式，由 `DetailLayoutStyle` 决定，不由这里的 `#if` 决定。**
@@ -64,16 +64,20 @@ final class DetailPagePager {
     }
 
     private(set) var page: Page = .art
+    private(set) var isTransitioning = false
     /// 第一页前景(LOGO / 简介 / 播放钮 / 选集带)可见性
     var artForegroundVisible = true
     /// 第二页正文可见性
     var bodyVisible = false
     /// 模糊块扩张开关:false = 覆盖左侧 68%;true = 扩张到越出右缘(整幅全糊)
     var blurExpanded = false
-    /// 第二页在滚动空间里的顶部 Y(0 = 停在顶部,负值 = 已下滚)
+    /// 正文滚动偏移；iOS 只记录顶部 0 / 离开顶部 3，macOS 记录实际值。
     var bodyOffsetY: CGFloat = 0
     /// 系统「降低动态效果」:整套编排压成硬切
     var reduceMotion = false
+
+    @ObservationIgnored private var bodyPullBeganAtTop = false
+    @ObservationIgnored private var bodyPullCrossedThreshold = false
 
     @ObservationIgnored private var pendingDelta: CGFloat = 0
     @ObservationIgnored private var upAccum: CGFloat = 0
@@ -94,6 +98,7 @@ final class DetailPagePager {
     /// 用来识别「新的一轮滚动动作」，见 `beginsNewScrollGesture(_:)`。
     @ObservationIgnored private var lastWheelEventAt: TimeInterval = 0
     @ObservationIgnored private var transitioningUntil = Date.distantPast
+    @ObservationIgnored private var transitionTask: Task<Void, Never>?
     #if os(macOS)
     /// 滚轮监视器句柄与所在窗口——**只有 macOS 有**（iOS 走系统滚动，无本地事件监视器）。
     @ObservationIgnored private var monitor: Any?
@@ -178,7 +183,8 @@ final class DetailPagePager {
     // MARK: - 翻页
 
     func flipToBody() {
-        guard page == .art, Date() >= transitioningUntil else { return }
+        guard page == .art, !isTransitioning else { return }
+        beginTransition()
         page = .body
         // 进第二页时等于「刚到位」：第一下上滚不该立刻把它顶回去
         wasBodyAtTop = true
@@ -192,7 +198,8 @@ final class DetailPagePager {
     }
 
     func flipToArt() {
-        guard page == .body, Date() >= transitioningUntil else { return }
+        guard page == .body, !isTransitioning else { return }
+        beginTransition()
         page = .art
         upAccum = 0
         topEntryToken = true
@@ -205,62 +212,111 @@ final class DetailPagePager {
 
     /// 换条目时复位(详情页会按 `.id(item.id)` 重建,这里兜一次 hot reload 场景)。
     func reset() {
+        transitionTask?.cancel()
+        transitionTask = nil
+        isTransitioning = false
         page = .art
         artForegroundVisible = true
         bodyVisible = false
         blurExpanded = false
         bodyOffsetY = 0
+        bodyPullBeganAtTop = false
+        bodyPullCrossedThreshold = false
         pendingDelta = 0
         upAccum = 0
         transitioningUntil = .distantPast
     }
 
-    // MARK: - iPad 滚动联动（阶段 ②）
-
-    /// 滚动进度 → 三层视觉的**纯值映射**（可单测，两个平台都跑）。
-    ///
-    /// ## 为什么不能照搬 `flipToBody()` 那一套
-    ///
-    /// macOS 的输入是「一次滚轮动作」，所以那边用**定时编排**：0.45s 淡出前景、
-    /// 0.55s 扫开模糊、0.40s 后正文才淡入。iPad 的输入是**系统滚动**——页面本身
-    /// 真的在位移，过渡由滚动这一动作完成，系统还会在松手时吸附。
-    /// 如果再叠一层「定时的淡入淡出」，两个动画会互相拉扯：滚动到一半前景淡到 40%、
-    /// 吸回去时又淡回来，观感是一层灰雾而不是翻页。
-    ///
-    /// ## 所以映射是这样定的
-    ///
-    /// - `blurExpanded`：进度过半把背景的模糊块扫开。正文（第二页）是深色小字，
-    ///   压在「左糊右清」的剧照上读不清；扫成整幅全糊后对比度才够。
-    /// - `artForegroundVisible` / `bodyVisible`：**恒 `true`**。两页在同一个滚动容器里
-    ///   上下排布、永不重叠，可见性本来就已经由「谁在视口里」决定了。这里返回 true
-    ///   是让调用方保持「不透明度 = 1」，**不是**说两页同时可见。
-    ///
-    /// `nonisolated`：纯值、无状态，测试与非隔离上下文都能直接调。
-    nonisolated static func scrollFlipVisuals(forProgress raw: CGFloat)
-        -> (blurExpanded: Bool, artForegroundVisible: Bool, bodyVisible: Bool)
-    {
-        // 滚动越界（回弹时 offset 为负）与非有限值都夹到 [0, 1]：
-        // NaN 传进比较会让 `>=` 恒为 false，正好落在安全的 false 那一侧，但仍显式夹一次。
-        let p = raw.isFinite ? min(max(raw, 0), 1) : 0
-        return (blurExpanded: p >= 0.5, artForegroundVisible: true, bodyVisible: true)
+    private func beginTransition() {
+        isTransitioning = true
+        transitionTask?.cancel()
+        let interval = duration(1.0) + 0.05
+        transitionTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(interval)) }
+            catch { return }
+            self?.isTransitioning = false
+        }
     }
 
-    /// 把滚动进度应用到视觉状态上。由 iPad 版式的 `onScrollGeometryChange` 调用。
-    ///
-    /// **只在值真的变化时才写**：这个方法是每一帧都可能被调的，`@Observable` 的属性
-    /// 赋值会触发视图重算——不做 diff 就等于每次滚动都整页重绘一次。
-    func applyScrollProgress(_ progress: CGFloat) {
-        let visuals = Self.scrollFlipVisuals(forProgress: progress)
-        if artForegroundVisible != visuals.artForegroundVisible {
-            artForegroundVisible = visuals.artForegroundVisible
+    // MARK: - 触控翻页
+
+    /// 正文只发布三个区域，避免把每帧偏移传播到整个详情页。
+    enum BodyScrollRegion: Equatable {
+        case scrolled, top, pulled
+    }
+
+    nonisolated static func bodyScrollRegion(offsetY: CGFloat) -> BodyScrollRegion {
+        guard offsetY.isFinite else { return .scrolled }
+        if offsetY <= -40 { return .pulled }
+        return offsetY <= 2 ? .top : .scrolled
+    }
+
+    func beginBodyScroll(atTop: Bool) {
+        bodyPullBeganAtTop = page == .body && !isTransitioning && atTop
+        bodyPullCrossedThreshold = false
+    }
+
+    func updateBodyScroll(region: BodyScrollRegion) {
+        bodyOffsetY = region == .scrolled ? 3 : 0
+        if bodyPullBeganAtTop, region == .pulled {
+            bodyPullCrossedThreshold = true
         }
-        if bodyVisible != visuals.bodyVisible {
-            bodyVisible = visuals.bodyVisible
+        #if OCPLAYER_SELFTEST
+        if ProcessInfo.processInfo.environment["OCPLAYER_DETAIL_SCROLL_TRACE"] == "1" {
+            print("DETAIL_SCROLL region=\(region) armed=\(bodyPullBeganAtTop) pulled=\(bodyPullCrossedThreshold)")
         }
-        if blurExpanded != visuals.blurExpanded {
-            // 扫开的是遮罩宽度，交给 SwiftUI 插值；时长比 macOS 那套短一档，
-            // 因为它跟着滚动走，太长会拖在手指后面。
-            withAnimation(anim(0.45)) { blurExpanded = visuals.blurExpanded }
+        #endif
+    }
+
+    func handleBodyScrollPhase(from oldPhase: ScrollPhase, to phase: ScrollPhase,
+                               offsetY: CGFloat) {
+        let region = Self.bodyScrollRegion(offsetY: offsetY)
+        // 某些触摸序列直接进入 interacting，不能依赖 tracking 必定单独回调。
+        if phase == .tracking ||
+            (phase == .interacting && oldPhase != .tracking && oldPhase != .interacting) {
+            beginBodyScroll(atTop: region != .scrolled)
+        }
+        // 阶段回调也带有最新位置；几何区域回调尚未送达时仍可捕获下拉阈值。
+        updateBodyScroll(region: region)
+        #if OCPLAYER_SELFTEST
+        if ProcessInfo.processInfo.environment["OCPLAYER_DETAIL_SCROLL_TRACE"] == "1" {
+            print("DETAIL_SCROLL phase=\(oldPhase)->\(phase) offset=\(offsetY) armed=\(bodyPullBeganAtTop) pulled=\(bodyPullCrossedThreshold)")
+        }
+        #endif
+        if (oldPhase == .interacting || oldPhase == .tracking),
+           (phase == .decelerating || phase == .idle) {
+            endBodyScroll()
+        }
+    }
+
+    func endBodyScroll() {
+        let shouldReturn = bodyPullBeganAtTop && bodyPullCrossedThreshold
+        bodyPullBeganAtTop = false
+        bodyPullCrossedThreshold = false
+        if shouldReturn { flipToArt() }
+    }
+
+    /// 只消费明确的竖向滑动。正文必须在手指落下时就在顶部：
+    /// 一路滚回顶部的同一次拖动，以及横向选集带，都不能翻页。
+    nonisolated static func swipeTarget(page: Page, translation: CGSize,
+                                       startedAtTop: Bool) -> Page? {
+        let dx = translation.width
+        let dy = translation.height
+        guard dx.isFinite, dy.isFinite, abs(dy) >= 60,
+              abs(dy) > abs(dx) * 1.5 else { return nil }
+        switch page {
+        case .art: return dy < 0 ? .body : nil
+        case .body: return dy > 0 && startedAtTop ? .art : nil
+        }
+    }
+
+    func handleSwipe(translation: CGSize, startedAtTop: Bool) {
+        guard !isTransitioning else { return }
+        switch Self.swipeTarget(page: page, translation: translation,
+                                startedAtTop: startedAtTop) {
+        case .body: flipToBody()
+        case .art: flipToArt()
+        case nil: break
         }
     }
 
@@ -886,9 +942,16 @@ struct DetailPageArtScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 
-    /// 底距。选集带贴窗口底（22，给缩略图留一口气）；电影页只有一颗播放钮，
-    /// 抬高到 74 —— 压在最底边会显得是被窗口裁掉半截，也离剧照下缘太近。
-    private var bottomInset: CGFloat { isSeries ? 22 : 74 }
+    /// 底距。iOS 选集带在标签栏预留空间之上再留 34；macOS 保持 22。
+    /// 电影页只有一颗播放钮，仍抬高到 74。
+    private var bottomInset: CGFloat {
+        guard isSeries else { return 74 }
+        #if os(iOS)
+        return 34
+        #else
+        return 22
+        #endif
+    }
 
     /// 季选择：点击弹出列表，点选切换。
     @ViewBuilder
@@ -1024,12 +1087,17 @@ struct DetailPageArtScreen: View {
             )
     }
 
+    private var thumbRailFadeWidth: CGFloat { min(36, leadingInset) }
+
     private var episodeThumbRail: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 thumbRailContent
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .modifier(EpisodeRailEdgeFade(width: thumbRailFadeWidth))
+            // 将渐隐区放进栏外留白，原有内容边界内保持清晰。
+            .padding(.horizontal, -thumbRailFadeWidth)
             .followsEpisodeSelection(proxy: proxy, selectedID: model.selectedEpisodeID,
                                      slotIDs: activeSlotIDs, activeIndex: activeChunkIndex)
         }
@@ -1045,6 +1113,8 @@ struct DetailPageArtScreen: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 2)
+        // 抵消外扩视口，第一张与最后一张停靠时仍与上方集号栏对齐。
+        .padding(.horizontal, thumbRailFadeWidth)
     }
 
     @ViewBuilder
@@ -1116,6 +1186,50 @@ struct DetailPageArtScreen: View {
 }
 
 // MARK: - 选中集跟随滚动
+
+/// 只把仍有屏外内容的一侧柔化，首尾卡片完全进入视口时恢复清晰边缘。
+private struct EpisodeRailEdgeFade: ViewModifier {
+    let width: CGFloat
+
+    private struct Edges: Equatable {
+        var leading: CGFloat = 0
+        var trailing: CGFloat = 0
+    }
+
+    @State private var edges = Edges()
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: Edges.self) { geometry in
+                guard width > 0 else { return Edges() }
+                let leading = geometry.contentOffset.x + geometry.contentInsets.leading
+                let trailing = geometry.contentSize.width + geometry.contentInsets.trailing
+                    - geometry.contentOffset.x - geometry.containerSize.width
+                return Edges(
+                    leading: min(max(leading / width, 0), 1),
+                    trailing: min(max(trailing / width, 0), 1)
+                )
+            } action: { _, newEdges in
+                edges = newEdges
+            }
+            .mask {
+                HStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [.black.opacity(1 - edges.leading), .black],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: width)
+                    Rectangle().fill(.black)
+                    LinearGradient(
+                        colors: [.black, .black.opacity(1 - edges.trailing)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                    .frame(width: width)
+                }
+                .allowsHitTesting(false)
+            }
+    }
+}
 
 /// 让一条横向选集轨道跟着「当前选中集」走。
 ///

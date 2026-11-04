@@ -2,81 +2,169 @@ import SwiftUI
 import XCTest
 @testable import OcPlayer
 
-/// iPad 翻页版式的**滚动进度 → 视觉**映射（阶段 ②）。
-///
-/// 这里只测纯函数 `DetailPagePager.scrollFlipVisuals(forProgress:)`，不渲染：
-/// 「滚动能不能真的翻页、吸附是否生效」由系统滚动行为决定，得在模拟器/真机上实跑
-/// （见 Reports/ipad-detail-layout-20261104/），单测证明不了。
-///
-/// 之所以把这个映射独立出来测，是因为它有三个**容易写反、且写反了不会崩**的点：
-/// 阈值、越界夹取、以及「前景/正文不参与透明度」这个决定。
+/// 触控分页的方向、手势边界和转场互斥。UI 观感另在真实导航宿主验收。
+@MainActor
 final class DetailScrollFlipTests: XCTestCase {
-
-    private func visuals(_ p: CGFloat) -> (blurExpanded: Bool, artForegroundVisible: Bool, bodyVisible: Bool) {
-        DetailPagePager.scrollFlipVisuals(forProgress: p)
+    func testUpwardSwipeOpensBody() {
+        XCTAssertEqual(target(.art, dx: 0, dy: -60), .body)
+        XCTAssertNil(target(.art, dx: 0, dy: 100))
+        XCTAssertNil(target(.art, dx: 0, dy: -59))
     }
 
-    // MARK: - 阈值
-
-    /// 进度**过半**才扫开模糊块。正文是深色小字，压在「左糊右清」的剧照上读不清；
-    /// 扫成整幅全糊对比度才够。阈值写在 0.5：低于它时第一页还是主体。
-    func testBlurExpandsAtHalfProgress() {
-        XCTAssertFalse(visuals(0).blurExpanded, "停在第一页时背景必须是「左糊右清」")
-        XCTAssertFalse(visuals(0.25).blurExpanded)
-        XCTAssertFalse(visuals(0.49).blurExpanded, "不到一半就不该扫开")
-        XCTAssertTrue(visuals(0.5).blurExpanded, "过半即扫开（含 0.5 这一点）")
-        XCTAssertTrue(visuals(0.75).blurExpanded)
-        XCTAssertTrue(visuals(1).blurExpanded, "第二页顶满屏时必须已是全糊")
+    func testHorizontalEpisodeSwipeDoesNotFlip() {
+        for page in [DetailPagePager.Page.art, .body] {
+            XCTAssertNil(target(page, dx: 160, dy: -90))
+            XCTAssertNil(target(page, dx: -160, dy: 90))
+            XCTAssertNil(target(page, dx: 100, dy: 150))
+        }
     }
 
-    /// **翻回第一页时模糊块要跟着收回去**。这条不是多余的：如果映射只写成
-    /// `p > 0.5 ? true : blurExpanded`（保留旧值），往回滚就会停在「全糊」，
-    /// 第一页的清晰剧照再也回不来 —— 而这在单向上滚的用例里看不出来。
-    func testBlurRestoresWhenScrollingBack() {
-        XCTAssertTrue(visuals(1).blurExpanded)
-        XCTAssertFalse(visuals(0.4).blurExpanded, "滚回一半以下必须收回「左糊右清」")
-        XCTAssertFalse(visuals(0).blurExpanded, "回到第一页必须完全恢复")
+    func testBodyRequiresNewPullStartingAtTop() {
+        XCTAssertEqual(target(.body, dx: 0, dy: 80, atTop: true), .art)
+        // 滚动途中到达顶部的同一次拖动不能翻回去。
+        XCTAssertNil(target(.body, dx: 0, dy: 180, atTop: false))
+        XCTAssertNil(target(.body, dx: 0, dy: -180, atTop: true))
     }
 
-    // MARK: - 越界与脏值
-
-    /// 回弹时 offset 会是负值；内容比一屏还长时进度会 > 1。两者都必须夹到 [0,1]，
-    /// 否则 `artForegroundVisible` 之类的判断会跟着越界值漂。
-    func testOutOfRangeProgressIsClamped() {
-        XCTAssertFalse(visuals(-0.5).blurExpanded, "回弹越界（负进度）按「停在第一页」处理")
-        XCTAssertFalse(visuals(-999).blurExpanded)
-        XCTAssertTrue(visuals(1.5).blurExpanded, "超过一屏按「已到第二页」处理")
-        XCTAssertTrue(visuals(999).blurExpanded)
-    }
-
-    /// NaN / 无穷是真实可能进来的（`contentOffset` 在布局未定时可能是 NaN，
-    /// 视口高度为 0 时除法会产出 inf）。判据是**不能崩、且落到安全侧**。
-    func testNonFiniteProgressFallsBackToFirstPage() {
+    func testInvalidTranslationsDoNotFlip() {
         for bad in [CGFloat.nan, .infinity, -.infinity] {
-            let v = visuals(bad)
-            XCTAssertFalse(v.blurExpanded, "非有限进度必须退到第一页（左糊右清），实际输入 \(bad)")
+            XCTAssertNil(target(.art, dx: bad, dy: -100))
+            XCTAssertNil(target(.body, dx: 0, dy: bad))
         }
     }
 
-    // MARK: - 前景 / 正文可见性恒 true
+    func testNativeScrollRegionsRespectInsetsNormalizedThresholds() {
+        XCTAssertEqual(DetailPagePager.bodyScrollRegion(offsetY: 200), .scrolled)
+        XCTAssertEqual(DetailPagePager.bodyScrollRegion(offsetY: 2), .top)
+        XCTAssertEqual(DetailPagePager.bodyScrollRegion(offsetY: -39), .top)
+        XCTAssertEqual(DetailPagePager.bodyScrollRegion(offsetY: -40), .pulled)
+        XCTAssertEqual(DetailPagePager.bodyScrollRegion(offsetY: .nan), .scrolled)
+    }
 
-    /// **这两层不参与滚动过渡，是刻意的。**
-    ///
-    /// iPad 上两页在同一个滚动容器里上下排布、永不重叠，「谁可见」已经由视口位置决定。
-    /// 如果再给它们叠一层淡入淡出，就是「边滑边淡」的双重过渡——观感是一层灰雾，
-    /// 而不是页面在走。这条用例把「不要给它们加透明度」钉住：
-    /// 谁哪天想「顺手加个淡出更平滑」，这里会红。
-    func testForegroundAndBodyNeverFade() {
-        for p in stride(from: CGFloat(-0.2), through: 1.2, by: 0.05) {
-            let v = visuals(p)
-            XCTAssertTrue(
-                v.artForegroundVisible,
-                "第一页前景不参与透明度（进度 \(p)）：滚动本身已经在移走它了"
-            )
-            XCTAssertTrue(
-                v.bodyVisible,
-                "正文不参与透明度（进度 \(p)）：它已经由滚动位置决定可见性"
-            )
-        }
+    func testNativeBodyScrollKeepsBodyOpen() async throws {
+        let pager = try await bodyPager()
+        pager.beginBodyScroll(atTop: true)
+        pager.updateBodyScroll(region: .scrolled)
+        XCTAssertEqual(pager.bodyOffsetY, 3)
+        pager.endBodyScroll()
+        XCTAssertEqual(pager.page, .body, "向上拖动正文只滚动内容")
+        XCTAssertFalse(pager.isTransitioning)
+        pager.reset()
+    }
+
+    func testNativePullReturnsOnlyAfterRelease() async throws {
+        let pager = try await bodyPager()
+        pager.beginBodyScroll(atTop: true)
+        pager.updateBodyScroll(region: .pulled)
+        XCTAssertEqual(pager.page, .body, "拖动过程中不能中断原生滚动")
+        // 松手回弹跨回阈值前，已达到的下拉距离仍应保留。
+        pager.updateBodyScroll(region: .top)
+        pager.endBodyScroll()
+        XCTAssertEqual(pager.page, .art)
+        pager.reset()
+    }
+
+    func testNativeScrollToTopAndInertiaDoNotReturn() async throws {
+        let pager = try await bodyPager()
+        pager.beginBodyScroll(atTop: false)
+        pager.updateBodyScroll(region: .top)
+        pager.updateBodyScroll(region: .pulled)
+        pager.endBodyScroll()
+        XCTAssertEqual(pager.page, .body, "滚回顶部的同一次拖动不能翻页")
+        pager.updateBodyScroll(region: .pulled)
+        pager.endBodyScroll()
+        XCTAssertEqual(pager.page, .body, "无手指按下的惯性回弹不能翻页")
+        pager.beginBodyScroll(atTop: true)
+        pager.updateBodyScroll(region: .top)
+        pager.endBodyScroll()
+        XCTAssertEqual(pager.page, .body, "短距离下拉不能沿用上一轮凭据")
+        pager.reset()
+    }
+
+    func testDirectInteractionCanReturnToCover() async throws {
+        let pager = try await bodyPager()
+        pager.handleBodyScrollPhase(from: .idle, to: .interacting, offsetY: 0)
+        pager.updateBodyScroll(region: .pulled)
+        pager.handleBodyScrollPhase(from: .interacting, to: .decelerating, offsetY: -45)
+        XCTAssertEqual(pager.page, .art, "没有独立 tracking 回调也能返回")
+        pager.reset()
+    }
+
+    func testReleaseGeometryCapturesPullBeforeRegionCallback() async throws {
+        let pager = try await bodyPager()
+        pager.handleBodyScrollPhase(from: .idle, to: .tracking, offsetY: 0)
+        pager.handleBodyScrollPhase(from: .tracking, to: .interacting, offsetY: -10)
+        pager.handleBodyScrollPhase(from: .interacting, to: .idle, offsetY: -45)
+        XCTAssertEqual(pager.page, .art, "松手时的位置可补足尚未送达的区域变化")
+        pager.reset()
+    }
+
+    func testNativePhaseSequenceKeepsScrollToTopOpen() async throws {
+        let pager = try await bodyPager()
+        pager.handleBodyScrollPhase(from: .decelerating, to: .tracking, offsetY: 200)
+        pager.handleBodyScrollPhase(from: .tracking, to: .interacting, offsetY: 1)
+        pager.handleBodyScrollPhase(from: .interacting, to: .decelerating, offsetY: -45)
+        XCTAssertEqual(pager.page, .body)
+        pager.handleBodyScrollPhase(from: .decelerating, to: .idle, offsetY: 0)
+        XCTAssertEqual(pager.page, .body)
+        pager.reset()
+    }
+
+    private func bodyPager() async throws -> DetailPagePager {
+        let pager = DetailPagePager()
+        pager.reduceMotion = true
+        pager.flipToBody()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(pager.isTransitioning)
+        return pager
+    }
+
+    func testTransitionRejectsRepeatedAndReverseSwipes() {
+        let pager = DetailPagePager()
+        pager.handleSwipe(translation: CGSize(width: 0, height: -100), startedAtTop: true)
+        XCTAssertEqual(pager.page, .body)
+        XCTAssertFalse(pager.artForegroundVisible)
+        XCTAssertTrue(pager.bodyVisible)
+        XCTAssertTrue(pager.blurExpanded)
+        XCTAssertTrue(pager.isTransitioning)
+        pager.handleSwipe(translation: CGSize(width: 0, height: 100), startedAtTop: true)
+        pager.flipToArt()
+        XCTAssertEqual(pager.page, .body, "转场未结束时不能被另一手势顶回第一页")
+        pager.reset()
+    }
+
+    func testReducedMotionUnlocksAndAllowsReturn() async throws {
+        let pager = DetailPagePager()
+        pager.reduceMotion = true
+        pager.flipToBody()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertFalse(pager.isTransitioning)
+        pager.handleSwipe(translation: CGSize(width: 0, height: 100), startedAtTop: true)
+        XCTAssertEqual(pager.page, .art)
+        XCTAssertTrue(pager.artForegroundVisible)
+        XCTAssertFalse(pager.bodyVisible)
+        XCTAssertFalse(pager.blurExpanded)
+        pager.reset()
+    }
+
+    func testResetCancelsPreviousTransitionUnlock() async throws {
+        let pager = DetailPagePager()
+        pager.reduceMotion = true
+        pager.flipToBody()
+        pager.reset()
+        XCTAssertEqual(pager.page, .art)
+        XCTAssertFalse(pager.isTransitioning)
+        XCTAssertEqual(pager.bodyOffsetY, 0)
+        pager.reduceMotion = false
+        pager.flipToBody()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertTrue(pager.isTransitioning, "旧转场的完成回调不能解锁新转场")
+        pager.reset()
+    }
+
+    private func target(_ page: DetailPagePager.Page, dx: CGFloat, dy: CGFloat,
+                        atTop: Bool = true) -> DetailPagePager.Page? {
+        DetailPagePager.swipeTarget(page: page, translation: CGSize(width: dx, height: dy),
+                                   startedAtTop: atTop)
     }
 }

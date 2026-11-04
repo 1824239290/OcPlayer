@@ -7,24 +7,20 @@ import UIKit
 
 #if OCPLAYER_SELFTEST
 
-/// **iPad 详情页翻页版式的验收台**（Debug-only）：不接服务器，直接渲染真实的 `DetailView`。
+/// **iPad 详情页翻页版式的验收台**（Debug-only）：用固定条目进入真实导航宿主。
 ///
 /// ## 为什么需要它
 ///
-/// 阶段 ② 的验收判据是滚动行为：
-///
-/// ```
-/// offset 0 → viewport 全程两页视觉连续、无跳变
-/// 滚动能到页 2、停在顶部再下拉能吸回页 1
-/// ```
+/// 验收固定视口、先淡出再淡入的转场，以及正文顶部下拉返回封面。
 ///
 /// 这本该在真机上用真实条目验，但正常入口进不去：`OCPLAYER_START_ROUTE=detail*`
 /// 要求首页已经载入「带背景图」的条目（见 `AppModel+LaunchRoute.swift`），
 /// **不接服务器首页就是空的**，一条都进不去。
 ///
 /// 所以照 `MoviePilotCardPreviewStage` 那套成形做法给一条自检通道：用固定 fixture
-/// 渲染**同一个 `DetailView`**（不是复制一份版式代码），这样验的就是产品路径本身。
-/// 它与真实登录相比缺的只有「真实剧照与真实简介」——那影响观感，不影响滚动结构。
+/// 经 `AppShellView` 的 TabView / NavigationStack 渲染**同一个 `DetailView`**。
+/// 详情模型仍会访问已配置的服务；fixture 的虚拟 ID 可能产生服务端错误，
+/// 因此这条通道用于版式和手势验收，真实条目的加载与播放需走正常入口。
 ///
 /// ## 用法
 ///
@@ -83,7 +79,17 @@ struct DetailFlipPreviewStage: View {
                 // 只显示判定结果：不挂详情页，方便核对档位。
                 inspector
             } else {
-                DetailView(item: fixture)
+                // 走真实 TabView + NavigationStack 宿主，才能复现安全区域留白。
+                AppShellView()
+                    .task {
+                        app.selectedSection = .home
+                        #if os(iOS)
+                        app.setCompact(true)
+                        app.setNavPath([.detail(fixture)], for: .home)
+                        #else
+                        app.handleStackPathChange([.detail(fixture)])
+                        #endif
+                    }
             }
         }
         // 注入档位（`OCPLAYER_DETAIL_FLIP_HSCLASS=compact|regular`）。

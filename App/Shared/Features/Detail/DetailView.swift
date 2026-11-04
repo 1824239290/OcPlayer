@@ -226,95 +226,6 @@ struct DetailView: View {
     }
 
 
-    // MARK: - 翻页版式（iPad，原生滚动驱动）
-
-    #if !os(macOS)
-    /// iPad 的翻页版式：**两页真的上下排在一个 ScrollView 里**，位移与吸附交给系统。
-    ///
-    /// ## 与 `flippedPages`（macOS）的机制差别
-    ///
-    /// | | macOS | iPad（这里） |
-    /// | --- | --- | --- |
-    /// | 输入 | 滚轮监视器（`NSEvent`） | 系统滚动（触控 / 触控板 / 滚轮 / VoiceOver） |
-    /// | 两页 | 叠在同一个 viewport，靠透明度切换 | **上下排布**，靠滚动位移 |
-    /// | 过渡 | `flipToBody()` 的定时编排 | 滚动本身；只有背景模糊按进度映射 |
-    /// | 吸附 | 自己算阈值 | `.scrollTargetBehavior(.viewAligned)` |
-    ///
-    /// 背景层（`DetailPageArt`）在两版里都是**固定不动的**：它不参与滚动，
-    /// 所以两页交替时背景不会位移——这正是「无跳变」的来源。
-    ///
-    /// ## 三条硬约束的落点
-    ///
-    /// 1. **不动 macOS 输入链路**：`flippedPages` 一个字没改，本视图只在 iOS 分支存在；
-    /// 2. **第二页不嵌 ScrollView**：正文用 `detailBody`（裸 VStack），外层只有这一个
-    ///    ScrollView。嵌了的话内层会先吃掉手势，吸附和「下拉吸回页 1」都会失灵；
-    /// 3. **同一连续进度量驱动**：`onScrollGeometryChange` 把 offset 归一化成
-    ///    `progress ∈ [0,1]` 后交给 `pager.applyScrollProgress`，不调用
-    ///    `flipToBody()` / `flipToArt()` 那套离散状态机。
-    private var flipScrollPages: some View {
-        GeometryReader { geo in
-            let viewport = geo.size
-            ScrollViewReader { proxy in
-                ScrollView(.vertical) {
-                    VStack(spacing: 0) {
-                        // 第一页：限高正好一个视口 —— 这样它自己就是一个对齐目标，
-                        // 松手时系统会把它吸附回整屏位置。
-                        artPage(size: viewport)
-                            .frame(width: viewport.width, height: viewport.height)
-                        // 第二页：正文。见 `detailBody` 的注释（不能是 ScrollView）。
-                        detailBody
-                            .frame(width: viewport.width, alignment: .leading)
-                            .id(Self.flipPreviewPage2Anchor)
-                    }
-                    .scrollTargetLayout()
-                }
-                .scrollTargetBehavior(.viewAligned)
-                .scrollIndicators(.hidden)
-                .background {
-                    DetailPageArt(
-                        viewport: viewport,
-                        target: artTarget,
-                        blurTarget: artBlurTarget,
-                        expanded: pager.blurExpanded
-                    )
-                    .allowsHitTesting(false)
-                }
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    // 归一化到「滚过几屏」：0 = 停在第一页，1 = 第二页顶到视口顶部。
-                    geometry.contentOffset.y / max(viewport.height, 1)
-                } action: { _, progress in
-                    pager.applyScrollProgress(progress)
-                }
-                // 自检通道（Debug-only）：`OCPLAYER_DETAIL_FLIP_PAGE=2` 时把初始位置
-                // 放到**第二页顶部**。`simctl` 没有滚动 API，没有这段就截不到第二页——
-                // 只能截图第一页，等于「页 2 到底有没有渲染」根本没验。
-                //
-                // 不能改用 `.defaultScrollAnchor(.bottom)`：后者锚的是整段内容的末尾，
-                // 而第二页正文比一屏长得多，锚过去会落在所有区块之后的空白处
-                // （实测截出来是一张空图，看着像「页 2 没渲染」，其实只是滚过头了）。
-                //
-                // **只改初始位置，不改滚动行为**：吸附、手势、进度映射全部原样。
-                // 所以这条通道能证明「第二页在同一容器里且渲染正确」，
-                // **不能**证明「手势滑动与吸附手感」——后者仍要真机。
-                #if OCPLAYER_SELFTEST
-                .task {
-                    guard ProcessInfo.processInfo
-                        .environment["OCPLAYER_DETAIL_FLIP_PAGE"] == "2" else { return }
-                    // 等首帧布局完成再滚：锚点没进布局时 scrollTo 是空转。
-                    try? await Task.sleep(for: .milliseconds(400))
-                    proxy.scrollTo(Self.flipPreviewPage2Anchor, anchor: .top)
-                }
-                #endif
-            }
-        }
-        // 第一页是整窗画面，顶栏浮在它上面（与 `flippedPages` 同一条理由）。
-        .ignoresSafeArea(edges: .top)
-    }
-
-    /// 第二页的滚动锚点标识。只在自检通道里被 `scrollTo` 用，但也无副作用。
-    private static let flipPreviewPage2Anchor = "detail-flip-page2"
-    #endif
-
     /// 三层自下而上：**常驻的头图/模糊背景** → 正文 → 第一页前景。
     ///
     /// 背景层自己会从「左糊右清」扫成「整幅全糊」，扫完之后就一直是第二页的固定
@@ -325,33 +236,58 @@ struct DetailView: View {
         GeometryReader { geo in
             let size = geo.size
             ZStack(alignment: .top) {
-                DetailPageArt(
-                    viewport: size,
-                    target: artTarget,
-                    blurTarget: artBlurTarget,
-                    expanded: pager.blurExpanded
-                )
-                .allowsHitTesting(false)
-
                 detailScroll
                     .opacity(pager.bodyVisible ? 1 : 0)
-                    .allowsHitTesting(pager.bodyVisible)
+                    .allowsHitTesting(pager.page == .body && !pager.isTransitioning)
+                    .accessibilityHidden(pager.page != .body || pager.isTransitioning)
 
                 artPage(size: size)
                     .opacity(pager.artForegroundVisible ? 1 : 0)
-                    .allowsHitTesting(pager.artForegroundVisible)
+                    #if os(iOS)
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
+                        pager.handleSwipe(translation: value.translation, startedAtTop: true)
+                    })
+                    .accessibilityAction(named: Text("查看详细信息")) { pager.flipToBody() }
+                    #endif
+                    // 放在手势外层：隐藏的封面连同手势一起退出命中测试。
+                    .allowsHitTesting(pager.page == .art && !pager.isTransitioning)
+                    .accessibilityHidden(pager.page != .art || pager.isTransitioning)
             }
             .frame(width: size.width, height: size.height)
             .background {
+                // 仅背景延伸到标签栏后；正文和选集仍由系统安全区避让底栏。
+                GeometryReader { backgroundGeo in
+                    DetailPageArt(
+                        viewport: backgroundGeo.size,
+                        target: artTarget,
+                        blurTarget: artBlurTarget,
+                        expanded: pager.blurExpanded
+                    )
+                }
+                #if os(iOS)
+                .ignoresSafeArea(.container, edges: .bottom)
+                #endif
+                .allowsHitTesting(false)
+            }
+            .background {
                 #if os(macOS)
                 // 把所在窗口报给状态机：滚轮监视器只裁决这个窗口的事件。
-                // iOS 没有本地事件监视器（翻页走系统滚动），不需要这层回报。
+                // iOS 的翻页走触控手势，不需要这层窗口回报。
                 DetailPageWindowAnchor { pager.attach(window: $0) }
                 #endif
             }
         }
-        // 第一页是整窗画面：顶栏浮在它上面（工具栏材质本页已摘）
+        // 固定视口延伸到导航栏后，正文顶部另行预留内容间距。
         .ignoresSafeArea(edges: .top)
+        #if OCPLAYER_SELFTEST
+        .task {
+            guard ProcessInfo.processInfo.environment["OCPLAYER_DETAIL_FLIP_PAGE"] == "2" else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            pager.flipToBody()
+        }
+        #endif
     }
 
     private func artPage(size: CGSize) -> some View {
@@ -403,17 +339,7 @@ struct DetailView: View {
     var body: some View {
         Group {
             if detailLayoutStyle == .flip {
-                // 翻页版式：本页就是两页（见 `DetailPageFlip`）——第一页头图 + 下部选集带，
-                // 翻一屏到正文。没有第二套版式，也不再回退旧横幅。
-                //
-                // **两套实现按编译期分**，不是运行期分叉：macOS 那套依赖滚轮监视器
-                // （`NSEvent` / `NSWindow`），iOS 编不出来；iPad 那套用系统滚动。
-                // 版式判定（要不要翻页）是运行期的、只有一处；这里分的是「**怎么翻**」。
-                #if os(macOS)
                 flippedPages
-                #else
-                flipScrollPages
-                #endif
             } else {
                 detailScroll
             }
@@ -424,6 +350,8 @@ struct DetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        // 详情页保留底部标签栏；前景避让底栏，背景单独延伸到底栏后。
+        .toolbarVisibility(.visible, for: .tabBar)
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
         .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
         #elseif os(macOS)
@@ -481,15 +409,18 @@ struct DetailView: View {
             model.attach(app)
             await model.load()
         }
+        .onChange(of: reduceMotion, initial: true) { _, newValue in
+            pager.reduceMotion = newValue
+        }
+        .onChange(of: detailLayoutStyle) { _, _ in
+            pager.reset()
+        }
         #if os(macOS)
         // 翻页状态机：滚轮监视器只在本页是栈顶且翻页布局生效时安装
         // （macOS 26 上被盖页不发 onDisappear，靠 `app.path` 的深度判定）。
         .onChange(of: isFlippingActive, initial: true) { _, active in
             pager.reduceMotion = reduceMotion
             pager.updateMonitor(active: active)
-        }
-        .onChange(of: reduceMotion) { _, newValue in
-            pager.reduceMotion = newValue
         }
         .onDisappear { pager.updateMonitor(active: false) }
         #endif
@@ -508,11 +439,7 @@ struct DetailView: View {
 
     // MARK: - 详情页正文（= 翻页布局里的第二页）
 
-    /// 正文内容（**不含 ScrollView**）。
-    ///
-    /// 抽出来的唯一理由是 iPad 的翻页版式：那一版两页要放进**同一个** ScrollView，
-    /// 第二页不能是嵌套的 `ScrollView` —— 嵌套会让内层先吃掉手势，吸附与回弹全乱。
-    /// banner 版式与 macOS 的第二页仍是「一个 ScrollView 包着它」，行为不变。
+    /// 正文内容，翻页版式的第二页拥有独立的原生 ScrollView。
     private var detailBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             #if os(macOS)
@@ -616,22 +543,36 @@ struct DetailView: View {
         // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
     }
 
-    /// 详情页正文滚动区。
-    ///
-    /// - banner 版式（iPhone / iPad 分屏）：就是整页正文；
-    /// - macOS 翻页版式：第二页（滚轮状态机读它的 `bodyOffsetY`）；
-    /// - iPad 翻页版式：**不经过这里** —— 它被 `flipScrollPages` 直接放进外层
-    ///   那个唯一的 ScrollView，见 `detailBody` 的注释。
+    /// banner 的完整页面，或翻页版式的独立正文页。
     private var detailScroll: some View {
         ScrollView {
             detailBody
         }
         #if os(macOS)
-        // 第二页的滚动位置：翻回第一页的判据（停在顶部 + 主动上滚）
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
             geometry.contentOffset.y
         } action: { _, newValue in
             pager.bodyOffsetY = newValue
+        }
+        #else
+        // 原生滚动独占正文拖动；只观察顶部与下拉阈值，不另挂 DragGesture。
+        .onScrollGeometryChange(for: DetailPagePager.BodyScrollRegion.self) { geometry in
+            DetailPagePager.bodyScrollRegion(
+                offsetY: geometry.contentOffset.y + geometry.contentInsets.top
+            )
+        } action: { _, region in
+            pager.updateBodyScroll(region: region)
+        }
+        .onScrollPhaseChange { oldPhase, phase, context in
+            guard detailLayoutStyle == .flip else { return }
+            pager.handleBodyScrollPhase(from: oldPhase, to: phase,
+                offsetY: context.geometry.contentOffset.y + context.geometry.contentInsets.top)
+        }
+        .scrollBounceBehavior(.always, axes: .vertical)
+        // 外层视口延伸到导航栏后；正文在安全区域内开始，背景仍铺满。
+        .safeAreaPadding(.top, detailLayoutStyle == .flip ? 0 : nil)
+        .accessibilityAction(named: Text("返回封面")) {
+            if detailLayoutStyle == .flip { pager.flipToArt() }
         }
         #endif
     }
