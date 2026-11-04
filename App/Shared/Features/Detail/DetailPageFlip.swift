@@ -46,10 +46,9 @@ import AppKit
 // 与 demo 的差异(都是为了落进本 App 既有设计语言,不是简化):
 //   1. **外观自适应**:demo 恒暗;本页第一页跟随 `.detail` 档氛围底——浅色压白雾配
 //      深字、深色压黑纱配白字,所以 `EpisodeSelectCard` 等现成组件不用改色。
-//   2. **正文页不另垫背景**:它本来就是「整窗氛围层 + 透明页面」,头图淡出正好沉回
-//      同一张模糊剧照,翻页前后背景连续。
-//   3. **只在有剧照时启用**:没有 backdrop 的条目仍走原来的横幅布局,不做翻页
-//      (翻页的价值全在那张头图上,空底翻页只会翻出一片纯色)。
+//   2. **正文页不另垫背景**：`DetailBackdropView` 始终保留同一份条目像素，
+//      翻页只扩张模糊遮罩，清晰层与模糊层不分别加载。
+//   3. **版式由设备宽度决定**：无图条目保持相同布局，固定过渡图或页面底色承托前景。
 //   4. **滚轮裁决按设备方向归一**:demo 只读原始 delta,关掉「自然滚动」时方向会反。
 
 /// 详情页翻页状态机:两页的可见性、模糊块扩张、正文滚动位置与滚轮裁决都在这里。
@@ -495,13 +494,8 @@ private final class MainThreadEventBox: @unchecked Sendable {
 // MARK: - 头图:清晰剧照 + 可扩张的模糊块 + 外观自适应压雾
 struct DetailPageArt: View {
     let viewport: CGSize
-    /// 清晰层取图(大图,1600 宽)
-    let target: (url: URL?, authHeader: String?)
-    /// 模糊层取图。**必须与整窗氛围层同参**(800 宽 URL + 512 解码,见
-    /// `DetailAmbienceImage`),否则模糊层命中不了 `prewarmAmbience` 预热过的那份缓存,
-    /// 进页首帧就会露出下面那张糊底、等自己加载完再补 —— 也就是「全模糊闪一下、
-    /// 再猛地变清晰」那串闪烁的来源。
-    let blurTarget: (url: URL?, authHeader: String?)
+    /// 两层共用同一份已就绪像素，不在视图内部加载或切换图片。
+    let image: PlatformImage
     /// 模糊块是否已扩张到整幅(翻页中)
     var expanded = false
 
@@ -517,64 +511,26 @@ struct DetailPageArt: View {
         .clipped()
     }
 
-    /// 清晰层:右半是这张图的主体,取比模糊层高两档的解码尺寸。
     private var sharpImage: some View {
-        Group {
-            if target.url != nil {
-                RemoteImage(
-                    url: target.url,
-                    authHeader: target.authHeader,
-                    maxPixelSize: 1920,
-                    preserveCurrentImageOnReload: true
-                )
-                .aspectRatio(contentMode: .fill)
-            } else {
-                Rectangle().fill(Metrics.placeholderFill)
-            }
-        }
-        .frame(width: viewport.width, height: viewport.height)
-        .clipped()
+        Image(platform: image).resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: viewport.width, height: viewport.height)
+            .clipped()
     }
 
-    /// 模糊层:同一张图的模糊版 + 压雾,右缘自带渐变软边;`expanded` 时软边
-    /// 向右扫出屏幕 → 「左糊右清」变「整幅全糊」。
-    ///
-    /// ## 扫动的是**遮罩**,不是图像
-    ///
-    /// 早先的实现是把图像套进一个宽度会变的 `frame` 里再 `clipped`:块宽从 0.68W
-    /// 涨到 1.55W,而图像只有视口那么宽,于是「块比图宽」的那段时间右边是空的;
-    /// 软边扫过去之后,左侧又跟着块宽被重新裁一遍 —— 肉眼就是「模糊跑一半、左边
-    /// 没那么糊了」。
-    ///
-    /// 现在图像**始终铺满视口、尺寸不变**(模糊也只算一次),只有 mask 里那条
-    /// 「实心段 + 软边」的遮罩条在变宽。实心段的左边界恒在 0,所以已经糊住的
-    /// 区域一直是完整的 30pt 模糊,不会再变浅。
+    /// 图像固定铺满视口；只扩张遮罩，翻页时不换图、不改变模糊半径。
     private var blurBlock: some View {
-        Group {
-            if blurTarget.url != nil {
-                RemoteImage(
-                    url: blurTarget.url,
-                    authHeader: blurTarget.authHeader,
-                    maxPixelSize: DetailAmbienceImage.decodePixels,
-                    preserveCurrentImageOnReload: true
-                )
-                .aspectRatio(contentMode: .fill)
-                .frame(width: viewport.width, height: viewport.height)
-                // 模糊会让边缘发虚透光,放大一点把虚边推出可视区
-                .scaleEffect(1.15)
-                .blur(radius: 30)
-                .saturation(1.02)
-                // 模糊结果整块栅格化一次:遮罩动画只动裁剪,不必逐帧重算 30pt 高斯
-                .drawingGroup()
-                .clipped()
-                .overlay(veilTint)
-            } else {
-                Rectangle().fill(Metrics.placeholderFill)
-            }
-        }
-        // 图像与遮罩都按视口定容:块本身永远不参与 ZStack 的居中计算
-        .frame(width: viewport.width, height: viewport.height)
-        .mask(alignment: .leading) { maskStrip }
+        Image(platform: image).resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: viewport.width, height: viewport.height)
+            .scaleEffect(1.15)
+            .blur(radius: 30)
+            .saturation(1.02)
+            .drawingGroup()
+            .clipped()
+            .overlay(veilTint)
+            .frame(width: viewport.width, height: viewport.height)
+            .mask(alignment: .leading) { maskStrip }
     }
 
     /// 遮罩条 = 实心段 + 软边。两段各自用 `frame(width:)` 动，而不是改

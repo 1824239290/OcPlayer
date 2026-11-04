@@ -1,3 +1,4 @@
+import AppDesignKit
 import CoreModel
 import Foundation
 import JellyfinKit
@@ -486,6 +487,56 @@ final class CollectionDetailTests: XCTestCase {
                       "内容上屏时背景图来源必须已解析完成（把 resolveBackdropSource() 挪到上屏之后即红）")
         XCTAssertEqual(first.url?.contains("server-bd"), true,
                        "内容上屏时 backdropTarget 就该给出最终那张，实际: \(first.url ?? "nil")")
+    }
+
+    func testLaterMemberPageSubmitsFirstBackdropPixels() async throws {
+        try await assertMemberBackdropSubmission(reset: false)
+    }
+
+    func testRestoredMemberCacheSubmitsFirstBackdropPixels() async throws {
+        try await assertMemberBackdropSubmission(reset: true)
+    }
+
+    private func assertMemberBackdropSubmission(reset: Bool) async throws {
+        let (app, stub, _) = try await makeApp()
+        let item = MediaItem(id: "late-member-box", name: "合集", kind: .boxSet)
+        stub.itemResult = .success(item)
+        #if os(macOS)
+        let image = PlatformImage(size: CGSize(width: 2, height: 2))
+        #else
+        let image = PlatformImage()
+        #endif
+        var decodedTargets: [URL] = []
+        let artwork = DetailBackdropArtwork(cachedImage: { url, _, pixels in
+            guard pixels == DetailAmbienceImage.artDecodePixels else { return nil }
+            decodedTargets.append(url)
+            return image
+        }, loader: { _, _, _ in
+            XCTFail("本例的最终图片已缓存，不应发起异步加载")
+            return nil
+        })
+        let model = DetailViewModel(item: item, backdropArtwork: artwork)
+        model.attach(app)
+        await model.load()
+        XCTAssertNil(artwork.content, "首屏无图时不能提交其他来源")
+
+        let member = MediaItem(id: "late-member", name: "电影", kind: .movie,
+                               backdropImageTag: "late-art")
+        stub.itemsPageResult = .success(MediaItemsPage(
+            items: [member], startIndex: 0, totalRecordCount: 1))
+        if reset {
+            _ = try await app.metadata.refreshCollectionMembers(itemID: item.id, startIndex: 0)
+        }
+        let calls = stub.callCount("itemsPage")
+        await model.loadMembers(reset: reset)
+
+        let snapshot = try XCTUnwrap(artwork.content, "成员到达后必须提交像素，只有来源锁不够")
+        XCTAssertTrue(snapshot.image === image)
+        XCTAssertTrue(snapshot.target.url?.absoluteString.contains("late-art") == true)
+        XCTAssertTrue(snapshot.target.url?.absoluteString.contains("maxWidth=1600") == true)
+        XCTAssertEqual(decodedTargets.count, 1)
+        XCTAssertEqual(stub.callCount("itemsPage"), calls + (reset ? 0 : 1),
+                       "缓存恢复不请求，分页只拉一个新窗口")
     }
 
     // MARK: - 网格卡的封面（合集库）

@@ -10,34 +10,37 @@ import SwiftUI
 /// 换着放，共用这里的遮罩与裁剪。
 struct BackdropAmbienceView: View {
     enum Scrim {
-        /// 详情页：顶部要浮白字头部（Logo 白字兜底 / metaRow 白字 / 白胶囊播放钮），
-        /// 遮罩顶部两种外观下都压暗，下半段沉回页面底色。
+        /// 详情页：上半段保留图片氛围，下半段沉回页面底色以承托正文。
         case detail
         /// 首页：Rail 标题、卡片直接压在背景上，全屏均衡的雾化/压暗。
         case home
     }
 
-    /// `MediaItem.imageTarget` 的产物。模糊底图给 800 宽的小图 + 512px 解码
-    /// 下采样就够——反正要糊掉，别为氛围图拉原画。
+    /// URL 加载路径通常使用 800 宽 / 512px 解码；详情直接提供与清晰层共用的像素。
     let target: (url: URL?, authHeader: String?)
     var scrim: Scrim = .detail
-    /// 图片出现时的淡入节奏。默认 `Motion.ambient`（1.6s）：换片、或从别处切到
-    /// 本图，要「缓慢渐变」。**首次出现且图已在缓存里**的场景（详情页拿首页那张
-    /// 顶底）必须传短淡入——1.6s 在推页那 0.35s 里只走到 ~25% 不透明度，观感
-    /// 等于没兜住，还是先黑一下。
+    /// URL 加载路径使用的淡入动画；已解码快照由页面外层统一动画。
     var fade: Animation? = Motion.ambient
+    /// 已解码的页面快照优先。详情页由外层统一加载、统一淡入，这里只做视觉处理。
+    var image: PlatformImage? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if let url = target.url {
-            RemoteImage(
-                url: url,
-                authHeader: target.authHeader,
-                maxPixelSize: 512,
-                preserveCurrentImageOnReload: true,
-                fadeAnimation: fade
-            )
+        if image != nil || target.url != nil {
+            Group {
+                if let image {
+                    Image(platform: image).resizable()
+                } else {
+                    RemoteImage(
+                        url: target.url,
+                        authHeader: target.authHeader,
+                        maxPixelSize: 512,
+                        preserveCurrentImageOnReload: true,
+                        fadeAnimation: fade
+                    )
+                }
+            }
                 .aspectRatio(contentMode: .fill)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // 4e7287e 的教训：fill 的溢出尺寸会参与布局、撑高兄弟图层，
@@ -62,8 +65,7 @@ struct BackdropAmbienceView: View {
             switch scrim {
             case .detail:
                 // 全屏遮罩保持模式自适应：日间白雾、夜间黑纱，下半段沉回
-                // 页面底色。白字头部的压暗不在这层——那会把日间上半屏
-                // 染成浑浊过渡带；它绑在详情页英雄区视图上随头部滚动。
+                // 页面底色；这层只负责整体氛围，不跟随头部滚动或额外叠加英雄图。
                 let tint: Color = light ? .white : .black
                 LinearGradient(
                     stops: [
@@ -82,7 +84,7 @@ struct BackdropAmbienceView: View {
                 // 就压满（旧值 0.55/0.28 起）会把顶栏玻璃底下的图洗成白条——轮播页
                 // （首页 / Bangumi / MoviePilot 首页）顶栏读作「纯白」的主因。内容区
                 // 的雾度不变：继续观看标题 / chips 行都在 0.10-0.13 高度，此处雾度
-                // 仍到达满档。`.detail` 档不动（详情页白字头部靠它压底）。
+                // 仍到达满档。详情页继续使用独立的 `.detail` 渐变。
                 let tint: Color = light ? .white : .black
                 LinearGradient(
                     stops: [

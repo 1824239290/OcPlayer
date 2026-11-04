@@ -19,14 +19,20 @@ extension AppModel {
         return task
     }
 
-    /// 氛围底图预热：与进页后的 `DetailViewModel.prewarmAmbience` 同链。
+    /// 点击时预取详情实际使用的高分辨率档，来源与详情解析共用同一策略。
     private func prewarmDetailBackdrop(for item: MediaItem) {
         guard let server else { return }
-        let target = item.imageTarget(server, kind: .backdrop, width: DetailAmbienceImage.urlWidth)
-        guard let url = target.url else { return }
-        let authHeader = target.authHeader
+        let policy = tmdbImagePolicy
         Task {
-            await DetailAmbienceImage.prewarm(url: url, authHeader: authHeader)
+            let overlay = await tmdbOverlay(for: item)
+            let target = DetailBackdropSource.resolve(
+                item: item, server: server, overlay: overlay, policy: policy,
+                width: DetailAmbienceImage.artURLWidth
+            )
+            guard let url = target.url else { return }
+            _ = try? await ImagePipeline.shared.load(
+                url, authHeader: target.authHeader, maxPixelSize: DetailAmbienceImage.artDecodePixels
+            )
         }
     }
 }

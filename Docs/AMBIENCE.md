@@ -3,6 +3,8 @@
 「氛围背景图」= 页面底部那张**模糊 + 雾化**的 backdrop（`BackdropAmbienceView`）。
 本文件回答两个问题：**哪些界面应该有**、**怎么客观验证它有**。
 
+图片来源、加载时机、详情切换与模糊职责以 [背景架构规划](BACKGROUND-ARCHITECTURE.md) 为准（2026-11-04）。
+
 配套的验收台：`Scripts/verify-ambience.sh`（覆盖契约的唯一事实源是它内置的
 `PAGES` 表）+ `Scripts/ambience-probe.swift`（判据实现）。本文件的表格是给人和
 代码评审看的同一份清单。
@@ -13,7 +15,7 @@
 
 | | 机制 | 结果 |
 | --- | --- | --- |
-| **macOS** | `AppShellView` 根节点 `.background { windowAmbienceLayer }`，层里**常驻** `AmbientBackdropCarousel`；导航栈宿主透明，垫在后面的层能透到屏幕 | **任何**没画底的页面都免费得到背景；有自己主体图的页面用 `windowAmbience(_:)` 声明覆盖它 |
+| **macOS** | `AppShellView` 根节点 `.background { windowAmbienceLayer }`，层里**常驻** `AmbientBackdropCarousel`；导航栈宿主透明，垫在后面的层能透到屏幕 | **任何**没画底的页面都免费得到背景；普通主体图页面用 `pageAmbience` 声明覆盖；详情页用页面内快照图组覆盖并清除窗口声明 |
 | **iOS** | UIKit 宿主**不透明**（`WindowAmbience.reachesScreen == false`，栈后面垫层到不了屏幕），push 落地后被盖页会被移出窗口 | **每个页面必须自己垫**。没人垫 → 页面落在系统纯色底上（夜间=黑、日间=白） |
 
 结论：**macOS 的覆盖是"结构性"的，iOS 的覆盖是"逐页登记"的**——所以缺口全部在 iOS，
@@ -24,7 +26,7 @@
 ## 二、覆盖契约（与 `Scripts/verify-ambience.sh --list` 同源）
 
 `gate` 说明启动通道：`section` = 现成的 `OCPLAYER_START_SECTION`；
-`route` = 需要 Debug 深链 `OCPLAYER_START_ROUTE`（**尚未实现**，属实施方案 Phase 4）；
+`route` = 使用 Debug 深链 `OCPLAYER_START_ROUTE`（入口见 `AppModel+LaunchRoute.swift`）；
 `excluded` = 设计上不做。
 
 ### macOS（全会话覆盖）
@@ -41,10 +43,10 @@
 | --- | --- | --- | --- |
 | 首页 / MoviePilot / Bangumi / 设置（Tab 根页） | section | 有背景 | ✅ `pageAmbience` |
 | 搜索 Tab 根页 | route | 有背景 | ✅ 补（原先整页纯色，而 Tab 栏玻璃底下能透出氛围图） |
-| 媒体库网格页 / Bangumi 个人 / 收藏列表 / 条目详情 / 每日放送 | route | 有背景 | ✅ `appRouteView` 的 `.routeAmbience(route)` 一处覆盖 |
+| 媒体库网格页 / Bangumi 个人 / 收藏列表 / 每日放送 | route | 有背景 | ✅ `appRouteView` 的 `.routeAmbience(route)` 一处覆盖 |
 | 设置 10 个子页 | route | 有背景 | ✅ 同上（path 路由，无需逐页登记；2026-10-22 承载变更见下） |
 | 管理服务器 / 开源许可证 | route | 有背景 | ✅ 呈现式页各自挂 `pageAmbience`；管理服务器已改玻璃卡片流，开源许可证保留系统 `List` 但**行底显式清空**（`listRowBackground(.clear)`，iOS grouped 行底是系统实色） |
-| 详情页 / 资源搜索页 / 下载管理页 | route | 有背景 | ✅ 自有主体图（`ownsArt`） |
+| 详情页 / 资源搜索页 / 下载管理页 | route | 有背景 | ✅ 详情页自有快照图组；资源搜索/下载管理使用主体图声明 |
 | 引导页（未登录） | excluded | — | 会话未建立，没有图可用 |
 | 播放器 | excluded | — | 画面本身即内容 |
 | sheet / 弹窗 / 菜单 | excluded | — | 系统材质浮动层，底下垫图看不见 |
@@ -73,10 +75,10 @@
 
 | 挂载点 | 覆盖 | 现状 |
 | --- | --- | --- |
-| `appRouteView` 的 `.routeAmbience(route)` | 媒体库 / Bangumi 个人 / 收藏列表 / 条目详情 / 每日放送 / **10 个设置子页** | ✅ 一处覆盖六类路由 |
+| `appRouteView` 的 `.routeAmbience(route)` | 媒体库 / Bangumi 个人 / 收藏列表 / 每日放送 / **10 个设置子页** | ✅ 池兜底集中挂载，详情路由直通到页面自身背景 |
 | 5 个 Tab 根页（`AppShell.compactTabs`） | 首页（轮播组件）/ Bangumi / MoviePilot / 设置 / 搜索 | ✅ 后四个走 `pageAmbience` |
 | `navigationDestination(isPresented:)` 调用点 | 管理服务器 / 开源许可证 / 下载管理 / 资源搜索 | ✅ 四处各自挂着 |
-| `DetailView` | 详情页（预热 + 兜底淡入 + 未就绪声明 nil） | ✅ 走 `pageAmbience(ownsArt: true)` |
+| `DetailView` | 详情页（固定进页快照 → 条目像素整组淡入） | ✅ `DetailBackdropView` + `pageAmbience(nil)` |
 | 设置页（**2026-10-22 承载变更**） | 设置 Tab 根页 + 10 个子页 + 管理服务器 + 开源许可证详情页 | ✅ **挂载点与上表完全一致**：Tab 根页 `pageAmbience` / 子页 `.routeAmbience(route)` / 两个呈现式页各自挂；`Form` → `ScrollView` + 玻璃卡片流只换内容承载，不动这一层 |
 
 **卡换成玻璃后，采样位置要按新卡缘复核**：设置页的卡现在是整块玻璃（浅色下等效不透明度 0.60–0.65），
@@ -89,8 +91,7 @@
 （空态/失败态/骨架）的页面必须走 `PageFillingState`（见 §六）；④ 在
 `Scripts/verify-ambience.sh` 的 `PAGES` 表加一行，`--list` 就会把它算进契约。
 
-**详情页为什么在路由出口让路**：它的整窗声明在底图未就绪时发的是 nil（"本页暂无氛围"），
-外层若再声明一次就会把它盖掉、背景消失——所以 `RouteAmbienceModifier` 对 `.detail` 直通。
+**详情页为什么在路由出口让路**：详情页已拥有页面内的快照图组，并清除窗口主体图声明。外层再挂池图会产生重复背景来源，所以 `RouteAmbienceModifier` 对 `.detail` 直通。
 
 ## 五、验收怎么跑
 

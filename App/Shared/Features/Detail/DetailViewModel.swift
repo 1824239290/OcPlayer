@@ -55,7 +55,9 @@ final class DetailViewModel {
     /// 服务端本来就有这条能力（实测 Jellyfin 12.1.0：`parentId=<合集id>&recursive=false`
     /// 返回全部成员电影），此前 App **一次都没调用过** —— 于是「合集」在详情页里
     /// 只是一个空壳：没有成员列表，主按钮还会把合集自己的 id 送去协商播放。
-    var collectionMembers: [MediaItem] = []
+    var collectionMembers: [MediaItem] = [] {
+        didSet { lockBackdropTargetsIfNeeded() }
+    }
     /// 服务端报的成员总数（合集可能大于一页）；nil = 还没拉到 / 服务端没给。
     private(set) var collectionMembersTotalCount: Int?
     var isLoadingMembers = false
@@ -92,12 +94,8 @@ final class DetailViewModel {
     /// 合集成员上一页是否满页（总数未知时判断还能不能翻）。
     private var membersLastPageWasFull = false
 
-    /// 氛围底图（800 宽 backdrop + 512 解码）是否已进 pipeline 缓存。
-    /// 视图只在就绪后才声明整窗/页内氛围——氛围层不再以灰占位淡入、
-    /// 图片到位时也无需可见地补加载。取图失败保持 false（回退纯色底）。
-    private(set) var isAmbienceReady = false
-    private var ambiencePrewarmTask: Task<Void, Never>?
-    private var prewarmedAmbienceURL: URL?
+    /// 本次访问的进页快照与已就绪条目图；视图只消费已解码像素。
+    let backdropArtwork: DetailBackdropArtwork
 
     var shown: MediaItem { detail ?? item }
 
@@ -136,10 +134,8 @@ final class DetailViewModel {
     @ObservationIgnored
     private var backdropLatch = BackdropSourceLatch()
 
-    /// 解析完成后锁定的取图目标，键为 URL 宽度档（800 / 1600 …）。
-    ///
-    /// 只在 `resolveBackdropSource()` 里写（那里一次性算好全部宽度档），
-    /// `backdropTarget(width:)` **只读不写** —— 见那个函数的「必须是纯函数」说明。
+    /// 解析完成后首个非空来源；只由解析及数据落地时的锁定函数写入。
+    /// `backdropTarget(width:)` 只读，不能在 SwiftUI body 求值时改状态。
     @ObservationIgnored
     private var lockedBackdropTargets: [Int: BackdropSourceLatch.Target] = [:]
 
@@ -303,45 +299,11 @@ final class DetailViewModel {
         return (url, nil)
     }
 
-    /// 背景（氛围）取图目标，规则同上。
-    ///
-    /// ## 为什么要在本页存续期内**锁定**第一张解析出来的图
-    ///
-    /// TMDB 图片策略默认是「优先顶替服务端已有的图」（`TMDbPreferences.replaceExistingImages`
-    /// 默认 true），而 `tmdbOverlay` 是**异步**到的：`overlay(for:)` 虽然只是磁盘读、不发
-    /// 网络，但它仍然要等一次 async 跳转。于是默认顺序变成：
-    ///
-    ///   ① 详情内容先落地 → 按「服务端 backdrop」上屏
-    ///   ② 几十~几百毫秒后 overlay 到达 → `backdropTarget` 返回值换成 TMDB 图
-    ///   ③ `RemoteImage` 按新 URL 交叉淡入
-    ///
-    /// 用户看到的就是「背景先出来一张，然后马上被另一张顶掉」——同一条目的两张不同背景
-    /// 图（2026-11-03 实测：赛博朋克：边缘行者先服务端 backdrop、后被 TMDB key art 顶替，
-    /// 探针三条 URL 依次为 氛围池兜底图 → 服务端 backdrop → `image.tmdb.org`）。
-    ///
-    /// **这不是数据层给了两份数据**：数据侧只有一条规则（TMDB 优先），是渲染顺序把一条
-    /// 规则的两个阶段都画了出来。修法在渲染层：解析完成后的第一张非空图即锁定，
-    /// 本页之后不再因迟到数据改口——迟到的 TMDB 数据仍然会落库，**下次进页**直接命中缓存，
-    /// 于是「要么一次画对、要么这次先画服务端图但绝不中途换脸」。
-    ///
-    /// 锁定只对**非空**结果生效：解析完成前 `own` 可能还是 nil（详情未落地 / 列表条目
-    /// 不带 backdrop tag），这时视图会走氛围池兜底图（`DetailView.artTarget`），
-    /// 那条路径是设计上的「背景延续」，不受这里锁定。
-    /// ## 这个函数**必须是纯函数**（2026-11-03 死循环事故）
-    ///
-    /// 2026-11-03 曾把 `backdropLatch.target(for:)`（`mutating`）直接接在这里，导致
-    /// 详情页死循环、CPU 100%、窗口出不来。成因是一条完整的自激链：
-    ///
-    /// 1. `DetailViewModel` 是 `@Observable`；`backdropLatch` 是它的普通存储属性；
-    /// 2. 视图 `DetailView.artTarget`（计算属性）在 body 求值路径上调用本函数；
-    /// 3. 本函数若写 `backdropLatch`，`@Observable` 就登记一次对象变更；
-    /// 4. `.onChange(of: artTarget.url, initial: true)` 每次 body 求值都要重算 `artTarget`
-    ///    以比较新旧值 ⇒ 又回到第 3 步。
-    ///
-    /// 结论：**body 求值期间不许改状态**。所以解析（会改状态的唯一时点）全部挪进
-    /// `resolveBackdropSource()`，结果存进 `lockedBackdropTargets`；本函数只读不写。
+    /// 本次访问锁定的背景来源。先读本机 TMDB 缓存，再锁定第一张非空图；
+    /// 后续详情、TMDB 或合集成员补齐可补锁空档，但不能替换已锁定来源。
+    /// 此函数保持纯读取，图片加载和像素提交由 `backdropArtwork` 负责。
     func backdropTarget(width: Int) -> (url: URL?, authHeader: String?) {
-        // 解析完成前一律不给本条目的图，让视图回落氛围池兜底图（设计上的「背景延续」）。
+        // 解析前不发出条目图；视图延续已冻结的入场快照。
         guard backdropLatch.isResolved else { return (nil, nil) }
         // 解析完成后读缓存；缓存未命中时**只算不写**。
         if let cached = lockedBackdropTargets[width] {
@@ -352,13 +314,11 @@ final class DetailViewModel {
 
     /// 真正的取图规则（未加锁定）。`backdropTarget` 是它的带锁定版本。
     private func resolveBackdropTarget(width: Int) -> (url: URL?, authHeader: String?) {
-        let policy = app?.tmdbImagePolicy ?? TMDbImagePolicy()
-        let serverTarget = shown.imageTarget(app?.server, kind: .backdrop, width: width)
-        let url = DisplayMetadata.backdropURL(serverURL: serverTarget.url, overlay: tmdbOverlay,
-                                             requestedWidth: width, policy: policy)
-        if let url {
-            return (url, DisplayMetadata.isTMDbImage(url) ? nil : serverTarget.authHeader)
-        }
+        let target = DetailBackdropSource.resolve(
+            item: shown, server: app?.server, overlay: tmdbOverlay,
+            policy: app?.tmdbImagePolicy ?? TMDbImagePolicy(), width: width
+        )
+        if target.url != nil { return (target.url, target.authHeader) }
         // 合集专用兜底：服务端与 TMDB 都没有背景图时，用**第一个成员的背景图**。
         // 合集本身在服务端就是没有图的容器（实测 `ImageTags: {}`），而它的成员是正常
         // 电影、海报背景一应俱全 —— jellyfin-web 对合集卡也是这么做的（拿子项的图顶上）。
@@ -367,27 +327,11 @@ final class DetailViewModel {
         return (fallback.url, fallback.authHeader)
     }
 
-    /// 首帧取图用的 TMDB overlay 预读。
-    ///
-    /// `overlay(for:)` **不发网络**（只查 link + 磁盘 payload），代价是一次 async 跳转；
-    /// 但它若排在 `load()` 末尾，详情内容会先按服务端图上屏、随后被 TMDB 图顶掉。
-    /// 所以这里在**任何会触发背景图绘制的内容落地之前**先读一次。
-    ///
-    /// 读不到（未配置 TMDB / 没有对应 / 没缓存）不算失败：策略自然回落到服务端图，
-    /// 之后 `loadTMDbOverlay` 的后台补齐照常进行。
-    ///
-    /// **不是 private**：它是「背景图解析完成」这个状态转换的唯一入口，用例要能直接
-    /// 驱动到解析后的状态（见 `CollectionDetailTests` 的两条背景来源用例）。
-    /// 生产调用点只有 `load()` 的第一句——顺序本身就是修复的一部分，别挪。
-    ///
-    /// ## 它是**唯一**会写背景图状态的地方
-    ///
-    /// 解析结果在这里一次性算进 `lockedBackdropTargets`，`backdropTarget(width:)` 只读。
-    /// 这是 2026-11-03 死循环事故的修复方式：把「会改状态的时刻」从 body 求值路径上摘出来。
+    /// 在详情内容落地前读取本机 TMDB 缓存（无网络），随后开放来源锁定。
+    /// 没有缓存时按图片策略使用服务端图；迟到的 TMDB 留给下次访问。
+    /// 保持内部可见，供来源锁定与加载顺序测试直接驱动。
     func resolveBackdropSource() async {
-        // `app` 为 nil（未 `attach`）时也必须置位：否则 latch 永远不 resolved，
-        // 页面会永久停在氛围池兜底图、本条目的图永远不出且不报错 —— 那是可见的功能退化。
-        // 这里宁可「这次不给本条目图」，也不留一个永久卡死的状态。
+        // 未 attach 也完成解析状态，避免来源永远悬而未决。
         if let app {
             tmdbOverlay = await app.tmdbOverlay(for: item)
         }
@@ -395,22 +339,8 @@ final class DetailViewModel {
         lockBackdropTargetsIfNeeded()
     }
 
-    /// 对**尚未锁定**的宽度档做一次性锁定：首次算到非空图就锁住，之后不再改口。
-    ///
-    /// ## 为什么还留一个「迟到补锁」入口（2026-11-03 review 补的第 3 条）
-    ///
-    /// 解析发生在 `load()` 第一句，那一刻 `shown` 还是列表带来的条目。若它没有
-    /// backdrop tag、本机也没有 TMDB 缓存，`resolveBackdropTarget` 返回 nil，于是
-    /// **什么都不锁**——锁窗口在解析那一刻就永久关闭了。之后详情落地（服务端图出现）、
-    /// 后台 TMDB 补齐（TMDB 图出现）都会让 `backdropTarget` 现算出不同的图，服务端图
-    /// 被 TMDB 顶掉，闪图原样回归。
-    ///
-    /// 旧的 `BackdropSourceLatch` 靠「解析后第一张非空图即锁定」挡住这一种；纯函数化
-    /// 之后必须有人接这一棒。接棒的时点只能是**已有的状态变更点**（`detail` /
-    /// `tmdbOverlay` 的 `didSet`），绝不能放回 body 求值路径——那正是死循环的成因。
-    ///
-    /// **已锁的档不覆盖**：锁定语义是「本页第一次算到的那张就是这张」，重新加载也
-    /// 不改口。这正是 `BackdropSourceLatch` 文档里「本页不再因迟到数据改口」那条。
+    /// 只在状态变更点补锁非空图，绝不放回视图求值路径。
+    /// 已锁档位不覆盖；列表缺 tag、迟到详情和合集成员均遵守同一规则。
     private func lockBackdropTargetsIfNeeded() {
         guard backdropLatch.isResolved else { return }
         for width in Self.backdropWidthBuckets where lockedBackdropTargets[width] == nil {
@@ -457,12 +387,15 @@ final class DetailViewModel {
         return shown.homeStillImageTarget(app?.server, width: width)
     }
 
-    init(item: MediaItem) {
+    init(item: MediaItem, backdropArtwork: DetailBackdropArtwork = DetailBackdropArtwork()) {
         self.item = item
+        self.backdropArtwork = backdropArtwork
     }
 
     func attach(_ app: AppModel) {
         self.app = app
+        let target = app.currentAmbienceTarget
+        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader))
     }
 
     // MARK: - 选中
@@ -498,16 +431,10 @@ final class DetailViewModel {
 
     func load() async {
         guard let app, app.server != nil else { return }
-        // **先读 overlay，再预热 / 上屏**：`overlay(for:)` 是纯磁盘读（不发网络），
-        // 排在后面会让详情内容先按服务端 backdrop 画出首帧、随后被 TMDB 图顶掉
-        // （见 `backdropTarget(width:)` 的锁定说明）。这里先把它读进 `tmdbOverlay`
-        // 并锁好各宽度档，于是第一次绘制就已经是「按 TMDB 优先策略算好的那张」。
-        //
-        // 顺序本身就是修复的一部分：`resolveBackdropSource()` 必须排在**任何会让
-        // 详情内容落地 / 触发背景图绘制**的语句之前，它是唯一会写背景图状态的地方。
+        // 来源解析必须早于详情内容落地；后续数据变化仅补齐尚未锁定的来源。
         await resolveBackdropSource()
-        // 解析完成后 `backdropTarget` 才有值；预热紧跟其后，首帧直接命中缓存。
-        prewarmAmbience()
+        // 来源解析完成后准备实际像素，内存命中时可直接提交。
+        prepareBackdrop()
 
         // 重进页 = 新一轮访问，补拉预算清零。
         episodeReloadAttemptCount = 0
@@ -570,7 +497,7 @@ final class DetailViewModel {
                episodesBySeason[selectedSeasonID] == nil {
                 await loadEpisodes()
             }
-            prewarmAmbience()
+            prepareBackdrop()
         } catch where JellyfinError.isCancellation(error) {
             // 取消不是错误，但加载态必须收尾（否则页面永远停在骨架屏）。
             isLoading = false
@@ -607,6 +534,7 @@ final class DetailViewModel {
         collectionMembers = content.collectionMembers
         collectionMembersTotalCount = content.collectionMembersTotalCount
         membersNextStartIndex = content.collectionMembers.count
+        prepareBackdrop()
 
         if let seasonID = content.episodesSeasonID, !content.episodes.isEmpty {
             episodesBySeason[seasonID] = content.episodes
@@ -658,7 +586,7 @@ final class DetailViewModel {
                 tmdbOverlay = overlay
                 app.noteCollectionArtwork(itemID: shown.id, posterPath: overlay?.posterPath)
             },
-            onRefreshed: { prewarmAmbience() }
+            onRefreshed: { prepareBackdrop() }
         )
     }
 
@@ -689,7 +617,6 @@ final class DetailViewModel {
                 applyMembersPage(page.value)
             }
             membersLoadError = nil
-            if reset { prewarmAmbience() }
         } catch where JellyfinError.isCancellation(error) {
             return
         } catch let e as JellyfinError {
@@ -704,6 +631,7 @@ final class DetailViewModel {
         collectionMembersTotalCount = page.totalCount
         membersNextStartIndex = page.nextStartIndex
         membersLastPageWasFull = page.lastPageWasFull
+        prepareBackdrop()
     }
 
     /// 还有没拉完的成员：优先服务端总数；没有总数时按上一页是否满页判断。
@@ -722,28 +650,14 @@ final class DetailViewModel {
             read: { await app.tmdbOverlay(for: self.shown) },
             refresh: { await app.refreshTMDb(for: self.shown) },
             apply: { self.tmdbOverlay = $0 },
-            onRefreshed: { prewarmAmbience() }
+            onRefreshed: { prepareBackdrop() }
         )
     }
 
-    /// 预热当前条目的氛围底图：与 `BackdropAmbienceView` / 整窗层完全同参
-    /// （`DetailAmbienceImage` 单源），保证视图层的 `RemoteImage` 首帧命中缓存。
-    /// 同一 URL 只预热一次；换条目 / 详情落地换 tag 时重跑。
-    private func prewarmAmbience() {
-        guard app?.server != nil else { return }
-        // 走 `backdropTarget` 而不是裸 `imageTarget`：前者在服务端缺背景图时会回落到
-        // TMDB（TMDB 只补缺）。否则「服务端没有背景图」的条目永远没有氛围层。
-        let target = backdropTarget(width: DetailAmbienceImage.urlWidth)
-        guard let url = target.url else { return }
-        guard url != prewarmedAmbienceURL else { return }
-        prewarmedAmbienceURL = url
-        let authHeader = target.authHeader
-        ambiencePrewarmTask?.cancel()
-        ambiencePrewarmTask = Task {
-            let ready = await DetailAmbienceImage.prewarm(url: url, authHeader: authHeader)
-            guard !Task.isCancelled else { return }
-            isAmbienceReady = ready
-        }
+    /// 单次加载后提交像素。来源锁定与像素就绪是两个阶段，不把 URL 当作图片已显示。
+    private func prepareBackdrop() {
+        let target = backdropTarget(width: DetailAmbienceImage.artURLWidth)
+        backdropArtwork.prepare(target: .init(url: target.url, authHeader: target.authHeader))
     }
 
     /// 读当前选中季的 TMDB 数据（先读缓存立即渲染，再后台补）。
