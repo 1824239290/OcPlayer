@@ -9,8 +9,7 @@ import SwiftUI
 /// 两个平台拿到底图的方式**根本不同**，而这件事此前散落在 7 个调用点上各写一遍：
 ///
 /// * **macOS**：`AppShellView` 根节点垫了一份常驻的整窗层（导航栈宿主透明），
-///   所以**任何没画底的页面自动就有背景**；只有当页面有自己的主体图（详情页的
-///   backdrop、资源页的海报）时才需要声明覆盖它。
+///   所以**任何没画底的页面自动就有背景**；只有当页面有自己的主体图（资源页的海报）时才需要声明覆盖它。
 /// * **iOS**：UIKit 宿主**不透明**（`WindowAmbience.reachesScreen == false`，
 ///   栈后垫层到不了屏幕），页面必须**自己垫**，否则落在系统纯色底上
 ///   （夜间=黑、日间=白）。
@@ -75,8 +74,7 @@ private struct PageAmbienceModifier: ViewModifier {
     /// macOS 整窗声明：只有自带主体图的页面才发。
     ///
     /// 不发声明时**主动传 nil 占位**（而不是挂 nil 就不调修饰符）：`windowAmbience`
-    /// 的 nil 语义是"本页声明无氛围"，会盖住下层的声明——这正是从"有图的详情页"
-    /// 返回"无图的详情页"时该有的行为。
+    /// 的 nil 语义是"本页不声明窗口主体图"，会盖住下层的声明，避免继承前一页面的图。
     private var declaredAmbience: WindowAmbience? {
         guard WindowAmbience.reachesScreen, let target, !target.isEmpty else { return nil }
         return target.ownsArt
@@ -130,9 +128,8 @@ extension View {
 /// 漏一处（实测漏了 11 类）。挂在路由出口后，**新增 `Route` case 自动继承**，
 /// 不需要谁记得登记。
 ///
-/// **详情页显式让路**：它有自己的主体图（条目 backdrop + TMDB 补图 + 合集成员兜底），
-/// 整窗声明由 `DetailView` 自己发，而且底图未就绪时发的是 nil（"本页暂无氛围"）。
-/// 外层要是在它之后再声明一次，就会把它的声明盖掉、详情页背景消失——所以这里跳过它。
+/// **详情页显式让路**：`DetailBackdropView` 在页面内持有固定快照与条目图组，
+/// `pageAmbience(nil)` 清除前页窗口声明。外层不再挂池图，避免重复背景来源。
 private struct RouteAmbienceModifier: ViewModifier {
     @Environment(AppModel.self) private var app
     let route: AppModel.Route

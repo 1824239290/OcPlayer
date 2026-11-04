@@ -1,25 +1,10 @@
-import AppDesignKit
-import Foundation
-
-/// 氛围底图预热的唯一实现：800 宽 URL + 512 解码（与 `BackdropAmbienceView` /
-/// 整窗层完全同参，保证视图层的 `RemoteImage` 首帧命中缓存）。
-///
-/// 点击预取（`AppModel+DetailPrefetch`）与进页（`DetailViewModel.prewarmAmbience`）
-/// 共用——参数曾两处手写保持一致，漂移就是「首帧不命中」的隐性回退。
+/// 氛围池小图与详情整组图片的缓存参数。详情清晰层/模糊层共用 art 档像素。
 enum DetailAmbienceImage {
-    /// 底图 URL 的宽度档（视图层 `backdropTarget(width:)` 同参）。
+    /// 氛围池与进页快照的小图 URL 档。
     static let urlWidth = 800
-    /// 解码像素档（视图层 `RemoteImage(maxPixelSize:)` 同参）。
+    /// 氛围池预热、轮播与进页快照共用的解码档。
     static let decodePixels = 512
 
-    /// 已缓存立即返回 true；否则加载并回报成功与否。调用方不管状态的当预热用。
-    @discardableResult
-    static func prewarm(url: URL, authHeader: String?) async -> Bool {
-        if ImagePipeline.shared.memoryCachedImage(
-            url: url, authHeader: authHeader, maxPixelSize: decodePixels) != nil {
-            return true
-        }
-        return (try? await ImagePipeline.shared.load(
-            url, authHeader: authHeader, maxPixelSize: decodePixels)) != nil
-    }
+    static let artURLWidth = 1600
+    static let artDecodePixels = 1920
 }

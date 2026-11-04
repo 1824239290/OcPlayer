@@ -84,81 +84,6 @@ struct DetailView: View {
         _model = State(initialValue: DetailViewModel(item: item))
     }
 
-    /// 氛围布局是否生效：条目有背景图（服务端 / TMDB / 合集成员兜底，见 VM 的 `hasBackdrop`）。
-    /// 没图时没有氛围层，浮动白字头部会落在纯色底上看不清——这种情况永远走老横幅布局。
-    private var isAmbientActive: Bool {
-        guard app.server != nil else { return false }
-        if model.hasBackdrop { return true }
-        // 初版数据缺 tag 的剧集（「继续播放/接下来看」进来的占位剧集——分集没有
-        // 自己的场布图，借不到 tag）：详情未落地前先按氛围布局渲染，别闪老横幅。
-        // 背景有轮播当前那张兜底（homeAmbienceTarget，没就绪时 BackdropAmbienceView 整体
-        // 不渲染、落回纯色底，头部文字本就按外观自适应，仍可读），首帧观感与从
-        // 库列表进入完全一致；详情落地后确无场布图的罕见剧集再交叉淡入切老横幅。
-        if model.detail == nil, model.shown.kind == .series { return true }
-        return false
-    }
-
-    /// 页面是否自己垫氛围层——**已收进 `PageAmbience` 修饰符**（双端唯一分叉点），
-    /// 本页不再自己判断 `WindowAmbience.reachesScreen` / 尺寸类。留着这条注释是为了
-    /// 说明为什么这里看不到那段判断了：它曾经在本文件、MoviePilot 资源页、下载页与
-    /// 四个 Tab 根页各写一遍，而漏掉的那些页面（搜索 Tab、媒体库、Bangumi 四页、
-    /// 设置 10 个子页）在 iOS 上整页纯色底。
-
-    /// 背景底图。整窗声明与页内氛围层共用一份，别再各拼一次 URL。
-    ///
-    /// 走 VM 的 `backdropTarget`（TMDB 优先补缺 + 合集成员兜底），**不是**条目的
-    /// 原始服务端图：早先这里用 `shown.imageTarget`，而 `isAmbientActive` 只看服务端
-    /// tag，两者恰好一致所以看不出问题；合集/TMDB 补图的条目一进来就会「走了氛围布局
-    /// 却画不出图」——同一份判定必须用同一个来源。
-    private var backdropTarget: (url: URL?, authHeader: String?) {
-        model.backdropTarget(width: 800)
-    }
-
-    /// 底图未就绪时的兜底图：氛围池当前那张（与首页轮播同源）。
-    /// 同一个 URL、同一档解码，内存缓存直接命中，页面一出生就能画。
-    private var homeAmbienceTarget: (url: URL?, authHeader: String?) {
-        app.currentAmbienceTarget
-    }
-
-    /// 交给 `pageAmbience` 的氛围声明。
-    ///
-    /// ## macOS：**不声明**整窗氛围（返回 nil）
-    ///
-    /// macOS 的第一页自己画头图（`DetailPageArt`：清晰剧照 + 可扩张的模糊块），
-    /// 整页是不透明的。再向整窗层声明一张同款模糊图，等于在同一块位置上放两层背景，
-    /// 而它们的时间线对不齐：
-    ///
-    ///   1. 点进详情 → 整窗层立刻开始用**新条目**的图做 1.6s 交叉淡入
-    ///   2. 页面自己的头图要等 `RemoteImage` 解码完（1600 宽那档）才画出来
-    ///   3. 中间这一拍：首页内容还在，整窗层已经换成新条目的糊图并压暗
-    ///   4. 头图画好再盖上去 → 肉眼就是「背景瞬间切换了一下」
-    ///
-    /// 抓帧实证：转场第 1 帧就是「首页仍在、整窗层已是赛博朋克糊图」。
-    /// 不声明之后整窗层保持首页轮播不动（被不透明的第一页完全盖住），
-    /// 背景只有一条时间线 —— 页面自己那张。
-    ///
-    /// ## iOS：照旧声明（`ownsArt: true`）
-    ///
-    /// iOS 的导航栈宿主不透明，整窗层到不了屏幕，页面本来就自己垫；那条链路上
-    /// 没有第二层背景，不存在这个竞争。
-    private var ambienceTarget: AmbienceTarget? {
-        if detailLayoutStyle == .flip { return nil }
-        #if os(iOS)
-        guard isAmbientActive else { return nil }
-        let target = model.isAmbienceReady ? backdropTarget : homeAmbienceTarget
-        return AmbienceTarget(
-            url: target.url,
-            authHeader: target.authHeader,
-            scrim: .detail,
-            fade: model.isAmbienceReady ? Motion.ambient : Motion.fast,
-            ownsArt: true
-        )
-        #else
-        // macOS：flip 版式恒 nil（上面已 return），banner 版式在 macOS 上不存在。
-        return nil
-        #endif
-    }
-
     #if !os(macOS)
     /// 紧凑宽度（iPhone）横幅矮一点，留出更多正文空间。
     private var bannerHeight: CGFloat {
@@ -202,36 +127,9 @@ struct DetailView: View {
         return pushed.id == item.id
     }
 
-    // MARK: - 翻页版式的取图（flip 用，banner 不用）
+    // MARK: - 翻页版式
 
-    /// 第一页清晰层取图（1600 宽那档）。
-    ///
-    /// 条目**还没有**背景图时（详情未落地 / 该条目缺图）回落到首页轮播那张：
-    /// 同一个 URL、同一档解码，内存缓存直接命中，推页首帧就有画面 —— 否则第一页
-    /// 会先空一拍（整窗层现在不再替它兜底了，见 `ambienceTarget`）。
-    private var artTarget: (url: URL?, authHeader: String?) {
-        let own = model.backdropTarget(width: 1600)
-        guard own.url == nil else { return own }
-        return app.currentAmbienceTarget
-    }
-
-    /// 第一页模糊层取图：**刻意用氛围层那一档**（800 宽 URL / 512 解码）。
-    /// `prewarmAmbience` 预热的就是这一份，推页首帧直接命中内存缓存 —— 模糊层不会
-    /// 先空一拍再补。用 1600 那档会换一个缓存键，等于把预热白做了。
-    /// 兜底规则同 `artTarget`。
-    private var artBlurTarget: (url: URL?, authHeader: String?) {
-        let own = model.backdropTarget(width: DetailAmbienceImage.urlWidth)
-        guard own.url == nil else { return own }
-        return app.currentAmbienceTarget
-    }
-
-
-    /// 三层自下而上：**常驻的头图/模糊背景** → 正文 → 第一页前景。
-    ///
-    /// 背景层自己会从「左糊右清」扫成「整幅全糊」，扫完之后就一直是第二页的固定
-    /// 背景（与 demo 的 HeroSharpBackground + HeroBlurBlock 同构）。它**不做透明度
-    /// 动画**：早先让它翻页后淡出、沉回整窗氛围层，结果 30pt 模糊淡成 20pt、
-    /// 中间还透出清晰图，肉眼就是一串闪烁。
+    /// 固定背景位于正文和第一页前景下方；翻页只改变模糊遮罩。
     private var flippedPages: some View {
         GeometryReader { geo in
             let size = geo.size
@@ -258,10 +156,9 @@ struct DetailView: View {
             .background {
                 // 仅背景延伸到标签栏后；正文和选集仍由系统安全区避让底栏。
                 GeometryReader { backgroundGeo in
-                    DetailPageArt(
+                    DetailBackdropView(
+                        artwork: model.backdropArtwork,
                         viewport: backgroundGeo.size,
-                        target: artTarget,
-                        blurTarget: artBlurTarget,
                         expanded: pager.blurExpanded
                     )
                 }
@@ -316,23 +213,9 @@ struct DetailView: View {
     }
 
     #if DEBUG
-    /// 🔬 探针专用：**屏幕上真正显示的那张头图** URL，含「未就绪回落氛围池」这一步。
-    ///
-    /// 为什么不直接用 `backdropTarget`：那个只给本条目自己的图、`url == nil` 时**不回落**，
-    /// 所以它永远记不到氛围池兜底图。而 2026-11-03 的归档证据与
-    /// `verify-backdrop-urls.py` 的判据都是「① 池兜底 → ③ TMDB、② 本条目服务端图 0 次」，
-    /// **必须能记到池图**，否则新旧日志无法比对、脚本也判不出 ①。
-    ///
-    /// 平台分叉照抄两处既有取图逻辑，不新造语义：
-    /// * macOS：`artTarget`（1600 档，`url == nil` 时回落氛围池）—— 与归档证据同口径；
-    /// * iOS：与 `ambienceTarget` 同一表达式（未就绪用氛围池、就绪用本条目 800 档）。
+    /// 已提交像素对应的来源，不能用待加载 URL 冒充上屏图片。
     private var probedBackdropURL: URL? {
-        // 按**版式**取，不按平台取：flip 版式屏幕上画的是 `artTarget`（含氛围池回落），
-        // banner 版式画的是 `ambienceTarget` 那条链。如果这里按 `#if os` 判，
-        // iPad 一切到 flip 就会「探针记 800 档不回落、屏幕画 1600 档含回落」，
-        // 日志与画面脱钩，`verify-backdrop-urls.py` 的 ① 池兜底图判据直接失效。
-        if detailLayoutStyle == .flip { return artTarget.url }
-        return (model.isAmbienceReady ? backdropTarget : homeAmbienceTarget).url
+        model.backdropArtwork.content?.target.url ?? model.backdropArtwork.entry?.target.url
     }
     #endif
 
@@ -342,6 +225,12 @@ struct DetailView: View {
                 flippedPages
             } else {
                 detailScroll
+                    .background {
+                        GeometryReader { geo in
+                            DetailBackdropView(artwork: model.backdropArtwork, viewport: geo.size)
+                        }
+                        .ignoresSafeArea()
+                    }
             }
         }
         .contentMargins(.top, 0, for: .scrollContent)
@@ -357,46 +246,11 @@ struct DetailView: View {
         #elseif os(macOS)
         .toolbarBackground(.hidden, for: .windowToolbar)
         #endif
-        // 氛围背景：走统一入口 `pageAmbience`（平台分叉收在那一个修饰符里）。
-        // 本页是"自带主体图"的那一类（`ownsArt`）——macOS 上由它声明整窗层覆盖
-        // 首页轮播，iOS 上自己垫。
-        //
-        // 三处本页特有的语义都作为参数传进去，不复制渲染代码：
-        //   * **底图未就绪时先画首页轮播那张**（`isAmbienceReady` 为假）：iOS 的导航
-        //     栈宿主不透明，「背景延续」只能在页面内做——先画池子里那张（同 URL、
-        //     内存缓存命中、瞬时可画、与首页观感连续），自己的底图到位后由
-        //     `RemoteImage`（preserveCurrentImageOnReload）原位缓慢淡入替换。
-        //   * **两档淡入**：兜底那张是缓存命中、首帧就能画，用短淡入（默认的 1.6s
-        //     在推页那 0.35s 里只走到 ~25% 不透明度，观感等于没兜住）；换成自己那张
-        //     时仍走默认的缓慢渐变。
-        //   * **未就绪时声明 nil**：macOS 的整窗声明在预热完成后才发，氛围层淡入时
-        //     图已就绪，不会先灰一块再可见地补加载。
-        .pageAmbience(ambienceTarget)
+        // 详情自己持有完整背景；声明 nil 清除整窗覆盖，避免两套图层同时换图。
+        .pageAmbience(nil)
         #if DEBUG
-        // 🔬 探针·详情页头图 —— **排查专用，日常请勿依赖**。
-        //
-        // 用途：复核「同一条目先后上屏两张图」（背景图闪烁）。每次**屏幕上那张头图**
-        // 的 URL 变化记一条，三个字段合起来才回答得了「换了没有、换的时候解析完了没有、
-        // TMDB 补上了没有」：
-        //   url        屏幕上实际显示的头图 URL（`nil` = 还没有图）
-        //   resolved   `backdropLatch` 是否已锁定终态来源
-        //   hasOverlay TMDB 叠加层是否已到（剧集级）
-        //
-        // ## ⚠️ 口径：含「未就绪回落到氛围池」这一步，与 `backdropTarget` **不同**
-        //
-        // 取图走 `probedBackdropURL`，它含「本条目还没图时先画氛围池那张」的回落，
-        // 记的是**屏幕上真正显示的那张**；而 `backdropTarget` 只给本条目自己的图、
-        // 不回落。两者不可混用：
-        //   * 2026-11-03 那次归档证据就是这个口径（`Reports/ambience-flash-20261103/`），
-        //     判据是「① 池兜底 → ③ TMDB、② 本条目服务端图 0 次」；
-        //   * 若改成只记 `backdropTarget`，日志里**永远不会出现池兜底图**，
-        //     `verify-backdrop-urls.py` 会判不出 ①，新旧日志也无法比对。
-        //
-        // ## 已知局限（别用它证它证不了的事）
-        //   * 只在 DEBUG 编进来，Release 一行都不生成；
-        //   * 挂在 `.onChange` 上，**采不到「首帧那一下」**——页面第一次画出来时
-        //     `initial: true` 那一跳才是首帧，之后才是变化跳。`detailLanded` 这类
-        //     「内容何时落地」的信号在这里结构性采不到，所以本探针**不带该字段**。
+        // DEBUG 诊断：记录提交到背景视图的图片来源（冻结过渡图 → 条目图）。
+        // URL 指向已解码快照；不代表 GPU 首帧时间，也不记录淡入的中间帧。
         .onChange(of: probedBackdropURL, initial: true) { _, newURL in
             AppDiagnostics.logWarning("探针·详情页头图", fields: [
                 "url": .string(newURL?.absoluteString ?? "nil"),
@@ -430,6 +284,7 @@ struct DetailView: View {
             model.reloadAfterPlaybackTask = Task { await model.reloadAfterPlayback() }
         }
         .onDisappear {
+            model.backdropArtwork.cancel()
             model.reloadAfterPlaybackTask?.cancel()
             // 真离页撤掉待补拉（被盖页 macOS 26 不发 onDisappear，被盖场景
             // 补拉照跑——正是要救的场景）。
@@ -456,32 +311,10 @@ struct DetailView: View {
                 metadata
                     .padding(.top, 44)
             } else if horizontalSizeClass == .compact {
-                ZStack(alignment: .top) {
-                    if isAmbientActive {
-                        ambientCompactHeader
-                            .transition(.section)
-                    } else {
-                        compactHeaderView
-                            .transition(.section)
-                    }
-                }
-                .motion(Motion.standard, value: isAmbientActive)
+                // 头部版式不依赖图片是否到位；无图也保持同样的安全布局。
+                ambientCompactHeader
             } else {
-                ZStack(alignment: .top) {
-                    if isAmbientActive {
-                        // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
-                        ambientHeader
-                            .transition(.section)
-                    } else {
-                        banner
-                            .transition(.section)
-                    }
-                }
-                // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
-                // 占位条目落地后有图；氛围初版落地后发现确无图）——头部在
-                // 横幅与氛围两版之间切换时交叉淡入；两版同高（bannerHeight），
-                // 不产生高度过渡，下方内容纹丝不动。
-                .motion(Motion.standard, value: isAmbientActive)
+                ambientHeader
                 metadata
             }
             #endif
@@ -577,59 +410,9 @@ struct DetailView: View {
         #endif
     }
 
-    // MARK: - iOS 旧头部：紧凑端（iPhone / iPad 窄窗）
-    //
-    // **只在 iOS 上被使用**。macOS 详情页是翻页布局（见 `DetailPageFlip`）：
-    // 没有横幅、没有氛围头部、没有紧凑头部，这几段在 macOS 上既不可达、也不参与
-    // 编译（下面整段收在 `#if !os(macOS)` 里）。
-    //
-    // 之所以留在同一个文件而不是删掉：iPad / iPhone 现在仍然靠这套布局渲染详情页
-    // （翻页页那套滚轮裁决依赖 `NSEvent`，是 macOS 专属）。等 iOS 也换成翻页页，
-    // 这一段可以整段删除。
+    // MARK: - iOS 氛围布局：紧凑头部与操作区
+    // 头部高度与图片加载无关；背景统一由 DetailBackdropView 提供。
 #if !os(macOS)
-
-    private var compactHeaderView: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            compactHeroBanner
-            compactContentStack
-        }
-    }
-
-    private var compactHeroBanner: some View {
-        ZStack(alignment: .bottom) {
-            let target = model.shown.imageTarget(app.server, kind: .backdrop, width: 1600)
-            if let url = target.url {
-                RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: compactBannerHeight)
-                    .clipped()
-            } else {
-                Rectangle().fill(Color.primary.opacity(0.06))
-            }
-
-            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
-            //（旧实现是两条全尺寸渐变叠着合成，合成权重见各 stop）。
-            LinearGradient(
-                stops: [
-                    .init(color: Color.pageBackground.opacity(0.7), location: 0),
-                    .init(color: Color.pageBackground.opacity(0.34), location: 0.25),
-                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
-                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
-                    .init(color: Color.pageBackground, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            // 居中/醒目的标题 Logo
-            compactBannerTitle
-                .padding(.horizontal, detailHorizontalInset)
-                .padding(.bottom, 8)
-        }
-        .frame(height: compactBannerHeight)
-        .clipped()
-    }
 
     private var compactContentStack: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -820,7 +603,7 @@ struct DetailView: View {
         .accessibilityValue(played ? "当前为已看完" : "当前为未看完")
     }
 
-    // MARK: - iOS 旧头部：氛围紧凑头部 / 标题
+    // MARK: - iOS 氛围紧凑头部 / 标题
 
     private var ambientCompactHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -837,80 +620,12 @@ struct DetailView: View {
         ItemTitleLogoView(item: model.shown, server: app.server, maxHeight: 84, maxWidth: 340, fontSize: 26, centered: true, adaptiveText: true)
             .frame(maxWidth: .infinity, alignment: .center)
     }
-    // MARK: - iOS 旧头部：横幅 / 氛围头部 / 播放钮 / 元数据行
+    // MARK: - iOS 宽窗口头部 / 播放钮 / 元数据行
     //
     // 与上面几段是同一套：iPad / iPhone 的详情页头部，macOS 不编译。
 
 
-    private var banner: some View {
-        ZStack {
-            // 背景层：fill 的溢出尺寸会参与 ZStack 布局、把渐变层的坐标系一起
-            // 撑高，底部渐隐就画到了裁剪窗口之外（视觉上「渐变没了」）。先把
-            // 图片层钳回定高、原位裁掉溢出，渐变才对齐可见区域。
-            let target = model.shown.imageTarget(app.server, kind: .backdrop, width: 1600)
-            if let url = target.url {
-                RemoteImage(url: url, authHeader: target.authHeader, maxPixelSize: 1000)
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: bannerHeight)
-                    .clipped()
-            } else {
-                Rectangle().fill(Color.primary.opacity(0.06))
-            }
-
-            // 底部渐变：夜间黑纱保白字；日间换白雾垫自适应深字（与氛围布局
-            // 同套「文字随外观」逻辑），两种模式都有足够的文字对比度。
-            LinearGradient(
-                colors: [
-                    (colorScheme == .light ? Color.white : Color.black).opacity(0.65),
-                    (colorScheme == .light ? Color.white : Color.black).opacity(0.2),
-                    .clear,
-                ],
-                startPoint: .bottom,
-                endPoint: .center
-            )
-
-            // 顶部/底部两组 pageBackground 渐隐合并成一条多 stop 渐变
-            //（旧实现是两条全尺寸渐变叠着合成，各 stop 的透明度按
-            // 「底混上」的合成权重算好，视觉不变，少一层全尺寸合成）。
-            // 仅在老横幅布局（氛围背景关）使用，底部必须渐隐到实色。
-            LinearGradient(
-                stops: [
-                    .init(color: Color.pageBackground.opacity(0.85), location: 0),
-                    .init(color: Color.pageBackground.opacity(0.42), location: 0.25),
-                    .init(color: Color.pageBackground.opacity(0.35), location: 0.5),
-                    .init(color: Color.pageBackground.opacity(0.675), location: 0.75),
-                    .init(color: Color.pageBackground, location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
-        .frame(height: bannerHeight)
-        .overlay(alignment: .bottomLeading) {
-            HStack(alignment: .bottom, spacing: 24) {
-                bannerPoster(width: 120, height: 180)
-                VStack(alignment: .leading, spacing: 8) {
-                    bannerTitle
-                    metaRow
-                    playbackActions
-                }
-                // 日间白雾上的白胶囊按钮缺少分界，给文字列一层柔和投影
-                //（海报自带投影，不并入，避免双重阴影）。
-                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
-            }
-            .padding(.horizontal, detailHorizontalInset)
-            .padding(.bottom, 28)
-        }
-        .clipped()
-    }
-
-    @ViewBuilder
-    // MARK: - 氛围布局头部（条目有 backdrop 时替代横幅）
-
-    /// 桌面端：海报 + 标题 + 元数据 + 播放钮直接浮在整页氛围背景上，
-    /// 内容与老横幅的 overlay 完全同套组件（同为外观自适应色），
-    /// 只是不再有图片层和渐变，也没有压暗带。
+    /// 宽窗口：海报、标题和操作浮在整页氛围背景上。
     private var ambientHeader: some View {
         HStack(alignment: .bottom, spacing: 24) {
             bannerPoster(width: 120, height: 180)
@@ -926,20 +641,10 @@ struct DetailView: View {
         .frame(maxWidth: .infinity, alignment: .bottomLeading)
         .padding(.horizontal, detailHorizontalInset)
         .padding(.bottom, 28)
-        // 与老横幅**同高**（bannerHeight）底对齐：两版头部高度一致，isAmbientActive
-        // 翻转只剩交叉淡入——没有高度过渡把下方内容上推；内容底边与横幅 overlay
-        // 落在同一竖直位置。内容顶边 = 320-28-180 = 112pt，iPadOS 26 导航栏玻璃
-        // 按钮 ~104pt 的悬深自然让开（等高框取代了此前的固定 top inset）。
+        // 固定头部高度，加载/无图不改变正文起点，也为导航栏留出空间。
         .frame(height: bannerHeight, alignment: .bottom)
     }
 
-    /// 紧凑端：居中标题 + 元数据/播放区直接排在氛围背景上。
-    ///
-    /// 标题占**和 `compactHeroBanner` 同一个竖直位置**——同一个 `compactBannerHeight`
-    /// 英雄带、同样底对齐 + 8pt 内边距，只是这里没有图片层。所以「有图 / 无图」
-    /// 两条头部的标题落在同一竖直位置，正文区起点两边也都是 `compactBannerHeight`。
-    /// 顶边贴屏那版（`padding(.top, 52)`）会让艺术字 Logo 压进状态栏、离灵动岛只剩
-    /// 几个点，底对齐后 Logo 顶边恒定落在 198pt 以下，离状态栏自然有余量。
     @ViewBuilder
     private func bannerPoster(width: CGFloat, height: CGFloat) -> some View {
         // 条件用 `posterTarget` 的结果而不是 `primaryImageTag != nil`：
@@ -952,11 +657,7 @@ struct DetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardRadius))
                 .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
         } else {
-            // **槽位恒占位**：海报 URL 未就绪/缺失时也要留住这 120×180。否则
-            // 「横幅 ↔ 氛围」翻转（占位剧集详情落地、hasBackdrop 翻转）时两个
-            // 头部的文字列 x 差 ~120px，交叉淡化被眼睛读成「logo/年份/播放钮
-            // 从左往右滑」（录屏逐帧实证：落地帧文字列在 75 = 52 inset + 24
-            // 空槽间距，落定在 196）。占位后两版布局逐像素同构，翻转只剩纯淡入。
+            // 无图时仍保留海报槽位，标题和操作不会随数据落地横移。
             Color.clear.frame(width: width, height: height)
         }
     }
