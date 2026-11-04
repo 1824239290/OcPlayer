@@ -215,6 +215,55 @@ final class DetailPagePager {
         transitioningUntil = .distantPast
     }
 
+    // MARK: - iPad 滚动联动（阶段 ②）
+
+    /// 滚动进度 → 三层视觉的**纯值映射**（可单测，两个平台都跑）。
+    ///
+    /// ## 为什么不能照搬 `flipToBody()` 那一套
+    ///
+    /// macOS 的输入是「一次滚轮动作」，所以那边用**定时编排**：0.45s 淡出前景、
+    /// 0.55s 扫开模糊、0.40s 后正文才淡入。iPad 的输入是**系统滚动**——页面本身
+    /// 真的在位移，过渡由滚动这一动作完成，系统还会在松手时吸附。
+    /// 如果再叠一层「定时的淡入淡出」，两个动画会互相拉扯：滚动到一半前景淡到 40%、
+    /// 吸回去时又淡回来，观感是一层灰雾而不是翻页。
+    ///
+    /// ## 所以映射是这样定的
+    ///
+    /// - `blurExpanded`：进度过半把背景的模糊块扫开。正文（第二页）是深色小字，
+    ///   压在「左糊右清」的剧照上读不清；扫成整幅全糊后对比度才够。
+    /// - `artForegroundVisible` / `bodyVisible`：**恒 `true`**。两页在同一个滚动容器里
+    ///   上下排布、永不重叠，可见性本来就已经由「谁在视口里」决定了。这里返回 true
+    ///   是让调用方保持「不透明度 = 1」，**不是**说两页同时可见。
+    ///
+    /// `nonisolated`：纯值、无状态，测试与非隔离上下文都能直接调。
+    nonisolated static func scrollFlipVisuals(forProgress raw: CGFloat)
+        -> (blurExpanded: Bool, artForegroundVisible: Bool, bodyVisible: Bool)
+    {
+        // 滚动越界（回弹时 offset 为负）与非有限值都夹到 [0, 1]：
+        // NaN 传进比较会让 `>=` 恒为 false，正好落在安全的 false 那一侧，但仍显式夹一次。
+        let p = raw.isFinite ? min(max(raw, 0), 1) : 0
+        return (blurExpanded: p >= 0.5, artForegroundVisible: true, bodyVisible: true)
+    }
+
+    /// 把滚动进度应用到视觉状态上。由 iPad 版式的 `onScrollGeometryChange` 调用。
+    ///
+    /// **只在值真的变化时才写**：这个方法是每一帧都可能被调的，`@Observable` 的属性
+    /// 赋值会触发视图重算——不做 diff 就等于每次滚动都整页重绘一次。
+    func applyScrollProgress(_ progress: CGFloat) {
+        let visuals = Self.scrollFlipVisuals(forProgress: progress)
+        if artForegroundVisible != visuals.artForegroundVisible {
+            artForegroundVisible = visuals.artForegroundVisible
+        }
+        if bodyVisible != visuals.bodyVisible {
+            bodyVisible = visuals.bodyVisible
+        }
+        if blurExpanded != visuals.blurExpanded {
+            // 扫开的是遮罩宽度，交给 SwiftUI 插值；时长比 macOS 那套短一档，
+            // 因为它跟着滚动走，太长会拖在手指后面。
+            withAnimation(anim(0.45)) { blurExpanded = visuals.blurExpanded }
+        }
+    }
+
     #if os(macOS)
     // MARK: - 滚轮
 

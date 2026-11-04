@@ -196,10 +196,6 @@ struct DetailView: View {
     /// 以前这里还留着一个条件（有剧照才翻页、无剧照回退旧横幅），结果是同一页在
     /// 两种版式之间来回切，进页时还会先闪一下旧横幅。旧横幅在 macOS 上已经整个删掉，
     /// 无剧照的条目由 `DetailPageArt` 自己出占位底色 —— 版式只有一套，没有回退分支。
-    ///
-    /// 以前这里还留着一个条件（有剧照才翻页、无剧照回退旧横幅），结果是同一页在
-    /// 两种版式之间来回切，进页时还会先闪一下旧横幅。旧横幅在 macOS 上已经整个删掉，
-    /// 无剧照的条目由 `DetailPageArt` 自己出占位底色 —— 版式只有一套，没有回退分支。
     private var isFlippingActive: Bool {
         guard !app.isCompact else { return false }
         guard case .detail(let pushed)? = app.path.last else { return false }
@@ -229,6 +225,70 @@ struct DetailView: View {
         return app.currentAmbienceTarget
     }
 
+
+    // MARK: - 翻页版式（iPad，原生滚动驱动）
+
+    #if !os(macOS)
+    /// iPad 的翻页版式：**两页真的上下排在一个 ScrollView 里**，位移与吸附交给系统。
+    ///
+    /// ## 与 `flippedPages`（macOS）的机制差别
+    ///
+    /// | | macOS | iPad（这里） |
+    /// | --- | --- | --- |
+    /// | 输入 | 滚轮监视器（`NSEvent`） | 系统滚动（触控 / 触控板 / 滚轮 / VoiceOver） |
+    /// | 两页 | 叠在同一个 viewport，靠透明度切换 | **上下排布**，靠滚动位移 |
+    /// | 过渡 | `flipToBody()` 的定时编排 | 滚动本身；只有背景模糊按进度映射 |
+    /// | 吸附 | 自己算阈值 | `.scrollTargetBehavior(.viewAligned)` |
+    ///
+    /// 背景层（`DetailPageArt`）在两版里都是**固定不动的**：它不参与滚动，
+    /// 所以两页交替时背景不会位移——这正是「无跳变」的来源。
+    ///
+    /// ## 三条硬约束的落点
+    ///
+    /// 1. **不动 macOS 输入链路**：`flippedPages` 一个字没改，本视图只在 iOS 分支存在；
+    /// 2. **第二页不嵌 ScrollView**：正文用 `detailBody`（裸 VStack），外层只有这一个
+    ///    ScrollView。嵌了的话内层会先吃掉手势，吸附和「下拉吸回页 1」都会失灵；
+    /// 3. **同一连续进度量驱动**：`onScrollGeometryChange` 把 offset 归一化成
+    ///    `progress ∈ [0,1]` 后交给 `pager.applyScrollProgress`，不调用
+    ///    `flipToBody()` / `flipToArt()` 那套离散状态机。
+    private var flipScrollPages: some View {
+        GeometryReader { geo in
+            let viewport = geo.size
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    // 第一页：限高正好一个视口 —— 这样它自己就是一个对齐目标，
+                    // 松手时系统会把它吸附回整屏位置。
+                    artPage(size: viewport)
+                        .frame(width: viewport.width, height: viewport.height)
+                    // 第二页：正文。见 `detailBody` 的注释（不能是 ScrollView）。
+                    detailBody
+                        .frame(width: viewport.width, alignment: .leading)
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            // 背景固定：不放进 ScrollView 里面，否则它会跟着内容一起滚走。
+            .background {
+                DetailPageArt(
+                    viewport: viewport,
+                    target: artTarget,
+                    blurTarget: artBlurTarget,
+                    expanded: pager.blurExpanded
+                )
+                .allowsHitTesting(false)
+            }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                // 归一化到「滚过几屏」：0 = 停在第一页，1 = 第二页顶到视口顶部。
+                geometry.contentOffset.y / max(viewport.height, 1)
+            } action: { _, progress in
+                pager.applyScrollProgress(progress)
+            }
+        }
+        // 第一页是整窗画面，顶栏浮在它上面（与 `flippedPages` 同一条理由）。
+        .ignoresSafeArea(edges: .top)
+    }
+    #endif
 
     /// 三层自下而上：**常驻的头图/模糊背景** → 正文 → 第一页前景。
     ///
@@ -320,7 +380,15 @@ struct DetailView: View {
             if detailLayoutStyle == .flip {
                 // 翻页版式：本页就是两页（见 `DetailPageFlip`）——第一页头图 + 下部选集带，
                 // 翻一屏到正文。没有第二套版式，也不再回退旧横幅。
+                //
+                // **两套实现按编译期分**，不是运行期分叉：macOS 那套依赖滚轮监视器
+                // （`NSEvent` / `NSWindow`），iOS 编不出来；iPad 那套用系统滚动。
+                // 版式判定（要不要翻页）是运行期的、只有一处；这里分的是「**怎么翻**」。
+                #if os(macOS)
                 flippedPages
+                #else
+                flipScrollPages
+                #endif
             } else {
                 detailScroll
             }
@@ -415,109 +483,123 @@ struct DetailView: View {
 
     // MARK: - 详情页正文（= 翻页布局里的第二页）
 
-    /// 原有的详情滚动区。翻页布局里它就是第二页，单独抽出来只为了给 `Group` 让位。
-    private var detailScroll: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                #if os(macOS)
-                // macOS 上 `detailScroll` 只是翻页页的第二屏，头部在另一页上。
-                // **这一段必须留编译期**：下面 banner / 紧凑头部那几段实现在
-                // `#if !os(macOS)` 里，macOS 引用不到它们。
-                // 版式判定在 macOS 上恒为 `.flip`（见 `DetailLayoutStyle.resolve`），
-                // 所以这里不需要运行时分支，编译期裁剪等价且能编过。
+    /// 正文内容（**不含 ScrollView**）。
+    ///
+    /// 抽出来的唯一理由是 iPad 的翻页版式：那一版两页要放进**同一个** ScrollView，
+    /// 第二页不能是嵌套的 `ScrollView` —— 嵌套会让内层先吃掉手势，吸附与回弹全乱。
+    /// banner 版式与 macOS 的第二页仍是「一个 ScrollView 包着它」，行为不变。
+    private var detailBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            #if os(macOS)
+            // macOS 上 `detailScroll` 只是翻页页的第二屏，头部在另一页上。
+            // **这一段必须留编译期**：下面 banner / 紧凑头部那几段实现在
+            // `#if !os(macOS)` 里，macOS 引用不到它们。
+            // 版式判定在 macOS 上恒为 `.flip`（见 `DetailLayoutStyle.resolve`），
+            // 所以这里不需要运行时分支，编译期裁剪等价且能编过。
+            metadata
+                .padding(.top, 44)
+            #else
+            if detailLayoutStyle == .flip {
+                // iPad 阶段 ① 起会走到这里：翻页版式下第二页没有头部。
                 metadata
                     .padding(.top, 44)
-                #else
-                if detailLayoutStyle == .flip {
-                    // iPad 阶段 ① 起会走到这里：翻页版式下第二页没有头部。
-                    metadata
-                        .padding(.top, 44)
-                } else if horizontalSizeClass == .compact {
-                    ZStack(alignment: .top) {
-                        if isAmbientActive {
-                            ambientCompactHeader
-                                .transition(.section)
-                        } else {
-                            compactHeaderView
-                                .transition(.section)
-                        }
+            } else if horizontalSizeClass == .compact {
+                ZStack(alignment: .top) {
+                    if isAmbientActive {
+                        ambientCompactHeader
+                            .transition(.section)
+                    } else {
+                        compactHeaderView
+                            .transition(.section)
                     }
-                    .motion(Motion.standard, value: isAmbientActive)
-                } else {
-                    ZStack(alignment: .top) {
-                        if isAmbientActive {
-                            // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
-                            ambientHeader
-                                .transition(.section)
-                        } else {
-                            banner
-                                .transition(.section)
-                        }
+                }
+                .motion(Motion.standard, value: isAmbientActive)
+            } else {
+                ZStack(alignment: .top) {
+                    if isAmbientActive {
+                        // 氛围布局：无横幅图层，头部内容直接浮在整页背景上。
+                        ambientHeader
+                            .transition(.section)
+                    } else {
+                        banner
+                            .transition(.section)
                     }
-                    // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
-                    // 占位条目落地后有图；氛围初版落地后发现确无图）——头部在
-                    // 横幅与氛围两版之间切换时交叉淡入；两版同高（bannerHeight），
-                    // 不产生高度过渡，下方内容纹丝不动。
-                    .motion(Motion.standard, value: isAmbientActive)
-                    metadata
                 }
-                #endif
-                if let loadError = model.loadError {
-                    ErrorNotice(loadError)
-                        .padding(.horizontal, detailHorizontalInset)
-                        .padding(.top, 14)
-                }
-                if let playedActionError {
-                    ErrorNotice(playedActionError)
-                        .padding(.horizontal, detailHorizontalInset)
-                        .padding(.top, 14)
-                }
-                if model.shown.kind == .series {
-                    seasonBar
-                    episodeList
-                }
-                if model.shown.kind == .boxSet {
-                    collectionSection
-                }
-                // 合集不渲染 Bangumi 章节区：那一栏列的是「按集数组织的作品」的章节，
-                // 而合集是「多部电影的容器」，两者根本不是一回事。实测合集页上它匹配到
-                // 的是同名**剧集**（EVA 合集 → 新世纪福音战士 TV 的 01…26 集），
-                // 26 个「未看」格子里没有一个能点进合集里的那两部电影——纯粹是噪声。
-                if model.shown.kind != .boxSet {
-                    BangumiChapterSection(
-                        item: model.shown,
-                        selectedSeason: selectedSeason,
-                        // 章节列表同时是选集轨道占位的**兜底来源**：没配 TMDB（或 TMDB 编号
-                        // 对不上）时用它补出库里没有的集。让区块递上来而不是 VM 自己再读一次库，
-                        // 是因为区块今天已经在读全量章节，且自带启用开关 / 登录态 / 建库就绪三道闸门。
-                        onCandidatesLoaded: { model.acceptBangumiCandidates($0) }
-                    )
-                }
-                MoviePilotResourceSection(item: model.shown)
-                if !model.displayCast.isEmpty { castRail }
-                // 当前选中集（电影为自身）的文件级媒体信息。
-                // 合集传 nil：它是容器，服务端对它的 `MediaSources` 恒为空
-                // （实测 `/Items?ids=<合集id>&fields=MediaSources` → 空），
-                // 区块本来就会整块不渲染，没必要为它白打一次请求。
-                DetailMediaInfoSection(
-                    item: model.shown.kind == .boxSet ? nil : playableItem,
-                    horizontalInset: detailHorizontalInset
-                )
-                if !model.similar.isEmpty { similarRail }
+                // 详情数据落地时 backdrop tag 可能双向变化（初版缺 tag 的
+                // 占位条目落地后有图；氛围初版落地后发现确无图）——头部在
+                // 横幅与氛围两版之间切换时交叉淡入；两版同高（bannerHeight），
+                // 不产生高度过渡，下方内容纹丝不动。
+                .motion(Motion.standard, value: isAmbientActive)
+                metadata
             }
-            .padding(.bottom, 48)
-            // 简介 / 演员 / 相似推荐都是**数据到了才插入**的区块（占位剧集详情落地
-            // 才有简介与 cast，similar 异步更晚）。插入会把下方内容整体下压——动画
-            // 作用域必须挂在**页面级** VStack 上才盖得住兄弟区块的下推（挂在区块
-            // 自己上只会淡入自己，下面照样硬跳）。作用域按数据源各挂一个：值翻转
-            // 的那一拍，插入区块淡入、下方下推，整页一次平滑重排。
-            .motion(Motion.standard, value: model.displayOverview == nil)
-            .motion(Motion.standard, value: model.displayCast.isEmpty)
-            .motion(Motion.standard, value: model.similar.isEmpty)
-            // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
-            // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
-            // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
-            // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
+            #endif
+            if let loadError = model.loadError {
+                ErrorNotice(loadError)
+                    .padding(.horizontal, detailHorizontalInset)
+                    .padding(.top, 14)
+            }
+            if let playedActionError {
+                ErrorNotice(playedActionError)
+                    .padding(.horizontal, detailHorizontalInset)
+                    .padding(.top, 14)
+            }
+            if model.shown.kind == .series {
+                seasonBar
+                episodeList
+            }
+            if model.shown.kind == .boxSet {
+                collectionSection
+            }
+            // 合集不渲染 Bangumi 章节区：那一栏列的是「按集数组织的作品」的章节，
+            // 而合集是「多部电影的容器」，两者根本不是一回事。实测合集页上它匹配到
+            // 的是同名**剧集**（EVA 合集 → 新世纪福音战士 TV 的 01…26 集），
+            // 26 个「未看」格子里没有一个能点进合集里的那两部电影——纯粹是噪声。
+            if model.shown.kind != .boxSet {
+                BangumiChapterSection(
+                    item: model.shown,
+                    selectedSeason: selectedSeason,
+                    // 章节列表同时是选集轨道占位的**兜底来源**：没配 TMDB（或 TMDB 编号
+                    // 对不上）时用它补出库里没有的集。让区块递上来而不是 VM 自己再读一次库，
+                    // 是因为区块今天已经在读全量章节，且自带启用开关 / 登录态 / 建库就绪三道闸门。
+                    onCandidatesLoaded: { model.acceptBangumiCandidates($0) }
+                )
+            }
+            MoviePilotResourceSection(item: model.shown)
+            if !model.displayCast.isEmpty { castRail }
+            // 当前选中集（电影为自身）的文件级媒体信息。
+            // 合集传 nil：它是容器，服务端对它的 `MediaSources` 恒为空
+            // （实测 `/Items?ids=<合集id>&fields=MediaSources` → 空），
+            // 区块本来就会整块不渲染，没必要为它白打一次请求。
+            DetailMediaInfoSection(
+                item: model.shown.kind == .boxSet ? nil : playableItem,
+                horizontalInset: detailHorizontalInset
+            )
+            if !model.similar.isEmpty { similarRail }
+        }
+        .padding(.bottom, 48)
+        // 简介 / 演员 / 相似推荐都是**数据到了才插入**的区块（占位剧集详情落地
+        // 才有简介与 cast，similar 异步更晚）。插入会把下方内容整体下压——动画
+        // 作用域必须挂在**页面级** VStack 上才盖得住兄弟区块的下推（挂在区块
+        // 自己上只会淡入自己，下面照样硬跳）。作用域按数据源各挂一个：值翻转
+        // 的那一拍，插入区块淡入、下方下推，整页一次平滑重排。
+        .motion(Motion.standard, value: model.displayOverview == nil)
+        .motion(Motion.standard, value: model.displayCast.isEmpty)
+        .motion(Motion.standard, value: model.similar.isEmpty)
+        // 入场过渡由路由出口的 routeExitFade 复位淡入统一承担（两段式第二拍，
+        // 见 AppShell.RouteExitFader）；加载中的骨架块（海报 / 头像 / 标题
+        // Logo）与 RemoteImage 的原位淡入承担「加载过渡」，不做整页透明度
+        // 脉冲——那会在每次进入时可见地变暗又提亮一次（「闪一下」）。
+    }
+
+    /// 详情页正文滚动区。
+    ///
+    /// - banner 版式（iPhone / iPad 分屏）：就是整页正文；
+    /// - macOS 翻页版式：第二页（滚轮状态机读它的 `bodyOffsetY`）；
+    /// - iPad 翻页版式：**不经过这里** —— 它被 `flipScrollPages` 直接放进外层
+    ///   那个唯一的 ScrollView，见 `detailBody` 的注释。
+    private var detailScroll: some View {
+        ScrollView {
+            detailBody
         }
         #if os(macOS)
         // 第二页的滚动位置：翻回第一页的判据（停在顶部 + 主动上滚）
