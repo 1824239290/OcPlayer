@@ -1050,14 +1050,16 @@ struct DetailPageArtScreen: View {
         let isSelected = slot.id == model.selectedEpisodeID
         if let number = episodeNumber(of: slot) {
             if let episode = slot.episode {
+                let isPlayed = episode.playState?.played == true
                 Button {
                     onSelectEpisode(episode)
                 } label: {
-                    squareLabel(number, isSelected: isSelected, enabled: true)
+                    squareLabel(number, isSelected: isSelected, enabled: true, isPlayed: isPlayed)
                 }
                 .buttonStyle(.plain)
                 .help(model.displayEpisodeTitle(episode))
                 .accessibilityLabel("第 \(number) 集")
+                .accessibilityValue(isPlayed ? "已看完" : "未看完")
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             } else {
                 // 占位格不可选（不是一个能播的条目）：淡一档、不带按钮 trait
@@ -1067,7 +1069,7 @@ struct DetailPageArtScreen: View {
         }
     }
 
-    private func squareLabel(_ number: Int, isSelected: Bool, enabled: Bool) -> some View {
+    private func squareLabel(_ number: Int, isSelected: Bool, enabled: Bool, isPlayed: Bool = false) -> some View {
         Text(String(number))
             .font(.system(size: 12, weight: .semibold, design: .rounded))
             .monospacedDigit()
@@ -1079,12 +1081,22 @@ struct DetailPageArtScreen: View {
             )
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? AnyShapeStyle(AppAccent.solid) : AnyShapeStyle(Color.primary.opacity(enabled ? 0.10 : 0.04)))
+                    .fill(isSelected ? AppAccent.solid : Color.primary.opacity(isPlayed ? 0.22 : (enabled ? 0.10 : 0.04)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(isSelected ? 0 : (isPlayed ? 0.32 : 0.08)), lineWidth: 1)
             )
+            .overlay(alignment: .topTrailing) {
+                // 勾独立于选中态，选中已看集时仍能辨认观看状态。
+                if isPlayed {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(isSelected ? AppAccent.onSolid : AppAccent.solid)
+                        .padding(3)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 
     private var thumbRailFadeWidth: CGFloat { min(36, leadingInset) }
