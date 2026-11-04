@@ -405,13 +405,15 @@ struct BangumiCalendarView: View {
 
             LazyVGrid(columns: gridColumns, spacing: 10) {
                 ForEach(day.items) { item in
-                    Button {
-                        app.openBangumiSubject(id: item.id, initialSubject: item.toSlimSubject())
-                    } label: {
-                        CalendarItemCard(
-                            item: item,
-                            localInterest: localInterests[item.id]
-                        )
+                    DetailTransitionCard(list: "bangumi.calendar", position: String(item.id), action: { source in app.openBangumiSubject(id: item.id, initialSubject: item.toSlimSubject(), source: source) }) { open in
+                        Button {
+                            open()
+                        } label: {
+                            CalendarItemCard(
+                                item: item,
+                                localInterest: localInterests[item.id]
+                            )
+                        }
                     }
                     .buttonStyle(.plain)
                 }

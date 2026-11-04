@@ -79,10 +79,12 @@ struct BangumiCollectionListView: View {
         } else {
             List {
                 ForEach(loader.items) { subject in
-                    Button {
-                        app.openBangumiSubject(id: subject.id)
-                    } label: {
-                        CollectionRow(subject: subject)
+                    DetailTransitionCard(list: "bangumi.collection", position: String(subject.id), action: { source in app.openBangumiSubject(id: subject.id, source: source) }) { open in
+                        Button {
+                            open()
+                        } label: {
+                            CollectionRow(subject: subject)
+                        }
                     }
                     .buttonStyle(.plain)
                     .onAppear {

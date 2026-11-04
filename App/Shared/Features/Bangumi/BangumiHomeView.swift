@@ -287,10 +287,12 @@ struct BangumiHomeView: View {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 ForEach(loader.items) { subject in
-                                    Button {
-                                        app.openBangumiSubject(id: subject.id, initialSubject: subject)
-                                    } label: {
-                                        SearchResultRow(subject: subject)
+                                    DetailTransitionCard(list: "bangumi.search", position: String(subject.id), action: { source in app.openBangumiSubject(id: subject.id, initialSubject: subject, source: source) }) { open in
+                                        Button {
+                                            open()
+                                        } label: {
+                                            SearchResultRow(subject: subject)
+                                        }
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -631,34 +633,38 @@ private struct ProgressCard: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            Button {
-                app.openBangumiSubject(id: subject.id)
-            } label: {
-                MediaArtwork(
-                    url: coverURL,
-                    shape: .poster,
-                    width: 56,
-                    cornerRadius: 6,
-                    // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
-                    nominalRatio: 2.0 / 3.0
-                )
+            DetailTransitionCard(list: "bangumi.watching.cover", position: String(subject.id), action: { source in app.openBangumiSubject(id: subject.id, source: source) }) { open in
+                Button {
+                    open()
+                } label: {
+                    MediaArtwork(
+                        url: coverURL,
+                        shape: .poster,
+                        width: 56,
+                        cornerRadius: 6,
+                        // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
+                        nominalRatio: 2.0 / 3.0
+                    )
+                }
             }
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 4) {
-                Button {
-                    app.openBangumiSubject(id: subject.id)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                            .font(.headline)
-                            .lineLimit(1)
-                            .foregroundStyle(.primary)
-                        if !subject.nameCN.isEmpty, subject.nameCN != subject.name {
-                            Text(subject.name)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                DetailTransitionCard(list: "bangumi.watching.title", position: String(subject.id), action: { source in app.openBangumiSubject(id: subject.id, source: source) }) { open in
+                    Button {
+                        open()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
+                                .font(.headline)
                                 .lineLimit(1)
+                                .foregroundStyle(.primary)
+                            if !subject.nameCN.isEmpty, subject.nameCN != subject.name {
+                                Text(subject.name)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                     }
                 }
