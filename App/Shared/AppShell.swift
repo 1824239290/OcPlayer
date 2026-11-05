@@ -62,7 +62,6 @@ enum ShellSizeClass {
 /// 底部），每个 Tab 的内容层换回设备真实宽度（首页 rail / 媒体库列数 / 详情页头部 /
 /// 设置卡片都还是 iPad 档）。
 struct AppShellView: View {
-    @Namespace private var detailZoomNamespace
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -88,13 +87,12 @@ struct AppShellView: View {
             // 口径跟**内容**层（`contentSizeClass`），不跟标签栏层：iPad 的内容是
             // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
-            .environment(\.detailZoomNamespace, detailZoomNamespace)
             #if os(macOS)
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
             #endif
             // 背景挂在 AppShell 根节点，分区内容重建时不销毁轮播视图。
-            // 仅 macOS：iOS 的 TabView / 导航栈宿主自带不透明底，垫在后面的层
+            // 仅 macOS：iOS 的导航栈宿主自带不透明底，垫在后面的层
             // 到不了屏幕——iOS 的首页轮播挂在首页 Tab 栈内（见 compactLayout）。
             #if os(macOS)
             .background { windowAmbienceLayer }
@@ -194,7 +192,7 @@ struct AppShellView: View {
         }
     }
 
-    /// Mac / iPad 共用一个导航栈；切分区只替换栈内根页面，避免系统宿主层
+    /// macOS 共用一个导航栈；切分区只替换栈内根页面，避免系统宿主层
     /// 跟着整栈淡入，短暂盖住常驻的背景。
     private var detailColumn: some View {
         // pop 拦截：系统返回键 / 手势都是把变短的 path 写回 binding——先不落地，
@@ -215,7 +213,7 @@ struct AppShellView: View {
     private func navPathBinding(_ section: AppModel.Section) -> Binding<[AppModel.Route]> {
         Binding(
             get: { app.navPath(for: section) },
-            set: { app.setNavPath($0, for: section) }
+            set: { app.handleNavPathChange($0, for: section) }
         )
     }
 
@@ -299,6 +297,7 @@ struct AppShellView: View {
                         // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
+                .detailTransitionScope(section: .bangumi)
                 .pageContentSizeClass(contentSizeClass)
             }
         }
@@ -310,6 +309,7 @@ struct AppShellView: View {
                         .appRoutes()
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
+                .detailTransitionScope(section: .moviepilot)
                 .pageContentSizeClass(contentSizeClass)
             }
         }
@@ -320,6 +320,7 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
+            .detailTransitionScope(section: .settings)
             .pageContentSizeClass(contentSizeClass)
         }
 
@@ -331,6 +332,7 @@ struct AppShellView: View {
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
+            .detailTransitionScope(section: .search)
             .pageContentSizeClass(contentSizeClass)
         }
     }
@@ -347,6 +349,7 @@ struct AppShellView: View {
                         .ignoresSafeArea()
                 }
         }
+        .detailTransitionScope(section: .home)
         .pageContentSizeClass(contentSizeClass)
     }
 
@@ -502,16 +505,8 @@ struct AppShellView: View {
 
 // MARK: - 两段式换页：退场淡出
 
-/// 读 `app.routeExiting` 给当前页画换页过渡：两段式的第一段——离场页淡出
-/// （`Motion.exit`），落地后回弹淡入就是落点页的入场（新视图隐藏态出生，
-/// 复位时正好有 from-state）。淡出期间顺便禁点击，防止点中已透明的按钮。
-///
-/// **当前只有三处挂载**：栈根 `sectionContent`、路由出口 `appRouteView`，
-/// 以及呈现式页面（`appShellBackChrome(title:presented:)` 里按 `presented` 非空补挂，
-/// 这类页面不在路由出口上）。
-/// 分区药丸按钮**没挂**（它挂在工具栏里、退出系统共享胶囊后几何自绘，挂上淡出会
-/// 在工具栏里闪一下），所以换分区时内容淡出、按钮硬切。要改就来这里加。
-/// 「换页进行中忽略新请求」是 `AppModel.beginRouteExit` 的语义，不在这一层。
+/// macOS 两段式换页的淡出层；淡出期间禁用页面点击。
+/// iOS 使用系统导航缩放及返回手势，导航栈不参与此淡出。
 struct RouteExitFader: ViewModifier {
     @Environment(AppModel.self) private var app
 
@@ -524,9 +519,14 @@ struct RouteExitFader: ViewModifier {
 }
 
 extension View {
-    /// 页面与工具栏按钮共用的两段式换页淡出层。
+    /// 仅 macOS 按页挂载淡出层。
+    @ViewBuilder
     func routeExitFade() -> some View {
+        #if os(macOS)
         modifier(RouteExitFader())
+        #else
+        self
+        #endif
     }
 }
 
@@ -612,9 +612,9 @@ extension View {
     }
 }
 
-// MARK: - 自绘返回键（常规布局）
+// MARK: - 自绘返回键
 
-/// 常规布局的返回键：系统返回键的 pop 点击即系统级滑出（不经 binding、
+/// 两端共用的返回键：系统返回键的 pop 点击即系统级滑出（不经 binding、
 /// 拦不住），换自绘键走 `AppModel.back()` 两段式（淡出 → 弹栈 → 落点淡入）。
 /// 正圆玻璃钮（36×36，与分区药丸同高）；系统共享底要隐藏，否则系统圆角
 /// 矩形底和自绘圆叠两层。
@@ -648,10 +648,7 @@ struct AppShellBackButton: View {
 }
 
 /// push 页的返回键 + 可选顶栏标题。
-/// - compact（iPhone）：系统返回键 + 标题，保持原样。
-/// - iPad（常规宽度、Tab 外壳）：顶栏已有胶囊 + 返回键，标题去掉——页面头部
-///   自己有名字（详情页 Logo / 库页网格），再放一个只会和胶囊挤在一起；inline
-///   + removing: .title 双保险，大标题与栏内标题都不出。
+/// - iOS：保留系统返回键与可取消的交互式返回；iPad 保留页面自身标题。
 /// - macOS 常规布局：系统渲染的标题文字无法参与两段式淡入淡出——`title` 非空时
 ///   隐藏系统标题，与返回键放**同一个工具栏项**自绘（保证 [返回键, 标题] 顺序），
 ///   随 routeExiting 整体淡出 / 淡入。
@@ -709,6 +706,12 @@ private struct RegularBackChrome: ViewModifier {
     }
 
     private var toolbarItem: some ToolbarContent {
+        #if os(iOS)
+        ToolbarItem(placement: .topBarLeading) {
+            AppShellBackButton(presented: presented)
+        }
+        .sharedBackgroundVisibility(.hidden)
+        #else
         ToolbarItem(placement: .navigation) {
             HStack(spacing: 10) {
                 AppShellBackButton(presented: presented)
@@ -720,6 +723,7 @@ private struct RegularBackChrome: ViewModifier {
             }
         }
         .sharedBackgroundVisibility(.hidden)
+        #endif
     }
 }
 
@@ -784,11 +788,11 @@ extension View {
     private func appRouteView(_ route: AppModel.Route) -> some View {
         Group {
             switch route {
-            case .detail(let item):
+            case .detail(let item, let source):
                 DetailView(item: item)
                     .id(item.id)
+                    .detailZoomTransition(source: source)
                     .appShellBackChrome(title: item.name)
-                    .detailZoomDestination(itemID: item.id)
             case .library(let library):
                 LibraryView(library: library)
                     .appShellBackChrome(title: library.name)
@@ -798,9 +802,10 @@ extension View {
             case .bangumiCollectionList(let type):
                 BangumiCollectionListView(subjectType: type)
                     .appShellBackChrome(title: "我的\(type.description)")
-            case .bangumiSubject(let subjectID, let initialSubject):
+            case .bangumiSubject(let subjectID, let initialSubject, let source):
                 BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
                     .id(subjectID)
+                    .detailZoomTransition(source: source)
                     // 无 initialSubject 时名称要异步加载，标题交给系统渲染。
                     .appShellBackChrome(
                         title: initialSubject.map { $0.nameCN.isEmpty ? $0.name : $0.nameCN }
@@ -812,10 +817,7 @@ extension View {
                 settingsSubpageView(subpage)
             }
         }
-        // 两段式换页由本页自己淡出（routeExiting 复位的回弹淡入即入场，
-        // 见 RouteExitFader）；系统 push 滑动已由 AppModel.push 禁动画掐掉。
-        // 两者在 iOS 上都空转：系统自带 push / pop 滑动，routeExiting 也不会被置起。
-        // coveredPageHidden：被后推的页盖住时按深度归零透明度（见 CoveredPageHider）。
+        // macOS 保留两段式淡出与被覆盖页隐藏；iOS 由导航转场管理页面可见性。
         .routeAmbience(route)
         .coveredPageHidden()
         .routeExitFade()

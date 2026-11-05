@@ -294,18 +294,12 @@ struct PosterCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    @State private var detailZoomSourceID = UUID().uuidString
-    @Environment(AppModel.self) private var app: AppModel?
 
     /// 跟随列宽＝紧凑海报墙版式（两行居中标题区），见类型注释。
     private var fillsColumn: Bool { width == nil }
 
     var body: some View {
-        return Button(action: {
-            app?.pendingDetailZoomSourceID = detailZoomSourceID
-            onTap()
-            app?.pendingDetailZoomSourceID = nil
-        }) {
+        return Button(action: onTap) {
             VStack(alignment: fillsColumn ? .center : .leading, spacing: fillsColumn ? 6 : 9) {
                 let serverTarget = item.imageTarget(server, kind: .primary, width: 400)
                 // 覆盖图优先，但它**免鉴权**（TMDB CDN 不校验）：带上服务端凭证
@@ -335,7 +329,6 @@ struct PosterCard: View {
             .frame(width: width)
         }
         .buttonStyle(.plain)
-        .detailZoomSource(id: detailZoomSourceID)
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
     }
@@ -398,8 +391,6 @@ struct LatestCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    @State private var detailZoomSourceID = UUID().uuidString
-    @Environment(AppModel.self) private var app: AppModel?
 
     /// 「年份 · 首类型」。Jellyfin 的 `Genres` 是数组，首项就是主类型。
     private var metaLine: String? {
@@ -414,11 +405,7 @@ struct LatestCard: View {
     }
 
     var body: some View {
-        Button(action: {
-            app?.pendingDetailZoomSourceID = detailZoomSourceID
-            onTap()
-            app?.pendingDetailZoomSourceID = nil
-        }) {
+        Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 let target = item.homeStillImageTarget(server, width: 720)
                 MediaArtwork(
@@ -444,7 +431,6 @@ struct LatestCard: View {
             .frame(width: width)
         }
         .buttonStyle(.plain)
-        .detailZoomSource(id: detailZoomSourceID)
         .hoverLift(active: hovering, reduceMotion: reduceMotion)
         .onHover { hovering = $0 }
     }
@@ -612,8 +598,6 @@ struct StillCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    @State private var detailZoomSourceID = UUID().uuidString
-    @Environment(AppModel.self) private var app: AppModel?
 
     init(
         item: MediaItem,
@@ -661,11 +645,7 @@ struct StillCard: View {
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
 
     var body: some View {
-        Button(action: {
-            app?.pendingDetailZoomSourceID = detailZoomSourceID
-            onTap()
-            app?.pendingDetailZoomSourceID = nil
-        }) {
+        Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
                 let target = item.homeStillImageTarget(server, width: 720)
                 MediaArtwork(
@@ -706,7 +686,6 @@ struct StillCard: View {
             .frame(width: width)
         }
         .buttonStyle(.plain)
-        .detailZoomSource(id: detailZoomSourceID)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(actionAccessibilityLabel ?? "播放 \(title)")
         .accessibilityValue("\(subtitle)，已播放 \(Int(progress * 100))%")

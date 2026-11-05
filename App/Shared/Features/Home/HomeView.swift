@@ -206,14 +206,16 @@ struct HomeView: View {
         case .resume:
             if !app.home.resume.isEmpty {
                 Rail("继续观看", kind: .still, items: app.home.resume) { item in
-                    StillCard(
-                        item: item,
-                        server: app.server,
-                        actionIcon: "chevron.right",
-                        actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
-                        width: stillWidth
-                    ) {
-                        app.openSeriesDetail(for: item)
+                    DetailTransitionCard(list: "home.resume", position: String(item.id), action: { source in app.openSeriesDetail(for: item, source: source) }) { open in
+                        StillCard(
+                            item: item,
+                            server: app.server,
+                            actionIcon: "chevron.right",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
+                            width: stillWidth
+                        ) {
+                            open()
+                        }
                     }
                 }
                 .transition(.section)
@@ -221,14 +223,16 @@ struct HomeView: View {
         case .nextUp:
             if !app.home.nextUp.isEmpty {
                 Rail("接下来看", kind: .still, items: app.home.nextUp) { item in
-                    StillCard(
-                        item: item,
-                        server: app.server,
-                        actionIcon: "chevron.right",
-                        actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
-                        width: stillWidth
-                    ) {
-                        app.openSeriesDetail(for: item)
+                    DetailTransitionCard(list: "home.nextUp", position: String(item.id), action: { source in app.openSeriesDetail(for: item, source: source) }) { open in
+                        StillCard(
+                            item: item,
+                            server: app.server,
+                            actionIcon: "chevron.right",
+                            actionAccessibilityLabel: "打开 \(item.seriesName ?? item.name) 详情",
+                            width: stillWidth
+                        ) {
+                            open()
+                        }
                     }
                 }
                 .transition(.section)
@@ -236,8 +240,10 @@ struct HomeView: View {
         case .latest:
             if !app.home.latest.isEmpty {
                 Rail("最近添加", kind: .latest, items: app.home.latest) { item in
-                    LatestCard(item: item, server: app.server, width: latestWidth) {
-                        app.openDetail(item)
+                    DetailTransitionCard(list: "home.latest", position: String(item.id), action: { source in app.openDetail(item, source: source) }) { open in
+                        LatestCard(item: item, server: app.server, width: latestWidth) {
+                            open()
+                        }
                     }
                 }
                 .transition(.section)
@@ -509,8 +515,10 @@ struct HomeSearchContent: View {
                     LazyVStack(spacing: 0) {
                         LazyVGrid(columns: searchColumns, alignment: .leading, spacing: PosterGrid.rowSpacing(compact: isCompact)) {
                             ForEach(searchResults) { item in
-                                PosterCard(item: item, server: app.server, width: searchCardWidth) {
-                                    app.openDetail(item)
+                                DetailTransitionCard(list: "home.search", position: String(item.id), action: { source in app.openDetail(item, source: source) }) { open in
+                                    PosterCard(item: item, server: app.server, width: searchCardWidth) {
+                                        open()
+                                    }
                                 }
                                 .transition(reduceMotion ? .identity : .section)
                             }

@@ -64,6 +64,8 @@ final class DetailPagePager {
 
     private(set) var page: Page = .art
     private(set) var isTransitioning = false
+    /// 第二页的下拉属于内部翻页；转场结束前也不能启动导航离场。
+    var blocksNavigationDismissal: Bool { page == .body || isTransitioning }
     /// 第一页前景(LOGO / 简介 / 播放钮 / 选集带)可见性
     var artForegroundVisible = true
     /// 第二页正文可见性

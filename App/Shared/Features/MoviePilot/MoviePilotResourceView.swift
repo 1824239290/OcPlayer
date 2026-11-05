@@ -47,6 +47,7 @@ struct MoviePilotResourceView: View {
     /// 添加下载成功后直接推入下载管理页。
     @State private var navigateToDownloads = false
 
+    @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -532,7 +533,7 @@ struct MoviePilotResourceView: View {
                 try await MoviePilotAPIClient.shared.addDownload(media: media, torrent: torrent)
                 notice = "已添加下载；完成后 MoviePilot 会自动整理入库到 Jellyfin"
                 isNoticeError = false
-                navigateToDownloads = true
+                app.pushPresented { navigateToDownloads = true }
             } catch {
                 notice = MoviePilotError.userMessage(of: error)
                 isNoticeError = true

@@ -392,6 +392,8 @@ enum OpenSourceLicenseCatalog {
 
 struct OpenSourceLicensesView: View {
     @Environment(AppModel.self) private var app
+    @State private var selectedComponent: OpenSourceComponent?
+    @State private var showComponent = false
 
     var body: some View {
         List {
@@ -410,11 +412,21 @@ struct OpenSourceLicensesView: View {
             ForEach(OpenSourceLicenseCatalog.groups) { group in
                 Section(group.title) {
                     ForEach(group.components) { component in
-                        NavigationLink {
-                            OpenSourceLicenseDetailView(component: component)
+                        Button {
+                            app.pushPresented {
+                                selectedComponent = component
+                                showComponent = true
+                            }
                         } label: {
-                            OpenSourceComponentRow(component: component)
+                            HStack {
+                                OpenSourceComponentRow(component: component)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .listRowBackground(Color.clear)
@@ -425,12 +437,13 @@ struct OpenSourceLicensesView: View {
         // 本页是**呈现式叶子页**，不在 `appRouteView` 上，氛围底要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle("开源许可证")
-        // 呈现式叶子页不走 `appShellBackChrome`（保留系统返回键），顶栏材质要自己
-        // 摘：否则全 App 就剩这两页顶栏还是一条洗白的带子（同款注释见 `AppShell` 的
-        // `RegularBackChrome` / `AppShellChrome.appShellChrome`）。
-        #if os(macOS)
-        .toolbarBackground(.hidden, for: .windowToolbar)
-        #endif
+        .navigationDestination(isPresented: $showComponent) {
+            if let selectedComponent {
+                OpenSourceLicenseDetailView(component: selectedComponent)
+                    .appShellBackChrome(title: selectedComponent.name, presented: $showComponent)
+            }
+        }
+        .coveredByPresented($showComponent)
     }
 }
 
@@ -500,7 +513,7 @@ private struct OpenSourceLicenseDetailView: View {
                 }
             }
         }
-        // 本页是从「开源许可证」列表里 NavigationLink 推上来的深层页（不在 `Route`
+        // 本页是从「开源许可证」列表呈现的深层页（不在 `Route`
         // 上），氛围底同样要单独挂。
         .pageAmbience(AmbienceTarget.sessionPool(app))
         .navigationTitle(component.name)
