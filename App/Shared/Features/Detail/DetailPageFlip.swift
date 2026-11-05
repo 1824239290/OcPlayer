@@ -498,6 +498,8 @@ struct DetailPageArt: View {
     let image: PlatformImage
     /// 模糊块是否已扩张到整幅(翻页中)
     var expanded = false
+    /// iPhone 从下向上展开，宽屏从左向右展开。
+    var vertical = false
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -530,7 +532,9 @@ struct DetailPageArt: View {
             .clipped()
             .overlay(veilTint)
             .frame(width: viewport.width, height: viewport.height)
-            .mask(alignment: .leading) { maskStrip }
+            .mask(alignment: vertical ? .bottom : .leading) {
+                if vertical { verticalMaskStrip } else { maskStrip }
+            }
     }
 
     /// 遮罩条 = 实心段 + 软边。两段各自用 `frame(width:)` 动，而不是改
@@ -558,6 +562,17 @@ struct DetailPageArt: View {
         .fixedSize()
     }
 
+    private var verticalMaskStrip: some View {
+        VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: viewport.height * 0.28)
+            Rectangle().fill(.black)
+                .frame(height: viewport.height * (expanded ? 1.75 : 0.48))
+        }
+        .frame(width: viewport.width)
+        .fixedSize()
+    }
+
     /// 模糊层上的压雾:让左侧文字在任意剧照上都有对比度,深浅各压一档。
     /// 压得比 demo(0.34)轻一档:模糊本来就是给文字让位的,再叠厚白纱会把
     /// 「左糊右清」的分界也糊掉。
@@ -581,8 +596,8 @@ struct DetailPageArt: View {
                         .init(color: .white.opacity(0.06), location: 0.66),
                         .init(color: .white.opacity(0.00), location: 1),
                     ],
-                    startPoint: .leading,
-                    endPoint: .trailing
+                    startPoint: vertical ? .bottom : .leading,
+                    endPoint: vertical ? .top : .trailing
                 )
             } else {
                 LinearGradient(
@@ -592,8 +607,8 @@ struct DetailPageArt: View {
                         .init(color: .black.opacity(0.06), location: 0.66),
                         .init(color: .black.opacity(0.00), location: 1),
                     ],
-                    startPoint: .leading,
-                    endPoint: .trailing
+                    startPoint: vertical ? .bottom : .leading,
+                    endPoint: vertical ? .top : .trailing
                 )
             }
         }
@@ -633,6 +648,7 @@ struct DetailPageArtScreen: View {
     let model: DetailViewModel
     let server: (any MediaServer)?
     let leadingInset: CGFloat
+    var compact = false
 
     let playLabel: String
     let playProgress: Double?
@@ -651,14 +667,80 @@ struct DetailPageArtScreen: View {
 
     /// 与详情页主按钮同一组尺寸（`Metrics.bannerActionHeight` / 常规宽度 228）。
     private var actionHeight: CGFloat { Metrics.bannerActionHeight }
-    private var playWidth: CGFloat { 228 }
+    private var playWidth: CGFloat {
+        guard compact else { return 228 }
+        let secondaryWidth = canTogglePlayed ? actionHeight + 10 : 0
+        return max(0, viewport.width - leadingInset * 2 - secondaryWidth)
+    }
 
     var body: some View {
-        ZStack {
-            leftColumn
-            // 剧集：底部是选集带；其他类型（电影等）没有选集，底部就只放播放钮 ——
-            // 两者占同一条底边，换条目进来时按钮不会在画面上跳位置。
-            bottomBar
+        Group {
+            if compact {
+                compactForeground
+            } else {
+                ZStack {
+                    leftColumn
+                    bottomBar
+                }
+            }
+        }
+    }
+
+    /// 与宽屏共享 Logo、播放和选集组件，窄屏将正文与选集依次贴向底边。
+    private var compactForeground: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer(minLength: 0)
+            ViewThatFits(in: .vertical) {
+                compactHeader(showsOverview: true)
+                compactHeader(showsOverview: false)
+            }
+            if isSeries {
+                compactEpisodeBar
+            } else if isMovie {
+                movieEpisodeBar
+            } else {
+                Spacer(minLength: 0)
+                    .frame(height: viewport.height * 0.12)
+            }
+        }
+        .padding(.horizontal, leadingInset)
+        .padding(.top, 110)
+        .padding(.bottom, 16)
+        .frame(width: viewport.width, height: viewport.height, alignment: .bottomLeading)
+    }
+
+    private func compactHeader(showsOverview: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            logoBlock
+            if showsOverview { introBlock }
+            playButtons
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var compactEpisodeBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                seasonPicker
+                Spacer(minLength: 8)
+                if model.episodeChunks.count > 1 {
+                    Menu {
+                        ForEach(model.episodeChunks) { chunk in
+                            Button(chunk.rangeLabel) { chunkNav.browsedIndex = chunk.index }
+                        }
+                    } label: {
+                        Label(model.episodeChunks.first { $0.index == activeChunkIndex }?.rangeLabel ?? "集数",
+                              systemImage: "chevron.up.chevron.down")
+                            .font(.caption.weight(.semibold))
+                    }
+                }
+                if model.isLoadingEpisodes { ProgressView().controlSize(.small) }
+            }
+            if !activeSlots.isEmpty {
+                episodeSquaresRail
+                episodeThumbRail
+            }
         }
     }
 
@@ -670,9 +752,8 @@ struct DetailPageArtScreen: View {
                 .padding(.top, viewport.height * 0.085)
             introBlock
                 .padding(.top, 34)
-            // 剧集页的播放钮跟着简介走（下面还有选集带）；电影页不留这一行，
-            // 播放钮在底部条上——省出来的竖直空间全给简介/剧照。
-            if isSeries {
+            // 有选集带时，播放操作跟随简介，底部留给选集。
+            if hasEpisodeBar {
                 playButtons
                     .padding(.top, 30)
             }
@@ -682,23 +763,54 @@ struct DetailPageArtScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    /// 剧集：底部是季胶囊 + 集号方格 + 缩略图带。其他类型没有选集。
     private var isSeries: Bool { model.shown.kind == .series }
+    private var isMovie: Bool { model.shown.kind == .movie }
+    private var hasEpisodeBar: Bool { isSeries || isMovie }
+
+    /// 电影自身就是唯一一集；复用选集缩略图的续播进度与已看角标。
+    private var movieEpisodeBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Text("选集")
+                    .font(.system(size: 15, weight: .semibold))
+                squareLabel(1, isSelected: true, enabled: canPlay, isPlayed: played)
+                    .accessibilityLabel("正片，已选中")
+                    .accessibilityValue(played ? "已看完" : "未看完")
+            }
+            DetailHeroEpisodeThumb(
+                number: nil,
+                title: "正片 · \(model.displayName)",
+                overview: model.shown.overview,
+                thumbTarget: model.hasBackdrop
+                    ? model.backdropTarget(width: 400)
+                    : model.shown.homeStillImageTarget(server, width: 400),
+                isSelected: true,
+                isPlayed: played,
+                progress: playProgress,
+                isPlayable: canPlay,
+                // 正片始终选中；双击与剧集卡片一样开播。
+                onSelect: {},
+                onPlay: onPlay
+            )
+            .padding(.vertical, 4)
+            .padding(.horizontal, 2)
+        }
+    }
 
     private var logoBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
             ItemTitleLogoView(
                 item: model.shown,
                 server: server,
-                maxHeight: 108,
-                maxWidth: 620,
-                fontSize: 42,
+                maxHeight: compact ? 76 : 108,
+                maxWidth: compact ? viewport.width - leadingInset * 2 : 620,
+                fontSize: compact ? 28 : 42,
                 adaptiveText: true
             )
             if let original = originalTitle {
                 Text(original)
                     .font(.system(size: 13, weight: .medium))
-                    .tracking(5)
+                    .tracking(compact ? 1.5 : 5)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
@@ -720,7 +832,7 @@ struct DetailPageArtScreen: View {
     }
 
     private var genres: [String] {
-        Array(model.displayGenres.prefix(4))
+        Array(model.displayGenres.prefix(compact ? 3 : 4))
     }
 
     private var overview: String? {
@@ -760,7 +872,7 @@ struct DetailPageArtScreen: View {
     private var metaParts: [String] {
         var parts: [String] = []
         if let year = model.shown.year { parts.append(String(year)) }
-        if !model.displayGenres.isEmpty {
+        if !compact, !model.displayGenres.isEmpty {
             parts.append(model.displayGenres.prefix(3).joined(separator: " / "))
         }
         if let runtime = model.shown.runtimeSeconds { parts.append(RuntimeText.format(runtime)) }
@@ -789,19 +901,17 @@ struct DetailPageArtScreen: View {
             if let overview {
                 Text(overview)
                     .font(.system(size: 15))
-                    .lineSpacing(7)
+                    .lineSpacing(compact ? 3 : 7)
                     .foregroundStyle(.primary.opacity(0.78))
-                    // 剧集页身下还有选集带，留 3 行；其他类型播放钮已经让到最底部，
-                    // 中间这块空着也是空着 —— 简介直接铺满、不再截断。
-                    .lineLimit(isSeries ? 3 : nil)
-                    .frame(width: viewport.width * introWidthRatio, alignment: .leading)
+                    // 有选集的页面为底部卡片预留高度。
+                    .lineLimit(compact ? (hasEpisodeBar ? 2 : 6) : (hasEpisodeBar ? 3 : nil))
+                    .frame(width: compact ? viewport.width - leadingInset * 2 : viewport.width * introWidthRatio, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    /// 简介栏宽：剧集页要跟右侧清晰剧照分界，取 36%；电影页没有选集带压底，
-    /// 可以放宽到 44%，长简介读起来不至于是窄窄一条。
+    /// 剧集简介与右侧剧照分界；电影简介稍宽。
     private var introWidthRatio: CGFloat { isSeries ? 0.36 : 0.44 }
 
     // MARK: 播放行动区（demo 的 HeroResumeButton + HeroMarkPlayedButton）
@@ -885,23 +995,21 @@ struct DetailPageArtScreen: View {
                     Spacer(minLength: 0)
                 }
                 episodeThumbRail
+            } else if isMovie {
+                movieEpisodeBar
             } else {
-                // 电影这类没有选集：播放钮落在剧集页选集带的同一条底边上，
-                // 左缘与简介对齐（靠下面的 `alignment: .bottomLeading`）。
                 playButtons
             }
         }
         .padding(.horizontal, leadingInset)
         .padding(.bottom, bottomInset)
-        // 两种内容都按左下角贴底：选集带的季胶囊/集号方格本来就是左对齐的，
-        // 电影页那颗播放钮也要贴在左下（用 .bottom 会被居中）。
+        // 选集与操作均沿正文左缘贴底。
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 
     /// 底距。iOS 选集带在标签栏预留空间之上再留 34；macOS 保持 22。
-    /// 电影页只有一颗播放钮，仍抬高到 74。
     private var bottomInset: CGFloat {
-        guard isSeries else { return 74 }
+        guard hasEpisodeBar else { return 74 }
         #if os(iOS)
         return 34
         #else
@@ -961,21 +1069,25 @@ struct DetailPageArtScreen: View {
                     rangeTab(chunk)
                 }
             }
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(activeSlots) { slot in
-                            episodeSquare(slot)
-                                .id(slot.id)
-                        }
+            episodeSquaresRail
+        }
+    }
+
+    private var episodeSquaresRail: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(activeSlots) { slot in
+                        episodeSquare(slot)
+                            .id(slot.id)
                     }
-                    .padding(.vertical, 2)
                 }
-                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-                .frame(maxWidth: 760)
-                .followsEpisodeSelection(proxy: proxy, selectedID: model.selectedEpisodeID,
-                                         slotIDs: activeSlotIDs, activeIndex: activeChunkIndex)
+                .padding(.vertical, 2)
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .frame(maxWidth: 760)
+            .followsEpisodeSelection(proxy: proxy, selectedID: model.selectedEpisodeID,
+                                     slotIDs: activeSlotIDs, activeIndex: activeChunkIndex)
         }
     }
 

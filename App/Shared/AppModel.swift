@@ -725,7 +725,13 @@ final class AppModel {
         isCompact = compact
     }
 
+    // 每个卡片实例有独立来源，避免同一影片在多个栏位重复时匹配错误。
+    var pendingDetailZoomSourceID: String?
+    var detailZoomSourceIDs: [String: String] = [:]
+
     func openDetail(_ item: MediaItem) {
+        detailZoomSourceIDs[item.id] = pendingDetailZoomSourceID
+        pendingDetailZoomSourceID = nil
         // 点击瞬间预取（与 push 转场并行）：详情页秒开的数据来源。
         prefetchDetail(for: item)
         push(.detail(item))

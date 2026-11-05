@@ -64,8 +64,16 @@ struct DetailView: View {
     /// 声明成平台条件会让版式判定散回编译期，正是这次要消掉的东西。
     @State private var pager = DetailPagePager()
 
-    /// 当前 iPad（`UIDevice.userInterfaceIdiom == .pad`）。
-    /// macOS 上恒 false（那边由 `DetailLayoutStyle.resolve` 的编译期分支直接给 `.flip`）。
+    /// iPhone 使用竖向封面和模糊遮罩。
+    private var isPhoneDevice: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        false
+        #endif
+    }
+
+    /// iPad 的版式继续随尺寸类切换。
     private var isPadDevice: Bool {
         #if os(iOS)
         UIDevice.current.userInterfaceIdiom == .pad
@@ -159,7 +167,8 @@ struct DetailView: View {
                     DetailBackdropView(
                         artwork: model.backdropArtwork,
                         viewport: backgroundGeo.size,
-                        expanded: pager.blurExpanded
+                        expanded: pager.blurExpanded,
+                        vertical: isPhoneDevice
                     )
                 }
                 #if os(iOS)
@@ -193,6 +202,7 @@ struct DetailView: View {
             model: model,
             server: app.server,
             leadingInset: detailHorizontalInset,
+            compact: isPhoneDevice,
             playLabel: playButtonLabel,
             playProgress: resumeProgress,
             played: isPlayableMarkedPlayed,
@@ -239,8 +249,13 @@ struct DetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        // 详情页保留底部标签栏；前景避让底栏，背景单独延伸到底栏后。
-        .toolbarVisibility(.visible, for: .tabBar)
+        // iPhone 封面与正文独占详情页，返回后由上级恢复标签栏。
+        .toolbarVisibility(isPhoneDevice ? .hidden : .visible, for: .tabBar)
+        .background {
+            if isPhoneDevice {
+                DetailZoomDismissGuard(blocked: pager.page == .body || pager.isTransitioning)
+            }
+        }
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
         .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
         #elseif os(macOS)
@@ -307,9 +322,9 @@ struct DetailView: View {
                 .padding(.top, 44)
             #else
             if detailLayoutStyle == .flip {
-                // iPad 阶段 ① 起会走到这里：翻页版式下第二页没有头部。
+                // 翻页版式的第二页直接显示正文，顶部避让返回按钮。
                 metadata
-                    .padding(.top, 44)
+                    .padding(.top, isPhoneDevice ? 100 : 44)
             } else if horizontalSizeClass == .compact {
                 // 头部版式不依赖图片是否到位；无图也保持同样的安全布局。
                 ambientCompactHeader
@@ -331,6 +346,8 @@ struct DetailView: View {
             if model.shown.kind == .series {
                 seasonBar
                 episodeList
+            } else if model.shown.kind == .movie {
+                movieEpisodeSection
             }
             if model.shown.kind == .boxSet {
                 collectionSection
@@ -930,6 +947,28 @@ struct DetailView: View {
                 ExpandableOverview(text: overview)
                     .foregroundStyle(.secondary)
             }
+        }
+        .padding(.horizontal, detailHorizontalInset)
+        .padding(.top, 20)
+    }
+
+    private var movieEpisodeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("选集")
+                .font(.title3.weight(.bold))
+            EpisodeSelectCard(
+                episode: model.shown,
+                server: app.server,
+                displayTitle: "正片 · \(model.displayName)",
+                displayOverview: model.shown.overview,
+                thumbTarget: model.hasBackdrop
+                    ? model.backdropTarget(width: 400)
+                    : model.shown.homeStillImageTarget(app.server, width: 400),
+                isSelected: true,
+                // 电影自身已是当前播放条目，无需切换选择。
+                onSelect: {},
+                onPlay: playCurrent
+            )
         }
         .padding(.horizontal, detailHorizontalInset)
         .padding(.top, 20)

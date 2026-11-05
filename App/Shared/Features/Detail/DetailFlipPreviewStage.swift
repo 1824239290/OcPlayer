@@ -33,6 +33,7 @@ import UIKit
 ///
 /// `OCPLAYER_DETAIL_FLIP=2` 只渲染判定结果（不挂 `DetailView`），用来在不看画面的
 /// 情况下核对档位——比如验证「iPad 分屏 = banner」时把窗口压窄再读这一屏。
+/// `OCPLAYER_DETAIL_FLIP=movie` 使用单部电影验收正片选集与播放操作布局。
 ///
 /// 整段只在 `OCPLAYER_SELFTEST`（Debug 配置定义）下存在，Release 构建里一个字都没有。
 struct DetailFlipPreviewStage: View {
@@ -47,7 +48,7 @@ struct DetailFlipPreviewStage: View {
 
     static var isRequested: Bool { requestedMode != nil }
 
-    /// fixture 条目：**剧集**（选集带与季胶囊只在剧集页出现，那是第一页最重的部分）。
+    /// 默认验收剧集；movie 模式验收只有正片的电影。
     ///
     /// 字段给全是有意的：标题 / 原名 / 简介 / 年份 / 时长 / 类型 / 评分 / 分级 / 集数
     /// 各自决定第一页左栏的一行，缺一条就少一行 —— 而「第一页是否正好一屏高」
@@ -57,7 +58,7 @@ struct DetailFlipPreviewStage: View {
             id: "preview-detail-flip",
             name: "药屋少女的呢喃",
             originalTitle: "薬屋のひとりごと",
-            kind: .series,
+            kind: Self.requestedMode == "movie" ? .movie : .series,
             overview: """
                 花街出身的药师少女猫猫被拐入后宫，凭药学知识破解宫中一桩桩悬案。
                 这一行是为了把简介撑到多行——第一页左栏的高度直接决定下半部分的排版，

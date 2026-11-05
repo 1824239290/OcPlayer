@@ -62,6 +62,7 @@ enum ShellSizeClass {
 /// 底部），每个 Tab 的内容层换回设备真实宽度（首页 rail / 媒体库列数 / 详情页头部 /
 /// 设置卡片都还是 iPad 档）。
 struct AppShellView: View {
+    @Namespace private var detailZoomNamespace
     @Environment(AppModel.self) private var app
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -87,6 +88,7 @@ struct AppShellView: View {
             // 口径跟**内容**层（`contentSizeClass`），不跟标签栏层：iPad 的内容是
             // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
+            .environment(\.detailZoomNamespace, detailZoomNamespace)
             #if os(macOS)
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
@@ -786,6 +788,7 @@ extension View {
                 DetailView(item: item)
                     .id(item.id)
                     .appShellBackChrome(title: item.name)
+                    .detailZoomDestination(itemID: item.id)
             case .library(let library):
                 LibraryView(library: library)
                     .appShellBackChrome(title: library.name)
