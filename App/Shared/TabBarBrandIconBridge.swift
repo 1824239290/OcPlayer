@@ -111,6 +111,8 @@ final class TabBarBrandIconController: UIViewController {
             imageObservations.append(tab.observe(\.image) { [weak self] _, _ in
                 MainActor.assumeIsolated { self?.scheduleApply() }
             })
+            // 该属性在 Xcode 27 SDK 才公开，虽标记为可回部署到 iOS 26.1。
+            #if compiler(>=6.4)
             if #available(iOS 26.1, *) {
                 imageObservations.append(tab.observe(\.selectedImage) { [weak self] _, _ in
                     MainActor.assumeIsolated { self?.scheduleApply() }
@@ -119,6 +121,7 @@ final class TabBarBrandIconController: UIViewController {
                     tab.selectedImage = selectedImage
                 }
             }
+            #endif
             if !Self.sameImage(tab.image, images.unselected) {
                 tab.image = images.unselected
             }

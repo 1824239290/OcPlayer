@@ -53,9 +53,11 @@ final class TabBarBrandIconBridgeTests: XCTestCase {
         let (root, controller, home, bridge) = fixture()
         defer { bridge.stopObserving(); _ = root }
         XCTAssertLessThan(try saturation(home.image), 0.05)
+        #if compiler(>=6.4)
         if #available(iOS 26.1, *) {
             XCTAssertGreaterThan(try saturation(home.selectedImage), 0.5)
         }
+        #endif
         let item = try XCTUnwrap(controller.tabBar.items?.first)
         XCTAssertLessThan(try saturation(item.image), 0.05)
         XCTAssertGreaterThan(try saturation(item.selectedImage), 0.5)
@@ -98,12 +100,19 @@ final class TabBarBrandIconBridgeTests: XCTestCase {
         controller.selectedTab = controller.tabs[1]
         try await settle()
         XCTAssertLessThan(try saturation(home.image), 0.05)
+        #if compiler(>=6.4)
         if #available(iOS 26.1, *) {
             XCTAssertLessThan(try saturation(home.selectedImage), 0.05)
-            bridge.selectedSection = .home
-            bridge.apply()
+        }
+        #endif
+        bridge.selectedSection = .home
+        bridge.apply()
+        #if compiler(>=6.4)
+        if #available(iOS 26.1, *) {
             XCTAssertEqual(home.selectedImage?.pngData(), replacement.pngData())
         }
+        #endif
+        XCTAssertEqual(controller.tabBar.items?.first?.selectedImage?.pngData(), replacement.pngData())
         XCTAssertEqual(controller.tabs[1].image?.pngData(), settingsImage?.pngData())
     }
 
