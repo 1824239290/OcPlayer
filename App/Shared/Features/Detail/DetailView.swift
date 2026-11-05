@@ -252,8 +252,8 @@ struct DetailView: View {
             detailLayoutStyle == .flip && pager.blocksNavigationDismissal
         )
         .toolbarBackground(.hidden, for: .navigationBar)
-        // iPhone 封面与正文独占详情页，返回后由上级恢复标签栏。
-        .toolbarVisibility(isPhoneDevice ? .hidden : .visible, for: .tabBar)
+        // iPhone 独占详情页；标签栏随导航转场同步进出，避免返回完成后再闪现。
+        .navigationTabBarHidden(isPhoneDevice)
         .sensoryFeedback(.impact, trigger: isPlayableMarkedPlayed)
         .sensoryFeedback(.selection, trigger: model.selectedEpisodeID)
         #elseif os(macOS)
