@@ -4,73 +4,29 @@ import AppDesignKit
 import SwiftUI
 import UIKit
 
-/// iOS 标签栏里「品牌图标 / 首页头像」的选中态渲染：**选中 = 彩色原图，未选中 = 灰**。
-///
-/// 用户口径（2026-10-22）：Bangumi / MoviePilot 两个 Tab 的图标现在只有「亮一点 / 暗一点」
-/// 的单色差，要改成和首页头像（以及 macOS 顶栏药丸）同一套语言 —— 选中时是 SVG 原本的
-/// 品牌色，未选中时是灰的。
-///
-/// ## 为什么必须下到 UIKit（而不是继续用 SwiftUI 的 `Tab`）
-///
-/// SwiftUI 的 `Tab` 只接收**一张**图片，标签栏自己决定两态怎么画：
-///
-/// * `Tab("Bangumi", image:)` 走模板渲染 → 两态都是单色（选中 `primary`、未选中 `secondary`），
-///   也就是现在的「选中白一点、未选中灰一点」；
-/// * 给 label 里的 `Image` 套 `.renderingMode(.original)` 能保住颜色，但**两态都会是彩色**
-///   （标签栏不会对 `alwaysOriginal` 图做未选中灰化）；
-/// * 在 label 里套 `.grayscale` / `.saturation` / `.opacity` 或者 `if isSelected` 条件视图
-///   **全部无效**：标签栏只取 label 里那张 `Image` 的底层位图，SwiftUI 的绘制修饰符在交给
-///   标签栏之前就被丢掉了（实测：五格图标加与不加逐像素相同；条件视图则会画出一块黑色
-///   圆角块，见 `AppShellView.compactTabs` 的实拍约束）。
-///
-/// 而 `UITabBarItem` 本来就是为这件事设计的：`image` 是未选中图、`selectedImage` 是选中图，
-/// **两张都钉 `alwaysOriginal`** 时系统不染色 —— 于是「未选中模板灰 / 选中品牌彩色」可以
-/// 直接表达成两张图。问题只是 SwiftUI 没有暴露它（`Tab` 的 init 没有 `selectedImage`；
-/// UIKit 侧 `UITab.selectedImage` 到 iOS 26.1 才有，SwiftUI 27.1 SDK 里也没有对应入口）。
-///
-/// 所以这里只做一件事：找到 SwiftUI `TabView` 底下那个 `UITabBarController`，按标题把
-/// 三个槽位的 `image` / `selectedImage` 换成我们准备好的两张图。标签栏本身还是系统那一个
-/// ——几何、玻璃底、搜索栏展开、iPad 尺寸类适配、无障碍全部不动，不需要自绘标签栏。
-///
-/// ## 实测（iPhone 17 Pro / iPad Pro 13″ / iOS 26.3 模拟器，最小探针 App，与 App 同构）
-///
-/// * **组合成立**：未选中用模板图（系统按未选中色染色，深色 ≈ `#F4F4F4`、浅色 ≈ `#000`，
-///   与齿轮 / 放大镜完全同色）、选中用原色图（两态都不被染色）。彩色图用矢量资产直接
-///   `.alwaysOriginal` 即可，**不用**按点尺寸烤位图。
-/// * **两态同尺寸**：`bangumi-logo`（模板）与 `bangumi-logo-color` 是同一 viewBox 的同一
-///   glyph，`.alwaysOriginal` 的矢量图按同一自然尺寸画；实测选中/未选中图标外接框逐像素
-///   同宽（68px @3x），切换不跳。
-/// * **注入的图会被 SwiftUI 重置**（实机 + 模拟器都复现过）：头像到达会换掉
-///   `compactTabs` 的「有无头像」两条分支，标签栏项被重建 / 被重置回 label 那张彩色图，
-///   而 `updateUIViewController` 是在**之前**调的 —— 结果首页那一格又变回彩色。
-///   所以两处各排一串**有界**补拍（0.1 / 0.3 / 0.8 / 1.6 / 3.0 s），全部结束即停；
-///   换选中 / 改无关状态都不会触发重置，注入一直有效。
-/// * **label 仍放模板图**（不是彩色图）：万一某次注入没赶上或系统重置了 item，回落的是
-///   现在的单色图标，而不是「两态都彩色」的错态。
-///
-/// ## 与 macOS 药丸的分工
-///
-/// macOS 没有标签栏（分区入口是窗口工具栏里的玻璃药丸），那边是纯 SwiftUI、按状态切
-/// `.renderingMode`（见 `SectionBrandIcon`）；这里只服务 iOS 的 `TabView`。
+/// 系统标签栏的品牌图标：选中彩色、未选中灰。
+/// SwiftUI 的 Tab 只提供一张图片，所以同时维护 UITab 的图片源与
+/// UITabBarItem 的两态图片。重建或回写后由 KVO 合并到下一轮主队列修复。
 struct TabBarBrandIconBridge: UIViewControllerRepresentable {
-    /// 当前账号头像（iOS 上已经烤成标签栏版本：28pt 圆 + `alwaysOriginal`）。
-    /// `nil` = 没头像，首页那格保持系统的 `house.fill`，这里不接管。
     let avatar: PlatformImage?
+    let selectedSection: AppModel.Section
 
     func makeUIViewController(context: Context) -> TabBarBrandIconController {
         let controller = TabBarBrandIconController()
         controller.avatar = avatar
+        controller.selectedSection = selectedSection
         return controller
     }
 
     func updateUIViewController(_ controller: TabBarBrandIconController, context: Context) {
         controller.avatar = avatar
-        // ⚠️ 这一句跑在 SwiftUI **提交重建之前**：标签栏项被重建时（头像到达会换掉
-        // `compactTabs` 的「有无头像」分支），此刻注入的图会被随后那一轮重建冲掉。
-        // 所以再排两拍：下一拍（重建已提交）+ 稍后一拍（图布局稳定）。
+        controller.selectedSection = selectedSection
         controller.apply()
-        DispatchQueue.main.async { controller.apply() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { controller.apply() }
+        controller.scheduleApply()
+    }
+
+    static func dismantleUIViewController(_ controller: TabBarBrandIconController, coordinator: ()) {
+        controller.stopObserving()
     }
 }
 
@@ -91,6 +47,8 @@ enum TabBarBrandSlot: String, CaseIterable {
 
 /// 真正干活的那一层：找标签栏、换 icon、缓存灰化后的头像。
 final class TabBarBrandIconController: UIViewController {
+    /// 搜索展开时系统会用上一页的 selectedImage 画返回按钮；以实际分区决定颜色。
+    var selectedSection: AppModel.Section = .home
     /// 当前账号头像（已经烤成标签栏版本）。换图时才需要重烤灰色那张。
     var avatar: UIImage? {
         didSet {
@@ -99,42 +57,114 @@ final class TabBarBrandIconController: UIViewController {
     }
 
     private var grayAvatar: UIImage?
+    private weak var observedTabBarController: UITabBarController?
+    private var containerObservations: [NSKeyValueObservation] = []
+    private var imageObservations: [NSKeyValueObservation] = []
+    private var isApplying = false
+    private var applyScheduled = false
+    private var isStopped = false
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         apply()
-        // 首帧之后标签栏项还会被重建若干次（头像到达 → 换掉「有无头像」分支；
-        // 冷启动时图片缓存预热也会改一次），而重建**不保证**有回调。所以在一个
-        // 有界的窗口里补几拍：0.1 / 0.3 / 0.8 / 1.6 / 3.0 s。全部结束即不再排任务
-        // （之后的变化由 `updateUIViewController` 驱动），不是常驻轮询。
-        for delay in [0.1, 0.3, 0.8, 1.6, 3.0] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.apply()
-            }
+        scheduleApply()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // 初次挂载或宿主替换时重连；没有固定间隔的轮询。
+        if Self.findTabBarController(from: self) !== observedTabBarController {
+            scheduleApply()
         }
     }
 
-    /// 把三个槽位换成「未选中图 / 选中图」。
-    ///
-    /// **无条件重设**。这里试过两种「没变就不写」的判据，都不成立：
-    ///
-    /// * ❌ **比较实例**：`UITabBarItem` 的 setter 会**拷贝**图片，写进去的对象与读出来
-    ///   永远不是同一实例 —— 每次调用都判成「没生效」（日志里 `applied=0`，图其实换好了）。
-    /// * ❌ **关联对象当记号**：SwiftUI 换头像时会**复用同一个** `UITabBarItem`、把 `image`
-    ///   重置回 label 那张彩色图，对象没变、记号还在 —— 于是判成「已接管」，首页那一格
-    ///   又变回彩色（浅色外观实拍抓到的）。
-    ///
-    /// 代价可接受：`apply()` 只在标签栏相关的更新时被调（首帧 + 有界补拍 + SwiftUI 更新），
-    /// 不是每帧；三次赋值对系统标签栏来说是噪声级。
-    func apply() {
-        guard let tabBarController = Self.findTabBarController(from: self) else { return }
-        for item in tabBarController.tabBar.items ?? [] {
-            guard let slot = TabBarBrandSlot.slot(forTitle: item.title ?? ""),
-                  let images = images(for: slot)
-            else { continue }
-            item.image = images.unselected
-            item.selectedImage = images.selected
+    func scheduleApply() {
+        guard !isStopped, !isApplying, !applyScheduled else { return }
+        applyScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.applyScheduled = false
+            self.apply()
         }
+    }
+
+    func stopObserving() {
+        isStopped = true
+        containerObservations.removeAll()
+        imageObservations.removeAll()
+        observedTabBarController = nil
+    }
+
+    /// 维护 UITab 源与栏项两层：只改栏项时，UIKit 可以从彩色源重新生成它。
+    func apply() {
+        guard !isStopped, !isApplying,
+              let controller = Self.findTabBarController(from: self) else { return }
+        isApplying = true
+        defer { isApplying = false }
+        observe(controller)
+        imageObservations.removeAll()
+
+        for tab in controller.tabs {
+            guard let slot = TabBarBrandSlot.slot(forTitle: tab.title),
+                  let images = images(for: slot) else { continue }
+            let selectedImage = selectedImage(for: slot, images: images)
+            imageObservations.append(tab.observe(\.image) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            })
+            if #available(iOS 26.1, *) {
+                imageObservations.append(tab.observe(\.selectedImage) { [weak self] _, _ in
+                    MainActor.assumeIsolated { self?.scheduleApply() }
+                })
+                if !Self.sameImage(tab.selectedImage, selectedImage) {
+                    tab.selectedImage = selectedImage
+                }
+            }
+            if !Self.sameImage(tab.image, images.unselected) {
+                tab.image = images.unselected
+            }
+        }
+
+        for item in controller.tabBar.items ?? [] {
+            guard let slot = TabBarBrandSlot.slot(forTitle: item.title ?? ""),
+                  let images = images(for: slot) else { continue }
+            let selectedImage = selectedImage(for: slot, images: images)
+            imageObservations.append(item.observe(\.image) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            })
+            imageObservations.append(item.observe(\.selectedImage) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            })
+            if !Self.sameImage(item.image, images.unselected) { item.image = images.unselected }
+            if !Self.sameImage(item.selectedImage, selectedImage) { item.selectedImage = selectedImage }
+        }
+    }
+
+    private func observe(_ controller: UITabBarController) {
+        guard controller !== observedTabBarController else { return }
+        containerObservations.removeAll()
+        observedTabBarController = controller
+        containerObservations = [
+            controller.observe(\.tabs) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            },
+            controller.tabBar.observe(\.items) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            },
+            controller.observe(\.selectedTab) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.scheduleApply() }
+            }
+        ]
+    }
+
+    /// UIKit 可以拷贝 UIImage；比较实际内容，避免相同图片反复赋值触发布局。
+    private static func sameImage(_ current: UIImage?, _ expected: UIImage) -> Bool {
+        guard let current, current.renderingMode == expected.renderingMode,
+              current.size == expected.size, current.scale == expected.scale,
+              current.imageOrientation == expected.imageOrientation else { return false }
+        if current.isEqual(expected) { return true }
+        if let cgImage = current.cgImage, cgImage === expected.cgImage { return true }
+        guard let data = current.pngData() else { return false }
+        return data == expected.pngData()
     }
 
     // MARK: - 每个槽位的两张图
@@ -143,6 +173,15 @@ final class TabBarBrandIconController: UIViewController {
     private struct SlotImages {
         let unselected: UIImage
         let selected: UIImage
+    }
+
+    private func selectedImage(for slot: TabBarBrandSlot, images: SlotImages) -> UIImage {
+        let section: AppModel.Section = switch slot {
+        case .home: .home
+        case .bangumi: .bangumi
+        case .moviepilot: .moviepilot
+        }
+        return selectedSection == section ? images.selected : images.unselected
     }
 
     /// 品牌资产缓存成 `static let`：`UIImage(named:)` 本身有缓存，但 `withRenderingMode`

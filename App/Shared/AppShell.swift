@@ -222,9 +222,8 @@ struct AppShellView: View {
     /// iPhone / iPad 底部 Tab：首页 /（Bangumi）/（MoviePilot）/ 设置 / 搜索。
     /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐；媒体库入口在
     /// 首页「媒体库」栏（不占 Tab）。搜索走 `Tab(role: .search)` 放大镜 Tab
-    /// ——不挂首页 `.searchable`：iOS 26/27 实测「minimize 搜索 + 导航栏存在
-    /// 工具栏项」点 X 收起会被系统重新展开（循环无法关闭），搜索 Tab 彻底
-    /// 脱离导航栏。每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非
+    /// ——iOS 27 用 `.prominent` 明确指定独立按钮，iOS 26 用 `.search`。
+    /// 搜索页保留常驻导航栏搜索框。每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非
     /// sheet——播放器覆盖层不再被遮住。
     ///
     /// 强调色不在这里管：整棵树吃 `RootView` 根节点钉的那一个中性 tint，标签栏
@@ -293,6 +292,7 @@ struct AppShellView: View {
             Tab("Bangumi", image: "bangumi-logo", value: AppModel.Section.bangumi) {
                 NavigationStack(path: navPathBinding(.bangumi)) {
                     BangumiHomeView()
+                        .navigationTabBarHidden(false)
                         .appRoutes()
                         // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
                         .pageAmbience(AmbienceTarget.sessionPool(app))
@@ -306,6 +306,7 @@ struct AppShellView: View {
             Tab("MoviePilot", image: "moviepilot-logo", value: AppModel.Section.moviepilot) {
                 NavigationStack(path: navPathBinding(.moviepilot)) {
                     MoviePilotHomeView()
+                        .navigationTabBarHidden(false)
                         .appRoutes()
                         .pageAmbience(AmbienceTarget.sessionPool(app))
                 }
@@ -317,6 +318,7 @@ struct AppShellView: View {
         Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
             NavigationStack(path: navPathBinding(.settings)) {
                 SettingsView()
+                    .navigationTabBarHidden(false)
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
@@ -326,9 +328,10 @@ struct AppShellView: View {
 
         // 搜索 Tab 此前**没有**垫任何底（漏网的第 11 类页面）：iOS 上整页纯色，
         // 而底部 Tab 栏玻璃底下能透出氛围图——图就在栈根下面，页面自己没画。
-        Tab("搜索", systemImage: "magnifyingglass", value: AppModel.Section.search, role: .search) {
+        Tab("搜索", systemImage: "magnifyingglass", value: AppModel.Section.search, role: mediaSearchTabRole) {
             NavigationStack(path: navPathBinding(.search)) {
                 HomeSearchView()
+                    .navigationTabBarHidden(false)
                     .appRoutes()
                     .pageAmbience(AmbienceTarget.sessionPool(app))
             }
@@ -337,12 +340,23 @@ struct AppShellView: View {
         }
     }
 
+    /// 搜索是一个常驻搜索页，不要求选中时立即激活输入。iOS 27 把独立显示
+    /// 明确交给 prominent 角色；继续只用 search 会受搜索激活行为影响。
+    private var mediaSearchTabRole: TabRole {
+        // Xcode 26 的 SDK 尚无 prominent；运行时可用性判断不能屏蔽旧 SDK 的查名。
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) { return .prominent }
+        #endif
+        return .search
+    }
+
     /// 首页 Tab 的根页。抽出来是因为它有两个调用点（有头像 / 没头像两个 label 分支，
     /// 见 `compactTabs` 的注释）——抄两份迟早会漂移。
     @ViewBuilder
     private var homeTabRoot: some View {
         NavigationStack(path: navPathBinding(.home)) {
             HomeView()
+                .navigationTabBarHidden(false)
                 .appRoutes()
                 .background {
                     AmbientBackdropCarousel()
@@ -387,7 +401,9 @@ struct AppShellView: View {
         // 两态图只能从 UIKit 侧塞进 `UITabBarItem.image` / `.selectedImage`（为什么必须
         // 这样、以及实拍验证见 `TabBarBrandIconBridge`）。挂在 background 上：它只负责
         // 找到宿主标签栏并换图，不参与布局，也不接管设置 / 搜索这些非品牌槽位。
-        .background { TabBarBrandIconBridge(avatar: app.userAvatarImage) }
+        .background {
+            TabBarBrandIconBridge(avatar: app.userAvatarImage, selectedSection: app.selectedSection)
+        }
         // 标签栏的选中色**继承** `RootView` 根节点钉的中性 tint（`.primary`）：
         // 未选中的 glyph 依旧是系统灰；选中项的品牌图 / 头像则由上面那层换成原色
         // （它们不吃 tint）。系统自带的玻璃选中底保留（iOS 26 的悬浮玻璃标签栏）。
