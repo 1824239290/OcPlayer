@@ -30,8 +30,14 @@ final class MetadataCoordinator {
     @ObservationIgnored private var activeServer: (any MediaServer)?
     @ObservationIgnored private var activeServerIdentifier: ObjectIdentifier?
     @ObservationIgnored private var repository: MediaRepository?
+    @ObservationIgnored private var sessionGeneration: UInt64 = 0
+    @ObservationIgnored private let openStore: @Sendable (URL) async throws -> MetadataStore
 
-    init() {}
+    init(openStore: @escaping @Sendable (URL) async throws -> MetadataStore = {
+        try MetadataCache.open(at: $0)
+    }) {
+        self.openStore = openStore
+    }
 
     // MARK: - 建库
 
@@ -40,9 +46,10 @@ final class MetadataCoordinator {
         guard setupTask == nil else { return }
         let root = directory ?? OcPlayerStorage.defaultRoot
         databaseDirectory = root
+        let openStore = openStore
         setupTask = Task.detached(priority: .userInitiated) {
             do {
-                let store = try MetadataCache.open(at: root)
+                let store = try await openStore(root)
                 await MainActor.run {
                     self.store = store
                     self.isReady = true
@@ -74,6 +81,7 @@ final class MetadataCoordinator {
     func setActiveServer(_ server: (any MediaServer)?) {
         let identifier = server.map { ObjectIdentifier($0 as AnyObject) }
         if identifier != activeServerIdentifier {
+            sessionGeneration &+= 1
             let retired = repository
             activeServer = server
             activeServerIdentifier = identifier
@@ -89,7 +97,12 @@ final class MetadataCoordinator {
     func currentRepository() async -> MediaRepository? {
         guard let server = activeServer else { return nil }
         if let repository { return repository }
+        let generation = sessionGeneration
         _ = await waitUntilReady()
+        // await 期间可能换服、登出，甚至 A → B → A；旧调用不能安装新会话的仓储。
+        guard generation == sessionGeneration else { return nil }
+        // 同一会话的其他调用者可能已经完成创建。安装过程在主 actor 上无悬挂点。
+        if let repository { return repository }
         let repo = MediaRepository(server: server, store: store)
         repository = repo
         return repo
