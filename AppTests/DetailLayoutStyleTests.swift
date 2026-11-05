@@ -11,7 +11,7 @@ import XCTest
 /// - `resolve` 在 macOS 上被 `#if os(macOS)` 短路成 `.flip`，只有 iOS 才会真的调表。
 ///
 /// 如果判定表只写在 `resolve` 内部，macOS 那半边 CI 就永远执行不到这几行，
-/// 「iPhone 恒 banner」这条判据只在 iOS job 里成立——有人把 macOS 的短路删掉、
+/// 「iPhone 恒 flip」这条判据只在 iOS job 里成立——有人把 macOS 的短路删掉、
 /// 或者把 iOS 的分支改错，都不会有用例变红。拆成纯函数就是为了让两边测同一份实现。
 ///
 /// 覆盖的是**判定**，不是像素：iPad 能不能翻页（滚动联动）由 `DetailPageFlip` 负责，
@@ -65,47 +65,24 @@ final class DetailLayoutStyleTests: XCTestCase {
         )
     }
 
-    // MARK: - iPhone（唯一不能出错的一条）
-
-    /// **iPhone 恒横幅版式，与尺寸类无关。**
-    ///
-    /// 这条不只是「iPhone 竖屏」：iPhone Pro Max 横屏的 `horizontalSizeClass` 是 `.regular`。
-    /// 如果判定表漏了 `isPad` 判断、写成「regular 就翻页」，那台机器一横过来就会变成翻页
-    /// 版式，而其余所有 iPhone 用例仍然是绿的——所以这里必须逐个尺寸类都断言。
-    func testPhoneAlwaysGetsBanner() {
+    // iPhone 在所有尺寸类下使用竖向两页；iPad 紧凑分屏仍使用横幅。
+    func testPhoneAlwaysGetsFlip() {
         for sizeClass in sizeClasses {
             XCTAssertEqual(
-                DetailLayoutStyle.resolveTable(isPad: false, hSizeClass: sizeClass), .banner,
-                "iPhone 行为必须零变化（含 Pro Max 横屏的 .regular）；"
-                    + "实际尺寸类 = \(String(describing: sizeClass))"
+                DetailLayoutStyle.resolveTable(isPad: false, hSizeClass: sizeClass), .flip
             )
         }
     }
 
-    // MARK: - 整张表：翻页版式只由一格产出
-
-    /// 穷举 2 × 3 种输入，断言**整个表里只有「iPad + regular」这一格产出 `.flip`**。
-    ///
-    /// 上面几条是逐格断言，这条管的是「有没有多出第 7 格」：以后有人加设备形态
-    /// （分屏左右窗、Mac Catalyst、视觉 Pro）时，任何新的 `.flip` 输入都会在这里浮现，
-    /// 而不是等到真机上发现某个宽度下版式突然变了。
-    func testFlipIsProducedByExactlyOneInputCombination() {
-        var flipInputs: [(isPad: Bool, sizeClass: UserInterfaceSizeClass?)] = []
-        for isPad in [false, true] {
-            for sizeClass in sizeClasses where
+    func testFlipIncludesPhonesAndRegularIPad() {
+        let flipInputs = [false, true].flatMap { isPad in
+            sizeClasses.compactMap { sizeClass -> Bool? in
                 DetailLayoutStyle.resolveTable(isPad: isPad, hSizeClass: sizeClass) == .flip
-            {
-                flipInputs.append((isPad, sizeClass))
+                    ? isPad : nil
             }
         }
-
-        XCTAssertEqual(
-            flipInputs.count, 1,
-            "产出翻页版式的输入必须恰好一种，实际 \(flipInputs.count) 种："
-                + "\(flipInputs.map { "isPad=\($0.isPad), sizeClass=\(String(describing: $0.sizeClass))" })"
-        )
-        XCTAssertEqual(flipInputs.first?.isPad, true, "翻页版式只允许出现在 iPad 上")
-        XCTAssertEqual(flipInputs.first?.sizeClass, .regular, "iPad 只在常规宽度下才是翻页版式")
+        XCTAssertEqual(flipInputs.count, 4)
+        XCTAssertEqual(flipInputs.filter { $0 }.count, 1)
     }
 
     // MARK: - 入口真的走这张表

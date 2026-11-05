@@ -7,6 +7,7 @@ struct DetailBackdropView: View {
     let viewport: CGSize
     /// nil 为全页氛围版式；翻页版式只动画模糊遮罩的扩张。
     var expanded: Bool? = nil
+    var vertical = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -22,7 +23,7 @@ struct DetailBackdropView: View {
             if let content = artwork.content {
                 Group {
                     if let expanded {
-                        DetailPageArt(viewport: viewport, image: content.image, expanded: expanded)
+                        DetailPageArt(viewport: viewport, image: content.image, expanded: expanded, vertical: vertical)
                     } else {
                         BackdropAmbienceView(
                             target: (content.target.url, content.target.authHeader),
