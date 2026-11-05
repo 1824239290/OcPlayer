@@ -126,10 +126,7 @@ extension AppModel {
             let session = try await MediaServerLogin.start(urlString: rawURL, preferredScheme: scheme)
             guard loginAttemptGeneration == attempt, phase == .onboarding else { return }
             loginSession = session
-            // Emby 没有 Quick Connect 端点，直接进密码登录，不开轮询。
-            if session.supportsQuickConnect {
-                await startQuickConnect()
-            }
+            // 默认使用账号密码；用户展开 Quick Connect 后才申请配对码。
         } catch let error as JellyfinError {
             if loginAttemptGeneration == attempt {
                 onboardingError = error.errorDescription
@@ -143,13 +140,14 @@ extension AppModel {
         }
     }
 
-    /// 服务器确认后自动开始 Quick Connect 轮询（失败了也不阻塞密码登录）。
-    func startQuickConnect() async {
-        guard let session = loginSession else { return }
+    /// 用户主动选择 Quick Connect 后开始轮询。
+    func startQuickConnect() {
+        guard phase == .onboarding, let session = loginSession, session.supportsQuickConnect else { return }
         quickConnectTask?.cancel()
         quickConnectCode = nil
         quickConnectError = nil
         quickConnectTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             do {
                 for try await event in session.quickConnectEvents {
                     guard let self, !Task.isCancelled else { return }
@@ -163,21 +161,21 @@ extension AppModel {
                 }
                 // 流正常结束但没走到 authenticated：服务器停止发码 / 配对超时。
                 // 不报到这里的话，面板会一直转「正在申请配对码…」，看不出已经没戏了。
-                guard let self, self.loginSession === session, !self.isAuthenticating,
+                guard !Task.isCancelled, let self, self.loginSession === session, !self.isAuthenticating,
                       self.phase == .onboarding
                 else { return }
-                self.quickConnectError = "Quick Connect 配对已超时，请用下方账号密码登录。"
+                self.quickConnectError = "Quick Connect 配对已超时，请使用账号密码登录。"
             } catch is CancellationError {
             } catch let error as JellyfinError {
                 // Quick Connect 没开 / 超时：只写到 quickConnectError，让面板自己说明；
                 // 不覆盖正在进行的密码登录 / 已成功的状态（用户在输密码时 QC 后台超时也算正常）。
-                if let self, self.loginSession === session,
+                if !Task.isCancelled, let self, self.loginSession === session,
                    !self.isAuthenticating, self.phase == .onboarding {
                     self.quickConnectError = error.errorDescription
-                        ?? "此服务器未启用 Quick Connect，请用下方账号密码登录。"
+                        ?? "此服务器未启用 Quick Connect，请使用账号密码登录。"
                 }
             } catch {
-                if let self, self.loginSession === session,
+                if !Task.isCancelled, let self, self.loginSession === session,
                    !self.isAuthenticating, self.phase == .onboarding {
                     self.quickConnectError = "\(error)"
                 }
@@ -185,7 +183,15 @@ extension AppModel {
         }
     }
 
-    /// 账号密码登录（Quick Connect 之外的兜底）。
+    /// 收起配对入口时停止轮询，并清除这次配对状态。
+    func stopQuickConnect() {
+        quickConnectTask?.cancel()
+        quickConnectTask = nil
+        quickConnectCode = nil
+        quickConnectError = nil
+    }
+
+    /// 默认的账号密码登录。
     func signIn(username: String, password: String) async {
         guard let session = loginSession else { return }
         await completeLogin { try await session.signIn(username: username, password: password) }

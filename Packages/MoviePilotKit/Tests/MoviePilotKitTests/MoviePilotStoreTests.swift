@@ -323,20 +323,35 @@ final class MoviePilotStoreTests: XCTestCase {
         let store = makeStore(defaults: defaults, directory: TestSupport.isolatedCredentialsDirectory())
 
         // 观察者装在这里：装早了会把测试自己埋残留键那次写也算进来。
-        let offMainWrites = OffMainDefaultsWrites()
+        let offMainWrites = DefaultsNotificationCount()
+        let tokenRemovalNotifications = DefaultsNotificationCount()
         let landedOnMain = expectation(description: "残留键清理落在主线程")
         // clearSession 会删两个残留键、各发一次通知，允许重复兑现。
         landedOnMain.assertForOverFulfill = false
         let observer = NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification, object: nil, queue: nil
-        ) { _ in
+            forName: UserDefaults.didChangeNotification, object: defaults, queue: nil
+        ) { notification in
+            guard let changedDefaults = notification.object as? UserDefaults else { return }
             if Thread.isMainThread {
-                landedOnMain.fulfill()
+                // 初始化清理密码键、或同一偏好域中的其他写入，都不代表令牌已删除。
+                if changedDefaults.string(forKey: legacyTokenKey) == nil {
+                    tokenRemovalNotifications.record()
+                    landedOnMain.fulfill()
+                }
             } else {
                 offMainWrites.record()
             }
         }
         defer { NotificationCenter.default.removeObserver(observer) }
+
+        // 确定性地制造无关通知：其他偏好域的后台写入，以及本域其他键的主线程写入。
+        await Task.detached {
+            let unrelatedDefaults = TestSupport.isolatedDefaults("unrelated-" + UUID().uuidString)
+            unrelatedDefaults.set("noise", forKey: "unrelated")
+        }.value
+        await MainActor.run { store.username = "notification-noise" }
+        XCTAssertEqual(offMainWrites.count, 0, "其他偏好域的通知不能计入本 store 的后台写入")
+        XCTAssertEqual(tokenRemovalNotifications.count, 0, "其他键的通知不能提前结束令牌删除等待")
 
         await Task.detached { store.clearSession() }.value
         // 等主线程那一拍补做完（跑主 runloop，与 App 里的时序一致）。
@@ -394,9 +409,8 @@ private final class TokenReadBox: @unchecked Sendable {
     }
 }
 
-/// 记录「在非主线程上发生的 UserDefaults 变更」次数。通知可能在任意线程上回调，
-/// 计数要自己加锁（测试里就这一处共享状态）。
-private final class OffMainDefaultsWrites: @unchecked Sendable {
+/// 通知可能在任意线程上回调，计数需加锁；分别记录本域的后台写入与令牌删除通知。
+private final class DefaultsNotificationCount: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
 
