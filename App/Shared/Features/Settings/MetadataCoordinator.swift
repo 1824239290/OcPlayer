@@ -32,6 +32,7 @@ final class MetadataCoordinator {
     @ObservationIgnored private var repository: MediaRepository?
     @ObservationIgnored private var sessionGeneration: UInt64 = 0
     @ObservationIgnored private let openStore: @Sendable (URL) async throws -> MetadataStore
+    @ObservationIgnored private(set) var pendingPlaybackProgressWrite: Task<Void, Never>?
 
     init(openStore: @escaping @Sendable (URL) async throws -> MetadataStore = {
         try MetadataCache.open(at: $0)
@@ -193,6 +194,29 @@ final class MetadataCoordinator {
     }
 
     // MARK: - 写入口
+
+    /// 排队前固定原会话。即使建库尚未完成或仓储已退休，也只写原租户的末次进度。
+    /// 本地进度与远端上报独立；串行写回防止快速换片时旧位置后落库。
+    func finishPlaybackProgress(
+        item: MediaItem,
+        positionSeconds: Double,
+        durationSeconds: Double?
+    ) -> Task<Void, Never>? {
+        guard let server = activeServer else { return nil }
+        let originRepository = repository
+        let readiness = setupTask
+        let preceding = pendingPlaybackProgressWrite
+        let write = Task { @MainActor in
+            await preceding?.value
+            await readiness?.value
+            // store 是整库，不随租户切换；server 已在排队前捕获，绝不再解析 activeServer。
+            let origin = originRepository ?? MediaRepository(server: server, store: store)
+            await origin.recordFinalPlaybackProgress(
+                item: item, positionSeconds: positionSeconds, durationSeconds: durationSeconds)
+        }
+        pendingPlaybackProgressWrite = write
+        return write
+    }
 
     @discardableResult
     func markPlayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState? {

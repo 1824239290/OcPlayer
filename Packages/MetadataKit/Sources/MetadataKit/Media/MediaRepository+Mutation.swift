@@ -26,20 +26,36 @@ extension MediaRepository {
         played: Bool
     ) async {
         let previous = items[itemID]?.value.playState
-        let percentage: Double
-        if played {
-            percentage = 1
-        } else if let durationSeconds, durationSeconds > 0 {
-            percentage = min(max(positionSeconds / durationSeconds, 0), 1)
-        } else {
-            percentage = previous?.percentage ?? 0
-        }
-        let state = MediaItem.PlayState(
-            played: played,
-            percentage: percentage,
-            positionSeconds: positionSeconds,
-            unplayedCount: previous?.unplayedCount)
+        let state = MediaItem.PlayState.playbackProgress(
+            positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+            played: played, previous: previous)
         await applyPlayState(state, forItemID: itemID, persistToStore: true)
+    }
+
+    /// 有明确原会话归属的末次进度，允许在 shutdown 之后完成；不开放旧网络请求的写盘闸门。
+    public func recordFinalPlaybackProgress(
+        item: MediaItem,
+        positionSeconds: Double,
+        durationSeconds: Double?
+    ) async {
+        let state: MediaItem.PlayState
+        if let store {
+            do {
+                state = try await store.recordPlaybackProgress(
+                    item: item, positionSeconds: positionSeconds,
+                    durationSeconds: durationSeconds, tenant: tenant)
+            } catch {
+                MetadataLog.logger.warning("播放末次进度写入失败", fields: ["error": .string("\(error)")])
+                return
+            }
+        } else {
+            let previous = items[item.id]?.value.playState ?? item.playState
+            state = .playbackProgress(
+                positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+                played: previous?.played ?? false, previous: previous)
+        }
+        guard !isShutdown else { return }
+        await applyPlayState(state, forItemID: item.id, persistToStore: false)
     }
 
     /// 把一份进度更新到内存里的全部投影，并按需写回 SQLite。
@@ -105,5 +121,25 @@ extension MediaRepository {
         var copy = items
         copy[index].playState = state
         return copy
+    }
+}
+
+extension MediaItem.PlayState {
+    static func playbackProgress(
+        positionSeconds: Double,
+        durationSeconds: Double?,
+        played: Bool,
+        previous: Self?
+    ) -> Self {
+        let percentage: Double
+        if played {
+            percentage = 1
+        } else if let durationSeconds, durationSeconds > 0 {
+            percentage = min(max(positionSeconds / durationSeconds, 0), 1)
+        } else {
+            percentage = previous?.percentage ?? 0
+        }
+        return Self(played: played, percentage: percentage, positionSeconds: positionSeconds,
+                    unplayedCount: previous?.unplayedCount)
     }
 }

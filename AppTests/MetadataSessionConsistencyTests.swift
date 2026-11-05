@@ -105,4 +105,23 @@ final class MetadataSessionConsistencyTests: XCTestCase {
             coordinator.setActiveServer(StubMediaServer(profileID: first.profile.id))
         }
     }
+    func testFinalProgressDuringSetupKeepsOriginalTenantWithoutInstallingRepository() async throws {
+        let gate = MetadataSetupGate()
+        let coordinator = coordinator(gate: gate)
+        let original = StubMediaServer(profileID: "a:user")
+        coordinator.setActiveServer(original)
+        let item = MediaItem(id: "shared", name: "original", kind: .movie)
+        let finish = coordinator.finishPlaybackProgress(item: item, positionSeconds: 42, durationSeconds: 100)
+        let next = StubMediaServer(profileID: "b:user")
+        coordinator.setActiveServer(next)
+        await gate.release()
+        await finish?.value
+        let store = try XCTUnwrap(coordinator.activeStore)
+        let old = try await store.item("shared", tenant: TenantID(profile: original.profile))
+        let new = try await store.item("shared", tenant: TenantID(profile: next.profile))
+        XCTAssertEqual(old?.item.playState?.positionSeconds, 42)
+        XCTAssertNil(new)
+        XCTAssertNil(coordinator.repositoryIfReady)
+    }
+
 }

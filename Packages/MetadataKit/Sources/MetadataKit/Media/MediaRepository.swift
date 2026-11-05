@@ -41,7 +41,7 @@ public actor MediaRepository {
     let configuration: Configuration
     let now: @Sendable () -> Date
 
-    private var isShutdown = false
+    var isShutdown = false
     var homeEntry: MemoryEntry<MediaHomeContent>?
     var items: MemoryLRU<MediaItem.ID, MediaItem>
     var details: MemoryLRU<MediaItem.ID, MediaDetailContent>

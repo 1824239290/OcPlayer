@@ -977,7 +977,7 @@ extension AppModel {
         }
     }
 
-    /// 换片 / 退出播放器：补 Stopped 后停表。返回 Stopped 上报任务（供调用方等待落库）。
+    /// 换片 / 退出播放器：停止上报并固定原租户的末次进度，返回同时等待两者落库的收尾任务。
     @discardableResult
     func finishReporting() -> Task<Void, Never>? {
         // 退出 / 换片时把这一刻的进度写回媒体数据面：首页 rail 与详情页立刻一致，
@@ -985,17 +985,21 @@ extension AppModel {
         let item = nowPlayingItem
         let position = playback.map { Double($0.state.position.microseconds) / 1_000_000 } ?? 0
         let duration = playback.map { Double($0.state.duration.microseconds) / 1_000_000 }
+        let write: Task<Void, Never>?
+        if let item, position > 0 {
+            write = metadata.finishPlaybackProgress(
+                item: item, positionSeconds: position, durationSeconds: duration)
+        } else {
+            // 重复收尾也要等先前已排队的本地写回；不再生成第二份进度记录。
+            write = metadata.pendingPlaybackProgressWrite
+        }
         clearPlaybackSessionState()
         let stopped = playbackReporting?.stop()
-        if let item, position > 0 {
-            let metadata = metadata
-            Task {
-                await metadata.recordPlaybackProgress(
-                    itemID: item.id, positionSeconds: position,
-                    durationSeconds: duration, played: false)
-            }
+        guard let write else { return stopped }
+        return Task {
+            await write.value
+            await stopped?.value
         }
-        return stopped
     }
 
     func clearPlaybackSessionState() {

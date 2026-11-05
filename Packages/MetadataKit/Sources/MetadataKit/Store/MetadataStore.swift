@@ -333,15 +333,61 @@ public actor MetadataStore {
             else { return }
             item.playState = state
             guard let updated = PayloadCodec.encode(item) else { return }
-            try db.execute(
-                sql: """
-                    UPDATE item SET played = ?, played_percentage = ?, position_seconds = ?,
-                                    progress_fetched_at = ?, payload = ?
-                    WHERE tenant_id = ? AND item_id = ?
-                    """,
-                arguments: [state.played ? 1 : 0, state.percentage, state.positionSeconds,
-                            timestamp, updated, tenant.rawValue, id])
+            try Self.setPlayState(db, state: state, payload: updated,
+                                  itemID: id, tenant: tenant, timestamp: timestamp)
         }
+    }
+
+    /// 原播放会话的末次进度：读旧状态与写新进度在同一事务里完成。
+    /// 缓存尚无条目时用会话条目补齐；已有条目只改进度，不覆盖更完整的元数据。
+    @discardableResult
+    public func recordPlaybackProgress(
+        item: MediaItem,
+        positionSeconds: Double,
+        durationSeconds: Double?,
+        tenant: TenantID,
+        now: Date = Date()
+    ) throws -> MediaItem.PlayState {
+        let timestamp = Int64(now.timeIntervalSince1970)
+        return try database.write { db in
+            let row = try Row.fetchOne(db,
+                sql: "SELECT payload_version, payload FROM item WHERE tenant_id = ? AND item_id = ?",
+                arguments: [tenant.rawValue, item.id])
+            let stored = row.flatMap { row -> MediaItem? in
+                guard let data = row["payload"] as Data? else { return nil }
+                return PayloadCodec.decode(MediaItem.self, from: data, storedVersion: row["payload_version"])
+            }
+            var updated = stored ?? item
+            let previous = updated.playState
+            let state = MediaItem.PlayState.playbackProgress(
+                positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+                played: previous?.played ?? false, previous: previous)
+            updated.playState = state
+            if let payload = PayloadCodec.encode(updated) {
+                if stored == nil {
+                    try Self.upsertItem(db, item: updated, payload: payload,
+                                        tenant: tenant, timestamp: timestamp, progressFresh: true)
+                } else {
+                    try Self.setPlayState(db, state: state, payload: payload,
+                                          itemID: item.id, tenant: tenant, timestamp: timestamp)
+                }
+            }
+            return state
+        }
+    }
+
+    private static func setPlayState(
+        _ db: Database, state: MediaItem.PlayState, payload: Data,
+        itemID: MediaItem.ID, tenant: TenantID, timestamp: Int64
+    ) throws {
+        try db.execute(
+            sql: """
+                UPDATE item SET played = ?, played_percentage = ?, position_seconds = ?,
+                                progress_fetched_at = ?, payload = ?
+                WHERE tenant_id = ? AND item_id = ?
+                """,
+            arguments: [state.played ? 1 : 0, state.percentage, state.positionSeconds,
+                        timestamp, payload, tenant.rawValue, itemID])
     }
 
     // MARK: - 库列表
