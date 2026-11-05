@@ -451,7 +451,8 @@ public actor MetadataStore {
                                                    storedVersion: row["payload_version"])
             else { return nil }
             return CachedRail(
-                items: snapshot.items,
+                items: Self.mergingProgress(snapshot.items, states: try Self.projectionPlayStates(
+                    db, itemIDs: snapshot.items.map(\.id), tenant: tenant)),
                 fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)))
         }
     }
@@ -534,6 +535,13 @@ public actor MetadataStore {
                     items: snapshot.items,
                     fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)))
             }
+            let states = try Self.projectionPlayStates(
+                db, itemIDs: byName.values.flatMap { $0.items.map(\.id) }, tenant: tenant)
+            for key in Array(byName.keys) {
+                guard var rail = byName[key] else { continue }
+                rail.items = Self.mergingProgress(rail.items, states: states)
+                byName[key] = rail
+            }
             return (libraries, byName)
         }
     }
@@ -584,7 +592,8 @@ public actor MetadataStore {
                                                    storedVersion: row["payload_version"])
             else { return nil }
             return CachedPage(
-                items: snapshot.items,
+                items: Self.mergingProgress(snapshot.items, states: try Self.projectionPlayStates(
+                    db, itemIDs: snapshot.items.map(\.id), tenant: tenant)),
                 totalRecordCount: snapshot.totalRecordCount,
                 fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)),
                 startIndex: key.startIndex,
@@ -606,7 +615,7 @@ public actor MetadataStore {
                     """,
                 arguments: [tenant.rawValue, query.parentID, query.kinds, query.sortKey,
                             query.watchState, query.searchTerm])
-            return rows.compactMap { row in
+            let pages: [CachedPage] = rows.compactMap { row in
                 guard let data = row["payload"] as Data?,
                       let snapshot = PayloadCodec.decode(
                         PageSnapshot.self, from: data, storedVersion: row["payload_version"])
@@ -617,6 +626,13 @@ public actor MetadataStore {
                     fetchedAt: Date(timeIntervalSince1970: TimeInterval(row["fetched_at"] as Int64)),
                     startIndex: row["start_index"],
                     limit: row["limit_value"])
+            }
+            let states = try Self.projectionPlayStates(
+                db, itemIDs: pages.flatMap { $0.items.map(\.id) }, tenant: tenant)
+            return pages.map { page in
+                var updated = page
+                updated.items = Self.mergingProgress(page.items, states: states)
+                return updated
             }
         }
     }
