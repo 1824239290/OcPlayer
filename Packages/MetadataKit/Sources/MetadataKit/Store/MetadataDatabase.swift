@@ -73,6 +73,12 @@ enum MetadataDatabaseFactory {
         migrator.registerMigration("addTMDbSchemaV2") { db in
             try db.execute(sql: Schema.createTMDbTables)
         }
+        migrator.registerMigration("addLocalProgressV3") { db in
+            try db.execute(sql: Schema.createLocalProgressTable)
+        }
+        migrator.registerMigration("makeLocalProgressIndependentV4") { db in
+            try db.execute(sql: Schema.makeLocalProgressIndependent)
+        }
         try migrator.migrate(pool)
         return pool
     }

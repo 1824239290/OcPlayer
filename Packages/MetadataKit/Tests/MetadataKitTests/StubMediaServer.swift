@@ -18,10 +18,12 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var resumeResult: Result<[MediaItem], any Error> = .success([])
     var nextUpResult: Result<[MediaItem], any Error> = .success([])
     var latestResult: Result<[MediaItem], any Error> = .success([])
+    var itemHook: (@Sendable () async throws -> MediaItem)?
     var itemResult: Result<MediaItem, any Error>?
     var itemsPageResult: Result<MediaItemsPage, any Error>?
     var seasonsResult: Result<[MediaItem], any Error> = .success([])
     var episodesResult: Result<[MediaItem], any Error> = .success([])
+    var episodesHook: (@Sendable () async throws -> [MediaItem])?
     var mediaFileInfoResult: Result<MediaFileInfo?, any Error> = .success(nil)
     var markPlayedResult: Result<MediaItem.PlayState, any Error>?
     /// 库页 / 搜索页的整套行；按 startIndex/limit 切片返回，模拟真实分页服务端。
@@ -94,6 +96,7 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
 
     func item(_ id: String) async throws -> MediaItem {
         count("item")
+        if let itemHook { return try await itemHook() }
         if let itemResult { return try itemResult.get() }
         return MediaItem(id: id, name: id, kind: .movie)
     }
@@ -129,7 +132,9 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         count("seasons"); return try seasonsResult.get()
     }
     func episodes(seriesID: String, seasonID: String?) async throws -> [MediaItem] {
-        count("episodes"); return try episodesResult.get()
+        count("episodes")
+        if let episodesHook { return try await episodesHook() }
+        return try episodesResult.get()
     }
     func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] {
         count("episodesStartingAt"); return try episodesResult.get()

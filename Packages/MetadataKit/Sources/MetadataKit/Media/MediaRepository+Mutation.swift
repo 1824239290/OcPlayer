@@ -38,23 +38,37 @@ extension MediaRepository {
         positionSeconds: Double,
         durationSeconds: Double?
     ) async {
+        let timestamp = now()
+        let previous = items[item.id]?.value.playState
+            ?? localProgress[item.id]?.item.playState ?? item.playState
+        var localItem = item
+        localItem.playState = .playbackProgress(
+            positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+            played: previous?.played ?? false, previous: previous)
+        let progress = LocalPlaybackProgress(item: localItem, recordedAt: timestamp,
+                                             completed: LocalPlaybackProgress.isComplete(position: positionSeconds, duration: durationSeconds))
+        localProgress[item.id] = progress
         let state: MediaItem.PlayState
         if let store {
             do {
                 state = try await store.recordPlaybackProgress(
                     item: item, positionSeconds: positionSeconds,
-                    durationSeconds: durationSeconds, tenant: tenant)
+                    durationSeconds: durationSeconds, tenant: tenant, now: timestamp)
             } catch {
                 MetadataLog.logger.warning("播放末次进度写入失败", fields: ["error": .string("\(error)")])
-                return
+                state = localItem.playState!
             }
         } else {
-            let previous = items[item.id]?.value.playState ?? item.playState
-            state = .playbackProgress(
-                positionSeconds: positionSeconds, durationSeconds: durationSeconds,
-                played: previous?.played ?? false, previous: previous)
+            state = localItem.playState!
         }
+        // await 期间可能已完成显式标记、新的末次写回或远端确认；不能把旧结果重新应用。
+        guard localProgress[item.id]?.revision == progress.revision,
+              localProgress[item.id]?.confirmedAt == nil else { return }
+        localProgress[item.id]?.item.playState = state
         guard !isShutdown else { return }
+        // 缓存未见过的播放条目也必须参与内存合并。
+        localItem.playState = state
+        if items[item.id] == nil { rememberItems([localItem]) }
         await applyPlayState(state, forItemID: item.id, persistToStore: false)
     }
 
@@ -65,6 +79,15 @@ extension MediaRepository {
         persistToStore: Bool
     ) async {
         let timestamp = now()
+        var progressItem = items[itemID]?.value ?? localProgress[itemID]?.item
+            ?? MediaItem(id: itemID, name: itemID, kind: .other)
+        progressItem.playState = state
+        if persistToStore {
+            // 显式操作已获服务端确认，但先发请求仍不能覆盖这份结果。
+            // 在第一次 await 之前建立内存边界，数据库写入复用同一时间。
+            localProgress[itemID] = LocalPlaybackProgress(
+                item: progressItem, recordedAt: timestamp, confirmedAt: timestamp)
+        }
         if let entry = items[itemID] {
             var item = entry.value
             item.playState = state
@@ -108,7 +131,11 @@ extension MediaRepository {
         }
 
         if persistToStore {
-            await persist { try await $0.updatePlayState(state, forItemID: itemID, tenant: tenant) }
+            let fallback = progressItem
+            await persist {
+                try await $0.updatePlayState(state, forItemID: itemID, tenant: tenant,
+                                            now: timestamp, fallbackItem: fallback)
+            }
         }
     }
 

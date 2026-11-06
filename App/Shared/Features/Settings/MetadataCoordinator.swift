@@ -267,7 +267,7 @@ final class MetadataCoordinator {
             } else {
                 try await store.clearAll()
             }
-            await repository?.invalidateMemory()
+            await repository?.invalidateMemory(discardLocalProgress: true)
             refreshSize()
             return true
         } catch {

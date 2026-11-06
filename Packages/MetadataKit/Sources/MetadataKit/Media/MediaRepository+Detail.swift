@@ -21,13 +21,14 @@ extension MediaRepository {
     }
 
     private func performItemRefresh(itemID: MediaItem.ID) async throws -> MediaItem {
-        let item = try await server.item(itemID)
+        let requestStartedAt = now()
+        let remote = try await server.item(itemID)
+        let item = await saveIncomingItems([remote], requestStartedAt: requestStartedAt)[0]
         rememberItems([item])
         if var detail = details[itemID]?.value {
             detail.item = item
             details[itemID] = MemoryEntry(value: detail, fetchedAt: now())
         }
-        await persist { try await $0.saveItems([item], tenant: tenant) }
         return item
     }
 
@@ -88,10 +89,14 @@ extension MediaRepository {
         let kind = kindHint ?? previous?.item.kind
 
         if kind == .series {
+            let requestStartedAt = now()
             async let seasonsPart = mediaLoadPart { try await server.seasons(seriesID: itemID) }
             let item = try await refreshItem(itemID: itemID)
             let seasonsResult = await seasonsPart
-            let seasons = seasonsResult.value ?? previous?.seasons ?? []
+            let seasons: [MediaItem]
+            if let remote = seasonsResult.value {
+                seasons = await saveIncomingItems(remote, requestStartedAt: requestStartedAt)
+            } else { seasons = previous?.seasons ?? [] }
             failures["seasons"] = seasonsResult.failure
 
             let seasonID = Self.defaultSeasonID(in: seasons)
@@ -105,14 +110,17 @@ extension MediaRepository {
                 failures["episodes"] = episodePart.failure
             }
             let content = MediaDetailContent(
-                item: item, seasons: seasons, episodesSeasonID: seasonID, episodes: episodes)
-            rememberItems(seasons + episodes)
+                item: mergingLocalProgress([item], requestStartedAt: requestStartedAt)[0],
+                seasons: mergingLocalProgress(seasons, requestStartedAt: requestStartedAt),
+                episodesSeasonID: seasonID,
+                episodes: mergingLocalProgress(episodes, requestStartedAt: requestStartedAt))
+            rememberItems(content.seasons + content.episodes)
             details[itemID] = MemoryEntry(value: content, fetchedAt: now())
-            await persist { try await $0.saveItems([item] + seasons, tenant: tenant) }
             return MediaDetailRefresh(
                 snapshot: snapshot(content, fetchedAt: now(), source: .network), failures: failures)
         }
 
+        let requestStartedAt = now()
         let item = try await refreshItem(itemID: itemID)
         if item.kind == .boxSet || kind == .boxSet {
             let descriptor = Self.collectionDescriptor(itemID: itemID)
@@ -125,7 +133,8 @@ extension MediaRepository {
                 ?? previous?.collectionMembersTotalCount
             failures["members"] = memberPart.failure
             let content = MediaDetailContent(
-                item: item, collectionMembers: members,
+                item: mergingLocalProgress([item], requestStartedAt: requestStartedAt)[0],
+                collectionMembers: mergingLocalProgress(members, requestStartedAt: requestStartedAt),
                 collectionMembersTotalCount: memberTotal)
             details[itemID] = MemoryEntry(value: content, fetchedAt: now())
             return MediaDetailRefresh(
@@ -181,14 +190,15 @@ extension MediaRepository {
     }
 
     private func performEpisodeRefresh(key: EpisodeKey) async throws -> [MediaItem] {
-        let episodes = try await server.episodes(seriesID: key.seriesID, seasonID: key.seasonID)
+        let requestStartedAt = now()
+        let remote = try await server.episodes(seriesID: key.seriesID, seasonID: key.seasonID)
+        let episodes = await saveIncomingItems(remote, requestStartedAt: requestStartedAt)
         episodeLists[key] = MemoryEntry(value: episodes, fetchedAt: now())
         rememberItems(episodes)
         if var detail = details[key.seriesID]?.value, detail.episodesSeasonID == key.seasonID {
             detail.episodes = episodes
             details[key.seriesID] = MemoryEntry(value: detail, fetchedAt: now())
         }
-        await persist { try await $0.saveItems(episodes, tenant: tenant) }
         return episodes
     }
 

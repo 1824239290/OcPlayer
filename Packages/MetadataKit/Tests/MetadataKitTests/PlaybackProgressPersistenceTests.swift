@@ -108,7 +108,11 @@ final class PlaybackProgressPersistenceTests: XCTestCase {
         }
         let pool = try DatabasePool(path: directory.url.appendingPathComponent("query-count.sqlite").path,
                                     configuration: configuration)
-        try await pool.write { try $0.execute(sql: Schema.createTables) }
+        try await pool.write {
+            try $0.execute(sql: Schema.createTables)
+            try $0.execute(sql: Schema.createLocalProgressTable)
+            try $0.execute(sql: Schema.makeLocalProgressIndependent)
+        }
         let store = MetadataStore(database: pool)
         let tenant = TenantID(profile: StubMediaServer().profile)
         let projection = (0..<1100).map { item("item-\($0)") }
@@ -156,7 +160,8 @@ private final class ProgressQueryCount: @unchecked Sendable {
 
     func record(_ sql: String) {
         let sql = sql.uppercased()
-        guard sql.hasPrefix("SELECT "), sql.contains("FROM ITEM ") else { return }
+        guard (sql.hasPrefix("SELECT ") || sql.hasPrefix("WITH ")),
+              (sql.contains("FROM ITEM ") || sql.contains("JOIN ITEM ")) else { return }
         lock.withLock { value += 1 }
     }
 

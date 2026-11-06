@@ -55,76 +55,38 @@ public actor MetadataStore {
 
     // MARK: - 条目
 
-    /// 批量写入条目（一个事务）。`progressFresh` 为 true 时同时刷新进度时间戳。
+    /// 网络元数据写入时保留未确认的本地进度；返回的列表也用于内存投影。
+    @discardableResult
     public func saveItems(
-        _ items: [MediaItem],
-        tenant: TenantID,
-        now: Date = Date(),
-        progressFresh: Bool = true
-    ) throws {
-        guard !items.isEmpty else { return }
-        let timestamp = Int64(now.timeIntervalSince1970)
-        // payload 编码放在事务外：编码是纯 CPU，占着写事务做它会挡住别的写。
-        let rows: [(MediaItem, Data)] = items.compactMap { item in
-            PayloadCodec.encode(item).map { (item, $0) }
-        }
-        guard !rows.isEmpty else { return }
-        try database.write { db in
-            for (item, payload) in rows {
-                try Self.upsertItem(db, item: item, payload: payload, tenant: tenant,
-                                    timestamp: timestamp, progressFresh: progressFresh)
-            }
-        }
+        _ items: [MediaItem], tenant: TenantID, now: Date = Date(),
+        progressFresh: Bool = true, requestStartedAt: Date = Date()
+    ) throws -> [MediaItem] {
+        try saveItemsAndRail(items, rail: nil, tenant: tenant, now: now,
+                             progressFresh: progressFresh, requestStartedAt: requestStartedAt)
     }
 
-    /// 条目（可选带 rail 快照）**一次事务写完**。
-    ///
-    /// ## 为什么要单独这个方法
-    ///
-    /// `saveItems` 与 `saveRail` 各自开一个 `database.write` 事务。连写两次的话，
-    /// 进程在两次写之间被杀会留下「**新 rail + 旧条目**」的不一致快照 ——
-    /// 首页显示的条目详情与 rail 里的对不上。这是正确性问题，不只是性能。
-    ///
-    /// ## 编码仍在事务外
-    ///
-    /// 与 `saveItems`（`:67` 的注释）同一理由：payload 编码是纯 CPU，占着写事务做
-    /// 它会挡住别的写。所以两次编码都先做完，事务里只剩 upsert。
-    ///
-    /// - Parameter rail: `nil` 时等价于 `saveItems`。
+    /// 合并进度、写 item 与 rail 在同一事务内完成，避免写入和内存返回不一致。
+    /// 空 rail 仍会清空；只有尚未确认的本地继续观看条目可以补入 resume。
+    @discardableResult
     public func saveItemsAndRail(
-        _ items: [MediaItem],
-        rail: String?,
-        tenant: TenantID,
-        now: Date = Date(),
-        progressFresh: Bool = true
-    ) throws {
-        // ⚠️ **不能写成 `guard !items.isEmpty else { return }`**。
-        //
-        // 「空 items + 非 nil rail」是一个**有意义的组合**：服务端说「这个 rail 现在
-        // 没有内容」时，`saveRail` 会把 `RailSnapshot(items: [])` 写进去、**清掉**上一份。
-        // 若在这里早退，磁盘会**原地保留过期 rail** —— 而仓储的冷启动读路径
-        // 读 rail 无任何新鲜度门槛（`fetchedAt` 只参与 `dates.min()`），
-        // 冷启动/离线就会把过期条目当「继续观看/接下来看/最近添加」铺上首页。
-        //
-        // 第一版就是那样写的，独立审查用端到端用例实测出「服务端返回空之后磁盘仍是
-        // 旧 rail」；回归见 `MediaRepositoryTests.testEmptyRailResponseClearsStaleRail`。
-        guard !items.isEmpty || rail != nil else { return }
+        _ items: [MediaItem], rail: String?, tenant: TenantID, now: Date = Date(),
+        progressFresh: Bool = true, requestStartedAt: Date = Date()
+    ) throws -> [MediaItem] {
+        guard !items.isEmpty || rail != nil else { return items }
         let timestamp = Int64(now.timeIntervalSince1970)
-        // 两次编码都在事务外。
-        let rows: [(MediaItem, Data)] = items.compactMap { item in
-            PayloadCodec.encode(item).map { (item, $0) }
-        }
-        let railPayload = rail.flatMap { _ in PayloadCodec.encode(RailSnapshot(items: items)) }
-        guard !rows.isEmpty || railPayload != nil else { return }
-        try database.write { db in
-            for (item, payload) in rows {
+        return try database.write { db in
+            let merged = try Self.reconcileIncomingItems(
+                db, items: items, rail: rail, tenant: tenant,
+                requestStartedAt: requestStartedAt, now: now)
+            for item in merged {
+                guard let payload = PayloadCodec.encode(item) else { continue }
                 try Self.upsertItem(db, item: item, payload: payload, tenant: tenant,
                                     timestamp: timestamp, progressFresh: progressFresh)
             }
-            if let rail, let railPayload {
-                try Self.upsertRail(db, rail: rail, payload: railPayload,
-                                    tenant: tenant, timestamp: timestamp)
+            if let rail, let payload = PayloadCodec.encode(RailSnapshot(items: merged)) {
+                try Self.upsertRail(db, rail: rail, payload: payload, tenant: tenant, timestamp: timestamp)
             }
+            return merged
         }
     }
 
@@ -317,24 +279,31 @@ public actor MetadataStore {
         _ state: MediaItem.PlayState,
         forItemID id: MediaItem.ID,
         tenant: TenantID,
-        now: Date = Date()
+        now: Date = Date(),
+        fallbackItem: MediaItem? = nil
     ) throws {
         let timestamp = Int64(now.timeIntervalSince1970)
         try database.write { db in
+            guard try Self.newerProgressState(db, itemID: id, tenant: tenant, recordedAt: now) == nil else { return }
             // payload 也要更新：读路径是从 payload 解出整个 MediaItem 的，
             // 只改投影列的话，读回来仍是旧进度（列只服务淘汰与筛选）。
-            guard let row = try Row.fetchOne(
+            let row = try Row.fetchOne(
                 db,
                 sql: "SELECT payload_version, payload FROM item WHERE tenant_id = ? AND item_id = ?",
-                arguments: [tenant.rawValue, id]),
-                let data = row["payload"] as Data?,
-                var item = PayloadCodec.decode(MediaItem.self, from: data,
-                                               storedVersion: row["payload_version"])
-            else { return }
+                arguments: [tenant.rawValue, id])
+            let cached = row.flatMap { row -> MediaItem? in
+                guard let data = row["payload"] as Data? else { return nil }
+                return PayloadCodec.decode(MediaItem.self, from: data, storedVersion: row["payload_version"])
+            }
+            var item = cached ?? fallbackItem ?? MediaItem(id: id, name: id, kind: .other)
+            item.id = id
             item.playState = state
             guard let updated = PayloadCodec.encode(item) else { return }
             try Self.setPlayState(db, state: state, payload: updated,
                                   itemID: id, tenant: tenant, timestamp: timestamp)
+            // 服务端标记已经成功：新请求可接管，先发请求仍须保留操作结果。
+            try Self.saveProgressRecord(db, item: item, tenant: tenant, recordedAt: now,
+                                        confirmedAt: now, completed: false)
         }
     }
 
@@ -350,6 +319,9 @@ public actor MetadataStore {
     ) throws -> MediaItem.PlayState {
         let timestamp = Int64(now.timeIntervalSince1970)
         return try database.write { db in
+            if let newer = try Self.newerProgressState(db, itemID: item.id, tenant: tenant, recordedAt: now) {
+                return newer
+            }
             let row = try Row.fetchOne(db,
                 sql: "SELECT payload_version, payload FROM item WHERE tenant_id = ? AND item_id = ?",
                 arguments: [tenant.rawValue, item.id])
@@ -358,7 +330,8 @@ public actor MetadataStore {
                 return PayloadCodec.decode(MediaItem.self, from: data, storedVersion: row["payload_version"])
             }
             var updated = stored ?? item
-            let previous = updated.playState
+            let previous = try stored?.playState
+                ?? Self.localProgressState(db, itemID: item.id, tenant: tenant) ?? item.playState
             let state = MediaItem.PlayState.playbackProgress(
                 positionSeconds: positionSeconds, durationSeconds: durationSeconds,
                 played: previous?.played ?? false, previous: previous)
@@ -372,6 +345,9 @@ public actor MetadataStore {
                                           itemID: item.id, tenant: tenant, timestamp: timestamp)
                 }
             }
+            try Self.saveProgressRecord(db, item: updated, tenant: tenant, recordedAt: now,
+                                        confirmedAt: nil,
+                                        completed: LocalPlaybackProgress.isComplete(position: positionSeconds, duration: durationSeconds))
             return state
         }
     }
@@ -770,6 +746,7 @@ public actor MetadataStore {
                     )
                     """,
                 arguments: [excess])
+            try Self.compactEvictedProgress(db)
             return excess
         }
     }
@@ -777,7 +754,7 @@ public actor MetadataStore {
     /// 清空一个租户的全部缓存（设置页「清空」与登出用）。
     public func clear(tenant: TenantID) throws {
         try database.write { db in
-            for table in ["item", "library", "rail", "page", "media_file_info"] {
+            for table in ["local_progress", "item", "library", "rail", "page", "media_file_info"] {
                 try db.execute(sql: "DELETE FROM \(table) WHERE tenant_id = ?", arguments: [tenant.rawValue])
             }
         }
@@ -786,7 +763,7 @@ public actor MetadataStore {
     /// 清空所有租户的缓存（设置页「清空」）。
     public func clearAll() throws {
         try database.write { db in
-            for table in ["item", "library", "rail", "page", "media_file_info", "tenant"] {
+            for table in ["local_progress", "item", "library", "rail", "page", "media_file_info", "tenant"] {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
         }

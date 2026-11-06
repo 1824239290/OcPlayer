@@ -37,6 +37,7 @@ extension MediaRepository {
 
     private func performHomeRefresh() async -> MediaHomeRefresh {
         let previous = await cachedHome()
+        let requestStartedAt = now()
         async let libraries = mediaLoadPart { try await server.userViews() }
         async let resume = mediaLoadPart { try await server.resumeItems() }
         async let nextUp = mediaLoadPart { try await server.nextUp() }
@@ -52,26 +53,28 @@ extension MediaRepository {
         failures["libraries"] = libraryPart.failure
 
         if let value = resumePart.value {
-            content.resume = value
-            await persist { try await $0.saveItemsAndRail(value, rail: "resume", tenant: tenant) }
+            content.resume = await saveIncomingItems(value, rail: "resume", requestStartedAt: requestStartedAt)
         }
         failures["resume"] = resumePart.failure
 
         if let value = nextUpPart.value {
-            content.nextUp = deduplicatedNextUp(value, resume: content.resume)
-            await persist { try await $0.saveItemsAndRail(value, rail: "nextUp", tenant: tenant) }
+            let merged = await saveIncomingItems(value, rail: "nextUp", requestStartedAt: requestStartedAt)
+            content.nextUp = deduplicatedNextUp(merged, resume: content.resume)
         }
         failures["nextUp"] = nextUpPart.failure
 
         if let value = latestPart.value {
-            content.latest = value
-            await persist { try await $0.saveItemsAndRail(value, rail: "latest", tenant: tenant) }
+            content.latest = await saveIncomingItems(value, rail: "latest", requestStartedAt: requestStartedAt)
         }
         failures["latest"] = latestPart.failure
 
         let anySuccess = [libraryPart.value != nil, resumePart.value != nil,
                           nextUpPart.value != nil, latestPart.value != nil].contains(true)
         let fetchedAt = anySuccess ? now() : (previous?.fetchedAt ?? now())
+        content.resume = mergingLocalProgress(content.resume, requestStartedAt: requestStartedAt)
+        content.resume.removeAll { localProgress[$0.id]?.confirmedCompletion == true }
+        content.nextUp = mergingLocalProgress(content.nextUp, requestStartedAt: requestStartedAt)
+        content.latest = mergingLocalProgress(content.latest, requestStartedAt: requestStartedAt)
         homeEntry = MemoryEntry(value: content, fetchedAt: fetchedAt)
         rememberItems(content.resume + content.nextUp + content.latest)
         let source: MediaDataSource = anySuccess ? .network : (previous?.source ?? .network)
