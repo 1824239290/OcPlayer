@@ -140,8 +140,8 @@ enum LoginWallCatalogLoader {
     ///
     /// * **参数阶梯**——`maxWidth` 与 `maxPixelSize` 都是缓存键的一部分，而它们当初
     ///   由海报卡的盒子宽度决定，会随布局改动而漂移（见 `LoginWallStyle.cacheParameterLadder`）。
-    /// * **身份历史**——身份由 `DeviceId + Token` 派生，而 token 会轮换；轮换一次，
-    ///   全部缓存键跟着变，字节却一张没少（见 `ImageCacheIdentityStore`）。
+    /// * **身份历史**——身份包含服务器与账号上下文；缺少 UserId 的旧认证头仍可能随 token 变化，
+    ///   只尝试本档案在 v2 中记下的历史（见 `ImageCacheIdentityStore`）。
     ///
     /// 每个组合只是一次「文件在不在」的判断，不发网络请求。
     nonisolated static func resolvePosterFile(
@@ -157,7 +157,7 @@ enum LoginWallCatalogLoader {
             ) else { continue }
             for identity in identities {
                 if let file = pipeline.cachedFileURL(
-                    url: url, cacheIdentity: identity, maxPixelSize: step.maxPixelSize
+                    url: url, cacheIdentity: identity, cacheScope: profile.imageCacheScope, maxPixelSize: step.maxPixelSize
                 ) {
                     return file
                 }

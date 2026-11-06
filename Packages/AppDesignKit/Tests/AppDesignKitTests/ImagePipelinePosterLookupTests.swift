@@ -64,16 +64,16 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
         let url = posterURL()
 
         // 会话还在时：正常加载 → 落盘
-        let loaded = try await pipeline.load(url, authHeader: auth, maxPixelSize: 400)
+        let loaded = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
         XCTAssertNotNil(loaded)
 
         // ① 用认证头查（在线路径）
-        let viaHeader = pipeline.cachedFileURL(url: url, authHeader: auth, maxPixelSize: 400)
+        let viaHeader = pipeline.cachedFileURL(url: url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
         XCTAssertNotNil(viaHeader, "刚写进去的字节，按认证头应当查得到")
 
         // ② 用**记下来的身份**查（登录页路径——那一刻 token 已经没了）
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
-        let viaIdentity = pipeline.cachedFileURL(url: url, cacheIdentity: identity, maxPixelSize: 400)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
+        let viaIdentity = pipeline.cachedFileURL(url: url, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400)
         XCTAssertNotNil(viaIdentity, "按缓存身份必须查到同一个文件；查不到 = 登录页海报墙全空")
 
         XCTAssertEqual(viaHeader, viaIdentity, "两条入口算出的必须是同一个键")
@@ -83,7 +83,7 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
     func testDifferentIdentityDoesNotMatch() async throws {
         let (pipeline, _) = try makePipeline()
         let url = posterURL()
-        _ = try await pipeline.load(url, authHeader: auth, maxPixelSize: 400)
+        _ = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
 
         XCTAssertNil(
             pipeline.cachedFileURL(url: url, cacheIdentity: "000000000000", maxPixelSize: 400),
@@ -96,12 +96,12 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
     func testMaxPixelSizeIsPartOfTheKey() async throws {
         let (pipeline, _) = try makePipeline()
         let url = posterURL()
-        _ = try await pipeline.load(url, authHeader: auth, maxPixelSize: 400)
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        _ = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
 
-        XCTAssertNotNil(pipeline.cachedFileURL(url: url, cacheIdentity: identity, maxPixelSize: 400))
+        XCTAssertNotNil(pipeline.cachedFileURL(url: url, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400))
         XCTAssertNil(
-            pipeline.cachedFileURL(url: url, cacheIdentity: identity, maxPixelSize: 300),
+            pipeline.cachedFileURL(url: url, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 300),
             "解码预算不同就是不同的键——阶梯里每一档都得单独试"
         )
     }
@@ -109,26 +109,26 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
     /// `maxWidth` 在 URL 查询里，同样是键的一部分。
     func testMaxWidthIsPartOfTheKey() async throws {
         let (pipeline, _) = try makePipeline()
-        _ = try await pipeline.load(posterURL(maxWidth: 400), authHeader: auth, maxPixelSize: 400)
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        _ = try await pipeline.load(posterURL(maxWidth: 400), authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
 
         XCTAssertNotNil(
-            pipeline.cachedFileURL(url: posterURL(maxWidth: 400), cacheIdentity: identity, maxPixelSize: 400)
+            pipeline.cachedFileURL(url: posterURL(maxWidth: 400), cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400)
         )
         XCTAssertNil(
-            pipeline.cachedFileURL(url: posterURL(maxWidth: 300), cacheIdentity: identity, maxPixelSize: 400)
+            pipeline.cachedFileURL(url: posterURL(maxWidth: 300), cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400)
         )
     }
 
     /// `tag` 也进键：服务端换图后 tag 变，旧字节自然查不到（正确的失效语义）。
     func testTagIsPartOfTheKey() async throws {
         let (pipeline, _) = try makePipeline()
-        _ = try await pipeline.load(posterURL(), authHeader: auth, maxPixelSize: 400)
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        _ = try await pipeline.load(posterURL(), authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
 
         let otherTag = URL(string:
             "http://192.168.1.10:8096/Items/item-1/Images/Primary?maxWidth=400&tag=tag-2")!
-        XCTAssertNil(pipeline.cachedFileURL(url: otherTag, cacheIdentity: identity, maxPixelSize: 400))
+        XCTAssertNil(pipeline.cachedFileURL(url: otherTag, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400))
     }
 
     /// **跨实例**（= 重启 App）仍然查得到。登录页几乎总是冷启动后的第一屏，
@@ -136,11 +136,11 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
     func testLookupSurvivesRestart() async throws {
         let (pipeline, dir) = try makePipeline()
         let url = posterURL()
-        _ = try await pipeline.load(url, authHeader: auth, maxPixelSize: 400)
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        _ = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
 
         let restarted = ImagePipeline(cacheDirectory: dir, protocolClasses: [HangingProtocol.self])
-        let found = restarted.cachedFileURL(url: url, cacheIdentity: identity, maxPixelSize: 400)
+        let found = restarted.cachedFileURL(url: url, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400)
         XCTAssertNotNil(found, "重启后仍要查得到，否则登录页永远只有程序化封面")
     }
 
@@ -148,11 +148,11 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
     func testFoundFileDecodes() async throws {
         let (pipeline, _) = try makePipeline()
         let url = posterURL()
-        _ = try await pipeline.load(url, authHeader: auth, maxPixelSize: 400)
+        _ = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 400)
 
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: posterURL(), authHeader: auth, cacheScope: "server-A")
         let file = try XCTUnwrap(
-            pipeline.cachedFileURL(url: url, cacheIdentity: identity, maxPixelSize: 400)
+            pipeline.cachedFileURL(url: url, cacheIdentity: identity, cacheScope: "server-A", maxPixelSize: 400)
         )
         let image = await pipeline.decodeCachedFile(file, maxPixelSize: 400)
         XCTAssertNotNil(image)
@@ -166,7 +166,7 @@ final class ImagePipelinePosterLookupTests: XCTestCase {
 
         let start = Date()
         let result = pipeline.cachedFileURL(
-            url: posterURL("never-cached"), authHeader: auth, maxPixelSize: 400
+            url: posterURL("never-cached"), authHeader: auth, cacheScope: "server-A", maxPixelSize: 400
         )
         let elapsed = Date().timeIntervalSince(start)
 

@@ -349,7 +349,7 @@ final class DetailViewModel {
             // 只锁非空：算不出图时留给下一个时点（详情落地 / TMDB 补齐）。
             guard resolved.url != nil else { continue }
             lockedBackdropTargets[width] = BackdropSourceLatch.Target(
-                url: resolved.url, authHeader: resolved.authHeader
+                url: resolved.url, authHeader: resolved.authHeader, cacheScope: app?.server?.profile.imageCacheScope
             )
         }
     }
@@ -397,7 +397,7 @@ final class DetailViewModel {
         self.app = app
         attachedSessionGeneration = app.sessionGeneration
         let target = app.currentAmbienceTarget
-        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader))
+        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader, cacheScope: app.server?.profile.imageCacheScope))
     }
 
     // MARK: - 选中
@@ -659,7 +659,9 @@ final class DetailViewModel {
     /// 单次加载后提交像素。来源锁定与像素就绪是两个阶段，不把 URL 当作图片已显示。
     private func prepareBackdrop() {
         let target = backdropTarget(width: DetailAmbienceImage.artURLWidth)
-        backdropArtwork.prepare(target: .init(url: target.url, authHeader: target.authHeader))
+        let snapshot = lockedBackdropTargets[DetailAmbienceImage.artURLWidth]
+            ?? .init(url: target.url, authHeader: target.authHeader, cacheScope: app?.server?.profile.imageCacheScope)
+        backdropArtwork.prepare(target: snapshot)
     }
 
     /// 读当前选中季的 TMDB 数据（先读缓存立即渲染，再后台补）。

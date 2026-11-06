@@ -186,6 +186,7 @@ extension AppModel {
         let image = try? await avatarImagePipeline.load(
             url,
             authHeader: authHeader,
+            cacheScope: server.profile.imageCacheScope,
             maxPixelSize: Self.userAvatarPixelSize
         )
         // 取图期间可能已经换了服务器 / 登出：旧账号的脸不能落到新会话上。

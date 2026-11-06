@@ -19,7 +19,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
         let pixels = image()
         var cached: PlatformImage? = pixels
         var reads = 0
-        let artwork = DetailBackdropArtwork(cachedImage: { url, auth, size in
+        let artwork = DetailBackdropArtwork(cachedImage: { url, auth, _, size in
             reads += 1
             XCTAssertEqual(url, self.home.url)
             XCTAssertEqual(auth, self.home.authHeader)
@@ -36,7 +36,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
 
     func testMissingEntryDoesNotFollowLaterPoolWarmup() {
         var cached: PlatformImage?
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in cached })
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in cached })
         artwork.captureEntry(target: home)
         cached = image()
         artwork.captureEntry(target: detail)
@@ -49,7 +49,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
         let gate = LoadGate()
         let started = expectation(description: "detail decode started")
         gate.started[detail.url!] = started
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, size in
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, size in
             size == DetailAmbienceImage.decodePixels ? entryPixels : nil
         }, loader: gate.load)
         artwork.captureEntry(target: home)
@@ -72,7 +72,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
     func testCachedContentCommitsWithoutAnotherRequest() {
         let pixels = image()
         var loads = 0
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in pixels }, loader: { _, _, _ in
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in pixels }, loader: { _, _, _, _ in
             loads += 1
             return nil
         })
@@ -84,9 +84,9 @@ final class DetailBackdropArtworkTests: XCTestCase {
     func testFailedLoadKeepsEntryAndDoesNotPublishPlaceholder() async throws {
         enum Failure: Error { case decode }
         let pixels = image()
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, size in
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, size in
             size == DetailAmbienceImage.decodePixels ? pixels : nil
-        }, loader: { _, _, _ in throw Failure.decode })
+        }, loader: { _, _, _, _ in throw Failure.decode })
         artwork.captureEntry(target: home)
         let task = try XCTUnwrap(artwork.prepare(target: detail))
         await task.value
@@ -100,7 +100,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
         let newStarted = expectation(description: "new load")
         gate.started[home.url!] = oldStarted
         gate.started[detail.url!] = newStarted
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in nil }, loader: gate.load)
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in nil }, loader: gate.load)
         let oldTask = try XCTUnwrap(artwork.prepare(target: home))
         await fulfillment(of: [oldStarted], timeout: 2)
         let newTask = try XCTUnwrap(artwork.prepare(target: detail))
@@ -119,7 +119,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
         let gate = LoadGate()
         let started = expectation(description: "first visit")
         gate.started[detail.url!] = started
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in nil }, loader: gate.load)
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in nil }, loader: gate.load)
         let first = try XCTUnwrap(artwork.prepare(target: detail))
         await fulfillment(of: [started], timeout: 2)
         artwork.cancel()
@@ -139,7 +139,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
 
     func testAbsentTargetDoesNotLoad() {
         var reads = 0
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in reads += 1; return nil })
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in reads += 1; return nil })
         XCTAssertNil(artwork.prepare(target: .init(url: nil, authHeader: nil)))
         XCTAssertEqual(reads, 0)
         XCTAssertNil(artwork.content)
@@ -148,7 +148,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
     func testCanceledCallerCannotRestartPreparationOrCommitCachedPixels() async {
         let pixels = image()
         var reads = 0
-        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _ in
+        let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in
             reads += 1
             return pixels
         })
@@ -172,7 +172,7 @@ final class DetailBackdropArtworkTests: XCTestCase {
         var requests: [Request] = []
         private var pending: [URL: CheckedContinuation<PlatformImage?, Error>] = [:]
 
-        func load(_ url: URL, _ auth: String?, _ size: Int) async throws -> PlatformImage? {
+        func load(_ url: URL, _ auth: String?, _ scope: String?, _ size: Int) async throws -> PlatformImage? {
             requests.append(Request(auth: auth, size: size))
             return try await withCheckedThrowingContinuation { continuation in
                 pending[url] = continuation

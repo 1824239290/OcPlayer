@@ -32,15 +32,15 @@ final class AmbiencePoolTests: XCTestCase {
         WarmRecorder.calls = []
         // 生产走 `ImagePipeline`（会真发请求、`stub.local` 的 DNS 还可能拖住用例），
         // 用例里换成"记录调用、立刻返回"。
-        AmbienceImageWarmup.warm = { url, authHeader, _ in
+        AmbienceImageWarmup.warm = { url, authHeader, _, _ in
             WarmRecorder.calls.append((url, authHeader))
         }
     }
 
     override func tearDown() {
-        AmbienceImageWarmup.warm = { url, authHeader, maxPixelSize in
+        AmbienceImageWarmup.warm = { url, authHeader, cacheScope, maxPixelSize in
             _ = try? await ImagePipeline.shared.load(
-                url, authHeader: authHeader, maxPixelSize: maxPixelSize
+                url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize
             )
         }
         WarmRecorder.calls = []
@@ -110,7 +110,7 @@ final class AmbiencePoolTests: XCTestCase {
         let app = makeApp(server: server)
         var poolWasEmptyWhenWarmingFirstImage = false
 
-        AmbienceImageWarmup.warm = { url, authHeader, _ in
+        AmbienceImageWarmup.warm = { url, authHeader, _, _ in
             WarmRecorder.calls.append((url, authHeader))
             // 预热回调里读池子：此刻必须还是空的（顺序断言）。
             if WarmRecorder.calls.count == 1 {
@@ -362,7 +362,7 @@ final class AmbienceRotationCadenceTests: XCTestCase {
         // 预热阶段会真的走 `ImagePipeline`（会发网络请求、`stub.local` 的 DNS
         // 还可能拖住用例）—— 也注入掉，只保留「记录 sleep 实参」这一个观测点。
         let originalWarm = AmbienceImageWarmup.warm
-        AmbienceImageWarmup.warm = { _, _, _ in }
+        AmbienceImageWarmup.warm = { _, _, _, _ in }
         defer { AmbienceImageWarmup.warm = originalWarm }
 
         Self.recorded = []

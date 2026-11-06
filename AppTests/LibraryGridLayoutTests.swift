@@ -622,7 +622,7 @@ final class LibraryArtworkScalingTests: XCTestCase {
             thumbImageTag: "thumb-tag", backdropImageTag: "bd-tag"
         )
         _ = try await pipeline.load(
-            stillURL(itemID: item.id, type: "Thumb"), authHeader: nil,
+            stillURL(itemID: item.id, type: "Thumb"), authHeader: nil, cacheScope: StubMediaServer().profile.imageCacheScope,
             maxPixelSize: ArtworkMetrics.pixelBudget(
                 boxWidth: width, heightRatio: 9.0 / 16.0, scale: scale)
         )
@@ -669,7 +669,7 @@ final class LibraryArtworkScalingTests: XCTestCase {
             id: "lib-tv", name: "电视剧", collectionType: .tvshows, primaryImageTag: "cover"
         )
         _ = try await pipeline.load(
-            stillURL(itemID: library.id), authHeader: nil,
+            stillURL(itemID: library.id), authHeader: nil, cacheScope: StubMediaServer().profile.imageCacheScope,
             maxPixelSize: ArtworkMetrics.pixelBudget(
                 boxWidth: width, heightRatio: 9.0 / 16.0, scale: scale)
         )

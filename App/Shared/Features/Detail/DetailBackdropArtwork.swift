@@ -10,8 +10,8 @@ final class DetailBackdropArtwork {
         let image: PlatformImage
     }
 
-    typealias Loader = @MainActor (URL, String?, Int) async throws -> PlatformImage?
-    typealias CacheReader = @MainActor (URL, String?, Int) -> PlatformImage?
+    typealias Loader = @MainActor (URL, String?, String?, Int) async throws -> PlatformImage?
+    typealias CacheReader = @MainActor (URL, String?, String?, Int) -> PlatformImage?
 
     private(set) var entry: Snapshot?
     private(set) var content: Snapshot?
@@ -22,10 +22,10 @@ final class DetailBackdropArtwork {
     @ObservationIgnored private let loader: Loader
     @ObservationIgnored private let cachedImage: CacheReader
 
-    init(cachedImage: @escaping CacheReader = { url, auth, pixels in
-        ImagePipeline.shared.memoryCachedImage(url: url, authHeader: auth, maxPixelSize: pixels)
-    }, loader: @escaping Loader = { url, auth, pixels in
-        try await ImagePipeline.shared.load(url, authHeader: auth, maxPixelSize: pixels)
+    init(cachedImage: @escaping CacheReader = { url, auth, scope, pixels in
+        ImagePipeline.shared.memoryCachedImage(url: url, authHeader: auth, cacheScope: scope, maxPixelSize: pixels)
+    }, loader: @escaping Loader = { url, auth, scope, pixels in
+        try await ImagePipeline.shared.load(url, authHeader: auth, cacheScope: scope, maxPixelSize: pixels)
     }) {
         self.cachedImage = cachedImage
         self.loader = loader
@@ -36,7 +36,7 @@ final class DetailBackdropArtwork {
         guard !capturedEntry else { return }
         capturedEntry = true
         guard let url = target.url,
-              let image = cachedImage(url, target.authHeader, DetailAmbienceImage.decodePixels)
+              let image = cachedImage(url, target.authHeader, target.cacheScope, DetailAmbienceImage.decodePixels)
         else { return }
         entry = Snapshot(target: target, image: image)
     }
@@ -49,13 +49,13 @@ final class DetailBackdropArtwork {
         guard requested != target else { return task }
         cancel()
         requested = target
-        if let image = cachedImage(url, target.authHeader, DetailAmbienceImage.artDecodePixels) {
+        if let image = cachedImage(url, target.authHeader, target.cacheScope, DetailAmbienceImage.artDecodePixels) {
             content = Snapshot(target: target, image: image)
             return nil
         }
         let ticket = generation
         task = Task { [weak self, loader] in
-            let image = try? await loader(url, target.authHeader, DetailAmbienceImage.artDecodePixels)
+            let image = try? await loader(url, target.authHeader, target.cacheScope, DetailAmbienceImage.artDecodePixels)
             guard !Task.isCancelled, let self, self.generation == ticket, let image else { return }
             // 一次赋值提交整组像素；视图不再分别发起清晰图/模糊图请求。
             self.content = Snapshot(target: target, image: image)

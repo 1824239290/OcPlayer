@@ -87,6 +87,7 @@ struct AppShellView: View {
             // 口径跟**内容**层（`contentSizeClass`），不跟标签栏层：iPad 的内容是
             // iPad 版式，留白就该是 52pt；跟着标签栏的紧凑档走会变成 22pt 的错位。
             .environment(\.contentLeading, contentLeading)
+            .environment(\.imageCacheScope, app.server?.profile.imageCacheScope)
             #if os(macOS)
             // 首页轮播等页面内的氛围层经它感知全屏（整窗层直接读 @State）。
             .environment(\.isWindowFullscreen, isWindowFullscreen)
@@ -464,6 +465,7 @@ struct AppShellView: View {
                 if let ambience = app.windowAmbience {
                     BackdropAmbienceView(
                         target: (url: ambience.url, authHeader: ambience.authHeader),
+                        cacheScope: ambience.cacheScope,
                         scrim: ambience.scrim
                     )
                     .drawingGroup()

@@ -66,8 +66,8 @@ enum AmbiencePool {
 /// DNS 还可能拖住用例）。生产路径与原来逐字相同。
 @MainActor
 enum AmbienceImageWarmup {
-    static var warm: @MainActor (URL, String?, Int) async -> Void = { url, authHeader, maxPixelSize in
-        _ = try? await ImagePipeline.shared.load(url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+    static var warm: @MainActor (URL, String?, String?, Int) async -> Void = { url, authHeader, cacheScope, maxPixelSize in
+        _ = try? await ImagePipeline.shared.load(url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
     }
 }
 
@@ -126,7 +126,7 @@ extension AppModel {
         if let first = picked.first {
             let target = first.imageTarget(server, kind: .backdrop, width: AmbiencePool.imageWidth)
             if let url = target.url {
-                await AmbienceImageWarmup.warm(url, target.authHeader, 512)
+                await AmbienceImageWarmup.warm(url, target.authHeader, server?.profile.imageCacheScope, 512)
             }
         }
         if Task.isCancelled { return }
@@ -149,7 +149,7 @@ extension AppModel {
             if Task.isCancelled { return }
             let target = item.imageTarget(server, kind: .backdrop, width: AmbiencePool.imageWidth)
             guard let url = target.url else { continue }
-            await AmbienceImageWarmup.warm(url, target.authHeader, 512)
+            await AmbienceImageWarmup.warm(url, target.authHeader, server?.profile.imageCacheScope, 512)
         }
         guard ambiencePool.count > 1, !reduceMotion else { return }
         // ## 为什么**不**按清单原建议「只在首页栈根可见时推进」

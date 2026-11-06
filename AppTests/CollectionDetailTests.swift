@@ -507,11 +507,11 @@ final class CollectionDetailTests: XCTestCase {
         let image = PlatformImage()
         #endif
         var decodedTargets: [URL] = []
-        let artwork = DetailBackdropArtwork(cachedImage: { url, _, pixels in
+        let artwork = DetailBackdropArtwork(cachedImage: { url, _, _, pixels in
             guard pixels == DetailAmbienceImage.artDecodePixels else { return nil }
             decodedTargets.append(url)
             return image
-        }, loader: { _, _, _ in
+        }, loader: { _, _, _, _ in
             XCTFail("本例的最终图片已缓存，不应发起异步加载")
             return nil
         })
