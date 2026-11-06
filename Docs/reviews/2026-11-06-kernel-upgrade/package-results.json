@@ -1,0 +1,11 @@
+{
+  "Erika": {
+    "executed": 93,
+    "passed": 93,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 28,
+    "swiftTesting": 65,
+    "source": "full raw test log; final XCTest + Swift Testing summaries"
+  }
+}

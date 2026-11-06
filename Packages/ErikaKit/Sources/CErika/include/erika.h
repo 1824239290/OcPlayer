@@ -62,13 +62,18 @@ typedef struct ErikaHttpHeader {
  * rewind budget (in bytes): how much already-played data stays cached so a
  * rewind inside it is served without a network request; 0 uses the 16 MiB
  * default (a -10 s skip at 71 Mbps covers ~89 MB, so hosts playing
- * high-bitrate media should size this from the bitrate). */
+ * high-bitrate media should size this from the bitrate).
+ * start_position_micros opens the media there instead of at its start: the
+ * engine seeks before presenting, so the first frame shown is the one at that
+ * position; 0 opens at the start (it was the first reserved slot, so callers
+ * that zero the struct keep opening at the start). */
 typedef struct ErikaOpenOptions {
   const ErikaHttpHeader *headers;
   uintptr_t header_count;
   uint64_t http_read_ahead_bytes;
   uint64_t http_back_buffer_bytes;
-  uint64_t reserved[2];
+  uint64_t start_position_micros;
+  uint64_t reserved[1];
 } ErikaOpenOptions;
 
 /* Headless GIF export. Times are milliseconds. The function is synchronous;
@@ -206,6 +211,11 @@ typedef enum ErikaEventKind {
   ErikaEventKind_TrackSelectionChanged = 10,
   ErikaEventKind_VideoDecoderChanged = 11,
   ErikaEventKind_AudioOutputChanged = 12,
+  /* 13 is the hosts' own (a system media control asked for the previous or
+   * next item); the engine never sends it. */
+  /* The media played to its end on its own. Follows the Stopped state the
+   * end brings; a stop asked for sends no Ended. */
+  ErikaEventKind_Ended = 14,
 } ErikaEventKind;
 
 typedef enum ErikaTrackKind {
@@ -273,11 +283,33 @@ typedef enum ErikaOutputSurfaceFormat {
   ErikaOutputSurfaceFormat_SixteenBitFloat = 2,
 } ErikaOutputSurfaceFormat;
 
+/* Upscaler modes. Values are grouped by family and stable: 1-15 ArtCNN,
+ * 16-31 Anime4K, 32-47 spatial shaders, 48-63 platform scalers, 64 a
+ * runtime-loaded network (erika_presenter_load_upscaler_model). Backends
+ * that cannot run a mode keep native sampling and report Inactive. */
 typedef enum ErikaLumaUpscalerMode {
   ErikaLumaUpscalerMode_Off = 0,
   ErikaLumaUpscalerMode_ArtCnnC4F16 = 1,
   ErikaLumaUpscalerMode_ArtCnnC4F32 = 2,
   ErikaLumaUpscalerMode_ArtCnnC4F16Ds = 3,
+  ErikaLumaUpscalerMode_ArtCnnC4F16Dn = 4,
+  ErikaLumaUpscalerMode_ArtCnnC4F32Ds = 5,
+  ErikaLumaUpscalerMode_ArtCnnC4F32Dn = 6,
+  ErikaLumaUpscalerMode_ArtCnnR8F64 = 7,
+  ErikaLumaUpscalerMode_Anime4kS = 16,
+  ErikaLumaUpscalerMode_Anime4kM = 17,
+  ErikaLumaUpscalerMode_Anime4kL = 18,
+  ErikaLumaUpscalerMode_Anime4kVl = 19,
+  ErikaLumaUpscalerMode_Anime4kUl = 20,
+  ErikaLumaUpscalerMode_Anime4kDenoiseS = 21,
+  ErikaLumaUpscalerMode_Anime4kDenoiseM = 22,
+  ErikaLumaUpscalerMode_Anime4kDenoiseL = 23,
+  ErikaLumaUpscalerMode_Anime4kDenoiseVl = 24,
+  ErikaLumaUpscalerMode_Anime4kDenoiseUl = 25,
+  ErikaLumaUpscalerMode_Fsr1 = 32,
+  ErikaLumaUpscalerMode_PlatformVideo = 48,
+  ErikaLumaUpscalerMode_MetalFxSpatial = 49,
+  ErikaLumaUpscalerMode_Custom = 64,
 } ErikaLumaUpscalerMode;
 
 typedef enum ErikaUpscalerBackendStatus {
@@ -286,6 +318,12 @@ typedef enum ErikaUpscalerBackendStatus {
   ErikaUpscalerBackendStatus_Building = 2,
   ErikaUpscalerBackendStatus_Scalar = 3,
   ErikaUpscalerBackendStatus_SimdgroupMatrix = 4,
+  ErikaUpscalerBackendStatus_CooperativeMatrix = 5,
+  ErikaUpscalerBackendStatus_LinalgMatrix = 6,
+  ErikaUpscalerBackendStatus_VideoProcessor = 7,
+  ErikaUpscalerBackendStatus_VideoToolbox = 8,
+  ErikaUpscalerBackendStatus_MetalFx = 9,
+  ErikaUpscalerBackendStatus_TensorOps = 10,
 } ErikaUpscalerBackendStatus;
 
 typedef enum ErikaVideoAlphaMode {
@@ -662,9 +700,11 @@ ErikaPresenterHandle *erika_presenter_create_with_output_mode_and_alpha(
 void erika_presenter_destroy(ErikaPresenterHandle *handle);
 
 /* Playback and runtime parameters. volume is 0.0–1.0; rate 1.0 is normal speed;
- * set_upscaler takes an ErikaLumaUpscalerMode. Metal and capable wgpu/Vulkan
- * renderers execute ArtCNN; other backends retain native luma sampling and
- * report an explicit Inactive fallback. */
+ * set_upscaler takes an ErikaLumaUpscalerMode. D3D11 runs every network mode,
+ * FSR 1.0 and (on NVIDIA/Intel) PlatformVideo; Metal runs the network modes
+ * and its platform scalers; wgpu/Vulkan runs the legacy ArtCNN modes. A
+ * backend that cannot run a mode keeps native sampling and reports Inactive
+ * (see erika_presenter_get_upscaler_status and the diagnostics JSON). */
 ErikaStatus erika_presenter_open(ErikaPresenterHandle *handle, const char *uri);
 ErikaStatus erika_presenter_open_with_headers(
     ErikaPresenterHandle *handle,
@@ -685,8 +725,30 @@ ErikaStatus erika_presenter_close(ErikaPresenterHandle *handle);
 ErikaStatus erika_presenter_seek(ErikaPresenterHandle *handle, uint64_t position_micros);
 ErikaStatus erika_presenter_set_playback_rate(ErikaPresenterHandle *handle, double rate);
 ErikaStatus erika_presenter_set_volume(ErikaPresenterHandle *handle, double volume);
+/* Silences the output (true) or restores it (false) without losing the
+ * volume: set_volume while muted is kept and applied on unmute. */
+ErikaStatus erika_presenter_set_muted(ErikaPresenterHandle *handle, bool muted);
 ErikaStatus erika_presenter_set_upscaler(ErikaPresenterHandle *handle, int32_t mode);
+/* Loads the network used by ErikaLumaUpscalerMode_Custom from memory: an
+ * Erika .esr model (see crates/erika/assets/artcnn/export_artcnn_esr.py) or
+ * an mpv hook shader of the FSRCNNX / Anime4K CNN dialect. Weights are never
+ * bundled for such models; the host supplies them. Select the network with
+ * erika_presenter_set_upscaler(handle, ErikaLumaUpscalerMode_Custom). */
+ErikaStatus erika_presenter_load_upscaler_model(
+    ErikaPresenterHandle *handle,
+    const char *name,
+    const uint8_t *data,
+    uintptr_t data_len);
+ErikaStatus erika_presenter_clear_upscaler_model(ErikaPresenterHandle *handle);
 ErikaStatus erika_presenter_set_subtitle_scale(ErikaPresenterHandle *handle, double scale);
+/* Shows subtitles later (positive delay_micros) or earlier (negative) than
+ * their timestamps, embedded and external tracks alike; clamped to ten
+ * minutes either way. 0 restores the timestamps. */
+ErikaStatus erika_presenter_set_subtitle_delay(ErikaPresenterHandle *handle, int64_t delay_micros);
+/* Where the next open on this presenter starts (microseconds) when its
+ * options leave start_position_micros at 0, for hosts whose open path cannot
+ * carry it. Taken by that open; 0 clears it. */
+ErikaStatus erika_presenter_set_open_start_position(ErikaPresenterHandle *handle, uint64_t position_micros);
 /* Fallback subtitle font. NULL or empty clears that half of the selection.
  * A container ASS script keeps its own font unless the font-name override bit
  * is passed through erika_presenter_set_subtitle_style. */
@@ -808,6 +870,9 @@ ErikaStatus erika_presenter_set_danmaku_font(
 ErikaStatus erika_presenter_set_danmaku_block_words_json(
     ErikaPresenterHandle *handle,
     const char *json);
+ErikaStatus erika_presenter_set_danmaku_random_colors(
+    ErikaPresenterHandle *handle,
+    bool enabled);
 ErikaStatus erika_presenter_track_selection(
     ErikaPresenterHandle *handle,
     ErikaTrackSelection *out_selection);
@@ -1004,12 +1069,80 @@ ErikaStatus erika_presenter_capture_frame_rgba(
     uint8_t *out_rgba,
     uintptr_t out_capacity);
 
+/* Off-screen host composition: same buffer, SDR output and error contract as
+ * capture_frame_rgba, with enabled danmaku included (no debug HUD). No surface
+ * or preceding render_tick is required. Danmaku follows the current playback
+ * clock and is laid out at width*height pixels with scale factor 1. */
+ErikaStatus erika_presenter_capture_frame_rgba_with_danmaku(
+    ErikaPresenterHandle *handle,
+    uint32_t width,
+    uint32_t height,
+    uint8_t *out_rgba,
+    uintptr_t out_capacity);
+
 /* Consume the latest Linux Flutter texture frame after render_tick. Includes
  * video, subtitles, danmaku and HUD. Returns NoEvent when no frame is ready.
  * The caller allocates at least surface_width*surface_height*4 bytes. */
 ErikaStatus erika_presenter_copy_flutter_frame_rgba(
     ErikaPresenterHandle *handle, uint8_t *out_rgba, uintptr_t capacity,
     uint32_t *out_width, uint32_t *out_height);
+
+typedef struct ErikaTextureFrame ErikaTextureFrame;
+typedef enum ErikaExternalTextureKind {
+    ErikaExternalTextureKind_Metal = 1,
+    ErikaExternalTextureKind_VulkanOpaqueFd = 2,
+} ErikaExternalTextureKind;
+typedef enum ErikaExternalTextureFormat {
+    ErikaExternalTextureFormat_Rgba8Unorm = 1,
+} ErikaExternalTextureFormat;
+
+typedef struct ErikaExternalTextureInfo {
+    ErikaExternalTextureKind kind;
+    ErikaExternalTextureFormat format;
+    uint32_t width;
+    uint32_t height;
+    uint64_t native_handle;
+    uint64_t device_id;
+    uint64_t allocation_size;
+    uint32_t memory_type_index;
+    uint32_t vulkan_format;
+    uint32_t vulkan_usage;
+    uint32_t vulkan_tiling;
+    uint8_t device_uuid[16];
+    uint8_t driver_uuid[16];
+} ErikaExternalTextureInfo;
+
+/* Native, immutable SDR texture: video + subtitle + enabled danmaku, no HUD.
+ * Select WgpuFallback. Supports Linux/Vulkan OPAQUE_FD and Apple/Metal. No
+ * surface, Flutter registrar, CPU pixel readback or GPU texture copy. Waits
+ * for producer GPU completion before returning. Unsupported backends and
+ * sizes fail before any playback work.
+ * Call once per host frame; also pumps audio, so render_tick is not required.
+ * content_scale is physical pixels per logical point (as for resize_surface)
+ * and sets danmaku size and speed. Danmaku is planned in the background like
+ * on screen, so it can appear a few frames after a seek or size change.
+ * NoEvent means no video yet. *out_frame is null on every non-Ok result.
+ * Frames can outlive the presenter. Release only after consumer GPU work and
+ * imported aliases are retired. Native handles from get_info are borrowed:
+ * Metal is id<MTLTexture> on device_id (registryID).
+ * Metal consumers may retain MTLTexture independently before releasing the
+ * frame; that retained reference must cover all consumer GPU use.
+ * Vulkan is an OPAQUE_FD (0 is valid), to be duplicated before import. Match
+ * device AND driver UUIDs.
+ * Vulkan: dedicated allocation, identical format/usage/tiling, 2D, 1 mip/layer/
+ * sample, flags 0. Import allocation_size and memory_type_index. Acquire queue
+ * ownership from EXTERNAL, old layout GENERAL, before reading. Read-only.
+ * Pixels are sRGB-encoded RGBA in UNORM storage; the host compositor applies
+ * any needed transfer conversion. */
+ErikaStatus erika_presenter_export_frame_texture(
+    ErikaPresenterHandle *handle, uint32_t width, uint32_t height,
+    double content_scale, ErikaTextureFrame **out_frame);
+/* Select the wgpu renderer, including on Apple where the default presenter
+ * uses the native renderer. Returns NULL and sets last_error on failure. */
+ErikaPresenterHandle *erika_presenter_create_for_texture_export(ErikaPresenterConfig config);
+ErikaStatus erika_texture_frame_get_info(
+    const ErikaTextureFrame *frame, ErikaExternalTextureInfo *out_info);
+void erika_texture_frame_release(ErikaTextureFrame *frame);
 
 #ifdef __cplusplus
 }

@@ -35,11 +35,11 @@ Scripts/verify-ambience.sh       # 氛围背景逐页验收（截图 + 客观判
 - `SKIP_ERIKA_FETCH=1` 让 `build-macos.sh` / `package-*.sh` 直接使用 Vendor 里现成的内核产物，跳过 fetch（手动铺入自编译内核时必开，否则 fetch 会按钉点版本静默覆盖回 Release 产物）。
 - macOS 构建必须用 `-scheme`，架构钉死 arm64。手动跑 `xcodebuild` 时请显式传 `-derivedDataPath`，不要写进全局 DerivedData。
 - **`Vendor/` 三个目录的保留策略（都在 `.gitignore` 里，只有 `Scripts/clean.sh --kernel` 才会清）**：
-  - `Vendor/downloads` —— 内核下载缓存（当前 6 个 zip，v0.2.0/v0.2.1/v0.3.0 × macOS-arm64+ios，约 912 MiB）
+  - `Vendor/downloads` —— 按版本保存的内核 zip 下载缓存
   - `Vendor/extracted` —— `fetch-erika.sh` 的解压暂存区（约 1.1G），**默认保留**
   - `Packages/ErikaKit/Vendor/Erika.xcframework` —— 内核产物（约 782 MiB），**默认保留**
   > `Vendor/extracted` 默认保留是 **2026-11-03 的明确决定，不是遗漏**：磁盘余量充足（约 217 GiB），省这 1.1G 换来每次构建重新解压，不划算。**看到它不要当垃圾清，也不要再报一次。**
-  > 清理代价：`--kernel` 之后下次构建只重下当前 tag 的两个 zip（v0.3.0 共 323,115,942 字节 ≈ 308 MiB）并重新解压；**只删 `extracted` 而 `downloads/` 仍在时，只重解压、不下载**（`fetch-erika.sh:205-214` 命中缓存直接复用）。
+  > 清理代价：`--kernel` 之后下次构建只重下当前 tag 的两个 zip（v0.3.4 的实际下载体积见升级报告中的 fetch 日志）并重新解压；**只删 `extracted` 而 `downloads/` 仍在时，只重解压、不下载**（`fetch-erika.sh:205-214` 命中缓存直接复用）。
 - Debug 配置带 `OCPLAYER_SELFTEST` 编译条件，提供一条自动化验收通道（见 `App/Shared/LaunchOptions.swift`）：`OCPLAYER_START_SECTION=home|bangumi|moviepilot|settings` 启动直落分区；`OCPLAYER_START_ROUTE=library` / `settings.playback` / `bangumi.calendar` 等直落某个 push 页或设置子页（语法见 `App/Shared/LaunchRoute.swift`）；`OCPLAYER_SELFTEST_FILE` + `OCPLAYER_SELFTEST_SECONDS` 可开窗播一段、打印 stats 后自退。Release 不编译这段代码。
 - **氛围背景的逐页验收**走 `Scripts/verify-ambience.sh`（判据在 `Scripts/ambience-probe.swift`，覆盖清单与判据口径见 [`AMBIENCE.md`](AMBIENCE.md)）：按契约逐页启动到目标页、截图、用「色度中位数 + 亮度方差 + 平均梯度」客观判定该页有没有氛围图。macOS 需要屏幕解锁（锁屏后 `screencapture` 只给黑图，脚本会直接拒绝）；iOS 模拟器容器里要有一个已登录会话。
 
@@ -64,11 +64,15 @@ CI（`.github/workflows/test.yml`）在 push / PR 上跑测试门禁——macOS 
 
 ## liberika 内核（原 Erika）
 
-内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **v0.3.0**，相对 v0.2.1 与本 App 相关的变化：
+内核取自上游 [AimesSoft/liberika](https://github.com/AimesSoft/liberika)（2026-10-25 起 0.3.0 更名 liberika，C ABI 仍为 `erika_*`）官方 release（钉点唯一事实源是 `Config/Erika.version`）。当前钉 **[v0.3.4](https://github.com/AimesSoft/liberika/releases/tag/v0.3.4)**。本次升级包含已在 v0.3.3 发布的 [glyph atlas 二维布局修复](https://github.com/AimesSoft/liberika/commit/c99c2481dbca2e0eaf59acc6c23523cacefcfc15)：密集 CJK 字幕不再横向铺成超过 Metal 上限的单张纹理。官方 macOS/iOS 资产 SHA-256 固定在 `Scripts/erika-v0.3.4.sha256`，C 头与生成的 Swift 版本同步更新。
+
+`ErikaOpenOptions.start_position_micros` 占用旧保留槽位，结构仍为 48 字节；当前 App 显式传 0，继续通过现有 ready 后 seek 流程续播。上采样现在可异步构建管线，渲染回归使用持续有效的片源并等待 `building` 完成，然后验证实际上采样帧数。密集字幕与双端验收见 `Docs/reviews/2026-11-06-kernel-upgrade/UPGRADE_REPORT.md`。
+
+下列为 v0.3.0 相对 v0.2.1 的历史接入变化：
 
 - **片尾尾读语义修复**（上游 #169，我们报的 #163）：最后 4 MiB 内未送达的普通 HTTP 尾部 range 按 EOF 处理，不再报 fatal `av_read_frame -5`。App 侧三层兜底已随之拆除：`PlayerState` 的片尾折叠（原 `endOfStreamToleranceSeconds`，PR #68）、上报层把片尾 `.error` 认成播完的分支（原 `isEndOfStream`）、以及 3 s 尾部安全边际（恢复为 0.5 s 防线 `tailGuardSeconds`，只为防 seek 越过 EOF 的「audio output stalled at EOF」错误风暴——那个内核行为 0.3.0 没修）。
   > ⚠️ 2026-10-31 追记：**还有一条不同层的片尾 fatal 没被 #169 覆盖**——一次 seek 打断的读把 EIO 永久锁进 FFmpeg 的 `AVIOContext.error`（`avio_seek` 只清 `eof_reached`），此后首次读到 0 字节返回的是那条旧伤。App 侧因此保留了一条**窄口径**折叠 `PlayerState.isStaleIOErrorInTail`（片长已知 + 位置贴片尾 + `av_read_frame` 的 `-5`，且会话尚未真失败），命中即落 `.stopped`；内核侧根治见 [1824239290/Erika#4](https://github.com/1824239290/Erika/issues/4)，修好后即可撤。
-- **字幕/弹幕超采样默认开启**：字形按 2x 栅格化。C ABI **没有**关闭开关（上游 `danmaku_config_from_c` 写死透传 Rust 侧默认值；46 个 invoke_json 方法也未暴露；上游 main 同样没有）。实测代价见下方探针一节。已知崩溃面：内核超采样 glyph atlas 横向单行铺、宽度 ∝ 同屏字形总量 × 2，高密度 CJK 字幕（同屏数百字形）会顶过 Metal 16384 纹理上限直接 MTL 断言 abort——待报上游。
+- **字幕/弹幕超采样默认开启**：字形按 2x 栅格化。C ABI **没有**关闭开关（上游 `danmaku_config_from_c` 写死透传 Rust 侧默认值；46 个 invoke_json 方法也未暴露；上游 main 同样没有）。实测代价见下方探针一节。已知崩溃面：内核超采样 glyph atlas 横向单行铺、宽度 ∝ 同屏字形总量 × 2，高密度 CJK 字幕（同屏数百字形）会顶过 Metal 16384 纹理上限直接 MTL 断言 abort。该问题已在上述 v0.3.3 atlas 修复中处理，本次 v0.3.4 复验通过。
 - **软件视频解码默认多线程**（frame + slice threading，FFmpeg 自选核数；open/seek 后首帧最多延后 N 个 packet）。运行期 env `ERIKA_VIDEO_DECODE_THREADS=1` 可回单线程。
 - **新 C API（均未接入，备案）**：`erika_export_frame` / frame export session（按媒体时间出 RGBA/PNG，HDR 自动 BT.2390 色调映射）；诊断三件套 `erika_log_read_json` / `erika_presenter_get_diagnostics_json` / `invokeJson('listMethods')`（可选符号，宿主应 dlsym 解析）；presenter JSON `chapters` 方法（容器章节）；解码器 hwaccel 半路失败转软解的事件上报。
 - **官方 macos zip 的 .a 带有 MACCATALYST 平台声明**：285 个 compiler-rt 对象各带 macOS 与 MACCATALYST 两条 `LC_BUILD_VERSION`，`xcodebuild -create-xcframework` 会把整个 .a 判成「多平台」拒收。`fetch-erika.sh` 里的 `strip_catalyst_build_version` 把 Catalyst 声明原地改写成等长的 `LC_UUID`（结构合法、对象与符号全保留；改 `LC_SOURCE_VERSION` 会被 ranlib 丢成员，勿用）。老 tag（≤ v0.2.1）无此问题，该步骤自动跳过。

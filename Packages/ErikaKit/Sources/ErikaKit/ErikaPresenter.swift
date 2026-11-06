@@ -81,7 +81,8 @@ public final class ErikaPresenter {
                 header_count: UInt(buffer.count),
                 http_read_ahead_bytes: source.readAheadBytes ?? 0,
                 http_back_buffer_bytes: source.backBufferBytes ?? 0,
-                reserved: (0, 0)
+                start_position_micros: 0,
+                reserved: 0
             )
             try withUnsafePointer(to: &options) { optionsPtr in
                 try ErikaError.check(

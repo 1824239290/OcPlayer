@@ -1,0 +1,28 @@
+{
+  "macos": {
+    "version": "0.2.2",
+    "build": "1",
+    "app": "/tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app",
+    "executable": "/tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer",
+    "dsym": "/tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer",
+    "executableUUID": "UUID: FB4F8A7C-09D3-3CB5-B1C9-6E77F5CAC4D1 (arm64) /tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer\n",
+    "dsymUUID": "UUID: FB4F8A7C-09D3-3CB5-B1C9-6E77F5CAC4D1 (arm64) /tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "uuidMatches": true,
+    "log": "/tmp/ocplayer-pr-kernel-macos-release.log",
+    "result": "BUILD SUCCEEDED",
+    "coreTag": "v0.3.4"
+  },
+  "ios": {
+    "version": "0.2.2",
+    "build": "1",
+    "app": "/tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app",
+    "executable": "/tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app/OcPlayer",
+    "dsym": "/tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer",
+    "executableUUID": "UUID: B68416FC-BD57-3AFA-A562-94F37F0A622A (arm64) /tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app/OcPlayer\n",
+    "dsymUUID": "UUID: B68416FC-BD57-3AFA-A562-94F37F0A622A (arm64) /tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "uuidMatches": true,
+    "log": "/tmp/ocplayer-pr-kernel-ios-release.log",
+    "result": "BUILD SUCCEEDED",
+    "coreTag": "v0.3.4"
+  }
+}

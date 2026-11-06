@@ -13,7 +13,7 @@ struct ErikaOpenOptionsLayoutTests {
     func layoutMatchesCHeader() {
         // C: { const ErikaHttpHeader *headers(8); uintptr_t header_count(8);
         //      uint64_t http_read_ahead_bytes(8); uint64_t http_back_buffer_bytes(8);
-        //      uint64_t reserved[2](16); }
+        //      uint64_t start_position_micros(8); uint64_t reserved[1](8); }
         // 总 48 字节、对齐 8。注意与旧头（reserved[3]）同尺寸：新字段吃的是
         // reserved 槽位，read-ahead 偏移 16 不变，回退预算落在 24。
         #expect(MemoryLayout<ErikaOpenOptions>.size == 48,
@@ -26,7 +26,7 @@ struct ErikaOpenOptionsLayoutTests {
         var options = ErikaOpenOptions(
             headers: nil, header_count: 0,
             http_read_ahead_bytes: 0, http_back_buffer_bytes: 0,
-            reserved: (0, 0)
+            start_position_micros: 0, reserved: 0
         )
         withUnsafeBytes(of: &options) { bytes in
             func u64(at offset: Int) -> UInt64 {
@@ -34,9 +34,12 @@ struct ErikaOpenOptionsLayoutTests {
             }
             #expect(u64(at: 16) == 0, "read-ahead 默认应为 0")
             #expect(u64(at: 24) == 0, "回退预算默认应为 0")
+            #expect(u64(at: 32) == 0, "起播位置默认应为 0")
+            #expect(u64(at: 40) == 0, "保留字段默认应为 0")
         }
         options.http_read_ahead_bytes = 16 * 1024 * 1024
         options.http_back_buffer_bytes = 32 * 1024 * 1024
+        options.start_position_micros = 20_000_000
         withUnsafeBytes(of: &options) { bytes in
             let readAhead = bytes.loadUnaligned(fromByteOffset: 16, as: UInt64.self)
             #expect(readAhead == 16 * 1024 * 1024,
@@ -44,6 +47,9 @@ struct ErikaOpenOptionsLayoutTests {
             let backBuffer = bytes.loadUnaligned(fromByteOffset: 24, as: UInt64.self)
             #expect(backBuffer == 32 * 1024 * 1024,
                     "偏移 24 处必须读到设置值，实际 \(backBuffer)")
+            let startPosition = bytes.loadUnaligned(fromByteOffset: 32, as: UInt64.self)
+            #expect(startPosition == 20_000_000,
+                    "偏移 32 处必须读到起播位置，实际 \(startPosition)")
         }
 
         // header_count 偏移 8：非零计数可见（内核以它遍历 header 数组）。

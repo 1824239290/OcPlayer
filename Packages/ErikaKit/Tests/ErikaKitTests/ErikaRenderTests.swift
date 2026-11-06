@@ -227,7 +227,7 @@ struct ErikaRenderTests {
     /// 不把具体后端写死（不同机器可以是 simdgroupMatrix / scalar / inactive）。
     @Test("运行期切换亮度上采样：挂上画布后要么真在跑、要么明确回落")
     func switchesLumaUpscalerAtRuntime() async throws {
-        let movie = try await TestMedia.makeMovieWithTone(seconds: 2)
+        let movie = try await TestMedia.makeMovieWithTone(seconds: 30)
         defer { try? FileManager.default.removeItem(at: movie) }
 
         let presenter = try ErikaPresenter()
@@ -241,9 +241,17 @@ struct ErikaRenderTests {
         #expect(stats.rendered_video_frames > 0, "前提：应真的出过画")
 
         for mode in PlaybackUpscalerMode.allCases {
+            // v0.3.4 异步构建 Metal 管线；每档从有效画面开始，等待构建落地，
+            // 不能让两秒片源先播完，也不能把 building 当作已处理过视频帧。
+            try presenter.seek(to: .zero)
             try presenter.setUpscaler(mode)
             stats = try Self.pump(presenter, frames: 40)
-            let state = try presenter.upscalerStatus()
+            var state = try presenter.upscalerStatus()
+            let deadline = Date().addingTimeInterval(20)
+            while state.backend == .building, Date() < deadline {
+                stats = try Self.pump(presenter, frames: 10)
+                state = try presenter.upscalerStatus()
+            }
             #expect(state.requested == mode, "请求的档位要能被内核读回：\(mode.rawValue)")
 
             switch state.backend {
@@ -253,7 +261,9 @@ struct ErikaRenderTests {
             case .inactive:
                 // 明确回落：允许（该后端不支持 ArtCNN），但设置页会据此提示。
                 #expect(mode != .off, "开着增强却报 inactive 是回退，不是常态")
-            case .building, .scalar, .simdgroupMatrix:
+            case .building:
+                Issue.record("上采样构建未在 20 秒内完成：\(mode.rawValue)")
+            case .scalar, .simdgroupMatrix:
                 #expect(
                     state.upscaledFrames > 0,
                     "报了计算后端却一帧都没上采样：\(mode.rawValue) backend=\(state.backend.rawValue)"

@@ -131,6 +131,7 @@ struct ErikaPerfProbeTests {
 
         if let ass = externalASS {
             subtitleTrackID = try presenter.addExternalSubtitle(ass.path)
+            #expect(subtitleTrackID >= 0, "本地压力探针必须成功挂载密集 ASS 字幕")
             if subtitleTrackID >= 0 {
                 try presenter.selectSubtitleTrack(subtitleTrackID)
             }
@@ -218,6 +219,11 @@ struct ErikaPerfProbeTests {
         }
 
         let finalStats = try presenter.stats()
+        #expect(failures == 0, "采样期间不应产生内核 failed 事件")
+        #expect(finalStats.rendered_video_frames > 0, "采样必须实际渲染视频帧")
+        if mode == "local" {
+            #expect(finalStats.overlay_frames > 0, "密集字幕场景必须实际渲染覆盖层")
+        }
         fflush(samplesFile); fflush(renderFile)
         fclose(samplesFile); fclose(renderFile)
 
@@ -303,7 +309,7 @@ struct ErikaPerfProbeTests {
         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         """
         // cue 间隔：默认 1s（cue 时长 2s → 同屏最多 2 条，贴近真实弹幕/字幕密度）。
-        // 调小可复现崩溃：内核超采样 glyph atlas 是横向单行，宽度 ∝ 同屏字形总量 × 2，
+        // 调小可复现旧版崩溃：v0.3.0 超采样 glyph atlas 是横向单行，宽度 ∝ 同屏字形总量 × 2，
         // 同屏字形一多（如 0.25s 间隔 × 8 并发）宽过 Metal 16384 上限即 MTL 断言 abort。
         let totalCues = Int(Double(seconds) / spacing)
         let lines = [
