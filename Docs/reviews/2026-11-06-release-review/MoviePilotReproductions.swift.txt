@@ -1,0 +1,69 @@
+import Foundation
+import XCTest
+@testable import MoviePilotKit
+
+final class ReleaseReviewReproductionTests: XCTestCase {
+    override func tearDown() {
+        MockURLProtocol.handler = nil
+        super.tearDown()
+    }
+
+    func testReproducesOldTokenSentToNewHostAfterSwitch() async throws {
+        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+            credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
+        await MainActor.run {
+            store.updateCredentials(serverURLString: "https://old.invalid", username: "old", password: "old-password")
+            store.accessToken = "synthetic-old-token"
+        }
+        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
+        let first = expectation(description: "first request")
+        let lock = NSLock()
+        var requests: [URLRequest] = []
+        MockURLProtocol.handler = { request in
+            let count = lock.withLock { requests.append(request); return requests.count }
+            if count == 1 {
+                first.fulfill()
+                return MockURLProtocol.response("{}", status: 503, for: request.url!)
+            }
+            return MockURLProtocol.response("{}", status: 200, for: request.url!)
+        }
+        let pending = Task { try await client.requestData(.init(path: "/api/v1/user/current")) }
+        await fulfillment(of: [first], timeout: 3)
+        _ = await client.signOut()
+        await MainActor.run {
+            store.updateCredentials(serverURLString: "https://new.invalid", username: "new", password: "new-password")
+            store.accessToken = "synthetic-new-token"
+        }
+        _ = try await pending.value
+        let observed = lock.withLock { requests }
+        XCTAssertEqual(observed.count, 2)
+        XCTAssertEqual(observed.last?.url?.host, "new.invalid")
+        XCTAssertEqual(observed.last?.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-old-token")
+    }
+
+    func testReproducesLoginRestoringTokenAfterSignOut() async throws {
+        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
+            credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
+        await MainActor.run {
+            store.updateCredentials(serverURLString: "https://old.invalid", username: "old", password: "old-password")
+        }
+        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
+        let started = expectation(description: "login request started")
+        let gate = DispatchSemaphore(value: 0)
+        MockURLProtocol.handler = { request in
+            if request.url!.path.contains("access-token") {
+                started.fulfill()
+                _ = gate.wait(timeout: .now() + 5)
+                return MockURLProtocol.response(#"{"access_token":"synthetic-stale-login","token_type":"bearer"}"#, status: 200, for: request.url!)
+            }
+            return MockURLProtocol.response(#"{"id":1,"name":"old","is_superuser":true,"is_active":true}"#, status: 200, for: request.url!)
+        }
+        let pending = Task { try await client.login() }
+        await fulfillment(of: [started], timeout: 3)
+        _ = await client.signOut()
+        XCTAssertNil(store.accessToken)
+        gate.signal()
+        _ = try await pending.value
+        XCTAssertEqual(store.accessToken, "synthetic-stale-login")
+    }
+}

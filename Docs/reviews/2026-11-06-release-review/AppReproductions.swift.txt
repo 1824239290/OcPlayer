@@ -1,0 +1,118 @@
+import CoreModel
+import Foundation
+import JellyfinKit
+import MetadataKit
+import PlaybackKit
+import SwiftUI
+import XCTest
+@testable import OcPlayer
+
+@MainActor
+final class ReleaseReviewReproductionTests: XCTestCase {
+    private final class ReviewEngine: PlaybackEngine, @unchecked Sendable {
+        static let descriptor = PlaybackEngineDescriptor(id: "review-fake", displayName: "Review", summary: "Review", supportsKernelDanmaku: false)
+        let events: AsyncStream<PlayerEvent>
+        let continuation: AsyncStream<PlayerEvent>.Continuation
+        var latestMediaTime: Duration { .zero }
+        var latestStats: PlaybackStats { .init() }
+        init() { (events, continuation) = AsyncStream.makeStream() }
+        @MainActor func makeSurfaceView() -> AnyView { AnyView(Color.black) }
+        func open(_ source: PlaybackSource) throws {}
+        func play() throws {}
+        func pause() throws {}
+        func stop() throws {}
+        func seek(to position: Duration) throws {}
+        func setRate(_ rate: Double) throws {}
+        func setVolume(_ volume: Double) throws {}
+        func tracks() throws -> [TrackInfo] { [] }
+        func selectAudioTrack(_ id: Int64) throws {}
+        func selectSubtitleTrack(_ id: Int64?) throws {}
+        func addExternalSubtitle(_ uri: String) throws -> Int64 { 0 }
+        func setSubtitleScale(_ scale: Double) throws {}
+        func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] { [] }
+    }
+
+    func testReproducesProgressWrittenToNewTenant() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "release-review-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let coordinator = MetadataCoordinator()
+        coordinator.setup(directory: directory)
+        _ = await coordinator.waitUntilReady()
+        let store = try XCTUnwrap(coordinator.activeStore)
+        let a = StubMediaServer(profileID: "A:user")
+        let b = StubMediaServer(profileID: "B:user")
+        let item = MediaItem(id: "same-item-id", name: "A video", kind: .movie)
+        try await store.saveItems([item], tenant: TenantID(profile: a.profile))
+        try await store.saveItems([MediaItem(id: item.id, name: "B video", kind: .movie)], tenant: TenantID(profile: b.profile))
+        let app = AppModel(metadata: coordinator)
+        app.server = a
+        let controller = PlaybackController()
+        app.playback = controller
+        let engine = ReviewEngine()
+        let consumer = controller.state.start(consuming: engine)
+        defer { consumer.cancel() }
+        engine.continuation.yield(.durationChanged(.seconds(600)))
+        engine.continuation.yield(.positionChanged(.seconds(60)))
+        while controller.state.position != .seconds(60) { await Task.yield() }
+        app.nowPlayingItem = item
+        app.finishReporting()
+        app.server = b
+        try await Task.sleep(for: .milliseconds(150))
+        let newTenantItem = try await store.item(item.id, tenant: TenantID(profile: b.profile))
+        let oldTenantItem = try await store.item(item.id, tenant: TenantID(profile: a.profile))
+        XCTAssertEqual(newTenantItem?.item.playState?.positionSeconds, 60)
+        XCTAssertNil(oldTenantItem?.item.playState)
+        app.server = nil
+    }
+
+    func testReproducesIgnoredResumeUnderThirtySeconds() throws {
+        let selected = PlaybackEngineRegistry.storedSelectionID
+        PlaybackEngineRegistry.resetForTesting()
+        PlaybackEngineRegistry.register(ReviewEngine.descriptor) { ReviewEngine() }
+        PlaybackEngineRegistry.select(ReviewEngine.descriptor.id)
+        defer {
+            PlaybackEngineRegistry.resetForTesting()
+            if let selected { PlaybackEngineRegistry.select(selected) }
+            else { PlaybackEngineRegistry.clearSelection() }
+            PlaybackEngineAssembly.registerAll()
+        }
+        let controller = PlaybackController()
+        controller.open(request: PlaybackRequest(title: "recover", uri: "/tmp/review.mp4", resumeSeconds: 20))
+        XCTAssertNil(controller.resumeTask)
+        controller.stopPlayback()
+        controller.open(request: PlaybackRequest(title: "control", uri: "/tmp/review.mp4", resumeSeconds: 40))
+        XCTAssertNotNil(controller.resumeTask)
+        controller.stopPlayback()
+    }
+
+    func testReproducesOldRepositoryInstalledAfterSwitchDuringSetup() async throws {
+        for _ in 0..<20 {
+            let directory = FileManager.default.temporaryDirectory.appending(path: "review-setup-\(UUID())")
+            let coordinator = MetadataCoordinator()
+            let a = StubMediaServer(profileID: "A:user")
+            a.userViewsResult = .success([MediaLibrary(id: "A-library", name: "A", collectionType: .movies)])
+            coordinator.setActiveServer(a)
+            coordinator.setup(directory: directory)
+            var entered = false
+            let pending = Task { @MainActor in
+                entered = true
+                return await coordinator.currentRepository()
+            }
+            while !entered { await Task.yield() }
+            let waiting = !coordinator.isReady
+            coordinator.setActiveServer(StubMediaServer(profileID: "B:user"))
+            _ = await pending.value
+            if waiting {
+                let repository = await coordinator.currentRepository()
+                let home = await repository?.refreshHome()
+                XCTAssertEqual(home?.snapshot.value.libraries.first?.id, "A-library")
+                coordinator.setActiveServer(nil)
+                try? FileManager.default.removeItem(at: directory)
+                return
+            }
+            coordinator.setActiveServer(nil)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        XCTFail("未捕获到建库等待窗口")
+    }
+}

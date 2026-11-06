@@ -246,6 +246,55 @@ final class MediaRepositoryTests: XCTestCase {
         XCTAssertEqual(cached?.item.playState, state)
     }
 
+    func testShutdownRejectsNewPlayStateRequests() async throws {
+        let stub = StubMediaServer()
+        let repository = makeRepository(server: stub, store: nil)
+        await repository.shutdown()
+        for played in [true, false] {
+            do {
+                if played { _ = try await repository.markPlayed(itemID: "m1") }
+                else { _ = try await repository.markUnplayed(itemID: "m1") }
+                XCTFail("已停用的仓储不能继续发出已看请求")
+            } catch is CancellationError {} catch { XCTFail("错误类型不符：\(error)") }
+        }
+        XCTAssertEqual(stub.callCount("markPlayed"), 0)
+        XCTAssertEqual(stub.callCount("markUnplayed"), 0)
+    }
+
+    func testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation() async throws {
+        let store = try await makeStore()
+        for shutdown in [true, false] {
+            for played in [true, false] {
+                let stub = StubMediaServer()
+                let tenant = TenantID(profile: stub.profile)
+                let original = MediaItem.PlayState(played: !played, percentage: 0.2, positionSeconds: 20)
+                var item = makeItem(id: "m1")
+                item.playState = original
+                try await store.saveItems([item], tenant: tenant)
+                let repository = makeRepository(server: stub, store: store)
+                let gate = PlayStateReplyGate()
+                let reply = MediaItem.PlayState(played: played, percentage: played ? 1 : 0, positionSeconds: 0)
+                let hook: @Sendable () async throws -> MediaItem.PlayState = {
+                    await gate.suspend()
+                    return reply
+                }
+                stub.markPlayedHook = hook
+                stub.markUnplayedHook = hook
+                let task = Task {
+                    if played { return try await repository.markPlayed(itemID: "m1") }
+                    return try await repository.markUnplayed(itemID: "m1")
+                }
+                await gate.waitUntilStarted()
+                if shutdown { await repository.shutdown() } else { task.cancel() }
+                await gate.release()
+                do { _ = try await task.value; XCTFail("迟到响应应被作废") }
+                catch is CancellationError {} catch { XCTFail("错误类型不符：\(error)") }
+                let cached = try await store.item("m1", tenant: tenant)
+                XCTAssertEqual(cached?.item.playState, original)
+            }
+        }
+    }
+
     // MARK: - 无库降级
 
     func testMemoryOnlyRepositoryKeepsProtocolWithoutStore() async throws {
@@ -261,4 +310,15 @@ final class MediaRepositoryTests: XCTestCase {
         XCTAssertEqual(cached.source, .memory)
         XCTAssertEqual(cached.value.libraries.map(\.id), ["lib"])
     }
+}
+
+private actor PlayStateReplyGate {
+    private var started = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    func suspend() async {
+        started = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func waitUntilStarted() async { while !started { await Task.yield() } }
+    func release() { continuation?.resume(); continuation = nil }
 }

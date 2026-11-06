@@ -1346,6 +1346,7 @@ struct DetailView: View {
     /// 切换当前可播条目（电影 / 选中集）的已看状态，并写回本地详情与选集列表。
     private func togglePlayed() async {
         guard !isUpdatingPlayed, let target = playableItem else { return }
+        let session = app.sessionGeneration
         let markAsPlayed = !(target.playState?.played ?? false)
         isUpdatingPlayed = true
         playedActionError = nil
@@ -1355,12 +1356,15 @@ struct DetailView: View {
             let state = markAsPlayed
                 ? try await app.metadata.markPlayed(itemID: target.id)
                 : try await app.metadata.markUnplayed(itemID: target.id)
+            guard session == app.sessionGeneration else { return }
             if let state {
-                await model.applyPlayState(state, toItemID: target.id)
+                await model.applyPlayState(state, toItemID: target.id, persistToRepository: false)
             }
         } catch let error as JellyfinError {
+            guard session == app.sessionGeneration, !JellyfinError.isCancellation(error) else { return }
             playedActionError = error.errorDescription
         } catch {
+            guard session == app.sessionGeneration, !JellyfinError.isCancellation(error) else { return }
             playedActionError = "\(error)"
         }
     }

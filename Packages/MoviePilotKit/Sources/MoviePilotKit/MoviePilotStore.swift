@@ -46,6 +46,24 @@ public final class MoviePilotStore: @unchecked Sendable {
     private let defaults: UserDefaults
     private let credentials: CredentialFileStore
     private let lock = NSLock()
+    private var revision: UInt64 = 0
+
+    /// 配置/会话变化与同会话的 token 刷新区分。
+    public var configurationRevision: UInt64 { lock.withLock { revision } }
+
+    @discardableResult
+    public func invalidateConfiguration() -> UInt64 {
+        lock.withLock { revision &+= 1; return revision }
+    }
+
+    public func setAccessToken(_ token: String?, ifRevision expected: UInt64) -> Bool {
+        lock.withLock {
+            guard revision == expected else { return false }
+            if let token, !token.isEmpty { credentials.setString(token, forKey: Self.tokenKey) }
+            else { clearTokenUnlocked() }
+            return true
+        }
+    }
 
     /// 本次运行内的密码。
     ///
@@ -131,6 +149,8 @@ public final class MoviePilotStore: @unchecked Sendable {
             let value = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             lock.lock()
             defer { lock.unlock() }
+            revision &+= 1
+            clearTokenUnlocked()
             if value.isEmpty {
                 mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
             } else {
@@ -148,6 +168,8 @@ public final class MoviePilotStore: @unchecked Sendable {
         set {
             lock.lock()
             defer { lock.unlock() }
+            revision &+= 1
+            clearTokenUnlocked()
             let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             if value.isEmpty {
                 mutateDefaults { $0.removeObject(forKey: Self.usernameKey) }
@@ -196,6 +218,7 @@ public final class MoviePilotStore: @unchecked Sendable {
         set {
             lock.lock()
             defer { lock.unlock() }
+            revision &+= 1
             sessionPassword = newValue.isEmpty ? nil : newValue
             if newValue.isEmpty {
                 credentials.removeValue(forKey: Self.passwordKey)
@@ -309,6 +332,11 @@ public final class MoviePilotStore: @unchecked Sendable {
     public func updateCredentials(serverURLString: String, username: String, password: String) {
         lock.lock()
         defer { lock.unlock() }
+        revision &+= 1
+        updateCredentialsUnlocked(serverURLString: serverURLString, username: username, password: password)
+    }
+
+    private func updateCredentialsUnlocked(serverURLString: String, username: String, password: String) {
         let server = serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         if server.isEmpty {
             mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
@@ -323,6 +351,19 @@ public final class MoviePilotStore: @unchecked Sendable {
         }
         setPasswordUnlocked(password)
         clearTokenUnlocked()
+    }
+
+    /// 新凭据通过服务器验证后一次性提交。失败/过期尝试无需回滚旧配置。
+    @MainActor
+    public func commitCredentials(serverURLString: String, username: String, password: String,
+                                  accessToken: String, ifRevision expected: UInt64) -> Bool {
+        lock.withLock {
+            guard !Task.isCancelled, revision == expected else { return false }
+            revision &+= 1
+            updateCredentialsUnlocked(serverURLString: serverURLString, username: username, password: password)
+            credentials.setString(accessToken, forKey: Self.tokenKey)
+            return true
+        }
     }
 
     /// 密码写入的唯一实现（**必须在 `lock` 内调用**）。
@@ -365,10 +406,19 @@ public final class MoviePilotStore: @unchecked Sendable {
         )
     }
 
+    public func sessionSnapshot() -> (credentials: CredentialSnapshot, revision: UInt64) {
+        lock.withLock {
+            (CredentialSnapshot(serverURLString: defaults.string(forKey: Self.serverKey),
+                                username: defaults.string(forKey: Self.usernameKey) ?? "",
+                                password: passwordUnlocked(), accessToken: accessTokenUnlocked()), revision)
+        }
+    }
+
     /// 按快照回滚四键：`nil` / 空串删键，其余原样写回（不 trim）。
     public func restore(_ snapshot: CredentialSnapshot) {
         lock.lock()
         defer { lock.unlock() }
+        revision &+= 1
         if let server = snapshot.serverURLString, !server.isEmpty {
             mutateDefaults { $0.set(server, forKey: Self.serverKey) }
         } else {
@@ -395,6 +445,7 @@ public final class MoviePilotStore: @unchecked Sendable {
     public func clearSession() {
         lock.lock()
         defer { lock.unlock() }
+        revision &+= 1
         sessionPassword = nil
         credentials.removeValue(forKey: Self.passwordKey)
         clearTokenUnlocked()
@@ -405,6 +456,7 @@ public final class MoviePilotStore: @unchecked Sendable {
     public func clearAll() {
         lock.lock()
         defer { lock.unlock() }
+        revision &+= 1
         sessionPassword = nil
         mutateDefaults {
             $0.removeObject(forKey: Self.serverKey)

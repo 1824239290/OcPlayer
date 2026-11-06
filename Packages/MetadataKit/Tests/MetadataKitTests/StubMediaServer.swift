@@ -26,6 +26,8 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     var episodesHook: (@Sendable () async throws -> [MediaItem])?
     var mediaFileInfoResult: Result<MediaFileInfo?, any Error> = .success(nil)
     var markPlayedResult: Result<MediaItem.PlayState, any Error>?
+    var markPlayedHook: (@Sendable () async throws -> MediaItem.PlayState)?
+    var markUnplayedHook: (@Sendable () async throws -> MediaItem.PlayState)?
     /// 库页 / 搜索页的整套行；按 startIndex/limit 切片返回，模拟真实分页服务端。
     var itemsPageRows: [MediaItem] = []
     /// 按搜索词隔离的行集。键为 searchTerm。
@@ -84,11 +86,13 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
 
     func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
         count("markPlayed")
+        if let markPlayedHook { return try await markPlayedHook() }
         guard let markPlayedResult else { return .init(played: true, percentage: 1, positionSeconds: 0) }
         return try markPlayedResult.get()
     }
     func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
         count("markUnplayed")
+        if let markUnplayedHook { return try await markUnplayedHook() }
         return .init(played: false, percentage: 0, positionSeconds: 0)
     }
 

@@ -349,7 +349,8 @@ final class MoviePilotStoreTests: XCTestCase {
             let unrelatedDefaults = TestSupport.isolatedDefaults("unrelated-" + UUID().uuidString)
             unrelatedDefaults.set("noise", forKey: "unrelated")
         }.value
-        await MainActor.run { store.username = "notification-noise" }
+        let defaultsReference = DefaultsReference(defaults)
+        await defaultsReference.writeUnrelatedPreference()
         XCTAssertEqual(offMainWrites.count, 0, "其他偏好域的通知不能计入本 store 的后台写入")
         XCTAssertEqual(tokenRemovalNotifications.count, 0, "其他键的通知不能提前结束令牌删除等待")
 
@@ -425,4 +426,10 @@ private final class DefaultsNotificationCount: @unchecked Sendable {
         defer { lock.unlock() }
         return value
     }
+}
+
+private final class DefaultsReference: @unchecked Sendable {
+    let defaults: UserDefaults
+    init(_ defaults: UserDefaults) { self.defaults = defaults }
+    @MainActor func writeUnrelatedPreference() { defaults.set("notification-noise", forKey: "unrelated") }
 }

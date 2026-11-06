@@ -1,0 +1,29 @@
+{
+  "MoviePilot": {
+    "executed": 102,
+    "passed": 102,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 82,
+    "swiftTesting": 20,
+    "source": "full raw test log; final XCTest + Swift Testing summaries"
+  },
+  "Jellyfin": {
+    "executed": 224,
+    "passed": 224,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 224,
+    "swiftTesting": 0,
+    "source": "full raw test log; final XCTest + Swift Testing summaries"
+  },
+  "Metadata": {
+    "executed": 301,
+    "passed": 301,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 267,
+    "swiftTesting": 34,
+    "source": "full raw test log; final XCTest + Swift Testing summaries"
+  }
+}

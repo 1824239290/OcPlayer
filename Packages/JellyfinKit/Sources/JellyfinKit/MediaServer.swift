@@ -189,6 +189,7 @@ public protocol MediaServer: PlaybackReporting {
     func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment]
     /// 条目的外挂字幕列表。
     func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle]
+    func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle]
     /// 下载外挂字幕到本地缓存，返回文件路径。
     func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL
     /// 条目的文件级媒体信息；没有媒体源时 nil。
@@ -200,6 +201,11 @@ public protocol MediaServer: PlaybackReporting {
 // MARK: - 合集（BoxSet）成员
 
 extension MediaServer {
+    /// 旧实现的兼容入口；多源实现应覆盖该方法。
+    public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
+        try await externalSubtitles(itemID: itemID)
+    }
+
     /// 合集的**直接成员**（Jellyfin / Emby 的 Collection / BoxSet 里的条目）。
     ///
     /// 三条约束收在这里，因为两处调用点（详情页的「合集内容」、库网格的封面解析）

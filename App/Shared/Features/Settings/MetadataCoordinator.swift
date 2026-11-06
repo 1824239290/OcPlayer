@@ -101,7 +101,7 @@ final class MetadataCoordinator {
         let generation = sessionGeneration
         _ = await waitUntilReady()
         // await 期间可能换服、登出，甚至 A → B → A；旧调用不能安装新会话的仓储。
-        guard generation == sessionGeneration else { return nil }
+        guard !Task.isCancelled, generation == sessionGeneration else { return nil }
         // 同一会话的其他调用者可能已经完成创建。安装过程在主 actor 上无悬挂点。
         if let repository { return repository }
         let repo = MediaRepository(server: server, store: store)

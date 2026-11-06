@@ -5,14 +5,18 @@ extension MediaRepository {
     /// 服务端已看标记的写入口：网络成功后才改本地，并让所有投影同步。
     @discardableResult
     public func markPlayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState {
+        guard !isShutdown else { throw CancellationError() }
         let state = try await server.markPlayed(itemID: itemID)
+        guard !isShutdown, !Task.isCancelled else { throw CancellationError() }
         await applyPlayState(state, forItemID: itemID, persistToStore: true)
         return state
     }
 
     @discardableResult
     public func markUnplayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState {
+        guard !isShutdown else { throw CancellationError() }
         let state = try await server.markUnplayed(itemID: itemID)
+        guard !isShutdown, !Task.isCancelled else { throw CancellationError() }
         await applyPlayState(state, forItemID: itemID, persistToStore: true)
         return state
     }
@@ -86,6 +90,7 @@ extension MediaRepository {
         forItemID itemID: MediaItem.ID,
         persistToStore: Bool
     ) async {
+        guard !isShutdown else { return }
         let timestamp = now()
         var progressItem = items[itemID]?.value ?? localProgress[itemID]?.item
             ?? MediaItem(id: itemID, name: itemID, kind: .other)

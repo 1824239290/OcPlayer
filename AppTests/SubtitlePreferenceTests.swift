@@ -427,6 +427,26 @@ final class SubtitlePreferenceTests: XCTestCase {
         try await waitUntil { engine.selectedIDs == [3] }
     }
 
+    func testStaleSubtitleBatchCannotEndNewBatchEvenForSameSource() {
+        let controller = PlaybackController()
+        let request = PlaybackRequest(title: "batch", uri: "/tmp/batch.mp4")
+        controller.activeRequest = request
+        controller.expectedRequestID = request.id
+        controller.sourceGeneration = 1
+        let source = PlaybackSourceGeneration(requestID: request.id, value: 1)
+        let old = controller.beginExternalSubtitleBatch(for: source)
+        let new = controller.beginExternalSubtitleBatch(for: source)
+        XCTAssertNotNil(old)
+        XCTAssertNotNil(new)
+        XCTAssertNil(controller.beginExternalSubtitleBatch(for: PlaybackSourceGeneration(requestID: UUID(), value: 0)))
+        XCTAssertFalse(controller.endExternalSubtitleBatch(for: source, batchID: old))
+        XCTAssertTrue(controller.isLoadingExternalSubtitleBatch)
+        XCTAssertFalse(controller.endExternalSubtitleBatch(for: source))
+        XCTAssertTrue(controller.isLoadingExternalSubtitleBatch)
+        _ = controller.endExternalSubtitleBatch(for: source, batchID: new)
+        XCTAssertFalse(controller.isLoadingExternalSubtitleBatch)
+    }
+
     /// 「跟随文件默认」档：有中文字幕也不干预，完全回到加这个功能之前的行为。
     func testFollowSourcePreferenceNeverIntervenes() async throws {
         let tracks = [

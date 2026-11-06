@@ -17,6 +17,7 @@ import SwiftUI
 final class DetailViewModel {
     let item: MediaItem
     private weak var app: AppModel?
+    @ObservationIgnored private var attachedSessionGeneration: Int?
 
     // MARK: - 数据状态
 
@@ -394,6 +395,7 @@ final class DetailViewModel {
 
     func attach(_ app: AppModel) {
         self.app = app
+        attachedSessionGeneration = app.sessionGeneration
         let target = app.currentAmbienceTarget
         backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader))
     }
@@ -827,7 +829,17 @@ final class DetailViewModel {
     }
 
     /// 已看状态写回：先更新仓储（内存全部投影 + SQLite），再同步本页展示值。
-    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) async {
+    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID, persistToRepository: Bool = true) async {
+        let generation = attachedSessionGeneration
+        if let app {
+            guard generation == app.sessionGeneration else { return }
+            if persistToRepository {
+                let repository = await app.metadata.currentRepository()
+                guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
+                await repository?.applyPlayState(state, forItemID: id, persistToStore: true)
+            }
+            guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
+        }
         if var current = detail, current.id == id {
             current.playState = state
             detail = current
@@ -839,7 +851,6 @@ final class DetailViewModel {
             guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
             episodesBySeason[seasonID]?[index].playState = state
         }
-        await app?.metadata.applyPlayState(state, forItemID: id)
     }
 
 }
