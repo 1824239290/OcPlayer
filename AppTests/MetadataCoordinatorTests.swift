@@ -158,3 +158,41 @@ final class MetadataCoordinatorTests: XCTestCase {
         XCTAssertFalse(coordinator.isReady)
     }
 }
+
+extension MetadataCoordinatorTests {
+    func testExplicitClearDiscardsUnsyncedProgressProtection() async throws {
+        let coordinator = try await makeReadyCoordinator()
+        let server = StubMediaServer()
+        let item = MediaItem(id: "item", name: "movie", kind: .movie,
+                             playState: .init(played: false, percentage: 0, positionSeconds: 0))
+        server.itemResult = .success(item)
+        coordinator.setActiveServer(server)
+        let created = await coordinator.currentRepository()
+        let repository = try XCTUnwrap(created)
+        await repository.recordFinalPlaybackProgress(item: item, positionSeconds: 42, durationSeconds: 100)
+        let before = try await repository.refreshItem(itemID: "item")
+        XCTAssertEqual(before.playState?.positionSeconds, 42)
+        let cleared = await coordinator.clearCurrentTenant()
+        XCTAssertTrue(cleared)
+        let after = try await repository.refreshItem(itemID: "item")
+        XCTAssertEqual(after.playState?.positionSeconds, 0, "显式清缓存应同时清除磁盘与内存保护")
+    }
+
+    func testAutomaticMaintenancePreservesPendingProgressInNewSession() async throws {
+        let coordinator = try await makeReadyCoordinator()
+        let server = StubMediaServer()
+        let item = MediaItem(id: "item", name: "movie", kind: .movie,
+                             playState: .init(played: false, percentage: 0, positionSeconds: 0))
+        server.itemResult = .success(item)
+        coordinator.setActiveServer(server)
+        let created = await coordinator.currentRepository()
+        let repository = try XCTUnwrap(created)
+        await repository.recordFinalPlaybackProgress(item: item, positionSeconds: 42, durationSeconds: 100)
+        await coordinator.runMaintenance(maxItems: 0, maxBytes: .max)
+        let newSession = try await makeReadyCoordinator()
+        newSession.setActiveServer(server)
+        let freshRepository = await newSession.currentRepository()
+        let refreshed = try await freshRepository?.refreshItem(itemID: "item")
+        XCTAssertEqual(refreshed?.playState?.positionSeconds, 42, "自动维护不得把未确认进度一起淘汰")
+    }
+}

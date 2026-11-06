@@ -19,6 +19,38 @@ enum Schema {
     /// 重拉覆盖，不迁移、不抛错。
     static let payloadVersion = 1
 
+    // v3: 与 item 同生命周期，租户隔离；未确认进度不能被网络旧回包覆盖。
+    static let createLocalProgressTable = """
+        CREATE TABLE local_progress(
+          tenant_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          recorded_at REAL NOT NULL,
+          confirmed_at REAL,
+          completed INTEGER NOT NULL,
+          payload_version INTEGER NOT NULL,
+          payload BLOB NOT NULL,
+          PRIMARY KEY(tenant_id, item_id),
+          FOREIGN KEY(tenant_id, item_id) REFERENCES item(tenant_id, item_id) ON DELETE CASCADE
+        ) WITHOUT ROWID;
+        """
+
+    // 保留 v3 迁移原文。v4 去除指向可淘汰 item 的外键，完整搬移保护记录。
+    static let makeLocalProgressIndependent = """
+        ALTER TABLE local_progress RENAME TO local_progress_v3;
+        CREATE TABLE local_progress(
+          tenant_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          recorded_at REAL NOT NULL,
+          confirmed_at REAL,
+          completed INTEGER NOT NULL,
+          payload_version INTEGER NOT NULL,
+          payload BLOB NOT NULL,
+          PRIMARY KEY(tenant_id, item_id)
+        ) WITHOUT ROWID;
+        INSERT INTO local_progress SELECT * FROM local_progress_v3;
+        DROP TABLE local_progress_v3;
+        """
+
     static let createTables = """
         CREATE TABLE tenant(
           tenant_id     TEXT PRIMARY KEY,

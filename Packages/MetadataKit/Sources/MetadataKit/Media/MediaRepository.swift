@@ -41,7 +41,8 @@ public actor MediaRepository {
     let configuration: Configuration
     let now: @Sendable () -> Date
 
-    private var isShutdown = false
+    var localProgress: [MediaItem.ID: LocalPlaybackProgress] = [:]
+    var isShutdown = false
     var homeEntry: MemoryEntry<MediaHomeContent>?
     var items: MemoryLRU<MediaItem.ID, MediaItem>
     var details: MemoryLRU<MediaItem.ID, MediaDetailContent>
@@ -80,7 +81,8 @@ public actor MediaRepository {
     }
 
     /// 清掉当前会话的内存投影。SQLite 内容仍属于租户，不应随视图或会话内存重置而删除。
-    public func invalidateMemory() {
+    public func invalidateMemory(discardLocalProgress: Bool = false) {
+        if discardLocalProgress { localProgress.removeAll() }
         homeEntry = nil
         items.removeAll()
         details.removeAll()

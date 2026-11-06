@@ -48,7 +48,8 @@ extension MediaRepository {
         startIndex: Int,
         limit: Int
     ) async throws -> MediaSnapshot<MediaPageContent> {
-        let page = try await server.itemsPage(
+        let requestStartedAt = now()
+        var page = try await server.itemsPage(
             parentID: descriptor.parentID,
             kinds: descriptor.kinds,
             recursive: descriptor.recursive,
@@ -58,6 +59,7 @@ extension MediaRepository {
             watchState: descriptor.watchState,
             searchTerm: descriptor.searchTerm)
 
+        page.items = await saveIncomingItems(page.items, requestStartedAt: requestStartedAt)
         var content: MediaPageContent
         if startIndex == 0 {
             content = MediaPageContent(
@@ -84,12 +86,13 @@ extension MediaRepository {
                 lastPageWasFull: page.items.count >= limit)
         }
 
+        content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt)
         pages[descriptor] = MemoryEntry(value: content, fetchedAt: now())
         rememberItems(page.items)
-        await persist {
-            try await $0.savePage(page, key: key, tenant: tenant)
-            try await $0.saveItems(page.items, tenant: tenant)
-        }
+        let persistedPage = page
+        await persist { try await $0.savePage(persistedPage, key: key, tenant: tenant) }
+        content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt)
+        pages[descriptor] = MemoryEntry(value: content, fetchedAt: now())
         return snapshot(content, fetchedAt: now(), source: .network)
     }
 

@@ -30,8 +30,15 @@ final class MetadataCoordinator {
     @ObservationIgnored private var activeServer: (any MediaServer)?
     @ObservationIgnored private var activeServerIdentifier: ObjectIdentifier?
     @ObservationIgnored private var repository: MediaRepository?
+    @ObservationIgnored private var sessionGeneration: UInt64 = 0
+    @ObservationIgnored private let openStore: @Sendable (URL) async throws -> MetadataStore
+    @ObservationIgnored private(set) var pendingPlaybackProgressWrite: Task<Void, Never>?
 
-    init() {}
+    init(openStore: @escaping @Sendable (URL) async throws -> MetadataStore = {
+        try MetadataCache.open(at: $0)
+    }) {
+        self.openStore = openStore
+    }
 
     // MARK: - 建库
 
@@ -40,9 +47,10 @@ final class MetadataCoordinator {
         guard setupTask == nil else { return }
         let root = directory ?? OcPlayerStorage.defaultRoot
         databaseDirectory = root
+        let openStore = openStore
         setupTask = Task.detached(priority: .userInitiated) {
             do {
-                let store = try MetadataCache.open(at: root)
+                let store = try await openStore(root)
                 await MainActor.run {
                     self.store = store
                     self.isReady = true
@@ -74,6 +82,7 @@ final class MetadataCoordinator {
     func setActiveServer(_ server: (any MediaServer)?) {
         let identifier = server.map { ObjectIdentifier($0 as AnyObject) }
         if identifier != activeServerIdentifier {
+            sessionGeneration &+= 1
             let retired = repository
             activeServer = server
             activeServerIdentifier = identifier
@@ -89,7 +98,12 @@ final class MetadataCoordinator {
     func currentRepository() async -> MediaRepository? {
         guard let server = activeServer else { return nil }
         if let repository { return repository }
+        let generation = sessionGeneration
         _ = await waitUntilReady()
+        // await 期间可能换服、登出，甚至 A → B → A；旧调用不能安装新会话的仓储。
+        guard generation == sessionGeneration else { return nil }
+        // 同一会话的其他调用者可能已经完成创建。安装过程在主 actor 上无悬挂点。
+        if let repository { return repository }
         let repo = MediaRepository(server: server, store: store)
         repository = repo
         return repo
@@ -181,6 +195,31 @@ final class MetadataCoordinator {
 
     // MARK: - 写入口
 
+    /// 排队前固定原会话。即使建库尚未完成或仓储已退休，也只写原租户的末次进度。
+    /// 本地进度与远端上报独立；串行写回防止快速换片时旧位置后落库。
+    func finishPlaybackProgress(
+        item: MediaItem,
+        positionSeconds: Double,
+        durationSeconds: Double?
+    ) -> Task<Void, Never>? {
+        guard let server = activeServer else { return nil }
+        let recordedAt = Date()
+        let originRepository = repository
+        let readiness = setupTask
+        let preceding = pendingPlaybackProgressWrite
+        let write = Task { @MainActor in
+            await preceding?.value
+            await readiness?.value
+            // store 是整库，不随租户切换；server 已在排队前捕获，绝不再解析 activeServer。
+            let origin = originRepository ?? MediaRepository(server: server, store: store)
+            await origin.recordFinalPlaybackProgress(
+                item: item, positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+                recordedAt: recordedAt)
+        }
+        pendingPlaybackProgressWrite = write
+        return write
+    }
+
     @discardableResult
     func markPlayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState? {
         try await currentRepository()?.markPlayed(itemID: itemID)
@@ -230,7 +269,7 @@ final class MetadataCoordinator {
             } else {
                 try await store.clearAll()
             }
-            await repository?.invalidateMemory()
+            await repository?.invalidateMemory(discardLocalProgress: true)
             refreshSize()
             return true
         } catch {

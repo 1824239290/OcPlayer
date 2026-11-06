@@ -6,6 +6,16 @@
 
 ### 改动
 
+- **固定排队末次进度的操作时间**（2026-11-06）。等待建库或前一写回期间完成的新已看/未看操作，不会再被旧播放快照撤销；仓储保留较新磁盘记录的确认边界，后续服务端更新正常接管。增加排队、跨会话和内存/磁盘回归。MetadataKit 全量 299 项通过；macOS 899 项通过、19 项条件跳过，iOS 920 项通过、3 项条件跳过，新增 App 排队回归两端均正常完成。
+
+- **修复淘汰后的末次写回和分集失败回退的状态反转**（2026-11-06）。元数据或纯内存条目淘汰后，退出播放仍采用独立进度中最新的已看/未看状态，再合并末次位置；保留完整会话元数据及最新进度字段。分集刷新失败时，条目内存与详情采用同一份最终合并结果。新增两方向、LRU、跨租户、清缓存和失败/成功对照回归；验证统一使用 App 的依赖锁；该轮 MetadataKit 全量 294 项通过，两端 App 全量测试及实际 Release 打包通过。
+
+- **补齐进度保护在显式标记与自动淘汰时的边界**（2026-11-06）。已看/未看成功后仍拦截先发旧回包，后发读取正常接管；较旧的排队末次写入不能撤销新操作。SQLite v4 增量迁移保留进度记录并解除元数据淘汰的级联删除，离线首页和分页可恢复独立进度；确认后的记录释放大段元数据，用户主动清缓存则同时清除磁盘和内存保护。新增迁移、并发、淘汰与 App 接线回归，设计与冲突规则见 `Docs/MEDIA-DATA-PLANE.md`。
+
+- **修复 Stopped 上报超时后首页和磁盘进度被旧响应覆盖**（2026-11-06）。末次位置在 SQLite v3 增量表中保存本地保护记录；首页、详情、分集和分页的网络写入在同一事务内合并并返回一致的进度。读到后发请求确认的位置后恢复服务端更新，确认前已发出的迟到请求仍受保护；主动倒退位置、跨租户同 ID、播完后服务端已看/清零和显式已看/未看均有回归覆盖。空继续观看列表可保留尚未确认的本地条目，已有缓存迁移保留原内容。App 的生产默认 5 秒超时路径与正常上报对照已加入 `StoppedProgressRegressionTests`。
+
+- **修复媒体仓储与播放进度的一致性**（2026-11-05）。冷启动并发读取复用同一仓储，等待建库期间切服或登出不会复活旧会话；退出播放的末次进度固定写回原租户，收尾任务等待本地进度和远端上报，重复收尾不重复记录。首页与分页从磁盘恢复时批量合并条目表的最新进度，保留列表顺序与其他元数据。新增会话时序和持久化回归测试，设计说明见 `Docs/MEDIA-DATA-PLANE.md`。
+
 - **修复详情页返回后标签栏晚一步闪现**（2026-11-05）。iPhone 详情页不再通过局部 `toolbarVisibility` 等待返回后恢复标签栏，而是在实际导航页的出现/离开时，将系统标签栏动画登记到导航转场协调器；取消交互式返回时恢复来源页的隐藏状态。五个 Tab 根页显式恢复可见状态，支持详情栈保留期间切换分区；iPad 详情继续显示标签栏。新增导航页标记、普通返回、缩放返回和取消交互返回 4 项用例，并扩展生产 AppShell 集成用例覆盖详情进出与跨 Tab 切换。缩放返回探针中，标签栏约 77 ms 开始恢复，导航约 878 ms 完成。相关 iPhone 测试 14 项通过，iPad 导航与生产外壳集成测试 5 项通过。
 
 - **恢复独立搜索按钮，并修复首页头像偶尔未去色**（2026-11-05）。iOS 27 的搜索 Tab 显式使用 `TabRole.prominent`，iOS 26 保留 `.search`，搜索页继续使用原有常驻输入框；新角色与 `UITab.selectedImage` 同时加编译器版本判断，兼容 CI 的 Xcode 26 SDK（旧 SDK 通过 `UITabBarItem` 维护选中图片）。头像桥接同时维护 `UITab` 图片源与 `UITabBarItem`，通过图片、栏项重建和选中变化的通知合并回写，替代启动后几次固定延迟补写；两态图片的颜色由实际选中的分区决定，避免搜索展开时系统复用上一页的 `selectedImage` 仍显示彩色头像。增加 5 条桥接回归用例与生产 `AppShellView` 的搜索/头像集成用例。使用 Xcode 27.1 SDK 编译，iPhone 17 Pro 与 iPad Pro 11-inch (M5) 的 iOS 26.3 模拟器各 21 项相关测试通过，macOS Debug 编译通过；iOS 27 的 `.prominent` 分支已编译验证，随后安装到 iOS 27.2 的 iPhone 17 并通过启动检查。
@@ -199,11 +209,7 @@
 
 ### 已知问题
 
-- **退出播放器后首页「继续观看」的进度可能短暂显示为退出前的旧值（慢网/上报超时才出现）——不是数据没写进去，是随后一次首页刷新用服务端旧值把它盖回去了**
-  - **机制（【复核】：静态读码，未用测试复现）**：`dismissPlayer()` 的顺序是 ①`finishReporting()` 里用 fire-and-forget 的 `Task { }` 调 `metadata.recordPlaybackProgress(...)` 写本地，②返回 `stopped`（Stopped 上报任务），③`dismissFollowUpTask` 先 `await stopped?.value` 再 `await loadHome()`。而 `stopped` 内部的 `PlaybackReportingCoordinator.performWithTimeout()` 是**到点无条件放行**——`reportTimeout` 默认 5s（`PlaybackReportingCoordinator.swift:134`），超时就 `work.cancel()` + `gate.resume()`，**不等上报真的完成**。于是上报慢于 5s 时 `loadHome()` 照跑，`MediaRepository.refreshHome()` 里 `content.resume = <服务端返回值>`（`MediaRepository+Home.swift:55`）会**整体覆盖** `applyPlayState` 刚写进 `homeEntry.resume` 的本地进度（`MediaRepository+Mutation.swift:77-83`）。正常网络下服务端已收到 Stopped，不显现。
-  - **影响面**：仅「首页继续观看的进度数字」这一处显示，服务端下次刷新即纠正；**不影响播放与选片逻辑**（自动连播走 `resolveNextEpisode` 的服务端有序窗口，不读本地 `played`）。
-  - **证伪方法（下一轮修前先把它变成确定性红）**：注入一个 `sleep > reportTimeout` 的慢 reporter，并把 `PlaybackReportingCoordinator.reportTimeout` 调短（该属性本就为测试留的）；退出播放器后立即断言 `home.resume` 里该条目的 `positionSeconds` 等于退出位置——**当前应红**；把 stub 的延迟去掉应转绿（否则说明测的不是这条路径）。
-  - **候选修法（未实施，不要照着直接改）**：`refreshHome` 合并本地 `playState`（通用修），或让本地回写参与 `stopped` 的等待（局部修）。
+- **高密度 CJK 字幕崩溃尚未修复，等待上游**（2026-11-06）。官方 Erika v0.3.0 在密集 ASS 素材上会因 18768 > 16384 的 Metal 纹理宽度断言退出，已用同源码对照确认属于内核问题。按本轮决定保留官方内核，不继续本地补丁构建或更改发版内核。应用层进度修复不改变这一已知问题。
 
 - **`DanmakuKit` 内置的 `defaultAPIKey` 是「设计上公开」的，不要当泄漏去改**
   - 位置：`Packages/DanmakuKit/Sources/DanmakuKit/DandanplaySettingsStore.swift:23`。
