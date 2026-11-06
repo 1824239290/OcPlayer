@@ -1,0 +1,74 @@
+[
+  {
+    "duration": "0.13s",
+    "durationInSeconds": 0.12759602069854736,
+    "name": "testInstalledRemotePauseDuringOpenIsAppliedAfterOpen()",
+    "nodeIdentifier": "PlaybackControllerOpenTests/testInstalledRemotePauseDuringOpenIsAppliedAfterOpen()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/PlaybackControllerOpenTests/testInstalledRemotePauseDuringOpenIsAppliedAfterOpen",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.12s",
+    "durationInSeconds": 0.12074601650238037,
+    "name": "testInstalledRemotePauseIsIdempotent()",
+    "nodeIdentifier": "PlaybackControllerOpenTests/testInstalledRemotePauseIsIdempotent()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/PlaybackControllerOpenTests/testInstalledRemotePauseIsIdempotent",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.1s",
+    "durationInSeconds": 0.10383808612823486,
+    "name": "testCancelledRefreshPreservesItemsAndAllowsRetry()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testCancelledRefreshPreservesItemsAndAllowsRetry()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testCancelledRefreshPreservesItemsAndAllowsRetry",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.014s",
+    "durationInSeconds": 0.013622045516967773,
+    "name": "testChangedRevisionDiscardsLateSuccessBeforeNewTabTaskRuns()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testChangedRevisionDiscardsLateSuccessBeforeNewTabTaskRuns()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testChangedRevisionDiscardsLateSuccessBeforeNewTabTaskRuns",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.018s",
+    "durationInSeconds": 0.017903923988342285,
+    "name": "testLateOldFailureCannotReplaceNewSessionError()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testLateOldFailureCannotReplaceNewSessionError()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testLateOldFailureCannotReplaceNewSessionError",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.013s",
+    "durationInSeconds": 0.013029932975769043,
+    "name": "testResetAllowsSameRevisionReloadAndRejectsOldSuccess()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testResetAllowsSameRevisionReloadAndRejectsOldSuccess()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testResetAllowsSameRevisionReloadAndRejectsOldSuccess",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.013s",
+    "durationInSeconds": 0.013434052467346191,
+    "name": "testSameRevisionDeduplicatesConcurrentLoads()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testSameRevisionDeduplicatesConcurrentLoads()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testSameRevisionDeduplicatesConcurrentLoads",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  },
+  {
+    "duration": "0.025s",
+    "durationInSeconds": 0.02455306053161621,
+    "name": "testSwitchStartsNewRequestAndOldCancellationCannotFinishIt()",
+    "nodeIdentifier": "MoviePilotSubscriptionLoaderTests/testSwitchStartsNewRequestAndOldCancellationCannotFinishIt()",
+    "nodeIdentifierURL": "test://com.apple.xcode/OcPlayer/OcPlayerTests/MoviePilotSubscriptionLoaderTests/testSwitchStartsNewRequestAndOldCancellationCannotFinishIt",
+    "nodeType": "Test Case",
+    "result": "Passed"
+  }
+]

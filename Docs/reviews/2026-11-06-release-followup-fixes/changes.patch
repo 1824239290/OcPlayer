@@ -1,0 +1,444 @@
+diff --git a/App/Shared/Features/MoviePilot/MoviePilotHomeView.swift b/App/Shared/Features/MoviePilot/MoviePilotHomeView.swift
+index 383f4b9..3b0c1d3 100644
+--- a/App/Shared/Features/MoviePilot/MoviePilotHomeView.swift
++++ b/App/Shared/Features/MoviePilot/MoviePilotHomeView.swift
+@@ -17,10 +17,14 @@ struct MoviePilotHomeView: View {
+     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+ 
+     // MARK: - 订阅状态
+-    @State private var subscribes: [MPSubscribe] = []
+-    @State private var isLoadingSubscribes = false
++    @State private var subscriptionLoader = MoviePilotSubscriptionLoader()
++    private var subscribes: [MPSubscribe] {
++        get { subscriptionLoader.items }
++        nonmutating set { subscriptionLoader.items = newValue }
++    }
++    private var isLoadingSubscribes: Bool { subscriptionLoader.isLoading }
+     /// 保留错误本体而不是文案：登录失效类错误要把「重试」换成「重新登录」。
+-    @State private var subscribesError: MoviePilotError?
++    private var subscribesError: MoviePilotError? { subscriptionLoader.error }
+     @State private var selectedCategory: SubscribeCategory = .all
+     @State private var pendingDeleteSubscribe: MPSubscribe?
+     @State private var editingSubscribe: MPSubscribe?
+@@ -772,16 +776,12 @@ struct MoviePilotHomeView: View {
+     }
+ 
+     private func loadSubscribes() async {
+-        guard !isLoadingSubscribes else { return }
+-        isLoadingSubscribes = true
+-        subscribesError = nil
+-        do {
+-            let list = try await MoviePilotAPIClient.shared.subscribes()
+-            subscribes = list
+-        } catch {
+-            subscribesError = (error as? MoviePilotError) ?? .generic("\(error)")
+-        }
+-        isLoadingSubscribes = false
++        let store = moviepilot.store
++        await subscriptionLoader.load(
++            revision: store.configurationRevision,
++            currentRevision: { store.configurationRevision },
++            fetch: { try await MoviePilotAPIClient.shared.subscribes() }
++        )
+     }
+ 
+     private func search() {
+@@ -816,7 +816,7 @@ struct MoviePilotHomeView: View {
+     private func resetServerScopedState() {
+         searchTask?.cancel()
+         searchGeneration += 1
+-        subscribes = []
++        subscriptionLoader.reset()
+         subscribingMediaIDs = []
+         localSubscribedMediaIDs = []
+         results = []
+@@ -824,7 +824,6 @@ struct MoviePilotHomeView: View {
+         keyword = ""
+         isSearching = false
+         searchError = nil
+-        subscribesError = nil
+         notice = nil
+         pendingDeleteSubscribe = nil
+     }
+diff --git a/App/Shared/Features/Player/PlaybackController.swift b/App/Shared/Features/Player/PlaybackController.swift
+index 1ed418a..43ff9cf 100644
+--- a/App/Shared/Features/Player/PlaybackController.swift
++++ b/App/Shared/Features/Player/PlaybackController.swift
+@@ -249,7 +249,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
+         return PlaybackPreferences.danmakuUseOverlayRenderer
+     }
+ 
+-    init() {
++    init(nowPlaying: PlaybackNowPlayingCenter = PlaybackNowPlayingCenter()) {
++        self.nowPlaying = nowPlaying
+         usesOverlayDanmakuRenderer = PlaybackController.resolveOverlayDanmakuRoute()
+         // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
+         danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
+@@ -365,7 +366,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
+     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
+     @ObservationIgnored private let wakeLock = PlaybackWakeLock()
+     /// 系统「正在播放」与媒体键 / 控制中心命令。同样没有 UI 表示。
+-    @ObservationIgnored private let nowPlaying = PlaybackNowPlayingCenter()
++    @ObservationIgnored private let nowPlaying: PlaybackNowPlayingCenter
+     #if os(iOS)
+     /// 来电 / Siri 之类的音频中断。配上 `.playback` 会话后系统才会发这些通知。
+     @ObservationIgnored private let audioInterruptions = PlaybackAudioInterruptions()
+@@ -418,8 +419,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
+                 self.togglePlayPause()
+             },
+             pause: { [weak self] in
+-                guard let self, self.state.state == .playing else { return }
+-                self.togglePlayPause()
++                self?.pauseFromRemoteCommand()
+             },
+             toggle: { [weak self] in self?.togglePlayPause() },
+             skip: { [weak self] seconds in self?.skip(by: seconds) },
+@@ -1407,6 +1407,23 @@ final class PlaybackController: DanmakuPlaybackHosting {
+ 
+     // MARK: - 控制
+ 
++    func pauseFromRemoteCommand() {
++        #if os(iOS)
++        // Explicit pause also revokes automatic resume when already interrupted.
++        audioInterruptions.noteUserIntent()
++        #endif
++        if openingRequestID != nil {
++            openingPauseIntent = true
++            return
++        }
++        guard state.state == .playing, let engine else { return }
++        do {
++            try engine.pause()
++        } catch {
++            setupError = "\(error)"
++        }
++    }
++
+     func togglePlayPause() {
+         #if os(iOS)
+         // 用户（或远程命令）自己按的收放：这次音频中断不再欠一次自动恢复。
+diff --git a/App/Shared/Features/Player/PlaybackNowPlayingCenter.swift b/App/Shared/Features/Player/PlaybackNowPlayingCenter.swift
+index 4eb1a2f..07721bd 100644
+--- a/App/Shared/Features/Player/PlaybackNowPlayingCenter.swift
++++ b/App/Shared/Features/Player/PlaybackNowPlayingCenter.swift
+@@ -182,6 +182,10 @@ final class PlaybackNowPlayingCenter {
+         self.handlers = handlers
+     }
+ 
++    func pauseFromRemoteCommand() {
++        handlers?.pause()
++    }
++
+     func setMetadata(title: String, subtitle: String) {
+         self.title = title
+         self.subtitle = subtitle
+@@ -279,7 +283,7 @@ final class PlaybackNowPlayingCenter {
+         }
+         center.pauseCommand.isEnabled = true
+         center.pauseCommand.addTarget { [weak self] _ in
+-            Task { @MainActor in self?.handlers?.pause() }
++            Task { @MainActor in self?.pauseFromRemoteCommand() }
+             return .success
+         }
+         center.togglePlayPauseCommand.isEnabled = true
+diff --git a/AppTests/PlaybackControllerOpenTests.swift b/AppTests/PlaybackControllerOpenTests.swift
+index 9eb0fca..4c3e535 100644
+--- a/AppTests/PlaybackControllerOpenTests.swift
++++ b/AppTests/PlaybackControllerOpenTests.swift
+@@ -1,8 +1,11 @@
+ import Foundation
+-import PlaybackKit
++@testable import PlaybackKit
+ import SwiftUI
+ @testable import OcPlayer
+ import XCTest
++#if os(iOS)
++import AVFoundation
++#endif
+ 
+ /// open 移出主线程后的控制器语义（弱网下内核 open 同步阻塞数十秒，主线程不能碰）：
+ /// 完成落状态、open 在飞取消不复活状态、在飞换片让位退役旧引擎、同请求重入去重、
+@@ -162,6 +165,83 @@ final class PlaybackControllerOpenTests: XCTestCase {
+         XCTAssertEqual(engine.playCalls, 1, "open 成功后应 play")
+     }
+ 
++    func testInstalledRemotePauseIsIdempotent() async throws {
++        let engine = GatedFakeEngine(allowOpenImmediately: true)
++        installEngines([engine])
++        let commands = PlaybackNowPlayingCenter()
++        let controller = PlaybackController(nowPlaying: commands)
++        defer { controller.stopPlayback() }
++        controller.installRemoteCommandHandlers()
++        controller.open(request: PlaybackRequest(title: "Pause", uri: "/tmp/pause.mp4"))
++        try await waitUntil { controller.hasLoadedSource }
++        controller.state.apply(.stateChanged(.playing))
++        commands.pauseFromRemoteCommand()
++        XCTAssertEqual(engine.pauseCalls, 1)
++        controller.state.apply(.stateChanged(.paused))
++        commands.pauseFromRemoteCommand()
++        XCTAssertEqual(engine.pauseCalls, 1)
++        XCTAssertEqual(engine.playCalls, 1, "Already paused must not toggle to play")
++    }
++
++    func testInstalledRemotePauseDuringOpenIsAppliedAfterOpen() async throws {
++        let engine = GatedFakeEngine()
++        installEngines([engine])
++        let commands = PlaybackNowPlayingCenter()
++        let controller = PlaybackController(nowPlaying: commands)
++        defer { controller.stopPlayback() }
++        controller.installRemoteCommandHandlers()
++        controller.open(request: PlaybackRequest(title: "Opening", uri: "/tmp/opening.mp4"))
++        try await waitUntil { engine.openCalls.count == 1 }
++        commands.pauseFromRemoteCommand()
++        XCTAssertTrue(controller.openingPauseIntent)
++        engine.releaseGate()
++        try await waitUntil { controller.hasLoadedSource }
++        XCTAssertEqual(engine.pauseCalls, 1)
++    }
++
++    #if os(iOS)
++    private func postInterruption(_ type: AVAudioSession.InterruptionType, shouldResume: Bool = true) {
++        NotificationCenter.default.post(
++            name: AVAudioSession.interruptionNotification,
++            object: AVAudioSession.sharedInstance(),
++            userInfo: [AVAudioSessionInterruptionTypeKey: type.rawValue,
++                       AVAudioSessionInterruptionOptionKey:
++                        shouldResume ? AVAudioSession.InterruptionOptions.shouldResume.rawValue : 0]
++        )
++    }
++
++    private func checkInterruptionResume(explicitPause: Bool, shouldResume: Bool) async throws {
++        let engine = GatedFakeEngine(allowOpenImmediately: true)
++        installEngines([engine])
++        let commands = PlaybackNowPlayingCenter()
++        let controller = PlaybackController(nowPlaying: commands)
++        defer { controller.stopPlayback() }
++        controller.installRemoteCommandHandlers()
++        controller.open(request: PlaybackRequest(title: "Interrupted", uri: "/tmp/interrupted.mp4"))
++        try await waitUntil { controller.hasLoadedSource }
++        controller.state.apply(.stateChanged(.playing))
++        postInterruption(.began)
++        XCTAssertEqual(engine.pauseCalls, 1)
++        controller.state.apply(.stateChanged(.paused))
++        if explicitPause { commands.pauseFromRemoteCommand() }
++        postInterruption(.ended, shouldResume: shouldResume)
++        XCTAssertEqual(engine.playCalls, explicitPause || !shouldResume ? 1 : 2)
++        XCTAssertEqual(engine.pauseCalls, 1, "Explicit pause during interruption is idempotent")
++    }
++
++    func testInstalledRemotePauseRevokesInterruptionResume() async throws {
++        try await checkInterruptionResume(explicitPause: true, shouldResume: true)
++    }
++
++    func testInterruptionAutomaticallyResumesWithoutExplicitPause() async throws {
++        try await checkInterruptionResume(explicitPause: false, shouldResume: true)
++    }
++
++    func testInterruptionWithoutResumeOptionStaysPaused() async throws {
++        try await checkInterruptionResume(explicitPause: false, shouldResume: false)
++    }
++    #endif
++
+     /// 关播放器要把这段会话结账（session.end 汇总）。`finishSession` 是单次语义，
+     /// 所以「关完再结一次得到 nil」就证明控制器确实结过了。
+     func testStopPlaybackClosesTheSession() async throws {
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index eba55bc..1fcf89f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -6,6 +6,8 @@
+ 
+ ### 改动
+ 
++- **修复 MoviePilot 换服漏加载与音频中断后的误恢复播放**（2026-11-06）。订阅加载按会话修订和请求代次隔离，切服后立即启动新请求，旧请求不能覆盖列表、错误或加载状态；正常取消不再显示为失败。系统明确暂停时先清除中断恢复意图，已暂停的播放保持暂停，打开中的播放也会记住暂停要求。新增 11 个回归场景，双端 App 全量通过，验证入口见 `Docs/reviews/2026-11-06-release-followup-fixes/FIX_REPORT.md`。
++
+ - **修复跨服务器图片缓存串读，准备 0.2.3**（2026-11-06）。图片缓存身份纳入服务器类型、稳定服务器 ID 与账号；同服换地址和 token 轮换继续复用，缺少服务器 ID 时按档案与入口保守隔离。URLCache、内存、字节缓存与图片任务使用同一上下文；登录页只恢复本档案的 v2 身份，无法确认归属的旧缓存重新下载。回归覆盖相同 UserId/图片路径跨服、同源不同服、重启、头像、登录海报墙与迁移边界，验证入口见 `Docs/reviews/2026-11-06-image-isolation/FIX_REPORT.md`。
+ 
+ - **修复 MoviePilot 会话改绑、迟到登录与多源字幕/精确续播**（2026-11-06）。旧请求固定服务器与会话，换服后停止重试；登录验证后原子提交，失败保留原会话，迟到响应与通知不能覆盖新登录。外挂字幕严格使用当前媒体源并隔离服务器/源/轨道缓存；旧批次不能干扰新批次。明确续播位置支持 1–29 秒，非法数值不进入内核。详情已看回写与取消建库等待遵守会话边界，保留 #96 的独立进度记录与冲突保护。
+diff --git a/App/Shared/Features/MoviePilot/MoviePilotSubscriptionLoader.swift b/App/Shared/Features/MoviePilot/MoviePilotSubscriptionLoader.swift
+new file mode 100644
+index 0000000..b9fff35
+--- /dev/null
++++ b/App/Shared/Features/MoviePilot/MoviePilotSubscriptionLoader.swift
+@@ -0,0 +1,53 @@
++import DiagnosticsKit
++import MoviePilotKit
++import Observation
++
++/// Owns subscription request state across retained tabs and server changes.
++@MainActor
++@Observable
++final class MoviePilotSubscriptionLoader {
++    var items: [MPSubscribe] = []
++    private(set) var isLoading = false
++    private(set) var error: MoviePilotError?
++    @ObservationIgnored private var generation: UInt64 = 0
++    @ObservationIgnored private var configurationRevision: UInt64?
++
++    func reset() {
++        generation &+= 1
++        configurationRevision = nil
++        items = []
++        error = nil
++        isLoading = false
++    }
++
++    func load(
++        revision: UInt64,
++        currentRevision: @MainActor () -> UInt64,
++        fetch: @MainActor () async throws -> [MPSubscribe]
++    ) async {
++        guard !Task.isCancelled, currentRevision() == revision else { return }
++        if configurationRevision != revision {
++            reset()
++            configurationRevision = revision
++        }
++        guard !isLoading else { return }
++        generation &+= 1
++        let requestGeneration = generation
++        isLoading = true
++        error = nil
++        defer {
++            if generation == requestGeneration { isLoading = false }
++        }
++        do {
++            let list = try await fetch()
++            guard generation == requestGeneration,
++                  currentRevision() == revision, !Task.isCancelled else { return }
++            items = list
++        } catch {
++            guard generation == requestGeneration,
++                  currentRevision() == revision, !Task.isCancelled,
++                  !CancellationClassifier.isCancellation(error) else { return }
++            self.error = (error as? MoviePilotError) ?? .generic("\(error)")
++        }
++    }
++}
+diff --git a/AppTests/MoviePilotSubscriptionLoaderTests.swift b/AppTests/MoviePilotSubscriptionLoaderTests.swift
+new file mode 100644
+index 0000000..3fd2bb9
+--- /dev/null
++++ b/AppTests/MoviePilotSubscriptionLoaderTests.swift
+@@ -0,0 +1,122 @@
++import MoviePilotKit
++import XCTest
++@testable import OcPlayer
++
++@MainActor
++final class MoviePilotSubscriptionLoaderTests: XCTestCase {
++    @MainActor
++    private final class ResponseGate {
++        var continuation: CheckedContinuation<[MPSubscribe], Error>?
++        var calls = 0
++        func fetch() async throws -> [MPSubscribe] {
++            calls += 1
++            return try await withCheckedThrowingContinuation { continuation = $0 }
++        }
++        func finish(_ result: Result<[MPSubscribe], Error>) {
++            continuation?.resume(with: result)
++            continuation = nil
++        }
++    }
++
++    private func waitForRequest(_ gate: ResponseGate) async throws {
++        for _ in 0..<100 {
++            if gate.continuation != nil { return }
++            try await Task.sleep(for: .milliseconds(10))
++        }
++        XCTFail("Subscription request did not start")
++        throw CancellationError()
++    }
++
++    private func items(_ id: Int) -> [MPSubscribe] {
++        [MPSubscribe(raw: ["id": .number(Double(id))])]
++    }
++
++    func testSwitchStartsNewRequestAndOldCancellationCannotFinishIt() async throws {
++        let loader = MoviePilotSubscriptionLoader()
++        let a = ResponseGate(), b = ResponseGate()
++        var revision: UInt64 = 1
++        let old = Task { await loader.load(revision: 1, currentRevision: { revision }, fetch: a.fetch) }
++        try await waitForRequest(a)
++        old.cancel()
++        revision = 2
++        loader.reset() // Same reset used by the retained tab on rebinding.
++        let new = Task { await loader.load(revision: 2, currentRevision: { revision }, fetch: b.fetch) }
++        defer { a.finish(.failure(CancellationError())); b.finish(.failure(CancellationError())) }
++        try await waitForRequest(b)
++        a.finish(.failure(CancellationError()))
++        await old.value
++        XCTAssertTrue(loader.isLoading, "A must not clear B's loading state")
++        XCTAssertNil(loader.error)
++        b.finish(.success(items(2)))
++        await new.value
++        XCTAssertEqual(loader.items, items(2))
++        XCTAssertFalse(loader.isLoading)
++    }
++
++    func testChangedRevisionDiscardsLateSuccessBeforeNewTabTaskRuns() async throws {
++        let loader = MoviePilotSubscriptionLoader()
++        let gate = ResponseGate()
++        var revision: UInt64 = 1
++        let old = Task { await loader.load(revision: 1, currentRevision: { revision }, fetch: gate.fetch) }
++        try await waitForRequest(gate)
++        revision = 2
++        gate.finish(.success(items(1)))
++        await old.value
++        XCTAssertTrue(loader.items.isEmpty)
++        await loader.load(revision: 2, currentRevision: { revision }, fetch: { self.items(2) })
++        XCTAssertEqual(loader.items, items(2))
++    }
++
++    func testLateOldFailureCannotReplaceNewSessionError() async throws {
++        let loader = MoviePilotSubscriptionLoader()
++        let gate = ResponseGate()
++        var revision: UInt64 = 1
++        let old = Task { await loader.load(revision: 1, currentRevision: { revision }, fetch: gate.fetch) }
++        try await waitForRequest(gate)
++        revision = 2
++        await loader.load(revision: 2, currentRevision: { revision }, fetch: {
++            throw MoviePilotError.request("B failure")
++        })
++        gate.finish(.failure(MoviePilotError.request("A failure")))
++        await old.value
++        guard case .request("B failure")? = loader.error else {
++            return XCTFail("Must retain B's error")
++        }
++    }
++
++    func testCancelledRefreshPreservesItemsAndAllowsRetry() async {
++        let loader = MoviePilotSubscriptionLoader()
++        await loader.load(revision: 1, currentRevision: { 1 }, fetch: { self.items(1) })
++        await loader.load(revision: 1, currentRevision: { 1 }, fetch: { throw URLError(.cancelled) })
++        XCTAssertEqual(loader.items, items(1))
++        XCTAssertNil(loader.error)
++        XCTAssertFalse(loader.isLoading)
++        await loader.load(revision: 1, currentRevision: { 1 }, fetch: { self.items(2) })
++        XCTAssertEqual(loader.items, items(2))
++    }
++
++    func testSameRevisionDeduplicatesConcurrentLoads() async throws {
++        let loader = MoviePilotSubscriptionLoader()
++        let gate = ResponseGate()
++        let first = Task { await loader.load(revision: 1, currentRevision: { 1 }, fetch: gate.fetch) }
++        try await waitForRequest(gate)
++        await loader.load(revision: 1, currentRevision: { 1 }, fetch: gate.fetch)
++        XCTAssertEqual(gate.calls, 1)
++        gate.finish(.success(items(1)))
++        await first.value
++    }
++
++    func testResetAllowsSameRevisionReloadAndRejectsOldSuccess() async throws {
++        let loader = MoviePilotSubscriptionLoader()
++        let gate = ResponseGate()
++        let old = Task { await loader.load(revision: 1, currentRevision: { 1 }, fetch: gate.fetch) }
++        try await waitForRequest(gate)
++        loader.reset()
++        await loader.load(revision: 1, currentRevision: { 1 }, fetch: { self.items(2) })
++        gate.finish(.success(items(1)))
++        await old.value
++        XCTAssertEqual(loader.items, items(2))
++        XCTAssertNil(loader.error)
++        XCTAssertFalse(loader.isLoading)
++    }
++}

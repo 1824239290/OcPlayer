@@ -17,10 +17,14 @@ struct MoviePilotHomeView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - 订阅状态
-    @State private var subscribes: [MPSubscribe] = []
-    @State private var isLoadingSubscribes = false
+    @State private var subscriptionLoader = MoviePilotSubscriptionLoader()
+    private var subscribes: [MPSubscribe] {
+        get { subscriptionLoader.items }
+        nonmutating set { subscriptionLoader.items = newValue }
+    }
+    private var isLoadingSubscribes: Bool { subscriptionLoader.isLoading }
     /// 保留错误本体而不是文案：登录失效类错误要把「重试」换成「重新登录」。
-    @State private var subscribesError: MoviePilotError?
+    private var subscribesError: MoviePilotError? { subscriptionLoader.error }
     @State private var selectedCategory: SubscribeCategory = .all
     @State private var pendingDeleteSubscribe: MPSubscribe?
     @State private var editingSubscribe: MPSubscribe?
@@ -772,16 +776,12 @@ struct MoviePilotHomeView: View {
     }
 
     private func loadSubscribes() async {
-        guard !isLoadingSubscribes else { return }
-        isLoadingSubscribes = true
-        subscribesError = nil
-        do {
-            let list = try await MoviePilotAPIClient.shared.subscribes()
-            subscribes = list
-        } catch {
-            subscribesError = (error as? MoviePilotError) ?? .generic("\(error)")
-        }
-        isLoadingSubscribes = false
+        let store = moviepilot.store
+        await subscriptionLoader.load(
+            revision: store.configurationRevision,
+            currentRevision: { store.configurationRevision },
+            fetch: { try await MoviePilotAPIClient.shared.subscribes() }
+        )
     }
 
     private func search() {
@@ -816,7 +816,7 @@ struct MoviePilotHomeView: View {
     private func resetServerScopedState() {
         searchTask?.cancel()
         searchGeneration += 1
-        subscribes = []
+        subscriptionLoader.reset()
         subscribingMediaIDs = []
         localSubscribedMediaIDs = []
         results = []
@@ -824,7 +824,6 @@ struct MoviePilotHomeView: View {
         keyword = ""
         isSearching = false
         searchError = nil
-        subscribesError = nil
         notice = nil
         pendingDeleteSubscribe = nil
     }

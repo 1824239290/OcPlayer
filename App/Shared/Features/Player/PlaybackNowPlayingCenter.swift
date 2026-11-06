@@ -182,6 +182,10 @@ final class PlaybackNowPlayingCenter {
         self.handlers = handlers
     }
 
+    func pauseFromRemoteCommand() {
+        handlers?.pause()
+    }
+
     func setMetadata(title: String, subtitle: String) {
         self.title = title
         self.subtitle = subtitle
@@ -279,7 +283,7 @@ final class PlaybackNowPlayingCenter {
         }
         center.pauseCommand.isEnabled = true
         center.pauseCommand.addTarget { [weak self] _ in
-            Task { @MainActor in self?.handlers?.pause() }
+            Task { @MainActor in self?.pauseFromRemoteCommand() }
             return .success
         }
         center.togglePlayPauseCommand.isEnabled = true
