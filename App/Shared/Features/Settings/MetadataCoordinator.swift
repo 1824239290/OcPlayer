@@ -203,6 +203,7 @@ final class MetadataCoordinator {
         durationSeconds: Double?
     ) -> Task<Void, Never>? {
         guard let server = activeServer else { return nil }
+        let recordedAt = Date()
         let originRepository = repository
         let readiness = setupTask
         let preceding = pendingPlaybackProgressWrite
@@ -212,7 +213,8 @@ final class MetadataCoordinator {
             // store 是整库，不随租户切换；server 已在排队前捕获，绝不再解析 activeServer。
             let origin = originRepository ?? MediaRepository(server: server, store: store)
             await origin.recordFinalPlaybackProgress(
-                item: item, positionSeconds: positionSeconds, durationSeconds: durationSeconds)
+                item: item, positionSeconds: positionSeconds, durationSeconds: durationSeconds,
+                recordedAt: recordedAt)
         }
         pendingPlaybackProgressWrite = write
         return write

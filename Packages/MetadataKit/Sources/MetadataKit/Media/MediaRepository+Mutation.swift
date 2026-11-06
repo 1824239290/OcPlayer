@@ -36,9 +36,12 @@ extension MediaRepository {
     public func recordFinalPlaybackProgress(
         item: MediaItem,
         positionSeconds: Double,
-        durationSeconds: Double?
+        durationSeconds: Double?,
+        recordedAt: Date? = nil
     ) async {
-        let timestamp = now()
+        let timestamp = recordedAt ?? now()
+        // 队列等待不改变操作先后：更早捕获的快照不能替换较新的内存事实。
+        if let current = localProgress[item.id], current.recordedAt > timestamp { return }
         let previous = items[item.id]?.value.playState
             ?? localProgress[item.id]?.item.playState ?? item.playState
         var localItem = item
@@ -49,11 +52,15 @@ extension MediaRepository {
                                              completed: LocalPlaybackProgress.isComplete(position: positionSeconds, duration: durationSeconds))
         localProgress[item.id] = progress
         let state: MediaItem.PlayState
+        var acceptedProgress = progress
         if let store {
             do {
-                state = try await store.recordPlaybackProgress(
+                let result = try await store.recordPlaybackProgressUpdate(
                     item: item, positionSeconds: positionSeconds,
                     durationSeconds: durationSeconds, tenant: tenant, now: timestamp)
+                state = result.state
+                // 新会话的操作可能只在磁盘中。沿用它的确认边界，不能重新变成未确认保护。
+                if let newer = result.newerRecord { acceptedProgress = newer }
             } catch {
                 MetadataLog.logger.warning("播放末次进度写入失败", fields: ["error": .string("\(error)")])
                 state = localItem.playState!
@@ -64,10 +71,11 @@ extension MediaRepository {
         // await 期间可能已完成显式标记、新的末次写回或远端确认；不能把旧结果重新应用。
         guard localProgress[item.id]?.revision == progress.revision,
               localProgress[item.id]?.confirmedAt == nil else { return }
-        localProgress[item.id]?.item.playState = state
+        localItem.playState = state
+        acceptedProgress.item = localItem
+        localProgress[item.id] = acceptedProgress
         guard !isShutdown else { return }
         // 缓存未见过的播放条目也必须参与内存合并。
-        localItem.playState = state
         if items[item.id] == nil { rememberItems([localItem]) }
         await applyPlayState(state, forItemID: item.id, persistToStore: false)
     }

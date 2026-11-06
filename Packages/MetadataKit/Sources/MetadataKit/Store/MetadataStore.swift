@@ -317,10 +317,23 @@ public actor MetadataStore {
         tenant: TenantID,
         now: Date = Date()
     ) throws -> MediaItem.PlayState {
+        try recordPlaybackProgressUpdate(item: item, positionSeconds: positionSeconds,
+                                         durationSeconds: durationSeconds, tenant: tenant, now: now).state
+    }
+
+    /// 仓储还需知道是否沿用了较新的记录，保留其真实操作时间和确认边界。
+    func recordPlaybackProgressUpdate(
+        item: MediaItem,
+        positionSeconds: Double,
+        durationSeconds: Double?,
+        tenant: TenantID,
+        now: Date
+    ) throws -> (state: MediaItem.PlayState, newerRecord: LocalPlaybackProgress?) {
         let timestamp = Int64(now.timeIntervalSince1970)
         return try database.write { db in
-            if let newer = try Self.newerProgressState(db, itemID: item.id, tenant: tenant, recordedAt: now) {
-                return newer
+            if let newer = try Self.newerProgressRecord(db, itemID: item.id, tenant: tenant, recordedAt: now),
+               let state = newer.item.playState {
+                return (state, newer)
             }
             let row = try Row.fetchOne(db,
                 sql: "SELECT payload_version, payload FROM item WHERE tenant_id = ? AND item_id = ?",
@@ -348,7 +361,7 @@ public actor MetadataStore {
             try Self.saveProgressRecord(db, item: updated, tenant: tenant, recordedAt: now,
                                         confirmedAt: nil,
                                         completed: LocalPlaybackProgress.isComplete(position: positionSeconds, duration: durationSeconds))
-            return state
+            return (state, nil)
         }
     }
 

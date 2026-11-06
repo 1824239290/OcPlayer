@@ -96,3 +96,10 @@ v4 的进度记录独立于可淘汰元数据。自动维护仍按原来的条�
 纯内存路径在 items 被 LRU 淘汰后仍从 localProgress 取状态；这份状态在创建新记录之前捕获。分集刷新失败时，详情先合并本地保护，再从 content.seasons/content.episodes 安装条目内存，保证详情、cachedItem 与磁盘看到同一状态。
 
 该修复沿用现有 v4 表和排队写入时间检查。主动清缓存后的新末次写回按仍可用的会话数据处理；跨租户同 ID 不共享状态。正式回归见 [PlaybackStateRecoveryTests](../Packages/MetadataKit/Tests/MetadataKitTests/PlaybackStateRecoveryTests.swift)，在 App 锁定依赖下验证已看/未看两方向及内存/磁盘路径。
+
+
+## 排队末次快照的操作时间（2026-11-06）
+
+`finishPlaybackProgress` 在排队前捕获 `recordedAt`，等待建库或前一写回不会改变这次操作的先后。仓储在安装保护记录前拒绝比当前内存记录更旧的快照；SQLite 在同一事务内比较该捕获时间。磁盘记录较新时，仓储同步采用它的状态、操作时间、确认时间与完成标记，避免把已经确认的显式操作重新变成未确认保护。
+
+这条规则同时适用于原仓储已退休、同租户的新仓储及纯内存降级；较新捕获的正常播放末次快照仍可更新位置。没有新增迁移或改变内核。回归见 [App 排队测试](../AppTests/QueuedPlaybackProgressTests.swift) 与 [MetadataKit 排队测试](../Packages/MetadataKit/Tests/MetadataKitTests/QueuedPlaybackProgressTests.swift)。

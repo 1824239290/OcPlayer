@@ -102,13 +102,24 @@ extension MetadataStore {
     static func newerProgressState(
         _ db: Database, itemID: MediaItem.ID, tenant: TenantID, recordedAt: Date
     ) throws -> MediaItem.PlayState? {
+        try newerProgressRecord(db, itemID: itemID, tenant: tenant, recordedAt: recordedAt)?.item.playState
+    }
+
+    static func newerProgressRecord(
+        _ db: Database, itemID: MediaItem.ID, tenant: TenantID, recordedAt: Date
+    ) throws -> LocalPlaybackProgress? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT recorded_at, payload_version, payload FROM local_progress
+            SELECT recorded_at, confirmed_at, completed, payload_version, payload FROM local_progress
             WHERE tenant_id = ? AND item_id = ?
             """, arguments: [tenant.rawValue, itemID]),
               (row["recorded_at"] as Double) > recordedAt.timeIntervalSince1970,
-              let payload = row["payload"] as Data? else { return nil }
-        return PayloadCodec.decode(MediaItem.self, from: payload, storedVersion: row["payload_version"])?.playState
+              let payload = row["payload"] as Data?,
+              let item = PayloadCodec.decode(MediaItem.self, from: payload, storedVersion: row["payload_version"])
+        else { return nil }
+        return LocalPlaybackProgress(
+            item: item, recordedAt: Date(timeIntervalSince1970: row["recorded_at"] as Double),
+            confirmedAt: (row["confirmed_at"] as Double?).map { Date(timeIntervalSince1970: $0) },
+            completed: row["completed"] as Bool)
     }
 
     static func saveProgressRecord(
