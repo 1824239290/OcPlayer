@@ -1,0 +1,47 @@
+{
+  "macos": {
+    "version": "0.2.3",
+    "build": "674",
+    "commit": "053b9a6",
+    "kernel": "v0.3.4",
+    "crcPassed": true,
+    "licenseFiles": 29,
+    "licenseHash": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+    "dependencyLockMatches": true,
+    "uuid": [
+      [
+        "0CF29B1C-EEB9-3224-A930-0520889065AD",
+        "arm64"
+      ]
+    ],
+    "uuidMatches": true,
+    "sha256": {
+      "OcPlayer-v0.2.3-b674-053b9a6-macOS-arm64.zip": "0f97a382bd84b2697754a9833f9b37f515157a0bb78a575e8d2d46e6ca9d10f6",
+      "OcPlayer-v0.2.3-b674-053b9a6-macOS-arm64.dmg": "88905c95beb8a7c1127db28e574e7b0f820f5dcb8589c0d74c82d67d8c9e29e6",
+      "OcPlayer-v0.2.3-b674-053b9a6-macOS-arm64.dSYM.zip": "7bfd78ccab8aa5baea7af846f1b0f406dddbfe41e378355d7ed83d87d41274df"
+    },
+    "dmgVerified": true,
+    "mountedSignatureVerified": true
+  },
+  "ios": {
+    "version": "0.2.3",
+    "build": "674",
+    "commit": "053b9a6",
+    "kernel": "v0.3.4",
+    "crcPassed": true,
+    "licenseFiles": 29,
+    "licenseHash": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+    "dependencyLockMatches": true,
+    "uuid": [
+      [
+        "420B6FD0-9AEF-385F-8E95-DB49CE4ED64C",
+        "arm64"
+      ]
+    ],
+    "uuidMatches": true,
+    "sha256": {
+      "OcPlayer-v0.2.3-b674-053b9a6-ios-unsigned.ipa": "4d1d8e63c1eab659e7d9ca071f4d3a52534feb780d829077999ceb5e2bffa7c1",
+      "OcPlayer-v0.2.3-b674-053b9a6-ios-unsigned.dSYM.zip": "9ab3994ea0dab3cd45bc240ebb874af3af27fdfe4615f976dda90f80a6085eac"
+    }
+  }
+}
