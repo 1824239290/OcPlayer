@@ -68,7 +68,8 @@ extension AppModel {
         // 就是这里，所以只在这一处记；登录页在没有 token 时靠它复原海报的缓存键。
         // 刻意不在登出时清除——见 `ImageCacheIdentityStore`。
         ImageCacheIdentityStore.remember(
-            identity: ImagePipeline.cacheIdentity(authHeader: server.authorizationHeader),
+            identity: ImagePipeline.cacheIdentity(url: server.profile.baseURL, authHeader: server.authorizationHeader,
+                                                  cacheScope: server.profile.imageCacheScope),
             tenant: server.profile.id
         )
         attachEndpoints(to: server)

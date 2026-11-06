@@ -143,7 +143,7 @@ extension EmbyMediaStreamDTO {
 
 extension EmbyMediaStreamDTO {
     /// 外挂文本字幕 → 域模型；内封 / 图像字幕（PGS 等内核不吃）返回 nil。
-    func domainSubtitle(itemID: String, mediaSourceID: String?) -> ExternalSubtitle? {
+    func domainSubtitle(itemID: String, mediaSourceID: String?, namespace: String = "") -> ExternalSubtitle? {
         guard type == "Subtitle",
               isExternal == true,
               let index,
@@ -153,6 +153,7 @@ extension EmbyMediaStreamDTO {
         return ExternalSubtitle(
             itemID: itemID,
             mediaSourceID: mediaSourceID,
+            namespace: namespace,
             index: index,
             title: title ?? displayTitle,
             language: language,

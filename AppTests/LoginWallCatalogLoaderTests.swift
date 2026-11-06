@@ -91,13 +91,13 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
         let tenant = "test-tenant-\(UUID().uuidString)"
         addTeardownBlock {
             UserDefaults.standard.removeObject(
-                forKey: "dev.jumusu.ocplayer.imageCacheIdentity." + tenant)
+                forKey: "dev.jumusu.ocplayer.imageCacheIdentity.v2." + tenant)
         }
 
         XCTAssertNil(ImageCacheIdentityStore.identity(for: tenant), "没记过就该是 nil")
 
-        ImageCacheIdentityStore.remember(identity: "abcdef123456", tenant: tenant)
-        XCTAssertEqual(ImageCacheIdentityStore.identity(for: tenant), "abcdef123456")
+        ImageCacheIdentityStore.remember(identity: "v2-scope-abcdef123456", tenant: tenant)
+        XCTAssertEqual(ImageCacheIdentityStore.identity(for: tenant), "v2-scope-abcdef123456")
     }
 
     /// 空值一律当「没记过」：写入空串不该让登录页以为有身份可用。
@@ -105,7 +105,7 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
         let tenant = "test-tenant-\(UUID().uuidString)"
         addTeardownBlock {
             UserDefaults.standard.removeObject(
-                forKey: "dev.jumusu.ocplayer.imageCacheIdentity." + tenant)
+                forKey: "dev.jumusu.ocplayer.imageCacheIdentity.v2." + tenant)
         }
 
         ImageCacheIdentityStore.remember(identity: "", tenant: tenant)
@@ -120,15 +120,15 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
         let a = "tenant-a-\(UUID().uuidString)"
         let b = "tenant-b-\(UUID().uuidString)"
         addTeardownBlock {
-            UserDefaults.standard.removeObject(forKey: "dev.jumusu.ocplayer.imageCacheIdentity." + a)
-            UserDefaults.standard.removeObject(forKey: "dev.jumusu.ocplayer.imageCacheIdentity." + b)
+            UserDefaults.standard.removeObject(forKey: "dev.jumusu.ocplayer.imageCacheIdentity.v2." + a)
+            UserDefaults.standard.removeObject(forKey: "dev.jumusu.ocplayer.imageCacheIdentity.v2." + b)
         }
 
-        ImageCacheIdentityStore.remember(identity: "aaa111aaa111", tenant: a)
-        ImageCacheIdentityStore.remember(identity: "bbb222bbb222", tenant: b)
+        ImageCacheIdentityStore.remember(identity: "v2-scope-aaa111aaa111", tenant: a)
+        ImageCacheIdentityStore.remember(identity: "v2-scope-bbb222bbb222", tenant: b)
 
-        XCTAssertEqual(ImageCacheIdentityStore.identity(for: a), "aaa111aaa111")
-        XCTAssertEqual(ImageCacheIdentityStore.identity(for: b), "bbb222bbb222")
+        XCTAssertEqual(ImageCacheIdentityStore.identity(for: a), "v2-scope-aaa111aaa111")
+        XCTAssertEqual(ImageCacheIdentityStore.identity(for: b), "v2-scope-bbb222bbb222")
     }
 
     // MARK: 身份历史（token 轮换）
@@ -139,151 +139,67 @@ final class LoginWallCatalogLoaderTests: XCTestCase {
     /// 覆盖掉，墙上 47 张海报一张都查不到（字节全在磁盘上）。
     func testIdentityHistoryKeepsMostRecentFirstWithoutDuplicates() {
         let tenant = "test-tenant-\(UUID().uuidString)"
-        let key = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
+        let key = "dev.jumusu.ocplayer.imageCacheIdentity.v2." + tenant
         addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }
 
-        ImageCacheIdentityStore.remember(identity: "aaa111aaa111", tenant: tenant)
-        ImageCacheIdentityStore.remember(identity: "bbb222bbb222", tenant: tenant)
+        ImageCacheIdentityStore.remember(identity: "v2-scope-aaa111aaa111", tenant: tenant)
+        ImageCacheIdentityStore.remember(identity: "v2-scope-bbb222bbb222", tenant: tenant)
         // 回到旧身份：应当被提到最前，而不是出现两次。
-        ImageCacheIdentityStore.remember(identity: "aaa111aaa111", tenant: tenant)
+        ImageCacheIdentityStore.remember(identity: "v2-scope-aaa111aaa111", tenant: tenant)
 
         XCTAssertEqual(
             ImageCacheIdentityStore.history(for: tenant),
-            ["aaa111aaa111", "bbb222bbb222"]
+            ["v2-scope-aaa111aaa111", "v2-scope-bbb222bbb222"]
         )
-        XCTAssertEqual(ImageCacheIdentityStore.identity(for: tenant), "aaa111aaa111")
+        XCTAssertEqual(ImageCacheIdentityStore.identity(for: tenant), "v2-scope-aaa111aaa111")
     }
 
     /// 历史有上界，不会无限增长。
     func testIdentityHistoryIsCapped() {
         let tenant = "test-tenant-\(UUID().uuidString)"
-        let key = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
+        let key = "dev.jumusu.ocplayer.imageCacheIdentity.v2." + tenant
         addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }
 
         for index in 0..<(ImageCacheIdentityStore.historyLimit + 5) {
-            ImageCacheIdentityStore.remember(identity: String(format: "%012x", index), tenant: tenant)
+            ImageCacheIdentityStore.remember(identity: "v2-scope-" + String(format: "%012x", index), tenant: tenant)
         }
 
         let history = ImageCacheIdentityStore.history(for: tenant)
         XCTAssertEqual(history.count, ImageCacheIdentityStore.historyLimit)
         // 最新的那个必须在，最老的那些被挤掉。
-        XCTAssertEqual(history.first, String(format: "%012x", ImageCacheIdentityStore.historyLimit + 4))
+        XCTAssertEqual(history.first, "v2-scope-" + String(format: "%012x", ImageCacheIdentityStore.historyLimit + 4))
     }
 
-    /// 旧版在这个键上存的是**一个字符串**，新版存数组。旧值必须能平滑升上来
-    /// ——否则升级一次就等于「所有人重新变回程序化封面」。
-    func testLegacySingleStringValueIsReadAsHistory() {
-        let tenant = "test-tenant-\(UUID().uuidString)"
-        let key = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
-        addTeardownBlock { UserDefaults.standard.removeObject(forKey: key) }
-
-        UserDefaults.standard.set("legacy123456", forKey: key)
-
-        XCTAssertEqual(ImageCacheIdentityStore.history(for: tenant), ["legacy123456"])
-        XCTAssertEqual(ImageCacheIdentityStore.identity(for: tenant), "legacy123456")
-    }
-
-    // MARK: 从 URL 缓存里捞历史身份
-
-    /// `URLCache` 的键就是那条带 `_auth=<身份>` 的规范化 URL，所以字节里能捞出
-    /// 「这批图当初是用哪个身份写进去的」。这是丢掉的历史身份**唯一**的现存记录。
-    func testAuthIdentitiesAreExtractedFromRawBytes() {
-        let raw = Data("""
-        <key>http://ocplayer.invalid/Items/abc/Images/Primary?maxWidth=400&tag=ff&_auth=b484f14daf8d</key>
-        <key>http://ocplayer.invalid/Items/def/Images/Primary?maxWidth=300&tag=aa&_auth=ceb97745c31d</key>
-        """.utf8)
-
-        XCTAssertEqual(
-            ImageCacheIdentityStore.authIdentities(in: raw),
-            ["b484f14daf8d", "ceb97745c31d"]
-        )
-    }
-
-    /// 非身份的 `_auth=` 值（公开图床写的 `none`）与畸形值都不能被当成身份——
-    /// 混进去只是白白多几次查文件，但那说明解析是错的。
-    func testAuthIdentitiesIgnoresNonIdentityValues() {
-        let raw = Data("_auth=none _auth=SHORT _auth=ABCDEFABCDEF _auth=  _auth=12345g789012".utf8)
-        XCTAssertTrue(
-            ImageCacheIdentityStore.authIdentities(in: raw).isEmpty,
-            "捞出了非身份值：\(ImageCacheIdentityStore.authIdentities(in: raw))"
-        )
-    }
-
-    /// 扫描**必须如实报告「被取消」**，不能把「没扫完」混成「扫完了但没找到」。
-    func testScanSeparatesCancellationFromEmptyResult() async {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("identity-scan-\(UUID().uuidString)", isDirectory: true)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
-        try? Data("_auth=b484f14daf8d".utf8)
-            .write(to: dir.appendingPathComponent("Cache.db"))
-
-        // 未取消：wasCancelled 必须是 false（空结果 ≠ 被取消）。
-        let clean = await ImageCacheIdentityStore.scanURLCacheForIdentities(in: dir)
-        XCTAssertFalse(clean.wasCancelled, "正常扫完时不能报成被取消")
-
-        // 在已取消的任务里跑：必须报 wasCancelled，而不是安静地返回空集。
-        let task = Task {
-            await ImageCacheIdentityStore.scanURLCacheForIdentities(in: dir)
+    /// v1 只有账号身份；即使曾记在这个档案下，也无法排除已串服的缓存。
+    func testLegacyHistoryAndGlobalDiscoveryAreNotRecovered() async {
+        let tenant = "migration-\(UUID().uuidString)"
+        let oldKey = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
+        let globalKey = "dev.jumusu.ocplayer.imageCacheIdentities.discovered"
+        let originalGlobal = UserDefaults.standard.object(forKey: globalKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: oldKey)
+            if let originalGlobal { UserDefaults.standard.set(originalGlobal, forKey: globalKey) }
+            else { UserDefaults.standard.removeObject(forKey: globalKey) }
+            UserDefaults.standard.removeObject(forKey: ImageCacheIdentityStore.prefix + tenant)
         }
-        task.cancel()
-        let cancelled = await task.value
-        XCTAssertTrue(cancelled.wasCancelled, "任务已取消时扫描必须如实报告")
+        UserDefaults.standard.set(["abcdef123456"], forKey: oldKey)
+        UserDefaults.standard.set(["v2-other-server-abcdef123456"], forKey: globalKey)
+        let oldIdentities = await ImageCacheIdentityStore.identities(for: tenant)
+        XCTAssertTrue(oldIdentities.isEmpty)
+        ImageCacheIdentityStore.remember(identity: "v2-current-123456abcdef", tenant: tenant)
+        let newIdentities = await ImageCacheIdentityStore.identities(for: tenant)
+        XCTAssertEqual(newIdentities, ["v2-current-123456abcdef"])
+        XCTAssertEqual(UserDefaults.standard.stringArray(forKey: oldKey), ["abcdef123456"], "迁移边界不删除旧记录")
     }
 
-    /// **取消之后必须能重扫、并把身份捞回来。**
-    ///
-    /// 这条才是 `9fd4dbd` 修复语义的真正守门人：前一条只断言了 `scanURLCache`
-    /// 的返回值，**没有断言 `didScanURLCache` 被复位**。审查用变异证明过——
-    /// 把 `discoveredIdentities` 里 `guard !scan.wasCancelled` 那段删掉（行为退回
-    /// 修复前），前一条用例照样全绿，而身份池仍被**永久截断**。
-    ///
-    /// 所以这里走**完整入口** `identities(for:in:)`（不是扫描函数本身）：
-    /// ① 先在被取消的任务里触发一次扫描 → 只有部分结果、标志应复位；
-    /// ② 再正常调一次 → 必须真的把 Cache.db 里的 `_auth=` 身份捞进结果。
-    /// 修复前 ② 拿不到任何捞回身份（因为 `didScanURLCache` 已置位、直接短路）。
-    func testCancelledScanIsRetriedAndRecoversIdentities() async throws {
-        let tenant = "tenant-\(UUID().uuidString)"
-        let discoveredKey = "dev.jumusu.ocplayer.imageCacheIdentities.discovered"
-        let historyKey = "dev.jumusu.ocplayer.imageCacheIdentity." + tenant
-        addTeardownBlock {
-            UserDefaults.standard.removeObject(forKey: historyKey)
-            UserDefaults.standard.removeObject(forKey: discoveredKey)
-        }
-        UserDefaults.standard.removeObject(forKey: historyKey)
-        UserDefaults.standard.removeObject(forKey: discoveredKey)
-        ImageCacheIdentityStore.resetDiscoveredScanForTesting()
-
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("identity-retry-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
-
-        // 目标身份：必须是小写十六进制 12 位。
-        let target = "b484f14daf8d"
-        try Data("_auth=\(target)".utf8)
-            .write(to: dir.appendingPathComponent("Cache.db"))
-
-        // ① 在被取消的任务里扫一次。`Task.cancel()` 在任务开跑前置位，
-        //    扫描函数一进循环就应当看到取消。
-        let cancelledTask = Task {
-            await ImageCacheIdentityStore.identities(for: tenant, in: dir)
-        }
-        cancelledTask.cancel()
-        _ = await cancelledTask.value
-
-        // ② 正常再扫一次：必须能捞出目标身份。
-        ImageCacheIdentityStore.resetDiscoveredScanForTesting()
-        let identities = await ImageCacheIdentityStore.identities(for: tenant, in: dir)
-        XCTAssertTrue(
-            identities.contains(target),
-            "取消后重扫必须捞回身份（修复前这里会因「已扫过」标志短路而永远为空）：\(identities)"
-        )
-    }
-
-    /// 没有任何 `_auth=` 时安静返回空集，不崩。
-    func testAuthIdentitiesHandlesEmptyAndUnrelatedBytes() {
-        XCTAssertTrue(ImageCacheIdentityStore.authIdentities(in: Data()).isEmpty)
-        XCTAssertTrue(ImageCacheIdentityStore.authIdentities(in: Data("hello world".utf8)).isEmpty)
+    func testUnscopedIdentityCannotBeRememberedOrRestored() async {
+        let tenant = "unscoped-\(UUID().uuidString)"
+        let key = ImageCacheIdentityStore.prefix + tenant
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        ImageCacheIdentityStore.remember(identity: "abcdef123456", tenant: tenant)
+        XCTAssertNil(ImageCacheIdentityStore.identity(for: tenant))
+        UserDefaults.standard.set(["abcdef123456", "v2-current-123456abcdef"], forKey: key)
+        let identities = await ImageCacheIdentityStore.identities(for: tenant)
+        XCTAssertEqual(identities, ["v2-current-123456abcdef"])
     }
 }

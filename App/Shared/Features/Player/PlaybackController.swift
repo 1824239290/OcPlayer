@@ -199,6 +199,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 下完」的片源在开播头几秒连续切换两次字幕轨（每次都是内核级轨切换，会停/重启
     /// 音频输出）。批次期间挂起校正，整批结束后统一做一次。
     @ObservationIgnored var isLoadingExternalSubtitleBatch = false
+    @ObservationIgnored var externalSubtitleBatch: (id: UUID, source: PlaybackSourceGeneration)?
     #if DEBUG
     /// 测试观察口：本代次按偏好下发选轨 / 关字幕的次数（幂等与「不重复下发」靠它验）。
     @ObservationIgnored var appliedSubtitlePreferenceCount = 0
@@ -692,7 +693,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         reportableRequestID = request.id
         // 续播位置不立刻 seek（源还没就绪），挂到 pending 等 duration 到达。
         // open 失败时完成路径会失效 generation，这个等待循环按代次守卫自行退出。
-        if let resume = request.resumeSeconds, resume >= 30, let engine {
+        if let resume = request.resumeSeconds, resume.isFinite, resume > 0, let engine {
             let generation = sourceGeneration
             let engineID = ObjectIdentifier(engine)
             resumeTask = Task { [weak self] in
@@ -1209,6 +1210,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         externalSubtitleNames = [:]
         userChoseSubtitleForCurrentSource = false
         isLoadingExternalSubtitleBatch = false
+        externalSubtitleBatch = nil
         #if DEBUG
         appliedSubtitlePreferenceCount = 0
         #endif

@@ -31,7 +31,7 @@ extension AppModel {
             )
             guard let url = target.url else { return }
             _ = try? await ImagePipeline.shared.load(
-                url, authHeader: target.authHeader, maxPixelSize: DetailAmbienceImage.artDecodePixels
+                url, authHeader: target.authHeader, cacheScope: target.cacheScope, maxPixelSize: DetailAmbienceImage.artDecodePixels
             )
         }
     }

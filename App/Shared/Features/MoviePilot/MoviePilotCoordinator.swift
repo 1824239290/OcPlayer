@@ -1,4 +1,5 @@
 import Foundation
+import DiagnosticsKit
 import MoviePilotKit
 import Observation
 
@@ -52,12 +53,7 @@ final class MoviePilotCoordinator {
 
     // MARK: - 登录 / 登出
 
-    /// 设置页「保存并登录」：先落凭据（顺带作废旧 token）再登录取用户——
-    /// 但**失败必须回滚**：客户端登录时从 store 读凭据与服务器地址（新地址也
-    /// 必须先落 store 才能被请求用上），所以走不了「先验后存」；改打快照，
-    /// 登录失败把四键（含旧 token）原样还原——否则用户改密码打错一次，
-    /// 原本能用的会话就被毁掉，点「取消」也救不回来。
-    /// 返回错误文案（nil = 成功）。
+    /// 验证新凭据后提交；失败保留原会话，迟到尝试不更新 UI。
     @discardableResult
     func login(serverURLString: String, username: String, password: String) async -> String? {
         guard MoviePilotStore.normalizedURL(from: serverURLString) != nil else {
@@ -71,25 +67,23 @@ final class MoviePilotCoordinator {
             return authError
         }
 
-        let snapshot = store.credentialSnapshot()
-        store.updateCredentials(
-            serverURLString: serverURLString, username: username, password: password
-        )
+        attemptGeneration &+= 1
+        let attempt = attemptGeneration
+        didRefreshProfile = false
         isLoggingIn = true
-        defer { isLoggingIn = false }
+        authError = nil
+        defer { if attempt == attemptGeneration { isLoggingIn = false } }
         do {
-            profile = try await MoviePilotAPIClient.shared.login()
+            let user = try await MoviePilotAPIClient.shared.login(
+                serverURLString: serverURLString, username: username, password: password)
+            guard attempt == attemptGeneration else { return nil }
+            profile = user
             authError = nil
-            // 登录成功才更新绑定标识：改绑后登录失败的场合，首页保留旧数据即可
-            // （反正 gate 挡着），避免用未就绪的会话去拉新服务器。
             boundServerID = store.serverURLString
             return nil
         } catch {
-            // 回滚到登录前的凭据与 token：错误凭据只是「尝试」，不该持久化，
-            // 更不能把上一台服务器的可用会话一起带走。
-            store.restore(snapshot)
+            guard attempt == attemptGeneration, !CancellationClassifier.isCancellation(error) else { return nil }
             let message = MoviePilotError.userMessage(of: error)
-            MoviePilotNetworkLog.logger.error("MoviePilot 登录失败（已回滚凭据）error=\(error)")
             authError = message
             return message
         }
@@ -98,15 +92,25 @@ final class MoviePilotCoordinator {
     /// 收到 401 通知：清会话、拉回未登录态。挂在 `RootView`（与 Bangumi 同理，
     /// 401 可能来自任何页面的请求，那时设置页未必存在）。
     func handleAuthenticationRequired(generation: UInt64) async {
-        _ = await MoviePilotAPIClient.shared.clearSession(ifCurrent: generation)
+        let attempt = attemptGeneration
+        guard await MoviePilotAPIClient.shared.clearSession(ifCurrent: generation) != nil,
+              attempt == attemptGeneration else { return }
+        attemptGeneration &+= 1
+        isLoggingIn = false
+        didRefreshProfile = false
         profile = nil
         authError = MoviePilotError.requireLogin.userMessage
     }
 
     func signOut() async {
-        _ = await MoviePilotAPIClient.shared.signOut()
+        attemptGeneration &+= 1
+        let attempt = attemptGeneration
+        isLoggingIn = false
+        didRefreshProfile = false
         profile = nil
         authError = nil
+        _ = await MoviePilotAPIClient.shared.signOut()
+        guard attempt == attemptGeneration else { return }
     }
 
     // MARK: - 会话恢复
@@ -114,11 +118,15 @@ final class MoviePilotCoordinator {
     /// 设置页出现时补一次用户信息：跨启动后 profile 是空的，token 还在的话
     /// 拉回来顺便验证 token 活着。失败不动登录态——真过期会走 401 通知那条路。
     func refreshProfileIfNeeded() {
-        guard store.hasToken, profile == nil, !didRefreshProfile else { return }
+        guard !isLoggingIn, store.hasToken, profile == nil, !didRefreshProfile else { return }
         didRefreshProfile = true
+        let attempt = attemptGeneration
+        let revision = store.configurationRevision
         Task {
             do {
-                profile = try await MoviePilotAPIClient.shared.currentUser()
+                let user = try await MoviePilotAPIClient.shared.currentUser()
+                guard attempt == attemptGeneration, revision == store.configurationRevision else { return }
+                profile = user
             } catch {
                 MoviePilotNetworkLog.logger.error("拉取 MoviePilot 用户信息失败 error=\(error)")
             }
@@ -126,4 +134,5 @@ final class MoviePilotCoordinator {
     }
 
     private var didRefreshProfile = false
+    @ObservationIgnored private var attemptGeneration: UInt64 = 0
 }

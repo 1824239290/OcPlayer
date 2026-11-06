@@ -1,0 +1,26 @@
+[
+  {
+    "platform": "macos",
+    "application": "/tmp/ocplayer-release-review-macos/Build/Products/Release/OcPlayer.app",
+    "binary": "/tmp/ocplayer-release-review-macos/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer",
+    "dSYM": "/tmp/ocplayer-release-review-macos/Build/Products/Release/OcPlayer.app.dSYM",
+    "version": "0.2.2",
+    "buildVersion": "1",
+    "uuidMatches": true,
+    "binaryUUIDOutput": "UUID: A4081059-8E80-3717-8928-8909EBEE29EC (arm64) /tmp/ocplayer-release-review-macos/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer\n",
+    "dSYMuuidOutput": "UUID: A4081059-8E80-3717-8928-8909EBEE29EC (arm64) /tmp/ocplayer-release-review-macos/Build/Products/Release/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "binarySHA256": "0f42c06ba606f0a38b604f6d288d815cb29125ae77688ed60a3a2261612f801c"
+  },
+  {
+    "platform": "ios",
+    "application": "/tmp/ocplayer-release-review-ios/Build/Products/Release-iphoneos/OcPlayer.app",
+    "binary": "/tmp/ocplayer-release-review-ios/Build/Products/Release-iphoneos/OcPlayer.app/OcPlayer",
+    "dSYM": "/tmp/ocplayer-release-review-ios/Build/Products/Release-iphoneos/OcPlayer.app.dSYM",
+    "version": "0.2.2",
+    "buildVersion": "1",
+    "uuidMatches": true,
+    "binaryUUIDOutput": "UUID: 4E3DB44B-312D-39A6-92B1-2709F0888CAF (arm64) /tmp/ocplayer-release-review-ios/Build/Products/Release-iphoneos/OcPlayer.app/OcPlayer\n",
+    "dSYMuuidOutput": "UUID: 4E3DB44B-312D-39A6-92B1-2709F0888CAF (arm64) /tmp/ocplayer-release-review-ios/Build/Products/Release-iphoneos/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "binarySHA256": "f6cfb8cfefd26317259b42099d62e7fbe879273c6dd1d83dbf7956240bed26e1"
+  }
+]

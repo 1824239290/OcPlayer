@@ -165,8 +165,10 @@ public actor MoviePilotAPIClient {
     /// SSE 流式搜索专用：`timeoutIntervalForResource` 不能按请求覆盖，而站点
     /// 聚合搜索整场可以跑几分钟，普通会话 30s 就会把流掐断。
     private let streamSession: URLSession
+    private let retrySleep: @Sendable (UInt64) async throws -> Void
 
     private var authGeneration: UInt64 = 0
+    private var authConfigurationRevision: UInt64
     /// 单飞的静默重登：并发请求同时撞 401 时只登一次，其余等同一个 Task。
     private var reloginTask: Task<String, Error>?
     private var reloginGeneration: UInt64 = 0
@@ -177,9 +179,12 @@ public actor MoviePilotAPIClient {
 
     public init(
         store: MoviePilotStore = .shared,
-        sessionConfiguration: URLSessionConfiguration = .default
+        sessionConfiguration: URLSessionConfiguration = .default,
+        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     ) {
         self.store = store
+        self.authConfigurationRevision = store.configurationRevision
+        self.retrySleep = retrySleep
         // 复制后再改：直接改写入参 configuration 会污染调用方手里的对象
         //（共享 .default 的属性是进程级单例，改动影响全局）。
         let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
@@ -214,31 +219,51 @@ public actor MoviePilotAPIClient {
         generation == authGeneration
     }
 
-    /// 登录：读 store 里的地址与账号密码，换 token、返回当前用户。
-    /// 成功会推进代际，作废旧 token 与在途请求。
-    @discardableResult
-    public func login() async throws -> MPUser {
-        guard !store.username.isEmpty, !store.password.isEmpty else {
+    private struct RequestContext: Sendable {
+        let baseURL: URL
+        let revision: UInt64
+    }
+
+    private func context() throws -> RequestContext {
+        let snapshot = store.sessionSnapshot()
+        guard let url = MoviePilotStore.normalizedURL(from: snapshot.credentials.serverURLString ?? "") else {
             throw MoviePilotError.notConfigured
         }
+        return RequestContext(baseURL: url, revision: snapshot.revision)
+    }
+
+    private func check(_ context: RequestContext) throws {
+        try Task.checkCancellation()
+        guard context.revision == store.configurationRevision else { throw CancellationError() }
+    }
+
+    @discardableResult
+    public func login() async throws -> MPUser {
+        let credentials = store.credentialSnapshot()
+        return try await login(serverURLString: credentials.serverURLString ?? "",
+                               username: credentials.username, password: credentials.password)
+    }
+
+    /// 验证期间保持旧配置；只有当前登录尝试可提交新凭据。
+    @discardableResult
+    public func login(serverURLString: String, username: String, password: String) async throws -> MPUser {
+        guard let baseURL = MoviePilotStore.normalizedURL(from: serverURLString),
+              !username.isEmpty, !password.isEmpty else { throw MoviePilotError.notConfigured }
         cancelRelogin()
+        let revision = store.invalidateConfiguration()
         bumpGeneration()
-        // 手动登录会重置凭据，解除静默重登的熔断。
         reloginExhaustedGeneration = nil
-        let token = try await postLogin(username: store.username, password: store.password)
-        // 拿新 token 直接取用户信息（不经重登路径——token 就是刚换的）。
-        let request = MPRequest(path: "/api/v1/user/current")
+        let context = RequestContext(baseURL: baseURL, revision: revision)
+        let token = try await postLogin(username: username, password: password, context: context)
+        let data = MPEnvelope.unwrap(try await sendOnce(MPRequest(path: "/api/v1/user/current"), token: token, context: context))
+        try check(context)
         let user: MPUser
-        do {
-            let data = MPEnvelope.unwrap(try await sendOnce(request, token: token))
-            user = try Self.decoder.decode(MPUser.self, from: data)
-        } catch {
-            store.accessToken = nil
-            bumpGeneration()
-            // 别映射成 badRequest——那是「请求参数有误」，会把解析问题误导成参数问题。
-            throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)")
-        }
-        store.accessToken = token
+        do { user = try Self.decoder.decode(MPUser.self, from: data) }
+        catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
+        try check(context)
+        let committed = await store.commitCredentials(serverURLString: serverURLString, username: username,
+                                                      password: password, accessToken: token, ifRevision: context.revision)
+        guard committed else { throw CancellationError() }
         bumpGeneration()
         reloginExhaustedGeneration = nil
         return user
@@ -264,7 +289,9 @@ public actor MoviePilotAPIClient {
 
     /// 收到 401 通知侧的配合接口：只在代际仍匹配时清 token。
     public func clearSession(ifCurrent expectedGeneration: UInt64) -> UInt64? {
-        guard expectedGeneration == authGeneration else { return nil }
+        guard expectedGeneration == authGeneration,
+              authConfigurationRevision == store.configurationRevision else { return nil }
+        store.invalidateConfiguration()
         store.accessToken = nil
         bumpGeneration()
         reloginExhaustedGeneration = nil
@@ -338,13 +365,14 @@ public actor MoviePilotAPIClient {
 
     /// 发请求返回原始 data（非 JSON 响应用）。
     public func requestData(_ request: MPRequest) async throws -> Data {
+        let context = try context()
         if request.authorized {
             guard let token = store.accessToken, !token.isEmpty else {
                 throw MoviePilotError.requireLogin
             }
-            return try await send(request, token: token)
+            return try await send(request, token: token, context: context)
         } else {
-            return try await send(request, token: nil)
+            return try await send(request, token: nil, context: context)
         }
     }
 
@@ -358,6 +386,7 @@ public actor MoviePilotAPIClient {
 
     private func bumpGeneration() {
         authGeneration &+= 1
+        authConfigurationRevision = store.configurationRevision
     }
 
     private func cancelRelogin() {
@@ -367,7 +396,7 @@ public actor MoviePilotAPIClient {
     }
 
     /// 登录接口本体（不带 Bearer 头：拿旧 token 撞新登录没有意义）。
-    private func postLogin(username: String, password: String) async throws -> String {
+    private func postLogin(username: String, password: String, context: RequestContext) async throws -> String {
         let request = MPRequest(
             path: "/api/v1/login/access-token",
             method: "POST",
@@ -378,7 +407,7 @@ public actor MoviePilotAPIClient {
             // 弱网下重登失败会让整个 MoviePilot 集成不可用，所以这里保留退避重试。
             idempotent: true
         )
-        let data = try await send(request, token: nil)
+        let data = try await send(request, token: nil, context: context)
         do {
             let response = try JSONDecoder().decode(MPTokenResponse.self, from: data)
             guard !response.accessToken.isEmpty else {
@@ -393,7 +422,7 @@ public actor MoviePilotAPIClient {
     }
 
     /// 发送请求（支持 401 静默重登与 502/503/504/超时等 isRetryable 错误指数退避重试）。
-    private func send(_ request: MPRequest, token: String?) async throws -> Data {
+    private func send(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
         var currentToken = token
         var lastError: Error?
 
@@ -406,23 +435,31 @@ public actor MoviePilotAPIClient {
         let retries = request.isIdempotent ? maxRetries : 0
 
         for attempt in 0...retries {
+            try check(context)
             if attempt > 0 {
                 // 指数退避乘 0.5~1.5 抖动：避免多端同拍重试放大服务端压力。
                 let delay = UInt64((pow(2.0, Double(attempt - 1)) * Double.random(in: 0.5...1.5)) * 1_000_000_000)
-                try await Task.sleep(nanoseconds: delay)
+                try await retrySleep(delay)
+                try check(context)
                 MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(retries + 1))")
             }
 
             do {
-                return try await sendOnce(request, token: currentToken)
+                return try await sendOnce(request, token: currentToken, context: context)
             } catch MoviePilotError.requireLogin where request.authorized {
                 // 旧 token 已被拒。重登失败（含可重试网络错）直接抛，不要带着作废 token
                 // 再进一轮外层重试：postLogin 内部已经跑过自己的退避重试，外层 continue
                 // 只会每轮白撞一次 401、再触发一轮带密码的 login。
-                currentToken = try await silentRelogin()
+                try check(context)
+                if let latest = store.accessToken, latest != currentToken {
+                    // 另一个并发请求已刷新 token；迟到的旧 token 401 只需重放。
+                    currentToken = latest
+                } else {
+                    currentToken = try await silentRelogin(context: context)
+                }
 
                 do {
-                    return try await sendOnce(request, token: currentToken)
+                    return try await sendOnce(request, token: currentToken, context: context)
                 } catch let error as MoviePilotError where error.isRetryable && attempt < retries {
                     // 换到新 token 后重放失败仍值得重试（502/504/超时是服务端瞬态）。
                     lastError = error
@@ -447,14 +484,16 @@ public actor MoviePilotAPIClient {
     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。
     /// 传输 + 计时日志走共享执行器（DiagnosticsKit.HTTPClient），URL 拼装留在
     /// `makeURLRequest`（MoviePilot 的 path 规范化是定制逻辑）。
-    private func sendOnce(_ request: MPRequest, token: String?) async throws -> Data {
-        let urlRequest = try makeURLRequest(request, token: token)
+    private func sendOnce(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
+        try check(context)
+        let urlRequest = try makeURLRequest(request, token: token, context: context)
 
         let exchange: HTTPExchange
         do {
             exchange = try await HTTPClient(session: session, category: "MoviePilot")
                 .exchange(urlRequest: urlRequest)
         } catch let transport as HTTPTransportError {
+            try check(context)
             switch transport {
             case .url(let urlError):
                 throw MoviePilotError(networkError: urlError as NSError)
@@ -468,6 +507,7 @@ public actor MoviePilotAPIClient {
             }
         }
 
+        try check(context)
         guard exchange.statusCode < 400 else {
             throw MoviePilotError(
                 code: exchange.statusCode,
@@ -478,11 +518,8 @@ public actor MoviePilotAPIClient {
     }
 
     /// URL + URLRequest 组装（普通请求与 SSE 流共用）。
-    private func makeURLRequest(_ request: MPRequest, token: String?) throws -> URLRequest {
-        guard let baseURL = store.baseURL else {
-            throw MoviePilotError.notConfigured
-        }
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+    private func makeURLRequest(_ request: MPRequest, token: String?, context: RequestContext) throws -> URLRequest {
+        var components = URLComponents(url: context.baseURL, resolvingAgainstBaseURL: false)
             ?? URLComponents()
         // 规范化拼接：baseURL 尾斜杠 / path 首字符差异都会拼出 //；path 逐段
         // 百分号编码（媒体键带 `tmdb:` 这类冒号，URLQueryItem 只管 query 段）。
@@ -527,9 +564,12 @@ public actor MoviePilotAPIClient {
     /// 401 后用存的密码重登。成功返回新 token（已落库并推进代际——这一步在
     /// 单飞 Task 里做，恰好一次）；密码错误 → 清 token、广播通知、抛 requireLogin；
     /// 网络故障 → 原样抛网络错误，不动 token（可能只是暂时连不上，下次再试）。
-    private func silentRelogin() async throws -> String {
+    private func silentRelogin(context: RequestContext) async throws -> String {
+        try check(context)
         if let existing = reloginTask {
-            return try await existing.value
+            let token = try await existing.value
+            try check(context)
+            return token
         }
         // 熔断：当前代际的 token 就是上一次静默重登刚发的（或刚被密码错误拒绝），
         // 再登一次大概率还是同样结果，直接抛 requireLogin 让上层走登录 UI，
@@ -540,14 +580,14 @@ public actor MoviePilotAPIClient {
         if reloginExhaustedGeneration == authGeneration {
             if store.accessToken != nil {
                 let generation = authGeneration
-                store.accessToken = nil
-                await notifyAuthenticationRequired(ifCurrent: generation)
+                guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
+                await notifyAuthenticationRequired(ifCurrent: generation, context: context)
             }
             throw MoviePilotError.requireLogin
         }
         guard !store.username.isEmpty, !store.password.isEmpty else {
             // 没存密码就没法静默重登（比如退出登录后残留请求）。
-            store.accessToken = nil
+            guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
             throw MoviePilotError.requireLogin
         }
 
@@ -556,11 +596,12 @@ public actor MoviePilotAPIClient {
         let myRelogin = reloginGeneration
 
         let task = Task<String, Error> {
-            let token = try await self.performRelogin()
+            let token = try await self.performRelogin(context: context)
+            try self.check(context)
             guard generation == self.authGeneration else {
                 throw MoviePilotError(ignore: "静默重登结果已过期")
             }
-            self.store.accessToken = token
+            guard self.store.setAccessToken(token, ifRevision: context.revision) else { throw CancellationError() }
             self.bumpGeneration()
             // 刚发的 token 若仍被 401，本轮代际内不再重试重登（见入口熔断）。
             self.reloginExhaustedGeneration = self.authGeneration
@@ -581,15 +622,18 @@ public actor MoviePilotAPIClient {
         }
 
         do {
-            return try await task.value
+            let token = try await task.value
+            try check(context)
+            return token
         } catch let error as MoviePilotError {
+            try check(context)
             switch error {
             case .requireLogin, .badRequest:
                 // 密码已改 / 账号被停：token 作废，通知 UI 重新登录；本轮熔断。
                 if generation == authGeneration {
-                    store.accessToken = nil
+                    guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
                     reloginExhaustedGeneration = authGeneration
-                    await notifyAuthenticationRequired(ifCurrent: generation)
+                    await notifyAuthenticationRequired(ifCurrent: generation, context: context)
                 }
                 throw MoviePilotError.requireLogin
             default:
@@ -598,13 +642,14 @@ public actor MoviePilotAPIClient {
         }
     }
 
-    private func performRelogin() async throws -> String {
-        try await postLogin(username: store.username, password: store.password)
+    private func performRelogin(context: RequestContext) async throws -> String {
+        try await postLogin(username: store.username, password: store.password, context: context)
     }
 
-    private func notifyAuthenticationRequired(ifCurrent generation: UInt64) async {
+    private func notifyAuthenticationRequired(ifCurrent generation: UInt64, context: RequestContext) async {
         guard generation == authGeneration else { return }
         await MainActor.run {
+            guard self.store.configurationRevision == context.revision else { return }
             NotificationCenter.default.post(
                 name: Self.authenticationRequiredNotification,
                 object: NSNumber(value: generation)
@@ -625,18 +670,20 @@ public actor MoviePilotAPIClient {
         sites: [Int] = [],
         onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)? = nil
     ) async throws -> [MPTorrent] {
+        let context = try context()
         do {
-            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
+            return try await runStreamSearch(keyword: keyword, sites: sites, context: context, onUpdate: onUpdate)
         } catch MoviePilotError.requireLogin {
             // cookie 过期：静默重登会顺带种新 cookie，重放一次。
-            _ = try await silentRelogin()
-            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
+            _ = try await silentRelogin(context: context)
+            return try await runStreamSearch(keyword: keyword, sites: sites, context: context, onUpdate: onUpdate)
         }
     }
 
     private func runStreamSearch(
         keyword: String,
         sites: [Int],
+        context: RequestContext,
         onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)?
     ) async throws -> [MPTorrent] {
         var query = [
@@ -652,7 +699,8 @@ public actor MoviePilotAPIClient {
             query: query,
             authorized: false
         )
-        let urlRequest = try makeURLRequest(request, token: nil)
+        try check(context)
+        let urlRequest = try makeURLRequest(request, token: nil, context: context)
         MoviePilotNetworkLog.requestStarted(MoviePilotNetworkLog.logPath(for: urlRequest.url))
         let searchStart = Date()
 
@@ -660,8 +708,10 @@ public actor MoviePilotAPIClient {
         do {
             (bytes, response) = try await streamSession.bytes(for: urlRequest)
         } catch let error as NSError where error.domain == NSURLErrorDomain {
+            try check(context)
             throw MoviePilotError(networkError: error)
         }
+        try check(context)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw MoviePilotError.generic("服务器响应异常")
         }
@@ -679,6 +729,7 @@ public actor MoviePilotAPIClient {
         var torrents: [MPTorrent] = []
         var seen: Set<String> = []
         for try await line in bytes.lines {
+            try check(context)
             guard line.hasPrefix("data:") else { continue }
             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
             guard !payload.isEmpty,
@@ -739,6 +790,7 @@ public actor MoviePilotAPIClient {
             }
             onUpdate?(torrents, progress)
         }
+        try check(context)
         // 服务端关流没发 done（超时截断等）：按已收到的返回。
         return torrents
     }

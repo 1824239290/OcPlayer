@@ -196,3 +196,54 @@ extension MetadataCoordinatorTests {
         XCTAssertEqual(refreshed?.playState?.positionSeconds, 42, "自动维护不得把未确认进度一起淘汰")
     }
 }
+
+extension MetadataCoordinatorTests {
+    func testConcurrentSetupWaitersShareOneRepository() async throws {
+        let gate = SetupGate()
+        let opened = expectation(description: "open waiting")
+        let coordinator = MetadataCoordinator(openStore: { root in
+            opened.fulfill()
+            await gate.wait()
+            return try MetadataCache.open(at: root)
+        })
+        coordinator.setActiveServer(StubMediaServer())
+        coordinator.setup(directory: directory)
+        await fulfillment(of: [opened], timeout: 3)
+        let a = Task { await coordinator.currentRepository() }
+        let b = Task { await coordinator.currentRepository() }
+        await gate.release()
+        let repoA = await a.value
+        let repoB = await b.value
+        XCTAssertNotNil(repoA)
+        XCTAssertTrue(repoA === repoB)
+    }
+
+    func testCancelledSetupWaiterDoesNotInstallRepository() async throws {
+        let gate = SetupGate()
+        let opened = expectation(description: "open waiting")
+        let coordinator = MetadataCoordinator(openStore: { root in
+            opened.fulfill()
+            await gate.wait()
+            return try MetadataCache.open(at: root)
+        })
+        coordinator.setActiveServer(StubMediaServer())
+        coordinator.setup(directory: directory)
+        await fulfillment(of: [opened], timeout: 3)
+        let pending = Task { await coordinator.currentRepository() }
+        pending.cancel()
+        await gate.release()
+        let repository = await pending.value
+        XCTAssertNil(repository)
+        XCTAssertNil(coordinator.repositoryIfReady)
+    }
+
+    private actor SetupGate {
+        var continuation: CheckedContinuation<Void, Never>?
+        var open = false
+        func wait() async {
+            if open { return }
+            await withCheckedContinuation { continuation = $0 }
+        }
+        func release() { open = true; continuation?.resume(); continuation = nil }
+    }
+}

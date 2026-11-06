@@ -118,7 +118,9 @@ public final class ImagePipeline: @unchecked Sendable {
             }
         }
         let configuration = URLSessionConfiguration.default
-        configuration.urlCache = cache
+        // 自动缓存经过 URLSession/CFNetwork 的请求副本，不能依赖它保留本地上下文。
+        // fetch 显式用原请求读写 URLCache，服务器身份不会在桥接过程中丢失。
+        configuration.urlCache = nil
         configuration.requestCachePolicy = .returnCacheDataElseLoad
         configuration.httpAdditionalHeaders = [:]
         // 图片请求的超时收短：系统默认 60 秒，而图片是**可替代**资源——
@@ -274,8 +276,8 @@ public final class ImagePipeline: @unchecked Sendable {
     }
 
     /// 同步获取内存缓存中的位图（若存在）；未命中或未解码返回 nil。
-    public func memoryCachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) -> PlatformImage? {
-        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+    public func memoryCachedImage(url: URL, authHeader: String?, cacheScope: String? = nil, maxPixelSize: Int? = nil) -> PlatformImage? {
+        let key = requestKey(url: url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
         return cachedImage(forKey: key)
     }
 
@@ -288,8 +290,8 @@ public final class ImagePipeline: @unchecked Sendable {
     ///
     /// 命中后照常写回内存缓存，所以同一张图第二次出现是纯内存命中。
     /// 取消（视图走掉）与真失败都收敛成 `nil`：调用方一律按「这张没有图」处理。
-    public func cachedImage(url: URL, authHeader: String?, maxPixelSize: Int? = nil) async -> PlatformImage? {
-        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+    public func cachedImage(url: URL, authHeader: String?, cacheScope: String? = nil, maxPixelSize: Int? = nil) async -> PlatformImage? {
+        let key = requestKey(url: url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
         if let cached = cachedImage(forKey: key) {
             return cached
         }
@@ -325,13 +327,13 @@ public final class ImagePipeline: @unchecked Sendable {
 
     // MARK: - 按条目复原缓存（登录页海报墙的**主**来源）
 
-    /// 认证头对应的**缓存身份**（`ImageCacheKey.authIdentity` 的公开投影）。
+    /// 服务器上下文与认证头对应的 v2 缓存身份。
     ///
     /// 调用方（登录页）需要在**没有 token** 的时候复原历史图片的缓存键，而键里含
     /// 这个身份。会话还在时把它记下来，登录页就能接着用——token 被删不影响已经
     /// 落到磁盘上的字节。
-    public static func cacheIdentity(authHeader: String?) -> String {
-        ImageCacheKey.authIdentity(authHeader)
+    public static func cacheIdentity(url: URL, authHeader: String?, cacheScope: String? = nil) -> String {
+        ImageCacheKey.cacheIdentity(for: url, authHeader: authHeader, cacheScope: cacheScope)
     }
 
     /// 这条 URL 的字节在本地缓存里吗？**只查文件**：不读内容、不解码、不出网。
@@ -339,17 +341,18 @@ public final class ImagePipeline: @unchecked Sendable {
     /// - Parameter maxPixelSize: 必须与当初存进去的那一档一致——它是缓存键的一部分
     ///   （见 `requestKey`）。调用方按 `LoginWallStyle` 的阶梯逐个试。
     /// - Returns: 命中的缓存文件，可以直接交给 `decodeCachedFile`。
-    public func cachedFileURL(url: URL, authHeader: String?, maxPixelSize: Int) -> URL? {
-        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+    public func cachedFileURL(url: URL, authHeader: String?, cacheScope: String? = nil, maxPixelSize: Int) -> URL? {
+        let key = requestKey(url: url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
         return blobStore.fileURL(forKey: key)
     }
 
     /// 同上，但用**已经记下来的**缓存身份而不是当前认证头。
     ///
     /// 登录页用这一条：那一刻 token 已经没了，身份只能用会话还在时记下的那一个
-    /// （见 `cacheIdentity(authHeader:)`）。两条入口共用 `requestKey`，所以算出的键
+    /// （见 `cacheIdentity(url:authHeader:cacheScope:)`）。两条入口共用 `requestKey`，所以算出的键
     /// 与当初存进去的完全一致。
-    public func cachedFileURL(url: URL, cacheIdentity: String, maxPixelSize: Int) -> URL? {
+    public func cachedFileURL(url: URL, cacheIdentity: String, cacheScope: String? = nil, maxPixelSize: Int) -> URL? {
+        guard cacheIdentity.hasPrefix(ImageCacheKey.scopePrefix(for: url, cacheScope: cacheScope)) else { return nil }
         let key = requestKey(url: url, identity: cacheIdentity, maxPixelSize: maxPixelSize)
         return blobStore.fileURL(forKey: key)
     }
@@ -359,8 +362,8 @@ public final class ImagePipeline: @unchecked Sendable {
     /// 同一 URL 的并发调用共享同一个网络任务（列表滚动反复出现同一张图时不重复拉）；
     /// 共享任务在**最后一个订阅者离开**时被取消（视图消失 / 换 URL / clearCache），
     /// 调用方被取消会抛 `CancellationError`——不要把取消当成失败。
-    public func load(_ url: URL, authHeader: String?, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
-        let key = requestKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+    public func load(_ url: URL, authHeader: String?, cacheScope: String? = nil, maxPixelSize: Int? = nil) async throws -> PlatformImage? {
+        let key = requestKey(url: url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
         if let cached = cachedImage(forKey: key) {
             return cached
         }
@@ -383,7 +386,7 @@ public final class ImagePipeline: @unchecked Sendable {
                 if let image = try await self.imageFromBlobStore(key: key, maxPixelSize: maxPixelSize) {
                     _ = self.accept(image, forKey: key, generation: generation)
                     self.revalidateIfStale(
-                        url: url, authHeader: authHeader, cacheKey: key, maxPixelSize: maxPixelSize)
+                        url: url, authHeader: authHeader, cacheScope: cacheScope, cacheKey: key, maxPixelSize: maxPixelSize)
                     return image
                 }
 
@@ -401,7 +404,7 @@ public final class ImagePipeline: @unchecked Sendable {
                     throw ImageHostFailureBreaker.OpenCircuit(host: url.host ?? url.absoluteString)
                 }
 
-                let request = self.makeRequest(url, authHeader: authHeader)
+                let request = self.makeRequest(url, authHeader: authHeader, cacheScope: cacheScope)
                 do {
                     let image = try await self.fetch(request, cacheKey: key, maxPixelSize: maxPixelSize)
                     try Task.checkCancellation()
@@ -494,6 +497,7 @@ public final class ImagePipeline: @unchecked Sendable {
     private func revalidateIfStale(
         url: URL,
         authHeader: String?,
+        cacheScope: String?,
         cacheKey: String,
         maxPixelSize: Int?
     ) {
@@ -514,7 +518,8 @@ public final class ImagePipeline: @unchecked Sendable {
             guard self.breaker.shouldAllowRequest(for: url) else { return }
             // 刷新失败（离线）完全静默：图已经在屏幕上，这不是错误。
             // 也别用它替换内存缓存——那会让用户眼前的图突然跳变。
-            let request = self.makeRequest(url, authHeader: authHeader)
+            var request = self.makeRequest(url, authHeader: authHeader, cacheScope: cacheScope)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
             _ = try? await self.fetch(request, cacheKey: cacheKey, maxPixelSize: maxPixelSize)
         }
     }
@@ -531,10 +536,12 @@ public final class ImagePipeline: @unchecked Sendable {
     ///    公开图床（`image.tmdb.org` 等）返回 nil，退回原始 URL（它们只有一条地址）。
     /// 2. **认证头只留稳定哈希**：它可能出现在 SwiftUI 的 view identity 与诊断输出里，
     ///    且用 `String.hashValue` 会**每进程随机化**——那会让磁盘字节缓存每次启动全部
-    ///    失效。这里用 `ImageCacheKey.authIdentity`（只取 DeviceId + Token 的 FNV1a 哈希），
+    ///    失效。媒体图使用服务器上下文 + DeviceId + UserId；缺少 UserId 时退到 token 哈希，
     ///    跨进程稳定，且不随 App 版本变化（版本号曾在里面，见该方法的说明）。
-    private func requestKey(url: URL, authHeader: String?, maxPixelSize: Int?) -> String {
-        requestKey(url: url, identity: ImageCacheKey.authIdentity(authHeader), maxPixelSize: maxPixelSize)
+    private func requestKey(url: URL, authHeader: String?, cacheScope: String?, maxPixelSize: Int?) -> String {
+        requestKey(url: url, identity: ImageCacheKey.isMediaServerImage(url)
+                   ? Self.cacheIdentity(url: url, authHeader: authHeader, cacheScope: cacheScope)
+                   : ImageCacheKey.authIdentity(authHeader), maxPixelSize: maxPixelSize)
     }
 
     /// 同上，但身份**已经算好**（见 `cachedFileURL(url:cacheIdentity:maxPixelSize:)`）。
@@ -642,7 +649,7 @@ public final class ImagePipeline: @unchecked Sendable {
         var subscribers: Set<UUID>
     }
 
-    private func makeRequest(_ url: URL, authHeader: String?) -> URLRequest {
+    private func makeRequest(_ url: URL, authHeader: String?, cacheScope: String?) -> URLRequest {
         // 协议由连接时选择的 HTTP/HTTPS 决定(url 来自服务器 baseURL),这里不去 inline 改 url 的 scheme,
         // 避免「画面走 http、图片被强转 https」的不一致。
         let targetURL = url
@@ -662,7 +669,7 @@ public final class ImagePipeline: @unchecked Sendable {
         if let authHeader {
             request.setValue(authHeader, forHTTPHeaderField: "Authorization")
         }
-        return request
+        return ImageCacheKey.scopedRequest(request, cacheScope: cacheScope)
     }
 
     /// Bangumi 图床的 Referer：官方 `lain.bgm.tv` 与**任意镜像** `lain.<root>` 都成立。
@@ -689,7 +696,12 @@ public final class ImagePipeline: @unchecked Sendable {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(for: request)
+            if request.cachePolicy != .reloadIgnoringLocalCacheData,
+               let cached = cache.cachedResponse(for: request) {
+                (data, response) = (cached.data, cached.response)
+            } else {
+                (data, response) = try await session.data(for: request)
+            }
         } catch {
             // 只有**真正的网络失败**才记账：取消（`URLError.cancelled` / 任务取消）
             // 是视图走掉的常态，把它算成宿主故障会让正常滚动把服务器误判成下线。
@@ -737,6 +749,7 @@ public final class ImagePipeline: @unchecked Sendable {
         }
         // 存**编码后的字节**（JPEG/PNG 原样）：离线时自己解码就能出图，
         // 不必依赖 URLCache 的可读性（见 `ImageBlobStore`）。
+        cache.storeCachedResponse(CachedURLResponse(response: response, data: data), for: request)
         blobStore.store(data, forKey: cacheKey)
         return image
     }

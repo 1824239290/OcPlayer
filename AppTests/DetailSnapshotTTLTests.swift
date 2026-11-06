@@ -151,4 +151,21 @@ final class DetailSnapshotTTLTests: XCTestCase {
         XCTAssertEqual(cached?.item.playState, state)
         XCTAssertNotNil(cached?.progressFetchedAt)
     }
+    func testOldDetailCannotWritePlayStateToNewSessionWithSameItemID() async throws {
+        let (app, _) = try await makeApp()
+        try await seedDisk(app)
+        let model = DetailViewModel(item: series())
+        model.attach(app)
+        let newServer = StubMediaServer(profileID: "new:user")
+        app.resetBrowseState()
+        app.server = newServer
+        let store = try XCTUnwrap(app.metadata.activeStore)
+        let tenant = TenantID(profile: newServer.profile)
+        try await store.saveItems([episode(id: "e-1", number: 1)], tenant: tenant)
+        let state = MediaItem.PlayState(played: true, percentage: 1, positionSeconds: 120)
+        await model.applyPlayState(state, toItemID: "e-1")
+        let cached = try await store.item("e-1", tenant: tenant)
+        XCTAssertNotEqual(cached?.item.playState, state)
+    }
+
 }

@@ -1,0 +1,214 @@
+[
+  {
+    "package": "AppDesignKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-AppDesignKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/AppDesignKit"
+    ],
+    "uniqueTests": 187,
+    "executed": 187,
+    "passed": 187,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 187,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "CoreModel",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-CoreModel.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/CoreModel"
+    ],
+    "uniqueTests": 19,
+    "executed": 19,
+    "passed": 19,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 19,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "DiagnosticsKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-DiagnosticsKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/DiagnosticsKit"
+    ],
+    "uniqueTests": 95,
+    "executed": 95,
+    "passed": 95,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 95,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "PlaybackKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-PlaybackKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/PlaybackKit"
+    ],
+    "uniqueTests": 71,
+    "executed": 71,
+    "passed": 71,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 69,
+    "swiftTestingPassed": 2
+  },
+  {
+    "package": "DanmakuKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-DanmakuKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/DanmakuKit"
+    ],
+    "uniqueTests": 228,
+    "executed": 228,
+    "passed": 228,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 228,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "DanmakuRenderKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-DanmakuRenderKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/DanmakuRenderKit"
+    ],
+    "uniqueTests": 12,
+    "executed": 12,
+    "passed": 12,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 12,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "JellyfinKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-JellyfinKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/JellyfinKit"
+    ],
+    "uniqueTests": 224,
+    "executed": 224,
+    "passed": 224,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 224,
+    "swiftTestingPassed": 0
+  },
+  {
+    "package": "BangumiKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-BangumiKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/BangumiKit"
+    ],
+    "uniqueTests": 89,
+    "executed": 89,
+    "passed": 89,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 0,
+    "swiftTestingPassed": 89
+  },
+  {
+    "package": "MetadataKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-MetadataKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/MetadataKit"
+    ],
+    "uniqueTests": 251,
+    "executed": 251,
+    "passed": 251,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 216,
+    "swiftTestingPassed": 35
+  },
+  {
+    "package": "MoviePilotKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-MoviePilotKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/MoviePilotKit"
+    ],
+    "uniqueTests": 102,
+    "executed": 102,
+    "passed": 102,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 82,
+    "swiftTestingPassed": 20
+  },
+  {
+    "package": "ErikaKit",
+    "exitCode": 0,
+    "log": "/tmp/ocplayer-fix-package-ErikaKit.log",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "Packages/ErikaKit",
+      "--skip",
+      "ErikaRenderTests",
+      "--skip",
+      "ErikaSmokeTests",
+      "--skip",
+      "ErikaOpenFileTests",
+      "--skip",
+      "ErikaHTTPHeaderTests",
+      "--skip",
+      "ErikaLifecycleTests",
+      "--skip",
+      "ErikaMemorySnapshotTests",
+      "--skip",
+      "ErikaReadAheadBehaviorTests"
+    ],
+    "uniqueTests": 67,
+    "executed": 67,
+    "passed": 67,
+    "skipped": 0,
+    "failed": 0,
+    "xctestExecuted": 28,
+    "swiftTestingPassed": 39
+  }
+]

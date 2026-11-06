@@ -382,8 +382,16 @@ extension PlaybackController {
     }
 
     /// 侧车字幕批量装载开始：期间不做偏好校正（见 `applySubtitlePreferenceIfNeeded`）。
-    func beginExternalSubtitleBatch() {
+    @discardableResult
+    func beginExternalSubtitleBatch(for source: PlaybackSourceGeneration? = nil) -> UUID? {
+        if let source {
+            guard source.value == sourceGeneration, source.requestID == activeRequest?.id,
+                  source.requestID == expectedRequestID else { return nil }
+        }
+        let id = UUID()
+        if let source { externalSubtitleBatch = (id, source) }
         isLoadingExternalSubtitleBatch = true
+        return id
     }
 
     /// 侧车字幕批量装载结束：整批只在这里校正一次（代次仍对得上才动）。
@@ -392,7 +400,11 @@ extension PlaybackController {
     /// 都会提前 return，只有把「关批次」和「校正」绑在一起才能保证 flag 不残留
     /// ——flag 残留的后果是这一整片再也不按偏好选字幕。
     @discardableResult
-    func endExternalSubtitleBatch(for source: PlaybackSourceGeneration) -> Bool {
+    func endExternalSubtitleBatch(for source: PlaybackSourceGeneration, batchID: UUID? = nil) -> Bool {
+        if let batchID {
+            guard externalSubtitleBatch?.id == batchID, externalSubtitleBatch?.source == source else { return false }
+        } else if externalSubtitleBatch != nil { return false }
+        externalSubtitleBatch = nil
         isLoadingExternalSubtitleBatch = false
         return applySubtitlePreference(for: source)
     }

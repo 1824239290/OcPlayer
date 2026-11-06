@@ -29,6 +29,7 @@ public struct RemoteImage: View {
 
     public let url: URL?
     public var authHeader: String?
+    public var cacheScope: String?
     /// 解码目标最大长边像素数；指定后通过 ImageIO 进行下采样，大幅降低大图内存开销。
     /// nil = 不下采样（由调用方自己保证展示尺寸已知并显式给值）。
     public var maxPixelSize: Int? = nil
@@ -61,6 +62,11 @@ public struct RemoteImage: View {
     public var pipeline: ImagePipeline? = nil
 
     @Environment(\.imagePipeline) private var environmentPipeline
+    @Environment(\.imageCacheScope) private var environmentCacheScope
+    private var effectiveCacheScope: String? { cacheScope ?? environmentCacheScope }
+    private var effectiveLoadKey: String {
+        Self.scopedLoadKey(loadKeyValue, url: url, cacheScope: effectiveCacheScope)
+    }
     private var effectivePipeline: ImagePipeline { pipeline ?? environmentPipeline }
 
     /// `init` 里算好一次，body 里直接读。
@@ -77,6 +83,7 @@ public struct RemoteImage: View {
     public init(
         url: URL?,
         authHeader: String? = nil,
+        cacheScope: String? = nil,
         maxPixelSize: Int? = nil,
         emptyIcon: String = "photo",
         preserveCurrentImageOnReload: Bool = false,
@@ -87,6 +94,7 @@ public struct RemoteImage: View {
     ) {
         self.url = url
         self.authHeader = authHeader
+        self.cacheScope = cacheScope
         self.maxPixelSize = maxPixelSize
         self.emptyIcon = emptyIcon
         self.preserveCurrentImageOnReload = preserveCurrentImageOnReload
@@ -108,14 +116,16 @@ public struct RemoteImage: View {
         // 用显式传入的管道或 `.shared`。仅通过环境注入时，这个同步命中会退化为
         // 异步加载的第一次命中——图仍会出，只是少了"首帧即有位图"的优化。
         let syncPipeline = pipeline ?? .shared
-        let cached = url.flatMap {
-            syncPipeline.memoryCachedImage(
-                url: $0, authHeader: authHeader, maxPixelSize: maxPixelSize)
+        let cached = url.flatMap { url -> PlatformImage? in
+            // init 读不到环境中的服务器归属；媒体图只在上下文显式给出时同步命中。
+            guard cacheScope != nil || !ImageCacheKey.isMediaServerImage(url) else { return nil }
+            return syncPipeline.memoryCachedImage(
+                url: url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
         }
         if let cached {
             // 同步命中也算「位图已在手上」：状态机直接以它开局（两个键都指向这张图），
             // 于是 `.task` 里的 `represent` 会回答「已经是这张」、不重复加载。
-            _state = State(initialValue: RemoteImageState(image: cached, displayedKey: key))
+            _state = State(initialValue: RemoteImageState(image: cached, displayedKey: Self.scopedLoadKey(key, url: url, cacheScope: cacheScope)))
             // 同步命中也算「图已到手」：尺寸回调要在同一拍发出去，否则盒子会停在
             // 兜底比例上，等下一次重绘才校正。
             _reportedSize = State(initialValue: cached.size)
@@ -157,7 +167,15 @@ public struct RemoteImage: View {
     static func probeLoadKey(url: URL?, authHeader: String?, maxPixelSize: Int?) -> String {
         loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize)
     }
+    static func probeScopedLoadKey(url: URL?, authHeader: String?, cacheScope: String?, maxPixelSize: Int?) -> String {
+        scopedLoadKey(loadKey(url: url, authHeader: authHeader, maxPixelSize: maxPixelSize),
+                      url: url, cacheScope: cacheScope)
+    }
     #endif
+
+    private static func scopedLoadKey(_ key: String, url: URL?, cacheScope: String?) -> String {
+        key + "#" + (url.map { ImageCacheKey.scopePrefix(for: $0, cacheScope: cacheScope) } ?? "none")
+    }
 
     private static func loadKey(url: URL?, authHeader: String?, maxPixelSize: Int?) -> String {
         "\(url?.absoluteString ?? "")#\(credentialFingerprint(authHeader))#\(maxPixelSize ?? 0)"
@@ -211,7 +229,9 @@ public struct RemoteImage: View {
             reportedSize = size
             onImageSizeChange?(size)
         }
-        .task(id: loadKeyValue) {
+        .task(id: effectiveLoadKey) {
+            let loadKeyValue = effectiveLoadKey
+            let cacheScope = effectiveCacheScope
             // A row can keep its SwiftUI identity while its media value changes
             // (season switching / refresh). The state machine keeps the previous
             // bitmap on screen until the replacement is ready; nothing is cleared
@@ -238,7 +258,7 @@ public struct RemoteImage: View {
             guard let generation = state.represent(loadKeyValue) else { return }
             do {
                 let loaded = try await effectivePipeline.load(
-                    url, authHeader: authHeader, maxPixelSize: maxPixelSize)
+                    url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize)
                 guard !Task.isCancelled else { return }   // 换 URL / 消失：新任务会接手，别写旧图
                 guard let loaded else {
                     // 失败：只置 `failed`，旧帧原样留着（从未有图时才会落占位）。
@@ -281,5 +301,17 @@ public struct RemoteImage: View {
         // 只记最新一次到达项：`.task` 重启时取消它（对已执行的令牌是幂等 no-op），
         // 因此不需要在闭包里回写这个槽位。
         pendingArrival = arrival
+    }
+}
+
+private struct ImageCacheScopeKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+public extension EnvironmentValues {
+    /// 服务器及账号的稳定缓存上下文；nil 时媒体图按 origin 保守隔离。
+    var imageCacheScope: String? {
+        get { self[ImageCacheScopeKey.self] }
+        set { self[ImageCacheScopeKey.self] = newValue }
     }
 }

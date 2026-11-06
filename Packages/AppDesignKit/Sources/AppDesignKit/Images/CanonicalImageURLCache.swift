@@ -22,9 +22,8 @@ import Foundation
 /// ## 键里为什么还要带认证头哈希
 ///
 /// 丢掉 host 之后，「不同服务器上 id 恰好相同的条目」会撞键（Jellyfin 的条目 id 是
-/// GUID，撞的概率极低但并非不可能）。认证头哈希把键重新绑回**具体那台服务器 + 那个
-/// 账号**，同时不影响本条修复的目的：同一台服务器的不同地址共用同一个 token →
-/// 哈希相同 → 缓存仍然共享。
+/// GUID，撞的概率极低但并非不可能）。v2 缓存上下文把键绑回服务器与账号。已验证服务器 ID 不随入口变化；
+/// 没有上下文的调用按 origin 保守隔离。认证部分使用稳定 UserId，token 轮换仍可复用。
 ///
 /// ⚠️ 哈希**必须跨进程稳定**：这是落在磁盘上的键，用 `String.hashValue`
 /// （每进程随机播种）会导致**每次启动所有图片缓存全部失效**。所以用
@@ -51,8 +50,49 @@ enum ImageCacheKey {
     }
 
     /// 缓存键。`authHeader` 为 nil（公开图床）时用固定串，保证确定性。
-    static func canonicalURL(for url: URL, authHeader: String?) -> URL? {
-        canonicalURL(for: url, identity: authIdentity(authHeader))
+    static func canonicalURL(for url: URL, authHeader: String?, cacheScope: String? = nil) -> URL? {
+        canonicalURL(for: url, identity: cacheIdentity(for: url, authHeader: authHeader, cacheScope: cacheScope))
+    }
+
+    /// v2 为旧的、没有服务器归属的缓存设迁移边界。未提供已验证身份时按 origin 隔离。
+    static func cacheIdentity(for url: URL, authHeader: String?, cacheScope: String?) -> String {
+        scopePrefix(for: url, cacheScope: cacheScope) + authIdentity(authHeader)
+    }
+
+    static func scopePrefix(for url: URL, cacheScope: String?) -> String {
+        let scope: String
+        if let cacheScope, !cacheScope.isEmpty {
+            scope = "verified:" + cacheScope
+        } else {
+            var origin = URLComponents()
+            origin.scheme = url.scheme?.lowercased()
+            origin.host = url.host?.lowercased()
+            let port = url.port
+            if !(origin.scheme == "https" && port == 443 || origin.scheme == "http" && port == 80) {
+                origin.port = port
+            }
+            scope = "origin:" + (origin.string ?? url.absoluteString)
+        }
+        return "v2-" + digest(scope) + "-"
+    }
+
+    /// 本地请求属性不进入 HTTP 头或 URL；URLCache 与字节/内存缓存使用同一身份。
+    private static let identityProperty = "dev.jumusu.ocplayer.imageCacheIdentity.v2"
+
+    static func scopedRequest(_ request: URLRequest, cacheScope: String?) -> URLRequest {
+        guard let url = request.url else { return request }
+        guard let mutable = (request as NSURLRequest).mutableCopy() as? NSMutableURLRequest else { return request }
+        URLProtocol.setProperty(cacheIdentity(for: url,
+                                              authHeader: request.value(forHTTPHeaderField: "Authorization"),
+                                              cacheScope: cacheScope),
+                                forKey: identityProperty, in: mutable)
+        return mutable as URLRequest
+    }
+
+    static func identity(for request: URLRequest) -> String? {
+        guard let url = request.url else { return nil }
+        return URLProtocol.property(forKey: identityProperty, in: request) as? String
+            ?? cacheIdentity(for: url, authHeader: request.value(forHTTPHeaderField: "Authorization"), cacheScope: nil)
     }
 
     /// 同上，但身份**已经算好**。
@@ -74,7 +114,7 @@ enum ImageCacheKey {
         return components.url
     }
 
-    /// 认证身份：**只取与「哪台服务器 + 哪个账号」有关的字段**，绝不含版本、也绝不含凭证。
+    /// 账号/设备身份，不含 App 版本或原始凭证；服务器维度由 `cacheIdentity` 补齐。
     ///
     /// 客户端身份头长这样：
     /// ```
@@ -94,10 +134,10 @@ enum ImageCacheKey {
     /// 重新登录整面变空（要靠 `ImageCacheIdentityStore` 的身份历史去把旧字节捞回来）。
     ///
     /// 换成 `DeviceId + UserId` 之后：换账号会变（正确——那是另一份可见范围），
-    /// 重新登录 / token 轮换**不再**变，升级版本与换地址依旧不影响。
+    /// 重新登录 / token 轮换**不再**变。服务器维度由 `cacheIdentity` 单独补齐。
     ///
     /// 老版本的头里没有 `UserId`，所以仍认 `Token`——但那只作为**退化**路径，
-    /// 让改动之前写下的键还能被算出来一次（登录页的身份历史正是靠它去认旧字节）。
+    /// 同一 v2 服务器上下文内仍可复原缺少 UserId 的会话历史。
     static func authIdentity(_ authHeader: String?) -> String {
         guard let authHeader, !authHeader.isEmpty else { return "none" }
 
@@ -202,7 +242,7 @@ final class CanonicalImageURLCache: URLCache, @unchecked Sendable {
         guard let url = request.url,
               let canonical = ImageCacheKey.canonicalURL(
                 for: url,
-                authHeader: request.value(forHTTPHeaderField: "Authorization"))
+                identity: ImageCacheKey.identity(for: request) ?? "")
         else { return nil }
         var copy = request
         copy.url = canonical

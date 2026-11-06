@@ -1,0 +1,1729 @@
+diff --git a/App/Shared/AppModel+Playback.swift b/App/Shared/AppModel+Playback.swift
+index ff00308..6e1bdd7 100644
+--- a/App/Shared/AppModel+Playback.swift
++++ b/App/Shared/AppModel+Playback.swift
+@@ -1143,7 +1143,7 @@ extension AppModel {
+         externalSubtitleTask = Task { [weak self] in
+             let subtitles: [ExternalSubtitle]
+             do {
+-                subtitles = try await server.externalSubtitles(itemID: itemID)
++                subtitles = try await server.externalSubtitles(itemID: itemID, mediaSourceID: request.sessionContext?.mediaSourceID)
+             } catch is CancellationError {
+                 return
+             } catch {
+@@ -1163,8 +1163,9 @@ extension AppModel {
+             // 「繁體先下完、简体后下完」在这里连着切两次字幕轨。整批只校正一次。
+             // 用 `defer` 收尾：循环里有多处提前 return（取消 / 换片 / 单条失败），
+             // 少关一次 flag 就是这一整片再也不按偏好选字幕。
+-            playback.beginExternalSubtitleBatch()
+-            defer { playback.endExternalSubtitleBatch(for: source) }
++            guard !Task.isCancelled, self.activePlaybackIdentity == identity,
++                  let batchID = playback.beginExternalSubtitleBatch(for: source) else { return }
++            defer { playback.endExternalSubtitleBatch(for: source, batchID: batchID) }
+             // `P2-33`：**并发取、串行挂**。
+             //
+             // 原实现逐条 `await`，N 条字幕 = N 个串行往返。现在默认 4 路并发，
+diff --git a/App/Shared/Features/Detail/DetailView.swift b/App/Shared/Features/Detail/DetailView.swift
+index 6bbc7fd..0e4490c 100644
+--- a/App/Shared/Features/Detail/DetailView.swift
++++ b/App/Shared/Features/Detail/DetailView.swift
+@@ -1346,6 +1346,7 @@ struct DetailView: View {
+     /// 切换当前可播条目（电影 / 选中集）的已看状态，并写回本地详情与选集列表。
+     private func togglePlayed() async {
+         guard !isUpdatingPlayed, let target = playableItem else { return }
++        let session = app.sessionGeneration
+         let markAsPlayed = !(target.playState?.played ?? false)
+         isUpdatingPlayed = true
+         playedActionError = nil
+@@ -1355,12 +1356,15 @@ struct DetailView: View {
+             let state = markAsPlayed
+                 ? try await app.metadata.markPlayed(itemID: target.id)
+                 : try await app.metadata.markUnplayed(itemID: target.id)
++            guard session == app.sessionGeneration else { return }
+             if let state {
+-                await model.applyPlayState(state, toItemID: target.id)
++                await model.applyPlayState(state, toItemID: target.id, persistToRepository: false)
+             }
+         } catch let error as JellyfinError {
++            guard session == app.sessionGeneration, !JellyfinError.isCancellation(error) else { return }
+             playedActionError = error.errorDescription
+         } catch {
++            guard session == app.sessionGeneration, !JellyfinError.isCancellation(error) else { return }
+             playedActionError = "\(error)"
+         }
+     }
+diff --git a/App/Shared/Features/Detail/DetailViewModel.swift b/App/Shared/Features/Detail/DetailViewModel.swift
+index 1dc835d..36cc9e4 100644
+--- a/App/Shared/Features/Detail/DetailViewModel.swift
++++ b/App/Shared/Features/Detail/DetailViewModel.swift
+@@ -17,6 +17,7 @@ import SwiftUI
+ final class DetailViewModel {
+     let item: MediaItem
+     private weak var app: AppModel?
++    @ObservationIgnored private var attachedSessionGeneration: Int?
+ 
+     // MARK: - 数据状态
+ 
+@@ -394,6 +395,7 @@ final class DetailViewModel {
+ 
+     func attach(_ app: AppModel) {
+         self.app = app
++        attachedSessionGeneration = app.sessionGeneration
+         let target = app.currentAmbienceTarget
+         backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader))
+     }
+@@ -827,7 +829,17 @@ final class DetailViewModel {
+     }
+ 
+     /// 已看状态写回：先更新仓储（内存全部投影 + SQLite），再同步本页展示值。
+-    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) async {
++    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID, persistToRepository: Bool = true) async {
++        let generation = attachedSessionGeneration
++        if let app {
++            guard generation == app.sessionGeneration else { return }
++            if persistToRepository {
++                let repository = await app.metadata.currentRepository()
++                guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
++                await repository?.applyPlayState(state, forItemID: id, persistToStore: true)
++            }
++            guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
++        }
+         if var current = detail, current.id == id {
+             current.playState = state
+             detail = current
+@@ -839,7 +851,6 @@ final class DetailViewModel {
+             guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
+             episodesBySeason[seasonID]?[index].playState = state
+         }
+-        await app?.metadata.applyPlayState(state, forItemID: id)
+     }
+ 
+ }
+diff --git a/App/Shared/Features/MoviePilot/MoviePilotCoordinator.swift b/App/Shared/Features/MoviePilot/MoviePilotCoordinator.swift
+index 806cc0b..82d3f0a 100644
+--- a/App/Shared/Features/MoviePilot/MoviePilotCoordinator.swift
++++ b/App/Shared/Features/MoviePilot/MoviePilotCoordinator.swift
+@@ -1,4 +1,5 @@
+ import Foundation
++import DiagnosticsKit
+ import MoviePilotKit
+ import Observation
+ 
+@@ -52,12 +53,7 @@ final class MoviePilotCoordinator {
+ 
+     // MARK: - 登录 / 登出
+ 
+-    /// 设置页「保存并登录」：先落凭据（顺带作废旧 token）再登录取用户——
+-    /// 但**失败必须回滚**：客户端登录时从 store 读凭据与服务器地址（新地址也
+-    /// 必须先落 store 才能被请求用上），所以走不了「先验后存」；改打快照，
+-    /// 登录失败把四键（含旧 token）原样还原——否则用户改密码打错一次，
+-    /// 原本能用的会话就被毁掉，点「取消」也救不回来。
+-    /// 返回错误文案（nil = 成功）。
++    /// 验证新凭据后提交；失败保留原会话，迟到尝试不更新 UI。
+     @discardableResult
+     func login(serverURLString: String, username: String, password: String) async -> String? {
+         guard MoviePilotStore.normalizedURL(from: serverURLString) != nil else {
+@@ -71,25 +67,23 @@ final class MoviePilotCoordinator {
+             return authError
+         }
+ 
+-        let snapshot = store.credentialSnapshot()
+-        store.updateCredentials(
+-            serverURLString: serverURLString, username: username, password: password
+-        )
++        attemptGeneration &+= 1
++        let attempt = attemptGeneration
++        didRefreshProfile = false
+         isLoggingIn = true
+-        defer { isLoggingIn = false }
++        authError = nil
++        defer { if attempt == attemptGeneration { isLoggingIn = false } }
+         do {
+-            profile = try await MoviePilotAPIClient.shared.login()
++            let user = try await MoviePilotAPIClient.shared.login(
++                serverURLString: serverURLString, username: username, password: password)
++            guard attempt == attemptGeneration else { return nil }
++            profile = user
+             authError = nil
+-            // 登录成功才更新绑定标识：改绑后登录失败的场合，首页保留旧数据即可
+-            // （反正 gate 挡着），避免用未就绪的会话去拉新服务器。
+             boundServerID = store.serverURLString
+             return nil
+         } catch {
+-            // 回滚到登录前的凭据与 token：错误凭据只是「尝试」，不该持久化，
+-            // 更不能把上一台服务器的可用会话一起带走。
+-            store.restore(snapshot)
++            guard attempt == attemptGeneration, !CancellationClassifier.isCancellation(error) else { return nil }
+             let message = MoviePilotError.userMessage(of: error)
+-            MoviePilotNetworkLog.logger.error("MoviePilot 登录失败（已回滚凭据）error=\(error)")
+             authError = message
+             return message
+         }
+@@ -98,15 +92,25 @@ final class MoviePilotCoordinator {
+     /// 收到 401 通知：清会话、拉回未登录态。挂在 `RootView`（与 Bangumi 同理，
+     /// 401 可能来自任何页面的请求，那时设置页未必存在）。
+     func handleAuthenticationRequired(generation: UInt64) async {
+-        _ = await MoviePilotAPIClient.shared.clearSession(ifCurrent: generation)
++        let attempt = attemptGeneration
++        guard await MoviePilotAPIClient.shared.clearSession(ifCurrent: generation) != nil,
++              attempt == attemptGeneration else { return }
++        attemptGeneration &+= 1
++        isLoggingIn = false
++        didRefreshProfile = false
+         profile = nil
+         authError = MoviePilotError.requireLogin.userMessage
+     }
+ 
+     func signOut() async {
+-        _ = await MoviePilotAPIClient.shared.signOut()
++        attemptGeneration &+= 1
++        let attempt = attemptGeneration
++        isLoggingIn = false
++        didRefreshProfile = false
+         profile = nil
+         authError = nil
++        _ = await MoviePilotAPIClient.shared.signOut()
++        guard attempt == attemptGeneration else { return }
+     }
+ 
+     // MARK: - 会话恢复
+@@ -114,11 +118,15 @@ final class MoviePilotCoordinator {
+     /// 设置页出现时补一次用户信息：跨启动后 profile 是空的，token 还在的话
+     /// 拉回来顺便验证 token 活着。失败不动登录态——真过期会走 401 通知那条路。
+     func refreshProfileIfNeeded() {
+-        guard store.hasToken, profile == nil, !didRefreshProfile else { return }
++        guard !isLoggingIn, store.hasToken, profile == nil, !didRefreshProfile else { return }
+         didRefreshProfile = true
++        let attempt = attemptGeneration
++        let revision = store.configurationRevision
+         Task {
+             do {
+-                profile = try await MoviePilotAPIClient.shared.currentUser()
++                let user = try await MoviePilotAPIClient.shared.currentUser()
++                guard attempt == attemptGeneration, revision == store.configurationRevision else { return }
++                profile = user
+             } catch {
+                 MoviePilotNetworkLog.logger.error("拉取 MoviePilot 用户信息失败 error=\(error)")
+             }
+@@ -126,4 +134,5 @@ final class MoviePilotCoordinator {
+     }
+ 
+     private var didRefreshProfile = false
++    @ObservationIgnored private var attemptGeneration: UInt64 = 0
+ }
+diff --git a/App/Shared/Features/Player/PlaybackController+Tracks.swift b/App/Shared/Features/Player/PlaybackController+Tracks.swift
+index 437749e..7c1efe6 100644
+--- a/App/Shared/Features/Player/PlaybackController+Tracks.swift
++++ b/App/Shared/Features/Player/PlaybackController+Tracks.swift
+@@ -382,8 +382,16 @@ extension PlaybackController {
+     }
+ 
+     /// 侧车字幕批量装载开始：期间不做偏好校正（见 `applySubtitlePreferenceIfNeeded`）。
+-    func beginExternalSubtitleBatch() {
++    @discardableResult
++    func beginExternalSubtitleBatch(for source: PlaybackSourceGeneration? = nil) -> UUID? {
++        if let source {
++            guard source.value == sourceGeneration, source.requestID == activeRequest?.id,
++                  source.requestID == expectedRequestID else { return nil }
++        }
++        let id = UUID()
++        if let source { externalSubtitleBatch = (id, source) }
+         isLoadingExternalSubtitleBatch = true
++        return id
+     }
+ 
+     /// 侧车字幕批量装载结束：整批只在这里校正一次（代次仍对得上才动）。
+@@ -392,7 +400,11 @@ extension PlaybackController {
+     /// 都会提前 return，只有把「关批次」和「校正」绑在一起才能保证 flag 不残留
+     /// ——flag 残留的后果是这一整片再也不按偏好选字幕。
+     @discardableResult
+-    func endExternalSubtitleBatch(for source: PlaybackSourceGeneration) -> Bool {
++    func endExternalSubtitleBatch(for source: PlaybackSourceGeneration, batchID: UUID? = nil) -> Bool {
++        if let batchID {
++            guard externalSubtitleBatch?.id == batchID, externalSubtitleBatch?.source == source else { return false }
++        } else if externalSubtitleBatch != nil { return false }
++        externalSubtitleBatch = nil
+         isLoadingExternalSubtitleBatch = false
+         return applySubtitlePreference(for: source)
+     }
+diff --git a/App/Shared/Features/Player/PlaybackController.swift b/App/Shared/Features/Player/PlaybackController.swift
+index baf1b79..1ed418a 100644
+--- a/App/Shared/Features/Player/PlaybackController.swift
++++ b/App/Shared/Features/Player/PlaybackController.swift
+@@ -199,6 +199,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
+     /// 下完」的片源在开播头几秒连续切换两次字幕轨（每次都是内核级轨切换，会停/重启
+     /// 音频输出）。批次期间挂起校正，整批结束后统一做一次。
+     @ObservationIgnored var isLoadingExternalSubtitleBatch = false
++    @ObservationIgnored var externalSubtitleBatch: (id: UUID, source: PlaybackSourceGeneration)?
+     #if DEBUG
+     /// 测试观察口：本代次按偏好下发选轨 / 关字幕的次数（幂等与「不重复下发」靠它验）。
+     @ObservationIgnored var appliedSubtitlePreferenceCount = 0
+@@ -692,7 +693,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
+         reportableRequestID = request.id
+         // 续播位置不立刻 seek（源还没就绪），挂到 pending 等 duration 到达。
+         // open 失败时完成路径会失效 generation，这个等待循环按代次守卫自行退出。
+-        if let resume = request.resumeSeconds, resume >= 30, let engine {
++        if let resume = request.resumeSeconds, resume.isFinite, resume > 0, let engine {
+             let generation = sourceGeneration
+             let engineID = ObjectIdentifier(engine)
+             resumeTask = Task { [weak self] in
+@@ -1209,6 +1210,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
+         externalSubtitleNames = [:]
+         userChoseSubtitleForCurrentSource = false
+         isLoadingExternalSubtitleBatch = false
++        externalSubtitleBatch = nil
+         #if DEBUG
+         appliedSubtitlePreferenceCount = 0
+         #endif
+diff --git a/App/Shared/Features/Settings/MetadataCoordinator.swift b/App/Shared/Features/Settings/MetadataCoordinator.swift
+index 78bc657..2277595 100644
+--- a/App/Shared/Features/Settings/MetadataCoordinator.swift
++++ b/App/Shared/Features/Settings/MetadataCoordinator.swift
+@@ -101,7 +101,7 @@ final class MetadataCoordinator {
+         let generation = sessionGeneration
+         _ = await waitUntilReady()
+         // await 期间可能换服、登出，甚至 A → B → A；旧调用不能安装新会话的仓储。
+-        guard generation == sessionGeneration else { return nil }
++        guard !Task.isCancelled, generation == sessionGeneration else { return nil }
+         // 同一会话的其他调用者可能已经完成创建。安装过程在主 actor 上无悬挂点。
+         if let repository { return repository }
+         let repo = MediaRepository(server: server, store: store)
+diff --git a/AppTests/DetailSnapshotTTLTests.swift b/AppTests/DetailSnapshotTTLTests.swift
+index b866742..4788494 100644
+--- a/AppTests/DetailSnapshotTTLTests.swift
++++ b/AppTests/DetailSnapshotTTLTests.swift
+@@ -151,4 +151,21 @@ final class DetailSnapshotTTLTests: XCTestCase {
+         XCTAssertEqual(cached?.item.playState, state)
+         XCTAssertNotNil(cached?.progressFetchedAt)
+     }
++    func testOldDetailCannotWritePlayStateToNewSessionWithSameItemID() async throws {
++        let (app, _) = try await makeApp()
++        try await seedDisk(app)
++        let model = DetailViewModel(item: series())
++        model.attach(app)
++        let newServer = StubMediaServer(profileID: "new:user")
++        app.resetBrowseState()
++        app.server = newServer
++        let store = try XCTUnwrap(app.metadata.activeStore)
++        let tenant = TenantID(profile: newServer.profile)
++        try await store.saveItems([episode(id: "e-1", number: 1)], tenant: tenant)
++        let state = MediaItem.PlayState(played: true, percentage: 1, positionSeconds: 120)
++        await model.applyPlayState(state, toItemID: "e-1")
++        let cached = try await store.item("e-1", tenant: tenant)
++        XCTAssertNotEqual(cached?.item.playState, state)
++    }
++
+ }
+diff --git a/AppTests/MetadataCoordinatorTests.swift b/AppTests/MetadataCoordinatorTests.swift
+index 56c3861..bf46515 100644
+--- a/AppTests/MetadataCoordinatorTests.swift
++++ b/AppTests/MetadataCoordinatorTests.swift
+@@ -196,3 +196,54 @@ extension MetadataCoordinatorTests {
+         XCTAssertEqual(refreshed?.playState?.positionSeconds, 42, "自动维护不得把未确认进度一起淘汰")
+     }
+ }
++
++extension MetadataCoordinatorTests {
++    func testConcurrentSetupWaitersShareOneRepository() async throws {
++        let gate = SetupGate()
++        let opened = expectation(description: "open waiting")
++        let coordinator = MetadataCoordinator(openStore: { root in
++            opened.fulfill()
++            await gate.wait()
++            return try MetadataCache.open(at: root)
++        })
++        coordinator.setActiveServer(StubMediaServer())
++        coordinator.setup(directory: directory)
++        await fulfillment(of: [opened], timeout: 3)
++        let a = Task { await coordinator.currentRepository() }
++        let b = Task { await coordinator.currentRepository() }
++        await gate.release()
++        let repoA = await a.value
++        let repoB = await b.value
++        XCTAssertNotNil(repoA)
++        XCTAssertTrue(repoA === repoB)
++    }
++
++    func testCancelledSetupWaiterDoesNotInstallRepository() async throws {
++        let gate = SetupGate()
++        let opened = expectation(description: "open waiting")
++        let coordinator = MetadataCoordinator(openStore: { root in
++            opened.fulfill()
++            await gate.wait()
++            return try MetadataCache.open(at: root)
++        })
++        coordinator.setActiveServer(StubMediaServer())
++        coordinator.setup(directory: directory)
++        await fulfillment(of: [opened], timeout: 3)
++        let pending = Task { await coordinator.currentRepository() }
++        pending.cancel()
++        await gate.release()
++        let repository = await pending.value
++        XCTAssertNil(repository)
++        XCTAssertNil(coordinator.repositoryIfReady)
++    }
++
++    private actor SetupGate {
++        var continuation: CheckedContinuation<Void, Never>?
++        var open = false
++        func wait() async {
++            if open { return }
++            await withCheckedContinuation { continuation = $0 }
++        }
++        func release() { open = true; continuation?.resume(); continuation = nil }
++    }
++}
+diff --git a/AppTests/ReleaseSessionRegressionTests.swift b/AppTests/ReleaseSessionRegressionTests.swift
+new file mode 100644
+index 0000000..fad7ba7
+--- /dev/null
++++ b/AppTests/ReleaseSessionRegressionTests.swift
+@@ -0,0 +1,161 @@
++import CoreModel
++import Foundation
++import JellyfinKit
++import MetadataKit
++import PlaybackKit
++import SwiftUI
++import XCTest
++@testable import OcPlayer
++
++@MainActor
++final class ReleaseSessionRegressionTests: XCTestCase {
++    private final class ReviewEngine: PlaybackEngine, @unchecked Sendable {
++        static let descriptor = PlaybackEngineDescriptor(id: "review-fake", displayName: "Review", summary: "Review", supportsKernelDanmaku: false)
++        let events: AsyncStream<PlayerEvent>
++        let continuation: AsyncStream<PlayerEvent>.Continuation
++        var latestMediaTime: Duration { .zero }
++        var latestStats: PlaybackStats { .init() }
++        init() { (events, continuation) = AsyncStream.makeStream() }
++        @MainActor func makeSurfaceView() -> AnyView { AnyView(Color.black) }
++        func open(_ source: PlaybackSource) throws {}
++        func play() throws {}
++        func pause() throws {}
++        func stop() throws {}
++        private let lock = NSLock()
++        private var seeks: [Duration] = []
++        var seekPositions: [Duration] { lock.withLock { seeks } }
++        func seek(to position: Duration) throws { lock.withLock { seeks.append(position) } }
++        func setRate(_ rate: Double) throws {}
++        func setVolume(_ volume: Double) throws {}
++        func tracks() throws -> [TrackInfo] { [] }
++        func selectAudioTrack(_ id: Int64) throws {}
++        func selectSubtitleTrack(_ id: Int64?) throws {}
++        func addExternalSubtitle(_ uri: String) throws -> Int64 { 0 }
++        func setSubtitleScale(_ scale: Double) throws {}
++        func captureFrameRGBA(width: Int, height: Int) throws -> [UInt8] { [] }
++    }
++
++    func testFinalProgressStaysInOriginalTenant() async throws {
++        let directory = FileManager.default.temporaryDirectory.appending(path: "release-review-\(UUID())")
++        defer { try? FileManager.default.removeItem(at: directory) }
++        let coordinator = MetadataCoordinator()
++        coordinator.setup(directory: directory)
++        _ = await coordinator.waitUntilReady()
++        let store = try XCTUnwrap(coordinator.activeStore)
++        let a = StubMediaServer(profileID: "A:user")
++        let b = StubMediaServer(profileID: "B:user")
++        let item = MediaItem(id: "same-item-id", name: "A video", kind: .movie)
++        try await store.saveItems([item], tenant: TenantID(profile: a.profile))
++        try await store.saveItems([MediaItem(id: item.id, name: "B video", kind: .movie)], tenant: TenantID(profile: b.profile))
++        let app = AppModel(metadata: coordinator)
++        app.server = a
++        let controller = PlaybackController()
++        app.playback = controller
++        let engine = ReviewEngine()
++        let consumer = controller.state.start(consuming: engine)
++        defer { consumer.cancel() }
++        engine.continuation.yield(.durationChanged(.seconds(600)))
++        engine.continuation.yield(.positionChanged(.seconds(60)))
++        while controller.state.position != .seconds(60) { await Task.yield() }
++        app.nowPlayingItem = item
++        let finished = app.finishReporting()
++        app.server = b
++        await finished?.value
++        let newTenantItem = try await store.item(item.id, tenant: TenantID(profile: b.profile))
++        let oldTenantItem = try await store.item(item.id, tenant: TenantID(profile: a.profile))
++        XCTAssertNil(newTenantItem?.item.playState)
++        XCTAssertEqual(oldTenantItem?.item.playState?.positionSeconds, 60)
++        app.server = nil
++    }
++
++    func testExplicitResumeUnderThirtySecondsSchedulesSeek() throws {
++        let selected = PlaybackEngineRegistry.storedSelectionID
++        PlaybackEngineRegistry.resetForTesting()
++        PlaybackEngineRegistry.register(ReviewEngine.descriptor) { ReviewEngine() }
++        PlaybackEngineRegistry.select(ReviewEngine.descriptor.id)
++        defer {
++            PlaybackEngineRegistry.resetForTesting()
++            if let selected { PlaybackEngineRegistry.select(selected) }
++            else { PlaybackEngineRegistry.clearSelection() }
++            PlaybackEngineAssembly.registerAll()
++        }
++        let controller = PlaybackController()
++        controller.open(request: PlaybackRequest(title: "recover", uri: "/tmp/review.mp4", resumeSeconds: 20))
++        XCTAssertNotNil(controller.resumeTask)
++        controller.stopPlayback()
++        controller.open(request: PlaybackRequest(title: "control", uri: "/tmp/review.mp4", resumeSeconds: 40))
++        XCTAssertNotNil(controller.resumeTask)
++        controller.stopPlayback()
++    }
++
++    func testExplicitResumePositionsReachEngineAndInvalidValuesDoNot() async throws {
++        let selected = PlaybackEngineRegistry.storedSelectionID
++        PlaybackEngineRegistry.resetForTesting()
++        PlaybackEngineRegistry.register(ReviewEngine.descriptor) { ReviewEngine() }
++        PlaybackEngineRegistry.select(ReviewEngine.descriptor.id)
++        defer {
++            PlaybackEngineRegistry.resetForTesting()
++            if let selected { PlaybackEngineRegistry.select(selected) }
++            else { PlaybackEngineRegistry.clearSelection() }
++            PlaybackEngineAssembly.registerAll()
++        }
++        for position in [1.0, 20, 29, 30, 40, 0, -1, .nan, .infinity] {
++            let controller = PlaybackController()
++            let request = PlaybackRequest(title: "resume", uri: "/tmp/resume.mp4", resumeSeconds: position)
++            controller.open(request: request)
++            let engine = try XCTUnwrap(controller.engine as? ReviewEngine)
++            engine.continuation.yield(.stateChanged(.ready))
++            engine.continuation.yield(.durationChanged(.seconds(600)))
++            let source = await controller.waitUntilSourceReady(for: request.id, timeout: .seconds(3))
++            XCTAssertNotNil(source)
++            if position.isFinite && position > 0 {
++                let resume = try XCTUnwrap(controller.resumeTask)
++                await resume.value
++                XCTAssertEqual(engine.seekPositions, [.seconds(position)])
++            } else {
++                XCTAssertNil(controller.resumeTask)
++                XCTAssertTrue(engine.seekPositions.isEmpty)
++            }
++            controller.stopPlayback()
++        }
++    }
++
++    private actor Gate {
++        private var continuation: CheckedContinuation<Void, Never>?
++        private var open = false
++        func wait() async {
++            if open { return }
++            await withCheckedContinuation { continuation = $0 }
++        }
++        func release() { open = true; continuation?.resume(); continuation = nil }
++    }
++
++    func testSetupWaitCannotInstallRetiredRepository() async throws {
++        let directory = FileManager.default.temporaryDirectory.appending(path: "setup-race-\(UUID())")
++        defer { try? FileManager.default.removeItem(at: directory) }
++        let gate = Gate()
++        let entered = expectation(description: "database open held")
++        let coordinator = MetadataCoordinator(openStore: { root in
++            entered.fulfill()
++            await gate.wait()
++            return try MetadataCache.open(at: root)
++        })
++        coordinator.setActiveServer(StubMediaServer(profileID: "A:user"))
++        coordinator.setup(directory: directory)
++        await fulfillment(of: [entered], timeout: 3)
++        var started = false
++        let pending = Task { @MainActor in
++            started = true
++            return await coordinator.currentRepository()
++        }
++        while !started { await Task.yield() }
++        coordinator.setActiveServer(StubMediaServer(profileID: "B:user"))
++        await gate.release()
++        let stale = await pending.value
++        XCTAssertNil(stale)
++        let current = await coordinator.currentRepository()
++        XCTAssertNotNil(current)
++        XCTAssertFalse(stale === current)
++        coordinator.setActiveServer(nil)
++    }
++}
+diff --git a/AppTests/SubtitlePreferenceTests.swift b/AppTests/SubtitlePreferenceTests.swift
+index ca921c2..c0921a1 100644
+--- a/AppTests/SubtitlePreferenceTests.swift
++++ b/AppTests/SubtitlePreferenceTests.swift
+@@ -427,6 +427,26 @@ final class SubtitlePreferenceTests: XCTestCase {
+         try await waitUntil { engine.selectedIDs == [3] }
+     }
+ 
++    func testStaleSubtitleBatchCannotEndNewBatchEvenForSameSource() {
++        let controller = PlaybackController()
++        let request = PlaybackRequest(title: "batch", uri: "/tmp/batch.mp4")
++        controller.activeRequest = request
++        controller.expectedRequestID = request.id
++        controller.sourceGeneration = 1
++        let source = PlaybackSourceGeneration(requestID: request.id, value: 1)
++        let old = controller.beginExternalSubtitleBatch(for: source)
++        let new = controller.beginExternalSubtitleBatch(for: source)
++        XCTAssertNotNil(old)
++        XCTAssertNotNil(new)
++        XCTAssertNil(controller.beginExternalSubtitleBatch(for: PlaybackSourceGeneration(requestID: UUID(), value: 0)))
++        XCTAssertFalse(controller.endExternalSubtitleBatch(for: source, batchID: old))
++        XCTAssertTrue(controller.isLoadingExternalSubtitleBatch)
++        XCTAssertFalse(controller.endExternalSubtitleBatch(for: source))
++        XCTAssertTrue(controller.isLoadingExternalSubtitleBatch)
++        _ = controller.endExternalSubtitleBatch(for: source, batchID: new)
++        XCTAssertFalse(controller.isLoadingExternalSubtitleBatch)
++    }
++
+     /// 「跟随文件默认」档：有中文字幕也不干预，完全回到加这个功能之前的行为。
+     func testFollowSourcePreferenceNeverIntervenes() async throws {
+         let tracks = [
+diff --git a/Packages/JellyfinKit/Sources/JellyfinKit/EmbyMapping.swift b/Packages/JellyfinKit/Sources/JellyfinKit/EmbyMapping.swift
+index 9c08d7b..6fab383 100644
+--- a/Packages/JellyfinKit/Sources/JellyfinKit/EmbyMapping.swift
++++ b/Packages/JellyfinKit/Sources/JellyfinKit/EmbyMapping.swift
+@@ -143,7 +143,7 @@ extension EmbyMediaStreamDTO {
+ 
+ extension EmbyMediaStreamDTO {
+     /// 外挂文本字幕 → 域模型；内封 / 图像字幕（PGS 等内核不吃）返回 nil。
+-    func domainSubtitle(itemID: String, mediaSourceID: String?) -> ExternalSubtitle? {
++    func domainSubtitle(itemID: String, mediaSourceID: String?, namespace: String = "") -> ExternalSubtitle? {
+         guard type == "Subtitle",
+               isExternal == true,
+               let index,
+@@ -153,6 +153,7 @@ extension EmbyMediaStreamDTO {
+         return ExternalSubtitle(
+             itemID: itemID,
+             mediaSourceID: mediaSourceID,
++            namespace: namespace,
+             index: index,
+             title: title ?? displayTitle,
+             language: language,
+diff --git a/Packages/JellyfinKit/Sources/JellyfinKit/EmbyServer.swift b/Packages/JellyfinKit/Sources/JellyfinKit/EmbyServer.swift
+index d1aaca0..bdc9245 100644
+--- a/Packages/JellyfinKit/Sources/JellyfinKit/EmbyServer.swift
++++ b/Packages/JellyfinKit/Sources/JellyfinKit/EmbyServer.swift
+@@ -569,9 +569,13 @@ public struct EmbyServer: MediaServer {
+     }
+ 
+     public func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
+-        let source = try await firstMediaSource(itemID: itemID)
++        try await externalSubtitles(itemID: itemID, mediaSourceID: nil)
++    }
++
++    public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
++        let source = try await subtitleMediaSource(itemID: itemID, mediaSourceID: mediaSourceID)
+         return (source?.mediaStreams ?? []).compactMap {
+-            $0.domainSubtitle(itemID: itemID, mediaSourceID: source?.id)
++            $0.domainSubtitle(itemID: itemID, mediaSourceID: source?.id, namespace: ExternalSubtitle.namespace(profile: profile))
+         }
+     }
+ 
+@@ -579,15 +583,7 @@ public struct EmbyServer: MediaServer {
+         let data = try await session.data(subtitle.remotePath, method: "GET")
+         let directory = OcPlayerStorage.directory("Subtitles")
+         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+-        let safeID = subtitle.id
+-            .replacingOccurrences(of: "#", with: "-")
+-            .replacingOccurrences(of: "/", with: "-")
+-            .replacingOccurrences(of: ":", with: "-")
+-            .replacingOccurrences(of: "\\", with: "-")
+-        let safeExt = subtitle.fileExtension
+-            .replacingOccurrences(of: "/", with: "")
+-            .replacingOccurrences(of: "..", with: "")
+-        let url = directory.appending(path: "\(safeID).\(safeExt)")
++        let url = directory.appending(path: subtitle.cacheFileName(profile: profile))
+         try data.write(to: url, options: .atomic)
+         return url
+     }
+@@ -609,13 +605,16 @@ public struct EmbyServer: MediaServer {
+         return sources[index].domainFileInfo(sourceCount: sources.count)
+     }
+ 
+-    private func firstMediaSource(itemID: String) async throws -> EmbyMediaSourceDTO? {
++    private func subtitleMediaSource(itemID: String, mediaSourceID: String?) async throws -> EmbyMediaSourceDTO? {
+         let result = try await session.get(
+             "/Items",
+             query: [("userId", userID), ("fields", "MediaSources"), ("ids", itemID)],
+             as: EmbyQueryResultDTO.self
+         )
+-        return result.items?.first?.mediaSources?.first
++        let sources = result.items?.first?.mediaSources ?? []
++        if let mediaSourceID { return sources.first { $0.id == mediaSourceID } }
++        guard let index = MediaSourceSelection.preferredIndex(count: sources.count, supportsDirectPlay: { sources[$0].supportsDirectPlay == true }, supportsDirectStream: { sources[$0].supportsDirectStream == true }) else { return nil }
++        return sources[index]
+     }
+ 
+     public func playbackInfo(itemID: String) async throws -> PlaybackInfo {
+diff --git a/Packages/JellyfinKit/Sources/JellyfinKit/ExternalSubtitles.swift b/Packages/JellyfinKit/Sources/JellyfinKit/ExternalSubtitles.swift
+index 06e048b..095490d 100644
+--- a/Packages/JellyfinKit/Sources/JellyfinKit/ExternalSubtitles.swift
++++ b/Packages/JellyfinKit/Sources/JellyfinKit/ExternalSubtitles.swift
+@@ -1,4 +1,5 @@
+ import Foundation
++import CryptoKit
+ import DiagnosticsKit
+ import Get
+ import JellyfinAPI
+@@ -6,7 +7,7 @@ import JellyfinAPI
+ /// 一条 Jellyfin 外挂字幕（服务器上的侧车文件，不在视频容器里）。
+ /// 直连播放时客户端负责下载后喂给内核（`addExternalSubtitle`）。
+ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
+-    /// `itemID#index`
++    /// 租户、条目、媒体源、轨道和格式的稳定身份。
+     public let id: String
+     public let index: Int
+     public let title: String?
+@@ -17,8 +18,8 @@ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
+     /// 下载路径（不带 host、不带 token —— 认证走请求头）。
+     public let remotePath: String
+ 
+-    init(itemID: String, mediaSourceID: String? = nil, index: Int, title: String?, language: String?, codec: String) {
+-        self.id = "\(itemID)#\(index)"
++    init(itemID: String, mediaSourceID: String? = nil, namespace: String = "", index: Int, title: String?, language: String?, codec: String) {
++        self.id = Self.stableKey([namespace, itemID, mediaSourceID ?? itemID, String(index), Self.fileExtension(forCodec: codec) ?? codec])
+         self.index = index
+         self.title = title
+         self.language = language
+@@ -31,6 +32,20 @@ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
+         self.remotePath = "/Videos/\(itemID)/\(resolvedMediaSourceID)/Subtitles/\(index)/Stream.\(fileExtension)"
+     }
+ 
++    static func stableKey(_ components: [String]) -> String {
++        let joined = components.map { "\($0.utf8.count):\($0)" }.joined()
++        return SHA256.hash(data: Data(joined.utf8)).map { String(format: "%02x", $0) }.joined()
++    }
++
++    /// 下载入口再绑定服务器，兼容手工构造的旧字幕对象。
++    func cacheFileName(profile: ServerProfile) -> String {
++        Self.stableKey([Self.namespace(profile: profile), id]) + "." + fileExtension
++    }
++
++    static func namespace(profile: ServerProfile) -> String {
++        stableKey([profile.kind.rawValue, profile.baseURL.absoluteString, profile.userID])
++    }
++
+     /// 文本字幕的扩展名映射；图像字幕（PGS sup 等）内核外挂不吃，返回 nil 跳过。
+     static func fileExtension(forCodec codec: String) -> String? {
+         switch codec.lowercased() {
+@@ -51,6 +66,10 @@ extension JellyfinServer {
+     /// 条目的外挂字幕列表。Jellyfin 把 `.zh.srt` 这类侧车文件暴露成
+     /// `MediaStream(type: subtitle, isExternal: true)`；内封字幕内核自己认，不用管。
+     public func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
++        try await externalSubtitles(itemID: itemID, mediaSourceID: nil)
++    }
++
++    public func externalSubtitles(itemID: String, mediaSourceID selectedSourceID: String?) async throws -> [ExternalSubtitle] {
+         let result = try await send(
+             Paths.getItems(parameters: .init(
+                 userID: profile.userID,
+@@ -58,7 +77,13 @@ extension JellyfinServer {
+                 ids: [itemID]
+             ))
+         )
+-        let mediaSource = result.items?.first?.mediaSources?.first
++        let sources = result.items?.first?.mediaSources ?? []
++        let mediaSource: MediaSourceInfo?
++        if let selectedSourceID {
++            mediaSource = sources.first { $0.id == selectedSourceID }
++        } else if let index = MediaSourceSelection.preferredIndex(count: sources.count, supportsDirectPlay: { sources[$0].isSupportsDirectPlay == true }, supportsDirectStream: { sources[$0].isSupportsDirectStream == true }) {
++            mediaSource = sources[index]
++        } else { mediaSource = nil }
+         let mediaSourceID = mediaSource?.id
+         let streams = mediaSource?.mediaStreams ?? []
+         return streams.compactMap { stream in
+@@ -72,6 +97,7 @@ extension JellyfinServer {
+             return ExternalSubtitle(
+                 itemID: itemID,
+                 mediaSourceID: mediaSourceID,
++                namespace: ExternalSubtitle.namespace(profile: profile),
+                 index: index,
+                 title: stream.title ?? stream.displayTitle,
+                 language: stream.language,
+@@ -93,15 +119,7 @@ extension JellyfinServer {
+         }
+         let directory = OcPlayerStorage.directory("Subtitles")
+         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+-        let safeID = subtitle.id
+-            .replacingOccurrences(of: "#", with: "-")
+-            .replacingOccurrences(of: "/", with: "-")
+-            .replacingOccurrences(of: ":", with: "-")
+-            .replacingOccurrences(of: "\\", with: "-")
+-        let safeExt = subtitle.fileExtension
+-            .replacingOccurrences(of: "/", with: "")
+-            .replacingOccurrences(of: "..", with: "")
+-        let url = directory.appending(path: "\(safeID).\(safeExt)")
++        let url = directory.appending(path: subtitle.cacheFileName(profile: profile))
+         try data.write(to: url, options: .atomic)
+         return url
+     }
+diff --git a/Packages/JellyfinKit/Sources/JellyfinKit/MediaServer.swift b/Packages/JellyfinKit/Sources/JellyfinKit/MediaServer.swift
+index 2a56c11..49a9e16 100644
+--- a/Packages/JellyfinKit/Sources/JellyfinKit/MediaServer.swift
++++ b/Packages/JellyfinKit/Sources/JellyfinKit/MediaServer.swift
+@@ -189,6 +189,7 @@ public protocol MediaServer: PlaybackReporting {
+     func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment]
+     /// 条目的外挂字幕列表。
+     func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle]
++    func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle]
+     /// 下载外挂字幕到本地缓存，返回文件路径。
+     func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL
+     /// 条目的文件级媒体信息；没有媒体源时 nil。
+@@ -200,6 +201,11 @@ public protocol MediaServer: PlaybackReporting {
+ // MARK: - 合集（BoxSet）成员
+ 
+ extension MediaServer {
++    /// 旧实现的兼容入口；多源实现应覆盖该方法。
++    public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
++        try await externalSubtitles(itemID: itemID)
++    }
++
+     /// 合集的**直接成员**（Jellyfin / Emby 的 Collection / BoxSet 里的条目）。
+     ///
+     /// 三条约束收在这里，因为两处调用点（详情页的「合集内容」、库网格的封面解析）
+diff --git a/Packages/JellyfinKit/Tests/JellyfinKitTests/SubtitleSourceIsolationTests.swift b/Packages/JellyfinKit/Tests/JellyfinKitTests/SubtitleSourceIsolationTests.swift
+new file mode 100644
+index 0000000..990b15c
+--- /dev/null
++++ b/Packages/JellyfinKit/Tests/JellyfinKitTests/SubtitleSourceIsolationTests.swift
+@@ -0,0 +1,54 @@
++import Foundation
++import XCTest
++@testable import JellyfinKit
++
++final class SubtitleSourceIsolationTests: XCTestCase {
++    private func server(emby: Bool, host: String = "nas.local") -> any MediaServer {
++        let profile = ServerProfile(id: "same-profile", serverName: "nas", baseURL: URL(string: "http://\(host):8096")!, userID: "user", userName: nil, serverVersion: nil, kind: emby ? .emby : .jellyfin)
++        if emby {
++            return EmbyServer(profile: profile, session: EmbySession(baseURL: profile.baseURL, accessToken: "tok", userID: "user", profileID: profile.id, sessionConfiguration: TestSupport.mockedSessionConfiguration()))
++        }
++        return JellyfinServer(profile: profile, client: JellyfinServer.makeClient(baseURL: profile.baseURL, token: "tok", sessionConfiguration: TestSupport.mockedSessionConfiguration()))
++    }
++
++    func testBothServersUseSelectedSourceAndNeverFallbackForMissingID() async throws {
++        let fixture = #"{"Items":[{"Id":"item","MediaSources":[{"Id":"first","SupportsDirectPlay":false,"MediaStreams":[{"Index":2,"Type":"Subtitle","IsExternal":true,"Codec":"subrip","Title":"First"}]},{"Id":"second","SupportsDirectPlay":true,"MediaStreams":[{"Index":2,"Type":"Subtitle","IsExternal":true,"Codec":"ass","Title":"Second"}]}]}]}"#
++        for emby in [false, true] {
++            try await TestSupport.withMock { request in
++                MockURLProtocol.ok(fixture, for: request.url!)
++            } with: {
++                let server = self.server(emby: emby)
++                let selected = try await server.externalSubtitles(itemID: "item", mediaSourceID: "second")
++                XCTAssertEqual(selected.map(\.title), ["Second"])
++                XCTAssertEqual(selected.first?.remotePath, "/Videos/item/second/Subtitles/2/Stream.ass")
++                let missing = try await server.externalSubtitles(itemID: "item", mediaSourceID: "missing")
++                XCTAssertTrue(missing.isEmpty)
++                let preferred = try await server.externalSubtitles(itemID: "item", mediaSourceID: nil)
++                XCTAssertEqual(preferred.map(\.title), ["Second"])
++                let first = try await server.externalSubtitles(itemID: "item", mediaSourceID: "first")
++                XCTAssertEqual(first.map(\.title), ["First"])
++                XCTAssertNotEqual(first.first?.id, selected.first?.id)
++            }
++        }
++    }
++
++    func testCacheSeparatesServersSourcesAndFormatsWithoutLossySanitizing() async throws {
++        for emby in [false, true] {
++            try await TestSupport.withMock { request in
++                MockURLProtocol.ok(request.url!.absoluteString, for: request.url!)
++            } with: {
++                let a = self.server(emby: emby)
++                let b = self.server(emby: emby, host: "other.local")
++                let first = ExternalSubtitle(itemID: "same/item", mediaSourceID: "source:a", index: 2, title: nil, language: nil, codec: "subrip")
++                let second = ExternalSubtitle(itemID: "same/item", mediaSourceID: "source-a", index: 2, title: nil, language: nil, codec: "subrip")
++                let ass = ExternalSubtitle(itemID: "same/item", mediaSourceID: "source:a", index: 2, title: nil, language: nil, codec: "ass")
++                let urls = try await [a.downloadSubtitle(first), b.downloadSubtitle(first), a.downloadSubtitle(second), a.downloadSubtitle(ass)]
++                defer { for url in urls { try? FileManager.default.removeItem(at: url) } }
++                XCTAssertEqual(Set(urls).count, 4)
++                XCTAssertEqual(Set(try urls.map { try String(contentsOf: $0, encoding: .utf8) }).count, 4)
++                let repeatDownload = try await a.downloadSubtitle(first)
++                XCTAssertEqual(repeatDownload, urls[0], "Cache identity must be stable")
++            }
++        }
++    }
++}
+diff --git a/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Mutation.swift b/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Mutation.swift
+index 3e21439..94be0f8 100644
+--- a/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Mutation.swift
++++ b/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Mutation.swift
+@@ -5,14 +5,18 @@ extension MediaRepository {
+     /// 服务端已看标记的写入口：网络成功后才改本地，并让所有投影同步。
+     @discardableResult
+     public func markPlayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState {
++        guard !isShutdown else { throw CancellationError() }
+         let state = try await server.markPlayed(itemID: itemID)
++        guard !isShutdown, !Task.isCancelled else { throw CancellationError() }
+         await applyPlayState(state, forItemID: itemID, persistToStore: true)
+         return state
+     }
+ 
+     @discardableResult
+     public func markUnplayed(itemID: MediaItem.ID) async throws -> MediaItem.PlayState {
++        guard !isShutdown else { throw CancellationError() }
+         let state = try await server.markUnplayed(itemID: itemID)
++        guard !isShutdown, !Task.isCancelled else { throw CancellationError() }
+         await applyPlayState(state, forItemID: itemID, persistToStore: true)
+         return state
+     }
+@@ -86,6 +90,7 @@ extension MediaRepository {
+         forItemID itemID: MediaItem.ID,
+         persistToStore: Bool
+     ) async {
++        guard !isShutdown else { return }
+         let timestamp = now()
+         var progressItem = items[itemID]?.value ?? localProgress[itemID]?.item
+             ?? MediaItem(id: itemID, name: itemID, kind: .other)
+diff --git a/Packages/MetadataKit/Tests/MetadataKitTests/MediaRepositoryTests.swift b/Packages/MetadataKit/Tests/MetadataKitTests/MediaRepositoryTests.swift
+index acae752..9320f0e 100644
+--- a/Packages/MetadataKit/Tests/MetadataKitTests/MediaRepositoryTests.swift
++++ b/Packages/MetadataKit/Tests/MetadataKitTests/MediaRepositoryTests.swift
+@@ -246,6 +246,55 @@ final class MediaRepositoryTests: XCTestCase {
+         XCTAssertEqual(cached?.item.playState, state)
+     }
+ 
++    func testShutdownRejectsNewPlayStateRequests() async throws {
++        let stub = StubMediaServer()
++        let repository = makeRepository(server: stub, store: nil)
++        await repository.shutdown()
++        for played in [true, false] {
++            do {
++                if played { _ = try await repository.markPlayed(itemID: "m1") }
++                else { _ = try await repository.markUnplayed(itemID: "m1") }
++                XCTFail("已停用的仓储不能继续发出已看请求")
++            } catch is CancellationError {} catch { XCTFail("错误类型不符：\(error)") }
++        }
++        XCTAssertEqual(stub.callCount("markPlayed"), 0)
++        XCTAssertEqual(stub.callCount("markUnplayed"), 0)
++    }
++
++    func testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation() async throws {
++        let store = try await makeStore()
++        for shutdown in [true, false] {
++            for played in [true, false] {
++                let stub = StubMediaServer()
++                let tenant = TenantID(profile: stub.profile)
++                let original = MediaItem.PlayState(played: !played, percentage: 0.2, positionSeconds: 20)
++                var item = makeItem(id: "m1")
++                item.playState = original
++                try await store.saveItems([item], tenant: tenant)
++                let repository = makeRepository(server: stub, store: store)
++                let gate = PlayStateReplyGate()
++                let reply = MediaItem.PlayState(played: played, percentage: played ? 1 : 0, positionSeconds: 0)
++                let hook: @Sendable () async throws -> MediaItem.PlayState = {
++                    await gate.suspend()
++                    return reply
++                }
++                stub.markPlayedHook = hook
++                stub.markUnplayedHook = hook
++                let task = Task {
++                    if played { return try await repository.markPlayed(itemID: "m1") }
++                    return try await repository.markUnplayed(itemID: "m1")
++                }
++                await gate.waitUntilStarted()
++                if shutdown { await repository.shutdown() } else { task.cancel() }
++                await gate.release()
++                do { _ = try await task.value; XCTFail("迟到响应应被作废") }
++                catch is CancellationError {} catch { XCTFail("错误类型不符：\(error)") }
++                let cached = try await store.item("m1", tenant: tenant)
++                XCTAssertEqual(cached?.item.playState, original)
++            }
++        }
++    }
++
+     // MARK: - 无库降级
+ 
+     func testMemoryOnlyRepositoryKeepsProtocolWithoutStore() async throws {
+@@ -262,3 +311,14 @@ final class MediaRepositoryTests: XCTestCase {
+         XCTAssertEqual(cached.value.libraries.map(\.id), ["lib"])
+     }
+ }
++
++private actor PlayStateReplyGate {
++    private var started = false
++    private var continuation: CheckedContinuation<Void, Never>?
++    func suspend() async {
++        started = true
++        await withCheckedContinuation { continuation = $0 }
++    }
++    func waitUntilStarted() async { while !started { await Task.yield() } }
++    func release() { continuation?.resume(); continuation = nil }
++}
+diff --git a/Packages/MetadataKit/Tests/MetadataKitTests/StubMediaServer.swift b/Packages/MetadataKit/Tests/MetadataKitTests/StubMediaServer.swift
+index e3d35b4..58e4d75 100644
+--- a/Packages/MetadataKit/Tests/MetadataKitTests/StubMediaServer.swift
++++ b/Packages/MetadataKit/Tests/MetadataKitTests/StubMediaServer.swift
+@@ -26,6 +26,8 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
+     var episodesHook: (@Sendable () async throws -> [MediaItem])?
+     var mediaFileInfoResult: Result<MediaFileInfo?, any Error> = .success(nil)
+     var markPlayedResult: Result<MediaItem.PlayState, any Error>?
++    var markPlayedHook: (@Sendable () async throws -> MediaItem.PlayState)?
++    var markUnplayedHook: (@Sendable () async throws -> MediaItem.PlayState)?
+     /// 库页 / 搜索页的整套行；按 startIndex/limit 切片返回，模拟真实分页服务端。
+     var itemsPageRows: [MediaItem] = []
+     /// 按搜索词隔离的行集。键为 searchTerm。
+@@ -84,11 +86,13 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
+ 
+     func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
+         count("markPlayed")
++        if let markPlayedHook { return try await markPlayedHook() }
+         guard let markPlayedResult else { return .init(played: true, percentage: 1, positionSeconds: 0) }
+         return try markPlayedResult.get()
+     }
+     func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
+         count("markUnplayed")
++        if let markUnplayedHook { return try await markUnplayedHook() }
+         return .init(played: false, percentage: 0, positionSeconds: 0)
+     }
+ 
+diff --git a/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift b/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift
+index c22779b..2da825a 100644
+--- a/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift
++++ b/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift
+@@ -165,8 +165,10 @@ public actor MoviePilotAPIClient {
+     /// SSE 流式搜索专用：`timeoutIntervalForResource` 不能按请求覆盖，而站点
+     /// 聚合搜索整场可以跑几分钟，普通会话 30s 就会把流掐断。
+     private let streamSession: URLSession
++    private let retrySleep: @Sendable (UInt64) async throws -> Void
+ 
+     private var authGeneration: UInt64 = 0
++    private var authConfigurationRevision: UInt64
+     /// 单飞的静默重登：并发请求同时撞 401 时只登一次，其余等同一个 Task。
+     private var reloginTask: Task<String, Error>?
+     private var reloginGeneration: UInt64 = 0
+@@ -177,9 +179,12 @@ public actor MoviePilotAPIClient {
+ 
+     public init(
+         store: MoviePilotStore = .shared,
+-        sessionConfiguration: URLSessionConfiguration = .default
++        sessionConfiguration: URLSessionConfiguration = .default,
++        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
+     ) {
+         self.store = store
++        self.authConfigurationRevision = store.configurationRevision
++        self.retrySleep = retrySleep
+         // 复制后再改：直接改写入参 configuration 会污染调用方手里的对象
+         //（共享 .default 的属性是进程级单例，改动影响全局）。
+         let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
+@@ -214,31 +219,51 @@ public actor MoviePilotAPIClient {
+         generation == authGeneration
+     }
+ 
+-    /// 登录：读 store 里的地址与账号密码，换 token、返回当前用户。
+-    /// 成功会推进代际，作废旧 token 与在途请求。
+-    @discardableResult
+-    public func login() async throws -> MPUser {
+-        guard !store.username.isEmpty, !store.password.isEmpty else {
++    private struct RequestContext: Sendable {
++        let baseURL: URL
++        let revision: UInt64
++    }
++
++    private func context() throws -> RequestContext {
++        let snapshot = store.sessionSnapshot()
++        guard let url = MoviePilotStore.normalizedURL(from: snapshot.credentials.serverURLString ?? "") else {
+             throw MoviePilotError.notConfigured
+         }
++        return RequestContext(baseURL: url, revision: snapshot.revision)
++    }
++
++    private func check(_ context: RequestContext) throws {
++        try Task.checkCancellation()
++        guard context.revision == store.configurationRevision else { throw CancellationError() }
++    }
++
++    @discardableResult
++    public func login() async throws -> MPUser {
++        let credentials = store.credentialSnapshot()
++        return try await login(serverURLString: credentials.serverURLString ?? "",
++                               username: credentials.username, password: credentials.password)
++    }
++
++    /// 验证期间保持旧配置；只有当前登录尝试可提交新凭据。
++    @discardableResult
++    public func login(serverURLString: String, username: String, password: String) async throws -> MPUser {
++        guard let baseURL = MoviePilotStore.normalizedURL(from: serverURLString),
++              !username.isEmpty, !password.isEmpty else { throw MoviePilotError.notConfigured }
+         cancelRelogin()
++        let revision = store.invalidateConfiguration()
+         bumpGeneration()
+-        // 手动登录会重置凭据，解除静默重登的熔断。
+         reloginExhaustedGeneration = nil
+-        let token = try await postLogin(username: store.username, password: store.password)
+-        // 拿新 token 直接取用户信息（不经重登路径——token 就是刚换的）。
+-        let request = MPRequest(path: "/api/v1/user/current")
++        let context = RequestContext(baseURL: baseURL, revision: revision)
++        let token = try await postLogin(username: username, password: password, context: context)
++        let data = MPEnvelope.unwrap(try await sendOnce(MPRequest(path: "/api/v1/user/current"), token: token, context: context))
++        try check(context)
+         let user: MPUser
+-        do {
+-            let data = MPEnvelope.unwrap(try await sendOnce(request, token: token))
+-            user = try Self.decoder.decode(MPUser.self, from: data)
+-        } catch {
+-            store.accessToken = nil
+-            bumpGeneration()
+-            // 别映射成 badRequest——那是「请求参数有误」，会把解析问题误导成参数问题。
+-            throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)")
+-        }
+-        store.accessToken = token
++        do { user = try Self.decoder.decode(MPUser.self, from: data) }
++        catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
++        try check(context)
++        let committed = await store.commitCredentials(serverURLString: serverURLString, username: username,
++                                                      password: password, accessToken: token, ifRevision: context.revision)
++        guard committed else { throw CancellationError() }
+         bumpGeneration()
+         reloginExhaustedGeneration = nil
+         return user
+@@ -264,7 +289,9 @@ public actor MoviePilotAPIClient {
+ 
+     /// 收到 401 通知侧的配合接口：只在代际仍匹配时清 token。
+     public func clearSession(ifCurrent expectedGeneration: UInt64) -> UInt64? {
+-        guard expectedGeneration == authGeneration else { return nil }
++        guard expectedGeneration == authGeneration,
++              authConfigurationRevision == store.configurationRevision else { return nil }
++        store.invalidateConfiguration()
+         store.accessToken = nil
+         bumpGeneration()
+         reloginExhaustedGeneration = nil
+@@ -338,13 +365,14 @@ public actor MoviePilotAPIClient {
+ 
+     /// 发请求返回原始 data（非 JSON 响应用）。
+     public func requestData(_ request: MPRequest) async throws -> Data {
++        let context = try context()
+         if request.authorized {
+             guard let token = store.accessToken, !token.isEmpty else {
+                 throw MoviePilotError.requireLogin
+             }
+-            return try await send(request, token: token)
++            return try await send(request, token: token, context: context)
+         } else {
+-            return try await send(request, token: nil)
++            return try await send(request, token: nil, context: context)
+         }
+     }
+ 
+@@ -358,6 +386,7 @@ public actor MoviePilotAPIClient {
+ 
+     private func bumpGeneration() {
+         authGeneration &+= 1
++        authConfigurationRevision = store.configurationRevision
+     }
+ 
+     private func cancelRelogin() {
+@@ -367,7 +396,7 @@ public actor MoviePilotAPIClient {
+     }
+ 
+     /// 登录接口本体（不带 Bearer 头：拿旧 token 撞新登录没有意义）。
+-    private func postLogin(username: String, password: String) async throws -> String {
++    private func postLogin(username: String, password: String, context: RequestContext) async throws -> String {
+         let request = MPRequest(
+             path: "/api/v1/login/access-token",
+             method: "POST",
+@@ -378,7 +407,7 @@ public actor MoviePilotAPIClient {
+             // 弱网下重登失败会让整个 MoviePilot 集成不可用，所以这里保留退避重试。
+             idempotent: true
+         )
+-        let data = try await send(request, token: nil)
++        let data = try await send(request, token: nil, context: context)
+         do {
+             let response = try JSONDecoder().decode(MPTokenResponse.self, from: data)
+             guard !response.accessToken.isEmpty else {
+@@ -393,7 +422,7 @@ public actor MoviePilotAPIClient {
+     }
+ 
+     /// 发送请求（支持 401 静默重登与 502/503/504/超时等 isRetryable 错误指数退避重试）。
+-    private func send(_ request: MPRequest, token: String?) async throws -> Data {
++    private func send(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
+         var currentToken = token
+         var lastError: Error?
+ 
+@@ -406,23 +435,31 @@ public actor MoviePilotAPIClient {
+         let retries = request.isIdempotent ? maxRetries : 0
+ 
+         for attempt in 0...retries {
++            try check(context)
+             if attempt > 0 {
+                 // 指数退避乘 0.5~1.5 抖动：避免多端同拍重试放大服务端压力。
+                 let delay = UInt64((pow(2.0, Double(attempt - 1)) * Double.random(in: 0.5...1.5)) * 1_000_000_000)
+-                try await Task.sleep(nanoseconds: delay)
++                try await retrySleep(delay)
++                try check(context)
+                 MoviePilotNetworkLog.logger.warning("重试 \(request.method) \(request.path) (尝试 \(attempt + 1)/\(retries + 1))")
+             }
+ 
+             do {
+-                return try await sendOnce(request, token: currentToken)
++                return try await sendOnce(request, token: currentToken, context: context)
+             } catch MoviePilotError.requireLogin where request.authorized {
+                 // 旧 token 已被拒。重登失败（含可重试网络错）直接抛，不要带着作废 token
+                 // 再进一轮外层重试：postLogin 内部已经跑过自己的退避重试，外层 continue
+                 // 只会每轮白撞一次 401、再触发一轮带密码的 login。
+-                currentToken = try await silentRelogin()
++                try check(context)
++                if let latest = store.accessToken, latest != currentToken {
++                    // 另一个并发请求已刷新 token；迟到的旧 token 401 只需重放。
++                    currentToken = latest
++                } else {
++                    currentToken = try await silentRelogin(context: context)
++                }
+ 
+                 do {
+-                    return try await sendOnce(request, token: currentToken)
++                    return try await sendOnce(request, token: currentToken, context: context)
+                 } catch let error as MoviePilotError where error.isRetryable && attempt < retries {
+                     // 换到新 token 后重放失败仍值得重试（502/504/超时是服务端瞬态）。
+                     lastError = error
+@@ -447,14 +484,16 @@ public actor MoviePilotAPIClient {
+     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。
+     /// 传输 + 计时日志走共享执行器（DiagnosticsKit.HTTPClient），URL 拼装留在
+     /// `makeURLRequest`（MoviePilot 的 path 规范化是定制逻辑）。
+-    private func sendOnce(_ request: MPRequest, token: String?) async throws -> Data {
+-        let urlRequest = try makeURLRequest(request, token: token)
++    private func sendOnce(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
++        try check(context)
++        let urlRequest = try makeURLRequest(request, token: token, context: context)
+ 
+         let exchange: HTTPExchange
+         do {
+             exchange = try await HTTPClient(session: session, category: "MoviePilot")
+                 .exchange(urlRequest: urlRequest)
+         } catch let transport as HTTPTransportError {
++            try check(context)
+             switch transport {
+             case .url(let urlError):
+                 throw MoviePilotError(networkError: urlError as NSError)
+@@ -468,6 +507,7 @@ public actor MoviePilotAPIClient {
+             }
+         }
+ 
++        try check(context)
+         guard exchange.statusCode < 400 else {
+             throw MoviePilotError(
+                 code: exchange.statusCode,
+@@ -478,11 +518,8 @@ public actor MoviePilotAPIClient {
+     }
+ 
+     /// URL + URLRequest 组装（普通请求与 SSE 流共用）。
+-    private func makeURLRequest(_ request: MPRequest, token: String?) throws -> URLRequest {
+-        guard let baseURL = store.baseURL else {
+-            throw MoviePilotError.notConfigured
+-        }
+-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
++    private func makeURLRequest(_ request: MPRequest, token: String?, context: RequestContext) throws -> URLRequest {
++        var components = URLComponents(url: context.baseURL, resolvingAgainstBaseURL: false)
+             ?? URLComponents()
+         // 规范化拼接：baseURL 尾斜杠 / path 首字符差异都会拼出 //；path 逐段
+         // 百分号编码（媒体键带 `tmdb:` 这类冒号，URLQueryItem 只管 query 段）。
+@@ -527,9 +564,12 @@ public actor MoviePilotAPIClient {
+     /// 401 后用存的密码重登。成功返回新 token（已落库并推进代际——这一步在
+     /// 单飞 Task 里做，恰好一次）；密码错误 → 清 token、广播通知、抛 requireLogin；
+     /// 网络故障 → 原样抛网络错误，不动 token（可能只是暂时连不上，下次再试）。
+-    private func silentRelogin() async throws -> String {
++    private func silentRelogin(context: RequestContext) async throws -> String {
++        try check(context)
+         if let existing = reloginTask {
+-            return try await existing.value
++            let token = try await existing.value
++            try check(context)
++            return token
+         }
+         // 熔断：当前代际的 token 就是上一次静默重登刚发的（或刚被密码错误拒绝），
+         // 再登一次大概率还是同样结果，直接抛 requireLogin 让上层走登录 UI，
+@@ -540,14 +580,14 @@ public actor MoviePilotAPIClient {
+         if reloginExhaustedGeneration == authGeneration {
+             if store.accessToken != nil {
+                 let generation = authGeneration
+-                store.accessToken = nil
+-                await notifyAuthenticationRequired(ifCurrent: generation)
++                guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
++                await notifyAuthenticationRequired(ifCurrent: generation, context: context)
+             }
+             throw MoviePilotError.requireLogin
+         }
+         guard !store.username.isEmpty, !store.password.isEmpty else {
+             // 没存密码就没法静默重登（比如退出登录后残留请求）。
+-            store.accessToken = nil
++            guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
+             throw MoviePilotError.requireLogin
+         }
+ 
+@@ -556,11 +596,12 @@ public actor MoviePilotAPIClient {
+         let myRelogin = reloginGeneration
+ 
+         let task = Task<String, Error> {
+-            let token = try await self.performRelogin()
++            let token = try await self.performRelogin(context: context)
++            try self.check(context)
+             guard generation == self.authGeneration else {
+                 throw MoviePilotError(ignore: "静默重登结果已过期")
+             }
+-            self.store.accessToken = token
++            guard self.store.setAccessToken(token, ifRevision: context.revision) else { throw CancellationError() }
+             self.bumpGeneration()
+             // 刚发的 token 若仍被 401，本轮代际内不再重试重登（见入口熔断）。
+             self.reloginExhaustedGeneration = self.authGeneration
+@@ -581,15 +622,18 @@ public actor MoviePilotAPIClient {
+         }
+ 
+         do {
+-            return try await task.value
++            let token = try await task.value
++            try check(context)
++            return token
+         } catch let error as MoviePilotError {
++            try check(context)
+             switch error {
+             case .requireLogin, .badRequest:
+                 // 密码已改 / 账号被停：token 作废，通知 UI 重新登录；本轮熔断。
+                 if generation == authGeneration {
+-                    store.accessToken = nil
++                    guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
+                     reloginExhaustedGeneration = authGeneration
+-                    await notifyAuthenticationRequired(ifCurrent: generation)
++                    await notifyAuthenticationRequired(ifCurrent: generation, context: context)
+                 }
+                 throw MoviePilotError.requireLogin
+             default:
+@@ -598,13 +642,14 @@ public actor MoviePilotAPIClient {
+         }
+     }
+ 
+-    private func performRelogin() async throws -> String {
+-        try await postLogin(username: store.username, password: store.password)
++    private func performRelogin(context: RequestContext) async throws -> String {
++        try await postLogin(username: store.username, password: store.password, context: context)
+     }
+ 
+-    private func notifyAuthenticationRequired(ifCurrent generation: UInt64) async {
++    private func notifyAuthenticationRequired(ifCurrent generation: UInt64, context: RequestContext) async {
+         guard generation == authGeneration else { return }
+         await MainActor.run {
++            guard self.store.configurationRevision == context.revision else { return }
+             NotificationCenter.default.post(
+                 name: Self.authenticationRequiredNotification,
+                 object: NSNumber(value: generation)
+@@ -625,18 +670,20 @@ public actor MoviePilotAPIClient {
+         sites: [Int] = [],
+         onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)? = nil
+     ) async throws -> [MPTorrent] {
++        let context = try context()
+         do {
+-            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
++            return try await runStreamSearch(keyword: keyword, sites: sites, context: context, onUpdate: onUpdate)
+         } catch MoviePilotError.requireLogin {
+             // cookie 过期：静默重登会顺带种新 cookie，重放一次。
+-            _ = try await silentRelogin()
+-            return try await runStreamSearch(keyword: keyword, sites: sites, onUpdate: onUpdate)
++            _ = try await silentRelogin(context: context)
++            return try await runStreamSearch(keyword: keyword, sites: sites, context: context, onUpdate: onUpdate)
+         }
+     }
+ 
+     private func runStreamSearch(
+         keyword: String,
+         sites: [Int],
++        context: RequestContext,
+         onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)?
+     ) async throws -> [MPTorrent] {
+         var query = [
+@@ -652,7 +699,8 @@ public actor MoviePilotAPIClient {
+             query: query,
+             authorized: false
+         )
+-        let urlRequest = try makeURLRequest(request, token: nil)
++        try check(context)
++        let urlRequest = try makeURLRequest(request, token: nil, context: context)
+         MoviePilotNetworkLog.requestStarted(MoviePilotNetworkLog.logPath(for: urlRequest.url))
+         let searchStart = Date()
+ 
+@@ -660,8 +708,10 @@ public actor MoviePilotAPIClient {
+         do {
+             (bytes, response) = try await streamSession.bytes(for: urlRequest)
+         } catch let error as NSError where error.domain == NSURLErrorDomain {
++            try check(context)
+             throw MoviePilotError(networkError: error)
+         }
++        try check(context)
+         guard let httpResponse = response as? HTTPURLResponse else {
+             throw MoviePilotError.generic("服务器响应异常")
+         }
+@@ -679,6 +729,7 @@ public actor MoviePilotAPIClient {
+         var torrents: [MPTorrent] = []
+         var seen: Set<String> = []
+         for try await line in bytes.lines {
++            try check(context)
+             guard line.hasPrefix("data:") else { continue }
+             let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+             guard !payload.isEmpty,
+@@ -739,6 +790,7 @@ public actor MoviePilotAPIClient {
+             }
+             onUpdate?(torrents, progress)
+         }
++        try check(context)
+         // 服务端关流没发 done（超时截断等）：按已收到的返回。
+         return torrents
+     }
+diff --git a/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift b/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift
+index 7c1a67a..bf8e68c 100644
+--- a/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift
++++ b/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift
+@@ -46,6 +46,24 @@ public final class MoviePilotStore: @unchecked Sendable {
+     private let defaults: UserDefaults
+     private let credentials: CredentialFileStore
+     private let lock = NSLock()
++    private var revision: UInt64 = 0
++
++    /// 配置/会话变化与同会话的 token 刷新区分。
++    public var configurationRevision: UInt64 { lock.withLock { revision } }
++
++    @discardableResult
++    public func invalidateConfiguration() -> UInt64 {
++        lock.withLock { revision &+= 1; return revision }
++    }
++
++    public func setAccessToken(_ token: String?, ifRevision expected: UInt64) -> Bool {
++        lock.withLock {
++            guard revision == expected else { return false }
++            if let token, !token.isEmpty { credentials.setString(token, forKey: Self.tokenKey) }
++            else { clearTokenUnlocked() }
++            return true
++        }
++    }
+ 
+     /// 本次运行内的密码。
+     ///
+@@ -131,6 +149,8 @@ public final class MoviePilotStore: @unchecked Sendable {
+             let value = newValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+             lock.lock()
+             defer { lock.unlock() }
++            revision &+= 1
++            clearTokenUnlocked()
+             if value.isEmpty {
+                 mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
+             } else {
+@@ -148,6 +168,8 @@ public final class MoviePilotStore: @unchecked Sendable {
+         set {
+             lock.lock()
+             defer { lock.unlock() }
++            revision &+= 1
++            clearTokenUnlocked()
+             let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+             if value.isEmpty {
+                 mutateDefaults { $0.removeObject(forKey: Self.usernameKey) }
+@@ -196,6 +218,7 @@ public final class MoviePilotStore: @unchecked Sendable {
+         set {
+             lock.lock()
+             defer { lock.unlock() }
++            revision &+= 1
+             sessionPassword = newValue.isEmpty ? nil : newValue
+             if newValue.isEmpty {
+                 credentials.removeValue(forKey: Self.passwordKey)
+@@ -309,6 +332,11 @@ public final class MoviePilotStore: @unchecked Sendable {
+     public func updateCredentials(serverURLString: String, username: String, password: String) {
+         lock.lock()
+         defer { lock.unlock() }
++        revision &+= 1
++        updateCredentialsUnlocked(serverURLString: serverURLString, username: username, password: password)
++    }
++
++    private func updateCredentialsUnlocked(serverURLString: String, username: String, password: String) {
+         let server = serverURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+         if server.isEmpty {
+             mutateDefaults { $0.removeObject(forKey: Self.serverKey) }
+@@ -325,6 +353,19 @@ public final class MoviePilotStore: @unchecked Sendable {
+         clearTokenUnlocked()
+     }
+ 
++    /// 新凭据通过服务器验证后一次性提交。失败/过期尝试无需回滚旧配置。
++    @MainActor
++    public func commitCredentials(serverURLString: String, username: String, password: String,
++                                  accessToken: String, ifRevision expected: UInt64) -> Bool {
++        lock.withLock {
++            guard !Task.isCancelled, revision == expected else { return false }
++            revision &+= 1
++            updateCredentialsUnlocked(serverURLString: serverURLString, username: username, password: password)
++            credentials.setString(accessToken, forKey: Self.tokenKey)
++            return true
++        }
++    }
++
+     /// 密码写入的唯一实现（**必须在 `lock` 内调用**）。
+     private func setPasswordUnlocked(_ value: String) {
+         sessionPassword = value.isEmpty ? nil : value
+@@ -365,10 +406,19 @@ public final class MoviePilotStore: @unchecked Sendable {
+         )
+     }
+ 
++    public func sessionSnapshot() -> (credentials: CredentialSnapshot, revision: UInt64) {
++        lock.withLock {
++            (CredentialSnapshot(serverURLString: defaults.string(forKey: Self.serverKey),
++                                username: defaults.string(forKey: Self.usernameKey) ?? "",
++                                password: passwordUnlocked(), accessToken: accessTokenUnlocked()), revision)
++        }
++    }
++
+     /// 按快照回滚四键：`nil` / 空串删键，其余原样写回（不 trim）。
+     public func restore(_ snapshot: CredentialSnapshot) {
+         lock.lock()
+         defer { lock.unlock() }
++        revision &+= 1
+         if let server = snapshot.serverURLString, !server.isEmpty {
+             mutateDefaults { $0.set(server, forKey: Self.serverKey) }
+         } else {
+@@ -395,6 +445,7 @@ public final class MoviePilotStore: @unchecked Sendable {
+     public func clearSession() {
+         lock.lock()
+         defer { lock.unlock() }
++        revision &+= 1
+         sessionPassword = nil
+         credentials.removeValue(forKey: Self.passwordKey)
+         clearTokenUnlocked()
+@@ -405,6 +456,7 @@ public final class MoviePilotStore: @unchecked Sendable {
+     public func clearAll() {
+         lock.lock()
+         defer { lock.unlock() }
++        revision &+= 1
+         sessionPassword = nil
+         mutateDefaults {
+             $0.removeObject(forKey: Self.serverKey)
+diff --git a/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift b/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift
+new file mode 100644
+index 0000000..4cf6c55
+--- /dev/null
++++ b/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift
+@@ -0,0 +1,218 @@
++import Foundation
++import XCTest
++@testable import MoviePilotKit
++
++final class MoviePilotSessionRaceTests: XCTestCase {
++    override func tearDown() {
++        MockURLProtocol.handler = nil
++        super.tearDown()
++    }
++
++    func testSwitchCancelsOldRetryWithoutSendingOldToken() async throws {
++        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
++            credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++        await MainActor.run {
++            store.updateCredentials(serverURLString: "https://old.invalid", username: "old", password: "old-password")
++            store.accessToken = "synthetic-old-token"
++        }
++        let backoff = expectation(description: "retry held")
++        let retryGate = Gate()
++        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration(), retrySleep: { _ in
++            backoff.fulfill()
++            await retryGate.wait()
++        })
++        let first = expectation(description: "first request")
++        let lock = NSLock()
++        var requests: [URLRequest] = []
++        MockURLProtocol.handler = { request in
++            let count = lock.withLock { requests.append(request); return requests.count }
++            if count == 1 {
++                first.fulfill()
++                return MockURLProtocol.response("{}", status: 503, for: request.url!)
++            }
++            return MockURLProtocol.response("{}", status: 200, for: request.url!)
++        }
++        let pending = Task { try await client.requestData(.init(path: "/api/v1/user/current")) }
++        await fulfillment(of: [first, backoff], timeout: 3)
++        _ = await client.signOut()
++        await MainActor.run {
++            store.updateCredentials(serverURLString: "https://new.invalid", username: "new", password: "new-password")
++            store.accessToken = "synthetic-new-token"
++        }
++        await retryGate.release()
++        do { _ = try await pending.value; XCTFail("旧会话应取消") } catch is CancellationError { }
++        let observed = lock.withLock { requests }
++        XCTAssertEqual(observed.count, 1)
++        XCTAssertEqual(observed.last?.url?.host, "old.invalid")
++        XCTAssertEqual(observed.last?.value(forHTTPHeaderField: "Authorization"), "Bearer synthetic-old-token")
++    }
++
++    func testSignOutRejectsLateLogin() async throws {
++        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(),
++            credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++        await MainActor.run {
++            store.updateCredentials(serverURLString: "https://old.invalid", username: "old", password: "old-password")
++        }
++        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
++        let started = expectation(description: "login request started")
++        let gate = DispatchSemaphore(value: 0)
++        MockURLProtocol.handler = { request in
++            if request.url!.path.contains("access-token") {
++                started.fulfill()
++                _ = gate.wait(timeout: .now() + 5)
++                return MockURLProtocol.response(#"{"access_token":"synthetic-stale-login","token_type":"bearer"}"#, status: 200, for: request.url!)
++            }
++            return MockURLProtocol.response(#"{"id":1,"name":"old","is_superuser":true,"is_active":true}"#, status: 200, for: request.url!)
++        }
++        let pending = Task { try await client.login() }
++        await fulfillment(of: [started], timeout: 3)
++        _ = await client.signOut()
++        XCTAssertNil(store.accessToken)
++        gate.signal()
++        do { _ = try await pending.value; XCTFail("旧会话应取消") } catch is CancellationError { }
++        XCTAssertNil(store.accessToken)
++    }
++    private actor Gate {
++        private var continuation: CheckedContinuation<Void, Never>?
++        private var open = false
++        func wait() async {
++            if open { return }
++            await withCheckedContinuation { continuation = $0 }
++        }
++        func release() { open = true; continuation?.resume(); continuation = nil }
++    }
++
++    func testFailedConfiguredLoginPreservesExistingCredentials() async throws {
++        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(), credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++        await MainActor.run {
++            store.updateCredentials(serverURLString: "https://old.invalid", username: "old", password: "old-password")
++            store.accessToken = "old-token"
++        }
++        let previous = store.credentialSnapshot()
++        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
++        MockURLProtocol.handler = { request in
++            XCTAssertEqual(request.url?.host, "new.invalid")
++            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
++            return MockURLProtocol.response("{}", status: 400, for: request.url!)
++        }
++        do {
++            _ = try await client.login(serverURLString: "https://new.invalid", username: "new", password: "wrong")
++            XCTFail("Login must fail")
++        } catch is MoviePilotError { }
++        XCTAssertEqual(store.credentialSnapshot(), previous)
++    }
++
++    func testNewerLoginWinsAgainstLateSuccessAndFailure() async throws {
++        for oldStatus in [200, 400] {
++            let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(), credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++            let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
++            let started = expectation(description: "old login held")
++            let gate = DispatchSemaphore(value: 0)
++            MockURLProtocol.handler = { request in
++                if request.url?.host == "old.invalid" {
++                    started.fulfill()
++                    _ = gate.wait(timeout: .now() + 5)
++                    return MockURLProtocol.response(#"{"access_token":"old-token"}"#, status: oldStatus, for: request.url!)
++                }
++                let body = request.url!.path.contains("access-token") ? #"{"access_token":"new-token"}"# : #"{"id":2,"name":"new"}"#
++                return MockURLProtocol.response(body, status: 200, for: request.url!)
++            }
++            let old = Task { try await client.login(serverURLString: "https://old.invalid", username: "old", password: "old-pass") }
++            await fulfillment(of: [started], timeout: 3)
++            // URLProtocol's callback queue is serial. Let the obsolete response finish;
++            // the new attempt is registered first, before either response can commit.
++            let new = Task { try await client.login(serverURLString: "https://new.invalid", username: "new", password: "new-pass") }
++            // A request on the actor establishes the new attempt before releasing the transport.
++            while await client.currentGeneration() < 2 { await Task.yield() }
++            gate.signal()
++            _ = try await new.value
++            do { _ = try await old.value; XCTFail("Late attempt must cancel") } catch is CancellationError { }
++            XCTAssertEqual(store.accessToken, "new-token")
++            XCTAssertEqual(store.username, "new")
++            XCTAssertEqual(store.baseURL?.host, "new.invalid")
++        }
++    }
++
++    func testLateOldToken401ReplaysAlreadyRefreshedToken() async throws {
++        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(), credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++        await MainActor.run {
++            store.updateCredentials(serverURLString: "https://old.invalid", username: "user", password: "password")
++            store.accessToken = "expired"
++        }
++        let firstGate = Gate(), secondGate = Gate()
++        let firstStarted = expectation(description: "first held")
++        let secondStarted = expectation(description: "second held")
++        let count = LoginCount()
++        AsyncRaceURLProtocol.handler = { request in
++            let path = request.url!.path
++            if request.value(forHTTPHeaderField: "Authorization") == "Bearer expired" {
++                if path == "/first" { firstStarted.fulfill(); await firstGate.wait() }
++                else { secondStarted.fulfill(); await secondGate.wait() }
++                return MockURLProtocol.response("{}", status: 401, for: request.url!)
++            }
++            if path.contains("access-token") {
++                count.increment()
++                return MockURLProtocol.response(#"{"access_token":"fresh"}"#, status: 200, for: request.url!)
++            }
++            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fresh")
++            return MockURLProtocol.response("{}", status: 200, for: request.url!)
++        }
++        defer { AsyncRaceURLProtocol.handler = nil }
++        let configuration = URLSessionConfiguration.ephemeral
++        configuration.protocolClasses = [AsyncRaceURLProtocol.self]
++        let client = MoviePilotAPIClient(store: store, sessionConfiguration: configuration)
++        let first = Task { try await client.requestData(.init(path: "/first")) }
++        await fulfillment(of: [firstStarted], timeout: 3)
++        let second = Task { try await client.requestData(.init(path: "/second")) }
++        await fulfillment(of: [secondStarted], timeout: 3)
++        await firstGate.release()
++        _ = try await first.value
++        await secondGate.release()
++        _ = try await second.value
++        XCTAssertEqual(count.value, 1)
++        XCTAssertEqual(store.accessToken, "fresh")
++    }
++
++    func testDirectConfigurationChangeRejectsOldNotificationAndToken() async throws {
++        let store = MoviePilotStore(defaults: TestSupport.isolatedDefaults(), credentialsDirectory: TestSupport.isolatedCredentialsDirectory())
++        let client = MoviePilotAPIClient(store: store, sessionConfiguration: TestSupport.mockedSessionConfiguration())
++        MockURLProtocol.handler = { request in
++            let body = request.url!.path.contains("access-token") ? #"{"access_token":"old-token"}"# : #"{"id":1,"name":"old"}"#
++            return MockURLProtocol.response(body, status: 200, for: request.url!)
++        }
++        _ = try await client.login(serverURLString: "https://old.invalid", username: "old", password: "old-pass")
++        let generation = await client.currentGeneration()
++        await MainActor.run { store.serverURLString = "https://new.invalid" }
++        XCTAssertNil(store.accessToken)
++        await MainActor.run { store.accessToken = "new-token" }
++        let cleared = await client.clearSession(ifCurrent: generation)
++        XCTAssertNil(cleared)
++        XCTAssertEqual(store.accessToken, "new-token")
++    }
++
++    private final class LoginCount: @unchecked Sendable {
++        private let lock = NSLock()
++        private var count = 0
++        var value: Int { lock.withLock { count } }
++        func increment() { lock.withLock { count += 1 } }
++    }
++
++}
++
++private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
++    nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
++    private var pending: Task<Void, Never>?
++    override class func canInit(with request: URLRequest) -> Bool { true }
++    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
++    override func startLoading() {
++        guard let handler = Self.handler else { return }
++        pending = Task {
++            let (response, data) = await handler(request)
++            guard !Task.isCancelled else { return }
++            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
++            client?.urlProtocol(self, didLoad: data)
++            client?.urlProtocolDidFinishLoading(self)
++        }
++    }
++    override func stopLoading() { pending?.cancel() }
++}
+diff --git a/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotStoreTests.swift b/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotStoreTests.swift
+index b357ee4..428b9c9 100644
+--- a/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotStoreTests.swift
++++ b/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotStoreTests.swift
+@@ -349,7 +349,8 @@ final class MoviePilotStoreTests: XCTestCase {
+             let unrelatedDefaults = TestSupport.isolatedDefaults("unrelated-" + UUID().uuidString)
+             unrelatedDefaults.set("noise", forKey: "unrelated")
+         }.value
+-        await MainActor.run { store.username = "notification-noise" }
++        let defaultsReference = DefaultsReference(defaults)
++        await defaultsReference.writeUnrelatedPreference()
+         XCTAssertEqual(offMainWrites.count, 0, "其他偏好域的通知不能计入本 store 的后台写入")
+         XCTAssertEqual(tokenRemovalNotifications.count, 0, "其他键的通知不能提前结束令牌删除等待")
+ 
+@@ -426,3 +427,9 @@ private final class DefaultsNotificationCount: @unchecked Sendable {
+         return value
+     }
+ }
++
++private final class DefaultsReference: @unchecked Sendable {
++    let defaults: UserDefaults
++    init(_ defaults: UserDefaults) { self.defaults = defaults }
++    @MainActor func writeUnrelatedPreference() { defaults.set("notification-noise", forKey: "unrelated") }
++}

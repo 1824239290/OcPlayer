@@ -1,0 +1,15 @@
+{
+  "version": "0.2.3",
+  "build": "675",
+  "GitCommit": "6adb83c-dirty",
+  "archiveCRC": true,
+  "licenseFiles": 29,
+  "erikaLicenseSHA256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+  "executableUUID": "UUID: 8E0BDA30-458A-3D75-8B74-C1507B38CB4D (arm64) /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-image-uuid-e2qiq1f2/OcPlayer\n",
+  "dsymUUID": "UUID: 8E0BDA30-458A-3D75-8B74-C1507B38CB4D (arm64) /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-image-uuid-e2qiq1f2/OcPlayer.dwarf\n",
+  "uuidMatches": true,
+  "sha256": {
+    "OcPlayer-v0.2.3-b675-6adb83c-dirty-ios-unsigned.ipa": "5f8e54f5991999f5a9979cf05fdbd19f7012800ea050bb26a9483a7fdcc66b80",
+    "OcPlayer-v0.2.3-b675-6adb83c-dirty-ios-unsigned.dSYM.zip": "aa2cb2df9af2557c19836fc92db294194f338854aa0f0edcb8324ff4db4b874e"
+  }
+}

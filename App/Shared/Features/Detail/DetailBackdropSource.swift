@@ -11,7 +11,8 @@ enum DetailBackdropSource {
         let url = DisplayMetadata.backdropURL(serverURL: serverTarget.url, overlay: overlay,
                                              requestedWidth: width, policy: policy)
         return BackdropSourceLatch.Target(
-            url: url, authHeader: url.map { DisplayMetadata.isTMDbImage($0) } == true ? nil : serverTarget.authHeader
+            url: url, authHeader: url.map { DisplayMetadata.isTMDbImage($0) } == true ? nil : serverTarget.authHeader,
+            cacheScope: url.map { DisplayMetadata.isTMDbImage($0) } == true ? nil : server?.profile.imageCacheScope
         )
     }
 }

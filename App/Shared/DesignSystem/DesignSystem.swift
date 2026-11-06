@@ -57,6 +57,16 @@ enum BangumiStatusColor {
     static let rating: Color = .orange
 }
 
+extension ServerProfile {
+    /// 缓存可见范围不等同于 UserId；它还属于特定产品和服务器。
+    var imageCacheScope: String {
+        let server = resolvedServerID.map { "server:" + $0 }
+            ?? "profile:\(id):origin:\(baseURL.absoluteString)"
+        // 长度前缀避免字段中的分隔符产生歧义。
+        return [kind.rawValue, server, userID].map { "\($0.utf8.count):\($0)" }.joined()
+    }
+}
+
 // MARK: - MediaItem → 图片 URL（要服务器会话，所以放 App 层）
 
 extension MediaItem {
@@ -183,6 +193,7 @@ struct ItemTitleLogoView: View {
                let cached = ImagePipeline.shared.memoryCachedImage(
                    url: url,
                    authHeader: target.authHeader,
+                   cacheScope: server.profile.imageCacheScope,
                    maxPixelSize: maxPixel
                ) {
                 _logoImage = State(initialValue: cached)
@@ -218,8 +229,8 @@ struct ItemTitleLogoView: View {
             }
         }
         .motion(Motion.standard, value: logoImage != nil)
-        .task(id: "\(item.id)#\(item.logoImageTag ?? "")") {
-            let key = "\(item.id)#\(item.logoImageTag ?? "")"
+        .task(id: "\(item.id)#\(item.logoImageTag ?? "")#\(server?.profile.imageCacheScope ?? "")") {
+            let key = "\(item.id)#\(item.logoImageTag ?? "")#\(server?.profile.imageCacheScope ?? "")"
             guard item.logoImageTag != nil else {
                 logoImage = nil
                 loadFailed = false
@@ -237,14 +248,14 @@ struct ItemTitleLogoView: View {
                 loadedKey = key
                 return
             }
-            if let cached = ImagePipeline.shared.memoryCachedImage(url: url, authHeader: target.authHeader, maxPixelSize: maxPixel) {
+            if let cached = ImagePipeline.shared.memoryCachedImage(url: url, authHeader: target.authHeader, cacheScope: server?.profile.imageCacheScope, maxPixelSize: maxPixel) {
                 logoImage = cached
                 loadFailed = false
                 loadedKey = key
                 return
             }
             do {
-                if let loaded = try await ImagePipeline.shared.load(url, authHeader: target.authHeader, maxPixelSize: maxPixel) {
+                if let loaded = try await ImagePipeline.shared.load(url, authHeader: target.authHeader, cacheScope: server?.profile.imageCacheScope, maxPixelSize: maxPixel) {
                     guard !Task.isCancelled else { return }
                     logoImage = loaded
                     loadFailed = false
@@ -308,6 +319,7 @@ struct PosterCard: View {
                 MediaArtwork(
                     url: url,
                     authHeader: posterOverride == nil ? serverTarget.authHeader : nil,
+                    cacheScope: posterOverride == nil ? server?.profile.imageCacheScope : nil,
                     shape: .poster,
                     width: width,
                     // 解码预算不写死：按卡片实际显示尺寸 × 屏幕缩放算（见 MediaArtwork）。
@@ -411,6 +423,7 @@ struct LatestCard: View {
                 MediaArtwork(
                     url: target.url,
                     authHeader: target.authHeader,
+                    cacheScope: server?.profile.imageCacheScope,
                     shape: .still,
                     width: width
                 )
@@ -493,6 +506,7 @@ struct LibraryCard: View {
                     MediaArtwork(
                         url: target.url,
                         authHeader: target.authHeader,
+                        cacheScope: server?.profile.imageCacheScope,
                         shape: .still,
                         width: width,
                         // 合集库（UserView 的 CollectionType = boxsets）在服务端没有封面图
@@ -651,6 +665,7 @@ struct StillCard: View {
                 MediaArtwork(
                     url: target.url,
                     authHeader: target.authHeader,
+                    cacheScope: server?.profile.imageCacheScope,
                     shape: .still,
                     width: width
                 ) {

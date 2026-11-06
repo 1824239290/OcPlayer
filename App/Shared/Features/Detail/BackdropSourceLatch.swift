@@ -39,10 +39,12 @@ struct BackdropSourceLatch {
     struct Target: Equatable {
         var url: URL?
         var authHeader: String?
+        var cacheScope: String? = nil
 
-        init(url: URL?, authHeader: String?) {
+        init(url: URL?, authHeader: String?, cacheScope: String? = nil) {
             self.url = url
             self.authHeader = authHeader
+            self.cacheScope = cacheScope
         }
     }
 

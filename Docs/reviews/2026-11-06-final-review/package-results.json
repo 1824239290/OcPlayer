@@ -1,0 +1,101 @@
+{
+  "AppDesignKit": {
+    "executed": 187,
+    "passed": 187,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 187,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-AppDesignKit-repeat.log"
+  },
+  "CoreModel": {
+    "executed": 19,
+    "passed": 19,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 19,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-CoreModel.log"
+  },
+  "DiagnosticsKit": {
+    "executed": 95,
+    "passed": 95,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 95,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-DiagnosticsKit.log"
+  },
+  "PlaybackKit": {
+    "executed": 71,
+    "passed": 71,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 69,
+    "swiftTesting": 2,
+    "source": "ocplayer-final-package-PlaybackKit.log"
+  },
+  "DanmakuKit": {
+    "executed": 228,
+    "passed": 228,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 228,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-DanmakuKit.log"
+  },
+  "DanmakuRenderKit": {
+    "executed": 12,
+    "passed": 12,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 12,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-DanmakuRenderKit.log"
+  },
+  "JellyfinKit": {
+    "executed": 224,
+    "passed": 224,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 224,
+    "swiftTesting": 0,
+    "source": "ocplayer-final-package-JellyfinKit.log"
+  },
+  "BangumiKit": {
+    "executed": 89,
+    "passed": 89,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 0,
+    "swiftTesting": 89,
+    "source": "ocplayer-final-package-BangumiKit.log"
+  },
+  "MetadataKit": {
+    "executed": 301,
+    "passed": 301,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 267,
+    "swiftTesting": 34,
+    "source": "ocplayer-final-package-MetadataKit.log"
+  },
+  "MoviePilotKit": {
+    "executed": 102,
+    "passed": 102,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 82,
+    "swiftTesting": 20,
+    "source": "ocplayer-final-package-MoviePilotKit.log"
+  },
+  "ErikaKit": {
+    "executed": 93,
+    "passed": 93,
+    "skipped": 0,
+    "failed": 0,
+    "xctest": 28,
+    "swiftTesting": 65,
+    "source": "ocplayer-final-package-ErikaKit.log"
+  }
+}

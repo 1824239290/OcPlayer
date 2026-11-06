@@ -1,0 +1,20 @@
+{
+  "macos": {
+    "version": "0.2.2",
+    "build": "674",
+    "GitCommit": "38fabfe-dirty",
+    "executableUUID": "UUID: 8DECDA82-FF78-3541-AF69-744330218B53 (arm64) /tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer\n",
+    "dsymUUID": "UUID: 8DECDA82-FF78-3541-AF69-744330218B53 (arm64) /tmp/ocplayer-kernel-v034-macos/Build/Products/Release/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "uuidMatches": true,
+    "coreTag": "v0.3.4"
+  },
+  "ios": {
+    "version": "0.2.2",
+    "build": "674",
+    "GitCommit": "38fabfe-dirty",
+    "executableUUID": "UUID: 06062C19-B57A-34DB-B1CE-B2C9D9F7080E (arm64) /tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app/OcPlayer\n",
+    "dsymUUID": "UUID: 06062C19-B57A-34DB-B1CE-B2C9D9F7080E (arm64) /tmp/ocplayer-kernel-v034-ios/Build/Products/Release-iphoneos/OcPlayer.app.dSYM/Contents/Resources/DWARF/OcPlayer\n",
+    "uuidMatches": true,
+    "coreTag": "v0.3.4"
+  }
+}

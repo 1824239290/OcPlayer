@@ -62,6 +62,7 @@ struct AmbientBackdropCarousel: View {
                 if app.ambiencePoolIsLoaded {
                     BackdropAmbienceView(
                         target: app.currentAmbienceTarget,
+                        cacheScope: app.server?.profile.imageCacheScope,
                         scrim: .home
                     )
                     .transition(.section)

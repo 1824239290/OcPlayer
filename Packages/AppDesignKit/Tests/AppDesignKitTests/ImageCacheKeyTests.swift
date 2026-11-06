@@ -19,9 +19,9 @@ final class ImageCacheKeyTests: XCTestCase {
 
     /// 同一路径、**不同 host** → 同一个规范化键（这就是本修复的全部目的）。
     func testSamePathOnDifferentHostsSharesKey() {
-        let lan = ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.100.107"), authHeader: "Tok=\"a\"")
-        let wan = ImageCacheKey.canonicalURL(for: mediaURL(host: "100.64.1.96"), authHeader: "Tok=\"a\"")
-        let reverse = ImageCacheKey.canonicalURL(for: mediaURL(host: "nas.example.com"), authHeader: "Tok=\"a\"")
+        let lan = ImageCacheKey.canonicalURL(for: mediaURL(host: "192.168.100.107"), authHeader: "Tok=\"a\"", cacheScope: "server-A")
+        let wan = ImageCacheKey.canonicalURL(for: mediaURL(host: "100.64.1.96"), authHeader: "Tok=\"a\"", cacheScope: "server-A")
+        let reverse = ImageCacheKey.canonicalURL(for: mediaURL(host: "nas.example.com"), authHeader: "Tok=\"a\"", cacheScope: "server-A")
 
         XCTAssertNotNil(lan)
         XCTAssertEqual(lan, wan, "局域网与 Tailscale 必须共键")
@@ -44,10 +44,10 @@ final class ImageCacheKeyTests: XCTestCase {
 
     /// 不同条目 / 不同尺寸 / 不同 tag → 不同键（串图就是灾难）。
     func testDistinctImagesKeepDistinctKeys() {
-        let base = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "A")
-        let otherItem = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", item: "zzz"), authHeader: "A")
-        let otherWidth = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", width: 400), authHeader: "A")
-        let otherTag = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", tag: "cafe"), authHeader: "A")
+        let base = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "A", cacheScope: "server-A")
+        let otherItem = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", item: "zzz"), authHeader: "A", cacheScope: "server-A")
+        let otherWidth = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", width: 400), authHeader: "A", cacheScope: "server-A")
+        let otherTag = ImageCacheKey.canonicalURL(for: mediaURL(host: "h", tag: "cafe"), authHeader: "A", cacheScope: "server-A")
 
         XCTAssertNotEqual(base, otherItem)
         XCTAssertNotEqual(base, otherWidth)
@@ -56,13 +56,13 @@ final class ImageCacheKeyTests: XCTestCase {
 
     /// **不同服务器 / 不同账号 → 不同键**：丢掉 host 后，认证头是唯一的归属信号。
     func testDifferentAccountsDoNotShareKey() {
-        let a = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "Token=\"userA\"")
-        let b = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "Token=\"userB\"")
+        let a = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "Token=\"userA\"", cacheScope: "server-A")
+        let b = ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "Token=\"userB\"", cacheScope: "server-A")
         XCTAssertNotEqual(a, b, "同一台服务器上的两个账号不能互看缓存")
         // 但没有认证头时是确定性的（公开图床 / 未登录）
         XCTAssertEqual(
-            ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: nil),
-            ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: ""))
+            ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: nil, cacheScope: "server-A"),
+            ImageCacheKey.canonicalURL(for: mediaURL(host: "h"), authHeader: "", cacheScope: "server-A"))
     }
 
     /// 非媒体服务器图床（MoviePilot 海报、bgm 封面）不改键——它们只有一条地址，
@@ -86,9 +86,9 @@ final class ImageCacheKeyTests: XCTestCase {
             URL(string: "http://\(host):8096/UserImage?userId=user-9&tag=\(tag)")!
         }
         let lan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107"),
-                                                           authHeader: "UserId=\"user-9\""))
+                                                           authHeader: "UserId=\"user-9\"", cacheScope: "server-A"))
         let wan = try XCTUnwrap(ImageCacheKey.canonicalURL(for: avatar(host: "100.64.1.96"),
-                                                           authHeader: "UserId=\"user-9\""))
+                                                           authHeader: "UserId=\"user-9\"", cacheScope: "server-A"))
         XCTAssertEqual(lan, wan, "换地址必须共键")
         XCTAssertEqual(lan.host, ImageCacheKey.placeholderHost)
         XCTAssertEqual(lan.path, "/UserImage")
@@ -98,12 +98,12 @@ final class ImageCacheKeyTests: XCTestCase {
         XCTAssertNotEqual(
             lan,
             ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107", tag: "av-8"),
-                                       authHeader: "UserId=\"user-9\""))
+                                       authHeader: "UserId=\"user-9\"", cacheScope: "server-A"))
         // 同一台服务器上的两个账号不能互看缓存。
         XCTAssertNotEqual(
             lan,
             ImageCacheKey.canonicalURL(for: avatar(host: "192.168.100.107"),
-                                       authHeader: "UserId=\"other\""))
+                                       authHeader: "UserId=\"other\"", cacheScope: "server-A"))
     }
 
     /// Emby 的头像走 `/emby/Users/{id}/Images/Primary` —— 含 `/Images/` 段，
@@ -111,7 +111,7 @@ final class ImageCacheKeyTests: XCTestCase {
     func testEmbyUserAvatarEndpointIsRecognized() throws {
         let url = URL(string: "http://nas.local:8096/emby/Users/user-e/Images/Primary?tag=av-7")!
         XCTAssertTrue(ImageCacheKey.isMediaServerImage(url))
-        let key = try XCTUnwrap(ImageCacheKey.canonicalURL(for: url, authHeader: "UserId=\"user-e\""))
+        let key = try XCTUnwrap(ImageCacheKey.canonicalURL(for: url, authHeader: "UserId=\"user-e\"", cacheScope: "server-A"))
         XCTAssertEqual(key.path, "/emby/Users/user-e/Images/Primary")
     }
 
@@ -258,7 +258,7 @@ final class ImageCacheKeyTests: XCTestCase {
     private func request(_ url: URL, auth: String? = "Token=\"u\"") -> URLRequest {
         var r = URLRequest(url: url)
         if let auth { r.setValue(auth, forHTTPHeaderField: "Authorization") }
-        return r
+        return ImageCacheKey.scopedRequest(r, cacheScope: "server-A")
     }
 
     /// **端到端（真 URLCache）**：从局域网地址存进去，用 Tailscale 地址取出来能命中。
@@ -502,7 +502,7 @@ final class ImagePipelineDiskFirstTests: XCTestCase {
         let auth = "MediaBrowser DeviceId=\"D\", Token=\"T\""
 
         // 第一次：走网络并落盘
-        let first = try await pipeline.load(url, authHeader: auth, maxPixelSize: 720)
+        let first = try await pipeline.load(url, authHeader: auth, cacheScope: "server-A", maxPixelSize: 720)
         XCTAssertNotNil(first)
 
         // 之后让网络永久挂起（模拟断网时连接既不成功也不失败）
@@ -513,7 +513,7 @@ final class ImagePipelineDiskFirstTests: XCTestCase {
         let restarted = ImagePipeline(cacheDirectory: dir, protocolClasses: [HangingProtocol.self])
 
         let start = Date()
-        let second = try await restarted.load(otherAddress, authHeader: auth, maxPixelSize: 720)
+        let second = try await restarted.load(otherAddress, authHeader: auth, cacheScope: "server-A", maxPixelSize: 720)
         let elapsed = Date().timeIntervalSince(start)
 
         XCTAssertNotNil(second, "缓存命中必须出图")

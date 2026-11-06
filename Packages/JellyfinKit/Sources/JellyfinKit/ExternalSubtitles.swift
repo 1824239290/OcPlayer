@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import DiagnosticsKit
 import Get
 import JellyfinAPI
@@ -6,7 +7,7 @@ import JellyfinAPI
 /// 一条 Jellyfin 外挂字幕（服务器上的侧车文件，不在视频容器里）。
 /// 直连播放时客户端负责下载后喂给内核（`addExternalSubtitle`）。
 public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
-    /// `itemID#index`
+    /// 租户、条目、媒体源、轨道和格式的稳定身份。
     public let id: String
     public let index: Int
     public let title: String?
@@ -17,8 +18,8 @@ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
     /// 下载路径（不带 host、不带 token —— 认证走请求头）。
     public let remotePath: String
 
-    init(itemID: String, mediaSourceID: String? = nil, index: Int, title: String?, language: String?, codec: String) {
-        self.id = "\(itemID)#\(index)"
+    init(itemID: String, mediaSourceID: String? = nil, namespace: String = "", index: Int, title: String?, language: String?, codec: String) {
+        self.id = Self.stableKey([namespace, itemID, mediaSourceID ?? itemID, String(index), Self.fileExtension(forCodec: codec) ?? codec])
         self.index = index
         self.title = title
         self.language = language
@@ -29,6 +30,20 @@ public struct ExternalSubtitle: Identifiable, Hashable, Sendable {
         // （同一 item 挂多个版本）时必须用真正的 mediaSourceId，否则 404。
         let resolvedMediaSourceID = mediaSourceID ?? itemID
         self.remotePath = "/Videos/\(itemID)/\(resolvedMediaSourceID)/Subtitles/\(index)/Stream.\(fileExtension)"
+    }
+
+    static func stableKey(_ components: [String]) -> String {
+        let joined = components.map { "\($0.utf8.count):\($0)" }.joined()
+        return SHA256.hash(data: Data(joined.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// 下载入口再绑定服务器，兼容手工构造的旧字幕对象。
+    func cacheFileName(profile: ServerProfile) -> String {
+        Self.stableKey([Self.namespace(profile: profile), id]) + "." + fileExtension
+    }
+
+    static func namespace(profile: ServerProfile) -> String {
+        stableKey([profile.kind.rawValue, profile.baseURL.absoluteString, profile.userID])
     }
 
     /// 文本字幕的扩展名映射；图像字幕（PGS sup 等）内核外挂不吃，返回 nil 跳过。
@@ -51,6 +66,10 @@ extension JellyfinServer {
     /// 条目的外挂字幕列表。Jellyfin 把 `.zh.srt` 这类侧车文件暴露成
     /// `MediaStream(type: subtitle, isExternal: true)`；内封字幕内核自己认，不用管。
     public func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
+        try await externalSubtitles(itemID: itemID, mediaSourceID: nil)
+    }
+
+    public func externalSubtitles(itemID: String, mediaSourceID selectedSourceID: String?) async throws -> [ExternalSubtitle] {
         let result = try await send(
             Paths.getItems(parameters: .init(
                 userID: profile.userID,
@@ -58,7 +77,13 @@ extension JellyfinServer {
                 ids: [itemID]
             ))
         )
-        let mediaSource = result.items?.first?.mediaSources?.first
+        let sources = result.items?.first?.mediaSources ?? []
+        let mediaSource: MediaSourceInfo?
+        if let selectedSourceID {
+            mediaSource = sources.first { $0.id == selectedSourceID }
+        } else if let index = MediaSourceSelection.preferredIndex(count: sources.count, supportsDirectPlay: { sources[$0].isSupportsDirectPlay == true }, supportsDirectStream: { sources[$0].isSupportsDirectStream == true }) {
+            mediaSource = sources[index]
+        } else { mediaSource = nil }
         let mediaSourceID = mediaSource?.id
         let streams = mediaSource?.mediaStreams ?? []
         return streams.compactMap { stream in
@@ -72,6 +97,7 @@ extension JellyfinServer {
             return ExternalSubtitle(
                 itemID: itemID,
                 mediaSourceID: mediaSourceID,
+                namespace: ExternalSubtitle.namespace(profile: profile),
                 index: index,
                 title: stream.title ?? stream.displayTitle,
                 language: stream.language,
@@ -93,15 +119,7 @@ extension JellyfinServer {
         }
         let directory = OcPlayerStorage.directory("Subtitles")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let safeID = subtitle.id
-            .replacingOccurrences(of: "#", with: "-")
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .replacingOccurrences(of: "\\", with: "-")
-        let safeExt = subtitle.fileExtension
-            .replacingOccurrences(of: "/", with: "")
-            .replacingOccurrences(of: "..", with: "")
-        let url = directory.appending(path: "\(safeID).\(safeExt)")
+        let url = directory.appending(path: subtitle.cacheFileName(profile: profile))
         try data.write(to: url, options: .atomic)
         return url
     }

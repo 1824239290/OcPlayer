@@ -30,6 +30,7 @@ struct AmbienceTarget: Equatable {
     /// 底图地址与鉴权头（`MediaItem.imageTarget` 的产物）。
     var url: URL?
     var authHeader: String?
+    var cacheScope: String? = nil
     /// 遮罩档位：详情页/资源页用 `.detail`（顶部压暗，给白字头部兜底），
     /// 其余页面用 `.home`（全屏均衡雾化）。
     var scrim: BackdropAmbienceView.Scrim = .home
@@ -48,7 +49,7 @@ struct AmbienceTarget: Equatable {
     static func sessionPool(_ app: AppModel) -> AmbienceTarget? {
         let target = app.currentAmbienceTarget
         guard target.url != nil else { return nil }
-        return AmbienceTarget(url: target.url, authHeader: target.authHeader, scrim: .home)
+        return AmbienceTarget(url: target.url, authHeader: target.authHeader, cacheScope: app.server?.profile.imageCacheScope, scrim: .home)
     }
 
     /// 空 URL 的声明视同"没有氛围"：页面回退 `Color.pageBackground` 纯色底，
@@ -78,7 +79,7 @@ private struct PageAmbienceModifier: ViewModifier {
     private var declaredAmbience: WindowAmbience? {
         guard WindowAmbience.reachesScreen, let target, !target.isEmpty else { return nil }
         return target.ownsArt
-            ? WindowAmbience(url: target.url, authHeader: target.authHeader, scrim: target.scrim)
+            ? WindowAmbience(url: target.url, authHeader: target.authHeader, cacheScope: target.cacheScope, scrim: target.scrim)
             : nil
     }
 
@@ -88,6 +89,7 @@ private struct PageAmbienceModifier: ViewModifier {
                 if drawsOwnLayer, let target, !target.isEmpty {
                     BackdropAmbienceView(
                         target: (url: target.url, authHeader: target.authHeader),
+                        cacheScope: target.cacheScope,
                         scrim: target.scrim,
                         fade: target.fade
                     )

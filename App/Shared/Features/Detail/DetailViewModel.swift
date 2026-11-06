@@ -17,6 +17,7 @@ import SwiftUI
 final class DetailViewModel {
     let item: MediaItem
     private weak var app: AppModel?
+    @ObservationIgnored private var attachedSessionGeneration: Int?
 
     // MARK: - 数据状态
 
@@ -348,7 +349,7 @@ final class DetailViewModel {
             // 只锁非空：算不出图时留给下一个时点（详情落地 / TMDB 补齐）。
             guard resolved.url != nil else { continue }
             lockedBackdropTargets[width] = BackdropSourceLatch.Target(
-                url: resolved.url, authHeader: resolved.authHeader
+                url: resolved.url, authHeader: resolved.authHeader, cacheScope: app?.server?.profile.imageCacheScope
             )
         }
     }
@@ -394,8 +395,9 @@ final class DetailViewModel {
 
     func attach(_ app: AppModel) {
         self.app = app
+        attachedSessionGeneration = app.sessionGeneration
         let target = app.currentAmbienceTarget
-        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader))
+        backdropArtwork.captureEntry(target: .init(url: target.url, authHeader: target.authHeader, cacheScope: app.server?.profile.imageCacheScope))
     }
 
     // MARK: - 选中
@@ -657,7 +659,9 @@ final class DetailViewModel {
     /// 单次加载后提交像素。来源锁定与像素就绪是两个阶段，不把 URL 当作图片已显示。
     private func prepareBackdrop() {
         let target = backdropTarget(width: DetailAmbienceImage.artURLWidth)
-        backdropArtwork.prepare(target: .init(url: target.url, authHeader: target.authHeader))
+        let snapshot = lockedBackdropTargets[DetailAmbienceImage.artURLWidth]
+            ?? .init(url: target.url, authHeader: target.authHeader, cacheScope: app?.server?.profile.imageCacheScope)
+        backdropArtwork.prepare(target: snapshot)
     }
 
     /// 读当前选中季的 TMDB 数据（先读缓存立即渲染，再后台补）。
@@ -827,7 +831,17 @@ final class DetailViewModel {
     }
 
     /// 已看状态写回：先更新仓储（内存全部投影 + SQLite），再同步本页展示值。
-    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID) async {
+    func applyPlayState(_ state: MediaItem.PlayState, toItemID id: MediaItem.ID, persistToRepository: Bool = true) async {
+        let generation = attachedSessionGeneration
+        if let app {
+            guard generation == app.sessionGeneration else { return }
+            if persistToRepository {
+                let repository = await app.metadata.currentRepository()
+                guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
+                await repository?.applyPlayState(state, forItemID: id, persistToStore: true)
+            }
+            guard generation == app.sessionGeneration, generation == attachedSessionGeneration else { return }
+        }
         if var current = detail, current.id == id {
             current.playState = state
             detail = current
@@ -839,7 +853,6 @@ final class DetailViewModel {
             guard let index = cached.firstIndex(where: { $0.id == id }) else { continue }
             episodesBySeason[seasonID]?[index].playState = state
         }
-        await app?.metadata.applyPlayState(state, forItemID: id)
     }
 
 }

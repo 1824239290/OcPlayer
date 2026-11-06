@@ -1,0 +1,19 @@
+{
+  "combinedCodeCommit": "6adb83c39f224e144f770eb5013e424b4155716c",
+  "appCodeCommit": "a688550386c90e7eee4f25302c991b3525c2eed6",
+  "corePR": 98,
+  "coreTag": "v0.3.4",
+  "recordedAt": "2026-11-06T10:27:03.328651+00:00",
+  "packageCommand": "swift test --package-path Packages/AppDesignKit --disable-automatic-resolution",
+  "macOSCommand": "xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination platform=macOS -derivedDataPath /tmp/ocplayer-kernel-v034-macos -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution test",
+  "iosCommand": "xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-iOS -configuration Debug -destination platform=iOS Simulator,id=6FE48A06-F30F-483F-918A-2160A2D43AAD -derivedDataPath /tmp/ocplayer-kernel-v034-ios-tests -clonedSourcePackagesDirPath /tmp/ocplayer-kernel-v034-macos/SourcePackages -skipPackageUpdates -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution test",
+  "packaging": "SKIP_ERIKA_FETCH=1; BUILD_ROOT=/tmp/ocplayer-final-package-<platform>; DIST_DIR=/tmp/ocplayer-image-isolation-artifacts/<platform>; Scripts/package-<platform>.sh",
+  "exits": {
+    "AppDesignKit": 0,
+    "macOSApp": 0,
+    "iOSApp": 0,
+    "packageMacOS": 0,
+    "packageIOS": 0,
+    "artifactVerification": 0
+  }
+}

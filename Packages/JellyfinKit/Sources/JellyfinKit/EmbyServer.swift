@@ -569,9 +569,13 @@ public struct EmbyServer: MediaServer {
     }
 
     public func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
-        let source = try await firstMediaSource(itemID: itemID)
+        try await externalSubtitles(itemID: itemID, mediaSourceID: nil)
+    }
+
+    public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
+        let source = try await subtitleMediaSource(itemID: itemID, mediaSourceID: mediaSourceID)
         return (source?.mediaStreams ?? []).compactMap {
-            $0.domainSubtitle(itemID: itemID, mediaSourceID: source?.id)
+            $0.domainSubtitle(itemID: itemID, mediaSourceID: source?.id, namespace: ExternalSubtitle.namespace(profile: profile))
         }
     }
 
@@ -579,15 +583,7 @@ public struct EmbyServer: MediaServer {
         let data = try await session.data(subtitle.remotePath, method: "GET")
         let directory = OcPlayerStorage.directory("Subtitles")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let safeID = subtitle.id
-            .replacingOccurrences(of: "#", with: "-")
-            .replacingOccurrences(of: "/", with: "-")
-            .replacingOccurrences(of: ":", with: "-")
-            .replacingOccurrences(of: "\\", with: "-")
-        let safeExt = subtitle.fileExtension
-            .replacingOccurrences(of: "/", with: "")
-            .replacingOccurrences(of: "..", with: "")
-        let url = directory.appending(path: "\(safeID).\(safeExt)")
+        let url = directory.appending(path: subtitle.cacheFileName(profile: profile))
         try data.write(to: url, options: .atomic)
         return url
     }
@@ -609,13 +605,16 @@ public struct EmbyServer: MediaServer {
         return sources[index].domainFileInfo(sourceCount: sources.count)
     }
 
-    private func firstMediaSource(itemID: String) async throws -> EmbyMediaSourceDTO? {
+    private func subtitleMediaSource(itemID: String, mediaSourceID: String?) async throws -> EmbyMediaSourceDTO? {
         let result = try await session.get(
             "/Items",
             query: [("userId", userID), ("fields", "MediaSources"), ("ids", itemID)],
             as: EmbyQueryResultDTO.self
         )
-        return result.items?.first?.mediaSources?.first
+        let sources = result.items?.first?.mediaSources ?? []
+        if let mediaSourceID { return sources.first { $0.id == mediaSourceID } }
+        guard let index = MediaSourceSelection.preferredIndex(count: sources.count, supportsDirectPlay: { sources[$0].supportsDirectPlay == true }, supportsDirectStream: { sources[$0].supportsDirectStream == true }) else { return nil }
+        return sources[index]
     }
 
     public func playbackInfo(itemID: String) async throws -> PlaybackInfo {

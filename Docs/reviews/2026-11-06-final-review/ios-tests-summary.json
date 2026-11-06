@@ -1,0 +1,49 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "6FE48A06-F30F-483F-918A-2160A2D43AAD",
+        "deviceName" : "iPhone 17 Pro",
+        "modelName" : "iPhone 17 Pro",
+        "osBuildNumber" : "23D8133",
+        "osVersion" : "26.3.1",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 928,
+      "skippedTests" : 3,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "OcPlayer-iOS · Built with macOS 26.6",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1793957514.835,
+  "passedTests" : 928,
+  "result" : "Passed",
+  "runtimeWarnings" : [
+
+  ],
+  "skippedTests" : 3,
+  "startTime" : 1793957354.479,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - OcPlayer-iOS",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "53% of duration",
+      "text" : "13 longest test runs with outlier durations exceeding 0.96s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 931
+}

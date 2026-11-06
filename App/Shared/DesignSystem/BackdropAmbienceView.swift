@@ -18,6 +18,7 @@ struct BackdropAmbienceView: View {
 
     /// URL 加载路径通常使用 800 宽 / 512px 解码；详情直接提供与清晰层共用的像素。
     let target: (url: URL?, authHeader: String?)
+    var cacheScope: String? = nil
     var scrim: Scrim = .detail
     /// URL 加载路径使用的淡入动画；已解码快照由页面外层统一动画。
     var fade: Animation? = Motion.ambient
@@ -35,6 +36,7 @@ struct BackdropAmbienceView: View {
                     RemoteImage(
                         url: target.url,
                         authHeader: target.authHeader,
+                        cacheScope: cacheScope,
                         maxPixelSize: 512,
                         preserveCurrentImageOnReload: true,
                         fadeAnimation: fade
@@ -111,6 +113,7 @@ struct BackdropAmbienceView: View {
 struct WindowAmbience: Hashable {
     var url: URL?
     var authHeader: String?
+    var cacheScope: String? = nil
     var scrim: BackdropAmbienceView.Scrim = .detail
 
     /// 整窗层是否够得着屏幕。macOS 的导航栈宿主是透明的，垫在它**后面**的层能

@@ -85,6 +85,7 @@ public struct MediaArtwork<Overlay: View>: View {
 
     public let url: URL?
     public var authHeader: String?
+    public var cacheScope: String?
     public var shape: Shape
     /// nil = 跟随可用宽度（网格自适应列，订阅卡那类）；给具体值 = 定宽（Rail/行内缩略图）。
     public var width: CGFloat?
@@ -125,6 +126,7 @@ public struct MediaArtwork<Overlay: View>: View {
     public init(
         url: URL?,
         authHeader: String? = nil,
+        cacheScope: String? = nil,
         shape: Shape,
         width: CGFloat? = nil,
         cornerRadius: CGFloat = Metrics.cardRadius,
@@ -141,6 +143,7 @@ public struct MediaArtwork<Overlay: View>: View {
     ) {
         self.url = url
         self.authHeader = authHeader
+        self.cacheScope = cacheScope
         self.shape = shape
         self.width = width
         self.cornerRadius = cornerRadius
@@ -233,6 +236,7 @@ public struct MediaArtwork<Overlay: View>: View {
             RemoteImage(
                 url: url,
                 authHeader: authHeader,
+                cacheScope: cacheScope,
                 maxPixelSize: pixelBudget(boxWidth: boxWidth),
                 emptyIcon: emptyIcon,
                 scaling: effectiveScaling,
@@ -267,6 +271,7 @@ public extension MediaArtwork where Overlay == EmptyView {
     init(
         url: URL?,
         authHeader: String? = nil,
+        cacheScope: String? = nil,
         shape: Shape,
         width: CGFloat? = nil,
         cornerRadius: CGFloat = Metrics.cardRadius,
@@ -283,6 +288,7 @@ public extension MediaArtwork where Overlay == EmptyView {
         self.init(
             url: url,
             authHeader: authHeader,
+            cacheScope: cacheScope,
             shape: shape,
             width: width,
             cornerRadius: cornerRadius,

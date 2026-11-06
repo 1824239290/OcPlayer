@@ -63,7 +63,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     private func makeProfile() -> ServerProfile {
         ServerProfile(
             id: "srv:user", serverName: "probe",
-            baseURL: URL(string: "https://media.example.com")!, userID: "user")
+            baseURL: URL(string: "https://media.example.com")!, userID: "user", serverID: "server-A")
     }
 
     private func makeCandidate(id: String, tag: String?) -> CachedItem {
@@ -86,8 +86,22 @@ final class LoginWallPosterResolutionTests: XCTestCase {
         guard let url = profile.imageURL(
             itemID: itemID, type: .primary, maxWidth: step.maxWidth, tag: tag
         ) else { return nil }
-        _ = try? await pipeline.load(url, authHeader: auth, maxPixelSize: step.maxPixelSize)
+        _ = try? await pipeline.load(url, authHeader: auth, cacheScope: profile.imageCacheScope, maxPixelSize: step.maxPixelSize)
         return url
+    }
+
+    func testOtherServerHistoryCannotResolveTheSameUserAndItem() async {
+        let (pipeline, _) = makePipeline()
+        let a = makeProfile()
+        var b = a
+        b.id = "server-B:user"
+        b.serverID = "server-B"
+        let identity = ImagePipeline.cacheIdentity(url: a.baseURL, authHeader: auth, cacheScope: a.imageCacheScope)
+        await seedCache(pipeline: pipeline, profile: a, itemID: "same-item", tag: "same-tag", step: (400, 400))
+        XCTAssertNotNil(LoginWallCatalogLoader.resolvePosterFile(
+            pipeline: pipeline, profile: a, identities: [identity], itemID: "same-item", tag: "same-tag"))
+        XCTAssertNil(LoginWallCatalogLoader.resolvePosterFile(
+            pipeline: pipeline, profile: b, identities: [identity], itemID: "same-item", tag: "same-tag"))
     }
 
     // MARK: - resolvePosterFile：单张判定
@@ -96,7 +110,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFileFindsCachedBytes() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
             step: (400, 400))
@@ -114,7 +128,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFileReturnsNilWhenAbsent() {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
 
         let file = LoginWallCatalogLoader.resolvePosterFile(
             pipeline: pipeline, profile: profile, identities: [identity],
@@ -127,7 +141,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFileTriesEveryIdentity() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let realIdentity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let realIdentity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
             step: (400, 400))
@@ -144,7 +158,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFileTriesEveryLadderStep() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         // 只写第二档（300/300）。
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
@@ -166,7 +180,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFileKeepsAsymmetricLadderStepParameters() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         // 只按第三档 (720, 360) 写：maxWidth=720、maxPixelSize=360。
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "abc123", tag: "t1",
@@ -185,7 +199,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePosterFilePrefersEarlierLadderStep() async throws {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
 
         // 两档都写。第一档 (400,400) 在阶梯里更靠前。
         await seedCache(
@@ -204,7 +218,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
         let firstURL = try XCTUnwrap(profile.imageURL(
             itemID: "abc123", type: .primary, maxWidth: firstStep.maxWidth, tag: "t1"))
         let expected = try XCTUnwrap(pipeline.cachedFileURL(
-            url: firstURL, cacheIdentity: identity, maxPixelSize: firstStep.maxPixelSize))
+            url: firstURL, cacheIdentity: identity, cacheScope: profile.imageCacheScope, maxPixelSize: firstStep.maxPixelSize))
         XCTAssertEqual(file, expected, "两档都命中时必须返回阶梯里更靠前的那一档")
     }
 
@@ -228,7 +242,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePostersStopsAtLimit() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
 
         var candidates: [CachedItem] = []
         for index in 0..<10 {
@@ -249,7 +263,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePostersSkipsItemsWithoutImageTag() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "item1", tag: "t1",
             step: (400, 400))
@@ -268,7 +282,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePostersReturnsEmptyWhenNothingCached() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
 
         let candidates = (0..<5).map { makeCandidate(id: "item\($0)", tag: "t\($0)") }
         let posters = await LoginWallCatalogLoader.resolvePosters(
@@ -281,7 +295,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePostersShortCircuitsOnNonPositiveLimit() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "item0", tag: "t0",
             step: (400, 400))
@@ -299,7 +313,7 @@ final class LoginWallPosterResolutionTests: XCTestCase {
     func testResolvePostersAttachesProceduralArt() async {
         let (pipeline, _) = makePipeline()
         let profile = makeProfile()
-        let identity = ImagePipeline.cacheIdentity(authHeader: auth)
+        let identity = ImagePipeline.cacheIdentity(url: profile.baseURL, authHeader: auth, cacheScope: profile.imageCacheScope)
         await seedCache(
             pipeline: pipeline, profile: profile, itemID: "item0", tag: "t0",
             step: (400, 400))

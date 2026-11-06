@@ -1143,7 +1143,7 @@ extension AppModel {
         externalSubtitleTask = Task { [weak self] in
             let subtitles: [ExternalSubtitle]
             do {
-                subtitles = try await server.externalSubtitles(itemID: itemID)
+                subtitles = try await server.externalSubtitles(itemID: itemID, mediaSourceID: request.sessionContext?.mediaSourceID)
             } catch is CancellationError {
                 return
             } catch {
@@ -1163,8 +1163,9 @@ extension AppModel {
             // 「繁體先下完、简体后下完」在这里连着切两次字幕轨。整批只校正一次。
             // 用 `defer` 收尾：循环里有多处提前 return（取消 / 换片 / 单条失败），
             // 少关一次 flag 就是这一整片再也不按偏好选字幕。
-            playback.beginExternalSubtitleBatch()
-            defer { playback.endExternalSubtitleBatch(for: source) }
+            guard !Task.isCancelled, self.activePlaybackIdentity == identity,
+                  let batchID = playback.beginExternalSubtitleBatch(for: source) else { return }
+            defer { playback.endExternalSubtitleBatch(for: source, batchID: batchID) }
             // `P2-33`：**并发取、串行挂**。
             //
             // 原实现逐条 `await`，N 条字幕 = N 个串行往返。现在默认 4 路并发，
