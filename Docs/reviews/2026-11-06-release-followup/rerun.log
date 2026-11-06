@@ -1,0 +1,6 @@
+inflight-switch: expected list=[2], error=nil; actual list=[], error=Optional(main.MoviePilotError.generic("CancellationError()")), calls=["A"]; FAIL
+manual-retry-control: PASS
+settled-switch-control: PASS
+automatic-resume-control: PASS
+explicit-intent-control: PASS
+remote-pause-during-interruption: expected paused,resumes=0; actual playing=true, resumes=1; FAIL

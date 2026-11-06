@@ -1,0 +1,26 @@
+==> 清理上一次构建产物（项目根：/Users/jumusu/Documents/project/OcPlayer）
+  已删除 Packages/AppDesignKit/.build  (182.1MB)
+  已删除 Packages/AppDesignKit/.swiftpm  (0KB)
+  已删除 Packages/BangumiKit/.build  (567.4MB)
+  已删除 Packages/BangumiKit/.swiftpm  (0KB)
+  已删除 Packages/CoreModel/.build  (119.8MB)
+  已删除 Packages/CoreModel/.swiftpm  (0KB)
+  已删除 Packages/DanmakuKit/.build  (159.3MB)
+  已删除 Packages/DanmakuKit/.swiftpm  (0KB)
+  已删除 Packages/DanmakuRenderKit/.build  (141.0MB)
+  已删除 Packages/DanmakuRenderKit/.swiftpm  (0KB)
+  已删除 Packages/DiagnosticsKit/.build  (130.5MB)
+  已删除 Packages/DiagnosticsKit/.swiftpm  (0KB)
+  已删除 Packages/ErikaKit/.build  (776.7MB)
+  已删除 Packages/ErikaKit/.swiftpm  (0KB)
+  已删除 Packages/JellyfinKit/.build  (785.6MB)
+  已删除 Packages/JellyfinKit/.swiftpm  (0KB)
+  已删除 Packages/MetadataKit/.build  (1.3GB)
+  已删除 Packages/MetadataKit/.swiftpm  (0KB)
+  已删除 Packages/MoviePilotKit/.build  (145.9MB)
+  已删除 Packages/MoviePilotKit/.swiftpm  (0KB)
+  已删除 Packages/PlaybackKit/.build  (153.7MB)
+  已删除 Packages/PlaybackKit/.swiftpm  (0KB)
+
+已释放：4.4GB
+项目当前占用：7.0G   磁盘可用：170Gi

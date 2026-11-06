@@ -1,0 +1,3 @@
+automatic-resume-control: PASS
+explicit-intent-control: PASS
+remote-pause-during-interruption: expected paused,resumes=0; actual playing=true, resumes=1; FAIL

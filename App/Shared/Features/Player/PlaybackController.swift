@@ -249,7 +249,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         return PlaybackPreferences.danmakuUseOverlayRenderer
     }
 
-    init() {
+    init(nowPlaying: PlaybackNowPlayingCenter = PlaybackNowPlayingCenter()) {
+        self.nowPlaying = nowPlaying
         usesOverlayDanmakuRenderer = PlaybackController.resolveOverlayDanmakuRoute()
         // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
         danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
@@ -365,7 +366,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 播放期间阻止息屏。不参与 Observation：它没有任何 UI 表示。
     @ObservationIgnored private let wakeLock = PlaybackWakeLock()
     /// 系统「正在播放」与媒体键 / 控制中心命令。同样没有 UI 表示。
-    @ObservationIgnored private let nowPlaying = PlaybackNowPlayingCenter()
+    @ObservationIgnored private let nowPlaying: PlaybackNowPlayingCenter
     #if os(iOS)
     /// 来电 / Siri 之类的音频中断。配上 `.playback` 会话后系统才会发这些通知。
     @ObservationIgnored private let audioInterruptions = PlaybackAudioInterruptions()
@@ -418,8 +419,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
                 self.togglePlayPause()
             },
             pause: { [weak self] in
-                guard let self, self.state.state == .playing else { return }
-                self.togglePlayPause()
+                self?.pauseFromRemoteCommand()
             },
             toggle: { [weak self] in self?.togglePlayPause() },
             skip: { [weak self] seconds in self?.skip(by: seconds) },
@@ -1406,6 +1406,23 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     // MARK: - 控制
+
+    func pauseFromRemoteCommand() {
+        #if os(iOS)
+        // Explicit pause also revokes automatic resume when already interrupted.
+        audioInterruptions.noteUserIntent()
+        #endif
+        if openingRequestID != nil {
+            openingPauseIntent = true
+            return
+        }
+        guard state.state == .playing, let engine else { return }
+        do {
+            try engine.pause()
+        } catch {
+            setupError = "\(error)"
+        }
+    }
 
     func togglePlayPause() {
         #if os(iOS)

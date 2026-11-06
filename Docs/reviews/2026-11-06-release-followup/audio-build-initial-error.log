@@ -1,0 +1,15 @@
+Docs/reviews/2026-11-06-release-followup/AudioProbe.swift:13:8: error: expected ',' separator
+11 |     }
+12 |     var remotePause: () -> Void { { [weak self] in
+13 |  [weak self] in
+   |        `- error: expected ',' separator
+14 |                 guard let self, self.state == .playing else { return }
+15 |                 self.togglePlayPause()
+
+Docs/reviews/2026-11-06-release-followup/AudioProbe.swift:13:3: error: cannot find 'weak' in scope
+11 |     }
+12 |     var remotePause: () -> Void { { [weak self] in
+13 |  [weak self] in
+   |   `- error: cannot find 'weak' in scope
+14 |                 guard let self, self.state == .playing else { return }
+15 |                 self.togglePlayPause()
