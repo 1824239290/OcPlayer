@@ -1,0 +1,27 @@
+import Foundation
+import XCTest
+@testable import AppDesignKit
+
+final class FinalReviewImageIsolationReproductionTests: XCTestCase {
+    func testDifferentServersWithSameUserAndItemMustNotShareImage() throws {
+        let a = URL(string: "https://server-a.invalid/Items/42/Images/Primary?maxWidth=720")!
+        let b = URL(string: "https://server-b.invalid/Items/42/Images/Primary?maxWidth=720")!
+        let authA = "Emby DeviceId=\"same-device\", UserId=\"same-user-id\", Token=\"token-a\""
+        let authB = "Emby DeviceId=\"same-device\", UserId=\"same-user-id\", Token=\"token-b\""
+        let keyA = try XCTUnwrap(ImageCacheKey.canonicalURL(for: a, authHeader: authA))
+        let keyB = try XCTUnwrap(ImageCacheKey.canonicalURL(for: b, authHeader: authB))
+        XCTAssertNotEqual(keyA, keyB, "不同服务器不能只凭局部 UserId 合并图片身份")
+
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = CanonicalImageURLCache(memoryCapacity: 1_048_576, diskCapacity: 0, directory: directory)
+        var requestA = URLRequest(url: a)
+        requestA.setValue(authA, forHTTPHeaderField: "Authorization")
+        var requestB = URLRequest(url: b)
+        requestB.setValue(authB, forHTTPHeaderField: "Authorization")
+        let response = try XCTUnwrap(HTTPURLResponse(url: a, statusCode: 200, httpVersion: nil, headerFields: nil))
+        cache.storeCachedResponse(CachedURLResponse(response: response, data: Data("server-a-poster".utf8)), for: requestA)
+        XCTAssertNotNil(cache.cachedResponse(for: requestA))
+        XCTAssertNil(cache.cachedResponse(for: requestB), "B 的请求不能读到 A 的图片缓存")
+    }
+}

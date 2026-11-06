@@ -1,0 +1,37 @@
+[
+  {
+    "platform": "macos",
+    "file": "OcPlayer-v0.2.2-b674-38fabfe-dirty-macOS-arm64.zip",
+    "bytes": 36152118,
+    "sha256": "038d2a6a27f8e61f73f5ac36568aae7dca71ac1867e6c2c00a575f772fcd29eb",
+    "matchesManifest": true
+  },
+  {
+    "platform": "macos",
+    "file": "OcPlayer-v0.2.2-b674-38fabfe-dirty-macOS-arm64.dmg",
+    "bytes": 40752284,
+    "sha256": "964455b0afb9e0ab535757a29ff9ca0e52dce8ddc5b619a5532f55d47875322d",
+    "matchesManifest": true
+  },
+  {
+    "platform": "macos",
+    "file": "OcPlayer-v0.2.2-b674-38fabfe-dirty-macOS-arm64.dSYM.zip",
+    "bytes": 37565564,
+    "sha256": "c20bc297a33cfaccc8da09311da0bad1dcbbfa72306c0014d80da92a5d66f40c",
+    "matchesManifest": true
+  },
+  {
+    "platform": "ios",
+    "file": "OcPlayer-v0.2.2-b674-38fabfe-dirty-ios-unsigned.ipa",
+    "bytes": 31231145,
+    "sha256": "7f7f428c8d25692c2becbf8f23617757057ae1c8a7d4555702d7d8d40da2b005",
+    "matchesManifest": true
+  },
+  {
+    "platform": "ios",
+    "file": "OcPlayer-v0.2.2-b674-38fabfe-dirty-ios-unsigned.dSYM.zip",
+    "bytes": 34924680,
+    "sha256": "eab9e275dbe63f202b94713b0056958db820e1b9fc3d7941b8682fc5755f4359",
+    "matchesManifest": true
+  }
+]

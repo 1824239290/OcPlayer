@@ -1,0 +1,10 @@
+{
+  "candidate": "38fabfe3ef3ad3b11b00ada56d8898562a6d2049",
+  "recordedAt": "2026-11-06T09:44:33.045230+00:00",
+  "xcode": "Xcode 27.1\nBuild version 27A9275\n",
+  "sourceCodeChanged": false,
+  "coreTag": "v0.3.4",
+  "spm": "swift test --package-path Packages/<package> --disable-automatic-resolution; App lock temporarily copied to existing Package.resolved files and restored",
+  "xcodeTests": "Both schemes Debug test with -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipPackageUpdates; macOS + iPhone 17 Pro simulator",
+  "packaging": "SKIP_ERIKA_FETCH=1; separate BUILD_ROOT with DerivedData symlink; separate DIST_DIR; package-macos.sh/package-ios.sh without tag (inspection artifacts only)"
+}
