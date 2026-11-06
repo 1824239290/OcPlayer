@@ -40,3 +40,5 @@ Xcode 测试与打包固定现有验收依赖：GRDB 7.11.1、Jellyfin SDK 3.3.0
 产物校验明细见 `artifact-verification.json` 与 `dmg-verification.json`；原始测试、构建、打包和校验输出及验证脚本保存在 `verification-logs.zip`。此前的图片、报告和代码证据均保留。
 
 本轮没有安装或重签 iOS 真机，也没有新增真实服务器/问题片源的现场验收。发布流程仍需真实设备冒烟；没有把模拟器通过描述成真机通过。
+
+后续 App CI 的标签栏固定等待失败、测试同步修正与新的本地全量验证，见 [CI_FOLLOWUP.md](CI_FOLLOWUP.md)。原始本轮日志包保持不变。

@@ -139,6 +139,36 @@ final class TabSearchIntegrationTests: XCTestCase {
         return nil
     }
 
+    private func findNavigation(_ root: UIViewController) -> UINavigationController? {
+        if let navigation = root as? UINavigationController { return navigation }
+        return root.children.compactMap { findNavigation($0) }.first
+    }
+
+    /// A fixed delay can expire in the middle of UIKit's tab/navigation transition.
+    /// Wait for the selected stack and visibility together; a permanent mismatch still fails.
+    private func waitForTabState(_ controller: UITabBarController, title: String,
+                                 depth: Int, hidden: Bool) async throws {
+        let index = try XCTUnwrap(controller.tabBar.items?.firstIndex { $0.title == title })
+        func ready() -> Bool {
+            guard controller.selectedIndex == index,
+                  let selected = controller.selectedViewController,
+                  let navigation = findNavigation(selected) else { return false }
+            return selected.viewIfLoaded?.window != nil
+                && navigation.viewControllers.count == depth
+                && controller.transitionCoordinator == nil
+                && navigation.transitionCoordinator == nil
+                && controller.isTabBarHidden == hidden
+        }
+        let deadline = Date().addingTimeInterval(3)
+        var settledFrames = 0
+        while Date() < deadline, settledFrames < 2 {
+            settledFrames = ready() ? settledFrames + 1 : 0
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertTrue(settledFrames == 2 && ready(),
+                      "\(title) must settle at depth \(depth), hidden=\(hidden); selected=\(controller.selectedIndex), hidden=\(controller.isTabBarHidden)")
+    }
+
     func testProductionTabBarSurvivesDetailReturnAndSearchSelection() async throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "TabSearchIntegrationTests-\(UUID())"))
         let app = AppModel(store: ServerStore(defaults: defaults, tokens: InMemoryTokenStore()), preferences: defaults)
@@ -160,18 +190,18 @@ final class TabSearchIntegrationTests: XCTestCase {
         defer { window.isHidden = true; window.rootViewController = nil; previousWindow?.makeKeyAndVisible() }
         try await Task.sleep(for: .milliseconds(350))
         let controller = try XCTUnwrap(findTabController(try XCTUnwrap(window.rootViewController)))
-        app.setNavPath([.detail(MediaItem(id: "tab-return", name: "返回验收", kind: .movie))], for: .home)
-        try await Task.sleep(for: .milliseconds(900))
         let phone = UIDevice.current.userInterfaceIdiom == .phone
+        app.setNavPath([.detail(MediaItem(id: "tab-return", name: "返回验收", kind: .movie))], for: .home)
+        try await waitForTabState(controller, title: "首页", depth: 2, hidden: phone)
         XCTAssertEqual(controller.isTabBarHidden, phone, "iPhone 详情隐藏标签栏，iPad 详情保留标签栏")
         app.selectedSection = .settings
-        try await Task.sleep(for: .milliseconds(300))
+        try await waitForTabState(controller, title: "设置", depth: 1, hidden: false)
         XCTAssertFalse(controller.isTabBarHidden, "切到其他 Tab 的根页必须显示标签栏")
         app.selectedSection = .home
-        try await Task.sleep(for: .milliseconds(300))
+        try await waitForTabState(controller, title: "首页", depth: 2, hidden: phone)
         XCTAssertEqual(controller.isTabBarHidden, phone)
         app.back()
-        try await Task.sleep(for: .milliseconds(700))
+        try await waitForTabState(controller, title: "首页", depth: 1, hidden: false)
         XCTAssertFalse(controller.isTabBarHidden, "从详情返回必须恢复标签栏")
         func searchControllers(_ root: UIViewController) -> [UISearchController] {
             let own = root.navigationItem.searchController.map { [$0] } ?? []
