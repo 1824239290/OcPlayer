@@ -101,6 +101,29 @@ public struct EmbyServer: MediaServer {
         return items.map(\.domainItem)
     }
 
+    public func playedItemsPage(startIndex: Int, limit: Int) async throws -> ServerPlayedItemsPage {
+        let result = try await session.get(
+            "/Users/\(userID)/Items",
+            query: [
+                ("startIndex", String(max(startIndex, 0))), ("limit", String(max(limit, 1))),
+                ("recursive", "true"), ("includeItemTypes", "Movie,Episode"),
+                ("isPlayed", "true"), ("sortBy", "DatePlayed,SortName"), ("sortOrder", "Descending"),
+                ("enableTotalRecordCount", "true"), ("enableUserData", "true"),
+                ("fields", "UserDataLastPlayedDate,RunTimeTicks,Genres,PrimaryImageAspectRatio,ProviderIds"),
+                ("enableImageTypes", "Primary"),
+            ], as: EmbyQueryResultDTO.self
+        )
+        return ServerPlayedItemsPage(items: (result.items ?? []).map {
+            ServerPlayedItem(item: $0.domainItem, lastPlayedAt: $0.userData?.lastPlayedDate.flatMap(Self.historyDate))
+        }, totalRecordCount: result.totalRecordCount)
+    }
+
+    private static func historyDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
+    }
+
     public func resumeItems() async throws -> [MediaItem] {
         // Emby 走老式 `/Users/{id}/Items/Resume`（Jellyfin 是 `/UserItems/Resume`）。
         let result = try await session.get(

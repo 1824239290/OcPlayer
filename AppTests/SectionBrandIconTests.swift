@@ -203,41 +203,16 @@ final class SectionBrandIconTests: XCTestCase {
         }
     }
 
-    // MARK: - 接线（makeSegments 实际传的资产名）
-
-    /// `makeSegments` 给两个品牌传的**资产名**必须和这里测的一致 —— 否则上面所有用例都绿，
-    /// 而 App 里画的仍是单色（反向变异实测：把 Bangumi 的 `colorName` 改回 `bangumi-logo`，
-    /// 6 条用例**全绿**，因为它们直接构造 `SectionBrandIcon`，绕过了真实配置）。
-    ///
-    /// 这条钉的是「配置」而不是「渲染」：它必须和上面两条选中态用例配成一对。
-    func testSegmentsWireBrandColorAssets() {
-        let segments = AppShellSectionGroup.makeSegments(
-            bangumiEnabled: true, moviepilotEnabled: true)
-
-        func brand(for section: AppModel.Section) -> (name: String, colorName: String, side: CGFloat)? {
-            guard let segment = segments.first(where: { $0.section == section }),
-                  case let .brand(name, colorName, side) = segment.icon
-            else { return nil }
-            return (name, colorName, side)
+    /// 完整集成入口已归入「观影」，主胶囊只保留三个页面。
+    func testSegmentsContainOnlyHomeMyAndSettings() {
+        let segments = AppShellSectionGroup.makeSegments()
+        XCTAssertEqual(segments.map(\.section), [.home, .my, .settings])
+        XCTAssertEqual(segments.map(\.title), ["首页", "观影", "设置"])
+        guard case .symbol(let normal, let selected) = segments[1].icon else {
+            return XCTFail("Viewing dashboard must use its film-card symbol")
         }
-
-        let bangumi = brand(for: .bangumi)
-        XCTAssertEqual(bangumi?.name, "bangumi-logo")
-        XCTAssertEqual(bangumi?.colorName, "bangumi-logo-color",
-                       "Bangumi 的彩色是另一份渐变资产；写回单色资产会让选中态退化成灰")
-        XCTAssertEqual(bangumi?.side, 20)
-
-        let moviepilot = brand(for: .moviepilot)
-        XCTAssertEqual(moviepilot?.name, "moviepilot-logo")
-        XCTAssertEqual(moviepilot?.colorName, "moviepilot-logo",
-                       "MoviePilot 的彩色就在同一份 SVG 里（只换渲染模式）")
-        XCTAssertEqual(moviepilot?.side, 18)
-
-        // 开关关掉时对应段消失（与侧栏时代一致）。
-        let noIntegrations = AppShellSectionGroup.makeSegments(
-            bangumiEnabled: false, moviepilotEnabled: false)
-        XCTAssertNil(noIntegrations.first { $0.section == .bangumi })
-        XCTAssertNil(noIntegrations.first { $0.section == .moviepilot })
+        XCTAssertEqual(normal, "play.rectangle.on.rectangle")
+        XCTAssertEqual(selected, "play.rectangle.on.rectangle.fill")
     }
 
     /// 两个品牌资产确实存在且能被 `Image` 解析（名字写错时 `Image` 不报错、只渲染成空）。

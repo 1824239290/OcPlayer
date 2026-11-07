@@ -17,6 +17,9 @@ import SwiftUI
 /// （后果是浅色模式黑底黑字）。系统按钮要走 `.tint(solidTint)`，让系统自己算反色
 /// ——细节与实测数据见 `neutralProminentButton()`。
 public enum AppAccent {
+    /// 自绘控件的中性强调色：直接使用灰白，避免读取系统彩色 accentColor。
+    public static let tint = Color.primary
+
     /// 实底强调（主行动按钮、选中态实底）的填充色。
     public static let solid = Color.primary
 

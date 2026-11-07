@@ -530,16 +530,12 @@ struct DetailView: View {
     private var compactPlayButton: some View {
         Button(action: playCurrent) {
             ZStack(alignment: .leading) {
-                // 中性强调色下的实底主行动：填充 `.primary`，文字必须**反色**
-                // （`AppAccent.onSolid`）。不点名反色字会整颗糊成白底白字——tint 是
-                // `.primary` 时系统不会自动给实底按钮换字色（详见 `AppAccent`）。
+                // 主播放按钮使用中性实底与反色文字，保持深浅色可读。
                 Capsule()
                     .fill(AppAccent.solid)
 
                 if let progress = resumeProgress {
-                    // 已播进度条压在实底上：用**反色**的半透明带——深色模式下是压暗、
-                    // 浅色模式下是提亮，两种外观都看得见（原来的 `Color.white` 压在
-                    // 白色实底上完全不可见）。
+                    // 半透明反色带标记已播比例，两种外观都可辨。
                     Rectangle()
                         .fill(AppAccent.onSolid.opacity(0.25))
                         .scaleEffect(x: progress, y: 1, anchor: .leading)
@@ -590,14 +586,14 @@ struct DetailView: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(played ? AnyShapeStyle(Color.accentColor.opacity(0.15)) : AnyShapeStyle(Color.primary.opacity(0.06)))
+                    .fill(played ? AnyShapeStyle(AppAccent.tint.opacity(0.15)) : AnyShapeStyle(Color.primary.opacity(0.06)))
                 if isUpdatingPlayed {
                     ProgressView()
                         .controlSize(.small)
                 } else {
                     Image(systemName: played ? "checkmark.circle.fill" : "checkmark.circle")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(played ? Color.accentColor : Color.primary.opacity(0.65))
+                        .foregroundStyle(played ? AppAccent.tint : Color.primary.opacity(0.65))
                         .symbolEffect(.bounce, value: played)
                 }
             }
@@ -605,7 +601,7 @@ struct DetailView: View {
             .clipShape(Circle())
             .overlay {
                 Circle()
-                    .strokeBorder(played ? Color.accentColor.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(played ? AppAccent.tint.opacity(0.35) : Color.primary.opacity(0.12), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

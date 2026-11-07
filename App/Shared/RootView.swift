@@ -16,6 +16,7 @@ struct RootView: View {
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
     /// 启动动画状态机（门控/时钟/撤除都在 presenter，见 LaunchPresenter）。
     @State private var launch = LaunchPresenter()
     /// iOS 预热可能在后台把 UI 建出来：后台不动画，激活再起表。
@@ -57,7 +58,9 @@ struct RootView: View {
             // 渲染」，而没有会话时 `phase == .onboarding`，登录页会挡住整个 AppShell。
             // 正常入口也进不去详情页——`OCPLAYER_START_ROUTE=detail*` 要求首页已载入
             // 带背景图的条目（见 `AppModel+LaunchRoute`），没服务器首页就是空的。
-            if DetailFlipPreviewStage.isRequested {
+            if MyDashboardPreviewStage.isRequested {
+                MyDashboardPreviewStage()
+            } else if DetailFlipPreviewStage.isRequested {
                 DetailFlipPreviewStage()
                     .transition(.section)
             } else {
@@ -68,24 +71,8 @@ struct RootView: View {
             #endif
         }
         .motion(Motion.slide, value: app.phase)
-        // 全 App 的强调色语言 = **中性**：只用前景色亮暗差表达「选中 / 强调」，
-        // 色相不参与（与 macOS 顶栏药丸、iOS 标签栏同一套，见 `AppShellSectionGroup`）。
-        //
-        // **钉在根节点这一个地方**，不再按 Tab 或按平台各钉一遍。tint 是环境值，
-        // `Color.accentColor` 与 `.foregroundStyle(.tint)` 都会跟着它走，所以这一行
-        // 覆盖：iOS 标签栏选中色、导航栏 / 工具栏按钮、`.bordered*` 按钮、Toggle /
-        // Picker / Stepper / Slider / ProgressView 这些吃 tint 的系统控件、以及 40 处
-        // 显式 `Color.accentColor` 与 13 处 `.foregroundStyle(.tint)`。macOS 原先没有
-        // 任何 pin、跟着用户的系统强调色走（可能是粉 / 石墨），这里一并统一。
-        //
-        // **曾经的做法别再回去**：`TabView` 上钉 `.tint(Color.primary)` 改标签栏选中色，
-        // 再给每个 Tab 根页挂 `.tabContentAccent()`（钉 `Color.blue`）把强调色"钉回去"。
-        // 那条路有三重代价——① 每新增一个 Tab 都要记得补一句，漏了不报错、只是那个 Tab
-        // 的强调元素悄悄变白；② 钉的是**具体色值** `Color.blue`，等于把全 App 的强调色
-        // 写死成系统蓝；③ `.tint` 无法用公开 API 还原成"未设置"（`\.tint` 是 `package`
-        // 保护级，`.environment(\.tint, nil)` 编译不过），于是那次"改标签栏"顺带把
-        // Toggle（绿→蓝）、菜单式 Picker 取值（灰→蓝）、圆形不定 ProgressView（灰→蓝）、
-        // 工具栏按钮（label→蓝）、`.bordered` 底（中性→蓝）一起换了色。
+        // 全局恢复中性灰白，实底按钮与开关沿用原来的对比度配方。
+        // 类型分布的品牌橙仅在图例处指定，不向其他控件传播。
         .tint(Color.primary)
         // 安全区要在 ignoresSafeArea 之外读：RootView 本体处于正常安全区内，
         // 播放锁横屏时这里会跟着重排出新值（横屏顶部归零、侧边变灵动岛禁区）。
@@ -200,6 +187,9 @@ struct RootView: View {
             }
         }
         .task {
+            #if OCPLAYER_SELFTEST
+            guard !MyDashboardPreviewStage.isRequested else { return }
+            #endif
             app.playback = controller
             // 媒体键 / 控制中心的回调装一次就够（命令中心是全局单例）。
             controller.installRemoteCommandHandlers()
@@ -207,6 +197,15 @@ struct RootView: View {
             await LaunchOptions.run(with: controller, presentPlayer: { url in
                 app.presentLocalFile(url)
             })
+        }
+        .task(id: app.viewingAvatarRequest(bangumiEnabled: bangumiEnabled)) {
+            #if OCPLAYER_SELFTEST
+            guard !MyDashboardPreviewStage.isRequested else { return }
+            #endif
+            // Prewarm globally, including while browsing Home. The dashboard never
+            // decides between server/Bangumi avatars after its header has appeared.
+            await app.viewingProfileAvatar.load(
+                app.viewingAvatarRequest(bangumiEnabled: bangumiEnabled), pipeline: app.avatarImagePipeline)
         }
         // 播放入口（本地文件 / 直连链接）挂在根视图：macOS 文件菜单 Cmd+O 在
         // 任何分区（设置 / Bangumi / MoviePilot…）下都可能触发，挂在某个分区
@@ -231,6 +230,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .background:
+                controller.checkpointLocalViewingRecord()
                 _ = app.playbackDidEnterBackground()
             case .active:
                 if launchAwaitingScene {
@@ -284,6 +284,9 @@ struct RootView: View {
 
     /// 启动动画进场：激活态立即起表；后台（iOS 预热）攒到激活。
     private func beginLaunchWhenSceneActive() {
+        #if OCPLAYER_SELFTEST
+        guard !MyDashboardPreviewStage.isRequested else { return }
+        #endif
         if scenePhase == .active {
             launch.begin(reduceMotion: reduceMotion)
         } else {

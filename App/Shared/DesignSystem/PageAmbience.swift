@@ -140,8 +140,8 @@ private struct RouteAmbienceModifier: ViewModifier {
         switch route {
         case .detail:
             content
-        case .library, .bangumiProfile, .bangumiCollectionList, .bangumiSubject, .bangumiCalendar,
-             .settingsSubpage:
+        case .library, .bangumiProgress, .bangumiProfile, .bangumiCollectionList, .bangumiSubject, .bangumiCalendar,
+             .moviepilotHome, .settingsSubpage:
             content.pageAmbience(AmbienceTarget.sessionPool(app))
         }
     }

@@ -66,7 +66,7 @@ private struct HoverRowHighlight: ViewModifier {
             .overlay(
                 shape
                     .strokeBorder(
-                        active ? Color.accentColor.opacity(0.35) : Color.clear,
+                        active ? AppAccent.tint.opacity(0.35) : Color.clear,
                         lineWidth: 1
                     )
                     .allowsHitTesting(false)

@@ -10,6 +10,8 @@ import SwiftUI
 /// - 搜索栏输入关键词后聚合搜索多源媒体，支持一键/高级订阅与站点资源下载
 /// - 右上角常驻下载管理、添加订阅与全站刷新追更菜单
 struct MoviePilotHomeView: View {
+    /// 统一搜索入口持有搜索框，本页复用结果与完整资源操作。
+    var externalSearchQuery: String? = nil
     @Environment(AppModel.self) private var app
     @Environment(MoviePilotCoordinator.self) private var moviepilot
     @Environment(\.contentLeading) private var contentLeading
@@ -193,37 +195,20 @@ struct MoviePilotHomeView: View {
         !submittedKeyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var mainContent: some View {
+    private var resultContent: some View {
         Group {
-            if isSearchingMode {
+            if isSearchingMode || externalSearchQuery != nil {
                 searchResultsView
             } else {
                 subscriptionsView
             }
         }
-        .motion(Motion.slide, value: isSearchingMode)
-        .searchable(text: $keyword, prompt: Text("搜索电影、电视剧、番剧…"))
-        .onSubmit(of: .search) {
-            let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else {
-                submittedKeyword = ""
-                results = []
-                isSearching = false
-                searchError = nil
-                return
-            }
-            submittedKeyword = trimmed
-            search()
-        }
-        .onChange(of: keyword) { _, newValue in
-            if newValue.isEmpty {
-                submittedKeyword = ""
-                results = []
-                isSearching = false
-                searchError = nil
-                searchTask?.cancel()
-                searchGeneration += 1
-            }
+    }
+
+    private var mainContent: some View {
+        Group {
+            if externalSearchQuery != nil { resultContent }
+            else { internalSearchContent }
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -278,7 +263,7 @@ struct MoviePilotHomeView: View {
         // 呈现式页面不在 path 上，CoveredPageHider 看不见这层覆盖：落地期间
         // 整页隐去，别透过透显的资源搜索 / 下载管理页漏出（见 coveredByPresented）。
         .coveredByPresented($showDownloads, $showResource)
-        .task(id: moviepilot.boundServerID) {
+        .task(id: "\(moviepilot.boundServerID ?? "none"):\(externalSearchQuery ?? "internal")") {
             // iOS 上 tab 保活：换绑另一台 MP 服务器后本页 @State 不销毁，
             // 旧服务器的订阅/搜索残留。绑定标识变化（登出后重绑、换一台）即整体作废；
             // 回到同一台服务器则保留数据，避免每次切回 tab 都重拉。
@@ -287,7 +272,20 @@ struct MoviePilotHomeView: View {
                 loadedForServerID = moviepilot.boundServerID
             }
             // Bangumi / Jellyfin 详情页「在 MoviePilot 找资源」带过来的搜索词。
-            consumePendingQuery(app.pendingMoviePilotQuery)
+            if let query = externalSearchQuery {
+                searchTask?.cancel()
+                searchGeneration += 1
+                keyword = query
+                submittedKeyword = query
+                results = []
+                searchError = nil
+                isSearching = true
+                do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+                guard !Task.isCancelled else { return }
+                search()
+            } else {
+                consumePendingQuery(app.pendingMoviePilotQuery)
+            }
             if subscribes.isEmpty {
                 await loadSubscribes()
             }
@@ -298,7 +296,13 @@ struct MoviePilotHomeView: View {
         // 触发 `.task`，词就一直挂着不生效。`.onChange` 补上这一拍；两处都靠
         // 「取走即清」保证不会重复消费。
         .onChange(of: app.pendingMoviePilotQuery) { _, pending in
-            consumePendingQuery(pending)
+            if externalSearchQuery == nil { consumePendingQuery(pending) }
+        }
+        .onDisappear {
+            if externalSearchQuery != nil {
+                searchTask?.cancel()
+                searchGeneration += 1
+            }
         }
         .sheet(isPresented: $isPresentingAddSheet) {
             MoviePilotSubscribeSheet(mode: .add(media: sheetMedia)) {
@@ -323,6 +327,34 @@ struct MoviePilotHomeView: View {
             }
         } message: { _ in
             Text("取消订阅后，MoviePilot 将停止自动检索和下载后续更新。已下载的文件不会被删除。")
+        }
+    }
+
+    private var internalSearchContent: some View {
+        resultContent
+        .motion(Motion.slide, value: isSearchingMode)
+        .searchable(text: $keyword, prompt: Text("搜索电影、电视剧、番剧…"))
+        .onSubmit(of: .search) {
+            let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                submittedKeyword = ""
+                results = []
+                isSearching = false
+                searchError = nil
+                return
+            }
+            submittedKeyword = trimmed
+            search()
+        }
+        .onChange(of: keyword) { _, newValue in
+            if newValue.isEmpty {
+                submittedKeyword = ""
+                results = []
+                isSearching = false
+                searchError = nil
+                searchTask?.cancel()
+                searchGeneration += 1
+            }
         }
     }
 
@@ -796,14 +828,14 @@ struct MoviePilotHomeView: View {
         searchTask = Task {
             do {
                 let found = try await MoviePilotAPIClient.shared.searchMedia(title: trimmed)
-                guard generation == searchGeneration else { return }
+                guard !Task.isCancelled, generation == searchGeneration else { return }
                 // TMDB 源排前面：MoviePilot 的刮削链路以 `tmdb_id` 为锚点，
                 // 而 `/media/search` 是多源聚合、顺序由服务端 `SEARCH_SOURCE` 配置
                 // 决定（Douban 条目可能排第一）。这里只调整**展示顺序**，不替用户
                 // 做选择——每张卡仍是服务端返回的完整对象（见 `MoviePilotMediaRanking`）。
                 results = MoviePilotMediaRanking.sortedForDisplay(found)
             } catch {
-                guard generation == searchGeneration else { return }
+                guard !Task.isCancelled, generation == searchGeneration else { return }
                 searchError = (error as? MoviePilotError) ?? .generic("\(error)")
             }
             if generation == searchGeneration {
@@ -906,7 +938,7 @@ private struct MoviePilotSubscribeCard: View {
 
                 // 2. 追更进度细轨（有集数的剧集展示进度，没有集数或电影则保持统一间距）
                 if let fraction = progressFraction {
-                    CardProgressTrack(fraction: fraction, tint: .accentColor)
+                    CardProgressTrack(fraction: fraction, tint: AppAccent.tint)
                         .padding(.top, 7)
                 } else {
                     Color.clear

@@ -48,7 +48,7 @@ public struct PillChip: View {
     private var tint: Color {
         switch role {
         case .neutral: return .primary
-        case .accent: return .accentColor
+        case .accent: return AppAccent.tint
         case .custom(let color): return color
         }
     }

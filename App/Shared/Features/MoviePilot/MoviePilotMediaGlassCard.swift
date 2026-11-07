@@ -271,7 +271,7 @@ struct MoviePilotMediaGlassCard: View {
                 Text("查资源")
             }
             .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(AppAccent.tint)
             .lineLimit(1)
             .fixedSize(horizontal: !compressible, vertical: false)
             .padding(.horizontal, 14)
@@ -280,7 +280,7 @@ struct MoviePilotMediaGlassCard: View {
         }
         .buttonStyle(.plain)
         .liquidGlassCapsule(
-            tint: Color.accentColor.opacity(0.22),
+            tint: AppAccent.tint.opacity(0.22),
             isInteractive: true
         )
         .accessibilityLabel("查资源")

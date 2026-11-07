@@ -133,7 +133,7 @@ struct MoviePilotTorrentFilterBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             // 激活分组 tint 玻璃高亮（MP 网页端是紫色实底，玻璃用 tint 同语义）。
-            .liquidGlassCapsule(tint: selection.isEmpty ? nil : Color.accentColor)
+            .liquidGlassCapsule(tint: selection.isEmpty ? nil : AppAccent.tint)
         }
         .buttonStyle(.plain)
         .popover(isPresented: popoverPresented(field)) {
@@ -161,7 +161,7 @@ struct MoviePilotTorrentFilterBar: View {
                     filters[keyPath: field.selectionKeyPath] = Set(candidates)
                 }
                 .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(AppAccent.tint)
                 .buttonStyle(.plain)
                 .disabled(candidates.isEmpty)
 
@@ -241,11 +241,11 @@ struct MoviePilotTorrentFilterBar: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppAccent.tint)
                     .padding(.horizontal, 9)
                     .padding(.vertical, 4)
-                    .background(Color.accentColor.opacity(0.13), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 0.5))
+                    .background(AppAccent.tint.opacity(0.13), in: Capsule())
+                    .overlay(Capsule().strokeBorder(AppAccent.tint.opacity(0.3), lineWidth: 0.5))
                 }
 
                 if filters.activeCount > 1 {

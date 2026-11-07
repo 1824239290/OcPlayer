@@ -66,12 +66,6 @@ struct AppShellView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Bangumi / MoviePilot 集成开关（默认开）。关掉后顶栏药丸 / Tab 的对应入口消失，
-    /// 停用瞬间若正停在那个分区，选中回落到首页；详情页与后台活动由各自触点
-    /// 读同一组 key 门控（见 SettingsKeys）。
-    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
-    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
-
     #if os(macOS)
     /// 原生全屏状态：进全屏时系统把工具栏搬进独立的 NSToolbarFullScreenWindow，
     /// 顶栏是它画的不透明硬底，窗口态「氛围图透过玻璃顶栏」不再成立——氛围层
@@ -107,18 +101,6 @@ struct AppShellView: View {
             // 设置子页在这里落地——挂 AppShell 而不挂 RootView，是因为目标页依赖
             // 「布局已定型、isCompact 已设定」这个前提（push 按它分派栈）。
             .task { await app.applyLaunchRouteIfNeeded() }
-            // 集成停用时把停留在该分区的选中回落到首页——否则顶栏药丸 / Tab 少了
-            // 一项而 selection 还指着旧值，会渲染出无入口的孤儿分区。
-            .onChange(of: bangumiEnabled) { _, enabled in
-                if !enabled, app.selectedSection == .bangumi {
-                    app.selectedSection = .home
-                }
-            }
-            .onChange(of: moviepilotEnabled) { _, enabled in
-                if !enabled, app.selectedSection == .moviepilot {
-                    app.selectedSection = .home
-                }
-            }
             // 两段式换页要读 reduceMotion 决定是否直切，AppModel 无环境，注入副本。
             .onAppear { app.reduceMotion = reduceMotion }
             .onChange(of: reduceMotion) { _, newValue in app.reduceMotion = newValue }
@@ -220,29 +202,18 @@ struct AppShellView: View {
 
     #if !os(macOS)
 
-    /// iPhone / iPad 底部 Tab：首页 /（Bangumi）/（MoviePilot）/ 设置 / 搜索。
-    /// Bangumi、MoviePilot 两个 Tab 跟随设置里的启用开关显隐；媒体库入口在
-    /// 首页「媒体库」栏（不占 Tab）。搜索走 `Tab(role: .search)` 放大镜 Tab
-    /// ——iOS 27 用 `.prominent` 明确指定独立按钮，iOS 26 用 `.search`。
-    /// 搜索页保留常驻导航栏搜索框。每个 Tab 有独立导航栈（`navPaths`），详情页走 push 而非
-    /// sheet——播放器覆盖层不再被遮住。
-    ///
-    /// 强调色不在这里管：整棵树吃 `RootView` 根节点钉的那一个中性 tint，标签栏
-    /// 未选中项的灰与内容侧是**同一个来源**，新增 Tab 不需要补任何一句。
-    ///
-    /// **但「选中 = 原色」那三格是例外**（用户口径 2026-10-22：首页头像、Bangumi、
-    /// MoviePilot 三格要统一成「选中彩色 / 未选中灰」）：SwiftUI 的 `Tab` 只吃一张图、
-    /// 且不吃 label 上的绘制修饰符，两态图只能由 `compactLayout` 背景里那层
-    /// `TabBarBrandIconBridge` 塞进 `UITabBarItem.image` / `.selectedImage`。
-    /// 所以下面两个品牌 Tab 的 `image:` 仍然传**模板**资产（那是注入没赶上时的回落态，
-    /// 也是未选中态本身）；本文件里不需要再写任何彩色资产。
+    /// iPhone / iPad 底部 Tab：首页 / 观影 / 设置，加独立搜索按钮。
+    /// Bangumi 与 MoviePilot 完整管理入口位于「观影」；媒体库入口位于首页。
+    /// iOS 27 搜索用 `.prominent`，iOS 26 用 `.search`。
+    /// 每个 Tab 保留独立导航栈，内容与页面氛围按设备真实尺寸展示。
+    /// 首页头像由 `TabBarBrandIconBridge` 维护选中原色、未选中灰化。
     ///
     /// **每个 Tab 的内容都挂 `.pageContentSizeClass(contentSizeClass)`**：外壳在
     /// `compactLayout` 里为了标签栏把尺寸类钉成了紧凑档（见那里的注释），内容必须换成
     /// 设备真实的那一份，否则整页版式会跟着标签栏一起降级成 iPhone 档。新增 Tab 别忘了这一句。
     @TabContentBuilder<AppModel.Section>
     private var compactTabs: some TabContent<AppModel.Section> {
-        // 五个 Tab 根页统一用 `pageAmbience`：它会按平台分叉（iOS 自垫 /
+        // Tab 根页统一用 `pageAmbience`：它会按平台分叉（iOS 自垫 /
         // macOS 靠整窗层），调用点不再各自写一遍 `.background { BackdropAmbienceView }`。
         //
         // 两条历史约束仍成立，只是收进了 `PageAmbience`：
@@ -272,7 +243,7 @@ struct AppShellView: View {
         //
         // **头像那一格的「选中原色 / 未选中灰化」不在这里表达**：label 里只能放一张
         // 彩色位图（上面第 1 条约束：条件视图会画出黑块），灰化后的那张由
-        // `TabBarBrandIconBridge` 在标签栏侧按状态替换（它同样接管下面两个品牌 Tab）。
+        // `TabBarBrandIconBridge` 在标签栏侧按状态替换。
         if let avatar = app.userAvatarImage {
             Tab(value: AppModel.Section.home) {
                 homeTabRoot
@@ -289,31 +260,18 @@ struct AppShellView: View {
             }
         }
 
-        if bangumiEnabled {
-            Tab("Bangumi", image: "bangumi-logo", value: AppModel.Section.bangumi) {
-                NavigationStack(path: navPathBinding(.bangumi)) {
-                    BangumiHomeView()
-                        .navigationTabBarHidden(false)
-                        .appRoutes()
-                        // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
-                        .pageAmbience(AmbienceTarget.sessionPool(app))
-                }
-                .detailTransitionScope(section: .bangumi)
-                .pageContentSizeClass(contentSizeClass)
+        Tab(ViewingNavigation.title,
+            systemImage: ViewingNavigation.symbol(isSelected: app.selectedSection == .my),
+            value: AppModel.Section.my) {
+            NavigationStack(path: navPathBinding(.my)) {
+                MyHomeView()
+                    .navigationTabBarHidden(false)
+                    .appRoutes()
+                    // 与首页同一张轮播图（池子同源）：跨 Tab 背景连续，也不多拉图。
+                    .pageAmbience(AmbienceTarget.sessionPool(app))
             }
-        }
-
-        if moviepilotEnabled {
-            Tab("MoviePilot", image: "moviepilot-logo", value: AppModel.Section.moviepilot) {
-                NavigationStack(path: navPathBinding(.moviepilot)) {
-                    MoviePilotHomeView()
-                        .navigationTabBarHidden(false)
-                        .appRoutes()
-                        .pageAmbience(AmbienceTarget.sessionPool(app))
-                }
-                .detailTransitionScope(section: .moviepilot)
-                .pageContentSizeClass(contentSizeClass)
-            }
+            .detailTransitionScope(section: .my)
+            .pageContentSizeClass(contentSizeClass)
         }
 
         Tab("设置", systemImage: "gearshape", value: AppModel.Section.settings) {
@@ -405,7 +363,7 @@ struct AppShellView: View {
         .background {
             TabBarBrandIconBridge(avatar: app.userAvatarImage, selectedSection: app.selectedSection)
         }
-        // 标签栏的选中色**继承** `RootView` 根节点钉的中性 tint（`.primary`）：
+        // 标签栏的选中色**继承** `RootView` 根节点的中性 tint（`.primary`）：
         // 未选中的 glyph 依旧是系统灰；选中项的品牌图 / 头像则由上面那层换成原色
         // （它们不吃 tint）。系统自带的玻璃选中底保留（iOS 26 的悬浮玻璃标签栏）。
         // 这里不再单独钉一遍——两处钉同一个值只会制造"改了一处忘了另一处"的机会。
@@ -428,10 +386,8 @@ struct AppShellView: View {
                 HomeView()
             case .settings:
                 SettingsView()
-            case .bangumi:
-                BangumiHomeView()
-            case .moviepilot:
-                MoviePilotHomeView()
+            case .my:
+                MyHomeView()
             case .search:
                 // 仅 iOS 放大镜 Tab 使用；常规布局不会到达此分支。
                 EmptyView()
@@ -512,7 +468,7 @@ struct AppShellView: View {
 
 // MARK: - 强调色
 
-// 强调色（中性）统一由 `RootView` 在**根节点**钉一次，这里不再按 Tab 各钉一遍。
+// 强调色（中性灰白）统一由 `RootView` 在**根节点**钉一次，这里不再按 Tab 各钉一遍。
 //
 // 历史：曾经在 `compactLayout` 给 TabView 钉 `.tint(Color.primary)` 改标签栏选中色，
 // 再给每个 Tab 根页挂 `.tabContentAccent()`（钉具体色值 `Color.blue`）把强调色"钉回去"。
@@ -814,12 +770,15 @@ extension View {
             case .library(let library):
                 LibraryView(library: library)
                     .appShellBackChrome(title: library.name)
+            case .bangumiProgress:
+                BangumiHomeView()
+                    .appShellBackChrome(title: "Bangumi 章节管理")
             case .bangumiProfile:
                 BangumiProfileView()
                     .appShellBackChrome(title: "我的")
-            case .bangumiCollectionList(let type):
-                BangumiCollectionListView(subjectType: type)
-                    .appShellBackChrome(title: "我的\(type.description)")
+            case .bangumiCollectionList(let type, let collection):
+                BangumiCollectionListView(subjectType: type, initialCollection: collection)
+                    .appShellBackChrome(title: "\(type.description)片单")
             case .bangumiSubject(let subjectID, let initialSubject, let source):
                 BangumiSubjectDetailView(subjectID: subjectID, initialSubject: initialSubject)
                     .id(subjectID)
@@ -831,6 +790,9 @@ extension View {
             case .bangumiCalendar:
                 BangumiCalendarView()
                     .appShellBackChrome(title: "每日放送")
+            case .moviepilotHome:
+                MoviePilotHomeView()
+                    .appShellBackChrome(title: "MoviePilot 资源管理")
             case .settingsSubpage(let subpage):
                 settingsSubpageView(subpage)
             }

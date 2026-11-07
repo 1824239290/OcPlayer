@@ -258,6 +258,9 @@ extension AppModel {
             alternates: alternates
         )
         playback?.prepareForPresentation(request)
+        if let profile = server?.profile {
+            playback?.startLocalViewingRecord(sourceID: ServerViewingHistory.sourceID(for: profile), item: item)
+        }
         // URI 已就绪但内核未出帧：loading 层继续盖住 PlayerScreen，
         // 等 state 到 ready/playing 再清 preparation，消除
         // 「loading 退出后还要再等内核 open」的两段式等待。
@@ -555,6 +558,8 @@ extension AppModel {
         )
         playbackPreparation = .loading(title: request.title)
         playback?.prepareForPresentation(request)
+        playback?.startLocalViewingRecord(sourceID: AppPlaybackHistoryStore.localSourceID,
+                                         item: AppPlaybackRecorder.localItem(for: request))
         presentedPlayer = request
         schedulePreparationDismiss(for: request)
         startDanmaku(for: request, item: nil)
@@ -568,6 +573,8 @@ extension AppModel {
         finishReporting()
         playbackPreparation = .loading(title: request.title)
         playback?.prepareForPresentation(request)
+        playback?.startLocalViewingRecord(sourceID: AppPlaybackHistoryStore.localSourceID,
+                                         item: AppPlaybackRecorder.localItem(for: request))
         presentedPlayer = request
         schedulePreparationDismiss(for: request)
         startDanmaku(for: request, item: nil)
@@ -980,6 +987,7 @@ extension AppModel {
     /// 换片 / 退出播放器：停止上报并固定原租户的末次进度，返回同时等待两者落库的收尾任务。
     @discardableResult
     func finishReporting() -> Task<Void, Never>? {
+        let localWrite = playback?.finishLocalViewingRecord()
         // 退出 / 换片时把这一刻的进度写回媒体数据面：首页 rail 与详情页立刻一致，
         // 离线缓存也不必等下一次服务端刷新。服务端上报仍由 playbackReporting 负责。
         let item = nowPlayingItem
@@ -995,9 +1003,10 @@ extension AppModel {
         }
         clearPlaybackSessionState()
         let stopped = playbackReporting?.stop()
-        guard let write else { return stopped }
+        if write == nil && stopped == nil { return localWrite }
         return Task {
-            await write.value
+            await localWrite?.value
+            await write?.value
             await stopped?.value
         }
     }

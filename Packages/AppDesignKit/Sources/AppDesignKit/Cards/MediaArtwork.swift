@@ -313,7 +313,7 @@ public struct CardProgressTrack: View {
     public let fraction: Double
     /// nil = 跟随可用宽度（网格自适应列）；定宽 Rail 卡给定宽，布局少一次协商。
     public var width: CGFloat?
-    /// 填充色。默认中性灰（融入卡片不抢海报调子）；追更进度等强调场景传 `.accentColor`。
+    /// 填充色。默认中性灰（融入卡片不抢海报调子）；追更进度等强调场景传 `AppAccent.tint`。
     public var tint: Color
 
     public init(fraction: Double, width: CGFloat? = nil, tint: Color = Color.primary.opacity(0.6)) {

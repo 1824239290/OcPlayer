@@ -37,6 +37,35 @@ final class EmbyServerTests: XCTestCase {
 
     // MARK: - 老式路由
 
+    func testViewingHistoryUsesLegacyUserRouteAndToleratesOptionalDates() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Items")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["isPlayed"], "true")
+            XCTAssertEqual(query["includeItemTypes"], "Movie,Episode")
+            XCTAssertEqual(query["sortBy"], "DatePlayed,SortName")
+            XCTAssertEqual(query["sortOrder"], "Descending")
+            XCTAssertEqual(query["startIndex"], "5")
+            XCTAssertTrue(query["fields"]?.contains("UserDataLastPlayedDate") == true)
+            return MockURLProtocol.ok(
+                """
+                {"Items":[{"Id":"a","Type":"Episode","UserData":{"Played":true,"LastPlayedDate":"2026-11-07T00:30:00.1234567Z"}},
+                {"Id":"b","Type":"Movie","UserData":{"Played":true,"LastPlayedDate":"2026-11-07T00:00:00Z"}},
+                {"Id":"c","Type":"Movie","UserData":{"Played":true,"LastPlayedDate":"invalid"}},
+                {"Id":"d","Type":"Movie","UserData":{"Played":true}}],"TotalRecordCount":30}
+                """, for: request.url!
+            )
+        } with: {
+            let page = try await makeServer().playedItemsPage(startIndex: 5, limit: 10)
+            XCTAssertEqual(page.totalRecordCount, 30)
+            XCTAssertEqual(page.items.map(\.item.id), ["a", "b", "c", "d"])
+            XCTAssertNotNil(page.items[0].lastPlayedAt)
+            XCTAssertNotNil(page.items[1].lastPlayedAt)
+            XCTAssertNil(page.items[2].lastPlayedAt)
+            XCTAssertNil(page.items[3].lastPlayedAt)
+        }
+    }
+
     func testUserViewsUsesLegacyRouteAndFiltersUnknownCollections() async throws {
         try await TestSupport.withMock { request in
             XCTAssertEqual(request.url?.path, "/emby/Users/user-e/Views")

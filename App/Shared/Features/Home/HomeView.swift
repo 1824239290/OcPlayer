@@ -27,6 +27,7 @@ struct HomeView: View {
     /// macOS 导航栏搜索框的词（顶栏药丸右侧）；iOS 没有这一层——搜索入口是
     /// 底部的放大镜 Tab（见 `HomeSearchView`），这里恒为空、分支不生效。
     @State private var searchText = ""
+    @State private var searchSource = UnifiedSearchSource.defaultSource
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -34,10 +35,10 @@ struct HomeView: View {
 
     var body: some View {
         Group {
-            if app.server == nil {
+            if isSearching {
+                UnifiedSearchContent(query: $searchText, source: searchSource)
+            } else if app.server == nil {
                 noServerState
-            } else if isSearching {
-                HomeSearchContent(query: $searchText)
             } else if homeSections.isEmpty {
                 // 栏目全关：不铺骨架、也不说「服务器没有内容」——那两样都会把
                 // 用户的主动选择说成故障。栏目都还在设置页，一键就能回去开。
@@ -62,7 +63,7 @@ struct HomeView: View {
         #if os(macOS)
         .navigationSubtitle(app.server == nil ? "未连接" : app.serverLabel)
         // 常规布局的搜索入口：窗口工具栏搜索框。iOS 走底部放大镜 Tab。
-        .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
+        .unifiedSearchField(query: $searchText, source: $searchSource)
         #else
         // iPhone / iPad：**整块标题去掉**。「首页」已经写在底部 Tab 上，顶部再挂一遍
         // 只白占约 52pt（大标题）——对照 Rex 的首页：第一个栏位标题紧贴状态栏下方，
@@ -349,45 +350,28 @@ struct HomeView: View {
 /// 时点 X 收起会被系统重新展开（导航栏搜索的宿主互扰，与按钮分合无关），
 /// 挪到搜索 Tab 彻底脱离导航栏。
 struct HomeSearchView: View {
-    @Environment(AppModel.self) private var app
     @State private var searchText = ""
+    @State private var searchSource = UnifiedSearchSource.defaultSource
 
     var body: some View {
         Group {
-            if app.server == nil {
-                PageFillingState {
-                    EmptyState(empty: "先连接服务器再搜索", systemImage: "wifi.exclamationmark")
-                }
-            } else if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 PageFillingState {
                     EmptyState(
-                        empty: "搜索全部媒体库",
+                        empty: searchSource.title,
                         systemImage: "magnifyingglass",
-                        message: "电影与剧集条目都会检索，结果以海报墙呈现。"
+                        message: "选择媒体库、Bangumi 或 MoviePilot；直接搜索默认检索媒体库。"
                     )
                 }
             } else {
-                HomeSearchContent(query: $searchText)
+                UnifiedSearchContent(query: $searchText, source: searchSource)
             }
         }
         .navigationTitle("搜索")
         #if os(iOS)
-        // inline 大小：`.searchable` 字段常驻导航栏（大标题模式下 iPhone 会把
-        // 字段藏进下拉，搜索页就没了入口）。
         .navigationBarTitleDisplayMode(.inline)
-        // `displayMode: .always` 是必需的，不能用默认 placement：搜索页正文不是
-        // ScrollView（空态）就是可滚动列表（结果），而 iOS 26/27 的导航栏搜索框
-        // 默认「随滚动收起」——正文里有 ScrollView 时，**切走再切回搜索 Tab**
-        // 输入框会被系统收掉且不再恢复（实测：正文换成纯文本才留得住，加
-        // `.scrollDisabled(true)` 也没用）。.always 让字段常驻，不随滚动收起。
-        .searchable(
-            text: $searchText,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: Text("搜索全部媒体库")
-        )
-        #else
-        .searchable(text: $searchText, prompt: Text("搜索全部媒体库"))
         #endif
+        .unifiedSearchField(query: $searchText, source: $searchSource)
     }
 }
 

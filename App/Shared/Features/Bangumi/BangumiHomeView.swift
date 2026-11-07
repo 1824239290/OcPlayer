@@ -14,6 +14,8 @@ import SwiftUI
 /// - 搜索走 Bangumi 远程（不再本地筛选闪烁）
 /// - 在播/搜索两套分页共用 `PagedListLoader`（代次守卫/追加去重收在包里）
 struct BangumiHomeView: View {
+    /// 统一搜索入口传词；自身不再创建第二个搜索框，也不触发个人收藏同步。
+    var externalSearchQuery: String? = nil
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
     @Environment(\.contentLeading) private var contentLeading
@@ -74,7 +76,9 @@ struct BangumiHomeView: View {
 
     var body: some View {
         Group {
-            if bangumi.isAuthenticated {
+            if externalSearchQuery != nil {
+                searchView
+            } else if bangumi.isAuthenticated {
                 if let error = bangumi.databaseError {
                     // 建库失败：给重试入口，不再是无尽占位 + 全功能静默失效。
                     // 状态视图是「根级」的（本页没有别的内容兜底），必须走
@@ -111,9 +115,26 @@ struct BangumiHomeView: View {
                     #endif
             }
         }
-        .task(id: loadKey) { await loadIfReady() }
+        .task(id: loadKey) {
+            if externalSearchQuery == nil { await loadIfReady() }
+        }
+        .task(id: externalSearchQuery) {
+            guard let query = externalSearchQuery else { return }
+            // 新关键词使用新分页器，旧查询与翻页不能写进新结果。
+            submittedSearchKeyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            searchLoader = makeSearchLoader()
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+            guard !Task.isCancelled else { return }
+            await searchLoader?.loadInitial()
+        }
+        .onChange(of: searchTypeFilter) { _, _ in
+            let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            // 分类筛选同时用于章节管理页和统一搜索结果，挂在共同的宿主上。
+            Task { await searchLoader?.loadInitial() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: BangumiProgressInvalidation.notificationName)) { note in
-            guard bangumi.isAuthenticated else { return }
+            guard externalSearchQuery == nil, bangumi.isAuthenticated else { return }
             let mayChangeMembership = (note.userInfo?["mayChangeProgressMembership"] as? Bool) ?? false
             let subjectID = (note.object as? NSNumber)?.intValue
             if mayChangeMembership || subjectID == nil {
@@ -150,11 +171,6 @@ struct BangumiHomeView: View {
             if newValue.isEmpty {
                 exitSearchMode()
             }
-        }
-        .onChange(of: searchTypeFilter) { _, _ in
-            let trimmed = submittedSearchKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            Task { await searchLoader?.loadInitial() }
         }
         .navigationTitle("Bangumi")
         #if os(macOS)
@@ -242,7 +258,7 @@ struct BangumiHomeView: View {
     @ViewBuilder
     private var searchView: some View {
         VStack(spacing: 0) {
-            searchHeader
+            if externalSearchQuery == nil { searchHeader } else { searchTypePicker.padding(.vertical, 10) }
 
             if let loader = searchLoader {
                 Group {
@@ -263,10 +279,10 @@ struct BangumiHomeView: View {
                                     }
                                     .neutralProminentButton()
 
-                                    Button("返回在看") {
-                                        exitSearchMode()
+                                    if externalSearchQuery == nil {
+                                        Button("返回在看") { exitSearchMode() }
+                                            .buttonStyle(.bordered)
                                     }
-                                    .buttonStyle(.bordered)
                                 }
                             }
                         }
@@ -277,10 +293,10 @@ struct BangumiHomeView: View {
                             } description: {
                                 Text("未找到与「\(submittedSearchKeyword)」相关的 \(searchTypeFilter.description) 条目。\n可以尝试缩短关键词或切换分类。")
                             } actions: {
-                                Button("返回在看") {
-                                    exitSearchMode()
+                                if externalSearchQuery == nil {
+                                    Button("返回在看") { exitSearchMode() }
+                                        .buttonStyle(.bordered)
                                 }
-                                .buttonStyle(.bordered)
                             }
                         }
                     } else {
