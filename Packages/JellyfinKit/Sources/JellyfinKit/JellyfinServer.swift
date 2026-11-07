@@ -196,6 +196,21 @@ public struct JellyfinServer: MediaServer {
         return result.items?.map(\.domainItem) ?? []
     }
 
+    public func playedItemsPage(startIndex: Int, limit: Int) async throws -> ServerPlayedItemsPage {
+        var request = Paths.getItems(parameters: .init(
+            userID: profile.userID,
+            startIndex: max(startIndex, 0), limit: max(limit, 1), isRecursive: true,
+            sortOrder: [.descending], includeItemTypes: [.movie, .episode],
+            sortBy: [.datePlayed, .sortName], isPlayed: true,
+            enableImageTypes: [.primary], enableTotalRecordCount: true
+        ))
+        request.query?.append(("fields", "UserDataLastPlayedDate,RunTimeTicks,Genres,PrimaryImageAspectRatio,ProviderIds"))
+        let result = try await send(request)
+        return ServerPlayedItemsPage(items: (result.items ?? []).map {
+            ServerPlayedItem(item: $0.domainItem, lastPlayedAt: $0.userData?.lastPlayedDate)
+        }, totalRecordCount: result.totalRecordCount)
+    }
+
     /// 首页「继续观看」。
     public func resumeItems() async throws -> [MediaItem] {
         var request = Paths.getResumeItems(parameters: .init(

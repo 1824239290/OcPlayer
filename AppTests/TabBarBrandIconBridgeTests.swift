@@ -190,6 +190,14 @@ final class TabSearchIntegrationTests: XCTestCase {
         defer { window.isHidden = true; window.rootViewController = nil; previousWindow?.makeKeyAndVisible() }
         try await Task.sleep(for: .milliseconds(350))
         let controller = try XCTUnwrap(findTabController(try XCTUnwrap(window.rootViewController)))
+        XCTAssertEqual(controller.tabBar.items?.compactMap(\.title), ["首页", "观影", "设置", "搜索"])
+        XCTAssertTrue(app.openMoviePilot())
+        try await waitForTabState(controller, title: "观影", depth: 2, hidden: false)
+        XCTAssertEqual(app.navPath(for: .my), [.moviepilotHome])
+        app.back()
+        try await waitForTabState(controller, title: "观影", depth: 1, hidden: false)
+        app.selectedSection = .home
+        try await waitForTabState(controller, title: "首页", depth: 1, hidden: false)
         let phone = UIDevice.current.userInterfaceIdiom == .phone
         app.setNavPath([.detail(MediaItem(id: "tab-return", name: "返回验收", kind: .movie))], for: .home)
         try await waitForTabState(controller, title: "首页", depth: 2, hidden: phone)

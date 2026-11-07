@@ -263,6 +263,8 @@ extension AppModel {
         // 账号的脸（那比挂一张旧海报更刺眼——它是「你是谁」）。URL 里也带着旧账号的
         // authHeader，留着就是拿旧凭据去请求。
         userAvatarImage = nil
+        serverAvatarResolution = .pending
+        viewingProfileAvatar.reset()
         libraries = []
         librariesError = nil
         libraryPages = [:]

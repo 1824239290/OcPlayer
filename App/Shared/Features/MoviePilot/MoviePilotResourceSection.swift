@@ -4,9 +4,9 @@ import SwiftUI
 
 /// 详情页内嵌的 MoviePilot 下载入口（与 BangumiChapterSection 同级同款头）。
 ///
-/// ## 只有一个动作：跳到 MoviePilot 分区的搜索结果页
+/// ## 只有一个动作：打开「观影」里的 MoviePilot 搜索结果页
 ///
-/// 点这张卡 → 把片名交给 `AppModel.pendingMoviePilotQuery` 并 `switchSection(.moviepilot)`，
+/// 点这张卡 → 调用 `AppModel.openMoviePilotSearch(_:)` 打开资源管理并传入片名，
 /// MoviePilot 首页随即按该关键词调 `/media/search`、列出多源候选（截图那一页），
 /// 用户**自己挑** TMDB / Douban 条目、点那一条的「查资源」进站点资源搜索。
 ///

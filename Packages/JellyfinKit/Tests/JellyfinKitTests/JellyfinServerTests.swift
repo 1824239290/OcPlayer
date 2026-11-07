@@ -20,6 +20,81 @@ final class JellyfinServerTests: XCTestCase {
 
     // MARK: - 浏览（mock 数据 → 域模型）
 
+    func testViewingHistoryRequestsDatedCompletedMoviesAndEpisodes() async throws {
+        try await TestSupport.withMock { request in
+            XCTAssertEqual(request.url?.path, "/Items")
+            let query = TestSupport.queryItems(of: request)
+            XCTAssertEqual(query["userId"], "user-9")
+            XCTAssertEqual(query["isPlayed"], "true")
+            XCTAssertEqual(query["startIndex"], "20")
+            XCTAssertEqual(query["limit"], "100")
+            XCTAssertEqual(query["sortBy"], "DatePlayed")
+            XCTAssertEqual(query["sortOrder"], "Descending")
+            XCTAssertTrue(query["fields"]?.contains("UserDataLastPlayedDate") == true)
+            XCTAssertTrue(request.url?.query?.contains("includeItemTypes=Episode") == true)
+            return MockURLProtocol.ok(
+                """
+                {"Items":[{"Id":"ep-1","Name":"Episode","Type":"Episode","RunTimeTicks":14400000000,
+                 "UserData":{"Key":"ep-1","Played":true,"LastPlayedDate":"2026-11-07T00:30:00.1234567Z"}},
+                 {"Id":"m-1","Name":"Movie","Type":"Movie","UserData":{"Key":"m-1","Played":true}}],"TotalRecordCount":99}
+                """, for: request.url!
+            )
+        } with: {
+            let page = try await makeServer().playedItemsPage(startIndex: 20, limit: 100)
+            XCTAssertEqual(page.totalRecordCount, 99)
+            XCTAssertEqual(page.items.first?.item.runtimeSeconds, 1440)
+            XCTAssertEqual(page.items.first?.item.playState?.played, true)
+            XCTAssertNotNil(page.items.first?.lastPlayedAt)
+            XCTAssertNil(page.items.last?.lastPlayedAt)
+        }
+    }
+
+    func testViewingHistoryInheritsMissingEpisodeGenresFromSameServerParentOnce() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("HistoryGenreTests-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var parentsRequested = 0
+        try await TestSupport.withMock { request in
+            if request.url?.path == "/Items" {
+                return MockURLProtocol.ok(
+                    """
+                    {"Items":[{"Id":"a","Name":"A","Type":"Episode","SeriesId":"series-1","RunTimeTicks":14400000000,
+                    "UserData":{"Key":"a","Played":true,"LastPlayedDate":"2026-11-07T00:00:00Z"}},
+                    {"Id":"b","Name":"B","Type":"Episode","SeriesId":"series-1","RunTimeTicks":14400000000,
+                    "UserData":{"Key":"b","Played":true,"LastPlayedDate":"2026-11-07T00:00:00Z"}}],"TotalRecordCount":2}
+                    """, for: request.url!
+                )
+            }
+            XCTAssertEqual(request.url?.path, "/Items/series-1")
+            parentsRequested += 1
+            return MockURLProtocol.ok(#"{"Id":"series-1","Name":"Series","Type":"Series","Genres":["动画","喜剧"]}"#, for: request.url!)
+        } with: {
+            let now = ISO8601DateFormatter().date(from: "2026-11-07T01:00:00Z")!
+            let history = try await ServerViewingHistoryStore(directory: directory).synchronize(server: makeServer(), now: now)
+            XCTAssertEqual(history.records.count, 2)
+            XCTAssertEqual(history.records.map(\.item.genres), [["动画", "喜剧"], ["动画", "喜剧"]])
+        }
+        XCTAssertEqual(parentsRequested, 1)
+    }
+
+    func testOptionalGenreLookupFailureDoesNotDropCompletedRecords() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("HistoryGenreTests-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await TestSupport.withMock { request in
+            if request.url?.path == "/Items" {
+                return MockURLProtocol.ok(
+                    #"{"Items":[{"Id":"a","Type":"Episode","SeriesId":"missing","UserData":{"Key":"a","Played":true,"LastPlayedDate":"2026-11-07T00:00:00Z"}}],"TotalRecordCount":1}"#,
+                    for: request.url!
+                )
+            }
+            return (HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!, Data())
+        } with: {
+            let now = ISO8601DateFormatter().date(from: "2026-11-07T01:00:00Z")!
+            let history = try await ServerViewingHistoryStore(directory: directory).synchronize(server: makeServer(), now: now)
+            XCTAssertEqual(history.records.map(\.id), ["a"])
+            XCTAssertEqual(history.records.first?.item.genres, [])
+        }
+    }
+
     private func makeServer() -> JellyfinServer {
         let profile = ServerProfile(id: "srv:user", serverName: "home-nas",
                                     baseURL: URL(string: "http://nas.local:8096")!,

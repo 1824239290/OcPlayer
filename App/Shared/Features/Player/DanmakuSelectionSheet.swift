@@ -117,7 +117,7 @@ struct DanmakuSelectionSheet: View {
                 // 根层：标题与图标
                 Image(systemName: "text.bubble.fill")
                     .font(.title3)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(AppAccent.tint)
 
                 Text("选择弹幕")
                     .font(.title3.weight(.bold))
@@ -177,7 +177,7 @@ struct DanmakuSelectionSheet: View {
                         .padding(.vertical, 8)
                     }
                     .buttonStyle(.plain)
-                    .liquidGlassCapsule(tint: Color.accentColor.opacity(0.25), isInteractive: true)
+                    .liquidGlassCapsule(tint: AppAccent.tint.opacity(0.25), isInteractive: true)
                     .keyboardShortcut(.defaultAction)
                     .disabled(isSearching || animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -315,7 +315,7 @@ struct DanmakuSelectionSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: "play.tv.fill")
                                 .font(.system(size: 16))
-                                .foregroundStyle(containsMatch ? Color.accentColor : Color.secondary)
+                                .foregroundStyle(containsMatch ? AppAccent.tint : Color.secondary)
                                 .frame(width: 24)
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -364,7 +364,7 @@ struct DanmakuSelectionSheet: View {
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .strokeBorder(
-                                    containsMatch ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06),
+                                    containsMatch ? AppAccent.tint.opacity(0.3) : Color.primary.opacity(0.06),
                                     lineWidth: 0.5
                                 )
                         )
@@ -484,12 +484,12 @@ private struct DanmakuEpisodeRow: View {
             HStack(spacing: 12) {
                 Image(systemName: isCurrentMatch ? "checkmark.circle.fill" : "play.rectangle")
                     .font(.system(size: 15))
-                    .foregroundStyle(isCurrentMatch ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isCurrentMatch ? AppAccent.tint : Color.secondary)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(episode.episodeTitle ?? "Episode \(episode.episodeId)")
                         .font(.callout.weight(isCurrentMatch ? .semibold : .regular))
-                        .foregroundStyle(isCurrentMatch ? Color.accentColor : Color.primary)
+                        .foregroundStyle(isCurrentMatch ? AppAccent.tint : Color.primary)
                         .lineLimit(1)
                 }
 
@@ -508,10 +508,10 @@ private struct DanmakuEpisodeRow: View {
                 if isCurrentMatch {
                     Text("当前匹配")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(AppAccent.tint)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(Color.accentColor.opacity(0.15), in: Capsule())
+                        .background(AppAccent.tint.opacity(0.15), in: Capsule())
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.caption2)
@@ -523,10 +523,10 @@ private struct DanmakuEpisodeRow: View {
             .background {
                 if isCurrentMatch {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.08))
+                        .fill(AppAccent.tint.opacity(0.08))
                         .overlay {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 0.5)
+                                .strokeBorder(AppAccent.tint.opacity(0.25), lineWidth: 0.5)
                         }
                 } else if isHovered {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)

@@ -73,6 +73,8 @@ final class AppModel {
     /// 生命周期跟着会话走：`resetBrowseState()` 里清掉（换服务器 / 登出 / 401 之后
     /// 不能还挂着上一个账号的脸）。详见 `AppModel+Avatar.swift`。
     var userAvatarImage: PlatformImage?
+    var serverAvatarResolution: ServerAvatarResolution = .pending
+    let viewingProfileAvatar = ViewingProfileAvatarModel()
 
     /// 正在跑的头像装载任务（换会话时取消，避免旧会话的结果落到新会话上）。
     var userAvatarTask: Task<Void, Never>?
@@ -118,7 +120,7 @@ final class AppModel {
     /// 详情页「在 MoviePilot 找资源」待消费的搜索词（写入方：Bangumi 条目详情、
     /// Jellyfin 详情页的 MoviePilot 区块）。
     ///
-    /// 详情的入口只放词 + 切分区，MoviePilot 首页出现后取走并清空。
+    /// 详情入口打开「观影」内的资源管理并传词，MoviePilot 页面出现后取走并清空。
     /// **不要直接赋值**——走 `openMoviePilotSearch(_:)`：转场途中被丢弃的那次点击
     /// 会留下一个孤儿关键词，用户下次自己进分区时会莫名发起一次搜索。
     var pendingMoviePilotQuery: String?
@@ -329,8 +331,7 @@ final class AppModel {
     enum Section: Hashable {
         case home
         case settings
-        case bangumi
-        case moviepilot
+        case my
         /// iOS 放大镜 Tab（`Tab(role: .search)`）；常规布局（macOS 顶栏）不会到达。
         case search
     }
@@ -339,10 +340,13 @@ final class AppModel {
         case detail(MediaItem, source: DetailTransitionSource? = nil)
         /// 首页「媒体库」栏 → 单库网格页的 push 路由。
         case library(MediaLibrary)
+        case bangumiProgress
         case bangumiProfile
-        case bangumiCollectionList(BangumiSubjectType)
+        case bangumiCollectionList(BangumiSubjectType, collection: BangumiCollectionType = .collect)
         case bangumiSubject(subjectID: Int, initialSubject: BangumiSlimSubjectDTO? = nil, source: DetailTransitionSource? = nil)
         case bangumiCalendar
+        /// 「观影」→ 完整 MoviePilot 订阅、搜索与下载管理。
+        case moviepilotHome
         /// 设置 hub → 子页（见 `SettingsSubpage` 为何走 path 路由）。
         case settingsSubpage(SettingsSubpage)
     }
@@ -350,8 +354,7 @@ final class AppModel {
     /// iOS 各 Tab 的独立导航栈。每 Tab 一个路径数组，互不串。
     struct NavigationPaths {
         var home: [Route] = []
-        var bangumi: [Route] = []
-        var moviepilot: [Route] = []
+        var my: [Route] = []
         var settings: [Route] = []
         var search: [Route] = []
     }
@@ -384,8 +387,7 @@ final class AppModel {
     func navPath(for section: Section) -> [Route] {
         switch section {
         case .home: navPaths.home
-        case .bangumi: navPaths.bangumi
-        case .moviepilot: navPaths.moviepilot
+        case .my: navPaths.my
         case .settings: navPaths.settings
         case .search: navPaths.search
         }
@@ -395,8 +397,7 @@ final class AppModel {
     func setNavPath(_ newValue: [Route], for section: Section) {
         switch section {
         case .home: navPaths.home = newValue
-        case .bangumi: navPaths.bangumi = newValue
-        case .moviepilot: navPaths.moviepilot = newValue
+        case .my: navPaths.my = newValue
         case .settings: navPaths.settings = newValue
         case .search: navPaths.search = newValue
         }
@@ -607,6 +608,7 @@ final class AppModel {
     weak var playback: PlaybackController? {
         didSet {
             guard playback !== oldValue else { return }
+            oldValue?.finishLocalViewingRecord()
             let precedingStop = playbackReporting?.stop() ?? pendingPlaybackReportingHandoff
             clearPlaybackSessionState()
             pendingPlaybackReportingHandoff = precedingStop
@@ -753,8 +755,13 @@ final class AppModel {
         push(.bangumiSubject(subjectID: id, initialSubject: initialSubject, source: source))
     }
 
-    /// Bangumi 个人主页。**必须走 push**（不能由视图直接改栈）：compact 布局下
+    /// Bangumi 章节管理。**必须走 push**（不能由视图直接改栈）：compact 布局下
     /// 栈是 `navPaths.<tab>`，写 `path` 等于点了没反应。
+    func openBangumiProgress() {
+        push(.bangumiProgress)
+    }
+
+    /// Bangumi 个人主页，进入当前导航栈。
     func openBangumiProfile() {
         push(.bangumiProfile)
     }
@@ -765,8 +772,8 @@ final class AppModel {
     }
 
     /// Bangumi 某个收藏类型的完整列表。同上。
-    func openBangumiCollectionList(_ subjectType: BangumiSubjectType) {
-        push(.bangumiCollectionList(subjectType))
+    func openBangumiCollectionList(_ subjectType: BangumiSubjectType, collectionType: BangumiCollectionType = .collect) {
+        push(.bangumiCollectionList(subjectType, collection: collectionType))
     }
 
     /// 程序化呈现（`navigationDestination(isPresented:)` / view-destination 页面）
@@ -811,22 +818,46 @@ final class AppModel {
         #endif
     }
 
-    /// 切到 MoviePilot 分区并按关键词搜一次（详情页入口的唯一通道）。
+    /// 从「观影」打开完整资源管理；重复进入会回到已有页面，返回仍落在「观影」栈内。
+    @discardableResult
+    func openMoviePilot() -> Bool {
+        #if os(macOS)
+        guard !routeExiting || reduceMotion else { return false }
+        #endif
+        let routes = isCompact ? navPath(for: .my) : path
+        if selectedSection == .my, routes.last == .moviepilotHome { return true }
+        return beginRouteExit { [weak self] in
+            guard let self else { return }
+            var destination: [Route]
+            if selectedSection != .my {
+                selectedSection = .my
+                destination = [.moviepilotHome]
+            } else {
+                destination = isCompact ? navPath(for: .my) : path
+                if let index = destination.firstIndex(of: .moviepilotHome) {
+                    destination = Array(destination.prefix(through: index))
+                } else {
+                    destination.append(.moviepilotHome)
+                }
+            }
+            if isCompact { setNavPath(destination, for: .my) } else { path = destination }
+        }
+    }
+
+    /// 打开「观影」里的 MoviePilot 并按关键词搜一次（详情页入口的唯一通道）。
     ///
-    /// **顺序是「先确认分区切得过去、再放词」**：`beginRouteExit` 在两段式转场
+    /// **顺序是「先确认页面能打开、再放词」**：`beginRouteExit` 在两段式转场
     /// 途中会丢弃这次调用（`guard !routeExiting`），若先把词写进
     /// `pendingMoviePilotQuery`，那次被丢弃的点击就会留下一个**孤儿关键词**——
-    /// 用户下次自己进 MoviePilot 分区时，页面会莫名发起一次他并没有要求的搜索。
+    /// 用户下次自己进 MoviePilot 时，页面会莫名发起一次他并没有要求的搜索。
     ///
     /// - Returns: 关键词已排入队列时为 true；空关键词或切换被丢弃时为 false。
     @discardableResult
     func openMoviePilotSearch(_ query: String) -> Bool {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        guard switchSection(.moviepilot) else { return false }
-        // 落在 `switchSection` 之后：常规布局里它只是排了个 0.45s 后的落地任务，
-        // 关键词会先于 MoviePilot 首页出现而就位；reduceMotion 下
-        // `selectedSection` 已经改好，而 SwiftUI 的下一轮 body 求值晚于本次调用。
+        guard openMoviePilot() else { return false }
+        // 页面首次出现前就位；页面已打开时由 onChange 消费。
         pendingMoviePilotQuery = trimmed
         return true
     }

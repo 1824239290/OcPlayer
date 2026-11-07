@@ -2,6 +2,7 @@ import CoreGraphics
 import DanmakuKit
 import DiagnosticsKit
 import Foundation
+import CoreModel
 import ImageIO
 import JellyfinKit
 import Observation
@@ -91,7 +92,13 @@ private final class PlaybackOpenAttempt: @unchecked Sendable {
 final class PlaybackController: DanmakuPlaybackHosting {
     /// Replaced for every engine generation so buffered events from an old
     /// engine can never mutate the new source's timeline.
-    var state = PlayerState()
+    var state = PlayerState() {
+        didSet {
+            oldValue.onPlaybackActivityChanged = nil
+            watchRecorder.discontinuity()
+            state.onPlaybackActivityChanged = { [weak self] in self?.recordPlaybackActivity() }
+        }
+    }
 
     var engine: (any PlaybackEngine)?
     var setupError: String?
@@ -249,8 +256,10 @@ final class PlaybackController: DanmakuPlaybackHosting {
         return PlaybackPreferences.danmakuUseOverlayRenderer
     }
 
-    init(nowPlaying: PlaybackNowPlayingCenter = PlaybackNowPlayingCenter()) {
+    init(nowPlaying: PlaybackNowPlayingCenter = PlaybackNowPlayingCenter(),
+         watchRecorder: AppPlaybackRecorder = AppPlaybackRecorder()) {
         self.nowPlaying = nowPlaying
+        self.watchRecorder = watchRecorder
         usesOverlayDanmakuRenderer = PlaybackController.resolveOverlayDanmakuRoute()
         // 先占位再注入：闭包捕获 self 必须等全部存储属性初始化完成。
         danmakuOverlay = DanmakuOverlayController(engineProvider: { nil })
@@ -270,6 +279,32 @@ final class PlaybackController: DanmakuPlaybackHosting {
             $0.allowStacking = danmakuAllowStacking
             $0.fontSize = danmakuFontSize
         }
+        state.onPlaybackActivityChanged = { [weak self] in self?.recordPlaybackActivity() }
+    }
+
+    @ObservationIgnored let watchRecorder: AppPlaybackRecorder
+
+    private func recordPlaybackActivity() {
+        watchRecorder.sample(position: Double(state.position.microseconds) / 1_000_000,
+                             playing: state.state == .playing && activeRequest?.id == expectedRequestID,
+                             buffering: state.isBuffering, rate: rate)
+    }
+
+    func startLocalViewingRecord(sourceID: String, item: MediaItem) {
+        recordPlaybackActivity()
+        watchRecorder.start(sourceID: sourceID, item: item)
+    }
+
+    @discardableResult
+    func finishLocalViewingRecord() -> Task<Void, Never>? {
+        recordPlaybackActivity()
+        return watchRecorder.finish()
+    }
+
+    func checkpointLocalViewingRecord() {
+        recordPlaybackActivity()
+        watchRecorder.checkpoint()
+        watchRecorder.discontinuity()
     }
 
     // MARK: open 在飞状态（open 已移出主线程,见 engineOpenQueue 注释）
@@ -1129,6 +1164,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     func stopPlayback() {
+        finishLocalViewingRecord()
         playerLog.info("stopPlayback hasLoadedSource=\(hasLoadedSource) state=\(state.state)")
         // 会话收尾先落一条内核原始计数器快照，**必须在下面的 engine?.stop() 之前**：
         // 内核自 v0.2.1 起在 stop 时释放 HTTP 缓存与队列，而统计里有些量反映的正是
@@ -1489,6 +1525,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 这样即使 seek 本身失败，日志里也有「用户想跳去哪」这一笔。
     /// 用户主动类 seek 额外喂给 `onUserSeek`。
     private func recordSeek(toSeconds target: Double, kind: String) {
+        recordPlaybackActivity()
+        watchRecorder.discontinuity()
         PlaybackLog.event(.seek, fields: [
             "from_ms": .integer(state.position.microseconds / 1000),
             "to_ms": .integer(Int64(target * 1000)),

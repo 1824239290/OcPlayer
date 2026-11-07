@@ -350,7 +350,7 @@ private struct DownloadTaskCard: View {
                 Spacer(minLength: 0)
             }
 
-            CardProgressTrack(fraction: task.progressFraction, tint: .accentColor)
+            CardProgressTrack(fraction: task.progressFraction, tint: AppAccent.tint)
 
             HStack(spacing: 10) {
                 Text(percentText)
@@ -388,12 +388,12 @@ private struct DownloadTaskCard: View {
                     Button(action: onTogglePause) {
                         Image(systemName: task.isPaused ? "play.fill" : "pause.fill")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(AppAccent.tint)
                             .frame(width: 30, height: 30)
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .liquidGlassCapsule(tint: Color.accentColor.opacity(0.15))
+                    .liquidGlassCapsule(tint: AppAccent.tint.opacity(0.15))
                     .help(task.isPaused ? "开始下载" : "暂停下载")
                     .accessibilityLabel(task.isPaused ? "开始下载" : "暂停下载")
 

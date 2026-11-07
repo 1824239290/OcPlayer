@@ -2,171 +2,269 @@ import AppDesignKit
 import BangumiKit
 import SwiftUI
 
-/// 完整收藏列表：segmented 切换收藏类型 + 分页行。
-/// 分页状态机走共享的 `PagedListLoader`（代次守卫/追加去重/hasMore 都在里面）。
+/// 与观影空间共用灰白控件、氛围底和玻璃海报卡的完整片单。
 struct BangumiCollectionListView: View {
     let subjectType: BangumiSubjectType
 
     @Environment(BangumiCoordinator.self) private var bangumi
     @Environment(AppModel.self) private var app
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.contentLeading) private var contentLeading
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var collectionType: BangumiCollectionType = .collect
     @State private var counts: [BangumiCollectionType: Int] = [:]
-    /// 懒建一次；fetch 闭包读的 @State 是存储引用，切类型时读到的是当前值。
     @State private var loader: PagedListLoader<BangumiSubjectDTO>?
+    @State private var loaderKey: String?
 
     private static let pageSize = 20
+    private var isCompact: Bool { horizontalSizeClass == .compact }
+    private var accountKey: String {
+        "\(bangumi.profile?.id ?? 0):\(bangumi.profile?.username ?? ""):" +
+        "\(bangumi.isAuthenticated):\(bangumi.isDatabaseReady):\(subjectType.rawValue)"
+    }
+    private var loadKey: String { "\(accountKey):\(collectionType.rawValue)" }
+    private var columns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible(), alignment: .top)] : PosterGrid.columns(compact: isCompact)
+    }
+
+    init(subjectType: BangumiSubjectType, initialCollection: BangumiCollectionType = .collect) {
+        self.subjectType = subjectType
+        _collectionType = State(initialValue: initialCollection)
+    }
 
     var body: some View {
-        Group {
-            if let loader {
-                content(loader)
-                    .id(collectionType)
-                    .transition(.section)
-                    .motion(Motion.standard, value: collectionType)
-            } else {
-                // 根级状态视图（本页此时还没有 `List` 兜底）走 `PageFillingState`
-                // 铺满，否则尺寸链塌掉、氛围背景与顶栏一起失去内容（见该类型注释）。
-                PageFillingState {
-                    ProgressView("正在加载…")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                pageHeading
+                if let loader, loaderKey == loadKey {
+                    content(loader)
+                } else {
+                    loadingState
                 }
             }
+            .padding(.horizontal, contentLeading)
+            .padding(.top, 20)
+            .padding(.bottom, 32)
+            .frame(maxWidth: 1120, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
-        .navigationTitle("我的\(subjectType.description)")
-        .safeAreaInset(edge: .top) {
-            // 吸附在顶部的分段选择条：**这是 chrome（浮动控件）不是内容卡**，
-            // 所以保留系统 `.bar` 材质，没有跟着内容卡一起换玻璃——吸附条要的是
-            // 「滚到它底下时内容被压住」的系统行为，换成 glassEffect 反而要在滚动
-            // 边缘做二次处理。若将来要统一观感，改这里一处即可。
+        .id(collectionType)
+        .navigationTitle("\(subjectType.description)片单")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .safeAreaInset(edge: .top, spacing: 0) {
             collectionTypePicker
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(.bar)   // glass-guard-exempt: 吸附式分段条是 chrome，不是内容卡
+                .padding(.horizontal, contentLeading)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 1120)
+                .frame(maxWidth: .infinity)
         }
-        .task(id: subjectType.rawValue) {
-            if loader == nil {
-                loader = PagedListLoader(pageSize: Self.pageSize) { offset, limit in
-                    let items = try await bangumi.context.fetchCollectionSubjects(
-                        subjectType: subjectType, collectionType: collectionType,
-                        limit: limit, offset: offset)
-                    return .init(items: items)
-                } errorMessage: { error in
-                    (error as? BangumiError)?.userMessage ?? "\(error)"
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel("刷新片单")
+                .help("刷新片单")
+                .disabled(loader?.isLoading == true)
+            }
+        }
+        .refreshable { await refresh() }
+        .task(id: loadKey) {
+            // 每种片单固定自己的查询条件；旧请求只能更新已离开页面的分页器。
+            let selectedType = collectionType
+            let next = PagedListLoader<BangumiSubjectDTO>(pageSize: Self.pageSize) { offset, limit in
+                let items = try await bangumi.context.fetchCollectionSubjects(
+                    subjectType: subjectType, collectionType: selectedType,
+                    limit: limit, offset: offset)
+                return .init(items: items)
+            } errorMessage: { error in
+                (error as? BangumiError)?.userMessage ?? "\(error)"
+            }
+            loader = next
+            loaderKey = loadKey
+            await next.loadInitial()
+        }
+        .task(id: accountKey) {
+            counts = [:]
+            await refreshCounts()
+        }
+    }
+
+    private func title(for type: BangumiCollectionType) -> String {
+        subjectType == .anime && type == .wish ? "待看" : type.description(subjectType)
+    }
+
+    private var pageHeading: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("\(title(for: collectionType))片单")
+                .font(.largeTitle.weight(.bold))
+            HStack(spacing: 6) {
+                Text("Bangumi")
+                if let count = counts[collectionType] {
+                    Text("·")
+                    Text("\(count) 部\(subjectType.description)").monospacedDigit()
                 }
             }
-            async let countsFetch: () = refreshCounts()
-            await loader?.loadInitial()
-            await countsFetch
+            .font(.subheadline).foregroundStyle(.secondary)
         }
-        .onChange(of: collectionType) { _, _ in
-            // 切收藏类型 = 整份重取；loader 的代次守卫会丢掉在途旧翻页。
-            Task { await loader?.loadInitial() }
+    }
+
+    private var collectionTypePicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(BangumiCollectionType.allTypes()) { type in
+                    let selected = collectionType == type
+                    Button { collectionType = type } label: {
+                        HStack(spacing: 7) {
+                            Text(title(for: type))
+                            Text(counts[type].map(String.init) ?? "—")
+                                .monospacedDigit().opacity(selected ? 0.75 : 0.6)
+                        }
+                        .font(.subheadline.weight(selected ? .semibold : .medium))
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 44)
+                        .foregroundStyle(selected ? AppAccent.onSolid : Color.primary)
+                        .background(selected ? AppAccent.solidTint : Color.clear, in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(title(for: type))，\(counts[type].map(String.init) ?? "数量待获取")")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+            }
+            .padding(5)
+            .glassEffect(.regular, in: Capsule())
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder
     private func content(_ loader: PagedListLoader<BangumiSubjectDTO>) -> some View {
         if loader.isLoading && loader.items.isEmpty {
-            PageFillingState {
-                ProgressView("正在加载…")
-            }
+            loadingState
         } else if let error = loader.loadError, loader.items.isEmpty {
-            PageFillingState {
-                EmptyState(failure: error) {
-                    Task { await loader.loadInitial() }
-                }
-            }
+            EmptyState(failure: error) { Task { await loader.loadInitial() } }
+                .frame(maxWidth: .infinity, minHeight: 340)
+        } else if loader.items.isEmpty {
+            EmptyState(empty: "还没有\(title(for: collectionType))的条目", systemImage: "rectangle.stack",
+                       message: "在 Bangumi 条目详情中加入收藏后，会出现在这里。")
+                .frame(maxWidth: .infinity, minHeight: 340)
         } else {
-            List {
-                ForEach(loader.items) { subject in
-                    DetailTransitionCard(list: "bangumi.collection", position: String(subject.id), action: { source in app.openBangumiSubject(id: subject.id, source: source) }) { open in
-                        Button {
-                            open()
-                        } label: {
-                            CollectionRow(subject: subject)
+            GlassEffectContainer(spacing: 18) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: isCompact ? 16 : 22) {
+                    ForEach(loader.items) { subject in
+                        DetailTransitionCard(list: "bangumi.collection.\(collectionType.rawValue)",
+                                             position: String(subject.id),
+                                             action: { source in app.openBangumiSubject(id: subject.id, source: source) }) { open in
+                            Button(action: open) {
+                                BangumiCollectionPosterCard(subject: subject)
+                            }
+                            .buttonStyle(.plain)
                         }
-                    }
-                    .buttonStyle(.plain)
-                    .onAppear {
-                        if subject.id == loader.items.last?.id {
-                            Task { await loader.loadMore() }
+                        .onAppear {
+                            if subject.id == loader.items.last?.id {
+                                Task { await loader.loadMore() }
+                            }
                         }
                     }
                 }
             }
-            .listStyle(.inset)
-            .motion(Motion.standard, value: loader.items.count)
+            if loader.hasMore {
+                HStack {
+                    Spacer()
+                    if loader.isLoadingMore {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Button("加载更多") { Task { await loader.loadMore() } }
+                            .buttonStyle(.borderless)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+            }
         }
     }
 
-    private var collectionTypePicker: some View {
-        Picker("收藏类型", selection: $collectionType) {
-            ForEach(BangumiCollectionType.allTypes()) { type in
-                Text("\(type.description(subjectType))(\(counts[type, default: 0]))")
-                    .tag(type)
-            }
-        }
-        .pickerStyle(.segmented)
+    private var loadingState: some View {
+        ProgressView("正在加载片单…")
+            .frame(maxWidth: .infinity, minHeight: 340)
+    }
+
+    private func refresh() async {
+        async let countsFetch: () = refreshCounts()
+        await loader?.loadInitial()
+        await countsFetch
     }
 
     private func refreshCounts() async {
-        counts = (try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType)) ?? [:]
+        let key = accountKey
+        guard let updated = try? await bangumi.context.fetchCollectionCounts(subjectType: subjectType),
+              !Task.isCancelled, key == accountKey else { return }
+        counts = updated
     }
 }
 
-/// 收藏列表行：封面 + 标题 + 评分/吐槽摘要。
-private struct CollectionRow: View {
+private struct BangumiCollectionPosterCard: View {
     let subject: BangumiSubjectDTO
 
-    var body: some View {
-        HStack(spacing: 12) {
-            MediaArtwork(
-                url: coverURL,
-                shape: .poster,
-                width: 48,
-                cornerRadius: 6,
-                // bgm.tv 的封面惯例就是 2:3：给兜底比例，加载前那一帧也严丝合缝。
-                nominalRatio: 2.0 / 3.0
-            )
-            VStack(alignment: .leading, spacing: 3) {
-                Text(subject.nameCN.isEmpty ? subject.name : subject.nameCN)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                if !subject.nameCN.isEmpty, subject.name != subject.nameCN {
-                    Text(subject.name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                if let interest = subject.interest {
-                    HStack(spacing: 6) {
-                        if interest.rate > 0 {
-                            Text(String(repeating: "★", count: min(max(interest.rate, 0), 10)))
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                        if interest.type == .doing, subject.eps > 0 {
-                            Text("\(interest.epStatus)/\(subject.eps) 话")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            Spacer()
-            if let interest = subject.interest, !interest.comment.isEmpty {
-                Text(interest.comment)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 140, alignment: .trailing)
+    private var title: String { subject.nameCN.isEmpty ? subject.name : subject.nameCN }
+    private var originalTitle: String { subject.nameCN.isEmpty || subject.name == subject.nameCN ? "" : subject.name }
+    private var coverURL: URL? {
+        guard let images = subject.images,
+              let image = [images.large, images.common, images.medium].first(where: { !$0.isEmpty }) else { return nil }
+        return URL(string: BangumiURL.imageURLString(from: image))
+    }
+    private var metadata: String {
+        var parts: [String] = []
+        if subject.airtime.year > 0 { parts.append(String(subject.airtime.year)) }
+        if subject.eps > 0 {
+            if let interest = subject.interest, interest.type == .doing {
+                parts.append("\(interest.epStatus)/\(subject.eps) 话")
+            } else {
+                parts.append("\(subject.eps) 话")
             }
         }
-        .padding(.vertical, 2)
+        return parts.isEmpty ? subject.type.description : parts.joined(separator: " · ")
     }
 
-    private var coverURL: URL? {
-        guard let image = subject.images?.large else { return nil }
-        return URL(string: BangumiURL.imageURLString(from: image))
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            MediaArtwork(url: coverURL, shape: .poster, cornerRadius: 10,
+                         emptyIcon: "film", aspectRatio: 2.0 / 3.0, scaling: .fill)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.subheadline.weight(.semibold))
+                    .lineLimit(2, reservesSpace: true)
+                Text(originalTitle.isEmpty ? " " : originalTitle)
+                    .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    .accessibilityHidden(originalTitle.isEmpty)
+                HStack(spacing: 5) {
+                    Text(metadata).lineLimit(1)
+                    Spacer(minLength: 2)
+                    if subject.rating.score.isFinite, subject.rating.score > 0 {
+                        Label(subject.rating.score.formatted(.number.precision(.fractionLength(1))), systemImage: "star.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .font(.caption2).foregroundStyle(.secondary)
+                if let interest = subject.interest, interest.rate > 0 {
+                    Text("我的评分 \(interest.rate)/10").font(.caption2).foregroundStyle(.secondary)
+                }
+                if let comment = subject.interest?.comment, !comment.isEmpty {
+                    Text(comment).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(.primary)
+        .liquidGlassCard(isInteractive: true)
+        .contentShape(.rect(cornerRadius: Metrics.glassCardRadius))
+        .accessibilityElement(children: .combine)
     }
 }

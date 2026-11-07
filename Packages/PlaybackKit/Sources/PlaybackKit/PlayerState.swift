@@ -177,6 +177,8 @@ public final class PlayerState {
     /// 外挂字幕一条条挂上），控制器自己拿不到「这一次刷新之后列表已经最新」这个点。
     /// 实现方必须**幂等**——选轨本身会再推一次 `trackSelectionChanged` → 再刷新。
     @ObservationIgnored public var onTracksRefreshed: (() -> Void)?
+    /// Cheap host hook after timeline/activity changes; never performs I/O in the event loop.
+    @ObservationIgnored public var onPlaybackActivityChanged: (() -> Void)?
 
     /// 换源 / 手动选轨后由 `PlaybackController` 显式调用。
     public func refreshTracks(from engine: any PlaybackEngine) {
@@ -208,6 +210,13 @@ public final class PlayerState {
     }
 
     func apply(_ event: PlayerEvent) {
+        defer {
+            switch event {
+            case .stateChanged, .positionChanged, .bufferingChanged, .failed:
+                onPlaybackActivityChanged?()
+            default: break
+            }
+        }
         switch event {
         case .stateChanged(let value):
             // 片尾那条陈旧读错误的内核侧孪生事件：`.failed` 已按自然收尾折叠

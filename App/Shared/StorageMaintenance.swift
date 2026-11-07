@@ -23,6 +23,16 @@ enum AppStorageDirectories {
     /// 本地数据库。**不是普通缓存**：进度/关联/元数据都不能随手删，
     /// 所以它们只参与「体积上报」，不进 `ManagedDirectoryPruner` 的删除路径。
     static let databaseFileNames = ["Bangumi.sqlite", "Media.sqlite"]
+    /// Server snapshots and App playback durations are user history: report size, never prune by age.
+    static let viewingHistory = OcPlayerStorage.directory("ViewingHistory")
+
+    static func viewingHistoryTotalBytes() -> Int64 {
+        let urls = (try? FileManager.default.contentsOfDirectory(
+            at: viewingHistory, includingPropertiesForKeys: [.fileSizeKey], options: [.skipsHiddenFiles])) ?? []
+        return urls.filter { $0.pathExtension == "json" }.reduce(0) {
+            $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+    }
 
     /// 数据库及其 WAL 附属文件（`-wal` / `-shm`）的总字节数。
     ///
@@ -157,6 +167,7 @@ final class AppStorageMaintenance: @unchecked Sendable {
             "failed_files": .integer(Int64(failedCount)),
             "unsafe_root": .boolean(skippedUnsafeRoot),
             "database_bytes": .integer(databaseBytes),
+            "viewing_history_bytes": .integer(AppStorageDirectories.viewingHistoryTotalBytes()),
         ]
         if failedCount > 0 || skippedUnsafeRoot {
             AppDiagnostics.logWarning("存储定期清理未完全执行", fields: fields)

@@ -5,7 +5,7 @@ import SwiftUI
 //
 // 常规布局（macOS / iPad）原先靠 `NavigationSplitView` 侧栏承载三个分区入口、
 // 媒体库列表和底部「设置」行。侧栏整列让给内容之后，导航收进顶栏一组
-// **纯图标**按钮（首页 / MoviePilot / Bangumi / 设置，顺序沿用原侧栏），
+// **纯图标**按钮（首页 / 观影 / 设置），
 // 共用一个液态玻璃圆角容器。媒体库入口在首页「媒体库」栏（可关），这里
 // 不再放独立的「媒体库」按钮。
 //
@@ -75,17 +75,13 @@ struct AppShellNavigationToolbarContent: ToolbarContent {
 /// 模式下都稳。
 struct AppShellSectionGroup: View {
     @Environment(AppModel.self) private var app
-    /// 两个集成的启用开关：关掉后对应按钮消失（与侧栏时代一致）。
-    @AppStorage(SettingsKeys.bangumiEnabled) private var bangumiEnabled = true
-    @AppStorage(SettingsKeys.moviepilotEnabled) private var moviepilotEnabled = true
-
     @State private var hovering: AppModel.Section?
 
     /// 组里的一颗按钮。`id` 取 section，方便 ForEach 稳定复用。
     struct Segment: Identifiable {
         /// 图标来源：SF Symbol、品牌矢量图（Assets.xcassets imageset），或当前账号头像。
         enum Icon {
-            case symbol(String)
+            case symbol(String, selected: String? = nil)
             /// 品牌图：未选中用 `name`（模板渲染，吃前景色）；选中用 `colorName` 的
             /// **品牌原色**（`.renderingMode(.original)`）。两者是同一个官方 glyph；
             /// Bangumi 有单独的渐变版资产，MoviePilot 的彩色直接存在同一个 SVG 里
@@ -105,28 +101,17 @@ struct AppShellSectionGroup: View {
         var id: AppModel.Section { section }
     }
 
-    /// 顺序沿用侧栏：首页 → MoviePilot → Bangumi → 设置。
-    static func makeSegments(bangumiEnabled: Bool, moviepilotEnabled: Bool) -> [Segment] {
-        var segments: [Segment] = [Segment(section: .home, title: "首页", icon: .avatar)]
-        if moviepilotEnabled {
-            segments.append(Segment(
-                section: .moviepilot, title: "MoviePilot",
-                icon: .brand(name: "moviepilot-logo", colorName: "moviepilot-logo", side: 18)
-            ))
-        }
-        if bangumiEnabled {
-            segments.append(Segment(
-                section: .bangumi, title: "Bangumi",
-                icon: .brand(name: "bangumi-logo", colorName: "bangumi-logo-color", side: 20)
-            ))
-        }
-        segments.append(Segment(section: .settings, title: "设置", icon: .symbol("gearshape")))
-        return segments
+    /// 分区顺序：首页 → 观影 → 设置。集成入口集中在「观影」内。
+    static func makeSegments() -> [Segment] {
+        [
+            Segment(section: .home, title: "首页", icon: .avatar),
+            Segment(section: .my, title: ViewingNavigation.title,
+                    icon: .symbol(ViewingNavigation.symbol, selected: ViewingNavigation.selectedSymbol)),
+            Segment(section: .settings, title: "设置", icon: .symbol("gearshape")),
+        ]
     }
 
-    private var segments: [Segment] {
-        Self.makeSegments(bangumiEnabled: bangumiEnabled, moviepilotEnabled: moviepilotEnabled)
-    }
+    private var segments: [Segment] { Self.makeSegments() }
 
     var body: some View {
         let content = HStack(spacing: 2) {
@@ -189,8 +174,8 @@ struct AppShellSectionGroup: View {
     @ViewBuilder
     private func segmentIcon(_ icon: Segment.Icon, isSelected: Bool) -> some View {
         switch icon {
-        case .symbol(let name):
-            Image(systemName: name)
+        case .symbol(let name, let selectedName):
+            Image(systemName: isSelected ? (selectedName ?? name) : name)
                 .font(.system(size: 13, weight: .semibold))
         case .brand(let name, let colorName, let side):
             SectionBrandIcon(name: name, colorName: colorName,
@@ -207,7 +192,7 @@ struct AppShellSectionGroup: View {
     }
 
     private func segmentBackground(isSelected: Bool, isHovering: Bool) -> AnyShapeStyle {
-        // 选中态不画强调色底（用户确认过不要蓝色的选中底）：glyph 靠前景色亮暗，
+        // 选中态保留清透玻璃底：glyph 使用灰白前景，
         // 品牌图 / 头像靠**自己的颜色信号**（见 `SectionBrandIcon` / `SectionAvatarIcon`）。
         // hover 保留浅色底。
         // macOS 工具栏的 Liquid Glass 会把低 alpha 的内容填充当「背景」吃掉

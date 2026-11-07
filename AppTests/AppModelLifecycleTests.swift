@@ -26,12 +26,12 @@ final class AppModelLifecycleTests: XCTestCase {
     func testReconnectFlowClearsNavPaths() {
         let app = AppModel()
         app.phase = .ready
-        app.setNavPath([.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))], for: .bangumi)
+        app.setNavPath([.detail(MediaItem(id: "series-2", name: "另一部", kind: .series))], for: .my)
         app.handleStackPathChange([.detail(MediaItem(id: "m2", name: "电影2", kind: .movie))])
 
         app.reconnectFlow()
 
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
+        XCTAssertTrue(app.navPath(for: .my).isEmpty)
         XCTAssertTrue(app.path.isEmpty)
         XCTAssertEqual(app.phase, .onboarding)
         XCTAssertEqual(app.selectedSection, .home)
@@ -98,24 +98,59 @@ final class AppModelLifecycleTests: XCTestCase {
         app.setCompact(true)
         XCTAssertTrue(app.openMoviePilotSearch("第一次"))
         XCTAssertTrue(app.openMoviePilotSearch("最后一次"))
-        XCTAssertEqual(app.selectedSection, .moviepilot)
+        XCTAssertEqual(app.selectedSection, .my)
         XCTAssertEqual(app.pendingMoviePilotQuery, "最后一次")
         XCTAssertFalse(app.routeExiting)
     }
     #endif
 
-    /// 同分区早退也要能消费：`switchSection` 回到同一分区时是同步落地（返回 true），
-    /// 关键词照常排队。这条钉住「返回 true 才写词」不会把同分区那条路一起挡掉。
+    /// 已打开资源管理时仍接受关键词，且不再压入重复页面。
     @MainActor
-    func testOpenMoviePilotSearchWorksWhenAlreadyOnMoviePilotSection() {
+    func testOpenMoviePilotSearchWorksWhenAlreadyOnMoviePilotPage() {
         let app = AppModel()
         app.phase = .ready
-        app.selectedSection = .moviepilot
+        app.reduceMotion = true
+        XCTAssertTrue(app.openMoviePilot())
 
         XCTAssertTrue(app.openMoviePilotSearch("  芙莉莲  "))
         XCTAssertEqual(
             app.pendingMoviePilotQuery, "芙莉莲",
-            "关键词要 trim；同分区早退也必须排进队列")
+            "关键词要 trim；页面已打开时也必须排进队列")
+        XCTAssertEqual(app.path, [.moviepilotHome])
+    }
+
+    func testMoviePilotEntryUsesMyStackAndReturnsToOverview() {
+        for compact in [false, true] {
+            let app = AppModel()
+            app.phase = .ready
+            app.reduceMotion = true
+            app.setCompact(compact)
+            app.setNavPath([.bangumiCalendar], for: .home)
+            XCTAssertTrue(app.openMoviePilot())
+            XCTAssertEqual(app.selectedSection, .my)
+            XCTAssertEqual(compact ? app.navPath(for: .my) : app.path, [.moviepilotHome])
+            XCTAssertEqual(app.navPath(for: .home), [.bangumiCalendar])
+            XCTAssertTrue(app.openMoviePilotSearch("新搜索"))
+            XCTAssertEqual(compact ? app.navPath(for: .my) : app.path, [.moviepilotHome])
+            app.back()
+            XCTAssertTrue((compact ? app.navPath(for: .my) : app.path).isEmpty)
+            XCTAssertEqual(app.selectedSection, .my)
+        }
+    }
+
+    func testMoviePilotEntryPreservesMySourcePageAndAvoidsDuplicateDestination() {
+        let app = AppModel()
+        app.phase = .ready
+        app.reduceMotion = true
+        app.selectedSection = .my
+        app.openBangumiCalendar()
+        XCTAssertTrue(app.openMoviePilot())
+        XCTAssertEqual(app.path, [.bangumiCalendar, .moviepilotHome])
+        app.openBangumiProfile()
+        XCTAssertTrue(app.openMoviePilot())
+        XCTAssertEqual(app.path, [.bangumiCalendar, .moviepilotHome])
+        app.back()
+        XCTAssertEqual(app.path, [.bangumiCalendar])
     }
 
     /// 空关键词不排入队列（避免整块入口消失后仍留下一个 `""` 触发一次空搜索）。
@@ -123,7 +158,7 @@ final class AppModelLifecycleTests: XCTestCase {
     func testOpenMoviePilotSearchRejectsBlankQuery() {
         let app = AppModel()
         app.phase = .ready
-        app.selectedSection = .moviepilot
+        app.selectedSection = .my
 
         XCTAssertFalse(app.openMoviePilotSearch("   "))
         XCTAssertNil(app.pendingMoviePilotQuery)
@@ -200,12 +235,12 @@ final class AppModelLifecycleTests: XCTestCase {
         let app = AppModel()
         app.reduceMotion = true   // 两段式直切落地，不等 0.45s 淡出
         app.setCompact(true)
-        app.selectedSection = .bangumi
+        app.selectedSection = .my
 
         app.openBangumiProfile()
         app.openBangumiCalendar()
 
-        XCTAssertEqual(app.navPath(for: .bangumi).count, 2, "两个入口都必须进 Bangumi Tab 自己的栈")
+        XCTAssertEqual(app.navPath(for: .my).count, 2, "两个入口都必须进 Bangumi Tab 自己的栈")
         XCTAssertTrue(app.path.isEmpty, "compact 下共享栈不得被写入（只写不读 = 死按钮）")
     }
 
@@ -213,21 +248,21 @@ final class AppModelLifecycleTests: XCTestCase {
     func testCompactPushAndBackWaitForFadeAndPreserveOtherTabs() async throws {
         let app = AppModel()
         app.setCompact(true)
-        app.selectedSection = .bangumi
+        app.selectedSection = .my
         app.setNavPath([.bangumiCalendar], for: .home)
 
         app.openBangumiProfile()
         XCTAssertTrue(app.routeExiting)
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty, "淡出完成前不应启动系统 push")
+        XCTAssertTrue(app.navPath(for: .my).isEmpty, "淡出完成前不应启动系统 push")
         app.openBangumiCalendar() // 退场中重复点击必须被忽略。
         try await waitForRouteLanding(app)
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
 
         app.back()
         XCTAssertTrue(app.routeExiting)
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile], "返回先淡出，再弹栈")
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile], "返回先淡出，再弹栈")
         try await waitForRouteLanding(app)
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
+        XCTAssertTrue(app.navPath(for: .my).isEmpty)
         XCTAssertEqual(app.navPath(for: .home), [.bangumiCalendar])
         XCTAssertTrue(app.path.isEmpty)
     }
@@ -236,30 +271,30 @@ final class AppModelLifecycleTests: XCTestCase {
         let app = AppModel()
         app.setCompact(true)
         app.setNavPath([.bangumiCalendar], for: .home)
-        app.setNavPath([.bangumiProfile], for: .bangumi)
+        app.setNavPath([.bangumiProfile], for: .my)
 
-        XCTAssertTrue(app.switchSection(.bangumi))
+        XCTAssertTrue(app.switchSection(.my))
         XCTAssertEqual(app.selectedSection, .home)
         XCTAssertTrue(app.routeExiting)
         XCTAssertFalse(app.switchSection(.settings), "淡出中第二次切换不能覆盖落点")
         try await waitForRouteLanding(app)
 
-        XCTAssertEqual(app.selectedSection, .bangumi)
+        XCTAssertEqual(app.selectedSection, .my)
         XCTAssertEqual(app.navPath(for: .home), [.bangumiCalendar])
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
     }
 
     func testCompactSystemPopAndPresentedPagesUseSharedFade() async throws {
         let app = AppModel()
         app.setCompact(true)
-        app.selectedSection = .bangumi
-        app.setNavPath([.bangumiProfile, .bangumiCalendar], for: .bangumi)
+        app.selectedSection = .my
+        app.setNavPath([.bangumiProfile, .bangumiCalendar], for: .my)
 
-        app.handleNavPathChange([.bangumiProfile], for: .bangumi)
-        XCTAssertEqual(app.navPath(for: .bangumi).count, 2)
+        app.handleNavPathChange([.bangumiProfile], for: .my)
+        XCTAssertEqual(app.navPath(for: .my).count, 2)
         XCTAssertTrue(app.routeExiting)
         try await waitForRouteLanding(app)
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
 
         var presented = false
         app.pushPresented { presented = true }
@@ -276,16 +311,16 @@ final class AppModelLifecycleTests: XCTestCase {
     func testCompactNavigationLandsImmediatelyAndPreservesOtherStacks() {
         let app = AppModel()
         app.setCompact(true)
-        app.selectedSection = .bangumi
+        app.selectedSection = .my
         app.setNavPath([.bangumiCalendar], for: .home)
         app.openBangumiProfile()
         app.openBangumiCalendar()
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile, .bangumiCalendar])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile, .bangumiCalendar])
         XCTAssertFalse(app.routeExiting)
-        app.handleNavPathChange([.bangumiProfile], for: .bangumi)
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        app.handleNavPathChange([.bangumiProfile], for: .my)
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
         app.back()
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
+        XCTAssertTrue(app.navPath(for: .my).isEmpty)
         XCTAssertEqual(app.navPath(for: .home), [.bangumiCalendar])
         XCTAssertTrue(app.path.isEmpty)
         var presented = false
@@ -300,30 +335,30 @@ final class AppModelLifecycleTests: XCTestCase {
         let app = AppModel()
         app.setCompact(true)
         app.setNavPath([.bangumiCalendar], for: .home)
-        app.setNavPath([.bangumiProfile], for: .bangumi)
-        for section in [AppModel.Section.bangumi, .settings, .search, .home, .bangumi] {
+        app.setNavPath([.bangumiProfile], for: .my)
+        for section in [AppModel.Section.my, .settings, .search, .home, .my] {
             XCTAssertTrue(app.switchSection(section))
             XCTAssertEqual(app.selectedSection, section)
         }
         XCTAssertEqual(app.navPath(for: .home), [.bangumiCalendar])
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
         XCTAssertFalse(app.routeExiting)
     }
 
     func testDetailSourceSurvivesNavigationAndSourceLessRoutesRemainSupported() {
         let app = AppModel()
         app.setCompact(true)
-        app.selectedSection = .bangumi
-        let source = DetailTransitionSource(section: .bangumi, list: "calendar", instance: UUID(), position: "1")
+        app.selectedSection = .my
+        let source = DetailTransitionSource(section: .my, list: "calendar", instance: UUID(), position: "1")
         app.openBangumiSubject(id: 42, source: source)
-        guard case .bangumiSubject(let id, _, let actual) = app.navPath(for: .bangumi).last else {
+        guard case .bangumiSubject(let id, _, let actual) = app.navPath(for: .my).last else {
             return XCTFail("Missing subject route")
         }
         XCTAssertEqual(id, 42)
         XCTAssertEqual(actual, source)
         app.back()
         app.openBangumiSubject(id: 42)
-        guard case .bangumiSubject(_, _, let fallback) = app.navPath(for: .bangumi).last else {
+        guard case .bangumiSubject(_, _, let fallback) = app.navPath(for: .my).last else {
             return XCTFail("Missing source-less route")
         }
         XCTAssertNil(fallback)
@@ -335,12 +370,12 @@ final class AppModelLifecycleTests: XCTestCase {
         app.setCompact(true)
         app.reduceMotion = true
 
-        XCTAssertTrue(app.switchSection(.bangumi))
-        XCTAssertEqual(app.selectedSection, .bangumi)
+        XCTAssertTrue(app.switchSection(.my))
+        XCTAssertEqual(app.selectedSection, .my)
         app.openBangumiProfile()
-        XCTAssertEqual(app.navPath(for: .bangumi), [.bangumiProfile])
+        XCTAssertEqual(app.navPath(for: .my), [.bangumiProfile])
         app.back()
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
+        XCTAssertTrue(app.navPath(for: .my).isEmpty)
         XCTAssertFalse(app.routeExiting)
     }
 
@@ -348,13 +383,13 @@ final class AppModelLifecycleTests: XCTestCase {
     func testSignOutCancelsCompactNavigationDuringFade() async throws {
         let app = AppModel()
         app.setCompact(true)
-        app.selectedSection = .bangumi
+        app.selectedSection = .my
         app.openBangumiProfile()
         XCTAssertTrue(app.routeExiting)
 
         app.signOut()
         try await Task.sleep(for: .seconds(Motion.exitSeconds + Motion.restoreDelay + Motion.standardSeconds))
-        XCTAssertTrue(app.navPath(for: .bangumi).isEmpty)
+        XCTAssertTrue(app.navPath(for: .my).isEmpty)
         XCTAssertFalse(app.routeExiting)
         XCTAssertEqual(app.selectedSection, .home)
     }
