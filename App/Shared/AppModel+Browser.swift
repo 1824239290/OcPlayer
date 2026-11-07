@@ -64,6 +64,8 @@ extension AppModel {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
         self.server = server
+        serverAvatarResolution = .pending
+        viewingProfileAvatar.reset()
         // 记下本会话的图片缓存身份。**唯一**的会话落地点（登录 / 启动恢复 / 切换服务器）
         // 就是这里，所以只在这一处记；登录页在没有 token 时靠它复原海报的缓存键。
         // 刻意不在登出时清除——见 `ImageCacheIdentityStore`。

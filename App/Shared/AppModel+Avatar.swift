@@ -130,7 +130,15 @@ extension AppModel {
     /// 刻意**不**在失败时把已有的位图清掉：头像拉不到（离线 / 服务器半死）时，
     /// 保留档案里那张旧图比变回房子图标好——这与「离线重启后海报还在」是同一条口径。
     func loadUserAvatar(server: any MediaServer, generation: Int) async {
+        guard sessionIsCurrent(generation, server: server) else { return }
+        serverAvatarResolution = .pending
         let cachedTag = server.profile.primaryImageTag
+        var resolvedTag = cachedTag
+        defer {
+            if !Task.isCancelled, sessionIsCurrent(generation, server: server) {
+                serverAvatarResolution = .resolved(tag: resolvedTag)
+            }
+        }
 
         // ① 档案里那份：有就直接出图（冷启动第一帧就有，不必等网络）。
         if let cachedTag, let url = server.userImageURL(tag: cachedTag) {
@@ -156,6 +164,7 @@ extension AppModel {
             return
         }
         guard sessionIsCurrent(generation, server: server) else { return }
+        resolvedTag = freshTag
 
         if freshTag == cachedTag { return }
 

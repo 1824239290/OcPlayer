@@ -33,8 +33,8 @@ struct TabBarBrandIconBridge: UIViewControllerRepresentable {
 /// 要接管的标签栏槽位。**按标题匹配** —— 整条路唯一脆的地方，所以抽成纯函数用单例钉住。
 ///
 /// 为什么不用下标 / 标识：SwiftUI 的 `Tab` 没有给 `UITabBarItem` 打标识的 API，能稳定拿到
-/// 的只有标题；而这三个标题在 `AppShellView.compactTabs` 里是写死的裸字符串（不是本地化
-/// 资源），不会随语言变。认不出来的标题（设置 / 搜索 / 以后新增的 Tab）一律不接管。
+/// 的只有标题。当前主导航只使用首页头像；保留旧品牌槽位的渲染支持供兼容与回归使用，
+/// 其完整页面已归入「观影」。观影 / 设置 / 搜索等系统图标不接管。
 enum TabBarBrandSlot: String, CaseIterable {
     case home = "首页"
     case bangumi = "Bangumi"
@@ -181,8 +181,8 @@ final class TabBarBrandIconController: UIViewController {
     private func selectedImage(for slot: TabBarBrandSlot, images: SlotImages) -> UIImage {
         let section: AppModel.Section = switch slot {
         case .home: .home
-        case .bangumi: .bangumi
-        case .moviepilot: .moviepilot
+        case .bangumi: .my
+        case .moviepilot: .my
         }
         return selectedSection == section ? images.selected : images.unselected
     }

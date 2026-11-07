@@ -117,6 +117,10 @@ public protocol MediaServer: PlaybackReporting {
     /// 首页氛围背景取材：全库随机一批带 backdrop 的电影 / 剧集。
     func randomBackdropItems(limit: Int) async throws -> [MediaItem]
 
+    /// Completed films/episodes sorted by DatePlayed descending, with last-played dates.
+    /// This is a user-state snapshot API, not a log of individual playback sessions.
+    func playedItemsPage(startIndex: Int, limit: Int) async throws -> ServerPlayedItemsPage
+
     /// 标记条目已看完，返回服务端最新的播放状态快照。
     @discardableResult
     func markPlayed(itemID: String) async throws -> MediaItem.PlayState
@@ -201,6 +205,10 @@ public protocol MediaServer: PlaybackReporting {
 // MARK: - 合集（BoxSet）成员
 
 extension MediaServer {
+    public func playedItemsPage(startIndex: Int, limit: Int) async throws -> ServerPlayedItemsPage {
+        throw ServerViewingHistoryError.unsupported
+    }
+
     /// 旧实现的兼容入口；多源实现应覆盖该方法。
     public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
         try await externalSubtitles(itemID: itemID)

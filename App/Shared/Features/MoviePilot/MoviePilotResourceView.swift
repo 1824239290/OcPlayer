@@ -227,8 +227,8 @@ struct MoviePilotResourceView: View {
                 .font(.callout.weight(.semibold))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
-                .background(Color.accentColor.opacity(0.22), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
+                .background(AppAccent.tint.opacity(0.22), in: Capsule())
+                .overlay(Capsule().strokeBorder(AppAccent.tint.opacity(0.35), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
@@ -697,8 +697,8 @@ private struct MoviePilotTorrentGlassCard: View {
                 .font(.subheadline.weight(.semibold))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
-                .background(Color.accentColor.opacity(0.18), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.35), lineWidth: 0.5))
+                .background(AppAccent.tint.opacity(0.18), in: Capsule())
+                .overlay(Capsule().strokeBorder(AppAccent.tint.opacity(0.35), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .disabled(isAdding)

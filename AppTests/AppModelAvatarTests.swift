@@ -102,6 +102,7 @@ final class AppModelAvatarTests: XCTestCase {
         await app.loadUserAvatar(server: stub, generation: app.sessionGeneration)
 
         let image = try XCTUnwrap(app.userAvatarImage, "服务端有头像时必须出图")
+        XCTAssertEqual(app.serverAvatarResolution, .resolved(tag: "av-1"))
         #if canImport(UIKit)
         // 标签栏版本的三条硬要求。macOS 没有标签栏（分区入口是工具栏药丸），
         // `tabIcon(from:)` 在那里原样返回，所以这几条只在 iOS 断言。
@@ -252,6 +253,7 @@ final class AppModelAvatarTests: XCTestCase {
 
         XCTAssertNil(app.userAvatarImage)
         XCTAssertEqual(stub.callCount("currentUserAvatarTag"), 1, "校准查询本身要发")
+        XCTAssertEqual(app.serverAvatarResolution, .resolved(tag: nil))
         XCTAssertEqual(requestedURLs.count, 0, "没有 tag 就不该发取图请求（那是一次必然 404 的白打）")
     }
 
@@ -266,6 +268,7 @@ final class AppModelAvatarTests: XCTestCase {
         await app.loadUserAvatar(server: stub, generation: app.sessionGeneration)
 
         XCTAssertEqual(store.currentProfile?.primaryImageTag, "av-new", "新 tag 必须落盘")
+        XCTAssertEqual(app.serverAvatarResolution, .resolved(tag: "av-new"))
         XCTAssertTrue(requestedURLs.snapshot().contains { $0.contains("tag=av-new") },
                       "换了头像必须按新 tag 再取一次，实际请求：\(requestedURLs.snapshot())")
         XCTAssertNotNil(app.userAvatarImage)
@@ -285,6 +288,7 @@ final class AppModelAvatarTests: XCTestCase {
 
         XCTAssertNil(app.userAvatarImage)
         XCTAssertNil(store.currentProfile?.primaryImageTag, "服务端说没有头像 → 档案也要跟着清")
+        XCTAssertEqual(app.serverAvatarResolution, .resolved(tag: nil))
     }
 
     /// 校准失败（离线 / 老服务器没有 `/Users/Me`）时保留档案里那张：变回房子图标
@@ -298,6 +302,7 @@ final class AppModelAvatarTests: XCTestCase {
         await app.loadUserAvatar(server: stub, generation: app.sessionGeneration)
 
         XCTAssertNotNil(app.userAvatarImage, "档案里有 tag，取图成功后不该被校准失败清掉")
+        XCTAssertEqual(app.serverAvatarResolution, .resolved(tag: "av-old"))
     }
 
     /// 换会话 / 登出（`resetBrowseState` 是唯一的会话边界）：头像位图与在途任务
@@ -310,6 +315,8 @@ final class AppModelAvatarTests: XCTestCase {
 
         XCTAssertNil(app.userAvatarImage)
         XCTAssertNil(app.userAvatarTask)
+        XCTAssertEqual(app.serverAvatarResolution, .pending)
+        XCTAssertFalse(app.viewingProfileAvatar.isReady)
     }
 
     // MARK: - 辅助

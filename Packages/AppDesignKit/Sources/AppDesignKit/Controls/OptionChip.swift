@@ -23,15 +23,15 @@ public struct OptionChip: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
         .background(
-            selected ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.05),
+            selected ? AppAccent.tint.opacity(0.16) : Color.primary.opacity(0.05),
             in: Capsule()
         )
         .overlay(
             Capsule().strokeBorder(
-                selected ? Color.accentColor.opacity(0.45) : Color.primary.opacity(0.08),
+                selected ? AppAccent.tint.opacity(0.45) : Color.primary.opacity(0.08),
                 lineWidth: 0.5
             )
         )
-        .foregroundStyle(selected ? Color.accentColor : Color.primary)
+        .foregroundStyle(selected ? AppAccent.tint : Color.primary)
     }
 }

@@ -76,6 +76,8 @@ struct EmbyQueryResultDTO: Decodable, Sendable {
 /// 首字母再和属性名比对，任何显式 `CodingKeys` 都得按这个转换后的形态写。
 struct EmbyUserDataDTO: Decodable, Sendable {
     var played: Bool?
+    /// Kept as a string so an invalid optional date cannot break unrelated browsing.
+    var lastPlayedDate: String?
     /// 0–100 的百分数（与 Jellyfin 同口径）。Emby 可能发整数或小数，都收。
     var playedPercentage: Double?
     var playbackPositionTicks: Int?

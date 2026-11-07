@@ -29,7 +29,7 @@ public struct CapsuleSearchField: View {
     public var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(focus.wrappedValue ? Color.accentColor : Color.secondary)
+                .foregroundStyle(focus.wrappedValue ? AppAccent.tint : Color.secondary)
                 .font(.callout)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
@@ -59,7 +59,7 @@ public struct CapsuleSearchField: View {
         .background(Color.primary.opacity(0.04), in: Capsule())
         .overlay(
             Capsule().strokeBorder(
-                focus.wrappedValue ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.08),
+                focus.wrappedValue ? AppAccent.tint.opacity(0.6) : Color.primary.opacity(0.08),
                 lineWidth: 0.5
             )
         )
