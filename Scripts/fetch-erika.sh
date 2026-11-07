@@ -254,8 +254,9 @@ MAC_INC="$WORK/$MAC_PKG/include"
 # v0.3.0 起官方 macos zip 的 liberika_capi.a 里，285 个 compiler-rt 对象
 #（Rust compiler_builtins 产物）同时携带 macOS 与 MACCATALYST 两条
 # LC_BUILD_VERSION，xcodebuild -create-xcframework 因此把整个 .a 判成「多平台」
-# 拒收。此处把对象里的 Catalyst 平台声明原地改写成等长（24B）的 LC_UUID：
-# 结构合法、不挪数据偏移、对象本体与全部符号保留（实测 ranlib 后成员数与符号
+# 拒收。此处把对象里的 Catalyst 平台声明改写成 24B 的 LC_UUID；v0.3.6
+# 的声明含工具版本、长度为 32B，缩短后把后续 load command 前移，并在命令区
+# 末尾补零。结构合法、不挪节数据偏移、对象本体与全部符号保留（实测 ranlib 后成员数与符号
 # 总数与原档分毫不差；改 LC_SOURCE_VERSION 会被 ranlib 整个丢成员，勿用）。
 # 老 tag 无此问题（检出 0 处时不落盘、原样沿用）。
 strip_catalyst_build_version() {
@@ -295,18 +296,27 @@ while pos + 60 <= len(data):
     else:
         real = name.encode("ascii", "replace")
     if len(body) >= 32 and struct.unpack_from("<I", body, 0)[0] == 0xFEEDFACF:
-        sizeofcmds = struct.unpack_from("<I", body, 20)[0]
+        ncmds, sizeofcmds = struct.unpack_from("<II", body, 16)
         off, end = 32, 32 + sizeofcmds
-        while off + 8 <= end:
+        commands = []
+        for _ in range(ncmds):
+            if off + 8 > end or end > len(body):
+                sys.exit("Mach-O load command 越界")
             cmd, cmdsize = struct.unpack_from("<II", body, off)
             if cmdsize < 8 or off + cmdsize > end:
-                break
-            if cmd == LC_BUILD_VERSION and cmdsize == 24 and \
+                sys.exit("无效的 Mach-O load command 长度")
+            command = bytes(body[off:off + cmdsize])
+            if cmd == LC_BUILD_VERSION and cmdsize >= 24 and \
                struct.unpack_from("<I", body, off + 8)[0] == PLATFORM_MACCATALYST:
-                struct.pack_into("<II", body, off, LC_UUID, 24)
-                struct.pack_into("<QQ", body, off + 8, 0, 0)
+                command = struct.pack("<IIQQ", LC_UUID, 24, 0, 0)
                 patched += 1
+            commands.append(command)
             off += cmdsize
+        if off != end:
+            sys.exit("Mach-O load command 总长度不匹配")
+        rewritten = b"".join(commands)
+        body[32:end] = rewritten + bytes(sizeofcmds - len(rewritten))
+        struct.pack_into("<I", body, 20, len(rewritten))
     payload = real + bytes(body)
     out.append(b"#1/" + str(len(real)).encode().ljust(13)
                + b"0".ljust(12) + b"0".ljust(6) + b"0".ljust(6)

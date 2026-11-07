@@ -1,0 +1,30 @@
+{
+  "tag": "v0.3.6",
+  "slices": [
+    {
+      "identifier": "macos-arm64",
+      "architectures": [
+        "arm64"
+      ],
+      "sha256": "a3527b1f7705de422a2c5ab671ef1b82edad073f7d25d5d4a50c8a9e42975f6f",
+      "size": 163141856
+    },
+    {
+      "identifier": "ios-arm64",
+      "architectures": [
+        "arm64"
+      ],
+      "sha256": "24c82bd203aa4500667d344dd1c0f044380839a72c9c09d8b6bfa8a67dd089be",
+      "size": 54243704
+    },
+    {
+      "identifier": "ios-arm64_x86_64-simulator",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "sha256": "fef6a63a15ec01e26d239086b8f18a734697126a86a80827bed7ccf4b1abee48",
+      "size": 114632328
+    }
+  ]
+}
