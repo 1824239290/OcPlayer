@@ -97,6 +97,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
             oldValue.onPlaybackActivityChanged = nil
             watchRecorder.discontinuity()
             state.onPlaybackActivityChanged = { [weak self] in self?.recordPlaybackActivity() }
+            // 新会话的第一条 seek 不该拿上一代会话的落点判「重复」：换源/重开只有这
+            // 一处整体替换 `state`（open 路径），所以代际边界就挂在这里。
+            scrubSeekCoalescer.reset()
         }
     }
 
@@ -1481,16 +1484,73 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
     }
 
+    /// 同落点重复 scrub seek 的合并策略（窗口与判定口径见 `SeekCoalescer`）。
+    ///
+    /// `@ObservationIgnored` 是必须的：`PlaybackController` 是 `@Observable`，
+    /// 没有这个标注时每次 `submit` 都会触发一次观察通知——拖动过程中每几十毫秒
+    /// 一次无意义的视图失效，正是这条路径最不该有的开销。
+    @ObservationIgnored private var scrubSeekCoalescer = SeekCoalescer()
+
+    /// 合并窗口用的单调时钟（秒）。与 `PlaybackNowPlayingCenter.now` 同口径：
+    /// 默认 `systemUptime`（单调、跨进程无关），测试可注入固定步进时钟。
+    /// **不读墙钟**——墙钟会被 NTP / 用户改时间影响，而这里只关心「两次拖动隔了多久」。
+    @ObservationIgnored var seekNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+
     func seek(toFraction fraction: Double) {
-        guard let engine, state.duration > .zero else { return }
+        guard fraction.isFinite, let engine, state.duration > .zero else { return }
         let duration = Double(state.duration.microseconds) / 1_000_000
         // 拖动条能拖到最右端（fraction = 1）：落点同样要留在片长 − tailGuardSeconds
         // 以内，理由与 `skip(by:)` 同一条防线——seek 越过 EOF 会触发内核的
         // 「audio output stalled at EOF」错误风暴，而 3 s 厚边际退场后这条防线是
         // 唯一拦它的地方。片长不足防线时退化为 0（与 clampedBeforeEnd 一致）。
         let target = Self.clampedBeforeEnd(duration * min(max(fraction, 0), 1), duration: duration)
+        // 一次物理拖动实测会提交**两条逐字相同**的 scrub seek（间隔 2~43 ms）。
+        // ⚠️ 第二个提交点在 macOS 上**尚未确证**，别顺着「两个调用点」去猜：
+        //   · macOS 只有一条进度滑块，实例化路径唯一（PlayerScreen:192 →
+        //     PlayerHUDOverlay:58 → PlayerHUDBottomDock:25 的 `PlayerHUDTimeline`；
+        //     PlayerScreen:1151 那处在 `#if os(iOS)` 的 pan 反馈层里，且是
+        //     allowsHitTesting(false) 的显示层）；
+        //   · 整段 pan 触摸状态机（handleTouchChanged / handleTouchEnded / commitPan）
+        //     连 `panCommitDebounce = 80 ms` 一起都在 `#if os(iOS)` 里，而现场是 macOS；
+        //   · 80 ms 的去抖也解释不了 2~43 ms 的重复对间隔。
+        // 剩下的候选只有一个：Slider 的 onEditingChanged(false) 被同一次交互重复触发
+        // （同样未确证）。iOS 上则另有 pan 提交路径。
+        // 无论成因为何，事实是同一落点被提交了两次，而第二条对内核不是「更精确的
+        // 落点」而是一次纯粹的重复——内核 `SourceCancellation::interrupt()` 会再打断
+        // 一次在途 HTTP 读，被打断的读在 liberika 里一律被翻成 EIO(-5)，最终以
+        // playback_fatal 结束会话（证据：Reports/seek-cancel-20261107/）。
+        // 这里只去掉这个放大因子：**落点相同、且距上次放行 < 300 ms 的重复不发给
+        // 内核**；不同落点、超出窗口的同样落点都照常放行（连续拖动与「拖开再拖回」
+        // 都不会被吃掉）。
+        switch scrubSeekCoalescer.submit(landingSeconds: target, at: seekNow()) {
+        case .coalesced(let elapsed):
+            // 取舍（刻意为之）：被合并的这一次**不调 `recordSeek`**。
+            // `recordSeek` 不只是写一条 `kind=scrub` 事件，它还负责
+            // `watchRecorder.discontinuity()` 与 `onUserSeek`（片头学习）上报；这两件事
+            // 的语义都是「用户又表达了一次跳转意图」。同一次物理拖动已经上报过一次，
+            // 再报一次会把一次拖动算成两次观看中断、两个片头学习样本。
+            // 代价有两条，都记在这里备查：
+            // ① 「被合并过」这个事实只剩下面这条 debug（默认档被过滤，排障时开
+            //    「详细日志」才可见），所以按 `kind=scrub` 数拖动次数时看到的是
+            //    合并后的次数（每次拖动一条）——这正是想要的计数，但别再拿它当
+            //    「内核被 seek 了几次」的旧口径；
+            // ② 第一条 seek 抛错时会重置基准，让后续相同落点可以重试。
+            PlaybackLog.append(
+                "seek 合并：落点 \(Int(target * 1000))ms 与上次放行的重复"
+                + "（间隔 \(Int((elapsed * 1000).rounded()))ms < 窗口 "
+                + "\(Int((scrubSeekCoalescer.window * 1000).rounded()))ms），"
+                + "不调内核、不记 seek 事件"
+            )
+            return
+        case .forward:
+            break
+        }
         recordSeek(toSeconds: target, kind: "scrub")
-        try? engine.seek(to: .seconds(target))
+        do {
+            try engine.seek(to: .seconds(target))
+        } catch {
+            scrubSeekCoalescer.reset()
+        }
     }
 
     func skip(by seconds: Double) {
@@ -1525,6 +1585,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 这样即使 seek 本身失败，日志里也有「用户想跳去哪」这一笔。
     /// 用户主动类 seek 额外喂给 `onUserSeek`。
     private func recordSeek(toSeconds target: Double, kind: String) {
+        // 章节、快进、远程命令与自动跳过会改变落点；下一次 scrub 是新的意图。
+        if kind != "scrub" { scrubSeekCoalescer.reset() }
         recordPlaybackActivity()
         watchRecorder.discontinuity()
         PlaybackLog.event(.seek, fields: [

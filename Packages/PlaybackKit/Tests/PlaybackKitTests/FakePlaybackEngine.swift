@@ -30,6 +30,11 @@ final class FakePlaybackEngine: PlaybackEngine, @unchecked Sendable {
     /// 记录收到的调用，断言用。
     private(set) var openedSources: [PlaybackSource] = []
     private(set) var selectedSubtitleIDs: [Int64?] = []
+    /// 收到的 seek 落点（按调用顺序）。`SeekCoalescerTests` 用它断言
+    /// 「被合并掉的那次没有产生第二次内核调用」——这条边界只能在内核调用的
+    /// 那一侧量，光看策略的返回值量不到。
+    private var _seekTargets: [Duration] = []
+    var seekTargets: [Duration] { lock.withLock { _seekTargets } }
 
     init(tracks: [TrackInfo] = []) {
         var sink: AsyncStream<PlayerEvent>.Continuation!
@@ -51,7 +56,9 @@ final class FakePlaybackEngine: PlaybackEngine, @unchecked Sendable {
     func play() throws {}
     func pause() throws {}
     func stop() throws {}
-    func seek(to position: Duration) throws {}
+    func seek(to position: Duration) throws {
+        lock.withLock { _seekTargets.append(position) }
+    }
     func setRate(_ rate: Double) throws {}
     func setVolume(_ volume: Double) throws {}
 
