@@ -24,3 +24,16 @@
 实际 OcPlayer 弹窗截图（单窗口截图展示布局，跨窗口模糊效果以实际 App 为准）：
 
 ![macOS Bangumi 关联弹窗](macos-picker.png)
+
+## 首轮 CI 失败修复
+
+首轮 CI 的 macOS 与 iOS App tests 均在 `SettingsGlassMetricsTests.testNoMaterialCardBackgroundsRemainInFeatures` 失败：全仓扫描把独立关联 sheet 的 `thinMaterial` 呈现背景也计入了页内内容卡。初次本地验证仅覆盖 Bangumi 搜索回归，遗漏了这条样式守卫。
+
+在该背景用法旁使用守卫已有的 `glass-guard-exempt:` 机制，注明独立 sheet 的用途。豁免限定在这一处呈现背景；其余内容卡仍由原检查保护，已确认的视觉效果与交互保持一致。
+
+修复后本地完整 App tests：
+
+| 平台 | 成功 | 失败 | 跳过 | 总数 |
+| --- | ---: | ---: | ---: | ---: |
+| macOS | 980 | 0 | 19 | 999 |
+| iOS Simulator | 1004 | 0 | 3 | 1007 |

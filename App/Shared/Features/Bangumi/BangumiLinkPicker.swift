@@ -60,6 +60,7 @@ struct BangumiLinkPicker: View {
                     panelShape.fill((colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.98)).opacity(0.62))
                 }
                 #else
+                // glass-guard-exempt: 独立关联 sheet 的呈现背景，不是页内内容卡；保留磨砂半透与减少透明度回退。
                 panelShape.fill(.thinMaterial)
                 #endif
             }
