@@ -271,6 +271,118 @@ final class BangumiMatcherTests: XCTestCase {
         XCTAssertEqual(best?.candidate.id, 2, "超电磁炮S 应匹配超电磁炮S")
     }
 
+    // MARK: - 关联搜索关键词
+
+    func testSeasonSearchTitles() {
+        let series = MediaItem(id: "series", name: "中二病也要谈恋爱！", kind: .series)
+        let cases: [(String, String)] = [
+            ("中二病也要谈恋爱！ 恋", "中二病也要谈恋爱！ 恋"),
+            ("  中二病也要谈恋爱！ 恋\n", "中二病也要谈恋爱！ 恋"),
+            ("完全不同的当季标题", "完全不同的当季标题"),
+            ("第2季", "中二病也要谈恋爱！ 第2季"),
+            ("第二季", "中二病也要谈恋爱！ 第二季"),
+            ("Season 2", "中二病也要谈恋爱！ Season 2"),
+            ("2nd Season", "中二病也要谈恋爱！ 2nd Season"),
+            ("S02", "中二病也要谈恋爱！ S02"),
+            ("Season Ⅱ", "中二病也要谈恋爱！ Season Ⅱ"),
+            ("最终季", "中二病也要谈恋爱！ 最终季"),
+            ("\n ", "中二病也要谈恋爱！ 第2季"),
+        ]
+        for (name, expected) in cases {
+            let season = MediaItem(id: "season", name: name, kind: .season, seasonNumber: 2)
+            XCTAssertEqual(BangumiMatcher.searchTitle(for: series, season: season), expected, name)
+        }
+        XCTAssertEqual(BangumiMatcher.searchTitle(for: series), series.name)
+
+        let arcSeries = MediaItem(id: "arc-series", name: "鬼灭之刃", kind: .series)
+        let arcSeason = MediaItem(id: "arc-season", name: "游郭篇", kind: .season, seasonNumber: 2)
+        XCTAssertEqual(BangumiMatcher.searchTitle(for: arcSeries, season: arcSeason), "鬼灭之刃 游郭篇")
+
+        let episode = MediaItem(
+            id: "episode", name: "第1集", kind: .episode, seriesName: series.name,
+            seasonName: "中二病也要谈恋爱！ 恋", seasonNumber: 2)
+        XCTAssertEqual(BangumiMatcher.searchTitle(for: episode), "中二病也要谈恋爱！ 恋")
+    }
+
+    func testManualSearchFallsBackOnlyAfterTitleHasNoResults() async throws {
+        let recorder = SearchRecorder()
+        let subject = makeSlimSubject(id: 2, name: "中二病でも恋がしたい！戀", nameCN: "中二病也要谈恋爱！ 恋", type: .anime)
+        let results = try await BangumiMatcher.search(
+            "中二病也要谈恋爱！ 恋", fallbackKeyword: "中二病也要谈恋爱！",
+            search: { keyword, filter in
+                recorder.record(filter: filter, keyword: keyword)
+                return BangumiPagedDTO(data: keyword == "中二病也要谈恋爱！" ? [subject] : [], total: 1)
+            })
+        XCTAssertEqual(results.map(\.id), [2])
+        XCTAssertEqual(recorder.keywords, ["中二病也要谈恋爱！ 恋", "中二病也要谈恋爱！ 恋", "中二病也要谈恋爱！"])
+    }
+
+    func testManualSearchKeepsSuccessfulSeasonTitle() async throws {
+        let recorder = SearchRecorder()
+        let subject = makeSlimSubject(id: 2, name: "中二病でも恋がしたい！戀", nameCN: "中二病也要谈恋爱！ 恋", type: .anime)
+        let results = try await BangumiMatcher.search(
+            subject.nameCN, fallbackKeyword: "中二病也要谈恋爱！",
+            search: { keyword, filter in
+                recorder.record(filter: filter, keyword: keyword)
+                return BangumiPagedDTO(data: [subject], total: 1)
+            })
+        XCTAssertEqual(results.map(\.id), [2])
+        XCTAssertEqual(recorder.keywords, [subject.nameCN])
+    }
+
+    func testManualSearchFailureDoesNotTriggerFallback() async {
+        let recorder = SearchRecorder()
+        do {
+            _ = try await BangumiMatcher.search(
+                "完整季标题", fallbackKeyword: "剧名",
+                search: { keyword, filter in
+                    recorder.record(filter: filter, keyword: keyword)
+                    throw URLError(.notConnectedToInternet)
+                })
+            XCTFail("网络错误应继续抛出")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+        XCTAssertEqual(recorder.keywords, ["完整季标题"])
+    }
+
+    func testAutoMatchFindsNamedSeasonWithoutNumericSuffix() async throws {
+        let recorder = SearchRecorder()
+        let series = MediaItem(id: "series", name: "中二病也要谈恋爱！", kind: .series)
+        let season = MediaItem(id: "season", name: "中二病也要谈恋爱！ 恋", kind: .season, seasonNumber: 2)
+        let first = makeSlimSubject(id: 1, name: "中二病でも恋がしたい！", nameCN: series.name, type: .anime)
+        let second = makeSlimSubject(id: 2, name: "中二病でも恋がしたい！戀", nameCN: season.name, type: .anime)
+        // 完整季名下也可能有多个候选；第一季和明确标着第三季的条目都不能胜出。
+        let third = makeSlimSubject(id: 3, name: "中二病でも恋がしたい！戀 Season 3", nameCN: "中二病也要谈恋爱！ 恋 第3季", type: .anime)
+        let result = try await BangumiMatcher.searchAndPick(for: series, season: season, search: { keyword, filter in
+            recorder.record(filter: filter, keyword: keyword)
+            return BangumiPagedDTO(data: keyword == season.name ? [first, third, second] : [first], total: 3)
+        })
+        XCTAssertEqual(result?.id, second.id)
+        XCTAssertEqual(Set(recorder.keywords), Set([season.name, series.name]))
+
+        let conflictOnly = try await BangumiMatcher.searchAndPick(for: series, season: season, search: { _, _ in
+            BangumiPagedDTO(data: [third], total: 1)
+        })
+        XCTAssertNil(conflictOnly, "相似完整标题不能覆盖候选明确写出的季数冲突")
+    }
+
+    func testAutoMatchGenericSeasonKeepsSeasonNumberConstraint() async throws {
+        let series = MediaItem(id: "series", name: "进击的巨人", kind: .series)
+        let season = MediaItem(id: "season", name: "Season 2", kind: .season, seasonNumber: 2)
+        let first = makeSlimSubject(id: 1, name: "進撃の巨人", nameCN: series.name, type: .anime)
+        let second = makeSlimSubject(id: 2, name: "進撃の巨人 Season 2", nameCN: "进击的巨人 第二季", type: .anime)
+        let result = try await BangumiMatcher.searchAndPick(for: series, season: season, search: { _, _ in
+            BangumiPagedDTO(data: [first, second], total: 2)
+        })
+        XCTAssertEqual(result?.id, second.id)
+
+        let fallbackOnly = try await BangumiMatcher.searchAndPick(for: series, season: season, search: { _, _ in
+            BangumiPagedDTO(data: [first], total: 1)
+        })
+        XCTAssertNil(fallbackOnly, "剧名回退不能把第一季关联成第二季")
+    }
+
     // MARK: - 第二轮「放开类型过滤」的触发条件
 
     /// 回归：**关键词请求全部失败时，不该再发第二轮注定失败的请求**。
@@ -308,7 +420,7 @@ final class BangumiMatcherTests: XCTestCase {
     @MainActor
     func testPartialFailureStillAllowsTypeFilterRound() async {
         let recorder = SearchRecorder()
-        let item = MediaItem(id: "movie-partial", name: "某部不存在的电影", kind: .movie)
+        let item = MediaItem(id: "movie-partial", name: "某部不存在的电影 Season 2", kind: .movie)
 
         _ = try? await BangumiMatcher.searchAndPick(for: item, search: { _, filter in
             let seen = recorder.record(filter: filter)
@@ -335,13 +447,15 @@ private final class SearchRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var callCount = 0
     private var sawUnfiltered = false
+    private var searchedKeywords: [String] = []
 
     /// 返回这是第几次调用（从 1 开始）。
     @discardableResult
-    func record(filter: BangumiSubjectType?) -> Int {
+    func record(filter: BangumiSubjectType?, keyword: String? = nil) -> Int {
         lock.lock()
         defer { lock.unlock() }
         callCount += 1
+        if let keyword { searchedKeywords.append(keyword) }
         if filter == nil { sawUnfiltered = true }
         return callCount
     }
@@ -350,6 +464,12 @@ private final class SearchRecorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return callCount
+    }
+
+    var keywords: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return searchedKeywords
     }
 
     var didSearchWithoutTypeFilter: Bool {
