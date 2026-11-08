@@ -150,6 +150,7 @@ final class SkipPreferenceTests: XCTestCase {
         private let eventContinuation: AsyncStream<PlayerEvent>.Continuation
         private let lock = NSLock()
         private var _seeks: [Duration] = []
+        var seekError: Error?
         var seeks: [Duration] { lock.withLock { _seeks } }
 
         init() {
@@ -166,7 +167,10 @@ final class SkipPreferenceTests: XCTestCase {
         func play() throws {}
         func pause() throws {}
         func stop() throws {}
-        func seek(to position: Duration) throws { lock.withLock { _seeks.append(position) } }
+        func seek(to position: Duration) throws {
+            lock.withLock { _seeks.append(position) }
+            if let seekError { throw seekError }
+        }
         func setRate(_ rate: Double) throws {}
         func setVolume(_ volume: Double) throws {}
         func tracks() throws -> [TrackInfo] { [] }
@@ -391,4 +395,72 @@ final class SkipPreferenceTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: SettingsKeys.skipOutro)
         XCTAssertEqual(controller.currentSkipPrompt?.kind, .credits)
     }
+
+    func testDuplicateScrubCallsEngineAndUserSeekOnce() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(100))
+        var time = 0.0
+        controller.seekNow = { time }
+        var userSeeks = 0
+        controller.onUserSeek = { _, _ in userSeeks += 1 }
+        controller.seek(toFraction: 0.5)
+        time = 0.031
+        controller.seek(toFraction: 0.5)
+        XCTAssertEqual(engine.seeks, [.seconds(600)])
+        XCTAssertEqual(userSeeks, 1)
+        time = 0.375
+        controller.seek(toFraction: 0.5)
+        XCTAssertEqual(engine.seeks.count, 2)
+        XCTAssertEqual(userSeeks, 2)
+    }
+
+    func testInterveningSkipAllowsScrubBackWithinWindow() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(100))
+        controller.seekNow = { 0 }
+        controller.seek(toFraction: 0.5)
+        controller.skip(by: 10)
+        controller.seek(toFraction: 0.5)
+        XCTAssertEqual(engine.seeks, [.seconds(600), .seconds(110), .seconds(600)])
+    }
+
+    func testNewStateAllowsSameScrubWithinWindow() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(100))
+        controller.seekNow = { 0 }
+        controller.seek(toFraction: 0.5)
+        controller.eventTask?.cancel()
+        controller.state = PlayerState()
+        controller.eventTask = controller.state.start(consuming: engine)
+        engine.emit(.durationChanged(.seconds(1200)))
+        try await waitUntil("新会话片长就位") { controller.state.duration == .seconds(1200) }
+        controller.seek(toFraction: 0.5)
+        XCTAssertEqual(engine.seeks, [.seconds(600), .seconds(600)])
+    }
+
+    func testFailedScrubCanRetrySameLandingWithinWindow() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(100))
+        controller.seekNow = { 0 }
+        engine.seekError = NSError(domain: "seek-test", code: 1)
+        controller.seek(toFraction: 0.5)
+        engine.seekError = nil
+        controller.seek(toFraction: 0.5)
+        XCTAssertEqual(engine.seeks, [.seconds(600), .seconds(600)])
+    }
+
+    func testNonFiniteScrubDoesNotCallEngine() async throws {
+        let engine = SeekRecordingEngine()
+        let controller = try await makeController(
+            engine: engine, duration: .seconds(1200), position: .seconds(100))
+        for fraction in [Double.nan, .infinity, -.infinity] {
+            controller.seek(toFraction: fraction)
+        }
+        XCTAssertTrue(engine.seeks.isEmpty)
+    }
+
 }
