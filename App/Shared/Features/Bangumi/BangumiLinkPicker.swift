@@ -21,18 +21,7 @@ struct BangumiLinkPicker: View {
         self.season = season
         self.onSelect = onSelect
 
-        let seriesName = item.seriesName ?? item.name
-        let seasonNumber = season?.seasonNumber ?? item.seasonNumber
-        let seasonName = season?.name ?? item.seasonName
-        let initialKeyword: String
-        if let seasonName, !seasonName.isEmpty, season != nil {
-            initialKeyword = "\(seriesName) \(seasonName)"
-        } else if let seasonNumber, seasonNumber > 1 {
-            initialKeyword = "\(seriesName) 第\(seasonNumber)季"
-        } else {
-            initialKeyword = seriesName
-        }
-        _keyword = State(initialValue: initialKeyword)
+        _keyword = State(initialValue: BangumiMatcher.searchTitle(for: item, season: season))
     }
 
     var body: some View {
@@ -52,7 +41,7 @@ struct BangumiLinkPicker: View {
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await search() } }
                 Button("搜索") { Task { await search() } }
-                    .disabled(keyword.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -107,20 +96,23 @@ struct BangumiLinkPicker: View {
         // 最小宽度只约束常规宽度的窗口/分栏。
         .frame(minWidth: sizeClass == .compact ? nil : 480, minHeight: 420)
         .task {
-            if results.isEmpty && !keyword.trimmingCharacters(in: .whitespaces).isEmpty {
+            if results.isEmpty && !keyword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 await search()
             }
         }
     }
 
     private func search() async {
-        let trimmed = keyword.trimmingCharacters(in: .whitespaces)
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         isSearching = true
         searchError = nil
         defer { isSearching = false }
         do {
-            results = try await BangumiMatcher.search(trimmed)
+            // 只为默认关键词回退；用户自己输入的搜索词按原意搜索。
+            let initialKeyword = BangumiMatcher.searchTitle(for: item, season: season)
+            let fallback = trimmed == initialKeyword ? (item.seriesName ?? item.name) : nil
+            results = try await BangumiMatcher.search(trimmed, fallbackKeyword: fallback)
         } catch let error as BangumiError {
             searchError = error.userMessage
         } catch {

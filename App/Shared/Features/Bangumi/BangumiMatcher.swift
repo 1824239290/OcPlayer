@@ -11,6 +11,8 @@ public struct AnimeTitleInfo: Sendable, Equatable {
     public var isFinal: Bool
     public var subtitle: String?
     public var year: Int?
+    /// 当前季的独立完整标题，用于识别标题里没有季数的续作。
+    public var seasonTitle: String? = nil
 
     public init(
         rawTitle: String,
@@ -423,27 +425,69 @@ public enum BangumiMatcher {
         return result
     }
 
-    /// 手动搜索（关联选择器用）。
-    public static func search(_ keyword: String) async throws -> [BangumiSlimSubjectDTO] {
-        let trimmed = keyword.trimmingCharacters(in: .whitespaces)
+    /// 手动关联和自动匹配共用：完整季名直接搜，通用季度名称才补上剧名。
+    public static func searchTitle(for item: MediaItem, season: MediaItem? = nil) -> String {
+        let seriesName = (item.seriesName ?? item.name).trimmingCharacters(in: .whitespacesAndNewlines)
+        let seasonName = (season?.name ?? item.seasonName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let seasonName, !seasonName.isEmpty {
+            return isGenericSeasonName(seasonName) ? "\(seriesName) \(seasonName)" : seasonName
+        }
+        if let number = season?.seasonNumber ?? item.seasonNumber, number > 1 {
+            return "\(seriesName) 第\(number)季"
+        }
+        return seriesName
+    }
+
+    private static func isGenericSeasonName(_ name: String) -> Bool {
+        let normalized = AnimeTitleParser.replaceRomanNumerals(
+            AnimeTitleParser.replaceChineseSeasonNumbers(AnimeTitleParser.normalizeFullWidth(name)))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let genericLabel = normalized.range(
+            of: "(?i)^(?:第\\s*\\d+\\s*[季期部]|season\\s*\\d+|\\d+(?:st|nd|rd|th)\\s*season|s\\s*\\d+|\\d+|(?:the\\s+)?final\\s+season|最终季|完结篇|specials?|特别篇|特典)$",
+            options: .regularExpression
+        ) != nil
+        // "游郭篇"、"后半"等只有篇章描述的短名也需要剧名，完整标题则会留下主名称。
+        return genericLabel || AnimeTitleParser.cleanBaseString(normalized).isEmpty
+    }
+
+    private nonisolated static func normalizedSeasonTitle(_ title: String) -> String {
+        AnimeTitleParser.normalizeFullWidth(title).lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// 手动搜索（关联选择器用）。默认标题无结果时可回退到剧名。
+    public static func search(
+        _ keyword: String,
+        fallbackKeyword: String? = nil,
+        search: SubjectSearch = { keyword, filter in
+            try await BangumiSubjectService.search(
+                keyword: keyword, filter: filter, limit: 30, offset: 0)
+        }
+    ) async throws -> [BangumiSlimSubjectDTO] {
+        let trimmed = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-
-        // 先尝试按动画类型搜索
-        let animePage = try await BangumiSubjectService.search(
-            keyword: trimmed, filter: .anime, limit: 30, offset: 0)
-        var results = animePage.data
-
-        // 若动画无结果，回退到全类型
-        if results.isEmpty {
-            let allPage = try await BangumiSubjectService.search(
-                keyword: trimmed, filter: nil, limit: 30, offset: 0)
-            results = allPage.data
+        var keywords = [trimmed]
+        if let fallback = fallbackKeyword?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallback.isEmpty, fallback != trimmed {
+            keywords.append(fallback)
         }
 
-        // 排序：动画绝对优先，其次真人剧，最后按 Bangumi 原始次序
-        return results.sorted { lhs, rhs in
-            typeRank(lhs.type) > typeRank(rhs.type)
+        for keyword in keywords {
+            // 先尝试按动画类型搜索，无结果再放开类型。
+            let animePage = try await search(keyword, .anime)
+            var results = animePage.data
+
+            if results.isEmpty {
+                results = try await search(keyword, nil).data
+            }
+
+            if !results.isEmpty {
+                return results.sorted { lhs, rhs in
+                    typeRank(lhs.type) > typeRank(rhs.type)
+                }
+            }
         }
+        return []
     }
 
     // MARK: - 私有匹配算法
@@ -474,43 +518,37 @@ public enum BangumiMatcher {
     ) async throws -> BangumiSlimSubjectDTO? {
         let seriesName = item.seriesName ?? item.name
         let seasonNumber = season?.seasonNumber ?? item.seasonNumber
-        let seasonName = season?.name ?? item.seasonName
+        let seasonName = (season?.name ?? item.seasonName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let queryTitle: String
-        if let sName = seasonName, !sName.isEmpty, season != nil {
-            queryTitle = "\(seriesName) \(sName)"
-        } else if let sNum = seasonNumber, sNum > 1 {
-            queryTitle = "\(seriesName) 第\(sNum)季"
-        } else {
-            queryTitle = seriesName
-        }
+        let queryTitle = searchTitle(for: item, season: season)
 
-        let queryInfo = AnimeTitleParser.parse(
+        var queryInfo = AnimeTitleParser.parse(
             title: queryTitle,
             explicitSeason: seasonNumber,
             explicitSeasonName: seasonName,
             year: item.year
         )
+        if let seasonName, !seasonName.isEmpty, !isGenericSeasonName(seasonName),
+           normalizedSeasonTitle(queryTitle) != normalizedSeasonTitle(seriesName) {
+            queryInfo.seasonTitle = queryTitle
+        }
 
-        // 1. 构造搜索关键词（优先精准季度词，失败回退基础名）
-        var keywordsToTry: [String] = []
+        // 1. 完整季标题始终参与检索；通用季名补季度变体，剧名用于兜底。
+        var keywordsToTry = [queryTitle]
         let cleanBase = queryInfo.cleanBaseName.isEmpty ? seriesName : queryInfo.cleanBaseName
 
-        if let s = queryInfo.season, s > 1 {
-            keywordsToTry.append("\(cleanBase) 第\(s)季")
-            keywordsToTry.append("\(cleanBase) Season \(s)")
-            keywordsToTry.append("\(cleanBase)")
-        } else if queryInfo.isFinal {
-            keywordsToTry.append("\(cleanBase) 最终季")
-            keywordsToTry.append("\(cleanBase) Final Season")
-            keywordsToTry.append("\(cleanBase)")
-        } else if let sub = queryInfo.subtitle, !sub.isEmpty {
-            keywordsToTry.append("\(cleanBase) \(sub)")
-            keywordsToTry.append("\(cleanBase)")
-        } else {
+        if seasonName == nil || seasonName?.isEmpty == true || seasonName.map(isGenericSeasonName) == true {
+            if let s = queryInfo.season, s > 1 {
+                keywordsToTry.append("\(cleanBase) 第\(s)季")
+                keywordsToTry.append("\(cleanBase) Season \(s)")
+            } else if queryInfo.isFinal {
+                keywordsToTry.append("\(cleanBase) 最终季")
+                keywordsToTry.append("\(cleanBase) Final Season")
+            }
             keywordsToTry.append(cleanBase)
-            keywordsToTry.append(seriesName)
         }
+        keywordsToTry.append(seriesName)
 
         var candidates: [BangumiSlimSubjectDTO] = []
         var seenIDs = Set<Int>()
@@ -518,9 +556,10 @@ public enum BangumiMatcher {
         /// 第一轮里**真的到达了服务端**的请求数。见下面第二轮的守卫。
         var succeededSearches = 0
 
+        var seenKeywords = Set<String>()
         let trimmedKeywords = keywordsToTry
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seenKeywords.insert($0).inserted }
 
         // 合并一批搜索结果（按关键词原顺序去重，保证打分确定性）。
         func merge(_ page: BangumiPagedDTO<BangumiSlimSubjectDTO>) {
@@ -677,7 +716,15 @@ public enum BangumiMatcher {
         }
 
         if let ts = targetSeason, ts > 1 {
-            if candSeason == ts {
+            // "中二病也要谈恋爱！ 恋"没有数字季号，但完整季标题精确命中可确认当前季。
+            // 候选明确写了其它季号时仍按冲突处理；剧名兜底也不能冒充当前季。
+            let exactSeasonTitle = query.seasonTitle.map { title in
+                let normalized = normalizedSeasonTitle(title)
+                return !normalized.isEmpty
+                    && (normalized == normalizedSeasonTitle(candidate.nameCN)
+                        || normalized == normalizedSeasonTitle(candidate.name))
+            } ?? false
+            if candSeason == ts || (candSeason == nil && exactSeasonTitle) {
                 score += 1000 // 精准匹配第 N 季
             } else if candSeason == nil || candSeason == 1 {
                 score -= 1500 // 目标要第 N 季，候选却是第 1 季
