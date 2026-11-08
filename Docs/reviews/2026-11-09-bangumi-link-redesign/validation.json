@@ -1,0 +1,48 @@
+{
+  "base": "cb45dcf20ed6f28b47c2fd1150e3a43eeb1d8c7d",
+  "source": "App/Shared/Features/Bangumi/BangumiLinkPicker.swift",
+  "sha256": "53177b17c23cbb030d757a5d4ac8132c9cd1444b6b8c35cdc9f57320d5405a3c",
+  "blocking_findings": 0,
+  "tests": {
+    "macOS": {
+      "result": "Passed",
+      "totalTestCount": 19,
+      "passedTests": 19,
+      "failedTests": 0,
+      "skippedTests": 0
+    },
+    "iOS Simulator": {
+      "result": "Passed",
+      "totalTestCount": 19,
+      "passedTests": 19,
+      "failedTests": 0,
+      "skippedTests": 0
+    }
+  },
+  "initial_ci_failure": {
+    "run": "https://github.com/1824239290/OcPlayer/actions/runs/42503195851",
+    "test": "SettingsGlassMetricsTests.testNoMaterialCardBackgroundsRemainInFeatures",
+    "platforms": [
+      "macOS",
+      "iOS Simulator"
+    ],
+    "cause": "Independent sheet material was counted as a content-card background.",
+    "fix": "Document the presentation background with the guard's existing glass-guard-exempt marker."
+  },
+  "full_app_tests": {
+    "macOS": {
+      "result": "Passed",
+      "totalTestCount": 999,
+      "passedTests": 980,
+      "failedTests": 0,
+      "skippedTests": 19
+    },
+    "iOS Simulator": {
+      "result": "Passed",
+      "totalTestCount": 1007,
+      "passedTests": 1004,
+      "failedTests": 0,
+      "skippedTests": 3
+    }
+  }
+}
