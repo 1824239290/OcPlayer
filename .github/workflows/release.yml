@@ -123,6 +123,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 -B -m unittest discover -s Scripts/tests
           for pkg in \
               Packages/AppDesignKit \
               Packages/CoreModel \

@@ -1,0 +1,20 @@
+[
+  {
+    "platform": "macos",
+    "app": "/Users/jumusu/Documents/project/OcPlayer/.local-build/kernel-upgrade-v0.3.6/macos/Build/Products/Release/OcPlayer.app",
+    "version": "0.3.0",
+    "build": "1",
+    "kernelTagInExecutable": "v0.3.6",
+    "executableSha256": "23c93937341363b3ce3b3578262c4b8445c80bfe70805f046f871cbee1b2b278",
+    "codeSigningAllowed": false
+  },
+  {
+    "platform": "ios",
+    "app": "/Users/jumusu/Documents/project/OcPlayer/.local-build/kernel-upgrade-v0.3.6/ios/Build/Products/Release-iphoneos/OcPlayer.app",
+    "version": "0.3.0",
+    "build": "1",
+    "kernelTagInExecutable": "v0.3.6",
+    "executableSha256": "189c317e1286a69fbee380c091c4345307bf8178b648e4887ee37f664f4a505d",
+    "codeSigningAllowed": false
+  }
+]

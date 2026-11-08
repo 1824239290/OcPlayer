@@ -1,0 +1,21 @@
+{
+  "ErikaKit": {
+    "xctestPassed": 28,
+    "swiftTestingPassed": 65,
+    "failed": 0
+  },
+  "denseSubtitleProbe": {
+    "passed": 1,
+    "failedEvents": 0,
+    "seconds": 6,
+    "cueSpacingSeconds": 0.25
+  },
+  "archivePatch": {
+    "tests": 3,
+    "commandSizesCovered": [
+      24,
+      32
+    ],
+    "failed": 0
+  }
+}

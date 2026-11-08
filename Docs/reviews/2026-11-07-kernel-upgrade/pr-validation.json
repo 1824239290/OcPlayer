@@ -1,0 +1,12 @@
+{
+  "baseCommit": "93dd6e325addc4d3d10f482d47104b3f6246e1c3",
+  "branch": "codex/liberika-v0.3.6",
+  "ErikaKit": {
+    "xctestPassed": 28,
+    "swiftTestingPassed": 65,
+    "failed": 0
+  },
+  "archivePatchTestsPassed": 3,
+  "kernelTag": "v0.3.6",
+  "appValidationSource": "upgrade preparation workspace; PR App tests run in CI"
+}

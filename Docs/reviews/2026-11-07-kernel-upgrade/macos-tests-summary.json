@@ -1,0 +1,43 @@
+{
+  "devicesAndConfigurations": [
+    {
+      "device": {
+        "architecture": "arm64",
+        "deviceId": "00008103-001A544E0A62001E",
+        "deviceName": "My Mac",
+        "modelName": "MacBook Air",
+        "osBuildNumber": "25G72",
+        "osVersion": "26.6",
+        "platform": "macOS"
+      },
+      "expectedFailures": 0,
+      "failedTests": 0,
+      "passedTests": 969,
+      "skippedTests": 19,
+      "testPlanConfiguration": {
+        "configurationId": "1",
+        "configurationName": "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription": "OcPlayer-macOS · Built with macOS 26.6",
+  "expectedFailures": 0,
+  "failedTests": 0,
+  "finishTime": 1794057146.186,
+  "passedTests": 969,
+  "result": "Passed",
+  "runtimeWarnings": [],
+  "skippedTests": 19,
+  "startTime": 1794056980.069,
+  "statistics": [],
+  "testFailures": [],
+  "title": "Test - OcPlayer-macOS",
+  "topInsights": [
+    {
+      "category": "Longest Test Runs",
+      "impact": "38% of duration",
+      "text": "7 longest test runs with outlier durations exceeding 1.47s (three standard deviations)"
+    }
+  ],
+  "totalTestCount": 988
+}
