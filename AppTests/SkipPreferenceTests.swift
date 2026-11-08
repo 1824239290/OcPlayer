@@ -434,11 +434,14 @@ final class SkipPreferenceTests: XCTestCase {
         controller.seek(toFraction: 0.5)
         controller.eventTask?.cancel()
         controller.state = PlayerState()
-        controller.eventTask = controller.state.start(consuming: engine)
-        engine.emit(.durationChanged(.seconds(1200)))
+        let nextEngine = SeekRecordingEngine()
+        controller.engine = nextEngine
+        controller.eventTask = controller.state.start(consuming: nextEngine)
+        nextEngine.emit(.durationChanged(.seconds(1200)))
         try await waitUntil("新会话片长就位") { controller.state.duration == .seconds(1200) }
         controller.seek(toFraction: 0.5)
-        XCTAssertEqual(engine.seeks, [.seconds(600), .seconds(600)])
+        XCTAssertEqual(engine.seeks, [.seconds(600)])
+        XCTAssertEqual(nextEngine.seeks, [.seconds(600)])
     }
 
     func testFailedScrubCanRetrySameLandingWithinWindow() async throws {
