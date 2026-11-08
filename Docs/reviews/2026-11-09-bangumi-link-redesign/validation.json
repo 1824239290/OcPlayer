@@ -1,0 +1,22 @@
+{
+  "base": "cb45dcf20ed6f28b47c2fd1150e3a43eeb1d8c7d",
+  "source": "App/Shared/Features/Bangumi/BangumiLinkPicker.swift",
+  "sha256": "ba8b13a999a6afa6157236c478059a670aef563ae640cb2ef8883c101d9ff14b",
+  "blocking_findings": 0,
+  "tests": {
+    "macOS": {
+      "result": "Passed",
+      "totalTestCount": 19,
+      "passedTests": 19,
+      "failedTests": 0,
+      "skippedTests": 0
+    },
+    "iOS Simulator": {
+      "result": "Passed",
+      "totalTestCount": 19,
+      "passedTests": 19,
+      "failedTests": 0,
+      "skippedTests": 0
+    }
+  }
+}
