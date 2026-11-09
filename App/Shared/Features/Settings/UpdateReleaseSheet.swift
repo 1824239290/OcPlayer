@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 发现新版本时展示的更新说明弹窗
+/// 自动更新提示与关于页共用的版本说明窗口。
 struct UpdateReleaseSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -8,94 +8,63 @@ struct UpdateReleaseSheet: View {
     let release: GitHubRelease
     var onIgnore: (() -> Void)? = nil
 
+    private var releaseTitle: String {
+        if let name = release.name, !name.isEmpty { return name }
+        return "发现新版本 \(release.tagName)"
+    }
+
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            AppSheetHeader(title: "版本更新", symbol: "sparkles", subtitle: releaseTitle)
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    // 头部版本与日期
-                    HStack(spacing: 14) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.tint)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(release.name?.isEmpty == false ? release.name! : "发现新版本 \(release.tagName)")
-                                .font(.title3.weight(.bold))
-
-                            HStack(spacing: 8) {
-                                Text("版本 \(release.tagName)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                if let date = release.publishedAt {
-                                    Text("·")
-                                        .foregroundStyle(.tertiary)
-                                    Text(date, format: .dateTime.year().month().day())
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
+                    HStack(spacing: 8) {
+                        Text("版本 \(release.tagName)")
+                        if let date = release.publishedAt {
+                            Text("·")
+                            Text(date, format: .dateTime.year().month().day())
                         }
                     }
-                    .padding(.top, 4)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    Divider()
-
-                    // 更新日志内容
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("更新日志")
-                            .font(.headline)
-
-                        if let body = release.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            // changelog 是 Markdown 原文，当 LocalizedStringKey
-                            // 会整段进本地化查找（且 % 字符有格式化歧义），原样输出。
-                            Text(verbatim: body)
-                                .font(.body)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Text("作者未提供详细更新日志。")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
+                    AppSheetDivider()
+                    Text("更新日志").font(.callout.weight(.medium))
+                    if let body = release.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(verbatim: body)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        Text("作者未提供详细更新日志。")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer(minLength: 16)
                 }
-                .padding(20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
             }
-            .navigationTitle("版本更新")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    HStack(spacing: 12) {
-                        Button("忽略此版本") {
-                            AppUpdateChecker.shared.ignoreVersion(release.tagName)
-                            onIgnore?()
-                            dismiss()
-                        }
-                        .foregroundStyle(.secondary)
-
-                        Button("稍后再说") {
-                            dismiss()
-                        }
-                    }
+            AppSheetDivider()
+            AppSheetFooter {
+                Button("忽略此版本") {
+                    AppUpdateChecker.shared.ignoreVersion(release.tagName)
+                    onIgnore?()
+                    dismiss()
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button {
-                        openURL(release.htmlURL)
-                        dismiss()
-                    } label: {
-                        Label("前往 GitHub 下载", systemImage: "arrow.down.circle.fill")
-                    }
-                    .keyboardShortcut(.defaultAction)
+                .buttonStyle(AppSheetButtonStyle())
+            } actions: {
+                Button {
+                    openURL(release.htmlURL)
+                    dismiss()
+                } label: {
+                    Label("前往下载", systemImage: "arrow.down.circle")
                 }
+                .buttonStyle(AppSheetButtonStyle(primary: true))
+                .keyboardShortcut(.defaultAction)
+                .help("前往 GitHub 下载此版本")
             }
         }
-        #if os(macOS)
-        .frame(width: 540, height: 430)
-        #endif
+        .appSheetSurface()
     }
 }

@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// 地址 / 凭证录入弹窗的统一外壳与字段组。
-///
-/// 「NavigationStack + ScrollView + 标签/输入/说明字段组 + 取消/确认 toolbar +
-/// macOS 520pt 定宽」这套骨架曾逐行同构三份（MoviePilot 服务器、弹幕网关、
-/// 添加服务器地址），新增录入弹窗从这里拼，别再抄。
+/// 地址与凭证录入共用 Bangumi 风格的固定顶栏、可滚动表单与底部操作。
 struct FormSheetShell<Content: View, ConfirmLabel: View>: View {
     let title: String
-    /// 确认钮可用性（表单校验）与动作。
-    var confirmEnabled: Bool = true
+    var symbol = "slider.horizontal.3"
+    var subtitle: String? = nil
+    var size: AppSheetSize = .form
+    var isSubmitting = false
+    var confirmEnabled = true
     var onConfirm: () -> Void
     @ViewBuilder var confirmLabel: () -> ConfirmLabel
     @ViewBuilder var content: () -> Content
@@ -16,32 +15,32 @@ struct FormSheetShell<Content: View, ConfirmLabel: View>: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            AppSheetHeader(title: title, symbol: symbol, subtitle: subtitle, canDismiss: !isSubmitting)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     content()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.vertical, 20)
+                .padding(.bottom, 20)
+                .disabled(isSubmitting)
             }
-            .navigationTitle(title)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: onConfirm) {
-                        confirmLabel()
-                    }
+            .scrollDismissesKeyboard(.interactively)
+            AppSheetDivider()
+            AppSheetFooter {
+                Button("取消") { dismiss() }
+                    .buttonStyle(AppSheetButtonStyle())
+                    .disabled(isSubmitting)
+            } actions: {
+                Button(action: onConfirm) { confirmLabel() }
+                    .buttonStyle(AppSheetButtonStyle(primary: true))
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!confirmEnabled)
-                }
+                    .disabled(!confirmEnabled || isSubmitting)
             }
         }
-        #if os(macOS)
-        .frame(width: 520)
-        #endif
+        .appSheetSurface(size: size)
+        .interactiveDismissDisabled(isSubmitting)
     }
 }
 
@@ -83,7 +82,7 @@ struct LabeledCredentialField: View {
             .textInputAutocapitalization(.never)
             #endif
             .autocorrectionDisabled()
-            .textFieldStyle(.roundedBorder)
+            .textFieldStyle(AppSheetTextFieldStyle())
             .frame(maxWidth: .infinity)
             if let caption {
                 Text(caption)

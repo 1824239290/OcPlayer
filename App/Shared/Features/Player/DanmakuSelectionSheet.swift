@@ -5,6 +5,7 @@ import SwiftUI
 struct DanmakuSelectionSheet: View {
     @Environment(DanmakuModel.self) private var danmakuModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @FocusState private var animeFocused: Bool
     @FocusState private var episodeFocused: Bool
@@ -34,14 +35,8 @@ struct DanmakuSelectionSheet: View {
         VStack(spacing: 0) {
             headerBar
 
-            Divider()
-                .opacity(0.15)
-
             if selectedAnime == nil {
                 searchHeader
-
-                Divider()
-                    .opacity(0.12)
             }
 
             ZStack {
@@ -60,19 +55,18 @@ struct DanmakuSelectionSheet: View {
                 }
             }
             .clipped()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            AppSheetDivider()
+            AppSheetFooter {
+                Text(selectedAnime == nil ? "选择作品后查看集数" : "点击对应集数即可加载弹幕")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } actions: {
+                Button("完成") { dismiss() }
+                    .buttonStyle(AppSheetButtonStyle())
+            }
         }
-        #if os(macOS)
-        .frame(minWidth: 500, idealWidth: 560, minHeight: 460, idealHeight: 520)
-        #endif
-        .liquidGlassCard()
-        // 半径与 `liquidGlassCard()` 同源：卡圆角 2026-10-22 统一到
-        // `Metrics.glassCardRadius`(16)，这里若继续写 24，描边会在四角浮在卡内。
-        .overlay {
-            RoundedRectangle(cornerRadius: Metrics.glassCardRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
-        }
-        .padding(16)
-        .presentationBackground(.clear)
+        .appSheetSurface()
         .onAppear {
             if !didStartInitialSearch,
                !animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -89,148 +83,73 @@ struct DanmakuSelectionSheet: View {
     // MARK: - 顶栏（支持多层子菜单返回）
 
     private var headerBar: some View {
-        HStack(spacing: 10) {
-            if let anime = selectedAnime {
-                // 子菜单第二层：返回作品列表按钮
-                Button {
-                    withAnimation(Motion.lift) {
-                        selectedAnime = nil
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 13, weight: .semibold))
-                        Text("作品列表")
-                    }
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                }
-                .buttonStyle(.plain)
-                .liquidGlassCapsule(isInteractive: true)
-
-                Text(anime.animeTitle ?? "选集")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            } else {
-                // 根层：标题与图标
-                Image(systemName: "text.bubble.fill")
-                    .font(.title3)
-                    .foregroundStyle(AppAccent.tint)
-
-                Text("选择弹幕")
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(.primary)
+        AppSheetHeader(
+            title: selectedAnime?.animeTitle ?? "选择弹幕",
+            symbol: "text.bubble",
+            onBack: selectedAnime == nil ? nil : {
+                withAnimation(reduceMotion ? nil : Motion.lift) { selectedAnime = nil }
             }
-
-            Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Text("完成")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.plain)
-            .liquidGlassCapsule(isInteractive: true)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 10)
+        )
     }
 
     // MARK: - 搜索栏与状态条
 
     private var searchHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 输入行：作品名 + 集数 + 搜索按钮
-            GlassEffectContainer(spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    CapsuleSearchField(
-                        "作品名（如：葬送的芙莉莲）",
-                        text: $animeQuery,
-                        focus: $animeFocused,
-                        onSubmit: startSearch,
-                        onChange: invalidateChangedSearch
-                    )
-
-                    CapsuleSearchField(
-                        "集数",
-                        text: $episodeQuery,
-                        focus: $episodeFocused,
-                        onSubmit: startSearch,
-                        onChange: invalidateChangedSearch
-                    )
-                    .frame(maxWidth: 96)
-
-                    // 搜索按钮
-                    Button(action: startSearch) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass")
-                            Text("搜索")
-                        }
-                        .font(.callout.weight(.medium))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                    animeSearchField.frame(minWidth: 220)
+                    episodeSearchField.frame(width: 110)
+                    searchButton
+                }
+                VStack(spacing: 10) {
+                    animeSearchField
+                    HStack(spacing: 8) {
+                        episodeSearchField
+                        searchButton
                     }
-                    .buttonStyle(.plain)
-                    .liquidGlassCapsule(tint: AppAccent.tint.opacity(0.25), isInteractive: true)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(isSearching || animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-
-            // 当前状态与匹配指示
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(statusIndicatorColor)
-                        .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 6) {
+                Label {
                     Text("弹幕状态：" + danmakuModel.danmaku.status.displayLabel(
                         elapsedSeconds: danmakuModel.danmaku.statusElapsedSeconds))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                } icon: {
+                    Circle().fill(statusIndicatorColor).frame(width: 7, height: 7)
                 }
-
                 if let match = danmakuModel.danmaku.currentMatch {
-                    Text("·")
-                        .foregroundStyle(.tertiary)
-                    HStack(spacing: 5) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.green)
-                        Text(verbatim: "已关联 Episode \(match.episodeID)")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.green.opacity(0.08), in: Capsule())
-                }
-
-                Spacer()
-
-                if isSearching {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("正在搜索…")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } else if !validAnimeResults.isEmpty {
-                    Text("检索到 \(validAnimeResults.count) 部相关作品")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    Label("当前匹配：Episode \(match.episodeID)", systemImage: "checkmark.circle")
                 }
             }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            HStack {
+                Text("搜索结果").fontWeight(.medium)
+                Spacer()
+                Text(isSearching ? "正在搜索…" : "\(validAnimeResults.count) 部作品")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 12)
+    }
+
+    private var animeSearchField: some View {
+        CapsuleSearchField("搜索作品名或原名", text: $animeQuery, focus: $animeFocused,
+                           onSubmit: startSearch, onChange: invalidateChangedSearch)
+    }
+
+    private var episodeSearchField: some View {
+        CapsuleSearchField("集数", text: $episodeQuery, focus: $episodeFocused,
+                           onSubmit: startSearch, onChange: invalidateChangedSearch)
+    }
+
+    private var searchButton: some View {
+        Button("搜索", action: startSearch)
+            .buttonStyle(AppSheetButtonStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(isSearching || animeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var statusIndicatorColor: Color {
@@ -308,7 +227,7 @@ struct DanmakuSelectionSheet: View {
                         $0.episodeId == danmakuModel.danmaku.currentMatch?.episodeID
                     }
                     Button {
-                        withAnimation(Motion.lift) {
+                        withAnimation(reduceMotion ? nil : Motion.lift) {
                             selectedAnime = anime
                         }
                     } label: {
@@ -322,7 +241,7 @@ struct DanmakuSelectionSheet: View {
                                 Text(anime.animeTitle ?? "未命名作品")
                                     .font(.callout.weight(.semibold))
                                     .foregroundStyle(.primary)
-                                    .lineLimit(1)
+                                    .lineLimit(2)
 
                                 HStack(spacing: 6) {
                                     if let typeDesc = anime.typeDescription ?? anime.type, !typeDesc.isEmpty {

@@ -22,6 +22,10 @@ struct MoviePilotServerSheet: View {
         @Bindable var mp = moviepilot
         return FormSheetShell(
             title: "MoviePilot",
+            symbol: "server.rack",
+            subtitle: "连接服务器并登录账号。",
+            size: AppSheetSize(minHeight: 460, idealHeight: 540),
+            isSubmitting: mp.isLoggingIn,
             confirmEnabled: isValid && !mp.isLoggingIn,
             onConfirm: {
                 Task {
@@ -54,25 +58,19 @@ struct MoviePilotServerSheet: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("账号")
-                    .font(.subheadline.weight(.semibold))
-                TextField("", text: $username, prompt: Text("用户名"))
-                    .textContentType(.username)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: .infinity)
-                SecureField("", text: $password, prompt: Text("密码"))
-                    .textContentType(.password)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: .infinity)
-                Text("token 有效期 8 天；密码只存本机，过期后自动用它静默续登，不上传任何第三方。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            LabeledCredentialField(
+                label: "用户名",
+                text: $username,
+                prompt: "登录账号",
+                textContentType: .username
+            )
+            LabeledCredentialField(
+                label: "密码",
+                text: $password,
+                prompt: "登录密码",
+                caption: "用于登录 MoviePilot；只有开启“记住密码”时才会保存密码。",
+                kind: .secure
+            )
 
             if let error = mp.authError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -80,9 +78,6 @@ struct MoviePilotServerSheet: View {
                     .foregroundStyle(.red)
             }
         }
-        #if os(macOS)
-        .frame(height: 400)
-        #endif
     }
 
     private var isValid: Bool {

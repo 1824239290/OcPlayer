@@ -2,9 +2,6 @@ import AppDesignKit
 import BangumiKit
 import CoreModel
 import SwiftUI
-#if os(macOS)
-import AppKit
-#endif
 
 /// 搜索、核对候选，再确认关联。搜索任务随关键词失效，旧结果不能覆盖新选择。
 struct BangumiLinkPicker: View {
@@ -13,8 +10,6 @@ struct BangumiLinkPicker: View {
     var onSelect: (Int) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @FocusState private var searchFocused: Bool
     @State private var keyword: String
     @State private var results: [BangumiSlimSubjectDTO] = []
@@ -40,45 +35,10 @@ struct BangumiLinkPicker: View {
             resultHeading
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider().overlay(Color.primary.opacity(0.08))
-                .opacity(0.3)
+            AppSheetDivider()
             footer
         }
-        #if os(macOS)
-        .frame(minWidth: 500, idealWidth: 560, minHeight: 520, idealHeight: 620)
-        #endif
-        .background {
-            // 系统材质保留背后的色彩与明暗；不降低整个视图的透明度，保证文字清晰。
-            if reduceTransparency {
-                panelShape.fill(opaqueSurface)
-            } else {
-                #if os(macOS)
-                ZStack {
-                    BangumiLinkWindowMaterial()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    panelShape.fill((colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.98)).opacity(0.62))
-                }
-                #else
-                // glass-guard-exempt: 独立关联 sheet 的呈现背景，不是页内内容卡；保留磨砂半透与减少透明度回退。
-                panelShape.fill(.thinMaterial)
-                #endif
-            }
-        }
-        .clipShape(panelShape)
-        .overlay {
-            panelShape.strokeBorder(Color.primary.opacity(0.14), lineWidth: 0.5)
-        }
-        .shadow(color: .black.opacity(0.16), radius: 24, y: 10)
-        #if os(iOS)
-        .padding(16)
-        #endif
-        .tint(AppAccent.tint)
-        .presentationBackground(.clear)
-        #if os(iOS)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.hidden)
-        #endif
+        .appSheetSurface()
         .onAppear {
             guard !didStartInitialSearch else { return }
             didStartInitialSearch = true
@@ -88,18 +48,6 @@ struct BangumiLinkPicker: View {
             guard let searchRequest else { return }
             await search(searchRequest)
         }
-    }
-
-    private var panelShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: Metrics.glassCardRadius, style: .continuous)
-    }
-
-    private var opaqueSurface: Color {
-        #if os(macOS)
-        Color(nsColor: .windowBackgroundColor)
-        #else
-        Color(uiColor: .systemBackground)
-        #endif
     }
 
     private var selectedSubject: BangumiSlimSubjectDTO? {
@@ -315,44 +263,6 @@ struct BangumiLinkPicker: View {
         }
     }
 }
-
-#if os(macOS)
-/// SwiftUI 的窗口内材质只能采到 sheet 自己的底色；跨窗口采样才能透出详情页。
-private struct BangumiLinkWindowMaterial: NSViewRepresentable {
-    @Environment(\.colorScheme) private var colorScheme
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = BangumiLinkEffectView()
-        view.material = .hudWindow
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        let name: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
-        if nsView.appearance?.name != name {
-            nsView.appearance = NSAppearance(named: name)
-        }
-    }
-}
-
-private final class BangumiLinkEffectView: NSVisualEffectView {
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        // sheetParent 在挂载视图之后才建立，下一次主队列检查实际的呈现关系。
-        DispatchQueue.main.async { [weak self] in self?.clearSheetBackground() }
-    }
-
-    private func clearSheetBackground() {
-        // 只改本弹窗的窗口，不能把详情页的宿主窗口一起变透明。
-        guard let window, window.sheetParent != nil else { return }
-        window.isOpaque = false
-        window.backgroundColor = .clear
-    }
-}
-#endif
 
 private struct BangumiLinkSearchRequest: Hashable {
     let id = UUID()
