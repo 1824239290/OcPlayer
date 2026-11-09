@@ -1,0 +1,74 @@
+[
+  {
+    "kind": "bangumi",
+    "dark": true,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-bangumi-dark.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-bangumi-dark.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "direct",
+    "dark": false,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-direct-light.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-direct-light.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "server",
+    "dark": true,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-server-dark.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-server-dark.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "subscribe",
+    "dark": false,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-subscribe-light.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-subscribe-light.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "gateway",
+    "dark": false,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-gateway-light.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-gateway-light.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "address",
+    "dark": true,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-address-dark.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-address-dark.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "update",
+    "dark": false,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-update-light.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-update-light.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "tmdb",
+    "dark": true,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-tmdb-dark.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-tmdb-dark.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  },
+  {
+    "kind": "danmaku",
+    "dark": true,
+    "screenshot": ".local-build/sheet-transparency-20261109/macos-visible-danmaku-dark.png",
+    "runtime": ".local-build/sheet-transparency-20261109/runtime-danmaku-dark.json",
+    "translucentSheet": true,
+    "parentUnchanged": true
+  }
+]

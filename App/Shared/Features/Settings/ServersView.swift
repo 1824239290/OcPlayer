@@ -507,6 +507,10 @@ private struct AddAddressSheet: View {
     var body: some View {
         FormSheetShell(
             title: "添加地址",
+            symbol: "network",
+            subtitle: profile.serverName,
+            size: AppSheetSize(minHeight: 400, idealHeight: 480),
+            isSubmitting: isSubmitting,
             confirmEnabled: isValid && !isSubmitting,
             onConfirm: {
                 Task { await submit(allowUnreachable: false) }
@@ -525,16 +529,19 @@ private struct AddAddressSheet: View {
                 TextField(
                     "",
                     text: $text,
-                    prompt: Text("例如 100.64.1.20:8096 或 nas.example.ts.net:8096")
+                    prompt: Text("例如 100.64.1.20:8096")
                 )
                 .textContentType(.URL)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 #endif
                 .autocorrectionDisabled()
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(AppSheetTextFieldStyle())
                 .frame(maxWidth: .infinity)
-                .onSubmit { Task { await submit(allowUnreachable: false) } }
+                .onSubmit {
+                    guard isValid, !isSubmitting else { return }
+                    Task { await submit(allowUnreachable: false) }
+                }
                 Text("可以不打 http:// 前缀；Tailscale 请填 100.x 地址或 MagicDNS 名字。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -563,9 +570,6 @@ private struct AddAddressSheet: View {
                 }
             }
         }
-        #if os(macOS)
-        .frame(height: 380)
-        #endif
     }
 
     @ViewBuilder
@@ -601,7 +605,7 @@ private struct AddAddressSheet: View {
     }
 
     private func submit(allowUnreachable: Bool) async {
-        guard !isSubmitting else { return }
+        guard isValid, !isSubmitting else { return }
         isSubmitting = true
         let outcome = await app.addAddress(
             text.trimmingCharacters(in: .whitespacesAndNewlines),

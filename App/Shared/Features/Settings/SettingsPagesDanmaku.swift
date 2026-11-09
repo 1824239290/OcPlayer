@@ -97,6 +97,7 @@ struct DanmakuGatewayEntrySheet: View {
     var body: some View {
         FormSheetShell(
             title: "弹幕网关",
+            symbol: "text.bubble",
             confirmEnabled: gatewayURLIsValid,
             onConfirm: {
                 onSubmit(
@@ -121,13 +122,10 @@ struct DanmakuGatewayEntrySheet: View {
                 label: "API Key",
                 text: $key,
                 prompt: "由网关管理员签发",
-                caption: "Key 只通过 X-API-Key 请求头发送，不写入播放地址或诊断日志。",
+                caption: "用于获取网络弹幕；留空关闭网络弹幕。",
                 kind: .secure
             )
         }
-        #if os(macOS)
-        .frame(height: 340)
-        #endif
     }
 
     private var gatewayURLIsValid: Bool {

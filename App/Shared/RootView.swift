@@ -318,32 +318,45 @@ struct URLEntrySheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("打开直连链接").font(.headline)
-            TextField("http://…/Videos/{id}/stream?static=true", text: $uri)
-                .textFieldStyle(.roundedBorder)
+        FormSheetShell(
+            title: "打开直连链接",
+            symbol: "play.rectangle",
+            subtitle: "播放 HTTP/HTTPS 视频直链或本地文件。",
+            confirmEnabled: isAcceptable,
+            onConfirm: play,
+            confirmLabel: { Label("播放", systemImage: "play.fill") }
+        ) {
+            LabeledCredentialField(
+                label: "视频地址",
+                text: $uri,
+                prompt: "https://example.com/video.mkv",
+                kind: .url
+            )
+            .onSubmit(play)
+
             if !trimmedURI.isEmpty && !isAcceptable {
-                Text("只支持 http/https 直链，或本地文件绝对路径（/… 或 ~/…）。本地文件也可以直接用 ⌘O 打开。")
+                Label("请输入完整的 HTTP/HTTPS 链接，或以 /、~/ 开头的本地文件路径。",
+                      systemImage: "exclamationmark.triangle")
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            SecureField("服务器 AccessToken（可留空）", text: $token)
-                .textFieldStyle(.roundedBorder)
-            Text("token 只作为请求头发给内核，不写进 URL、不落日志。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("取消") { dismiss() }
-                Button("播放") {
-                    onSubmit(trimmedURI, token.isEmpty ? nil : token)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!isAcceptable)
-            }
+
+            LabeledCredentialField(
+                label: "AccessToken（可选）",
+                text: $token,
+                prompt: "服务器访问令牌",
+                caption: "用于需要登录的服务器，可留空。",
+                kind: .secure
+            )
+            .onSubmit(play)
         }
-        .padding(20)
-        .frame(width: 460)
+    }
+
+    private func play() {
+        guard isAcceptable else { return }
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        onSubmit(trimmedURI, trimmedToken.isEmpty ? nil : trimmedToken)
+        dismiss()
     }
 }

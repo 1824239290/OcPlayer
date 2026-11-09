@@ -44,6 +44,9 @@ struct MoviePilotSubscribeSheet: View {
     // 站点列表与加载
     @State private var availableSites: [MPSite] = []
     @State private var isSaving = false
+    @State private var showsSiteSelection = false
+    @State private var isLoadingSites = false
+    @State private var siteLoadError: String?
     @State private var errorMessage: String?
 
     // 预设质量标签
@@ -101,64 +104,70 @@ struct MoviePilotSubscribeSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if let errorMessage {
-                    Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                            .font(.callout)
+        VStack(spacing: 0) {
+            AppSheetHeader(
+                title: showsSiteSelection ? "限定站点" : (isEditMode ? "编辑订阅" : "添加订阅"),
+                symbol: "bookmark",
+                canDismiss: !isSaving,
+                onBack: showsSiteSelection ? { showsSiteSelection = false } : nil
+            )
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if showsSiteSelection {
+                        siteSelectionView
+                    } else {
+                        if let errorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.red)
+                                .font(.callout)
+                        }
+                        headerSection
+                        basicInfoSection
+                        if isTV { episodeSection }
+                        filterRulesSection
+                        advancedSection
                     }
                 }
-
-                // 媒体头部预览
-                headerSection
-
-                // 基础信息
-                basicInfoSection
-
-                // 剧集与季集设置（仅电视剧）
-                if isTV {
-                    episodeSection
-                }
-
-                // 过滤规则与站点
-                filterRulesSection
-
-                // 高级选项
-                advancedSection
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
+                .textFieldStyle(AppSheetTextFieldStyle())
+                .pickerStyle(.menu)
+                .disabled(isSaving)
             }
-            .formStyle(.grouped)
-            .navigationTitle(isEditMode ? "编辑订阅" : "添加订阅")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                        .disabled(isSaving)
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditMode ? "保存" : "添加") {
-                        Task { await save() }
+            .scrollDismissesKeyboard(.interactively)
+            AppSheetDivider()
+            AppSheetFooter {
+                Button("取消") { dismiss() }
+                    .buttonStyle(AppSheetButtonStyle())
+                    .disabled(isSaving)
+            } actions: {
+                if showsSiteSelection {
+                    Button("完成选择") { showsSiteSelection = false }
+                        .buttonStyle(AppSheetButtonStyle(primary: true))
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button { Task { await save() } } label: {
+                        HStack(spacing: 8) {
+                            if isSaving { ProgressView().controlSize(.small) }
+                            Text(isEditMode ? "保存" : "添加")
+                        }
                     }
+                    .buttonStyle(AppSheetButtonStyle(primary: true))
+                    .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
                 }
             }
-            .task {
-                await loadSites()
-            }
         }
-        #if os(macOS)
-        .frame(minWidth: 480, idealWidth: 540, minHeight: 520, idealHeight: 640)
-        #endif
+        .appSheetSurface(size: .subscription)
+        .interactiveDismissDisabled(isSaving)
+        .task { await loadSites() }
     }
 
     // MARK: - 头部预览
 
     private var headerSection: some View {
-        Section {
+        AppSheetSection {
             HStack(spacing: 14) {
                 if let posterURL = URL(string: posterURLString), !posterURLString.isEmpty {
                     RemoteImage(url: posterURL, authHeader: nil, maxPixelSize: 300)
@@ -215,7 +224,7 @@ struct MoviePilotSubscribeSheet: View {
     // MARK: - 基本信息
 
     private var basicInfoSection: some View {
-        Section("基本信息") {
+        AppSheetSection("基本信息") {
             TextField("媒体名称（必填）", text: $name)
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -237,10 +246,13 @@ struct MoviePilotSubscribeSheet: View {
                     #endif
             }
 
-            Picker("订阅状态", selection: $state) {
-                Text("追更中 (运行)").tag(MPSubscribeState.running)
-                Text("暂停订阅").tag(MPSubscribeState.paused)
-                Text("已完成").tag(MPSubscribeState.completed)
+            LabeledContent("订阅状态") {
+                Picker("订阅状态", selection: $state) {
+                    Text("追更中 (运行)").tag(MPSubscribeState.running)
+                    Text("暂停订阅").tag(MPSubscribeState.paused)
+                    Text("已完成").tag(MPSubscribeState.completed)
+                }
+                .labelsHidden()
             }
 
             HStack {
@@ -275,7 +287,7 @@ struct MoviePilotSubscribeSheet: View {
     // MARK: - 剧集设置
 
     private var episodeSection: some View {
-        Section("剧集设置") {
+        AppSheetSection("剧集设置") {
             Stepper("季数：第 \(season) 季", value: $season, in: 1...99)
 
             Stepper("起始集数：第 \(startEpisode) 集", value: $startEpisode, in: 0...999)
@@ -305,7 +317,7 @@ struct MoviePilotSubscribeSheet: View {
     // MARK: - 过滤规则
 
     private var filterRulesSection: some View {
-        Section("过滤与偏好规则") {
+        AppSheetSection("过滤与偏好规则") {
             VStack(alignment: .leading, spacing: 4) {
                 Text("搜索关键词")
                     .font(.caption)
@@ -336,23 +348,42 @@ struct MoviePilotSubscribeSheet: View {
                     #endif
             }
 
-            Picker("分辨率 / 质量偏好", selection: $quality) {
-                Text("全部 / 默认").tag("")
-                ForEach(Self.qualityPresets.filter { !$0.isEmpty }, id: \.self) { q in
-                    Text(q).tag(q)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("分辨率 / 质量偏好")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("分辨率 / 质量偏好", selection: $quality) {
+                    Text("全部 / 默认").tag("")
+                    ForEach(Self.qualityPresets.filter { !$0.isEmpty }, id: \.self) { q in
+                        Text(q).tag(q)
+                    }
                 }
+                .labelsHidden()
             }
 
             if !availableSites.isEmpty {
-                NavigationLink {
-                    siteSelectionView
+                Button {
+                    showsSiteSelection = true
                 } label: {
                     HStack {
                         Text("限定搜索站点")
                         Spacer()
                         Text(selectedSiteIDs.isEmpty ? "全部站点" : "已选 \(selectedSiteIDs.count) 个")
                             .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right").foregroundStyle(.secondary)
                     }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            if isLoadingSites {
+                ProgressView("正在加载站点…").font(.caption)
+            } else if let siteLoadError {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(siteLoadError).font(.caption).foregroundStyle(.secondary)
+                    Button("重新加载站点") { Task { await loadSites() } }
+                        .buttonStyle(AppSheetButtonStyle())
                 }
             }
         }
@@ -361,7 +392,7 @@ struct MoviePilotSubscribeSheet: View {
     // MARK: - 高级选项
 
     private var advancedSection: some View {
-        Section("高级设置") {
+        AppSheetSection("高级设置") {
             Toggle("最佳版本洗版 (自动下载更高质量版本)", isOn: $bestVersion)
             .neutralSwitch()
 
@@ -390,16 +421,13 @@ struct MoviePilotSubscribeSheet: View {
     // MARK: - 站点多选子页
 
     private var siteSelectionView: some View {
-        List {
-            Section {
-                Button("选择全部站点") {
-                    selectedSiteIDs = []
-                }
-            } footer: {
-                Text("未选择特定站点时，MoviePilot 会在全部已启用的站点中搜寻。")
-            }
-
-            Section("选择站点") {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("未选择特定站点时，将在全部已启用的站点中搜索。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("使用全部站点") { selectedSiteIDs = [] }
+                .buttonStyle(AppSheetButtonStyle())
+            AppSheetSection("选择站点") {
                 ForEach(availableSites) { site in
                     Button {
                         if selectedSiteIDs.contains(site.id) {
@@ -408,34 +436,43 @@ struct MoviePilotSubscribeSheet: View {
                             selectedSiteIDs.insert(site.id)
                         }
                     } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(site.name ?? "站点 \(site.id)")
+                                    .font(.callout.weight(.medium))
                                 if let domain = site.domain {
                                     Text(domain).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
-                            if selectedSiteIDs.contains(site.id) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
+                            Image(systemName: selectedSiteIDs.contains(site.id) ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedSiteIDs.contains(site.id) ? Color.primary : Color.secondary)
                         }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedSiteIDs.contains(site.id) ? .isSelected : [])
+                    .accessibilityValue(selectedSiteIDs.contains(site.id) ? "已选择" : "未选择")
                 }
             }
         }
-        .navigationTitle("限定站点")
     }
 
     // MARK: - 初始化与保存
 
     private func loadSites() async {
+        guard !isLoadingSites else { return }
+        isLoadingSites = true
+        siteLoadError = nil
+        defer { isLoadingSites = false }
         do {
-            availableSites = try await MoviePilotAPIClient.shared.sites()
+            let sites = try await MoviePilotAPIClient.shared.sites()
+            guard !Task.isCancelled else { return }
+            availableSites = sites
         } catch {
-            // 忽略站点加载错误
+            guard !Task.isCancelled else { return }
+            siteLoadError = "站点加载失败，可以重试或使用现有站点设置。"
         }
     }
 
