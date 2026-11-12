@@ -2,33 +2,42 @@
 
 ## 结论
 
-建议采用 **WinUI 3 + Windows App SDK + C#/.NET 10 LTS**。WinUI 3 负责桌面 UI，C# 负责应用编排和服务层，Rust 播放内核保持独立，通过一层很薄的 native bridge 暴露播放所需的能力。
+建议采用 **Rust 共享核心 + SwiftUI/AppKit/UIKit + WinUI 3/Windows App SDK**。Rust 负责多个平台真正应该一致的能力，Swift 和 C# 分别负责各自平台的 UI、生命周期和系统集成。
+
+Windows 端仍建议使用 C#/.NET 10 LTS 承载 WinUI 3 应用层。WinUI 3 是 Windows App SDK 提供的原生桌面 UI 框架，适合做 Windows 专属体验；它不应该成为跨平台业务层的抽象。
 
 ## 为什么这样拆分
 
-### UI 与应用层
+### UI 与平台层
 
-WinUI 3 适合 Windows 原生桌面体验，XAML 对自适应布局、键盘操作、无障碍和 Fluent 控件支持完整。应用层使用 MVVM：View 只处理展示，ViewModel 负责状态和命令，领域服务负责登录、媒体库、播放队列、进度同步和弹幕。
+WinUI 3 负责 Windows 原生桌面体验；macOS、iOS 继续分别使用 SwiftUI 与必要的 AppKit/UIKit。三端共享状态模型和业务协议，但不强行共享 View、导航、窗口和系统交互。
+
+Windows 应用层使用 MVVM：View 只处理展示，ViewModel 负责状态和命令，平台服务负责窗口、文件、通知、媒体键、后台任务和凭据。macOS/iOS 保留各自的 Swift 视图模型适配层。
 
 建议的项目分层：
 
 ```text
-src/
-  OcPlayer.Windows/           # WinUI 3 应用、导航、窗口和资源
-  OcPlayer.Application/       # 用例、ViewModel、应用服务接口
-  OcPlayer.Domain/            # 媒体、服务器、播放状态等纯模型
-  OcPlayer.Infrastructure/    # Jellyfin/Emby、SQLite、日志、文件系统
-  OcPlayer.Native/            # C# 对 Rust 播放内核的 P/Invoke 封装
+crates/
+  ocplayer-core/              # 播放、媒体模型、同步规则和跨平台业务
+  ocplayer-ffi/               # 稳定的 C ABI、句柄、事件和错误码
+  liberika/                   # 现有 Rust 播放内核
+platforms/
+  windows/                    # WinUI 3、C# ViewModel、Windows 系统服务
+  apple/                      # SwiftUI/AppKit/UIKit、Swift 适配层
 native/
-  liberika/                   # 本地构建或下载，不直接提交二进制产物
+  artifacts/                  # 各平台构建产物，不提交到 Git
 tests/
-  OcPlayer.Domain.Tests/
-  OcPlayer.Application.Tests/
+  ocplayer-core-tests/
+  ocplayer-ffi-tests/
 ```
 
-### 播放内核
+### 共享 Rust 核心
 
-OcPlayer 已经有 Rust 编写的 `liberika`，内部使用 FFmpeg 和 libass。Windows 端优先复用它，可以保持音视频解码、字幕和播放行为的一致性。建议先定义一组与平台无关的接口：
+OcPlayer 已经有 Rust 编写的 `liberika`，内部使用 FFmpeg 和 libass。建议以它为起点，逐步把真正跨平台的能力收拢到 `ocplayer-core`，包括媒体播放、媒体信息、播放队列、继续观看、进度同步、字幕轨道和服务端协议模型。这样 macOS、iOS、Windows 的行为可以由同一套核心逻辑保证。
+
+不要一次性重写所有 Swift 代码。先让现有 Apple 应用继续工作，再按模块把共享逻辑迁移到 Rust；每迁移一个模块，就让 Swift 端通过适配器调用 Rust，并保留一段时间的行为对照测试。
+
+跨平台接口建议先定义为：
 
 - 创建 / 销毁播放器实例
 - 打开本地路径或网络 URL
@@ -38,9 +47,21 @@ OcPlayer 已经有 Rust 编写的 `liberika`，内部使用 FFmpeg 和 libass。
 - 输出视频帧 / 绑定渲染目标
 - 订阅错误、状态和播放进度事件
 
-C ABI 只暴露句柄、整数、浮点数和 UTF-8 字符串，所有内存释放由 Rust 提供对应函数。这样可以避免 C# 直接理解 Rust 的复杂类型，也便于以后替换播放后端。
+C ABI 只暴露 opaque handle、整数、浮点数、UTF-8 字符串、字节缓冲区和明确的错误码。所有内存释放由 Rust 提供对应函数，事件采用回调或可轮询事件队列。不要把 Rust 的 Vec、String、trait、Future 或内部结构体直接暴露给 Swift/C#。
 
-如果 `liberika` 的 Windows 渲染桥接在早期阻塞开发，再临时接入 libmpv 完成播放器壳层；不要一开始同时维护两套完整播放实现。
+Swift 端可以用 C header/modulemap 或 UniFFI 生成包装；Windows 端用 native DLL + P/Invoke 包一层 C# API。UniFFI 对 Swift 有成熟支持，但其 C# 支持属于第三方绑定路径，因此第一版最好让两端都围绕同一份 C ABI 工作。
+
+Rust 的 ABI 不保证跨版本稳定，所以 FFI 层必须显式使用 `extern "C"`，并单独维护头文件、版本号和兼容性测试。这样可以把 Rust 内部重构与 Swift/C# 客户端解耦。
+
+### 不适合放进共享 Rust 核心的部分
+
+以下能力应该保留在平台层：
+
+- SwiftUI、WinUI、导航、窗口和渲染控件
+- AppKit/UIKit、Win32/Windows App SDK 的生命周期与系统事件
+- AirPlay、Picture in Picture、媒体中心、Windows 媒体键、通知和文件选择器
+- Keychain、Windows Credential Manager、DPAPI 等安全存储
+- MSIX、App Store、沙盒、后台任务和平台特定权限
 
 ### 数据与服务
 
@@ -54,8 +75,9 @@ Jellyfin、Emby、Bangumi、MoviePilot 和弹幕网关分别放在独立的服�
 
 ## 第一阶段建议
 
-1. 生成 WinUI 3 解决方案和上述项目结构。
-2. 先完成本地文件播放、播放控制、进度条、音轨 / 字幕选择。
-3. 接入 Jellyfin / Emby 登录和媒体库浏览。
-4. 接入播放进度同步、继续观看和弹幕。
-5. 最后补齐 MoviePilot、Bangumi、自动更新和高级画质功能。
+1. 先把现有 Swift 播放逻辑与 `liberika` 的边界画出来，确定哪些状态和能力必须跨平台一致。
+2. 建立 `ocplayer-core` 与 `ocplayer-ffi`，先迁移媒体模型、播放状态和本地播放控制。
+3. 在 macOS/iOS 保持原 UI 不变，用 Swift 适配层接入 Rust 核心。
+4. 生成 WinUI 3 解决方案，用 C# P/Invoke 接入同一套 Rust 核心。
+5. 再迁移 Jellyfin / Emby 协议、播放进度同步、继续观看和弹幕。
+6. 最后补齐窗口体验、系统媒体控制、MoviePilot、Bangumi、自动更新和高级画质功能。

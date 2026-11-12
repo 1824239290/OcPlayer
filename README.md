@@ -14,7 +14,7 @@ OcPlayer 的 Windows 移植版本。项目目标是在保留 OcPlayer 媒体库�
 - **UI**：WinUI 3 + Windows App SDK
 - **语言与运行时**：C# + .NET 10 LTS
 - **架构**：MVVM，使用 CommunityToolkit.Mvvm；应用启动、依赖注入和配置使用 `Microsoft.Extensions.Hosting`
-- **播放内核**：优先复用 OcPlayer 现有的 Rust `liberika`（FFmpeg + libass），通过稳定的 C ABI / PInvoke 边界接入；在 Windows 端验证成本过高的能力再评估 libmpv 作为替代方案
+- **共享核心**：逐步把 macOS、iOS、Windows 共用的媒体播放、媒体模型、同步规则和跨平台业务迁移到 Rust；通过稳定的 C ABI 接入 Swift 和 C#，两端 UI 与系统能力分别使用原生实现
 - **服务端 API**：Jellyfin / Emby 使用独立的 typed client 层，避免 UI 直接依赖 HTTP 细节
 - **本地数据**：SQLite + `Microsoft.Data.Sqlite`，保存服务器配置、播放历史、设置和缓存索引
 - **日志与诊断**：`Microsoft.Extensions.Logging`，提供可导出的诊断包
