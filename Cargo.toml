@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ocp-model",
+    "crates/ocp-core",
+    "crates/ocp-ffi",
+    "crates/ocp-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+repository = "http://192.168.5.107:8418/jumusu/OcPlayer-Core"
+
+[workspace.dependencies]
+ocp-model = { path = "crates/ocp-model" }
+ocp-core = { path = "crates/ocp-core" }
+ocp-ffi = { path = "crates/ocp-ffi" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
