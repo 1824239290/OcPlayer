@@ -8,4 +8,3 @@ The WinUI 3 application currently contains the P0 bootstrap only. The P1
 renderer integration will bind the window's `HWND` and DirectComposition
 surface through `IWindowsPlayerSurface`, then call `RenderTick` from the
 display/render clock.
-
