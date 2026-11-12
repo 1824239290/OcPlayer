@@ -98,7 +98,12 @@ impl Core {
                 state.push_event(method, arguments);
                 ApiResponse::ok(json!({ "accepted": true }))
             }
-            _ => return Err(CoreError::UnknownMethod(method.to_string())),
+            _ => ApiResponse::error(
+                1001,
+                false,
+                format!("unknown method: {method}"),
+                Value::Null,
+            ),
         };
         serde_json::to_string(&response).map_err(CoreError::InvalidJson)
     }
