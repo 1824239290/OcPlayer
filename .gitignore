@@ -1,0 +1,47 @@
+# Visual Studio / .NET
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+[Bb]in/
+[Oo]bj/
+TestResults/
+*.nupkg
+.nuget/
+artifacts/
+
+# WinUI 3 / Windows App SDK generated files
+AppPackages/
+BundleArtifacts/
+*.appinstaller
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+
+# Native playback artifacts (download/build locally; do not commit)
+native/vendor/
+liberika/build/
+*.dll
+*.lib
+*.pdb
+*.dSYM/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+Secrets/
+secrets.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated documentation / coverage
+coverage/
+*.coverage
+*.userprefs
