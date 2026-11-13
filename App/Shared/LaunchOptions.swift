@@ -191,10 +191,10 @@ enum LaunchOptions {
         [
             4: ("pause", { controller.togglePlayPause() }),
             6: ("play", { controller.togglePlayPause() }),
-            8: ("seek 3.5s", { controller.seek(toFraction: 0.7) }),
+            8: ("seek 70%", { controller.seek(toFraction: 0.7) }),
             10: ("rate 2.0", { controller.applyRate(2.0) }),
             12: ("resize window", { resizeWindow() }),
-            14: ("rate 1.0 + seek 1s", {
+            14: ("rate 1.0 + seek 20%", {
                 controller.applyRate(1.0)
                 controller.seek(toFraction: 0.2)
             }),
