@@ -1,0 +1,45 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 2] JellyfinKit
+[2 / 11] MetadataKit
+[4 / 13] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[11 / 12] MetadataKit-product
+[11 / 12] MetadataKitTests-product
+[13 / 15] MetadataKitTests-product
+Build complete! (2.63秒)
+Test Suite 'Selected tests' started at 2026-11-14 03:02:46.569.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 03:02:46.570.
+Test Suite 'RustMediaRepositoryTests' started at 2026-11-14 03:02:46.570.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' passed (1.329 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' passed (3.480 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustMediaRepositoryTests.swift:201: error: -[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch] : XCTAssertEqual failed: ("Optional(32768)") is not equal to ("Optional(8388608)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustMediaRepositoryTests.swift:201: error: -[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch] : XCTAssertEqual failed: ("Optional(32768)") is not equal to ("Optional(8388608)")
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' failed (1.024 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' passed (0.005 seconds).
+Test Suite 'RustMediaRepositoryTests' failed at 2026-11-14 03:02:52.419.
+	 Executed 6 tests, with 2 failures (0 unexpected) in 5.849 (5.849) seconds
+Test Suite 'MetadataKitTests.xctest' failed at 2026-11-14 03:02:52.419.
+	 Executed 6 tests, with 2 failures (0 unexpected) in 5.849 (5.850) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 03:02:52.419.
+	 Executed 6 tests, with 2 failures (0 unexpected) in 5.849 (5.850) seconds
+Note: Some test targets reported failures:
+  - MetadataKitTests (XCTest)

@@ -1,0 +1,392 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 32] Atomics
+Build complete! (1.12秒)
+Test Suite 'All tests' started at 2026-11-14 03:07:19.156.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 03:07:19.157.
+Test Suite 'EpisodeChunkTests' started at 2026-11-14 03:07:19.157.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testAccessibilityLabelMatchesRange]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testAccessibilityLabelMatchesRange]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBoundariesAndSingleEpisodeTailLabel]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBoundariesAndSingleEpisodeTailLabel]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBrowsedChunkWinsAndOutOfRangeBrowsedChunkIsIgnored]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBrowsedChunkWinsAndOutOfRangeBrowsedChunkIsIgnored]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testChunksCoverEverySlotInOrder]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testChunksCoverEverySlotInOrder]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testCustomSizeAndNonPositiveSize]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testCustomSizeAndNonPositiveSize]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testDisplayedChunksFollowSortDirection]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testDisplayedChunksFollowSortDirection]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testEmptyTrackProducesNoChunks]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testEmptyTrackProducesNoChunks]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowSelectionClearsBrowsedChunk]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowSelectionClearsBrowsedChunk]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowsSelectionIncludingPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowsSelectionIncludingPlaceholders]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testLabelBoundsAreOrderIndependent]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testLabelBoundsAreOrderIndependent]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testNoSelectionFallsBackToFirstDisplayedChunk]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testNoSelectionFallsBackToFirstDisplayedChunk]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testOneChunkAtOrBelowSize]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testOneChunkAtOrBelowSize]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPartlyUnnumberedChunkKeepsRealNumberBounds]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPartlyUnnumberedChunkKeepsRealNumberBounds]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPlaceholderNumbersCountTowardLabel]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPlaceholderNumbersCountTowardLabel]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testRailSlotsRespectSortAndBounds]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testRailSlotsRespectSortAndBounds]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testUnnumberedTailFallsBackToTrackPositions]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testUnnumberedTailFallsBackToTrackPositions]' passed (0.000 seconds).
+Test Suite 'EpisodeChunkTests' passed at 2026-11-14 03:07:19.163.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'EpisodeSlotTests' started at 2026-11-14 03:07:19.163.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testDuplicateNumbersProduceOneSlotEach]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testDuplicateNumbersProduceOneSlotEach]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalSeasonFillsFromTheStart]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalSeasonFillsFromTheStart]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalTrustsTheSource]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalTrustsTheSource]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEntityOverlayHasNoCandidates]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEntityOverlayHasNoCandidates]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeAiringTodayCountsAsAired]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeAiringTodayCountsAsAired]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesMapAirDateStillAndRuntime]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesMapAirDateStillAndRuntime]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesRejectUnparseableAirDates]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesRejectUnparseableAirDates]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackRescuesAMismatchedPrimary]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackRescuesAMismatchedPrimary]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackUsedWhenPrimaryIsEmpty]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackUsedWhenPrimaryIsEmpty]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsHolesInTheMiddleInPlace]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsHolesInTheMiddleInPlace]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsMissingTailWithAiredAndFutureLabels]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsMissingTailWithAiredAndFutureLabels]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testKeepsLocalEpisodesUnknownToTheSource]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testKeepsLocalEpisodesUnknownToTheSource]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLocalWithoutEpisodeNumbersSuppressesPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLocalWithoutEpisodeNumbersSuppressesPlaceholders]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLongRunningSeriesIsBoundedByForwardWindow]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLongRunningSeriesIsBoundedByForwardWindow]' passed (0.043 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testMismatchedNumberingSuppressesPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testMismatchedNumberingSuppressesPlaceholders]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNonPositiveNumbersAreDropped]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNonPositiveNumbersAreDropped]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNoSourceReturnsLocalUnchanged]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNoSourceReturnsLocalUnchanged]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testOverlapMakesTheSourceTrusted]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testOverlapMakesTheSourceTrusted]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderCapIsEnforced]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderCapIsEnforced]' passed (0.045 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderDisplayTitleFallsBackToEpisodeNumber]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderDisplayTitleFallsBackToEpisodeNumber]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderIDCannotCollideWithLocalIDs]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderIDCannotCollideWithLocalIDs]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPrimaryWinsOverFallback]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPrimaryWinsOverFallback]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testShowPlaceholdersDefaultsToOn]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testShowPlaceholdersDefaultsToOn]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testSpecialsSeasonIsNeverFilled]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testSpecialsSeasonIsNeverFilled]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testUnknownAirDateIsNotInLibraryNotNotAired]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testUnknownAirDateIsNotInLibraryNotNotAired]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testWindowIsAnchoredOnTheLocalSpan]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testWindowIsAnchoredOnTheLocalSpan]' passed (0.009 seconds).
+Test Suite 'EpisodeSlotTests' passed at 2026-11-14 03:07:19.275.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.110 (0.112) seconds
+Test Suite 'LocalProgressConflictTests' started at 2026-11-14 03:07:19.275.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testConfirmationKeepsOlderInflightRepliesProtectedButAllowsNewRemoteRewind]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testConfirmationKeepsOlderInflightRepliesProtectedButAllowsNewRemoteRewind]' passed (0.021 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testEmptyResumeKeepsOnlyUnconfirmedLocalPlayback]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testEmptyResumeKeepsOnlyUnconfirmedLocalPlayback]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testExplicitMarkUnplayedReleasesPendingProtection]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testExplicitMarkUnplayedReleasesPendingProtection]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNaturalCompletionAcceptsServerPlayedFlagAndClearedResumePosition]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNaturalCompletionAcceptsServerPlayedFlagAndClearedResumePosition]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNewLocalRewindReplacesPriorPendingPositionAndOtherTenantIsUnaffected]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNewLocalRewindReplacesPriorPendingPositionAndOtherTenantIsUnaffected]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testPendingProgressSurvivesReopenAndMergesFreshMetadata]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testPendingProgressSurvivesReopenAndMergesFreshMetadata]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testReplyStartedBeforeLocalWriteCannotConfirmCoincidentallyMatchingPosition]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testReplyStartedBeforeLocalWriteCannotConfirmCoincidentallyMatchingPosition]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testRepositoryProtectsAllNetworkProjectionsInDiskAndMemoryModes]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testRepositoryProtectsAllNetworkProjectionsInDiskAndMemoryModes]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testV3MigrationPreservesV2ItemsAndRails]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testV3MigrationPreservesV2ItemsAndRails]' passed (0.021 seconds).
+Test Suite 'LocalProgressConflictTests' passed at 2026-11-14 03:07:19.366.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.090 (0.091) seconds
+Test Suite 'MediaRepositoryTests' started at 2026-11-14 03:07:19.366.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' passed (0.001 seconds).
+Test Suite 'MediaRepositoryTests' passed at 2026-11-14 03:07:19.438.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.071 (0.072) seconds
+Test Suite 'PlaybackProgressPersistenceTests' started at 2026-11-14 03:07:19.438.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testDiskHomeAndPagesMergeProgressWithoutReplacingProjectionMetadata]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testDiskHomeAndPagesMergeProgressWithoutReplacingProjectionMetadata]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSeedsMissingItem]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSeedsMissingItem]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSurvivesShutdownWhileOldNetworkWritesStayBlocked]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSurvivesShutdownWhileOldNetworkWritesStayBlocked]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testLargeProjectionUsesBatchesAndPreservesOrder]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testLargeProjectionUsesBatchesAndPreservesOrder]' passed (0.131 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testMarkPlayedAndUnplayedReachDiskProjectionsAfterMemoryEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testMarkPlayedAndUnplayedReachDiskProjectionsAfterMemoryEviction]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testProjectionKeepsItsMetadataAndFallsBackForMissingCanonicalItems]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testProjectionKeepsItsMetadataAndFallsBackForMissingCanonicalItems]' passed (0.005 seconds).
+Test Suite 'PlaybackProgressPersistenceTests' passed at 2026-11-14 03:07:19.603.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.165 (0.166) seconds
+Test Suite 'PlaybackStateRecoveryTests' started at 2026-11-14 03:07:19.603.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testExplicitClearRemovesStateFallbackBeforeLaterPlayback]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testExplicitClearRemovesStateFallbackBeforeLaterPlayback]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' passed (0.026 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' passed (0.027 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFallbackKeepsSnapshotMetadataAndLatestProgressFields]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFallbackKeepsSnapshotMetadataAndLatestProgressFields]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentPlayedAfterCanonicalEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentPlayedAfterCanonicalEviction]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentUnplayedAfterCanonicalEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentUnplayedAfterCanonicalEviction]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesPlayedWhenCanonicalItemExists]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesPlayedWhenCanonicalItemExists]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesUnplayedWhenCanonicalItemExists]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesUnplayedWhenCanonicalItemExists]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testIndependentStateFallbackRemainsTenantScoped]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testIndependentStateFallbackRemainsTenantScoped]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesPlayedAfterLRUEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesPlayedAfterLRUEviction]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesUnplayedAfterLRUEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesUnplayedAfterLRUEviction]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testRepositoryFinalWritePreservesPlayedAfterDiskEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testRepositoryFinalWritePreservesPlayedAfterDiskEviction]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' passed (0.030 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' passed (0.029 seconds).
+Test Suite 'PlaybackStateRecoveryTests' passed at 2026-11-14 03:07:19.766.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.161 (0.163) seconds
+Test Suite 'ProgressEvictionTests' started at 2026-11-14 03:07:19.766.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testConfirmedProgressAllowsEvictionButStillBlocksVeryLateReplies]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testConfirmedProgressAllowsEvictionButStillBlocksVeryLateReplies]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testEvictionCompactsConfirmedMetadataAndKeepsPendingMetadata]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testEvictionCompactsConfirmedMetadataAndKeepsPendingMetadata]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testOfflineRailsAndPagesUseIndependentProgressAfterEviction]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testOfflineRailsAndPagesUseIndependentProgressAfterEviction]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesAutomaticMetadataEvictionAndReopen]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesAutomaticMetadataEvictionAndReopen]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesReopenWhenMetadataLimitIsNotReached]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesReopenWhenMetadataLimitIsNotReached]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testV4MigrationPreservesPendingAndConfirmedV3Records]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testV4MigrationPreservesPendingAndConfirmedV3Records]' passed (0.018 seconds).
+Test Suite 'ProgressEvictionTests' passed at 2026-11-14 03:07:19.819.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.052 (0.053) seconds
+Test Suite 'ProgressOperationBoundaryTests' started at 2026-11-14 03:07:19.819.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testDirectAuthoritativeStateUsesTheSameBoundary]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testDirectAuthoritativeStateUsesTheSameBoundary]' passed (0.027 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitCacheClearDiscardsDiskAndMemoryProtection]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitCacheClearDiscardsDiskAndMemoryProtection]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitFenceIsTenantScopedAndSurvivesMetadataEviction]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitFenceIsTenantScopedAndSurvivesMetadataEviction]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightReplyCannotUndoUnplayedAndNewerReplyCanTakeOver]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightReplyCannotUndoUnplayedAndNewerReplyCanTakeOver]' passed (0.027 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightResponseCannotUndoExplicitPlayedMark]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightResponseCannotUndoExplicitPlayedMark]' passed (0.026 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkBoundarySurvivesEvictionWhileOlderRequestIsInflight]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkBoundarySurvivesEvictionWhileOlderRequestIsInflight]' passed (0.027 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkPlayedWithoutOlderInflightResponsePreservesState]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkPlayedWithoutOlderInflightResponsePreservesState]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderExplicitWriteCannotUndoNewerFinalPosition]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderExplicitWriteCannotUndoNewerFinalPosition]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderFinalWriteCannotUndoNewerExplicitMark]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderFinalWriteCannotUndoNewerExplicitMark]' passed (0.005 seconds).
+Test Suite 'ProgressOperationBoundaryTests' passed at 2026-11-14 03:07:19.951.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.131 (0.132) seconds
+Test Suite 'QueuedPlaybackProgressTests' started at 2026-11-14 03:07:19.951.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewerCapturedSnapshotCanReplaceAnExplicitState]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewerCapturedSnapshotCanReplaceAnExplicitState]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionKeepsTheNewerPendingDiskPositionUntilConfirmed]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionKeepsTheNewerPendingDiskPositionUntilConfirmed]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionUsesDiskConfirmationWithoutFreezingLaterRemoteState]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionUsesDiskConfirmationWithoutFreezingLaterRemoteState]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerExplicitStateInMemoryAndDisk]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerExplicitStateInMemoryAndDisk]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerFinalPositionInMemoryAndDisk]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerFinalPositionInMemoryAndDisk]' passed (0.007 seconds).
+Test Suite 'QueuedPlaybackProgressTests' passed at 2026-11-14 03:07:20.000.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.048 (0.048) seconds
+Test Suite 'RustCacheIntegrationTests' started at 2026-11-14 03:07:20.000.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' passed (0.021 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' passed (0.009 seconds).
+Test Suite 'RustCacheIntegrationTests' passed at 2026-11-14 03:07:20.043.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.043 (0.043) seconds
+Test Suite 'RustMediaRepositoryTests' started at 2026-11-14 03:07:20.043.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' passed (0.366 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' passed (2.943 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' passed (0.022 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' passed (0.006 seconds).
+Test Suite 'RustMediaRepositoryTests' passed at 2026-11-14 03:07:23.388.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 3.344 (3.345) seconds
+Test Suite 'RustProgressCompatibilityTests' started at 2026-11-14 03:07:23.388.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testRustCreatesDatabaseSwiftMigratesAndReadsIndependentProgress]' started.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testRustCreatesDatabaseSwiftMigratesAndReadsIndependentProgress]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testSwiftWritesRustReadsAndRustUpdatesCanonicalSwiftPayload]' started.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testSwiftWritesRustReadsAndRustUpdatesCanonicalSwiftPayload]' passed (0.009 seconds).
+Test Suite 'RustProgressCompatibilityTests' passed at 2026-11-14 03:07:23.403.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.015 (0.015) seconds
+Test Suite 'RustTMDbEnrichmentTests' started at 2026-11-14 03:07:23.403.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' passed (0.040 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' passed (0.101 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' passed (0.412 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' passed (0.112 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' passed (0.085 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' passed (0.726 seconds).
+Test Suite 'RustTMDbEnrichmentTests' passed at 2026-11-14 03:07:24.880.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.476 (1.477) seconds
+Test Suite 'RustTMDbIntegrationTests' started at 2026-11-14 03:07:24.880.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' started.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' passed (0.852 seconds).
+Test Suite 'RustTMDbIntegrationTests' passed at 2026-11-14 03:07:25.732.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.852 (0.852) seconds
+Test Suite 'RustTMDbMatcherTests' started at 2026-11-14 03:07:25.732.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' passed (0.336 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' passed (0.044 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' passed (1.125 seconds).
+Test Suite 'RustTMDbMatcherTests' passed at 2026-11-14 03:07:27.247.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.514 (1.515) seconds
+Test Suite 'RustTMDbWireTests' started at 2026-11-14 03:07:27.247.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' passed (0.199 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' passed (0.141 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testSignedRequestRangesAndEpisodeSearchYearSuppression]' started.
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite MetadataStoreTests started.
+◇ Suite PosterCandidatesTests started.
+◇ Suite MetadataSnapshotTests started.
+◇ Suite MetadataDatabaseTests started.
+◇ Test orderIsDeterministicAcrossCalls() started.
+◇ Test updatePlayStateUpdatesPayloadButNotMetadataTimestamp() started.
+◇ Test candidatesCarryTitleAndYear() started.
+◇ Test itemRoundTripsAllFields() started.
+◇ Test emptyStoreYieldsNothing() started.
+◇ Test decodesPayloadMissingNewFields() started.
+◇ Test projectionColumnsMatchPayload() started.
+◇ Test unknownPayloadVersionReadsAsMiss() started.
+◇ Test limitIsRespected() started.
+◇ Test scanWindowSkipsPosterlessItems() started.
+◇ Test otherTenantsAreInvisible() started.
+◇ Test tenantIDDerivation() started.
+◇ Test clearAllWipesEveryTable() started.
+◇ Test unknownKindDecodesAsOther() started.
+◇ Test railSurvivesItemEviction() started.
+◇ Test progressStalenessIsIndependentOfMetadata() started.
+◇ Test onlyMoviesAndSeriesWithAPosterQualify() started.
+◇ Test pageKeySeparatesSearchSortAndWatchState() started.
+◇ Test tenantIgnoresBaseURL() started.
+◇ Test pageRoundTripsWithTotalCount() started.
+◇ Test librariesRoundTripInOrder() started.
+◇ Test mediaFileInfoRoundTrips() started.
+◇ Test corruptDatabaseIsRebuilt() started.
+◇ Test reopensExistingDatabase() started.
+◇ Test tenantsAreIsolated() started.
+◇ Test evictionIsNoOpUnderLimit() started.
+◇ Test pageKeyIsOrderInsensitiveForKinds() started.
+◇ Test createsDatabaseAndSchema() started.
+◇ Test evictionKeepsNewestAndReportsCount() started.
+◇ Test railOverwritesSameName() started.
+◇ Test pageKeySeparatesWindows() started.
+◇ Test savingLibrariesReplacesPreviousSet() started.
+◇ Test railRoundTripsSelfContainedSnapshot() started.
+◇ Test bulkReadReturnsOnlyExistingInRequestedOrder() started.
+✔ Test unknownPayloadVersionReadsAsMiss() passed after 0.094 seconds.
+✔ Test decodesPayloadMissingNewFields() passed after 0.094 seconds.
+✔ Test emptyStoreYieldsNothing() passed after 0.094 seconds.
+✔ Test candidatesCarryTitleAndYear() passed after 0.094 seconds.
+✔ Test tenantIDDerivation() passed after 0.094 seconds.
+✔ Test projectionColumnsMatchPayload() passed after 0.094 seconds.
+✔ Test unknownKindDecodesAsOther() passed after 0.094 seconds.
+✔ Test updatePlayStateUpdatesPayloadButNotMetadataTimestamp() passed after 0.094 seconds.
+✔ Test itemRoundTripsAllFields() passed after 0.094 seconds.
+✔ Test progressStalenessIsIndependentOfMetadata() passed after 0.094 seconds.
+✔ Test tenantIgnoresBaseURL() passed after 0.094 seconds.
+✔ Test orderIsDeterministicAcrossCalls() passed after 0.094 seconds.
+✔ Test limitIsRespected() passed after 0.094 seconds.
+✔ Test railSurvivesItemEviction() passed after 0.094 seconds.
+✔ Test clearAllWipesEveryTable() passed after 0.094 seconds.
+✔ Test otherTenantsAreInvisible() passed after 0.094 seconds.
+✔ Test onlyMoviesAndSeriesWithAPosterQualify() passed after 0.094 seconds.
+✔ Test pageRoundTripsWithTotalCount() passed after 0.094 seconds.
+✔ Test pageKeyIsOrderInsensitiveForKinds() passed after 0.094 seconds.
+✔ Test librariesRoundTripInOrder() passed after 0.094 seconds.
+✔ Test reopensExistingDatabase() passed after 0.094 seconds.
+✔ Test evictionIsNoOpUnderLimit() passed after 0.094 seconds.
+✔ Test scanWindowSkipsPosterlessItems() passed after 0.095 seconds.
+✔ Test pageKeySeparatesSearchSortAndWatchState() passed after 0.095 seconds.
+✔ Test tenantsAreIsolated() passed after 0.095 seconds.
+✔ Test mediaFileInfoRoundTrips() passed after 0.095 seconds.
+✔ Suite PosterCandidatesTests passed after 0.095 seconds.
+✔ Test createsDatabaseAndSchema() passed after 0.103 seconds.
+✔ Test evictionKeepsNewestAndReportsCount() passed after 0.108 seconds.
+✔ Test railOverwritesSameName() passed after 0.108 seconds.
+✔ Test pageKeySeparatesWindows() passed after 0.112 seconds.
+✔ Test savingLibrariesReplacesPreviousSet() passed after 0.112 seconds.
+✔ Test railRoundTripsSelfContainedSnapshot() passed after 0.113 seconds.
+✔ Suite MetadataSnapshotTests passed after 0.113 seconds.
+✔ Test bulkReadReturnsOnlyExistingInRequestedOrder() passed after 0.113 seconds.
+✔ Suite MetadataStoreTests passed after 0.113 seconds.
+✔ Test corruptDatabaseIsRebuilt() passed after 0.122 seconds.
+✔ Suite MetadataDatabaseTests passed after 0.122 seconds.
+✔ Test run with 34 tests in 4 suites passed after 0.122 seconds.
+Note: Some test targets reported failures:
+  - MetadataKitTests (XCTest)

@@ -53,6 +53,7 @@ struct State {
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
     danmaku_flow: ocp_danmaku::flow::Directory,
     tmdb_enrichment: ocp_tmdb::enrichment::Directory,
+    media_repository: ocp_store::repository::Repository,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -143,6 +144,7 @@ impl Core {
                 intro_ids: None,
                 danmaku_flow: Default::default(),
                 tmdb_enrichment: Default::default(),
+                media_repository: Default::default(),
                 endpoint: None,
             })),
         };
@@ -405,6 +407,15 @@ impl Core {
         }
 
         let response = match method {
+            method if method.starts_with("mediaRepository.") => {
+                match state
+                    .media_repository
+                    .call(method.trim_start_matches("mediaRepository."), &arguments)
+                {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(error) => ApiResponse::error(1002, false, error, Value::Null),
+                }
+            }
             method if method.starts_with("tmdbEnrichment.") => {
                 match state
                     .tmdb_enrichment
@@ -599,6 +610,55 @@ impl Core {
                         ApiResponse::error(1002, false, message, Value::Null)
                     }
                     Err(error) => ApiResponse::error(1402, false, error.to_string(), Value::Null),
+                }
+            }
+            method if method.starts_with("metadataDatabase.") => {
+                let directory = arguments
+                    .get("directory")
+                    .and_then(Value::as_str)
+                    .filter(|v| !v.is_empty());
+                if let Some(directory) = directory {
+                    let directory = std::path::Path::new(directory);
+                    match method {
+                        "metadataDatabase.open" => match ocp_store::database::open(directory) {
+                            Ok(opened) => {
+                                let data = json!({"path":opened.path.to_string_lossy(),"rebuilt":opened.rebuilt,"firstError":opened.first_error});
+                                state.config.media_database_path =
+                                    Some(opened.path.to_string_lossy().into_owned());
+                                state.store = Some(opened.store);
+                                ApiResponse::ok(data)
+                            }
+                            Err(error) => {
+                                ApiResponse::error(1402, false, error.to_string(), Value::Null)
+                            }
+                        },
+                        "metadataDatabase.size" => {
+                            match ocp_store::database::total_bytes(directory) {
+                                Ok(size) => ApiResponse::ok(json!(size)),
+                                Err(error) => {
+                                    ApiResponse::error(1402, false, error.to_string(), Value::Null)
+                                }
+                            }
+                        }
+                        "metadataDatabase.remove" => {
+                            state.store = None;
+                            ocp_store::database::remove_files(directory);
+                            ApiResponse::ok(Value::Null)
+                        }
+                        _ => ApiResponse::error(
+                            1002,
+                            false,
+                            "unknown metadata database command",
+                            Value::Null,
+                        ),
+                    }
+                } else {
+                    ApiResponse::error(
+                        1002,
+                        false,
+                        "directory must be a non-empty string",
+                        Value::Null,
+                    )
                 }
             }
             method if method.starts_with("cache.") => {
@@ -2657,15 +2717,9 @@ fn open_config_store(config: &CoreConfig) -> Result<Option<ocp_store::Store>, Co
 }
 
 fn open_store(directory: &str) -> Result<ocp_store::Store, CoreError> {
-    let path = PathBuf::from(directory);
-    std::fs::create_dir_all(&path).map_err(|error| {
-        CoreError::StoreConfig(format!("cannot create data directory: {error}"))
-    })?;
-    let database = path.join("Media.sqlite");
-    let database = database
-        .to_str()
-        .ok_or_else(|| CoreError::StoreConfig("data directory path is not valid UTF-8".into()))?;
-    ocp_store::Store::open(database).map_err(CoreError::Store)
+    ocp_store::database::open(std::path::Path::new(directory))
+        .map(|opened| opened.store)
+        .map_err(CoreError::Store)
 }
 
 fn error_response(code: i32, retryable: bool, message: impl Into<String>) -> String {

@@ -2,6 +2,8 @@
 
 mod bangumi;
 mod cache;
+pub mod database;
+pub mod repository;
 pub use bangumi::BangumiStore;
 
 use chrono::Utc;
@@ -11,6 +13,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
+    #[error("filesystem: {0}")]
+    Io(#[from] std::io::Error),
     #[error("invalid cache request: {0}")]
     InvalidRequest(String),
     #[error("sqlite: {0}")]
@@ -130,6 +134,17 @@ impl Store {
         };
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
         connection.pragma_update(None, "foreign_keys", true)?;
+        let store = Self { connection };
+        store.migrate()?;
+        Ok(store)
+    }
+
+    pub(crate) fn open_cache_connection(path: &std::path::Path) -> Result<Self, StoreError> {
+        let connection = Connection::open(path)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
+        connection.pragma_update(None, "foreign_keys", true)?;
+        connection.pragma_update(None, "journal_mode", "WAL")?;
+        let _ = connection.pragma_update(None, "journal_size_limit", database::JOURNAL_LIMIT);
         let store = Self { connection };
         store.migrate()?;
         Ok(store)

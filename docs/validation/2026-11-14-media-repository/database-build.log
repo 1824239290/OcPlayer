@@ -1,0 +1,19 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+error[E0308]: `match` arms have incompatible types
+   --> crates/ocp-core/src/lib.rs:620:43
+    |
+618 |                           "metadataDatabase.size" => match ocp_store::database::total_bytes(directory) {
+    |  ____________________________________________________-
+619 | |                             Ok(size) => ApiResponse::ok(size),
+    | |                                         --------------------- this is found to be of type `ApiResponse<i64>`
+620 | |                             Err(error) => ApiResponse::error(1402,false,error.to_string(),Value::Null),
+    | |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `ApiResponse<i64>`, found `ApiResponse<Value>`
+621 | |                         },
+    | |_________________________- `match` arms have incompatible types
+    |
+    = note: expected struct `ApiResponse<i64>`
+               found struct `ApiResponse<Value>`
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `ocp-core` (lib) due to 1 previous error
