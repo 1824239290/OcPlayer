@@ -51,8 +51,7 @@ stable alternatives, Unicode behavior, exact identifiers and preflight errors.
 Four native differential cases include the reference Unicode scalar corpus,
 900 nine-candidate score/ranking sets, 90 complete search flows and provider/
 parent/disabled-search boundaries. Existing native matcher tests also run through
-Core under the unified macOS verifier. Enricher/batch scheduling and repository
-memory/freshness orchestration remain separate open acceptance work in
+Core under the unified macOS verifier. Enricher/batch scheduling is covered by [tmdb-enrichment-contract.md](tmdb-enrichment-contract.md). Repository memory/freshness orchestration remains open in
 [macos-parity.md](macos-parity.md).
 
 Exact-ID evidence here covers the matcher boundary. Network DTOs now use the

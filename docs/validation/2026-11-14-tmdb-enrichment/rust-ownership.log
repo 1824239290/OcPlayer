@@ -1,0 +1,18 @@
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.07s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_tmdb-459566e22380accc)
+
+running 10 tests
+test enrichment::tests::airing_refresh_window_is_independent_from_expiration_and_grace_is_strict ... ok
+test enrichment::tests::batches_refill_after_progress_and_cancel_without_abandoning_active_workers ... ok
+test enrichment::tests::refresh_uses_fresh_cache_before_authoritative_rematching ... ok
+test enrichment::tests::low_confidence_and_unconfigured_paths_never_yield_writes ... ok
+test enrichment::tests::malformed_replies_duplicate_steps_and_batch_contributions_leave_state_intact ... ok
+test enrichment::tests::batches_classify_unsupported_pre_cancelled_and_series_season_counts ... ok
+test enrichment::tests::seasons_use_parent_tv_and_stop_between_fetches_after_cancellation ... ok
+test enrichment::tests::single_flight_is_scoped_by_key_language_and_preserves_completion_order_failures ... ok
+test enrichment::tests::collections_keep_three_member_budget_order_and_response_failure_distinction ... ok
+test enrichment::tests::refresh_upgrades_search_links_but_preserves_manual_links_and_failure_cache ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+

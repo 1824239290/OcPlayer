@@ -19,6 +19,7 @@ cmp tests/intro_provider_server.py "$apple_root/Packages/DanmakuKit/Tests/Danmak
 cmp tests/standalone_danmaku_server.py "$apple_root/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py" > "$output_dir/standalone-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_wire_server.py bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/tmdb_wire_server.py > "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_wire_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_wire_server.py" >> "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
+cmp tests/tmdb_enrichment_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_enrichment_server.py" > "$output_dir/tmdb-enrichment-fixture-equivalence.log" 2>&1
 swift test --package-path bindings/apple/OcPlayerCore --scratch-path "$output_dir/AppleBindingBuild" > "$output_dir/apple-binding-tests.log" 2>&1
 python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&1
 python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&1
@@ -34,6 +35,7 @@ python3 tests/danmaku_flow_contract.py > "$output_dir/danmaku-flow-contract-test
 python3 tests/standalone_danmaku_contract.py > "$output_dir/standalone-contract-tests.log" 2>&1
 python3 tests/tmdb_matcher_contract.py > "$output_dir/tmdb-matcher-contract-tests.log" 2>&1
 python3 tests/tmdb_wire_contract.py > "$output_dir/tmdb-wire-contract-tests.log" 2>&1
+python3 tests/tmdb_enrichment_contract.py > "$output_dir/tmdb-enrichment-contract-tests.log" 2>&1
 for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done

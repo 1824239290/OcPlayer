@@ -102,6 +102,7 @@ impl HttpTransport for reqwest::Client {
 pub struct HttpClient<T = reqwest::Client> {
     transport: T,
     pub retry: RetryPolicy,
+    retry_server_errors: bool,
 }
 
 impl HttpClient<reqwest::Client> {
@@ -113,6 +114,7 @@ impl HttpClient<reqwest::Client> {
                 .build()
                 .expect("default HTTP client configuration is valid"),
             retry: RetryPolicy::default(),
+            retry_server_errors: true,
         }
     }
 }
@@ -128,7 +130,15 @@ impl<T> HttpClient<T> {
         Self {
             transport,
             retry: RetryPolicy::default(),
+            retry_server_errors: true,
         }
+    }
+
+    /// Some domains retry rate limits and transport failures, while treating
+    /// other HTTP failures as final. This preserves the existing connection pool.
+    pub fn retry_rate_limits_only(mut self) -> Self {
+        self.retry_server_errors = false;
+        self
     }
 }
 
@@ -365,6 +375,13 @@ impl<T: HttpTransport> HttpClient<T> {
                 }
                 Ok(mut response) => {
                     let mut error = status_error(response.status(), response.headers());
+                    if !self.retry_server_errors
+                        && response.status() != StatusCode::TOO_MANY_REQUESTS
+                    {
+                        if let HttpError::Request { retryable, .. } = &mut error {
+                            *retryable = false;
+                        }
+                    }
                     if preserve_status && (!error.retryable() || attempt + 1 >= attempts) {
                         return Ok(response);
                     }
@@ -500,6 +517,61 @@ mod tests {
         );
         assert!(status_error(StatusCode::SERVICE_UNAVAILABLE, &HeaderMap::new()).retryable());
         assert!(!status_error(StatusCode::BAD_REQUEST, &HeaderMap::new()).retryable());
+    }
+
+    #[tokio::test]
+    async fn rate_limit_only_policy_keeps_http_errors_final_without_changing_other_domains() {
+        struct StatusTransport {
+            status: u16,
+            calls: std::sync::atomic::AtomicUsize,
+        }
+        #[async_trait]
+        impl HttpTransport for StatusTransport {
+            async fn send(&self, _: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+                self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                Ok(reqwest::Response::from(
+                    http::Response::builder()
+                        .status(self.status)
+                        .body("{}".to_owned())
+                        .unwrap(),
+                ))
+            }
+        }
+        for (status, limited, expected, retryable) in [
+            (500, true, 1, false),
+            (503, true, 1, false),
+            (429, true, 3, true),
+            (401, true, 1, false),
+            (503, false, 3, true),
+        ] {
+            let client = HttpClient::with_transport(StatusTransport {
+                status,
+                calls: Default::default(),
+            });
+            let mut client = if limited {
+                client.retry_rate_limits_only()
+            } else {
+                client
+            };
+            client.retry.base_delay = Duration::ZERO;
+            let error = client
+                .bytes(
+                    Method::GET,
+                    Url::parse("http://localhost/fixture").unwrap(),
+                    HeaderMap::new(),
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(
+                client
+                    .transport
+                    .calls
+                    .load(std::sync::atomic::Ordering::SeqCst),
+                expected
+            );
+            assert_eq!(error.retryable(), retryable);
+        }
     }
 
     #[test]

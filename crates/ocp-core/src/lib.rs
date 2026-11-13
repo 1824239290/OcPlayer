@@ -52,6 +52,7 @@ struct State {
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
     danmaku_flow: ocp_danmaku::flow::Directory,
+    tmdb_enrichment: ocp_tmdb::enrichment::Directory,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -141,6 +142,7 @@ impl Core {
                 intro_learning: None,
                 intro_ids: None,
                 danmaku_flow: Default::default(),
+                tmdb_enrichment: Default::default(),
                 endpoint: None,
             })),
         };
@@ -403,6 +405,15 @@ impl Core {
         }
 
         let response = match method {
+            method if method.starts_with("tmdbEnrichment.") => {
+                match state
+                    .tmdb_enrichment
+                    .call(method.trim_start_matches("tmdbEnrichment."), &arguments)
+                {
+                    Ok(value) => ApiResponse::ok(value),
+                    Err(error) => ApiResponse::error(1002, false, error, Value::Null),
+                }
+            }
             method if method.starts_with("playbackEvents.") => {
                 match call_playback_events(&mut state, method, &arguments) {
                     Ok(data) => ApiResponse::ok(data),

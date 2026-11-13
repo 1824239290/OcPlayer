@@ -87,10 +87,10 @@ pub fn year(raw: Option<&str>) -> Option<i64> {
     None
 }
 pub fn provider_id(raw: Option<&str>) -> Option<i64> {
-    raw?.trim_matches(|c| contains(unicode::TRIMMING, c))
-        .parse()
-        .ok()
-        .filter(|v| *v > 0)
+    trim(raw?).parse().ok().filter(|v| *v > 0)
+}
+pub fn trim(raw: &str) -> &str {
+    raw.trim_matches(|c| contains(unicode::TRIMMING, c))
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]

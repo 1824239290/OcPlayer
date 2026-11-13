@@ -1,0 +1,32 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[2 / 7] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+[5 / 10] MetadataKitTests-product
+[9 / 11] MetadataKitTests-product
+[10 / 14] MetadataKitTests-product
+[12 / 14] MetadataKitTests-product
+Build complete! (3.09秒)
+Test Suite 'Selected tests' started at 2026-11-14 02:37:01.866.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 02:37:01.866.
+Test Suite 'RustTMDbEnrichmentTests' started at 2026-11-14 02:37:01.866.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' passed (0.043 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' passed (0.187 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' passed (0.480 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' passed (0.096 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' started.
+Note: Some test targets reported failures:
+  - MetadataKitTests (XCTest)

@@ -1,0 +1,129 @@
+{
+  "goalComplete": false,
+  "cohort": "complete TMDB enrichment, collection/season/manual binding, single-flight ownership and batch scheduling",
+  "rustTests": 111,
+  "newRustTests": 11,
+  "directABI": {
+    "moviepilot": 10,
+    "danmaku": 4,
+    "intro": 9,
+    "intro-provider": 6,
+    "danmaku-cache": 6,
+    "network": 7,
+    "tmdb-matcher": 4,
+    "tmdb-enrichment": 8,
+    "intro-identity": 6,
+    "bangumi": 4,
+    "danmaku-policy": 4,
+    "media-login": 10,
+    "tmdb-wire": 5,
+    "standalone": 10,
+    "danmaku-flow": 6
+  },
+  "directABITotal": 99,
+  "newABITests": 8,
+  "exportedAppleBindingTests": {
+    "total": 19,
+    "passed": 19,
+    "skipped": 0,
+    "failed": 0
+  },
+  "nativePackages": {
+    "OcPlayerCore": {
+      "total": 19,
+      "passed": 19,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "total": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "total": 320,
+      "passed": 320,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "total": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "total": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "total": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "total": 272,
+      "passed": 272,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "nativePackageTotal": 1185,
+  "newNativeEnrichmentTests": 6,
+  "newTypedCacheTests": 1,
+  "dateAgeComparisons": 320,
+  "airingComparisons": 64,
+  "coreDisabledMetadataKit": {
+    "total": 320,
+    "passed": 301,
+    "skipped": 19,
+    "failed": 0
+  },
+  "macOSAppTests": {
+    "total": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "independentRustSourceCopy": {
+    "files": 56,
+    "hashesMatchCurrentSource": true,
+    "locked": true,
+    "offline": true,
+    "tests": 111
+  },
+  "macOSDebugApplicationBuilt": true,
+  "xcodeDerivedDataReused": true,
+  "deepSignatureVerificationPassed": true,
+  "app": "/tmp/ocplayer-tmdb-enrichment-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "builtCoreSha256": "af76cb1a145eb1910a70ca7e8b1861b66864cfa990003e9053592f79cdc4bb8b",
+  "signedBundledCoreSha256": "17ae66dfdd199bd6b207db7a485f3e8a29fec3a00f87038c344d805ae04f83d1",
+  "bindingClientSha256": "01a09842570f62b13b20fc91b9731bc10d5fd3aa97e500cac6962931df0c568d",
+  "windowsRuntimeTested": false,
+  "bundledSelftest": {
+    "completed": true,
+    "durationSeconds": 10,
+    "clipSeconds": 20,
+    "pausePlay": true,
+    "seek70Percent": 14.0,
+    "seek20Percent": 4.0,
+    "resize": true,
+    "initialSavedRate": 2.0,
+    "finalRate": 1.0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "remaining": [
+    "Repository memory/freshness and database open recovery",
+    "Account lifecycle and shared sync orchestration",
+    "Playback source/track preferences and recovery orchestration",
+    "Native deadline/TLS/redirect/streaming fidelity",
+    "Configuration/diagnostics mapping",
+    "Apple release delivery and Windows adapter implementation"
+  ],
+  "preliminaryEvidence": "Initial compilation, collection receipt, cached-integer and HTTP-retry failures are retained. The disabled-Core XCTSkip helper failure and corrected pass are separate. A focused rerun stalled in Foundation Process.waitUntilExit during fixture teardown; its interrupted raw log and diagnostic sample are preserved, with a final complete MetadataKit pass after asynchronous fixture teardown. The first independent copy omitted root SQL schemas; that failure and the complete 56-file locked/offline passing copy are retained."
+}

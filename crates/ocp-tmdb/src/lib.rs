@@ -1,5 +1,6 @@
 //! TMDB matching and season/episode derivation.
 
+pub mod enrichment;
 pub mod matcher;
 mod wire;
 
@@ -96,7 +97,7 @@ impl TmdbClient<reqwest::Client> {
         Self {
             api_key: api_key.into(),
             api_base: api_base.into(),
-            http: ocp_http::HttpClient::new(),
+            http: ocp_http::HttpClient::new().retry_rate_limits_only(),
         }
     }
 }
@@ -110,7 +111,7 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         Self {
             api_key: api_key.into(),
             api_base: api_base.into(),
-            http,
+            http: http.retry_rate_limits_only(),
         }
     }
 
