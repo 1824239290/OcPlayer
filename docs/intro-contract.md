@@ -3,8 +3,9 @@
 Production DanmakuIntroDetector, IntroLearningStore, source interval selection,
 sibling-hint aggregation and the player's manual-seek eligibility/confirmation
 now dispatch through Core. Pure policies share RustDanmakuPolicy's retained
-handle. Each learning actor owns a separate retained Core and one learning
-store, preserving the native instance's memory lifetime. Disabled Core and
+handle. The production learning actor shares its service's retained cache Core,
+so manual-seek learning reads and updates the same live hints and mappings.
+Standalone learning stores retain their own Core. Disabled Core and
 injected FileManagers retain native implementations for comparison/testing.
 Activated operations do not replay through Swift.
 
@@ -93,6 +94,46 @@ seek/source boundaries, bidirectional learning files and a 10000-comment batch.
 Six direct C ABI cases additionally cover validation, exact IDs/dates, event
 bounds, corruption semantics, disk failure and source/cluster ties.
 
-Intro provider transport/identity resolution and the complete asynchronous
-load/manual/promotion coordinator remain migration work; the broader acceptance
+Provider transport/identity and automatic/manual loading now run in Core;
+see [intro-provider-contract.md](intro-provider-contract.md),
+[intro-identity-contract.md](intro-identity-contract.md) and
+[danmaku-flow-contract.md](danmaku-flow-contract.md). The broader acceptance
 scope remains in [macos-parity.md](macos-parity.md).
+
+## Complete manual-seek learning
+
+`introLearning.applySeek {payloadJSON}` accepts `{match,from,to,at?}`. `match`
+is the original EpisodeMatch; `at` is an optional reference-date timestamp,
+sampled by Core when recording if absent. Positions and supplied timestamps
+must be finite. Apple normalizes negative-infinite `from` to its smallest finite
+Double, retaining native eligibility. Invalid arguments return 1002 before writes.
+An ineligible seek or a match without an explicit/derived anime ID returns
+`ignored` before requiring storage. An eligible seek requires both
+`introLearning.open` and `danmakuCache.open` on the same handle (otherwise 1401).
+
+The decoded result is `{kind,animeID,hint,updatedEpisodeIDs,applyToCurrent}`:
+`kind` is `ignored`, `recorded`, `confirmed` or `promoted`. Confirmation retains
+the current interval, upgrades its source/evidence, promotes the anime hint,
+and updates only the current episode. It records no event and requests no
+immediate playback update. Otherwise the event is recorded; only a new consensus
+for an anime without an existing promotion is promoted and propagated. Explicit
+anime IDs take precedence over episode-ID division. Propagation updates only
+absent or danmaku hints, protecting all other sources and duplicate mappings.
+Updated IDs are sorted. `applyToCurrent` follows the native mapping-membership
+rule even when the current cache hint is protected; native playback source ranking
+and the captured request ID guard the live session update.
+
+One Core state lock covers this decision and all memory updates, so concurrent
+requests cannot repeatedly confirm the same stale danmaku hint. Disk writes
+retain the existing best-effort semantics: this is not a multi-file disk
+transaction. `updatedEpisodeIDs` describes the write-through hint updates;
+store/cache diagnostics count failed persistence. Cancellation before the Apple
+entry point avoids all writes; an operation already executing under Core's lock
+finishes its finite update. No network or player operation occurs inside it.
+
+The native fallback owns the same sequence in DanmakuKit and remains independently
+testable. The app now captures the seek and playback request ID, logs completed
+confirmations/promotions, and applies the returned consensus. Six new native
+flow cases compare these paths and test exact IDs/dates, source protection,
+single-episode evidence limits, concurrency and cancellation. Three additional
+C ABI cases cover the complete workflow and failed-write memory behavior.

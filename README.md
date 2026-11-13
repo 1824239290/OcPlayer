@@ -43,7 +43,10 @@ Core; see [`docs/intro-identity-contract.md`](docs/intro-identity-contract.md).
 Automatic/manual loading now uses a resumable Core flow, including matching
 budgets, payload conversion and intro precedence; see
 [`docs/danmaku-flow-contract.md`](docs/danmaku-flow-contract.md).
-Learning-promotion propagation and broader acceptance remain in progress.
+Manual-seek confirmation and source-protected cross-episode learning promotion
+share the same retained cache Core; see the complete workflow in
+[`docs/intro-contract.md`](docs/intro-contract.md). Broader acceptance remains
+in progress.
 
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults

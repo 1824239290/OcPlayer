@@ -61,6 +61,80 @@ class IntroContract(unittest.TestCase):
     def hint(self, source='learned', end=140):
         return {'endSeconds': end, 'evidenceCount': 3, 'source': source}
 
+    def open_flow(self):
+        self.open_store()
+        self.assertTrue(self.call('danmakuCache.open', directory=str(self.directory))['ok'])
+
+    def seek(self, episode, to, anime=None, at=100, core=None, start=0):
+        match = {'episodeID': episode, 'shiftSeconds': 0}
+        if anime is not None:
+            match['animeID'] = anime
+        return self.value('introLearning.applySeek', core, payloadJSON=json.dumps(
+            {'match': match, 'from': start, 'to': to, 'at': at}))
+
+    def test_learning_flow_confirmation_exact_ids_and_local_only_update(self):
+        self.open_flow()
+        episode, anime = 9223372036854775807, 9007199254740993
+        hint = dict(self.hint('danmaku', 130), startSeconds=12)
+        self.value('danmakuCache.setIntroHint', episodeID=episode, payloadJSON=hint)
+        self.value('danmakuCache.setIntroHint', episodeID=episode - 1, payloadJSON=hint)
+        outcome = self.seek(episode, 140, anime)
+        self.assertEqual(outcome, {'kind': 'confirmed', 'animeID': anime,
+                                  'hint': dict(hint, source='learned', evidenceCount=4),
+                                  'updatedEpisodeIDs': [episode], 'applyToCurrent': False})
+        self.assertEqual(self.value('introLearning.events', animeID=anime), [])
+        self.assertEqual(self.value('introLearning.promotedHint', animeID=anime), outcome['hint'])
+        self.assertEqual(self.value('danmakuCache.introHint', episodeID=episode), outcome['hint'])
+        self.assertEqual(self.value('danmakuCache.introHint', episodeID=episode - 1), hint)
+
+    def test_learning_flow_consensus_protects_sources_and_explicit_identity(self):
+        self.open_flow()
+        for episode, anime in [(50001, None), (50002, None), (50003, None), (90001, 5), (50004, 8)]:
+            match = {'episodeID': episode, 'shiftSeconds': 0}
+            if anime is not None:
+                match['animeID'] = anime
+            self.value('danmakuCache.setEpisodeMatch', mediaID=str(episode), payloadJSON=match)
+        self.value('danmakuCache.setEpisodeMatch', mediaID='duplicate',
+                   payloadJSON={'episodeID': 50002, 'shiftSeconds': 0})
+        self.value('danmakuCache.setIntroHint', episodeID=50002, payloadJSON=self.hint('danmaku', 200))
+        protected = self.hint('aniskip', 200)
+        self.value('danmakuCache.setIntroHint', episodeID=50003, payloadJSON=protected)
+        self.assertEqual(self.seek(50001, 120)['kind'], 'recorded')
+        outcome = self.seek(50003, 130)
+        self.assertEqual(outcome['kind'], 'promoted')
+        self.assertEqual(outcome['hint']['endSeconds'], 125)
+        self.assertEqual(outcome['updatedEpisodeIDs'], [50001, 50002, 90001])
+        self.assertTrue(outcome['applyToCurrent'])
+        self.assertEqual(self.value('danmakuCache.introHint', episodeID=50003), protected)
+        self.assertIsNone(self.value('danmakuCache.introHint', episodeID=50004))
+        self.assertEqual(self.seek(50005, 138)['kind'], 'recorded')
+        self.assertEqual(self.value('introLearning.promotedHint', animeID=5), outcome['hint'])
+
+    def test_learning_flow_preflight_validation_and_best_effort_write_through(self):
+        empty = self.new_core()
+        self.assertEqual(self.seek(9999, 130, core=empty)['kind'], 'ignored')
+        self.assertEqual(self.seek(50001, 29, core=empty)['kind'], 'ignored')
+        valid = {'match': {'episodeID': 50001, 'shiftSeconds': 0}, 'from': 0, 'to': 130}
+        self.assertEqual(self.call('introLearning.applySeek', empty, payloadJSON=valid)['code'], 1401)
+        for invalid in ['bad', dict(valid, at='date'), dict(valid, to=None),
+                        dict(valid, match={'episodeID': 9223372036854775808, 'shiftSeconds': 0})]:
+            self.assertEqual(self.call('introLearning.applySeek', empty, payloadJSON=invalid)['code'], 1002)
+        self.open_flow()
+        for episode in [50001, 50002]:
+            self.value('danmakuCache.setEpisodeMatch', mediaID=str(episode),
+                       payloadJSON={'episodeID': episode, 'shiftSeconds': 0})
+        (self.directory / 'learned-intros.json').mkdir()
+        (self.directory / 'intro-hints.json').mkdir()
+        self.assertEqual(self.seek(50001, 120)['kind'], 'recorded')
+        outcome = self.seek(50002, 130)
+        self.assertEqual(outcome['kind'], 'promoted')
+        self.assertEqual(outcome['updatedEpisodeIDs'], [50001, 50002])
+        self.assertEqual(self.value('introLearning.stats')['writeFailures'], 3)
+        self.assertEqual(self.value('danmakuCache.stats')['writeFailures'], 2)
+        self.assertEqual(self.value('danmakuCache.introHint', episodeID=50001), outcome['hint'])
+        self.assertEqual(self.value('introLearning.promotedHint', animeID=5), outcome['hint'])
+        self.assertFalse(any(p.name.startswith('.ocp-cache-') for p in self.directory.iterdir()))
+
     def test_detector_strong_signals_and_single_user_rejection(self):
         comments = [{'cid': 9223372036854775807, 'p': f'{time},1,255,{uid}', 'm': text}
                     for time, uid, text in [(10, 'a', '跳伞2:10'), (11, 'b', '空降2:12'),

@@ -1,6 +1,6 @@
 //! Reference intro detection, source consensus and manual-seek learning.
 use crate::{
-    cache::{atomic_write, IntroHint, IntroSource},
+    cache::{atomic_write, DanmakuCache, EpisodeMatch, IntroHint, IntroSource},
     DanmakuComment,
 };
 use serde::{Deserialize, Serialize};
@@ -602,6 +602,53 @@ pub struct LearningStore {
     cached: Option<HashMap<String, AnimeLearning>>,
     write_failures: u64,
 }
+
+#[derive(Deserialize)]
+pub struct SeekInput {
+    #[serde(rename = "match")]
+    episode: EpisodeMatch,
+    from: f64,
+    to: f64,
+    at: Option<f64>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeekOutcome {
+    kind: &'static str,
+    #[serde(rename = "animeID")]
+    anime_id: Option<i64>,
+    hint: Option<IntroHint>,
+    #[serde(rename = "updatedEpisodeIDs")]
+    updated_episode_ids: Vec<i64>,
+    apply_to_current: bool,
+}
+impl SeekInput {
+    pub fn decode(args: &Value) -> Result<Self, String> {
+        let value: Self = decode(args, "payloadJSON")?;
+        if !value.from.is_finite()
+            || !value.to.is_finite()
+            || value.at.is_some_and(|v| !v.is_finite())
+        {
+            return Err("seek positions and timestamp must be finite".to_owned());
+        }
+        Ok(value)
+    }
+    pub fn ignored(&self) -> bool {
+        !eligible_seek(self.from, self.to) || self.episode.resolved_anime_id().is_none()
+    }
+    pub fn ignored_result(&self) -> Value {
+        payload(json!(self.outcome("ignored")))
+    }
+    fn outcome(&self, kind: &'static str) -> SeekOutcome {
+        SeekOutcome {
+            kind,
+            anime_id: self.episode.resolved_anime_id(),
+            hint: None,
+            updated_episode_ids: vec![],
+            apply_to_current: false,
+        }
+    }
+}
 impl LearningStore {
     pub fn open(args: &Value) -> Result<Self, String> {
         let directory = PathBuf::from(text(args, "directory")?);
@@ -636,49 +683,111 @@ impl LearningStore {
         }
         saved
     }
+    fn record(&mut self, anime_id: i64, event: SeekEvent) -> bool {
+        let learning = self
+            .load()
+            .entry(anime_id.to_string())
+            .or_insert_with(|| AnimeLearning {
+                events: vec![],
+                promoted: None,
+            });
+        learning.events.push(event);
+        if learning.events.len() > MAX_EVENTS {
+            learning.events.drain(..learning.events.len() - MAX_EVENTS);
+        }
+        self.save()
+    }
+    fn promote(&mut self, anime_id: i64, hint: IntroHint) -> bool {
+        self.load()
+            .entry(anime_id.to_string())
+            .or_insert_with(|| AnimeLearning {
+                events: vec![],
+                promoted: None,
+            })
+            .promoted = Some(hint);
+        self.save()
+    }
+    fn promoted_hint(&mut self, anime_id: i64) -> Option<IntroHint> {
+        self.load()
+            .get(&anime_id.to_string())
+            .and_then(|v| v.promoted.clone())
+    }
+    fn consensus_hint(&mut self, anime_id: i64) -> Option<IntroHint> {
+        self.load()
+            .get(&anime_id.to_string())
+            .and_then(|v| consensus(&v.events, MINIMUM_EPISODES))
+            .map(|c| IntroHint {
+                start_seconds: None,
+                end_seconds: c.end,
+                evidence_count: c.episode_count as i64,
+                source: IntroSource::Learned,
+            })
+    }
+    /// The owning Core holds its state lock over this whole decision and update.
+    /// Disk writes are best effort, retaining each store's write-through memory.
+    pub fn apply_seek(&mut self, input: SeekInput, cache: &mut DanmakuCache) -> Value {
+        if input.ignored() {
+            return input.ignored_result();
+        }
+        let anime_id = input.episode.resolved_anime_id().unwrap();
+        let episode_id = input.episode.episode_id;
+        if let Some(hint) = confirmed_hint(input.to, cache.intro_hint(episode_id)) {
+            self.promote(anime_id, hint.clone());
+            cache.set_intro_hint(episode_id, hint.clone());
+            let mut result = input.outcome("confirmed");
+            result.hint = Some(hint);
+            result.updated_episode_ids = vec![episode_id];
+            return payload(json!(result));
+        }
+        self.record(
+            anime_id,
+            SeekEvent {
+                episode_id,
+                position: input.to,
+                at: input.at.unwrap_or_else(crate::cache::now),
+            },
+        );
+        let mut result = input.outcome("recorded");
+        let Some(hint) = self.consensus_hint(anime_id) else {
+            return payload(json!(result));
+        };
+        if self.promoted_hint(anime_id).is_some() {
+            return payload(json!(result));
+        }
+        self.promote(anime_id, hint.clone());
+        let episode_ids = cache.episode_ids(anime_id);
+        for id in &episode_ids {
+            if cache
+                .intro_hint(*id)
+                .is_none_or(|h| matches!(h.source, IntroSource::Danmaku))
+            {
+                cache.set_intro_hint(*id, hint.clone());
+                result.updated_episode_ids.push(*id);
+            }
+        }
+        result.updated_episode_ids.sort_unstable();
+        result.kind = "promoted";
+        result.hint = Some(hint);
+        result.apply_to_current = episode_ids.contains(&episode_id);
+        payload(json!(result))
+    }
     pub fn call(&mut self, method: &str, args: &Value) -> Result<Value, String> {
         let result = match method {
             "record" => {
-                let key = id(args, "animeID")?.to_string();
+                let anime_id = id(args, "animeID")?;
                 let event: SeekEvent = decode(args, "payloadJSON")?;
-                let learning = self.load().entry(key).or_insert_with(|| AnimeLearning {
-                    events: vec![],
-                    promoted: None,
-                });
-                learning.events.push(event);
-                if learning.events.len() > MAX_EVENTS {
-                    learning.events.drain(..learning.events.len() - MAX_EVENTS);
-                }
-                json!(self.save())
+                json!(self.record(anime_id, event))
             }
             "promote" => {
-                let key = id(args, "animeID")?.to_string();
+                let anime_id = id(args, "animeID")?;
                 let hint = decode(args, "payloadJSON")?;
-                self.load()
-                    .entry(key)
-                    .or_insert_with(|| AnimeLearning {
-                        events: vec![],
-                        promoted: None,
-                    })
-                    .promoted = Some(hint);
-                json!(self.save())
+                json!(self.promote(anime_id, hint))
             }
             "promotedHint" => {
-                let key = id(args, "animeID")?.to_string();
-                json!(self.load().get(&key).and_then(|v| v.promoted.clone()))
+                json!(self.promoted_hint(id(args, "animeID")?))
             }
             "consensusHint" => {
-                let key = id(args, "animeID")?.to_string();
-                let c = self
-                    .load()
-                    .get(&key)
-                    .and_then(|v| consensus(&v.events, MINIMUM_EPISODES));
-                json!(c.map(|c| IntroHint {
-                    start_seconds: None,
-                    end_seconds: c.end,
-                    evidence_count: c.episode_count as i64,
-                    source: IntroSource::Learned
-                }))
+                json!(self.consensus_hint(id(args, "animeID")?))
             }
             "events" => {
                 let key = id(args, "animeID")?.to_string();

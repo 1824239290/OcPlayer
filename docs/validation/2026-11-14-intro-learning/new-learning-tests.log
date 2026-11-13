@@ -1,0 +1,270 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[1 / 1]
+[2 / 13] DanmakuKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:169:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+167 | 
+168 |         let identity = AniSkipAnimeIdentity(title: "僕は友達が少ない", seasonNumber: 1)
+169 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+170 |             XCTAssertEqual(request.url?.host, "graphql.anilist.co")
+171 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:199:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+197 |         let counter = TestSupport.RequestCounter()
+198 | 
+199 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+200 |             counter.count += 1
+201 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:212:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+210 |         // 8 天后负缓存过期，允许重试。
+211 |         clock.now = Date(timeIntervalSince1970: 1_000_000 + 8 * 24 * 3600)
+212 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+213 |             counter.count += 1
+214 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:238:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+236 |             seasonNumber: 1)
+237 |         let searches = SearchRecorder()
+238 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+239 |             if let search = GraphQLRequestBody.searchVariable(of: request) {
+240 |                 searches.list.append(search)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:263:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+261 | 
+262 |         let identity = AniSkipAnimeIdentity(title: "きみが死ぬまで恋をしたい")
+263 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+264 |             return TestSupport.response(
+265 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":111,"title":{"native":"別の作品"}},{"id":2,"idMal":null,"title":{"native":"きみが死ぬまで恋をしたい"}},{"id":3,"idMal":61126,"title":{"native":"きみが死ぬまで恋をしたい"}}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:282:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+280 | 
+281 |         let identity = AniSkipAnimeIdentity(title: "我的朋友很少")
+282 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+283 |             return TestSupport.response(
+284 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":null,"title":{"native":"僕は友達が少ない"}},{"id":2,"idMal":10719,"title":{"native":"僕は友達が少ない"},"synonyms":["我的朋友很少"]}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:300:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+298 | 
+299 |         let identity = AniSkipAnimeIdentity(title: "二十世紀電氣目録")
+300 |         try await TestSupport.withMock({ _ in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+301 |             TestSupport.response(
+302 |                 #"{"data":{"Page":{"media":[{"id":1,"idMal":62856,"title":{"native":"二十世紀電氣目録 -ユーレカ・エヴリカ-"}}]}}}"#,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:323:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+321 |         let counter = TestSupport.RequestCounter()
+322 | 
+323 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+324 |             counter.count += 1
+325 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:345:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+343 |         let counter = TestSupport.RequestCounter()
+344 | 
+345 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+346 |             counter.count += 1
+347 |             return TestSupport.response(#"{"data":{"Page":{"media":[]}}}"#, url: request.url!)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:357:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+355 | 
+356 |         // AniList 后来收录了：forceRefresh 重解析能拿到并写回正缓存。
+357 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+358 |             counter.count += 1
+359 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:384:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+382 |         let counter = TestSupport.RequestCounter()
+383 | 
+384 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+385 |             counter.count += 1
+386 |             return TestSupport.response(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/AniSkipTests.swift:414:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+412 |         let identity = AniSkipAnimeIdentity(title: "二十世纪电气目录", seasonNumber: 1)
+413 |         let counter = TestSupport.RequestCounter()
+414 |         try await TestSupport.withMock({ request in
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+415 |             counter.count += 1
+416 |             return TestSupport.response(
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[11 / 22] DanmakuKitTests-product
+[15 / 21] DanmakuKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashRangePolicyTests.swift:311:27: warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.DripBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+309 |             }
+310 |             DispatchQueue.global().asyncAfter(deadline: .now() + Self.interChunkDelay) { [weak self] in
+311 |                 guard let self else { return }
+    |                           `- warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.DripBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+312 |                 self.lock.lock()
+313 |                 let stopped = self.stopped
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/FileHashRangePolicyTests.swift:378:27: warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.FloodBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+376 |             }
+377 |             DispatchQueue.global().asyncAfter(deadline: .now() + Self.interChunkDelay) { [weak self] in
+378 |                 guard let self else { return }
+    |                           `- warning: capture of 'self' with non-Sendable type 'FileHashRangePolicyTests.FloodBodyURLProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+379 |                 self.lock.lock()
+380 |                 let stopped = self.stopped
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuFieldsParseTests.swift:26:17: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 24 |     private func accepts(_ p: String, _ m: String = "正文") -> Bool {
+ 25 |         let comments = [DanmakuComment(cid: 1, p: p, m: m)]
+ 26 |         return (try? DanmakuJSONConverter.entries(from: comments))??.isEmpty == false
+    |                 `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 27 |     }
+ 28 | 
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:24:9: warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: mutation of this property is only permitted within the actor
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  22 |         let directory = FileManager.default.temporaryDirectory
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+     |         `- warning: main actor-isolated property 'cache' can not be mutated from a nonisolated context
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:9: warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: mutation of this property is only permitted within the actor
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |         `- warning: main actor-isolated property 'service' can not be mutated from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:25:41: warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  13 | final class DanmakuLoadOrchestratorTests: XCTestCase {
+  14 | 
+  15 |     private var cache: DanmakuCache!
+     |                 `- note: property declared here
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     :
+  23 |             .appendingPathComponent("DanmakuOrchestratorTests-\(UUID().uuidString)", isDirectory: true)
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+     |                                         `- warning: main actor-isolated property 'cache' can not be referenced from a nonisolated context
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:9: warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+     |                 `- note: mutation of this property is only permitted within the actor
+  18 |     private var playback: FakePlaybackHost!
+  19 | 
+     :
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |         `- warning: main actor-isolated property 'orchestrator' can not be mutated from a nonisolated context
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:26:24: warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  24 |         cache = DanmakuCache(directory: directory)
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+     |                        `- warning: call to main actor-isolated initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' in a synchronous nonisolated context [#ActorIsolatedCall]
+  27 |             service: service,
+  28 |             session: TestSupport.mockedSession(),
+
+DanmakuKit.DanmakuLoadOrchestrator.init:2:19: note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+1 | struct DanmakuLoadOrchestrator {
+2 | @MainActor public init(service: DanmakuKit.DanmakuService, session: URLSession = DanmakuNetworking.makeSession(), retryPolicy: DiagnosticsKit.RetryPolicy = RetryPolicy(), aniSkipClient: DanmakuKit.AniSkipClient? = nil, aniSkipIDResolver: DanmakuKit.AniSkipIDResolver? = nil, titleAliases: (any DanmakuKit.DanmakuTitleAliasProviding)? = nil, animeSkipClientProvider: (@Sendable () -> DanmakuKit.AnimeSkipClient?)? = nil, theIntroDBClient: DanmakuKit.TheIntroDBClient? = nil, introLearningStore: DanmakuKit.IntroLearningStore? = nil, totalBudget: Duration = .seconds(30))}
+  |                   `- note: calls to initializer 'init(service:session:retryPolicy:aniSkipClient:aniSkipIDResolver:titleAliases:animeSkipClientProvider:theIntroDBClient:introLearningStore:totalBudget:)' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:27:22: warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  14 | 
+  15 |     private var cache: DanmakuCache!
+  16 |     private var service: DanmakuService!
+     |                 `- note: property declared here
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     :
+  25 |         service = DanmakuService(cache: cache)
+  26 |         orchestrator = DanmakuLoadOrchestrator(
+  27 |             service: service,
+     |                      `- warning: main actor-isolated property 'service' can not be referenced from a nonisolated context
+  28 |             session: TestSupport.mockedSession(),
+  29 |             // 零等待重试策略：编排层透传给网关客户端，重试用例不空等退避。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Tests/DanmakuKitTests/DanmakuLoadOrchestratorTests.swift:32:9: warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  16 |     private var service: DanmakuService!
+  17 |     private var orchestrator: DanmakuLoadOrchestrator!
+  18 |     private var playback: FakePlaybackHost!
+     |                 `- note: mutation of this property is only permitted within the actor
+  19 | 
+  20 |     override func setUp() {
+     :
+  30 |             retryPolicy: RetryPolicy(attempts: 3, base: 0, jitter: 0.0...0.0)
+  31 |         )
+  32 |         playback = FakePlaybackHost()
+     |         `- warning: main actor-isolated property 'playback' can not be mutated from a nonisolated context
+  33 |     }
+  34 | 
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[17 / 21] DanmakuKitTests-product
+Build complete! (4.22秒)
+Test Suite 'Selected tests' started at 2026-11-14 00:14:48.533.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-14 00:14:48.534.
+Test Suite 'IntroLearningFlowTests' started at 2026-11-14 00:14:48.534.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testCancellationBeforeEntryDoesNotRecordOrPromote]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testCancellationBeforeEntryDoesNotRecordOrPromote]' passed (0.007 seconds).
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConcurrentConfirmationUsesTheServicesLiveCacheOnlyOnce]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConcurrentConfirmationUsesTheServicesLiveCacheOnlyOnce]' passed (0.420 seconds).
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConfirmationRetainsIntervalAndOnlyUpdatesCurrentEpisode]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConfirmationRetainsIntervalAndOnlyUpdatesCurrentEpisode]' passed (0.034 seconds).
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConsensusPropagatesOnlyEligibleSourcesAndHonorsExplicitAnimeIdentity]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testConsensusPropagatesOnlyEligibleSourcesAndHonorsExplicitAnimeIdentity]' passed (0.131 seconds).
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testEligibilityNonFiniteInputsAndMissingAnimeMatchNative]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testEligibilityNonFiniteInputsAndMissingAnimeMatchNative]' passed (0.017 seconds).
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testSameEpisodeNeverPromotesAndKeepsNewestTwoHundredExactEvents]' started.
+Test Case '-[DanmakuKitTests.IntroLearningFlowTests testSameEpisodeNeverPromotesAndKeepsNewestTwoHundredExactEvents]' passed (1.133 seconds).
+Test Suite 'IntroLearningFlowTests' passed at 2026-11-14 00:14:50.276.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.742 (1.743) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-14 00:14:50.276.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.742 (1.743) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 00:14:50.277.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.742 (1.744) seconds

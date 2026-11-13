@@ -500,6 +500,31 @@ impl Core {
                 }
                 Err(message) => ApiResponse::error(1002, false, message, Value::Null),
             },
+            "introLearning.applySeek" => {
+                let input = match ocp_danmaku::intro::SeekInput::decode(&arguments) {
+                    Ok(input) => input,
+                    Err(message) => return Ok(error_response(1002, false, message)),
+                };
+                if input.ignored() {
+                    return Ok(serde_json::to_string(&ApiResponse::ok(
+                        input.ignored_result(),
+                    ))?);
+                }
+                let State {
+                    intro_learning,
+                    danmaku_cache,
+                    ..
+                } = &mut *state;
+                let (Some(store), Some(cache)) = (intro_learning.as_mut(), danmaku_cache.as_mut())
+                else {
+                    return Ok(error_response(
+                        1401,
+                        false,
+                        "intro learning and danmaku cache must be configured on the same Core",
+                    ));
+                };
+                ApiResponse::ok(store.apply_seek(input, cache))
+            }
             method if method.starts_with("introLearning.") => {
                 let Some(store) = state.intro_learning.as_mut() else {
                     return Ok(error_response(

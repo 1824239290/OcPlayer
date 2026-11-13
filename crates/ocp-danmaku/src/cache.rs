@@ -32,6 +32,10 @@ pub struct EpisodeMatch {
     pub episode_title: Option<String>,
 }
 impl EpisodeMatch {
+    pub fn resolved_anime_id(&self) -> Option<i64> {
+        self.anime_id
+            .or_else(|| (self.episode_id >= 10_000).then_some(self.episode_id / 10_000))
+    }
     fn legacy(episode_id: i64) -> Self {
         Self {
             episode_id,
@@ -272,6 +276,25 @@ impl DanmakuCache {
         self.hints = Some(hints.clone());
         Some(hints)
     }
+    pub fn episode_ids(&mut self, anime_id: i64) -> Vec<i64> {
+        self.load_mapping()
+            .unwrap_or_default()
+            .into_values()
+            .filter(|entry| entry.resolved_anime_id() == Some(anime_id))
+            .map(|entry| entry.episode_id)
+            .collect()
+    }
+    pub fn intro_hint(&mut self, episode_id: i64) -> Option<IntroHint> {
+        self.load_hints()
+            .and_then(|h| h.get(&episode_id.to_string()).cloned())
+    }
+    pub fn set_intro_hint(&mut self, episode_id: i64, hint: IntroHint) -> bool {
+        let mut hints = self.load_hints().unwrap_or_default();
+        hints.insert(episode_id.to_string(), hint);
+        let saved = self.save("intro-hints.json", &hints);
+        self.hints = Some(hints);
+        saved
+    }
     pub fn call(&mut self, method: &str, args: &Value) -> Result<Value, CacheError> {
         let result = match method {
             "episodeMatch" => {
@@ -341,21 +364,14 @@ impl DanmakuCache {
                 self.remember(id, entry);
                 json!(saved)
             }
-            "introHint" => {
-                let key = id(args, "episodeID")?.to_string();
-                json!(self.load_hints().and_then(|h| h.get(&key).cloned()))
-            }
+            "introHint" => json!(self.intro_hint(id(args, "episodeID")?)),
             "setIntroHint" => {
-                let key = id(args, "episodeID")?.to_string();
+                let episode_id = id(args, "episodeID")?;
                 let hint: IntroHint = decode(
                     args.get("payloadJSON")
                         .ok_or_else(|| invalid("payloadJSON is required"))?,
                 )?;
-                let mut hints = self.load_hints().unwrap_or_default();
-                hints.insert(key, hint);
-                let saved = self.save("intro-hints.json", &hints);
-                self.hints = Some(hints);
-                json!(saved)
+                json!(self.set_intro_hint(episode_id, hint))
             }
             "memoryCount" => json!(self.comments.len()),
             "stats" => {

@@ -1,0 +1,14 @@
+test_corruption_cached_empty_failed_write_memory_and_validation (__main__.IntroContract.test_corruption_cached_empty_failed_write_memory_and_validation) ... ok
+test_cross_episode_consensus_boundaries_chain_and_source_upgrade (__main__.IntroContract.test_cross_episode_consensus_boundaries_chain_and_source_upgrade) ... ok
+test_detector_strong_signals_and_single_user_rejection (__main__.IntroContract.test_detector_strong_signals_and_single_user_rejection) ... ok
+test_learning_flow_confirmation_exact_ids_and_local_only_update (__main__.IntroContract.test_learning_flow_confirmation_exact_ids_and_local_only_update) ... ok
+test_learning_flow_consensus_protects_sources_and_explicit_identity (__main__.IntroContract.test_learning_flow_consensus_protects_sources_and_explicit_identity) ... ok
+test_learning_flow_preflight_validation_and_best_effort_write_through (__main__.IntroContract.test_learning_flow_preflight_validation_and_best_effort_write_through) ... ok
+test_learning_persistence_exact_ids_reference_dates_and_cap (__main__.IntroContract.test_learning_persistence_exact_ids_reference_dates_and_cap) ... ok
+test_source_cluster_representative_tie_and_sibling_start_consensus (__main__.IntroContract.test_source_cluster_representative_tie_and_sibling_start_consensus) ... ok
+test_timestamp_keyword_priority_and_grapheme_fields (__main__.IntroContract.test_timestamp_keyword_priority_and_grapheme_fields) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.306s
+
+OK

@@ -1,0 +1,16 @@
+{
+  "core": {
+    "crates/ocp-core/src/lib.rs": "c32b9c7ce5700267acdf87301d07b56959211ef1ad9c994a471a6745a39c22df",
+    "crates/ocp-danmaku/src/cache.rs": "47ebc2c23cfd7652700113c1522b3fc2813af2cc17d5ad3431a5e128679b1567",
+    "crates/ocp-danmaku/src/intro.rs": "2b239083aa3deb8ade934411cb9c3bc71dc5f4d219ef1fbfc7834ae47b6bbea3",
+    "tests/intro_contract.py": "a572c6b2cd0e0a1cf2fb1aec104354d067a9a40722d59f26115be99f9cb05b77"
+  },
+  "apple": {
+    "App/Shared/Features/Player/DanmakuCoordinator.swift": "662555959567acdddeea78c4800106cf78e10d9cf5e9560c69c62cfe7754b3cd",
+    "Packages/DanmakuKit/Sources/DanmakuKit/DanmakuCache.swift": "530de6285824870a83e2f993e0035a4243dc33dcaa73e54dbbf855bcbfef16b7",
+    "Packages/DanmakuKit/Sources/DanmakuKit/DanmakuService.swift": "0ab2e78a014cf9dc72b39f501a3c00e99edb9e68c83ddd5f87f9abed1ef9931a",
+    "Packages/DanmakuKit/Sources/DanmakuKit/IntroLearningStore.swift": "dd8f3d8897334ed169ecdb8dbe8d35b76d718155ee5ad0da1ff3c6bcdf88a3b9",
+    "Packages/DanmakuKit/Sources/DanmakuKit/RustIntroPolicy.swift": "415f8638c57c53f8f6cdee9c9a88d4e541847fa856929de922fb27c46d92055e",
+    "Packages/DanmakuKit/Tests/DanmakuKitTests/IntroLearningFlowTests.swift": "fe02dbd253566412bd624eddd0304a4b15f452c87c6b93532dca2942a66290ab"
+  }
+}
