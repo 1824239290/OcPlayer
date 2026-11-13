@@ -14,6 +14,7 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 pub mod cache;
 mod filename;
+pub mod identity;
 pub mod intro;
 mod intro_unicode;
 pub mod policy;
@@ -222,11 +223,19 @@ pub fn parse_chinese_number(input: &str) -> Option<i64> {
 pub use filename::{parse_episode_token, parse_filename};
 
 pub fn comparable_title(title: &str) -> String {
-    let normalized: String = normalize_full_width(title).to_lowercase().nfc().collect();
+    let normalized: String = swift_lowercase(&normalize_full_width(title))
+        .nfc()
+        .collect();
     normalized
         .graphemes(true)
         .filter(|g| g.chars().next().is_some_and(char::is_alphanumeric))
         .collect()
+}
+
+/// Swift's locale-independent String.lowercased() uses the scalar mapping for
+/// Greek sigma, whereas Rust's str::to_lowercase() applies final-sigma context.
+pub(crate) fn swift_lowercase(value: &str) -> String {
+    value.chars().flat_map(char::to_lowercase).collect()
 }
 
 pub fn canonical_match_name(

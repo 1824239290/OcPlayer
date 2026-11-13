@@ -38,7 +38,9 @@ also run in Core; see [`docs/intro-contract.md`](docs/intro-contract.md).
 AniSkip, AnimeSkip, TheIntroDB and AniList provider HTTP transport now runs in
 Core, together with the first three providers' request/decoding/interval policies;
 see [`docs/intro-provider-contract.md`](docs/intro-provider-contract.md). AniList
-identity/cache orchestration and complete shared loading remain in progress.
+ordered identity resolution and native-compatible ID persistence also run in
+Core; see [`docs/intro-identity-contract.md`](docs/intro-identity-contract.md).
+Complete shared loading remains in progress.
 
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults

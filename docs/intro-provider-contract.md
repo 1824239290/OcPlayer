@@ -5,8 +5,8 @@ handle and use its pooled, cancellable HTTP exchanges. Provider request assembly
 AniSkip/AnimeSkip/TheIntroDB response decoding, opening conversion, timestamp
 selection and interval clamping run in Rust. Injected URLProtocol sessions keep
 their native transport, and native policy implementations remain independent
-comparison oracles. AniList identity scheduling/matching and ID persistence still
-run in Swift; sharing its HTTP transport does not complete that migration.
+comparison oracles. AniList ordered identity resolution, matching and ID
+persistence also run in Core; see [intro-identity-contract.md](intro-identity-contract.md).
 
 Each exchange is one HTTP attempt. Native AniSkip's retry loop surrounds only
 transport exchange; HTTP status handling and decoding are outside that loop.
@@ -72,7 +72,7 @@ headers/error bytes, validation before I/O, timeout and cancellation. The exact
 same Python fixture is copied into DanmakuKit resources and checked with `cmp`.
 
 Native request/resource timeout distinctions, redirect/TLS/streaming transport
-fidelity, AniList identity/cache orchestration, complete shared load/manual flow,
+fidelity, complete shared load/manual flow,
 and the remaining macOS parity acceptance rows stay open. The wrapper currently
 uses the smaller native request/resource timeout as Core's whole-exchange
 deadline; it does not yet model URLSession's separate idle/resource deadlines.

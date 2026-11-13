@@ -80,7 +80,7 @@ fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, ProviderErr
         serde_json::from_slice(&bytes).map_err(|e| ProviderError::Decode(e.to_string()))?;
     serde_json::from_value(value.0).map_err(|e| ProviderError::Decode(e.to_string()))
 }
-fn decode_response<T: serde::de::DeserializeOwned>(
+pub(crate) fn decode_response<T: serde::de::DeserializeOwned>(
     bytes: &[u8],
     shape: &Value,
 ) -> Result<T, ProviderError> {
@@ -110,6 +110,12 @@ fn validate_shape(value: &Value, shape: &Value, marker: &str) -> Result<(), Prov
     }
     match (value, shape) {
         (Value::Object(value), Value::Object(shape)) => {
+            if let Some(wildcard) = shape.get("*") {
+                for value in value.values() {
+                    validate_shape(value, wildcard, marker)?;
+                }
+                return Ok(());
+            }
             for (key, shape) in shape {
                 if let Some(value) = value.get(key) {
                     validate_shape(value, shape, marker)?;
@@ -677,7 +683,9 @@ pub fn decode_anime_skip(
 }
 
 // JSONDecoder accepts integral floating JSON numbers for Int (e.g. 90000.0).
-fn optional_swift_int<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+pub(crate) fn optional_swift_int<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<i64>, D::Error> {
     let value = Option::<serde_json::Number>::deserialize(d)?;
     value
         .map(|n| {

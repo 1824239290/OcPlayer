@@ -14,7 +14,8 @@ func ranges(_ predicate: (Unicode.Scalar) -> Bool) -> [(UInt32, UInt32)] {
 print("//! Scalar tables derived from the reference Swift runtime for intro parsing.")
 print("//! Generated with Scripts/generate-swift-intro-unicode.swift; do not edit by hand.")
 for (name, predicate) in [("NUMERIC", { (s: Unicode.Scalar) in Character(String(s)).isNumber }),
-                          ("WHITESPACE", { (s: Unicode.Scalar) in CharacterSet.whitespaces.contains(s) })] {
+                          ("WHITESPACE", { (s: Unicode.Scalar) in CharacterSet.whitespaces.contains(s) }),
+                          ("TRIMMING", { (s: Unicode.Scalar) in CharacterSet.whitespacesAndNewlines.contains(s) })] {
     print("pub const \(name): &[(u32,u32)] = &[")
     for (low, high) in ranges(predicate) { print("    (0x\(String(low,radix:16)), 0x\(String(high,radix:16))),") }
     print("];")

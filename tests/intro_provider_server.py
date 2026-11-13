@@ -81,10 +81,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond({'errors': []}, 503)
             if anime == 404:
                 return self.respond({'data': {}})
+            if anime == 99:
+                return self.respond({'data': {'Media': {'id': 'bad', 'idMal': 100000}}})
             return self.respond({'data': {'Media': {'id': 999, 'idMal': 100000}}})
         title = variables.get('search', '')
         media = [{'id': 12, 'idMal': 34, 'title': {'native': '其他番剧'}}]
-        if title == '作品名稱':
+        if title in ('empty', 'no-mal'):
+            media = [] if title == 'empty' else [{'id': 12, 'title': {'native': title}}]
+        elif title == 'http503':
+            return self.respond({'data': {}}, 503)
+        elif title == 'bad':
+            return self.respond({'data': {'Page': {'media': [{'idMal': 'bad'}]}}})
+        elif title == 'contained-one':
+            media = [{'id': 24, 'idMal': 14, 'title': {'native': 'contained-one extra'}}]
+        elif title == 'exact-last':
+            media = [{'id': 1, 'idMal': 11, 'title': {'native': 'exact-last extra'}},
+                     {'id': 2, 'idMal': 22, 'title': {'native': title}}]
+        elif title == 'short':
+            media = [{'id': 3, 'idMal': 33, 'title': {'native': 'short extra'}}]
+        elif title in ('作品名稱', 'later'):
             media = [{'id': 56, 'idMal': 78, 'title': {'native': title}}]
         return self.respond({'data': {'Page': {'media': media}}})
 

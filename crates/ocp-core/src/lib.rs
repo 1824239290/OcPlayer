@@ -49,6 +49,7 @@ struct State {
     bangumi_store: Option<ocp_store::BangumiStore>,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
+    intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -136,6 +137,7 @@ impl Core {
                 bangumi_store: None,
                 danmaku_cache: None,
                 intro_learning: None,
+                intro_ids: None,
                 endpoint: None,
             })),
         };
@@ -157,6 +159,83 @@ impl Core {
             .as_ref()
             .expect("initialized network service")
             .clone())
+    }
+
+    fn resolve_intro_ids(
+        &self,
+        arguments: &Value,
+        cancelled: Option<Arc<AtomicBool>>,
+    ) -> Result<Value, CommandError> {
+        use ocp_danmaku::identity;
+        let identity = identity::identity(arguments)?;
+        let force = identity::force(arguments)?;
+        let now = identity::clock(arguments)?;
+        let commit = identity::boolean(arguments, "commit", true)?;
+        let resolved_at = match arguments.get("resolvedAt") {
+            None => None,
+            Some(value) => Some(
+                value
+                    .as_f64()
+                    .filter(|v| v.is_finite())
+                    .ok_or_else(|| CommandError::invalid("resolvedAt must be finite"))?,
+            ),
+        };
+        let store = self
+            .state
+            .lock()
+            .map_err(|_| CommandError::invalid("state unavailable"))?
+            .intro_ids
+            .clone()
+            .ok_or_else(|| CommandError::invalid("intro ID store is not configured"))?;
+        let plan = store
+            .lock()
+            .map_err(|_| CommandError::invalid("intro ID store unavailable"))?
+            .prepare(&identity, force, now);
+        if let Some(ids) = plan.ready {
+            return Ok(ocp_danmaku::providers::payload(
+                json!({"ids":ids,"cacheKey":plan.cache_key,"needsCommit":false,"resolution":null}),
+            )?);
+        }
+        let key = plan.cache_key.unwrap();
+        let mut args = arguments.clone();
+        let object = args
+            .as_object_mut()
+            .ok_or_else(|| CommandError::invalid("arguments must be an object"))?;
+        object.insert("anilistID".into(), json!(plan.anilist_id));
+        object.insert("searchTitles".into(), json!(plan.search_titles));
+        let service = self.network().map_err(|e| CommandError(1500, false, e))?;
+        let http = service.http();
+        let resolution = service.run(cancellable(cancelled.clone(), async move {
+            Ok(identity::resolve_ids(&http, &args).await?)
+        }))?;
+        let check_cancelled = || {
+            if cancelled
+                .as_ref()
+                .is_some_and(|v| v.load(Ordering::Acquire))
+            {
+                Err(CommandError(1003, false, "request cancelled".into()))
+            } else {
+                Ok(())
+            }
+        };
+        check_cancelled()?;
+        if commit {
+            let mut store = store
+                .lock()
+                .map_err(|_| CommandError::invalid("intro ID store unavailable"))?;
+            check_cancelled()?;
+            store.write(
+                &key,
+                identity::Record {
+                    mal_id: resolution.ids.mal_id,
+                    anilist_id: resolution.ids.anilist_id,
+                    resolved_at: resolved_at.unwrap_or_else(identity::reference_now),
+                },
+            )?;
+        }
+        Ok(ocp_danmaku::providers::payload(
+            json!({"ids":resolution.ids,"cacheKey":key,"needsCommit":!commit,"resolution":resolution}),
+        )?)
     }
 
     pub fn call(&self, method: &str, arguments_json: &str) -> Result<String, CoreError> {
@@ -224,6 +303,15 @@ impl Core {
             .is_some_and(|c| c.load(Ordering::Acquire))
         {
             return Ok(error_response(1003, false, "request cancelled"));
+        }
+        if method == "introIDs.resolve" {
+            let response = match self.resolve_intro_ids(&arguments, cancelled) {
+                Ok(data) => ApiResponse::ok(data),
+                Err(CommandError(code, retryable, message)) => {
+                    ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
         }
         if method == "endpoint.probe" {
             let service = match self.network() {
@@ -322,6 +410,45 @@ impl Core {
                 match call_endpoint_policy(&mut state, method, &arguments) {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            "introIDs.open" => match ocp_danmaku::identity::IDStore::open(&arguments) {
+                Ok(store) => {
+                    state.intro_ids = Some(Arc::new(Mutex::new(store)));
+                    ApiResponse::ok(json!({"opened":true}))
+                }
+                Err(error) => {
+                    let error = CommandError::from(error);
+                    ApiResponse::error(error.0, error.1, error.2, Value::Null)
+                }
+            },
+            method if method.starts_with("introIDs.") => {
+                let Some(store) = state.intro_ids.as_ref() else {
+                    return Ok(error_response(
+                        1002,
+                        false,
+                        "intro ID store is not configured",
+                    ));
+                };
+                let mut store = store.lock().map_err(|_| CoreError::StateUnavailable)?;
+                match store.call(method.trim_start_matches("introIDs."), &arguments) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(error) => {
+                        let error = CommandError::from(error);
+                        ApiResponse::error(error.0, error.1, error.2, Value::Null)
+                    }
+                }
+            }
+            method if method.starts_with("introIdentity.") => {
+                match ocp_danmaku::identity::policy(
+                    method.trim_start_matches("introIdentity."),
+                    &arguments,
+                ) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(error) => {
+                        let error = CommandError::from(error);
+                        ApiResponse::error(error.0, error.1, error.2, Value::Null)
+                    }
                 }
             }
             method if method.starts_with("introProvider.") => {
@@ -1488,6 +1615,7 @@ fn is_domain_command(method: &str) -> bool {
             | "introProvider.aniskip"
             | "introProvider.animeSkip"
             | "introProvider.theIntroDB"
+            | "introProvider.resolveIDs"
             | "bangumi.request"
             | "bangumi.subject"
             | "bangumi.search"
@@ -2001,6 +2129,9 @@ fn run_domain_command(
                     };
                     Ok(value)
                 }
+                "introProvider.resolveIDs" => Ok(ocp_danmaku::providers::payload(
+                    ocp_danmaku::identity::resolve_ids(&http, &arguments).await?,
+                )?),
                 "introProvider.exchange"
                 | "introProvider.aniskip"
                 | "introProvider.animeSkip"

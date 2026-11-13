@@ -1,0 +1,25 @@
+{
+  "goalComplete": false,
+  "cohort": "shared AniList ordered identity resolution and native-compatible ID persistence",
+  "verificationStage": "Rust, exported ABI, Apple binding and all seven macOS packages passed; app build and tests still running",
+  "rustTests": 87,
+  "independentOfflineRustTests": 87,
+  "independentSourceFiles": 52,
+  "directABITests": 63,
+  "exportedAppleBindingTests": 14,
+  "swiftPackages": {
+    "OcPlayerCore": 14,
+    "JellyfinKit": 255,
+    "MetadataKit": 306,
+    "MoviePilotKit": 124,
+    "BangumiKit": 99,
+    "PlaybackKit": 96,
+    "DanmakuKit": 262
+  },
+  "windowsRuntimeTested": false,
+  "remaining": [
+    "complete shared Danmaku async load/manual/promotion orchestration",
+    "native idle/resource timeouts, redirect/TLS/streaming fidelity",
+    "remaining macOS parity acceptance rows"
+  ]
+}
