@@ -219,6 +219,7 @@ extension PlaybackController {
     func selectAudio(_ track: TrackInfo) {
         guard let engine else { return }
         try? engine.selectAudioTrack(track.id)
+        try? rustPlayback?.selectAudio(String(track.id))
         state.refreshTracks(from: engine)
     }
 
@@ -227,6 +228,7 @@ extension PlaybackController {
         guard let engine else { return }
         do {
             try engine.selectSubtitleTrack(track?.id)
+            try? rustPlayback?.selectSubtitle(track.map { String($0.id) })
             // 用户自己拨过 → 本片内不再自动改（见 `userChoseSubtitleForCurrentSource`）。
             // 只在**真的生效**之后置位：选轨失败（内核报错）时闸门不该跟着关，
             // 否则用户会卡在「自动校正也不再介入」的状态里。
@@ -277,6 +279,7 @@ extension PlaybackController {
             let baseName = fileURL.deletingPathExtension().lastPathComponent
             externalSubtitleNames[id] = baseName
             try engine.selectSubtitleTrack(id)
+            try? rustPlayback?.selectSubtitle(String(id))
             // 用户自己挑的文件就是要看的那条：挡住后续的偏好校正。同样只在
             // 加载 + 选中都成功之后才置位（坏文件不该连带关掉自动校正）。
             userChoseSubtitleForCurrentSource = true
@@ -352,6 +355,7 @@ extension PlaybackController {
         case .disable:
             do {
                 try engine.selectSubtitleTrack(nil)
+                try? rustPlayback?.selectSubtitle(nil)
             } catch {
                 // 自动动作失败只进日志，不弹错误徽章：用户没要求过这次切换
                 // （对照 `applyDanmakuPrefs` 失败只 warning 的口径）。
@@ -365,6 +369,7 @@ extension PlaybackController {
         case .select(let id):
             do {
                 try engine.selectSubtitleTrack(id)
+                try? rustPlayback?.selectSubtitle(String(id))
             } catch {
                 playerLog.warning("按偏好选字幕失败 id=\(id) error=\(error)")
                 return

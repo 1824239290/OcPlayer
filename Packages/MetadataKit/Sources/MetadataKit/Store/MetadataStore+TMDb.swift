@@ -56,10 +56,19 @@ extension MetadataStore {
         lifetime: TimeInterval,
         now: Date = Date()
     ) throws {
+        if let rust {
+            var a: [String: Any] = ["entityKey": key.storageKey, "language": language,
+                "kind": payload.kind.rawValue, "tmdbId": key.tmdbID,
+                "now": now.timeIntervalSince1970, "lifetime": max(0, lifetime),
+                "payload": try rust.object(payload)]
+            a["seasonNumber"] = seasonNumber(of: key)
+            try rust.write("saveTMDbPayload", a); return
+         }
+
         guard let data = PayloadCodec.encode(payload) else { return }
         let fetched = Int64(now.timeIntervalSince1970)
         let expires = Int64(now.addingTimeInterval(max(0, lifetime)).timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO tmdb_entity(entity_key, language, kind, tmdb_id, season_number,
@@ -83,7 +92,9 @@ extension MetadataStore {
 
     /// 读一份 TMDB 数据。nil = 没缓存过 / 版本不认识 / 载荷与键不匹配（一律当未命中）。
     public func tmdbPayload(key: TMDbEntityKey, language: String) throws -> CachedTMDbPayload? {
-        try database.read { db in
+        if let rust { return try rust.tmdbPayload(key: key, language: language) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -122,7 +133,9 @@ extension MetadataStore {
         tenant: TenantID,
         now: Date = Date()
     ) throws {
-        try database.write { db in
+        if let rust { var a = rust.args(tenant, now: now); a["itemId"] = itemID; a["entityKey"] = entityKey.storageKey; a["source"] = source.rawValue; a["confidence"] = confidence; try rust.write("saveTMDbLink", a); return }
+
+        return try database.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO tmdb_link(tenant_id, item_id, entity_key, source, confidence, linked_at)
@@ -147,7 +160,9 @@ extension MetadataStore {
     }
 
     func tmdbLink(itemID: String, tenant: TenantID) throws -> TMDbLink? {
-        try database.read { db in
+        if let rust { return try rust.tmdbLink(itemID: itemID, tenant: tenant) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -171,7 +186,9 @@ extension MetadataStore {
 
     /// 删掉某条目的对应（重新匹配前先清）。
     public func removeTMDbLink(itemID: String, tenant: TenantID) throws {
-        try database.write { db in
+        if let rust { try rust.write("removeTMDbLink", ["tenantId": tenant.rawValue, "itemId": itemID]); return }
+
+        return try database.write { db in
             try db.execute(
                 sql: "DELETE FROM tmdb_link WHERE tenant_id = ? AND item_id = ?",
                 arguments: [tenant.rawValue, itemID])
@@ -180,7 +197,9 @@ extension MetadataStore {
 
     /// 某租户下已建立多少条对应（设置页显示「已补全 N 部」用）。
     public func tmdbLinkCount(tenant: TenantID) throws -> Int {
-        try database.read { db in
+        if let rust { return try rust.call("tmdbLinkCount", rust.args(tenant)).decode(Int.self) }
+
+        return try database.read { db in
             try Int.fetchOne(
                 db, sql: "SELECT COUNT(*) FROM tmdb_link WHERE tenant_id = ?",
                 arguments: [tenant.rawValue]) ?? 0
@@ -195,7 +214,9 @@ extension MetadataStore {
     /// 自相矛盾（本用例第一版就是这么失败的）。
     @discardableResult
     public func evictExpiredTMDbEntities(now: Date = Date()) throws -> Int {
-        try database.write { db in
+        if let rust { return try rust.call("evictExpiredTMDb", ["now": now.timeIntervalSince1970]).decode(Int.self) }
+
+        return try database.write { db in
             try db.execute(
                 sql: "DELETE FROM tmdb_entity WHERE expires_at <= ?",
                 arguments: [Int64(now.timeIntervalSince1970)])
@@ -208,7 +229,9 @@ extension MetadataStore {
     /// 顺序有讲究：先删 link 再删实体。反过来的话，`tmdb_entity` 会因为
     /// 还有 link 指着而被 `NOT EXISTS` 保住——用户以为清了，实际数据还在。
     public func clearTMDbData(tenant: TenantID) throws {
-        try database.write { db in
+        if let rust { try rust.write("clearTMDb", rust.args(tenant)); return }
+
+        return try database.write { db in
             try db.execute(sql: "DELETE FROM tmdb_link WHERE tenant_id = ?",
                            arguments: [tenant.rawValue])
             try db.execute(sql: """

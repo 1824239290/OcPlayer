@@ -55,6 +55,11 @@ public struct HTTPExchange: Sendable {
     public let data: Data
     public let response: HTTPURLResponse
 
+    public init(data: Data, response: HTTPURLResponse) {
+        self.data = data
+        self.response = response
+    }
+
     public var statusCode: Int { response.statusCode }
     /// 响应体的 UTF-8 文本（错误分支常用）。
     public var bodyText: String { String(data: data, encoding: .utf8) ?? "" }

@@ -6,6 +6,7 @@ import CoreModel
 import ImageIO
 import JellyfinKit
 import Observation
+import OcPlayerCore
 import PlaybackKit
 import UniformTypeIdentifiers
 
@@ -97,6 +98,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
             oldValue.onPlaybackActivityChanged = nil
             watchRecorder.discontinuity()
             state.onPlaybackActivityChanged = { [weak self] in self?.recordPlaybackActivity() }
+            lastRustPositionSyncAt = 0
+            lastRustObservedState = nil
             // 新会话的第一条 seek 不该拿上一代会话的落点判「重复」：换源/重开只有这
             // 一处整体替换 `state`（open 路径），所以代际边界就挂在这里。
             scrubSeekCoalescer.reset()
@@ -104,6 +107,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
     }
 
     var engine: (any PlaybackEngine)?
+    /// Optional Rust business session. Erika remains the decoder/renderer; this
+    /// mirrors lifecycle and progress into the cross-platform state machine.
+    @ObservationIgnored var usesSharedSourceRecovery = false
+    @ObservationIgnored var rustPlayback: OcpPlaybackSession?
+    @ObservationIgnored private var lastRustObservedState: PlaybackState?
+    @ObservationIgnored private var lastRustPositionSyncAt: TimeInterval = 0
     var setupError: String?
     /// `setupError` 的类别（L2）。只在**打开失败**时赋值；字幕 / 截图 / 续播定位
     /// 这类「播起来之后」的失败留 nil —— 那条路的处理方式与开流失败无关。
@@ -288,9 +297,24 @@ final class PlaybackController: DanmakuPlaybackHosting {
     @ObservationIgnored let watchRecorder: AppPlaybackRecorder
 
     private func recordPlaybackActivity() {
-        watchRecorder.sample(position: Double(state.position.microseconds) / 1_000_000,
+        let position = Double(state.position.microseconds) / 1_000_000
+        watchRecorder.sample(position: position,
                              playing: state.state == .playing && activeRequest?.id == expectedRequestID,
                              buffering: state.isBuffering, rate: rate)
+        let now = ProcessInfo.processInfo.systemUptime
+        if let rustPlayback {
+            let duration = state.duration > .zero ? Double(state.duration.microseconds) / 1_000_000 : nil
+            if now - lastRustPositionSyncAt >= 0.2 || lastRustObservedState != state.state
+                || rustPlayback.snapshot?.durationSeconds != duration {
+                lastRustPositionSyncAt = now
+                lastRustObservedState = state.state
+                if state.sharedEngineEvents?.client === rustPlayback.client {
+                    try? rustPlayback.refresh()
+                } else {
+                    try? rustPlayback.updatePosition(seconds: position, durationSeconds: duration)
+                }
+            }
+        }
     }
 
     func startLocalViewingRecord(sourceID: String, item: MediaItem) {
@@ -515,6 +539,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         usesOverlayDanmakuRenderer = Self.resolveOverlayDanmakuRoute()
         do {
             let engine = try PlaybackEngineRegistry.makeSelected()
+            if rustPlayback == nil { rustPlayback = OcpPlaybackSession() }
+            if let client = rustPlayback?.client { state.attachCoreClient(client) }
             eventTask = state.start(consuming: engine)
             // 轨道就绪 / 变化点：自动选字幕挂这里（见 `applySubtitlePreferenceIfNeeded`）。
             state.onTracksRefreshed = { [weak self] in
@@ -836,6 +862,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             // 换片：先把上一段会话的账结掉（播放时长/缓冲次数/卡死次数），再退役旧引擎。
             state.finishSession(reason: "superseded")
             playerLog.info("open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）")
+            try? rustPlayback?.stop()
             try? engine?.stop()
             hasLoadedSource = false
             releaseSecurityScopedResource()
@@ -844,12 +871,36 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // A fresh state object is the event-generation boundary. The cancelled
         // old consumer only holds the old state weakly, so buffered events cannot
         // overwrite this source's position or duration.
-        state = PlayerState()
+        state = PlayerState(coreClient: rustPlayback?.client)
         guard let engine = prepareEngine() else {
             finishOpenFailure(request: request, generation: generation,
                               attempt: nil,
                               error: setupError ?? "内核创建失败")
             return
+        }
+        if let rustPlayback {
+            var candidates: [[String: Any]] = [[
+                "id": request.sessionContext?.mediaSourceID ?? "primary",
+                "source": ["uri": source.uri, "headers": source.headers],
+                "displayName": request.title,
+            ]]
+            candidates.append(contentsOf: request.alternates.map { alternate in
+                [
+                    "id": alternate.id,
+                    "source": ["uri": alternate.uri, "headers": alternate.authHeader.map { ["Authorization": $0] } ?? [:]],
+                    "displayName": alternate.label,
+                ]
+            })
+            do {
+                try rustPlayback.open(
+                    uri: source.uri,
+                    headers: source.headers,
+                    sourceID: request.sessionContext?.mediaSourceID,
+                    alternates: candidates
+                )
+            } catch {
+                playerLog.warning("Rust playback.open mirror failed error=\(error)")
+            }
         }
         guard Self.activeOpenAttempts < Self.maximumConcurrentOpenAttempts,
               Self.abandonedOpenAttempts < Self.maximumAbandonedOpenAttempts else {
@@ -977,6 +1028,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         try? engine.setVolume(muted ? 0 : volume)
         try? engine.setRate(rate)
         // 队列闭包的 play() 已经走完，这里补放 open 在飞期间暂存的暂停意图才不被盖掉。
+        let wasPausedDuringOpen = openingPauseIntent
         if openingPauseIntent {
             openingPauseIntent = false
             try? engine.pause()
@@ -986,6 +1038,13 @@ final class PlaybackController: DanmakuPlaybackHosting {
         setupErrorKind = nil
         activeSecurityScopeLease = attempt.scopeLease
         engineIsActive = true
+        try? rustPlayback?.ready(
+            durationSeconds: state.duration > .zero ? Double(state.duration.microseconds) / 1_000_000 : nil
+        )
+        try? rustPlayback?.setVolume(volume)
+        try? rustPlayback?.setMuted(muted)
+        try? rustPlayback?.setRate(rate)
+        if wasPausedDuringOpen { try? rustPlayback?.pause() } else { try? rustPlayback?.play() }
         playerLog.info("open 成功 title=\(currentTitle ?? "?")")
         // 结构化结果行：`elapsed_ms` 就是 issue 里「open 花了 16/36/18 秒」那个数。
         PlaybackLog.event(.openDone, fields: [
@@ -1010,6 +1069,12 @@ final class PlaybackController: DanmakuPlaybackHosting {
             return
         }
         if releaseScope { attempt?.scopeLease?.releaseOnce() }
+        try? rustPlayback?.failed(
+            category: Self.rustFailureCategory(for: PlaybackOpenErrorKind.classify(message: error)),
+            message: error,
+            retryable: PlaybackOpenErrorKind.classify(message: error).isRetryable,
+            recordOnly: usesSharedSourceRecovery
+        )
         if expectedRequestID == request.id {
             expectedRequestID = nil
             sourceGeneration &+= 1
@@ -1186,6 +1251,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         // 否则「调完音量立刻退出」会丢掉最后一拍音量。
         volumePersistTask?.cancel()
         PlaybackPreferences.volume = volume
+        try? rustPlayback?.stop()
         try? engine?.stop()
         // 清空去重标记：否则下次打开同一视频时 openIfNeeded 会误判「已打开同一个源」
         // 直接跳过（画面停在旧帧/黑屏，进度丢失）。
@@ -1275,6 +1341,16 @@ final class PlaybackController: DanmakuPlaybackHosting {
         if uri.hasPrefix("http://") || uri.hasPrefix("https://") { return "network" }
         if uri.hasPrefix("/") || uri.hasPrefix("file://") { return "local" }
         return "other"
+    }
+
+    private static func rustFailureCategory(for kind: PlaybackOpenErrorKind) -> String {
+        switch kind {
+        case .network, .server: return "network"
+        case .format: return "unsupported"
+        case .auth: return "unauthorized"
+        case .aborted: return "cancelled"
+        case .unknown: return "unknown"
+        }
     }
 
     /// 距本次 open 起点多少毫秒（没记起点时给 0，不编数）。
@@ -1377,6 +1453,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
 
         do {
             try engine.pause()
+            try? rustPlayback?.pause()
             suspensionMode = .paused
             PlaybackLog.append("系统进后台：暂停在播会话，等回前台接着播")
             return true
@@ -1426,6 +1503,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
             case .paused, .ready:
                 do {
                     try engine?.play()
+                    try? rustPlayback?.play()
                     PlaybackLog.append("系统回前台：接着播")
                     return true
                 } catch {
@@ -1458,6 +1536,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         guard state.state == .playing, let engine else { return }
         do {
             try engine.pause()
+            try? rustPlayback?.pause()
         } catch {
             setupError = "\(error)"
         }
@@ -1478,7 +1557,9 @@ final class PlaybackController: DanmakuPlaybackHosting {
         }
         guard let engine else { return }
         do {
-            if state.state == .playing { try engine.pause() } else { try engine.play() }
+            let wasPlaying = state.state == .playing
+            if wasPlaying { try engine.pause() } else { try engine.play() }
+            if wasPlaying { try? rustPlayback?.pause() } else { try? rustPlayback?.play() }
         } catch {
             setupError = "\(error)"
         }
@@ -1548,6 +1629,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
         recordSeek(toSeconds: target, kind: "scrub")
         do {
             try engine.seek(to: .seconds(target))
+            try? rustPlayback?.seek(seconds: target)
         } catch {
             scrubSeekCoalescer.reset()
         }
@@ -1846,6 +1928,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func applyRate(_ newRate: Double) {
         rate = newRate
         try? engine?.setRate(newRate)
+        try? rustPlayback?.setRate(newRate)
         if usesOverlayDanmakuRenderer { danmakuOverlay.setRate(newRate) }
     }
 
@@ -1874,6 +1957,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func applyVolume(_ newVolume: Double) {
         volume = min(max(newVolume, 0), 1)
         try? engine?.setVolume(muted ? 0 : volume)
+        try? rustPlayback?.setVolume(volume)
+        try? rustPlayback?.setMuted(muted)
     }
 
     func adjustVolume(by delta: Double) {
@@ -1883,6 +1968,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
     func toggleMute() {
         muted.toggle()
         try? engine?.setVolume(muted ? 0 : volume)
+        try? rustPlayback?.setVolume(volume)
+        try? rustPlayback?.setMuted(muted)
     }
 
     /// 字幕字号 +/-（0.1 步进，0.5…3.0 夹紧）。

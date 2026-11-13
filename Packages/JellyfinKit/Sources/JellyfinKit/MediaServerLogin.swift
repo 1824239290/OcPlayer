@@ -143,9 +143,11 @@ public enum MediaServerLogin {
         // 四个字段，宽松 DTO 足够 —— 这样 Emby 的整条登录链路都不碰 SDK，
         // 也不受 SDK 强类型枚举的约束。
         let probe = EmbySession(baseURL: url, accessToken: nil, sessionConfiguration: sessionConfiguration)
+        let coreTransport = RustServerLogin(configuration: sessionConfiguration)
         let info: EmbyPublicSystemInfoDTO
         do {
-            info = try await probe.get("/System/Info/Public", as: EmbyPublicSystemInfoDTO.self)
+            if let coreTransport { info = try await coreTransport.probe(baseURL: url) }
+            else { info = try await probe.get("/System/Info/Public", as: EmbyPublicSystemInfoDTO.self) }
         } catch {
             throw JellyfinError.wrapPreservingCancellation(error)
         }
@@ -163,7 +165,8 @@ public enum MediaServerLogin {
                     baseURL: resolved,
                     accessToken: nil,
                     sessionConfiguration: sessionConfiguration
-                )
+                ),
+                coreTransport: coreTransport
             )
         case .jellyfin:
             return JellyfinLoginSession(
@@ -173,7 +176,8 @@ public enum MediaServerLogin {
                     baseURL: url,
                     token: nil,
                     sessionConfiguration: sessionConfiguration
-                )
+                ),
+                coreTransport: coreTransport
             )
         }
     }

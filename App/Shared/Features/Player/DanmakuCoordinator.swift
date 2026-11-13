@@ -382,6 +382,7 @@ final class DanmakuCoordinator {
         )
         self.introLearningStore = introLearningStore
         self.session = session
+
     }
 
     func setAutoLoadingEnabled(_ enabled: Bool) {
@@ -702,8 +703,9 @@ final class DanmakuCoordinator {
         status = .matching
         let startedAt = Date()
         AppDiagnostics.logInfo("弹幕自动匹配开始", fields: Self.matchLogFields(for: context))
+        let matchContext = await resolvedMatchContext(for: context)
         let outcome = await orchestrator.runAutomatic(
-            matchContext: await resolvedMatchContext(for: context),
+            matchContext: matchContext,
             configuration: configuration,
             playback: playback,
             revision: generation,

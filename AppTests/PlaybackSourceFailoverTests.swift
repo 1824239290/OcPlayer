@@ -1,6 +1,7 @@
 import Foundation
 import CoreModel
 import JellyfinKit
+import OcPlayerCore
 @testable import OcPlayer
 import XCTest
 
@@ -58,6 +59,11 @@ final class PlaybackSourceFailoverTests: XCTestCase {
     private func makeApp(controller: PlaybackController) -> AppModel {
         let app = AppModel()
         app.playback = controller
+        if OcpCoreFeature.isEnabled {
+            XCTAssertNotNil(app.playbackFlow, "Enabled tests must execute the Rust recovery owner")
+            XCTAssertTrue(controller.usesSharedSourceRecovery)
+            XCTAssertTrue(controller.rustPlayback?.client === app.playbackFlow?.client)
+        }
         app.nowPlayingItem = MediaItem(id: "episode-1", name: "第一集", kind: .episode)
         return app
     }
@@ -111,6 +117,80 @@ final class PlaybackSourceFailoverTests: XCTestCase {
         XCTAssertEqual(app.sourceFailoverCount, 0)
         XCTAssertTrue(app.sourceFailoverAttempts.isEmpty, "旧请求的失败与当前播放无关，不该记账")
         XCTAssertEqual(app.presentedPlayer?.id, original.id)
+    }
+
+    func testAuthenticationFailureNeverChangesSource() async {
+        let controller = PlaybackController()
+        let app = makeApp(controller: controller)
+        let original = request(alternates: [alternate("alt-1")])
+        app.presentedPlayer = original
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .auth)
+        await settle()
+        XCTAssertEqual(app.presentedPlayer?.id, original.id)
+        XCTAssertEqual(app.sourceFailoverCount, 0)
+        XCTAssertEqual(app.sourceFailoverAttempts.map(\.kind), [.auth])
+    }
+
+    func testCancellingPreparationInvalidatesAlreadyQueuedFailover() async {
+        let controller = PlaybackController()
+        let app = makeApp(controller: controller)
+        let original = request(alternates: [alternate("alt-1")])
+        app.presentedPlayer = original
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .network)
+        app.cancelPlaybackOpen()
+        await settle()
+        XCTAssertEqual(app.presentedPlayer?.id, original.id)
+        if let flow = app.playbackFlow { XCTAssertFalse(flow.snapshot.active) }
+    }
+
+    func testOldFailureCannotRestoreHistoryAfterNewUserPlayResetsIt() async throws {
+        guard OcpCoreFeature.isEnabled else { throw XCTSkip("Shared request invalidation requires Core") }
+        let controller = PlaybackController()
+        let app = makeApp(controller: controller)
+        let original = request(alternates: [alternate("alt-1")])
+        app.presentedPlayer = original
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .network)
+        app.play(MediaItem(id: "episode-2", name: "第二集", kind: .episode), resumeSeconds: 0)
+        await settle()
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .network)
+        await settle()
+        XCTAssertEqual(app.sourceFailoverCount, 0)
+        XCTAssertTrue(app.sourceFailoverAttempts.isEmpty, "Ignored old callbacks must not republish the retired chain")
+        XCTAssertEqual(app.presentedPlayer?.id, original.id, "The cancelled queued switch must not reopen")
+    }
+
+    func testMissingMediaItemKeepsOriginalRequest() async {
+        let controller = PlaybackController()
+        let app = makeApp(controller: controller)
+        app.nowPlayingItem = nil
+        app.retryPlaybackItem = nil
+        let original = request(alternates: [alternate("alt-1")])
+        app.presentedPlayer = original
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .unknown)
+        await settle()
+        XCTAssertEqual(app.presentedPlayer?.id, original.id)
+        XCTAssertEqual(app.sourceFailoverCount, 0)
+        XCTAssertEqual(app.sourceFailoverAttempts.count, 1)
+    }
+
+    func testExhaustedShortChainExplainsBothSources() async {
+        let controller = PlaybackController()
+        let app = makeApp(controller: controller)
+        let original = request(alternates: [alternate("alt-1")])
+        app.presentedPlayer = original
+        app.handlePlaybackOpenFailure(requestID: original.id, kind: .network)
+        await settle()
+        guard let current = app.presentedPlayer else { return XCTFail("Missing request") }
+        app.handlePlaybackOpenFailure(requestID: current.id, kind: .format)
+        await settle()
+        XCTAssertEqual(app.sourceFailoverCount, 1)
+        XCTAssertEqual(app.sourceFailoverAttempts.map(\.kind), [.network, .format])
+        XCTAssertEqual(controller.setupError, "已试 2 条源：网络 / 格式不支持")
+        XCTAssertEqual(app.presentedPlayer?.id, current.id)
+        if let flow = app.playbackFlow {
+            XCTAssertEqual(flow.snapshot.playbackRequestId, current.id.uuidString)
+            XCTAssertEqual(flow.snapshot.failoverCount, 1)
+        }
     }
 
     // MARK: - 换源成功路径

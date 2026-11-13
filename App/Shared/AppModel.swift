@@ -6,6 +6,7 @@ import DiagnosticsKit
 import Foundation
 import JellyfinKit
 import MoviePilotKit
+import OcPlayerCore
 import Observation
 import SwiftUI
 
@@ -608,11 +609,14 @@ final class AppModel {
     weak var playback: PlaybackController? {
         didSet {
             guard playback !== oldValue else { return }
+            oldValue?.onOpenFailure = nil
             oldValue?.finishLocalViewingRecord()
             let precedingStop = playbackReporting?.stop() ?? pendingPlaybackReportingHandoff
             clearPlaybackSessionState()
             pendingPlaybackReportingHandoff = precedingStop
             if let playback {
+                playback.rustPlayback = OcpPlaybackSession(client: playbackFlow?.client)
+                playback.usesSharedSourceRecovery = playbackFlow != nil
                 playbackReporting = PlaybackReportingCoordinator(
                     stateSource: playback,
                     precedingStoppedReport: pendingPlaybackReportingHandoff
@@ -657,6 +661,7 @@ final class AppModel {
     // MARK: - L1 自动换源
 
     /// 本条请求已经自动换过几次源。用户重新发起播放（`play()`）时归零。
+    @ObservationIgnored let playbackFlow = OcpPlaybackFlow()
     var sourceFailoverCount = 0
     /// 本轮已试过的源与各自的失败类别，按发生顺序。
     ///

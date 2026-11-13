@@ -172,6 +172,11 @@ enum LaunchOptions {
             emit("[selftest] \(controller.state.state) pos=\(controller.state.position.microseconds)µs " +
                  "dur=\(controller.state.duration.microseconds)µs surface=\(controller.state.hasSurface) " +
                  "| \(controller.statsLine())")
+            if let core = controller.rustPlayback?.snapshot {
+                emit("[selftest] core=\(core.state) pos=\(core.positionSeconds)s rate=\(core.rate) volume=\(core.volume)")
+            } else {
+                emit("[selftest] core=unavailable")
+            }
             if let error = controller.state.lastError { emit("[selftest] error: \(error)") }
         }
         emit("[selftest] done")

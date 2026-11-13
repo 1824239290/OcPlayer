@@ -16,6 +16,9 @@ public struct EmbyServer: MediaServer {
     /// 档案的基准快照；对外暴露的 `profile.baseURL` 是**当前生效地址**（见下）。
     private let storedProfile: ServerProfile
 
+    var allowsCoreTransport: Bool { session.allowsCoreTransport }
+    func resolveCoreEndpoint() async { _ = await session.resolvedURL() }
+    func failoverCoreEndpoint(from failed: URL) async -> Bool { await session.failover(from: failed) }
     private let session: EmbySession
 
     /// Emby 用 `Emby` scheme（Jellyfin 是 `MediaBrowser`）。

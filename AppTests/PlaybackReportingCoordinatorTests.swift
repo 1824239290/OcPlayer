@@ -1,4 +1,5 @@
 import JellyfinKit
+import OcPlayerCore
 @testable import OcPlayer
 import XCTest
 
@@ -16,6 +17,22 @@ final class PlaybackReportingCoordinatorTests: XCTestCase {
     override func tearDown() {
         PlaybackReportingCoordinator.reportTimeout = savedReportTimeout
         super.tearDown()
+    }
+
+    @MainActor
+    func testFailedOpenNearTailFinalizesWithoutAutoplayUsingSharedPolicy() async {
+        let source = TestPlaybackStateSource(snapshot: PlaybackReportSnapshot(
+            state: .stopped, positionSeconds: 99, durationSeconds: 100, sourceOpenFailed: true
+        ))
+        let reporter = TestPlaybackReporter()
+        let coordinator = PlaybackReportingCoordinator(stateSource: source, heartbeatInterval: .milliseconds(5))
+        if OcpCoreFeature.isEnabled { XCTAssertNotNil(coordinator.sharedReportPolicy) }
+        var terminalEvents: [PlaybackReportingCoordinator.TerminalEvent] = []
+        coordinator.start(reporter: reporter, context: PlaybackSessionContext(itemID: "failed-open"),
+                          requestID: UUID(), resumeSeconds: 99, onTerminal: { terminalEvents.append($0) })
+        await waitUntil { terminalEvents.count == 1 }
+        XCTAssertFalse(terminalEvents[0].reachedEnd)
+        XCTAssertEqual(reporter.events.filter(\.isStopped).count, 1)
     }
 
     @MainActor

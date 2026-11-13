@@ -11,13 +11,16 @@ public final class EmbyLoginSession: ServerLoginSession {
     public let serverID: String?
 
     private let session: EmbySession
+    private let coreTransport: RustServerLogin?
+    var usesCoreTransport: Bool { coreTransport != nil }
 
-    init(baseURL: URL, info: EmbyPublicSystemInfoDTO, session: EmbySession) {
+    init(baseURL: URL, info: EmbyPublicSystemInfoDTO, session: EmbySession, coreTransport: RustServerLogin? = nil) {
         self.baseURL = baseURL
         self.serverName = info.serverName ?? "Emby"
         self.serverVersion = info.version
         self.serverID = info.id
         self.session = session
+        self.coreTransport = coreTransport
     }
 
     public var kind: ServerKind { .emby }
@@ -36,6 +39,7 @@ public final class EmbyLoginSession: ServerLoginSession {
     /// 密码错误的 HTTP 状态码 Emby 老版本可能返回 400，这里与 Jellyfin 侧同口径
     /// 归成「账号密码不对」，避免报成莫名的 HTTP 400。
     public func signIn(username: String, password: String) async throws -> LoginResult {
+        if let coreTransport { return try await coreTransport.signIn(baseURL: baseURL, kind: kind, username: username, password: password) }
         let body = LoginRequestBody(username: username, password: password)
         do {
             let data = try await session.requestData(

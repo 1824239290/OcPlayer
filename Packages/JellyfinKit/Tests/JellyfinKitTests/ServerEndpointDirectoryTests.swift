@@ -72,7 +72,12 @@ final class ServerEndpointDirectoryTests: XCTestCase {
             timeout: 0.2,
             sessionConfiguration: .ephemeral,
             inject: { url in await script.probe(url) })
-        return ServerEndpointDirectory(profile: profile, probe: probe)
+        let directory = ServerEndpointDirectory(profile: profile, probe: probe)
+        if ProcessInfo.processInfo.environment["OCP_CORE_ENABLED"] == "1",
+           ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"] != nil {
+            XCTAssertTrue(directory.usesCorePolicy, "the existing decision fixtures must exercise Rust")
+        }
+        return directory
     }
 
     // MARK: - 择优
@@ -275,6 +280,33 @@ final class ServerEndpointDirectoryTests: XCTestCase {
     }
 
     // MARK: - 档案同步
+
+    func testConcurrentRequestsShareOneProbeRound() async {
+        let script = ProbeScript(reachable: [lan.absoluteString: 0.005, tailscale.absoluteString: 0.05])
+        script.probeDelay = 0.05
+        let directory = makeDirectory(baseURL: lan, alternates: [tailscale], script: script)
+        await withTaskGroup(of: URL.self) { group in
+            for _ in 0..<40 { group.addTask { await directory.resolvedURL() } }
+            for await value in group { XCTAssertEqual(value, lan) }
+        }
+        XCTAssertEqual(script.callCount, 2, "one shared round probes each of the two candidates once")
+    }
+
+    func testDeletingAddressDuringProbeRejectsOldResult() async {
+        let script = ProbeScript(reachable: [lan.absoluteString: 0.08, tailscale.absoluteString: 0.001])
+        script.probeDelay = 0.1
+        let directory = makeDirectory(baseURL: lan, alternates: [tailscale], script: script)
+        let inFlight = Task { await directory.resolvedURL() }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        let updated = ServerProfile(id: "srv-1:user-1", serverName: "home-nas", baseURL: lan,
+                                    userID: "user-1", addresses: [], serverID: "srv-1")
+        directory.sync(profile: updated)
+        let resolved = await directory.resolvedURL()
+        _ = await inFlight.value
+        XCTAssertEqual(resolved, lan)
+        XCTAssertEqual(directory.currentURL, lan, "a removed address cannot be restored by an old probe")
+        XCTAssertEqual(directory.candidateCount, 1)
+    }
 
     func testSyncingProfileFollowsPinnedAndDroppedAddresses() async {
         let script = ProbeScript(reachable: [lan.absoluteString: 0.005,

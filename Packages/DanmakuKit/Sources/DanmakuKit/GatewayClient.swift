@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 网关诊断日志。常规请求只记 path；匹配参数只记形态元数据，绝不记录
 /// hash、文件名、URL/query 或凭据（脱敏器对 `api_key` 类 key 另有兜底）。
@@ -186,6 +187,8 @@ public struct DanmakuGatewayClient: Sendable {
     public let configuration: DandanplayConfiguration
     private let session: URLSession
     private let retryPolicy: RetryPolicy
+    private let core: OcpCoreClient?
+    var usesCoreTransport: Bool { core != nil }
 
     public init(
         configuration: DandanplayConfiguration,
@@ -193,7 +196,11 @@ public struct DanmakuGatewayClient: Sendable {
         retryPolicy: RetryPolicy = RetryPolicy()
     ) {
         self.configuration = configuration
-        self.session = session ?? DanmakuNetworking.makeSession()
+        let session = session ?? DanmakuNetworking.makeSession()
+        self.session = session
+        if OcpCoreFeature.isEnabled && OcpCoreFeature.supportsNativeTransport(session.configuration) {
+            core = try? OcpCoreClient()
+        } else { core = nil }
         self.retryPolicy = retryPolicy
     }
 
@@ -320,7 +327,7 @@ public struct DanmakuGatewayClient: Sendable {
         return request
     }
 
-    private func send<T: Decodable & Sendable>(
+    func send<T: Decodable & Sendable>(
         url: URL,
         method: String,
         body: Data?
@@ -352,14 +359,19 @@ public struct DanmakuGatewayClient: Sendable {
 
     /// 单次尝试：传输与计时日志走共享执行器（DiagnosticsKit.HTTPClient）；这里只留
     /// 网关自己的语义：业务基座判定、401/403/429 映射、缓存命中日志。
-    private func performExchange<T: Decodable & Sendable>(
+    func performExchange<T: Decodable & Sendable>(
         spec: HTTPRequestSpec,
         logPath: String
     ) async throws -> GatewayResult<T> {
         let start = Date()
         let exchange: HTTPExchange
         do {
-            exchange = try await HTTPClient(session: session, category: "Danmaku").exchange(spec)
+            if let core {
+                exchange = try await RustDanmakuTransport(core: core, configuration: configuration,
+                    timeout: session.configuration.timeoutIntervalForResource).exchange(spec)
+            } else {
+                exchange = try await HTTPClient(session: session, category: "Danmaku").exchange(spec)
+            }
         } catch let transport as HTTPTransportError {
             switch transport {
             case .url(let urlError):

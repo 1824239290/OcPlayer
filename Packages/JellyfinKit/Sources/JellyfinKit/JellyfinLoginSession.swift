@@ -12,13 +12,16 @@ public final class JellyfinLoginSession: ServerLoginSession {
     public let serverID: String?
 
     let client: JellyfinClient
+    private let coreTransport: RustServerLogin?
+    var usesCoreTransport: Bool { coreTransport != nil }
 
-    init(baseURL: URL, info: EmbyPublicSystemInfoDTO, client: JellyfinClient) {
+    init(baseURL: URL, info: EmbyPublicSystemInfoDTO, client: JellyfinClient, coreTransport: RustServerLogin? = nil) {
         self.baseURL = baseURL
         self.serverName = info.serverName ?? "Jellyfin"
         self.serverVersion = info.version
         self.serverID = info.id
         self.client = client
+        self.coreTransport = coreTransport
     }
 
     public var kind: ServerKind { .jellyfin }
@@ -28,7 +31,8 @@ public final class JellyfinLoginSession: ServerLoginSession {
 
     /// Quick Connect 事件流（内置轮询，取消流即取消轮询）。
     public var quickConnectEvents: AsyncThrowingStream<QuickConnectEvent, Error> {
-        AsyncThrowingStream { continuation in
+        if let coreTransport { return coreTransport.quickConnectEvents(baseURL: baseURL) }
+        return AsyncThrowingStream { continuation in
             let upstream = client.quickConnect.connect(poll: 3, max: 60)
             let task = Task {
                 do {
@@ -66,6 +70,7 @@ public final class JellyfinLoginSession: ServerLoginSession {
     /// **响应体走宽松解码**（`LoginResult.parse`），不复用 SDK 的
     /// `AuthenticationResult`：登录只需要 AccessToken / User.Id / User.Name 三样。
     public func signIn(username: String, password: String) async throws -> LoginResult {
+        if let coreTransport { return try await coreTransport.signIn(baseURL: baseURL, kind: kind, username: username, password: password) }
         do {
             let request = Request<Data>(
                 path: "/Users/AuthenticateByName",
@@ -85,6 +90,7 @@ public final class JellyfinLoginSession: ServerLoginSession {
     }
 
     public func signIn(quickConnectSecret: String) async throws -> LoginResult {
+        if let coreTransport { return try await coreTransport.signIn(baseURL: baseURL, secret: quickConnectSecret) }
         do {
             return try LoginResult(await client.signIn(quickConnectSecret: quickConnectSecret))
         } catch let error as JellyfinError {

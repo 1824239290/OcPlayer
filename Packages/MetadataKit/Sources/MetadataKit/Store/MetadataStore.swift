@@ -2,6 +2,7 @@ import CoreModel
 import Foundation
 import GRDB
 import JellyfinKit
+import OcPlayerCore
 
 /// 媒体元数据缓存的读写入口。
 ///
@@ -22,16 +23,32 @@ public actor MetadataStore {
     /// 之前是「每行新建一个」。actor 隔离保证它只被串行访问。
     private let libraryDecoder = JSONDecoder()
 
-    public init(database: DatabasePool) {
+    let rust: RustMetadataStore?
+    var usesCoreCache: Bool { rust != nil }
+
+    public init(database: DatabasePool, coreLibraryPath: String? = nil, coreEnabled: Bool? = nil) {
         self.database = database
+        if coreLibraryPath != nil || (coreEnabled ?? OcpCoreFeature.isEnabled) {
+            do { rust = try RustMetadataStore(path: database.path, libraryPath: coreLibraryPath) }
+            catch {
+                rust = nil
+                MetadataLog.logger.warning("Core 媒体缓存不可用", fields: ["error": .string("\(error)")])
+            }
+        } else { rust = nil }
     }
 
     // MARK: - 租户
 
     /// 记下这次见到该租户（首次创建）。每次会话开始调一次即可。
     public func touchTenant(_ tenant: TenantID, profile: ServerProfile, now: Date = Date()) throws {
+        if let rust {
+            var a = rust.args(tenant, now: now)
+            a["kind"] = profile.kind.rawValue; a["serverName"] = profile.serverName
+            try rust.write("touchTenant", a); return
+        }
+
         let timestamp = Int64(now.timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO tenant(tenant_id, kind, server_name, first_seen_at, last_seen_at)
@@ -47,7 +64,9 @@ public actor MetadataStore {
 
     /// 该租户是否已有任何缓存内容（决定首屏要不要走「先读磁盘」那条路）。
     public func hasContent(for tenant: TenantID) throws -> Bool {
-        try database.read { db in
+        if let rust { return try rust.call("hasContent", rust.args(tenant)).decode(Bool.self) }
+
+        return try database.read { db in
             try Int.fetchOne(db, sql: "SELECT 1 FROM item WHERE tenant_id = ? LIMIT 1",
                              arguments: [tenant.rawValue]) != nil
         }
@@ -72,6 +91,8 @@ public actor MetadataStore {
         _ items: [MediaItem], rail: String?, tenant: TenantID, now: Date = Date(),
         progressFresh: Bool = true, requestStartedAt: Date = Date()
     ) throws -> [MediaItem] {
+        if let rust { return try rust.saveItems(items, rail: rail, tenant: tenant, now: now, progressFresh: progressFresh, requestStartedAt: requestStartedAt) }
+
         guard !items.isEmpty || rail != nil else { return items }
         let timestamp = Int64(now.timeIntervalSince1970)
         return try database.write { db in
@@ -155,7 +176,9 @@ public actor MetadataStore {
     /// 注意 `progress_fetched_at`：条目整体新鲜不代表**进度**新鲜。调用方要判断
     /// 「看到的是不是旧进度」得看这个字段，`fetchedAt` 只管元数据（见 `CachedItem`）。
     public func item(_ id: MediaItem.ID, tenant: TenantID) throws -> CachedItem? {
-        try database.read { db in
+        if let rust { return try rust.item(id, tenant: tenant) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -180,6 +203,8 @@ public actor MetadataStore {
     /// 取一组条目（详情页的季 / 集列表用）。返回顺序按调用方给的 id 顺序，
     /// **缺的那些直接跳过**（不补占位：调用方要么整份用、要么不用）。
     public func items(_ ids: [MediaItem.ID], tenant: TenantID) throws -> [CachedItem] {
+        if let rust { return try rust.items(ids, tenant: tenant) }
+
         guard !ids.isEmpty else { return [] }
         return try database.read { db in
             var byID: [MediaItem.ID: CachedItem] = [:]
@@ -235,6 +260,8 @@ public actor MetadataStore {
     ///
     /// - Parameter limit: 想要多少张。实际返回可能更少（库里本来就没那么多带图条目）。
     public func posterCandidates(tenant: TenantID, limit: Int) throws -> [CachedItem] {
+        if let rust { return try rust.posterCandidates(tenant: tenant, limit: limit) }
+
         guard limit > 0 else { return [] }
         let scanLimit = max(limit * 8, 240)
         return try database.read { db in
@@ -282,8 +309,15 @@ public actor MetadataStore {
         now: Date = Date(),
         fallbackItem: MediaItem? = nil
     ) throws {
+        if let rust {
+            var a = rust.args(tenant, now: now)
+            a["itemId"] = id; a["state"] = try rust.object(state)
+            if let fallbackItem { a["item"] = try rust.object(fallbackItem) }
+            try rust.write("updatePlayState", a); return
+         }
+
         let timestamp = Int64(now.timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             guard try Self.newerProgressState(db, itemID: id, tenant: tenant, recordedAt: now) == nil else { return }
             // payload 也要更新：读路径是从 payload 解出整个 MediaItem 的，
             // 只改投影列的话，读回来仍是旧进度（列只服务淘汰与筛选）。
@@ -329,6 +363,8 @@ public actor MetadataStore {
         tenant: TenantID,
         now: Date
     ) throws -> (state: MediaItem.PlayState, newerRecord: LocalPlaybackProgress?) {
+        if let rust { return try rust.recordProgress(item: item, position: positionSeconds, duration: durationSeconds, tenant: tenant, now: now) }
+
         let timestamp = Int64(now.timeIntervalSince1970)
         return try database.write { db in
             if let newer = try Self.newerProgressRecord(db, itemID: item.id, tenant: tenant, recordedAt: now),
@@ -382,11 +418,13 @@ public actor MetadataStore {
     // MARK: - 库列表
 
     public func saveLibraries(_ libraries: [MediaLibrary], tenant: TenantID, now: Date = Date()) throws {
+        if let rust { var a = rust.args(tenant, now: now); a["libraries"] = try rust.object(libraries); try rust.write("saveLibraries", a); return }
+
         let timestamp = Int64(now.timeIntervalSince1970)
         let encoded = libraries.compactMap { library in
             PayloadCodec.encode(library).map { (library, $0) }
         }
-        try database.write { db in
+        return try database.write { db in
             // 整表替换：库列表是「一份完整清单」，不是增量集合。不删旧行的话，
             // 服务端删掉的库会永远留在侧栏里。
             try db.execute(sql: "DELETE FROM library WHERE tenant_id = ?", arguments: [tenant.rawValue])
@@ -402,7 +440,9 @@ public actor MetadataStore {
     }
 
     public func libraries(tenant: TenantID) throws -> [CachedLibrary] {
-        try database.read { db in
+        if let rust { return try rust.libraries(tenant: tenant) }
+
+        return try database.read { db in
             let rows = try Row.fetchAll(
                 db,
                 sql: "SELECT library_id, payload, fetched_at FROM library WHERE tenant_id = ? ORDER BY position",
@@ -421,16 +461,20 @@ public actor MetadataStore {
     // MARK: - rail（首页三条）
 
     public func saveRail(_ items: [MediaItem], rail: String, tenant: TenantID, now: Date = Date()) throws {
+        if let rust { var a = rust.args(tenant, now: now); a["rail"] = rail; a["items"] = try rust.object(items); try rust.write("saveRail", a); return }
+
         guard let payload = PayloadCodec.encode(RailSnapshot(items: items)) else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             try Self.upsertRail(db, rail: rail, payload: payload,
                                 tenant: tenant, timestamp: timestamp)
         }
     }
 
     public func rail(_ rail: String, tenant: TenantID) throws -> CachedRail? {
-        try database.read { db in
+        if let rust { return try rust.rail(rail, tenant: tenant) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: "SELECT payload_version, payload, fetched_at FROM rail WHERE tenant_id = ? AND rail = ?",
@@ -485,11 +529,13 @@ public actor MetadataStore {
     ///   而不是吞掉错误当成「没有缓存」。
     /// 测试用：在写事务里跑任意 SQL（用于制造「读失败」这类异常状态）。
     func rawWriteForTesting(_ body: @escaping (Database) throws -> Void) throws {
-        try database.write { db in try body(db) }
+        return try database.write { db in try body(db) }
     }
 
     public func homeSnapshotParts(tenant: TenantID) throws
         -> (libraries: [CachedLibrary], rails: [String: CachedRail]) {
+        if let rust { return try rust.home(tenant: tenant) }
+
         let rails = ["resume", "nextUp", "latest"]
         return try database.read { db in
             let libraryRows = try Row.fetchAll(
@@ -543,11 +589,13 @@ public actor MetadataStore {
         tenant: TenantID,
         now: Date = Date()
     ) throws {
+        if let rust { var a = rust.args(tenant, now: now); a["key"] = rust.key(key); a["payload"] = try rust.object(PageSnapshot(items: page.items, totalRecordCount: page.totalRecordCount)); try rust.write("savePage", a); return }
+
         guard let payload = PayloadCodec.encode(
             PageSnapshot(items: page.items, totalRecordCount: page.totalRecordCount))
         else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO page(tenant_id, parent_id, kinds, sort_key, watch_state, search_term,
@@ -566,7 +614,9 @@ public actor MetadataStore {
     }
 
     public func page(_ key: PageKey, tenant: TenantID) throws -> CachedPage? {
-        try database.read { db in
+        if let rust { return try rust.page(key, tenant: tenant) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -593,7 +643,9 @@ public actor MetadataStore {
     /// 同一查询的全部分页，按起点升序。仓储负责合并连续页与条目去重；
     /// 这里只负责一次读事务取回，避免每页一次 SQLite round-trip。
     public func pages(matching query: PageQuery, tenant: TenantID) throws -> [CachedPage] {
-        try database.read { db in
+        if let rust { return try rust.pages(query, tenant: tenant) }
+
+        return try database.read { db in
             let rows = try Row.fetchAll(
                 db,
                 sql: """
@@ -630,9 +682,11 @@ public actor MetadataStore {
 
     public func saveMediaFileInfo(_ info: MediaFileInfo, itemID: MediaItem.ID,
                                   tenant: TenantID, now: Date = Date()) throws {
+        if let rust { var a = rust.args(tenant, now: now); a["itemId"] = itemID; a["payload"] = try rust.object(info); try rust.write("saveMediaFileInfo", a); return }
+
         guard let payload = PayloadCodec.encode(info) else { return }
         let timestamp = Int64(now.timeIntervalSince1970)
-        try database.write { db in
+        return try database.write { db in
             try db.execute(
                 sql: """
                     INSERT INTO media_file_info(tenant_id, item_id, fetched_at, payload_version, payload)
@@ -647,7 +701,9 @@ public actor MetadataStore {
     }
 
     public func mediaFileInfo(itemID: MediaItem.ID, tenant: TenantID) throws -> CachedMediaFileInfo? {
-        try database.read { db in
+        if let rust { return try rust.fileInfo(itemID: itemID, tenant: tenant) }
+
+        return try database.read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -672,7 +728,9 @@ public actor MetadataStore {
     /// 只从 `item` 表按投影列取——这条查询是离线进详情页的热路径，
     /// 不该解 payload 才能排序（`season_number` 就是为它建的索引）。
     public func seasons(seriesID: MediaItem.ID, tenant: TenantID) throws -> [MediaItem] {
-        try database.read { db in
+        if let rust { return try rust.call("seasons", ["tenantId": tenant.rawValue, "seriesId": seriesID]).decode([JSONValue].self).compactMap { try? $0.decode(MediaItem.self) } }
+
+        return try database.read { db in
             let rows = try Row.fetchAll(
                 db,
                 sql: """
@@ -689,7 +747,9 @@ public actor MetadataStore {
     /// 某一季的集列表，按集号排序。
     public func episodes(seriesID: MediaItem.ID, seasonID: MediaItem.ID,
                          tenant: TenantID) throws -> [MediaItem] {
-        try database.read { db in
+        if let rust { return try rust.call("episodes", ["tenantId": tenant.rawValue, "seriesId": seriesID, "seasonId": seasonID]).decode([JSONValue].self).compactMap { try? $0.decode(MediaItem.self) } }
+
+        return try database.read { db in
             let rows = try Row.fetchAll(
                 db,
                 sql: """
@@ -714,7 +774,9 @@ public actor MetadataStore {
 
     /// 所有含媒体的备份（供后续调试/统计用；不进热路径）。
     public func itemCount(kind: MediaItem.Kind, tenant: TenantID) throws -> Int {
-        try database.read { db in
+        if let rust { return try rust.call("itemCount", ["tenantId": tenant.rawValue, "kind": kind.rawValue]).decode(Int.self) }
+
+        return try database.read { db in
             try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM item WHERE tenant_id = ? AND kind = ?",
@@ -726,7 +788,9 @@ public actor MetadataStore {
 
     /// 条目数（淘汰判定与设置页展示用）。
     public func itemCount(tenant: TenantID? = nil) throws -> Int {
-        try database.read { db in
+        if let rust { var a: [String: Any] = [:]; a["tenantId"] = tenant?.rawValue; return try rust.call("itemCount", a).decode(Int.self) }
+
+        return try database.read { db in
             if let tenant {
                 return try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM item WHERE tenant_id = ?",
                                         arguments: [tenant.rawValue]) ?? 0
@@ -741,7 +805,9 @@ public actor MetadataStore {
     /// 删条目不会让首页缺项——这是把快照存成自包含的主要理由。
     @discardableResult
     public func evictItems(keepingAtMost maxItems: Int) throws -> Int {
-        try database.write { db in
+        if let rust { return try rust.call("evictItems", ["maxItems": maxItems]).decode(Int.self) }
+
+        return try database.write { db in
             let total = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM item") ?? 0
             guard total > maxItems else { return 0 }
             let excess = total - maxItems
@@ -766,7 +832,9 @@ public actor MetadataStore {
 
     /// 清空一个租户的全部缓存（设置页「清空」与登出用）。
     public func clear(tenant: TenantID) throws {
-        try database.write { db in
+        if let rust { try rust.write("clear", rust.args(tenant)); return }
+
+        return try database.write { db in
             for table in ["local_progress", "item", "library", "rail", "page", "media_file_info"] {
                 try db.execute(sql: "DELETE FROM \(table) WHERE tenant_id = ?", arguments: [tenant.rawValue])
             }
@@ -775,7 +843,9 @@ public actor MetadataStore {
 
     /// 清空所有租户的缓存（设置页「清空」）。
     public func clearAll() throws {
-        try database.write { db in
+        if let rust { try rust.write("clearAll"); return }
+
+        return try database.write { db in
             for table in ["local_progress", "item", "library", "rail", "page", "media_file_info", "tenant"] {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
@@ -784,6 +854,8 @@ public actor MetadataStore {
 
     /// 回收磁盘（淘汰后调；VACUUM 会重写整库，调用方应确保在后台做）。
     public func vacuum() throws {
+        if let rust { try rust.write("vacuum"); return }
+
         try database.writeWithoutTransaction { db in
             try db.execute(sql: "VACUUM")
         }

@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 /// 一次地址探活的结果。
 public struct ServerProbeResult: Sendable, Equatable {
@@ -52,6 +53,9 @@ public struct ServerProbe: Sendable {
 
     /// 测试注入：非 nil 时取代真实请求，用于构造确定性延迟 / 失败组合。
     var inject: (@Sendable (URL) async -> ServerProbeResult?)?
+    var usesCoreTransport: Bool {
+        inject == nil && OcpCoreFeature.isEnabled && OcpCoreFeature.supportsNativeTransport(sessionConfiguration) && RustServerProbe.client != nil
+    }
 
     public init(timeout: TimeInterval = 2, sessionConfiguration: URLSessionConfiguration = .default) {
         // ⚠️ `timeout` 是缓存键的一部分，**必须是有限正数**：NaN 做键永不命中
@@ -88,6 +92,10 @@ public struct ServerProbe: Sendable {
                 return nil
             }
             return result
+        }
+        if usesCoreTransport, let client = RustServerProbe.client {
+            return await RustServerProbe.probe(client: client, url: url, timeout: timeout,
+                                              authorization: authorizationHeader, expected: expectedServerID)
         }
         return await request(url: url, authorizationHeader: authorizationHeader,
                              expectedServerID: expectedServerID)

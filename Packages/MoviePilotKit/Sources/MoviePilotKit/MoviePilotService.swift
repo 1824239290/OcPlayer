@@ -10,6 +10,10 @@ extension MoviePilotAPIClient {
     /// 元数据搜索：`GET /media/search`，返回可直接发起资源搜索的媒体条目。
     /// 多源聚合（tmdb/douban/bangumi…，顺序跟服务端 SEARCH_SOURCE 配置走）。
     public func searchMedia(title: String) async throws -> [MPMediaInfo] {
+        if let response = try await rustCoreCall("moviepilot.mediaSearch", arguments: ["title": title]) {
+            let items = try response.data.decode(RustMoviePilotItems.self).items
+            return items.map { MPMediaInfo(raw: $0) }
+        }
         let request = MPRequest(
             path: "/api/v1/media/search",
             query: [
@@ -29,6 +33,10 @@ extension MoviePilotAPIClient {
 
     /// 站点列表（资源搜索的站点筛选用；ResponseAPIRouter 自动信封）。
     public func sites() async throws -> [MPSite] {
+        if let response = try await rustCoreCall("moviepilot.sites", arguments: [:]) {
+            let items = try response.data.decode(RustMoviePilotItems.self).items
+            return items.map { MPSite(raw: $0) }
+        }
         let request = MPRequest(path: "/api/v1/site/")
         let data = try await requestData(request)
         let items = try MPEnvelope.unwrapObjects(data)
@@ -40,6 +48,13 @@ extension MoviePilotAPIClient {
 
     /// 添加下载：media / torrent 必须是搜索结果的原始对象回传。
     public func addDownload(media: MPMediaInfo, torrent: MPTorrent) async throws {
+        if let response = try await rustCoreCall("moviepilot.download.add", arguments: [
+            "media": try media.raw.encodedAny(),
+            "torrent": try torrent.raw.encodedAny(),
+        ]) {
+            _ = response
+            return
+        }
         let request = MPRequest(
             path: "/api/v1/download/",
             method: "POST",
@@ -55,6 +70,10 @@ extension MoviePilotAPIClient {
 
     /// 下载中的任务列表（含进度）。
     public func downloadingTasks() async throws -> [MPDownloadTask] {
+        if let response = try await rustCoreCall("moviepilot.download.list") {
+            let items = try response.data.decode(RustMoviePilotItems.self).items
+            return items.map { MPDownloadTask(raw: $0) }
+        }
         let request = MPRequest(path: "/api/v1/download/")
         let data = try await requestData(request)
         // `P2-22`：一次解析。这条尤其值得 —— 下载页 **5 秒轮询**它。
@@ -63,14 +82,17 @@ extension MoviePilotAPIClient {
     }
 
     public func startDownload(hash: String) async throws {
+        if try await rustCoreCall("moviepilot.download.start", arguments: ["hash": hash]) != nil { return }
         try await downloadControl("start", hash: hash)
     }
 
     public func stopDownload(hash: String) async throws {
+        if try await rustCoreCall("moviepilot.download.stop", arguments: ["hash": hash]) != nil { return }
         try await downloadControl("stop", hash: hash)
     }
 
     public func removeDownload(hash: String) async throws {
+        if try await rustCoreCall("moviepilot.download.remove", arguments: ["hash": hash]) != nil { return }
         let request = MPRequest(
             path: "/api/v1/download/\(Self.encodePathSegment(hash))",
             method: "DELETE"
@@ -83,6 +105,10 @@ extension MoviePilotAPIClient {
 
     /// 查询全部订阅（`GET /api/v1/subscribe/`）。
     public func subscribes() async throws -> [MPSubscribe] {
+        if let response = try await rustCoreCall("moviepilot.subscription.list") {
+            let items = try response.data.decode(RustMoviePilotItems.self).items
+            return items.map { MPSubscribe(raw: $0) }
+        }
         let request = MPRequest(path: "/api/v1/subscribe/")
         let data = try await requestData(request)
         let items = try MPEnvelope.unwrapObjects(data)
@@ -121,6 +147,9 @@ extension MoviePilotAPIClient {
             body["description"] = .string(overview)
         }
 
+        if try await rustCoreCall("moviepilot.subscription.add", arguments: ["subscription": try body.encodedAny()]) != nil {
+            return
+        }
         let request = MPRequest(
             path: "/api/v1/subscribe/",
             method: "POST",
@@ -133,6 +162,9 @@ extension MoviePilotAPIClient {
 
     /// 直接以 MPSubscribe 对象添加订阅（`POST /api/v1/subscribe/`）。
     public func addSubscribe(subscribe: MPSubscribe) async throws {
+        if try await rustCoreCall("moviepilot.subscription.add", arguments: ["subscription": try subscribe.raw.encodedAny()]) != nil {
+            return
+        }
         let request = MPRequest(
             path: "/api/v1/subscribe/",
             method: "POST",
@@ -145,6 +177,9 @@ extension MoviePilotAPIClient {
 
     /// 更新订阅配置（`PUT /api/v1/subscribe/`）。
     public func updateSubscribe(subscribe: MPSubscribe) async throws {
+        if try await rustCoreCall("moviepilot.subscription.update", arguments: ["subscription": try subscribe.raw.encodedAny()]) != nil {
+            return
+        }
         let request = MPRequest(
             path: "/api/v1/subscribe/",
             method: "PUT",
@@ -157,6 +192,9 @@ extension MoviePilotAPIClient {
 
     /// 直接以字典更新订阅配置（`PUT /api/v1/subscribe/`）。
     public func updateSubscribe(raw: [String: JSONValue]) async throws {
+        if try await rustCoreCall("moviepilot.subscription.update", arguments: ["subscription": try raw.encodedAny()]) != nil {
+            return
+        }
         let request = MPRequest(
             path: "/api/v1/subscribe/",
             method: "PUT",
@@ -169,6 +207,7 @@ extension MoviePilotAPIClient {
 
     /// 按订阅 ID 删除订阅（`DELETE /api/v1/subscribe/{id}`）。
     public func deleteSubscribe(id: Int) async throws {
+        if try await rustCoreCall("moviepilot.subscription.delete", arguments: ["id": id]) != nil { return }
         let request = MPRequest(
             path: "/api/v1/subscribe/\(id)",
             method: "DELETE"
@@ -179,6 +218,7 @@ extension MoviePilotAPIClient {
 
     /// 按媒体键删除订阅（`DELETE /api/v1/subscribe/media/{mediaid}`）。
     public func deleteSubscribeByMedia(mediaId: String) async throws {
+        if try await rustCoreCall("moviepilot.subscription.deleteByMedia", arguments: ["mediaId": mediaId]) != nil { return }
         let request = MPRequest(
             path: "/api/v1/subscribe/media/\(Self.encodePathSegment(mediaId))",
             method: "DELETE"
@@ -189,6 +229,7 @@ extension MoviePilotAPIClient {
 
     /// 刷新全部订阅（`GET /api/v1/subscribe/refresh`）。
     public func refreshSubscribes() async throws {
+        if try await rustCoreCall("moviepilot.subscription.refresh") != nil { return }
         let request = MPRequest(path: "/api/v1/subscribe/refresh")
         let data = try await requestData(request)
         try Self.checkStatus(data)
@@ -196,6 +237,7 @@ extension MoviePilotAPIClient {
 
     /// 触发全站追更检索（`GET /api/v1/subscribe/search`）。
     public func searchSubscribes() async throws {
+        if try await rustCoreCall("moviepilot.subscription.search") != nil { return }
         let request = MPRequest(path: "/api/v1/subscribe/search")
         let data = try await requestData(request)
         try Self.checkStatus(data)
@@ -240,3 +282,5 @@ private struct MPTorrentListResponse: Decodable {
     let message: String?
     let data: [[String: JSONValue]]?
 }
+
+private struct RustMoviePilotItems: Decodable { let items: [[String: JSONValue]] }

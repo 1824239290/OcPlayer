@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 /// Emby 的裸 HTTP 会话。
 ///
@@ -22,6 +23,8 @@ final class EmbySession: @unchecked Sendable {
 
     /// 当前生效地址。请求、图片、播放流地址全部从这里派生 —— 换地址对上层透明。
     var baseURL: URL { directory?.currentURL ?? fixedBaseURL }
+    func resolvedURL() async -> URL { await directory?.resolvedURL() ?? fixedBaseURL }
+    func failover(from failed: URL) async -> Bool { await directory?.reportFailure(of: failed) ?? false }
 
     let accessToken: String?
 
@@ -35,6 +38,7 @@ final class EmbySession: @unchecked Sendable {
     /// 401 是密码错误，发通知会把用户从登录页踢回登录页。
     private let profileID: String?
 
+    var allowsCoreTransport: Bool { OcpCoreFeature.supportsNativeTransport(session.configuration) }
     private let session: URLSession
     private let decoder: JSONDecoder
 

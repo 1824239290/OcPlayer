@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import OcPlayerCore
 
 /// 排序模式（进度页）。
 public enum BangumiProgressSortMode: Sendable {
@@ -11,8 +12,14 @@ public enum BangumiProgressSortMode: Sendable {
 public actor BangumiDatabaseOperator {
     private let database: DatabasePool
 
-    public init(database: DatabasePool) {
+    private let rust: RustBangumiStore?
+    var usesCoreStore: Bool { rust != nil }
+
+    public init(database: DatabasePool, coreLibraryPath: String? = nil, coreEnabled: Bool? = nil) {
         self.database = database
+        if coreLibraryPath != nil || (coreEnabled ?? OcpCoreFeature.isEnabled) {
+            rust = try? RustBangumiStore(path: database.path, libraryPath: coreLibraryPath)
+        } else { rust = nil }
     }
 
     // MARK: - 进度
@@ -26,7 +33,9 @@ public actor BangumiDatabaseOperator {
         limit: Int,
         offset: Int
     ) throws -> BangumiPagedDTO<BangumiProgressSubject> {
-        try database.read { db in
+        if let rust { return try rust.call("progressSubjects", ["progressTab": progressTab.rawValue, "sortMode": sortMode == .airTime ? "airTime" : "collectedAt", "search": search, "episodeWindowSize": episodeWindowSize, "limit": limit, "offset": offset]) }
+
+        return try database.read { db in
             let subjects: [BangumiSubject]
             let total: Int
             if sortMode == .collectedAt {
@@ -60,7 +69,9 @@ public actor BangumiDatabaseOperator {
     public func fetchProgressSubject(
         subjectId: Int, episodeWindowSize: Int
     ) throws -> BangumiProgressSubject? {
-        try database.read { db in
+        if let rust { return try rust.call("progressSubject", ["subjectId": subjectId, "episodeWindowSize": episodeWindowSize]) }
+
+        return try database.read { db in
             guard let subject = try fetchSubject(in: db, id: subjectId) else { return nil }
             return try makeProgressSubjects(
                 in: db, [subject], episodeWindowSize: episodeWindowSize
@@ -70,7 +81,9 @@ public actor BangumiDatabaseOperator {
 
     /// 各进度 tab 的计数（在看条目数）。
     public func fetchProgressCounts() throws -> [BangumiSubjectType: Int] {
-        try database.read { db in
+        if let rust { return Dictionary(uniqueKeysWithValues: try rust.counts("progressCounts").map { (BangumiSubjectType($0.key), $0.value) }) }
+
+        return try database.read { db in
             var counts: [BangumiSubjectType: Int] = [:]
             for type in BangumiSubjectType.progressTypes {
                 let filter = progressSubjectFilter(progressTab: type, search: "")
@@ -86,7 +99,9 @@ public actor BangumiDatabaseOperator {
     public func fetchCollectionCounts(
         subjectType: BangumiSubjectType
     ) throws -> [BangumiCollectionType: Int] {
-        try database.read { db in
+        if let rust { return Dictionary(uniqueKeysWithValues: try rust.counts("collectionCounts", ["subjectType": subjectType.rawValue]).map { (BangumiCollectionType($0.key), $0.value) }) }
+
+        return try database.read { db in
             // 一条 GROUP BY 出全部类型计数，替代逐类型 9 趟 COUNT 扫描。
             let rows = try Row.fetchAll(
                 db,
@@ -109,7 +124,9 @@ public actor BangumiDatabaseOperator {
         limit: Int,
         offset: Int
     ) throws -> [BangumiSubjectDTO] {
-        try database.read { db in
+        if let rust { return try rust.call("collectionSubjects", ["subjectType": subjectType.rawValue, "collectionType": collectionType.rawValue, "limit": limit, "offset": offset]) }
+
+        return try database.read { db in
             try fetchSubjects(
                 in: db,
                 whereSQL: "ctype = ? AND type = ?",
@@ -130,7 +147,13 @@ public actor BangumiDatabaseOperator {
         sortDesc: Bool = false,
         limit: Int? = nil
     ) throws -> [BangumiEpisodeDTO] {
-        try database.read { db in
+        if let rust {
+            var a: [String: Any] = ["subjectId": subjectId, "uncollectedOnly": uncollectedOnly, "sortDesc": sortDesc]
+            a["main"] = main; a["limit"] = limit
+            return try rust.call("episodes", a)
+         }
+
+        return try database.read { db in
             var clauses = ["subject_id = ?"]
             var arguments: StatementArguments = [subjectId]
             if let main {
@@ -161,7 +184,12 @@ public actor BangumiDatabaseOperator {
     }
 
     public func fetchEpisodeCounts(subjectId: Int) throws -> (main: Int, other: Int) {
-        try database.read { db in
+        if let rust {
+            let counts: [String: Int] = try rust.call("episodeCounts", ["subjectId": subjectId])
+            return (counts["main"] ?? 0, counts["other"] ?? 0)
+         }
+
+        return try database.read { db in
             let main = try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM episodes WHERE subject_id = ? AND type = ?",
@@ -182,7 +210,9 @@ public actor BangumiDatabaseOperator {
     public func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) throws -> Int? {
-        try database.write { db in
+        if let rust { return try rust.call("updateEpisodeCollection", ["episodeId": episodeId, "type": type.rawValue, "batch": batch, "now": Int(Date().timeIntervalSince1970)]) }
+
+        return try database.write { db in
             let now = Int(Date().timeIntervalSince1970) - 1
             guard let episode = try fetchEpisode(in: db, id: episodeId) else { return nil }
             let subjectId = episode.subjectId
@@ -229,7 +259,9 @@ public actor BangumiDatabaseOperator {
     public func updateSubjectCollectionType(
         subjectId: Int, type: BangumiCollectionType
     ) throws {
-        try database.write { db in
+        if let rust { try rust.write("updateSubjectCollectionType", ["subjectId": subjectId, "type": type.rawValue, "now": Int(Date().timeIntervalSince1970)]); return }
+
+        return try database.write { db in
             guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
             let now = Int(Date().timeIntervalSince1970) - 1
             // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
@@ -259,7 +291,9 @@ public actor BangumiDatabaseOperator {
     public func updateSubjectRating(
         subjectId: Int, rate: Int
     ) throws {
-        try database.write { db in
+        if let rust { try rust.write("updateSubjectRating", ["subjectId": subjectId, "rate": rate, "now": Int(Date().timeIntervalSince1970)]); return }
+
+        return try database.write { db in
             guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
             let now = Int(Date().timeIntervalSince1970)
             if var interest = subject.interest {
@@ -296,60 +330,32 @@ public actor BangumiDatabaseOperator {
     public func saveEpisodes(
         subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false
     ) throws {
+        if let rust { try rust.write("saveEpisodes", ["subjectId": subjectId, "items": try rust.object(items), "authoritativeCollection": authoritativeCollection, "now": Int(Date().timeIntervalSince1970)]); return }
+
+        return try database.write { db in try self.saveEpisodeBatch(in: db, subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection) }
+    }
+
+    /// 完整同步在一个事务内落库并删去远端已移除的章节。
+    public func replaceEpisodes(
+        subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false
+    ) throws {
+        if let rust {
+            try rust.write("replaceEpisodes", ["subjectId": subjectId, "items": try rust.object(items),
+                "authoritativeCollection": authoritativeCollection, "now": Int(Date().timeIntervalSince1970)])
+            return
+        }
         try database.write { db in
-            var subjectRef = try fetchSubject(in: db, id: subjectId)
-            if subjectRef == nil, let slim = items.first?.subject {
-                let (ensured, _) = try ensureSubject(slim, in: db)
-                try upsertSubject(ensured, in: db)
-                subjectRef = ensured
-            } else if let subjectRef, let slim = items.first?.subject {
-                subjectRef.update(slim)
-                try upsertSubject(subjectRef, in: db)
-            }
-
-            let existingEpisodes = try fetchEpisodes(in: db, subjectId: subjectId)
-            let existingMap = Dictionary(uniqueKeysWithValues: existingEpisodes.map { ($0.episodeId, $0) })
-
-            for item in items {
-                let episode: BangumiEpisode
-                if let existing = existingMap[item.id] {
-                    existing.update(item, authoritativeCollection: authoritativeCollection)
-                    episode = existing
-                } else {
-                    episode = BangumiEpisode(item)
-                }
-                try upsertEpisode(episode, in: db)
-            }
-            // 空结果也要盖时间戳：远端确实没登记章节的条目，否则每次刷新都白拉一遍。
-            try db.execute(
-                sql: "UPDATE subjects SET episodes_synced_at = ? WHERE subject_id = ?",
-                arguments: [Int(Date().timeIntervalSince1970), subjectId])
+            try self.saveEpisodeBatch(in: db, subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
+            try self.deleteObsoleteEpisodes(in: db, subjectId: subjectId, episodeIds: Set(items.map(\.id)))
         }
     }
 
     /// 删除本地不在远端集合里的章节（远端删除后清理）。
     /// NOT IN 的占位符逐批 ≤900（SQLite 变量上限 999）：超长剧集一口气传会撞上限。
     public func deleteEpisodesNotIn(subjectId: Int, episodeIds: Set<Int>) throws {
-        try database.write { db in
-            if episodeIds.isEmpty {
-                try db.execute(
-                    sql: "DELETE FROM episodes WHERE subject_id = ?", arguments: [subjectId])
-                return
-            }
-            let ids = Array(episodeIds)
-            var start = 0
-            while start < ids.count {
-                let batch = ids[start..<min(start + 900, ids.count)]
-                try db.execute(
-                    sql: """
-                        DELETE FROM episodes
-                        WHERE subject_id = ? AND episode_id NOT IN (\(placeholders(batch.count)))
-                        """,
-                    arguments: StatementArguments([subjectId] + batch)
-                )
-                start += 900
-            }
-        }
+        if let rust { try rust.write("deleteEpisodesNotIn", ["subjectId": subjectId, "episodeIds": Array(episodeIds)]); return }
+
+        return try database.write { db in try self.deleteObsoleteEpisodes(in: db, subjectId: subjectId, episodeIds: episodeIds) }
     }
 
     /// 落库单条目。
@@ -362,7 +368,9 @@ public actor BangumiDatabaseOperator {
     public func saveSubject(
         _ item: BangumiSubjectDTO, authoritativeInterest: Bool = false
     ) throws -> Bool {
-        try database.write { db in
+        if let rust { return try rust.call("saveSubject", ["item": try rust.object(item), "authoritativeInterest": authoritativeInterest]) }
+
+        return try database.write { db in
             let (subject, created) = try ensureSubject(
                 item, in: db, authoritativeInterest: authoritativeInterest
             )
@@ -376,8 +384,10 @@ public actor BangumiDatabaseOperator {
     public func saveSubjects(
         _ items: [BangumiSubjectDTO], authoritativeInterest: Bool = false
     ) throws {
+        if let rust { try rust.write("saveSubjects", ["items": try rust.object(items), "authoritativeInterest": authoritativeInterest]); return }
+
         guard !items.isEmpty else { return }
-        try database.write { db in
+        return try database.write { db in
             // **先把这一页已有的条目批量读回来**，而不是每条各 `SELECT` 一次。
             //
             // 改前是 N+1：`ensureSubject` 对每条调一次 `fetchSubject`（单条 SELECT），
@@ -439,7 +449,9 @@ public actor BangumiDatabaseOperator {
 
     @discardableResult
     public func saveSubject(_ item: BangumiSlimSubjectDTO) throws -> Bool {
-        try database.write { db in
+        if let rust { return try rust.call("saveSlimSubject", ["item": try rust.object(item)]) }
+
+        return try database.write { db in
             let (subject, created) = try ensureSubject(item, in: db)
             try upsertSubject(subject, in: db)
             return created
@@ -448,7 +460,9 @@ public actor BangumiDatabaseOperator {
 
     /// 单条目读取。
     public func subject(id: Int) throws -> BangumiSubjectDTO? {
-        try database.read { db in
+        if let rust { return try rust.call("subject", ["subjectId": id]) }
+
+        return try database.read { db in
             try fetchSubject(in: db, id: id)?.dto
         }
     }
@@ -456,6 +470,8 @@ public actor BangumiDatabaseOperator {
     /// 批量读取（按 id）。日历页「本地收藏标记」一屏几十个条目，逐条 `subject(id:)`
     /// 是几十次 DB 往返；这里一条 `IN (...)` 查询取回来。
     public func subjects(ids: [Int]) throws -> [Int: BangumiSubjectDTO] {
+        if let rust { return try rust.subjects(ids) }
+
         guard !ids.isEmpty else { return [:] }
         return try database.read { db in
             try fetchSubjectsById(in: db, ids).mapValues { $0.dto }
@@ -464,9 +480,59 @@ public actor BangumiDatabaseOperator {
 
     /// 清空账户相关数据（登出/换号时调用）。
     public func clearAccountLocalState() throws {
-        try database.write { db in
+        if let rust { try rust.write("clearAccountLocalState"); return }
+
+        return try database.write { db in
             try db.execute(sql: "DELETE FROM subjects")
             try db.execute(sql: "DELETE FROM episodes")
+        }
+    }
+
+
+    private func saveEpisodeBatch(in db: Database, subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool) throws {
+        var subjectRef = try fetchSubject(in: db, id: subjectId)
+        if subjectRef == nil, let slim = items.first?.subject {
+            let (ensured, _) = try ensureSubject(slim, in: db)
+            try upsertSubject(ensured, in: db)
+            subjectRef = ensured
+        } else if let subjectRef, let slim = items.first?.subject {
+            subjectRef.update(slim)
+            try upsertSubject(subjectRef, in: db)
+        }
+
+        let existingEpisodes = try fetchEpisodes(in: db, subjectId: subjectId)
+        let existingMap = Dictionary(uniqueKeysWithValues: existingEpisodes.map { ($0.episodeId, $0) })
+
+        for item in items {
+            let episode: BangumiEpisode
+            if let existing = existingMap[item.id] {
+                existing.update(item, authoritativeCollection: authoritativeCollection)
+                episode = existing
+            } else {
+                episode = BangumiEpisode(item)
+            }
+            try upsertEpisode(episode, in: db)
+        }
+        // 空结果也要盖时间戳：远端确实没登记章节的条目，否则每次刷新都白拉一遍。
+        try db.execute(
+            sql: "UPDATE subjects SET episodes_synced_at = ? WHERE subject_id = ?",
+            arguments: [Int(Date().timeIntervalSince1970), subjectId])
+    }
+
+
+    private func deleteObsoleteEpisodes(in db: Database, subjectId: Int, episodeIds: Set<Int>) throws {
+        if episodeIds.isEmpty {
+            try db.execute(
+                sql: "DELETE FROM episodes WHERE subject_id = ?", arguments: [subjectId])
+            return
+        }
+        let existing = try Int.fetchAll(db, sql: "SELECT episode_id FROM episodes WHERE subject_id = ?",
+                                        arguments: [subjectId])
+        let removed = existing.filter { !episodeIds.contains($0) }
+        for start in stride(from: 0, to: removed.count, by: 900) {
+            let batch = Array(removed[start..<min(start + 900, removed.count)])
+            try db.execute(sql: "DELETE FROM episodes WHERE subject_id = ? AND episode_id IN (\(placeholders(batch.count)))",
+                           arguments: StatementArguments([subjectId] + batch))
         }
     }
 
@@ -598,6 +664,20 @@ public actor BangumiDatabaseOperator {
         }.map(\.id)
     }
 
+    /// 从同一个快照挑出待补齐/待重拉条目，按原优先顺序去重。
+    public func fetchEpisodeSyncTargets(
+        limit: Int = 200, retryInterval: TimeInterval = 6 * 3600, resyncCooldown: TimeInterval = 60
+    ) throws -> [Int] {
+        if let rust {
+            let timestamp = Date().timeIntervalSince1970
+            return try rust.call("syncTargets", ["limit": limit,
+                "staleBefore": Int(timestamp - retryInterval), "cooldownBefore": Int(timestamp - resyncCooldown)])
+        }
+        let missing = try fetchSubjectIDsMissingEpisodes(limit: limit, retryInterval: retryInterval)
+        let stale = try fetchSubjectIDsWithStaleEpisodeProgress(limit: limit, resyncCooldown: resyncCooldown)
+        return BangumiEpisodeRepository.episodeSyncTargets(missingEpisodes: missing, staleProgress: stale)
+    }
+
     /// 「在看」里本地章节还没补齐的条目（章节表里的本篇数少于条目声明的总集数）。
     /// 收藏同步只落条目，章节要另外拉；用它把要补的条目框出来，避免每次全量重拉。
     ///
@@ -607,6 +687,8 @@ public actor BangumiDatabaseOperator {
     public func fetchSubjectIDsMissingEpisodes(
         limit: Int = 200, retryInterval: TimeInterval = 6 * 3600
     ) throws -> [Int] {
+        if let rust { return try rust.call("missingEpisodes", ["limit": limit, "staleBefore": Int(Date().timeIntervalSince1970 - retryInterval)]) }
+
         let staleBefore = Int(Date().timeIntervalSince1970 - retryInterval)
         return try database.read { db in
             try Int.fetchAll(
@@ -656,6 +738,8 @@ public actor BangumiDatabaseOperator {
     public func fetchSubjectIDsWithStaleEpisodeProgress(
         limit: Int = 200, resyncCooldown: TimeInterval = 60
     ) throws -> [Int] {
+        if let rust { return try rust.call("staleEpisodeProgress", ["limit": limit, "cooldownBefore": Int(Date().timeIntervalSince1970 - resyncCooldown)]) }
+
         let cooldownBefore = Int(Date().timeIntervalSince1970 - resyncCooldown)
         return try database.read { db in
             let rows = try Row.fetchAll(
@@ -755,7 +839,9 @@ public actor BangumiDatabaseOperator {
     /// 按单集 id 反查所属条目 id（标「看过」前推进条目「在看」用）。
     /// 本地没有这一集时返回 nil，调用方跳过推进直接标集。
     public func subjectID(ofEpisode episodeId: Int) throws -> Int? {
-        try database.read { db in
+        if let rust { return try rust.call("subjectID", ["episodeId": episodeId]) }
+
+        return try database.read { db in
             try Int.fetchOne(
                 db,
                 sql: "SELECT subject_id FROM episodes WHERE episode_id = ?",

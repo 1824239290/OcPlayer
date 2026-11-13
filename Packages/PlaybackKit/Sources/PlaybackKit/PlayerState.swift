@@ -1,6 +1,7 @@
 import DiagnosticsKit
 import Foundation
 import Observation
+import OcPlayerCore
 
 /// 专门承载高频刷新的时间轴快照（progress 10Hz、displayPosition 1Hz），
 /// 独立于 PlayerState 其它属性，保证进度更新不连带触发菜单、控制栏等静态 UI 重绘。
@@ -74,6 +75,8 @@ public struct PlaybackSessionStats: Sendable, Equatable {
 @MainActor
 @Observable
 public final class PlayerState {
+    @ObservationIgnored public private(set) var sharedEngineEvents: OcpPlaybackEvents?
+    nonisolated private static let sharedRules = OcpPlaybackFlow()
     public private(set) var state: PlaybackState = .idle
     public private(set) var isBuffering = false
     /// UI 展示用的缓冲态：`isBuffering` **持续** `bufferingUIShowDelay` 才置位，
@@ -142,10 +145,16 @@ public final class PlayerState {
     /// 迟滞参数可注入：默认值是面向真机观感的，测试用小值跑真实计时路径。
     public init(
         bufferingUIShowDelay: Duration = .milliseconds(300),
-        bufferingUIMinVisible: Duration = .milliseconds(500)
+        bufferingUIMinVisible: Duration = .milliseconds(500),
+        coreClient: OcpCoreClient? = nil
     ) {
+        self.sharedEngineEvents = OcpPlaybackEvents(client: coreClient)
         self.bufferingUIShowDelay = bufferingUIShowDelay
         self.bufferingUIMinVisible = bufferingUIMinVisible
+    }
+
+    public func attachCoreClient(_ client: OcpCoreClient) {
+        if sharedEngineEvents?.client !== client { sharedEngineEvents = OcpPlaybackEvents(client: client) }
     }
 
     /// 开始消费某个引擎的事件流。调用方持有返回的 `Task` 决定生命周期。
@@ -191,6 +200,7 @@ public final class PlayerState {
     /// 换源时复位快照，避免旧内容的 position / duration / 轨道 / 错误残留到新源。
     /// surface 归 surface（视图一直挂着），这里只管媒体相关的状态。
     public func reset() {
+        try? sharedEngineEvents?.reset()
         state = .idle
         timeline.reset()
         isBuffering = false
@@ -212,10 +222,20 @@ public final class PlayerState {
     func apply(_ event: PlayerEvent) {
         defer {
             switch event {
-            case .stateChanged, .positionChanged, .bufferingChanged, .failed:
+            case .stateChanged, .positionChanged, .durationChanged, .bufferingChanged, .failed:
                 onPlaybackActivityChanged?()
             default: break
             }
+        }
+        if let sharedEngineEvents, let payload = Self.coreEvent(event) {
+            do {
+                let decision = try sharedEngineEvents.apply(payload)
+                guard decision.accepted else { return }
+                applySharedDecision(decision, event: event)
+            } catch {
+                PlaybackLog.warning("Core 引擎事件处理失败", fields: ["error": .string(error.localizedDescription)])
+            }
+            return
         }
         switch event {
         case .stateChanged(let value):
@@ -321,6 +341,57 @@ public final class PlayerState {
         }
     }
 
+    private static func coreEvent(_ event: PlayerEvent) -> [String: Any]? {
+        switch event {
+        case .stateChanged(let state): return ["kind": "state_changed", "state": String(describing: state)]
+        case .positionChanged(let value): return ["kind": "position", "seconds": Double(value.microseconds) / 1_000_000]
+        case .durationChanged(let value): return ["kind": "duration", "seconds": Double(value.microseconds) / 1_000_000]
+        case .failed(let code, let message): return ["kind": "failed", "code": code, "message": message as Any]
+        default: return nil
+        }
+    }
+
+    private func applySharedDecision(_ decision: OcpPlaybackEvents.Decision, event: PlayerEvent) {
+        let snapshot = decision.snapshot
+        let nextState: PlaybackState
+        switch snapshot.state {
+        case "opening": nextState = .opening
+        case "ready": nextState = .ready
+        case "playing": nextState = .playing
+        case "paused": nextState = .paused
+        case "stopped": nextState = .stopped
+        case "closed": nextState = .closed
+        case "error": nextState = .error
+        default: nextState = .idle
+        }
+        if nextState != state {
+            state = nextState
+            recordStateTransition(nextState)
+        }
+        switch event {
+        case .positionChanged(let value): timeline.setPosition(value)
+        case .durationChanged(let value): timeline.setDuration(value)
+        default: break
+        }
+        sessionStats.errorCount = Int(clamping: snapshot.errorCount)
+        if let failure = snapshot.failure {
+            let message = failure.message ?? "内核错误 code=\(failure.code)"
+            if message != lastError { lastError = message }
+        }
+        if decision.reportedFailure, let failure = snapshot.failure {
+            PlaybackLog.error("内核错误事件 code=\(failure.code) message=\(failure.message ?? "nil")")
+            PlaybackLog.event(.error, fields: ["code": .integer(Int64(failure.code)),
+                                             "message": .string(failure.message ?? "nil"),
+                                             "position_ms": .integer(timeline.position.microseconds / 1000)], level: .error)
+        }
+        if decision.foldedTailFailure, case .failed(let code, let message) = event {
+            PlaybackLog.warning("片尾陈旧读错误按自然收尾处理（内核 AVIO 错误闸门，待 liberika 修）",
+                                fields: ["code": .integer(Int64(code)), "message": .string(message ?? "nil"),
+                                         "position_ms": .integer(timeline.position.microseconds / 1000),
+                                         "duration_ms": .integer(timeline.duration.microseconds / 1000)])
+        }
+    }
+
     /// 识别「片尾的陈旧读错误」：内核在一次 seek 打断读之后，那条 EIO 会被 FFmpeg
     /// 永久锁进 `AVIOContext.error`（`avio_seek` 只清 `eof_reached`，从不清 `error`），
     /// 于是此后**第一次读到 0 字节**（自然播完 / 跳到片尾）拿到的是这条陈旧 EIO
@@ -345,6 +416,10 @@ public final class PlayerState {
         position: Duration,
         duration: Duration
     ) -> Bool {
+        if let rules = sharedRules {
+            return (try? rules.staleTailIO(message: message, positionSeconds: Double(position.microseconds) / 1_000_000,
+                                           durationSeconds: Double(duration.microseconds) / 1_000_000)) ?? false
+        }
         guard let message,
               isInTailWindow(position: position, duration: duration),
               message.contains("av_read_frame"),

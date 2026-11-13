@@ -80,11 +80,21 @@ final class MetadataCoordinator {
     /// 会话落地 / 换服 / 登出时调用。服务器实例变化即丢弃旧仓储的内存投影，
     /// 磁盘内容按租户隔离，仍归同一台服务器复用。
     func setActiveServer(_ server: (any MediaServer)?) {
-        let identifier = server.map { ObjectIdentifier($0 as AnyObject) }
+        let effectiveServer: (any MediaServer)?
+        if let server = server as? RustCoreMediaServer {
+            // AppModel may install the Rust facade as the session's canonical
+            // server so playback reporting and browsing share one backend.
+            effectiveServer = server
+        } else if let server, let rust = RustCoreMediaServer(wrapping: server, dataDirectory: databaseDirectory) {
+            effectiveServer = rust
+        } else {
+            effectiveServer = server
+        }
+        let identifier = effectiveServer.map { ObjectIdentifier($0 as AnyObject) }
         if identifier != activeServerIdentifier {
             sessionGeneration &+= 1
             let retired = repository
-            activeServer = server
+            activeServer = effectiveServer
             activeServerIdentifier = identifier
             repository = nil
             if let retired {

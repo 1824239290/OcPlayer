@@ -9,12 +9,13 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../DiagnosticsKit"),
+        .package(path: "../OcPlayerCore"),
     ],
     targets: [
         .target(
             name: "MoviePilotKit",
-            dependencies: ["DiagnosticsKit"]
+            dependencies: ["DiagnosticsKit", "OcPlayerCore"]
         ),
-        .testTarget(name: "MoviePilotKitTests", dependencies: ["MoviePilotKit"]),
+        .testTarget(name: "MoviePilotKitTests", dependencies: ["MoviePilotKit"], resources: [.copy("Fixtures")]),
     ]
 )

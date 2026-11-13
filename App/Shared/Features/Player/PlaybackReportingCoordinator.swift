@@ -1,13 +1,14 @@
 import Foundation
 import JellyfinKit
 import PlaybackKit
+import OcPlayerCore
 
 // 上报协议 `PlaybackReporting` 由 JellyfinKit 提供（只有那 3 条方法）：
 // 协调器只依赖它需要的契约，测试替身不必实现整个 `MediaServer`。
 // 生产侧 `JellyfinServer` / `EmbyServer` 都经 `MediaServer` 满足它。
 
 struct PlaybackReportSnapshot: Equatable {
-    enum State: Equatable {
+    enum State: String, Equatable {
         case active
         case paused
         case stopped
@@ -62,6 +63,7 @@ final class PlaybackReportingCoordinator {
     private weak var stateSource: (any PlaybackReportingStateSource)?
     private let heartbeatInterval: Duration
     private let progressEveryTicks: Int
+    let sharedReportPolicy = OcpPlaybackFlow()
 
     private var generation: UInt64 = 0
     private var session: Session?
@@ -116,9 +118,26 @@ final class PlaybackReportingCoordinator {
     /// 唯一「先 stop 后清 identity」的调用点是 `AppModel.playback` 的 didSet，
     /// 而它只在注入时跑一次。若将来新增「播放中把 `AppModel.playback` 换成新控制器」
     /// 的路径，需要重新评估这里。
-    private static func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
+    private func isNaturalEnd(snapshot: PlaybackReportSnapshot?) -> Bool {
         guard let snapshot else { return false }
-        return snapshot.state == .stopped && isReachedEnd(snapshot: snapshot)
+        if let decision = sharedDecision(snapshot: snapshot, mode: "inspect") { return decision.reachedEnd }
+        return snapshot.state == .stopped && !snapshot.sourceOpenFailed && Self.isReachedEnd(snapshot: snapshot)
+    }
+
+    private func sharedDecision(snapshot: PlaybackReportSnapshot, mode: String,
+                                ticks: UInt64 = 0, reportedPause: Bool = false) -> OcpPlaybackFlow.ReportDecision? {
+        guard let policy = sharedReportPolicy else { return nil }
+        do {
+            return try policy.reportStep(state: snapshot.state.rawValue,
+                                         positionSeconds: snapshot.positionSeconds,
+                                         durationSeconds: snapshot.durationSeconds,
+                                         sourceOpenFailed: snapshot.sourceOpenFailed, mode: mode,
+                                         ticks: ticks, reportedPause: reportedPause, everyTicks: progressEveryTicks)
+        } catch {
+            // Failed shared decisions cannot authorize a new report or autoplay.
+            return OcpPlaybackFlow.ReportDecision(action: "none", ticks: ticks,
+                                                   reportedPause: reportedPause, reachedEnd: false)
+        }
     }
 
     private func triggerTerminalIfNeeded(session: Session, reachedEnd: Bool) {
@@ -219,7 +238,7 @@ final class PlaybackReportingCoordinator {
         heartbeatTask = Task { [weak self] in
             await startTask.value
             guard !Task.isCancelled else { return }
-            var ticks = 0
+            var ticks: UInt64 = 0
             // 本次暂停是否已经报过（恢复播放时复位）。见下面的暂停分支。
             var reportedPause = false
             while !Task.isCancelled {
@@ -233,10 +252,17 @@ final class PlaybackReportingCoordinator {
                 guard let snapshot = self.stateSource?.playbackReportSnapshot(for: requestID) else {
                     continue
                 }
-                ticks += 1
+                let decision = self.sharedDecision(snapshot: snapshot, mode: "heartbeat", ticks: ticks, reportedPause: reportedPause)
+                if let decision {
+                    ticks = decision.ticks
+                    reportedPause = decision.reportedPause
+                } else {
+                    ticks &+= 1
+                }
 
-                if snapshot.state == .stopped || snapshot.state == .error
-                    || snapshot.sourceOpenFailed {
+                let terminal = decision.map { $0.action == "stopped" }
+                    ?? (snapshot.state == .stopped || snapshot.state == .error || snapshot.sourceOpenFailed)
+                if terminal {
                     let precedingLifecycle = self.pendingLifecycleReport
                     self.pendingLifecycleReport = nil
                     let stopTask = self.enqueueStoppedReport(
@@ -248,9 +274,16 @@ final class PlaybackReportingCoordinator {
                     guard self.isCurrent(activeSession) else { return }
                     self.session = nil
                     self.heartbeatTask = nil
-                    let reachedEnd = Self.isNaturalEnd(snapshot: snapshot)
+                    let reachedEnd = self.isNaturalEnd(snapshot: snapshot)
                     self.triggerTerminalIfNeeded(session: activeSession, reachedEnd: reachedEnd)
                     return
+                }
+
+                if let decision {
+                    if decision.action == "progress" {
+                        _ = self.enqueueProgressReport(session: activeSession, snapshot: snapshot)
+                    }
+                    continue
                 }
 
                 // 暂停只报一次：位置已经不再前进，服务端拿到这一条就知道「停在哪 +
@@ -269,7 +302,7 @@ final class PlaybackReportingCoordinator {
                 }
                 reportedPause = false
 
-                if ticks % self.progressEveryTicks == 0 {
+                if ticks % UInt64(self.progressEveryTicks) == 0 {
                     _ = self.enqueueProgressReport(
                         session: activeSession,
                         snapshot: snapshot
@@ -286,8 +319,10 @@ final class PlaybackReportingCoordinator {
         guard let session,
               let snapshot = stateSource?.playbackReportSnapshot(for: session.requestID)
         else { return nil }
-        if snapshot.state == .stopped || snapshot.state == .error
-            || snapshot.sourceOpenFailed {
+        let decision = sharedDecision(snapshot: snapshot, mode: "background")
+        let terminal = decision.map { $0.action == "stopped" }
+            ?? (snapshot.state == .stopped || snapshot.state == .error || snapshot.sourceOpenFailed)
+        if terminal {
             guard let task = stop() else { return nil }
             return .terminal(task)
         }
@@ -306,7 +341,7 @@ final class PlaybackReportingCoordinator {
         pendingLifecycleReport = nil
         session = nil
 
-        let reachedEnd = Self.isNaturalEnd(snapshot: snapshot)
+        let reachedEnd = isNaturalEnd(snapshot: snapshot)
         if reachedEnd {
             triggerTerminalIfNeeded(session: activeSession, reachedEnd: true)
         }

@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 网络层诊断日志。只记请求路径，任何 token 都由红actor 兜底，绝不进日志。
 /// 实现委托 DiagnosticsKit.NetworkLog（按 category 共享 logger），保留公开 API 形状。
@@ -68,6 +69,8 @@ public actor BangumiAPIClient {
 
     private let store: BangumiStore
     private let userAgent: String
+    private let rust: OcpCoreClient?
+    private var rustRequests: [String: UInt64] = [:]
     /// 网关 OAuth 配置。由 App 层在启动 / 网关设置变更时注入（`configureGateway`）：
     /// token 交换与刷新都要经网关，凭证不进客户端。
     private var gateway: BangumiGatewayConfiguration?
@@ -101,8 +104,13 @@ public actor BangumiAPIClient {
         store: BangumiStore = .shared,
         gateway: BangumiGatewayConfiguration? = nil,
         userAgent: String = "OcPlayer/0.1 (BangumiKit)",
-        sessionFactory: (@Sendable (String?) -> URLSession)? = nil
+        sessionFactory: (@Sendable (String?) -> URLSession)? = nil,
+        rustCoreLibraryPath: String? = nil
     ) {
+        if (rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled),
+           (rustCoreLibraryPath != nil || sessionFactory == nil) {
+            self.rust = try? OcpCoreClient(libraryPath: rustCoreLibraryPath)
+        } else { self.rust = nil }
         self.store = store
         self.gateway = gateway
         self.userAgent = userAgent
@@ -180,7 +188,10 @@ public actor BangumiAPIClient {
         url: URL, method: String, body: BangumiJSONValue? = nil, auth: BangumiAuthMode = .auto,
         headers: [String: String] = [:]
     ) async throws -> Data {
-        try await Self.requestRetryPolicy.run {
+        // Rust owns HTTP retries once selected. A dispatched failure cannot fall
+        // through to URLSession; POST/PATCH mutations must not be duplicated.
+        let retryPolicy = rust != nil ? RetryPolicy(attempts: 1) : Self.requestRetryPolicy
+        return try await retryPolicy.run {
             var authed: Bool
             switch auth {
             case .auto: authed = isAuthenticated()
@@ -205,32 +216,59 @@ public actor BangumiAPIClient {
                 spec.body = try Self.encoder.encode(body)
             }
 
-            let exchange: HTTPExchange
+            let data: Data
+            let httpResponse: HTTPURLResponse
             do {
-                exchange = try await HTTPClient(
-                    session: requestSession.session, category: "Bangumi"
-                ).exchange(spec)
+                if let rust {
+                    var requestHeaders: [String: String] = [:]
+                    for (key, value) in requestSession.session.configuration.httpAdditionalHeaders ?? [:] {
+                        if let key = key as? String, let value = value as? String { requestHeaders[key] = value }
+                    }
+                    for (key, value) in spec.headers { requestHeaders[key] = value }
+                    let requestID = UUID().uuidString
+                    if let generation = requestSession.credentialGeneration { rustRequests[requestID] = generation }
+                    defer { rustRequests.removeValue(forKey: requestID) }
+                    var arguments: [String: Any] = ["url": url.absoluteString, "httpMethod": method, "headers": requestHeaders, "requestId": requestID]
+                    if let body = spec.body { arguments["body"] = try JSONSerialization.jsonObject(with: body) }
+                    let response = try await executeRustRequest(rust, arguments: arguments, url: url)
+                    guard response.ok else {
+                        switch response.code {
+                        case 1003: throw CancellationError()
+                        case 1521: throw BangumiError.network(failure: .timedOut, message: "请求超时，请稍后再试")
+                        case 1522: throw BangumiError.network(failure: .cannotConnect, message: "无法连接到服务器，请检查网络后重试")
+                        default: throw BangumiError.request(response.message)
+                        }
+                    }
+                    let result = try response.data.decode(RustExchange.self)
+                    guard let nativeResponse = HTTPURLResponse(url: url, statusCode: result.status,
+                                                              httpVersion: "HTTP/1.1", headerFields: result.headers) else {
+                        throw BangumiError.request("invalid Rust HTTP response")
+                    }
+                    data = Data(result.body.utf8)
+                    httpResponse = nativeResponse
+                } else {
+                    let exchange = try await HTTPClient(session: requestSession.session, category: "Bangumi").exchange(spec)
+                    data = exchange.data
+                    httpResponse = exchange.response
+                }
             } catch let transport as HTTPTransportError {
                 switch transport {
-                case .url(let urlError):
-                    throw BangumiError(networkError: urlError as NSError)
-                case .nonHTTP:
-                    throw BangumiError(message: "api response nil")
-                case .other(let description):
-                    throw BangumiError(request: description)
-                case .status(let code):
-                    // exchange 不会为状态码抛 .status（只是日志记号）；防御兜底。
-                    throw BangumiError(code: code, response: "", requestID: nil)
+                case .url(let urlError): throw BangumiError(networkError: urlError as NSError)
+                case .nonHTTP: throw BangumiError(message: "api response nil")
+                case .other(let description): throw BangumiError(request: description)
+                case .status(let code): throw BangumiError(code: code, response: "", requestID: nil)
                 }
             }
 
-            let httpResponse = exchange.response
-            let requestID = httpResponse.allHeaderFields["x-request-id"] as? String
-
+            if let generation = requestSession.credentialGeneration, generation != authGeneration {
+                throw BangumiError(ignore: "Discarded stale credential response")
+            }
+            let requestID = httpResponse.value(forHTTPHeaderField: "x-request-id")
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
             if httpResponse.statusCode < 400 {
-                return exchange.data
+                return data
             } else if httpResponse.statusCode == 429 {
-                throw BangumiError.rateLimited(retryAfter: exchange.retryAfter)
+                throw BangumiError.rateLimited(retryAfter: httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init))
             } else if httpResponse.statusCode == 401 {
                 if let requestAuthGeneration = requestSession.credentialGeneration {
                     guard requestAuthGeneration == authGeneration else {
@@ -243,15 +281,17 @@ public actor BangumiAPIClient {
                 // 保留响应体：网关的 403 靠 `error.code` 区分原因（SCOPE_REQUIRED /
                 // OCPLAY_USER_AGENT_REQUIRED），丢了 body 就只剩笼统文案。
                 // 面向用户的文案与旧行为一致（`.forbidden` 的 userMessage 同字面）。
-                throw BangumiError(code: 403, response: exchange.bodyText, requestID: requestID)
+                throw BangumiError(code: 403, response: bodyText, requestID: requestID)
             } else {
                 throw BangumiError(
                     code: httpResponse.statusCode,
-                    response: exchange.bodyText,
+                    response: bodyText,
                     requestID: requestID)
             }
         } shouldRetry: { error in
-            (error as? BangumiError)?.isRetryable ?? false
+            let idempotent = ["GET", "HEAD", "PUT", "DELETE", "OPTIONS"].contains(method.uppercased())
+                || (method.uppercased() == "POST" && url.path.hasSuffix("/p1/search/subjects"))
+            return idempotent && ((error as? BangumiError)?.isRetryable ?? false)
         } retryAfterProvider: { error in
             if case .rateLimited(let retryAfter) = error as? BangumiError { return retryAfter }
             return nil
@@ -259,6 +299,37 @@ public actor BangumiAPIClient {
             BangumiNetworkLog.logger.warning(
                 "重试 \(method) \(url.absoluteString) (尝试 \(attempt + 1)/\(Self.requestRetryPolicy.attempts))")
         }
+    }
+
+    private func executeRustRequest(_ core: OcpCoreClient, arguments: [String: Any], url: URL) async throws -> OcpResponse {
+        let path = NetworkLog.logPath(for: url)
+        let start = ContinuousClock.now
+        NetworkLog.requestStarted(category: "Bangumi", path: path)
+        do {
+            let response = try await core.callAsync("bangumi.request", argumentsJSON:
+                String(decoding: try JSONSerialization.data(withJSONObject: arguments), as: UTF8.self))
+            let duration = start.duration(to: .now).timeInterval
+            if response.code == 1003 {
+                NetworkLog.requestCancelled(category: "Bangumi", path: path, duration: duration)
+            } else if response.ok, let exchange = try? response.data.decode(RustExchange.self) {
+                if exchange.status < 400 { NetworkLog.requestSucceeded(category: "Bangumi", path: path, duration: duration) }
+                else { NetworkLog.requestFailed(category: "Bangumi", path: path, error: HTTPTransportError.status(exchange.status), duration: duration, level: .warning) }
+            } else {
+                NetworkLog.requestFailed(category: "Bangumi", path: path, error: BangumiError.request(response.message), duration: duration)
+            }
+            return response
+        } catch {
+            let duration = start.duration(to: .now).timeInterval
+            if CancellationClassifier.isCancellation(error) { NetworkLog.requestCancelled(category: "Bangumi", path: path, duration: duration) }
+            else { NetworkLog.requestFailed(category: "Bangumi", path: path, error: error, duration: duration) }
+            throw error
+        }
+    }
+
+    private struct RustExchange: Decodable {
+        let status: Int
+        let headers: [String: String]
+        let body: String
     }
 
     // MARK: - 网关 OAuth
@@ -496,6 +567,7 @@ public actor BangumiAPIClient {
         case .refresh(let credentialGeneration):
             guard credentialGeneration == authGeneration else { return nil }
         }
+        cancelRustAuthorizedRequests()
         authGeneration &+= 1
         authorizedSession?.invalidateAndCancel()
         authorizedSession = nil
@@ -507,6 +579,7 @@ public actor BangumiAPIClient {
 
     @discardableResult
     private func invalidateCredentials() -> UInt64 {
+        cancelRustAuthorizedRequests()
         authGeneration &+= 1
         oauthExchangeGeneration &+= 1
         refreshGeneration &+= 1
@@ -518,6 +591,12 @@ public actor BangumiAPIClient {
         auth = nil
         store.auth = nil
         return authGeneration
+    }
+
+    private func cancelRustAuthorizedRequests() {
+        for requestID in rustRequests.keys {
+            _ = try? rust?.call("request.cancel", arguments: ["requestId": requestID])
+        }
     }
 
     /// 通知 UI「这一代凭证需要重新登录」。

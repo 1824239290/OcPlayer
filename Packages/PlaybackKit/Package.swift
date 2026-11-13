@@ -10,9 +10,10 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../DiagnosticsKit"),
+        .package(path: "../OcPlayerCore"),
     ],
     targets: [
-        .target(name: "PlaybackKit", dependencies: ["DiagnosticsKit"]),
+        .target(name: "PlaybackKit", dependencies: ["DiagnosticsKit", "OcPlayerCore"]),
         .testTarget(name: "PlaybackKitTests", dependencies: ["PlaybackKit"]),
     ]
 )

@@ -63,30 +63,37 @@ extension AppModel {
     func activate(server: any MediaServer) async {
         initialDataTask?.cancel()
         sessionGeneration &+= 1
-        self.server = server
+        // Install one canonical facade for the session. This keeps browsing,
+        // playback reporting, and future migrated features on the same Rust
+        // core instance while preserving the native fallback when the feature
+        // flag or bundled library is unavailable.
+        let effectiveServer = (server as? RustCoreMediaServer)
+            ?? RustCoreMediaServer(wrapping: server, dataDirectory: OcPlayerStorage.defaultRoot)
+            ?? server
+        self.server = effectiveServer
         serverAvatarResolution = .pending
         viewingProfileAvatar.reset()
         // 记下本会话的图片缓存身份。**唯一**的会话落地点（登录 / 启动恢复 / 切换服务器）
         // 就是这里，所以只在这一处记；登录页在没有 token 时靠它复原海报的缓存键。
         // 刻意不在登出时清除——见 `ImageCacheIdentityStore`。
         ImageCacheIdentityStore.remember(
-            identity: ImagePipeline.cacheIdentity(url: server.profile.baseURL, authHeader: server.authorizationHeader,
-                                                  cacheScope: server.profile.imageCacheScope),
-            tenant: server.profile.id
+            identity: ImagePipeline.cacheIdentity(url: effectiveServer.profile.baseURL, authHeader: effectiveServer.authorizationHeader,
+                                                  cacheScope: effectiveServer.profile.imageCacheScope),
+            tenant: effectiveServer.profile.id
         )
-        attachEndpoints(to: server)
+        attachEndpoints(to: effectiveServer)
         // 换会话就丢掉上个会话的分页投影：条目 id 只在那台服务器里有意义。
         libraryPages = [:]
         phase = .ready
         let generation = sessionGeneration
         initialDataTask = Task { [weak self] in
-            await self?.loadInitialData(server: server, generation: generation)
+            await self?.loadInitialData(server: effectiveServer, generation: generation)
         }
         // 头像单独一条任务，不搭首屏那趟车：它只喂首页 Tab 的图标，不该拖慢首屏；
         // 而首屏任务会被下拉刷新 / 重试重建，头像没必要跟着重来一遍。
         userAvatarTask?.cancel()
         userAvatarTask = Task { [weak self] in
-            await self?.loadUserAvatar(server: server, generation: generation)
+            await self?.loadUserAvatar(server: effectiveServer, generation: generation)
         }
     }
 

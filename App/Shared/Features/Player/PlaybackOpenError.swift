@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 /// 「打开播放源」失败的**类别**。
 ///
@@ -32,6 +33,8 @@ enum PlaybackOpenErrorKind: String, Hashable, Sendable, CaseIterable {
     /// 归不出来的。默认按可重试处理（宁可多试一次，不要卡死在未知）。
     case unknown
 
+    private static let sharedRules = OcpPlaybackFlow()
+
     /// 用户可见的短标签。徽章文案由它开头，因此「分类错了」在界面上是可见的。
     var label: String {
         switch self {
@@ -49,7 +52,8 @@ enum PlaybackOpenErrorKind: String, Hashable, Sendable, CaseIterable {
     /// `.aborted` 是一次主动放弃，重试只会把用户刚取消的东西又拉起来；
     /// 其余都值得重试——包括 `.auth`：用户可能刚好在设置里修好了地址。
     var isRetryable: Bool {
-        self != .aborted
+        if let rules = Self.sharedRules { return (try? rules.capabilities(kind: rawValue).isRetryable) ?? false }
+        return self != .aborted
     }
 
     /// 还有备用源时，**要不要自动换到下一条源**。
@@ -62,6 +66,7 @@ enum PlaybackOpenErrorKind: String, Hashable, Sendable, CaseIterable {
     /// * `.auth` —— 换源无效：两条源用的是同一份凭据，失败在令牌不在流。
     /// * `.aborted` —— 换源会违背用户意图。
     var allowsSourceFailover: Bool {
+        if let rules = Self.sharedRules { return (try? rules.capabilities(kind: rawValue).allowsSourceFailover) ?? false }
         switch self {
         case .network, .format, .server, .unknown: return true
         case .auth, .aborted: return false
@@ -98,6 +103,9 @@ enum PlaybackOpenErrorKind: String, Hashable, Sendable, CaseIterable {
 
     /// 分类：只拿到一句话时用（当前生产路径主要走这条）。
     static func classify(message: String) -> PlaybackOpenErrorKind {
+        if let rules = sharedRules {
+            return (try? rules.classify(message: message)).flatMap { Self(rawValue: $0.kind) } ?? .unknown
+        }
         let text = message.lowercased()
         // 取消类先判：它常与「网络中断」的文案混在一起，但语义是主动放弃。
         if text.contains("取消") || text.contains("cancel") || text.contains("让位") {

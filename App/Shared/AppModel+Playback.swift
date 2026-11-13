@@ -5,6 +5,7 @@ import DiagnosticsKit
 import Foundation
 import JellyfinKit
 import PlaybackKit
+import OcPlayerCore
 
 extension AppModel {
     // MARK: - 弹幕设置（弹弹play 网关）
@@ -56,6 +57,7 @@ extension AppModel {
 
     func cancelPlaybackOpen() {
         AppDiagnostics.logInfo("cancelPlaybackOpen 取消播放准备")
+        try? playbackFlow?.invalidate()
         playbackOpenGeneration &+= 1
         playbackOpenTask?.cancel()
         playbackOpenTask = nil
@@ -247,7 +249,8 @@ extension AppModel {
         resumeSeconds: Double?,
         item: MediaItem,
         sessionContext: PlaybackSessionContext,
-        alternates: [PlaybackAlternate] = []
+        alternates: [PlaybackAlternate] = [],
+        recoveryFrom: (requestID: PlaybackRequest.ID, generation: UInt64)? = nil
     ) {
         let request = PlaybackRequest(
             title: title,
@@ -257,6 +260,22 @@ extension AppModel {
             sessionContext: sessionContext,
             alternates: alternates
         )
+        if let flow = playbackFlow {
+            do {
+                if let recoveryFrom {
+                    guard let sourceID = sessionContext.mediaSourceID,
+                          try flow.adopt(fromRequestID: recoveryFrom.requestID.uuidString,
+                                         generation: recoveryFrom.generation,
+                                         requestID: request.id.uuidString, sourceID: sourceID) else { return }
+                } else {
+                    try beginSharedPlaybackFlow(for: request)
+                }
+                projectSharedPlaybackFlow()
+            } catch {
+                AppDiagnostics.logWarning("Core 播放请求登记失败", fields: ["error": .string(error.localizedDescription)])
+                return
+            }
+        }
         playback?.prepareForPresentation(request)
         if let profile = server?.profile {
             playback?.startLocalViewingRecord(sourceID: ServerViewingHistory.sourceID(for: profile), item: item)
@@ -296,6 +315,46 @@ extension AppModel {
     ) {
         // 只处理当前这条请求：换片 / 退出后，旧请求的失败与现在的播放无关。
         guard let request = presentedPlayer, request.id == requestID else { return }
+        // A new item may still be resolving while the old player is presented.
+        guard playbackPreparation == nil || playbackOpenTask == nil else { return }
+        if let flow = playbackFlow {
+            do {
+                if flow.snapshot.playbackRequestId != requestID.uuidString {
+                    try beginSharedPlaybackFlow(for: request)
+                }
+                let item = nowPlayingItem ?? retryPlaybackItem
+                let decision = try flow.failed(requestID: requestID.uuidString, kind: kind.rawValue, hasItem: item != nil)
+                guard decision.action != "ignored" else { return }
+                projectSharedPlaybackFlow()
+                switch decision.action {
+                case "manual": finishManualSourceFailover(request: request, lastKind: kind)
+                case "switch":
+                    guard let item, let next = request.alternates.first,
+                          next.id == decision.snapshot.pendingSourceId,
+                          let context = next.sessionContext else { return }
+                    AppDiagnostics.logWarning("自动换源", fields: [
+                        "title": .string(request.title), "attempt": .integer(Int64(decision.snapshot.failoverCount)),
+                        "from_source": .string(request.sessionContext?.mediaSourceID ?? "nil"),
+                        "to_source": .string(next.id), "kind": .string(kind.rawValue),
+                        "remaining": .integer(Int64(request.alternates.count - 1)),
+                    ])
+                    let generation = playbackOpenGeneration
+                    Task { @MainActor [weak self] in
+                        guard let self, self.playbackOpenGeneration == generation,
+                              self.presentedPlayer?.id == requestID else { return }
+                        self.presentPlayback(title: request.title, uri: next.uri,
+                                             authHeader: next.authHeader, resumeSeconds: request.resumeSeconds,
+                                             item: item, sessionContext: context,
+                                             alternates: Array(request.alternates.dropFirst()),
+                                             recoveryFrom: (requestID, decision.snapshot.generation))
+                    }
+                default: break
+                }
+            } catch {
+                AppDiagnostics.logWarning("Core 换源决策失败", fields: ["error": .string(error.localizedDescription)])
+            }
+            return
+        }
         // 先记账再决策：`sourceFailoverAttempts` 要能在「全失败」时说出
         // 试过哪几条、各自哪一类。`.aborted` 也记——它是「用户自己取消的」，
         // 与「源有问题」在事后看日志时是两件事。
@@ -312,7 +371,10 @@ extension AppModel {
             finishManualSourceFailover(request: request, lastKind: kind)
             return
         }
-        guard !request.alternates.isEmpty else { return }
+        guard !request.alternates.isEmpty else {
+            if sourceFailoverCount > 0 { finishManualSourceFailover(request: request, lastKind: kind) }
+            return
+        }
         // 没有可播条目就没有「换源」这件事可言：presentPlayback 需要它来重建上报
         // 与弹幕上下文。宁可按原样停在错误态，也不要带着空条目开出一条半残会话。
         guard let item = nowPlayingItem ?? retryPlaybackItem else { return }
@@ -348,8 +410,9 @@ extension AppModel {
             sessionContext: nextContext,
             alternates: remaining
         )
+        let failoverGeneration = playbackOpenGeneration
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, self.playbackOpenGeneration == failoverGeneration else { return }
             // 决策与开播之间可能已经换片 / 退出：再核一次，避免把用户已经
             // 离开的片重新拉起来。
             guard self.presentedPlayer?.id == requestID else { return }
@@ -362,6 +425,21 @@ extension AppModel {
                 sessionContext: nextContext,
                 alternates: remaining
             )
+        }
+    }
+
+    private func beginSharedPlaybackFlow(for request: PlaybackRequest) throws {
+        try playbackFlow?.begin(requestID: request.id.uuidString,
+                                sourceID: request.sessionContext?.mediaSourceID,
+                                alternates: request.alternates.map { ["id": $0.id, "hasSessionContext": $0.sessionContext != nil] })
+    }
+
+    private func projectSharedPlaybackFlow() {
+        guard let snapshot = playbackFlow?.snapshot else { return }
+        sourceFailoverCount = snapshot.failoverCount
+        sourceFailoverAttempts = snapshot.attempts.compactMap { attempt in
+            guard let kind = PlaybackOpenErrorKind(rawValue: attempt.kind) else { return nil }
+            return (sourceID: attempt.sourceId, kind: kind)
         }
     }
 
@@ -750,7 +828,9 @@ extension AppModel {
     }
 
     /// 回前台的动作决策（纯函数，便于单测）。
-    enum ForegroundResumeAction: Equatable {
+    private static let sharedLifecycleRules = OcpPlaybackFlow()
+
+    enum ForegroundResumeAction: String, Equatable {
         /// 离开前没在播（用户自己按的暂停 / 本来就停在错误页）：什么都不做。
         case none
         /// 内核算健康：退出后台档接着播（没有后台档的内核则是解开那次暂停）。
@@ -764,6 +844,12 @@ extension AppModel {
         state: PlaybackState?,
         hasSetupError: Bool
     ) -> ForegroundResumeAction {
+        if let rules = sharedLifecycleRules {
+            let action = try? rules.foregroundAction(intentToResume: intentToResume,
+                                                     state: state.map { String(describing: $0) },
+                                                     hasSetupError: hasSetupError)
+            return action.flatMap(ForegroundResumeAction.init(rawValue:)) ?? .none
+        }
         guard intentToResume, let state else { return .none }
         if hasSetupError || state == .error { return .rebuild }
         switch state {

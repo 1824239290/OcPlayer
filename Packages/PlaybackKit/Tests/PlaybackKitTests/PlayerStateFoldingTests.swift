@@ -1,5 +1,6 @@
 import XCTest
 import Observation
+import OcPlayerCore
 @testable import PlaybackKit
 
 /// `withObservationTracking` 的 onChange 是 @Sendable，测试计数用引用盒包一层。
@@ -22,6 +23,27 @@ private final class RepublishCounter: @unchecked Sendable {
 @MainActor
 final class PlayerStateFoldingTests: XCTestCase {
 
+    private func makeState() -> PlayerState {
+        let state = PlayerState()
+        if OcpCoreFeature.isEnabled { XCTAssertNotNil(state.sharedEngineEvents, "Enabled folding tests must execute Core") }
+        return state
+    }
+
+    func testSharedEventGenerationDoesNotLetOldConsumerAdoptNewSource() throws {
+        guard OcpCoreFeature.isEnabled else { throw XCTSkip("Shared event ownership requires Core") }
+        let old = try XCTUnwrap(OcpPlaybackEvents())
+        _ = try old.apply(["kind": "duration", "seconds": 100])
+        let new = try XCTUnwrap(OcpPlaybackEvents(client: old.client))
+        for event in [["kind": "position", "seconds": 99] as [String: Any],
+                      ["kind": "failed", "code": 401, "message": "old failure"]] {
+            XCTAssertFalse(try old.apply(event).accepted)
+        }
+        XCTAssertNotEqual(old.snapshot.generation, new.snapshot.generation)
+        XCTAssertEqual(new.snapshot.errorCount, 0)
+        XCTAssertEqual(new.snapshot.positionSeconds, 0)
+        XCTAssertTrue(try new.apply(["kind": "state_changed", "state": "playing"]).accepted)
+    }
+
     /// 等一个条件成立（事件跨 Task 投递，不能同步断言）。
     private func waitUntil(
         _ description: String,
@@ -39,7 +61,7 @@ final class PlayerStateFoldingTests: XCTestCase {
 
     func testStateAndDurationFoldFromEvents() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -53,7 +75,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 标签只在**整秒**变化时发布：亚秒抖动不该把整棵 HUD 子树拖成逐帧重排。
     func testDisplayPositionPublishesOnWholeSecondsOnly() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -72,7 +94,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// duration 是 progress 的分母，晚到时必须强制重算——否则进度条停在 0。
     func testLateDurationForcesProgressRecompute() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -86,7 +108,7 @@ final class PlayerStateFoldingTests: XCTestCase {
 
     func testErrorEventSetsErrorStateAndMessage() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -99,7 +121,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 内核没给文案时也要有个能显示的东西，别给 UI 一个 nil。
     func testErrorWithoutMessageFallsBackToCode() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -114,7 +136,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 折叠：不露徽章、不计 `errorCount`（否则 `session.end` 汇总里凭空多一条错）。
     func testTailStaleIOErrorFoldsToNaturalStop() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -168,7 +190,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 片尾窗口外同样的文案：那是真的读坏了，照旧报错。
     func testStaleIOErrorOutsideTailWindowStillFails() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -187,7 +209,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 不能退回到「片尾任何错误都算播完」。
     func testNonStaleTailErrorStillFails() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -207,7 +229,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 不许把状态翻回错误态（否则徽章照弹、连播照断）。
     func testStateChangedErrorAfterFoldStaysStopped() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -235,7 +257,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 上报层就会当成自然播完、在一集明明失败的情况下连播下一集。
     func testStaleTailIOErrorDoesNotResurrectFailedSession() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -262,7 +284,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 事件重复投递不该重复折叠（日志里那条 warning 只写一次）。
     func testRepeatedTailStaleIOErrorFoldsOnce() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -287,7 +309,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 片中（离片尾还远）的错误照旧：错误徽章 + 「重试」那条路一个字都不能变。
     func testMidStreamErrorStillFails() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -306,7 +328,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 片长未知（0 = 直播 / duration 还没到）：照旧报错。
     func testUnknownDurationStillFails() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -321,7 +343,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 不想再看到「状态层悄悄吞掉 error」。
     func testStateChangedErrorLandsInError() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -339,7 +361,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 新片源不该带着上一集的错误徽章与计数开始。
     func testResetClearsErrorResidue() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -356,7 +378,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// lastError 不重复发布——去重与折叠无关，拆兜底后这条守卫必须还在。
     func testIdenticalErrorStormCountsOnce() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -380,7 +402,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     ///（否则 HUD / 进度订阅被无谓连坐失效）。
     func testSameLastErrorDoesNotRePublish() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -410,7 +432,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     func testOnlyLatestConsumerMutatesState() async throws {
         let oldEngine = FakePlaybackEngine()
         let newEngine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
 
         let oldTask = state.start(consuming: oldEngine)
         let newTask = state.start(consuming: newEngine)
@@ -435,7 +457,7 @@ final class PlayerStateFoldingTests: XCTestCase {
             .stub(id: 2, kind: .subtitle, language: "zho"),
             .stub(id: 3, kind: .subtitle, source: .external, title: "外挂"),
         ])
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -450,7 +472,7 @@ final class PlayerStateFoldingTests: XCTestCase {
 
     func testResetClearsMediaStateButNotSurface() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -471,7 +493,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 缓冲轮次要能数出来：issue #2（「三十秒闪一次」）就是缓冲周期在驱动 UI，此前零记录。
     func testBufferingTogglesFoldIntoSessionStats() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -494,7 +516,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 同一条内核错误逐帧重发只计一次（与错误日志的去重口径一致）。
     func testDistinctErrorsAreCountedOnceEach() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 
@@ -510,7 +532,7 @@ final class PlayerStateFoldingTests: XCTestCase {
     /// 会话汇总只出一次，且没开过源时不写噪音记录。
     func testFinishSessionIsSingleShot() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
 
         XCTAssertNil(state.finishSession(reason: "user"), "还没开过源：不该产出 session.end")
 
@@ -526,7 +548,7 @@ final class PlayerStateFoldingTests: XCTestCase {
 
     /// 宿主侧看门狗上报的卡死次数要进汇总。
     func testNoteStallFeedsSessionStats() {
-        let state = PlayerState()
+        let state = makeState()
         state.noteStall()
         state.noteStall()
         XCTAssertEqual(state.sessionStats.stallCount, 2)
@@ -534,7 +556,7 @@ final class PlayerStateFoldingTests: XCTestCase {
 
     func testResetClearsSessionStats() async throws {
         let engine = FakePlaybackEngine()
-        let state = PlayerState()
+        let state = makeState()
         let task = state.start(consuming: engine)
         defer { task.cancel() }
 

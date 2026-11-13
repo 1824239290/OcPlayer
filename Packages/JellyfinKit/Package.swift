@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/jellyfin/jellyfin-sdk-swift", from: "3.3.0"),
         .package(path: "../CoreModel"),
         .package(path: "../DiagnosticsKit"),
+        .package(path: "../OcPlayerCore"),
     ],
     targets: [
         .target(
@@ -22,10 +23,11 @@ let package = Package(
                 .product(name: "JellyfinAPI", package: "jellyfin-sdk-swift"),
                 "CoreModel",
                 "DiagnosticsKit",
+                "OcPlayerCore",
             ],
             // 勿在此用 linkerSettings 给 iOS 补链 NIO 系框架：静态库的 linker flags 会
             // 传导进 App 的 Archive 链接，而 SPM 不产出 .framework，必报 framework not found。
         ),
-        .testTarget(name: "JellyfinKitTests", dependencies: ["JellyfinKit"]),
+        .testTarget(name: "JellyfinKitTests", dependencies: ["JellyfinKit"], resources: [.copy("Fixtures")]),
     ]
 )

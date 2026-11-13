@@ -33,6 +33,7 @@ public enum BangumiCollectionRepository {
             // 整页一个事务：一条一个事务在上千条收藏时会明显卡。
             // 收藏接口每页都带 interest，是收藏态的权威来源——这里才允许按
             // nil 清空本地收藏（单条回读路径的 nil 只是「没拉到」，见 update 的注释）。
+            try Task.checkCancellation()
             try await db.saveSubjects(resp.data, authoritativeInterest: true)
             count += resp.data.count
             offset += limit
@@ -53,10 +54,7 @@ public enum BangumiCollectionRepository {
     @discardableResult
     public static func reconcileEpisodes(maxConcurrent: Int = 4) async -> Int {
         guard let db = BangumiContext.shared.database else { return 0 }
-        let missing = (try? await db.fetchSubjectIDsMissingEpisodes()) ?? []
-        let stale = (try? await db.fetchSubjectIDsWithStaleEpisodeProgress()) ?? []
-        let subjectIDs = BangumiEpisodeRepository.episodeSyncTargets(
-            missingEpisodes: missing, staleProgress: stale)
+        let subjectIDs = (try? await db.fetchEpisodeSyncTargets()) ?? []
         guard !subjectIDs.isEmpty else { return 0 }
         // 与「重拉」同一个事实：章节接口是否带 collection 取决于当前登录态。
         let authoritativeCollection = BangumiContext.shared.isAuthenticated
@@ -118,7 +116,6 @@ public enum BangumiEpisodeRepository {
         let limit = 1000
         var total = 0
         var items: [BangumiEpisodeDTO] = []
-        var episodeIds = Set<Int>()
         while true {
             let response = try await BangumiEpisodeService.getSubjectEpisodes(
                 subjectId, limit: limit, offset: offset)
@@ -126,14 +123,13 @@ public enum BangumiEpisodeRepository {
             if response.data.isEmpty { break }
             for item in response.data {
                 items.append(item)
-                episodeIds.insert(item.id)
             }
             offset += limit
             if offset >= total { break }
         }
-        try await db.saveEpisodes(
+        try Task.checkCancellation()
+        try await db.replaceEpisodes(
             subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
-        try await db.deleteEpisodesNotIn(subjectId: subjectId, episodeIds: episodeIds)
     }
 
     /// `syncEpisodes` 的静默版本：失败只记日志，返回是否成功（批量补齐用）。

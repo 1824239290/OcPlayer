@@ -53,6 +53,10 @@ extension JSONValue: Codable {
 }
 
 extension JSONValue {
+    func encodedData() throws -> Data {
+        try JSONEncoder().encode(self)
+    }
+
     /// 从 `JSONSerialization` 的 Any 构造（SSE 事件现场解析用）。
     /// 注意 Bool 分支要在 NSNumber 前判断（Bool 桥接成 NSNumber）。
     init(any: Any) {
@@ -128,6 +132,15 @@ extension JSONValue {
         if case .object(let dict) = self { return dict }
         return nil
     }
+
+    func objectValueRequired() throws -> [String: JSONValue] {
+        guard let value = objectValue else {
+            throw DecodingError.typeMismatch(
+                [String: JSONValue].self,
+                DecodingError.Context(codingPath: [], debugDescription: "expected JSON object"))
+        }
+        return value
+    }
 }
 
 extension JSONValue {
@@ -167,6 +180,11 @@ extension JSONValue {
 }
 
 extension Dictionary where Key == String, Value == JSONValue {
+    func encodedAny() throws -> Any {
+        let data = try JSONEncoder().encode(self)
+        return try JSONSerialization.jsonObject(with: data)
+    }
+
     /// 参见 `JSONValue.stableContentHash`。
     var stableContentHash: String {
         JSONValue.object(self).stableContentHash

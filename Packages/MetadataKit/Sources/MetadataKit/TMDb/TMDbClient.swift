@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// TMDB 客户端错误。
 public enum TMDbError: Error, Equatable {
@@ -57,6 +58,8 @@ public struct TMDbClient: Sendable {
     /// 用 `append_to_response` 把 4 个请求压成 1 个。
     static let appendToResponse = "credits,images,external_ids,content_ratings"
 
+    var usesCoreTransport: Bool { rust != nil }
+    private let rust: RustTMDbClient?
     private let credentials: any TMDbCredentialProviding
     private let client: HTTPClient
     private let limiter: TMDbRateLimiter
@@ -72,8 +75,16 @@ public struct TMDbClient: Sendable {
         credentials: any TMDbCredentialProviding,
         limiter: TMDbRateLimiter = TMDbRateLimiter(),
         retryPolicy: RetryPolicy = RetryPolicy(attempts: 3),
-        endpointProvider: (@Sendable () -> TMDbEndpoints)? = nil
+        endpointProvider: (@Sendable () -> TMDbEndpoints)? = nil,
+        rustCoreLibraryPath: String? = nil
     ) {
+        if (rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled),
+           (rustCoreLibraryPath != nil || OcpCoreFeature.supportsNativeTransport(session.configuration)),
+           let core = try? OcpCoreClient(libraryPath: rustCoreLibraryPath) {
+            self.rust = RustTMDbClient(core: core)
+        } else {
+            self.rust = nil
+        }
         self.credentials = credentials
         self.client = HTTPClient(session: session, category: "TMDB")
         self.limiter = limiter
@@ -112,6 +123,13 @@ public struct TMDbClient: Sendable {
 
     /// 一季的全部集（**一次请求**）。
     public func season(tvID: Int, seasonNumber: Int, language: String) async throws -> TMDbSeason {
+        if let rust {
+            guard let key = credentials.apiKey() else { throw TMDbError.notConfigured }
+            let endpoint = endpointProvider().apiBaseURL
+            return try await limiter.withPermit {
+                try await rust.season(id: tvID, number: seasonNumber, key: key, endpoint: endpoint, language: language)
+            }
+        }
         let data = try await get(path: "tv/\(tvID)/season/\(seasonNumber)", language: language)
         return try TMDbDecoding.season(data, seasonNumber: seasonNumber, fallbackNumber: seasonNumber)
     }
@@ -126,6 +144,13 @@ public struct TMDbClient: Sendable {
         year: Int?,
         language: String
     ) async throws -> [TMDbSearchResult] {
+        if let rust {
+            guard let key = credentials.apiKey() else { throw TMDbError.notConfigured }
+            let endpoint = endpointProvider().apiBaseURL
+            return try await limiter.withPermit {
+                try await rust.search(query: query, type: mediaType, year: year, key: key, endpoint: endpoint, language: language)
+            }
+        }
         var items: [URLQueryItem] = [URLQueryItem(name: "query", value: query)]
         if let year {
             switch mediaType {
@@ -144,6 +169,13 @@ public struct TMDbClient: Sendable {
     // MARK: - 请求
 
     private func entity(path: String, mediaType: TMDbMediaType, language: String) async throws -> TMDbEntity {
+        if let rust, let id = Int(path.split(separator: "/").last ?? "") {
+            guard let key = credentials.apiKey() else { throw TMDbError.notConfigured }
+            let endpoint = endpointProvider().apiBaseURL
+            return try await limiter.withPermit {
+                try await rust.entity(id: id, type: mediaType, key: key, endpoint: endpoint, language: language)
+            }
+        }
         var primary = try TMDbDecoding.entity(
             try await get(path: path, language: language,
                           extraQuery: [URLQueryItem(name: "append_to_response", value: Self.appendToResponse)]),

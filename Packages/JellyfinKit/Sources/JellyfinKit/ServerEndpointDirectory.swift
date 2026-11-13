@@ -43,6 +43,8 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     private let lock = NSLock()
     private let probe: ServerProbe
     private let profileID: String
+    private let corePolicy: RustEndpointPolicy?
+    var usesCorePolicy: Bool { corePolicy != nil }
     /// 期望的服务器 ID（来自档案 id 的 `serverID` 段）：探活时用它挡住
     /// 「同一个域名换了台服务器」这种把会话指错门的切换。
     private let serverID: String?
@@ -63,9 +65,12 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     public init(
         profile: ServerProfile,
         authorizationHeader: String? = nil,
-        probe: ServerProbe = ServerProbe()
+        probe: ServerProbe = ServerProbe(),
+        coreEnabled: Bool? = nil,
+        coreLibraryPath: String? = nil
     ) {
         self.profileID = profile.id
+        self.corePolicy = RustEndpointPolicy(profile: profile, enabled: coreEnabled, libraryPath: coreLibraryPath)
         // 用 `resolvedServerID` 而不是裸 `serverID`：老档案没有显式字段，但能从
         // 档案 id 前缀恢复，不恢复的话它们等于**没有**校验（探活只认「这个地址上
         // 有个 Jellyfin」，不认「是这个服务器」），而同一份档案在「添加地址」那条
@@ -82,12 +87,12 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     // MARK: - 读
 
     /// 当前生效地址。**同步**可读（请求路径上不能每次都 await）。
-    public var currentURL: URL { lock.withLock { active } }
+    public var currentURL: URL { lock.withLock { corePolicy?.current()?.currentURL ?? active } }
 
     /// 是否被用户固定到了某个地址（固定模式下不做自动切换）。
-    public var isPinned: Bool { lock.withLock { pinned != nil } }
+    public var isPinned: Bool { lock.withLock { corePolicy?.current()?.pinned ?? (pinned != nil) } }
 
-    public var candidateCount: Int { lock.withLock { candidates.count } }
+    public var candidateCount: Int { lock.withLock { corePolicy?.current()?.candidateCount ?? candidates.count } }
 
     /// 地址变化回调。**不得同步回调 `ServerStore`**（会在持有决议器锁时反向拿
     /// store 的锁）；App 层的写法是 `Task { @MainActor in ... }`。
@@ -100,6 +105,23 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     /// 档案变了（地址增删、固定项、当前地址）时同步候选。
     public func sync(profile: ServerProfile) {
         let applied: (url: URL, handler: ChangeHandler?)? = lock.withLock {
+            if let corePolicy {
+                let before = corePolicy.current()
+                guard let snapshot = corePolicy.sync(profile: profile) else { return nil }
+                candidates = profile.allAddresses
+                pinned = profile.pinnedURL
+                if snapshot.generation != before?.generation { resolution = nil }
+                let changed = !ServerAddress.isSame(active, snapshot.currentURL)
+                active = snapshot.currentURL
+                return changed ? (active, onChange) : nil
+            }
+            if candidates != profile.allAddresses || pinned != profile.pinnedURL {
+                generation += 1
+                hardInvalid = true
+                resolvedAt = nil
+                earliestNextProbe = nil
+                resolution = nil
+            }
             self.candidates = profile.allAddresses
             self.pinned = profile.pinnedURL
             // 服务器 ID 是档案身份的一部分，不会在会话存续期间变，故不在这里更新。
@@ -133,6 +155,13 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     /// - 硬失效（首启 / 网络变化 / 从没决议过）→ **等**一次探活再返回。
     public func resolvedURL() async -> URL {
         let decision: Decision = lock.withLock {
+            if let corePolicy {
+                switch corePolicy.decision(options: coreOptionsLocked()) {
+                case .awaitResolution: return .awaitResolution
+                case .background: return .background
+                default: return .immediate
+                }
+            }
             if let earliest = earliestNextProbe, Date() < earliest { return .immediate }
             if hardInvalid || resolvedAt == nil { return .awaitResolution }
             if let resolvedAt, Date().timeIntervalSince(resolvedAt) >= cacheTTL { return .background }
@@ -175,6 +204,11 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     /// 丢掉，最长再等一个缓存周期（300s）才自愈。推进代次让那轮结果作废。
     public func invalidate() {
         lock.withLock {
+            if let corePolicy {
+                _ = corePolicy.invalidate()
+                resolution = nil
+                return
+            }
             generation += 1
             hardInvalid = true
             resolvedAt = nil
@@ -193,6 +227,7 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
     public func reportFailure(of failed: URL) async -> Bool {
         let before = currentURL
         let allowed: Bool = lock.withLock {
+            if let corePolicy { return corePolicy.failureAllowed(failed: failed, options: coreOptionsLocked()) }
             // 固定地址 = 用户明确要求只用它：不做自动切换。
             guard pinned == nil else { return false }
             if let last = lastFailoverAt,
@@ -213,6 +248,16 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
         case awaitResolution
     }
 
+    /// Called under lock; public tuning values retain their existing API.
+    private func coreOptionsLocked() -> [String: Any] {
+        func time(_ value: Double, fallback: Double) -> Double { value.isFinite && value >= 0 ? value : fallback }
+        return ["cacheTtl": time(cacheTTL, fallback: 300),
+                "unreachableRetryInterval": time(unreachableRetryInterval, fallback: 5),
+                "failureCooldown": time(failureCooldown, fallback: 3),
+                "stickinessRatio": min(1, time(stickinessRatio, fallback: 0.7)),
+                "stickinessSlack": time(stickinessSlack, fallback: 0.02)]
+    }
+
     private func resolveNow() async -> URL {
         let task: Task<URL, Never> = lock.withLock {
             if let existing = resolution { return existing }
@@ -230,6 +275,20 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
 
     /// 必须在 `lock` 内调用。
     private func startResolutionLocked() -> Task<URL, Never> {
+        if let corePolicy {
+            guard let plan = corePolicy.begin() else { let fallback = active; return Task { fallback } }
+            let probe = self.probe
+            let authorizationHeader = self.authorizationHeader
+            let fallback = active
+            let task = Task<URL, Never> { [weak self] in
+                let results = await Self.probeAll(plan.targets.map { ServerAddress(url: $0) },
+                    probe: probe, authorizationHeader: authorizationHeader, serverID: plan.expectedServerID)
+                guard let self else { return fallback }
+                return self.applyCore(results: results, generation: plan.generation)
+            }
+            resolution = task
+            return task
+        }
         generation += 1
         let generation = self.generation
         let targets = probeTargetsLocked()
@@ -284,6 +343,24 @@ public final class ServerEndpointDirectory: @unchecked Sendable {
         let changed: Bool
         let stale: Bool
         let latency: TimeInterval?
+    }
+
+    private func applyCore(results: [ServerProbeResult], generation: UInt64) -> URL {
+        let applied: Applied = lock.withLock {
+            guard let value = corePolicy?.apply(results: results, generation: generation, options: coreOptionsLocked()) else {
+                return Applied(url: active, previous: active, handler: nil, changed: false, stale: true, latency: nil)
+            }
+            if !value.stale { resolution = nil }
+            let previous = active
+            active = value.snapshot.currentURL
+            return Applied(url: active, previous: previous, handler: onChange,
+                           changed: value.changed, stale: value.stale, latency: value.latency)
+        }
+        if !applied.stale, applied.changed {
+            NetworkLog.logger.info("服务器地址切换 \(applied.previous.host ?? "?") → \(applied.url.host ?? "?")")
+            applied.handler?(applied.url)
+        }
+        return applied.url
     }
 
     private func apply(results: [ServerProbeResult], generation: Int) -> URL {

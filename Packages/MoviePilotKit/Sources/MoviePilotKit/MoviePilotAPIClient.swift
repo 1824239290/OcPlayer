@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// v3 的 `ResponseAPIRouter` 会把大多数路由的返回**自动包进** `{success, message, data}`
 /// 信封（用户信息、媒体搜索、下载列表都中招）；少数端点又是裸返回（显式声明
@@ -160,6 +161,13 @@ public actor MoviePilotAPIClient {
     public static let authenticationRequiredNotification = Notification.Name(
         "MoviePilotAPIClientAuthenticationRequired")
 
+    private let rustCoreLibraryPath: String?
+    private let allowsRustCore: Bool
+    private var rustCore: OcpCoreClient?
+    var usesCoreTransport: Bool { rustCore != nil }
+    private var rustRequests: Set<String> = []
+    private var rustEventHandlers: [String: (RequestContext, @Sendable (OcpEvent) -> Void)] = [:]
+    private var rustEventPoller: Task<Void, Never>?
     private let store: MoviePilotStore
     private let session: URLSession
     /// SSE 流式搜索专用：`timeoutIntervalForResource` 不能按请求覆盖，而站点
@@ -180,9 +188,12 @@ public actor MoviePilotAPIClient {
     public init(
         store: MoviePilotStore = .shared,
         sessionConfiguration: URLSessionConfiguration = .default,
+        rustCoreLibraryPath: String? = nil,
         retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     ) {
         self.store = store
+        self.rustCoreLibraryPath = rustCoreLibraryPath
+        self.allowsRustCore = rustCoreLibraryPath != nil || OcpCoreFeature.supportsNativeTransport(sessionConfiguration)
         self.authConfigurationRevision = store.configurationRevision
         self.retrySleep = retrySleep
         // 复制后再改：直接改写入参 configuration 会污染调用方手里的对象
@@ -251,20 +262,28 @@ public actor MoviePilotAPIClient {
               !username.isEmpty, !password.isEmpty else { throw MoviePilotError.notConfigured }
         cancelRelogin()
         let revision = store.invalidateConfiguration()
+        retireRustRequests()
         bumpGeneration()
         reloginExhaustedGeneration = nil
         let context = RequestContext(baseURL: baseURL, revision: revision)
-        let token = try await postLogin(username: username, password: password, context: context)
-        let data = MPEnvelope.unwrap(try await sendOnce(MPRequest(path: "/api/v1/user/current"), token: token, context: context))
-        try check(context)
+        let token: String
         let user: MPUser
-        do { user = try Self.decoder.decode(MPUser.self, from: data) }
-        catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
+        if let native = try await rustLogin(username: username, password: password, context: context, validateUser: true) {
+            token = native.token
+            guard let validatedUser = native.user else { throw MoviePilotError.generic("登录成功但用户信息为空") }
+            user = validatedUser
+        } else {
+            token = try await postLogin(username: username, password: password, context: context)
+            let data = MPEnvelope.unwrap(try await sendOnce(MPRequest(path: "/api/v1/user/current"), token: token, context: context))
+            try check(context)
+            do { user = try Self.decoder.decode(MPUser.self, from: data) }
+            catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
+        }
         try check(context)
         let committed = await store.commitCredentials(serverURLString: serverURLString, username: username,
                                                       password: password, accessToken: token, ifRevision: context.revision)
         guard committed else { throw CancellationError() }
-        bumpGeneration()
+        bumpGeneration(retireRustSessions: false)
         reloginExhaustedGeneration = nil
         return user
     }
@@ -272,15 +291,174 @@ public actor MoviePilotAPIClient {
     /// 当前用户（带鉴权；token 过期走静默重登）。
     @discardableResult
     public func currentUser() async throws -> MPUser {
+        if let response = try await rustCoreCall("moviepilot.currentUser") {
+            let object = try response.data.decode([String: JSONValue].self)
+            guard let user = object["user"] else {
+                throw MoviePilotError.generic("Rust Core 返回的当前用户为空")
+            }
+            return try Self.decoder.decode(MPUser.self, from: user.encodedData())
+        }
         let data = MPEnvelope.unwrap(
             try await requestData(MPRequest(path: "/api/v1/user/current")))
         return try Self.decoder.decode(MPUser.self, from: data)
+    }
+
+    /// A nil result means no Rust request was sent. Errors after dispatch never replay in Swift.
+    func rustCoreCall(
+        _ method: String, arguments: [String: Any] = [:],
+        onEvent: (@Sendable (OcpEvent) -> Void)? = nil
+    ) async throws -> OcpResponse? {
+        guard let core = try loadRustCore() else { return nil }
+        let context = try context()
+        guard var token = store.accessToken, !token.isEmpty else { throw MoviePilotError.requireLogin }
+        for attempt in 0...1 {
+            try check(context)
+            var merged = arguments
+            merged["baseURL"] = context.baseURL.absoluteString
+            merged["accessToken"] = token
+            let response = try await dispatchRust(core, method: method, arguments: merged, context: context, onEvent: onEvent)
+            if response.ok { return response }
+            if response.code == 1503, attempt == 0 {
+                if let latest = store.accessToken, latest != token {
+                    token = latest
+                } else {
+                    token = try await silentRelogin(context: context)
+                }
+                continue
+            }
+            throw rustError(response)
+        }
+        throw MoviePilotError.requireLogin
+    }
+
+    private func loadRustCore() throws -> OcpCoreClient? {
+        guard allowsRustCore, rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled else { return nil }
+        if rustCore == nil {
+            if let rustCoreLibraryPath { rustCore = try OcpCoreClient(libraryPath: rustCoreLibraryPath) }
+            else { rustCore = try? OcpCoreClient() }
+        }
+        return rustCore
+    }
+
+    private func dispatchRust(
+        _ core: OcpCoreClient, method: String, arguments: [String: Any], context: RequestContext,
+        onEvent: (@Sendable (OcpEvent) -> Void)? = nil
+    ) async throws -> OcpResponse {
+        try check(context)
+        var arguments = arguments
+        let requestID = UUID().uuidString
+        arguments["baseURL"] = context.baseURL.absoluteString
+        arguments["requestId"] = requestID
+        rustRequests.insert(requestID)
+        if let onEvent {
+            rustEventHandlers[requestID] = (context, onEvent)
+            startRustEventPoller(core)
+        }
+        defer {
+            rustRequests.remove(requestID)
+            rustEventHandlers.removeValue(forKey: requestID)
+            if rustEventHandlers.isEmpty { rustEventPoller?.cancel(); rustEventPoller = nil }
+        }
+        let payload = try JSONSerialization.data(withJSONObject: arguments)
+        do {
+            let response = try await core.callAsync(method, argumentsJSON: String(decoding: payload, as: UTF8.self))
+            try check(context)
+            drainRustEvents(core)
+            if response.code == 1003 { throw CancellationError() }
+            return response
+        } catch {
+            try check(context)
+            throw error
+        }
+    }
+
+    private func rustError(_ response: OcpResponse) -> MoviePilotError {
+        switch response.code {
+        case 1503: return .requireLogin
+        case 1504: return .forbidden(response.message)
+        case 1514: return .badRequest(response.message)
+        case 1521: return MoviePilotError(networkError: NSError(domain: NSURLErrorDomain, code: URLError.timedOut.rawValue))
+        case 1522: return MoviePilotError(networkError: NSError(domain: NSURLErrorDomain, code: URLError.cannotConnectToHost.rawValue))
+        case 1523: return .network(failure: nil, message: response.message)
+        case 2000...2199: return MoviePilotError(code: Int(response.code) - 1600, response: response.message)
+        default: return .generic(response.message)
+        }
+    }
+
+    private func rustLogin(
+        username: String, password: String, context: RequestContext, validateUser: Bool
+    ) async throws -> (token: String, user: MPUser?)? {
+        guard let core = try loadRustCore() else { return nil }
+        let response = try await dispatchRust(core, method: "moviepilot.login", arguments: [
+            "username": username, "password": password, "validateUser": validateUser,
+        ], context: context)
+        guard response.ok else { throw rustError(response) }
+        let fields = try response.data.decode([String: JSONValue].self)
+        guard case .string(let token) = fields["accessToken"], !token.isEmpty else {
+            throw MoviePilotError.generic("服务器返回了空 token")
+        }
+        let user: MPUser?
+        if validateUser, let object = fields["user"] {
+            do { user = try Self.decoder.decode(MPUser.self, from: object.encodedData()) }
+            catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
+        } else { user = nil }
+        return (token, user)
+    }
+
+    private struct RustExchange: Decodable { let status: Int; let bodyBase64: String }
+
+    private func rustExchange(_ request: URLRequest, token: String?, timeout: TimeInterval?, context: RequestContext) async throws -> Data? {
+        guard let core = try loadRustCore() else { return nil }
+        var arguments: [String: Any] = ["url": request.url!.absoluteString, "httpMethod": request.httpMethod ?? "GET"]
+        // Authorization and cookies come from the account-scoped Core transport.
+        let headers = (request.allHTTPHeaderFields ?? [:]).filter { $0.key.lowercased() != "authorization" }
+        arguments["headers"] = headers
+        if let token { arguments["accessToken"] = token }
+        if let body = request.httpBody { arguments["bodyBase64"] = body.base64EncodedString() }
+        if let timeout { arguments["timeout"] = timeout }
+        let response = try await dispatchRust(core, method: "moviepilot.request", arguments: arguments, context: context)
+        guard response.ok else { throw rustError(response) }
+        let exchange = try response.data.decode(RustExchange.self)
+        guard let data = Data(base64Encoded: exchange.bodyBase64) else { throw MoviePilotError.generic("Core 返回了无效响应体") }
+        guard exchange.status < 400 else {
+            throw MoviePilotError(code: exchange.status, response: MoviePilotErrorBody.message(from: data) ?? String(decoding: data, as: UTF8.self))
+        }
+        return data
+    }
+
+    private func retireRustRequests() {
+        for requestID in rustRequests { _ = try? rustCore?.call("request.cancel", arguments: ["requestId": requestID]) }
+        rustEventHandlers.removeAll()
+        rustEventPoller?.cancel()
+        rustEventPoller = nil
+    }
+
+    private func startRustEventPoller(_ core: OcpCoreClient) {
+        guard rustEventPoller == nil else { return }
+        rustEventPoller = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.drainRustEvents(core)
+                do { try await Task.sleep(for: .milliseconds(25)) } catch { return }
+            }
+        }
+    }
+
+    private func drainRustEvents(_ core: OcpCoreClient) {
+        while let event = try? core.pollEvent() {
+            guard let fields = try? event.data.decode([String: OcPlayerCore.JSONValue].self),
+                  case .string(let requestID) = fields["requestId"],
+                  let (context, handler) = rustEventHandlers[requestID],
+                  (try? check(context)) != nil else { continue }
+            handler(event)
+        }
     }
 
     /// 退出登录：清 token 与密码，作废在途请求。
     @discardableResult
     public func signOut() -> UInt64 {
         cancelRelogin()
+        retireRustRequests()
         store.clearSession()
         bumpGeneration()
         reloginExhaustedGeneration = nil
@@ -292,6 +470,7 @@ public actor MoviePilotAPIClient {
         guard expectedGeneration == authGeneration,
               authConfigurationRevision == store.configurationRevision else { return nil }
         store.invalidateConfiguration()
+        retireRustRequests()
         store.accessToken = nil
         bumpGeneration()
         reloginExhaustedGeneration = nil
@@ -384,7 +563,8 @@ public actor MoviePilotAPIClient {
         return decoder
     }()
 
-    private func bumpGeneration() {
+    private func bumpGeneration(retireRustSessions: Bool = true) {
+        if retireRustSessions { _ = try? rustCore?.call("moviepilot.clearSessions") }
         authGeneration &+= 1
         authConfigurationRevision = store.configurationRevision
     }
@@ -397,6 +577,9 @@ public actor MoviePilotAPIClient {
 
     /// 登录接口本体（不带 Bearer 头：拿旧 token 撞新登录没有意义）。
     private func postLogin(username: String, password: String, context: RequestContext) async throws -> String {
+        if let native = try await rustLogin(username: username, password: password, context: context, validateUser: false) {
+            return native.token
+        }
         let request = MPRequest(
             path: "/api/v1/login/access-token",
             method: "POST",
@@ -487,6 +670,7 @@ public actor MoviePilotAPIClient {
     private func sendOnce(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
         try check(context)
         let urlRequest = try makeURLRequest(request, token: token, context: context)
+        if let data = try await rustExchange(urlRequest, token: token, timeout: request.timeout, context: context) { return data }
 
         let exchange: HTTPExchange
         do {
@@ -602,7 +786,7 @@ public actor MoviePilotAPIClient {
                 throw MoviePilotError(ignore: "静默重登结果已过期")
             }
             guard self.store.setAccessToken(token, ifRevision: context.revision) else { throw CancellationError() }
-            self.bumpGeneration()
+            self.bumpGeneration(retireRustSessions: false)
             // 刚发的 token 若仍被 401，本轮代际内不再重试重登（见入口熔断）。
             self.reloginExhaustedGeneration = self.authGeneration
             return token
@@ -670,6 +854,18 @@ public actor MoviePilotAPIClient {
         sites: [Int] = [],
         onUpdate: (@Sendable ([MPTorrent], MPSearchProgress) -> Void)? = nil
     ) async throws -> [MPTorrent] {
+        if let response = try await rustCoreCall("moviepilot.torrentSearch", arguments: [
+            "keyword": keyword, "sites": sites,
+        ], onEvent: { event in
+            guard event.kind == "moviepilot.searchProgress",
+                  let update = try? event.data.decode(RustSearchUpdate.self) else { return }
+            onUpdate?(update.items.map { MPTorrent(raw: $0.torrent, meta: $0.meta) },
+                      MPSearchProgress(text: update.progress.text, finished: update.progress.finished,
+                                       total: update.progress.total, totalItems: update.progress.total_items))
+        }) {
+            let result = try response.data.decode(RustTorrentItems.self)
+            return result.items.map { MPTorrent(raw: $0.torrent, meta: $0.meta) }
+        }
         let context = try context()
         do {
             return try await runStreamSearch(keyword: keyword, sites: sites, context: context, onUpdate: onUpdate)
@@ -803,4 +999,20 @@ public struct MPSearchProgress: Sendable, Equatable {
     public let finished: Int
     public let total: Int
     public let totalItems: Int
+}
+
+private struct RustTorrentItem: Decodable {
+    let torrent: [String: JSONValue]
+    let meta: [String: JSONValue]?
+}
+private struct RustTorrentItems: Decodable { let items: [RustTorrentItem] }
+private struct RustSearchUpdate: Decodable {
+    let items: [RustTorrentItem]
+    let progress: RustSearchProgress
+}
+private struct RustSearchProgress: Decodable {
+    let text: String?
+    let finished: Int
+    let total: Int
+    let total_items: Int
 }

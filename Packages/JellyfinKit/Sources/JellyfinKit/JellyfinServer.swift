@@ -1,6 +1,7 @@
 import CoreModel
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 import Get
 import JellyfinAPI
 
@@ -86,6 +87,9 @@ public struct JellyfinServer: MediaServer {
     public var profile: ServerProfile { session.profile }
     public var accessToken: String? { session.accessToken }
     /// 当前生效地址对应的 SDK 客户端。
+    var allowsCoreTransport: Bool { session.allowsCoreTransport }
+    func resolveCoreEndpoint() async { _ = await session.resolvedURL() }
+    func failoverCoreEndpoint(from failed: URL) async -> Bool { await session.failover(from: failed) }
     public var client: JellyfinClient { session.client }
 
     /// 按指定档案恢复会话（多服务器快速切换用）。token 缺失 / 会话对象建不出来时返回 nil，
@@ -732,6 +736,8 @@ final class JellyfinSession: @unchecked Sendable {
         self.sessionConfiguration = .default
         self.fixedClient = fixedClient
     }
+
+    var allowsCoreTransport: Bool { fixedClient == nil && OcpCoreFeature.supportsNativeTransport(sessionConfiguration) }
 
     /// 当前生效地址。
     var activeURL: URL { directory?.currentURL ?? baseProfile.baseURL }
