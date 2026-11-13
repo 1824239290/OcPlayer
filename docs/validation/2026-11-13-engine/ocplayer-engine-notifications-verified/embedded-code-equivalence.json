@@ -1,0 +1,23 @@
+{
+  "source": "/tmp/ocplayer-engine-final/libocp_ffi.dylib",
+  "embedded": "/tmp/ocplayer-engine-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib",
+  "runtimeSectionsMatch": true,
+  "sections": {
+    "__TEXT,__text": "0645a17f3de56a3a3a501fc91d9f3ec041e02262f8b00f2ac053b66b0bea0440",
+    "__TEXT,__stubs": "1697b3d5aeb0683e8079c02c395d64354853cd3f409a0a95dc31dbd8bd33e104",
+    "__TEXT,__stub_helper": "f85ab37a3b91ca055c870988016370c4ce9df87ed88f7e6cb19ec1b74dd54a61",
+    "__TEXT,__gcc_except_tab": "934eb3dea9ae568e799d23b8fcad6f23287193fda3e47b30649536bd54441b83",
+    "__TEXT,__cstring": "295bd7fd76d371a6cff2d0329fde017cb7e1b7e3e9e762a233cbc4a20b61673c",
+    "__TEXT,__const": "80e846b0dc6b5007e3f5cd81d01958403d55d2fd7de654f4645d2c5036f667cc",
+    "__TEXT,__unwind_info": "ce997a103f632b050f1868f298b7438eaece67dfa6ad4124da36fbfc1c53c3aa",
+    "__TEXT,__eh_frame": "a4b947a70b2891e30932f6591c57551b3abef44c004c4d232afdcd72c275a7f6",
+    "__DATA_CONST,__const": "d9b95a141110e0b23c649bdbb3a8f5add4cbee1557b47324f26dff3b1567d7db",
+    "__DATA_CONST,__got": "350f08db433f8ffc81ae3d0d3bfd48c0326755a303acf2e6f52a45bc185cfebf",
+    "__DATA,__la_symbol_ptr": "7294d578cbb76f16428a63fae660d24947588d39f8d090a71c8b7fe09b63e6bd",
+    "__DATA,__data": "9b7fce0b99b96a96a8589674e135ed5332894371d81fba68e2c198effc6ebf45",
+    "__DATA,__thread_vars": "16ece2f8e1e418da7a8066844f7872a304409b326ea5d4160ecead37e17bdccd",
+    "__DATA,__thread_data": "35d6421426fb8d2876a433cdac8fa0bec52748ff292e1e301035ae29f78d4145"
+  },
+  "sourceSHA256": "98e99aac9936a4923ade2358503c463cd1db383b4580064c4dc92b53f855c84d",
+  "embeddedSHA256": "c80c07ef6029e2680283cb5bee2b30a72ffba000bbcf84730dfe6d657406ba08"
+}

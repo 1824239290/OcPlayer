@@ -1,0 +1,64 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Pre-planning 1 / 155]
+[Planning deferred tasks]
+[40 / 80]
+[42 / 82] OcPlayerCore
+[57 / 169]
+[62 / 169]
+[72 / 169]
+[79 / 169]
+[81 / 169]
+[89 / 169]
+[95 / 169]
+[100 / 169]
+[106 / 169]
+[110 / 169]
+[112 / 169]
+[122 / 169] DiagnosticsKit
+[123 / 169] OcPlayerCore
+[135 / 169] OcPlayerCore-product
+[141 / 169]
+[144 / 170] OcPlayerCore
+[144 / 170] DiagnosticsKit
+[144 / 170] PlaybackKit
+[157 / 211]
+[163 / 211]
+[164 / 211]
+/Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit/Sources/DiagnosticsKit/DiagnosticLogger.swift:853:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 851 |     /// 它是**上界**（实际可能因按行对齐略少），用于 `Data(capacity:)` 足够。
+ 852 |     func exportByteCount(byteBudget: Int?) throws -> Int {
+ 853 |         try queue.sync {
+     |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 854 |             let files = existingLogFiles()
+ 855 |             guard let byteBudget else { return files.reduce(0) { $0 + $1.size } }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[168 / 211]
+[172 / 211]
+[174 / 211]
+[175 / 211]
+[176 / 211]
+[177 / 211]
+[178 / 211]
+[187 / 211] PlaybackKit
+error: SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlayerState.swift failed with a nonzero exit code. Command line:     cd /Users/jumusu/Documents/project/OcPlayer/Packages
+    builtin-SwiftPerFileCompile PlayerState.swift
+/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlayerState.swift:419:24: error: main actor-isolated static property 'sharedRules' can not be referenced from a nonisolated context
+ 77 | public final class PlayerState {
+ 78 |     @ObservationIgnored public private(set) var sharedEngineEvents: OcpPlaybackEvents?
+ 79 |     private static let sharedRules = OcpPlaybackFlow()
+    |                        `- note: static property declared here
+ 80 |     public private(set) var state: PlaybackState = .idle
+ 81 |     public private(set) var isBuffering = false
+    :
+417 |         duration: Duration
+418 |     ) -> Bool {
+419 |         if let rules = sharedRules {
+    |                        `- error: main actor-isolated static property 'sharedRules' can not be referenced from a nonisolated context
+420 |             return (try? rules.staleTailIO(message: message, positionSeconds: Double(position.microseconds) / 1_000_000,
+421 |                                            durationSeconds: Double(duration.microseconds) / 1_000_000)) ?? false
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/DanmakuTypes.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlatformView.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackEngine.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackEngineRegistry.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackEvent.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackLog.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackTypes.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlaybackWatchClock.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/PlayerState.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/SeekCoalescer.swift /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/Sources/PlaybackKit/SubtitleSelection.swift -emit-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.d -emit-const-values-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.swiftconstvalues -emit-reference-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.swiftdeps -serialize-diagnostics-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.dia -target arm64-apple-macos14.0 -disable-cross-import-overlay-search -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlaybackKit-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -stack-check -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -I /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Products/Debug/PackageFrameworks -F /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -module-cache-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/SwiftExplicitPrecompiledModules -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -swift-version 6 -Onone -D SWIFT_PACKAGE -D DEBUG -D SWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -D Xcode -serialize-debugging-options -enable-experimental-feature DebugDescriptionMacro -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages -enable-anonymous-context-mangled-names -file-compilation-dir /Users/jumusu/Documents/project/OcPlayer/Packages -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/SDKStatCaches.noindex/macosx27.0-26A425-a0facfad118c1a7a18f0aad9463f65497231f6df4def33e022ae2eb8f782df1a.sdkstatcache -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Products/Debug/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/DerivedSources-normal/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/DerivedSources/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name PlaybackKit -package-name playbackkit -const-gather-protocols-file /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlaybackKit_const_extract_protocols.json -disable-clang-spi -clang-target arm64-apple-macos27.0 -target-sdk-version 27.0 -target-sdk-name macosx27.0 -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -parse-as-library -o /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.o -debug-module-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out/Intermediates.noindex/PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlaybackKit.swiftmodule -index-unit-output-path /PlaybackKit.build/Debug/PlaybackKit-t.build/Objects-normal/arm64/PlayerState.o -index-store-path /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit/.build/out -index-system-modules
+error: Build failed
+error: fatalError

@@ -1,0 +1,468 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project /Users/jumusu/Documents/project/OcPlayer/OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination platform=macOS,arch=arm64 -derivedDataPath /tmp/ocplayer-engine-final/DerivedData -disableAutomaticPackageResolution -parallel-testing-enabled NO "-only-testing:OcPlayerTests/PlaybackSourceFailoverTests" "-only-testing:OcPlayerTests/PlaybackOpenErrorTests" "-only-testing:OcPlayerTests/PlaybackReportingCoordinatorTests" "-only-testing:OcPlayerTests/PlaybackControllerOpenTests" "-only-testing:OcPlayerTests/AppBackgroundPlaybackTests" CODE_SIGNING_ALLOWED=NO test-without-building
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  swift-atomics: https://github.com/apple/swift-atomics.git @ 1.3.1
+  MetadataKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit @ local
+  ErikaKit: /Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit @ local
+  AppDesignKit: /Users/jumusu/Documents/project/OcPlayer/Packages/AppDesignKit @ local
+  OcPlayerCore: /Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore @ local
+  PlaybackKit: /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit @ local
+  JellyfinAPI: https://github.com/jellyfin/jellyfin-sdk-swift @ 3.3.0
+  Get: https://github.com/kean/Get @ 2.2.1
+  GRDB: https://github.com/groue/GRDB.swift @ 7.12.0
+  DanmakuKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit @ local
+  DanmakuRenderKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuRenderKit @ local
+  swift-nio-transport-services: https://github.com/apple/swift-nio-transport-services.git @ 1.28.0
+  swift-system: https://github.com/apple/swift-system.git @ 1.8.1
+  BangumiKit: /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit @ local
+  DiagnosticsKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit @ local
+  swift-collections: https://github.com/apple/swift-collections.git @ 1.7.5
+  JellyfinKit: /Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit @ local
+  MoviePilotKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit @ local
+  swift-nio: https://github.com/apple/swift-nio.git @ 2.105.0
+  CoreModel: /Users/jumusu/Documents/project/OcPlayer/Packages/CoreModel @ local
+
+2026-11-13 17:24:36.820204+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+2026-11-13 17:24:36.828335+0800 OcPlayer[65870:25804207] [App] 应用启动 fields={build="1",commit="dev",platform="macOS",version="0.3.0"}
+2026-11-13 17:24:36.886785+0800 OcPlayer[65870:25804245] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.886824+0800 OcPlayer[65870:25804245] [Application] Error registering app with intents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.889385+0800 OcPlayer[65870:25804244] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.889408+0800 OcPlayer[65870:25804244] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.891926+0800 OcPlayer[65870:25804253] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.891945+0800 OcPlayer[65870:25804253] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.894556+0800 OcPlayer[65870:25804253] [Connection] Will NOT re-try to establish the connection
+2026-11-13 17:24:36.894588+0800 OcPlayer[65870:25804245] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.894600+0800 OcPlayer[65870:25804245] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 17:24:36.925552+0800 OcPlayer[65870:25804207] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/dev.jumusu.OcPlayer.savedState
+2026-11-13 17:24:37.013999+0800 OcPlayer[65870:25804207] [App] 启动动画跳过 fields={reason="测试宿主"}
+Test Suite 'Selected tests' started at 2026-11-13 17:24:37.154.
+Test Suite 'OcPlayerTests.xctest' started at 2026-11-13 17:24:37.154.
+Test Suite 'AppBackgroundPlaybackTests' started at 2026-11-13 17:24:37.155.
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundDoesNotTouchEngineWhenNotPlaying]' started.
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundDoesNotTouchEngineWhenNotPlaying]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundKeepsPlayingWhenEngineSupportsBackgroundAudio]' started.
+2026-11-13 17:24:37.157955+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundKeepsPlayingWhenEngineSupportsBackgroundAudio]' passed (0.010 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundPausesWhenEngineLacksBackgroundAudio]' started.
+2026-11-13 17:24:37.168966+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundPausesWhenEngineLacksBackgroundAudio]' passed (0.014 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundWithoutControllerRecordsNoResumeIntent]' started.
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testBackgroundWithoutControllerRecordsNoResumeIntent]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testFailedPauseFallsBackToRebuild]' started.
+2026-11-13 17:24:37.185110+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+2026-11-13 17:24:37.191431+0800 OcPlayer[65870:25804207] [App] 系统进后台暂停失败，回前台按重建处理 error=pauseFailed
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testFailedPauseFallsBackToRebuild]' passed (0.008 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testForegroundHookIsNoOpWhenPlaybackWasNotRunning]' started.
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testForegroundHookIsNoOpWhenPlaybackWasNotRunning]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testForegroundResumeActionTable]' started.
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testForegroundResumeActionTable]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testLeavingBackgroundExitsAudioOnlyModeEvenWhenNotResuming]' started.
+2026-11-13 17:24:37.195873+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+Test Case '-[OcPlayerTests.AppBackgroundPlaybackTests testLeavingBackgroundExitsAudioOnlyModeEvenWhenNotResuming]' passed (0.013 seconds).
+Test Suite 'AppBackgroundPlaybackTests' passed at 2026-11-13 17:24:37.208.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.051 (0.053) seconds
+Test Suite 'PlaybackControllerOpenTests' started at 2026-11-13 17:24:37.208.
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testCancelDuringInFlightOpenDoesNotResurrectState]' started.
+2026-11-13 17:24:37.218423+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.218708+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.218775+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.218902+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.218968+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.219055+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.230573+0800 OcPlayer[65870:25804207] [App] stopPlayback hasLoadedSource=false state=idle
+2026-11-13 17:24:37.230734+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="user",stall_count=0}
+2026-11-13 17:24:37.230956+0800 OcPlayer[65870:25804207] [Playback] stopPlayback() 完成 hasLoadedSource=false
+2026-11-13 17:24:37.231556+0800 OcPlayer[65870:25804207] [Playback] open() 成果已让位（收尾已 stop）title=A
+2026-11-13 17:24:37.284813+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testCancelDuringInFlightOpenDoesNotResurrectState]' passed (0.077 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testInstalledRemotePauseDuringOpenIsAppliedAfterOpen]' started.
+2026-11-13 17:24:37.344933+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.345200+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=Opening hasLoadedSource=false
+2026-11-13 17:24:37.345249+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.345395+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.345477+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.345557+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.356863+0800 OcPlayer[65870:25804207] [App] open 成功 title=Opening
+2026-11-13 17:24:37.356975+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=11,event="open.done",ok=true}
+2026-11-13 17:24:37.367941+0800 OcPlayer[65870:25804207] [App] stopPlayback hasLoadedSource=true state=idle
+2026-11-13 17:24:37.368089+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="user",stall_count=0}
+2026-11-13 17:24:37.368207+0800 OcPlayer[65870:25804207] [Playback] stopPlayback() 完成 hasLoadedSource=false
+2026-11-13 17:24:37.369436+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testInstalledRemotePauseDuringOpenIsAppliedAfterOpen]' passed (0.084 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testInstalledRemotePauseIsIdempotent]' started.
+2026-11-13 17:24:37.384904+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.385098+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=Pause hasLoadedSource=false
+2026-11-13 17:24:37.385137+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.385253+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.385316+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.385378+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.385460+0800 OcPlayer[65870:25804207] [App] open 成功 title=Pause
+2026-11-13 17:24:37.385521+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=0,event="open.done",ok=true}
+2026-11-13 17:24:37.396604+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+2026-11-13 17:24:37.396700+0800 OcPlayer[65870:25804207] [App] stopPlayback hasLoadedSource=true state=paused
+2026-11-13 17:24:37.396821+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="user",stall_count=0}
+2026-11-13 17:24:37.396948+0800 OcPlayer[65870:25804207] [Playback] stopPlayback() 完成 hasLoadedSource=false
+2026-11-13 17:24:37.397797+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testInstalledRemotePauseIsIdempotent]' passed (0.028 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenAfterSupersededInFlightRebindsEventConsumer]' started.
+2026-11-13 17:24:37.399805+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.399952+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.399985+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.400090+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.400150+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.400208+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.411694+0800 OcPlayer[65870:25804207] [Playback] open() 成果已让位（收尾已 stop）title=A
+2026-11-13 17:24:37.423839+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=B hasLoadedSource=false
+2026-11-13 17:24:37.424010+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.424352+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.424723+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="superseded",stall_count=0}
+2026-11-13 17:24:37.424793+0800 OcPlayer[65870:25804207] [App] open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）
+2026-11-13 17:24:37.425075+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.425286+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.425573+0800 OcPlayer[65870:25804207] [App] open 成功 title=B
+2026-11-13 17:24:37.425776+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,event="open.done",ok=true}
+2026-11-13 17:24:37.437094+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+2026-11-13 17:24:37.449197+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenAfterSupersededInFlightRebindsEventConsumer]' passed (0.052 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenAppliesStateAfterBackgroundOpenCompletes]' started.
+2026-11-13 17:24:37.457208+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.457615+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.457697+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.457985+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.458162+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.458318+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.458514+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.458672+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=0,event="open.done",ok=true}
+2026-11-13 17:24:37.470647+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenAppliesStateAfterBackgroundOpenCompletes]' passed (0.020 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenFailureReportsErrorAndDropsEngine]' started.
+2026-11-13 17:24:37.476903+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.477266+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.477348+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.477615+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.477769+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.477921+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.478975+0800 OcPlayer[65870:25804207] [App] open 失败 kind=unknown error=Boom() title=A
+2026-11-13 17:24:37.479220+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,error="Boom()",event="open.done",kind="unknown",ok=false}
+2026-11-13 17:24:37.490508+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenFailureReportsErrorAndDropsEngine]' passed (0.019 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenWorkersHaveABoundedCapacity]' started.
+2026-11-13 17:24:37.497081+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.497446+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.497529+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.497797+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.497952+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.498106+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.509571+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=B hasLoadedSource=false
+2026-11-13 17:24:37.509725+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.510053+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.510430+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="superseded",stall_count=0}
+2026-11-13 17:24:37.510499+0800 OcPlayer[65870:25804207] [App] open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）
+2026-11-13 17:24:37.510732+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.510916+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.521852+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=C hasLoadedSource=false
+2026-11-13 17:24:37.522030+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.522427+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.522899+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="superseded",stall_count=0}
+2026-11-13 17:24:37.522998+0800 OcPlayer[65870:25804207] [App] open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）
+2026-11-13 17:24:37.523291+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.523526+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.523863+0800 OcPlayer[65870:25804207] [App] open 失败 kind=unknown error=后台媒体打开任务已满（在飞 2、已放弃 0），请稍后重试 title=C
+2026-11-13 17:24:37.524235+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,error="后台媒体打开任务已满（在飞 2、已放弃 0），请稍后重试",event="open.done",kind="unknown",ok=false}
+2026-11-13 17:24:37.525482+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testOpenWorkersHaveABoundedCapacity]' passed (0.035 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testPauseIntentDuringInFlightOpenAppliesPauseAfterSuccess]' started.
+2026-11-13 17:24:37.532621+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.533032+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.533128+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.533411+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.533582+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.533742+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.545308+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.545594+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=12,event="open.done",ok=true}
+2026-11-13 17:24:37.557379+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testPauseIntentDuringInFlightOpenAppliesPauseAfterSuccess]' passed (0.031 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testReopenOfSameRequestWhileInFlightIsSkipped]' started.
+2026-11-13 17:24:37.564680+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.565058+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.565142+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.565416+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.565575+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.565727+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.577693+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testReopenOfSameRequestWhileInFlightIsSkipped]' passed (0.019 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSecondOpenWhileFirstInFlightRetiresFirstEngine]' started.
+2026-11-13 17:24:37.583522+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.583890+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.583972+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.584242+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.584393+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.584549+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.595040+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=B hasLoadedSource=false
+2026-11-13 17:24:37.595213+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.595542+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.595937+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="superseded",stall_count=0}
+2026-11-13 17:24:37.596020+0800 OcPlayer[65870:25804207] [App] open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）
+2026-11-13 17:24:37.596271+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.596458+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.596711+0800 OcPlayer[65870:25804207] [Playback] open() 成果已让位（收尾已 stop）title=A
+2026-11-13 17:24:37.596799+0800 OcPlayer[65870:25804207] [App] open 成功 title=B
+2026-11-13 17:24:37.596986+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,event="open.done",ok=true}
+2026-11-13 17:24:37.609006+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSecondOpenWhileFirstInFlightRetiresFirstEngine]' passed (0.031 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSecurityScopeLeaseReleasesOnlyOnce]' started.
+2026-11-13 17:24:37.615765+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSecurityScopeLeaseReleasesOnlyOnce]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSharedEngineEventsUpdateControllerSnapshotAndRetainMutedVolume]' started.
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:157: -[OcPlayerTests.PlaybackControllerOpenTests testSharedEngineEventsUpdateControllerSnapshotAndRetainMutedVolume] : Test skipped - Shared engine integration requires Core
+2026-11-13 17:24:37.637493+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSharedEngineEventsUpdateControllerSnapshotAndRetainMutedVolume]' skipped (0.021 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testStopPlaybackClosesTheSession]' started.
+2026-11-13 17:24:37.644708+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.645120+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.645205+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.645480+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.645636+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.645797+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.645978+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.646169+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=0,event="open.done",ok=true}
+2026-11-13 17:24:37.657034+0800 OcPlayer[65870:25804207] [App] stopPlayback hasLoadedSource=true state=idle
+2026-11-13 17:24:37.657411+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="user",stall_count=0}
+2026-11-13 17:24:37.657649+0800 OcPlayer[65870:25804207] [Playback] stopPlayback() 完成 hasLoadedSource=false
+2026-11-13 17:24:37.660007+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testStopPlaybackClosesTheSession]' passed (0.022 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSwitchingSourceClosesPreviousSession]' started.
+2026-11-13 17:24:37.665502+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.665858+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.665945+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.666213+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.666367+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.666522+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.666728+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.666892+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=0,event="open.done",ok=true}
+2026-11-13 17:24:37.677767+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=B hasLoadedSource=true
+2026-11-13 17:24:37.677881+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.678193+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.678564+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="superseded",stall_count=0}
+2026-11-13 17:24:37.678638+0800 OcPlayer[65870:25804207] [App] open 前 stop 旧源并重建引擎（换片/上一发 open 在飞）
+2026-11-13 17:24:37.678882+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.679062+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.679304+0800 OcPlayer[65870:25804207] [App] open 成功 title=B
+2026-11-13 17:24:37.679506+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,event="open.done",ok=true}
+2026-11-13 17:24:37.690788+0800 OcPlayer[65870:25804207] [Playback] 播放事件 session.end fields={buffer_count=0,buffered_ms=0,error_count=0,event="session.end",played_ms=0,reason="probe",stall_count=0}
+2026-11-13 17:24:37.692855+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testSwitchingSourceClosesPreviousSession]' passed (0.032 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTimedOutOpenCanBeRetriedWhileOldNativeOpenIsStillBlocked]' started.
+2026-11-13 17:24:37.698488+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.698838+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.698920+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.699184+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.699336+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.699486+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.785253+0800 OcPlayer[65870:25804207] [Playback] open 看门狗触发（60s）title=A
+2026-11-13 17:24:37.785450+0800 OcPlayer[65870:25804207] [Playback] open 看门狗收回槽位（内核 open 未返回，已放弃 1/4）title=A
+2026-11-13 17:24:37.785700+0800 OcPlayer[65870:25804207] [App] open 失败 kind=network error=连接媒体服务器超时，请检查网络后重试 title=A
+2026-11-13 17:24:37.786268+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=86,error="连接媒体服务器超时，请检查网络后重试",event="open.done",kind="network",ok=false}
+2026-11-13 17:24:37.788243+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.788416+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.788935+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.789300+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.789622+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.789974+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.790295+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,event="open.done",ok=true}
+2026-11-13 17:24:37.802770+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTimedOutOpenCanBeRetriedWhileOldNativeOpenIsStillBlocked]' passed (0.110 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTimedOutOpenReleasesItsSlotSoPlaybackStaysUsable]' started.
+2026-11-13 17:24:37.813207+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.813765+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.813881+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.814229+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.814455+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.814645+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.879204+0800 OcPlayer[65870:25804207] [Playback] open 看门狗触发（60s）title=A
+2026-11-13 17:24:37.879441+0800 OcPlayer[65870:25804207] [Playback] open 看门狗收回槽位（内核 open 未返回，已放弃 1/4）title=A
+2026-11-13 17:24:37.879751+0800 OcPlayer[65870:25804207] [App] open 失败 kind=network error=连接媒体服务器超时，请检查网络后重试 title=A
+2026-11-13 17:24:37.880363+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=65,error="连接媒体服务器超时，请检查网络后重试",event="open.done",kind="network",ok=false}
+2026-11-13 17:24:37.880840+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=B hasLoadedSource=false
+2026-11-13 17:24:37.881031+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.881554+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.881980+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.882321+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.943271+0800 OcPlayer[65870:25804207] [Playback] open 看门狗触发（60s）title=B
+2026-11-13 17:24:37.943504+0800 OcPlayer[65870:25804207] [Playback] open 看门狗收回槽位（内核 open 未返回，已放弃 2/4）title=B
+2026-11-13 17:24:37.943816+0800 OcPlayer[65870:25804207] [App] open 失败 kind=network error=连接媒体服务器超时，请检查网络后重试 title=B
+2026-11-13 17:24:37.944508+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=63,error="连接媒体服务器超时，请检查网络后重试",event="open.done",kind="network",ok=false}
+2026-11-13 17:24:37.948991+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=C hasLoadedSource=false
+2026-11-13 17:24:37.949222+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.949781+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.950208+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.950550+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.951029+0800 OcPlayer[65870:25804207] [App] open 成功 title=C
+2026-11-13 17:24:37.951437+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=1,event="open.done",ok=true}
+2026-11-13 17:24:37.963731+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTimedOutOpenReleasesItsSlotSoPlaybackStaysUsable]' passed (0.160 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTogglePlayPauseAfterOpenSucceedsTakesNormalPath]' started.
+2026-11-13 17:24:37.973067+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:37.973607+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:37.973705+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:37.974002+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:37.974164+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:37.974325+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:37.974560+0800 OcPlayer[65870:25804207] [App] open 成功 title=A
+2026-11-13 17:24:37.974723+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=0,event="open.done",ok=true}
+2026-11-13 17:24:37.985973+0800 OcPlayer[65870:25804207] [Playback] 播放事件 first_frame fields={event="first_frame",position_ms=0}
+2026-11-13 17:24:37.998322+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testTogglePlayPauseAfterOpenSucceedsTakesNormalPath]' passed (0.033 seconds).
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testWatchdogFailsStuckOpenAndLateCompletionDoesNotResurrect]' started.
+2026-11-13 17:24:38.007287+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=gated-fake name=GatedFake
+2026-11-13 17:24:38.007772+0800 OcPlayer[65870:25804207] [Playback] PlaybackController open(request) title=A hasLoadedSource=false
+2026-11-13 17:24:38.007886+0800 OcPlayer[65870:25804207] [Playback] openPreparedRequest readAhead=默认(2 MiB) backBuffer=默认(16 MiB)
+2026-11-13 17:24:38.008182+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.start fields={back_buffer_bytes=null,event="open.start",has_resume=false,read_ahead_bytes=null,source="local"}
+2026-11-13 17:24:38.008342+0800 OcPlayer[65870:25804207] [Playback] 内核实例化 id=gated-fake
+2026-11-13 17:24:38.008500+0800 OcPlayer[65870:25804207] [Playback] PlaybackController prepareEngine 成功 kernel=gated-fake danmaku=overlay
+2026-11-13 17:24:38.093236+0800 OcPlayer[65870:25804207] [Playback] open 看门狗触发（60s）title=A
+2026-11-13 17:24:38.093457+0800 OcPlayer[65870:25804207] [Playback] open 看门狗收回槽位（内核 open 未返回，已放弃 1/4）title=A
+2026-11-13 17:24:38.093756+0800 OcPlayer[65870:25804207] [App] open 失败 kind=network error=连接媒体服务器超时，请检查网络后重试 title=A
+2026-11-13 17:24:38.094366+0800 OcPlayer[65870:25804207] [Playback] 播放事件 open.done fields={elapsed_ms=85,error="连接媒体服务器超时，请检查网络后重试",event="open.done",kind="network",ok=false}
+2026-11-13 17:24:38.099953+0800 OcPlayer[65870:25804207] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.PlaybackControllerOpenTests testWatchdogFailsStuckOpenAndLateCompletionDoesNotResurrect]' passed (0.101 seconds).
+Test Suite 'PlaybackControllerOpenTests' passed at 2026-11-13 17:24:38.102.
+	 Executed 18 tests, with 1 test skipped and 0 failures (0 unexpected) in 0.880 (0.894) seconds
+Test Suite 'PlaybackOpenErrorTests' started at 2026-11-13 17:24:38.103.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testAuthenticationURLErrorIsAuth]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testAuthenticationURLErrorIsAuth]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testCancellationIsAbortedNotNetwork]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testCancellationIsAbortedNotNetwork]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAbortedMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAbortedMessages]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAuthMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAuthMessages]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesChineseNetworkMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesChineseNetworkMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesEnglishNetworkMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesEnglishNetworkMessages]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesFormatMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesFormatMessages]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesNetworkErrorsFromErrorDomain]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesNetworkErrorsFromErrorDomain]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesServerMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesServerMessages]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testDecoratePrefixesLabelExceptUnknown]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testDecoratePrefixesLabelExceptUnknown]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testEveryKindHasDistinctNonEmptyLabel]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testEveryKindHasDistinctNonEmptyLabel]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testFailoverDispatchTableIsTheDocumentedOne]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testFailoverDispatchTableIsTheDocumentedOne]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testNetworkTimeoutIsNeverClassifiedAsFormat]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testNetworkTimeoutIsNeverClassifiedAsFormat]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testRetryabilityExcludesOnlyAborted]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testRetryabilityExcludesOnlyAborted]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testTaxonomyIsTheSixDocumentedKinds]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testTaxonomyIsTheSixDocumentedKinds]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testUnknownMessageFallsBackToUnknown]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testUnknownMessageFallsBackToUnknown]' passed (0.001 seconds).
+Test Suite 'PlaybackOpenErrorTests' passed at 2026-11-13 17:24:38.135.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.024 (0.032) seconds
+Test Suite 'PlaybackReportingCoordinatorTests' started at 2026-11-13 17:24:38.136.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundProgressAndStopStayOrdered]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundProgressAndStopStayOrdered]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundTerminalReturnsCleanupSignal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundTerminalReturnsCleanupSignal]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testCooperativeReportReturnsImmediately]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testCooperativeReportReturnsImmediately]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorOnExplicitStopDoesNotSignalTerminal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorOnExplicitStopDoesNotSignalTerminal]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorSignalsTerminalWithoutReachedEnd]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorSignalsTerminalWithoutReachedEnd]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFailedOpenNearTailFinalizesWithoutAutoplayUsingSharedPolicy]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFailedOpenNearTailFinalizesWithoutAutoplayUsingSharedPolicy]' passed (0.011 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFirstHeartbeatIsSentOnConfiguredTick]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFirstHeartbeatIsSentOnConfiguredTick]' passed (0.027 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidPlaybackExplicitStopDoesNotSignalTerminal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidPlaybackExplicitStopDoesNotSignalTerminal]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidStreamErrorSignalsTerminalWithoutReachedEnd]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidStreamErrorSignalsTerminalWithoutReachedEnd]' passed (0.008 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndRacingExplicitStopReportsStoppedOnce]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndRacingExplicitStopReportsStoppedOnce]' passed (0.015 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndReportsStoppedAndSignalsTerminalOnce]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndReportsStoppedAndSignalsTerminalOnce]' passed (0.009 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNextStartWaitsForPreviousStoppedToFinish]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNextStartWaitsForPreviousStoppedToFinish]' passed (0.034 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNonCooperativeReportDoesNotBlockTheChain]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNonCooperativeReportDoesNotBlockTheChain]' passed (0.090 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPausedDoesNotRepeatProgressReports]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPausedDoesNotRepeatProgressReports]' passed (0.229 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPendingStopSurvivesMultipleCoordinatorHandoffs]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPendingStopSurvivesMultipleCoordinatorHandoffs]' passed (0.036 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPreparedRequestHasNoSnapshotBeforeItsSourceOpens]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPreparedRequestHasNoSnapshotBeforeItsSourceOpens]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testRepeatedStopIsDeduplicated]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testRepeatedStopIsDeduplicated]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testReplacementCoordinatorWaitsForHandoffStop]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testReplacementCoordinatorWaitsForHandoffStop]' passed (0.033 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testStateSourceRejectsSnapshotForAnotherRequest]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testStateSourceRejectsSnapshotForAnotherRequest]' passed (0.003 seconds).
+Test Suite 'PlaybackReportingCoordinatorTests' passed at 2026-11-13 17:24:38.688.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.539 (0.553) seconds
+Test Suite 'PlaybackSourceFailoverTests' started at 2026-11-13 17:24:38.689.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' started.
+2026-11-13 17:24:38.693213+0800 OcPlayer[65870:25804207] [App] open 失败但该类不换源 fields={kind="aborted",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' started.
+2026-11-13 17:24:38.698467+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 17:24:38.698709+0800 OcPlayer[65870:25804207] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=1}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' started.
+2026-11-13 17:24:38.703593+0800 OcPlayer[65870:25804207] [App] open 失败但该类不换源 fields={kind="auth",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' started.
+2026-11-13 17:24:38.708731+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 17:24:38.708959+0800 OcPlayer[65870:25804207] [App] cancelPlaybackOpen 取消播放准备
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' started.
+2026-11-13 17:24:38.713861+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 17:24:38.716491+0800 OcPlayer[65870:25804207] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 17:24:38.716767+0800 OcPlayer[65870:25804207] [App] 自动换源已用尽 fields={last_kind="format",title="测试剧集",tried=2}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' started.
+2026-11-13 17:24:38.721462+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=3,title="测试剧集",to_source="alt-1"}
+2026-11-13 17:24:38.722349+0800 OcPlayer[65870:25804207] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 17:24:38.722847+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=2,from_source="alt-1",kind="network",remaining=2,title="测试剧集",to_source="alt-2"}
+2026-11-13 17:24:38.723609+0800 OcPlayer[65870:25804207] [App] 弹幕自动匹配开始 fields={fileName="alt-2",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 17:24:38.724103+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=3,from_source="alt-2",kind="network",remaining=1,title="测试剧集",to_source="alt-3"}
+2026-11-13 17:24:38.724809+0800 OcPlayer[65870:25804207] [App] 弹幕自动匹配开始 fields={fileName="alt-3",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 17:24:38.725202+0800 OcPlayer[65870:25804207] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=4}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' passed (0.008 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' started.
+2026-11-13 17:24:38.730056+0800 OcPlayer[65870:25804207] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=1,title="测试剧集",to_source="alt-1"}
+2026-11-13 17:24:38.730831+0800 OcPlayer[65870:25804207] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' passed (0.003 seconds).
+Test Suite 'PlaybackSourceFailoverTests' passed at 2026-11-13 17:24:38.742.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.048 (0.053) seconds
+Test Suite 'OcPlayerTests.xctest' passed at 2026-11-13 17:24:38.742.
+	 Executed 71 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.542 (1.588) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 17:24:38.743.
+	 Executed 71 tests, with 1 test skipped and 0 failures (0 unexpected) in 1.542 (1.589) seconds
+2026-11-13 17:24:39.058 xcodebuild[65705:25803139] [MT] IDETestOperationsObserverDebug: 2.722 elapsed -- Testing started completed.
+2026-11-13 17:24:39.058 xcodebuild[65705:25803139] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-13 17:24:39.058 xcodebuild[65705:25803139] [MT] IDETestOperationsObserverDebug: 2.722 sec, +2.722 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_17-24-36-+0800.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

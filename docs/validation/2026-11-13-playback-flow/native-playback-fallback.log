@@ -1,0 +1,177 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project /Users/jumusu/Documents/project/OcPlayer/OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination platform=macOS,arch=arm64 -derivedDataPath /tmp/ocplayer-playback-final/DerivedData -disableAutomaticPackageResolution -parallel-testing-enabled NO "-only-testing:OcPlayerTests/PlaybackSourceFailoverTests" "-only-testing:OcPlayerTests/PlaybackOpenErrorTests" "-only-testing:OcPlayerTests/PlaybackReportingCoordinatorTests" CODE_SIGNING_ALLOWED=NO test-without-building
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  BangumiKit: /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit @ local
+  DiagnosticsKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit @ local
+  swift-atomics: https://github.com/apple/swift-atomics.git @ 1.3.1
+  swift-system: https://github.com/apple/swift-system.git @ 1.8.1
+  swift-collections: https://github.com/apple/swift-collections.git @ 1.7.5
+  DanmakuRenderKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuRenderKit @ local
+  MetadataKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit @ local
+  ErikaKit: /Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit @ local
+  CoreModel: /Users/jumusu/Documents/project/OcPlayer/Packages/CoreModel @ local
+  Get: https://github.com/kean/Get @ 2.2.1
+  swift-nio: https://github.com/apple/swift-nio.git @ 2.105.0
+  MoviePilotKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit @ local
+  JellyfinKit: /Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit @ local
+  GRDB: https://github.com/groue/GRDB.swift @ 7.12.0
+  DanmakuKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit @ local
+  OcPlayerCore: /Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore @ local
+  swift-nio-transport-services: https://github.com/apple/swift-nio-transport-services.git @ 1.28.0
+  AppDesignKit: /Users/jumusu/Documents/project/OcPlayer/Packages/AppDesignKit @ local
+  PlaybackKit: /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit @ local
+  JellyfinAPI: https://github.com/jellyfin/jellyfin-sdk-swift @ 3.3.0
+
+2026-11-13 16:47:26.832546+0800 OcPlayer[59405:25753252] [Playback] 内核注册 id=erika name=liberika
+2026-11-13 16:47:26.839935+0800 OcPlayer[59405:25753252] [App] 应用启动 fields={build="1",commit="dev",platform="macOS",version="0.3.0"}
+2026-11-13 16:47:26.886978+0800 OcPlayer[59405:25753313] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.887020+0800 OcPlayer[59405:25753313] [Application] Error registering app with intents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.889816+0800 OcPlayer[59405:25753312] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.889842+0800 OcPlayer[59405:25753312] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.892520+0800 OcPlayer[59405:25753321] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.892546+0800 OcPlayer[59405:25753321] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.895241+0800 OcPlayer[59405:25753323] [Connection] Will NOT re-try to establish the connection
+2026-11-13 16:47:26.895276+0800 OcPlayer[59405:25753312] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.895291+0800 OcPlayer[59405:25753312] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-13 16:47:26.919497+0800 OcPlayer[59405:25753252] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/dev.jumusu.OcPlayer.savedState
+2026-11-13 16:47:27.006198+0800 OcPlayer[59405:25753252] [App] 启动动画跳过 fields={reason="测试宿主"}
+Test Suite 'Selected tests' started at 2026-11-13 16:47:27.133.
+Test Suite 'OcPlayerTests.xctest' started at 2026-11-13 16:47:27.133.
+Test Suite 'PlaybackOpenErrorTests' started at 2026-11-13 16:47:27.134.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testAuthenticationURLErrorIsAuth]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testAuthenticationURLErrorIsAuth]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testCancellationIsAbortedNotNetwork]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testCancellationIsAbortedNotNetwork]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAbortedMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAbortedMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAuthMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesAuthMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesChineseNetworkMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesChineseNetworkMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesEnglishNetworkMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesEnglishNetworkMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesFormatMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesFormatMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesNetworkErrorsFromErrorDomain]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesNetworkErrorsFromErrorDomain]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesServerMessages]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testClassifiesServerMessages]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testDecoratePrefixesLabelExceptUnknown]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testDecoratePrefixesLabelExceptUnknown]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testEveryKindHasDistinctNonEmptyLabel]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testEveryKindHasDistinctNonEmptyLabel]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testFailoverDispatchTableIsTheDocumentedOne]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testFailoverDispatchTableIsTheDocumentedOne]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testNetworkTimeoutIsNeverClassifiedAsFormat]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testNetworkTimeoutIsNeverClassifiedAsFormat]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testRetryabilityExcludesOnlyAborted]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testRetryabilityExcludesOnlyAborted]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testTaxonomyIsTheSixDocumentedKinds]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testTaxonomyIsTheSixDocumentedKinds]' passed (0.001 seconds).
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testUnknownMessageFallsBackToUnknown]' started.
+Test Case '-[OcPlayerTests.PlaybackOpenErrorTests testUnknownMessageFallsBackToUnknown]' passed (0.001 seconds).
+Test Suite 'PlaybackOpenErrorTests' passed at 2026-11-13 16:47:27.152.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.011 (0.019) seconds
+Test Suite 'PlaybackReportingCoordinatorTests' started at 2026-11-13 16:47:27.153.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundProgressAndStopStayOrdered]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundProgressAndStopStayOrdered]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundTerminalReturnsCleanupSignal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testBackgroundTerminalReturnsCleanupSignal]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testCooperativeReportReturnsImmediately]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testCooperativeReportReturnsImmediately]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorOnExplicitStopDoesNotSignalTerminal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorOnExplicitStopDoesNotSignalTerminal]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorSignalsTerminalWithoutReachedEnd]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testEndOfStreamErrorSignalsTerminalWithoutReachedEnd]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFailedOpenNearTailFinalizesWithoutAutoplayUsingSharedPolicy]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFailedOpenNearTailFinalizesWithoutAutoplayUsingSharedPolicy]' passed (0.010 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFirstHeartbeatIsSentOnConfiguredTick]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testFirstHeartbeatIsSentOnConfiguredTick]' passed (0.022 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidPlaybackExplicitStopDoesNotSignalTerminal]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidPlaybackExplicitStopDoesNotSignalTerminal]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidStreamErrorSignalsTerminalWithoutReachedEnd]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testMidStreamErrorSignalsTerminalWithoutReachedEnd]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndRacingExplicitStopReportsStoppedOnce]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndRacingExplicitStopReportsStoppedOnce]' passed (0.013 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndReportsStoppedAndSignalsTerminalOnce]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNaturalEndReportsStoppedAndSignalsTerminalOnce]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNextStartWaitsForPreviousStoppedToFinish]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNextStartWaitsForPreviousStoppedToFinish]' passed (0.033 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNonCooperativeReportDoesNotBlockTheChain]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testNonCooperativeReportDoesNotBlockTheChain]' passed (0.088 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPausedDoesNotRepeatProgressReports]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPausedDoesNotRepeatProgressReports]' passed (0.220 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPendingStopSurvivesMultipleCoordinatorHandoffs]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPendingStopSurvivesMultipleCoordinatorHandoffs]' passed (0.034 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPreparedRequestHasNoSnapshotBeforeItsSourceOpens]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testPreparedRequestHasNoSnapshotBeforeItsSourceOpens]' passed (0.002 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testRepeatedStopIsDeduplicated]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testRepeatedStopIsDeduplicated]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testReplacementCoordinatorWaitsForHandoffStop]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testReplacementCoordinatorWaitsForHandoffStop]' passed (0.033 seconds).
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testStateSourceRejectsSnapshotForAnotherRequest]' started.
+Test Case '-[OcPlayerTests.PlaybackReportingCoordinatorTests testStateSourceRejectsSnapshotForAnotherRequest]' passed (0.003 seconds).
+Test Suite 'PlaybackReportingCoordinatorTests' passed at 2026-11-13 16:47:27.662.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.502 (0.510) seconds
+Test Suite 'PlaybackSourceFailoverTests' started at 2026-11-13 16:47:27.663.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' started.
+2026-11-13 16:47:27.667424+0800 OcPlayer[59405:25753252] [App] open 失败但该类不换源 fields={kind="aborted",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAbortedFailureRecordsButDoesNotFailover]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' started.
+2026-11-13 16:47:27.673866+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 16:47:27.674241+0800 OcPlayer[59405:25753252] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=1}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAlternateWithoutSessionContextStopsInsteadOfReusingOldContext]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' started.
+2026-11-13 16:47:27.679979+0800 OcPlayer[59405:25753252] [App] open 失败但该类不换源 fields={kind="auth",title="测试剧集"}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testAuthenticationFailureNeverChangesSource]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' started.
+2026-11-13 16:47:27.684987+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 16:47:27.685108+0800 OcPlayer[59405:25753252] [App] cancelPlaybackOpen 取消播放准备
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testCancellingPreparationInvalidatesAlreadyQueuedFailover]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' started.
+2026-11-13 16:47:27.688651+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=0,title="测试剧集",to_source="alt-1"}
+2026-11-13 16:47:27.689972+0800 OcPlayer[59405:25753252] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 16:47:27.690151+0800 OcPlayer[59405:25753252] [App] 自动换源已用尽 fields={last_kind="format",title="测试剧集",tried=2}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustedShortChainExplainsBothSources]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' started.
+2026-11-13 16:47:27.692781+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=3,title="测试剧集",to_source="alt-1"}
+2026-11-13 16:47:27.693284+0800 OcPlayer[59405:25753252] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 16:47:27.693539+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=2,from_source="alt-1",kind="network",remaining=2,title="测试剧集",to_source="alt-2"}
+2026-11-13 16:47:27.693939+0800 OcPlayer[59405:25753252] [App] 弹幕自动匹配开始 fields={fileName="alt-2",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 16:47:27.694205+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=3,from_source="alt-2",kind="network",remaining=1,title="测试剧集",to_source="alt-3"}
+2026-11-13 16:47:27.694579+0800 OcPlayer[59405:25753252] [App] 弹幕自动匹配开始 fields={fileName="alt-3",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+2026-11-13 16:47:27.694773+0800 OcPlayer[59405:25753252] [App] 自动换源已用尽 fields={last_kind="network",title="测试剧集",tried=4}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testExhaustingAlternatesStopsAtTheNamedLimit]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' started.
+2026-11-13 16:47:27.697356+0800 OcPlayer[59405:25753252] [App] 自动换源 fields={attempt=1,from_source="primary",kind="network",remaining=1,title="测试剧集",to_source="alt-1"}
+2026-11-13 16:47:27.697963+0800 OcPlayer[59405:25753252] [App] 弹幕自动匹配开始 fields={fileName="alt-1",fileSize=null,matchMode="hashAndFileName",source="remoteURL",videoDuration=null}
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailoverUsesTheAlternateOwnSessionContext]' passed (0.102 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testFailureForAnotherRequestIsIgnored]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testMissingMediaItemKeepsOriginalRequest]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' started.
+Test Case '-[OcPlayerTests.PlaybackSourceFailoverTests testSingleSourceFailureKeepsErrorStateAndRecordsOneAttempt]' passed (0.005 seconds).
+Test Suite 'PlaybackSourceFailoverTests' passed at 2026-11-13 16:47:27.814.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.146 (0.152) seconds
+Test Suite 'OcPlayerTests.xctest' passed at 2026-11-13 16:47:27.815.
+	 Executed 45 tests, with 0 failures (0 unexpected) in 0.659 (0.681) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 16:47:27.815.
+	 Executed 45 tests, with 0 failures (0 unexpected) in 0.659 (0.682) seconds
+2026-11-13 16:47:28.139 xcodebuild[59203:25752052] [MT] IDETestOperationsObserverDebug: 1.758 elapsed -- Testing started completed.
+2026-11-13 16:47:28.139 xcodebuild[59203:25752052] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-13 16:47:28.139 xcodebuild[59203:25752052] [MT] IDETestOperationsObserverDebug: 1.758 sec, +1.758 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_16-47-26-+0800.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

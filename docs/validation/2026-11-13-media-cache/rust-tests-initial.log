@@ -1,0 +1,53 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+   Compiling ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+   Compiling ocp-cli v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.36s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_bangumi-d4be02f42d56eb6f)
+
+running 3 tests
+test tests::maps_bangumi_numeric_subject_type_wire_values ... ok
+test tests::partitions_and_counts ... ok
+test tests::client_preserves_api_base_path ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (/tmp/ocplayer-target/debug/deps/ocp_cli-33151ae15f712233)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-5e000829f285dfdc)
+
+running 12 tests
+test tests::event_sequence_is_monotonic ... ok
+test tests::creates_core_and_emits_ready_event ... ok
+test tests::invalid_transitions_and_values_return_error_envelopes ... ok
+test tests::ping_is_json_response ... ok
+test tests::network_commands_validate_before_requesting ... ok
+test tests::prepared_cancellation_prevents_dispatch_and_releases_request_id ... ok
+test tests::playback_commands_update_state_and_snapshot ... ok
+test tests::bangumi_rejects_invalid_pagination_and_types_before_network ... ok
+test tests::shared_cache_survives_locale_settings_and_reports_validation_errors ... FAILED
+test tests::diagnostics_and_config_commands_are_versioned_and_redacted ... ok
+test tests::persists_progress_when_data_directory_is_configured ... ok
+test tests::cancellation_drops_in_flight_future ... ok
+
+failures:
+
+---- tests::shared_cache_survives_locale_settings_and_reports_validation_errors stdout ----
+
+thread 'tests::shared_cache_survives_locale_settings_and_reports_validation_errors' (25540364) panicked at crates/ocp-core/src/lib.rs:2019:9:
+assertion `left == right` failed
+  left: Bool(false)
+ right: true
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::shared_cache_survives_locale_settings_and_reports_validation_errors
+
+test result: FAILED. 11 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p ocp-core --lib`

@@ -1,0 +1,141 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[1 / 5]
+[2 / 6] OcPlayerCore
+[3 / 7] OcPlayerCore
+[8 / 11] OcPlayerCore
+[11 / 14] OcPlayerCoreTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:152:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+150 |         }
+151 |         let client = try OcpCoreClient(libraryPath: path)
+152 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+153 |         try client.call("playback.play")
+154 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:153:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+151 |         let client = try OcpCoreClient(libraryPath: path)
+152 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+153 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+154 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+155 |         for frame in 0..<7200 {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:158:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+156 |             client.renderTick(timeSeconds: Double(frame) / 60)
+157 |             if frame.isMultiple(of: 60) {
+158 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+159 |             }
+160 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:161:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+159 |             }
+160 |         }
+161 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+162 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+163 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:184:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+182 |         // A host that never polls controls must still have a fixed upper bound.
+183 |         for position in 0..<1000 {
+184 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+185 |         }
+186 |         try client.call("playback.stop")
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:186:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+184 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+185 |         }
+186 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+187 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+188 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[13 / 16] OcPlayerCoreTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:152:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+150 |         }
+151 |         let client = try OcpCoreClient(libraryPath: path)
+152 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+153 |         try client.call("playback.play")
+154 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:153:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+151 |         let client = try OcpCoreClient(libraryPath: path)
+152 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+153 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+154 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+155 |         for frame in 0..<7200 {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:158:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+156 |             client.renderTick(timeSeconds: Double(frame) / 60)
+157 |             if frame.isMultiple(of: 60) {
+158 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+159 |             }
+160 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:161:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+159 |             }
+160 |         }
+161 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+162 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+163 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:184:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+182 |         // A host that never polls controls must still have a fixed upper bound.
+183 |         for position in 0..<1000 {
+184 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+185 |         }
+186 |         try client.call("playback.stop")
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:186:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+184 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+185 |         }
+186 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+187 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+188 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[15 / 16] OcPlayerCoreTests-product
+Build complete! (1.69秒)
+Test Suite 'All tests' started at 2026-11-13 16:40:10.934.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-13 16:40:10.935.
+Test Suite 'OcpCoreClientTests' started at 2026-11-13 16:40:10.935.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' passed (0.077 seconds).
+Test Suite 'OcpCoreClientTests' passed at 2026-11-13 16:40:11.027.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.091 (0.092) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-13 16:40:11.028.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.091 (0.092) seconds
+Test Suite 'All tests' passed at 2026-11-13 16:40:11.028.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.091 (0.093) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

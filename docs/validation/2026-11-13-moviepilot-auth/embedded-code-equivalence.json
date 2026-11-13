@@ -1,0 +1,66 @@
+{
+  "source": "/tmp/ocplayer-mp-auth-final/libocp_ffi.dylib",
+  "embedded": "/tmp/ocplayer-mp-auth-final/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks/libocp_ffi.dylib",
+  "runtimeSectionsMatch": true,
+  "sectionCount": 14,
+  "sections": {
+    "__TEXT,__text": {
+      "size": 5809980,
+      "sha256": "efb665fa1489d3671a90ceaaba21d7407dec77f5767df86df74f9f92ecc7f43e"
+    },
+    "__TEXT,__stubs": {
+      "size": 1764,
+      "sha256": "8ceab4cdccc4a9ca40279adfed691a498ae61b9129eea146caae07f579507370"
+    },
+    "__TEXT,__stub_helper": {
+      "size": 1788,
+      "sha256": "1299a9bc9c6aabb36d26f9062a5d47211c7d49a7e3c34e1aa0d1c7418279e21b"
+    },
+    "__TEXT,__gcc_except_tab": {
+      "size": 253008,
+      "sha256": "8fb73d0f8851b299702b5b1087be45c5d51db400a3ccd0cd38165d7642bfa5fa"
+    },
+    "__TEXT,__cstring": {
+      "size": 111044,
+      "sha256": "fd3788c099a2ebd3f9aa49cedda6f156b09982163f1578ff23fe99eabeb12385"
+    },
+    "__TEXT,__const": {
+      "size": 947400,
+      "sha256": "c72a73f2c0f48d1db1eb3141030ea7c268f6d51ca37698e290224e8aa7bfa5f2"
+    },
+    "__TEXT,__unwind_info": {
+      "size": 118464,
+      "sha256": "8de71340e58d1ad88ae2dce294ce286ad809d2ebcb9d97868f36128fd54c86b3"
+    },
+    "__TEXT,__eh_frame": {
+      "size": 626228,
+      "sha256": "a01316b4aa2007d38e66b1948b96722b9ef50cdd512903e433f0ee40f783433e"
+    },
+    "__DATA_CONST,__const": {
+      "size": 368600,
+      "sha256": "39ecf801acc8f4304a70d36eb18fd40f40c7285f9e68ca2ee93959f3ed6bd1fb"
+    },
+    "__DATA_CONST,__got": {
+      "size": 32,
+      "sha256": "91b67ec02cc0f9e425cd651bac6c082a61a28a582ad9645b95e3d6f539af8a80"
+    },
+    "__DATA,__la_symbol_ptr": {
+      "size": 1176,
+      "sha256": "dfaf5d59a11713594fc395156f22ae14f3d647e69692f0da580b9b369e26be86"
+    },
+    "__DATA,__data": {
+      "size": 19072,
+      "sha256": "892bace0d84f58e1640f0a19b4b0ff0fa85141a4590b0fb7ffb76d90189a04e9"
+    },
+    "__DATA,__thread_vars": {
+      "size": 408,
+      "sha256": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc"
+    },
+    "__DATA,__thread_data": {
+      "size": 232,
+      "sha256": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+    }
+  },
+  "sourceSHA256": "253da356b83080772046c955a4ad5801ff9d58f1dd6d70df8e27a2e8ffa12b36",
+  "embeddedSHA256": "1ae8f0e49d24567dc38ca59d1411319132d2eb8ac1aec7e3d35d69a7ebf5df33"
+}

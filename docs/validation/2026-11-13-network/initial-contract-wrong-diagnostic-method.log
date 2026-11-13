@@ -1,0 +1,23 @@
+test_cancelled_request_does_not_block_shared_executor_or_other_requests (__main__.NetworkContract.test_cancelled_request_does_not_block_shared_executor_or_other_requests) ... ok
+test_concurrent_search_events_keep_request_identity_and_account_cookie (__main__.NetworkContract.test_concurrent_search_events_keep_request_identity_and_account_cookie) ... ok
+test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie (__main__.NetworkContract.test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie) ... FAIL
+test_login_publishes_cookie_only_under_issued_token_and_clear_retires_it (__main__.NetworkContract.test_login_publishes_cookie_only_under_issued_token_and_clear_retires_it) ... ok
+test_moviepilot_reuses_connections_and_isolates_tokens_hosts_and_domains (__main__.NetworkContract.test_moviepilot_reuses_connections_and_isolates_tokens_hosts_and_domains) ... ok
+test_sse_heartbeats_keep_search_alive_beyond_normal_request_deadline (__main__.NetworkContract.test_sse_heartbeats_keep_search_alive_beyond_normal_request_deadline) ... ok
+test_standard_domains_and_probe_share_connection_without_header_leaks (__main__.NetworkContract.test_standard_domains_and_probe_share_connection_without_header_leaks) ... ok
+
+======================================================================
+FAIL: test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie (__main__.NetworkContract.test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 200, in test_cookie_cache_is_bounded_and_eviction_never_reuses_old_cookie
+    diagnostics = self.success('diagnostics.export')
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1001, 'retryable': False, 'message': 'unknown method: diagnostics.export', 'data': None}
+
+----------------------------------------------------------------------
+Ran 7 tests in 37.237s
+
+FAILED (failures=1)

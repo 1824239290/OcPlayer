@@ -1,0 +1,143 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Core-owned engine event reduction/generation validation, lifecycle projection, foreground resume decision, separate mute preference, unknown-duration timeline and ignored recovery projection safety.",
+  "Rust": {
+    "passed": 76,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 245,
+      "passed": 245,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 108,
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0,
+    "sameCasesAsNativeAdapter": true,
+    "sourceEquivalent": true
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "nativePlaybackFallback": {
+    "executed": 72,
+    "passed": 70,
+    "skipped": 2,
+    "failed": 0
+  },
+  "nativePlaybackKitFallback": {
+    "executed": 96,
+    "passed": 95,
+    "skipped": 1,
+    "failed": 0
+  },
+  "enginePolicy": {
+    "CoreFactoryActivationAsserted": true,
+    "sharedCoreHandleWithControllerAndRequestFlow": true,
+    "staleGenerationDoesNotAdoptOrPublish": true,
+    "tailEIOSignatureAndPairedErrorFolded": true,
+    "realFailureAndMessagePreserved": true,
+    "nilAndEmptyMessagesDeduplicateAsNative": true,
+    "unknownDurationDoesNotClampPositionToZero": true,
+    "clearedDurationRemovesPreviousClamp": true,
+    "timelineDoesNotOverwriteNewerPauseControl": true,
+    "stateChangesRefreshCachedControllerSnapshot": true,
+    "nativeElapsedStatsObservationAndRenderRemainAdapters": true
+  },
+  "preferencesAndLifecycle": {
+    "mutedAndUserVolumeStoredSeparately": true,
+    "rateVolumeAndTrackChoicesSurviveEvents": true,
+    "foregroundIntentErrorAndStateTableShared": true,
+    "iOSDeviceSuspensionNotExecuted": true,
+    "macOSNativeBehaviorRetained": true,
+    "ignoredOldFailureDoesNotRestoreResetHistory": true
+  },
+  "eventNotifications": {
+    "latestPositionCoalesces": true,
+    "stateDurationEndFailureAndTailFoldPublished": true,
+    "rejectedOldGenerationsPublishNothing": true,
+    "rawQueueBoundsRemainVerified": true
+  },
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-engine-final-source-d7nkm8to",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 76,
+    "filesMatchWorkspace": true
+  },
+  "embeddedCode": {
+    "runtimeSectionsMatchBuild": true,
+    "verification": "embedded-code-equivalence.json"
+  },
+  "playbackSelftests": {
+    "controlsSeconds": 10,
+    "naturalEndClipSeconds": 5.066667,
+    "naturalEndObservedPositionSeconds": 4.933333,
+    "naturalEndCoreState": "ended",
+    "coreFromBundle": true,
+    "exitCode": 0,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "controls": [
+      "pause",
+      "resume",
+      "seek",
+      "rate",
+      "resize"
+    ]
+  },
+  "application": "/tmp/ocplayer-engine-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_17-48-52-+0800.xcresult",
+  "librarySHA256": "aa62e7c4e9a66a212df6577e9ed78d3536db7cd35bbcaf4586f008f356344b56",
+  "remaining": [
+    "full source/track preference and recovery orchestration acceptance",
+    "initial login/Quick Connect and full media endpoint/payload fidelity",
+    "other network clients connection ownership and transport configuration",
+    "remaining metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

@@ -2,9 +2,9 @@
 
 #![allow(clippy::missing_safety_doc, clippy::not_unsafe_ptr_arg_deref)]
 
+use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr;
-use std::sync::{Mutex, OnceLock};
 
 use ocp_core::Core;
 use ocp_model::ABI_VERSION;
@@ -14,22 +14,17 @@ pub struct OcpCore {
     _private: [u8; 0],
 }
 
-fn last_error() -> &'static Mutex<Option<CString>> {
-    static LAST_ERROR: OnceLock<Mutex<Option<CString>>> = OnceLock::new();
-    LAST_ERROR.get_or_init(|| Mutex::new(None))
+thread_local! {
+    static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
 fn set_last_error(message: impl Into<String>) {
     let message = message.into().replace('\0', " ");
-    if let Ok(mut slot) = last_error().lock() {
-        *slot = CString::new(message).ok();
-    }
+    LAST_ERROR.with(|slot| *slot.borrow_mut() = CString::new(message).ok());
 }
 
 fn clear_last_error() {
-    if let Ok(mut slot) = last_error().lock() {
-        *slot = None;
-    }
+    LAST_ERROR.with(|slot| *slot.borrow_mut() = None);
 }
 
 fn copy_string(value: String) -> *mut c_char {
@@ -38,12 +33,14 @@ fn copy_string(value: String) -> *mut c_char {
         .unwrap_or(ptr::null_mut())
 }
 
-unsafe fn read_utf8(value: *const c_char) -> Result<&'static str, String> {
+unsafe fn read_utf8(value: *const c_char) -> Result<String, String> {
     if value.is_null() {
-        return Ok("");
+        return Ok(String::new());
     }
     let bytes = CStr::from_ptr(value).to_bytes();
-    std::str::from_utf8(bytes).map_err(|error| error.to_string())
+    std::str::from_utf8(bytes)
+        .map(str::to_owned)
+        .map_err(|error| error.to_string())
 }
 
 unsafe fn core_ref<'a>(core: *mut OcpCore) -> Result<&'a Core, String> {
@@ -63,7 +60,7 @@ pub extern "C" fn ocp_core_create(config_json: *const c_char) -> *mut OcpCore {
             return ptr::null_mut();
         }
     };
-    match Core::new(config) {
+    match Core::new(&config) {
         Ok(core) => Box::into_raw(Box::new(core)) as *mut OcpCore,
         Err(error) => {
             set_last_error(error.to_string());
@@ -116,7 +113,7 @@ pub unsafe extern "C" fn ocp_call(
             return ptr::null_mut();
         }
     };
-    match core.call(method, arguments) {
+    match core.call(&method, &arguments) {
         Ok(response) => copy_string(response),
         Err(error) => {
             set_last_error(error.to_string());
@@ -145,7 +142,7 @@ pub unsafe extern "C" fn ocp_snapshot(
             return ptr::null_mut();
         }
     };
-    match core.snapshot(kind) {
+    match core.snapshot(&kind) {
         Ok(snapshot) => copy_string(snapshot),
         Err(error) => {
             set_last_error(error.to_string());
@@ -245,13 +242,12 @@ pub unsafe extern "C" fn ocp_string_free(value: *mut c_char) {
 
 #[no_mangle]
 pub extern "C" fn ocp_last_error_message() -> *mut c_char {
-    match last_error().lock().ok().and_then(|slot| {
-        slot.as_ref()
-            .map(|value| value.to_string_lossy().into_owned())
-    }) {
-        Some(value) => copy_string(value),
-        None => ptr::null_mut(),
-    }
+    LAST_ERROR.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|value| copy_string(value.to_string_lossy().into_owned()))
+            .unwrap_or(ptr::null_mut())
+    })
 }
 
 #[cfg(test)]
@@ -288,5 +284,69 @@ mod tests {
             ocp_string_free(event);
             ocp_core_destroy(core);
         }
+    }
+
+    #[test]
+    fn ffi_reports_invalid_json_without_panicking() {
+        let core = ocp_core_create(ptr::null());
+        let method = CString::new("playback.open").unwrap();
+        let args = CString::new("{").unwrap();
+        let result = unsafe { ocp_call(core, method.as_ptr(), args.as_ptr()) };
+        assert!(result.is_null());
+        let error = ocp_last_error_message();
+        assert!(!error.is_null());
+        unsafe {
+            ocp_string_free(error);
+            ocp_core_destroy(core);
+        }
+    }
+
+    #[test]
+    fn last_error_is_isolated_per_thread() {
+        set_last_error("main-thread");
+        let worker = std::thread::spawn(|| {
+            set_last_error("worker-thread");
+            let message = ocp_last_error_message();
+            let value = unsafe { CStr::from_ptr(message) }
+                .to_string_lossy()
+                .into_owned();
+            unsafe { ocp_string_free(message) };
+            value
+        });
+        assert_eq!(worker.join().unwrap(), "worker-thread");
+        let message = ocp_last_error_message();
+        let value = unsafe { CStr::from_ptr(message) }
+            .to_string_lossy()
+            .into_owned();
+        unsafe { ocp_string_free(message) };
+        assert_eq!(value, "main-thread");
+    }
+
+    #[test]
+    fn concurrent_calls_on_one_handle_are_serialized_safely() {
+        let core = ocp_core_create(ptr::null());
+        assert!(!core.is_null());
+        let address = core as usize;
+        let workers = (0..8)
+            .map(|_| {
+                std::thread::spawn(move || {
+                    let core = address as *mut OcpCore;
+                    let method = CString::new("ping").unwrap();
+                    let arguments = CString::new("{}").unwrap();
+                    for _ in 0..100 {
+                        let response =
+                            unsafe { ocp_call(core, method.as_ptr(), arguments.as_ptr()) };
+                        assert!(!response.is_null());
+                        let value = unsafe { CStr::from_ptr(response) }.to_bytes();
+                        assert!(value.windows(11).any(|part| part == b"\"pong\":true"));
+                        unsafe { ocp_string_free(response) };
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+        unsafe { ocp_core_destroy(core) };
     }
 }

@@ -1,0 +1,13 @@
+test_invalid_raw_arguments_and_escaping_urls_never_dispatch (__main__.MoviePilotContract.test_invalid_raw_arguments_and_escaping_urls_never_dispatch) ... ok
+test_login_validation_and_safe_token_retries_use_same_wire_contract (__main__.MoviePilotContract.test_login_validation_and_safe_token_retries_use_same_wire_contract) ... ok
+test_named_download_and_subscription_mutations_keep_wire_paths_and_fields (__main__.MoviePilotContract.test_named_download_and_subscription_mutations_keep_wire_paths_and_fields) ... ok
+test_named_lists_and_search_preserve_raw_entries_and_query_shape (__main__.MoviePilotContract.test_named_lists_and_search_preserve_raw_entries_and_query_shape) ... ok
+test_raw_binary_error_status_and_headers_are_preserved_without_truncation (__main__.MoviePilotContract.test_raw_binary_error_status_and_headers_are_preserved_without_truncation) ... ok
+test_raw_creation_is_sent_once_with_exact_request_bytes (__main__.MoviePilotContract.test_raw_creation_is_sent_once_with_exact_request_bytes) ... ok
+test_raw_timeout_uses_transport_category_and_does_not_retry (__main__.MoviePilotContract.test_raw_timeout_uses_transport_category_and_does_not_retry) ... ok
+test_token_only_login_retains_cookie_without_requesting_user (__main__.MoviePilotContract.test_token_only_login_retains_cookie_without_requesting_user) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.821s
+
+OK

@@ -1,0 +1,33 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[2 / 12] MoviePilotKit
+[4 / 14] MoviePilotKit
+[8 / 18] MoviePilotKit
+[9 / 19] MoviePilotKit
+[13 / 18] MoviePilotKitTests-product
+[19 / 24] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[23 / 26] MoviePilotKitTests-product
+[25 / 29] MoviePilotKitTests-product
+Build complete! (3.40秒)
+Test Suite 'Selected tests' started at 2026-11-13 19:05:45.736.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-13 19:05:45.737.
+Test Suite 'RustMoviePilotAuthenticationTests' started at 2026-11-13 19:05:45.737.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' passed (0.108 seconds).
+Test Suite 'RustMoviePilotAuthenticationTests' passed at 2026-11-13 19:05:45.845.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.108 (0.108) seconds
+Test Suite 'MoviePilotKitTests.xctest' passed at 2026-11-13 19:05:45.845.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.108 (0.108) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 19:05:45.845.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.108 (0.109) seconds

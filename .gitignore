@@ -1,5 +1,10 @@
 /target/
-Cargo.lock
 *.log
 .DS_Store
 
+!docs/validation/**/*.log
+
+**/.build/
+**/__pycache__/
+/artifacts/
+*.dylib

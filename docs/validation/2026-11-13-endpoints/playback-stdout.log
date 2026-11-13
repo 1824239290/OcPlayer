@@ -1,0 +1,129 @@
+[selftest] start file=/tmp/ocplayer-core-playback.mp4
+{"event":"player_frame_output_transition","operation":"open","stage":"quiesce_request"}
+{"active":false,"elapsedMs":0,"event":"player_frame_output_transition","operation":"open","stage":"quiesce_acknowledged"}
+{"activeBackend":"videotoolbox","codec":"h264","event":"video_decoder_changed","fallbackCount":0,"lineSizes":null,"pixelFormat":null,"previousBackend":null,"reason":null,"requestedBackend":"videotoolbox","stage":"open"}
+[selftest] ready pos=0µs dur=20000000µs surface=false | 解码 10 · 渲染 22 · 硬解 10 · 软解 0 · 零拷贝 10 · 音频 24 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 78.8MB · 峰值RSS 168.1MB · malloc 98.2MB
+[selftest] core=playing pos=0.0s rate=1.5 volume=1.0
+[selftest] playing pos=1066666µs dur=20000000µs surface=true | 解码 33 · 渲染 53 · 硬解 33 · 软解 0 · 零拷贝 33 · 音频 60 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 79.7MB · 峰值RSS 169.4MB · malloc 98.2MB
+[selftest] core=playing pos=1.066666s rate=1.5 volume=1.0
+[selftest] playing pos=1700000µs dur=20000000µs surface=true | 解码 57 · 渲染 84 · 硬解 57 · 软解 0 · 零拷贝 57 · 音频 97 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 78.2MB · 峰值RSS 169.5MB · malloc 98.2MB
+[selftest] core=playing pos=1.533333s rate=1.5 volume=1.0
+[selftest] >>> pause
+[selftest] playing pos=2600000µs dur=20000000µs surface=true | 解码 79 · 渲染 115 · 硬解 79 · 软解 0 · 零拷贝 79 · 音频 132 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 78.2MB · 峰值RSS 169.6MB · malloc 98.2MB
+[selftest] core=paused pos=2.433333s rate=1.5 volume=1.0
+[selftest] paused pos=2600000µs dur=20000000µs surface=true | 解码 79 · 渲染 131 · 硬解 79 · 软解 0 · 零拷贝 79 · 音频 132 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 75.9MB · 峰值RSS 170.0MB · malloc 98.2MB
+[selftest] core=paused pos=2.433333s rate=1.5 volume=1.0
+[selftest] >>> play
+[selftest] paused pos=2600000µs dur=20000000µs surface=true | 解码 79 · 渲染 146 · 硬解 79 · 软解 0 · 零拷贝 79 · 音频 132 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 75.9MB · 峰值RSS 170.0MB · malloc 98.2MB
+[selftest] core=playing pos=2.433333s rate=1.5 volume=1.0
+[selftest] playing pos=3033333µs dur=20000000µs surface=true | 解码 93 · 渲染 176 · 硬解 93 · 软解 0 · 零拷贝 93 · 音频 153 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 78.4MB · 峰值RSS 170.2MB · malloc 98.2MB
+[selftest] core=playing pos=3.033333s rate=1.5 volume=1.0
+[selftest] >>> seek 3.5s
+{"event":"player_frame_output_transition","operation":"seek","stage":"quiesce_request"}
+{"action":"quiesce","event":"player_frame_output","generation":2,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":2,"stage":"quiesced"}
+{"action":"quiesce","elapsedMs":0,"event":"player_frame_output","generation":2,"stage":"acknowledged"}
+{"active":true,"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"quiesce_acknowledged"}
+{"decoderAliveDuringCleanup":true,"discardedAudioFrames":0,"discardedSubtitleFrames":0,"discardedVideoFrames":3,"discardedVideoPackets":0,"event":"playback_queue_cleanup","stage":"seek_before_decoder_transition"}
+{"event":"video_seek_preroll","stage":"waiting_for_keyframe","targetSeconds":14.0,"videoBackend":"videotoolbox"}
+{"event":"player_frame_output_transition","operation":"seek","stage":"transition_barrier_request"}
+{"action":"quiesce","event":"player_frame_output","generation":3,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":3,"stage":"quiesced"}
+{"action":"quiesce","elapsedMs":0,"event":"player_frame_output","generation":3,"stage":"acknowledged"}
+{"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"transition_barrier_acknowledged"}
+{"event":"player_frame_output_transition","operation":"seek","stage":"resume_request"}
+{"action":"resume","event":"player_frame_output","generation":3,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":3,"stage":"resumed"}
+{"action":"resume","elapsedMs":0,"event":"player_frame_output","generation":3,"stage":"acknowledged"}
+{"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"resume_acknowledged"}
+{"absoluteTargetMicros":14000000,"availableVideoStreams":[0],"event":"ffmpeg_seek","relativeTargetMicros":14000000,"selectedStreams":[0,1],"stage":"backward_keyframe_request","streamIndex":0,"targetInSeekTimeBase":215040,"timelineOriginMicros":0}
+[selftest] playing pos=3766666µs dur=20000000µs surface=true | 解码 116 · 渲染 208 · 硬解 116 · 软解 0 · 零拷贝 116 · 音频 190 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 73.1MB · 峰值RSS 170.3MB · malloc 98.2MB
+[selftest] core=playing pos=14.0s rate=1.5 volume=1.0
+{"backend":"videotoolbox","event":"video_decoder_recovery_keyframe","mediaCodecMode":null,"stream":0}
+{"burstDroppedFrames":2,"burstElapsedMs":5.944,"event":"video_seek_preroll","frameBudget":5,"lastPtsSeconds":8.366666667,"stage":"budget_yield","targetSeconds":14.0,"timeBudgetMs":5.0,"totalDroppedFrames":2}
+{"elapsedMs":347.300333,"event":"video_seek_preroll","firstOutputPtsSeconds":14.0,"reason":"target_reached","stage":"complete","targetSeconds":14.0,"totalDroppedFrames":170}
+[selftest] playing pos=14000000µs dur=20000000µs surface=true | 解码 125 · 渲染 239 · 硬解 125 · 软解 0 · 零拷贝 125 · 音频 209 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0B · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 8.5MB · drawables 3 · device 0.4MB
+进程 72.9MB · 峰值RSS 170.5MB · malloc 98.2MB
+[selftest] core=playing pos=14.0s rate=1.5 volume=1.0
+[selftest] >>> rate 2.0
+[selftest] playing pos=14633333µs dur=20000000µs surface=true | 解码 139 · 渲染 270 · 硬解 139 · 软解 0 · 零拷贝 139 · 音频 231 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 72.9MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=14.633333s rate=2.0 volume=1.0
+[selftest] playing pos=15633333µs dur=20000000µs surface=true | 解码 169 · 渲染 301 · 硬解 169 · 软解 0 · 零拷贝 169 · 音频 279 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.6MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=15.633333s rate=2.0 volume=1.0
+[selftest] >>> resize window
+[selftest] playing pos=16633333µs dur=20000000µs surface=true | 解码 200 · 渲染 332 · 硬解 200 · 软解 0 · 零拷贝 200 · 音频 327 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.6MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=16.633333s rate=2.0 volume=1.0
+[selftest] playing pos=17666666µs dur=20000000µs surface=true | 解码 231 · 渲染 363 · 硬解 231 · 软解 0 · 零拷贝 231 · 音频 375 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.6MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=17.666666s rate=2.0 volume=1.0
+[selftest] >>> rate 1.0 + seek 1s
+{"event":"player_frame_output_transition","operation":"seek","stage":"quiesce_request"}
+{"action":"quiesce","event":"player_frame_output","generation":3,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":3,"stage":"quiesced"}
+{"action":"quiesce","elapsedMs":0,"event":"player_frame_output","generation":3,"stage":"acknowledged"}
+{"active":true,"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"quiesce_acknowledged"}
+{"decoderAliveDuringCleanup":true,"discardedAudioFrames":0,"discardedSubtitleFrames":0,"discardedVideoFrames":3,"discardedVideoPackets":0,"event":"playback_queue_cleanup","stage":"seek_before_decoder_transition"}
+{"event":"video_seek_preroll","stage":"waiting_for_keyframe","targetSeconds":4.0,"videoBackend":"videotoolbox"}
+{"event":"player_frame_output_transition","operation":"seek","stage":"transition_barrier_request"}
+{"action":"quiesce","event":"player_frame_output","generation":4,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":4,"stage":"quiesced"}
+{"action":"quiesce","elapsedMs":0,"event":"player_frame_output","generation":4,"stage":"acknowledged"}
+{"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"transition_barrier_acknowledged"}
+{"event":"player_frame_output_transition","operation":"seek","stage":"resume_request"}
+{"action":"resume","event":"player_frame_output","generation":4,"stage":"request","timeoutMs":2000}
+{"event":"player_frame_output","generation":4,"stage":"resumed"}
+{"action":"resume","elapsedMs":0,"event":"player_frame_output","generation":4,"stage":"acknowledged"}
+{"elapsedMs":0,"event":"player_frame_output_transition","operation":"seek","stage":"resume_acknowledged"}
+{"absoluteTargetMicros":4000000,"availableVideoStreams":[0],"event":"ffmpeg_seek","relativeTargetMicros":4000000,"selectedStreams":[0,1],"stage":"backward_keyframe_request","streamIndex":0,"targetInSeekTimeBase":61440,"timelineOriginMicros":0}
+[selftest] playing pos=18666666µs dur=20000000µs surface=true | 解码 262 · 渲染 395 · 硬解 262 · 软解 0 · 零拷贝 262 · 音频 424 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.4MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=4.0s rate=1.0 volume=1.0
+{"backend":"videotoolbox","event":"video_decoder_recovery_keyframe","mediaCodecMode":null,"stream":0}
+{"burstDroppedFrames":3,"burstElapsedMs":7.484,"event":"video_seek_preroll","frameBudget":5,"lastPtsSeconds":0.066666667,"stage":"budget_yield","targetSeconds":4.0,"timeBudgetMs":5.0,"totalDroppedFrames":3}
+{"elapsedMs":330.595458,"event":"video_seek_preroll","firstOutputPtsSeconds":4.0,"reason":"target_reached","stage":"complete","targetSeconds":4.0,"totalDroppedFrames":120}
+[selftest] playing pos=4100000µs dur=20000000µs surface=true | 解码 268 · 渲染 426 · 硬解 268 · 软解 0 · 零拷贝 268 · 音频 439 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.5MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=4.0s rate=1.0 volume=1.0
+[selftest] playing pos=4466666µs dur=20000000µs surface=true | 解码 280 · 渲染 457 · 硬解 280 · 软解 0 · 零拷贝 280 · 音频 457 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.5MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=4.333333s rate=1.0 volume=1.0
+[selftest] playing pos=5066666µs dur=20000000µs surface=true | 解码 295 · 渲染 487 · 硬解 295 · 软解 0 · 零拷贝 295 · 音频 481 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.5MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=4.966666s rate=1.0 volume=1.0
+[selftest] playing pos=5566666µs dur=20000000µs surface=true | 解码 310 · 渲染 518 · 硬解 310 · 软解 0 · 零拷贝 310 · 音频 505 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.5MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=5.566666s rate=1.0 volume=1.0
+[selftest] playing pos=6066666µs dur=20000000µs surface=true | 解码 326 · 渲染 549 · 硬解 326 · 软解 0 · 零拷贝 326 · 音频 529 · 渲染失败 0 · 音频失败 0
+内核内存 视频帧 0.7MB · 弹幕图集 0B · 顶点 0B · overlay 0B · 内核跟踪 4.7MB · drawables 3 · device 19.6MB
+进程 69.5MB · 峰值RSS 170.6MB · malloc 98.2MB
+[selftest] core=playing pos=5.866666s rate=1.0 volume=1.0
+[selftest] done

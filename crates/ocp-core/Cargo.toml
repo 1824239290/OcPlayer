@@ -6,7 +6,18 @@ license.workspace = true
 
 [dependencies]
 ocp-model.workspace = true
+ocp-session.workspace = true
+ocp-danmaku.workspace = true
+ocp-tmdb.workspace = true
+ocp-jellyfin.workspace = true
+ocp-http.workspace = true
+ocp-store.workspace = true
+ocp-bangumi.workspace = true
+ocp-moviepilot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+reqwest.workspace = true
+base64.workspace = true
 

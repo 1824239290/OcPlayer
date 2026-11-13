@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Bangumi.sqlite repository/progress/sync-target migration with native macOS regression. Full OcPlayer-Core parity remains active.",
+  "tests": {
+    "OcPlayerCore": {
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "passed": 240,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "Rust": {
+    "passed": 51,
+    "failed": 0
+  },
+  "NativeAppTests": {
+    "executed": 1001,
+    "passed": 982,
+    "skipped": 19,
+    "failed": 0
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "ExportedAppleBinding": {
+    "passed": 5,
+    "failed": 0,
+    "sameCasesAsNativeAdapter": true,
+    "sourceEquivalent": true
+  },
+  "BangumiStore": {
+    "nativeFixtureTests": 5,
+    "productionConstructorActivated": true,
+    "bidirectionalGRDBCore": true,
+    "rustCreatedDatabaseLoadsInGRDB": true,
+    "migrations": [
+      "createBangumiSchemaV1",
+      "addEpisodesSyncedAt"
+    ],
+    "largeEpisodeCount": 1905,
+    "completeKeepSetPruningVerified": true,
+    "fractionalBatchThresholdVerified": true,
+    "watchedCountMonotonicityVerified": true,
+    "replacementAtomicRollbackVerified": true,
+    "malformedBlobFallbackParityVerified": true,
+    "scope": [
+      "subject and slim subject merging",
+      "batch duplicate merge",
+      "episodes and collections",
+      "progress windows and ordering",
+      "counts and pagination",
+      "missing and stale episode cooldowns",
+      "single-snapshot sync target selection",
+      "atomic full chapter replacement",
+      "account cache clearing"
+    ]
+  },
+  "NativePlayback": {
+    "seconds": 10,
+    "coreFromBundle": true,
+    "controls": [
+      "pause",
+      "resume",
+      "seek",
+      "rate",
+      "resize"
+    ],
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "application": "/tmp/ocplayer-bangumi-store-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResults": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test",
+  "librarySHA256": "1720d987cd78a3310ec55c9ed876b9e8d2f5a018814acca53bfb4f9d051e5a75",
+  "embeddedLibrarySHA256": "45fc5b9d0d0a747565f0ff8154ce9a725bb24a83f44db5c440a74aa10898b881",
+  "initialFixtureFailure": "The new fixture compared the input image DTO with a persisted DTO; the native decoder fills empty image variants. Corrected to compare against the native round-trip. Original output retained.",
+  "remaining": [
+    "full shared account/sync lifecycle and orchestration",
+    "authoritative shared playback recovery",
+    "bounded events and complete argument coverage",
+    "remaining metadata/danmaku/matcher policy",
+    "settings and diagnostics integration",
+    "release and Windows native adapter delivery"
+  ]
+}

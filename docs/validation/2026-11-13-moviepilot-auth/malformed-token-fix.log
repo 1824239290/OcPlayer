@@ -1,0 +1,16 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[1 / 1]
+Build complete! (0.62秒)
+Test Suite 'Selected tests' started at 2026-11-13 18:58:43.338.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-13 18:58:43.339.
+Test Suite 'RustMoviePilotAuthenticationTests' started at 2026-11-13 18:58:43.339.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' passed (0.773 seconds).
+Test Suite 'RustMoviePilotAuthenticationTests' passed at 2026-11-13 18:58:44.112.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.773 (0.773) seconds
+Test Suite 'MoviePilotKitTests.xctest' passed at 2026-11-13 18:58:44.112.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.773 (0.773) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 18:58:44.112.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.773 (0.774) seconds

@@ -1,0 +1,5 @@
+{"method":"playback.open","arguments":{"source":"fixtures/sample.mp4"}}
+{"method":"playback.setVolume","arguments":{"volume":0.8}}
+{"method":"playback.play","arguments":{}}
+{"method":"playback.seek","arguments":{"positionSeconds":30}}
+{"method":"playback.pause","arguments":{}}

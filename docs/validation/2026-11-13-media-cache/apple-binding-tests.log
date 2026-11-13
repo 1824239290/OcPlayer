@@ -1,0 +1,68 @@
+Building for debugging...
+[Planning 15 / 95]
+[Planning deferred tasks]
+[28 / 52]
+[29 / 53] OcPlayerCore
+[37 / 92]
+[38 / 92]
+[39 / 92]
+[41 / 92]
+[44 / 92]
+[46 / 92]
+[47 / 92]
+[48 / 92]
+[51 / 92]
+[52 / 92]
+[53 / 92]
+[54 / 92]
+[55 / 92]
+[57 / 92]
+[60 / 92]
+[61 / 92]
+[62 / 92]
+[63 / 92]
+[68 / 92] OcPlayerCore
+[76 / 92] OcPlayerCore
+[78 / 92] OcPlayerCore
+[82 / 93] OcPlayerCoreTests-product
+[91 / 131]
+[97 / 131]
+[98 / 131]
+[101 / 131]
+[102 / 131]
+[107 / 131]
+[110 / 131]
+[111 / 131]
+[112 / 131]
+[113 / 131]
+[114 / 131]
+[115 / 131]
+[116 / 131]
+[117 / 131]
+[120 / 131] OcPlayerCoreTests-product
+[125 / 131] OcPlayerCoreTests-product
+[127 / 131] OcPlayerCoreTests-product
+Build complete! (14.95秒)
+Test Suite 'All tests' started at 2026-11-13 14:06:48.713.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-13 14:06:48.713.
+Test Suite 'OcpCoreClientTests' started at 2026-11-13 14:06:48.713.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' passed (0.519 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' passed (0.001 seconds).
+Test Suite 'OcpCoreClientTests' passed at 2026-11-13 14:06:49.238.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.524 (0.524) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-13 14:06:49.238.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.524 (0.524) seconds
+Test Suite 'All tests' passed at 2026-11-13 14:06:49.238.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.524 (0.525) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

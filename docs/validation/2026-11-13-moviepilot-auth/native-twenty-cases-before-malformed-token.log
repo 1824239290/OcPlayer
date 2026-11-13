@@ -1,0 +1,74 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Pre-planning 1 / 185]
+[Planning deferred tasks]
+[1 / 1]
+[10 / 21] MoviePilotKitTests-product
+[12 / 23] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[16 / 22] MoviePilotKitTests-product
+[18 / 22] MoviePilotKitTests-product
+Build complete! (1.79秒)
+Test Suite 'Selected tests' started at 2026-11-13 18:51:43.445.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-13 18:51:43.446.
+Test Suite 'RustMoviePilotAuthenticationTests' started at 2026-11-13 18:51:43.446.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' passed (0.506 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' passed (0.081 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' passed (0.828 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' passed (0.101 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' passed (0.062 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' passed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' passed (0.061 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' passed (0.141 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' passed (0.069 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' passed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' passed (0.070 seconds).
+Test Suite 'RustMoviePilotAuthenticationTests' passed at 2026-11-13 18:51:45.482.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 2.035 (2.036) seconds
+Test Suite 'RustMoviePilotIntegrationTests' started at 2026-11-13 18:51:45.482.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' passed (0.073 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' started.
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 50113)
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' passed (0.585 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' passed (0.609 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' passed (0.092 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' passed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' passed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' passed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' passed (0.069 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' started.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' passed (0.578 seconds).
+Test Suite 'RustMoviePilotIntegrationTests' passed at 2026-11-13 18:51:47.662.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 2.178 (2.180) seconds
+Test Suite 'MoviePilotKitTests.xctest' passed at 2026-11-13 18:51:47.662.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 4.213 (4.216) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 18:51:47.662.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 4.213 (4.217) seconds

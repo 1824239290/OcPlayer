@@ -1,0 +1,128 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Core-owned persistent network executor/pools, bounded account-isolated MoviePilot cookies and native retained Core/SSE routing.",
+  "Rust": {
+    "passed": 77,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 245,
+      "passed": 245,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 111,
+      "passed": 111,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "MoviePilotNativeFallback": {
+    "executed": 111,
+    "passed": 102,
+    "skipped": 9,
+    "failed": 0
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "NetworkCABI": {
+    "passed": 7,
+    "failed": 0,
+    "actualTCPPortsObserved": true,
+    "standardDomainsAndProbeReuse": true,
+    "credentialsAndCookieIsolation": true,
+    "loginCookiePublicationAndRetirement": true,
+    "LRULimit": 16,
+    "concurrentCancellationAndSSEIdentity": true,
+    "heartbeatsBeyond30Seconds": true
+  },
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-network-source-_m4fr1px",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 77,
+    "filesMatchWorkspace": true,
+    "schemaIncluded": true
+  },
+  "embeddedCode": {
+    "runtimeSectionsMatchBuild": true,
+    "sections": 14,
+    "verification": "embedded-code-equivalence.json"
+  },
+  "playbackSelftests": {
+    "controlsSeconds": 10,
+    "naturalEndClipSeconds": 5.066667,
+    "naturalEndObservedPositionSeconds": 4.933333,
+    "naturalEndCoreState": "ended",
+    "coreFromBundle": true,
+    "exitCode": 0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "application": "/tmp/ocplayer-network-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_18-33-04-+0800.xcresult",
+  "librarySHA256": "e56ad25dfdfd4816e26348f76f94319bb958413bf4bd016f7122b0cde0bfeb5c",
+  "changedSourceHashes": {
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-core/src/network.rs": "ec50202e8bc8a63cabb8137a21f0291a6e9d60c6e56eee9a5e8d9d4d7e797d99",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-core/src/probe.rs": "677702aee0a80160ce948b079c8a5eebd58a89df26d835e34ed475e928905867",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-core/src/lib.rs": "8359b7fbfa69bb59095a190a928bbb3653f370ec8504f7a1d31ecc7a88555b01",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-http/src/lib.rs": "a1446c933e5d0f56c19da9e0232e5bb5afe6ed36f98c93d6496bcd4aa8fdabde",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-bangumi/src/lib.rs": "b211bbbeb4a80e8c1d0f1eb8c66fdecd50eb61b54da04c332a24d709197d11e7",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-moviepilot/src/lib.rs": "a1beb91f50ed46ad65b4567372edcd3d2500c4c70512b77d1d7b450004858d07",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/tests/network_contract.py": "aca268d53180522c93e369ff8efc4be502bca201aa573d84e80dcf33392bb99a",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/Scripts/verify-macos.sh": "f842bb77bafcd6a6d28b3c2732e0ab7f28182dcc9bc6a8810d686de5dd76777f",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift": "8e9d742d98732c187212241dd1c549aea9ba08eb11aedaf40d0b974042fcb7ae",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/Fixtures/native_server.py": "96c2ee9ae6351b54c97ddc944494c8d3e8667b3ac3300137d62bdd3b6ffefe8d",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift": "9b32b78a12a9f575c15af23d24718c611b6f5110b934685f2d81838045929688"
+  },
+  "remaining": [
+    "MoviePilot initial/silent login and remaining raw HTTP dispatch",
+    "Jellyfin/Emby initial login/Quick Connect and full endpoint/payload fidelity",
+    "native system proxy/Keychain trust and full transport configuration fidelity",
+    "full source/track preference and recovery orchestration acceptance",
+    "metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

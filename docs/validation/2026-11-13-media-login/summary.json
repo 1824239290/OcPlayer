@@ -1,0 +1,148 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Jellyfin/Emby anonymous public-info and password login, Quick Connect authentication and shared polling, native device identity/prefix/tolerant parsing, independent cancellation and injected-transport compatibility.",
+  "Rust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "JellyfinKitNativeFallback": {
+    "executed": 255,
+    "passed": 242,
+    "skipped": 13,
+    "failed": 0
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "NetworkCABI": {
+    "passed": 7,
+    "failed": 0
+  },
+  "MoviePilotCABI": {
+    "passed": 10,
+    "failed": 0
+  },
+  "MediaLoginCABI": {
+    "passed": 10,
+    "failed": 0
+  },
+  "nativeLoginFixtures": {
+    "passed": 10,
+    "failed": 0,
+    "defaultProductionCoreActivation": true,
+    "EmbyPrefixAndIdentity": true,
+    "optionalFieldToleranceAndCredentialValidation": true,
+    "publicQuickConnect": true,
+    "pollingRetryResetToleranceAndTimeout": true,
+    "inflightAndConcurrentCancellation": true,
+    "injectedURLProtocolRetained": true,
+    "transientProbeRetry": true,
+    "HTTP410And411DistinctFromPairingErrors": true,
+    "profileCommitAndAvatar": true
+  },
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-login-source-2gn6z_bl",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 79,
+    "filesMatchWorkspace": true,
+    "files": 41,
+    "schemaIncluded": true
+  },
+  "embeddedCode": {
+    "runtimeSectionsMatchBuild": true,
+    "sections": 14,
+    "verification": "embedded-code-equivalence.json"
+  },
+  "playbackSelftests": {
+    "controlsSeconds": 10,
+    "controlsCompleted": true,
+    "naturalEndClipSeconds": 5.066667,
+    "naturalEndObservedPositionSeconds": 5.066667,
+    "naturalEndCoreState": "ended",
+    "coreFromBundle": true,
+    "combinedCommandExitCode": 0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "application": "/tmp/ocplayer-login-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_19-32-44-+0800.xcresult",
+  "librarySHA256": "0d3a60452bddee9a25bae7ecff57e4e93be2ad17973cf5b29f597f9ee9d2e3f9",
+  "changedSourceHashes": {
+    "/Volumes/Backup/软件/OcPlayer-Core/Cargo.lock": "bee9ef5b6702e9a4c11f6fdc6bcd2fab238750f1ffd5fa31a6fef020ef559ebf",
+    "/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin/Cargo.toml": "b08405c1d5ee400bf921b0da0d1bc1804985818a8e5be8aaa00cc2140836299e",
+    "/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin/src/lib.rs": "5750582c6b4cd8b4952ac3c53a5c9778eb31c15cd382d9597bfd9f886cca55ba",
+    "/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http/src/lib.rs": "d0d3891f2f33f0db47c8c17702f7363a790d2b477f1dc7678f43dfa63f97f809",
+    "/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core/src/lib.rs": "bead5c0a7f6ecd9855dd65f9ffe4740b5c451496d952969d4b9f8a0d83c1c355",
+    "/Volumes/Backup/软件/OcPlayer-Core/tests/media_login_contract.py": "7af79ac9814bf28b19a63be47e61b9a553c59acb28423491537b87a85a029366",
+    "/Volumes/Backup/软件/OcPlayer-Core/tests/fixtures/media_login_server.py": "62aec8fbb536c3a7740ff0f9a8fc35630e3ff47a1f46372da19db926d2bbe2a2",
+    "/Volumes/Backup/软件/OcPlayer-Core/Scripts/verify-macos.sh": "89918b0403fd41bed0e83cac3ae8d6c450d091a52b6dd295995d3f1b14a22e52",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Sources/JellyfinKit/RustServerLogin.swift": "4c8ed98a352db1d79bcf53b1fe864a8ae4640adc22c1552be54be7fb06fd10b9",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Sources/JellyfinKit/MediaServerLogin.swift": "480fdc4e7f518de74c6a431cdb969c4ade932de2031243c9737717fd0e0b828a",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Sources/JellyfinKit/JellyfinLoginSession.swift": "088cebd5ba3fdd5c040912d89697e88290fd32a57b0793f6fa2a4728cb47448a",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Sources/JellyfinKit/EmbyLoginSession.swift": "115b23f953489d441f260c1eb9730af1ea6faa8ab6e58b88e302495080c7837a",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/RustLoginIntegrationTests.swift": "34f26196d229da1c1a6afb1a3a09e2286a322934d6f087e857797a20c8f1b6d4",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_login_server.py": "62aec8fbb536c3a7740ff0f9a8fc35630e3ff47a1f46372da19db926d2bbe2a2"
+  },
+  "retainedEarlierRuns": "previous-complete-run/ retains the earlier complete passing run, initial compilation/query-path failures, and a clean-copy build failure caused by omission of schema/ from that temporary copy. Final code uses dedicated 2401/2402 pairing errors outside HTTP status codes, preserves three-attempt probes and includes all schema files.",
+  "remaining": [
+    "full media endpoint/payload/resource-selection fidelity",
+    "native system proxy/Keychain trust and full transport configuration fidelity",
+    "full source/track preference and recovery orchestration acceptance",
+    "metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

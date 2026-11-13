@@ -1,0 +1,122 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Shared request-chain source recovery, classification/capabilities and report scheduling/completion policy; native engine and reporting task execution remain adapters.",
+  "Rust": {
+    "passed": 70,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 10,
+      "passed": 10,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 245,
+      "passed": 245,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 108,
+      "passed": 108,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 10,
+    "passed": 10,
+    "skipped": 0,
+    "failed": 0,
+    "sameCasesAsNativeAdapter": true,
+    "sourceEquivalent": true
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1006,
+    "passed": 987,
+    "skipped": 19,
+    "failed": 0
+  },
+  "nativePlaybackFallback": {
+    "executed": 45,
+    "passed": 45,
+    "skipped": 0,
+    "failed": 0
+  },
+  "requestRecovery": {
+    "CoreActivationAsserted": true,
+    "sameCoreClientAcrossEngineReplacement": true,
+    "freshRequestAndOwnAlternateSessionContext": true,
+    "maximumSourceReplacements": 3,
+    "historyPreservedAcrossReplacements": true,
+    "lateAndDuplicateFailureIgnored": true,
+    "cancelInvalidatesQueuedAdoption": true,
+    "authAndCancellationNeverSwitchSource": true,
+    "missingItemAndContextGuards": true,
+    "exhaustedShortChainExplainsFailures": true,
+    "invalidRPCPreservesState": true,
+    "nativeFailedProjectionDoesNotRequestSecondRecovery": true
+  },
+  "reportPolicy": {
+    "CoreActivationAsserted": true,
+    "pauseOncePerInterval": true,
+    "resumePeriodicProgress": true,
+    "immediateBackgroundSnapshot": true,
+    "onlyCleanStoppedAtTailCompletes": true,
+    "failedOpenAtTailNeverAutoplays": true,
+    "nativeTaskOrderTimeoutAndTerminalDedupRegressionPassed": true
+  },
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-playback-source-4oggckz4",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 70,
+    "filesMatchWorkspace": true
+  },
+  "playbackSelftest": {
+    "seconds": 10,
+    "coreFromBundle": true,
+    "exitCode": 0,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "controls": [
+      "pause",
+      "resume",
+      "seek",
+      "rate",
+      "resize"
+    ]
+  },
+  "librarySHA256": "c12580763d9014b1b2ccde05d4e55cb6da4e4fe824a0721d235f715fe3a2483d",
+  "application": "/tmp/ocplayer-playback-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_16-42-00-+0800.xcresult",
+  "remaining": [
+    "shared engine event folding/EOF/stale-generation and lifecycle projection",
+    "foreground/background engine rebuild and resume policy",
+    "track/mute/source preference parity",
+    "initial login/Quick Connect and full media endpoint/payload fidelity",
+    "other network clients connection ownership and transport configuration",
+    "remaining metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "All macOS MoviePilot HTTP paths dispatch through Core, including initial/token-only login and byte-preserving raw exchanges; credential commit/retirement and refresh fuse retain native behavior.",
+  "Rust": {
+    "passed": 77,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 245,
+      "passed": 245,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "MoviePilotNativeFallback": {
+    "executed": 124,
+    "passed": 102,
+    "skipped": 22,
+    "failed": 0
+  },
+  "BangumiCABI": {
+    "passed": 4,
+    "failed": 0
+  },
+  "NetworkCABI": {
+    "passed": 7,
+    "failed": 0
+  },
+  "MoviePilotCABI": {
+    "passed": 10,
+    "failed": 0,
+    "rawBinaryAndHTTPStatusFidelity": true,
+    "singleExchangeNoNestedRetry": true,
+    "URLHeaderAndArgumentValidation": true,
+    "tokenOnlyAndValidatedLogin": true,
+    "malformedTokenAndMissingUserNameRejected": true,
+    "cookieAndConnectionContinuation": true,
+    "allDownloadSubscriptionMutationRoutesAndLists": true
+  },
+  "nativeAuthenticationFixtures": {
+    "passed": 13,
+    "failed": 0,
+    "defaultProductionConfigurationCoreActivation": true,
+    "initialLoginAtomicCommitAndCookiePoolRetention": true,
+    "safeTokenRetry": true,
+    "signOutAndNewerLoginCancelObsoleteRequests": true,
+    "rawBinaryJSONFormQueryAndTypedErrors": true,
+    "soleRawRetryOwner": true,
+    "timeouts": true,
+    "concurrentRawNamedAndLateExpiryRefreshSingleFlight": true,
+    "rejectedAndMalformedRefreshFuse": true,
+    "notificationAndCredentialSafety": true
+  },
+  "preexistingNativeIntegrationFixtures": {
+    "passed": 9,
+    "failed": 0
+  },
+  "initialFailureAndFix": "The added malformed-token refresh fixture exposed that the old parser classified a non-string token as a generic error, retaining expired credentials and allowing password resubmission. Typed token decoding now returns 1514, triggering the existing native refresh fuse. The failing run, fix check and complete passing rerun are preserved.",
+  "independentSourceCopy": {
+    "path": "/var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/ocplayer-core-mp-auth-source-ujmuvgzm",
+    "manifest": "clean-source-manifest.json",
+    "lockedOfflineTestsPassed": 77,
+    "filesMatchWorkspace": true,
+    "schemaIncluded": true
+  },
+  "embeddedCode": {
+    "runtimeSectionsMatchBuild": true,
+    "sections": 14,
+    "verification": "embedded-code-equivalence.json"
+  },
+  "playbackSelftests": {
+    "controlsSeconds": 10,
+    "naturalEndClipSeconds": 5.066667,
+    "naturalEndObservedPositionSeconds": 4.9,
+    "naturalEndCoreState": "ended",
+    "coreFromBundle": true,
+    "exitCode": 0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "application": "/tmp/ocplayer-mp-auth-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "nativeTestResult": "/tmp/ocplayer-bangumi-store-final/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.13_19-07-13-+0800.xcresult",
+  "librarySHA256": "253da356b83080772046c955a4ad5801ff9d58f1dd6d70df8e27a2e8ffa12b36",
+  "changedSourceHashes": {
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/Cargo.toml": "bfdf8ae3b4f3ce6c9295598f1f28f6905eb9f504180cc82999070ef7562ce907",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/Cargo.lock": "c9ee0242e8faa05ecfe87e798bde92619ff33abe5ee03b7187cc7c69ee02f6df",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-core/Cargo.toml": "66b9dacd52e6d0ff29f307c398b0a6910d95a185b538eaac6c627697bcd162d8",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-core/src/lib.rs": "1f89ac4ecbf23c22c726d994e5bf0bc8f3d3479c6e1c150ac1e4c40b2f24bf13",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-http/src/lib.rs": "f9bb94832a9477f527c012bc7de5107a5f4075680350f188c14824e93e80cfd6",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/crates/ocp-moviepilot/src/lib.rs": "d67d1477010f05e639ddb2bb959db4aba3760e6443bc9c013cb1167de92b7cb3",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/tests/moviepilot_contract.py": "d66342ed5febb722d3b77420343fd2cc3c38e73cb1bbaeb87b3ea48c4d265ef8",
+    "/Volumes/Backup/\u8f6f\u4ef6/OcPlayer-Core/Scripts/verify-macos.sh": "802a8168e290e7969543cf51db5c24168c334c0ef6e71adfb3cc0dec2438fa45",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift": "ab36d0877da2e659a6bf7c01f0fd7130c04797a4049c46a524dd70861b68e0c3",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/Fixtures/native_server.py": "e830390ff1c71fa3439eca8b2eeab395f13cc10c4504e81cef8e8d0f6bdd75a4",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift": "8f8eef027de85829b08b13c9ccb650d9298f5af0894807b4a86114034ac2b464",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift": "a615fbbd05dd07ca18537f96d4aba0462891978c421325a73689ebb04d3536bb"
+  },
+  "remaining": [
+    "cross-platform credential generation/refresh/account lifecycle orchestration",
+    "Jellyfin/Emby initial login/Quick Connect and full endpoint/payload fidelity",
+    "native system proxy/Keychain trust and full transport configuration fidelity",
+    "full source/track preference and recovery orchestration acceptance",
+    "metadata/danmaku/matcher orchestration",
+    "shared account/sync lifecycle",
+    "settings/aggregate diagnostics",
+    "release packaging and Windows adapter"
+  ]
+}

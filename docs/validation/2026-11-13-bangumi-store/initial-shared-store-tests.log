@@ -1,0 +1,255 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 1]
+[2 / 11] BangumiKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Sources/BangumiKit/Client/Types.swift:391:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DateFormatter', consider removing it
+389 |     /// 一次 body 会读 `aired` 7–8 次 → 单格约 **312 µs**、一屏 40 格约 12.5 ms。
+390 |     /// `DateFormatter.date(from:)` 线程安全（与同包 `BangumiCollectionTimestamp` 同款持有）。
+391 |     nonisolated(unsafe) private static let airDateParser: DateFormatter = {
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DateFormatter', consider removing it
+392 |         let formatter = DateFormatter()
+393 |         formatter.dateFormat = "yyyy-MM-dd"
+[5 / 14] BangumiKit
+[10 / 19] BangumiKit
+[11 / 20] BangumiKit
+[15 / 20] BangumiKitTests-product
+[18 / 23] BangumiKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiKitTests.swift:981:51: warning: assuming you mean 'Optional<BangumiSubjectType>.none'; did you mean 'BangumiSubjectType.none' instead?
+ 979 |     /// 不带 filter（或 filter 为「全部」）时请求体不出现 filter 字段。
+ 980 |     @Test func searchRequestBodyOmitsFilterWhenNone() throws {
+ 981 |         for filter: BangumiSubjectType? in [nil, .none] {
+     |                                                  |`- warning: assuming you mean 'Optional<BangumiSubjectType>.none'; did you mean 'BangumiSubjectType.none' instead?
+     |                                                  |- note: explicitly specify 'Optional' to silence this warning
+     |                                                  `- note: use 'BangumiSubjectType.none' instead
+ 982 |             let body = BangumiSubjectService.searchRequestBody(keyword: "x", filter: filter)
+ 983 |             let data = try JSONEncoder().encode(body)
+[20 / 23] BangumiKitTests-product
+[22 / 26] BangumiKitTests-product
+Build complete! (6.07秒)
+Test Suite 'All tests' started at 2026-11-13 14:40:30.374.
+Test Suite 'BangumiKitTests.xctest' started at 2026-11-13 14:40:30.375.
+Test Suite 'RustBangumiIntegrationTests' started at 2026-11-13 14:40:30.375.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testCompleteResponseAuthErrorsAndMutationNotReplayed]' started.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testCompleteResponseAuthErrorsAndMutationNotReplayed]' passed (0.967 seconds).
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testGatewayPermissionEnvelopeKeepsItsSemanticMessage]' started.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testGatewayPermissionEnvelopeKeepsItsSemanticMessage]' passed (0.072 seconds).
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testOAuthAndSingleFlightRefreshUseCoreWithoutLeakingTokenToGateway]' started.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testOAuthAndSingleFlightRefreshUseCoreWithoutLeakingTokenToGateway]' passed (0.223 seconds).
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testSignOutCancelsAuthorizedRustRequestAndRejectsStalePublication]' started.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testSignOutCancelsAuthorizedRustRequestAndRejectsStalePublication]' passed (0.094 seconds).
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testTaskCancellationDropsRustRequest]' started.
+Test Case '-[BangumiKitTests.RustBangumiIntegrationTests testTaskCancellationDropsRustRequest]' passed (0.070 seconds).
+Test Suite 'RustBangumiIntegrationTests' passed at 2026-11-13 14:40:31.802.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 1.426 (1.427) seconds
+Test Suite 'RustBangumiStoreIntegrationTests' started at 2026-11-13 14:40:31.802.
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testFractionalBatchThresholdAndWatchedCountDoNotRegress]' started.
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testFractionalBatchThresholdAndWatchedCountDoNotRegress]' passed (0.051 seconds).
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testLargeEpisodePruningUsesCompleteKeepSetForBothImplementations]' started.
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testLargeEpisodePruningUsesCompleteKeepSetForBothImplementations]' passed (0.340 seconds).
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testProductionActivationAndBidirectionalRecords]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiStoreIntegrationTests.swift:41: error: -[BangumiKitTests.RustBangumiStoreIntegrationTests testProductionActivationAndBidirectionalRecords] : XCTAssertEqual failed: ("Optional(BangumiKit.BangumiSubjectDTO(id: 1, airtime: BangumiKit.BangumiSubjectAirtime(date: "", month: 0, weekday: 0, year: 0), collection: [:], eps: 12, images: Optional(BangumiKit.BangumiSubjectImages(large: "image", common: "image", medium: "image", small: "image", grid: "image")), infobox: [], info: "", locked: false, metaTags: [], tags: [], name: "Subject", nameCN: "", nsfw: false, platform: BangumiKit.BangumiSubjectPlatform(alias: "", id: 0, searchString: Optional(""), sortKeys: Optional([]), type: "", typeCN: "", wikiTpl: Optional("")), rating: BangumiKit.BangumiSubjectRating(count: [], total: 0, score: 0.0, rank: 0), redirect: 0, series: false, seriesEntry: 0, summary: "full description", type: BangumiKit.BangumiSubjectType.anime, volumes: 0, interest: Optional(BangumiKit.BangumiSubjectInterest(comment: "", epStatus: 5, volStatus: 2, private: true, rate: 0, tags: [], type: BangumiKit.BangumiCollectionType.doing, updatedAt: 999999))))") is not equal to ("Optional(BangumiKit.BangumiSubjectDTO(id: 1, airtime: BangumiKit.BangumiSubjectAirtime(date: "", month: 0, weekday: 0, year: 0), collection: [:], eps: 12, images: Optional(BangumiKit.BangumiSubjectImages(large: "image", common: "", medium: "", small: "", grid: "")), infobox: [], info: "", locked: false, metaTags: [], tags: [], name: "Subject", nameCN: "", nsfw: false, platform: BangumiKit.BangumiSubjectPlatform(alias: "", id: 0, searchString: Optional(""), sortKeys: Optional([]), type: "", typeCN: "", wikiTpl: Optional("")), rating: BangumiKit.BangumiSubjectRating(count: [], total: 0, score: 0.0, rank: 0), redirect: 0, series: false, seriesEntry: 0, summary: "full description", type: BangumiKit.BangumiSubjectType.anime, volumes: 0, interest: Optional(BangumiKit.BangumiSubjectInterest(comment: "", epStatus: 5, volStatus: 2, private: true, rate: 0, tags: [], type: BangumiKit.BangumiCollectionType.doing, updatedAt: 999999))))")
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testProductionActivationAndBidirectionalRecords]' failed (0.300 seconds).
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testRustCreatedDatabaseLoadsThroughGRDBAndNewSlimDefaultsDecode]' started.
+Test Case '-[BangumiKitTests.RustBangumiStoreIntegrationTests testRustCreatedDatabaseLoadsThroughGRDBAndNewSlimDefaultsDecode]' passed (0.004 seconds).
+Test Suite 'RustBangumiStoreIntegrationTests' failed at 2026-11-13 14:40:32.498.
+	 Executed 4 tests, with 1 failure (0 unexpected) in 0.695 (0.695) seconds
+Test Suite 'BangumiKitTests.xctest' failed at 2026-11-13 14:40:32.498.
+	 Executed 9 tests, with 1 failure (0 unexpected) in 2.121 (2.123) seconds
+Test Suite 'All tests' failed at 2026-11-13 14:40:32.498.
+	 Executed 9 tests, with 1 failure (0 unexpected) in 2.121 (2.123) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite BangumiStoreTests started.
+◇ Suite "Episode 分类分区" started.
+◇ Test linkRoundTrip() started.
+◇ Test expiredAuthIsDetected() started.
+◇ Test clearAccountStateWipesCredentialFileEntry() started.
+◇ Test isAuthenticatedRequiresStoredCredentials() started.
+◇ Suite "Bangumi 镜像根域解析" started.
+◇ Suite BangumiKitTests started.
+◇ Suite BangumiDatabaseTests started.
+◇ Test legacyUserDefaultsAuthIsMigratedAndRemoved() started.
+◇ Test "七种 case 全部正确分流" started.
+◇ Test "tab → 列表的映射正确" started.
+◇ Test "displayGroups 的顺序、标题与空组省略" started.
+◇ Suite "BangumiURL 缓存" started.
+◇ Test "每个分类内部保持原数组顺序" started.
+◇ Test "与旧的三个 filter 逐条等价（含全部字段）" started.
+◇ Test "大输入（1000 集）结果与顺序都对" started.
+◇ Test "空数组与单一分类" started.
+✔ Test expiredAuthIsDetected() passed after 0.001 seconds.
+◇ Test authorizePageKeepsMirrorPort() started.
+◇ Test enabledNormalizesPastedURLs() started.
+◇ Test mirrorRootDerivesAllFourDomains() started.
+◇ Test enabledRejectsEmptyAndMalformedValues() started.
+◇ Test imageRewriteFollowsMirrorRoot() started.
+◇ Test authorizePageFollowsMirrorMainDomain() started.
+◇ Test enabledAcceptsBareHost() started.
+◇ Test disabledSwitchAlwaysFallsBackToOfficial() started.
+◇ Test keyLiteralsAreStable() started.
+◇ Test authorizePageIsUntouchedWhenMirrorIsOff() started.
+◇ Test mirrorRootKeepsPortOnDerivedDomains() started.
+◇ Test localProgressNeverRegressesOnMark() started.
+◇ Test progressFraction() started.
+◇ Test staleEpisodeProgressQuerySelectsWhenCollectionRecordIsNewer() started.
+◇ Test markEpisodeRecountsWatched() started.
+◇ Test airDateValueDistinguishesUnknownFromNotAired() started.
+◇ Test subjectCollectionURLUsesUsernameRoute() started.
+◇ Test gatewayForbiddenCodesMapToTheirOwnMessages() started.
+◇ Test episodeSyncTargetsMergesMissingAndStale() started.
+◇ Test staleEpisodeProgressQuerySelectsWhenServerCountIsAhead() started.
+◇ Test searchRequestBodyFilterTypeIsArray() started.
+◇ Test oauthURLIncludesStateAndRotates() started.
+◇ Test staleEpisodeProgressQueryOnlyInProgressAnime() started.
+◇ Test oauthExchangeRejectsMismatchedState() started.
+◇ Test searchDecoding() started.
+◇ Test airedSemanticsUnchangedAfterExtraction() started.
+◇ Test episodeSortDisplay() started.
+◇ Test pagedProgressWindowsStayPerSubject() started.
+◇ Test tokenResponseWithoutRefreshTokenKeepsPrevious() started.
+◇ Test batchSaveSubjectsMatchesSingleSaveSemantics() started.
+◇ Test collectionLookupClassifies404ByBody() started.
+◇ Test markingSpecialDoesNotChangeWatchedCount() started.
+◇ Test batchSaveSubjectsDeduplicatesIDsKeepingEarlierOptionalFields() started.
+◇ Test subjectIDOfEpisodeResolvesAndMisses() started.
+◇ Test collectionTypeMapping() started.
+◇ Test pagedProgressRespectsOffsetAndLimit() started.
+◇ Test missingEpisodesQueryHandlesUnknownTotal() started.
+◇ Test targetWatchingStateOnlyAdvancesConfirmedStates() started.
+◇ Test calendarDecoding() started.
+◇ Test staleEpisodeProgressQueryNeedsLocalEpisodes() started.
+◇ Test progressWindowClampsAtHead() started.
+◇ Test imageURLStringRewritesAndPreserves() started.
+◇ Test notFinishedWhileEpisodesAreMissing() started.
+◇ Test collectionLookupDecodesRealResponseAndTimestamp() started.
+◇ Test airTimeSortOrdersByAirDate() started.
+◇ Test oauthExchangeSendsCodeOnlyAndStoresCredentials() started.
+◇ Test authoritativeEpisodeSyncClearsUnwatchedStatus() started.
+◇ Test progressSearchMatchesChineseName() started.
+◇ Test collectionsURLCarriesPagingQuery() started.
+◇ Test slimSubjectDoesNotInferPrivateFlag() started.
+◇ Test authoritativeMissingInterestClearsLocalCollection() started.
+◇ Test batchMarkKeepsLaterCollectedEpisodes() started.
+◇ Test searchRequestBodyOmitsFilterWhenNone() started.
+◇ Test saveSubjectsWritesWholePage() started.
+◇ Test databaseSetupFailureResetsTaskAndAllowsRetry() started.
+◇ Test subjectsBatchFetchesAllRequested() started.
+◇ Test missingEpisodesQueryThrottlesRetryAfterSync() started.
+◇ Test progressWindowFallsBackToTail() started.
+◇ Test staleEpisodeProgressQueryIgnoresConsistentSubjects() started.
+◇ Test missingEpisodesQuerySelectsIncompleteDoingSubjects() started.
+◇ Test emptyEpisodeResultStillMarksSynced() started.
+◇ Test nonAuthoritativeMissingInterestKeepsLocalCollection() started.
+◇ Test progressWindowCentersOnNextUnwatched() started.
+◇ Test imageURLStringCacheDistinguishesRawMirrorStrings() started.
+◇ Test cacheSurvivesOverflowWithoutMixingValues() started.
+◇ Test rewritingSameKeyOccupiesOneSlotOnly() started.
+◇ Test imageURLStringCacheDoesNotMixInputs() started.
+◇ Test mirrorChangeInvalidatesAllKeysNotJustTheNewOne() started.
+◇ Test switchingBackToPreviousMirrorDoesNotLeakNewerEntries() started.
+◇ Test publicEntryPointIsStableAcrossCalls() started.
+◇ Test overflowEvictsOldestOnlyNotEverything() started.
+◇ Test imageURLStringCacheInvalidatesOnMirrorChange() started.
+◇ Test goldenAssertionsStillHold() started.
+◇ Test entryPointDelegatesToCacheAndComposesWithSameMirror() started.
+◇ Test entryPointUsesInjectedMirrorForBothTagAndComposition() started.
+◇ Test imageURLStringCacheIsTransparent() started.
+◇ Test entryPointCachesRelativePathsToo() started.
+✔ Test "tab → 列表的映射正确" passed after 0.002 seconds.
+✔ Test "displayGroups 的顺序、标题与空组省略" passed after 0.002 seconds.
+✔ Test "每个分类内部保持原数组顺序" passed after 0.002 seconds.
+✔ Test "空数组与单一分类" passed after 0.002 seconds.
+✔ Test "七种 case 全部正确分流" passed after 0.022 seconds.
+✔ Test mirrorRootDerivesAllFourDomains() passed after 0.071 seconds.
+✔ Test enabledNormalizesPastedURLs() passed after 0.071 seconds.
+✔ Test imageRewriteFollowsMirrorRoot() passed after 0.071 seconds.
+✔ Test enabledRejectsEmptyAndMalformedValues() passed after 0.071 seconds.
+✔ Test enabledAcceptsBareHost() passed after 0.071 seconds.
+✔ Test disabledSwitchAlwaysFallsBackToOfficial() passed after 0.071 seconds.
+✔ Test authorizePageFollowsMirrorMainDomain() passed after 0.071 seconds.
+✔ Test keyLiteralsAreStable() passed after 0.071 seconds.
+✔ Test mirrorRootKeepsPortOnDerivedDomains() passed after 0.071 seconds.
+✔ Test progressFraction() passed after 0.071 seconds.
+✔ Test "大输入（1000 集）结果与顺序都对" passed after 0.072 seconds.
+✔ Test authorizePageIsUntouchedWhenMirrorIsOff() passed after 0.071 seconds.
+✔ Test "与旧的三个 filter 逐条等价（含全部字段）" passed after 0.072 seconds.
+✔ Test airDateValueDistinguishesUnknownFromNotAired() passed after 0.071 seconds.
+✔ Test subjectCollectionURLUsesUsernameRoute() passed after 0.071 seconds.
+✔ Test linkRoundTrip() passed after 0.072 seconds.
+✔ Test episodeSyncTargetsMergesMissingAndStale() passed after 0.071 seconds.
+✔ Test isAuthenticatedRequiresStoredCredentials() passed after 0.072 seconds.
+✔ Test legacyUserDefaultsAuthIsMigratedAndRemoved() passed after 0.072 seconds.
+✔ Test searchRequestBodyFilterTypeIsArray() passed after 0.071 seconds.
+✔ Test clearAccountStateWipesCredentialFileEntry() passed after 0.072 seconds.
+✔ Test authorizePageKeepsMirrorPort() passed after 0.071 seconds.
+✔ Test searchDecoding() passed after 0.071 seconds.
+✔ Test staleEpisodeProgressQuerySelectsWhenCollectionRecordIsNewer() passed after 0.071 seconds.
+✔ Test airedSemanticsUnchangedAfterExtraction() passed after 0.071 seconds.
+✔ Test episodeSortDisplay() passed after 0.071 seconds.
+✔ Test tokenResponseWithoutRefreshTokenKeepsPrevious() passed after 0.071 seconds.
+✔ Test collectionLookupClassifies404ByBody() passed after 0.071 seconds.
+✔ Test staleEpisodeProgressQuerySelectsWhenServerCountIsAhead() passed after 0.071 seconds.
+✔ Test localProgressNeverRegressesOnMark() passed after 0.072 seconds.
+✔ Test collectionTypeMapping() passed after 0.072 seconds.
+✔ Test staleEpisodeProgressQueryOnlyInProgressAnime() passed after 0.072 seconds.
+✔ Test markEpisodeRecountsWatched() passed after 0.072 seconds.
+✔ Test targetWatchingStateOnlyAdvancesConfirmedStates() passed after 0.072 seconds.
+✔ Test batchSaveSubjectsDeduplicatesIDsKeepingEarlierOptionalFields() passed after 0.072 seconds.
+✔ Test imageURLStringRewritesAndPreserves() passed after 0.072 seconds.
+✔ Test subjectIDOfEpisodeResolvesAndMisses() passed after 0.072 seconds.
+✔ Test notFinishedWhileEpisodesAreMissing() passed after 0.072 seconds.
+✔ Test markingSpecialDoesNotChangeWatchedCount() passed after 0.072 seconds.
+✔ Test collectionLookupDecodesRealResponseAndTimestamp() passed after 0.072 seconds.
+✔ Test batchSaveSubjectsMatchesSingleSaveSemantics() passed after 0.072 seconds.
+✔ Test collectionsURLCarriesPagingQuery() passed after 0.072 seconds.
+✔ Test staleEpisodeProgressQueryNeedsLocalEpisodes() passed after 0.072 seconds.
+✔ Test missingEpisodesQueryHandlesUnknownTotal() passed after 0.072 seconds.
+✔ Test pagedProgressRespectsOffsetAndLimit() passed after 0.072 seconds.
+✔ Test searchRequestBodyOmitsFilterWhenNone() passed after 0.072 seconds.
+✔ Test progressWindowClampsAtHead() passed after 0.072 seconds.
+✔ Test pagedProgressWindowsStayPerSubject() passed after 0.072 seconds.
+✔ Test slimSubjectDoesNotInferPrivateFlag() passed after 0.072 seconds.
+✔ Test authoritativeEpisodeSyncClearsUnwatchedStatus() passed after 0.072 seconds.
+✔ Test authoritativeMissingInterestClearsLocalCollection() passed after 0.072 seconds.
+✔ Test airTimeSortOrdersByAirDate() passed after 0.072 seconds.
+✔ Test progressSearchMatchesChineseName() passed after 0.072 seconds.
+✔ Test subjectsBatchFetchesAllRequested() passed after 0.072 seconds.
+✔ Test calendarDecoding() passed after 0.072 seconds.
+✔ Test missingEpisodesQueryThrottlesRetryAfterSync() passed after 0.072 seconds.
+✔ Test staleEpisodeProgressQueryIgnoresConsistentSubjects() passed after 0.072 seconds.
+✔ Test imageURLStringCacheDistinguishesRawMirrorStrings() passed after 0.072 seconds.
+✔ Test imageURLStringCacheDoesNotMixInputs() passed after 0.072 seconds.
+✔ Test batchMarkKeepsLaterCollectedEpisodes() passed after 0.072 seconds.
+✔ Test cacheSurvivesOverflowWithoutMixingValues() passed after 0.072 seconds.
+✔ Test mirrorChangeInvalidatesAllKeysNotJustTheNewOne() passed after 0.072 seconds.
+✔ Test switchingBackToPreviousMirrorDoesNotLeakNewerEntries() passed after 0.072 seconds.
+✔ Test rewritingSameKeyOccupiesOneSlotOnly() passed after 0.072 seconds.
+✔ Test publicEntryPointIsStableAcrossCalls() passed after 0.072 seconds.
+✔ Test imageURLStringCacheInvalidatesOnMirrorChange() passed after 0.072 seconds.
+✔ Test entryPointDelegatesToCacheAndComposesWithSameMirror() passed after 0.072 seconds.
+✔ Test goldenAssertionsStillHold() passed after 0.072 seconds.
+✔ Test progressWindowFallsBackToTail() passed after 0.072 seconds.
+✔ Test entryPointUsesInjectedMirrorForBothTagAndComposition() passed after 0.072 seconds.
+✔ Test imageURLStringCacheIsTransparent() passed after 0.072 seconds.
+✔ Test overflowEvictsOldestOnlyNotEverything() passed after 0.072 seconds.
+✔ Test entryPointCachesRelativePathsToo() passed after 0.072 seconds.
+✔ Test saveSubjectsWritesWholePage() passed after 0.072 seconds.
+✔ Suite "Bangumi 镜像根域解析" passed after 0.074 seconds.
+✔ Suite "Episode 分类分区" passed after 0.074 seconds.
+✔ Test emptyEpisodeResultStillMarksSynced() passed after 0.072 seconds.
+✔ Test oauthExchangeRejectsMismatchedState() passed after 0.073 seconds.
+✔ Suite BangumiStoreTests passed after 0.074 seconds.
+✔ Suite "BangumiURL 缓存" passed after 0.074 seconds.
+✔ Test oauthURLIncludesStateAndRotates() passed after 0.074 seconds.
+✔ Test missingEpisodesQuerySelectsIncompleteDoingSubjects() passed after 0.074 seconds.
+✔ Test gatewayForbiddenCodesMapToTheirOwnMessages() passed after 0.075 seconds.
+✔ Test oauthExchangeSendsCodeOnlyAndStoresCredentials() passed after 0.076 seconds.
+✔ Suite BangumiKitTests passed after 0.077 seconds.
+✔ Test nonAuthoritativeMissingInterestKeepsLocalCollection() passed after 0.075 seconds.
+✔ Test progressWindowCentersOnNextUnwatched() passed after 0.075 seconds.
+✔ Test databaseSetupFailureResetsTaskAndAllowsRetry() passed after 0.281 seconds.
+✔ Suite BangumiDatabaseTests passed after 0.283 seconds.
+✔ Test run with 89 tests in 6 suites passed after 0.283 seconds.
+Note: Some test targets reported failures:
+  - BangumiKitTests (XCTest)
