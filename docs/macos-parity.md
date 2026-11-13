@@ -456,9 +456,10 @@ See [intro-contract.md](intro-contract.md). Intro provider transport/identity
 resolution, complete shared async load/manual/promotion orchestration and the
 remaining acceptance rows stay open. Windows runtime testing remains deferred.
 
-The final bundled playback control probe records zero render/audio failures,
-but its seek correctness is unresolved: the 20-second clip reaches about 14
-seconds after a requested 3.5-second seek, then 4 seconds after a later requested
-one-second seek. Initial rate was 2x. The native-disabled comparison and cause
-are not yet established. This is new evidence for the open playback acceptance
-row, not a passing seek-quality certification; raw logs and summary preserve it.
+The first bundled control probe's seek labels assumed a five-second clip,
+although its actual calls seek to fractions 0.7 and 0.2. Source inspection
+resolved the apparent seconds mismatch: for the 20-second file the expected
+positions are 14 and 4 seconds. Labels now state 70% and 20%. The rebuilt and
+re-signed app's final probe verifies both expected Core positions, pause/play,
+rate changes and resize with zero render/audio failures. Original logs and the
+initial summary remain preserved alongside the corrected verification.

@@ -108,20 +108,29 @@
   },
   "macOSBuild": "passed",
   "finalCoreEmbedAndSignature": "passed",
-  "validationOrder": "Full macOS verification passed before the final hex-tail rounding repair. Final source then passed locked Rust, all C ABI, exported binding and complete DanmakuKit checks; rebuilt Core was embedded and signed in the same tested native application.",
+  "validationOrder": "Full macOS verification passed before the final hex-tail rounding repair. Final source then passed locked Rust, all C ABI, exported binding and complete DanmakuKit checks; rebuilt Core was embedded and signed in the same tested native application. Selftest logging labels were then corrected; the native app was rebuilt, signed and its final bundled controls passed normalized seek checks.",
   "benchmarkContext": "Debug native Swift versus release Rust dylib, including Swift JSON encoding and ABI; observed 10000-comment timings are in post-precision/DanmakuKit-tests.log.",
   "builtLibrarySHA256": "5cd7861557494d9f7604e1216279dfd015f699f20da7a3cdb8aa9dd707e88e6c",
   "remaining": "Intro provider transport/identity resolution, complete shared async load/manual/promotion orchestration and other docs/macos-parity.md acceptance rows. Windows runtime tests deferred.",
   "bundledPlayback": {
-    "status": "seek correctness needs investigation",
+    "status": "passed",
     "renderFailures": 0,
     "audioFailures": 0,
-    "observations": [
-      "Native metadata duration 20 seconds",
-      "After requested seek 3.5 seconds, Core/native position reaches about 14 seconds",
-      "After later requested seek 1 second, Core/native position reaches 4 seconds"
+    "durationSeconds": 20.0,
+    "seekChecks": [
+      {
+        "label": "seek 70%",
+        "fraction": 0.7,
+        "expectedSeconds": 14.0,
+        "observedCoreSeconds": 14.0
+      },
+      {
+        "label": "rate 1.0 + seek 20%",
+        "fraction": 0.2,
+        "expectedSeconds": 4.0,
+        "observedCoreSeconds": 4.0
+      }
     ],
-    "nativeDisabledComparison": "not yet performed",
-    "initialRate": 2.0
+    "labelCorrection": "Original selftest text assumed a five-second clip while the actual calls seek to 70% and 20%; corrected labels and rebuilt/re-embedded application validate the actual fractions."
   }
 }
