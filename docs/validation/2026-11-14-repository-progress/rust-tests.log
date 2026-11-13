@@ -1,0 +1,18 @@
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+error[E0689]: can't call method `clamp` on ambiguous numeric type `{float}`
+   --> crates/ocp-store/src/repository/progress.rs:321:96
+    |
+321 |                 let expected=if duration.is_some_and(|d| d>0.0) { (position/duration.unwrap()).clamp(0.0,1.0) } else {1.0};
+    |                                                                                                ^^^^^
+
+warning: unused variable: `item_id`
+   --> crates/ocp-store/src/repository/progress.rs:178:17
+    |
+178 |             let item_id = id(&json!({"id":v["itemID"]}))?; validate_state(&v["state"])?;
+    |                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_item_id`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0689`.
+warning: `ocp-store` (lib test) generated 1 warning
+error: could not compile `ocp-store` (lib test) due to 1 previous error; 1 warning emitted

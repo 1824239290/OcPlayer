@@ -1,0 +1,147 @@
+{
+  "rust": 129,
+  "abi": {
+    "moviepilot-contract-tests.log": 10,
+    "danmaku-contract-tests.log": 4,
+    "intro-contract-tests.log": 9,
+    "intro-provider-contract-tests.log": 6,
+    "danmaku-cache-contract-tests.log": 6,
+    "network-contract-tests.log": 7,
+    "tmdb-matcher-contract-tests.log": 4,
+    "tmdb-enrichment-contract-tests.log": 8,
+    "intro-identity-contract-tests.log": 6,
+    "bangumi-contract-tests.log": 4,
+    "repository-progress-contract-tests.log": 4,
+    "media-repository-contract-tests.log": 6,
+    "danmaku-policy-contract-tests.log": 4,
+    "repository-composition-contract-tests.log": 3,
+    "media-login-contract-tests.log": 10,
+    "tmdb-wire-contract-tests.log": 5,
+    "standalone-contract-tests.log": 10,
+    "danmaku-flow-contract-tests.log": 6
+  },
+  "abiTotal": 112,
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 19,
+      "skipped": 0,
+      "failures": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MetadataKit": {
+      "executed": 332,
+      "skipped": 0,
+      "failures": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "skipped": 0,
+      "failures": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "skipped": 0,
+      "failures": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "skipped": 0,
+      "failures": 0
+    },
+    "DanmakuKit": {
+      "executed": 272,
+      "skipped": 0,
+      "failures": 0
+    }
+  },
+  "packageTotal": 1197,
+  "appTests": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "coreDisabledMetadata": {
+    "executed": 332,
+    "passed": 301,
+    "skipped": 31,
+    "failed": 0
+  },
+  "outputDirectory": "/tmp/ocp-repository-composition-macos",
+  "app": "/tmp/ocp-repository-composition-macos/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "librarySha256": "45d6eed5eb83cfa0318a8f848305f3b79256e0eefdc88dc65e6711e7c405284e",
+  "embeddedLibrarySha256": "462de10537e681896223ba15c8d0691db69239ae91edef70166d1c330d480e2d",
+  "runtimeSections": {
+    "__TEXT,__text": {
+      "bytes": 7284540,
+      "sha256": "012f0abc6960d0aee5f2acf6c17edae6e745e106c8ed959d940733fef35e6b3c"
+    },
+    "__TEXT,__stubs": {
+      "bytes": 1860,
+      "sha256": "9f53471f0b026d87e78408a77d2800c82c4ea12c7218054417ea877af18aa4a3"
+    },
+    "__TEXT,__stub_helper": {
+      "bytes": 1884,
+      "sha256": "880121f625c23f3bf81b42e4153822d3c047c07bd22a4db48975e65b852b5827"
+    },
+    "__TEXT,__gcc_except_tab": {
+      "bytes": 356724,
+      "sha256": "3dc74c00da259cc2ca481c6b9db01ef887ad97f75a6f78383f85df0063f36914"
+    },
+    "__TEXT,__cstring": {
+      "bytes": 115794,
+      "sha256": "ac99192f59b9ff384fe2fe9d6c0be6b7b0f20b7f6f55eaad93250b0714dba372"
+    },
+    "__TEXT,__const": {
+      "bytes": 1038088,
+      "sha256": "6d48a66cb3ae20a029704fcc320b22749867614ff38ac0c347147ee53a64dda8"
+    },
+    "__TEXT,__unwind_info": {
+      "bytes": 150456,
+      "sha256": "8baa6d86486f37899e04278ee8d74b4ef3ba066cdd2ba2d47c3575fb55ab3e81"
+    },
+    "__TEXT,__eh_frame": {
+      "bytes": 812332,
+      "sha256": "e4a831d26e1c70e90aa7b994a1169d3848d2ba5eb33a0212e691c47bdb13fa3d"
+    },
+    "__DATA_CONST,__const": {
+      "bytes": 440000,
+      "sha256": "fbd899dc9fedadecc0aa94ec7b623a53a423571cbd8d80cd1b18109c225fe9c6"
+    },
+    "__DATA_CONST,__got": {
+      "bytes": 32,
+      "sha256": "a13623c907b4e5915958b83b1e52ea9255ef8f908a30a4129f2158aa1eca2efd"
+    },
+    "__DATA,__la_symbol_ptr": {
+      "bytes": 1240,
+      "sha256": "ca1db0d9a703d3ccf296421dc6d82eee378ddb5d2211ab21a31968e00c78cf1c"
+    },
+    "__DATA,__data": {
+      "bytes": 25240,
+      "sha256": "048566ea93018fefb2d8852141fb48b3b8c8cf4ac9f273481bd1e46fe0618081"
+    },
+    "__DATA,__thread_vars": {
+      "bytes": 408,
+      "sha256": "3f5660fae9508d5fa4289b7c14b950e641c9a5646f06b3f0251060e7f03adebc"
+    },
+    "__DATA,__thread_data": {
+      "bytes": 232,
+      "sha256": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+    }
+  },
+  "playback": {
+    "completed": true,
+    "coreAvailable": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "bundledLibrary": true
+  },
+  "sourceBase": {
+    "core": "e31b4011fbb2b241198f12a0125f341be766c18d",
+    "apple": "12b549982f8656b06da4688229c08f79b082a464"
+  }
+}

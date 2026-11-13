@@ -1,0 +1,22 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 11] JellyfinAPI
+Build complete! (1.21秒)
+Test Suite 'Selected tests' started at 2026-11-14 07:53:07.123.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 07:53:07.124.
+Test Suite 'RustRepositoryCompositionTests' started at 2026-11-14 07:53:07.124.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' passed (0.039 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' passed (0.085 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' passed (0.025 seconds).
+Test Suite 'RustRepositoryCompositionTests' passed at 2026-11-14 07:53:07.273.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.148 (0.149) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 07:53:07.273.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.148 (0.149) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 07:53:07.273.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.148 (0.150) seconds

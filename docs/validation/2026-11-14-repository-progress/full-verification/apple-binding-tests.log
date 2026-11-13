@@ -1,0 +1,373 @@
+Building for debugging...
+[Pre-planning 1 / 125]
+[Planning deferred tasks]
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore_OcPlayerCoreTests-b.build/DerivedSources/Entitlements.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore_OcPlayerCoreTests-b.build/OcPlayerCore_OcPlayerCoreTests.bundle.xcent' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore_OcPlayerCoreTests-b.build/OcPlayerCore_OcPlayerCoreTests.bundle.xcent.der' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore_OcPlayerCoreTests-b.build/empty-OcPlayerCore_OcPlayerCoreTests.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle/Contents' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle/Contents/Info.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle/Contents/Resources' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore_OcPlayerCoreTests.bundle/Contents/Resources/Fixtures' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-product-p.build/Objects-normal/arm64/OcPlayerCore.LinkFileList' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/DerivedSources/Entitlements.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-product-p.build/Objects-normal/arm64/OcPlayerCore_libtool_dependency_info.dat' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/libOcPlayerCore.a' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/DerivedSources/resource_bundle_accessor.swift' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/DerivedSources/test_entry_point.swift' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests Swift Compilation Finished' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests Swift Compilation Requirements Finished' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests-OutputFileMap.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests-dependency-scan.dia' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.LinkFileList' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.SwiftFileList' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.abi.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.swiftdoc' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.swiftmodule' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests.swiftsourceinfo' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests_const_extract_protocols.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests_dependency_info.dat' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcPlayerCoreTests_lto.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpCoreClientTests.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpCoreClientTests.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpDanmakuLoaderTests.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpDanmakuLoaderTests.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpResponseTests.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/OcpResponseTests.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/resource_bundle_accessor.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/resource_bundle_accessor.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/test_entry_point.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/Objects-normal/arm64/test_entry_point.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/OcPlayerCoreTests.xctest.xcent' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/OcPlayerCoreTests.xctest.xcent.der' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCoreTests-p.build/empty-OcPlayerCoreTests.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/GeneratedModuleMaps/OcPlayerCore-Swift.h' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.swiftmodule/arm64-apple-macos.abi.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/GeneratedModuleMaps/OcPlayerCore.modulemap' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.swiftmodule/arm64-apple-macos.swiftdoc' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore Swift Compilation Finished' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.swiftmodule/arm64-apple-macos.swiftmodule' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore Swift Compilation Requirements Finished' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore-OutputFileMap.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore-Swift.h' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents/Info.plist' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore-dependency-scan.dia' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents/MacOS' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.LinkFileList' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents/MacOS/OcPlayerCoreTests' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.SwiftFileList' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents/Resources' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.abi.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.swiftdoc' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.swiftmodule' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore.swiftsourceinfo' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore_const_extract_protocols.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore_dependency_info.dat' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcPlayerCore_lto.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpBangumiClient.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpBangumiClient.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpCoreClient.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpCoreClient.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpDanmakuLoader.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpDanmakuLoader.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackEvents.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackEvents.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackFlow.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackFlow.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackSession.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/Objects-normal/arm64/OcpPlaybackSession.swiftconstvalues' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Intermediates.noindex/OcPlayerCore.build/Debug/OcPlayerCore-t.build/OcPlayerCore.modulemap' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore.o' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/Contents/Resources/OcPlayerCore_OcPlayerCoreTests.bundle' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore.swiftmodule/arm64-apple-macos.abi.json' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore.swiftmodule/arm64-apple-macos.swiftdoc' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCore.swiftmodule/arm64-apple-macos.swiftmodule' is located outside of the allowed root paths.
+
+warning: Stale file '/tmp/ocplayer-repository-macos-final/AppleBindingBuild/out/Products/Debug/OcPlayerCoreTests.xctest/_CodeSignature' is located outside of the allowed root paths.
+
+[39 / 67]
+[43 / 68] OcPlayerCore
+[51 / 109]
+[53 / 109]
+[55 / 109]
+[58 / 109]
+[60 / 109]
+[61 / 109]
+[62 / 109]
+[65 / 109]
+[66 / 109]
+[67 / 109]
+[68 / 109]
+[69 / 109]
+[71 / 109]
+[74 / 109]
+[75 / 109]
+[76 / 109]
+[77 / 109]
+[84 / 109] OcPlayerCore
+[92 / 109] OcPlayerCore
+[99 / 110] OcPlayerCoreTests-product
+[108 / 151]
+[113 / 151]
+[116 / 151]
+[120 / 151]
+[122 / 151]
+[123 / 151]
+[125 / 151]
+[126 / 151]
+[128 / 151]
+[129 / 151]
+[130 / 151]
+[131 / 151]
+[132 / 151]
+[133 / 151]
+[134 / 151]
+[140 / 151] OcPlayerCoreTests-product
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:255:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+253 |         }
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |         try client.call("playback.play")
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:256:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+256 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+258 |         for frame in 0..<7200 {
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:261:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+259 |             client.renderTick(timeSeconds: Double(frame) / 60)
+260 |             if frame.isMultiple(of: 60) {
+261 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:264:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+264 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+265 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+266 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:287:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+285 |         // A host that never polls controls must still have a fixed upper bound.
+286 |         for position in 0..<1000 {
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+288 |         }
+289 |         try client.call("playback.stop")
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:289:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+288 |         }
+289 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+290 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+291 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[145 / 151] OcPlayerCoreTests-product
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:255:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+253 |         }
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |         try client.call("playback.play")
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:256:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+254 |         let client = try OcpCoreClient(libraryPath: path)
+255 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+256 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+257 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+258 |         for frame in 0..<7200 {
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:261:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+259 |             client.renderTick(timeSeconds: Double(frame) / 60)
+260 |             if frame.isMultiple(of: 60) {
+261 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:264:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+262 |             }
+263 |         }
+264 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+265 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+266 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:287:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+285 |         // A host that never polls controls must still have a fixed upper bound.
+286 |         for position in 0..<1000 {
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+288 |         }
+289 |         try client.call("playback.stop")
+
+/Volumes/Backup/软件/OcPlayer-Core/bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:289:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+287 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+288 |         }
+289 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+290 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+291 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[147 / 151] OcPlayerCoreTests-product
+Build complete! (18.64秒)
+Test Suite 'All tests' started at 2026-11-14 03:33:11.160.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-14 03:33:11.162.
+Test Suite 'OcpCoreClientTests' started at 2026-11-14 03:33:11.162.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' passed (0.767 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' passed (0.004 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' passed (0.005 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' passed (0.245 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' passed (0.010 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' passed (0.004 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' passed (0.022 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' passed (0.004 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' passed (0.266 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' passed (0.002 seconds).
+Test Suite 'OcpCoreClientTests' passed at 2026-11-14 03:33:12.504.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 1.338 (1.342) seconds
+Test Suite 'OcpDanmakuLoaderTests' started at 2026-11-14 03:33:12.505.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' passed (0.263 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' passed (0.222 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' passed (0.227 seconds).
+Test Suite 'OcpDanmakuLoaderTests' passed at 2026-11-14 03:33:13.218.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.712 (0.713) seconds
+Test Suite 'OcpResponseTests' started at 2026-11-14 03:33:13.218.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testPublicSyncAndAsyncCallsKeepExactPayloadAfterClientRetirement]' started.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testPublicSyncAndAsyncCallsKeepExactPayloadAfterClientRetirement]' passed (0.188 seconds).
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testTypedDataPreservesNestedIntegerRangesNullsAndFloatingFields]' started.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testTypedDataPreservesNestedIntegerRangesNullsAndFloatingFields]' passed (0.001 seconds).
+Test Suite 'OcpResponseTests' passed at 2026-11-14 03:33:13.407.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.189 (0.189) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-14 03:33:13.407.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 2.240 (2.244) seconds
+Test Suite 'All tests' passed at 2026-11-14 03:33:13.407.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 2.240 (2.247) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

@@ -71,8 +71,12 @@ cases include 6000 LRU operations over four limits and five buckets, full public
 memory-only home/detail/page/progress projections, typed structured identities,
 waiter cancellation, migration/rebuild/file accounting and unrecoverable paths.
 
-The original four-part home/detail/page composition and actor-local progress
-observation/revision/lifecycle decisions still remain native. Moving those
-coordinators into retained Core flows is required follow-up; this cohort does not
-complete the repository or the full parity goal. Complete raw records are retained
-under `validation/2026-11-14-media-repository/`.
+The next retained session stage is specified in
+[media-repository-progress.md](media-repository-progress.md): local progress,
+observation, confirmation/revision barriers, all projection updates and shutdown
+state now run in Core. Home/detail/page reductions are specified in
+[media-repository-composition.md](media-repository-composition.md). Pagination,
+home deduplication/restoration, detail planning and progress composition now run
+in Core; effect sequencing and failure/fallback assembly remain host work. Neither cohort completes the repository or the
+full parity goal. Projection/database raw records are retained under
+`validation/2026-11-14-media-repository/`.

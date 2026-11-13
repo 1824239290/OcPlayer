@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
+mod composition;
+mod progress;
 
 // Swift String/Hashable uses canonical equivalence, recursively through keys.
 // Keep the original key/payload; normalize only the retained lookup identity.
@@ -83,6 +85,7 @@ pub struct Repository {
     buckets: HashMap<String, Bucket>,
     flights: HashMap<String, u64>,
     next_ticket: u64,
+    progress: progress::Session,
 }
 impl Repository {
     fn configure(&mut self, limits: Limits) {
@@ -98,6 +101,12 @@ impl Repository {
         .collect();
     }
     pub fn call(&mut self, method: &str, args: &Value) -> Result<Value, String> {
+        if let Some(method) = method.strip_prefix("compose.") {
+            return composition::call(self, method, args);
+        }
+        if let Some(method) = method.strip_prefix("progress.") {
+            return progress::call(self, method, args);
+        }
         if method == "open" {
             let limits: Limits = serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
             if !self.flights.is_empty() {
