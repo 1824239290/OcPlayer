@@ -341,3 +341,17 @@ Core fixtures. Four real HTTP C ABI checks pass. Full outputs, earlier compile
 errors and final verification are retained in `validation/2026-11-13-danmaku/`.
 See [danmaku-contract.md](danmaku-contract.md). Shared orchestration/persistence
 for Windows and the other acceptance rows remain open.
+
+The complete Danmaku verification passes Rust 79; OcPlayerCore 14, JellyfinKit
+255, MetadataKit 306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and
+DanmakuKit 232. Exported Apple binding 14 and C ABI Bangumi 4, network 7,
+MoviePilot 10, media login 10 and danmaku 4 pass. macOS AppTests execute 1008:
+989 passed, 19 platform skips, zero failures. The Core-disabled DanmakuKit run
+passes 228 with four explicit native-library fixture skips. The newly embedded
+and signed application passes pause/play/seek/speed/resize with zero render or
+audio failures. Natural EOF reaches Core ended with the same native timeline;
+at persisted 2x speed both end at 4.966666s for metadata duration 5.066667s.
+That 100ms difference is recorded as an open rate/EOF acceptance issue, rather
+than claiming exact complete-duration playback. Summary and all raw logs are
+retained with this run. Build scripts also retain executable Git modes so
+clean-checkout command invocations work.
