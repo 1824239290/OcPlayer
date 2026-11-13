@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 /// 弹幕本地缓存：两层结构。
 ///
@@ -42,6 +43,8 @@ public actor DanmakuCache {
     /// 缓存根目录（`mapping.json` / `comments-*.json` / `intro-hints.json` 等都在这）。
     /// 不可变值，跨隔离域只读（编排层派生同目录的伴生存储用）。
     nonisolated public let directory: URL
+    private let rust: RustDanmakuCache?
+    var usesCoreCache: Bool { rust != nil }
     private let commentsTTL: TimeInterval
     private let fileManager: FileManager
     private let encoder = JSONEncoder()
@@ -61,30 +64,48 @@ public actor DanmakuCache {
         directory: URL,
         commentsTTL: TimeInterval = 3600,
         fileManager: FileManager = .default,
-        commentsMemoryCapacity: Int = 2
+        commentsMemoryCapacity: Int = 2,
+        useCore: Bool? = nil
     ) {
         self.directory = directory
         self.commentsTTL = commentsTTL
         self.fileManager = fileManager
         self.commentsMemoryCapacity = max(0, commentsMemoryCapacity)
+        if (useCore ?? OcpCoreFeature.isEnabled) && fileManager === FileManager.default {
+            rust = try? RustDanmakuCache(
+                directory: directory, ttl: commentsTTL, capacity: max(0, commentsMemoryCapacity)
+            )
+        } else {
+            rust = nil
+        }
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     // MARK: 剧集映射（永久）
 
     public func episodeMatch(for mediaID: String) -> DanmakuEpisodeMatch? {
+        if let rust {
+            return try? rust.call("episodeMatch", ["mediaID": mediaID], as: DanmakuEpisodeMatch?.self)
+        }
         guard let mapping = loadMapping() else { return nil }
         return mapping[mediaID]
     }
 
     /// Advances the in-memory write barrier without touching the cache file.
     public func claimEpisodeMatchRevision(for mediaID: String, revision: UInt64) {
+        if let rust {
+            let _: Bool? = try? rust.call("claimRevision", ["mediaID": mediaID, "revision": revision])
+            return
+        }
         _ = acceptMappingMutation(for: mediaID, revision: revision)
     }
 
     /// The highest revision that has claimed this media mapping (in-memory only).
     public func claimedRevision(for mediaID: String) -> UInt64? {
-        latestMappingRevision[mediaID]
+        if let rust {
+            return try? rust.call("claimedRevision", ["mediaID": mediaID], as: UInt64?.self)
+        }
+        return latestMappingRevision[mediaID]
     }
 
     public func setEpisodeMatch(
@@ -92,6 +113,12 @@ public actor DanmakuCache {
         for mediaID: String,
         revision: UInt64? = nil
     ) {
+        if let rust {
+            var args: [String: Any] = ["mediaID": mediaID]
+            if let revision { args["revision"] = revision }
+            rust.write("setEpisodeMatch", value: match, arguments: args)
+            return
+        }
         // A read/decode failure is not an empty mapping. Do not overwrite a
         // possibly recoverable cache with a new one-entry file.
         guard var mapping = loadMapping() else { return }
@@ -101,6 +128,12 @@ public actor DanmakuCache {
     }
 
     public func removeEpisodeMatch(for mediaID: String, revision: UInt64? = nil) {
+        if let rust {
+            var args: [String: Any] = ["mediaID": mediaID]
+            if let revision { args["revision"] = revision }
+            let _: Bool? = try? rust.call("removeEpisodeMatch", args)
+            return
+        }
         guard var mapping = loadMapping() else { return }
         guard acceptMappingMutation(for: mediaID, revision: revision) else { return }
         if mapping.removeValue(forKey: mediaID) != nil {
@@ -114,7 +147,10 @@ public actor DanmakuCache {
 
     /// 全部已记录的匹配（跨集提示聚合用）。
     public func allEpisodeMatches() -> [DanmakuEpisodeMatch] {
-        Array((loadMapping() ?? [:]).values)
+        if let rust {
+            return (try? rust.call("allEpisodeMatches", as: [DanmakuEpisodeMatch].self)) ?? []
+        }
+        return Array((loadMapping() ?? [:]).values)
     }
 
     public func setEpisodeID(_ episodeID: Int64, for mediaID: String) {
@@ -188,6 +224,11 @@ public actor DanmakuCache {
     /// 所以这里只丢内存、**落到磁盘路径继续判断**：那份数据由 `diskComments` 先解码、
     /// 再按**盘上自己的** `fetchedAt` 决定是返回、还是真过期后删除。
     public func comments(for episodeID: Int64) -> [DanmakuComment]? {
+        if let rust {
+            return try? rust.call("comments", [
+                "episodeID": episodeID, "now": Date().timeIntervalSinceReferenceDate,
+            ], as: [DanmakuComment]?.self)
+        }
         let now = Date()
 
         if let entry = commentsCache[episodeID] {
@@ -218,6 +259,12 @@ public actor DanmakuCache {
     }
 
     public func setComments(_ comments: [DanmakuComment], for episodeID: Int64) {
+        if let rust {
+            rust.write("setComments", value: comments, arguments: [
+                "episodeID": episodeID, "now": Date().timeIntervalSinceReferenceDate,
+            ])
+            return
+        }
         let entry = CachedComments(fetchedAt: Date(), comments: comments)
         guard let data = try? encoder.encode(entry) else { return }
         try? data.write(to: commentsURL(episodeID), options: .atomic)
@@ -252,7 +299,12 @@ public actor DanmakuCache {
     }
 
     /// 当前常驻的集数（诊断与测试用）。
-    public var commentsMemoryCount: Int { commentsCache.count }
+    public var commentsMemoryCount: Int {
+        if let rust {
+            return (try? rust.call("memoryCount", as: Int.self)) ?? 0
+        }
+        return commentsCache.count
+    }
 
     private struct CachedComments: Codable {
         let fetchedAt: Date
@@ -265,10 +317,17 @@ public actor DanmakuCache {
     /// 弹幕正文有 TTL 会过期重拉，提示一旦成立就常驻，即使之后网关不可达、
     /// 弹幕拉不到，「跳过片头」也照常可用。
     public func introHint(for episodeID: Int64) -> DanmakuIntroHint? {
-        loadIntroHints()?[String(episodeID)]
+        if let rust {
+            return try? rust.call("introHint", ["episodeID": episodeID], as: DanmakuIntroHint?.self)
+        }
+        return loadIntroHints()?[String(episodeID)]
     }
 
     public func setIntroHint(_ hint: DanmakuIntroHint, for episodeID: Int64) {
+        if let rust {
+            rust.write("setIntroHint", value: hint, arguments: ["episodeID": episodeID])
+            return
+        }
         var hints = loadIntroHints() ?? [:]
         hints[String(episodeID)] = hint
         saveIntroHints(hints)
@@ -310,6 +369,10 @@ public actor DanmakuCache {
 
     /// 清空整个缓存目录（仅供测试与诊断使用）。
     func purge() {
+        if let rust {
+            let _: Bool? = try? rust.call("purge")
+            return
+        }
         latestMappingRevision.removeAll()
         try? fileManager.removeItem(at: directory)
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)

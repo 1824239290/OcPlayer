@@ -19,6 +19,7 @@ public struct OcpEvent: Decodable, Sendable {
 
 public struct OcpCoreError: Error, LocalizedError, Sendable {
     public let message: String
+    public init(message: String) { self.message = message }
     public var errorDescription: String? { message }
 }
 
