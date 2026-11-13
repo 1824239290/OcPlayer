@@ -100,6 +100,13 @@ public enum DanmakuIntroDetector {
 
     /// 从弹幕正文推导片头提示。弹幕不足/噪声过多时返回 nil。
     public static func detect(in comments: [DanmakuComment]) -> DanmakuIntroHint? {
+        if let rust = RustDanmakuPolicy.active {
+            return rust.introPayload("detect", value: comments, as: DanmakuIntroHint?.self)
+        }
+        return detectNative(in: comments)
+    }
+
+    static func detectNative(in comments: [DanmakuComment]) -> DanmakuIntroHint? {
         var targets: [(postTime: Double, target: Double, uid: String?)] = []
         var landingTimes: [(time: Double, uid: String?)] = []
         var startTimes: [(time: Double, uid: String?)] = []

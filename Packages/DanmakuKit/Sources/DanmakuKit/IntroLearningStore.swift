@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 一条手动跳过学习事件（用户主动前跳的落点）。
 public struct IntroSeekEvent: Codable, Sendable, Equatable {
@@ -30,6 +31,31 @@ public enum IntroLearningPolicy {
     public static let minimumConsensusEpisodes = 2
     /// 每番学习事件上限（最新优先），防长跑库无限膨胀。
     public static let maxEventsPerAnime = 200
+
+    /// Keeps the playback boundary and shared consensus on the same policy.
+    public static func eligibleSeek(from: Double, to: Double) -> Bool {
+        guard to.isFinite, !from.isNaN, from != .infinity else { return false }
+        if let rust = RustDanmakuPolicy.active {
+            return rust.intro("eligibleSeek", arguments: [
+                "from": from == -.infinity ? -Double.greatestFiniteMagnitude : from, "to": to,
+            ])
+        }
+        return landingWindow.contains(to) && from < to - minimumSeekSeconds
+    }
+
+    public static func confirmedHint(forLanding to: Double, current: DanmakuIntroHint?) -> DanmakuIntroHint? {
+        guard to.isFinite, let current, current.endSeconds.isFinite else { return nil }
+        if let rust = RustDanmakuPolicy.active {
+            guard let data = try? JSONEncoder().encode(current) else { return nil }
+            return rust.intro("confirmedHint", arguments: [
+                "to": to, "payloadJSON": String(decoding: data, as: UTF8.self),
+            ])
+        }
+        guard current.source == .danmaku,
+              abs(to - current.endSeconds) <= snapToleranceSeconds else { return nil }
+        return DanmakuIntroHint(startSeconds: current.startSeconds, endSeconds: current.endSeconds,
+            evidenceCount: current.evidenceCount + 1, source: .learned)
+    }
 }
 
 /// 手动跳过学习存储（`learned-intros.json`，anime 级，永久；已列入
@@ -50,20 +76,31 @@ public actor IntroLearningStore {
     }
 
     private let directory: URL
+    private let rust: RustIntroLearningStore?
+    var usesCoreLearning: Bool { rust != nil }
     private let fileManager: FileManager
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var cached: [String: AnimeLearning]?
     private var loaded = false
 
-    public init(directory: URL, fileManager: FileManager = .default) {
+    public init(directory: URL, fileManager: FileManager = .default, useCore: Bool? = nil) {
         self.directory = directory
         self.fileManager = fileManager
+        if (useCore ?? OcpCoreFeature.isEnabled) && fileManager === FileManager.default {
+            rust = try? RustIntroLearningStore(directory: directory)
+        } else {
+            rust = nil
+        }
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
     /// 记录一次用户跳过落点。
     public func record(animeID: Int64, event: IntroSeekEvent) {
+        if let rust {
+            rust.write("record", animeID: animeID, value: event)
+            return
+        }
         var learning = load()[String(animeID)] ?? AnimeLearning()
         learning.events.append(event)
         // 事件有界:最新优先截断（上限见 IntroLearningPolicy）。
@@ -75,12 +112,14 @@ public actor IntroLearningStore {
 
     /// 已晋升的 anime 级提示（无则 nil）。
     public func promotedHint(forAnime animeID: Int64) -> DanmakuIntroHint? {
-        load()[String(animeID)]?.promoted
+        if let rust { return try? rust.call("promotedHint", animeID: animeID, as: DanmakuIntroHint?.self) }
+        return load()[String(animeID)]?.promoted
     }
 
     /// 跨集共识判定（基于已记录事件,不落盘）。返回待晋升提示;无共识返回 nil。
     /// App 层据此决定是否 `promote`。
     public func consensusHint(forAnime animeID: Int64) -> DanmakuIntroHint? {
+        if let rust { return try? rust.call("consensusHint", animeID: animeID, as: DanmakuIntroHint?.self) }
         guard let consensus = Self.crossEpisodeConsensus(of: learning(for: animeID).events)
         else { return nil }
         return DanmakuIntroHint(
@@ -93,6 +132,10 @@ public actor IntroLearningStore {
 
     /// 记下晋升结果。
     public func promote(animeID: Int64, hint: DanmakuIntroHint) {
+        if let rust {
+            rust.write("promote", animeID: animeID, value: hint)
+            return
+        }
         var learning = load()[String(animeID)] ?? AnimeLearning()
         learning.promoted = hint
         setLearning(learning, for: animeID)
@@ -105,6 +148,16 @@ public actor IntroLearningStore {
     public static func crossEpisodeConsensus(
         of events: [IntroSeekEvent],
         minimumEpisodes: Int = IntroLearningPolicy.minimumConsensusEpisodes
+    ) -> (end: Double, episodeCount: Int)? {
+        if let rust = RustDanmakuPolicy.active {
+            guard let value = rust.consensus(events, minimum: minimumEpisodes) else { return nil }
+            return (value.end, value.episodeCount)
+        }
+        return crossEpisodeConsensusNative(of: events, minimumEpisodes: minimumEpisodes)
+    }
+
+    static func crossEpisodeConsensusNative(
+        of events: [IntroSeekEvent], minimumEpisodes: Int = IntroLearningPolicy.minimumConsensusEpisodes
     ) -> (end: Double, episodeCount: Int)? {
         let sorted = events.sorted { $0.position < $1.position }
         guard !sorted.isEmpty else { return nil }

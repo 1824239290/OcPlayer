@@ -812,6 +812,17 @@ public struct DanmakuLoadOrchestrator {
     func siblingAggregatedHint(match: DanmakuEpisodeMatch) async -> DanmakuIntroHint? {
         guard let animeID = match.animeID ?? match.derivedAnimeID else { return nil }
         let siblings = await service.siblingIntroHints(animeID: animeID, excluding: match.episodeID)
+        return Self.siblingHint(siblings)
+    }
+
+    static func siblingHint(_ siblings: [DanmakuIntroHint]) -> DanmakuIntroHint? {
+        if let rust = RustDanmakuPolicy.active {
+            return rust.introPayload("siblingHint", value: siblings, as: DanmakuIntroHint?.self)
+        }
+        return siblingHintNative(siblings)
+    }
+
+    static func siblingHintNative(_ siblings: [DanmakuIntroHint]) -> DanmakuIntroHint? {
         guard siblings.count >= 2 else { return nil }
         let ends = siblings.map(\.endSeconds).sorted()
         var clusters: [[Double]] = [[ends[0]]]
@@ -846,7 +857,7 @@ public struct DanmakuLoadOrchestrator {
     }
 
     /// 一路社区源返回的区间（多源聚合的中间形态）。internal 供测试用。
-    struct SkipSourceInterval: Sendable {
+    struct SkipSourceInterval: Codable, Sendable {
         let source: DanmakuIntroHintSource
         let start: Double?
         let end: Double
@@ -855,6 +866,17 @@ public struct DanmakuLoadOrchestrator {
     /// 多源区间选优：end ±10s 聚簇,票多者胜（中位数,来源标簇内优先级最高者）;
     /// 无一致时取优先级最高的单源。
     static func selectBestInterval(
+        _ intervals: [SkipSourceInterval]
+    ) -> (start: Double?, end: Double, votes: Int, source: DanmakuIntroHintSource)? {
+        if let rust = RustDanmakuPolicy.active {
+            guard let result = rust.introPayload("selectIntervals", value: intervals, as: SelectedIntroInterval?.self)
+            else { return nil }
+            return (result.start, result.end, result.votes, result.source)
+        }
+        return selectBestIntervalNative(intervals)
+    }
+
+    static func selectBestIntervalNative(
         _ intervals: [SkipSourceInterval]
     ) -> (start: Double?, end: Double, votes: Int, source: DanmakuIntroHintSource)? {
         guard !intervals.isEmpty else { return nil }

@@ -788,8 +788,7 @@ final class DanmakuCoordinator {
     /// 一次有效落点。两条晋升路径见 `IntroLearningStore`。
     private func handleUserSeek(fromSeconds from: Double, toSeconds to: Double) {
         guard let context, let match = currentMatch else { return }
-        guard IntroLearningPolicy.landingWindow.contains(to),
-              from < to - IntroLearningPolicy.minimumSeekSeconds else { return }
+        guard IntroLearningPolicy.eligibleSeek(from: from, to: to) else { return }
         guard let animeID = match.animeID ?? match.derivedAnimeID else { return }
         let episodeID = match.episodeID
         let requestID = context.requestID
@@ -798,13 +797,7 @@ final class DanmakuCoordinator {
             // 路径一:确认升级——落点与该集既有提示(弹幕推导)end 贴合(容差与聚簇同源),
             // 用户用行为背书了猜测,提示升级为 .learned(防低来源覆盖)。
             if let current = await self.orchestrator.service.cachedIntroHint(for: episodeID),
-               current.source == .danmaku,
-               abs(to - current.endSeconds) <= IntroLearningPolicy.snapToleranceSeconds {
-                let upgraded = DanmakuIntroHint(
-                    startSeconds: current.startSeconds,
-                    endSeconds: current.endSeconds,
-                    evidenceCount: current.evidenceCount + 1,
-                    source: .learned)
+               let upgraded = IntroLearningPolicy.confirmedHint(forLanding: to, current: current) {
                 await self.introLearningStore.promote(animeID: animeID, hint: upgraded)
                 await self.orchestrator.service.persistIntroHint(upgraded, for: episodeID)
                 AppDiagnostics.logInfo("片头学习:既有提示获确认升级", fields: [
