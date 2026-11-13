@@ -5,8 +5,8 @@ import OcPlayerCore
 struct RustTMDbClient: Sendable {
     let core: OcpCoreClient
 
-    func call(_ method: String, key: String, endpoint: URL, language: String,
-              arguments: [String: any Sendable]) async throws -> JSONValue {
+    func call<Value: Decodable>(_ method: String, key: String, endpoint: URL, language: String,
+              arguments: [String: any Sendable], as type: Value.Type) async throws -> Value {
         var args = arguments
         args["apiKey"] = key
         args["apiBase"] = endpoint.absoluteString
@@ -22,12 +22,12 @@ struct RustTMDbClient: Sendable {
             default: throw TMDbError.transport(response.message)
             }
         }
-        return response.data
+        return try response.decodeData(type)
     }
 
     func entity(id: Int, type: TMDbMediaType, key: String, endpoint: URL, language: String) async throws -> TMDbEntity {
         let raw = try await call("tmdb.entity", key: key, endpoint: endpoint, language: language,
-                                 arguments: ["id": id, "mediaType": type.rawValue]).decode(Entity.self)
+                                 arguments: ["id": id, "mediaType": type.rawValue], as: Entity.self)
         return TMDbEntity(id: raw.id, mediaType: type,
                           title: type == .movie ? raw.title : raw.name,
                           originalTitle: type == .movie ? raw.original_title : raw.original_name,
@@ -41,20 +41,20 @@ struct RustTMDbClient: Sendable {
 
     func search(query: String, type: TMDbMediaType, year: Int?, key: String, endpoint: URL, language: String) async throws -> [TMDbSearchResult] {
         var args: [String: any Sendable] = ["query": query, "mediaType": type.searchResultKind]
-        if let year { args["year"] = year }
-        let results = try await call("tmdb.search", key: key, endpoint: endpoint, language: language, arguments: args).decode([SearchResult].self)
+        if let year, type == .movie || type == .tv { args["year"] = year }
+        let results = try await call("tmdb.search", key: key, endpoint: endpoint, language: language, arguments: args, as: [SearchResult].self)
         return results.map { raw in
             let date = type == .movie ? raw.release_date : raw.first_air_date
             return TMDbSearchResult(id: raw.id, mediaType: type, title: type == .movie ? raw.title : raw.name,
                                     originalTitle: type == .movie ? raw.original_title : raw.original_name,
                                     overview: raw.overview, posterPath: raw.poster_path,
-                                    year: date.flatMap { Int($0.prefix(4)) }, popularity: raw.popularity)
+                                    year: date.flatMap { $0.count >= 4 ? Int($0.prefix(4)) : nil }, popularity: raw.popularity)
         }
     }
 
     func season(id: Int, number: Int, key: String, endpoint: URL, language: String) async throws -> TMDbSeason {
         let raw = try await call("tmdb.season", key: key, endpoint: endpoint, language: language,
-                                 arguments: ["id": id, "seasonNumber": number]).decode(Season.self)
+                                 arguments: ["id": id, "seasonNumber": number], as: Season.self)
         return TMDbSeason(seasonNumber: raw.season_number, name: raw.name, overview: raw.overview, posterPath: raw.poster_path,
                           episodes: raw.episodes.map { EpisodeEntry(episodeNumber: $0.episode_number, name: $0.name, overview: $0.overview, stillPath: $0.still_path, airDate: $0.air_date, runtime: $0.runtime, voteAverage: $0.vote_average) })
     }

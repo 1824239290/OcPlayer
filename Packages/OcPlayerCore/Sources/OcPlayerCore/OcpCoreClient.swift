@@ -9,6 +9,26 @@ public struct OcpResponse: Decodable, Sendable {
     public let retryable: Bool
     public let message: String
     public let data: JSONValue
+    private var wireJSON: Data? = nil
+
+    private enum CodingKeys: String, CodingKey {
+        case ok, code, retryable, message, data
+    }
+    private struct Payload<Value: Decodable>: Decodable { let data: Value }
+
+    /// Returned ABI responses decode directly from their original bytes, so
+    /// native Int/UInt fields never pass through the generic Double projection.
+    public func decodeData<Value: Decodable>(_ type: Value.Type = Value.self) throws -> Value {
+        if let wireJSON {
+            return try JSONDecoder().decode(Payload<Value>.self, from: wireJSON).data
+        }
+        return try data.decode(type)
+    }
+    static func fromWire(_ json: Data) throws -> Self {
+        var response = try JSONDecoder().decode(Self.self, from: json)
+        response.wireJSON = json
+        return response
+    }
 }
 
 public struct OcpEvent: Decodable, Sendable {
@@ -228,7 +248,7 @@ public final class OcpCoreClient: @unchecked Sendable {
         }
         guard let pointer else { throw OcpCoreError(message: lastError(fallback: "ocp_call failed")) }
         defer { api.stringFree(pointer) }
-        return try JSONDecoder().decode(OcpResponse.self, from: Data(String(cString: pointer).utf8))
+        return try OcpResponse.fromWire(Data(String(cString: pointer).utf8))
     }
 
     public func pollEvent() throws -> OcpEvent? {
