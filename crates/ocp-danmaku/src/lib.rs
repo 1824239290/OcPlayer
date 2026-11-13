@@ -17,6 +17,7 @@ mod filename;
 pub mod intro;
 mod intro_unicode;
 pub mod policy;
+pub mod providers;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedAnimeInfo {

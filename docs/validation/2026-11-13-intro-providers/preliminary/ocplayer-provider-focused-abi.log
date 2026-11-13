@@ -1,0 +1,35 @@
+test_decode_unicode_duplicates_bad_bytes_and_whole_array (__main__.IntroProviderContract.test_decode_unicode_duplicates_bad_bytes_and_whole_array) ... ok
+test_invalid_requests_never_issue_io (__main__.IntroProviderContract.test_invalid_requests_never_issue_io) ... ok
+test_native_status_semantics_and_no_http_retries (__main__.IntroProviderContract.test_native_status_semantics_and_no_http_retries) ... FAIL
+test_raw_status_binary_and_anilist_pool (__main__.IntroProviderContract.test_raw_status_binary_and_anilist_pool) ... ok
+test_timeout_and_cancel_interrupt_once (__main__.IntroProviderContract.test_timeout_and_cancel_interrupt_once) ... ok
+test_typed_requests_intervals_and_full_int64_variables (__main__.IntroProviderContract.test_typed_requests_intervals_and_full_int64_variables) ... FAIL
+
+======================================================================
+FAIL: test_native_status_semantics_and_no_http_retries (__main__.IntroProviderContract.test_native_status_semantics_and_no_http_retries)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_provider_contract.py", line 53, in test_native_status_semantics_and_no_http_retries
+    self.assertIsNone(self.value(self.typed('aniskip', malID=404, episodeNumber=1)))
+                      ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_provider_contract.py", line 35, in value
+    self.assertTrue(response['ok'], response)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'invalid provider request: request must use the configured HTTP origin', 'data': None}
+
+======================================================================
+FAIL: test_typed_requests_intervals_and_full_int64_variables (__main__.IntroProviderContract.test_typed_requests_intervals_and_full_int64_variables)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_provider_contract.py", line 40, in test_typed_requests_intervals_and_full_int64_variables
+    self.assertEqual(self.value(result)[0], dict(type='op', startSeconds=638.0, endSeconds=728.0))
+                     ~~~~~~~~~~^^^^^^^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/intro_provider_contract.py", line 35, in value
+    self.assertTrue(response['ok'], response)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'invalid provider request: request must use the configured HTTP origin', 'data': None}
+
+----------------------------------------------------------------------
+Ran 6 tests in 4.064s
+
+FAILED (failures=2)

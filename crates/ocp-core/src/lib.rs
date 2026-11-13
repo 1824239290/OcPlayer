@@ -324,6 +324,18 @@ impl Core {
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
+            method if method.starts_with("introProvider.") => {
+                match ocp_danmaku::providers::policy(
+                    method.trim_start_matches("introProvider."),
+                    &arguments,
+                ) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(error) => {
+                        let error = CommandError::from(error);
+                        ApiResponse::error(error.0, error.1, error.2, Value::Null)
+                    }
+                }
+            }
             method if method.starts_with("danmakuIntro.") => {
                 match ocp_danmaku::intro::call(
                     method.trim_start_matches("danmakuIntro."),
@@ -1472,6 +1484,10 @@ fn is_domain_command(method: &str) -> bool {
             | "tmdb.season"
             | "danmaku.load"
             | "danmaku.exchange"
+            | "introProvider.exchange"
+            | "introProvider.aniskip"
+            | "introProvider.animeSkip"
+            | "introProvider.theIntroDB"
             | "bangumi.request"
             | "bangumi.subject"
             | "bangumi.search"
@@ -1985,6 +2001,15 @@ fn run_domain_command(
                     };
                     Ok(value)
                 }
+                "introProvider.exchange"
+                | "introProvider.aniskip"
+                | "introProvider.animeSkip"
+                | "introProvider.theIntroDB" => Ok(ocp_danmaku::providers::fetch(
+                    &http,
+                    method.trim_start_matches("introProvider."),
+                    &arguments,
+                )
+                .await?),
                 "danmaku.exchange" => {
                     use base64::Engine;
                     let config: ocp_danmaku::GatewayConfig = serde_json::from_value(
@@ -2341,6 +2366,22 @@ impl From<ocp_danmaku::DanmakuError> for CommandError {
                 _ => (1502, http.retryable()),
             },
             _ => (1502, false),
+        };
+        Self(code, retryable, error.to_string())
+    }
+}
+impl From<ocp_danmaku::providers::ProviderError> for CommandError {
+    fn from(error: ocp_danmaku::providers::ProviderError) -> Self {
+        use ocp_danmaku::providers::ProviderError;
+        let (code, retryable) = match &error {
+            ProviderError::Request(_) => (1002, false),
+            ProviderError::Decode(_) => (1502, false),
+            ProviderError::Status(status) => (1600 + i32::from(*status), false),
+            ProviderError::Http(http) => match http.category() {
+                Some(ocp_http::ErrorCategory::Timeout) => (1503, true),
+                Some(ocp_http::ErrorCategory::Transport) => (1501, true),
+                _ => (1502, http.retryable()),
+            },
         };
         Self(code, retryable, error.to_string())
     }

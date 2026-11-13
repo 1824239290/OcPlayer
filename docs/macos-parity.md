@@ -19,7 +19,7 @@ Reference Apple checkout during this migration:
 | Playback | Existing native engine and surface quality, pause/resume/seek/rate/volume, track selection, progress, resource failover, end-of-playback, next episode and background behavior | macOS app builds; bundled Core passes local H.264/AAC playback and controls with synchronized Rust snapshots. Session rate/volume/tracks now survive timeline and lifecycle callbacks; revised duration, null track clearing and paused-open behavior are verified across the native ABI. Source recovery now runs in a shared request chain retained across engine replacement; report heartbeat/pause/terminal/natural-end decisions also run in Core. Native fixtures assert shared activation and cancellation/adoption guards. Engine event folding/EOF and stale-generation validation now run in Core, along with foreground resume decisions and mute/volume state. Actual native EOF and controller event integration pass. Complete source/track preference and recovery orchestration acceptance remains. |
 | Metadata / persistence | Existing Media.sqlite schema, tenant isolation, cached metadata/home rails/pages, offline reads, local-progress conflict handling | The complete MetadataStore path now delegates SQL, transactional progress reconciliation, offline snapshots, TMDB cache and maintenance to Core. Bidirectional GRDB/Core fixtures and the full 306-case MetadataKit run pass with shared storage activated. Repository memory/freshness scheduling and native open/recovery policy still need a shared-policy audit. |
 | TMDB | Mirror changes without restart, v3/v4 auth, searches, movie/TV/collection detail, per-field language fallback, whole seasons, mapping and cache policy | Rust-backed TMDbClient fixture verifies requests, fallback, fields, malformed optional entries, auth, status categories and no Swift replay. Entity/season cache, links, expiry and clearing now run in Core and retain GRDB compatibility. Enricher/matcher/batch scheduling remain native and need migration/coverage. |
-| Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Core now owns filename/canonical/episode/special parsing, Unicode comparable titles, candidate identity scoring and batch selection; differential and C ABI strategy fixtures cover these policies. Core also owns mapping/comment/saved-intro persistence, TTL, LRU and revision barriers with native file compatibility. Core now also owns intro detection, cross-episode learning persistence/consensus, manual-seek decisions and community/sibling interval aggregation. Shared resolver scheduling/intro-provider implementation and broader end-to-end acceptance remain. |
+| Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Core now owns filename/canonical/episode/special parsing, Unicode comparable titles, candidate identity scoring and batch selection; differential and C ABI strategy fixtures cover these policies. Core also owns mapping/comment/saved-intro persistence, TTL, LRU and revision barriers with native file compatibility. Core now also owns intro detection, cross-episode learning persistence/consensus, manual-seek decisions and community/sibling interval aggregation. AniSkip/AnimeSkip/TheIntroDB request and response policies plus all four intro-provider HTTP transports now run in Core. AniList identity/cache migration, shared resolver scheduling and broader end-to-end acceptance remain. |
 | Bangumi | Public/authorized API, mirrors, OAuth refresh/generation safety, collections, episodes/progress, search/calendar, sync and persistence | Native BangumiAPIClient now dispatches all public, authorized and gateway OAuth requests through Core; complete raw responses, p1 routes, PATCH mutations, pagination, generation cancellation and single-flight refresh are covered by real Rust/Swift and C ABI fixtures. All BangumiDatabaseOperator entry points now dispatch to shared SQLite, merge, progress-window and sync-target policy; complete chapter sync uses one transactional replacement. Native account/scheduling lifecycle and broader end-to-end shared sync orchestration still need migration/audit. |
 | MoviePilot | Login, silent relogin, raw media/torrent fields, SSE progress, downloads and subscriptions, cancellation/session retirement | All native HTTP paths now dispatch through Core, including first/token-only login and raw byte-preserving exchanges. Real C ABI/native fixtures cover login races, atomic credential commit, Cookie retention, shared refresh, mutation routes, raw fields and non-replay. Platform credential persistence, refresh coordination/generation and native notifications remain in the actor; broader shared account lifecycle orchestration remains. |
 | Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. Full native settings mapping and aggregate diagnostic export remain. |
@@ -463,3 +463,38 @@ positions are 14 and 4 seconds. Labels now state 70% and 20%. The rebuilt and
 re-signed app's final probe verifies both expected Core positions, pause/play,
 rate changes and resize with zero render/audio failures. Original logs and the
 initial summary remain preserved alongside the corrected verification.
+
+## Shared intro provider verification
+
+AniSkip, AnimeSkip, TheIntroDB and AniList production HTTP exchanges now use
+retained Core clients. The first three also share request assembly, decoding and
+interval policies. Seven native cases include 600 hint/clamp/timestamp corpora
+and real HTTP calls for all four providers; six new exported ABI cases verify
+request/response fidelity, Int64 variables, validation, pooling and cancellation.
+Their native retry/error rules, lazy JSON string decoding and timestamp ties are
+documented in [intro-provider-contract.md](intro-provider-contract.md).
+
+The complete final verification passes Rust 83, exported Apple binding 14 and
+all 57 ABI cases. Swift packages pass OcPlayerCore 14, JellyfinKit 255,
+MetadataKit 306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and
+DanmakuKit 254. AppTests execute 1008: 989 pass, 19 platform skips, zero failures.
+Core-disabled DanmakuKit executes 254: 228 pass and 26 Core-only skips. A
+hash-verified independent copy of 50 source/lock/schema/fixture files passes 83
+locked offline Rust tests.
+
+The signed app containing the final Core passes a ten-second control probe with
+the twenty-second media file: pause/play, 70% seek to 14 seconds, 20% seek to
+4 seconds and window resize. Its saved initial rate is 2.0 and the scripted
+final rate is 1.0; render/audio failures remain zero. Complete raw results,
+source hashes, initial failures and the final summary are retained in
+`validation/2026-11-13-intro-providers/`.
+
+The first full run used the Backup volume for Swift caches and failed on index
+file renames. Local `/tmp` build output resolves that environment issue. An
+existing source-scanning AppTest briefly stalled inside a system directory-open
+call, then resumed and passed; its sample and full test log remain available.
+Neither event is reported as a passing initial run.
+
+AniList identity matching/persistence, complete shared async loading/manual
+selection/promotion, native idle/resource deadline and broader transport fidelity,
+and the other acceptance rows remain open. Windows runtime testing is deferred.

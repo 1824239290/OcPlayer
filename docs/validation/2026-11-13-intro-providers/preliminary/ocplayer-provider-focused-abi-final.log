@@ -1,0 +1,34 @@
+test_decode_unicode_duplicates_bad_bytes_and_whole_array (__main__.IntroProviderContract.test_decode_unicode_duplicates_bad_bytes_and_whole_array) ... ok
+test_invalid_requests_never_issue_io (__main__.IntroProviderContract.test_invalid_requests_never_issue_io) ... ok
+test_native_status_semantics_and_no_http_retries (__main__.IntroProviderContract.test_native_status_semantics_and_no_http_retries) ... ok
+test_raw_status_binary_and_anilist_pool (__main__.IntroProviderContract.test_raw_status_binary_and_anilist_pool) ... ok
+test_timeout_and_cancel_interrupt_once (__main__.IntroProviderContract.test_timeout_and_cancel_interrupt_once) ... ok
+test_typed_requests_intervals_and_full_int64_variables (__main__.IntroProviderContract.test_typed_requests_intervals_and_full_int64_variables) ... ----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 61494)
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/socketserver.py", line 694, in process_request_thread
+    self.finish_request(request, client_address)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/socketserver.py", line 359, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/socketserver.py", line 763, in __init__
+    self.handle()
+    ~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/http/server.py", line 476, in handle
+    self.handle_one_request()
+    ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/http/server.py", line 442, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ~~~~~~~~~~~~~~~~~~~^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/socket.py", line 738, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionResetError: [Errno 54] Connection reset by peer
+----------------------------------------
+ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.711s
+
+OK
