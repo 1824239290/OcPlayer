@@ -179,6 +179,14 @@ public actor DanmakuService {
             await cache.setComments(fetched, for: match.episodeID)
             comments = fetched
         }
+        return try renderedPayload(for: match, comments: comments, format: format, detectingIntro: detectingIntro)
+    }
+
+    func renderedPayload(for match: DanmakuEpisodeMatch, comments: [DanmakuComment],
+        format: DanmakuPayloadFormat, detectingIntro: Bool) throws -> DanmakuPayload {
+        if let policy = RustDanmakuPolicy.active {
+            return try policy.render(comments, format: format, detectingIntro: detectingIntro, match: match)
+        }
         let detected = detectingIntro ? DanmakuIntroDetector.detect(in: comments) : nil
         return DanmakuPayload(
             match: match,

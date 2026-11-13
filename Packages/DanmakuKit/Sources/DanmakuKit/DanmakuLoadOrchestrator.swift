@@ -1,5 +1,6 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 弹幕装载流水线的编排结果。`DanmakuCoordinator`（app 层）把它映射成
 /// HUD 可直接显示的状态；测试用它断言整个 匹配 → 缓存 → 装载 链路的走向。
@@ -119,6 +120,17 @@ public struct DanmakuLoadOrchestrator {
         revision: UInt64,
         forceRematch: Bool = false
     ) async -> DanmakuLoadOutcome {
+        if let policy = RustDanmakuPolicy.active {
+            return await runShared(core: policy.core, mode: "automatic", match: nil,
+                matchContext: matchContext, uuid: matchContext.uuid, cacheKey: matchContext.cacheKey,
+                configuration: configuration, playback: playback, revision: revision, forceRematch: forceRematch)
+        }
+        return await runAutomaticNative(matchContext: matchContext, configuration: configuration,
+            playback: playback, revision: revision, forceRematch: forceRematch)
+    }
+
+    func runAutomaticNative(matchContext: DanmakuMatchContext, configuration: DandanplayConfiguration,
+        playback: DanmakuPlaybackHosting, revision: UInt64, forceRematch: Bool = false) async -> DanmakuLoadOutcome {
         let client = DanmakuGatewayClient(
             configuration: configuration, session: session, retryPolicy: retryPolicy)
         let cacheKey = matchContext.cacheKey
@@ -525,6 +537,18 @@ public struct DanmakuLoadOrchestrator {
         revision: UInt64,
         matchContext: DanmakuMatchContext? = nil
     ) async -> DanmakuLoadOutcome {
+        if let policy = RustDanmakuPolicy.active {
+            return await runShared(core: policy.core, mode: "manual", match: match,
+                matchContext: matchContext, uuid: uuid, cacheKey: cacheKey,
+                configuration: configuration, playback: playback, revision: revision, forceRematch: true)
+        }
+        return await runManualNative(match: match, uuid: uuid, cacheKey: cacheKey,
+            configuration: configuration, playback: playback, revision: revision, matchContext: matchContext)
+    }
+
+    func runManualNative(match: DanmakuEpisodeMatch, uuid: UUID, cacheKey: String,
+        configuration: DandanplayConfiguration, playback: DanmakuPlaybackHosting,
+        revision: UInt64, matchContext: DanmakuMatchContext? = nil) async -> DanmakuLoadOutcome {
         let client = DanmakuGatewayClient(
             configuration: configuration, session: session, retryPolicy: retryPolicy)
         await service.remember(match: match, cacheKey: cacheKey, revision: revision)
@@ -944,6 +968,181 @@ public struct DanmakuLoadOrchestrator {
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
             .nilIfEmpty ?? "弹弹play"
+    }
+}
+
+
+extension DanmakuLoadOrchestrator {
+    private func runShared(
+        core: OcpCoreClient, mode: String, match: DanmakuEpisodeMatch?,
+        matchContext: DanmakuMatchContext?, uuid: UUID, cacheKey: String,
+        configuration: DandanplayConfiguration, playback: DanmakuPlaybackHosting,
+        revision: UInt64, forceRematch: Bool
+    ) async -> DanmakuLoadOutcome {
+        let client = DanmakuGatewayClient(configuration: configuration, session: session, retryPolicy: retryPolicy)
+        var context: [String: Any] = [:]
+        if let c = matchContext {
+            context = ["fileName": c.fileName, "animeTitle": c.animeTitle as Any? ?? NSNull(),
+                "originalTitle": c.originalTitle as Any? ?? NSNull(), "episodeNumber": c.episodeNumber as Any? ?? NSNull(),
+                "seasonNumber": c.seasonNumber as Any? ?? NSNull(), "tmdbId": c.tmdbID as Any? ?? NSNull(),
+                "seriesTmdbId": c.seriesTmdbID as Any? ?? NSNull(), "malID": c.malID as Any? ?? NSNull(),
+                "anilistID": c.anilistID as Any? ?? NSNull(), "isFinal": c.isFinal, "isMovie": c.isMovie,
+                "fileSize": c.fileSize as Any? ?? NSNull(), "durationSeconds": c.durationSeconds as Any? ?? NSNull(),
+                "allowsCachedMatchReuse": c.allowsCachedMatchReuse]
+            if let special = c.special {
+                context["special"] = ["index": special.index, "kinds": special.kinds.map {
+                    switch $0 { case .special: "special"; case .extra: "extra"; case .other: "other" }
+                }]
+            }
+        }
+        let components = totalBudget.components
+        let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
+        do {
+            let flow = try RustDanmakuFlow(core: core, configuration: ["mode": mode, "context": context,
+                "forceRematch": forceRematch, "budgetSeconds": seconds,
+                "hasAliases": titleAliases != nil, "hasLearning": introLearningStore != nil,
+                "matchValue": try RustDanmakuFlow.object(match)])
+            defer { flow.close() }
+            var comments: [DanmakuComment] = []
+            var payload: DanmakuPayload?
+            while flow.outcome == nil {
+                guard let effect = flow.state["effect"] as? [String: Any], let kind = effect["kind"] as? String,
+                      let args = effect["arguments"] as? [String: Any] else { throw OcpCoreError(message: "Missing Core load effect") }
+                let selected = try RustDanmakuFlow.decode(flow.state["match"], as: DanmakuEpisodeMatch?.self)
+                var value: Any = NSNull()
+                var failure: [String: Any]?
+                var cancelled = Task.isCancelled
+                do {
+                    try Task.checkCancellation()
+                    switch kind {
+                    case "clearForce": _ = try? playback.clearDanmaku(uuid: uuid)
+                    case "claim": await service.claimMatchRevision(cacheKey: cacheKey, revision: revision)
+                    case "cachedMatch": value = try RustDanmakuFlow.object(await service.cachedMatch(for: cacheKey))
+                    case "fingerprint": value = try RustDanmakuFlow.object(try await matchContext?.mediaHash(session: session))
+                    case "match":
+                        let request = try RustDanmakuFlow.decode(args, as: MatchRequest.self)
+                        let result = try await client.match(request).payload
+                        value = ["isMatched": result.isMatched as Any? ?? NSNull(), "candidates": result.matches.map { c in
+                            var item = RustDanmakuPolicy(core: core).candidate(id: c.episodeId, anime: c.animeTitle,
+                                episode: c.episodeTitle, description: c.typeDescription, kind: c.type)
+                            item["animeId"] = c.animeId as Any? ?? NSNull()
+                            item["shift"] = c.shift as Any? ?? NSNull()
+                            return item
+                        }]
+                    case "search":
+                        let result = try await client.searchEpisodes(anime: args["anime"] as? String,
+                            tmdbId: (args["tmdbId"] as? NSNumber)?.intValue,
+                            tmdbIdType: (args["tmdbIdType"] as! NSNumber).intValue,
+                            episode: args["episode"] as? String).payload
+                        value = ["candidates": result.animes.flatMap { anime in anime.episodes.map { episode in
+                            var item = RustDanmakuPolicy(core: core).candidate(id: episode.episodeId,
+                                anime: anime.animeTitle, episode: episode.episodeTitle,
+                                description: anime.typeDescription, kind: anime.type)
+                            item["animeId"] = anime.animeId
+                            return item
+                        }}]
+                    case "remember": await service.remember(match: selected!, cacheKey: cacheKey, revision: revision)
+                    case "forget": await service.forgetMatch(cacheKey: cacheKey, revision: revision)
+                    case "detectIntro", "cachedIntro": value = try RustDanmakuFlow.object(await service.cachedIntroHint(for: selected!.episodeID))
+                    case "cachedComments":
+                        let cached = await service.cachedComments(for: selected!.episodeID)
+                        if let cached { comments = cached }
+                        value = ["hit": cached != nil]
+                    case "comments": comments = try await client.comments(episodeId: selected!.episodeID).payload.comments ?? []
+                    case "persistComments":
+                        try Task.checkCancellation()
+                        await service.persistComments(comments, for: selected!.episodeID)
+                    case "render":
+                        payload = try await service.renderedPayload(for: selected!, comments: comments,
+                            format: playback.danmakuPayloadFormat, detectingIntro: args["detectingIntro"] as! Bool)
+                        value = ["hasEntries": payload!.entries != nil, "hasJSON": payload!.json != nil,
+                            "commentCount": payload!.commentCount,
+                            "detectedIntroHint": try RustDanmakuFlow.object(payload!.detectedIntroHint)]
+                    case "waitReady": value = await playback.waitUntilReady(uuid: uuid, timeout: .seconds(30))
+                    case "inject":
+                        if await isCurrent(revision, cacheKey: cacheKey) {
+                            if args["replace"] as! Bool {
+                                value = try playback.replaceDanmaku(uuid: uuid, entries: payload?.entries ?? [],
+                                    json: payload?.json, name: args["name"] as! String,
+                                    offset: .seconds((args["shiftSeconds"] as! NSNumber).doubleValue))
+                            } else { value = try playback.clearDanmaku(uuid: uuid) }
+                        } else { value = false }
+                    case "aliases": value = await titleAliases?.aliases(for: args["title"] as! String) ?? []
+                    case "resolveIDs":
+                        let identity = try RustDanmakuFlow.decode(args["identity"], as: AniSkipAnimeIdentity.self)
+                        value = try RustDanmakuFlow.object(await aniSkipIDResolver.resolve(for: identity, forceRefresh: forceRematch))
+                    case "sources":
+                        value = try RustDanmakuFlow.object(await sharedSourceIntervals(args["sources"] as! [[String: Any]]))
+                    case "promoted":
+                        value = try RustDanmakuFlow.object(await introLearningStore?.promotedHint(forAnime: (args["animeID"] as! NSNumber).int64Value))
+                    case "siblings":
+                        value = try RustDanmakuFlow.object(await service.siblingIntroHints(animeID: (args["animeID"] as! NSNumber).int64Value, excluding: selected!.episodeID))
+                    case "persistIntro":
+                        if await isCurrent(revision, cacheKey: cacheKey) {
+                            let hint = try RustDanmakuFlow.decode(args["hint"], as: DanmakuIntroHint.self)
+                            await service.persistIntroHint(hint, for: selected!.episodeID)
+                        }
+                    default: throw OcpCoreError(message: "Unknown Core load effect: \(kind)")
+                    }
+                } catch {
+                    cancelled = cancelled || CancellationClassifier.isCancellation(error)
+                    failure = RustDanmakuFlow.failure(error)
+                }
+                try flow.advance(value: value, error: failure,
+                    current: await isCurrent(revision, cacheKey: cacheKey), cancelled: cancelled || Task.isCancelled)
+            }
+            if let diagnostics = flow.state["diagnostics"] as? [String: Any], diagnostics["budgetDidCut"] as? Bool == true {
+                NetworkLog.report(category: "Danmaku", level: .info, "弹幕自动匹配降级检索超出总预算",
+                    fields: ["cacheKey": .string(cacheKey), "budgetMs": .integer(durationMilliseconds(totalBudget)),
+                        "tiersAttempted": .integer((diagnostics["tiersAttempted"] as! NSNumber).int64Value)])
+            }
+            return flow.outcome!
+        } catch {
+            NetworkLog.report(category: "Danmaku", level: .warning, "共享弹幕加载失败: \(error)")
+            return .failed(message: Task.isCancelled ? "已取消" : "弹幕加载失败")
+        }
+    }
+
+    /// Execute the requested read effects concurrently; selection remains in Core.
+    private func sharedSourceIntervals(_ specifications: [[String: Any]]) async -> [SkipSourceInterval] {
+        struct Source: Sendable {
+            let provider: String; let id: Int; let episode: Int; let season: Int?; let duration: Int?
+        }
+        let sources = specifications.map { item in Source(provider: item["provider"] as! String,
+            id: (item["id"] as! NSNumber).intValue, episode: (item["episodeNumber"] as! NSNumber).intValue,
+            season: (item["seasonNumber"] as? NSNumber)?.intValue, duration: (item["durationSeconds"] as? NSNumber)?.intValue) }
+        let aniSkip = aniSkipClient
+        let animeSkip = animeSkipClientProvider?()
+        let introDB = theIntroDBClient
+        return await withTaskGroup(of: SkipSourceInterval?.self) { group in
+            for source in sources {
+                group.addTask {
+                    do {
+                        switch source.provider {
+                        case "aniSkip":
+                            guard let intervals = try await aniSkip.skipTimes(malID: source.id, episodeNumber: source.episode,
+                                episodeLengthSeconds: source.duration), let hint = DanmakuIntroHint(aniskipIntervals: intervals) else { return nil }
+                            return SkipSourceInterval(source: .aniskip, start: hint.startSeconds, end: hint.endSeconds)
+                        case "animeSkip":
+                            guard let interval = try await animeSkip?.introInterval(anilistID: source.id,
+                                seasonNumber: source.season, episodeNumber: source.episode) else { return nil }
+                            return SkipSourceInterval(source: .animeSkip, start: interval.startSeconds, end: interval.endSeconds)
+                        case "theIntroDB":
+                            guard let interval = try await introDB?.introInterval(tmdbID: source.id,
+                                seasonNumber: source.season, episodeNumber: source.episode) else { return nil }
+                            return SkipSourceInterval(source: .theIntroDB, start: interval.startSeconds, end: interval.endSeconds)
+                        default: return nil
+                        }
+                    } catch {
+                        NetworkLog.report(category: source.provider, level: .debug, "片头来源查询失败: \(error)")
+                        return nil
+                    }
+                }
+            }
+            var intervals: [SkipSourceInterval] = []
+            for await interval in group { if let interval { intervals.append(interval) } }
+            return intervals
+        }
     }
 }
 
