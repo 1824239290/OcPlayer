@@ -1,5 +1,7 @@
 //! TMDB matching and season/episode derivation.
 
+pub mod matcher;
+
 use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION},

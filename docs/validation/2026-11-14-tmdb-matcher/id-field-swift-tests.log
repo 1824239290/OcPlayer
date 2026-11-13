@@ -1,0 +1,206 @@
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 91] JellyfinKit
+[2 / 33] OcPlayerCore
+[4 / 35] OcPlayerCore
+[10 / 41] OcPlayerCore
+[19 / 53] JellyfinKit
+[22 / 53] JellyfinKit
+[24 / 53] JellyfinKit
+[27 / 54] JellyfinKit
+[28 / 53] MetadataKit
+[37 / 62] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbBatch.swift:133:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+131 |                                      enriched: 0, unmatched: 0, failed: 0, seasons: 0,
+132 |                                      wasCancelled: false)
+133 |         guard await client.isConfigured, !items.isEmpty else { return result }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+134 | 
+135 |         await onProgress(result.progress)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:49:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 47 |     /// 是否已配置 key（未配置时全部方法都是无操作，调用方不必自己判断）。
+ 48 |     public var isEnabled: Bool {
+ 49 |         get async { await client.isConfigured }
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 50 |     }
+ 51 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:59:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 57 |     /// 没建立对应关系、对应上了但数据没拉过、拉过但语言对不上。
+ 58 |     public func overlay(for item: MediaItem, tenant: TenantID) async -> TMDbOverlay? {
+ 59 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 60 |         let language = preferences.language
+ 61 |         guard let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant) else { return nil }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:83:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 81 |     /// 剧集页拿它做两件事：切换季时更新简介、给分集卡片提供每集的标题与简介。
+ 82 |     public func seasonOverlay(seriesLink: TMDbLink, seasonNumber: Int) async -> TMDbOverlay? {
+ 83 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 84 |         guard case .tv(let tvID) = seriesLink.entityKey else { return nil }
+ 85 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:99:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 97 |     @discardableResult
+ 98 |     public func refreshSeason(seriesLink: TMDbLink, seasonNumber: Int) async -> Bool {
+ 99 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+100 |         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
+101 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:188:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+186 |         tenant: TenantID
+187 |     ) async -> RefreshOutcome {
+188 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+189 |         let language = preferences.language
+190 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:344:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+342 |         seriesLink: TMDbLink? = nil
+343 |     ) async -> RefreshOutcome {
+344 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+345 |         let language = preferences.language
+346 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:401:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+399 |     @discardableResult
+400 |     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
+401 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+402 |         let language = language ?? preferences.language
+403 |         let taskKey = "\(key.storageKey)|\(language)"
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[42 / 59] MetadataKit
+[47 / 56] MetadataKit-product
+[47 / 58] MetadataKitTests-product
+[56 / 67] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[60 / 66] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:65:25: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
+ 64 |         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
+ 65 |             let value = await m.providerTmdbID(of: item(name: "x", tmdbID: dirty))
+    |                         `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:68:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+ 68 |         let clean = await m.providerTmdbID(of: item(name: "x", tmdbID: " 603 "))
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 69 |         XCTAssertEqual(clean, 603, "前后空白应被容忍")
+ 70 |     }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[62 / 66] MetadataKitTests-product
+[64 / 66] MetadataKitTests-product
+Build complete! (6.32秒)
+Test Suite 'Selected tests' started at 2026-11-14 01:12:53.080.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 01:12:53.081.
+Test Suite 'RustTMDbMatcherTests' started at 2026-11-14 01:12:53.081.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' passed (1.579 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' passed (0.065 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID +603, parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID +603, parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID +603, parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID +603, parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 603 , parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 603 , parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 603 , parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 603 , parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 9223372036854775807, parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 9223372036854775807, parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 9223372036854775807, parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: movie/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind movie, ID 9223372036854775807, parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID +603, parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID +603, parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID +603, parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID +603, parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 603 , parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 603 , parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 603 , parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/603, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 603 , parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 9223372036854775807, parent tv/9223372036854775807
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 9223372036854775807, parent movie/603
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 9223372036854775807, parent tv/2/season/1
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:137: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(MetadataKit.TMDbMatch(entityKey: tv/9223372036854775807, source: MetadataKit.TMDbLinkSource.providerID, confidence: 1.0, matchedTitle: Optional("Name"), alternatives: []))") - Kind series, ID 9223372036854775807, parent collection/3
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(603)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift:139: error: -[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' failed (1.064 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' passed (1.036 seconds).
+Test Suite 'RustTMDbMatcherTests' failed at 2026-11-14 01:12:56.826.
+	 Executed 4 tests, with 45 failures (0 unexpected) in 3.745 (3.745) seconds
+Test Suite 'MetadataKitTests.xctest' failed at 2026-11-14 01:12:56.826.
+	 Executed 4 tests, with 45 failures (0 unexpected) in 3.745 (3.745) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 01:12:56.826.
+	 Executed 4 tests, with 45 failures (0 unexpected) in 3.745 (3.746) seconds
+Note: Some test targets reported failures:
+  - MetadataKitTests (XCTest)

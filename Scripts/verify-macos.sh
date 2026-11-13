@@ -30,6 +30,7 @@ python3 tests/intro_provider_contract.py > "$output_dir/intro-provider-contract-
 python3 tests/intro_identity_contract.py > "$output_dir/intro-identity-contract-tests.log" 2>&1
 python3 tests/danmaku_flow_contract.py > "$output_dir/danmaku-flow-contract-tests.log" 2>&1
 python3 tests/standalone_danmaku_contract.py > "$output_dir/standalone-contract-tests.log" 2>&1
+python3 tests/tmdb_matcher_contract.py > "$output_dir/tmdb-matcher-contract-tests.log" 2>&1
 for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done

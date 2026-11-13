@@ -884,6 +884,10 @@ impl Core {
                 )
             }
 
+            "tmdb.matcher" => match ocp_tmdb::matcher::invoke(&arguments) {
+                Ok(result) => ApiResponse::ok(json!({"payloadJSON": result.to_string()})),
+                Err(error) => return Ok(error_response(1002, false, error)),
+            },
             "tmdb.match" => {
                 let Some(query) = arguments.get("query").and_then(Value::as_str) else {
                     return Ok(error_response(1002, false, "query is required"));

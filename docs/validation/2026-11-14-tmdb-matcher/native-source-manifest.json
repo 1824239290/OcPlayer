@@ -1,0 +1,6 @@
+{
+  "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbMatcher.swift": "ae016375d5983a2d9c09f9012be806ea1b32b83479a4819d6aa6bd714eb8b040",
+  "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbMatcher.swift": "7c11ddfdc49b9a93ef26f264b09aa5ea831b4d0e01ebe8042a20aac6cf295df8",
+  "Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbMatcherTests.swift": "4772204b1c3b9b6084fb6cb67177f84199edd4dbba97545bf7c33f7196ddc85d",
+  "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift": "12f3dfb84bef7739b05646a080103b81afa296f33931fac48e54340516d4e68d"
+}

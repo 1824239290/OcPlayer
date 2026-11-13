@@ -51,6 +51,10 @@ share the same retained cache Core; see the complete workflow in
 [`docs/intro-contract.md`](docs/intro-contract.md). Broader acceptance remains
 in progress.
 
+Native TMDB matching now uses Core's complete provider/parent/search and ranking
+decisions, preserving injected searches and exact identifiers; see
+[`docs/tmdb-matcher-contract.md`](docs/tmdb-matcher-contract.md).
+
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults
 flag) is set; native decoding/rendering remains the platform adapter. The

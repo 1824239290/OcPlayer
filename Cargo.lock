@@ -837,6 +837,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "unicode-normalization",
+ "unicode-segmentation",
  "url",
 ]
 

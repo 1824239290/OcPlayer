@@ -1,0 +1,22 @@
+Building for debugging...
+[Computing dependencies]
+[Provisioning 3 / 53]
+[1 / 1]
+Build complete! (1.23秒)
+Test Suite 'Selected tests' started at 2026-11-14 01:16:22.110.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 01:16:22.111.
+Test Suite 'RustTMDbMatcherTests' started at 2026-11-14 01:16:22.111.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' passed (0.595 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' passed (0.063 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' passed (0.017 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' passed (1.030 seconds).
+Test Suite 'RustTMDbMatcherTests' passed at 2026-11-14 01:16:23.817.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.705 (1.705) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 01:16:23.817.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.705 (1.705) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 01:16:23.817.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.705 (1.706) seconds
