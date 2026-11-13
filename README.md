@@ -25,4 +25,4 @@ OcPlayer 的 Windows 移植版本。项目目标是在保留 OcPlayer 媒体库�
 
 ## 开发前置条件
 
-Windows 11、Visual Studio 2026（.NET 桌面开发和 Windows App SDK 工作负载）以及对应的 Windows SDK。具体版本以项目首次生成时的解决方案文件为准。
+Windows 11（最低 Windows 10 1809）、.NET SDK 10.0.4xx（LTS）和 Windows App SDK 2.6.5；目标框架固定为 `net10.0-windows10.0.26100.0`。Visual Studio 2026（.NET 桌面开发和 Windows App SDK 工作负载）为可选项，用于调试和 MSIX 打包；命令行 `dotnet build` 足以完成还原与编译。完整版本基线和命令见 [`docs/development.md`](docs/development.md)。
