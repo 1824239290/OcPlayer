@@ -38,3 +38,45 @@ typed errors, exact retry counts and cancellation. Existing DanmakuKit tests
 exercise the full native resolver, cache, matching and intro flow. The native
 real-server tests invoke the internal exchange boundary to keep fixture HTTP
 out of the public HTTPS-origin contract.
+
+## Shared matching policy
+
+The production parser, canonical match names, episode tokens, special filename
+keywords, Unicode comparable titles, candidate scores and selection now use
+Core through the retained RustDanmakuPolicy. Disabled-Core implementations remain
+for differential/regression comparison. Once loaded, Core is authoritative;
+policy failures do not silently fall back to Swift.
+
+- `danmaku.parseFilename {fileName}` retains raw name and returns title, season,
+  episode and final-season status. Release groups, tags, years, specifications,
+  episode tails and hidden/trailing-dot filename handling match the native parser.
+- `danmaku.parseEpisode {title}` returns an optional episode token and its
+  `searchValue`. The string preserves signed-64-bit episode values through hosts
+  whose generic JSON number representation uses floating point. S/C/O prefixes
+  are case-sensitive, positive and limited to three digits, as in OcPlayer.
+- `danmaku.comparableTitle {title}` uses full-width conversion, lowercase,
+  canonical Unicode normalization and extended grapheme filtering. It preserves
+  character identity instead of compatibility-folding distinct titles.
+- `danmaku.specialKind {text}` checks letter/grapheme boundaries, prioritizes
+  NCOP/NCED/extra-footage keywords over SP and leaves OVA/OAD unclassified.
+- `danmaku.scoreCandidates {target,candidates,rankIndex?}` scores a complete batch
+  and returns `scores`, optional `{index,score}` selection and the 1200 confidence
+  threshold. Target has optional `animeTitle`, `episodeNumber`, `seasonNumber`,
+  `special {index,kinds}`, default `isFinal=false`, and `kind=episode|movie`.
+  Candidate fields use the gateway names and signed-64-bit IDs/shift. Namespace
+  preferences, same-index OVA fallback, episode/season/final conflicts, grapheme
+  overlap/containment and hard movie-vs-episode identity gates match OcPlayer.
+  Rank offsets apply to both scores and selection; equal scores retain the first
+  input. Swift submits flattened search results in global order and uses the
+  returned index to retain the exact original ID, shift and title fields.
+
+Native policy tests compare 960 filenames, 3840 scores, 270 special-keyword
+boundary combinations, episode/Unicode/canonical edge cases and large batches.
+They explicitly require an activated Core and compare with the independent
+native policy bodies. Direct C ABI fixtures additionally check thresholds,
+namespace order, type gates, malformed arguments, rank/tie behavior, Unicode,
+large integer token strings and zero network requests.
+
+The HTTP/match/search/cache/intro orchestration and cache persistence are still
+owned by the native service. Shared scheduling, cache and intro-policy migration
+remain necessary for complete platform parity.

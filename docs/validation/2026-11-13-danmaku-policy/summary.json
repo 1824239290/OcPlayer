@@ -1,0 +1,145 @@
+{
+  "date": "2026-11-13",
+  "goalComplete": false,
+  "scope": "Shared danmaku parsing, canonical names, Unicode comparison, episode and special tokens, identity scoring and batch selection activated in production macOS; full regression and packaging.",
+  "Rust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "cleanSourceRust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "executed": 237,
+      "passed": 237,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "CABI": {
+    "bangumi": {
+      "passed": 4,
+      "failed": 0
+    },
+    "network": {
+      "passed": 7,
+      "failed": 0
+    },
+    "moviepilot": {
+      "passed": 10,
+      "failed": 0
+    },
+    "media-login": {
+      "passed": 10,
+      "failed": 0
+    },
+    "danmaku": {
+      "passed": 4,
+      "failed": 0
+    },
+    "danmaku-policy": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "nativeFallback": {
+    "executed": 237,
+    "passed": 228,
+    "skipped": 9,
+    "failed": 0
+  },
+  "buildPassed": true,
+  "embeddingAndSigningPassed": true,
+  "differentialSamples": {
+    "filenames": 960,
+    "candidateScores": 3840,
+    "specialKeywords": 270,
+    "batchSelection": 1500,
+    "CABISelection": 2000
+  },
+  "librarySHA256": "9b8c298e5b1f71499571ce8716c775b08221077c93075aca6a8194559379133b",
+  "application": "/tmp/ocplayer-policy-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "remaining": [
+    "shared danmaku cache, resolver scheduling, complete load orchestration and intro policies",
+    "metadata scheduling/matching orchestration",
+    "complete playback preferences/recovery and EOF duration acceptance",
+    "shared account/sync lifecycle",
+    "full native transport fidelity",
+    "settings and diagnostics mapping",
+    "release packaging and Windows native adapter"
+  ],
+  "playback": {
+    "controlsPassed": true,
+    "naturalEndObserved": true,
+    "coreAndNativeTimelineAgree": true,
+    "coreFromBundle": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "naturalEndPositionSeconds": 5.033333,
+    "durationSeconds": 5.066667,
+    "savedPlaybackRate": 1.0,
+    "durationDifferenceSeconds": 0.033334,
+    "limitation": "This run at 1x reaches native/Core ended 33ms before metadata duration. The earlier 2x run ended 100ms short. Exact-duration EOF acceptance remains open."
+  },
+  "changedSourceHashes": {
+    "crates/ocp-danmaku/src/lib.rs": "3d7e3ca90e2a7ae92fc79851879d26d83544184af752a59c9b22195060289086",
+    "crates/ocp-danmaku/src/filename.rs": "ea87e3d729952ffd8cdabf21d93c6f5d6d9e8e1233b34243ad94676e35f7e32b",
+    "crates/ocp-danmaku/src/policy.rs": "927ac2cca490ffc5fbd20d092582fb5dd535762dd2ae1f70571f5500accb660c",
+    "crates/ocp-core/src/lib.rs": "ffe41281bb8ec9e4880e134063f102055df32e66ff21ec9776a540b1d0bc72e5",
+    "Cargo.lock": "3570a1bc903d856c777950633d61ad6fd2c7104430cfa0df7adc3491d13f725e",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuPolicy.swift": "2f89a347acfb8bdae3fd8d33ac063051a5f8e103c16e52fa2564df5d0739aa79",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuCandidateScorer.swift": "4af5d6f19cbb4c822bd8a0e13dc47dfef33baa8e1fbf2a142b3bd9f8c6f5f797",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuEpisodeToken.swift": "8e67f9a5414e072c36b9dcff27cb03f9e29087723b9e6d8ee51bbbe0ed1cd7ea",
+    "/Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit/Sources/DanmakuKit/DanmakuFilenameParser.swift": "821525a653516913130745ac5329c8121ecdaf14b4e196e9dd1ef135e1521185"
+  }
+}

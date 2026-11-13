@@ -19,7 +19,7 @@ Reference Apple checkout during this migration:
 | Playback | Existing native engine and surface quality, pause/resume/seek/rate/volume, track selection, progress, resource failover, end-of-playback, next episode and background behavior | macOS app builds; bundled Core passes local H.264/AAC playback and controls with synchronized Rust snapshots. Session rate/volume/tracks now survive timeline and lifecycle callbacks; revised duration, null track clearing and paused-open behavior are verified across the native ABI. Source recovery now runs in a shared request chain retained across engine replacement; report heartbeat/pause/terminal/natural-end decisions also run in Core. Native fixtures assert shared activation and cancellation/adoption guards. Engine event folding/EOF and stale-generation validation now run in Core, along with foreground resume decisions and mute/volume state. Actual native EOF and controller event integration pass. Complete source/track preference and recovery orchestration acceptance remains. |
 | Metadata / persistence | Existing Media.sqlite schema, tenant isolation, cached metadata/home rails/pages, offline reads, local-progress conflict handling | The complete MetadataStore path now delegates SQL, transactional progress reconciliation, offline snapshots, TMDB cache and maintenance to Core. Bidirectional GRDB/Core fixtures and the full 306-case MetadataKit run pass with shared storage activated. Repository memory/freshness scheduling and native open/recovery policy still need a shared-policy audit. |
 | TMDB | Mirror changes without restart, v3/v4 auth, searches, movie/TV/collection detail, per-field language fallback, whole seasons, mapping and cache policy | Rust-backed TMDbClient fixture verifies requests, fallback, fields, malformed optional entries, auth, status categories and no Swift replay. Entity/season cache, links, expiry and clearing now run in Core and retain GRDB compatibility. Enricher/matcher/batch scheduling remain native and need migration/coverage. |
-| Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Shared resolver/orchestrator/cache/intro-provider implementation and broader end-to-end acceptance remain. |
+| Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Core now owns filename/canonical/episode/special parsing, Unicode comparable titles, candidate identity scoring and batch selection; differential and C ABI strategy fixtures cover these policies. Shared resolver scheduling/cache/intro-provider implementation and broader end-to-end acceptance remain. |
 | Bangumi | Public/authorized API, mirrors, OAuth refresh/generation safety, collections, episodes/progress, search/calendar, sync and persistence | Native BangumiAPIClient now dispatches all public, authorized and gateway OAuth requests through Core; complete raw responses, p1 routes, PATCH mutations, pagination, generation cancellation and single-flight refresh are covered by real Rust/Swift and C ABI fixtures. All BangumiDatabaseOperator entry points now dispatch to shared SQLite, merge, progress-window and sync-target policy; complete chapter sync uses one transactional replacement. Native account/scheduling lifecycle and broader end-to-end shared sync orchestration still need migration/audit. |
 | MoviePilot | Login, silent relogin, raw media/torrent fields, SSE progress, downloads and subscriptions, cancellation/session retirement | All native HTTP paths now dispatch through Core, including first/token-only login and raw byte-preserving exchanges. Real C ABI/native fixtures cover login races, atomic credential commit, Cookie retention, shared refresh, mutation routes, raw fields and non-replay. Platform credential persistence, refresh coordination/generation and native notifications remain in the actor; broader shared account lifecycle orchestration remains. |
 | Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. Full native settings mapping and aggregate diagnostic export remain. |
@@ -355,3 +355,38 @@ That 100ms difference is recorded as an open rate/EOF acceptance issue, rather
 than claiming exact complete-duration playback. Summary and all raw logs are
 retained with this run. Build scripts also retain executable Git modes so
 clean-checkout command invocations work.
+
+## Shared danmaku matching verification
+
+Filename parsing, canonical names, episode and special tokens, special keyword
+classification, Unicode comparable titles, candidate identity scoring and batch
+selection now run in Core in the production Apple client. Native policy bodies
+remain independent for disabled-Core and differential comparison. Matching
+retains the gateway's original candidate DTO by index, preserving IDs larger
+than 2^53 and shifts larger than 32 bits. Global search order, threshold/ties,
+final/season conflicts, special namespace preferences, OVA fallback and hard
+movie-vs-episode identity gates match the existing native policy.
+
+Native differential fixtures compare 960 filenames, 3840 scores, 270 keyword
+boundary combinations, Unicode/episode/canonical edge cases and 1500 candidates.
+Four additional direct C ABI policy cases cover ranking, identity gates, exact
+large episode strings, validation and a 2000-candidate tie. Two failures involving
+canonical trailing dots were found and fixed; the initial and first unified
+outputs are retained. Final focused and complete package checks pass.
+
+The complete run passes Rust 79; OcPlayerCore 14, JellyfinKit 255, MetadataKit
+306, MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 237. Exported
+Apple binding 14 passes; C ABI Bangumi 4, network 7, MoviePilot 10, media login
+10, danmaku gateway 4 and matching policy 4 pass. macOS AppTests execute 1008:
+989 passed, 19 platform skips, zero failures. Core-disabled DanmakuKit passes
+228 with nine explicit native-library fixture skips. A hash-verified independent
+44-file source/lock/schema/fixture copy passes all 79 locked offline Rust tests.
+Raw output and source hashes are retained in `validation/2026-11-13-danmaku-policy/`.
+Shared resolver scheduling, cache persistence and complete intro/load policies
+remain open; see [danmaku-contract.md](danmaku-contract.md).
+
+The newly embedded/signed application also passes pause/play/seek/speed/resize
+from its bundled Core, with zero render/audio failures. Natural EOF reaches
+Core ended at the same native position (5.033333s for metadata duration
+5.066667s at 1x in this run). This 33ms gap and the earlier 100ms gap at 2x
+remain open exact-duration engine/EOF acceptance items.

@@ -2,7 +2,6 @@
 
 use chrono::{DateTime, Utc};
 use md5::{Digest, Md5};
-use regex::Regex;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Method, Url,
@@ -11,15 +10,17 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::sync::OnceLock;
 use unicode_normalization::UnicodeNormalization;
+use unicode_segmentation::UnicodeSegmentation;
+mod filename;
+pub mod policy;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedAnimeInfo {
     pub raw_name: String,
     pub title: String,
-    pub episode_number: Option<u32>,
-    pub season_number: Option<u32>,
+    pub episode_number: Option<i64>,
+    pub season_number: Option<i64>,
     pub is_final: bool,
 }
 
@@ -51,8 +52,8 @@ impl SpecialKind {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "tokenType", rename_all = "camelCase")]
 pub enum EpisodeToken {
-    Number { value: u32 },
-    Special { kind: SpecialKind, index: u32 },
+    Number { value: i64 },
+    Special { kind: SpecialKind, index: i64 },
 }
 
 impl EpisodeToken {
@@ -184,7 +185,7 @@ pub fn normalize_full_width(input: &str) -> String {
         .collect()
 }
 
-pub fn parse_chinese_number(input: &str) -> Option<u32> {
+pub fn parse_chinese_number(input: &str) -> Option<i64> {
     if let Ok(value) = input.parse() {
         return Some(value);
     }
@@ -214,173 +215,31 @@ pub fn parse_chinese_number(input: &str) -> Option<u32> {
     }
 }
 
-pub fn parse_episode_token(input: &str) -> Option<EpisodeToken> {
-    static SPECIAL: OnceLock<Regex> = OnceLock::new();
-    static EPISODE: OnceLock<Regex> = OnceLock::new();
-    static LEADING: OnceLock<Regex> = OnceLock::new();
-    let special = SPECIAL.get_or_init(|| Regex::new(r"(?i)^([SCO])(\d{1,3})(?:\D|$)").unwrap());
-    let normalized = normalize_full_width(input);
-    if let Some(caps) = special.captures(normalized.trim()) {
-        let kind = match caps[1].to_ascii_uppercase().as_str() {
-            "S" => SpecialKind::Special,
-            "C" => SpecialKind::Extra,
-            _ => SpecialKind::Other,
-        };
-        return Some(EpisodeToken::Special {
-            kind,
-            index: caps[2].parse().ok()?,
-        });
-    }
-    let episode = EPISODE.get_or_init(|| {
-        Regex::new(r"第\s*(\d{1,4}|[一二两三四五六七八九十零]+)\s*[话話集回期]").unwrap()
-    });
-    if let Some(caps) = episode.captures(&normalized) {
-        return Some(EpisodeToken::Number {
-            value: parse_chinese_number(&caps[1])?,
-        });
-    }
-    let leading =
-        LEADING.get_or_init(|| Regex::new(r"(?i)^(?:EP|E)?\s*(\d{1,4})(?:\b|\s|$)").unwrap());
-    if let Some(caps) = leading.captures(normalized.trim()) {
-        return Some(EpisodeToken::Number {
-            value: caps[1].parse().ok()?,
-        });
-    }
-    parse_filename(&normalized)
-        .episode_number
-        .map(|value| EpisodeToken::Number { value })
-}
-
-pub fn parse_filename(raw: &str) -> ParsedAnimeInfo {
-    static SEASON: OnceLock<Vec<Regex>> = OnceLock::new();
-    static EPISODE: OnceLock<Vec<Regex>> = OnceLock::new();
-    static FINAL: OnceLock<Regex> = OnceLock::new();
-    let season_patterns = SEASON.get_or_init(|| {
-        [
-            r"(?i)(?:^|[\s_.\[(])S(\d{1,2})(?:[Ee]|\b|[\s_.\])])",
-            r"(?i)season\s*(\d{1,2})",
-            r"第\s*(\d{1,2})\s*[季期部]",
-            r"(?i)(\d{1,2})(?:st|nd|rd|th)\s*season",
-            r"第\s*([一二两三四五六七八九十]+)\s*[季期部]",
-        ]
-        .iter()
-        .map(|p| Regex::new(p).unwrap())
-        .collect()
-    });
-    let episode_patterns = EPISODE.get_or_init(|| {
-        [
-            r"(?i)(?:s\d{1,2})?e(?:p)?\s*(\d{1,4})(?:v\d+)?(?:\b|[^a-zA-Z0-9])",
-            r"第\s*(\d{1,4})\s*[话話集回期]",
-            r"(?:^|[\s_.\[【(])(\d{1,4})(?:v\d+)?(?:[\s_.\]】)]|$)",
-        ]
-        .iter()
-        .map(|p| Regex::new(p).unwrap())
-        .collect()
-    });
-    let normalized = normalize_full_width(raw).replace('\\', "/");
-    let file = normalized.rsplit('/').next().unwrap_or(&normalized);
-    let name = file.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(file);
-    let is_final = FINAL
-        .get_or_init(|| Regex::new(r"(?i)(?:the\s+)?final\s+season|最终季|完结篇").unwrap())
-        .is_match(name);
-    let season_number = if is_final {
-        None
-    } else {
-        season_patterns.iter().find_map(|re| {
-            re.captures(name)
-                .and_then(|caps| parse_chinese_number(&caps[1]))
-        })
-    };
-    let episode_number = episode_patterns
-        .iter()
-        .find_map(|re| {
-            re.captures_iter(name).find_map(|caps| {
-                let n = caps[1].parse::<u32>().ok()?;
-                if matches!(n, 720 | 1080 | 2160)
-                    || (1970..=2050).contains(&n)
-                    || Some(n) == season_number
-                {
-                    None
-                } else {
-                    Some(n)
-                }
-            })
-        })
-        .or_else(|| {
-            Regex::new(r"第\s*([一二两三四五六七八九十零]+)\s*[话話集回期]")
-                .ok()?
-                .captures(name)
-                .and_then(|c| parse_chinese_number(&c[1]))
-        });
-    let mut title = name.to_owned();
-    for re in [
-        r"\[[^\]]*\]",
-        r"【[^】]*】",
-        r"\([^\)]*\)",
-        r"（[^）]*）",
-        r"★[^★]*★",
-    ] {
-        title = Regex::new(re)
-            .unwrap()
-            .replace_all(&title, " ")
-            .into_owned();
-    }
-    for re in [
-        r"(?i)\b(?:1080p|720p|2160p|4k|uhd|fhd|hd)\b",
-        r"(?i)\b(?:hevc|avc|x264|x265|h264|h265|10bit|8bit|ma10p)\b",
-        r"(?i)\b(?:aac|flac|mp3|dts|ac3|eac3|ddp?)\b",
-        r"(?i)\b(?:web-?dl|web-?rip|baha|cr|bilibili|abema|bdrip|dvdrip)\b",
-        r"(?i)\b(?:chs|cht|gb|big5|jp|sc|tc|eng|ita)\b",
-        r"(?i)(?:s\d{1,2}e\d{1,4}|ep?\d{1,4})\b",
-        r"第\s*\d{1,4}\s*[话話集回期]",
-        r"(?i)season\s*\d+",
-        r"第\s*\d+\s*[季期部]",
-        r"(?i)(?:the\s+)?final\s+season|最终季|完结篇",
-    ] {
-        title = Regex::new(re)
-            .unwrap()
-            .replace_all(&title, " ")
-            .into_owned();
-    }
-    if let Some((head, _)) = title.split_once(" - ") {
-        title = head.to_owned();
-    }
-    title = title
-        .replace(['.', '_'], " ")
-        .trim_matches(|c: char| c.is_whitespace() || " -_./[]()【】".contains(c))
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if title.is_empty() {
-        title = name.to_owned();
-    }
-    ParsedAnimeInfo {
-        raw_name: raw.to_owned(),
-        title,
-        episode_number,
-        season_number,
-        is_final,
-    }
-}
+pub use filename::{parse_episode_token, parse_filename};
 
 pub fn comparable_title(title: &str) -> String {
-    normalize_full_width(title)
-        .nfkc()
-        .flat_map(char::to_lowercase)
-        .filter(|c| c.is_alphanumeric())
+    let normalized: String = normalize_full_width(title).to_lowercase().nfc().collect();
+    normalized
+        .graphemes(true)
+        .filter(|g| g.chars().next().is_some_and(char::is_alphanumeric))
         .collect()
 }
 
 pub fn canonical_match_name(
     series_title: Option<&str>,
-    season: Option<u32>,
+    season: Option<i64>,
     episode: Option<EpisodeToken>,
     raw_file_name: &str,
 ) -> String {
     let name = normalize_full_width(raw_file_name).replace('\\', "/");
-    let file = name.rsplit('/').next().unwrap_or(&name);
+    let file = name
+        .split('/')
+        .filter(|p| !p.is_empty())
+        .next_back()
+        .unwrap_or(&name);
     let fallback = file
         .rsplit_once('.')
+        .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty())
         .map(|(stem, _)| stem.trim())
         .filter(|s| !s.is_empty())
         .unwrap_or(file);
@@ -724,63 +583,26 @@ pub struct Candidate {
     #[serde(rename = "type")]
     pub kind: Option<String>,
     pub type_description: Option<String>,
-    pub shift: Option<i32>,
+    pub shift: Option<i64>,
 }
 
 pub fn score_candidate(
     candidate: &Candidate,
     anime_title: Option<&str>,
-    season: Option<u32>,
-    episode: Option<u32>,
+    season: Option<i64>,
+    episode: Option<i64>,
     rank: usize,
 ) -> i32 {
-    let mut score = 0;
-    let cand_episode = candidate
-        .episode_title
-        .as_deref()
-        .and_then(parse_episode_token);
-    match (episode, cand_episode) {
-        (Some(a), Some(EpisodeToken::Number { value: b })) if a == b => score += 2000,
-        (Some(_), Some(EpisodeToken::Number { .. })) => score -= 3000,
-        (Some(_), Some(EpisodeToken::Special { .. })) => score -= 1500,
-        (Some(_), None) => score -= 500,
-        (None, Some(EpisodeToken::Number { value: 1 })) => score += 800,
-        (None, Some(EpisodeToken::Special { .. })) => score -= 500,
-        _ => score += 800,
-    }
-    let parsed = candidate.anime_title.as_deref().map(parse_filename);
-    if let Some(season) = season.filter(|s| *s > 1) {
-        match parsed.and_then(|p| p.season_number) {
-            Some(value) if value == season => score += 1500,
-            Some(_) => score -= 3000,
-            None => score -= 2000,
-        }
-    } else if let Some(p) = parsed {
-        if p.season_number.unwrap_or(1) == 1 {
-            score += 500
-        } else {
-            score -= 2000
-        }
-    }
-    if let Some(target) = anime_title {
-        let a = comparable_title(target);
-        let b = candidate
-            .anime_title
-            .as_deref()
-            .map(comparable_title)
-            .unwrap_or_default();
-        if a == b {
-            score += 1500
-        } else if !a.is_empty() && (!b.is_empty()) && (a.contains(&b) || b.contains(&a)) {
-            score += 800
-        } else {
-            score -= 500
-        }
-    } else {
-        score += 500
-    }
-    score += 100 - (rank.min(100) as i32);
-    score
+    policy::score(
+        candidate,
+        &policy::TargetContext {
+            anime_title: anime_title.map(str::to_owned),
+            episode_number: episode,
+            season_number: season,
+            ..Default::default()
+        },
+        rank as i64,
+    ) as i32
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

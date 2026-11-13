@@ -18,7 +18,7 @@ The core exposes a C ABI in `include/ocplayer_core.h`. Commands use the JSON
 response envelope documented in `docs/ffi-contract.md`; playback state is
 available through the `core` and `playback` snapshots. The command surface
 covers Jellyfin/Emby anonymous login, Quick Connect, browsing, detail/season/episode/media resources and
-playback reporting, TMDB lookup, DanDanPlay loading and complete gateway exchanges, Bangumi service calls,
+playback reporting, TMDB lookup, DanDanPlay identity matching, loading and complete gateway exchanges, Bangumi service calls,
 MoviePilot login/media/torrent/download/subscription commands, SQLite-backed
 progress, and versioned configuration/diagnostic export. `replay` accepts one
 JSON command per line (`{"method":"...","arguments":{...}}`) and prints each

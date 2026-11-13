@@ -1,0 +1,40 @@
+   Compiling unicode-segmentation v1.13.3
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+warning: unused import: `regex::Regex`
+ --> crates/ocp-danmaku/src/lib.rs:5:5
+  |
+5 | use regex::Regex;
+  |     ^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::sync::OnceLock`
+  --> crates/ocp-danmaku/src/lib.rs:14:5
+   |
+14 | use std::sync::OnceLock;
+   |     ^^^^^^^^^^^^^^^^^^^
+
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+warning: `ocp-danmaku` (lib) generated 2 warnings (run `cargo fix --lib -p ocp-danmaku` to apply 2 suggestions)
+error[E0308]: mismatched types
+   --> crates/ocp-core/src/lib.rs:549:25
+    |
+547 |                     "fileName": ocp_danmaku::canonical_match_name(
+    |                                 --------------------------------- arguments to this function are incorrect
+548 |                         arguments.get("seriesTitle").and_then(Value::as_str),
+549 |                         arguments.get("season").and_then(Value::as_u64).map(|value| value as u32),
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<i64>`, found `Option<u32>`
+    |
+    = note: expected enum `Option<i64>`
+               found enum `Option<u32>`
+note: function defined here
+   --> crates/ocp-danmaku/src/lib.rs:230:8
+    |
+230 | pub fn canonical_match_name(
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: `ocp-danmaku` (lib test) generated 2 warnings (2 duplicates)
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `ocp-core` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ocp-core` (lib test) due to 1 previous error

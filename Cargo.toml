@@ -46,6 +46,7 @@ sha2 = "0.10"
 md-5 = "0.10"
 url = "2"
 unicode-normalization = "0.1"
+unicode-segmentation = "1.12"
 base64 = "0.22"
 
 [workspace.metadata.cbindgen]

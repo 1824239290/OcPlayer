@@ -539,19 +539,103 @@ impl Core {
                 let Some(file_name) = arguments.get("rawFileName").and_then(Value::as_str) else {
                     return Ok(error_response(1002, false, "rawFileName is required"));
                 };
-                let episode = arguments
-                    .get("episode")
-                    .cloned()
-                    .and_then(|value| serde_json::from_value(value).ok());
+                let episode = match arguments.get("episode") {
+                    None | Some(Value::Null) => None,
+                    Some(value) => match serde_json::from_value(value.clone()) {
+                        Ok(episode) => Some(episode),
+                        Err(e) => {
+                            return Ok(error_response(1002, false, format!("invalid episode: {e}")))
+                        }
+                    },
+                };
+                let season = match arguments.get("season") {
+                    None | Some(Value::Null) => None,
+                    Some(value) => match value.as_i64() {
+                        Some(n) => Some(n),
+                        None => {
+                            return Ok(error_response(
+                                1002,
+                                false,
+                                "season must be a signed integer",
+                            ))
+                        }
+                    },
+                };
                 ApiResponse::ok(json!({
                     "fileName": ocp_danmaku::canonical_match_name(
-                        arguments.get("seriesTitle").and_then(Value::as_str),
-                        arguments.get("season").and_then(Value::as_u64).map(|value| value as u32),
-                        episode,
-                        file_name,
-                    )
+                        arguments.get("seriesTitle").and_then(Value::as_str), season, episode, file_name)
                 }))
             }
+            "danmaku.parseEpisode" => {
+                let title = match arguments.get("title") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(title)) => Some(title.as_str()),
+                    _ => return Ok(error_response(1002, false, "title must be a string")),
+                };
+                let episode = title.and_then(ocp_danmaku::parse_episode_token);
+                ApiResponse::ok(
+                    json!({"episode":episode,"searchValue":episode.map(|e|e.search_value())}),
+                )
+            }
+            "danmaku.comparableTitle" => {
+                let Some(title) = arguments.get("title").and_then(Value::as_str) else {
+                    return Ok(error_response(1002, false, "title is required"));
+                };
+                ApiResponse::ok(json!({"title":ocp_danmaku::comparable_title(title)}))
+            }
+            "danmaku.specialKind" => {
+                let Some(text) = arguments.get("text").and_then(Value::as_str) else {
+                    return Ok(error_response(1002, false, "text is required"));
+                };
+                ApiResponse::ok(json!({"kind":ocp_danmaku::policy::special_kind(text)}))
+            }
+            "danmaku.scoreCandidates" => {
+                let target: ocp_danmaku::policy::TargetContext = match serde_json::from_value(
+                    arguments.get("target").cloned().unwrap_or(Value::Null),
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Ok(error_response(1002, false, format!("invalid target: {e}")))
+                    }
+                };
+                let candidates: Vec<ocp_danmaku::Candidate> = match serde_json::from_value(
+                    arguments.get("candidates").cloned().unwrap_or(Value::Null),
+                ) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Ok(error_response(
+                            1002,
+                            false,
+                            format!("invalid candidates: {e}"),
+                        ))
+                    }
+                };
+                let rank = match arguments.get("rankIndex") {
+                    None => 0,
+                    Some(v) => match v.as_i64() {
+                        Some(n) => n,
+                        None => {
+                            return Ok(error_response(
+                                1002,
+                                false,
+                                "rankIndex must be a signed integer",
+                            ))
+                        }
+                    },
+                };
+                let scores: Vec<_> = candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(index, c)| {
+                        ocp_danmaku::policy::score(c, &target, rank.saturating_add(index as i64))
+                    })
+                    .collect();
+                ApiResponse::ok(
+                    json!({"scores":scores,"selection":ocp_danmaku::policy::select_scores(&scores),
+                    "confidenceThreshold":ocp_danmaku::policy::CONFIDENCE_THRESHOLD}),
+                )
+            }
+
             "tmdb.match" => {
                 let Some(query) = arguments.get("query").and_then(Value::as_str) else {
                     return Ok(error_response(1002, false, "query is required"));
