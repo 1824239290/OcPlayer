@@ -59,15 +59,19 @@ public struct TMDbMatcher: Sendable {
 
     private let search: @Sendable (String, TMDbMediaType, Int?, String) async throws -> [TMDbSearchResult]
     private let language: String
+    private let rust: RustTMDbMatcher?
+    var usesCoreMatching: Bool { rust != nil }
 
     /// - Parameter search: 搜索入口（生产传 `TMDbClient.search`；测试传固定结果）。
     ///   用闭包而不是直接持有 client：匹配逻辑是纯函数式的打分，不该被网络依赖绑住。
     public init(
         language: String,
+        rustCoreLibraryPath: String? = nil,
         search: @escaping @Sendable (String, TMDbMediaType, Int?, String) async throws -> [TMDbSearchResult]
     ) {
         self.language = language
         self.search = search
+        self.rust = RustTMDbMatcher.make(libraryPath: rustCoreLibraryPath)
     }
 
     // MARK: - 入口
@@ -83,6 +87,17 @@ public struct TMDbMatcher: Sendable {
         seriesLink: TMDbLink? = nil,
         allowSearch: Bool = true
     ) async -> TMDbMatch? {
+        if let rust {
+            return try? await rust.match(item: item, seriesLink: seriesLink,
+                                         allowSearch: allowSearch, language: language,
+                                         search: search)
+        }
+        return await nativeMatch(item: item, seriesLink: seriesLink, allowSearch: allowSearch)
+    }
+
+    // The original implementation remains an independent fallback/test oracle.
+    func nativeMatch(item: MediaItem, seriesLink: TMDbLink? = nil,
+                     allowSearch: Bool = true) async -> TMDbMatch? {
         // ① 集 / 季：只用父剧推导，**不看自己的 tmdbID**（见类型注释）。
         switch item.kind {
         case .season, .episode:
@@ -102,14 +117,14 @@ public struct TMDbMatcher: Sendable {
         }
 
         // ② 电影 / 剧：先用 ProviderIds。
-        if let id = providerTmdbID(of: item) {
+        if let id = nativeProviderTmdbID(of: item) {
             let key: TMDbEntityKey = item.kind == .movie ? .movie(id) : .tv(id)
             return TMDbMatch(entityKey: key, source: .providerID, confidence: 1.0,
                              matchedTitle: item.name)
         }
 
         guard allowSearch else { return nil }
-        return await matchBySearch(item: item)
+        return await nativeMatchBySearch(item: item)
     }
 
     /// `ProviderIds["Tmdb"]` → Int。脏数据（空串 / 非数字 / ≤0）一律当没有。
@@ -117,6 +132,13 @@ public struct TMDbMatcher: Sendable {
     /// 服务端的刮削器偶尔会写进 `""` 或 `"0"`，直接用会拿 0 去查 TMDB 并得到 404，
     /// 日志里表现为「明明有 id 却查不到」，很难查。
     func providerTmdbID(of item: MediaItem) -> Int? {
+        if let rust {
+            return try? rust.call(.init(operation: "providerID", item: .init(item))).id
+        }
+        return nativeProviderTmdbID(of: item)
+    }
+
+    func nativeProviderTmdbID(of item: MediaItem) -> Int? {
         guard let raw = item.tmdbID?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty, let id = Int(raw), id > 0
         else { return nil }
@@ -125,7 +147,7 @@ public struct TMDbMatcher: Sendable {
 
     // MARK: - 搜索匹配
 
-    func matchBySearch(item: MediaItem) async -> TMDbMatch? {
+    func nativeMatchBySearch(item: MediaItem) async -> TMDbMatch? {
         let mediaType: TMDbMediaType = item.kind == .movie ? .movie : .tv
         // 年份：优先用服务端字段；服务端没给时从标题里认（「某片 (2019)」）。
         //
@@ -141,7 +163,7 @@ public struct TMDbMatcher: Sendable {
         // 为什么需要：TMDB 的搜索是按它自己索引的标题匹配的，中文译名不一定在索引里
         // （尤其冷门番剧）。`originalTitle` 常是日文/英文原名，命中率高得多。
         // 只在第一次**没选出可自动应用的候选**时才多打这一趟，多数条目不会走到。
-        if !candidates.contains(where: { score($0, item: item) >= Self.autoApplyThreshold }),
+        if !candidates.contains(where: { nativeScore($0, item: item) >= Self.autoApplyThreshold }),
            let original = item.originalTitle,
            !original.isEmpty,
            original != item.name {
@@ -151,7 +173,7 @@ public struct TMDbMatcher: Sendable {
         guard !candidates.isEmpty else { return nil }
 
         let ranked = candidates
-            .map { (result: $0, confidence: score($0, item: item)) }
+            .map { (result: $0, confidence: nativeScore($0, item: item)) }
             .sorted { $0.confidence > $1.confidence }
 
         guard let best = ranked.first else { return nil }
@@ -172,6 +194,14 @@ public struct TMDbMatcher: Sendable {
     /// - 标题宽松命中（去标点后包含）+ 年份相符 → 0.6（不自动）
     /// - 其余 → 0.1
     func score(_ result: TMDbSearchResult, item: MediaItem) -> Double {
+        if let rust {
+            return (try? rust.call(.init(operation: "score", item: .init(item),
+                                        candidates: [result])).scores?.first) ?? 0.1
+        }
+        return nativeScore(result, item: item)
+    }
+
+    func nativeScore(_ result: TMDbSearchResult, item: MediaItem) -> Double {
         let target = TitleNormalizer.normalize(item.name)
         let candidate = TitleNormalizer.normalize(result.title)
         let candidateOriginal = TitleNormalizer.normalize(result.originalTitle)

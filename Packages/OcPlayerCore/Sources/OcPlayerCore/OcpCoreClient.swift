@@ -189,6 +189,11 @@ public final class OcpCoreClient: @unchecked Sendable {
         return try callJSON(method, json: String(decoding: data, as: UTF8.self))
     }
 
+    /// Keeps typed Encodable payloads intact at the synchronous ABI boundary.
+    public func call(_ method: String, argumentsJSON: String) throws -> OcpResponse {
+        try callJSON(method, json: argumentsJSON)
+    }
+
     /// Executes the blocking C ABI on a dispatch worker while the actor remains responsive.
     /// Capturing self retains both the core handle and the loaded library until completion.
     public func callAsync(_ method: String, argumentsJSON: String = "{}") async throws -> OcpResponse {
