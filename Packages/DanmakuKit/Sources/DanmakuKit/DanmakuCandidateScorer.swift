@@ -56,6 +56,13 @@ public enum DanmakuCandidateScorer {
         from candidates: [MatchResponse.Match],
         target: TargetContext
     ) -> ScoredMatch? {
+        if let core = RustDanmakuPolicy.active {
+            let fields = candidates.map { core.candidate(id: $0.episodeId, anime: $0.animeTitle, episode: $0.episodeTitle, description: $0.typeDescription, kind: $0.type) }
+            guard let best = core.select(fields, target: target) else { return nil }
+            let candidate = candidates[best.index]
+            return ScoredMatch(match: DanmakuEpisodeMatch(episodeID: candidate.episodeId, shiftSeconds: candidate.shift ?? 0,
+                animeTitle: candidate.animeTitle, episodeTitle: candidate.episodeTitle), score: best.score)
+        }
         guard !candidates.isEmpty else { return nil }
         var best: ScoredMatch? = nil
 
@@ -95,6 +102,14 @@ public enum DanmakuCandidateScorer {
         from animes: [AnimeWithEpisodes],
         target: TargetContext
     ) -> ScoredMatch? {
+        if let core = RustDanmakuPolicy.active {
+            let flattened = animes.flatMap { anime in anime.episodes.map { (anime, $0) } }
+            let fields = flattened.map { anime, episode in core.candidate(id: episode.episodeId, anime: anime.animeTitle, episode: episode.episodeTitle, description: anime.typeDescription, kind: anime.type) }
+            guard let best = core.select(fields, target: target) else { return nil }
+            let (anime, episode) = flattened[best.index]
+            return ScoredMatch(match: DanmakuEpisodeMatch(episodeID: episode.episodeId, animeTitle: anime.animeTitle,
+                episodeTitle: episode.episodeTitle), score: best.score)
+        }
         var best: ScoredMatch? = nil
         var globalIndex = 0
 
@@ -141,9 +156,17 @@ public enum DanmakuCandidateScorer {
         target: TargetContext,
         rankIndex: Int = 0
     ) -> Int {
+        if let core = RustDanmakuPolicy.active {
+            return core.score(anime: animeTitle, episode: episodeTitle, description: typeDescription, kind: type, target: target, rank: rankIndex)
+        }
+        return scoreCandidateNative(animeTitle: animeTitle, episodeTitle: episodeTitle, typeDescription: typeDescription, type: type, target: target, rankIndex: rankIndex)
+    }
+
+    static func scoreCandidateNative(animeTitle: String?, episodeTitle: String?, typeDescription: String? = nil, type: String? = nil,
+        target: TargetContext, rankIndex: Int = 0) -> Int {
         var score = 0
 
-        let candAnimeParsed = DanmakuFilenameParser.parse(animeTitle ?? "")
+        let candAnimeParsed = DanmakuFilenameParser.parseNative(animeTitle ?? "")
 
         // 1. 集数一致性（权重最高：不能把第 1 集的弹幕套在第 2 集上）
         score += episodeScore(target: target, candidateEpisodeTitle: episodeTitle)
@@ -170,7 +193,7 @@ public enum DanmakuCandidateScorer {
     /// 集数一致性。正片与特典是两个命名空间，冲突时不再一票判死，
     /// 但要输给同命名空间正确命中的候选。
     private static func episodeScore(target: TargetContext, candidateEpisodeTitle: String?) -> Int {
-        let candidate = DanmakuEpisodeToken.parse(candidateEpisodeTitle)
+        let candidate = DanmakuEpisodeToken.parseNative(candidateEpisodeTitle)
 
         if let special = target.special {
             switch candidate {
@@ -263,8 +286,8 @@ public enum DanmakuCandidateScorer {
             // 没有目标标题（如仅依靠 hash），给予基准分
             return 500
         }
-        let targetClean = DanmakuFilenameParser.comparableTitle(targetTitle)
-        let candidateClean = DanmakuFilenameParser.comparableTitle(candidateTitle ?? "")
+        let targetClean = DanmakuFilenameParser.comparableTitleNative(targetTitle)
+        let candidateClean = DanmakuFilenameParser.comparableTitleNative(candidateTitle ?? "")
         guard !candidateClean.isEmpty else { return -500 }
 
         if targetClean == candidateClean {

@@ -151,6 +151,11 @@ public enum DanmakuFilenameParser {
         episode: DanmakuEpisodeToken?,
         rawFileName: String
     ) -> String {
+        if let core = RustDanmakuPolicy.active { return core.canonical(series: seriesTitle, season: season, episode: episode, raw: rawFileName) }
+        return canonicalMatchNameNative(seriesTitle: seriesTitle, season: season, episode: episode, rawFileName: rawFileName)
+    }
+
+    static func canonicalMatchNameNative(seriesTitle: String?, season: Int?, episode: DanmakuEpisodeToken?, rawFileName: String) -> String {
         let normalized = normalizeFullWidth(rawFileName)
             .replacingOccurrences(of: "\\", with: "/")
         let lastComponent = normalized.split(separator: "/").last.map(String.init) ?? normalized
@@ -161,9 +166,9 @@ public enum DanmakuFilenameParser {
         let series = seriesTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !series.isEmpty else { return fallback }
 
-        let comparableSeries = comparableTitle(series)
+        let comparableSeries = comparableTitleNative(series)
         if !comparableSeries.isEmpty,
-           comparableTitle(fallback).contains(comparableSeries) {
+           comparableTitleNative(fallback).contains(comparableSeries) {
             return fallback
         }
 
@@ -185,6 +190,11 @@ public enum DanmakuFilenameParser {
     /// 标题比较用的归一形态：全角转半角、小写、只留字母与数字。
     /// 打分器与规范名判重共用（`Re：从零…` 与 `Re 从零…` 视为同一标题）。
     public static func comparableTitle(_ title: String) -> String {
+        if let core = RustDanmakuPolicy.active { return core.comparable(title) }
+        return comparableTitleNative(title)
+    }
+
+    static func comparableTitleNative(_ title: String) -> String {
         let normalized = normalizeFullWidth(title).lowercased()
         var cleaned = ""
         for ch in normalized where ch.isLetter || ch.isNumber {
@@ -195,6 +205,11 @@ public enum DanmakuFilenameParser {
 
     /// 解析文件名。
     public static func parse(_ raw: String) -> ParsedAnimeInfo {
+        if let core = RustDanmakuPolicy.active { return core.parse(raw) }
+        return parseNative(raw)
+    }
+
+    static func parseNative(_ raw: String) -> ParsedAnimeInfo {
         let normalized = normalizeFullWidth(raw)
             .replacingOccurrences(of: "\\", with: "/")
         let filenameWithExt = normalized.split(separator: "/").last.map(String.init) ?? normalized

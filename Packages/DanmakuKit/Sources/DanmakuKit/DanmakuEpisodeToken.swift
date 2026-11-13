@@ -63,6 +63,11 @@ public enum DanmakuEpisodeToken: Sendable, Equatable {
     /// 故意**不做**「标题里出现过这个数字就算命中」的宽松兜底：`S5 聖地巡礼` 这类特典
     /// 标题里的 5 会被误判成第 5 话，正是特典污染正片匹配的来源。
     public static func parse(_ title: String?) -> DanmakuEpisodeToken? {
+        if let core = RustDanmakuPolicy.active { return core.episode(title) }
+        return parseNative(title)
+    }
+
+    static func parseNative(_ title: String?) -> DanmakuEpisodeToken? {
         guard let title, !title.isEmpty else { return nil }
         let normalized = DanmakuFilenameParser.normalizeFullWidth(title)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -94,7 +99,7 @@ public enum DanmakuEpisodeToken: Sendable, Equatable {
             return .number(number)
         }
 
-        if let number = DanmakuFilenameParser.parse(title).episodeNumber {
+        if let number = DanmakuFilenameParser.parseNative(title).episodeNumber {
             return .number(number)
         }
         return nil
@@ -128,6 +133,11 @@ public enum DanmakuSpecialKeyword {
 
     /// 关键词命中的命名空间；认不出返回 nil（调用方按 `fallbackOrder` 依次试）。
     public static func kind(in text: String) -> DanmakuSpecialKind? {
+        if let core = RustDanmakuPolicy.active { return core.specialKind(text) }
+        return kindNative(in: text)
+    }
+
+    static func kindNative(in text: String) -> DanmakuSpecialKind? {
         let normalized = DanmakuFilenameParser.normalizeFullWidth(text).lowercased()
         // 附属影像先判：`NCOP` 里含 `op`，别被特典关键词抢走。
         if extraKeywords.contains(where: { containsToken(normalized, $0) }) { return .extra }
