@@ -29,6 +29,15 @@ extension MediaRepository {
         durationSeconds: Double?,
         played: Bool
     ) async {
+        if let rust {
+            do {
+                let state: MediaItem.PlayState = try rust.progress("playbackState", RustMediaRepository.Playback(
+                    itemID: itemID, positionSeconds: positionSeconds,
+                    durationSeconds: durationSeconds, played: played))
+                await applyPlayState(state, forItemID: itemID, persistToStore: true)
+            } catch { RustMediaRepository.report(error) }
+            return
+        }
         let previous = items[itemID]?.value.playState
         let state = MediaItem.PlayState.playbackProgress(
             positionSeconds: positionSeconds, durationSeconds: durationSeconds,
@@ -44,6 +53,11 @@ extension MediaRepository {
         recordedAt: Date? = nil
     ) async {
         let timestamp = recordedAt ?? now()
+        if let rust {
+            await recordSharedFinalProgress(rust, item: item, positionSeconds: positionSeconds,
+                durationSeconds: durationSeconds, recordedAt: timestamp)
+            return
+        }
         // 队列等待不改变操作先后：更早捕获的快照不能替换较新的内存事实。
         if let current = localProgress[item.id], current.recordedAt > timestamp { return }
         let previous = items[item.id]?.value.playState
@@ -92,6 +106,17 @@ extension MediaRepository {
     ) async {
         guard !isShutdown else { return }
         let timestamp = now()
+        if let rust {
+            do {
+                let result: RustMediaRepository.Applied = try rust.progress("apply", RustMediaRepository.Apply(
+                    itemID: itemID, state: state, persistToStore: persistToStore, now: timestamp))
+                if result.applied, persistToStore, let fallback = result.fallbackItem {
+                    await persist { try await $0.updatePlayState(state, forItemID: itemID,
+                        tenant: tenant, now: timestamp, fallbackItem: fallback) }
+                }
+            } catch { RustMediaRepository.report(error) }
+            return
+        }
         var progressItem = items[itemID]?.value ?? localProgress[itemID]?.item
             ?? MediaItem(id: itemID, name: itemID, kind: .other)
         progressItem.playState = state

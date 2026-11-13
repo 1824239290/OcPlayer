@@ -14,7 +14,11 @@ extension MediaRepository {
             try await store.pages(matching: descriptor.query, tenant: tenant)
         }), !rows.isEmpty else { return nil }
 
-        let content = Self.merge(rows: rows)
+        let content: MediaPageContent
+        if let rust {
+            do { content = try rust.compose("diskPage", RustMediaRepository.DiskPage(rows: rows.map(RustMediaRepository.DiskRow.init))) }
+            catch { RustMediaRepository.report(error); return nil }
+        } else { content = Self.merge(rows: rows) }
         guard !content.items.isEmpty else { return nil }
         let fetchedAt = rows.map(\.fetchedAt).min() ?? now()
         pages[descriptor] = MemoryEntry(value: content, fetchedAt: fetchedAt)
@@ -72,7 +76,16 @@ extension MediaRepository {
 
         page.items = await saveIncomingItems(page.items, requestStartedAt: requestStartedAt)
         var content: MediaPageContent
-        if startIndex == 0 {
+        if let rust {
+            let previous: MediaPageContent?
+            if startIndex == 0 { previous = nil }
+            else if let entry = pages[descriptor] { previous = entry.value }
+            else { previous = await cachedPage(descriptor, limit: limit)?.value }
+            content = try rust.compose("page", RustMediaRepository.Page(
+                items: page.items, totalRecordCount: page.totalRecordCount,
+                startIndex: startIndex, limit: limit, previous: previous,
+                requestStartedAt: requestStartedAt))
+        } else if startIndex == 0 {
             content = MediaPageContent(
                 items: page.items,
                 totalCount: page.totalRecordCount,
@@ -97,7 +110,7 @@ extension MediaRepository {
                 lastPageWasFull: page.items.count >= limit)
         }
 
-        content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt)
+        if rust == nil { content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt) }
         pages[descriptor] = MemoryEntry(value: content, fetchedAt: now())
         rememberItems(page.items)
         let persistedPage = page

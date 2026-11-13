@@ -22,8 +22,11 @@ opening remains available and is compared against actual persisted files.
 
 The complete protocol is in OcPlayer-Core's `docs/media-repository-contract.md`;
 raw verification records are in `docs/validation/2026-11-14-media-repository/`.
-The home/detail/page effect composition and actor-local progress/lifecycle
-coordinators remain migration work, alongside the broader parity requirements.
+Session-local progress reconciliation, confirmation/revision barriers, all
+projection updates and shutdown state now also run in Core; the existing local
+record map and flag serve explicit native mode only. The progress protocol is in
+OcPlayer-Core's `docs/media-repository-progress.md`. Home/detail/page effect
+composition remains migration work, alongside the broader parity requirements.
 Windows runtime testing remains deferred by the user.
 
 The prior enrichment validation report claimed asynchronous test fixture cleanup,
@@ -31,3 +34,14 @@ but source inspection showed the blocking waitUntilExit call remained. This
 cohort removes the blocking waits from both enrichment and wire fixtures,
 retains the stalled-run samples and revalidates the complete MetadataKit package. Historical raw reports are
 preserved; this correction supersedes only that cleanup claim.
+
+## Core composition policy
+
+Pagination recovery/append/replace, home restore/deduplication, default-season
+selection, detail planning and protected progress composition now dispatch to
+`mediaRepository.compose.*` on the repository's retained Core. Typed original
+Codable bytes keep signed integers and Foundation Date values exact. Native task
+handles, four parallel home effects, section failure/fallback assembly and disk
+await sequencing remain in Swift. Core-disabled paths stay independent for
+differential testing. The shared protocol and validation are in OcPlayer-Core's
+`docs/media-repository-composition.md`; full parity acceptance remains active.

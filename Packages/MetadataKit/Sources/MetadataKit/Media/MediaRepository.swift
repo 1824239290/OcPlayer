@@ -42,7 +42,8 @@ public actor MediaRepository {
     let now: @Sendable () -> Date
 
     var localProgress: [MediaItem.ID: LocalPlaybackProgress] = [:]
-    var isShutdown = false
+    private var nativeShutdown = false
+    var isShutdown: Bool { rust?.shutdownState ?? nativeShutdown }
     let rust: RustMediaRepository?
     var usesCoreRepository: Bool { rust != nil }
     private var nativeHomeEntry: MemoryEntry<MediaHomeContent>?
@@ -85,14 +86,15 @@ public actor MediaRepository {
     /// 会话结束：拒绝后续写盘并清掉内存投影，避免旧会话的在途请求在登出后
     /// 把缓存重新写回来。SQLite 内容按租户保留，不在这里删除。
     public func shutdown() {
-        isShutdown = true
+        if let rust { rust.shutdown(); return }
+        nativeShutdown = true
         invalidateMemory()
     }
 
     /// 清掉当前会话的内存投影。SQLite 内容仍属于租户，不应随视图或会话内存重置而删除。
     public func invalidateMemory(discardLocalProgress: Bool = false) {
+        if let rust { rust.invalidate(discardLocalProgress: discardLocalProgress); return }
         if discardLocalProgress { localProgress.removeAll() }
-        if let rust { rust.clear(); return }
         homeEntry = nil
         items.removeAll()
         details.removeAll()
@@ -141,6 +143,10 @@ public actor MediaRepository {
     }
 
     func deduplicatedNextUp(_ nextUp: [MediaItem], resume: [MediaItem]) -> [MediaItem] {
+        if let rust {
+            do { return try rust.compose("nextUp", RustMediaRepository.NextUp(nextUp: nextUp, resume: resume)) }
+            catch { RustMediaRepository.report(error); return [] }
+        }
         guard !nextUp.isEmpty, !resume.isEmpty else { return nextUp }
         let resumeIDs = Set(resume.map(\.id))
         return nextUp.filter { !resumeIDs.contains($0.id) }

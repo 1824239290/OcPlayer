@@ -55,7 +55,7 @@ extension MediaRepository {
         var memberTotal: Int?
         if cachedItem.item.kind == .series, let store {
             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
-            if let seasonID = Self.defaultSeasonID(in: seasons) {
+            if let seasonID = try? repositoryDefaultSeason(in: seasons) {
                 episodesSeasonID = seasonID
                 episodes = (await read {
                     try await $0.episodes(seriesID: itemID, seasonID: seasonID, tenant: tenant)
@@ -109,8 +109,11 @@ extension MediaRepository {
         let previous = await cachedDetail(itemID: itemID)?.value
         var failures: [String: MediaFailure] = [:]
         let kind = kindHint ?? previous?.item.kind
+        let initialPlan: String
+        if let rust { initialPlan = try rust.compose("detailPlan", RustMediaRepository.DetailPlan(kindHint: kindHint, previous: previous, item: nil)) }
+        else { initialPlan = kind == .series ? "series" : "item" }
 
-        if kind == .series {
+        if initialPlan == "series" {
             let requestStartedAt = now()
             async let seasonsPart = mediaLoadPart { try await server.seasons(seriesID: itemID) }
             let item = try await refreshItem(itemID: itemID)
@@ -121,7 +124,7 @@ extension MediaRepository {
             } else { seasons = previous?.seasons ?? [] }
             failures["seasons"] = seasonsResult.failure
 
-            let seasonID = Self.defaultSeasonID(in: seasons)
+            let seasonID = try repositoryDefaultSeason(in: seasons)
             var episodes: [MediaItem] = []
             if let seasonID {
                 let episodePart = await mediaLoadPart {
@@ -131,11 +134,9 @@ extension MediaRepository {
                     ?? (previous?.episodesSeasonID == seasonID ? previous?.episodes ?? [] : [])
                 failures["episodes"] = episodePart.failure
             }
-            let content = MediaDetailContent(
-                item: mergingLocalProgress([item], requestStartedAt: requestStartedAt)[0],
-                seasons: mergingLocalProgress(seasons, requestStartedAt: requestStartedAt),
-                episodesSeasonID: seasonID,
-                episodes: mergingLocalProgress(episodes, requestStartedAt: requestStartedAt))
+            let content = try repositoryDetail(MediaDetailContent(
+                item: item, seasons: seasons, episodesSeasonID: seasonID, episodes: episodes),
+                requestStartedAt: requestStartedAt)
             rememberItems(content.seasons + content.episodes)
             details[itemID] = MemoryEntry(value: content, fetchedAt: now())
             return MediaDetailRefresh(
@@ -144,7 +145,10 @@ extension MediaRepository {
 
         let requestStartedAt = now()
         let item = try await refreshItem(itemID: itemID)
-        if item.kind == .boxSet || kind == .boxSet {
+        let finalPlan: String
+        if let rust { finalPlan = try rust.compose("detailPlan", RustMediaRepository.DetailPlan(kindHint: kindHint, previous: previous, item: item)) }
+        else { finalPlan = item.kind == .boxSet || kind == .boxSet ? "members" : (item.kind == .series ? "retrySeries" : "item") }
+        if finalPlan == "members" {
             let descriptor = Self.collectionDescriptor(itemID: itemID)
             let memberPart = await mediaLoadPart {
                 try await self.refreshPage(
@@ -154,17 +158,16 @@ extension MediaRepository {
             let memberTotal = memberPart.value?.value.totalCount
                 ?? previous?.collectionMembersTotalCount
             failures["members"] = memberPart.failure
-            let content = MediaDetailContent(
-                item: mergingLocalProgress([item], requestStartedAt: requestStartedAt)[0],
-                collectionMembers: mergingLocalProgress(members, requestStartedAt: requestStartedAt),
-                collectionMembersTotalCount: memberTotal)
+            let content = try repositoryDetail(MediaDetailContent(
+                item: item, collectionMembers: members, collectionMembersTotalCount: memberTotal),
+                requestStartedAt: requestStartedAt)
             details[itemID] = MemoryEntry(value: content, fetchedAt: now())
             return MediaDetailRefresh(
                 snapshot: snapshot(content, fetchedAt: now(), source: .network), failures: failures)
         }
 
         // 列表 kind 偶发缺失时以完整详情为准补一季列表。
-        if item.kind == .series {
+        if finalPlan == "retrySeries" {
             return try await performDetailRefresh(itemID: itemID, kindHint: .series)
         }
         let content = MediaDetailContent(item: item)

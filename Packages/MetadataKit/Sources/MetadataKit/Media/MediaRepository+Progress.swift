@@ -14,6 +14,12 @@ extension MediaRepository {
                 MetadataLog.logger.warning("媒体数据写入失败（保留内存结果）", fields: ["error": .string("\(error)")])
             }
         }
+        if let rust {
+            do { return try rust.progress("incoming", RustMediaRepository.Incoming(
+                incoming: incoming, merged: merged, rail: rail,
+                requestStartedAt: requestStartedAt, now: now())) }
+            catch { RustMediaRepository.report(error); return merged }
+        }
         // await 落库期间也可能刚退出播放；再次合并当前 actor 的末次进度。
         for remote in incoming {
             if let progress = localProgress[remote.id], !progress.protects(requestStartedAt: requestStartedAt) {
@@ -39,7 +45,12 @@ extension MediaRepository {
     }
 
     func mergingLocalProgress(_ items: [MediaItem], requestStartedAt: Date) -> [MediaItem] {
-        items.map { item in
+        if let rust {
+            do { return try rust.progress("merge", RustMediaRepository.Merge(
+                items: items, requestStartedAt: requestStartedAt)) }
+            catch { RustMediaRepository.report(error); return items }
+        }
+        return items.map { item in
             guard let progress = localProgress[item.id], progress.protects(requestStartedAt: requestStartedAt)
             else { return item }
             var updated = item
