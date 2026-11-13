@@ -495,6 +495,42 @@ existing source-scanning AppTest briefly stalled inside a system directory-open
 call, then resumed and passed; its sample and full test log remain available.
 Neither event is reported as a passing initial run.
 
-AniList identity matching/persistence, complete shared async loading/manual
+Complete shared async loading/manual
 selection/promotion, native idle/resource deadline and broader transport fidelity,
 and the other acceptance rows remain open. Windows runtime testing is deferred.
+
+## AniList identity and ID persistence follow-up
+
+AniList lookup/search orchestration, title deduplication, candidate matching,
+SHA-256 cache keys, positive/negative-cache plans and `aniskip-ids.json` now run
+in Core. The macOS resolver and store share one handle and cached record map.
+Injected transport fixtures retain Swift requests with shared policy; native
+resolver/matching/storage paths remain independent comparison oracles. A
+cancelled miss does not write a negative record. Native file compatibility,
+legacy partial IDs, seven-day expiration, forced refresh, ordered fallbacks,
+post-request clock sampling and failed atomic-write memory behavior are covered.
+
+Eight new Swift cases include 900 Unicode title/key and 900 matching corpora.
+They exposed a Greek final-sigma lowercase difference, now fixed to preserve
+Swift behavior. Initial failures are retained alongside the passing rerun. Six
+new C ABI cases independently exercise resolution, persistence and cancellation.
+
+The complete verification passes Rust 87, exported Apple binding 14 and direct
+ABI 63. Native packages pass OcPlayerCore 14, JellyfinKit 255, MetadataKit 306,
+MoviePilotKit 124, BangumiKit 99, PlaybackKit 96 and DanmakuKit 262. Application
+tests pass 1008 total: 989 passed, 19 skipped, zero failures. Core-disabled
+DanmakuKit passes 262 total: 228 passed, 34 skipped, zero failures. A 52-file
+hash-verified source copy independently passes all 87 locked/offline Rust tests.
+
+The rebuilt signed application with embedded Core passes a ten-second playback
+control smoke on a twenty-second clip: pause/play, 70% seek to fourteen seconds,
+window resize, rate changes and 20% seek to four seconds. Rendering/audio
+failure counters remain zero. Exact raw output and the saved initial rate are
+recorded in `validation/2026-11-13-intro-identity/`. The application source scan
+paused in system directory enumeration and resumed; its diagnostic sample and
+complete passing run are preserved.
+
+See [intro-identity-contract.md](intro-identity-contract.md). Complete shared
+Danmaku async load/manual/promotion orchestration, transport deadline/TLS/redirect/
+streaming fidelity and the broader parity rows remain active. Windows runtime
+testing remains deferred as requested; this cohort does not complete the goal.
