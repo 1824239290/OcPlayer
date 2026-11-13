@@ -1,0 +1,10 @@
+{
+  "exported/Package.swift": "8cf148524400cf2dbb3eeec3bc7d956831aaba53d41db7c75a4806bb9b970aa3",
+  "exported/Sources/OcPlayerCore/OcpDanmakuLoader.swift": "31934ea7e1457337a721cbac66c7e908b6256b65a1cabbdf9fec55b057e80057",
+  "exported/Tests/OcPlayerCoreTests/OcpDanmakuLoaderTests.swift": "a9a7b108fb2c6bfe9ac4683f82d183b7dba9caa625513b01c1912824398fb17a",
+  "exported/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py": "d2c105d611ac5fb87539f1a0e0b03364b9b1a0b985341e9425de699215e57fe0",
+  "native/Package.swift": "8cf148524400cf2dbb3eeec3bc7d956831aaba53d41db7c75a4806bb9b970aa3",
+  "native/Sources/OcPlayerCore/OcpDanmakuLoader.swift": "31934ea7e1457337a721cbac66c7e908b6256b65a1cabbdf9fec55b057e80057",
+  "native/Tests/OcPlayerCoreTests/OcpDanmakuLoaderTests.swift": "a9a7b108fb2c6bfe9ac4683f82d183b7dba9caa625513b01c1912824398fb17a",
+  "native/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py": "d2c105d611ac5fb87539f1a0e0b03364b9b1a0b985341e9425de699215e57fe0"
+}

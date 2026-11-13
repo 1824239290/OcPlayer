@@ -13,6 +13,7 @@ use ocp_session::{PlaybackCandidate, PlaybackFailure, PlaybackFailureCategory, P
 use serde_json::{json, Value};
 use thiserror::Error;
 
+mod danmaku_load;
 mod events;
 mod network;
 mod probe;
@@ -367,7 +368,13 @@ impl Core {
                     cancelled.clone(),
                 )
             } else {
-                run_domain_command(&service, method, &arguments, cancelled.clone())
+                run_domain_command(
+                    &service,
+                    method,
+                    &arguments,
+                    self.state.clone(),
+                    cancelled.clone(),
+                )
             };
             let response = match result {
                 Ok(data) => ApiResponse::ok(data),
@@ -1962,11 +1969,13 @@ fn run_domain_command(
     service: &network::NetworkService,
     method: &str,
     arguments: &Value,
+    state: Arc<Mutex<State>>,
     cancelled: Option<Arc<AtomicBool>>,
 ) -> Result<Value, (i32, bool, String)> {
     let method = method.to_owned();
     let arguments = arguments.clone();
     let http = service.http();
+    let load_cancelled = cancelled.clone();
     service
         .run(cancellable(cancelled, async move {
             match method.as_str() {
@@ -2218,46 +2227,7 @@ fn run_domain_command(
                         )
                         .await?)
                 }
-                "danmaku.load" => {
-                    let config: ocp_danmaku::GatewayConfig = serde_json::from_value(
-                        arguments.get("gateway").cloned().unwrap_or(Value::Null),
-                    )
-                    .map_err(|error| {
-                        CommandError::invalid(format!("invalid gateway config: {error}"))
-                    })?;
-                    let request: ocp_danmaku::MatchRequest = serde_json::from_value(
-                        arguments
-                            .get("matchRequest")
-                            .cloned()
-                            .unwrap_or(Value::Null),
-                    )
-                    .map_err(|error| {
-                        CommandError::invalid(format!("invalid matchRequest: {error}"))
-                    })?;
-                    let gateway = ocp_danmaku::DanmakuGateway::with_http(config, http.clone());
-                    let matched = gateway.match_file(&request).await?;
-                    let mut loaded = Vec::new();
-                    for candidate in &matched.matches {
-                        let response = gateway.comments(candidate.episode_id).await?;
-                        let wire_comments = response
-                            .comments
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(|comment| ocp_danmaku::DanmakuWireComment {
-                                cid: comment.cid,
-                                p: comment.p,
-                                m: comment.m,
-                            })
-                            .collect::<Vec<_>>();
-                        let entries = ocp_danmaku::convert_comments(&wire_comments);
-                        loaded.push(json!({
-                            "candidate": candidate,
-                            "count": entries.len(),
-                            "comments": entries
-                        }));
-                    }
-                    Ok(json!({ "match": matched, "episodes": loaded }))
-                }
+                "danmaku.load" => danmaku_load::run(state, http, &arguments, load_cancelled).await,
                 _ => unreachable!("domain command dispatch is exhaustive"),
             }
         }))

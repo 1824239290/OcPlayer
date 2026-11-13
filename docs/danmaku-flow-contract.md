@@ -23,7 +23,7 @@ All results are wrapped in `payloadJSON` to preserve signed 64-bit identifiers.
 
 Configuration contains `mode` (`automatic` or `manual`), `context`, optional
 `forceRematch`, `budgetSeconds`, `hasAliases`, `hasLearning`, and manual
-`matchValue`. Context fields mirror DanmakuMatchContext: filename, title/original
+`matchValue`, and `delivery` (`player` by default, or `data`). Context fields mirror DanmakuMatchContext: filename, title/original
 title, episode/season, TMDB IDs, MAL/AniList IDs, movie/final/special identity,
 file size, duration and cached-match reuse. The adapter binds the playback UUID,
 cache key and revision to that flow; these cannot change between effects.
@@ -102,7 +102,8 @@ compare 1200 numeric/Unicode corpora across three formats, native manual/cached
 control flow and the two post-await races. Original implementations remain
 available as control-flow/rendering comparison oracles.
 
-The old `danmaku.load` shortcut and its standalone loader remain legacy interfaces;
-their replacement, App-side learning-promotion propagation and broader macOS
-parity acceptance are still open. This migration does not mark the full goal
-complete or claim Windows runtime validation.
+`danmaku.load` now executes the same complete state machine for a data consumer;
+see [standalone-danmaku-contract.md](standalone-danmaku-contract.md). Manual-seek
+learning promotion/propagation also executes in Core; see
+[intro-contract.md](intro-contract.md). Broader macOS acceptance remains open;
+this does not mark the full goal complete or claim Windows runtime validation.

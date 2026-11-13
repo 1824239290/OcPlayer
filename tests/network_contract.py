@@ -151,7 +151,7 @@ class NetworkContract(unittest.TestCase):
         self.success('bangumi.request', url=self.base + '/raw', headers={'Authorization': 'Bearer bangumi', 'User-Agent': 'bgm-fixture'})
         self.success('tmdb.search', apiBase=self.base, apiKey='tmdb-fixture', query='fixture')
         self.success('danmaku.load', gateway={'base_url': self.base, 'api_key': 'danmaku', 'user_agent': 'danmaku-fixture'},
-                     matchRequest={'fileHash': 'fixture', 'matchMode': 'hashOnly'})
+                     matchRequest={'fileHash': 'a' * 32, 'matchMode': 'hashOnly'})
         self.success('server.probe', profile={'id': 'fixture', 'kind': 'jellyfin', 'baseURL': self.base,
                                               'authorizationHeader': 'server-fixture', 'userAgent': 'jf-fixture'})
         records = self.server.records

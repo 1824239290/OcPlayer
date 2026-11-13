@@ -1,0 +1,81 @@
+{
+  "goalComplete": false,
+  "cohort": "complete standalone Danmaku data delivery through the shared automatic/manual loading flow",
+  "rustTests": 95,
+  "directABI": {
+    "bangumi": 4,
+    "danmaku-cache": 6,
+    "danmaku": 4,
+    "danmaku-flow": 6,
+    "danmaku-policy": 4,
+    "intro": 9,
+    "intro-identity": 6,
+    "intro-provider": 6,
+    "media-login": 10,
+    "moviepilot": 10,
+    "network": 7,
+    "standalone": 10
+  },
+  "directABITotal": 82,
+  "exportedAppleBindingTests": 17,
+  "newRustFlowTests": 2,
+  "newStandaloneABITests": 10,
+  "newPublicAppleLoaderTests": 3,
+  "nativePackages": {
+    "OcPlayerCore": 17,
+    "JellyfinKit": 255,
+    "MetadataKit": 306,
+    "MoviePilotKit": 124,
+    "BangumiKit": 99,
+    "PlaybackKit": 96,
+    "DanmakuKit": 272
+  },
+  "nativePackageFailures": 0,
+  "coreDisabledDanmakuKit": {
+    "total": 272,
+    "passed": 228,
+    "skipped": 44,
+    "failed": 0
+  },
+  "macOSAppTests": {
+    "total": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "independentRustSourceCopy": {
+    "files": 52,
+    "hashesMatchCurrentSource": true,
+    "locked": true,
+    "offline": true,
+    "tests": 95
+  },
+  "macOSDebugApplicationBuilt": true,
+  "xcodeDerivedDataReused": true,
+  "app": "/tmp/ocplayer-standalone-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "builtCoreSha256": "fa8cc1d860472c0ec42c6f48d6c4a3566e24a2d002cb8d0490e699ee66abc350",
+  "signedBundledCoreSha256": "849c9ce6a8ec56fc1590041a1d8d45de669a0af7703b6c233f365583074a43cd",
+  "deepSignatureVerificationPassed": true,
+  "bundledSelftest": {
+    "durationSeconds": 10,
+    "clipSeconds": 20,
+    "completed": true,
+    "pausePlay": true,
+    "seek70Percent": 14.0,
+    "seek20Percent": 4.0,
+    "initialSavedRate": 2.0,
+    "finalRate": 1.0,
+    "resize": true,
+    "renderFailures": 0,
+    "audioFailures": 0
+  },
+  "windowsRuntimeTested": false,
+  "remaining": [
+    "metadata/account scheduling",
+    "playback source/track preferences and recovery orchestration",
+    "native deadline/TLS/redirect/streaming fidelity",
+    "configuration/diagnostics mapping",
+    "Apple release delivery and Windows adapter implementation"
+  ],
+  "preliminaryEvidence": "The initial locked Cargo dependency-graph rejection, earlier 93-test Rust runs, eight-case ABI run and three-case focused binding run are preserved separately. Final complete passing evidence is in full-verification; the independent offline source run and Core-disabled Danmaku run have separate logs."
+}

@@ -19,3 +19,4 @@ unicode-normalization.workspace = true
 url.workspace = true
 base64.workspace = true
 unicode-segmentation.workspace = true
+tokio.workspace = true

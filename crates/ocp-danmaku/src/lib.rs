@@ -18,6 +18,7 @@ pub mod flow;
 pub mod identity;
 pub mod intro;
 mod intro_unicode;
+pub mod load_wire;
 pub mod policy;
 pub mod providers;
 pub mod render;

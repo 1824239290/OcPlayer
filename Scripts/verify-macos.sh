@@ -16,6 +16,7 @@ export OCP_CORE_LIBRARY_PATH="$output_dir/libocp_ffi.dylib"
 export OCP_CORE_ENABLED=1
 Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-equivalence.log" 2>&1
 cmp tests/intro_provider_server.py "$apple_root/Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py" > "$output_dir/intro-provider-fixture-equivalence.log" 2>&1
+cmp tests/standalone_danmaku_server.py "$apple_root/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py" > "$output_dir/standalone-fixture-equivalence.log" 2>&1
 swift test --package-path bindings/apple/OcPlayerCore --scratch-path "$output_dir/AppleBindingBuild" > "$output_dir/apple-binding-tests.log" 2>&1
 python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&1
 python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&1
@@ -28,6 +29,7 @@ python3 tests/intro_contract.py > "$output_dir/intro-contract-tests.log" 2>&1
 python3 tests/intro_provider_contract.py > "$output_dir/intro-provider-contract-tests.log" 2>&1
 python3 tests/intro_identity_contract.py > "$output_dir/intro-identity-contract-tests.log" 2>&1
 python3 tests/danmaku_flow_contract.py > "$output_dir/danmaku-flow-contract-tests.log" 2>&1
+python3 tests/standalone_danmaku_contract.py > "$output_dir/standalone-contract-tests.log" 2>&1
 for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done

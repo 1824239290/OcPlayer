@@ -7,6 +7,6 @@ let package = Package(
     products: [.library(name: "OcPlayerCore", targets: ["OcPlayerCore"])],
     targets: [
         .target(name: "OcPlayerCore"),
-        .testTarget(name: "OcPlayerCoreTests", dependencies: ["OcPlayerCore"]),
+        .testTarget(name: "OcPlayerCoreTests", dependencies: ["OcPlayerCore"], resources: [.copy("Fixtures")]),
     ]
 )

@@ -43,6 +43,9 @@ Core; see [`docs/intro-identity-contract.md`](docs/intro-identity-contract.md).
 Automatic/manual loading now uses a resumable Core flow, including matching
 budgets, payload conversion and intro precedence; see
 [`docs/danmaku-flow-contract.md`](docs/danmaku-flow-contract.md).
+The standalone `danmaku.load` command and Apple loader now use that same complete
+flow for a data consumer; see
+[`docs/standalone-danmaku-contract.md`](docs/standalone-danmaku-contract.md).
 Manual-seek confirmation and source-protected cross-episode learning promotion
 share the same retained cache Core; see the complete workflow in
 [`docs/intro-contract.md`](docs/intro-contract.md). Broader acceptance remains

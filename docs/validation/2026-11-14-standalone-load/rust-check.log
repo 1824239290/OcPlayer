@@ -1,0 +1,18 @@
+    Checking serde_json v1.0.154
+    Checking cpufeatures v0.2.17
+    Checking sha2 v0.10.9
+    Checking cookie_store v0.22.1
+    Checking ocp-model v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-model)
+    Checking ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+    Checking reqwest v0.12.28
+    Checking ocp-session v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-session)
+    Checking ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+    Checking ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+    Checking ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+    Checking ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+    Checking ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+    Checking ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+    Checking ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Checking ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Checking ocp-cli v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.75s

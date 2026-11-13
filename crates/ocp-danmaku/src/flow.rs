@@ -49,6 +49,8 @@ struct Context {
 #[serde(rename_all = "camelCase")]
 struct Config {
     mode: String,
+    #[serde(default = "player_delivery")]
+    delivery: String,
     #[serde(default)]
     context: Context,
     #[serde(default)]
@@ -60,6 +62,9 @@ struct Config {
     #[serde(default)]
     has_learning: bool,
     match_value: Option<EpisodeMatch>,
+}
+fn player_delivery() -> String {
+    "player".to_owned()
 }
 fn default_budget() -> f64 {
     30.0
@@ -147,6 +152,7 @@ struct Engine {
 impl Engine {
     fn begin(mut config: Config) -> Result<Self, FlowError> {
         if !matches!(config.mode.as_str(), "automatic" | "manual")
+            || !matches!(config.delivery.as_str(), "player" | "data")
             || !config.budget_seconds.is_finite()
         {
             return Err(invalid("invalid mode or budgetSeconds"));
@@ -382,6 +388,13 @@ impl Engine {
         self.finish(json!({"kind":if self.has_payload {"loaded"}else{"empty"},"episodeID":self.match_value().episode_id,
             "commentCount":self.comment_count,"title":self.name(),"introHint":self.hint}));
     }
+    fn after_delivery(&mut self) {
+        if self.config.force_rematch {
+            self.community();
+        } else {
+            self.emit("cachedIntro", json!({}));
+        }
+    }
     fn select_hint(&mut self, hint: IntroHint) {
         self.hint = Some(hint);
         self.emit("persistIntro", json!({"hint":self.hint}));
@@ -610,7 +623,11 @@ impl Engine {
                         .unwrap_or(Value::Null),
                 )?;
                 if self.check_current(reply.current) {
-                    self.emit("waitReady", json!({"timeoutSeconds":30}));
+                    if self.config.delivery == "data" {
+                        self.after_delivery();
+                    } else {
+                        self.emit("waitReady", json!({"timeoutSeconds":30}));
+                    }
                 }
             }
             "waitReady" => {
@@ -629,10 +646,8 @@ impl Engine {
                 }
                 if value != true {
                     self.fail("视频未就绪，弹幕未装载");
-                } else if self.config.force_rematch {
-                    self.community();
                 } else {
-                    self.emit("cachedIntro", json!({}));
+                    self.after_delivery();
                 }
             }
             "cachedIntro" => {
@@ -792,6 +807,67 @@ mod tests {
     }
     fn kind(state: &Value) -> &str {
         state["effect"]["kind"].as_str().unwrap()
+    }
+    #[test]
+    fn data_delivery_reuses_cache_and_resolves_intro_without_player_effects() {
+        let (mut d, mut s) = begin(
+            json!({"mode":"automatic","delivery":"data","context":{"allowsCachedMatchReuse":true}}),
+        );
+        advance(&mut d, &mut s, Value::Null, 0.0);
+        assert_eq!(kind(&s), "cachedMatch");
+        advance(
+            &mut d,
+            &mut s,
+            json!({"episodeID":50001,"shiftSeconds":1}),
+            0.0,
+        );
+        advance(&mut d, &mut s, Value::Null, 0.0);
+        advance(&mut d, &mut s, json!({"hit":true}), 0.0);
+        assert_eq!(kind(&s), "render");
+        advance(
+            &mut d,
+            &mut s,
+            json!({"hasEntries":true,"commentCount":3}),
+            0.0,
+        );
+        assert_eq!(kind(&s), "cachedIntro");
+        advance(
+            &mut d,
+            &mut s,
+            json!({"endSeconds":90,"evidenceCount":2,"source":"learned"}),
+            0.0,
+        );
+        assert_eq!(s["outcome"]["kind"], "loaded");
+        assert_eq!(s["outcome"]["introHint"]["source"], "learned");
+        assert_eq!(d.call("stats", &json!({})).unwrap()["active"], 0);
+    }
+    #[test]
+    fn manual_data_delivery_forces_detection_and_preserves_empty_outcome() {
+        let (mut d, mut s) = begin(
+            json!({"mode":"manual","delivery":"data","matchValue":{"episodeID":50001,"shiftSeconds":0}}),
+        );
+        advance(&mut d, &mut s, Value::Null, 0.0);
+        advance(
+            &mut d,
+            &mut s,
+            json!({"endSeconds":90,"evidenceCount":2,"source":"aniskip"}),
+            0.0,
+        );
+        advance(&mut d, &mut s, json!({"hit":true}), 0.0);
+        assert_eq!(s["effect"]["arguments"]["detectingIntro"], true);
+        advance(
+            &mut d,
+            &mut s,
+            json!({"hasEntries":false,"hasJSON":false,"commentCount":4,"detectedIntroHint":{"endSeconds":130,"evidenceCount":3}}),
+            0.0,
+        );
+        assert_eq!(kind(&s), "siblings");
+        advance(&mut d, &mut s, json!([]), 0.0);
+        assert_eq!(kind(&s), "persistIntro");
+        advance(&mut d, &mut s, Value::Null, 0.0);
+        assert_eq!(s["outcome"]["kind"], "empty");
+        assert_eq!(s["outcome"]["commentCount"], 4);
+        assert_eq!(s["outcome"]["introHint"]["endSeconds"], 130.0);
     }
     #[test]
     fn waterfall_keeps_eight_requests_and_finishes_without_false_budget_cut() {
