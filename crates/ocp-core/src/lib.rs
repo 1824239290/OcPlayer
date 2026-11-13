@@ -47,6 +47,7 @@ struct State {
     engine_events: ocp_session::engine::EngineEvents,
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
+    danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -132,6 +133,7 @@ impl Core {
                 engine_events: Default::default(),
                 store,
                 bangumi_store: None,
+                danmaku_cache: None,
                 endpoint: None,
             })),
         };
@@ -318,6 +320,29 @@ impl Core {
                 match call_endpoint_policy(&mut state, method, &arguments) {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            "danmakuCache.open" => match ocp_danmaku::cache::DanmakuCache::open(&arguments) {
+                Ok(cache) => {
+                    state.danmaku_cache = Some(cache);
+                    ApiResponse::ok(json!({"opened":true}))
+                }
+                Err(error) => ApiResponse::error(1002, false, error.to_string(), Value::Null),
+            },
+            method if method.starts_with("danmakuCache.") => {
+                let Some(cache) = state.danmaku_cache.as_mut() else {
+                    return Ok(error_response(
+                        1401,
+                        false,
+                        "danmaku cache is not configured",
+                    ));
+                };
+                match cache.call(method.trim_start_matches("danmakuCache."), &arguments) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(ocp_danmaku::cache::CacheError::Invalid(message)) => {
+                        ApiResponse::error(1002, false, message, Value::Null)
+                    }
+                    Err(error) => ApiResponse::error(1402, false, error.to_string(), Value::Null),
                 }
             }
             method if method.starts_with("bangumiStore.") => {

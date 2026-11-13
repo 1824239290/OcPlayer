@@ -1,0 +1,120 @@
+{
+  "goalComplete": false,
+  "scope": "Shared danmaku mapping/comment/saved-intro cache and Apple adapter",
+  "rust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "independentSourceRust": {
+    "passed": 79,
+    "failed": 0
+  },
+  "sourceCopyFiles": 45,
+  "packages": {
+    "OcPlayerCore": {
+      "executed": 14,
+      "passed": 14,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "executed": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "executed": 306,
+      "passed": 306,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "executed": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "executed": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "executed": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "executed": 240,
+      "passed": 240,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "exportedAppleBinding": {
+    "executed": 14,
+    "passed": 14,
+    "skipped": 0,
+    "failed": 0
+  },
+  "cABI": {
+    "bangumi": {
+      "passed": 4,
+      "failed": 0
+    },
+    "network": {
+      "passed": 7,
+      "failed": 0
+    },
+    "moviepilot": {
+      "passed": 10,
+      "failed": 0
+    },
+    "media-login": {
+      "passed": 10,
+      "failed": 0
+    },
+    "danmaku": {
+      "passed": 4,
+      "failed": 0
+    },
+    "danmaku-policy": {
+      "passed": 4,
+      "failed": 0
+    },
+    "danmaku-cache": {
+      "passed": 6,
+      "failed": 0
+    }
+  },
+  "macOSApp": {
+    "executed": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "coreDisabledDanmaku": {
+    "executed": 240,
+    "passed": 228,
+    "skipped": 12,
+    "failed": 0
+  },
+  "nativeCacheInteroperability": {
+    "executed": 3,
+    "passed": 3,
+    "skipped": 0,
+    "failed": 0
+  },
+  "macOSBuild": "passed",
+  "coreEmbedAndSignature": "passed",
+  "builtLibrarySHA256": "096c5a06f97fc1bc0adb13da81ba2e763d2a0bb59a354848dd66dba46616909b",
+  "remaining": "Shared resolver scheduling, intro detection/learning/provider policy, other rows in docs/macos-parity.md; Windows runtime tests deferred.",
+  "bundledPlaybackControls": {
+    "status": "passed",
+    "renderFailures": 0,
+    "audioFailures": 0
+  }
+}

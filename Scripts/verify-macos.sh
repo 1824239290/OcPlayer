@@ -22,6 +22,7 @@ python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.lo
 python3 tests/media_login_contract.py > "$output_dir/media-login-contract-tests.log" 2>&1
 python3 tests/danmaku_contract.py > "$output_dir/danmaku-contract-tests.log" 2>&1
 python3 tests/danmaku_policy_contract.py > "$output_dir/danmaku-policy-contract-tests.log" 2>&1
+python3 tests/danmaku_cache_contract.py > "$output_dir/danmaku-cache-contract-tests.log" 2>&1
 for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done

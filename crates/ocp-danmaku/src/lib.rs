@@ -12,6 +12,7 @@ use std::io::Read;
 use std::path::Path;
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
+pub mod cache;
 mod filename;
 pub mod policy;
 

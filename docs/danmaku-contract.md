@@ -28,8 +28,9 @@ loaded every candidate's comments and reconstructed comments without their IDs
 or original modes. Removing that shortcut keeps the complete native matching,
 cache/revision checks, alias fallback, manual selection, intro providers and
 learning, readiness and generation guards on the production path while the HTTP
-work runs through Core. Those orchestration/persistence policies still need
-shared implementation for Windows parity; this change does not close that work.
+work runs through Core. Resolver scheduling and intro policies still need
+shared implementation for Windows parity. Saved mappings/comments/intro hints
+now use the [shared cache](danmaku-cache-contract.md).
 
 `tests/danmaku_contract.py` checks the exported C ABI against a real local
 HTTP/1.1 server. Native RustDanmakuIntegrationTests verify default activation,
@@ -77,6 +78,7 @@ native policy bodies. Direct C ABI fixtures additionally check thresholds,
 namespace order, type gates, malformed arguments, rank/tie behavior, Unicode,
 large integer token strings and zero network requests.
 
-The HTTP/match/search/cache/intro orchestration and cache persistence are still
-owned by the native service. Shared scheduling, cache and intro-policy migration
-remain necessary for complete platform parity.
+The HTTP/match/search/intro orchestration remains owned by the native service.
+Cache persistence, TTL, LRU and revision barriers now run in Core through the
+retained RustDanmakuCache. Shared scheduling and intro-policy migration remain
+necessary for complete platform parity.

@@ -29,6 +29,11 @@ and byte-preserving low-level exchanges through Core. Its wire/retry boundaries
 and native credential lifecycle are documented in
 [`docs/moviepilot-contract.md`](docs/moviepilot-contract.md).
 
+Danmaku matching policy and mapping/comment/intro-hint persistence now run in
+Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,
+bounded LRU memory and revision guards are documented in
+[`docs/danmaku-cache-contract.md`](docs/danmaku-cache-contract.md).
+
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults
 flag) is set; native decoding/rendering remains the platform adapter. The

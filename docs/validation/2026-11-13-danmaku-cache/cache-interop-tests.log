@@ -1,0 +1,23 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[7 / 18] DanmakuKitTests-product
+[9 / 20] DanmakuKitTests-product
+[15 / 19] DanmakuKitTests-product
+Build complete! (1.50秒)
+Test Suite 'Selected tests' started at 2026-11-13 20:46:36.316.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 20:46:36.317.
+Test Suite 'RustDanmakuCacheTests' started at 2026-11-13 20:46:36.317.
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testLegacyFilesAndCorruptMappingRecoverWithoutDataLoss]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testLegacyFilesAndCorruptMappingRecoverWithoutDataLoss]' passed (0.014 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testNativeAndCoreFilesAreBidirectionallyCompatible]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testNativeAndCoreFilesAreBidirectionallyCompatible]' passed (0.020 seconds).
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testUInt64RevisionBarrierSurvivesTheSwiftABIProjection]' started.
+Test Case '-[DanmakuKitTests.RustDanmakuCacheTests testUInt64RevisionBarrierSurvivesTheSwiftABIProjection]' passed (0.011 seconds).
+Test Suite 'RustDanmakuCacheTests' passed at 2026-11-13 20:46:36.362.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.045 (0.045) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 20:46:36.362.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.045 (0.045) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 20:46:36.362.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.045 (0.046) seconds
