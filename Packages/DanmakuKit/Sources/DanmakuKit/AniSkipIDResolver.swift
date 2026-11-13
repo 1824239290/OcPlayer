@@ -1,9 +1,10 @@
 import CryptoKit
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 一次 MAL ID 解析所需的番剧身份信息（全部可选，至少要有一项可解析的线索）。
-public struct AniSkipAnimeIdentity: Sendable, Equatable {
+public struct AniSkipAnimeIdentity: Codable, Sendable, Equatable {
     /// 直接来自 Jellyfin ProviderIds 的 MyAnimeList ID（零网络，最优先）。
     public let malID: Int?
     /// ProviderIds 里的 AniList ID（一次 GraphQL 换算成 MAL）。
@@ -38,13 +39,17 @@ public struct AniSkipAnimeIdentity: Sendable, Equatable {
     /// AniList 搜索候选：主标题在前，按归一形态去重滤空（全半角/大小写/标点
     /// 视为同一标题，避免同一标题搜两遍白耗限流额度）。
     var searchTitles: [String] {
+        if let policy = RustDanmakuPolicy.active { return policy.identity("searchTitles", value: self) }
+        return searchTitlesNative
+    }
+    var searchTitlesNative: [String] {
         var seen = Set<String>()
         var titles: [String] = []
         for candidate in [title] + alternativeTitles {
             let trimmed = (candidate ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
-            let normalized = DanmakuFilenameParser.comparableTitle(trimmed)
+            let normalized = DanmakuFilenameParser.comparableTitleNative(trimmed)
             guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
             titles.append(trimmed)
         }
@@ -55,7 +60,7 @@ public struct AniSkipAnimeIdentity: Sendable, Equatable {
 /// 一次身份解析的结果。`anilistID` 供 anime-skip 这类按 AniList 索引的源复用;
 /// **两者都为 nil 才算解析失败**(负缓存)——AniList 条目可能只有 id 没有 idMal,
 /// 此时 AniSkip 查不了,但 anime-skip 还能用。
-public struct AniSkipResolvedIDs: Sendable, Equatable {
+public struct AniSkipResolvedIDs: Codable, Sendable, Equatable {
     public let malID: Int?
     public let anilistID: Int?
 
@@ -89,18 +94,18 @@ public struct AniSkipIDRecord: Codable, Sendable, Equatable {
 struct AniListClient: Sendable {
     let session: URLSession
     private let baseURL: URL
-    private let core: RustIntroProvider?
+    let core: RustIntroProvider?
     var usesCoreTransport: Bool { core != nil }
 
-    init(session: URLSession, baseURL: URL = URL(string: "https://graphql.anilist.co")!) {
+    init(session: URLSession, baseURL: URL = URL(string: "https://graphql.anilist.co")!, sharedCore: OcpCoreClient? = nil) {
         self.session = session
         self.baseURL = baseURL
-        core = RustIntroProvider.make(session: session, provider: "aniList", baseURL: baseURL)
+        core = RustIntroProvider.make(session: session, provider: "aniList", baseURL: baseURL, sharedCore: sharedCore)
     }
 
     /// 搜索响应里的一条候选条目。字段全可缺（GraphQL 只返回所请求的字段，
     /// 测试响应可以只带 idMal）。
-    struct SearchMedia: Sendable {
+    struct SearchMedia: Codable, Sendable {
         let anilistID: Int?
         let idMal: Int?
         let native: String?
@@ -114,7 +119,7 @@ struct AniListClient: Sendable {
     }
 
     /// 命中规则（进日志，排查「为什么认成了这一条」）。
-    enum MatchRule: String, Sendable {
+    enum MatchRule: String, Codable, Sendable {
         /// 归一化后与标题/别名完全一致。
         case exact
         /// 归一化后被候选标题包含（原生标题带副标题装饰的集，如
@@ -131,13 +136,40 @@ struct AniListClient: Sendable {
     /// 因此按官方推荐做客户端过滤：先在候选里找归一化相等/包含的条目，全部
     /// 落空再退到「第一个带 idMal」的旧行为。多候选标题按序尝试，任一命中短路。
     func resolveIDs(anilistID: Int?, searchTitles: [String]) async -> AniSkipResolvedIDs {
+        if let core {
+            do {
+                let result = try await core.resolveIDs(anilistID: anilistID, titles: searchTitles)
+                logResolution(result)
+                return result.ids
+            } catch {
+                NetworkLog.report(category: "AniList", level: .warning, "共享 ID 解析失败: \(error)")
+                return AniSkipResolvedIDs(malID: nil, anilistID: nil)
+            }
+        }
+        return await resolveIDsNative(anilistID: anilistID, searchTitles: searchTitles, useSharedMatching: true)
+    }
+
+    func logResolution(_ result: IntroIDResolution) {
+        for attempt in result.attempts {
+            if let error = attempt.error { NetworkLog.report(category: "AniList", level: .warning, "GraphQL 请求失败: \(error)") }
+        }
+        if let rule = result.rule {
+            NetworkLog.report(category: "AniList", level: .info, "AniList 搜索命中",
+                fields: ["title": result.title.map { .string($0) } ?? .null,
+                    "malID": result.ids.malID.map { .integer(Int64($0)) } ?? .null,
+                    "anilistID": result.ids.anilistID.map { .integer(Int64($0)) } ?? .null,
+                    "rule": .string(rule.rawValue)])
+        }
+    }
+
+    func resolveIDsNative(anilistID: Int?, searchTitles: [String], useSharedMatching: Bool = false) async -> AniSkipResolvedIDs {
         if let anilistID {
             return await lookupIDs(anilistID: anilistID)
         }
         var firstFallback: SearchMedia?
         for title in searchTitles {
             guard let media = await searchMedia(title: title) else { continue }
-            if let hit = Self.bestMatch(in: media, for: title) {
+            if let hit = useSharedMatching ? Self.bestMatch(in: media, for: title) : Self.bestMatchNative(in: media, for: title) {
                 let hitMedia = hit.media
                 NetworkLog.report(
                     category: "AniList", level: .info,
@@ -172,13 +204,25 @@ struct AniListClient: Sendable {
     static func bestMatch(
         in media: [SearchMedia], for title: String
     ) -> (media: SearchMedia, rule: MatchRule)? {
-        let query = DanmakuFilenameParser.comparableTitle(title)
+        if let policy = RustDanmakuPolicy.active {
+            let hit: IntroIdentityMatch? = policy.identity("bestMatch", value: media, arguments: ["title": title])
+            guard let hit else { return nil }
+            guard media.indices.contains(hit.index) else { preconditionFailure("Core AniList candidate index") }
+            return (media[hit.index], hit.rule)
+        }
+        return bestMatchNative(in: media, for: title)
+    }
+
+    static func bestMatchNative(
+        in media: [SearchMedia], for title: String
+    ) -> (media: SearchMedia, rule: MatchRule)? {
+        let query = DanmakuFilenameParser.comparableTitleNative(title)
         guard !query.isEmpty else { return nil }
         var contained: SearchMedia?
         for candidate in media {
             guard candidate.idMal != nil else { continue }
             for name in candidate.allTitles {
-                let normalized = DanmakuFilenameParser.comparableTitle(name)
+                let normalized = DanmakuFilenameParser.comparableTitleNative(name)
                 if normalized.isEmpty { continue }
                 if normalized == query {
                     return (candidate, .exact)
@@ -333,17 +377,20 @@ public actor AniSkipIDResolver {
     private let client: AniListClient
     /// 时间注入（测试负缓存过期用）。
     private let now: @Sendable () -> Date
+    var usesCoreResolution: Bool { store.sharedIDs != nil && client.core != nil }
 
-    public init(store: AniSkipIDStore, session: URLSession? = nil) {
+    public init(store: AniSkipIDStore, session: URLSession? = nil,
+        baseURL: URL = URL(string: "https://graphql.anilist.co")!) {
         self.store = store
-        self.client = AniListClient(session: session ?? DanmakuNetworking.makeSession())
+        self.client = AniListClient(session: session ?? DanmakuNetworking.makeSession(), baseURL: baseURL, sharedCore: store.sharedIDs?.core)
         self.now = { Date() }
     }
 
     /// 测试注入时钟。
-    init(store: AniSkipIDStore, session: URLSession? = nil, now: @escaping @Sendable () -> Date) {
+    init(store: AniSkipIDStore, session: URLSession? = nil, now: @escaping @Sendable () -> Date,
+        baseURL: URL = URL(string: "https://graphql.anilist.co")!) {
         self.store = store
-        self.client = AniListClient(session: session ?? DanmakuNetworking.makeSession())
+        self.client = AniListClient(session: session ?? DanmakuNetworking.makeSession(), baseURL: baseURL, sharedCore: store.sharedIDs?.core)
         self.now = now
     }
 
@@ -358,18 +405,49 @@ public actor AniSkipIDResolver {
     public func resolve(
         for identity: AniSkipAnimeIdentity, forceRefresh: Bool = false
     ) async -> AniSkipResolvedIDs {
+        if usesCoreResolution, let core = client.core {
+            do {
+                let result = try await core.resolveStored(identity, force: forceRefresh, now: now())
+                guard !Task.isCancelled else { return AniSkipResolvedIDs(malID: nil, anilistID: nil) }
+                if result.needsCommit, let key = result.cacheKey {
+                    await store.setRecord(AniSkipIDRecord(malID: result.ids.malID, anilistID: result.ids.anilistID, resolvedAt: now()), for: key)
+                }
+                if let resolution = result.resolution { client.logResolution(resolution) }
+                return result.ids
+            } catch {
+                NetworkLog.report(category: "AniSkip", level: .warning, "共享 ID 解析失败: \(error)")
+                return AniSkipResolvedIDs(malID: nil, anilistID: nil)
+            }
+        }
+        if let policy = RustDanmakuPolicy.active {
+            let initial = policy.identityPlan(identity, record: nil, force: forceRefresh, now: Date(timeIntervalSinceReferenceDate: 0))
+            if let ready = initial.ready { return ready }
+            guard let key = initial.cacheKey else { preconditionFailure("Core identity cache key") }
+            let record = forceRefresh ? nil : await store.record(for: key)
+            let plan = policy.identityPlan(identity, record: record, force: forceRefresh,
+                now: record?.isEmpty == true ? now() : Date(timeIntervalSinceReferenceDate: 0))
+            if let ready = plan.ready { return ready }
+            let resolved = await client.resolveIDs(anilistID: plan.anilistID, searchTitles: plan.searchTitles)
+            guard !Task.isCancelled else { return AniSkipResolvedIDs(malID: nil, anilistID: nil) }
+            await store.setRecord(AniSkipIDRecord(malID: resolved.malID, anilistID: resolved.anilistID, resolvedAt: now()), for: key)
+            return resolved
+        }
+        return await resolveNative(for: identity, forceRefresh: forceRefresh)
+    }
+
+    func resolveNative(for identity: AniSkipAnimeIdentity, forceRefresh: Bool = false) async -> AniSkipResolvedIDs {
         // 直取路径零成本，不走缓存。
         if let malID = identity.malID, malID >= 1 {
             return AniSkipResolvedIDs(malID: malID, anilistID: identity.anilistID)
         }
-        let titles = identity.searchTitles
+        let titles = identity.searchTitlesNative
         guard identity.anilistID != nil || !titles.isEmpty else {
             NetworkLog.report(
                 category: "AniSkip", level: .debug,
                 "MAL ID 解析无线索（无 ID、无标题），跳过")
             return AniSkipResolvedIDs(malID: nil, anilistID: nil)
         }
-        let key = Self.cacheKey(for: identity)
+        let key = Self.cacheKeyNative(for: identity)
         if !forceRefresh, let record = await store.record(for: key) {
             if !record.isEmpty {
                 return AniSkipResolvedIDs(malID: record.malID, anilistID: record.anilistID)
@@ -381,8 +459,9 @@ public actor AniSkipIDResolver {
                 return AniSkipResolvedIDs(malID: nil, anilistID: nil)
             }
         }
-        let resolved = await client.resolveIDs(
+        let resolved = await client.resolveIDsNative(
             anilistID: identity.anilistID, searchTitles: titles)
+        guard !Task.isCancelled else { return AniSkipResolvedIDs(malID: nil, anilistID: nil) }
         await store.setRecord(
             AniSkipIDRecord(
                 malID: resolved.malID, anilistID: resolved.anilistID, resolvedAt: now()),
@@ -410,6 +489,11 @@ public actor AniSkipIDResolver {
     /// 挡在 AniSkip 之外；多候选实现后键升版，旧负缓存（含错录）整体作废，
     /// 不做迁移——文件可随时重建。
     static func cacheKey(for identity: AniSkipAnimeIdentity) -> String {
+        if let policy = RustDanmakuPolicy.active { return policy.identity("cacheKey", value: identity) }
+        return cacheKeyNative(for: identity)
+    }
+
+    static func cacheKeyNative(for identity: AniSkipAnimeIdentity) -> String {
         let parts = [
             identity.anilistID.map(String.init) ?? "-",
             (identity.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
@@ -430,18 +514,26 @@ public actor AniSkipIDStore {
     private let decoder = JSONDecoder()
     private var cached: [String: AniSkipIDRecord]?
     private var loaded = false
+    nonisolated let sharedIDs: RustIntroIDStore?
+    var usesCoreIDs: Bool { sharedIDs != nil }
 
-    public init(directory: URL, fileManager: FileManager = .default) {
+    public init(directory: URL, fileManager: FileManager = .default, useCore: Bool? = nil) {
         self.directory = directory
         self.fileManager = fileManager
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        if (useCore ?? OcpCoreFeature.isEnabled), fileManager === FileManager.default {
+            sharedIDs = try? RustIntroIDStore(directory: directory)
+        } else { sharedIDs = nil }
     }
 
     public func record(for key: String) -> AniSkipIDRecord? {
-        load()[key]
+        if let sharedIDs { return sharedIDs.record(key) }
+        return load()[key]
     }
 
     public func setRecord(_ record: AniSkipIDRecord, for key: String) {
+        guard !Task.isCancelled else { return }
+        if let sharedIDs { sharedIDs.write(record, key: key); return }
         var map = load()
         map[key] = record
         guard let data = try? encoder.encode(map) else { return }

@@ -19,6 +19,13 @@ RustIntroProviderTests 使用 Fixtures/intro_provider_server.py 验证全部四�
 与 OcPlayer-Core 中的副本逐字节校验。完整 API 合约和原始验证日志保存在
 OcPlayer-Core 的 docs/intro-provider-contract.md 和对应 validation 目录。
 
-AniList 身份解析/ID 缓存、完整共享加载编排，以及 URLSession 的独立空闲/资源
+AniList 身份解析和 ID 缓存也已迁入 Core：默认 resolver 与 store 共用一个 Core
+实例，按原有标题顺序请求、精确/包含匹配、首个有 MAL ID 的候选回退，保留七天
+负缓存、强制刷新及 aniskip-ids.json 的原版格式。直接有效 MAL ID 和无有效线索
+不访问缓存或网络；取消中的请求不写入负缓存。原版 resolver/store 可独立运行
+作为差分对照。RustIntroIdentityTests 覆盖 900 组 Unicode 标题/缓存键、900 组
+候选匹配、原版文件互读、写盘失败、请求顺序和请求完成后的注入时钟。
+
+完整共享加载编排，以及 URLSession 的独立空闲/资源
 截止时间仍需迁入 Core。当前桥接以较小的 request/resource timeout 作为整次请求
 截止时间，尚未完成整个传输层的等价验收。

@@ -10,10 +10,10 @@ struct RustIntroProvider: Sendable {
     let baseURL: URL
     let timeout: TimeInterval
 
-    static func make(session: URLSession, provider: String, baseURL: URL) -> Self? {
+    static func make(session: URLSession, provider: String, baseURL: URL, sharedCore: OcpCoreClient? = nil) -> Self? {
         guard OcpCoreFeature.isEnabled,
               OcpCoreFeature.supportsNativeTransport(session.configuration),
-              let core = try? OcpCoreClient() else { return nil }
+              let core = sharedCore ?? (try? OcpCoreClient()) else { return nil }
         return Self(core: core, provider: provider, baseURL: baseURL,
             timeout: min(session.configuration.timeoutIntervalForRequest,
                          session.configuration.timeoutIntervalForResource))
