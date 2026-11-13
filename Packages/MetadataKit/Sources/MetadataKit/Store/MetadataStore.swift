@@ -728,7 +728,7 @@ public actor MetadataStore {
     /// 只从 `item` 表按投影列取——这条查询是离线进详情页的热路径，
     /// 不该解 payload 才能排序（`season_number` 就是为它建的索引）。
     public func seasons(seriesID: MediaItem.ID, tenant: TenantID) throws -> [MediaItem] {
-        if let rust { return try rust.call("seasons", ["tenantId": tenant.rawValue, "seriesId": seriesID]).decode([JSONValue].self).compactMap { try? $0.decode(MediaItem.self) } }
+        if let rust { return try rust.itemList("seasons", ["tenantId": tenant.rawValue, "seriesId": seriesID]) }
 
         return try database.read { db in
             let rows = try Row.fetchAll(
@@ -747,7 +747,7 @@ public actor MetadataStore {
     /// 某一季的集列表，按集号排序。
     public func episodes(seriesID: MediaItem.ID, seasonID: MediaItem.ID,
                          tenant: TenantID) throws -> [MediaItem] {
-        if let rust { return try rust.call("episodes", ["tenantId": tenant.rawValue, "seriesId": seriesID, "seasonId": seasonID]).decode([JSONValue].self).compactMap { try? $0.decode(MediaItem.self) } }
+        if let rust { return try rust.itemList("episodes", ["tenantId": tenant.rawValue, "seriesId": seriesID, "seasonId": seasonID]) }
 
         return try database.read { db in
             let rows = try Row.fetchAll(

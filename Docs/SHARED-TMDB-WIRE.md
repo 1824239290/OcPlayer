@@ -19,5 +19,4 @@ ranges and the real sync/async ABI. Five direct C ABI cases provide independent
 response/preflight coverage. The shared fixture and complete verification logs
 are retained in OcPlayer-Core's `docs/validation/2026-11-14-tmdb-wire/`.
 
-Enricher/batch coordination, repository memory/freshness and broader metadata
-acceptance remain in progress.
+Enricher/batch coordination is covered by [SHARED-TMDB-ENRICHMENT.md](SHARED-TMDB-ENRICHMENT.md). Repository memory/freshness and broader metadata acceptance remain in progress.

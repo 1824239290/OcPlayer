@@ -211,8 +211,13 @@ public extension TMDbSeason {
     /// 日期一律走 `TMDbAirDate.parse`（本地时区、共享 parser），**不做字符串字典序
     /// 比较**——坏日期（「2026-13-45」）字典序下会按任意方向误判成未来/过去。
     var isAiring: Bool {
+        if let rust = RustTMDbEnricher.make(),
+           let airing = try? rust.policy("airing",cache:.init(season:self)) { return airing }
+        return nativeIsAiring()
+    }
+
+    func nativeIsAiring(now: Date = Date()) -> Bool {
         if episodes.isEmpty { return true }
-        let now = Date()
         if episodes.contains(where: { episode in
             guard let air = TMDbAirDate.parse(episode.airDate) else { return true }
             return air >= Self.startOfToday(now)

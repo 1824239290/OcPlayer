@@ -127,6 +127,7 @@ extension TMDbEnricher {
         tenant: TenantID,
         onProgress: @Sendable (TMDbBatchProgress) async -> Void = { _ in }
     ) async -> TMDbBatchResult {
+        if rust != nil { return await sharedBatch(items:items,tenant:tenant,onProgress:onProgress) }
         var result = TMDbBatchResult(processed: 0, total: items.count, skipped: 0,
                                      enriched: 0, unmatched: 0, failed: 0, seasons: 0,
                                      wasCancelled: false)
@@ -238,7 +239,8 @@ extension TMDbEnricher {
     /// 季号来自**已落库的剧实体**（`entity.seasons`），而不是再问服务端要一遍剧集列表：
     /// 我们刚刚已经把它拉下来了，TMDB 的季列表与 Jellyfin 的季是对应的（季号即
     /// `IndexNumber`，特别篇为 0）。
-    private func enrichSeasons(ofSeries item: MediaItem, tenant: TenantID) async -> Int {
+    func enrichSeasons(ofSeries item: MediaItem, tenant: TenantID) async -> Int {
+        if rust != nil { return await sharedFlow("seasons",item:item,tenant:tenant)?.seasons ?? 0 }
         let language = preferences.language
         guard let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant),
               case .tv(let tvID) = link.entityKey,
@@ -255,7 +257,7 @@ extension TMDbEnricher {
             // 的旧占位数据一直当最新。
             let key = TMDbEntityKey.season(tvID: tvID, number: season.seasonNumber)
             if let seasonCached = try? await store.tmdbPayload(key: key, language: language),
-               TMDbEnricher.isFresh(seasonCached) {
+               TMDbEnricher.nativeIsFresh(seasonCached) {
                 continue
             }
             if await fetchAndStore(key: key, language: language) { fetched += 1 }
@@ -275,6 +277,11 @@ extension TMDbEnricher {
         mediaType: TMDbMediaType,
         year: Int? = nil
     ) async throws -> [TMDbSearchResult] {
+        if let rust {
+            let result: RustTMDbEnricher.Policy = try rust.call("policy",["operation":"searchQuery","query":query])
+            guard let query = result.query else { return [] }
+            return try await client.search(query:query,mediaType:mediaType,year:year,language:preferences.language)
+        }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         return try await client.search(query: trimmed, mediaType: mediaType,
@@ -291,6 +298,7 @@ extension TMDbEnricher {
         entityKey: TMDbEntityKey,
         tenant: TenantID
     ) async -> Bool {
+        if rust != nil { return await sharedFlow("bind",itemID:itemID,tenant:tenant,entityKey:entityKey)?.didFetch ?? false }
         try? await store.saveTMDbLink(itemID: itemID, entityKey: entityKey,
                                       source: .manual, confidence: 1.0, tenant: tenant)
         return await fetchAndStore(key: entityKey)

@@ -23,6 +23,5 @@ provider/parent boundaries. Four C ABI tests independently cover the wire API.
 Full evidence is stored in OcPlayer-Core's
 `docs/validation/2026-11-14-tmdb-matcher/`.
 
-Enricher/batch coordination and repository memory/freshness remain migration
-work. Network DTOs now preserve exact identifiers through original-byte typed
+Enricher/batch coordination is now covered by [SHARED-TMDB-ENRICHMENT.md](SHARED-TMDB-ENRICHMENT.md). Repository memory/freshness remains migration work. Network DTOs now preserve exact identifiers through original-byte typed
 decoding, with separate response coverage in [SHARED-TMDB-WIRE.md](SHARED-TMDB-WIRE.md).

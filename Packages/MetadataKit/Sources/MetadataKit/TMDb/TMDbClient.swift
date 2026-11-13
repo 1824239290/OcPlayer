@@ -76,9 +76,10 @@ public struct TMDbClient: Sendable {
         limiter: TMDbRateLimiter = TMDbRateLimiter(),
         retryPolicy: RetryPolicy = RetryPolicy(attempts: 3),
         endpointProvider: (@Sendable () -> TMDbEndpoints)? = nil,
-        rustCoreLibraryPath: String? = nil
+        rustCoreLibraryPath: String? = nil,
+        useSharedCore: Bool = true
     ) {
-        if (rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled),
+        if useSharedCore, (rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled),
            (rustCoreLibraryPath != nil || OcpCoreFeature.supportsNativeTransport(session.configuration)),
            let core = try? OcpCoreClient(libraryPath: rustCoreLibraryPath) {
             self.rust = RustTMDbClient(core: core)

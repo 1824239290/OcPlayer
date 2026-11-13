@@ -26,6 +26,9 @@ public actor TMDbEnricher {
     let store: MetadataStore
     /// `internal`：同上（扩展文件要用）。
     let preferences: TMDbPreferences
+    let rust: RustTMDbEnricher?
+    var sharedFetches: [UInt64: Task<Void, Never>] = [:]
+    var usesCoreEnrichment: Bool { rust != nil }
     private let logger = NetworkLog.logger(category: "TMDB")
 
     /// 正在拉取的键（同一实体并发请求只打一次——详情页与剧集页可能同时要它）。
@@ -38,10 +41,12 @@ public actor TMDbEnricher {
     /// 只记「最近一次」，不做历史；它是一个 UI 提示，不是错误账本。
     private var lastFailure: TMDbError?
 
-    public init(client: TMDbClient, store: MetadataStore, preferences: TMDbPreferences) {
+    public init(client: TMDbClient, store: MetadataStore, preferences: TMDbPreferences,
+                rustCoreLibraryPath: String? = nil, useSharedCore: Bool = true) {
         self.client = client
         self.store = store
         self.preferences = preferences
+        self.rust = useSharedCore ? RustTMDbEnricher.make(libraryPath: rustCoreLibraryPath) : nil
     }
 
     /// 是否已配置 key（未配置时全部方法都是无操作，调用方不必自己判断）。
@@ -96,6 +101,9 @@ public actor TMDbEnricher {
     /// 离线复用，也会让「切季」这个高频操作卡在一次网络往返上。
     @discardableResult
     public func refreshSeason(seriesLink: TMDbLink, seasonNumber: Int) async -> Bool {
+        if rust != nil {
+            return await sharedFlow("season",seriesLink:seriesLink,seasonNumber:seasonNumber)?.didFetch ?? false
+        }
         guard await client.isConfigured else { return false }
         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
@@ -103,7 +111,7 @@ public actor TMDbEnricher {
         // 回源窗口判，其余按 expires_at）——别在这里各写一份，库级补全与
         // `performRefresh` 的早退用的是同一份。
         if let cached = try? await store.tmdbPayload(key: key, language: preferences.language),
-           Self.isFresh(cached) {
+           Self.nativeIsFresh(cached) {
             return false
         }
         return await fetchAndStore(key: key)
@@ -138,10 +146,16 @@ public actor TMDbEnricher {
     ///   （《学生会也有洞！》踩到的坑：10-07 开播时拉的「第 N 集」占位，TMDB 一周
     ///   内补了真名，90 天缓存却把它锁到 2027 年）。
     static func isFresh(_ cached: CachedTMDbPayload) -> Bool {
-        if case .season(let season) = cached.payload, season.isAiring {
-            return Date().timeIntervalSince(cached.fetchedAt) < Self.airingSeasonLifetime
+        if let rust = RustTMDbEnricher.make(),
+           let fresh = try? rust.policy("fresh",cache:.init(cached)) { return fresh }
+        return nativeIsFresh(cached)
+    }
+
+    static func nativeIsFresh(_ cached: CachedTMDbPayload, now: Date = Date()) -> Bool {
+        if case .season(let season) = cached.payload, season.nativeIsAiring(now:now) {
+            return now.timeIntervalSince(cached.fetchedAt) < Self.airingSeasonLifetime
         }
-        return !cached.isExpired()
+        return !cached.isExpired(now:now)
     }
 
     // MARK: - 合集（BoxSet）
@@ -185,6 +199,9 @@ public actor TMDbEnricher {
         members: [MediaItem],
         tenant: TenantID
     ) async -> RefreshOutcome {
+        if rust != nil {
+            return await sharedFlow("collection",item:item,tenant:tenant,members:members)?.refresh ?? .failed
+        }
         guard await client.isConfigured else { return .noMatch }
         let language = preferences.language
 
@@ -341,6 +358,9 @@ public actor TMDbEnricher {
         tenant: TenantID,
         seriesLink: TMDbLink? = nil
     ) async -> RefreshOutcome {
+        if rust != nil {
+            return await sharedFlow("refresh",item:item,tenant:tenant,seriesLink:seriesLink)?.refresh ?? .failed
+        }
         guard await client.isConfigured else { return .noMatch }
         let language = preferences.language
 
@@ -349,7 +369,7 @@ public actor TMDbEnricher {
         // 早退也会遇到季载荷，不能只看 expires_at。
         if let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant),
            let cached = try? await store.tmdbPayload(key: link.entityKey, language: language),
-           Self.isFresh(cached) {
+           Self.nativeIsFresh(cached) {
             return .skipped
         }
 
@@ -400,6 +420,24 @@ public actor TMDbEnricher {
     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
         guard await client.isConfigured else { return false }
         let language = language ?? preferences.language
+        if let rust {
+            do {
+                let claim: RustTMDbEnricher.Claim = try rust.call("fetch.claim",["key":key.storageKey,"language":language])
+                if claim.owner {
+                    let ticket = claim.ticket
+                    sharedFetches[ticket] = Task { [weak self] in
+                        guard let self else { return }
+                        _ = await self.performFetch(key:key,language:language,ticket:ticket)
+                    }
+                }
+                if let task = sharedFetches[claim.ticket] { await task.value }
+                if claim.owner {
+                    finishSharedFetch(ticket:claim.ticket)
+                    sharedFetches[claim.ticket] = nil
+                }
+                return (try? await store.tmdbPayload(key:key,language:language)) != nil
+            } catch { return false }
+        }
         let taskKey = "\(key.storageKey)|\(language)"
 
         // 同一实体的并发请求合并：剧集页与详情页可能同时要它。
@@ -424,7 +462,7 @@ public actor TMDbEnricher {
     /// - Returns: 数据是否已写进库（批量补全据此统计，所以不能只看「有没有抛错」——
     ///   有些失败是静默 return 的）。
     @discardableResult
-    private func performFetch(key: TMDbEntityKey, language: String) async -> Bool {
+    private func performFetch(key: TMDbEntityKey, language: String, ticket: UInt64? = nil) async -> Bool {
         do {
             let payload: TMDbEntityPayload
             switch key {
@@ -443,10 +481,11 @@ public actor TMDbEnricher {
             // `airingSeasonRefreshDays` 的注释：缩 expires_at 会被每日维护删数据）。
             try await store.saveTMDbPayload(payload, key: key, language: language,
                                            lifetime: preferences.cacheLifetime)
-            lastFailure = nil
+            if let ticket { recordSharedFetch(ticket:ticket,error:nil) }
+            else { lastFailure = nil }
             return true
         } catch let error as TMDbError {
-            lastFailure = error
+            recordFetchFailure(error, ticket:ticket)
             // 失败**不删已有数据**：旧数据比没有强（这正是缓存优先的价值）。
             //
             // ## 404 的现状与为什么不加退避
@@ -468,14 +507,37 @@ public actor TMDbEnricher {
                 logger.warning("TMDB 拉取失败 key=\(key.storageKey) error=\(error)")
             }
         } catch {
-            lastFailure = .transport("\(error)")
+            recordFetchFailure(.transport("\(error)"), ticket:ticket)
             logger.warning("TMDB 拉取失败 key=\(key.storageKey) error=\(error)")
         }
         return false
     }
 
+    private func recordFetchFailure(_ error: TMDbError, ticket: UInt64?) {
+        if let ticket { recordSharedFetch(ticket:ticket,error:error) }
+        else { lastFailure = error }
+    }
+
+    private func recordSharedFetch(ticket: UInt64, error: TMDbError?) {
+        guard let rust else { return }
+        var args: [String:Any] = ["ticket":ticket]
+        if let error { args["error"] = try? rust.object(RustTMDbEnricher.Failure(error)) }
+        let _: RustTMDbEnricher.Accepted? = try? rust.call("fetch.record",args)
+    }
+
+    private func finishSharedFetch(ticket: UInt64) {
+        guard let rust else { return }
+        let _: RustTMDbEnricher.Accepted? = try? rust.call("fetch.finish",["ticket":ticket])
+    }
+
     /// 最近一次失败（设置页据此提示）。nil = 最近一次是成功的。
-    public func reportedFailure() -> TMDbError? { lastFailure }
+    public func reportedFailure() -> TMDbError? {
+        if let rust {
+            let result: RustTMDbEnricher.FailureResponse? = try? rust.call("failure",[:])
+            return result?.failure?.native
+        }
+        return lastFailure
+    }
 
     // MARK: - 维护
 

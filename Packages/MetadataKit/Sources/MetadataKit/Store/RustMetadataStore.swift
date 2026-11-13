@@ -13,14 +13,14 @@ final class RustMetadataStore: Sendable {
     client = try OcpCoreClient(config: ["mediaDatabasePath": path], libraryPath: libraryPath)
   }
 
-  func call(_ method: String, _ args: [String: Any] = [:]) throws -> JSONValue {
+  func call(_ method: String, _ args: [String: Any] = [:]) throws -> RustCacheResponse {
     let response = try client.call("cache.\(method)", arguments: args)
     guard response.ok else {
       throw NSError(
         domain: "OcPlayerCore.Cache", code: Int(response.code),
         userInfo: [NSLocalizedDescriptionKey: response.message])
     }
-    return response.data
+    return RustCacheResponse(response: response)
   }
 
   func write(_ method: String, _ args: [String: Any] = [:]) throws {
@@ -66,17 +66,22 @@ final class RustMetadataStore: Sendable {
   }
 
   func item(_ id: String, tenant: TenantID) throws -> CachedItem? {
-    try call("item", ["tenantId": tenant.rawValue, "itemId": id]).decode(RustCacheRow?.self)?.item()
+    try call("item", ["tenantId": tenant.rawValue, "itemId": id]).decode(
+      RustCacheRow<MediaItem>?.self)?.item()
   }
 
   func items(_ ids: [String], tenant: TenantID) throws -> [CachedItem] {
     try call("items", ["tenantId": tenant.rawValue, "ids": ids])
-      .decode([RustCacheRow].self).compactMap { $0.item() }
+      .decode([RustCacheRow<MediaItem>].self).compactMap { $0.item() }
   }
 
   func posterCandidates(tenant: TenantID, limit: Int) throws -> [CachedItem] {
     try call("posterCandidates", ["tenantId": tenant.rawValue, "limit": limit])
-      .decode([RustCacheRow].self).compactMap { $0.item() }
+      .decode([RustCacheRow<MediaItem>].self).compactMap { $0.item() }
+  }
+
+  func itemList(_ method: String, _ args: [String: Any]) throws -> [MediaItem] {
+    try call(method, args).decode([RustCacheValue<MediaItem>].self).compactMap(\.value)
   }
 
   func recordProgress(
@@ -100,11 +105,14 @@ final class RustMetadataStore: Sendable {
   }
 
   func libraries(tenant: TenantID) throws -> [CachedLibrary] {
-    try call("libraries", args(tenant)).decode([RustCacheRow].self).compactMap { $0.library() }
+    try call("libraries", args(tenant)).decode([RustCacheRow<MediaLibrary>].self).compactMap {
+      $0.library()
+    }
   }
 
   func rail(_ rail: String, tenant: TenantID) throws -> CachedRail? {
-    try call("rail", ["tenantId": tenant.rawValue, "rail": rail]).decode(RustCacheRow?.self)?.rail()
+    try call("rail", ["tenantId": tenant.rawValue, "rail": rail]).decode(
+      RustCacheRow<RailSnapshot>?.self)?.rail()
   }
 
   func home(tenant: TenantID) throws -> (libraries: [CachedLibrary], rails: [String: CachedRail]) {
@@ -114,18 +122,18 @@ final class RustMetadataStore: Sendable {
 
   func page(_ key: PageKey, tenant: TenantID) throws -> CachedPage? {
     try call("page", ["tenantId": tenant.rawValue, "key": self.key(key)])
-      .decode(RustCacheRow?.self)?.page()
+      .decode(RustCacheRow<PageSnapshot>?.self)?.page()
   }
 
   func pages(_ query: PageQuery, tenant: TenantID) throws -> [CachedPage] {
     try call("pages", ["tenantId": tenant.rawValue, "key": self.key(query)])
-      .decode([RustCacheRow].self).compactMap { $0.page() }
+      .decode([RustCacheRow<PageSnapshot>].self).compactMap { $0.page() }
   }
 
   func fileInfo(itemID: String, tenant: TenantID) throws -> CachedMediaFileInfo? {
     guard
       let row = try call("mediaFileInfo", ["tenantId": tenant.rawValue, "itemId": itemID])
-        .decode(RustCacheRow?.self), let info = try? row.payload.decode(MediaFileInfo.self)
+        .decode(RustCacheRow<MediaFileInfo>?.self), let info = row.payload
     else { return nil }
     return CachedMediaFileInfo(info: info, fetchedAt: row.date)
   }
@@ -133,7 +141,7 @@ final class RustMetadataStore: Sendable {
   func tmdbPayload(key: TMDbEntityKey, language: String) throws -> CachedTMDbPayload? {
     guard
       let row = try call("tmdbPayload", ["entityKey": key.storageKey, "language": language])
-        .decode(RustCacheRow?.self), let payload = try? row.payload.decode(TMDbEntityPayload.self),
+        .decode(RustCacheRow<TMDbEntityPayload>?.self), let payload = row.payload,
       payload.matches(key), let expires = row.expiresAt
     else { return nil }
     return CachedTMDbPayload(
@@ -153,38 +161,68 @@ final class RustMetadataStore: Sendable {
   }
 }
 
-private struct RustCacheRow: Decodable {
-  var payload: JSONValue
+struct RustCacheResponse {
+  let response: OcpResponse
+  func decode<T: Decodable>(_ type: T.Type = T.self) throws -> T { try response.decodeData(type) }
+}
+private struct RustCacheValue<Value: Decodable>: Decodable {
+  let value: Value?
+  init(from decoder: Decoder) throws { value = try? Value(from: decoder) }
+}
+/// Decode each payload from the original typed container. Invalid payloads stay
+/// cache misses without passing valid integer fields through JSONValue/Double.
+private struct RustCacheRow<Payload: Decodable>: Decodable {
+  var payload: Payload?
   var fetchedAt: Double
   var progressFetchedAt: Double?
   var startIndex: Int?
   var limit: Int?
   var expiresAt: Double?
   var date: Date { Date(timeIntervalSince1970: fetchedAt) }
-  func item() -> CachedItem? {
-    guard let item = try? payload.decode(MediaItem.self) else { return nil }
+  enum CodingKeys: String, CodingKey {
+    case payload, fetchedAt, progressFetchedAt, startIndex, limit, expiresAt
+  }
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    payload = try? c.decode(Payload.self, forKey: .payload)
+    fetchedAt = try c.decode(Double.self, forKey: .fetchedAt)
+    progressFetchedAt = try c.decodeIfPresent(Double.self, forKey: .progressFetchedAt)
+    startIndex = try c.decodeIfPresent(Int.self, forKey: .startIndex)
+    limit = try c.decodeIfPresent(Int.self, forKey: .limit)
+    expiresAt = try c.decodeIfPresent(Double.self, forKey: .expiresAt)
+  }
+}
+extension RustCacheRow where Payload == MediaItem {
+  fileprivate func item() -> CachedItem? {
+    guard let payload else { return nil }
     return CachedItem(
-      item: item, fetchedAt: date,
+      item: payload, fetchedAt: date,
       progressFetchedAt: progressFetchedAt.map { Date(timeIntervalSince1970: $0) })
   }
-  func library() -> CachedLibrary? {
-    guard let library = try? payload.decode(MediaLibrary.self) else { return nil }
-    return CachedLibrary(library: library, fetchedAt: date)
+}
+extension RustCacheRow where Payload == MediaLibrary {
+  fileprivate func library() -> CachedLibrary? {
+    guard let payload else { return nil }
+    return CachedLibrary(library: payload, fetchedAt: date)
   }
-  func rail() -> CachedRail? {
-    guard let rail = try? payload.decode(RailSnapshot.self) else { return nil }
-    return CachedRail(items: rail.items, fetchedAt: date)
+}
+extension RustCacheRow where Payload == RailSnapshot {
+  fileprivate func rail() -> CachedRail? {
+    guard let payload else { return nil }
+    return CachedRail(items: payload.items, fetchedAt: date)
   }
-  func page() -> CachedPage? {
-    guard let page = try? payload.decode(PageSnapshot.self) else { return nil }
+}
+extension RustCacheRow where Payload == PageSnapshot {
+  fileprivate func page() -> CachedPage? {
+    guard let payload else { return nil }
     return CachedPage(
-      items: page.items, totalRecordCount: page.totalRecordCount,
-      fetchedAt: date, startIndex: startIndex ?? 0, limit: limit ?? 0)
+      items: payload.items, totalRecordCount: payload.totalRecordCount, fetchedAt: date,
+      startIndex: startIndex ?? 0, limit: limit ?? 0)
   }
 }
 private struct RustHomeParts: Decodable {
-  var libraries: [RustCacheRow]
-  var rails: [String: RustCacheRow]
+  var libraries: [RustCacheRow<MediaLibrary>]
+  var rails: [String: RustCacheRow<RailSnapshot>]
 }
 private struct RustProgressResult: Decodable {
   var state: MediaItem.PlayState

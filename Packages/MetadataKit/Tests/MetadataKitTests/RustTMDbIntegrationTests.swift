@@ -79,7 +79,7 @@ final class RustTMDbIntegrationTests: XCTestCase {
         XCTAssertEqual(counts["/mirror/3/tv/7/season/0"], 1, "whole season is one request")
         XCTAssertEqual(counts["/new/3/movie/401"], 1, "failure must not replay through Swift")
         XCTAssertEqual(counts["/new/3/movie/429"], 3)
-        XCTAssertEqual(counts["/new/3/movie/500"], 3)
+        XCTAssertEqual(counts["/new/3/movie/500"], 1, "native TMDB HTTP errors are final; only rate limits and transport errors retry")
     }
 }
 #endif
