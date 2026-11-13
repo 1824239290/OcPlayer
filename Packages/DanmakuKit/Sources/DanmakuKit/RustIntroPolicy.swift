@@ -35,11 +35,11 @@ struct SelectedIntroInterval: Decodable {
     let source: DanmakuIntroHintSource
 }
 
-/// A separate retained Core keeps native per-store memory and file semantics.
+/// Reuses the service's cache handle when learning must read and update hints.
 struct RustIntroLearningStore: Sendable {
     let core: OcpCoreClient
-    init(directory: URL) throws {
-        core = try OcpCoreClient()
+    init(directory: URL, sharedCore: OcpCoreClient? = nil) throws {
+        core = try sharedCore ?? OcpCoreClient()
         let response = try core.call("introLearning.open", arguments: ["directory": directory.path])
         guard response.ok else { throw OcpCoreError(message: response.message) }
     }
@@ -48,7 +48,7 @@ struct RustIntroLearningStore: Sendable {
         try call(method, arguments: ["animeID": animeID])
     }
 
-    private func call<T: Decodable>(_ method: String, arguments: [String: Any]) throws -> T {
+    func call<T: Decodable>(_ method: String, arguments: [String: Any]) throws -> T {
         let response = try core.call("introLearning." + method, arguments: arguments)
         guard response.ok else { throw OcpCoreError(message: response.message) }
         let payload = try response.data.decode(IntroPayload.self)

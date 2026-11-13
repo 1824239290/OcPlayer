@@ -362,7 +362,7 @@ final class DanmakuCoordinator {
             ? true : defaults.bool(forKey: SettingsKeys.danmakuAutoLoad)
         let directory = OcPlayerStorage.directory("Danmaku")
         let service = DanmakuService(cache: DanmakuCache(directory: directory))
-        let introLearningStore = IntroLearningStore(directory: directory)
+        let introLearningStore = IntroLearningStore(directory: directory, sharedWith: service)
         // 别名桥（手动搜索合并用）：弹弹play 搜索认不得「另一个中文译名」，Bangumi 的
         // nameCN 能把本地译名换到弹弹play 库里的标题（永久缓存，负缓存 7 天）。
         titleAliasResolver = DanmakuTitleAliasResolver(
@@ -788,49 +788,29 @@ final class DanmakuCoordinator {
     /// 一次有效落点。两条晋升路径见 `IntroLearningStore`。
     private func handleUserSeek(fromSeconds from: Double, toSeconds to: Double) {
         guard let context, let match = currentMatch else { return }
-        guard IntroLearningPolicy.eligibleSeek(from: from, to: to) else { return }
-        guard let animeID = match.animeID ?? match.derivedAnimeID else { return }
         let episodeID = match.episodeID
         let requestID = context.requestID
         Task { [weak self] in
             guard let self else { return }
-            // 路径一:确认升级——落点与该集既有提示(弹幕推导)end 贴合(容差与聚簇同源),
-            // 用户用行为背书了猜测,提示升级为 .learned(防低来源覆盖)。
-            if let current = await self.orchestrator.service.cachedIntroHint(for: episodeID),
-               let upgraded = IntroLearningPolicy.confirmedHint(forLanding: to, current: current) {
-                await self.introLearningStore.promote(animeID: animeID, hint: upgraded)
-                await self.orchestrator.service.persistIntroHint(upgraded, for: episodeID)
+            guard let result = try? await self.introLearningStore.applySeek(
+                match: match, from: from, to: to, service: self.orchestrator.service),
+                  let hint = result.hint else { return }
+            if result.kind == .confirmed {
                 AppDiagnostics.logInfo("片头学习:既有提示获确认升级", fields: [
                     "episodeID": .integer(episodeID),
-                    "endSeconds": .integer(Int64(current.endSeconds)),
+                    "endSeconds": .integer(Int64(hint.endSeconds)),
                 ])
                 return
             }
-            // 路径二:跨集共识——记录落点,≥2 个不同集聚簇(±10s)即晋升推广。
-            await self.introLearningStore.record(
-                animeID: animeID,
-                event: IntroSeekEvent(episodeID: episodeID, position: to, at: Date()))
-            guard let consensus = await self.introLearningStore.consensusHint(forAnime: animeID),
-                  await self.introLearningStore.promotedHint(forAnime: animeID) == nil
-            else { return }
-            await self.introLearningStore.promote(animeID: animeID, hint: consensus)
+            guard result.kind == .promoted, let animeID = result.animeID else { return }
             AppDiagnostics.logInfo("片头学习:跨集共识晋升", fields: [
                 "animeID": .integer(animeID),
-                "endSeconds": .integer(Int64(consensus.endSeconds)),
-                "episodes": .integer(Int64(consensus.evidenceCount)),
+                "endSeconds": .integer(Int64(hint.endSeconds)),
+                "episodes": .integer(Int64(hint.evidenceCount)),
             ])
-            // 推广到全番:只写「无提示或弹幕推导」的集,不覆盖更高来源
-            // (.aniskip/.animeSkip/.theIntroDB/.learned)。
-            let episodeIDs = await self.orchestrator.service.episodeIDs(animeID: animeID)
-            for id in episodeIDs {
-                let existing = await self.orchestrator.service.cachedIntroHint(for: id)
-                if existing == nil || existing?.source == .danmaku {
-                    await self.orchestrator.service.persistIntroHint(consensus, for: id)
-                }
-            }
             // 本集若适用,当场升级会话内提示(rank 门槛在 ChapterSession 里挡)。
-            if episodeIDs.contains(episodeID) {
-                self.playback?.applySkipTimesHint(consensus, requestID: requestID)
+            if result.applyToCurrent {
+                self.playback?.applySkipTimesHint(hint, requestID: requestID)
             }
         }
     }

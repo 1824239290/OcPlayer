@@ -44,6 +44,7 @@ public actor DanmakuCache {
     /// 不可变值，跨隔离域只读（编排层派生同目录的伴生存储用）。
     nonisolated public let directory: URL
     private let rust: RustDanmakuCache?
+    nonisolated var sharedCore: OcpCoreClient? { rust?.core }
     var usesCoreCache: Bool { rust != nil }
     private let commentsTTL: TimeInterval
     private let fileManager: FileManager

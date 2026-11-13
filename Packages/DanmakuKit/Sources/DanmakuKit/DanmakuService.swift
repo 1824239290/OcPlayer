@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 public enum DanmakuPayloadFormat: Sendable, Equatable {
     case overlay
@@ -39,6 +40,7 @@ public struct DanmakuPayload: Sendable, Equatable {
 /// Playback generation checks and Erika mutations remain in the app layer.
 public actor DanmakuService {
     private let cache: DanmakuCache
+    nonisolated var sharedCore: OcpCoreClient? { cache.sharedCore }
     /// 缓存根目录（与 `cache.directory` 同源；伴生存储派生目录用）。
     public let cacheDirectory: URL
 

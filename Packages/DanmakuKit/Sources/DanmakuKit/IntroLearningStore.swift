@@ -15,6 +15,20 @@ public struct IntroSeekEvent: Codable, Sendable, Equatable {
     }
 }
 
+/// A completed learning decision; the player applies only a promoted consensus.
+public struct IntroLearningOutcome: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable { case ignored, recorded, confirmed, promoted }
+    public let kind: Kind
+    public let animeID: Int64?
+    public var hint: DanmakuIntroHint?
+    public var updatedEpisodeIDs: [Int64] = []
+    public var applyToCurrent = false
+
+    init(kind: Kind, animeID: Int64?, hint: DanmakuIntroHint? = nil) {
+        self.kind = kind; self.animeID = animeID; self.hint = hint
+    }
+}
+
 /// 手动跳过学习的全部判定参数（**单源**）。
 ///
 /// 「什么算一次有效落点」此前一半写在 App 层（`DanmakuCoordinator.handleUserSeek`
@@ -40,7 +54,12 @@ public enum IntroLearningPolicy {
                 "from": from == -.infinity ? -Double.greatestFiniteMagnitude : from, "to": to,
             ])
         }
-        return landingWindow.contains(to) && from < to - minimumSeekSeconds
+        return eligibleSeekNative(from: from, to: to)
+    }
+
+    static func eligibleSeekNative(from: Double, to: Double) -> Bool {
+        to.isFinite && !from.isNaN && from != .infinity
+            && landingWindow.contains(to) && from < to - minimumSeekSeconds
     }
 
     public static func confirmedHint(forLanding to: Double, current: DanmakuIntroHint?) -> DanmakuIntroHint? {
@@ -51,10 +70,16 @@ public enum IntroLearningPolicy {
                 "to": to, "payloadJSON": String(decoding: data, as: UTF8.self),
             ])
         }
-        guard current.source == .danmaku,
+        return confirmedHintNative(forLanding: to, current: current)
+    }
+
+    static func confirmedHintNative(forLanding to: Double, current: DanmakuIntroHint?) -> DanmakuIntroHint? {
+        guard to.isFinite, let current, current.endSeconds.isFinite, current.source == .danmaku,
               abs(to - current.endSeconds) <= snapToleranceSeconds else { return nil }
+        let (evidenceCount, overflow) = current.evidenceCount.addingReportingOverflow(1)
+        guard !overflow else { return nil }
         return DanmakuIntroHint(startSeconds: current.startSeconds, endSeconds: current.endSeconds,
-            evidenceCount: current.evidenceCount + 1, source: .learned)
+            evidenceCount: evidenceCount, source: .learned)
     }
 }
 
@@ -62,10 +87,9 @@ public enum IntroLearningPolicy {
 /// `DanmakuCache.permanentFileNames` 白名单，不会被缓存清理删掉）。
 ///
 /// 学习信号 = 用户在播放中**主动前跳**且落点落在片头结束区间（范围过滤在 App
-/// 层按 `IntroLearningPolicy` 做完才喂进来）。两条晋升路径：
+/// 层通过 `applySeek` 交给共享流程）。两条晋升路径：
 /// 1. **确认升级**：落点与该集既有提示 end ±`snapToleranceSeconds` → 用户背书了
-///    猜测，该提示升级为 `.learned`（防后续低优先级来源覆盖）——判定在 App 层做
-///    （它持有当前提示）；
+///    猜测，该提示升级为 `.learned`（防后续低优先级来源覆盖）；
 /// 2. **跨集晋升**：≥`minimumConsensusEpisodes` 个不同集的落点聚簇 → 同季 OP 恒定，
 ///    中位数推广到全番。变量 OP 的番（各集冷开场/前情不同）落点自然离散，
 ///    聚不起来不会误套。
@@ -84,15 +108,74 @@ public actor IntroLearningStore {
     private var cached: [String: AnimeLearning]?
     private var loaded = false
 
-    public init(directory: URL, fileManager: FileManager = .default, useCore: Bool? = nil) {
+    public init(directory: URL, fileManager: FileManager = .default, useCore: Bool? = nil,
+                sharedWith service: DanmakuService? = nil) {
         self.directory = directory
         self.fileManager = fileManager
         if (useCore ?? OcpCoreFeature.isEnabled) && fileManager === FileManager.default {
-            rust = try? RustIntroLearningStore(directory: directory)
+            let sharedCore = service?.cacheDirectory.standardizedFileURL == directory.standardizedFileURL
+                ? service?.sharedCore : nil
+            rust = try? RustIntroLearningStore(directory: directory, sharedCore: sharedCore)
         } else {
             rust = nil
         }
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    /// Owns eligibility, confirmation, event recording, promotion and propagation.
+    /// A shared service/store executes the complete update under one Core lock.
+    public func applySeek(match: DanmakuEpisodeMatch, from: Double, to: Double,
+                          service: DanmakuService, at: Date? = nil) async throws -> IntroLearningOutcome {
+        try Task.checkCancellation()
+        let animeID = match.animeID ?? match.derivedAnimeID
+        guard to.isFinite, !from.isNaN, from != .infinity,
+              at?.timeIntervalSinceReferenceDate.isFinite != false else {
+            return IntroLearningOutcome(kind: .ignored, animeID: animeID)
+        }
+        if let rust, let core = service.sharedCore, rust.core === core {
+            struct Input: Encodable {
+                let match: DanmakuEpisodeMatch; let from: Double; let to: Double; let at: Double?
+            }
+            let data = try JSONEncoder().encode(Input(match: match,
+                from: from == -.infinity ? -Double.greatestFiniteMagnitude : from, to: to,
+                at: at?.timeIntervalSinceReferenceDate))
+            return try rust.call("applySeek", arguments: ["payloadJSON": String(decoding: data, as: UTF8.self)])
+        }
+        return await applySeekNative(match: match, from: from, to: to, service: service, at: at)
+    }
+
+    func applySeekNative(match: DanmakuEpisodeMatch, from: Double, to: Double,
+                         service: DanmakuService, at: Date?) async -> IntroLearningOutcome {
+        let animeID = match.animeID ?? match.derivedAnimeID
+        guard IntroLearningPolicy.eligibleSeekNative(from: from, to: to), let animeID else {
+            return IntroLearningOutcome(kind: .ignored, animeID: animeID)
+        }
+        let episodeID = match.episodeID
+        let current = await service.cachedIntroHint(for: episodeID)
+        if let upgraded = IntroLearningPolicy.confirmedHintNative(forLanding: to, current: current) {
+            promote(animeID: animeID, hint: upgraded)
+            await service.persistIntroHint(upgraded, for: episodeID)
+            var result = IntroLearningOutcome(kind: .confirmed, animeID: animeID, hint: upgraded)
+            result.updatedEpisodeIDs = [episodeID]
+            return result
+        }
+        record(animeID: animeID, event: IntroSeekEvent(episodeID: episodeID, position: to, at: at ?? Date()))
+        guard let hint = consensusHint(forAnime: animeID), promotedHint(forAnime: animeID) == nil else {
+            return IntroLearningOutcome(kind: .recorded, animeID: animeID)
+        }
+        promote(animeID: animeID, hint: hint)
+        var result = IntroLearningOutcome(kind: .promoted, animeID: animeID, hint: hint)
+        let episodeIDs = await service.episodeIDs(animeID: animeID)
+        for id in episodeIDs {
+            let existing = await service.cachedIntroHint(for: id)
+            if existing == nil || existing?.source == .danmaku {
+                await service.persistIntroHint(hint, for: id)
+                result.updatedEpisodeIDs.append(id)
+            }
+        }
+        result.updatedEpisodeIDs.sort()
+        result.applyToCurrent = episodeIDs.contains(episodeID)
+        return result
     }
 
     /// 记录一次用户跳过落点。
@@ -117,10 +200,10 @@ public actor IntroLearningStore {
     }
 
     /// 跨集共识判定（基于已记录事件,不落盘）。返回待晋升提示;无共识返回 nil。
-    /// App 层据此决定是否 `promote`。
+    /// `applySeek` 在确认尚未晋升后推广此结果。
     public func consensusHint(forAnime animeID: Int64) -> DanmakuIntroHint? {
         if let rust { return try? rust.call("consensusHint", animeID: animeID, as: DanmakuIntroHint?.self) }
-        guard let consensus = Self.crossEpisodeConsensus(of: learning(for: animeID).events)
+        guard let consensus = Self.crossEpisodeConsensusNative(of: learning(for: animeID).events)
         else { return nil }
         return DanmakuIntroHint(
             startSeconds: nil,
