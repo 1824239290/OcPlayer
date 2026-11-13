@@ -1,9 +1,10 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
 
 /// 多源共用的一个社区标注区间（秒）。`startSeconds` 为 nil 表示起点未标注
 /// （消费侧回落到 0）。
-public struct ExternalSkipInterval: Sendable, Equatable {
+public struct ExternalSkipInterval: Codable, Sendable, Equatable {
     public let startSeconds: Double?
     public let endSeconds: Double
 
@@ -15,6 +16,14 @@ public struct ExternalSkipInterval: Sendable, Equatable {
     /// 区间合理性钳制（对齐 AniSkip 提示转换的判据）：超长/过短/倒挂的区间按
     /// 坏数据处理，是错季匹配与脏标注的防护。返回 nil 表示不可用。
     func clamped() -> ExternalSkipInterval? {
+        if let policy = RustDanmakuPolicy.active, (startSeconds?.isFinite ?? true), endSeconds.isFinite {
+            do { return try policy.providerPayload("clamp", value: self) }
+            catch { preconditionFailure("Core external interval: \(error)") }
+        }
+        return clampedNative()
+    }
+
+    func clampedNative() -> ExternalSkipInterval? {
         let start = max(0, startSeconds ?? 0)
         let end = endSeconds
         guard end >= 10, end <= 1_800, start < end - 1, end - start <= 400 else { return nil }
@@ -36,10 +45,17 @@ public struct ExternalSkipInterval: Sendable, Equatable {
 public struct AnimeSkipClient: Sendable {
     private let clientID: String
     private let session: URLSession
+    private let baseURL: URL
+    private let core: RustIntroProvider?
+    var usesCoreTransport: Bool { core != nil }
 
-    public init(clientID: String, session: URLSession? = nil) {
+    public init(clientID: String, session: URLSession? = nil,
+        baseURL: URL = URL(string: "https://api.anime-skip.com")!) {
         self.clientID = clientID
-        self.session = session ?? DanmakuNetworking.makeSession()
+        let session = session ?? DanmakuNetworking.makeSession()
+        self.session = session
+        self.baseURL = baseURL
+        core = RustIntroProvider.make(session: session, provider: "animeSkip", baseURL: baseURL)
     }
 
     /// 某集的 Intro 区间。查不到（show/集/时间戳任一缺失）返回 nil；网络/协议
@@ -47,8 +63,19 @@ public struct AnimeSkipClient: Sendable {
     public func introInterval(
         anilistID: Int, seasonNumber: Int?, episodeNumber: Int
     ) async throws -> ExternalSkipInterval? {
+        if let core {
+            let spec = try core.prepare(["anilistID": anilistID, "clientID": clientID])
+            let exchange = try await core.urlSessionExchange(spec)
+            guard (200..<300).contains(exchange.statusCode) else { throw AnimeSkipError.http(exchange.statusCode) }
+            do {
+                let policy = RustDanmakuPolicy(core: core.core)
+                var arguments: [String: Any] = ["responseBase64": exchange.data.base64EncodedString(), "episodeNumber": episodeNumber]
+                if let seasonNumber { arguments["seasonNumber"] = seasonNumber }
+                return try policy.provider("decodeAnimeSkip", arguments: arguments)
+            } catch { throw AnimeSkipError.decoding("\(error)") }
+        }
         let response = try await Self.request(
-            clientID: clientID, session: session,
+            clientID: clientID, session: session, baseURL: baseURL,
             query: """
             query ($service: ExternalService!, $id: String!) {
               findShowsByExternalId(service: $service, serviceId: $id) {
@@ -74,9 +101,9 @@ public struct AnimeSkipClient: Sendable {
     }
 
     private static func request(
-        clientID: String, session: URLSession, query: String, variables: [String: String]
+        clientID: String, session: URLSession, baseURL: URL, query: String, variables: [String: String]
     ) async throws -> Response {
-        var request = URLRequest(url: URL(string: "https://api.anime-skip.com/graphql")!)
+        var request = URLRequest(url: baseURL.appending(path: "/graphql"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -115,15 +142,15 @@ public struct AnimeSkipClient: Sendable {
         struct Show: Decodable {
             let episodes: [Episode]?
         }
-        struct Episode: Decodable {
+        struct Episode: Codable {
             let season: String?
             let number: String?
             let timestamps: [Timestamp]?
         }
-        struct Timestamp: Decodable {
+        struct Timestamp: Codable {
             let at: Double?
             let type: TypePayload?
-            struct TypePayload: Decodable {
+            struct TypePayload: Codable {
                 let name: String?
             }
         }
@@ -140,6 +167,18 @@ public struct AnimeSkipClient: Sendable {
     /// - 区间：排序后第一个 Intro 类时间戳 → 下一时间戳（任何类型）。社区
     ///   标注偶有前后两段主题,取第一段;脏标注由调用方的区间钳制兜底。
     static func introInterval(
+        from episodes: [Response.Episode], seasonNumber: Int?, episodeNumber: Int
+    ) -> ExternalSkipInterval? {
+        if let policy = RustDanmakuPolicy.active {
+            var arguments: [String: Any] = ["episodeNumber": episodeNumber]
+            if let seasonNumber { arguments["seasonNumber"] = seasonNumber }
+            do { return try policy.providerPayload("animeInterval", value: episodes, arguments: arguments) }
+            catch { preconditionFailure("Core anime-skip interval: \(error)") }
+        }
+        return introIntervalNative(from: episodes, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
+    }
+
+    static func introIntervalNative(
         from episodes: [Response.Episode], seasonNumber: Int?, episodeNumber: Int
     ) -> ExternalSkipInterval? {
         let candidates = episodes.filter { episode in
@@ -204,16 +243,34 @@ public final class AnimeSkipSettingsStore: @unchecked Sendable {
 /// ID，不能直接用（要用 series 级查询换出来）。
 public struct TheIntroDBClient: Sendable {
     private let session: URLSession
+    private let baseURL: URL
+    private let core: RustIntroProvider?
+    var usesCoreTransport: Bool { core != nil }
 
-    public init(session: URLSession? = nil) {
-        self.session = session ?? DanmakuNetworking.makeSession()
+    public init(session: URLSession? = nil,
+        baseURL: URL = URL(string: "https://api.theintrodb.org")!) {
+        let session = session ?? DanmakuNetworking.makeSession()
+        self.session = session
+        self.baseURL = baseURL
+        core = RustIntroProvider.make(session: session, provider: "theIntroDB", baseURL: baseURL)
     }
 
-    /// 某集的 Intro 区间。无数据（404 / 空）返回 nil。
+    /// 某集的 Intro 区间。空标注返回 nil；HTTP 错误（包括 404）抛出。
     public func introInterval(
         tmdbID: Int, seasonNumber: Int?, episodeNumber: Int
     ) async throws -> ExternalSkipInterval? {
-        var components = URLComponents(url: URL(string: "https://api.theintrodb.org/v3/media")!, resolvingAgainstBaseURL: false)
+        if let core {
+            var arguments: [String: Any] = ["tmdbID": tmdbID, "episodeNumber": episodeNumber]
+            if let seasonNumber { arguments["seasonNumber"] = seasonNumber }
+            let spec = try core.prepare(arguments)
+            let exchange = try await core.urlSessionExchange(spec)
+            guard (200..<300).contains(exchange.statusCode) else { throw AnimeSkipClient.AnimeSkipError.http(exchange.statusCode) }
+            do {
+                let policy = RustDanmakuPolicy(core: core.core)
+                return try policy.provider("decodeTheIntroDB", arguments: ["responseBase64": exchange.data.base64EncodedString()])
+            } catch { throw AnimeSkipClient.AnimeSkipError.decoding("\(error)") }
+        }
+        var components = URLComponents(url: baseURL.appending(path: "/v3/media"), resolvingAgainstBaseURL: false)
         components?.queryItems = [
             URLQueryItem(name: "tmdb_id", value: String(tmdbID)),
             URLQueryItem(name: "season", value: String(seasonNumber ?? 1)),
@@ -230,9 +287,13 @@ public struct TheIntroDBClient: Sendable {
             throw AnimeSkipClient.AnimeSkipError.transport("非 HTTP 响应")
         }
         guard (200..<300).contains(http.statusCode) else {
-            // 404 = 该集无收录,常态而非错误。
+            // 保持原版错误口径：404 也由调用方捕获并降级该数据源。
             throw AnimeSkipClient.AnimeSkipError.http(http.statusCode)
         }
+        return try Self.decodeNative(data)
+    }
+
+    static func decodeNative(_ data: Data) throws -> ExternalSkipInterval? {
         struct Response: Decodable {
             let intro: [Segment]?
             struct Segment: Decodable {
@@ -252,6 +313,6 @@ public struct TheIntroDBClient: Sendable {
         else { return nil }
         return ExternalSkipInterval(
             startSeconds: Double(startMS) / 1_000, endSeconds: Double(endMS) / 1_000
-        ).clamped()
+        ).clampedNative()
     }
 }

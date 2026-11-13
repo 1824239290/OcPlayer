@@ -88,6 +88,15 @@ public struct AniSkipIDRecord: Codable, Sendable, Equatable {
 /// AniList GraphQL 只读客户端（无需鉴权；限流 90 req/min，远低于我们的节奏）。
 struct AniListClient: Sendable {
     let session: URLSession
+    private let baseURL: URL
+    private let core: RustIntroProvider?
+    var usesCoreTransport: Bool { core != nil }
+
+    init(session: URLSession, baseURL: URL = URL(string: "https://graphql.anilist.co")!) {
+        self.session = session
+        self.baseURL = baseURL
+        core = RustIntroProvider.make(session: session, provider: "aniList", baseURL: baseURL)
+    }
 
     /// 搜索响应里的一条候选条目。字段全可缺（GraphQL 只返回所请求的字段，
     /// 测试响应可以只带 idMal）。
@@ -271,8 +280,8 @@ struct AniListClient: Sendable {
             NetworkLog.report(category: "AniList", level: .warning, "GraphQL 请求体编码失败: \(error)")
             return nil
         }
-        let spec = HTTPRequestSpec(
-            url: URL(string: "https://graphql.anilist.co")!,
+        var spec = HTTPRequestSpec(
+            url: baseURL,
             method: "POST",
             headers: [
                 "Content-Type": "application/json",
@@ -284,7 +293,12 @@ struct AniListClient: Sendable {
         )
         let exchange: HTTPExchange
         do {
-            exchange = try await HTTPClient(session: session, category: "AniList").exchange(spec)
+            if let core {
+                spec = try core.prepare(["query": query, "variables": variables])
+                exchange = try await core.exchange(spec)
+            } else {
+                exchange = try await HTTPClient(session: session, category: "AniList").exchange(spec)
+            }
         } catch {
             NetworkLog.report(category: "AniList", level: .warning, "GraphQL 请求失败: \(error)")
             return nil

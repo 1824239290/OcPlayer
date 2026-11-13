@@ -2,7 +2,7 @@ import DiagnosticsKit
 import Foundation
 
 /// AniSkip 区间类型。API 的 `types` 取值（服务端校验枚举，见 2026-09-13 探针）。
-public enum AniSkipIntervalType: String, Sendable, Equatable {
+public enum AniSkipIntervalType: String, Codable, Sendable, Equatable {
     case opening = "op"
     case ending = "ed"
     case mixedOpening = "mixed-op"
@@ -11,7 +11,7 @@ public enum AniSkipIntervalType: String, Sendable, Equatable {
 }
 
 /// 一段社区标注的区间（秒）。AniSkip 只存 `(start, end)`，类型由 `skipType` 区分。
-public struct AniSkipInterval: Sendable, Equatable {
+public struct AniSkipInterval: Codable, Sendable, Equatable {
     public let type: AniSkipIntervalType
     public let startSeconds: Double
     public let endSeconds: Double
@@ -31,14 +31,16 @@ public enum AniSkipError: Error, Sendable {
 /// 只认 MAL ID（AniList ID 直接查不命中，已实测）；`episodeLength` 是过滤条件，
 /// 传了不匹配的长度结果为空——知道真实时长就传（白赚一道正确性校验），未知传 0。
 ///
-/// `URLSession` 可注入（测试用 mock 协议）；瞬态错误（超时/断网、5xx、429）
-/// 走共享 `RetryPolicy` 重试，口径与 `DandanplayError.isRetryable` 一致。
+/// `URLSession` 可注入（测试用 mock 协议）；传输超时/断网走共享 `RetryPolicy`
+/// 重试。HTTP 状态在重试循环之后处理，因此不会重试 5xx / 429 响应。
 /// 限流 120 请求/窗口（实测响应头），一集一查的节奏远用不满。
 public struct AniSkipClient: Sendable {
     private let baseURL: URL
     private let userAgent: String
     private let session: URLSession
     private let retryPolicy: RetryPolicy
+    private let core: RustIntroProvider?
+    var usesCoreTransport: Bool { core != nil }
 
     public init(
         baseURL: URL = URL(string: "https://api.aniskip.com")!,
@@ -48,7 +50,9 @@ public struct AniSkipClient: Sendable {
     ) {
         self.baseURL = baseURL
         self.userAgent = userAgent
-        self.session = session ?? DanmakuNetworking.makeSession()
+        let session = session ?? DanmakuNetworking.makeSession()
+        self.session = session
+        core = RustIntroProvider.make(session: session, provider: "aniSkip", baseURL: baseURL)
         self.retryPolicy = retryPolicy
     }
 
@@ -78,9 +82,16 @@ public struct AniSkipClient: Sendable {
             throw AniSkipError.decodingFailed("AniSkip URL 组装失败")
         }
 
-        let spec = HTTPRequestSpec(url: url, headers: ["User-Agent": userAgent, "Accept": "application/json"])
+        var spec = HTTPRequestSpec(url: url, headers: ["User-Agent": userAgent, "Accept": "application/json"])
+        if let core {
+            var arguments: [String: Any] = ["malID": malID, "episodeNumber": episodeNumber, "userAgent": userAgent]
+            if let episodeLengthSeconds { arguments["episodeLengthSeconds"] = episodeLengthSeconds }
+            do { spec = try core.prepare(arguments) }
+            catch { throw AniSkipError.decodingFailed("\(error)") }
+        }
+        let requestSpec = spec
         let exchange: HTTPExchange = try await retryPolicy.run {
-            try await Self.performExchange(spec: spec, session: session)
+            try await Self.performExchange(spec: requestSpec, session: session, core: core)
         } shouldRetry: { error in
             Self.isRetryable(error)
         } onRetry: { attempt, error in
@@ -100,8 +111,9 @@ public struct AniSkipClient: Sendable {
 
     // MARK: 内部
 
-    private static func performExchange(spec: HTTPRequestSpec, session: URLSession) async throws -> HTTPExchange {
+    private static func performExchange(spec: HTTPRequestSpec, session: URLSession, core: RustIntroProvider?) async throws -> HTTPExchange {
         do {
+            if let core { return try await core.exchange(spec) }
             return try await HTTPClient(session: session, category: "AniSkip").exchange(spec)
         } catch let transport as HTTPTransportError {
             switch transport {
@@ -133,7 +145,15 @@ public struct AniSkipClient: Sendable {
         }
     }
 
-    private static func decode(_ data: Data) throws -> [AniSkipInterval]? {
+    static func decode(_ data: Data) throws -> [AniSkipInterval]? {
+        if let policy = RustDanmakuPolicy.active {
+            do { return try policy.provider("decodeAniSkip", arguments: ["responseBase64": data.base64EncodedString()]) }
+            catch { throw AniSkipError.decodingFailed("\(error)") }
+        }
+        return try decodeNative(data)
+    }
+
+    static func decodeNative(_ data: Data) throws -> [AniSkipInterval]? {
         struct Response: Decodable {
             struct Result: Decodable {
                 struct Interval: Decodable {
@@ -173,6 +193,19 @@ public extension DanmakuIntroHint {
     /// （如 OP 在 638–728s 的集，按钮只在 OP 区间内出现），比弹幕的最早报点估计更准。
     /// 没有 OP 区间（只有 ED/recap）构不成片头提示。
     init?(aniskipIntervals intervals: [AniSkipInterval]) {
+        if let policy = RustDanmakuPolicy.active,
+           intervals.allSatisfy({ $0.startSeconds.isFinite && $0.endSeconds.isFinite }) {
+            let hint: DanmakuIntroHint?
+            do { hint = try policy.providerPayload("aniskipHint", value: intervals) }
+            catch { preconditionFailure("Core AniSkip hint: \(error)") }
+            guard let hint else { return nil }
+            self = hint
+            return
+        }
+        self.init(nativeAniskipIntervals: intervals)
+    }
+
+    init?(nativeAniskipIntervals intervals: [AniSkipInterval]) {
         guard let opening = intervals.first(where: {
             $0.type == .opening || $0.type == .mixedOpening
         }) else { return nil }
