@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+libc.workspace = true
 md-5.workspace = true
 ocp-http.workspace = true
 regex.workspace = true

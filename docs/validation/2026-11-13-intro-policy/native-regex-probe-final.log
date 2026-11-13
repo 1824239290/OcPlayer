@@ -1,0 +1,98 @@
+/tmp/ocplayer-intro-regex-probe.swift:2:19: error: expected ',' separator
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                   `- error: expected ',' separator
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:21: error: consecutive statements on a line must be separated by ';'
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                     `- error: consecutive statements on a line must be separated by ';'
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:21: error: expected expression
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                     `- error: expected expression
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:27: error: expected expression in container literal
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                           `- error: expected expression in container literal
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:34: error: expected ',' separator
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                  `- error: expected ',' separator
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:36: error: consecutive statements on a line must be separated by ';'
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                    `- error: consecutive statements on a line must be separated by ';'
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:36: error: expected expression
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                    `- error: expected expression
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:41: error: expected expression in list of expressions
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                         `- error: expected expression in list of expressions
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:15: error: '/' is not a prefix unary operator
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |               `- error: '/' is not a prefix unary operator
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:55: error: '/' is not a postfix unary operator
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                                       `- error: '/' is not a postfix unary operator
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:18: error: cannot find 'd' in scope
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                  `- error: cannot find 'd' in scope
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:33: error: cannot find 'd' in scope
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                                 `- error: cannot find 'd' in scope
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:2:16: error: cannot call value of non-function type '(WritableKeyPath<Root, Root>, () -> Int)'
+1 | import Foundation
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+  |                `- error: cannot call value of non-function type '(WritableKeyPath<Root, Root>, () -> Int)'
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+
+/tmp/ocplayer-intro-regex-probe.swift:4:39: error: the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions
+2 | let pattern = /(\d{1,2})([:.])(\d{1,2})(?::(\d{1,2}))?/
+3 | for text in ["1:23:45", "１２:３４", "١٢:٣٤", "1\u{301}:23", "1:2\u{301}3", "a1:23b", "a\u{200D}1:23", "123:45", "1:23\u{301}","²1:23"] {
+4 |  if let m=text.firstMatch(of:pattern){print(text, String(m.0), String(m.1), String(m.3), m.4.map(String.init) as Any)}else{print(text,"nil")}
+  |                                       `- error: the compiler is unable to type-check this expression in reasonable time; try breaking up the expression into distinct sub-expressions
+5 | }
+6 | print([1,1,2].max(by: { $0 < $1 }) as Any)

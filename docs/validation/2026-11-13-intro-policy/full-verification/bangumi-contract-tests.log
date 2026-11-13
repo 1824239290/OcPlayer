@@ -1,0 +1,9 @@
+test_bad_pagination_never_reaches_server (__main__.BangumiContract.test_bad_pagination_never_reaches_server) ... ok
+test_collection_username_encoding_and_empty_mutation_responses (__main__.BangumiContract.test_collection_username_encoding_and_empty_mutation_responses) ... ok
+test_search_post_filter_and_pagination (__main__.BangumiContract.test_search_post_filter_and_pagination) ... ok
+test_subject_and_episode_extra_fields_are_preserved (__main__.BangumiContract.test_subject_and_episode_extra_fields_are_preserved) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.513s
+
+OK

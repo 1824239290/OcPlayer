@@ -1,0 +1,12 @@
+    Checking ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+    Checking unicode-segmentation v1.13.3
+    Checking ocp-session v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-session)
+    Checking ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+    Checking ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+    Checking ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+    Checking ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+    Checking ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+    Checking ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Checking ocp-cli v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-cli)
+    Checking ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.53s

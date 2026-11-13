@@ -1,0 +1,32 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[2 / 7] DanmakuKitTests-product
+[4 / 9] DanmakuKitTests-product
+[9 / 11] DanmakuKitTests-product
+[10 / 14] DanmakuKitTests-product
+Build complete! (1.43秒)
+Test Suite 'Selected tests' started at 2026-11-13 21:15:10.450.
+Test Suite 'DanmakuKitTests.xctest' started at 2026-11-13 21:15:10.451.
+Test Suite 'RustIntroPolicyTests' started at 2026-11-13 21:15:10.451.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorMatchesIndependentNativeAcrossSignalsAndNoise]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorMatchesIndependentNativeAcrossSignalsAndNoise]' passed (0.439 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorRepresentativeLargeCommentBatch]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testDetectorRepresentativeLargeCommentBatch]' passed (0.175 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningConsensusMatchesNativeDistinctEpisodesMedianAndTies]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningConsensusMatchesNativeDistinctEpisodesMedianAndTies]' passed (0.422 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningFilesBidirectionalPersistenceDatesIDsAndEventBounds]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testLearningFilesBidirectionalPersistenceDatesIDsAndEventBounds]' passed (1.149 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSeekBoundaryAndConfirmedSourceRules]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSeekBoundaryAndConfirmedSourceRules]' passed (0.006 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSourceSelectionAndSiblingAggregationMatchNative]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testSourceSelectionAndSiblingAggregationMatchNative]' passed (0.155 seconds).
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testTimestampAndCommentFieldsMatchNativeUnicodeAndNumberRules]' started.
+Test Case '-[DanmakuKitTests.RustIntroPolicyTests testTimestampAndCommentFieldsMatchNativeUnicodeAndNumberRules]' passed (0.032 seconds).
+Test Suite 'RustIntroPolicyTests' passed at 2026-11-13 21:15:12.829.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 2.377 (2.378) seconds
+Test Suite 'DanmakuKitTests.xctest' passed at 2026-11-13 21:15:12.829.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 2.377 (2.378) seconds
+Test Suite 'Selected tests' passed at 2026-11-13 21:15:12.829.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 2.377 (2.379) seconds
+Intro 10000-comment batch: native=0.141118834 seconds Core-with-JSON-ABI=0.030282083 seconds

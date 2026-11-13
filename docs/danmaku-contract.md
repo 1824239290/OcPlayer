@@ -80,5 +80,7 @@ large integer token strings and zero network requests.
 
 The HTTP/match/search/intro orchestration remains owned by the native service.
 Cache persistence, TTL, LRU and revision barriers now run in Core through the
-retained RustDanmakuCache. Shared scheduling and intro-policy migration remain
-necessary for complete platform parity.
+retained RustDanmakuCache. Intro detection, learning persistence/consensus,
+manual-seek decisions and interval/sibling aggregation now use the
+[shared intro policy](intro-contract.md). Shared scheduling and provider transport
+remain necessary for complete platform parity.

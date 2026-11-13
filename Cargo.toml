@@ -48,6 +48,7 @@ url = "2"
 unicode-normalization = "0.1"
 unicode-segmentation = "1.12"
 base64 = "0.22"
+libc = "0.2"
 
 [workspace.metadata.cbindgen]
 config = "cbindgen.toml"

@@ -14,6 +14,8 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 pub mod cache;
 mod filename;
+pub mod intro;
+mod intro_unicode;
 pub mod policy;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

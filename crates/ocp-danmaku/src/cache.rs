@@ -378,7 +378,7 @@ impl DanmakuCache {
         Ok(json!({"payloadJSON":result.to_string()}))
     }
 }
-fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
+pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let parent = path
         .parent()

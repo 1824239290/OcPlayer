@@ -48,6 +48,7 @@ struct State {
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
+    intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -134,6 +135,7 @@ impl Core {
                 store,
                 bangumi_store: None,
                 danmaku_cache: None,
+                intro_learning: None,
                 endpoint: None,
             })),
         };
@@ -318,6 +320,35 @@ impl Core {
             }
             method if method.starts_with("endpoint.") => {
                 match call_endpoint_policy(&mut state, method, &arguments) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            method if method.starts_with("danmakuIntro.") => {
+                match ocp_danmaku::intro::call(
+                    method.trim_start_matches("danmakuIntro."),
+                    &arguments,
+                ) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            "introLearning.open" => match ocp_danmaku::intro::LearningStore::open(&arguments) {
+                Ok(store) => {
+                    state.intro_learning = Some(store);
+                    ApiResponse::ok(json!({"opened":true}))
+                }
+                Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+            },
+            method if method.starts_with("introLearning.") => {
+                let Some(store) = state.intro_learning.as_mut() else {
+                    return Ok(error_response(
+                        1401,
+                        false,
+                        "intro learning store is not configured",
+                    ));
+                };
+                match store.call(method.trim_start_matches("introLearning."), &arguments) {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }

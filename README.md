@@ -33,6 +33,8 @@ Danmaku matching policy and mapping/comment/intro-hint persistence now run in
 Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,
 bounded LRU memory and revision guards are documented in
 [`docs/danmaku-cache-contract.md`](docs/danmaku-cache-contract.md).
+Intro detection, cross-episode learning, source selection and sibling consensus
+also run in Core; see [`docs/intro-contract.md`](docs/intro-contract.md).
 
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults
