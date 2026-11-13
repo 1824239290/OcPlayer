@@ -22,8 +22,9 @@ public struct CachedItem: Sendable {
 
     /// 这份进度是否已经旧到不该当作现状展示（用于离线标识与「可能过期」提示）。
     public func isProgressStale(now: Date = Date(), ttl: TimeInterval = Freshness.progress) -> Bool {
-        guard let progressFetchedAt else { return true }
-        return now.timeIntervalSince(progressFetchedAt) > ttl
+        let age = progressFetchedAt.map { now.timeIntervalSince($0) } ?? 0
+        return RustMediaRepository.freshness("progress", age: age, ttl: ttl, present: progressFetchedAt != nil)
+            ?? (progressFetchedAt == nil || age > ttl)
     }
 }
 

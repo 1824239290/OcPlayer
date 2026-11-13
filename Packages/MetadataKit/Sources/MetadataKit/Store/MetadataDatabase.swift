@@ -25,7 +25,24 @@ enum MetadataDatabaseFactory {
     ///
     /// - Parameter directory: 数据根目录（`Application Support/OcPlayer`）；
     ///   测试传临时目录。
-    static func makeDatabase(at directory: URL) throws -> DatabasePool {
+    static func makeDatabase(at directory: URL, coreLibraryPath: String? = nil,
+                             useSharedCore: Bool = true) throws -> DatabasePool {
+        if let core = RustMetadataDatabase.make(libraryPath: coreLibraryPath, enabled: useSharedCore) {
+            do {
+                let opened = try core.open(at: directory)
+                if opened.rebuilt {
+                    MetadataLog.logger.warning("媒体元数据库打开失败，删除重建", fields: [
+                        "error": .string(opened.firstError ?? ""),
+                    ])
+                }
+                // Migrations and recovery have finished in Core. This pool only
+                // supplies the compatible native adapter; never replay recovery.
+                return try makePool(at: directory)
+            } catch {
+                MetadataLog.logger.error("媒体元数据库重建后仍失败", fields: ["error": .string("\(error)")])
+                throw error
+            }
+        }
         do {
             return try openAndMigrate(at: directory)
         } catch {
@@ -34,7 +51,7 @@ enum MetadataDatabaseFactory {
             MetadataLog.logger.warning("媒体元数据库打开失败，删除重建", fields: [
                 "error": .string("\(error)"),
             ])
-            removeDatabaseFiles(at: directory)
+            removeDatabaseFiles(at: directory, useSharedCore: false)
             do {
                 return try openAndMigrate(at: directory)
             } catch {
@@ -49,7 +66,7 @@ enum MetadataDatabaseFactory {
         }
     }
 
-    private static func openAndMigrate(at directory: URL) throws -> DatabasePool {
+    private static func makePool(at directory: URL) throws -> DatabasePool {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let databaseURL = directory.appendingPathComponent(fileName)
         var configuration = Configuration()
@@ -62,6 +79,11 @@ enum MetadataDatabaseFactory {
         try? pool.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA journal_size_limit = \(8 * 1024 * 1024)")
         }
+        return pool
+    }
+
+    private static func openAndMigrate(at directory: URL) throws -> DatabasePool {
+        let pool = try makePool(at: directory)
         var migrator = DatabaseMigrator()
         // 不用 eraseDatabaseOnSchemaChange：那是开发期工具，会在迁移变更时**静默
         // 清空用户缓存**；这里的自愈路径是上面那条显式的删库重建。
@@ -84,7 +106,11 @@ enum MetadataDatabaseFactory {
     }
 
     /// 删掉库文件与 WAL / SHM 附属文件（不存在时忽略）。
-    static func removeDatabaseFiles(at directory: URL) {
+    static func removeDatabaseFiles(at directory: URL, useSharedCore: Bool = true) {
+        if let core = RustMetadataDatabase.make(enabled: useSharedCore) {
+            core.remove(at: directory)
+            return
+        }
         let fm = FileManager.default
         for suffix in ["", "-wal", "-shm"] {
             let url = directory.appendingPathComponent(fileName + suffix)
@@ -93,7 +119,10 @@ enum MetadataDatabaseFactory {
     }
 
     /// 数据库占用（含 WAL / SHM），供体积上报与淘汰判定。
-    static func totalBytes(at directory: URL) -> Int64 {
+    static func totalBytes(at directory: URL, useSharedCore: Bool = true) -> Int64 {
+        if let core = RustMetadataDatabase.make(enabled: useSharedCore) {
+            return (try? core.size(at: directory)) ?? 0
+        }
         let fm = FileManager.default
         var total: Int64 = 0
         for suffix in ["", "-wal", "-shm"] {

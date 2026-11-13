@@ -23,7 +23,11 @@ final class RustTMDbWireTests: XCTestCase {
             let port = String(decoding: pipe.fileHandleForReading.availableData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             base = URL(string: "http://127.0.0.1:\(port)")!
         }
-        deinit { if process.isRunning { process.terminate(); process.waitUntilExit() } }
+        deinit {
+            // Process exit notifications are delivered asynchronously. Waiting here
+            // can deadlock the cooperative executor running the XCTest method.
+            if process.isRunning { process.terminate() }
+        }
     }
     private func client(_ base: URL, library: String) -> TMDbClient {
         TMDbClient(session: .shared, credentials: Credential(),

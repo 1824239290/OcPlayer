@@ -39,7 +39,7 @@ public struct PageQuery: Hashable, Sendable {
     }
 }
 
-public struct PageKey: Hashable, Sendable {
+public struct PageKey: Hashable, Sendable, Codable {
     public var parentID: String
     public var kinds: String
     public var sortKey: String

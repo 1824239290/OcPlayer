@@ -13,6 +13,17 @@ extension MediaRepository {
     }
 
     public func refreshItem(itemID: MediaItem.ID) async throws -> MediaItem {
+        if let rust {
+            let claim = try rust.claim("item", key: itemID)
+            if !claim.owner {
+                guard let task = itemTasks[itemID] else { throw RustMediaRepository.missingTask }
+                return try await task.value
+            }
+            let task = Task { try await self.performItemRefresh(itemID: itemID) }
+            itemTasks[itemID] = task
+            defer { rust.finish(claim); itemTasks[itemID] = nil }
+            return try await task.value
+        }
         if let task = itemTasks[itemID] { return try await task.value }
         let task = Task { try await self.performItemRefresh(itemID: itemID) }
         itemTasks[itemID] = task
@@ -73,6 +84,17 @@ extension MediaRepository {
         itemID: MediaItem.ID,
         kindHint: MediaItem.Kind? = nil
     ) async throws -> MediaDetailRefresh {
+        if let rust {
+            let claim = try rust.claim("detail", key: itemID)
+            if !claim.owner {
+                guard let task = detailTasks[itemID] else { throw RustMediaRepository.missingTask }
+                return try await task.value
+            }
+            let task = Task { try await self.performDetailRefresh(itemID: itemID, kindHint: kindHint) }
+            detailTasks[itemID] = task
+            defer { rust.finish(claim); detailTasks[itemID] = nil }
+            return try await task.value
+        }
         if let task = detailTasks[itemID] { return try await task.value }
         let task = Task { try await self.performDetailRefresh(itemID: itemID, kindHint: kindHint) }
         detailTasks[itemID] = task
@@ -182,6 +204,17 @@ extension MediaRepository {
         seasonID: MediaItem.ID
     ) async throws -> [MediaItem] {
         let key = EpisodeKey(seriesID: seriesID, seasonID: seasonID)
+        if let rust {
+            let claim = try rust.claim("episodes", key: key)
+            if !claim.owner {
+                guard let task = episodeTasks[key] else { throw RustMediaRepository.missingTask }
+                return try await task.value
+            }
+            let task = Task { try await self.performEpisodeRefresh(key: key) }
+            episodeTasks[key] = task
+            defer { rust.finish(claim); episodeTasks[key] = nil }
+            return try await task.value
+        }
         if let task = episodeTasks[key] { return try await task.value }
         let task = Task { try await self.performEpisodeRefresh(key: key) }
         episodeTasks[key] = task

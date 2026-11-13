@@ -22,7 +22,9 @@ public struct MediaSnapshot<Value: Sendable>: Sendable {
     }
 
     public func isFresh(ttl: TimeInterval, now: Date = Date()) -> Bool {
-        source != .disk && now.timeIntervalSince(fetchedAt) < ttl
+        let age = now.timeIntervalSince(fetchedAt)
+        return RustMediaRepository.freshness("snapshot", age: age, ttl: ttl, source: source)
+            ?? (source != .disk && age < ttl)
     }
 
     public func replacingSource(_ source: MediaDataSource) -> Self {
@@ -191,3 +193,12 @@ public struct MediaPageContent: Sendable, Equatable {
         self.lastPageWasFull = lastPageWasFull
     }
 }
+
+extension MediaDataSource: Codable {}
+extension MediaSnapshot: Codable where Value: Codable {}
+extension MediaFailure: Codable {}
+extension MediaHomeContent: Codable {}
+extension MediaHomeRefresh: Codable {}
+extension MediaDetailContent: Codable {}
+extension MediaDetailRefresh: Codable {}
+extension MediaPageContent: Codable {}

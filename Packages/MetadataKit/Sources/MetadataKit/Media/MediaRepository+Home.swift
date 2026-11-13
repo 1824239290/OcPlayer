@@ -28,6 +28,23 @@ extension MediaRepository {
     /// 四个分区并行刷新，同一时刻只存在一轮首页请求。
     /// 成功分区写穿 SQLite；失败分区沿用缓存，不让一条 rail 的错误清空整页。
     public func refreshHome() async -> MediaHomeRefresh {
+        if let rust {
+            do {
+                let claim = try rust.claim("home", key: "home")
+                if !claim.owner {
+                    guard let homeTask else { throw RustMediaRepository.missingTask }
+                    return await homeTask.value
+                }
+                let task = Task { await self.performHomeRefresh() }
+                homeTask = task
+                defer { rust.finish(claim); homeTask = nil }
+                return await task.value
+            } catch {
+                RustMediaRepository.report(error)
+                let previous = await cachedHome() ?? snapshot(MediaHomeContent(), fetchedAt: now(), source: .network)
+                return MediaHomeRefresh(snapshot: previous, failures: ["repository": MediaFailure(error)])
+            }
+        }
         if let homeTask { return await homeTask.value }
         let task = Task { await self.performHomeRefresh() }
         homeTask = task

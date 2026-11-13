@@ -30,7 +30,8 @@ import XCTest
       deinit {
         if process.isRunning {
           process.terminate()
-          process.waitUntilExit()
+          // Process exit notifications reap the terminated fixture asynchronously.
+          // Blocking waitUntilExit can stall async XCTest teardown on macOS.
         }
       }
     }

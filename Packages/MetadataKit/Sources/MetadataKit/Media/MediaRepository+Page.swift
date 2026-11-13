@@ -32,6 +32,17 @@ extension MediaRepository {
         limit: Int
     ) async throws -> MediaSnapshot<MediaPageContent> {
         let key = descriptor.key(startIndex: startIndex, limit: limit)
+        if let rust {
+            let claim = try rust.claim("page", key: key)
+            if !claim.owner {
+                guard let task = pageTasks[key] else { throw RustMediaRepository.missingTask }
+                return try await task.value
+            }
+            let task = Task { try await self.performPageRefresh(descriptor, key: key, startIndex: startIndex, limit: limit) }
+            pageTasks[key] = task
+            defer { rust.finish(claim); pageTasks[key] = nil }
+            return try await task.value
+        }
         if let task = pageTasks[key] { return try await task.value }
         let task = Task {
             try await self.performPageRefresh(

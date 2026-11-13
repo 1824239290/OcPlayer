@@ -11,7 +11,7 @@ import JellyfinKit
 /// `store == nil` 是**内存模式**（建库失败 / 测试未建库），读取与刷新协议完全不变；
 /// 这样 App 不需要保留「有缓存走仓储、没缓存直走服务器」的第二套实现。
 public actor MediaRepository {
-    public struct Configuration: Sendable {
+    public struct Configuration: Sendable, Codable {
         public var itemLimit: Int
         public var detailLimit: Int
         public var episodeListLimit: Int
@@ -30,7 +30,7 @@ public actor MediaRepository {
         }
     }
 
-    struct EpisodeKey: Hashable {
+    struct EpisodeKey: Hashable, Codable {
         var seriesID: MediaItem.ID
         var seasonID: MediaItem.ID
     }
@@ -43,7 +43,13 @@ public actor MediaRepository {
 
     var localProgress: [MediaItem.ID: LocalPlaybackProgress] = [:]
     var isShutdown = false
-    var homeEntry: MemoryEntry<MediaHomeContent>?
+    let rust: RustMediaRepository?
+    var usesCoreRepository: Bool { rust != nil }
+    private var nativeHomeEntry: MemoryEntry<MediaHomeContent>?
+    var homeEntry: MemoryEntry<MediaHomeContent>? {
+        get { if let rust { return rust.get("home", key: "home") }; return nativeHomeEntry }
+        set { if let rust { rust.put("home", key: "home", entry: newValue) } else { nativeHomeEntry = newValue } }
+    }
     var items: MemoryLRU<MediaItem.ID, MediaItem>
     var details: MemoryLRU<MediaItem.ID, MediaDetailContent>
     var episodeLists: MemoryLRU<EpisodeKey, [MediaItem]>
@@ -60,17 +66,20 @@ public actor MediaRepository {
         store: MetadataStore?,
         tenant: TenantID? = nil,
         configuration: Configuration = .init(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        rustCoreLibraryPath: String? = nil, useSharedCore: Bool = true
     ) {
         self.server = server
         self.store = store
         self.tenant = tenant ?? TenantID(profile: server.profile)
         self.configuration = configuration
         self.now = now
-        self.items = MemoryLRU(limit: configuration.itemLimit)
-        self.details = MemoryLRU(limit: configuration.detailLimit)
-        self.episodeLists = MemoryLRU(limit: configuration.episodeListLimit)
-        self.pages = MemoryLRU(limit: configuration.pageLimit)
+        let rust = RustMediaRepository.make(configuration: configuration, libraryPath: rustCoreLibraryPath, enabled: useSharedCore)
+        self.rust = rust
+        self.items = MemoryLRU(limit: configuration.itemLimit, rust: rust, bucket: "items")
+        self.details = MemoryLRU(limit: configuration.detailLimit, rust: rust, bucket: "details")
+        self.episodeLists = MemoryLRU(limit: configuration.episodeListLimit, rust: rust, bucket: "episodes")
+        self.pages = MemoryLRU(limit: configuration.pageLimit, rust: rust, bucket: "pages")
     }
 
     /// 会话结束：拒绝后续写盘并清掉内存投影，避免旧会话的在途请求在登出后
@@ -83,6 +92,7 @@ public actor MediaRepository {
     /// 清掉当前会话的内存投影。SQLite 内容仍属于租户，不应随视图或会话内存重置而删除。
     public func invalidateMemory(discardLocalProgress: Bool = false) {
         if discardLocalProgress { localProgress.removeAll() }
+        if let rust { rust.clear(); return }
         homeEntry = nil
         items.removeAll()
         details.removeAll()
@@ -143,22 +153,28 @@ struct MemoryEntry<Value: Sendable>: Sendable {
 }
 
 /// 小型 LRU。只服务 actor 内部，不再引入另一套锁或跨 actor 缓存。
-struct MemoryLRU<Key: Hashable, Value: Sendable> {
+struct MemoryLRU<Key: Hashable & Codable, Value: Sendable & Codable> {
+    private let rust: RustMediaRepository?
+    private let bucket: String
     private let limit: Int
     private var values: [Key: MemoryEntry<Value>] = [:]
     private var recency: [Key] = []
 
-    init(limit: Int) {
+    init(limit: Int, rust: RustMediaRepository? = nil, bucket: String = "items") {
         self.limit = max(1, limit)
+        self.rust = rust
+        self.bucket = bucket
     }
 
     subscript(key: Key) -> MemoryEntry<Value>? {
         mutating get {
+            if let rust { return rust.get(bucket, key: key) }
             guard let entry = values[key] else { return nil }
             touch(key)
             return entry
         }
         set {
+            if let rust { rust.put(bucket, key: key, entry: newValue); return }
             guard let newValue else {
                 values[key] = nil
                 recency.removeAll { $0 == key }
@@ -173,9 +189,10 @@ struct MemoryLRU<Key: Hashable, Value: Sendable> {
         }
     }
 
-    var allValues: [Key: MemoryEntry<Value>] { values }
+    var allValues: [Key: MemoryEntry<Value>] { rust?.all(bucket) ?? values }
 
     mutating func removeAll() {
+        if let rust { rust.clear(bucket); return }
         values.removeAll()
         recency.removeAll()
     }
@@ -206,3 +223,6 @@ extension MediaPageDescriptor {
             watchState: watchState, searchTerm: searchTerm)
     }
 }
+
+extension MemoryEntry: Encodable where Value: Encodable {}
+extension MemoryEntry: Decodable where Value: Decodable {}

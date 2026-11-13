@@ -13,8 +13,12 @@ public enum MetadataCache {
     /// - Parameter directory: 数据根目录（`Application Support/OcPlayer`）。
     /// - Throws: 删库重建**之后**仍失败时抛（磁盘满 / 权限），此时调用方应降级为
     ///   「没有缓存」而不是崩掉。
-    public static func open(at directory: URL) throws -> MetadataStore {
-        MetadataStore(database: try MetadataDatabaseFactory.makeDatabase(at: directory))
+    public static func open(at directory: URL, coreLibraryPath: String? = nil,
+                            useSharedCore: Bool = true) throws -> MetadataStore {
+        MetadataStore(database: try MetadataDatabaseFactory.makeDatabase(
+            at: directory, coreLibraryPath: coreLibraryPath, useSharedCore: useSharedCore),
+            coreLibraryPath: useSharedCore ? coreLibraryPath : nil,
+            coreEnabled: useSharedCore ? nil : false)
     }
 
     /// 数据库占用（含 WAL / SHM）。
