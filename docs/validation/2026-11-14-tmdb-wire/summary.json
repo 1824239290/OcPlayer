@@ -1,0 +1,128 @@
+{
+  "goalComplete": false,
+  "cohort": "exact TMDB network DTOs and native JSONObject response fidelity",
+  "rustTests": 100,
+  "directABI": {
+    "bangumi": 4,
+    "danmaku": 4,
+    "danmaku-cache": 6,
+    "danmaku-flow": 6,
+    "danmaku-policy": 4,
+    "intro": 9,
+    "intro-identity": 6,
+    "intro-provider": 6,
+    "media-login": 10,
+    "moviepilot": 10,
+    "network": 7,
+    "standalone": 10,
+    "tmdb-matcher": 4,
+    "tmdb-wire": 5
+  },
+  "directABITotal": 91,
+  "exportedAppleBindingTests": {
+    "total": 19,
+    "passed": 19,
+    "skipped": 0,
+    "failed": 0
+  },
+  "newRustTests": 2,
+  "newABITests": 5,
+  "newSDKTests": 2,
+  "newNativeWireTests": 3,
+  "nativeDifferentialScenarios": 14,
+  "completeModelComparisons": 42,
+  "nativePackages": {
+    "OcPlayerCore": {
+      "total": 19,
+      "passed": 19,
+      "skipped": 0,
+      "failed": 0
+    },
+    "JellyfinKit": {
+      "total": 255,
+      "passed": 255,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MetadataKit": {
+      "total": 313,
+      "passed": 313,
+      "skipped": 0,
+      "failed": 0
+    },
+    "MoviePilotKit": {
+      "total": 124,
+      "passed": 124,
+      "skipped": 0,
+      "failed": 0
+    },
+    "BangumiKit": {
+      "total": 99,
+      "passed": 99,
+      "skipped": 0,
+      "failed": 0
+    },
+    "PlaybackKit": {
+      "total": 96,
+      "passed": 96,
+      "skipped": 0,
+      "failed": 0
+    },
+    "DanmakuKit": {
+      "total": 272,
+      "passed": 272,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "coreDisabledMetadataKit": {
+    "total": 313,
+    "passed": 301,
+    "skipped": 12,
+    "failed": 0
+  },
+  "macOSAppTests": {
+    "total": 1008,
+    "passed": 989,
+    "skipped": 19,
+    "failed": 0
+  },
+  "independentRustSourceCopy": {
+    "files": 55,
+    "hashesMatchCurrentSource": true,
+    "locked": true,
+    "offline": true,
+    "tests": 100
+  },
+  "macOSDebugApplicationBuilt": true,
+  "xcodeDerivedDataReused": true,
+  "deepSignatureVerificationPassed": true,
+  "app": "/tmp/ocplayer-tmdb-wire-macos-final/DerivedData/Build/Products/Debug/OcPlayer.app",
+  "builtCoreSha256": "474f31e6b3578deed68c0fa16b7cca029dacd32bdb927eee9216353972fdb9d9",
+  "signedBundledCoreSha256": "495367730fd963b43a807296a8a3646632cea83e49dcf75be06c8a37e6c32239",
+  "bindingClientSha256": "01a09842570f62b13b20fc91b9731bc10d5fd3aa97e500cac6962931df0c568d",
+  "windowsRuntimeTested": false,
+  "remaining": [
+    "TMDB enricher/batch scheduling and collection orchestration",
+    "Repository memory/freshness and database open recovery",
+    "Account lifecycle and shared sync orchestration",
+    "Playback source/track preferences and recovery orchestration",
+    "Native deadline/TLS/redirect/streaming fidelity",
+    "Configuration/diagnostics mapping",
+    "Apple release delivery and Windows adapter implementation"
+  ],
+  "preliminaryEvidence": "Initial build and focused SDK/native/C ABI passing logs are preserved separately; the final unified run, independent offline source run and disabled-Core run are distinct passing records.",
+  "bundledSelftest": {
+    "completed": true,
+    "durationSeconds": 10,
+    "clipSeconds": 20,
+    "pausePlay": true,
+    "seek70Percent": 14.0,
+    "seek20Percent": 4.0,
+    "resize": true,
+    "initialSavedRate": 2.0,
+    "finalRate": 1.0,
+    "renderFailures": 0,
+    "audioFailures": 0
+  }
+}

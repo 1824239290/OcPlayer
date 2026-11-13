@@ -55,6 +55,6 @@ Core under the unified macOS verifier. Enricher/batch scheduling and repository
 memory/freshness orchestration remain separate open acceptance work in
 [macos-parity.md](macos-parity.md).
 
-Exact-ID evidence here covers the matcher boundary. The existing TMDB network
-DTO adapter still decodes through generic `JSONValue` (Double) and needs a
-separate exact-ID decoding audit before complete TMDB end-to-end acceptance.
+Exact-ID evidence here covers the matcher boundary. Network DTOs now use the
+SDK's original-byte typed decoding path, with separate HTTP/native differential
+coverage described in [tmdb-wire-contract.md](tmdb-wire-contract.md).

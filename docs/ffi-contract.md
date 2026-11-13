@@ -14,6 +14,12 @@ Persistent executor/connection-pool ownership, MoviePilot cookie isolation,
 {"ok":true,"code":0,"retryable":false,"message":"","data":{}}
 ```
 
+The Apple SDK exposes `OcpResponse.decodeData` to decode typed `data` directly
+from the original response bytes. Use this path for exact integer identifiers;
+the older generic `JSONValue` projection represents numbers as Double. TMDB
+response fields, signed request ranges and native wire decoding are specified in
+[tmdb-wire-contract.md](tmdb-wire-contract.md).
+
 Creating a core enqueues `core.ready`. Retained events are consumed in
 FIFO order with `ocp_poll_event`; the function returns `1` for an event, `0`
 when the queue is empty, and `-1` on an invalid call.

@@ -54,6 +54,8 @@ in progress.
 Native TMDB matching now uses Core's complete provider/parent/search and ranking
 decisions, preserving injected searches and exact identifiers; see
 [`docs/tmdb-matcher-contract.md`](docs/tmdb-matcher-contract.md).
+TMDB network models also preserve full native integer ranges and Foundation
+wire-decoding behavior; see [`docs/tmdb-wire-contract.md`](docs/tmdb-wire-contract.md).
 
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults

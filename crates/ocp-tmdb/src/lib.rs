@@ -1,6 +1,7 @@
 //! TMDB matching and season/episode derivation.
 
 pub mod matcher;
+mod wire;
 
 use regex::Regex;
 use reqwest::{
@@ -60,7 +61,7 @@ pub struct TmdbSearchResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct TmdbSeason {
-    pub season_number: i32,
+    pub season_number: i64,
     pub name: Option<String>,
     pub overview: Option<String>,
     pub poster_path: Option<String>,
@@ -72,12 +73,12 @@ pub struct TmdbSeason {
 #[serde(rename_all = "snake_case")]
 pub struct TmdbEpisode {
     pub id: i64,
-    pub episode_number: i32,
+    pub episode_number: i64,
     pub name: Option<String>,
     pub overview: Option<String>,
     pub still_path: Option<String>,
     pub air_date: Option<String>,
-    pub runtime: Option<i32>,
+    pub runtime: Option<i64>,
     pub vote_average: Option<f64>,
 }
 
@@ -160,17 +161,16 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
                 .map_err(|e| TmdbError::InvalidEndpoint(e.to_string()))?;
             headers.insert(AUTHORIZATION, value);
         }
-        self.http
-            .json(Method::GET, url, headers, None)
-            .await
-            .map_err(Into::into)
+        let bytes = self.http.bytes(Method::GET, url, headers, None).await?;
+        let value = wire::decode(&bytes).map_err(TmdbError::Response)?;
+        serde_json::from_value(value).map_err(Into::into)
     }
 
     pub async fn search(
         &self,
         query: &str,
         media_type: MediaType,
-        year: Option<i32>,
+        year: Option<i64>,
         language: &str,
     ) -> Result<Vec<TmdbSearchResult>, TmdbError> {
         let mut params = vec![("query", query.to_owned())];
@@ -191,7 +191,7 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
         Ok(entries(raw, "results")
             .filter_map(|entry| {
                 Some(TmdbSearchResult {
-                    id: entry.get("id")?.as_i64()?,
+                    id: integer(entry, "id")?,
                     media_type,
                     title: text(entry, "title"),
                     original_title: text(entry, "original_title"),
@@ -249,14 +249,9 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
     pub async fn season(
         &self,
         tv_id: i64,
-        season_number: i32,
+        season_number: i64,
         language: &str,
     ) -> Result<TmdbSeason, TmdbError> {
-        if season_number < 0 {
-            return Err(TmdbError::Response(
-                "season number must be non-negative".into(),
-            ));
-        }
         let raw: serde_json::Value = self
             .get(&format!("tv/{tv_id}/season/{season_number}"), language, &[])
             .await?;
@@ -269,10 +264,7 @@ impl<T: ocp_http::HttpTransport> TmdbClient<T> {
             episodes: entries(raw, "episodes")
                 .filter_map(|entry| {
                     Some(TmdbEpisode {
-                        id: entry
-                            .get("id")
-                            .and_then(serde_json::Value::as_i64)
-                            .unwrap_or_default(),
+                        id: integer(entry, "id").unwrap_or_default(),
                         episode_number: integer(entry, "episode_number")?,
                         name: text(entry, "name"),
                         overview: text(entry, "overview"),
@@ -299,15 +291,15 @@ fn text(raw: &Object, key: &str) -> Option<String> {
         .map(str::to_owned)
 }
 fn number(raw: &Object, key: &str) -> Option<f64> {
-    raw.get(key)?.as_f64()
+    wire::number(raw.get(key)?)
 }
-fn integer(raw: &Object, key: &str) -> Option<i32> {
-    let number = raw.get(key)?.as_i64()?;
-    i32::try_from(number).ok()
+fn integer(raw: &Object, key: &str) -> Option<i64> {
+    wire::integer(raw.get(key)?)
 }
 fn entries<'a>(raw: &'a Object, key: &str) -> impl Iterator<Item = &'a Object> {
     raw.get(key)
         .and_then(serde_json::Value::as_array)
+        .filter(|values| values.iter().all(serde_json::Value::is_object))
         .into_iter()
         .flatten()
         .filter_map(serde_json::Value::as_object)
@@ -319,16 +311,20 @@ fn decode_entity(raw: &serde_json::Value, media_type: MediaType) -> Result<TmdbE
         .and_then(serde_json::Value::as_object)
         .and_then(|ratings| {
             let ratings: Vec<_> = entries(ratings, "results").collect();
+            let preferred = text(raw, "__language").unwrap_or_else(|| "US".into());
             ratings
                 .iter()
                 .find(|rating| text(rating, "iso_3166_1").as_deref() == Some("US"))
+                .or_else(|| {
+                    ratings.iter().find(|rating| {
+                        text(rating, "iso_3166_1").as_deref() == Some(preferred.as_str())
+                    })
+                })
                 .or_else(|| ratings.first())
                 .and_then(|rating| text(rating, "rating"))
         });
     Ok(TmdbEntity {
-        id: raw
-            .get("id")
-            .and_then(serde_json::Value::as_i64)
+        id: integer(raw, "id")
             .ok_or_else(|| TmdbError::Response("response is missing id".into()))?,
         media_type,
         title: text(raw, "title"),
@@ -353,7 +349,7 @@ fn decode_entity(raw: &serde_json::Value, media_type: MediaType) -> Result<TmdbE
                     .take(20)
                     .filter_map(|entry| {
                         Some(TmdbCastMember {
-                            id: entry.get("id")?.as_i64()?,
+                            id: integer(entry, "id")?,
                             name: text(entry, "name")?,
                             character: text(entry, "character"),
                             profile_path: text(entry, "profile_path"),
@@ -382,7 +378,7 @@ fn decode_entity(raw: &serde_json::Value, media_type: MediaType) -> Result<TmdbE
         collection_id: raw
             .get("belongs_to_collection")
             .and_then(|value| value.get("id"))
-            .and_then(serde_json::Value::as_i64),
+            .and_then(wire::integer),
     })
 }
 
@@ -423,11 +419,11 @@ pub struct TmdbCastMember {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TmdbSeasonSummary {
-    pub season_number: i32,
+    pub season_number: i64,
     pub name: Option<String>,
     pub overview: Option<String>,
     pub poster_path: Option<String>,
-    pub episode_count: Option<i32>,
+    pub episode_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

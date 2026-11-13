@@ -2011,41 +2011,31 @@ fn run_domain_command(
                                     .search(
                                         query,
                                         media_type,
-                                        arguments
-                                            .get("year")
-                                            .and_then(Value::as_i64)
-                                            .map(|value| value as i32),
+                                        optional_i64_arg(&arguments, "year")?,
                                         language,
                                     )
                                     .await?,
                             )?
                         }
                         "tmdb.entity" => {
-                            let id = arguments
-                                .get("id")
-                                .and_then(Value::as_i64)
-                                .filter(|id| *id > 0)
-                                .ok_or_else(|| {
-                                    CommandError::invalid("id must be a positive integer")
+                            let id =
+                                arguments.get("id").and_then(Value::as_i64).ok_or_else(|| {
+                                    CommandError::invalid("id must be a signed integer")
                                 })?;
                             encode_value(client.entity(id, media_type, language).await?)?
                         }
                         _ => {
-                            let id = arguments
-                                .get("id")
-                                .and_then(Value::as_i64)
-                                .filter(|id| *id > 0)
-                                .ok_or_else(|| {
-                                    CommandError::invalid("id must be a positive integer")
+                            let id =
+                                arguments.get("id").and_then(Value::as_i64).ok_or_else(|| {
+                                    CommandError::invalid("id must be a signed integer")
                                 })?;
                             let season = arguments
                                 .get("seasonNumber")
                                 .and_then(Value::as_i64)
-                                .filter(|number| *number >= 0 && *number <= i32::MAX as i64)
                                 .ok_or_else(|| {
-                                    CommandError::invalid("seasonNumber must be non-negative")
+                                    CommandError::invalid("seasonNumber must be a signed integer")
                                 })?;
-                            encode_value(client.season(id, season as i32, language).await?)?
+                            encode_value(client.season(id, season, language).await?)?
                         }
                     };
                     Ok(value)
@@ -2413,6 +2403,15 @@ fn optional_i32_arg(arguments: &Value, key: &str) -> Result<Option<i32>, Command
                 .ok_or_else(|| CommandError::invalid(format!("{key} must be a 32-bit integer")))
         })
         .transpose()
+}
+fn optional_i64_arg(arguments: &Value, key: &str) -> Result<Option<i64>, CommandError> {
+    match arguments.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value
+            .as_i64()
+            .map(Some)
+            .ok_or_else(|| CommandError::invalid(format!("{key} must be a signed integer"))),
+    }
 }
 fn page_arg(arguments: &Value, key: &str, default: u32, maximum: u32) -> Result<u32, CommandError> {
     let value = match arguments.get(key) {

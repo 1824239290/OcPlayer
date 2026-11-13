@@ -1,0 +1,9 @@
+{
+  "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbClient.swift": "f7570fff6df3237b01d025114b346d36437414bed6a70f8e8d8ba8bb0746cd9e",
+  "Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbClient.swift": "1cafdc37047925732febf934f0ab0442209e22a2f323bb08006d753e41e95026",
+  "Packages/MetadataKit/Tests/MetadataKitTests/RustTMDbWireTests.swift": "d3b9a2c7fc5e4e331311af0b943d57cb6091b801a7a0e3f08d2317ea773af0e2",
+  "Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_wire_server.py": "d8ca4cbd37c5b3d0853aa68bd089fcb58c77ec419446dd4c5cc6c7db4b41978c",
+  "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift": "01a09842570f62b13b20fc91b9731bc10d5fd3aa97e500cac6962931df0c568d",
+  "Packages/OcPlayerCore/Tests/OcPlayerCoreTests/OcpResponseTests.swift": "77606a7daac065f91edc39db3c78b369934a061b914286922a4f5f3829e20a67",
+  "Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/tmdb_wire_server.py": "d8ca4cbd37c5b3d0853aa68bd089fcb58c77ec419446dd4c5cc6c7db4b41978c"
+}
