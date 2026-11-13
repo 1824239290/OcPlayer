@@ -40,7 +40,10 @@ Core, together with the first three providers' request/decoding/interval policie
 see [`docs/intro-provider-contract.md`](docs/intro-provider-contract.md). AniList
 ordered identity resolution and native-compatible ID persistence also run in
 Core; see [`docs/intro-identity-contract.md`](docs/intro-identity-contract.md).
-Complete shared loading remains in progress.
+Automatic/manual loading now uses a resumable Core flow, including matching
+budgets, payload conversion and intro precedence; see
+[`docs/danmaku-flow-contract.md`](docs/danmaku-flow-contract.md).
+Learning-promotion propagation and broader acceptance remain in progress.
 
 The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults

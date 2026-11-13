@@ -451,7 +451,7 @@ pub fn input(args: &Value) -> Result<Value, ProviderError> {
         None => Err(invalid("payloadJSON is required")),
     }
 }
-fn trim(value: &str) -> &str {
+pub(crate) fn trim(value: &str) -> &str {
     value.trim_matches(|c: char| {
         crate::intro_unicode::TRIMMING
             .iter()

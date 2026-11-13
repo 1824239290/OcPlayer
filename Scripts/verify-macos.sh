@@ -27,6 +27,7 @@ python3 tests/danmaku_cache_contract.py > "$output_dir/danmaku-cache-contract-te
 python3 tests/intro_contract.py > "$output_dir/intro-contract-tests.log" 2>&1
 python3 tests/intro_provider_contract.py > "$output_dir/intro-provider-contract-tests.log" 2>&1
 python3 tests/intro_identity_contract.py > "$output_dir/intro-identity-contract-tests.log" 2>&1
+python3 tests/danmaku_flow_contract.py > "$output_dir/danmaku-flow-contract-tests.log" 2>&1
 for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done

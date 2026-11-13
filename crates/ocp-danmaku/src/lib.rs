@@ -14,11 +14,13 @@ use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 pub mod cache;
 mod filename;
+pub mod flow;
 pub mod identity;
 pub mod intro;
 mod intro_unicode;
 pub mod policy;
 pub mod providers;
+pub mod render;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedAnimeInfo {

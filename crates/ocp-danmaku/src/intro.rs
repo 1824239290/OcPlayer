@@ -109,7 +109,7 @@ pub fn timestamp(text: &str) -> Option<f64> {
     None
 }
 
-fn swift_double(raw: &str) -> Option<f64> {
+pub(crate) fn swift_double(raw: &str) -> Option<f64> {
     if let Ok(n) = raw.parse::<f64>() {
         return n.is_finite().then_some(n);
     }

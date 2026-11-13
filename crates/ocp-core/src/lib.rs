@@ -50,6 +50,7 @@ struct State {
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
+    danmaku_flow: ocp_danmaku::flow::Directory,
     endpoint: Option<ocp_jellyfin::endpoint::EndpointDirectory>,
 }
 
@@ -138,6 +139,7 @@ impl Core {
                 danmaku_cache: None,
                 intro_learning: None,
                 intro_ids: None,
+                danmaku_flow: Default::default(),
                 endpoint: None,
             })),
         };
@@ -412,6 +414,25 @@ impl Core {
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
+            method if method.starts_with("danmakuFlow.") => {
+                match state
+                    .danmaku_flow
+                    .call(method.trim_start_matches("danmakuFlow."), &arguments)
+                {
+                    Ok(value) => ApiResponse::ok(
+                        ocp_danmaku::providers::payload(value)
+                            .map_err(|_| CoreError::StateUnavailable)?,
+                    ),
+                    Err(error) => ApiResponse::error(1002, false, error.to_string(), Value::Null),
+                }
+            }
+            "danmaku.renderPayload" => match ocp_danmaku::render::call(&arguments) {
+                Ok(value) => ApiResponse::ok(value),
+                Err(error) => {
+                    let e = CommandError::from(error);
+                    ApiResponse::error(e.0, e.1, e.2, Value::Null)
+                }
+            },
             "introIDs.open" => match ocp_danmaku::identity::IDStore::open(&arguments) {
                 Ok(store) => {
                     state.intro_ids = Some(Arc::new(Mutex::new(store)));

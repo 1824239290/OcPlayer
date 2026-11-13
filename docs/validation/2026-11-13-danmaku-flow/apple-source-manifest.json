@@ -1,0 +1,21 @@
+{
+  "source": "/Users/jumusu/Documents/project/OcPlayer",
+  "files": [
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/DanmakuLoadOrchestrator.swift",
+      "sha256": "66d1f958cde89e26ba615b39044bad1d0f67a8f5051e454141fb77e1dad51aaf"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/DanmakuService.swift",
+      "sha256": "92a96d5a6c9e0d6920897d58eed4c89632a0ee3cef7c011bf63bf9d3f96d7da4"
+    },
+    {
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/RustDanmakuFlow.swift",
+      "sha256": "235917be70352171313d6f3f4209a377507f1e34bd71d8837f5fb4553e4631ed"
+    },
+    {
+      "path": "Packages/DanmakuKit/Tests/DanmakuKitTests/RustDanmakuFlowTests.swift",
+      "sha256": "4e8ac0762c2efd47f4a2eef33d936a69867d295b665bc2c6e11dc2c4a244c061"
+    }
+  ]
+}

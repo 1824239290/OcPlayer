@@ -1,0 +1,9 @@
+test_identity_gates_and_special_namespace_order (__main__.DanmakuPolicyContract.test_identity_gates_and_special_namespace_order) ... ok
+test_invalid_inputs_are_rejected (__main__.DanmakuPolicyContract.test_invalid_inputs_are_rejected) ... ok
+test_order_threshold_and_rank_offset (__main__.DanmakuPolicyContract.test_order_threshold_and_rank_offset) ... ok
+test_parser_canonical_unicode_and_large_tokens (__main__.DanmakuPolicyContract.test_parser_canonical_unicode_and_large_tokens) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 2.030s
+
+OK
