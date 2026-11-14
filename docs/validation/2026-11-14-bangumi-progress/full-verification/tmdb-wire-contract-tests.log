@@ -1,0 +1,10 @@
+test_exact_nested_integer_and_optional_model_fields (__main__.TmdbWireContract.test_exact_nested_integer_and_optional_model_fields) ... ok
+test_foundation_numeric_and_array_projection (__main__.TmdbWireContract.test_foundation_numeric_and_array_projection) ... ok
+test_malformed_wire_returns_decoding_error (__main__.TmdbWireContract.test_malformed_wire_returns_decoding_error) ... ok
+test_native_wire_encodings_preserve_unicode_and_integer_ids (__main__.TmdbWireContract.test_native_wire_encodings_preserve_unicode_and_integer_ids) ... ok
+test_signed_ranges_and_invalid_argument_preflight (__main__.TmdbWireContract.test_signed_ranges_and_invalid_argument_preflight) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.417s
+
+OK

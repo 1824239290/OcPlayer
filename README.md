@@ -38,6 +38,9 @@ profile-operation revision barriers. Collection/episode synchronization now uses
 retained flows and transactional SQL receipts. Native credential storage and
 effects remain adapters; see [`docs/bangumi-account-contract.md`](docs/bangumi-account-contract.md)
 and [`docs/bangumi-sync-contract.md`](docs/bangumi-sync-contract.md).
+Subject loading, tri-state collection reconciliation, progress and rating
+mutations, batch readback and season completion now also use retained SQL/effect
+flows; see [`docs/bangumi-progress-contract.md`](docs/bangumi-progress-contract.md).
 
 Danmaku matching policy and mapping/comment/intro-hint persistence now run in
 Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,
