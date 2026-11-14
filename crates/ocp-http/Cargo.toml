@@ -12,6 +12,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 url.workspace = true
-
-[dev-dependencies]
 http = "1"
+async-compression = { version = "0.4", features = ["tokio", "gzip", "zlib", "brotli"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"

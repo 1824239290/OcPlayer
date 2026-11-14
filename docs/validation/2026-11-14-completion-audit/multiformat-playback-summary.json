@@ -1,0 +1,38 @@
+[
+  {
+    "file": "av1-opus.mkv.selftest.log",
+    "lastNative": "[selftest] stopped pos=4833000µs dur=5008000µs surface=true | 解码 96 · 渲染 179 · 硬解 0 · 软解 96 · 零拷贝 0 · 音频 251 · 渲染失败 0 · 音频失败 0",
+    "lastCore": "[selftest] core=ended pos=4.833s rate=2.0 volume=0.4",
+    "ended": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "coreAvailable": true
+  },
+  {
+    "file": "hevc-main10.mkv.selftest.log",
+    "lastNative": "[selftest] stopped pos=4792000µs dur=5021000µs surface=true | 解码 120 · 渲染 186 · 硬解 120 · 软解 0 · 零拷贝 120 · 音频 235 · 渲染失败 0 · 音频失败 0",
+    "lastCore": "[selftest] core=ended pos=4.792s rate=2.0 volume=0.4",
+    "ended": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "coreAvailable": true
+  },
+  {
+    "file": "ocplayer-core-playback.mp4.selftest.log",
+    "lastNative": "[selftest] playing pos=5766666µs dur=20000000µs surface=true | 解码 379 · 渲染 547 · 硬解 379 · 软解 0 · 零拷贝 379 · 音频 613 · 渲染失败 0 · 音频失败 0",
+    "lastCore": "[selftest] core=playing pos=5.566666s rate=1.0 volume=0.4",
+    "ended": false,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "coreAvailable": true
+  },
+  {
+    "file": "vp9-opus.webm.selftest.log",
+    "lastNative": "[selftest] stopped pos=4792000µs dur=5008000µs surface=true | 解码 120 · 渲染 188 · 硬解 120 · 软解 0 · 零拷贝 120 · 音频 251 · 渲染失败 0 · 音频失败 0",
+    "lastCore": "[selftest] core=ended pos=4.792s rate=2.0 volume=0.4",
+    "ended": true,
+    "renderFailures": 0,
+    "audioFailures": 0,
+    "coreAvailable": true
+  }
+]

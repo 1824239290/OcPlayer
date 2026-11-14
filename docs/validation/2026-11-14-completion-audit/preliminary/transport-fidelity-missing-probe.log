@@ -1,0 +1,31 @@
+test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) ... 
+  test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) (coding='stacked') ... FAIL
+  test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) (coding='multi') ... FAIL
+test_bad_compressed_body_is_not_replayed (__main__.TransportFidelity.test_bad_compressed_body_is_not_replayed) ... ok
+test_compressed_sse_delivers_events_before_the_body_finishes (__main__.TransportFidelity.test_compressed_sse_delivers_events_before_the_body_finishes) ... ok
+test_json_domain_decoding_and_probe_share_the_decompressor (__main__.TransportFidelity.test_json_domain_decoding_and_probe_share_the_decompressor) ... ok
+test_moviepilot_permission_map_is_an_ignored_native_extension (__main__.TransportFidelity.test_moviepilot_permission_map_is_an_ignored_native_extension) ... ok
+test_same_origin_redirect_preserves_decoded_reply (__main__.TransportFidelity.test_same_origin_redirect_preserves_decoded_reply) ... ok
+
+======================================================================
+FAIL: test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) (coding='stacked')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/transport_fidelity_contract.py", line 65, in test_all_codings_decode_as_native_and_keep_raw_headers
+    native=json.loads(subprocess.check_output([probe,url],text=True));self.assertFalse(native['error'])
+                                                                      ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_all_codings_decode_as_native_and_keep_raw_headers (__main__.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers) (coding='multi')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/transport_fidelity_contract.py", line 68, in test_all_codings_decode_as_native_and_keep_raw_headers
+    self.assertEqual(core['body'].encode(),base64.b64decode(native['bodyBase64']))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: b'{"page":1,"results":[],"total_pages":1,"total_results":0}' != b'{"page":1,"results":'
+
+----------------------------------------------------------------------
+Ran 6 tests in 5.703s
+
+FAILED (failures=2)

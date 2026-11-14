@@ -14,6 +14,15 @@ cargo test --workspace --locked > "$output_dir/rust-tests.log" 2>&1
 Scripts/build-apple-dylib.sh "$output_dir" > "$output_dir/rust-build.log" 2>&1
 export OCP_CORE_LIBRARY_PATH="$output_dir/libocp_ffi.dylib"
 export OCP_CORE_ENABLED=1
+cc -dynamiclib "$repo_root/tests/fixtures/apple_boundary_echo.c" -o "$output_dir/apple-boundary-echo.dylib" > "$output_dir/apple-boundary-fixture-build.log" 2>&1
+cc -dynamiclib -DFIXTURE_MISSING_EXPORT "$repo_root/tests/fixtures/apple_boundary_echo.c" -o "$output_dir/apple-boundary-echo.dylib.missing.dylib" >> "$output_dir/apple-boundary-fixture-build.log" 2>&1
+cc -dynamiclib -DFIXTURE_ABI_VERSION=2 "$repo_root/tests/fixtures/apple_boundary_echo.c" -o "$output_dir/apple-boundary-echo.dylib.version.dylib" >> "$output_dir/apple-boundary-fixture-build.log" 2>&1
+cp "$repo_root/tests/fixtures/native_http_probe.swift" "$output_dir/native-http-probe.swift"
+swiftc "$output_dir/native-http-probe.swift" -o "$output_dir/native-http-probe" > "$output_dir/native-http-probe-build.log" 2>&1
+export OCP_NATIVE_HTTP_PROBE_PATH="$output_dir/native-http-probe"
+export OCP_CORE_ECHO_LIBRARY_PATH="$output_dir/apple-boundary-echo.dylib"
+python3 tests/public_command_contract.py > "$output_dir/public-command-contract-tests.log" 2>&1
+python3 tests/transport_fidelity_contract.py > "$output_dir/transport-fidelity-contract-tests.log" 2>&1
 Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-equivalence.log" 2>&1
 cmp tests/media_projection_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_projection_server.py" > "$output_dir/media-projection-fixture-equivalence.log" 2>&1
 cmp tests/media_nullable_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_nullable_server.py" > "$output_dir/media-nullable-fixture-equivalence.log" 2>&1

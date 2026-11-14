@@ -46,6 +46,7 @@ pub(crate) async fn run(client: Client, arguments: Value) -> Result<Value, Comma
     let mut request = client
         .get(target)
         .header(header::ACCEPT, "application/json")
+        .header(header::ACCEPT_ENCODING, "gzip, deflate, br")
         .timeout(timeout);
     if let Some(authorization) = authorization {
         request = request.header(header::AUTHORIZATION, authorization);
@@ -53,9 +54,10 @@ pub(crate) async fn run(client: Client, arguments: Value) -> Result<Value, Comma
     if let Some(user_agent) = user_agent {
         request = request.header(header::USER_AGENT, user_agent);
     }
-    let Ok(mut response) = request.send().await else {
+    let Ok(response) = request.send().await else {
         return Ok(Value::Null);
     };
+    let mut response = ocp_http::decoded_response(response);
     if !response.status().is_success() {
         return Ok(Value::Null);
     }

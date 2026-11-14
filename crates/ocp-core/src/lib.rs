@@ -18,6 +18,7 @@ mod diagnostic_export;
 mod events;
 mod media;
 mod network;
+mod preferences;
 mod probe;
 mod settings_backup;
 
@@ -31,6 +32,8 @@ pub enum CoreError {
     UnknownSnapshot(String),
     #[error("core state is unavailable")]
     StateUnavailable,
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
     #[error("session: {0}")]
     Session(String),
     #[error("store: {0}")]
@@ -265,13 +268,34 @@ impl Core {
     }
 
     pub fn call(&self, method: &str, arguments_json: &str) -> Result<String, CoreError> {
-        let arguments: Value = if arguments_json.trim().is_empty() {
+        let mut arguments: Value = if arguments_json.trim().is_empty() {
             json!({})
         } else {
             serde_json::from_str(arguments_json)?
         };
+        if !arguments.is_object() {
+            return Ok(error_response(
+                1002,
+                false,
+                "command arguments must be an object",
+            ));
+        }
+        if let Some(id) = arguments.get("requestId") {
+            if !id
+                .as_str()
+                .is_some_and(|id| !id.is_empty() && !id.contains('\0'))
+            {
+                return Ok(error_response(
+                    1002,
+                    false,
+                    "requestId must be a nonempty string without NUL",
+                ));
+            }
+        }
         if matches!(method, "request.prepare" | "request.cancel") {
-            let id = required_arg(&arguments, "requestId")?;
+            let Some(id) = arguments.get("requestId").and_then(Value::as_str) else {
+                return Ok(error_response(1002, false, "requestId is required"));
+            };
             let mut requests = self
                 .requests
                 .lock()
@@ -404,6 +428,19 @@ impl Core {
                 Err((code, retryable, message)) => {
                     ApiResponse::error(code, retryable, message, Value::Null)
                 }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        // Network streaming receipts retain requestId for host correlation. Local
+        // typed commands consume it only as cancellation envelope metadata.
+        arguments
+            .as_object_mut()
+            .expect("validated object")
+            .remove("requestId");
+        if matches!(method, "preferences.schema" | "preferences.resolve") {
+            let response = match preferences::call(method, &arguments) {
+                Ok(value) => ApiResponse::ok(value),
+                Err(error) => ApiResponse::error(1002, false, error, Value::Null),
             };
             return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
         }
@@ -1647,6 +1684,11 @@ impl Core {
         scale: f64,
         kind: u32,
     ) -> Result<(), CoreError> {
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err(CoreError::InvalidArgument(
+                "surface scale must be finite and positive".into(),
+            ));
+        }
         let mut state = self.state.lock().map_err(|_| CoreError::StateUnavailable)?;
         state.surface_attached = true;
         state.push_event("surface.attached", json!({ "nativeHandle": native_handle, "width": width, "height": height, "scale": scale, "kind": kind }));
@@ -1654,6 +1696,11 @@ impl Core {
     }
 
     pub fn resize_surface(&self, width: u32, height: u32, scale: f64) -> Result<(), CoreError> {
+        if !scale.is_finite() || scale <= 0.0 {
+            return Err(CoreError::InvalidArgument(
+                "surface scale must be finite and positive".into(),
+            ));
+        }
         let mut state = self.state.lock().map_err(|_| CoreError::StateUnavailable)?;
         if state.surface_attached {
             state.push_event(
@@ -1674,6 +1721,11 @@ impl Core {
     }
 
     pub fn render_tick(&self, time_seconds: f64) -> Result<(), CoreError> {
+        if !time_seconds.is_finite() {
+            return Err(CoreError::InvalidArgument(
+                "render time must be finite".into(),
+            ));
+        }
         let mut state = self.state.lock().map_err(|_| CoreError::StateUnavailable)?;
         if state.surface_attached {
             state.push_event("render.tick", json!({ "timeSeconds": time_seconds }));

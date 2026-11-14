@@ -1,0 +1,250 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[1 / 4]
+Build complete! (0.32秒)
+Test Suite 'All tests' started at 2026-11-14 20:06:02.274.
+Test Suite 'DiagnosticsKitTests.xctest' started at 2026-11-14 20:06:02.275.
+Test Suite 'CancellationClassifierTests' started at 2026-11-14 20:06:02.275.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testCancellationErrorIsCancellation]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testCancellationErrorIsCancellation]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testCancellationVariants]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testCancellationVariants]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testClassifierIsTheSingleSourceOfTruth]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testClassifierIsTheSingleSourceOfTruth]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testNormalizedOnlyRewritesCancellation]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testNormalizedOnlyRewritesCancellation]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testOtherErrorsAreNotCancellation]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testOtherErrorsAreNotCancellation]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testURLErrorCancelledIsCancellation]' started.
+Test Case '-[DiagnosticsKitTests.CancellationClassifierTests testURLErrorCancelledIsCancellation]' passed (0.000 seconds).
+Test Suite 'CancellationClassifierTests' passed at 2026-11-14 20:06:02.277.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'CredentialFileStoreTests' started at 2026-11-14 20:06:02.277.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testCorruptFileDegradesToEmpty]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testCorruptFileDegradesToEmpty]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFileIsExcludedFromBackup]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFileIsExcludedFromBackup]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFileIsJSONAndDoesNotContainPlaintext]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFileIsJSONAndDoesNotContainPlaintext]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFilePermissionsAreOwnerOnly]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testFilePermissionsAreOwnerOnly]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testPersistsAcrossInstances]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testPersistsAcrossInstances]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testRemoveAllClearsEverything]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testRemoveAllClearsEverything]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStoresAndReadsBackData]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStoresAndReadsBackData]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStoresAndReadsBackString]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStoresAndReadsBackString]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStringAndDataAPIShareOneFile]' started.
+Test Case '-[DiagnosticsKitTests.CredentialFileStoreTests testStringAndDataAPIShareOneFile]' passed (0.001 seconds).
+Test Suite 'CredentialFileStoreTests' passed at 2026-11-14 20:06:02.287.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.010 (0.010) seconds
+Test Suite 'DiagnosticExportBudgetTests' started at 2026-11-14 20:06:02.287.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testBudgetKeepsNewestRecordsOnly]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testBudgetKeepsNewestRecordsOnly]' passed (0.118 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testOrderRemainsAscendingAcrossFiles]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testOrderRemainsAscendingAcrossFiles]' passed (0.017 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testPartialLeadingLineIsDropped]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testPartialLeadingLineIsDropped]' passed (0.070 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testTinyBudgetYieldsHeaderOnly]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testTinyBudgetYieldsHeaderOnly]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnboundedExportIsByteIdenticalToLegacyShape]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnboundedExportIsByteIdenticalToLegacyShape]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnboundedExportStillContainsEverything]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnboundedExportStillContainsEverything]' passed (0.005 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnterminatedTailDoesNotConsumeBudget]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportBudgetTests testUnterminatedTailDoesNotConsumeBudget]' passed (0.004 seconds).
+Test Suite 'DiagnosticExportBudgetTests' passed at 2026-11-14 20:06:02.505.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.217 (0.218) seconds
+Test Suite 'DiagnosticExportDirectoryTests' started at 2026-11-14 20:06:02.505.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportDirectoryTests testQueuedRecordsAreSynchronizedBeforeDirectoryOperation]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportDirectoryTests testQueuedRecordsAreSynchronizedBeforeDirectoryOperation]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticExportDirectoryTests testThrowingDirectoryOperationReleasesTheQueueForLaterExports]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticExportDirectoryTests testThrowingDirectoryOperationReleasesTheQueueForLaterExports]' passed (0.001 seconds).
+Test Suite 'DiagnosticExportDirectoryTests' passed at 2026-11-14 20:06:02.507.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'DiagnosticLevelFilteringTests' started at 2026-11-14 20:06:02.508.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testDebugIsFilteredAtDefaultLevelAndMessageIsNotEvaluated]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testDebugIsFilteredAtDefaultLevelAndMessageIsNotEvaluated]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testDefaultProcessLevelIsInfo]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testDefaultProcessLevelIsInfo]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testFilteredEntriesDoNotTouchThrottleState]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testFilteredEntriesDoNotTouchThrottleState]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testInstanceOverrideWinsOverProcessLevel]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testInstanceOverrideWinsOverProcessLevel]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testLevelOrderingMatchesSeverity]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testLevelOrderingMatchesSeverity]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testRecordsCarrySessionAndMonotonicSequence]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testRecordsCarrySessionAndMonotonicSequence]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testSwitchingToDebugLetsDebugRecordsThrough]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testSwitchingToDebugLetsDebugRecordsThrough]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testTimestampsCarryMillisecondsAndOldRecordsStillDecode]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLevelFilteringTests testTimestampsCarryMillisecondsAndOldRecordsStillDecode]' passed (0.001 seconds).
+Test Suite 'DiagnosticLevelFilteringTests' passed at 2026-11-14 20:06:02.515.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'DiagnosticLoggerTests' started at 2026-11-14 20:06:02.515.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testAppendLandsAtRealEndWhenAnotherWriterIntervenes]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testAppendLandsAtRealEndWhenAnotherWriterIntervenes]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testClearRemovesEverything]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testClearRemovesEverything]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testExportTextPrependsHeaderLines]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testExportTextPrependsHeaderLines]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testFieldRedactionReachesDisk]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testFieldRedactionReachesDisk]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testMaintenanceRemovesExpiredFilesAndKeepsFreshFiles]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testMaintenanceRemovesExpiredFilesAndKeepsFreshFiles]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testOversizedEntryIsTruncatedNotReplaced]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testOversizedEntryIsTruncatedNotReplaced]' passed (0.008 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testRetentionKeepsNewestFilesAndNeverDeletesCurrent]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testRetentionKeepsNewestFilesAndNeverDeletesCurrent]' passed (0.003 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSessionFileContinuesAndExportKeepsAllRecords]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSessionFileContinuesAndExportKeepsAllRecords]' passed (0.006 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSessionFileNameCarriesStampAndSession]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSessionFileNameCarriesStampAndSession]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSubsystemAndCategoryAreRedacted]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSubsystemAndCategoryAreRedacted]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSummaryReportsFileSizeAndCount]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testSummaryReportsFileSizeAndCount]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testThrottleSuppressesAndFlushSummarizes]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testThrottleSuppressesAndFlushSummarizes]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testWritesAndReadsBackRecords]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticLoggerTests testWritesAndReadsBackRecords]' passed (0.001 seconds).
+Test Suite 'DiagnosticLoggerTests' passed at 2026-11-14 20:06:02.545.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.029 (0.030) seconds
+Test Suite 'DiagnosticRedactorGuardTests' started at 2026-11-14 20:06:02.545.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testCorpusExercisesBothSidesOfEveryGuard]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testCorpusExercisesBothSidesOfEveryGuard]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEmbeddedNULDoesNotBypassRedaction]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEmbeddedNULDoesNotBypassRedaction]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEveryKeywordInTheTableActuallyTripsTheGuard]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEveryKeywordInTheTableActuallyTripsTheGuard]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEveryTableEntryTracesBackToTheRegex]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testEveryTableEntryTracesBackToTheRegex]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testGuardedRedactionIsByteIdenticalToUnguarded]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testGuardedRedactionIsByteIdenticalToUnguarded]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testGuardMatchesUnguardedOnByteLevelEdgeCases]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testGuardMatchesUnguardedOnByteLevelEdgeCases]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testJWTIsRedacted]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testJWTIsRedacted]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testKeywordsTheRegexKnowsAreAllInTheTable]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testKeywordsTheRegexKnowsAreAllInTheTable]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testLongSDoesNotBypassRedaction]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testLongSDoesNotBypassRedaction]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testRedactionIsNotIdempotentSoDoNotDoubleRedact]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testRedactionIsNotIdempotentSoDoNotDoubleRedact]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testSensitiveValuesNeverSurviveRedaction]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testSensitiveValuesNeverSurviveRedaction]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testURLQueryAndUserInfoAreRedacted]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorGuardTests testURLQueryAndUserInfoAreRedacted]' passed (0.000 seconds).
+Test Suite 'DiagnosticRedactorGuardTests' passed at 2026-11-14 20:06:02.554.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+Test Suite 'DiagnosticRedactorTests' started at 2026-11-14 20:06:02.554.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testKeepsOrdinaryJSONFieldsIntact]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testKeepsOrdinaryJSONFieldsIntact]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testKeepsServerAPIRoutesIntact]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testKeepsServerAPIRoutesIntact]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsAppContainerPaths]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsAppContainerPaths]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsAuthorizationHeader]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsAuthorizationHeader]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsJSONWrappedCredentials]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsJSONWrappedCredentials]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsJWTs]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsJWTs]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsPrefixedHeaderFieldKeys]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsPrefixedHeaderFieldKeys]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsSensitiveFieldKeys]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsSensitiveFieldKeys]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsURLUserinfoAndQuery]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsURLUserinfoAndQuery]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsUserHomePaths]' started.
+Test Case '-[DiagnosticsKitTests.DiagnosticRedactorTests testRedactsUserHomePaths]' passed (0.000 seconds).
+Test Suite 'DiagnosticRedactorTests' passed at 2026-11-14 20:06:02.556.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'HTTPClientTests' started at 2026-11-14 20:06:02.556.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testBackoffIsExponentialWithJitter]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testBackoffIsExponentialWithJitter]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRetryAfterDominatesAndIsCapped]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRetryAfterDominatesAndIsCapped]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunDoesNotRetryCancellation]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunDoesNotRetryCancellation]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunExhaustsAttemptsAndThrowsLastError]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunExhaustsAttemptsAndThrowsLastError]' passed (1.037 seconds).
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunStopsOnNonRetryableError]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunStopsOnNonRetryableError]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunSucceedsAfterTransientFailures]' started.
+Test Case '-[DiagnosticsKitTests.HTTPClientTests testRunSucceedsAfterTransientFailures]' passed (1.045 seconds).
+Test Suite 'HTTPClientTests' passed at 2026-11-14 20:06:04.642.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 2.084 (2.085) seconds
+Test Suite 'ManagedDirectoryPrunerTests' started at 2026-11-14 20:06:04.642.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testAllowlistMatchIsCaseInsensitive]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testAllowlistMatchIsCaseInsensitive]' passed (0.004 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testEmptyAllowlistBehavesLikeNil]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testEmptyAllowlistBehavesLikeNil]' passed (0.002 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPrefixAllowlistProtectsUnknownFilesEvenWhenOldest]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPrefixAllowlistProtectsUnknownFilesEvenWhenOldest]' passed (0.003 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneLeavesUnlistedExtensionsAndChildSymlinksAlone]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneLeavesUnlistedExtensionsAndChildSymlinksAlone]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneRejectsSymbolicLinkRootWithoutTouchingTarget]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneRejectsSymbolicLinkRootWithoutTouchingTarget]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneRemovesOldestFilesUntilCountAndBytesFit]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneRemovesOldestFilesUntilCountAndBytesFit]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneTreatsMissingDirectoryAsNoWork]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testPruneTreatsMissingDirectoryAsNoWork]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testWithoutAllowlistAllCandidatesParticipate]' started.
+Test Case '-[DiagnosticsKitTests.ManagedDirectoryPrunerTests testWithoutAllowlistAllCandidatesParticipate]' passed (0.001 seconds).
+Test Suite 'ManagedDirectoryPrunerTests' passed at 2026-11-14 20:06:04.656.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.014 (0.015) seconds
+Test Suite 'NetworkCommonTests' started at 2026-11-14 20:06:04.657.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierCoversAllCertificateCases]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierCoversAllCertificateCases]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierMapsCommonCodes]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierMapsCommonCodes]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierReturnsNilForUnknown]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testClassifierReturnsNilForUnknown]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testDurationTimeInterval]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testDurationTimeInterval]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testLogPathDropsQueryAndTrailingSlash]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testLogPathDropsQueryAndTrailingSlash]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testLogPathFallsBackSafely]' started.
+Test Case '-[DiagnosticsKitTests.NetworkCommonTests testLogPathFallsBackSafely]' passed (0.001 seconds).
+Test Suite 'NetworkCommonTests' passed at 2026-11-14 20:06:04.659.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'OcPlayerStorageTests' started at 2026-11-14 20:06:04.659.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryDiffersFromDataDirectory]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryDiffersFromDataDirectory]' passed (0.001 seconds).
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryHonoursInjectedBase]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryHonoursInjectedBase]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryLivesUnderCachesRoot]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheDirectoryLivesUnderCachesRoot]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheRootNeverEqualsDataRoot]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCacheRootNeverEqualsDataRoot]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCachesRootFollowsIsolation]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCachesRootFollowsIsolation]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCachesRootSitsUnderSystemCaches]' started.
+Test Case '-[DiagnosticsKitTests.OcPlayerStorageTests testCachesRootSitsUnderSystemCaches]' passed (0.000 seconds).
+Test Suite 'OcPlayerStorageTests' passed at 2026-11-14 20:06:04.661.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'RuntimeEnvironmentTests' started at 2026-11-14 20:06:04.661.
+Test Case '-[DiagnosticsKitTests.RuntimeEnvironmentTests testDetectsTestHostInThisProcess]' started.
+Test Case '-[DiagnosticsKitTests.RuntimeEnvironmentTests testDetectsTestHostInThisProcess]' passed (0.000 seconds).
+Test Suite 'RuntimeEnvironmentTests' passed at 2026-11-14 20:06:04.662.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'StableHashTests' started at 2026-11-14 20:06:04.662.
+Test Case '-[DiagnosticsKitTests.StableHashTests testDifferentInputsDiffer]' started.
+Test Case '-[DiagnosticsKitTests.StableHashTests testDifferentInputsDiffer]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.StableHashTests testKnownVectors]' started.
+Test Case '-[DiagnosticsKitTests.StableHashTests testKnownVectors]' passed (0.000 seconds).
+Test Case '-[DiagnosticsKitTests.StableHashTests testMultiFeedConcatenates]' started.
+Test Case '-[DiagnosticsKitTests.StableHashTests testMultiFeedConcatenates]' passed (0.000 seconds).
+Test Suite 'StableHashTests' passed at 2026-11-14 20:06:04.662.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'DiagnosticsKitTests.xctest' passed at 2026-11-14 20:06:04.662.
+	 Executed 97 tests, with 0 failures (0 unexpected) in 2.378 (2.388) seconds
+Test Suite 'All tests' passed at 2026-11-14 20:06:04.662.
+	 Executed 97 tests, with 0 failures (0 unexpected) in 2.378 (2.388) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

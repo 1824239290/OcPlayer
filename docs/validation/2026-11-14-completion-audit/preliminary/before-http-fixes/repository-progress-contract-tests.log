@@ -1,0 +1,9 @@
+test_apply_updates_all_typed_projections_and_first_duplicate (__main__.RepositoryProgressContract.test_apply_updates_all_typed_projections_and_first_duplicate) ... ok
+test_bad_arguments_and_untyped_projection_do_not_mutate_progress_or_lru (__main__.RepositoryProgressContract.test_bad_arguments_and_untyped_projection_do_not_mutate_progress_or_lru) ... ok
+test_confirmation_signed_dates_completion_and_foreign_disk_boundaries (__main__.RepositoryProgressContract.test_confirmation_signed_dates_completion_and_foreign_disk_boundaries) ... ok
+test_final_receipts_are_retired_by_newer_progress_and_shutdown_preserves_owned_record (__main__.RepositoryProgressContract.test_final_receipts_are_retired_by_newer_progress_and_shutdown_preserves_owned_record) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 2.020s
+
+OK

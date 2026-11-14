@@ -1,0 +1,279 @@
+[
+  {
+    "log": "BangumiKit-tests.log",
+    "xctestExecuted": 33,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 89,
+    "executed": 122,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "DanmakuKit-tests.log",
+    "xctestExecuted": 272,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 0,
+    "executed": 272,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "DiagnosticsKit-tests.log",
+    "xctestExecuted": 97,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 0,
+    "executed": 97,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "JellyfinKit-tests.log",
+    "xctestExecuted": 288,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 0,
+    "executed": 288,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "MetadataKit-tests.log",
+    "xctestExecuted": 303,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 34,
+    "executed": 337,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "MoviePilotKit-tests.log",
+    "xctestExecuted": 114,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 20,
+    "executed": 134,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "OcPlayerCore-tests.log",
+    "xctestExecuted": 41,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 0,
+    "executed": 41,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "PlaybackKit-tests.log",
+    "xctestExecuted": 100,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 2,
+    "executed": 102,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "apple-binding-tests.log",
+    "xctestExecuted": 41,
+    "xctestFailures": 0,
+    "swiftTestingPassed": 0,
+    "executed": 41,
+    "source": "last XCTest all-tests summary plus Swift Testing run summary"
+  },
+  {
+    "log": "bangumi-account-contract-tests.log",
+    "executed": 5,
+    "passed": 5,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "bangumi-auth-flow-contract-tests.log",
+    "executed": 8,
+    "passed": 8,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "bangumi-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "bangumi-progress-contract-tests.log",
+    "executed": 9,
+    "passed": 9,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "bangumi-sync-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "danmaku-cache-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "danmaku-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "danmaku-flow-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "danmaku-policy-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "diagnostic-export-contract-tests.log",
+    "executed": 9,
+    "passed": 9,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "intro-contract-tests.log",
+    "executed": 9,
+    "passed": 9,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "intro-identity-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "intro-provider-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "media-login-contract-tests.log",
+    "executed": 10,
+    "passed": 10,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "media-nullable-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "media-projection-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "media-repository-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "moviepilot-account-contract-tests.log",
+    "executed": 5,
+    "passed": 5,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "moviepilot-contract-tests.log",
+    "executed": 10,
+    "passed": 10,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "moviepilot-flow-contract-tests.log",
+    "executed": 7,
+    "passed": 7,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "network-contract-tests.log",
+    "executed": 7,
+    "passed": 7,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "playback-preparation-contract-tests.log",
+    "executed": 11,
+    "passed": 11,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "playback-tracks-contract-tests.log",
+    "executed": 7,
+    "passed": 7,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "public-command-contract-tests.log",
+    "executed": 6,
+    "passed": 6,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "repository-composition-contract-tests.log",
+    "executed": 3,
+    "passed": 3,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "repository-flow-contract-tests.log",
+    "executed": 5,
+    "passed": 5,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "repository-progress-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "rust-tests.log",
+    "passed": 212,
+    "failed": 0,
+    "skipped": 0,
+    "source": "all Rust test-result summary blocks"
+  },
+  {
+    "log": "settings-backup-contract-tests.log",
+    "executed": 9,
+    "passed": 9,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "standalone-contract-tests.log",
+    "executed": 10,
+    "passed": 10,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "tmdb-enrichment-contract-tests.log",
+    "executed": 8,
+    "passed": 8,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "tmdb-matcher-contract-tests.log",
+    "executed": 4,
+    "passed": 4,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "tmdb-wire-contract-tests.log",
+    "executed": 5,
+    "passed": 5,
+    "source": "unittest full-run summaries"
+  },
+  {
+    "log": "transport-fidelity-contract-tests.log",
+    "executed": 7,
+    "passed": 7,
+    "source": "unittest full-run summaries"
+  }
+]

@@ -19,11 +19,20 @@ pub use stream::{SearchUpdate, StreamDecoder};
 pub struct User {
     pub id: Option<i64>,
     pub name: String,
+    // MPUser ignores this server-extension field. Preserve compatible lists but
+    // tolerate newer deployments' permission maps without rejecting login.
+    #[serde(default, deserialize_with = "optional_permissions")]
     pub permissions: Option<Vec<String>>,
     pub avatar: Option<String>,
     pub email: Option<String>,
     pub is_superuser: Option<bool>,
     pub is_active: Option<bool>,
+}
+fn optional_permissions<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    let value = Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MediaInfo {

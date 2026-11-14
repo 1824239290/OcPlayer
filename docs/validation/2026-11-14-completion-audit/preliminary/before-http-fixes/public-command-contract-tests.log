@@ -1,0 +1,11 @@
+test_every_command_rejects_invalid_request_ownership_before_dispatch (__main__.PublicCommandContract.test_every_command_rejects_invalid_request_ownership_before_dispatch) ... ok
+test_every_command_rejects_nonobject_arguments_before_side_effects (__main__.PublicCommandContract.test_every_command_rejects_nonobject_arguments_before_side_effects) ... ok
+test_inventory_matches_production_routing (__main__.PublicCommandContract.test_inventory_matches_production_routing) ... ok
+test_local_strict_dtos_accept_envelope_ownership_and_release_it (__main__.PublicCommandContract.test_local_strict_dtos_accept_envelope_ownership_and_release_it) ... ok
+test_runtime_preference_schema_and_boundaries (__main__.PublicCommandContract.test_runtime_preference_schema_and_boundaries) ... ok
+test_surface_rejects_nonfinite_values_without_mutation (__main__.PublicCommandContract.test_surface_rejects_nonfinite_values_without_mutation) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.100s
+
+OK

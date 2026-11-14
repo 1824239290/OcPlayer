@@ -1,0 +1,8 @@
+test_home_dates_empty_cache_and_default_season_match_native (__main__.RepositoryCompositionContract.test_home_dates_empty_cache_and_default_season_match_native) ... ok
+test_pagination_restores_gaps_and_retains_native_duplicate_rules (__main__.RepositoryCompositionContract.test_pagination_restores_gaps_and_retains_native_duplicate_rules) ... ok
+test_session_progress_is_shared_and_bad_payloads_are_atomic (__main__.RepositoryCompositionContract.test_session_progress_is_shared_and_bad_payloads_are_atomic) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.519s
+
+OK

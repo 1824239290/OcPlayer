@@ -1,0 +1,8 @@
+{
+  "testedOptimizedCoreSha256": "e0abfb563528bcaabe68754e2b7c494cebbef3984bb0b54310c648bbf8c7e3d2",
+  "signedBundledCoreSha256": "f68802a6fc20308915159969012c75481a756ef5fc17727e7c5926126bb7bb75",
+  "playbackRuns": 5,
+  "naturalEndRuns": 4,
+  "signaturePassed": true,
+  "xcresultZipIntegrityPassed": true
+}

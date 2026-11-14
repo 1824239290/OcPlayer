@@ -1,0 +1,160 @@
+{
+  "readOnly": true,
+  "credentialsLogged": false,
+  "checks": [
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "server.probe",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.163
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "server.libraries",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.087
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "browse.latest",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.084
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "browse.resume",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.08
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "browse.detail",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.114
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "media.fileInfo",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.052
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "media.segments",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.039
+    },
+    {
+      "label": "saved-server-1-jellyfin",
+      "method": "media.subtitles",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.048
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "server.probe",
+      "ok": true,
+      "code": 0,
+      "seconds": 2.767
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "server.libraries",
+      "ok": true,
+      "code": 0,
+      "seconds": 1.266
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "browse.latest",
+      "ok": true,
+      "code": 0,
+      "seconds": 1.105
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "browse.resume",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.903
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "browse.detail",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.41
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "media.fileInfo",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.268
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "media.segments",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.407
+    },
+    {
+      "label": "saved-server-2-emby",
+      "method": "media.subtitles",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.92
+    },
+    {
+      "label": "configured-tmdb-public-search",
+      "method": "tmdb.search",
+      "ok": true,
+      "code": 0,
+      "seconds": 5.693
+    },
+    {
+      "label": "bangumi-public-calendar",
+      "method": "bangumi.calendar",
+      "ok": true,
+      "code": 0,
+      "seconds": 2.719
+    },
+    {
+      "label": "configured-moviepilot-readonly",
+      "method": "moviepilot.currentUser",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.111
+    },
+    {
+      "label": "configured-moviepilot-readonly",
+      "method": "moviepilot.mediaSearch",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.037
+    },
+    {
+      "label": "configured-moviepilot-readonly",
+      "method": "moviepilot.subscription.list",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.128
+    },
+    {
+      "label": "moviepilot-user-wire-inspection",
+      "method": "moviepilot.request",
+      "ok": true,
+      "code": 0,
+      "seconds": 0.105
+    }
+  ]
+}

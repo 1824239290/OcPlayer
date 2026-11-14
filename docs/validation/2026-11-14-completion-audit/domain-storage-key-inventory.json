@@ -1,0 +1,230 @@
+{
+  "dev.jumusu.ocplayer.home.railPresence": [
+    {
+      "constant": "storageKey",
+      "path": "App/Shared/AppModel+Browser.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.animeskip.clientID": [
+    {
+      "constant": "clientIDKey",
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/AnimeSkipClient.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.dandanplay.gatewayURL": [
+    {
+      "constant": "gatewayURLKey",
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/DandanplaySettingsStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.dandanplay.apiKey": [
+    {
+      "constant": "defaultsKey",
+      "path": "Packages/DanmakuKit/Sources/DanmakuKit/DandanplaySettingsStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.deviceId": [
+    {
+      "constant": "deviceIDKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ClientIdentity.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.deviceName": [
+    {
+      "constant": "deviceNameKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ClientIdentity.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.customUserAgent": [
+    {
+      "constant": "customUserAgentKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ClientIdentity.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.servers": [
+    {
+      "constant": "profilesKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ServerStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.currentServer": [
+    {
+      "constant": "currentKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ServerStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.defaultServer": [
+    {
+      "constant": "defaultServerKey",
+      "path": "Packages/JellyfinKit/Sources/JellyfinKit/ServerStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.moviepilot.serverURL": [
+    {
+      "constant": "serverKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.moviepilot.username": [
+    {
+      "constant": "usernameKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.moviepilot.rememberPassword": [
+    {
+      "constant": "rememberPasswordKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.moviepilot.password": [
+    {
+      "constant": "legacyPasswordKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.moviepilot.accessToken": [
+    {
+      "constant": "legacyTokenKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "moviepilot.password": [
+    {
+      "constant": "passwordKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "moviepilot.token": [
+    {
+      "constant": "tokenKey",
+      "path": "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotStore.swift"
+    }
+  ],
+  "OCP_CORE_ENABLED": [
+    {
+      "constant": "userDefaultsKey",
+      "path": "Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.mirrorEnabled": [
+    {
+      "constant": "mirrorEnabledKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiURL.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.mirrorRootDomain": [
+    {
+      "constant": "mirrorRootDomainKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiURL.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.isAuthenticated": [
+    {
+      "constant": "isAuthenticatedKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.profile": [
+    {
+      "constant": "profileKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiStore.swift"
+    }
+  ],
+  "bangumi.auth": [
+    {
+      "constant": "authKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.auth": [
+    {
+      "constant": "legacyAuthKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.bangumi.collectionsUpdatedAt": [
+    {
+      "constant": "collectionsUpdatedAtKey",
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiStore.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.apiKey": [
+    {
+      "constant": "defaultsKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.language": [
+    {
+      "constant": "languageKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.preferText": [
+    {
+      "constant": "preferTMDbTextKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.fillImages": [
+    {
+      "constant": "fillMissingImagesKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.cacheDays": [
+    {
+      "constant": "expiresDaysKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.showPlaceholders": [
+    {
+      "constant": "showPlaceholdersKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbSettings.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.mirrorEnabled": [
+    {
+      "constant": "mirrorEnabledKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEndpoints.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.mirrorAPIBaseURL": [
+    {
+      "constant": "apiMirrorKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEndpoints.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL": [
+    {
+      "constant": "imageMirrorKey",
+      "path": "Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEndpoints.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.imageCache.canonicalKeysV1": [
+    {
+      "constant": "markerKey",
+      "path": "Packages/AppDesignKit/Sources/AppDesignKit/Images/ImagePipeline.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.imageCache.stableBlobKeysV1": [
+    {
+      "constant": "markerKey",
+      "path": "Packages/AppDesignKit/Sources/AppDesignKit/Images/ImagePipeline.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.imageCache.cachesRootV1": [
+    {
+      "constant": "markerKey",
+      "path": "Packages/AppDesignKit/Sources/AppDesignKit/Images/ImagePipeline.swift"
+    }
+  ],
+  "dev.jumusu.ocplayer.playback.engineID": [
+    {
+      "constant": "selectionKey",
+      "path": "Packages/PlaybackKit/Sources/PlaybackKit/PlaybackEngineRegistry.swift"
+    }
+  ]
+}

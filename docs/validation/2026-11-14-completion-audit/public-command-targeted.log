@@ -1,0 +1,20 @@
+test_every_command_rejects_invalid_request_ownership_before_dispatch (__main__.PublicCommandContract.test_every_command_rejects_invalid_request_ownership_before_dispatch) ... ok
+test_every_command_rejects_nonobject_arguments_before_side_effects (__main__.PublicCommandContract.test_every_command_rejects_nonobject_arguments_before_side_effects) ... ok
+test_inventory_matches_production_routing (__main__.PublicCommandContract.test_inventory_matches_production_routing) ... ok
+test_local_strict_dtos_accept_envelope_ownership_and_release_it (__main__.PublicCommandContract.test_local_strict_dtos_accept_envelope_ownership_and_release_it) ... FAIL
+test_runtime_preference_schema_and_boundaries (__main__.PublicCommandContract.test_runtime_preference_schema_and_boundaries) ... ok
+test_surface_rejects_nonfinite_values_without_mutation (__main__.PublicCommandContract.test_surface_rejects_nonfinite_values_without_mutation) ... ok
+
+======================================================================
+FAIL: test_local_strict_dtos_accept_envelope_ownership_and_release_it (__main__.PublicCommandContract.test_local_strict_dtos_accept_envelope_ownership_and_release_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/public_command_contract.py", line 58, in test_local_strict_dtos_accept_envelope_ownership_and_release_it
+    self.assertTrue(reply['ok'],reply)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 1002, 'retryable': False, 'message': 'diagnostic output must be separate from input files', 'data': None}
+
+----------------------------------------------------------------------
+Ran 6 tests in 1.286s
+
+FAILED (failures=1)

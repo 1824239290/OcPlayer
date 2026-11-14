@@ -1,0 +1,217 @@
+[
+  {
+    "name": "httpReadAheadMiB",
+    "key": "dev.jumusu.ocplayer.playback.httpReadAheadMiB",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "httpBackBufferMiB",
+    "key": "dev.jumusu.ocplayer.playback.httpBackBufferMiB",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "skipIntro",
+    "key": "dev.jumusu.ocplayer.playback.skipIntro",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "skipOutro",
+    "key": "dev.jumusu.ocplayer.playback.skipOutro",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "outroRetentionSeconds",
+    "key": "dev.jumusu.ocplayer.playback.outroRetentionSeconds",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleLanguagePreference",
+    "key": "dev.jumusu.ocplayer.playback.subtitleLanguage",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "lumaUpscaler",
+    "key": "dev.jumusu.ocplayer.playback.lumaUpscaler",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleAlignment",
+    "key": "dev.jumusu.ocplayer.playback.subtitleAlignment",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleMarginVertical",
+    "key": "dev.jumusu.ocplayer.playback.subtitleMarginVertical",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitlePrimaryColor",
+    "key": "dev.jumusu.ocplayer.playback.subtitlePrimaryColor",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleOutlineColor",
+    "key": "dev.jumusu.ocplayer.playback.subtitleOutlineColor",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleOutlineWidth",
+    "key": "dev.jumusu.ocplayer.playback.subtitleOutlineWidth",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleBold",
+    "key": "dev.jumusu.ocplayer.playback.subtitleBold",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "subtitleStyleOverrides",
+    "key": "dev.jumusu.ocplayer.playback.subtitleStyleOverrides",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "episodeSortAscending",
+    "key": "dev.jumusu.ocplayer.detail.episodeSortAscending",
+    "owner": "Native view ordering/layout persistence; Core receives the requested repository operation"
+  },
+  {
+    "name": "homeSections",
+    "key": "dev.jumusu.ocplayer.home.sections",
+    "owner": "Native view ordering/layout persistence; Core receives the requested repository operation"
+  },
+  {
+    "name": "bangumiProgressSort",
+    "key": "dev.jumusu.ocplayer.bangumi.progressSort",
+    "owner": "Native view ordering/layout persistence; Core receives the requested repository operation"
+  },
+  {
+    "name": "bangumiEnabled",
+    "key": "dev.jumusu.ocplayer.bangumi.enabled",
+    "owner": "Native feature/automatic-operation gate; Core owns any dispatched account, sync or danmaku flow"
+  },
+  {
+    "name": "moviepilotEnabled",
+    "key": "dev.jumusu.ocplayer.moviepilot.enabled",
+    "owner": "Native feature/automatic-operation gate; Core owns any dispatched account, sync or danmaku flow"
+  },
+  {
+    "name": "danmakuDiagnostics",
+    "key": "dev.jumusu.ocplayer.danmaku.diagnostics",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "playbackRate",
+    "key": "dev.jumusu.ocplayer.playback.rate",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "playbackVolume",
+    "key": "dev.jumusu.ocplayer.playback.volume",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "playbackMuted",
+    "key": "dev.jumusu.ocplayer.playback.muted",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "playbackSubtitleScale",
+    "key": "dev.jumusu.ocplayer.playback.subtitleScale",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuEnabled",
+    "key": "dev.jumusu.ocplayer.danmaku.enabled",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuOpacity",
+    "key": "dev.jumusu.ocplayer.danmaku.opacity",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuDisplayArea",
+    "key": "dev.jumusu.ocplayer.danmaku.displayArea",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuBlockTop",
+    "key": "dev.jumusu.ocplayer.danmaku.blockTop",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuBlockBottom",
+    "key": "dev.jumusu.ocplayer.danmaku.blockBottom",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuBlockScroll",
+    "key": "dev.jumusu.ocplayer.danmaku.blockScroll",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuUseOverlayRenderer",
+    "key": "dev.jumusu.ocplayer.danmaku.useOverlayRenderer",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuMergeDuplicates",
+    "key": "dev.jumusu.ocplayer.danmaku.mergeDuplicates",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuAllowStacking",
+    "key": "dev.jumusu.ocplayer.danmaku.allowStacking",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuFontSize",
+    "key": "dev.jumusu.ocplayer.danmaku.fontSize",
+    "owner": "Core runtime preference policy; native UserDefaults casts/writes and decoder/render effects"
+  },
+  {
+    "name": "danmakuAutoLoad",
+    "key": "dev.jumusu.ocplayer.danmaku.autoLoad",
+    "owner": "Native feature/automatic-operation gate; Core owns any dispatched account, sync or danmaku flow"
+  },
+  {
+    "name": "diagnosticsVerbose",
+    "key": "dev.jumusu.ocplayer.diagnostics.verbose",
+    "owner": "Native logging and decoder trace effect; Core owns diagnostic aggregate export and redaction"
+  },
+  {
+    "name": "bangumiMirrorEnabled",
+    "key": "dev.jumusu.ocplayer.bangumi.mirrorEnabled",
+    "owner": "Native live endpoint configuration and URL codec; Core executes requests with the selected endpoints"
+  },
+  {
+    "name": "bangumiMirrorRootDomain",
+    "key": "dev.jumusu.ocplayer.bangumi.mirrorRootDomain",
+    "owner": "Native live endpoint configuration and URL codec; Core executes requests with the selected endpoints"
+  },
+  {
+    "name": "tmdbMirrorEnabled",
+    "key": "dev.jumusu.ocplayer.tmdb.mirrorEnabled",
+    "owner": "Native live endpoint configuration and URL codec; Core executes requests with the selected endpoints"
+  },
+  {
+    "name": "tmdbMirrorAPIBaseURL",
+    "key": "dev.jumusu.ocplayer.tmdb.mirrorAPIBaseURL",
+    "owner": "Native live endpoint configuration and URL codec; Core executes requests with the selected endpoints"
+  },
+  {
+    "name": "tmdbMirrorImageBaseURL",
+    "key": "dev.jumusu.ocplayer.tmdb.mirrorImageBaseURL",
+    "owner": "Native live endpoint configuration and URL codec; Core executes requests with the selected endpoints"
+  },
+  {
+    "name": "updateLastCheckedAt",
+    "key": "dev.jumusu.ocplayer.update.lastCheckedAt",
+    "owner": "Native updater/system integration state"
+  },
+  {
+    "name": "updateIgnoredVersion",
+    "key": "dev.jumusu.OcPlayer.ignoredVersion",
+    "owner": "Native updater/system integration state"
+  }
+]

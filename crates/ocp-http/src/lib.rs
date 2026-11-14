@@ -93,7 +93,20 @@ pub trait HttpTransport: Send + Sync {
 
 #[async_trait]
 impl HttpTransport for reqwest::Client {
-    async fn send(&self, request: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+    async fn send(
+        &self,
+        mut request: reqwest::Request,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        if !request
+            .headers()
+            .contains_key(reqwest::header::ACCEPT_ENCODING)
+            && !request.headers().contains_key(reqwest::header::RANGE)
+        {
+            request.headers_mut().insert(
+                reqwest::header::ACCEPT_ENCODING,
+                HeaderValue::from_static("gzip, deflate, br"),
+            );
+        }
         self.execute(request).await
     }
 }
@@ -140,6 +153,81 @@ impl<T> HttpClient<T> {
         self.retry_server_errors = false;
         self
     }
+}
+
+/// Decode response bodies as URLSession does while retaining original headers,
+/// status and final URL. The stream remains cancellable and SSE is never buffered.
+pub fn decoded_response(response: reqwest::Response) -> reqwest::Response {
+    use futures_util::TryStreamExt;
+    use reqwest::ResponseBuilderExt;
+    use std::io;
+    use tokio::io::{AsyncRead, BufReader};
+    use tokio_util::io::{ReaderStream, StreamReader};
+    let encodings = response
+        .headers()
+        .get(reqwest::header::CONTENT_ENCODING)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .split(',')
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>();
+    if encodings.is_empty()
+        || encodings.iter().any(|s| {
+            !matches!(
+                s.as_str(),
+                "gzip" | "x-gzip" | "deflate" | "br" | "identity"
+            )
+        })
+    {
+        return response;
+    }
+    let mut builder = http::Response::builder()
+        .status(response.status())
+        .version(response.version())
+        .url(response.url().clone());
+    *builder.headers_mut().expect("valid response builder") = response.headers().clone();
+    if encodings.len() > 1 {
+        // Foundation rejects stacked Content-Encoding rather than decoding it.
+        let failure = futures_util::stream::once(async {
+            Err::<Vec<u8>, _>(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "stacked Content-Encoding is unsupported",
+            ))
+        });
+        return builder
+            .body(reqwest::Body::wrap_stream(failure))
+            .expect("valid response parts")
+            .into();
+    }
+
+    let stream = response
+        .bytes_stream()
+        .map_err(|error| io::Error::other(error.without_url()));
+    let mut reader: Box<dyn AsyncRead + Send + Unpin> =
+        Box::new(StreamReader::new(Box::pin(stream)));
+    for encoding in encodings.iter().rev() {
+        reader = match encoding.as_str() {
+            "gzip" | "x-gzip" => {
+                let mut decoder =
+                    async_compression::tokio::bufread::GzipDecoder::new(BufReader::new(reader));
+                // URLSession consumes only the first gzip member.
+                decoder.multiple_members(false);
+                Box::new(decoder)
+            }
+            "deflate" => Box::new(async_compression::tokio::bufread::ZlibDecoder::new(
+                BufReader::new(reader),
+            )),
+            "br" => Box::new(async_compression::tokio::bufread::BrotliDecoder::new(
+                BufReader::new(reader),
+            )),
+            _ => reader,
+        };
+    }
+    builder
+        .body(reqwest::Body::wrap_stream(ReaderStream::new(reader)))
+        .expect("valid response parts")
+        .into()
 }
 
 impl<T: HttpTransport> HttpClient<T> {
@@ -196,6 +284,7 @@ impl<T: HttpTransport> HttpClient<T> {
         self.transport
             .send(request)
             .await
+            .map(decoded_response)
             .map_err(|error| HttpError::Decode(error.without_url()))
     }
 
@@ -369,7 +458,7 @@ impl<T: HttpTransport> HttpClient<T> {
                     content_type.parse().expect("static header"),
                 );
             }
-            match self.transport.send(request).await {
+            match self.transport.send(request).await.map(decoded_response) {
                 Ok(response) if response.status().is_success() => {
                     return Ok(response);
                 }

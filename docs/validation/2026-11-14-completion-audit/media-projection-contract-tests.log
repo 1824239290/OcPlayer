@@ -1,0 +1,11 @@
+test_complete_file_projection_keeps_original_payloads_and_exact_int64 (__main__.MediaProjectionContract.test_complete_file_projection_keeps_original_payloads_and_exact_int64) ... ok
+test_enum_tolerance_tracks_the_actual_server_flavor (__main__.MediaProjectionContract.test_enum_tolerance_tracks_the_actual_server_flavor) ... ok
+test_frame_rate_bounds_nullable_fields_and_titles_match_native_rules (__main__.MediaProjectionContract.test_frame_rate_bounds_nullable_fields_and_titles_match_native_rules) ... ok
+test_malformed_nonnull_scalars_are_nonretryable_decode_errors (__main__.MediaProjectionContract.test_malformed_nonnull_scalars_are_nonretryable_decode_errors) ... ok
+test_requests_arguments_and_read_only_metadata_boundary (__main__.MediaProjectionContract.test_requests_arguments_and_read_only_metadata_boundary) ... ok
+test_source_priority_explicit_missing_and_empty_ids_never_replay_fallback (__main__.MediaProjectionContract.test_source_priority_explicit_missing_and_empty_ids_never_replay_fallback) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.466s
+
+OK
