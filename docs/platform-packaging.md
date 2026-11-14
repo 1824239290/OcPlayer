@@ -14,7 +14,8 @@ The workspace includes `Cargo.lock`; build and verification scripts use
   remaps checkout paths, preserves locked dependencies and refuses to overwrite
   an existing delivery.
 - `Scripts/build-apple-dylib.sh` builds `libocp_ffi.dylib` for a host/debug
-  integration. Copy that file into the app bundle's `Contents/Frameworks` (or
+  integration; `Scripts/build-apple-dylib.sh --universal /path/to/output` builds
+  both macOS architectures for a universal Release app. Copy that file into the app bundle's `Contents/Frameworks` (or
   `Frameworks` on iOS) and keep the checked-in `include/ocplayer_core.h` beside
   the artifact for native consumers.
 
