@@ -10,7 +10,7 @@ final class RustBangumiIntegrationTests: XCTestCase {
         }
         return path
     }
-    private func makeClient(_ server: Server, token: String? = "fresh", expired: Bool = false, gatewayKey: String = "gateway") throws -> (BangumiAPIClient, BangumiStore) {
+    private func makeClient(_ server: Server, token: String? = "fresh", expired: Bool = false, gatewayKey: String = "gateway", shared: Bool = true) throws -> (BangumiAPIClient, BangumiStore) {
         let defaults = UserDefaults(suiteName: "bangumi-rust-\(UUID().uuidString)")!
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("bangumi-rust-\(UUID().uuidString)")
         let store = BangumiStore(defaults: defaults, credentialsDirectory: directory)
@@ -20,9 +20,101 @@ final class RustBangumiIntegrationTests: XCTestCase {
             store.auth = auth
             store.setAuthenticated(true)
         }
+        let factory: (@Sendable (String?) -> URLSession)?
+        let path: String?
+        if shared { factory = nil; path = try library() }
+        else { factory = { _ in URLSession(configuration: .ephemeral) }; path = nil }
         return (BangumiAPIClient(store: store,
                                 gateway: .init(baseURL: server.root, apiKey: gatewayKey, userAgent: "OcPlay/test (macOS)"),
-                                rustCoreLibraryPath: try library()), store)
+                                sessionFactory: factory,
+                                rustCoreLibraryPath: path), store)
+    }
+    func testProductionClientRetainsSharedAccountAndConditionalClearIsAtomic() async throws {
+        _ = try library()
+        let server = try Server(); defer { server.stop() }
+        let (_, store) = try makeClient(server, token: nil)
+        let client = BangumiAPIClient(store: store)
+        let account = try XCTUnwrap(client.account)
+        let old = account.snapshot.generation
+        let next = await client.clearCredentials()
+        XCTAssertEqual(next, old &+ 1)
+        let stale = await client.clearCredentials(ifCurrent: old)
+        XCTAssertNil(stale)
+        XCTAssertEqual(account.snapshot.generation, next)
+        let current = await client.isCurrentCredentialGeneration(next)
+        XCTAssertTrue(current)
+        let revision: UInt64 = try account.call("operation.begin")
+        let newRevision: UInt64 = try account.call("operation.begin")
+        XCTAssertEqual(newRevision, revision &+ 1)
+        let staleOperation: Bool = try account.call("operation.current", ["generation": revision])
+        XCTAssertFalse(staleOperation)
+    }
+    private func waitFor(_ suffix: String, server: Server) async throws {
+        for _ in 0..<200 {
+            if try await server.requests().contains(where: { $0.path.hasSuffix(suffix) }) { return }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Request did not start: \(suffix)")
+    }
+    func testLogoutDuringRefreshRejectsOldCredentialAndReleasesOnlyItsClaim() async throws {
+        _ = try library()
+        for shared in [false, true] {
+            let server = try Server(); defer { server.stop() }
+            let (client, store) = try makeClient(server, token: "expired", expired: true, shared: shared)
+            let request = Task { try await client.request(url: server.url("private"), method: "GET", auth: .required) }
+            try await waitFor("oauth/refresh", server: server)
+            _ = await client.clearCredentials()
+            do { _ = try await request.value; XCTFail("Retired refresh must not publish") }
+            catch { XCTAssertTrue(error is BangumiError || error is CancellationError) }
+            XCTAssertNil(store.auth)
+            let requests = try await server.requests()
+            XCTAssertFalse(requests.contains { $0.path == "/private" })
+            if let account = client.account { XCTAssertFalse(account.snapshot.refreshActive) }
+        }
+    }
+    func testOAuthCallbackIsConsumedBeforeAwaitAndOldCompletionKeepsNewAuthorization() async throws {
+        _ = try library()
+        for shared in [false, true] {
+            let server = try Server(); defer { server.stop() }
+            let (client, store) = try makeClient(server, token: nil, shared: shared)
+            let first = try await client.buildOAuthURL()
+            let state = try XCTUnwrap(URLComponents(url: first, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+            let exchange = Task { try await client.exchangeForAccessToken(code: "slow-code", state: state) }
+            try await waitFor("oauth/token", server: server)
+            do { _ = try await client.exchangeForAccessToken(code: "fixture-code", state: state); XCTFail("Replay expected to fail") }
+            catch let error as BangumiError { XCTAssertTrue(error.userMessage.contains("授权校验失败")) }
+            let second = try await client.buildOAuthURL()
+            let nextState = try XCTUnwrap(URLComponents(url: second, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+            _ = try await exchange.value
+            _ = try await client.exchangeForAccessToken(code: "fixture-code", state: nextState)
+            XCTAssertEqual(store.auth?.accessToken, "fresh")
+            let requests = try await server.requests()
+            XCTAssertEqual(requests.filter { $0.path.hasSuffix("oauth/token") }.count, 2)
+        }
+    }
+    func testLogoutInvalidatesPendingAndInFlightOAuthWithoutCancellingNewLogin() async throws {
+        _ = try library()
+        for shared in [false, true] {
+            let server = try Server(); defer { server.stop() }
+            let (client, store) = try makeClient(server, token: nil, shared: shared)
+            let url = try await client.buildOAuthURL()
+            let state = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+            let exchange = Task { try await client.exchangeForAccessToken(code: "slow-code", state: state) }
+            try await waitFor("oauth/token", server: server)
+            let loggedOut = await client.clearCredentials()
+            do { _ = try await exchange.value; XCTFail("Old OAuth must not commit") }
+            catch { XCTAssertTrue(error is BangumiError || error is CancellationError) }
+            XCTAssertNil(store.auth)
+            let next = try await client.buildOAuthURL()
+            let nextState = try XCTUnwrap(URLComponents(url: next, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "state" }?.value)
+            _ = await client.clearCredentials()
+            do { _ = try await client.exchangeForAccessToken(code: "fixture-code", state: nextState); XCTFail("Logged-out state must not issue token") }
+            catch let error as BangumiError { XCTAssertTrue(error.userMessage.contains("授权校验失败")) }
+            let requests = try await server.requests()
+            XCTAssertEqual(requests.filter { $0.path.hasSuffix("oauth/token") }.count, 1)
+            let stale = await client.clearCredentials(ifCurrent: loggedOut)
+            XCTAssertNil(stale)
+        }
     }
     func testCompleteResponseAuthErrorsAndMutationNotReplayed() async throws {
         _ = try library()

@@ -70,6 +70,8 @@ public actor BangumiAPIClient {
     private let store: BangumiStore
     private let userAgent: String
     private let rust: OcpCoreClient?
+    nonisolated let account: RustBangumiAccount?
+    private var sharedRefreshTasks: [UInt64: Task<CredentialSnapshot, Error>] = [:]
     private var rustRequests: [String: UInt64] = [:]
     /// 网关 OAuth 配置。由 App 层在启动 / 网关设置变更时注入（`configureGateway`）：
     /// token 交换与刷新都要经网关，凭证不进客户端。
@@ -81,7 +83,8 @@ public actor BangumiAPIClient {
     private var anonymousSession: URLSession?
     private var authorizedSession: URLSession?
 
-    private var authGeneration: UInt64 = 0
+    private var nativeAuthGeneration: UInt64 = 0
+    private var authGeneration: UInt64 { account?.snapshot.generation ?? nativeAuthGeneration }
     private var authorizedSessionGeneration: UInt64?
     private var oauthExchangeGeneration: UInt64 = 0
     private var refreshTask: Task<CredentialSnapshot, Error>?
@@ -111,6 +114,7 @@ public actor BangumiAPIClient {
            (rustCoreLibraryPath != nil || sessionFactory == nil) {
             self.rust = try? OcpCoreClient(libraryPath: rustCoreLibraryPath)
         } else { self.rust = nil }
+        self.account = self.rust.map(RustBangumiAccount.init)
         self.store = store
         self.gateway = gateway
         self.userAgent = userAgent
@@ -133,7 +137,8 @@ public actor BangumiAPIClient {
     public func buildOAuthURL() async throws -> URL {
         // state 防 CSRF：生成后存内存，回调换 token 时校验（见 exchangeForAccessToken）。
         let state = UUID().uuidString
-        pendingOAuthState = state
+        if let account { let _: Bool = try account.call("oauth.prepare", ["state": state]) }
+        else { pendingOAuthState = state }
         let data = try await gatewayRequest(
             path: "/v1/bangumi/oauth/authorize", method: "GET", query: [("state", state)])
         let payload: BangumiAuthorizeResponse = try decodeResponse(data)
@@ -146,11 +151,19 @@ public actor BangumiAPIClient {
     }
 
     public func exchangeForAccessToken(code: String, state: String) async throws -> UInt64 {
-        defer { pendingOAuthState = nil }
-        guard let expected = pendingOAuthState, state == expected else {
-            throw BangumiError(notice: "授权校验失败，请重新发起登录")
+        let exchangeGeneration: UInt64
+        if let account {
+            let decision: RustBangumiAccount.Decision = try account.call("oauth.consume", ["state": state])
+            guard decision.accepted else { throw BangumiError(notice: "授权校验失败，请重新发起登录") }
+            exchangeGeneration = decision.generation
+        } else {
+            let expected = pendingOAuthState
+            pendingOAuthState = nil
+            guard let expected, state == expected else {
+                throw BangumiError(notice: "授权校验失败，请重新发起登录")
+            }
+            exchangeGeneration = beginOAuthExchange()
         }
-        let exchangeGeneration = beginOAuthExchange()
         let data = try await gatewayRequest(
             path: "/v1/bangumi/oauth/token", method: "POST",
             body: .object(["code": .string(code)]))
@@ -164,12 +177,18 @@ public actor BangumiAPIClient {
     }
 
     public func clearCredentials(ifCurrent expectedGeneration: UInt64) -> UInt64? {
+        if let account {
+            let transition: RustBangumiAccount.Transition = account.invariant("invalidate", ["generation": expectedGeneration])
+            guard transition.accepted else { return nil }
+            applySharedTransition(transition, auth: nil)
+            return transition.generation
+        }
         guard expectedGeneration == authGeneration else { return nil }
         return invalidateCredentials()
     }
 
     public func isCurrentCredentialGeneration(_ generation: UInt64) -> Bool {
-        generation == authGeneration
+        account?.current(generation) ?? (generation == authGeneration)
     }
 
     /// 解码响应（snake_case → camelCase）。
@@ -260,7 +279,7 @@ public actor BangumiAPIClient {
                 }
             }
 
-            if let generation = requestSession.credentialGeneration, generation != authGeneration {
+            if let generation = requestSession.credentialGeneration, !isCurrentCredentialGeneration(generation) {
                 throw BangumiError(ignore: "Discarded stale credential response")
             }
             let requestID = httpResponse.value(forHTTPHeaderField: "x-request-id")
@@ -271,7 +290,7 @@ public actor BangumiAPIClient {
                 throw BangumiError.rateLimited(retryAfter: httpResponse.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init))
             } else if httpResponse.statusCode == 401 {
                 if let requestAuthGeneration = requestSession.credentialGeneration {
-                    guard requestAuthGeneration == authGeneration else {
+                    guard isCurrentCredentialGeneration(requestAuthGeneration) else {
                         throw BangumiError(ignore: "Discarded stale unauthorized response")
                     }
                     await notifyAuthenticationRequired(ifCurrent: requestAuthGeneration)
@@ -404,11 +423,17 @@ public actor BangumiAPIClient {
     }
 
     private func getAuthorizedSession() async throws -> RequestSession {
-        if let auth,
-           !auth.isExpired(),
+        let canReuseSession: Bool
+        if let account {
+            var args: [String: Any] = ["present": auth != nil, "now": Date().timeIntervalSince1970]
+            if let auth { args["expiresAt"] = auth.expiresAt.timeIntervalSince1970 }
+            if let generation = authorizedSessionGeneration { args["sessionGeneration"] = generation }
+            canReuseSession = try account.call("session", args)
+        } else { canReuseSession = auth?.isExpired() == false }
+        if canReuseSession,
            let session = authorizedSession,
            let sessionGeneration = authorizedSessionGeneration,
-           sessionGeneration == authGeneration {
+           (account != nil || sessionGeneration == authGeneration) {
             return RequestSession(session: session, credentialGeneration: sessionGeneration)
         }
 
@@ -420,7 +445,7 @@ public actor BangumiAPIClient {
             } catch BangumiError.requireLogin {
                 throw SessionError.authenticationRequired(credentialGeneration: attemptedGeneration)
             }
-            guard credentials.generation == authGeneration else { continue }
+            guard isCurrentCredentialGeneration(credentials.generation) else { continue }
             if let session = authorizedSession,
                authorizedSessionGeneration == credentials.generation {
                 return RequestSession(session: session, credentialGeneration: credentials.generation)
@@ -452,6 +477,22 @@ public actor BangumiAPIClient {
     }
 
     private func getAccessToken() async throws -> CredentialSnapshot {
+        if let account {
+            if auth == nil { auth = store.auth }
+            var args: [String: Any] = ["present": auth != nil, "now": Date().timeIntervalSince1970]
+            if let auth { args["expiresAt"] = auth.expiresAt.timeIntervalSince1970 }
+            let decision: RustBangumiAccount.Access = try account.call("access", args)
+            switch decision.action {
+            case "missing": throw BangumiError.requireLogin
+            case "refresh":
+                guard let auth else { throw BangumiError.requireLogin }
+                return try await performTokenRefresh(auth: auth)
+            case "reuse":
+                guard let auth else { throw BangumiError.requireLogin }
+                return CredentialSnapshot(auth: auth, generation: decision.generation)
+            default: throw BangumiError.request("Invalid Core access decision")
+            }
+        }
         if let auth {
             if auth.isExpired() {
                 return try await performTokenRefresh(auth: auth)
@@ -471,6 +512,7 @@ public actor BangumiAPIClient {
 
     /// 单飞去重的 token 刷新：并发请求同时撞上过期时只发一次刷新，其余等待同一个 Task。
     private func performTokenRefresh(auth: BangumiAuth) async throws -> CredentialSnapshot {
+        if let account { return try await performSharedTokenRefresh(auth: auth, account: account) }
         if let existingTask = refreshTask {
             return try await existingTask.value
         }
@@ -557,6 +599,18 @@ public actor BangumiAPIClient {
     private func storeCredentials(
         _ auth: BangumiAuth, encodedData: Data, commit: CredentialCommit
     ) -> CredentialSnapshot? {
+        if let account {
+            let kind: String
+            let expected: UInt64
+            switch commit {
+            case .oauth(let generation): kind = "oauth"; expected = generation
+            case .refresh(let generation): kind = "refresh"; expected = generation
+            }
+            let transition: RustBangumiAccount.Transition = account.invariant("commit", ["kind": kind, "generation": expected])
+            guard transition.accepted else { return nil }
+            applySharedTransition(transition, auth: auth)
+            return CredentialSnapshot(auth: auth, generation: transition.generation)
+        }
         switch commit {
         case .oauth(let exchangeGeneration):
             guard exchangeGeneration == oauthExchangeGeneration else { return nil }
@@ -568,7 +622,7 @@ public actor BangumiAPIClient {
             guard credentialGeneration == authGeneration else { return nil }
         }
         cancelRustAuthorizedRequests()
-        authGeneration &+= 1
+        nativeAuthGeneration &+= 1
         authorizedSession?.invalidateAndCancel()
         authorizedSession = nil
         authorizedSessionGeneration = nil
@@ -579,8 +633,14 @@ public actor BangumiAPIClient {
 
     @discardableResult
     private func invalidateCredentials() -> UInt64 {
+        if let account {
+            let transition: RustBangumiAccount.Transition = account.invariant("invalidate")
+            applySharedTransition(transition, auth: nil)
+            return transition.generation
+        }
+        pendingOAuthState = nil
         cancelRustAuthorizedRequests()
-        authGeneration &+= 1
+        nativeAuthGeneration &+= 1
         oauthExchangeGeneration &+= 1
         refreshGeneration &+= 1
         refreshTask?.cancel()
@@ -591,6 +651,52 @@ public actor BangumiAPIClient {
         auth = nil
         store.auth = nil
         return authGeneration
+    }
+
+    private func applySharedTransition(_ transition: RustBangumiAccount.Transition, auth: BangumiAuth?) {
+        if transition.cancelRefresh == true {
+            for task in sharedRefreshTasks.values { task.cancel() }
+            sharedRefreshTasks.removeAll()
+        }
+        if transition.cancelRequests == true { cancelRustAuthorizedRequests() }
+        if transition.invalidateSession == true {
+            authorizedSession?.invalidateAndCancel()
+            authorizedSession = nil
+            authorizedSessionGeneration = nil
+        }
+        store.auth = auth
+        self.auth = auth
+    }
+
+    private func performSharedTokenRefresh(auth: BangumiAuth, account: RustBangumiAccount) async throws -> CredentialSnapshot {
+        let claim: RustBangumiAccount.Claim = try account.call("refresh.claim")
+        if claim.joined {
+            guard let task = sharedRefreshTasks[claim.id] else { throw BangumiError.request("Missing Core refresh effect") }
+            return try await task.value
+        }
+        let task = Task<CredentialSnapshot, Error> {
+            do { return try await self.refreshAccessToken(auth: auth, expectedGeneration: claim.generation) }
+            catch where CancellationClassifier.isCancellation(error) {
+                let category: String = try account.call("refresh.failure", ["kind": "cancelled", "generation": claim.id])
+                if category == "stale" { throw BangumiError(ignore: "Token refresh cancelled") }
+                throw BangumiError(notice: "令牌刷新超时，请稍后再试")
+            } catch BangumiError.requireLogin {
+                let category: String = try account.call("refresh.failure", ["kind": "unauthorized", "generation": claim.generation])
+                if category == "stale" { throw BangumiError(ignore: "Discarded stale token refresh failure") }
+                throw BangumiError.requireLogin
+            }
+        }
+        sharedRefreshTasks[claim.id] = task
+        let timeout = Task {
+            try await Task.sleep(nanoseconds: claim.timeoutSeconds * 1_000_000_000)
+            task.cancel()
+        }
+        defer {
+            timeout.cancel()
+            let _: Bool = account.invariant("refresh.finish", ["generation": claim.id])
+            sharedRefreshTasks.removeValue(forKey: claim.id)
+        }
+        return try await task.value
     }
 
     private func cancelRustAuthorizedRequests() {
@@ -604,7 +710,7 @@ public actor BangumiAPIClient {
     /// 只比对代际，**不看 `isAuthenticated`**：凭证已经被清掉、只剩标记位残留时，
     /// 恰恰最需要这条通知把 UI 拉回未登录态。
     private func notifyAuthenticationRequired(ifCurrent generation: UInt64) async {
-        guard generation == authGeneration else { return }
+        guard isCurrentCredentialGeneration(generation) else { return }
         await MainActor.run {
             NotificationCenter.default.post(
                 name: Self.authenticationRequiredNotification,

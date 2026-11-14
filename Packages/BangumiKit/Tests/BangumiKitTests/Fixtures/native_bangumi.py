@@ -29,7 +29,8 @@ class Handler(BaseHTTPRequestHandler):
             state = parse_qs(url.query)['state'][0]
             return self.reply({'authorize_url': 'https://bgm.tv/oauth/authorize?state=' + state})
         if url.path.endswith('/oauth/token'):
-            assert json.loads(body) == {'code': 'fixture-code'}
+            assert json.loads(body).get('code') in ['fixture-code', 'slow-code']
+            if json.loads(body)['code'] == 'slow-code': time.sleep(0.3)
             return self.reply({'access_token': 'fresh', 'expires_in': 3600, 'refresh_token': 'refresh'})
         if url.path.endswith('/oauth/refresh'):
             assert json.loads(body) == {'refresh_token': 'refresh'}

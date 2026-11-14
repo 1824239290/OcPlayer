@@ -6,7 +6,9 @@ import Foundation
 /// 避免「登出后旧登录响应把状态写回去」这类竞态。
 @MainActor
 public enum BangumiAuthService {
-    private static var operationRevision: UInt64 = 0
+    private static var nativeOperationRevision: UInt64 = 0
+    private static var account: RustBangumiAccount? { BangumiAPIClient.shared.account }
+    private static var operationRevision: UInt64 { account?.snapshot.operationRevision ?? nativeOperationRevision }
 
     /// 注入网关配置（启动时 + 网关设置变更时）。OAuth 授权、换 token、刷新都走网关，
     /// 客户端不持有 `client_secret`。
@@ -84,13 +86,15 @@ public enum BangumiAuthService {
     }
 
     private static func ensureCurrentOperation(_ revision: UInt64) throws {
-        guard revision == operationRevision else {
+        let current: Bool = account?.invariant("operation.current", ["generation": revision]) ?? (revision == operationRevision)
+        guard current else {
             throw BangumiError(ignore: "Discarded stale authentication operation")
         }
     }
 
     private static func beginOperation() -> UInt64 {
-        operationRevision &+= 1
-        return operationRevision
+        if let account { return account.invariant("operation.begin") }
+        nativeOperationRevision &+= 1
+        return nativeOperationRevision
     }
 }
