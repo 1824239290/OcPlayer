@@ -7,6 +7,10 @@ extension MediaRepository {
         _ descriptor: MediaPageDescriptor,
         limit: Int
     ) async -> MediaSnapshot<MediaPageContent>? {
+        if let rust {
+            return await cachedRepositoryValue(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "cachedPage", now: now(), descriptor: descriptor, startIndex: 0, limit: limit))
+        }
         if let entry = pages[descriptor] {
             return snapshot(entry.value, fetchedAt: entry.fetchedAt, source: .memory)
         }
@@ -14,11 +18,7 @@ extension MediaRepository {
             try await store.pages(matching: descriptor.query, tenant: tenant)
         }), !rows.isEmpty else { return nil }
 
-        let content: MediaPageContent
-        if let rust {
-            do { content = try rust.compose("diskPage", RustMediaRepository.DiskPage(rows: rows.map(RustMediaRepository.DiskRow.init))) }
-            catch { RustMediaRepository.report(error); return nil }
-        } else { content = Self.merge(rows: rows) }
+        let content = Self.merge(rows: rows)
         guard !content.items.isEmpty else { return nil }
         let fetchedAt = rows.map(\.fetchedAt).min() ?? now()
         pages[descriptor] = MemoryEntry(value: content, fetchedAt: fetchedAt)
@@ -35,7 +35,11 @@ extension MediaRepository {
         startIndex: Int,
         limit: Int
     ) async throws -> MediaSnapshot<MediaPageContent> {
-        let key = descriptor.key(startIndex: startIndex, limit: limit)
+        let key: PageKey
+        if let rust {
+            key = try rust.flow("pageKey", RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "page", now: now(), descriptor: descriptor, startIndex: startIndex, limit: limit))
+        } else { key = descriptor.key(startIndex: startIndex, limit: limit) }
         if let rust {
             let claim = try rust.claim("page", key: key)
             if !claim.owner {
@@ -63,6 +67,10 @@ extension MediaRepository {
         startIndex: Int,
         limit: Int
     ) async throws -> MediaSnapshot<MediaPageContent> {
+        if let rust {
+            return try await runRepositoryFlow(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "page", now: now(), descriptor: descriptor, key: key, startIndex: startIndex, limit: limit))
+        }
         let requestStartedAt = now()
         var page = try await server.itemsPage(
             parentID: descriptor.parentID,
@@ -76,16 +84,7 @@ extension MediaRepository {
 
         page.items = await saveIncomingItems(page.items, requestStartedAt: requestStartedAt)
         var content: MediaPageContent
-        if let rust {
-            let previous: MediaPageContent?
-            if startIndex == 0 { previous = nil }
-            else if let entry = pages[descriptor] { previous = entry.value }
-            else { previous = await cachedPage(descriptor, limit: limit)?.value }
-            content = try rust.compose("page", RustMediaRepository.Page(
-                items: page.items, totalRecordCount: page.totalRecordCount,
-                startIndex: startIndex, limit: limit, previous: previous,
-                requestStartedAt: requestStartedAt))
-        } else if startIndex == 0 {
+        if startIndex == 0 {
             content = MediaPageContent(
                 items: page.items,
                 totalCount: page.totalRecordCount,
@@ -110,7 +109,7 @@ extension MediaRepository {
                 lastPageWasFull: page.items.count >= limit)
         }
 
-        if rust == nil { content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt) }
+        content.items = mergingLocalProgress(content.items, requestStartedAt: requestStartedAt)
         pages[descriptor] = MemoryEntry(value: content, fetchedAt: now())
         rememberItems(page.items)
         let persistedPage = page

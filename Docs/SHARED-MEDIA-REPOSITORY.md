@@ -45,3 +45,14 @@ handles, four parallel home effects, section failure/fallback assembly and disk
 await sequencing remain in Swift. Core-disabled paths stay independent for
 differential testing. The shared protocol and validation are in OcPlayer-Core's
 `docs/media-repository-composition.md`; full parity acceptance remains active.
+
+## Complete retained workflows
+
+All ten cached/refresh home/item/detail/episodes/page operations and prefetch now
+use `mediaRepository.flow.*`. Core owns effect order, parallel request plans,
+section errors/fallback, complete result assembly, disk recovery, page/disk-query
+identity and post-await progress reconciliation. Swift executes typed yielded
+effects and holds task handles; native-only algorithms remain independent.
+Single-use receipts and deferred cancellation retire every flow on completion or
+primary failure. See OcPlayer-Core's `docs/media-repository-flow.md` for protocol,
+full validation and the remaining broader parity requirements.

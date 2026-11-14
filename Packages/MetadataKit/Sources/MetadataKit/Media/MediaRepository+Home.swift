@@ -4,6 +4,10 @@ import Foundation
 extension MediaRepository {
     /// 首页与库列表：内存命中零 I/O，否则一次读事务恢复库列表与三条 rail。
     public func cachedHome() async -> MediaSnapshot<MediaHomeContent>? {
+        if let rust {
+            return await cachedRepositoryValue(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "cachedHome", now: now()))
+        }
         if let entry = homeEntry {
             return snapshot(entry.value, fetchedAt: entry.fetchedAt, source: .memory)
         }
@@ -13,22 +17,10 @@ extension MediaRepository {
         let content = MediaHomeContent(
             libraries: parts.libraries.map(\.library),
             resume: parts.rails["resume"]?.items ?? [],
-            nextUp: rust != nil ? (parts.rails["nextUp"]?.items ?? []) : deduplicatedNextUp(
+            nextUp: deduplicatedNextUp(
                 parts.rails["nextUp"]?.items ?? [],
                 resume: parts.rails["resume"]?.items ?? []),
             latest: parts.rails["latest"]?.items ?? [])
-        if let rust {
-            do {
-                let restored: MemoryEntry<MediaHomeContent>? = try rust.compose("diskHome", RustMediaRepository.DiskHome(
-                    content: content,
-                    railDates: ["resume", "nextUp", "latest"].compactMap { parts.rails[$0]?.fetchedAt },
-                    libraryDates: parts.libraries.map(\.fetchedAt), now: now()))
-                guard let restored else { return nil }
-                homeEntry = restored
-                rememberItems(restored.value.resume + restored.value.nextUp + restored.value.latest)
-                return snapshot(restored.value, fetchedAt: restored.fetchedAt, source: .disk)
-            } catch { RustMediaRepository.report(error); return nil }
-        }
         guard !content.isEmpty else { return nil }
         let dates = ["resume", "nextUp", "latest"].compactMap { parts.rails[$0]?.fetchedAt }
         let fetchedAt = dates.min() ?? parts.libraries.map(\.fetchedAt).min() ?? now()
@@ -65,6 +57,7 @@ extension MediaRepository {
     }
 
     private func performHomeRefresh() async -> MediaHomeRefresh {
+        if let rust { return await performSharedHomeRefresh(rust) }
         let previous = await cachedHome()
         let requestStartedAt = now()
         async let libraries = mediaLoadPart { try await server.userViews() }
@@ -100,15 +93,10 @@ extension MediaRepository {
         let anySuccess = [libraryPart.value != nil, resumePart.value != nil,
                           nextUpPart.value != nil, latestPart.value != nil].contains(true)
         let fetchedAt = anySuccess ? now() : (previous?.fetchedAt ?? now())
-        if let rust {
-            do { content = try rust.compose("home", RustMediaRepository.Home(content: content, requestStartedAt: requestStartedAt)) }
-            catch { RustMediaRepository.report(error); failures["repository"] = MediaFailure(error) }
-        } else {
-            content.resume = mergingLocalProgress(content.resume, requestStartedAt: requestStartedAt)
-            content.resume = filteredCompletedResume(content.resume)
-            content.nextUp = mergingLocalProgress(content.nextUp, requestStartedAt: requestStartedAt)
-            content.latest = mergingLocalProgress(content.latest, requestStartedAt: requestStartedAt)
-        }
+        content.resume = mergingLocalProgress(content.resume, requestStartedAt: requestStartedAt)
+        content.resume = filteredCompletedResume(content.resume)
+        content.nextUp = mergingLocalProgress(content.nextUp, requestStartedAt: requestStartedAt)
+        content.latest = mergingLocalProgress(content.latest, requestStartedAt: requestStartedAt)
         homeEntry = MemoryEntry(value: content, fetchedAt: fetchedAt)
         rememberItems(content.resume + content.nextUp + content.latest)
         let source: MediaDataSource = anySuccess ? .network : (previous?.source ?? .network)

@@ -4,6 +4,10 @@ import JellyfinKit
 
 extension MediaRepository {
     public func cachedItem(itemID: MediaItem.ID) async -> MediaSnapshot<MediaItem>? {
+        if let rust {
+            return await cachedRepositoryValue(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "cachedItem", now: now(), itemID: itemID))
+        }
         if let entry = items[itemID] {
             return snapshot(entry.value, fetchedAt: entry.fetchedAt, source: .memory)
         }
@@ -32,6 +36,10 @@ extension MediaRepository {
     }
 
     private func performItemRefresh(itemID: MediaItem.ID) async throws -> MediaItem {
+        if let rust {
+            return try await runRepositoryFlow(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "item", now: now(), itemID: itemID))
+        }
         let requestStartedAt = now()
         let remote = try await server.item(itemID)
         let item = await saveIncomingItems([remote], requestStartedAt: requestStartedAt)[0]
@@ -44,6 +52,10 @@ extension MediaRepository {
     }
 
     public func cachedDetail(itemID: MediaItem.ID) async -> MediaSnapshot<MediaDetailContent>? {
+        if let rust {
+            return await cachedRepositoryValue(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "cachedDetail", now: now(), itemID: itemID, hasStore: store != nil))
+        }
         if let entry = details[itemID] {
             return snapshot(entry.value, fetchedAt: entry.fetchedAt, source: .memory)
         }
@@ -55,7 +67,7 @@ extension MediaRepository {
         var memberTotal: Int?
         if cachedItem.item.kind == .series, let store {
             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
-            if let seasonID = try? repositoryDefaultSeason(in: seasons) {
+            if let seasonID = Self.defaultSeasonID(in: seasons) {
                 episodesSeasonID = seasonID
                 episodes = (await read {
                     try await $0.episodes(seriesID: itemID, seasonID: seasonID, tenant: tenant)
@@ -106,14 +118,16 @@ extension MediaRepository {
         itemID: MediaItem.ID,
         kindHint: MediaItem.Kind?
     ) async throws -> MediaDetailRefresh {
+        if let rust {
+            let previous = await cachedDetail(itemID: itemID)?.value
+            var start = RustMediaRepository.FlowStart(kind: "detail", now: now(), previous: previous, itemID: itemID)
+            start.kindHint = kindHint
+            return try await runRepositoryFlow(rust, start)
+        }
         let previous = await cachedDetail(itemID: itemID)?.value
         var failures: [String: MediaFailure] = [:]
         let kind = kindHint ?? previous?.item.kind
-        let initialPlan: String
-        if let rust { initialPlan = try rust.compose("detailPlan", RustMediaRepository.DetailPlan(kindHint: kindHint, previous: previous, item: nil)) }
-        else { initialPlan = kind == .series ? "series" : "item" }
-
-        if initialPlan == "series" {
+        if kind == .series {
             let requestStartedAt = now()
             async let seasonsPart = mediaLoadPart { try await server.seasons(seriesID: itemID) }
             let item = try await refreshItem(itemID: itemID)
@@ -145,10 +159,7 @@ extension MediaRepository {
 
         let requestStartedAt = now()
         let item = try await refreshItem(itemID: itemID)
-        let finalPlan: String
-        if let rust { finalPlan = try rust.compose("detailPlan", RustMediaRepository.DetailPlan(kindHint: kindHint, previous: previous, item: item)) }
-        else { finalPlan = item.kind == .boxSet || kind == .boxSet ? "members" : (item.kind == .series ? "retrySeries" : "item") }
-        if finalPlan == "members" {
+        if item.kind == .boxSet || kind == .boxSet {
             let descriptor = Self.collectionDescriptor(itemID: itemID)
             let memberPart = await mediaLoadPart {
                 try await self.refreshPage(
@@ -167,7 +178,7 @@ extension MediaRepository {
         }
 
         // 列表 kind 偶发缺失时以完整详情为准补一季列表。
-        if finalPlan == "retrySeries" {
+        if item.kind == .series {
             return try await performDetailRefresh(itemID: itemID, kindHint: .series)
         }
         let content = MediaDetailContent(item: item)
@@ -178,6 +189,12 @@ extension MediaRepository {
 
     /// 点击预取与进页刷新共用同一个 `refreshDetail` 单飞任务；预取失败保持静默。
     public func prefetchDetail(itemID: MediaItem.ID, kindHint: MediaItem.Kind?) async {
+        if let rust {
+            var start = RustMediaRepository.FlowStart<RustMediaRepository.Empty>(kind: "prefetch", now: now(), itemID: itemID)
+            start.kindHint = kindHint
+            let _: RustMediaRepository.Empty? = try? await runRepositoryFlow(rust, start)
+            return
+        }
         // 会话内已经确认过的详情直接免了；磁盘来源仍要网络确认。
         if let cached = await cachedDetail(itemID: itemID), cached.source == .memory {
             return
@@ -189,6 +206,10 @@ extension MediaRepository {
         seriesID: MediaItem.ID,
         seasonID: MediaItem.ID
     ) async -> MediaSnapshot<[MediaItem]>? {
+        if let rust {
+            return await cachedRepositoryValue(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "cachedEpisodes", now: now(), seriesID: seriesID, seasonID: seasonID))
+        }
         let key = EpisodeKey(seriesID: seriesID, seasonID: seasonID)
         if let entry = episodeLists[key] {
             return snapshot(entry.value, fetchedAt: entry.fetchedAt, source: .memory)
@@ -226,6 +247,10 @@ extension MediaRepository {
     }
 
     private func performEpisodeRefresh(key: EpisodeKey) async throws -> [MediaItem] {
+        if let rust {
+            return try await runRepositoryFlow(rust, RustMediaRepository.FlowStart<RustMediaRepository.Empty>(
+                kind: "episodes", now: now(), seriesID: key.seriesID, seasonID: key.seasonID))
+        }
         let requestStartedAt = now()
         let remote = try await server.episodes(seriesID: key.seriesID, seasonID: key.seasonID)
         let episodes = await saveIncomingItems(remote, requestStartedAt: requestStartedAt)
@@ -246,17 +271,23 @@ extension MediaRepository {
     public func cachedCollectionMembers(
         itemID: MediaItem.ID
     ) async -> MediaSnapshot<MediaPageContent>? {
-        await cachedPage(Self.collectionDescriptor(itemID: itemID), limit: Self.collectionPageLimit)
+        if let rust {
+            do {
+                let descriptor: MediaPageDescriptor = try rust.flow("collectionDescriptor", RustMediaRepository.FlowStart<RustMediaRepository.Empty>(kind: "page", now: now(), itemID: itemID))
+                return await cachedPage(descriptor, limit: Self.collectionPageLimit)
+            } catch { RustMediaRepository.report(error); return nil }
+        }
+        return await cachedPage(Self.collectionDescriptor(itemID: itemID), limit: Self.collectionPageLimit)
     }
 
     public func refreshCollectionMembers(
         itemID: MediaItem.ID,
         startIndex: Int = 0
     ) async throws -> MediaSnapshot<MediaPageContent> {
-        try await refreshPage(
-            Self.collectionDescriptor(itemID: itemID),
-            startIndex: startIndex,
-            limit: Self.collectionPageLimit)
+        let descriptor: MediaPageDescriptor
+        if let rust { descriptor = try rust.flow("collectionDescriptor", RustMediaRepository.FlowStart<RustMediaRepository.Empty>(kind: "page", now: now(), itemID: itemID)) }
+        else { descriptor = Self.collectionDescriptor(itemID: itemID) }
+        return try await refreshPage(descriptor, startIndex: startIndex, limit: Self.collectionPageLimit)
     }
 
     static var collectionPageLimit: Int { 200 }
