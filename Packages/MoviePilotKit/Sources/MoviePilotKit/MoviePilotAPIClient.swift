@@ -164,6 +164,7 @@ public actor MoviePilotAPIClient {
     private let rustCoreLibraryPath: String?
     private let allowsRustCore: Bool
     private var rustCore: OcpCoreClient?
+    private var rustAccount: RustMoviePilotAccount?
     var usesCoreTransport: Bool { rustCore != nil }
     private var rustRequests: Set<String> = []
     private var rustEventHandlers: [String: (RequestContext, @Sendable (OcpEvent) -> Void)] = [:]
@@ -175,8 +176,13 @@ public actor MoviePilotAPIClient {
     private let streamSession: URLSession
     private let retrySleep: @Sendable (UInt64) async throws -> Void
 
-    private var authGeneration: UInt64 = 0
-    private var authConfigurationRevision: UInt64
+    private var nativeAuthGeneration: UInt64 = 0
+    private var nativeAuthConfigurationRevision: UInt64
+    private var authGeneration: UInt64 { rustAccount?.snapshot.generation ?? nativeAuthGeneration }
+    private var authConfigurationRevision: UInt64 { rustAccount?.snapshot.configurationRevision ?? nativeAuthConfigurationRevision }
+    private var nativeLoginDepth = 0
+    private var coreReloginID: UInt64?
+    private let credentialCommit: @Sendable (String, String, String, String, UInt64) async -> Bool
     /// 单飞的静默重登：并发请求同时撞 401 时只登一次，其余等同一个 Task。
     private var reloginTask: Task<String, Error>?
     private var reloginGeneration: UInt64 = 0
@@ -189,12 +195,17 @@ public actor MoviePilotAPIClient {
         store: MoviePilotStore = .shared,
         sessionConfiguration: URLSessionConfiguration = .default,
         rustCoreLibraryPath: String? = nil,
-        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
+        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
+        credentialCommit: (@Sendable (String, String, String, String, UInt64) async -> Bool)? = nil
     ) {
         self.store = store
         self.rustCoreLibraryPath = rustCoreLibraryPath
         self.allowsRustCore = rustCoreLibraryPath != nil || OcpCoreFeature.supportsNativeTransport(sessionConfiguration)
-        self.authConfigurationRevision = store.configurationRevision
+        self.nativeAuthConfigurationRevision = store.configurationRevision
+        self.credentialCommit = credentialCommit ?? { address, username, password, token, revision in
+            await store.commitCredentials(serverURLString: address, username: username,
+                password: password, accessToken: token, ifRevision: revision)
+        }
         self.retrySleep = retrySleep
         // 复制后再改：直接改写入参 configuration 会污染调用方手里的对象
         //（共享 .default 的属性是进程级单例，改动影响全局）。
@@ -260,10 +271,18 @@ public actor MoviePilotAPIClient {
     public func login(serverURLString: String, username: String, password: String) async throws -> MPUser {
         guard let baseURL = MoviePilotStore.normalizedURL(from: serverURLString),
               !username.isEmpty, !password.isEmpty else { throw MoviePilotError.notConfigured }
+        _ = try loadRustCore()
+        if let account = rustAccount {
+            return try await loginWithCore(account, baseURL: baseURL, address: serverURLString,
+                username: username, password: password)
+        }
+        nativeLoginDepth += 1
+        defer { nativeLoginDepth -= 1 }
         cancelRelogin()
         let revision = store.invalidateConfiguration()
         retireRustRequests()
         bumpGeneration()
+        let generation = authGeneration
         reloginExhaustedGeneration = nil
         let context = RequestContext(baseURL: baseURL, revision: revision)
         let token: String
@@ -280,11 +299,52 @@ public actor MoviePilotAPIClient {
             catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
         }
         try check(context)
-        let committed = await store.commitCredentials(serverURLString: serverURLString, username: username,
-                                                      password: password, accessToken: token, ifRevision: context.revision)
-        guard committed else { throw CancellationError() }
+        let committed = await credentialCommit(serverURLString, username, password, token, context.revision)
+        try Task.checkCancellation()
+        let snapshot = store.sessionSnapshot()
+        guard committed, generation == authGeneration, snapshot.revision == context.revision &+ 1,
+              snapshot.credentials.accessToken == token else { throw CancellationError() }
         bumpGeneration(retireRustSessions: false)
         reloginExhaustedGeneration = nil
+        return user
+    }
+
+    private func apply(_ transition: RustMoviePilotAccount.Transition, account: RustMoviePilotAccount) {
+        if transition.cancelRefresh {
+            reloginTask?.cancel()
+            reloginTask = nil
+            coreReloginID = nil
+        }
+        if transition.cancelRequests { retireRustRequests() }
+        if transition.clearSessions {
+            do {
+                let response = try account.core.call("moviepilot.clearSessions")
+                precondition(response.ok, "MoviePilot cookie session retirement failed")
+            } catch { preconditionFailure("MoviePilot cookie session retirement failed") }
+        }
+    }
+
+    private func loginWithCore(_ account: RustMoviePilotAccount, baseURL: URL, address: String,
+                               username: String, password: String) async throws -> MPUser {
+        let revision = store.invalidateConfiguration()
+        let transition: RustMoviePilotAccount.Transition = try account.call("login.begin", ["revision": revision])
+        apply(transition, account: account)
+        guard let id = transition.id else { throw MoviePilotError.generic("Core 登录操作缺少标识") }
+        defer { let _: Bool = account.invariant("login.finish", ["id": id]) }
+        let context = RequestContext(baseURL: baseURL, revision: revision)
+        guard let result = try await rustLogin(username: username, password: password, context: context, validateUser: true),
+              let user = result.user else { throw MoviePilotError.generic("登录成功但用户信息为空") }
+        try check(context)
+        let allowed: Bool = try account.call("login.authorize", ["id": id, "revision": store.configurationRevision])
+        guard allowed else { throw CancellationError() }
+        let committed = await credentialCommit(address, username, password, result.token, revision)
+        try Task.checkCancellation()
+        guard committed else { throw CancellationError() }
+        let snapshot = store.sessionSnapshot()
+        let decision: RustMoviePilotAccount.Decision = try account.call("login.commit", [
+            "id": id, "revision": snapshot.revision, "tokenMatches": snapshot.credentials.accessToken == result.token,
+        ])
+        guard decision.accepted else { throw CancellationError() }
         return user
     }
 
@@ -332,10 +392,22 @@ public actor MoviePilotAPIClient {
     }
 
     private func loadRustCore() throws -> OcpCoreClient? {
+        if let rustCore { return rustCore }
         guard allowsRustCore, rustCoreLibraryPath != nil || OcpCoreFeature.isEnabled else { return nil }
-        if rustCore == nil {
-            if let rustCoreLibraryPath { rustCore = try OcpCoreClient(libraryPath: rustCoreLibraryPath) }
-            else { rustCore = try? OcpCoreClient() }
+        // An operation that started with the native owner finishes with that owner.
+        guard nativeLoginDepth == 0, reloginTask == nil else { return nil }
+        let loaded: OcpCoreClient?
+        if let rustCoreLibraryPath { loaded = try OcpCoreClient(libraryPath: rustCoreLibraryPath) }
+        else { loaded = try? OcpCoreClient() }
+        if let loaded {
+            let account = RustMoviePilotAccount(loaded)
+            let _: RustMoviePilotAccount.Snapshot = try account.call("seed", [
+                "generation": nativeAuthGeneration, "configurationRevision": nativeAuthConfigurationRevision,
+                "refreshId": reloginGeneration,
+                "exhaustedGeneration": reloginExhaustedGeneration.map { $0 as Any } ?? NSNull(),
+            ])
+            rustCore = loaded
+            rustAccount = account
         }
         return rustCore
     }
@@ -457,6 +529,12 @@ public actor MoviePilotAPIClient {
     /// 退出登录：清 token 与密码，作废在途请求。
     @discardableResult
     public func signOut() -> UInt64 {
+        if let account = rustAccount {
+            store.clearSession()
+            let transition: RustMoviePilotAccount.Transition = account.invariant("invalidate", ["revision": store.configurationRevision])
+            apply(transition, account: account)
+            return transition.generation
+        }
         cancelRelogin()
         retireRustRequests()
         store.clearSession()
@@ -467,6 +545,15 @@ public actor MoviePilotAPIClient {
 
     /// 收到 401 通知侧的配合接口：只在代际仍匹配时清 token。
     public func clearSession(ifCurrent expectedGeneration: UInt64) -> UInt64? {
+        if let account = rustAccount {
+            let allowed: Bool = account.invariant("clear.allowed", ["generation": expectedGeneration, "revision": store.configurationRevision])
+            guard allowed else { return nil }
+            let revision = store.invalidateConfiguration()
+            store.accessToken = nil
+            let transition: RustMoviePilotAccount.Transition = account.invariant("invalidate", ["revision": revision])
+            apply(transition, account: account)
+            return transition.generation
+        }
         guard expectedGeneration == authGeneration,
               authConfigurationRevision == store.configurationRevision else { return nil }
         store.invalidateConfiguration()
@@ -544,6 +631,7 @@ public actor MoviePilotAPIClient {
 
     /// 发请求返回原始 data（非 JSON 响应用）。
     public func requestData(_ request: MPRequest) async throws -> Data {
+        _ = try loadRustCore()
         let context = try context()
         if request.authorized {
             guard let token = store.accessToken, !token.isEmpty else {
@@ -565,8 +653,9 @@ public actor MoviePilotAPIClient {
 
     private func bumpGeneration(retireRustSessions: Bool = true) {
         if retireRustSessions { _ = try? rustCore?.call("moviepilot.clearSessions") }
-        authGeneration &+= 1
-        authConfigurationRevision = store.configurationRevision
+        precondition(rustAccount == nil, "retained Core owns account generations")
+        nativeAuthGeneration &+= 1
+        nativeAuthConfigurationRevision = store.configurationRevision
     }
 
     private func cancelRelogin() {
@@ -750,6 +839,7 @@ public actor MoviePilotAPIClient {
     /// 网络故障 → 原样抛网络错误，不动 token（可能只是暂时连不上，下次再试）。
     private func silentRelogin(context: RequestContext) async throws -> String {
         try check(context)
+        if let account = rustAccount { return try await reloginWithCore(account, context: context) }
         if let existing = reloginTask {
             let token = try await existing.value
             try check(context)
@@ -828,6 +918,74 @@ public actor MoviePilotAPIClient {
 
     private func performRelogin(context: RequestContext) async throws -> String {
         try await postLogin(username: store.username, password: store.password, context: context)
+    }
+
+    private func reloginWithCore(_ account: RustMoviePilotAccount, context: RequestContext) async throws -> String {
+        let snapshot = store.sessionSnapshot()
+        let credentials = snapshot.credentials
+        let claim: RustMoviePilotAccount.Claim = try account.call("refresh.claim", [
+            "revision": snapshot.revision, "tokenPresent": credentials.accessToken != nil,
+            "credentialsPresent": !credentials.username.isEmpty && !credentials.password.isEmpty,
+        ])
+        if claim.clearToken {
+            guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
+        }
+        if claim.notify { await notifyAuthenticationRequired(ifCurrent: claim.generation, context: context) }
+        switch claim.action {
+        case "fused", "missing": throw MoviePilotError.requireLogin
+        case "join":
+            guard coreReloginID == claim.id, let task = reloginTask else {
+                throw MoviePilotError.generic("Core 静默重登任务缺失")
+            }
+            let token = try await task.value
+            try check(context)
+            return token
+        case "start": break
+        default: throw MoviePilotError.generic("Core 静默重登操作无效")
+        }
+        reloginTask?.cancel()
+        let task = Task<String, Error> {
+            let token = try await self.postLogin(username: credentials.username, password: credentials.password, context: context)
+            try self.check(context)
+            let allowed: Bool = try account.call("refresh.authorize", ["id": claim.id, "revision": self.store.configurationRevision])
+            guard allowed, self.store.setAccessToken(token, ifRevision: context.revision) else { throw CancellationError() }
+            let decision: RustMoviePilotAccount.Decision = try account.call("refresh.commit", ["id": claim.id, "revision": context.revision])
+            guard decision.accepted else { throw CancellationError() }
+            return token
+        }
+        reloginTask = task
+        coreReloginID = claim.id
+        let watchdog = Task {
+            do { try await Task.sleep(for: .seconds(claim.timeoutSeconds)); task.cancel() }
+            catch { }
+        }
+        defer {
+            watchdog.cancel()
+            let _: Bool = account.invariant("refresh.finish", ["id": claim.id])
+            if coreReloginID == claim.id { reloginTask = nil; coreReloginID = nil }
+        }
+        do {
+            let token = try await task.value
+            try check(context)
+            return token
+        } catch {
+            try check(context)
+            let rejected: Bool
+            if let error = error as? MoviePilotError {
+                switch error { case .requireLogin, .badRequest: rejected = true; default: rejected = false }
+            } else { rejected = false }
+            let failure: RustMoviePilotAccount.Decision = try account.call("refresh.failure", [
+                "id": claim.id, "revision": store.configurationRevision,
+                "kind": rejected ? "rejected" : (error is CancellationError ? "cancelled" : "transient"),
+            ])
+            guard failure.accepted else { throw CancellationError() }
+            if failure.clearToken == true {
+                guard store.setAccessToken(nil, ifRevision: context.revision) else { throw CancellationError() }
+            }
+            if failure.notify == true { await notifyAuthenticationRequired(ifCurrent: failure.generation, context: context) }
+            if rejected { throw MoviePilotError.requireLogin }
+            throw error
+        }
     }
 
     private func notifyAuthenticationRequired(ifCurrent generation: UInt64, context: RequestContext) async {
