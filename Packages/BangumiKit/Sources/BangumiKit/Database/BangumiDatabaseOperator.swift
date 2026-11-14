@@ -13,6 +13,12 @@ public actor BangumiDatabaseOperator {
     private let database: DatabasePool
 
     private let rust: RustBangumiStore?
+    nonisolated let sync: RustBangumiSync?
+    private var nativeSyncRevision: UInt64 = 0
+    func captureSyncRevision() -> UInt64 { nativeSyncRevision }
+    private func ensureSyncRevision(_ revision: UInt64?) throws {
+        if let revision, revision != nativeSyncRevision { throw BangumiError(ignore: "Discarded retired synchronization write") }
+    }
     var usesCoreStore: Bool { rust != nil }
 
     public init(database: DatabasePool, coreLibraryPath: String? = nil, coreEnabled: Bool? = nil) {
@@ -20,6 +26,7 @@ public actor BangumiDatabaseOperator {
         if coreLibraryPath != nil || (coreEnabled ?? OcpCoreFeature.isEnabled) {
             rust = try? RustBangumiStore(path: database.path, libraryPath: coreLibraryPath)
         } else { rust = nil }
+        sync = rust.map { RustBangumiSync(core: $0.core) }
     }
 
     // MARK: - 进度
@@ -337,8 +344,10 @@ public actor BangumiDatabaseOperator {
 
     /// 完整同步在一个事务内落库并删去远端已移除的章节。
     public func replaceEpisodes(
-        subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false
+        subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
+        try ensureSyncRevision(revision)
         if let rust {
             try rust.write("replaceEpisodes", ["subjectId": subjectId, "items": try rust.object(items),
                 "authoritativeCollection": authoritativeCollection, "now": Int(Date().timeIntervalSince1970)])
@@ -382,8 +391,10 @@ public actor BangumiDatabaseOperator {
     /// 批量落库（收藏同步用）：一个事务写完整页，别一条一个事务。
     /// 收藏全量同步每页都带 interest，是权威来源，传 `authoritativeInterest: true`。
     public func saveSubjects(
-        _ items: [BangumiSubjectDTO], authoritativeInterest: Bool = false
+        _ items: [BangumiSubjectDTO], authoritativeInterest: Bool = false,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
+        try ensureSyncRevision(revision)
         if let rust { try rust.write("saveSubjects", ["items": try rust.object(items), "authoritativeInterest": authoritativeInterest]); return }
 
         guard !items.isEmpty else { return }
@@ -480,6 +491,7 @@ public actor BangumiDatabaseOperator {
 
     /// 清空账户相关数据（登出/换号时调用）。
     public func clearAccountLocalState() throws {
+        nativeSyncRevision &+= 1
         if let rust { try rust.write("clearAccountLocalState"); return }
 
         return try database.write { db in

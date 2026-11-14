@@ -8,7 +8,7 @@ final class RustBangumiAccount: Sendable {
     func call<T: Decodable>(_ method: String, _ args: [String: Any] = [:], as: T.Type = T.self) throws -> T {
         let response = try core.call("bangumiAccount." + method, arguments: args)
         guard response.ok else { throw BangumiError.request(response.message) }
-        return try response.data.decode(T.self)
+        return try response.decodeData(T.self)
     }
     // Synchronous nonthrowing native APIs only send valid local commands. A
     // violated ABI contract cannot silently switch to another credential owner.
@@ -17,7 +17,7 @@ final class RustBangumiAccount: Sendable {
         catch { preconditionFailure("Bangumi account Core contract failed: \(method)") }
     }
     struct Snapshot: Decodable {
-        var generation, exchangeGeneration, refreshGeneration, operationRevision: UInt64
+        var generation, exchangeGeneration, refreshGeneration, operationRevision, identityGeneration: UInt64
         var refreshActive: Bool
     }
     struct Decision: Decodable { var accepted: Bool; var generation: UInt64 }

@@ -16,3 +16,21 @@ Logout also retires pending state. Shared refresh tasks are keyed by their Core
 claim, so retired cleanup cannot remove a newer task. Real native and Core HTTP
 race fixtures cover these behaviors. Collection/account effect scheduling and
 complete sync acceptance remain open.
+
+## Retained synchronization
+
+BangumiDatabaseOperator now retains the sync directory on its SQLite Core handle.
+Collection pagination, complete episode replacement, sliding reconciliation and
+full incremental refresh all execute yielded Core steps. SQL effects use a
+single-use receipt applied inside Core; account clearing/reconfiguration retires
+pending writes under the same lock. Starting a login/profile/logout operation
+also invalidates the database sync directory immediately. Swift retains HTTP
+and timestamp effects, using the captured account-operation/identity barriers.
+The independent native path now guards database writes with the database actor's
+revision and timestamp adoption with the MainActor account revision.
+
+Typed account/store/sync ABI replies decode directly from their original bytes,
+preserving exact Int64/UInt64 values. Actual HTTP/GRDB comparison fixtures cover
+paging, signed integer identity, partial failures, cancellation and late writes.
+Detailed subject/progress mutation chaining and full account/profile effect
+orchestration remain separate acceptance work.

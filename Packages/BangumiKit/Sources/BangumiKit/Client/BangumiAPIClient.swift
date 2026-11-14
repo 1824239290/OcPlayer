@@ -83,6 +83,7 @@ public actor BangumiAPIClient {
     private var anonymousSession: URLSession?
     private var authorizedSession: URLSession?
 
+    private var nativeIdentityGeneration: UInt64 = 0
     private var nativeAuthGeneration: UInt64 = 0
     private var authGeneration: UInt64 { account?.snapshot.generation ?? nativeAuthGeneration }
     private var authorizedSessionGeneration: UInt64?
@@ -185,6 +186,11 @@ public actor BangumiAPIClient {
         }
         guard expectedGeneration == authGeneration else { return nil }
         return invalidateCredentials()
+    }
+
+    func syncIdentityGeneration() -> UInt64 { account?.snapshot.identityGeneration ?? nativeIdentityGeneration }
+    func isCurrentSyncIdentity(_ generation: UInt64) -> Bool {
+        account?.invariant("identity.current", ["generation": generation]) ?? (generation == nativeIdentityGeneration)
     }
 
     public func isCurrentCredentialGeneration(_ generation: UInt64) -> Bool {
@@ -614,6 +620,7 @@ public actor BangumiAPIClient {
         switch commit {
         case .oauth(let exchangeGeneration):
             guard exchangeGeneration == oauthExchangeGeneration else { return nil }
+            nativeIdentityGeneration &+= 1
             oauthExchangeGeneration &+= 1
             refreshGeneration &+= 1
             refreshTask?.cancel()
@@ -639,6 +646,7 @@ public actor BangumiAPIClient {
             return transition.generation
         }
         pendingOAuthState = nil
+        nativeIdentityGeneration &+= 1
         cancelRustAuthorizedRequests()
         nativeAuthGeneration &+= 1
         oauthExchangeGeneration &+= 1

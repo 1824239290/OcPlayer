@@ -22,7 +22,12 @@ public enum BangumiProgressInvalidation {
 public enum BangumiCollectionRepository {
     /// 增量同步全部收藏（since > 0 时只拉变更）。返回本页拉取的条目数。
     public static func refreshCollections(since: Int) async throws -> Int {
+        let authRevision = BangumiAuthService.syncOperationRevision
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
+        if let sync = db.sync {
+            return try await sync.run(.init(operation: "collections", since: since), dependencies: sync.dependencies(db: db, revision: authRevision))
+        }
+        let revision = await db.captureSyncRevision()
         var count = 0
         var offset = 0
         let limit = 100
@@ -34,7 +39,8 @@ public enum BangumiCollectionRepository {
             // 收藏接口每页都带 interest，是收藏态的权威来源——这里才允许按
             // nil 清空本地收藏（单条回读路径的 nil 只是「没拉到」，见 update 的注释）。
             try Task.checkCancellation()
-            try await db.saveSubjects(resp.data, authoritativeInterest: true)
+            guard authRevision == BangumiAuthService.syncOperationRevision else { throw BangumiError(ignore: "Discarded stale collection sync") }
+            try await db.saveSubjects(resp.data, authoritativeInterest: true, ifCurrentSyncRevision: revision)
             count += resp.data.count
             offset += limit
             if offset >= resp.total { break }
@@ -53,7 +59,14 @@ public enum BangumiCollectionRepository {
     /// 并发有上限，别把几十个条目的章节请求一次全发出去。
     @discardableResult
     public static func reconcileEpisodes(maxConcurrent: Int = 4) async -> Int {
+        let authRevision = BangumiAuthService.syncOperationRevision
         guard let db = BangumiContext.shared.database else { return 0 }
+        if let sync = db.sync {
+            let filled: Int = (try? await sync.run(.init(operation: "reconcile", maxConcurrent: maxConcurrent,
+                authoritativeCollection: BangumiContext.shared.isAuthenticated), dependencies: sync.dependencies(db: db, revision: authRevision))) ?? 0
+            if filled > 0 { BangumiNetworkLog.logger.info("章节对齐完成 subjects=\(filled)") }
+            return filled
+        }
         let subjectIDs = (try? await db.fetchEpisodeSyncTargets()) ?? []
         guard !subjectIDs.isEmpty else { return 0 }
         // 与「重拉」同一个事实：章节接口是否带 collection 取决于当前登录态。
@@ -66,7 +79,7 @@ public enum BangumiCollectionRepository {
                 guard let subjectID = pending.next() else { break }
                 group.addTask {
                     await BangumiEpisodeRepository.syncEpisodesQuietly(
-                        subjectID, db: db, authoritativeCollection: authoritativeCollection)
+                        subjectID, db: db, authoritativeCollection: authoritativeCollection, expectedAuthRevision: authRevision)
                 }
             }
             while let succeeded = await group.next() {
@@ -74,7 +87,7 @@ public enum BangumiCollectionRepository {
                 if let subjectID = pending.next() {
                     group.addTask {
                         await BangumiEpisodeRepository.syncEpisodesQuietly(
-                            subjectID, db: db, authoritativeCollection: authoritativeCollection)
+                            subjectID, db: db, authoritativeCollection: authoritativeCollection, expectedAuthRevision: authRevision)
                     }
                 }
             }
@@ -110,8 +123,15 @@ public enum BangumiEpisodeRepository {
     /// 「远端没给 collection」就是「这一集没看过」，必须按它归零，否则在别处取消的
     /// 「看过」撤不掉。
     nonisolated static func syncEpisodes(
-        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool
+        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool,
+        expectedAuthRevision: UInt64? = nil
     ) async throws {
+        if let sync = db.sync {
+            let _: Bool = try await sync.run(.init(operation: "episodes", authoritativeCollection: authoritativeCollection,
+                subjectId: subjectId), dependencies: sync.dependencies(db: db, revision: expectedAuthRevision))
+            return
+        }
+        let revision = await db.captureSyncRevision()
         var offset = 0
         let limit = 1000
         var total = 0
@@ -128,17 +148,22 @@ public enum BangumiEpisodeRepository {
             if offset >= total { break }
         }
         try Task.checkCancellation()
+        if let expectedAuthRevision {
+            let current = await MainActor.run { expectedAuthRevision == BangumiAuthService.syncOperationRevision }
+            guard current else { throw BangumiError(ignore: "Discarded stale episode synchronization") }
+        }
         try await db.replaceEpisodes(
-            subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
+            subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection, ifCurrentSyncRevision: revision)
     }
 
     /// `syncEpisodes` 的静默版本：失败只记日志，返回是否成功（批量补齐用）。
     nonisolated static func syncEpisodesQuietly(
-        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool
+        _ subjectId: Int, db: BangumiDatabaseOperator, authoritativeCollection: Bool,
+        expectedAuthRevision: UInt64? = nil
     ) async -> Bool {
         do {
             try await syncEpisodes(
-                subjectId, db: db, authoritativeCollection: authoritativeCollection)
+                subjectId, db: db, authoritativeCollection: authoritativeCollection, expectedAuthRevision: expectedAuthRevision)
             return true
         } catch {
             BangumiNetworkLog.logger.warning("章节补齐失败 subject=\(subjectId) error=\(error)")
@@ -148,9 +173,10 @@ public enum BangumiEpisodeRepository {
 
     /// 拉取条目全部章节并落库，删除本地多余章节。
     public static func loadEpisodes(_ subjectId: Int) async throws {
+        let authRevision = BangumiAuthService.syncOperationRevision
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
         try await syncEpisodes(
-            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated)
+            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated, expectedAuthRevision: authRevision)
         BangumiProgressInvalidation.post(subjectId: subjectId)
     }
 
@@ -557,6 +583,12 @@ public final class BangumiContext {
     /// 收藏同步 + 章节补齐（进度页全量刷新）。返回同步到的条目数。
     @discardableResult
     public func refreshAllCollections(force: Bool = false) async throws -> Int {
+        let revision = BangumiAuthService.syncOperationRevision
+        if let db = database, let sync = db.sync {
+            return try await sync.run(.init(operation: "allCollections", since: store.collectionsUpdatedAt,
+                startedAt: Int(Date().timeIntervalSince1970), force: force,
+                authoritativeCollection: isAuthenticated), dependencies: sync.dependencies(db: db, store: store, revision: revision))
+        }
         if force { store.setCollectionsUpdatedAt(0) }
         let since = store.collectionsUpdatedAt
         // 时间戳取「同步开始」而不是结束：同步途中发生的变更下次还能被 since 捞到。
@@ -566,6 +598,7 @@ public final class BangumiContext {
         // 重叠区间重复拉到的条目 upsert 幂等，代价只是少量冗余请求。
         let querySince = since > 0 ? max(0, since - Self.collectionSyncOverlap) : 0
         let count = try await BangumiCollectionRepository.refreshCollections(since: querySince)
+        guard revision == BangumiAuthService.syncOperationRevision else { throw BangumiError(ignore: "Discarded stale synchronization timestamp") }
         store.setCollectionsUpdatedAt(startedAt)
         // 收藏接口既不带章节、也不带单集状态：进度页的章节网格与格子状态都靠这一步对齐。
         await BangumiCollectionRepository.reconcileEpisodes()

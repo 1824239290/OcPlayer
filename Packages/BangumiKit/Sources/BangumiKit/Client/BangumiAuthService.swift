@@ -10,6 +10,8 @@ public enum BangumiAuthService {
     private static var account: RustBangumiAccount? { BangumiAPIClient.shared.account }
     private static var operationRevision: UInt64 { account?.snapshot.operationRevision ?? nativeOperationRevision }
 
+    static var syncOperationRevision: UInt64 { operationRevision }
+
     /// 注入网关配置（启动时 + 网关设置变更时）。OAuth 授权、换 token、刷新都走网关，
     /// 客户端不持有 `client_secret`。
     public static func configureGateway(_ configuration: BangumiGatewayConfiguration?) async {
@@ -93,8 +95,10 @@ public enum BangumiAuthService {
     }
 
     private static func beginOperation() -> UInt64 {
-        if let account { return account.invariant("operation.begin") }
-        nativeOperationRevision &+= 1
-        return nativeOperationRevision
+        let revision: UInt64
+        if let account { revision = account.invariant("operation.begin") }
+        else { nativeOperationRevision &+= 1; revision = nativeOperationRevision }
+        BangumiContext.shared.database?.sync?.invalidate()
+        return revision
     }
 }

@@ -16,7 +16,7 @@ final class RustBangumiStore: Sendable {
         domain: "OcPlayerCore.BangumiStore", code: Int(response.code),
         userInfo: [NSLocalizedDescriptionKey: response.message])
     }
-    return try response.data.decode(type)
+    return try response.decodeData(type)
   }
   func write(_ method: String, _ args: [String: Any] = [:]) throws {
     let _: JSONValue = try call(method, args)
