@@ -5,6 +5,12 @@ workers with request reservation/cancellation; playback commands expose native
 session snapshots. The package also provides Bangumi and danmaku bridge helpers.
 Native UI, decoding/rendering and credential storage remain platform-owned.
 
+The source package loads a matching dylib at runtime. The release package made
+by `Scripts/build-apple-xcframework.sh` includes a binary `OcPlayerCoreFFI`
+dependency and directly references the twelve C ABI functions. This retains
+the static Core in optimized, stripped macOS/iOS builds without dynamic symbol
+exports. Both package forms expose the same Swift API and contract tests.
+
 Use `response.decodeData(MyPayload.self)` for typed command results with integer
 identifiers. It reads the original ABI response bytes and preserves Int/UInt
 ranges, including nested fields; the generic `response.data` uses Double for

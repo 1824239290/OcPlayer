@@ -11,6 +11,12 @@ The host must embed the matching dylib (or provide `OCP_CORE_LIBRARY_PATH` in
 development). The package discovers the library at runtime and checks its
 exports; no third-party Swift package dependency is needed.
 
+For static macOS/iOS distribution, add the package directory produced by
+`Scripts/build-apple-xcframework.sh`. It includes the XCFramework, matching Swift
+sources, C module map, system linker settings, tests, license and SHA-256 release
+manifest. Its direct C references work when dynamic ABI symbols are stripped.
+`Scripts/verify-apple-release.sh /path/to/release-package` verifies that delivery.
+
 Native application domain facades and UI are in the OcPlayer Apple checkout.
 The self-contained binding provides JSON commands, cancellation, events,
 snapshots, surface calls, and playback/Bangumi/danmaku bridge helpers.

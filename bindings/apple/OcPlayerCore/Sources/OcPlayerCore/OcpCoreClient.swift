@@ -2,6 +2,9 @@ import Foundation
 #if canImport(Darwin)
 import Darwin
 #endif
+#if canImport(OcPlayerCoreFFI)
+import OcPlayerCoreFFI
+#endif
 
 public struct OcpResponse: Decodable, Sendable {
     public let ok: Bool
@@ -119,7 +122,7 @@ private typealias StringFree = @convention(c) (UnsafeMutablePointer<CChar>?) -> 
 private typealias LastErrorMessage = @convention(c) () -> UnsafeMutablePointer<CChar>?
 
 private final class OcpNativeAPI: @unchecked Sendable {
-    let handle: UnsafeMutableRawPointer
+    let handle: UnsafeMutableRawPointer?
     private let ownsHandle: Bool
     let create: CoreCreate
     let destroy: CoreDestroy
@@ -135,6 +138,28 @@ private final class OcpNativeAPI: @unchecked Sendable {
     let lastErrorMessage: LastErrorMessage
 
     init(explicitPath: String? = nil) throws {
+#if canImport(OcPlayerCoreFFI)
+        // Direct references retain the static archive even when the app strips
+        // unused symbols. Static iOS consumers need no dlopen/dlsym exports.
+        if explicitPath == nil,
+           ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH", default: ""].isEmpty {
+            handle = nil
+            ownsHandle = false
+            create = ocp_core_create
+            destroy = ocp_core_destroy
+            abiVersion = ocp_core_abi_version
+            call = ocp_call
+            pollEvent = ocp_poll_event
+            snapshot = ocp_snapshot
+            attachSurface = ocp_attach_surface
+            resizeSurface = ocp_resize_surface
+            detachSurface = ocp_detach_surface
+            renderTick = ocp_render_tick
+            stringFree = ocp_string_free
+            lastErrorMessage = ocp_last_error_message
+            return
+        }
+#endif
         let candidates = Self.libraryCandidates(explicitPath: explicitPath)
         var loaded: UnsafeMutableRawPointer?
         for candidate in candidates {
@@ -172,7 +197,7 @@ private final class OcpNativeAPI: @unchecked Sendable {
     }
 
     deinit {
-        if ownsHandle { dlclose(handle) }
+        if ownsHandle, let handle { dlclose(handle) }
     }
 
     static func libraryCandidates(explicitPath: String? = nil) -> [String] {

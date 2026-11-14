@@ -27,9 +27,7 @@ final class OcpCoreClientTests: XCTestCase {
     private final class CustomProtocol: URLProtocol, @unchecked Sendable {}
 
     private func playbackFlow() throws -> OcpPlaybackFlow {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"], !path.isEmpty else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to exercise shared playback")
-        }
+        let path = try OcpTestLibrary.path()
         return try XCTUnwrap(OcpPlaybackFlow(libraryPath: path))
     }
 
@@ -220,9 +218,7 @@ final class OcpCoreClientTests: XCTestCase {
     }
 
     func testRustCoreSmokeWhenLibraryIsConfigured() throws {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"], !path.isEmpty else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to run the native Rust smoke test")
-        }
+        let path = try OcpTestLibrary.path()
         let client = try OcpCoreClient(libraryPath: path)
         XCTAssertEqual(OcpCoreClient.abiVersion, 1)
         let ping = try client.call("ping")
@@ -248,9 +244,7 @@ final class OcpCoreClientTests: XCTestCase {
     }
 
     func testRustEventBackpressurePreservesControlsAndLatestPosition() throws {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"], !path.isEmpty else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to run the native Rust event test")
-        }
+        let path = try OcpTestLibrary.path()
         let client = try OcpCoreClient(libraryPath: path)
         try client.call("playback.open", arguments: ["source": "movie.mp4"])
         try client.call("playback.play")
@@ -297,9 +291,7 @@ final class OcpCoreClientTests: XCTestCase {
     }
 
     func testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured() throws {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"], !path.isEmpty else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to run the native Rust playback test")
-        }
+        let path = try OcpTestLibrary.path()
         UserDefaults.standard.set(true, forKey: OcpCoreFeature.userDefaultsKey)
         defer { UserDefaults.standard.removeObject(forKey: OcpCoreFeature.userDefaultsKey) }
         let session = try XCTUnwrap(OcpPlaybackSession(libraryPath: path))
@@ -317,9 +309,7 @@ final class OcpCoreClientTests: XCTestCase {
     }
 
     func testPlaybackPreferencesSurvivePositionPauseAndTrackClearing() throws {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"], !path.isEmpty else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to run the native Rust preferences test")
-        }
+        let path = try OcpTestLibrary.path()
         UserDefaults.standard.set(true, forKey: OcpCoreFeature.userDefaultsKey)
         defer { UserDefaults.standard.removeObject(forKey: OcpCoreFeature.userDefaultsKey) }
         let client = try OcpCoreClient(libraryPath: path)
