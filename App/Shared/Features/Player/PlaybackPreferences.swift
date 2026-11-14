@@ -1,9 +1,34 @@
 import Foundation
 import PlaybackKit
+import OcPlayerCore
 
 /// 播放偏好跨启动记忆。弹幕渲染偏好由 HUD 修改后也在此统一保存。
 @MainActor
 enum PlaybackPreferences {
+    /// Tests compare the retained native policy with the actual Core branch.
+    static var coreEnabledOverride: Bool?
+    private(set) static var coreResolutionCount = 0
+    private static let preferenceCore = try? OcpCoreClient()
+    static var runtimeCoreActive: Bool {
+        (coreEnabledOverride ?? OcpCoreFeature.isEnabled) && preferenceCore != nil
+    }
+    private static func resolved(_ key: String, value: Any) -> JSONValue? {
+        guard runtimeCoreActive, let core = preferenceCore else { return nil }
+        let fact: Any
+        if let value = value as? Double, !value.isFinite {
+            fact = value.isNaN ? "nan" : (value > 0 ? "infinity" : "-infinity")
+        } else { fact = value }
+        let response = try? core.call("preferences.resolve", arguments: [
+            "key": String(key.dropFirst("dev.jumusu.ocplayer.".count)),
+            "present": UserDefaults.standard.object(forKey: key) != nil,
+            "value": fact,
+        ])
+        guard let response, response.ok,
+              case .object(let payload) = response.data else { return nil }
+        coreResolutionCount += 1
+        return payload["value"]
+    }
+
 
     static var rate: Double {
         get { storedDouble(forKey: SettingsKeys.playbackRate, range: 0.5...2.0, default: 1.0) }
@@ -14,7 +39,7 @@ enum PlaybackPreferences {
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackVolume) }
     }
     static var muted: Bool {
-        get { UserDefaults.standard.bool(forKey: SettingsKeys.playbackMuted) }
+        get { storedBool(forKey: SettingsKeys.playbackMuted, default: false) }
         set { UserDefaults.standard.set(newValue, forKey: SettingsKeys.playbackMuted) }
     }
     static var subtitleScale: Double {
@@ -29,6 +54,8 @@ enum PlaybackPreferences {
     /// （旧版本从没写过 / 被人手改坏）都按默认档处理。
     static var subtitleLanguagePreference: SubtitleLanguagePreference {
         get {
+            if case .string(let raw) = resolved(SettingsKeys.subtitleLanguagePreference, value: UserDefaults.standard.string(forKey: SettingsKeys.subtitleLanguagePreference) ?? ""),
+               let value = SubtitleLanguagePreference(rawValue: raw) { return value }
             guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.subtitleLanguagePreference),
                   let value = SubtitleLanguagePreference(rawValue: raw)
             else { return .chineseSimplified }
@@ -44,6 +71,8 @@ enum PlaybackPreferences {
     /// 坏数据不该把一个用户没要过的负担打开。
     static var lumaUpscaler: PlaybackUpscalerMode {
         get {
+            if case .string(let raw) = resolved(SettingsKeys.lumaUpscaler, value: UserDefaults.standard.string(forKey: SettingsKeys.lumaUpscaler) ?? ""),
+               let value = PlaybackUpscalerMode(rawValue: raw) { return value }
             guard let raw = UserDefaults.standard.string(forKey: SettingsKeys.lumaUpscaler),
                   let value = PlaybackUpscalerMode(rawValue: raw)
             else { return .off }
@@ -87,6 +116,7 @@ enum PlaybackPreferences {
     /// 所以非法值一律当作「不设置」。
     static var subtitleOutlineWidth: Double {
         get {
+            if case .number(let value) = resolved(SettingsKeys.subtitleOutlineWidth, value: UserDefaults.standard.double(forKey: SettingsKeys.subtitleOutlineWidth)) { return value }
             guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleOutlineWidth) != nil else {
                 return 0
             }
@@ -102,6 +132,10 @@ enum PlaybackPreferences {
     /// 必须区分得开，否则用户一进设置页就会把片源的字重覆盖成常规。
     static var subtitleBold: Bool? {
         get {
+            if let value = resolved(SettingsKeys.subtitleBold, value: UserDefaults.standard.bool(forKey: SettingsKeys.subtitleBold)) {
+                if case .bool(let flag) = value { return flag }
+                return nil
+            }
             guard UserDefaults.standard.object(forKey: SettingsKeys.subtitleBold) != nil else {
                 return nil
             }
@@ -143,6 +177,10 @@ enum PlaybackPreferences {
     }
 
     private static func storedColor(forKey key: String) -> UInt32? {
+        if let value = resolved(key, value: UserDefaults.standard.integer(forKey: key)) {
+            if case .number(let number) = value { return UInt32(number) }
+            return nil
+        }
         guard UserDefaults.standard.object(forKey: key) != nil else { return nil }
         let value = UserDefaults.standard.integer(forKey: key)
         guard value > 0, value <= Int(UInt32.max) else { return nil }
@@ -230,6 +268,7 @@ enum PlaybackPreferences {
     static let readAheadOptionsMiB: [Int] = [0, 8, 16, 32]
     static var httpReadAheadMiB: Int {
         get {
+            if case .number(let value) = resolved(SettingsKeys.httpReadAheadMiB, value: UserDefaults.standard.integer(forKey: SettingsKeys.httpReadAheadMiB)) { return Int(value) }
             let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpReadAheadMiB)
             return readAheadOptionsMiB.contains(stored) ? stored : 0
         }
@@ -252,6 +291,7 @@ enum PlaybackPreferences {
     static let backBufferOptionsMiB: [Int] = [0, 32, 64, 128]
     static var httpBackBufferMiB: Int {
         get {
+            if case .number(let value) = resolved(SettingsKeys.httpBackBufferMiB, value: UserDefaults.standard.integer(forKey: SettingsKeys.httpBackBufferMiB)) { return Int(value) }
             let stored = UserDefaults.standard.integer(forKey: SettingsKeys.httpBackBufferMiB)
             return backBufferOptionsMiB.contains(stored) ? stored : 0
         }
@@ -289,6 +329,7 @@ enum PlaybackPreferences {
     /// 有精确区间终点，按标记终点跳，不吃这个设置。
     static var outroRetentionSeconds: Int {
         get {
+            if case .number(let value) = resolved(SettingsKeys.outroRetentionSeconds, value: UserDefaults.standard.integer(forKey: SettingsKeys.outroRetentionSeconds)) { return Int(value) }
             // 不能学 httpReadAheadMiB 用 integer() 兜 0 再校验档位——0 在这里是
             // 合法档位（不保留），键缺失会被读成 0 而非默认 10，必须先探存在性。
             guard UserDefaults.standard.object(forKey: SettingsKeys.outroRetentionSeconds) != nil
@@ -304,6 +345,10 @@ enum PlaybackPreferences {
         range: ClosedRange<Double>,
         default fallback: Double
     ) -> Double {
+        if let value = resolved(key, value: UserDefaults.standard.double(forKey: key)) {
+            if case .number(let number) = value { return number }
+            if case .string("nan") = value { return .nan }
+        }
         guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
         return UserDefaults.standard.double(forKey: key).clamped(range)
     }
@@ -314,6 +359,7 @@ enum PlaybackPreferences {
         range: ClosedRange<Int>,
         default fallback: Int
     ) -> Int {
+        if case .number(let value) = resolved(key, value: UserDefaults.standard.integer(forKey: key)) { return Int(value) }
         guard UserDefaults.standard.object(forKey: key) != nil else { return fallback }
         let value = UserDefaults.standard.integer(forKey: key)
         return range.contains(value) ? value : fallback
@@ -322,7 +368,8 @@ enum PlaybackPreferences {
     /// 默认值感知的读取统一走 `UserDefaults.bool(forKey:default:)`（见 SettingsKeys）：
     /// 键不存在时回 fallback，而不是 `bool(forKey:)` 的 false。
     private static func storedBool(forKey key: String, default fallback: Bool) -> Bool {
-        UserDefaults.standard.bool(forKey: key, default: fallback)
+        if case .bool(let value) = resolved(key, value: UserDefaults.standard.bool(forKey: key)) { return value }
+        return UserDefaults.standard.bool(forKey: key, default: fallback)
     }
 }
 

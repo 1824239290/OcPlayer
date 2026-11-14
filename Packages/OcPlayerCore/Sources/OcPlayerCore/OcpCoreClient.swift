@@ -38,6 +38,19 @@ public struct OcpEvent: Decodable, Sendable {
     public let sequence: UInt64
     public let kind: String
     public let data: JSONValue
+    private var wireJSON: Data? = nil
+    private enum CodingKeys: String, CodingKey { case sequence, kind, data }
+    private struct Payload<Value: Decodable>: Decodable { let data: Value }
+
+    public func decodeData<Value: Decodable>(_ type: Value.Type = Value.self) throws -> Value {
+        if let wireJSON { return try JSONDecoder().decode(Payload<Value>.self, from: wireJSON).data }
+        return try data.decode(type)
+    }
+    static func fromWire(_ json: Data) throws -> Self {
+        var event = try JSONDecoder().decode(Self.self, from: json)
+        event.wireJSON = json
+        return event
+    }
 }
 
 public struct OcpCoreError: Error, LocalizedError, Sendable {
@@ -182,18 +195,24 @@ private final class OcpNativeAPI: @unchecked Sendable {
             }
             return unsafeBitCast(pointer, to: type)
         }
-        create = try symbol("ocp_core_create", as: CoreCreate.self)
-        destroy = try symbol("ocp_core_destroy", as: CoreDestroy.self)
-        abiVersion = try symbol("ocp_core_abi_version", as: AbiVersion.self)
-        call = try symbol("ocp_call", as: Call.self)
-        pollEvent = try symbol("ocp_poll_event", as: PollEvent.self)
-        snapshot = try symbol("ocp_snapshot", as: Snapshot.self)
-        attachSurface = try symbol("ocp_attach_surface", as: AttachSurface.self)
-        resizeSurface = try symbol("ocp_resize_surface", as: ResizeSurface.self)
-        detachSurface = try symbol("ocp_detach_surface", as: DetachSurface.self)
-        renderTick = try symbol("ocp_render_tick", as: RenderTick.self)
-        stringFree = try symbol("ocp_string_free", as: StringFree.self)
-        lastErrorMessage = try symbol("ocp_last_error_message", as: LastErrorMessage.self)
+        do {
+            create = try symbol("ocp_core_create", as: CoreCreate.self)
+            destroy = try symbol("ocp_core_destroy", as: CoreDestroy.self)
+            abiVersion = try symbol("ocp_core_abi_version", as: AbiVersion.self)
+            call = try symbol("ocp_call", as: Call.self)
+            pollEvent = try symbol("ocp_poll_event", as: PollEvent.self)
+            snapshot = try symbol("ocp_snapshot", as: Snapshot.self)
+            attachSurface = try symbol("ocp_attach_surface", as: AttachSurface.self)
+            resizeSurface = try symbol("ocp_resize_surface", as: ResizeSurface.self)
+            detachSurface = try symbol("ocp_detach_surface", as: DetachSurface.self)
+            renderTick = try symbol("ocp_render_tick", as: RenderTick.self)
+            stringFree = try symbol("ocp_string_free", as: StringFree.self)
+            lastErrorMessage = try symbol("ocp_last_error_message", as: LastErrorMessage.self)
+        } catch {
+            // A partially initialized API has no deinit to release dlopen.
+            if ownsHandle { dlclose(handle) }
+            throw error
+        }
     }
 
     deinit {
@@ -221,10 +240,15 @@ public final class OcpCoreClient: @unchecked Sendable {
     public init(config: [String: Any] = [:], libraryPath: String? = nil) throws {
         let native = try OcpNativeAPI(explicitPath: libraryPath)
         api = native
+        guard native.abiVersion() == 1 else { throw OcpCoreError(message: "Unsupported OcPlayer Core ABI version") }
         let data = try JSONSerialization.data(withJSONObject: config)
         let json = String(decoding: data, as: UTF8.self)
         core = json.withCString { native.create($0) }
-        guard core != nil else { throw NSError(domain: "OcPlayerCore", code: 1) }
+        guard core != nil else {
+            let pointer = native.lastErrorMessage()
+            defer { if let pointer { native.stringFree(pointer) } }
+            throw OcpCoreError(message: pointer.map { String(cString: $0) } ?? "ocp_core_create failed")
+        }
     }
 
     deinit { synchronized { api.destroy(core) } }
@@ -243,22 +267,39 @@ public final class OcpCoreClient: @unchecked Sendable {
     /// Capturing self retains both the core handle and the loaded library until completion.
     public func callAsync(_ method: String, argumentsJSON: String = "{}") async throws -> OcpResponse {
         try Task.checkCancellation()
-        guard var arguments = try JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any] else {
-            throw OcpCoreError(message: "command arguments must be an object")
+        // Decode only control metadata; keep every domain token in its original bytes.
+        struct RequestMetadata: Decodable {
+            let requestId: String?
+            enum CodingKeys: String, CodingKey { case requestId }
+            init(from decoder: Decoder) throws {
+                let values = try decoder.container(keyedBy: CodingKeys.self)
+                requestId = values.contains(.requestId) ? try values.decode(String.self, forKey: .requestId) : nil
+            }
         }
-        let requestID = arguments["requestId"] as? String ?? UUID().uuidString
-        arguments["requestId"] = requestID
-        let json = String(decoding: try JSONSerialization.data(withJSONObject: arguments), as: UTF8.self)
-        let controlJSON = String(decoding: try JSONSerialization.data(withJSONObject: ["requestId": requestID]), as: UTF8.self)
+        let metadata = try JSONDecoder().decode(RequestMetadata.self, from: Data(argumentsJSON.utf8))
+        if method == "request.prepare" || method == "request.cancel" {
+            let response = try await dispatchCall(method, json: argumentsJSON)
+            try Task.checkCancellation()
+            return response
+        }
+        let requestID = metadata.requestId ?? UUID().uuidString
+        guard !requestID.isEmpty, !requestID.contains("\0") else {
+            throw OcpCoreError(message: "requestId must be a nonempty string without NUL")
+        }
+        let encodedID = String(decoding: try JSONEncoder().encode(requestID), as: UTF8.self)
+        let controlJSON = "{\"requestId\":\(encodedID)}"
+        let json: String
+        if metadata.requestId != nil { json = argumentsJSON }
+        else {
+            let original = argumentsJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+            let body = original.dropFirst().dropLast()
+            let separator = String(body).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : ","
+            json = "{\(body)\(separator)\"requestId\":\(encodedID)}"
+        }
         let prepared = try callJSON("request.prepare", json: controlJSON)
         guard prepared.ok else { throw OcpCoreError(message: prepared.message) }
         let response: OcpResponse = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async { [self] in
-                    do { continuation.resume(returning: try callJSON(method, json: json)) }
-                    catch { continuation.resume(throwing: error) }
-                }
-            }
+            try await dispatchCall(method, json: json)
         } onCancel: {
             _ = try? self.callJSON("request.cancel", json: controlJSON)
         }
@@ -266,7 +307,19 @@ public final class OcpCoreClient: @unchecked Sendable {
         return response
     }
 
+    private func dispatchCall(_ method: String, json: String) async throws -> OcpResponse {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                do { continuation.resume(returning: try callJSON(method, json: json)) }
+                catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     private func callJSON(_ method: String, json: String) throws -> OcpResponse {
+        guard !method.isEmpty, !method.contains("\0"), !json.contains("\0") else {
+            throw OcpCoreError(message: "C ABI input must not contain NUL and method must not be empty")
+        }
         // Rust serializes shared state internally. Polling must stay available during network calls.
         let pointer = method.withCString { methodPointer in
             json.withCString { api.call(core, methodPointer, $0) }
@@ -282,14 +335,24 @@ public final class OcpCoreClient: @unchecked Sendable {
         guard result >= 0 else { throw synchronized { OcpCoreError(message: lastError(fallback: "ocp_poll_event failed")) } }
         guard result == 1, let pointer else { return nil }
         defer { api.stringFree(pointer) }
-        return try JSONDecoder().decode(OcpEvent.self, from: Data(String(cString: pointer).utf8))
+        return try OcpEvent.fromWire(Data(String(cString: pointer).utf8))
     }
 
     public func snapshot(kind: String = "core") throws -> JSONValue {
+        try JSONDecoder().decode(JSONValue.self, from: snapshotData(kind: kind))
+    }
+
+    /// Exact typed snapshot decoding without the generic Double projection.
+    public func snapshot<Value: Decodable>(kind: String = "core", as type: Value.Type) throws -> Value {
+        try JSONDecoder().decode(type, from: snapshotData(kind: kind))
+    }
+
+    private func snapshotData(kind: String) throws -> Data {
+        guard !kind.contains("\0") else { throw OcpCoreError(message: "snapshot kind must not contain NUL") }
         let pointer = synchronized { kind.withCString { api.snapshot(core, $0) } }
         guard let pointer else { throw synchronized { OcpCoreError(message: lastError(fallback: "ocp_snapshot failed")) } }
         defer { api.stringFree(pointer) }
-        return try JSONDecoder().decode(JSONValue.self, from: Data(String(cString: pointer).utf8))
+        return Data(String(cString: pointer).utf8)
     }
 
     /// Versioned configuration backup payload. Secrets are kept out of this
