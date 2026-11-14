@@ -10,7 +10,9 @@ final class PlaybackPreparationHTTPTests: XCTestCase {
     func testEmbyCompletePreparationOverRealHTTP() async throws { try await check(kind: .emby) }
     func testJellyfinEpisodeEndpointSortingAndContinuationWindow() async throws { try await check(kind: .jellyfin, ordering: true) }
     func testEmbyEpisodeEndpointSortingAndContinuationWindow() async throws { try await check(kind: .emby, ordering: true) }
-    private func check(kind: ServerKind, ordering: Bool = false) async throws {
+    func testJellyfinContinuationOverRealHTTP() async throws { try await check(kind: .jellyfin, continuation: true) }
+    func testEmbyContinuationOverRealHTTP() async throws { try await check(kind: .emby, continuation: true) }
+    private func check(kind: ServerKind, ordering: Bool = false, continuation: Bool = false) async throws {
         let process = Process(), output = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = ["-u", try XCTUnwrap(Bundle.module.url(forResource: "playback_preparation_server", withExtension: "py", subdirectory: "Fixtures")).path]
@@ -28,6 +30,20 @@ final class PlaybackPreparationHTTPTests: XCTestCase {
         if kind == .jellyfin { native = try XCTUnwrap(JellyfinServer.resume(profile: profile, from: store)) }
         else { native = try XCTUnwrap(EmbyServer.resume(profile: profile, from: store)) }
         let server = RustCoreMediaServer(wrapping: native) ?? native
+        if continuation {
+            var current = MediaItem(id: "episode", name: "当前集", kind: .episode)
+            current.seriesID = "series"; current.seasonNumber = 1
+            let next = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server)
+            XCTAssertEqual(next?.id, "next"); XCTAssertEqual(next?.overview, "下一集完整简介")
+            XCTAssertEqual(next?.seasonNumber, 2); XCTAssertEqual(next?.episodeNumber, 3)
+            XCTAssertEqual(next?.playState?.positionSeconds, 80.5)
+            let (data, _) = try await URLSession.shared.data(from: URL(string: "http://127.0.0.1:\(port)/stats")!)
+            struct Query: Decodable { let path: String; let query: [String: [String]] }
+            let queries = try JSONDecoder().decode([Query].self, from: data).filter { $0.path.hasSuffix("/Shows/series/Episodes") }
+            XCTAssertEqual(queries.count, 1); XCTAssertEqual(queries.first?.query["startItemId"], ["episode"])
+            XCTAssertEqual(queries.first?.query["limit"], ["6"])
+            return
+        }
         if ordering {
             let all = try await server.episodes(seriesID: "order", seasonID: "season-one")
             XCTAssertEqual(all.map(\.id), ["special", "first", "second", "maximum", "unknown"])

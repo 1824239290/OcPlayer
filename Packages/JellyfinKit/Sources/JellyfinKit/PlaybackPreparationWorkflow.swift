@@ -50,6 +50,25 @@ public enum PlaybackPreparationWorkflow {
         }
         return selected
     }
+    public static let nextEpisodeWindow = 6
+    public static func nextEpisode(after item: MediaItem, server: any MediaServer,
+                                   coreClient: OcpCoreClient? = nil) async throws -> MediaItem? {
+        guard let core = OcpPlaybackPreparation(client: coreClient) else {
+            guard item.kind == .episode, let seriesID = item.seriesID, item.seasonNumber != 0 else { return nil }
+            let window = try await server.episodes(seriesID: seriesID, startingAt: item.id, limit: nextEpisodeWindow)
+            try Task.checkCancellation()
+            guard let index = window.firstIndex(where: { $0.id == item.id }) else { return nil }
+            return window[window.index(after: index)...].first { $0.seasonNumber != 0 }
+        }
+        var selected: MediaItem?
+        let outcome = try await run(core: core, mode: "next", item: item, resumeSeconds: nil,
+            server: server, home: { ([], []) }, onResolved: { _ in }, onFallback: { _, _ in },
+            ready: { item, _, _, _, _ in selected = item })
+        if case let .failed(_, _, _, original) = outcome {
+            throw original ?? PreparationError.invalidEffect("Episode continuation failed")
+        }
+        return selected
+    }
     public static func prepare(item: MediaItem, resumeSeconds: Double?, server: any MediaServer,
                                home: HomeProvider, coreClient: OcpCoreClient? = nil,
                                onResolved: (String) -> Void,
@@ -113,6 +132,9 @@ public enum PlaybackPreparationWorkflow {
                 case "episodes":
                     guard let id = args.seriesId else { throw PreparationError.invalidEffect("Missing series") }
                     response = try await server.episodes(seriesID: id, seasonID: nil).map(wire)
+                case "episodeWindow":
+                    guard let id = args.seriesId, let after = args.startItemId, let limit = args.limit, limit > 0 else { throw PreparationError.invalidEffect("Missing episode window") }
+                    response = try await server.episodes(seriesID: id, startingAt: after, limit: limit).map(wire)
                 case "resolved":
                     guard let title = args.title else { throw PreparationError.invalidEffect("Missing resolved title") }
                     onResolved(title); response = true
@@ -140,7 +162,7 @@ public enum PlaybackPreparationWorkflow {
                 if effect != "streamURL" || args.role != "alternate" {
                     if args.role != "fallback" || originalError == nil { originalError = error }
                 }
-                let resolverEffect = effect == "home" || effect == "collectionMembers" || effect == "episodes"
+                let resolverEffect = effect == "home" || effect == "collectionMembers" || effect == "episodes" || effect == "episodeWindow"
                 let cancelled = Task.isCancelled || (resolverEffect && error is CancellationError)
                 step = try core.fail(step, message: "\(error)", cancelled: cancelled)
                 if cancelled { throw CancellationError() }

@@ -29,6 +29,7 @@ final class PreparationFixtureServer: MediaServer, @unchecked Sendable {
     var authorizationHeader = "Stub Client=\"test\""
     var playbackInfoHandler: (@MainActor (String) async throws -> PlaybackInfo)?
     var streamHandler: (@Sendable (String, String?, String?) throws -> String)?
+    var windowHandler: (@MainActor (String, String, Int) async throws -> [MediaItem])?
     var membersHandler: (@MainActor () async throws -> MediaItemsPage)?
 
 
@@ -139,7 +140,10 @@ final class PreparationFixtureServer: MediaServer, @unchecked Sendable {
         count("episodes")
         return try episodesResult.get()
     }
-    func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] { [] }
+    func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] {
+        if let windowHandler { return try await windowHandler(seriesID, startItemID, limit) }
+        return []
+    }
     func similar(itemID: String, limit: Int) async throws -> [MediaItem] { [] }
 
     func itemsPage(

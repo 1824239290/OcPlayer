@@ -798,15 +798,20 @@ extension AppModel {
     /// 回落到请求上带的续播点。
     private func recoverPlaybackAfterBackgroundFailure(reason: String) {
         guard let request = presentedPlayer, let playback else { return }
-        let resumeSeconds = playback.hasLoadedSource
-            ? Double(playback.state.position.microseconds) / 1_000_000
-            : request.resumeSeconds
+        let item = nowPlayingItem ?? retryPlaybackItem
+        let plan = Self.recoveryPlan(mode: "background", loading: false,
+            hasPlayback: true, hasRequest: true, hasMediaItem: item != nil,
+            hasLoadedSource: playback.hasLoadedSource,
+            currentPositionSeconds: Double(playback.state.position.microseconds) / 1_000_000,
+            requestResumeSeconds: request.resumeSeconds)
+        guard plan.action == .reprepare || plan.action == .reopen else { return }
+        let resumeSeconds = plan.resumeSeconds
         AppDiagnostics.logInfo("后台往返后自动重建播放", fields: [
             "reason": .string(reason),
             "title": .string(request.title),
             "resume_s": .double(resumeSeconds ?? -1),
         ])
-        if let item = nowPlayingItem ?? retryPlaybackItem {
+        if plan.action == .reprepare, let item {
             play(item, resumeSeconds: resumeSeconds)
             return
         }
@@ -837,17 +842,50 @@ extension AppModel {
     /// 重试当前 Jellyfin 条目时重新走完整的 PlaybackInfo / Start 会话，
     /// 不复用旧请求的 UUID，避免旧引擎的异步资源串到新引擎。
     func retryPlayback() {
-        // 解析进行中（loading）不重入；失败态（failed）允许重试。
-        if case .loading = playbackPreparation { return }
-        guard let item = nowPlayingItem ?? retryPlaybackItem else {
+        let loading: Bool
+        if case .loading = playbackPreparation { loading = true } else { loading = false }
+        let item = nowPlayingItem ?? retryPlaybackItem
+        let plan = Self.recoveryPlan(mode: "manual", loading: loading,
+            hasPlayback: playback != nil, hasRequest: presentedPlayer != nil,
+            hasMediaItem: item != nil, hasLoadedSource: playback?.hasLoadedSource ?? false,
+            currentPositionSeconds: playback.map { Double($0.state.position.microseconds) / 1_000_000 },
+            requestResumeSeconds: presentedPlayer?.resumeSeconds)
+        switch plan.action {
+        case .none, .reopen: return
+        case .retryLast:
             playback?.retryLast()
             restartDanmakuForCurrentPlayback()
-            return
+        case .reprepare:
+            guard let item else { return }
+            play(item, resumeSeconds: plan.resumeSeconds)
         }
-        let currentPosition = playback.map { Double($0.state.position.microseconds) / 1_000_000 }
-        let fallbackPosition = presentedPlayer?.resumeSeconds
-        let resumeSeconds = currentPosition.flatMap { $0 >= 30 ? $0 : nil } ?? fallbackPosition
-        play(item, resumeSeconds: resumeSeconds)
+    }
+
+    struct RecoveryPlan: Equatable {
+        enum Action: String { case none, reprepare, reopen, retryLast }
+        let action: Action
+        let resumeSeconds: Double?
+    }
+    static func recoveryPlan(mode: String, loading: Bool, hasPlayback: Bool, hasRequest: Bool,
+                             hasMediaItem: Bool, hasLoadedSource: Bool,
+                             currentPositionSeconds: Double?, requestResumeSeconds: Double?) -> RecoveryPlan {
+        if let rules = sharedLifecycleRules {
+            guard let value = try? rules.recoveryPlan(mode: mode, loading: loading,
+                hasPlayback: hasPlayback, hasRequest: hasRequest, hasMediaItem: hasMediaItem,
+                hasLoadedSource: hasLoadedSource, currentPositionSeconds: currentPositionSeconds,
+                requestResumeSeconds: requestResumeSeconds), let action = RecoveryPlan.Action(rawValue: value.action) else {
+                return RecoveryPlan(action: .none, resumeSeconds: nil)
+            }
+            return RecoveryPlan(action: action, resumeSeconds: value.resumeSeconds)
+        }
+        if mode == "manual" {
+            guard !loading else { return RecoveryPlan(action: .none, resumeSeconds: nil) }
+            guard hasMediaItem else { return RecoveryPlan(action: .retryLast, resumeSeconds: nil) }
+            return RecoveryPlan(action: .reprepare, resumeSeconds: currentPositionSeconds.flatMap { $0 >= 30 ? $0 : nil } ?? requestResumeSeconds)
+        }
+        guard mode == "background", hasPlayback, hasRequest else { return RecoveryPlan(action: .none, resumeSeconds: nil) }
+        return RecoveryPlan(action: hasMediaItem ? .reprepare : .reopen,
+            resumeSeconds: hasLoadedSource ? currentPositionSeconds : requestResumeSeconds)
     }
 
     // MARK: - 播放会话附属任务（M2）
@@ -1008,7 +1046,7 @@ extension AppModel {
 
     /// 连播窗口大小：当前集 + 往后几条。留出余量是为了跳过夹在正片之间的特典，
     /// 又远小于整部剧的集数。
-    static let nextEpisodeWindow = 6
+    static let nextEpisodeWindow = PlaybackPreparationWorkflow.nextEpisodeWindow
 
     func resolveNextEpisode(after item: MediaItem, identity: ActivePlaybackIdentity) {
         guard item.kind == .episode, let seriesID = item.seriesID, let server else { return }
@@ -1016,14 +1054,10 @@ extension AppModel {
         guard item.seasonNumber != 0 else { return }
         nextEpisodeTask?.cancel()
         nextEpisodeTask = Task { [weak self] in
-            // 只取当前集往后的一小窗，不再拉整部剧的集列表。
-            let window: [MediaItem]
+            let next: MediaItem?
             do {
-                window = try await server.episodes(
-                    seriesID: seriesID,
-                    startingAt: item.id,
-                    limit: Self.nextEpisodeWindow
-                )
+                next = try await PlaybackPreparationWorkflow.nextEpisode(after: item, server: server,
+                    coreClient: self?.playbackFlow?.client)
             } catch is CancellationError {
                 return
             } catch {
@@ -1035,11 +1069,7 @@ extension AppModel {
             guard let self else { return }
             guard !Task.isCancelled,
                   self.activePlaybackIdentity == identity else { return }
-            // 窗口是服务端顺序，当前集应该在第一条；找不到就不猜。
-            guard let index = window.firstIndex(where: { $0.id == item.id }) else { return }
-            // 往后第一条正片（跳过第 0 季特典）。
-            self.nextEpisode = window[window.index(after: index)...]
-                .first { $0.seasonNumber != 0 }
+            self.nextEpisode = next
         }
     }
 

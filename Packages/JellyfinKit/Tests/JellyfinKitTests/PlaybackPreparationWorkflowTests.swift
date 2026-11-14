@@ -123,4 +123,63 @@ final class PlaybackPreparationWorkflowTests: XCTestCase {
         do { _ = try await task.value; XCTFail() } catch { XCTAssertTrue(error is CancellationError) }
         XCTAssertFalse(presented); try core.validate(new); try core.cancel(token: new.token)
     }
+    func testContinuationKeepsServerOrderAndCompleteOpaqueNextItem() async throws {
+        let server = PreparationFixtureServer(); var current = item(); current.seasonNumber = 1
+        var special = current; special.id = "special"; special.seasonNumber = 0
+        var next = item(); next.id = "next"; next.playState = .init(played: true, percentage: 1, positionSeconds: 170.25)
+        let expected = next
+        server.windowHandler = { series, after, limit in
+            XCTAssertEqual(series, "series"); XCTAssertEqual(after, "episode"); XCTAssertEqual(limit, 6)
+            var earlier = current; earlier.id = "earlier"
+            return [earlier, current, special, expected]
+        }
+        let selected = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server)
+        XCTAssertEqual(selected?.id, "next"); XCTAssertEqual(selected?.overview, expected.overview)
+        XCTAssertEqual(selected?.seasonNumber, .max); XCTAssertEqual(selected?.episodeNumber, .max)
+        XCTAssertEqual(selected?.playState?.positionSeconds, 170.25); XCTAssertEqual(selected?.genres, expected.genres)
+    }
+    func testContinuationGuardsMissingAnchorNoSuccessorAndTypedErrors() async throws {
+        let server = PreparationFixtureServer(); var calls = 0
+        server.windowHandler = { _, _, _ in calls += 1; return [] }
+        var missingSeries = item(); missingSeries.seriesID = nil
+        var special = item(); special.seasonNumber = 0
+        for current in [MediaItem(id: "movie", name: "电影", kind: .movie), missingSeries, special] {
+            let next = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server); XCTAssertNil(next)
+        }
+        XCTAssertEqual(calls, 0)
+        let current = item()
+        for values in [[], [current], [MediaItem(id: "missing", name: "缺锚点", kind: .episode)]] {
+            server.windowHandler = { _, _, _ in values }
+            let next = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server); XCTAssertNil(next)
+        }
+        server.windowHandler = { _, _, _ in throw Failure(name: "typed-window") }
+        do { _ = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server); XCTFail() }
+        catch { XCTAssertEqual((error as? Failure)?.name, "typed-window") }
+        server.windowHandler = { _, _, _ in throw CancellationError() }
+        do { _ = try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server); XCTFail() }
+        catch { XCTAssertTrue(error is CancellationError) }
+    }
+    func testCancelledContinuationCannotReturnLateNextItem() async throws {
+        let server = PreparationFixtureServer(); var continuation: CheckedContinuation<[MediaItem], Never>?
+        server.windowHandler = { _, _, _ in await withCheckedContinuation { continuation = $0 } }
+        let current = item(); var next = current; next.id = "next"
+        let task = Task { try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server) }
+        for _ in 0..<100 where continuation == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let pending = try XCTUnwrap(continuation); task.cancel(); pending.resume(returning: [current, next])
+        do { _ = try await task.value; XCTFail() } catch { XCTAssertTrue(error is CancellationError) }
+    }
+    func testRetiredContinuationCannotConsumeNewPreparation() async throws {
+        guard OcpCoreFeature.isEnabled, let core = OcpPlaybackPreparation() else { throw XCTSkip("Core continuation retirement requires enabled Core") }
+        let server = PreparationFixtureServer(); var continuation: CheckedContinuation<[MediaItem], Never>?
+        server.windowHandler = { _, _, _ in await withCheckedContinuation { continuation = $0 } }
+        let current = item(); var next = current; next.id = "next"
+        let task = Task { try await PlaybackPreparationWorkflow.nextEpisode(after: current, server: server, coreClient: core.client) }
+        for _ in 0..<100 where continuation == nil { try await Task.sleep(for: .milliseconds(10)) }
+        let pending = try XCTUnwrap(continuation); try core.invalidate()
+        let fresh = try core.start(item: ["key":"fresh", "id":"fresh", "kind":"movie", "name":"新片"], mode: "resolve")
+        pending.resume(returning: [current, next])
+        do { _ = try await task.value; XCTFail() } catch { XCTAssertTrue(error is CancellationError) }
+        try core.validate(fresh); try core.cancel(token: fresh.token)
+    }
+
 }

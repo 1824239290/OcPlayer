@@ -36,6 +36,8 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     /// 详情 / 季 / 集：可注入失败。nil = 用默认空结果。
     var itemResult: Result<MediaItem, any Error>?
     var seasonsResult: Result<[MediaItem], any Error> = .success([])
+    var episodeWindowHandler: (@MainActor (String, String, Int) async throws -> [MediaItem])?
+    var playbackInfoHandler: (@MainActor (String) async throws -> PlaybackInfo)?
     var episodesResult: Result<[MediaItem], any Error> = .success([])
     /// 观测钩子：`item(_:)` **进入时**在主 actor 上回调一次。
     ///
@@ -135,7 +137,10 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
         count("episodes")
         return try episodesResult.get()
     }
-    func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] { [] }
+    func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] {
+        if let episodeWindowHandler { return try await episodeWindowHandler(seriesID, startItemID, limit) }
+        return []
+    }
     func similar(itemID: String, limit: Int) async throws -> [MediaItem] { [] }
 
     func itemsPage(
@@ -219,10 +224,9 @@ final class StubMediaServer: MediaServer, @unchecked Sendable {
     }
     func mediaFileInfo(itemID: String) async throws -> MediaFileInfo? { nil }
 
-    /// `PlaybackInfo` 的构造是包内收口的（只有包自己该造它），替身不越权去造一个。
-    /// 需要开播协商的用例请另配一个替身，别把这条改成返回假值——那会让「协商失败
-    /// 走回退直连」这条真实路径在测试里消失。
+    /// 默认仍抛协商错误，保留回退直连用例。完整会话测试显式注入包内构造的结果。
     func playbackInfo(itemID: String) async throws -> PlaybackInfo {
+        if let playbackInfoHandler { return try await playbackInfoHandler(itemID) }
         throw JellyfinError(.other("StubMediaServer 不提供开播协商"))
     }
 
