@@ -49,9 +49,9 @@ WinUI 应用通过 `OcPlayer.CoreAdapter` 的 P/Invoke 调用 `ocp_ffi.dll`，�
 （`src/OcPlayer.Windows/bin/<Platform>/<Configuration>/net10.0-windows10.0.26100.0/`）或
 `native/OcPlayerCore/`；仓库不提交任何原生二进制。
 
-原生核心还没构建时（当前 `native/OcPlayerCore/` 只有占位说明），`ocp_ffi.dll` 缺失会让
-`MainWindow` 进入降级模式：窗口正常打开，状态文本显示“原生核心未就绪”，异常信息挂在
-悬停提示里。这样可以先独立开发 WinUI 壳，核心就绪后自动走正常分支。
+当前默认启动离线前端 Demo，不创建 Core 实例，因此不依赖 `ocp_ffi.dll`。首页使用 macOS
+参考截图的图像 fixture，播放器使用静态画面与模拟时钟。真实 Core 接入与视频渲染仍需单独实现，
+不会因为放入 DLL 就自动启用。UI 对齐范围与具体差异见 [`UI-PARITY.md`](UI-PARITY.md)。
 
 ## 验证边界
 

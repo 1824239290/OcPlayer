@@ -1,0 +1,52 @@
+<Window x:Class="OcPlayer.Windows.PlayerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid x:Name="PlayerRoot" RequestedTheme="Dark" Background="Black">
+        <Image x:Name="Backdrop" Stretch="UniformToFill" Opacity="0.65" />
+        <Border>
+            <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Color="#40000000" Offset="0" /><GradientStop Color="#08000000" Offset="0.4" /><GradientStop Color="#EF000000" Offset="1" />
+            </LinearGradientBrush></Border.Background>
+        </Border>
+        <Grid x:Name="PlayerTitleBar" Height="48" VerticalAlignment="Top" Background="Transparent" Margin="0,0,150,0">
+            <TextBlock Text="OcPlayer · 播放器演示" Margin="24,0" VerticalAlignment="Center" Foreground="White" />
+        </Grid>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
+            <Border Background="#A0202028" CornerRadius="8" Padding="16,8" HorizontalAlignment="Center">
+                <TextBlock Text="界面演示 · 静态画面 / 模拟播放时钟" FontSize="12" Foreground="#DDDDE5" />
+            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="20" HorizontalAlignment="Center">
+                <Button Content="−10 秒" Click="Back_Click" Padding="18,14" />
+                <Button x:Name="PlayButton" Content="暂停" Click="Play_Click" Padding="28,18" FontSize="18" />
+                <Button Content="＋10 秒" Click="Forward_Click" Padding="18,14" />
+            </StackPanel>
+        </StackPanel>
+        <TextBlock x:Name="SubtitlePreview" Text="越过星辰与时间，寻找家的方向。" Foreground="White" FontSize="24"
+                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="20,0,20,215" TextWrapping="Wrap" />
+        <StackPanel VerticalAlignment="Bottom" Margin="32,0,32,28" Spacing="12">
+            <TextBlock x:Name="MediaTitle" FontSize="24" FontWeight="SemiBold" Foreground="White" />
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="PositionLabel" Foreground="#CCCCD5" />
+                <TextBlock Text="02:49:00" Grid.Column="1" Foreground="#CCCCD5" />
+            </Grid>
+            <Slider x:Name="Timeline" Minimum="0" Maximum="10140" ValueChanged="Timeline_ValueChanged" AutomationProperties.Name="播放进度" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <ComboBox x:Name="Audio" Width="140" SelectedIndex="0" AutomationProperties.Name="音轨">
+                    <ComboBoxItem Content="English · 5.1" /><ComboBoxItem Content="中文 · 立体声" />
+                </ComboBox>
+                <ComboBox x:Name="Subtitles" Grid.Column="1" Width="140" SelectedIndex="0" SelectionChanged="Subtitles_SelectionChanged" AutomationProperties.Name="字幕">
+                    <ComboBoxItem Content="简体中文" /><ComboBoxItem Content="English" /><ComboBoxItem Content="关闭字幕" />
+                </ComboBox>
+                <ComboBox x:Name="Rate" Grid.Column="2" Width="90" SelectedIndex="0" AutomationProperties.Name="倍速">
+                    <ComboBoxItem Content="1.0×" Tag="1" /><ComboBoxItem Content="1.5×" Tag="1.5" /><ComboBoxItem Content="2.0×" Tag="2" />
+                </ComboBox>
+                <StackPanel Orientation="Horizontal" Grid.Column="3" HorizontalAlignment="Right" Spacing="8">
+                    <Button x:Name="MuteButton" Content="音量" Click="Mute_Click" />
+                    <Slider x:Name="Volume" Width="100" Minimum="0" Maximum="100" Value="75" AutomationProperties.Name="音量" />
+                </StackPanel>
+                <Button Grid.Column="4" Content="全屏" Click="Fullscreen_Click" />
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Window>

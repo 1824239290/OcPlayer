@@ -16,4 +16,7 @@
     <ProjectReference Include="..\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\Demo\*.jpg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

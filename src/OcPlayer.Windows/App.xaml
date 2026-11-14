@@ -2,5 +2,13 @@
     x:Class="OcPlayer.Windows.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Application.Resources />
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            <SolidColorBrush x:Key="OcAccentBrush" Color="#ECA66B" />
+            <SolidColorBrush x:Key="OcMutedBrush" Color="#A9A9B3" />
+        </ResourceDictionary>
+    </Application.Resources>
 </Application>

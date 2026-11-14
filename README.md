@@ -23,6 +23,14 @@ OcPlayer 的 Windows 移植版本。项目目标是在保留 OcPlayer 媒体库�
 
 详细设计见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
+WinUI 3 前端的页面布局、Core 接入边界及实施顺序见
+[`docs/WINUI3-FRONTEND-PLAN.md`](docs/WINUI3-FRONTEND-PLAN.md)。该方案以共享 Core 已完成为前提，
+对照当前 macOS 源码规划 Windows 前端。
+
+UI 以 macOS 原版为准，当前对齐范围和未实现差异见
+[`docs/UI-PARITY.md`](docs/UI-PARITY.md)。当前应用可运行离线前端 Demo，首页对照用户的 macOS 截图，
+播放器使用静态画面与模拟时钟，尚未连接真实解码。
+
 ## 开发前置条件
 
 Windows 11（最低 Windows 10 1809）、.NET SDK 10.0.4xx（LTS）和 Windows App SDK 2.6.5；目标框架固定为 `net10.0-windows10.0.26100.0`。Visual Studio 2026（.NET 桌面开发和 Windows App SDK 工作负载）为可选项，用于调试和 MSIX 打包；命令行 `dotnet build` 足以完成还原与编译。完整版本基线和命令见 [`docs/development.md`](docs/development.md)。
