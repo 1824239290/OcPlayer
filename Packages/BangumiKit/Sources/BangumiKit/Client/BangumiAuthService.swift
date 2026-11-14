@@ -98,7 +98,7 @@ public enum BangumiAuthService {
         let revision: UInt64
         if let account { revision = account.invariant("operation.begin") }
         else { nativeOperationRevision &+= 1; revision = nativeOperationRevision }
-        BangumiContext.shared.database?.sync?.invalidate()
+        BangumiContext.shared.database?.invalidateWork()
         return revision
     }
 }

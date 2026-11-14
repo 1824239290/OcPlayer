@@ -56,7 +56,8 @@ final class RustBangumiSync: Sendable {
     }
     struct Stats: Decodable { var active: Int; var epoch: UInt64 }
     func invalidate() {
-        let _: Stats? = try? call("invalidate", [String: String]())
+        do { let _: Stats = try call("invalidate", [String: String]()) }
+        catch { preconditionFailure("Cannot retire Bangumi database work: \(error)") }
     }
     private func cancel(_ token: UInt64) {
         let _: Bool? = try? call("cancel", ["token": token])

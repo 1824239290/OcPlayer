@@ -173,10 +173,13 @@ public enum BangumiEpisodeRepository {
 
     /// 拉取条目全部章节并落库，删除本地多余章节。
     public static func loadEpisodes(_ subjectId: Int) async throws {
+        if try await runProgress(.init(operation: "loadEpisodes", subjectId: subjectId)) != nil { return }
         let authRevision = BangumiAuthService.syncOperationRevision
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
+        let revision = await db.captureSyncRevision()
         try await syncEpisodes(
             subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated, expectedAuthRevision: authRevision)
+        try checkProgress(authRevision, db: db, revision: revision)
         BangumiProgressInvalidation.post(subjectId: subjectId)
     }
 
@@ -187,32 +190,43 @@ public enum BangumiEpisodeRepository {
     public static func ensureSubjectLoaded(
         _ subjectId: Int, refreshEpisodes: Bool = false
     ) async throws {
+        if try await runProgress(.init(operation: "ensureSubject", subjectId: subjectId, refreshEpisodes: refreshEpisodes)) != nil { return }
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let revision = await db.captureSyncRevision()
         if try await db.subject(id: subjectId) == nil {
             let remote = try await BangumiSubjectService.getSubject(subjectId)
-            try await db.saveSubject(remote)
+            try checkProgress(authRevision, db: db, revision: revision)
+            try await db.saveSubject(remote, ifCurrentSyncRevision: revision)
         }
         let counts = try await db.fetchEpisodeCounts(subjectId: subjectId)
         if refreshEpisodes || counts.main + counts.other == 0 {
+            try checkProgress(authRevision, db: db, revision: revision)
             try await syncEpisodes(
                 subjectId, db: db,
-                authoritativeCollection: BangumiContext.shared.isAuthenticated)
+                authoritativeCollection: BangumiContext.shared.isAuthenticated, expectedAuthRevision: authRevision)
         }
+        try checkProgress(authRevision, db: db, revision: revision)
         BangumiProgressInvalidation.post(subjectId: subjectId)
     }
 
     /// 从远端整份回读条目 + 章节，覆盖本地。
     static func reconcileSubject(_ subjectId: Int) async throws {
+        if try await runProgress(.init(operation: "reconcileSubject", subjectId: subjectId)) != nil { return }
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let revision = await db.captureSyncRevision()
         var remote = try await BangumiSubjectService.getSubject(subjectId)
+        try checkProgress(authRevision, db: db, revision: revision)
         // 只有真读到收藏态才覆盖：`.unknown`（读不到）保持本地，否则一次瞬时抖动
         // 就会把条目清出「在看」、进度归零。
         if case .collected(let interest) = await BangumiContext.shared.lookupSubjectCollection(subjectId) {
             remote.interest = interest
         }
-        try await db.saveSubject(remote)
+        try checkProgress(authRevision, db: db, revision: revision)
+        try await db.saveSubject(remote, ifCurrentSyncRevision: revision)
         try await syncEpisodes(
-            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated)
+            subjectId, db: db, authoritativeCollection: BangumiContext.shared.isAuthenticated, expectedAuthRevision: authRevision)
     }
 
     /// 单集标记后的服务端对齐（播放结束自动标记用）。
@@ -226,13 +240,22 @@ public enum BangumiEpisodeRepository {
     /// 时，把条目状态推成「看过」（远端 PATCH + 本地对齐）。只从「在看」推进，
     /// 不碰想看/搁置/抛弃——那是用户自己的选择。
     public static func refreshSubjectAfterProgressChange(_ subjectId: Int) async {
+        if BangumiContext.shared.database?.progress != nil {
+            do { _ = try await runProgress(.init(operation: "refreshAfterProgress", subjectId: subjectId)) }
+            catch { BangumiNetworkLog.logger.warning("进度变更后对齐失败 subject=\(subjectId) error=\(error)") }
+            return
+        }
+        guard let db = BangumiContext.shared.database else { return }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let revision = await db.captureSyncRevision()
+        guard (try? checkProgress(authRevision, db: db, revision: revision)) != nil else { return }
         do {
             try await reconcileSubject(subjectId)
         } catch {
             BangumiNetworkLog.logger.warning(
                 "进度变更后回读条目失败 subject=\(subjectId) error=\(error)")
         }
-        guard let db = BangumiContext.shared.database else { return }
+        guard (try? checkProgress(authRevision, db: db, revision: revision)) != nil else { return }
         do {
             let mains = try await db.fetchEpisodes(subjectId: subjectId, main: true)
             let allWatched = !mains.isEmpty
@@ -240,9 +263,10 @@ public enum BangumiEpisodeRepository {
             if allWatched,
                case .collected(let interest) = await BangumiContext.shared.lookupSubjectCollection(subjectId),
                interest.type == .doing {
+                try checkProgress(authRevision, db: db, revision: revision)
                 try await BangumiCollectionService.updateSubjectCollection(
                     subjectId: subjectId, type: .collect)
-                try await db.updateSubjectCollectionType(subjectId: subjectId, type: .collect)
+                try await db.updateSubjectCollectionType(subjectId: subjectId, type: .collect, ifCurrentSyncRevision: revision)
                 BangumiNetworkLog.logger.info(
                     "全部本篇已看，条目在看 → 看过 subject=\(subjectId)")
             }
@@ -250,6 +274,7 @@ public enum BangumiEpisodeRepository {
             BangumiNetworkLog.logger.warning(
                 "整季完成推进条目状态失败 subject=\(subjectId) error=\(error)")
         }
+        guard (try? checkProgress(authRevision, db: db, revision: revision)) != nil else { return }
         BangumiProgressInvalidation.post(
             subjectId: subjectId, mayChangeProgressMembership: true)
     }
@@ -288,7 +313,10 @@ public enum BangumiEpisodeRepository {
     /// （用户明确意图优先），只是不动条目收藏状态。
     @discardableResult
     static func ensureSubjectWatching(_ subjectId: Int) async throws -> Bool {
+        if let value = try await runProgress(.init(operation: "ensureWatching", subjectId: subjectId)) { return value }
+        let authRevision = BangumiAuthService.syncOperationRevision
         let lookup = await BangumiContext.shared.lookupSubjectCollection(subjectId)
+        try checkProgress(authRevision)
         guard let target = targetWatchingState(for: lookup) else {
             if let reason = lookup.reason {
                 BangumiNetworkLog.logger.warning(
@@ -298,6 +326,7 @@ public enum BangumiEpisodeRepository {
         }
         try await BangumiCollectionService.updateSubjectCollection(
             subjectId: subjectId, type: target)
+        try checkProgress(authRevision)
         BangumiNetworkLog.logger.info("播放联动：条目推进为在看 subject=\(subjectId)")
         return true
     }
@@ -306,12 +335,18 @@ public enum BangumiEpisodeRepository {
     public static func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) async throws {
+        if try await runProgress(.init(operation: "updateEpisode", episodeId: episodeId, type: type.rawValue, batch: batch)) != nil { return }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let database = BangumiContext.shared.database
+        let revision = await database?.captureSyncRevision()
         try await BangumiEpisodeService.updateEpisodeCollection(
             episodeId: episodeId, type: type, batch: batch)
+        try checkProgress(authRevision, db: database, revision: revision)
         guard let db = BangumiContext.shared.database else { throw BangumiError.uninitializedDB }
         let subjectId = try await db.updateEpisodeCollection(
-            episodeId: episodeId, type: type, batch: batch)
+            episodeId: episodeId, type: type, batch: batch, ifCurrentSyncRevision: revision)
         guard let subjectId else { return }
+        try checkProgress(authRevision, db: db, revision: revision)
         // 先按本地推断更新，UI 立刻有反馈。
         BangumiProgressInvalidation.post(subjectId: subjectId)
         guard batch else { return }
@@ -319,12 +354,28 @@ public enum BangumiEpisodeRepository {
         // 本地猜，回读一次对齐；回读失败不回滚——本地乐观值仍然可用，下次同步会纠正。
         do {
             try await reconcileSubject(subjectId)
+            try checkProgress(authRevision, db: db, revision: revision)
             BangumiProgressInvalidation.post(
                 subjectId: subjectId, mayChangeProgressMembership: true)
         } catch {
             BangumiNetworkLog.logger.warning(
                 "批量标记后回读失败 subject=\(subjectId) error=\(error)")
         }
+    }
+    static func runProgress(_ initial: RustBangumiProgress.Start) async throws -> Bool? {
+        try await runProgress(initial, db: BangumiContext.shared.database)
+    }
+    static func checkProgress(_ expected: UInt64, db: BangumiDatabaseOperator? = nil, revision: UInt64? = nil) throws {
+        try Task.checkCancellation()
+        guard expected == BangumiAuthService.syncOperationRevision else { throw BangumiError(ignore: "Retired progress operation") }
+        if let db, let revision, !db.isCurrentWorkRevision(revision) { throw BangumiError(ignore: "Retired progress database") }
+    }
+    static func runProgress(_ initial: RustBangumiProgress.Start, db database: BangumiDatabaseOperator?) async throws -> Bool? {
+        guard let database, let progress = database.progress else { return nil }
+        var start = initial
+        start.authoritativeCollection = BangumiContext.shared.isAuthenticated
+        let revision = BangumiAuthService.syncOperationRevision
+        return try await progress.run(start, dependencies: progress.dependencies(db: database, revision: revision))
     }
 }
 
@@ -530,6 +581,9 @@ public final class BangumiContext {
     public func updateEpisodeCollection(
         episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
     ) async throws {
+        if try await BangumiEpisodeRepository.runProgress(.init(operation: "updateEpisode", episodeId: episodeId,
+            type: type.rawValue, batch: batch, prepareWatching: true), db: database) != nil { return }
+        let authRevision = BangumiAuthService.syncOperationRevision
         // 服务端只对「在看」条目可靠推进单集进度：条目不在看（未收藏/想看/搁置/
         // 抛弃）时标看过不生效。所有标「看过」的入口（手动点击/播放结束）都先做
         // 这个推进；「看过」不回退，完结条目不被重看一集拨回去。以远端状态为准，
@@ -537,9 +591,11 @@ public final class BangumiContext {
         if type == .collect {
             let subjectId = try await database?.subjectID(ofEpisode: episodeId)
             if let subjectId {
+                try BangumiEpisodeRepository.checkProgress(authRevision)
                 _ = try? await BangumiEpisodeRepository.ensureSubjectWatching(subjectId)
             }
         }
+        try BangumiEpisodeRepository.checkProgress(authRevision)
         try await BangumiEpisodeRepository.updateEpisodeCollection(
             episodeId: episodeId, type: type, batch: batch)
     }
@@ -562,9 +618,14 @@ public final class BangumiContext {
     public func updateSubjectCollection(
         subjectId: Int, type: BangumiCollectionType
     ) async throws {
+        if try await BangumiEpisodeRepository.runProgress(.init(operation: "updateSubject", subjectId: subjectId, type: type.rawValue), db: database) != nil { return }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let revision = await database?.captureSyncRevision()
         try await BangumiCollectionService.updateSubjectCollection(
             subjectId: subjectId, type: type)
-        try await database?.updateSubjectCollectionType(subjectId: subjectId, type: type)
+        try BangumiEpisodeRepository.checkProgress(authRevision, db: database, revision: revision)
+        try await database?.updateSubjectCollectionType(subjectId: subjectId, type: type, ifCurrentSyncRevision: revision)
+        try BangumiEpisodeRepository.checkProgress(authRevision, db: database, revision: revision)
         BangumiProgressInvalidation.post(
             subjectId: subjectId, mayChangeProgressMembership: true)
     }
@@ -573,9 +634,14 @@ public final class BangumiContext {
     public func updateSubjectRating(
         subjectId: Int, rate: Int
     ) async throws {
+        if try await BangumiEpisodeRepository.runProgress(.init(operation: "updateRating", subjectId: subjectId, rate: rate), db: database) != nil { return }
+        let authRevision = BangumiAuthService.syncOperationRevision
+        let revision = await database?.captureSyncRevision()
         try await BangumiCollectionService.updateSubjectCollection(
             subjectId: subjectId, rate: rate)
-        try await database?.updateSubjectRating(subjectId: subjectId, rate: rate)
+        try BangumiEpisodeRepository.checkProgress(authRevision, db: database, revision: revision)
+        try await database?.updateSubjectRating(subjectId: subjectId, rate: rate, ifCurrentSyncRevision: revision)
+        try BangumiEpisodeRepository.checkProgress(authRevision, db: database, revision: revision)
         BangumiProgressInvalidation.post(
             subjectId: subjectId, mayChangeProgressMembership: false)
     }

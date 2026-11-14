@@ -14,11 +14,11 @@ public actor BangumiDatabaseOperator {
 
     private let rust: RustBangumiStore?
     nonisolated let sync: RustBangumiSync?
-    private var nativeSyncRevision: UInt64 = 0
-    func captureSyncRevision() -> UInt64 { nativeSyncRevision }
-    private func ensureSyncRevision(_ revision: UInt64?) throws {
-        if let revision, revision != nativeSyncRevision { throw BangumiError(ignore: "Discarded retired synchronization write") }
-    }
+    nonisolated let progress: RustBangumiProgress?
+    private nonisolated let workRevision = BangumiWorkRevision()
+    func captureSyncRevision() -> UInt64 { workRevision.snapshot() }
+    nonisolated func invalidateWork() { workRevision.invalidate(); sync?.invalidate() }
+    nonisolated func isCurrentWorkRevision(_ revision: UInt64) -> Bool { workRevision.snapshot() == revision }
     var usesCoreStore: Bool { rust != nil }
 
     public init(database: DatabasePool, coreLibraryPath: String? = nil, coreEnabled: Bool? = nil) {
@@ -27,6 +27,7 @@ public actor BangumiDatabaseOperator {
             rust = try? RustBangumiStore(path: database.path, libraryPath: coreLibraryPath)
         } else { rust = nil }
         sync = rust.map { RustBangumiSync(core: $0.core) }
+        progress = rust.map { RustBangumiProgress($0.core) }
     }
 
     // MARK: - 进度
@@ -215,48 +216,51 @@ public actor BangumiDatabaseOperator {
     /// 返回所属 subjectId（nil 表示条目不在本地）。
     @discardableResult
     public func updateEpisodeCollection(
-        episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false
+        episodeId: Int, type: BangumiEpisodeCollectionType, batch: Bool = false,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws -> Int? {
-        if let rust { return try rust.call("updateEpisodeCollection", ["episodeId": episodeId, "type": type.rawValue, "batch": batch, "now": Int(Date().timeIntervalSince1970)]) }
+        return try workRevision.withCurrent(revision) {
+            if let rust { return try rust.call("updateEpisodeCollection", ["episodeId": episodeId, "type": type.rawValue, "batch": batch, "now": Int(Date().timeIntervalSince1970)]) }
 
-        return try database.write { db in
-            let now = Int(Date().timeIntervalSince1970) - 1
-            guard let episode = try fetchEpisode(in: db, id: episodeId) else { return nil }
-            let subjectId = episode.subjectId
-            guard let subject = try fetchSubject(in: db, id: subjectId) else { return nil }
+            return try database.write { db in
+                let now = Int(Date().timeIntervalSince1970) - 1
+                guard let episode = try fetchEpisode(in: db, id: episodeId) else { return nil }
+                let subjectId = episode.subjectId
+                guard let subject = try fetchSubject(in: db, id: subjectId) else { return nil }
 
-            if batch {
-                try db.execute(
-                    sql: """
-                        UPDATE episodes
-                        SET status = ?, collected_at = ?
-                        WHERE subject_id = ? AND sort <= ? AND type = ?
-                        """,
-                    arguments: [
-                        BangumiEpisodeCollectionType.collect.rawValue,
-                        now,
-                        subjectId,
-                        episode.sort,
-                        BangumiEpisodeType.main.rawValue,
-                    ]
-                )
-                // 已看数要数「全部标为看过的本篇」，不能用 rows.count：
-                // 那只是 ≤ 本集的集数，会把用户先前标过的后面几集抹掉。
-                try refreshEpisodeStatus(in: db, subject: subject, type: .collect)
-            } else {
-                episode.status = type.rawValue
-                episode.collectedAt = now
-                try upsertEpisode(episode, in: db)
-                if episode.typeEnum == .main {
-                    // 同样重新数一遍，而不是在旧值上加减：本地章节要么整份齐（loadEpisodes
-                    // 是全量替换）要么没有，数出来的值就是准的，也不会因为漏掉一次事件而漂。
-                    try refreshEpisodeStatus(in: db, subject: subject, type: type)
+                if batch {
+                    try db.execute(
+                        sql: """
+                            UPDATE episodes
+                            SET status = ?, collected_at = ?
+                            WHERE subject_id = ? AND sort <= ? AND type = ?
+                            """,
+                        arguments: [
+                            BangumiEpisodeCollectionType.collect.rawValue,
+                            now,
+                            subjectId,
+                            episode.sort,
+                            BangumiEpisodeType.main.rawValue,
+                        ]
+                    )
+                    // 已看数要数「全部标为看过的本篇」，不能用 rows.count：
+                    // 那只是 ≤ 本集的集数，会把用户先前标过的后面几集抹掉。
+                    try refreshEpisodeStatus(in: db, subject: subject, type: .collect)
+                } else {
+                    episode.status = type.rawValue
+                    episode.collectedAt = now
+                    try upsertEpisode(episode, in: db)
+                    if episode.typeEnum == .main {
+                        // 同样重新数一遍，而不是在旧值上加减：本地章节要么整份齐（loadEpisodes
+                        // 是全量替换）要么没有，数出来的值就是准的，也不会因为漏掉一次事件而漂。
+                        try refreshEpisodeStatus(in: db, subject: subject, type: type)
+                    }
                 }
+                subject.interest?.updatedAt = now
+                subject.collectedAt = now
+                try upsertSubject(subject, in: db)
+                return subjectId
             }
-            subject.interest?.updatedAt = now
-            subject.collectedAt = now
-            try upsertSubject(subject, in: db)
-            return subjectId
         }
     }
 
@@ -264,64 +268,70 @@ public actor BangumiDatabaseOperator {
 
     /// 只改条目级收藏状态（想看/在看/看过…），不动章节。
     public func updateSubjectCollectionType(
-        subjectId: Int, type: BangumiCollectionType
+        subjectId: Int, type: BangumiCollectionType,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
-        if let rust { try rust.write("updateSubjectCollectionType", ["subjectId": subjectId, "type": type.rawValue, "now": Int(Date().timeIntervalSince1970)]); return }
+        return try workRevision.withCurrent(revision) {
+            if let rust { try rust.write("updateSubjectCollectionType", ["subjectId": subjectId, "type": type.rawValue, "now": Int(Date().timeIntervalSince1970)]); return }
 
-        return try database.write { db in
-            guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
-            let now = Int(Date().timeIntervalSince1970) - 1
-            // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
-            if var interest = subject.interest {
-                interest.type = type
-                interest.updatedAt = now
-                subject.interest = interest
-            } else {
-                subject.interest = BangumiSubjectInterest(
-                    comment: "",
-                    epStatus: 0,
-                    volStatus: 0,
-                    private: false,
-                    rate: 0,
-                    tags: [],
-                    type: type,
-                    updatedAt: now
-                )
+            return try database.write { db in
+                guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
+                let now = Int(Date().timeIntervalSince1970) - 1
+                // 收藏状态挂在 interest 上；行级 type 是作品类型（动画/书籍…），别动。
+                if var interest = subject.interest {
+                    interest.type = type
+                    interest.updatedAt = now
+                    subject.interest = interest
+                } else {
+                    subject.interest = BangumiSubjectInterest(
+                        comment: "",
+                        epStatus: 0,
+                        volStatus: 0,
+                        private: false,
+                        rate: 0,
+                        tags: [],
+                        type: type,
+                        updatedAt: now
+                    )
+                }
+                subject.ctype = type.rawValue
+                subject.collectedAt = now
+                try upsertSubject(subject, in: db)
             }
-            subject.ctype = type.rawValue
-            subject.collectedAt = now
-            try upsertSubject(subject, in: db)
         }
     }
 
     /// 只改用户对条目的评分（1-10，0 表示撤销评分）。
     public func updateSubjectRating(
-        subjectId: Int, rate: Int
+        subjectId: Int, rate: Int,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
-        if let rust { try rust.write("updateSubjectRating", ["subjectId": subjectId, "rate": rate, "now": Int(Date().timeIntervalSince1970)]); return }
+        return try workRevision.withCurrent(revision) {
+            if let rust { try rust.write("updateSubjectRating", ["subjectId": subjectId, "rate": rate, "now": Int(Date().timeIntervalSince1970)]); return }
 
-        return try database.write { db in
-            guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
-            let now = Int(Date().timeIntervalSince1970)
-            if var interest = subject.interest {
-                interest.rate = rate
-                interest.updatedAt = now
-                subject.interest = interest
-            } else {
-                subject.interest = BangumiSubjectInterest(
-                    comment: "",
-                    epStatus: 0,
-                    volStatus: 0,
-                    private: false,
-                    rate: rate,
-                    tags: [],
-                    type: .collect,
-                    updatedAt: now
-                )
-                subject.ctype = BangumiCollectionType.collect.rawValue
+            return try database.write { db in
+                guard let subject = try fetchSubject(in: db, id: subjectId) else { return }
+                let now = Int(Date().timeIntervalSince1970)
+                if var interest = subject.interest {
+                    interest.rate = rate
+                    interest.updatedAt = now
+                    subject.interest = interest
+                } else {
+                    subject.interest = BangumiSubjectInterest(
+                        comment: "",
+                        epStatus: 0,
+                        volStatus: 0,
+                        private: false,
+                        rate: rate,
+                        tags: [],
+                        type: .collect,
+                        updatedAt: now
+                    )
+                    subject.ctype = BangumiCollectionType.collect.rawValue
+                }
+                subject.collectedAt = now
+                try upsertSubject(subject, in: db)
             }
-            subject.collectedAt = now
-            try upsertSubject(subject, in: db)
         }
     }
 
@@ -347,15 +357,16 @@ public actor BangumiDatabaseOperator {
         subjectId: Int, items: [BangumiEpisodeDTO], authoritativeCollection: Bool = false,
         ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
-        try ensureSyncRevision(revision)
-        if let rust {
-            try rust.write("replaceEpisodes", ["subjectId": subjectId, "items": try rust.object(items),
-                "authoritativeCollection": authoritativeCollection, "now": Int(Date().timeIntervalSince1970)])
-            return
-        }
-        try database.write { db in
-            try self.saveEpisodeBatch(in: db, subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
-            try self.deleteObsoleteEpisodes(in: db, subjectId: subjectId, episodeIds: Set(items.map(\.id)))
+        return try workRevision.withCurrent(revision) {
+            if let rust {
+                try rust.write("replaceEpisodes", ["subjectId": subjectId, "items": try rust.object(items),
+                    "authoritativeCollection": authoritativeCollection, "now": Int(Date().timeIntervalSince1970)])
+                return
+            }
+            try database.write { db in
+                try self.saveEpisodeBatch(in: db, subjectId: subjectId, items: items, authoritativeCollection: authoritativeCollection)
+                try self.deleteObsoleteEpisodes(in: db, subjectId: subjectId, episodeIds: Set(items.map(\.id)))
+            }
         }
     }
 
@@ -375,16 +386,19 @@ public actor BangumiDatabaseOperator {
     ///   附加拉取的，拉取失败即为 nil，传 true 会把条目误清出「在看」。
     @discardableResult
     public func saveSubject(
-        _ item: BangumiSubjectDTO, authoritativeInterest: Bool = false
+        _ item: BangumiSubjectDTO, authoritativeInterest: Bool = false,
+        ifCurrentSyncRevision revision: UInt64? = nil
     ) throws -> Bool {
-        if let rust { return try rust.call("saveSubject", ["item": try rust.object(item), "authoritativeInterest": authoritativeInterest]) }
+        return try workRevision.withCurrent(revision) {
+            if let rust { return try rust.call("saveSubject", ["item": try rust.object(item), "authoritativeInterest": authoritativeInterest]) }
 
-        return try database.write { db in
-            let (subject, created) = try ensureSubject(
-                item, in: db, authoritativeInterest: authoritativeInterest
-            )
-            try upsertSubject(subject, in: db)
-            return created
+            return try database.write { db in
+                let (subject, created) = try ensureSubject(
+                    item, in: db, authoritativeInterest: authoritativeInterest
+                )
+                try upsertSubject(subject, in: db)
+                return created
+            }
         }
     }
 
@@ -394,66 +408,67 @@ public actor BangumiDatabaseOperator {
         _ items: [BangumiSubjectDTO], authoritativeInterest: Bool = false,
         ifCurrentSyncRevision revision: UInt64? = nil
     ) throws {
-        try ensureSyncRevision(revision)
-        if let rust { try rust.write("saveSubjects", ["items": try rust.object(items), "authoritativeInterest": authoritativeInterest]); return }
+        return try workRevision.withCurrent(revision) {
+            if let rust { try rust.write("saveSubjects", ["items": try rust.object(items), "authoritativeInterest": authoritativeInterest]); return }
 
-        guard !items.isEmpty else { return }
-        return try database.write { db in
-            // **先把这一页已有的条目批量读回来**，而不是每条各 `SELECT` 一次。
-            //
-            // 改前是 N+1：`ensureSubject` 对每条调一次 `fetchSubject`（单条 SELECT），
-            // 再 `upsertSubject`。收藏全量同步一页 100 条就是 100 次 SELECT + 100 次
-            // UPSERT。实测（100 条已存在时的更新路径）：**31.2 ms / 页，每条 312 µs**。
-            //
-            // 本文件已经有 `fetchSubjectsById`（`IN (...)` 批量读、按 id 建字典），
-            // 只是这里没用 —— 复用它，SELECT 从 N 次降到 1 次。
-            // ⚠️ **同页重复 id 必须先去重（保留最后一条）**。
-            //
-            // 改前逐条写：第二条能 `SELECT` 到第一条刚写入的值，于是 `update()` 里
-            // 「非 nil 才覆盖」的字段（`images` / `interest`）会**保留**第一条贡献的。
-            // 改用「页前一次性预读」后，第二条看到的仍是页前快照 —— 走「新建」分支
-            // `BangumiSubject(item)` 整条重造，把第一条的 `images` / `interest` 冲掉。
-            //
-            // 实测（库中无 5100，本页 `[DTO(images:"NEWFIRST", interest:3),
-            // DTO(images:nil, interest:nil)]`）：
-            //   改前 → images="NEWFIRST"、interest=3（后一条缺字段，保留前一条的）
-            //   改后 → images=nil、interest=nil（被重造冲掉）
-            //
-            // 生产路径传 `authoritativeInterest: true` 会掩盖 interest 的差异，
-            // 但 `images` 的差异仍在。去重后两条语义一致（都以前一条的写入结果为准，
-            // 即「以本页最后一条的内容为最终状态」）。
-            // 去重**不能简单丢弃**前面的条目：改前逐条写时，第一条会**先落库**，
-            // 第二条 `update()` 里「非 nil 才覆盖」的字段会保留第一条贡献的
-            // （例如 `images`）。只留最后一条会让那些字段从未被写入。
-            //
-            // 所以按「后覆盖前」合并：后面的条目覆盖前面的，但**只覆盖它自己非 nil 的
-            // 可选字段**（与 `update()` 的语义一致）。这样合并成一条后再走一次
-            // update/insert，结果与逐条写等价。
-            var order: [Int] = []
-            var merged: [Int: BangumiSubjectDTO] = [:]
-            for item in items {
-                if var existingDTO = merged[item.id] {
-                    existingDTO.mergeFromLaterDuplicate(item)
-                    merged[item.id] = existingDTO
-                } else {
-                    merged[item.id] = item
-                    order.append(item.id)
+            guard !items.isEmpty else { return }
+            return try database.write { db in
+                // **先把这一页已有的条目批量读回来**，而不是每条各 `SELECT` 一次。
+                //
+                // 改前是 N+1：`ensureSubject` 对每条调一次 `fetchSubject`（单条 SELECT），
+                // 再 `upsertSubject`。收藏全量同步一页 100 条就是 100 次 SELECT + 100 次
+                // UPSERT。实测（100 条已存在时的更新路径）：**31.2 ms / 页，每条 312 µs**。
+                //
+                // 本文件已经有 `fetchSubjectsById`（`IN (...)` 批量读、按 id 建字典），
+                // 只是这里没用 —— 复用它，SELECT 从 N 次降到 1 次。
+                // ⚠️ **同页重复 id 必须先去重（保留最后一条）**。
+                //
+                // 改前逐条写：第二条能 `SELECT` 到第一条刚写入的值，于是 `update()` 里
+                // 「非 nil 才覆盖」的字段（`images` / `interest`）会**保留**第一条贡献的。
+                // 改用「页前一次性预读」后，第二条看到的仍是页前快照 —— 走「新建」分支
+                // `BangumiSubject(item)` 整条重造，把第一条的 `images` / `interest` 冲掉。
+                //
+                // 实测（库中无 5100，本页 `[DTO(images:"NEWFIRST", interest:3),
+                // DTO(images:nil, interest:nil)]`）：
+                //   改前 → images="NEWFIRST"、interest=3（后一条缺字段，保留前一条的）
+                //   改后 → images=nil、interest=nil（被重造冲掉）
+                //
+                // 生产路径传 `authoritativeInterest: true` 会掩盖 interest 的差异，
+                // 但 `images` 的差异仍在。去重后两条语义一致（都以前一条的写入结果为准，
+                // 即「以本页最后一条的内容为最终状态」）。
+                // 去重**不能简单丢弃**前面的条目：改前逐条写时，第一条会**先落库**，
+                // 第二条 `update()` 里「非 nil 才覆盖」的字段会保留第一条贡献的
+                // （例如 `images`）。只留最后一条会让那些字段从未被写入。
+                //
+                // 所以按「后覆盖前」合并：后面的条目覆盖前面的，但**只覆盖它自己非 nil 的
+                // 可选字段**（与 `update()` 的语义一致）。这样合并成一条后再走一次
+                // update/insert，结果与逐条写等价。
+                var order: [Int] = []
+                var merged: [Int: BangumiSubjectDTO] = [:]
+                for item in items {
+                    if var existingDTO = merged[item.id] {
+                        existingDTO.mergeFromLaterDuplicate(item)
+                        merged[item.id] = existingDTO
+                    } else {
+                        merged[item.id] = item
+                        order.append(item.id)
+                    }
                 }
-            }
-            let deduped = order.compactMap { merged[$0] }
+                let deduped = order.compactMap { merged[$0] }
 
-            let existing = try fetchSubjectsById(in: db, deduped.map(\.id))
-            for item in deduped {
-                let subject: BangumiSubject
-                if let found = existing[item.id] {
-                    // `BangumiSubject` 是 class，`update` 直接改引用指向的对象，
-                    // 不需要（也不该）声明成 `var`。
-                    found.update(item, authoritativeInterest: authoritativeInterest)
-                    subject = found
-                } else {
-                    subject = BangumiSubject(item)
+                let existing = try fetchSubjectsById(in: db, deduped.map(\.id))
+                for item in deduped {
+                    let subject: BangumiSubject
+                    if let found = existing[item.id] {
+                        // `BangumiSubject` 是 class，`update` 直接改引用指向的对象，
+                        // 不需要（也不该）声明成 `var`。
+                        found.update(item, authoritativeInterest: authoritativeInterest)
+                        subject = found
+                    } else {
+                        subject = BangumiSubject(item)
+                    }
+                    try upsertSubject(subject, in: db)
                 }
-                try upsertSubject(subject, in: db)
             }
         }
     }
@@ -491,7 +506,7 @@ public actor BangumiDatabaseOperator {
 
     /// 清空账户相关数据（登出/换号时调用）。
     public func clearAccountLocalState() throws {
-        nativeSyncRevision &+= 1
+        workRevision.invalidate()
         if let rust { try rust.write("clearAccountLocalState"); return }
 
         return try database.write { db in
@@ -1201,5 +1216,19 @@ extension BangumiSubjectDTO {
         summary = later.summary
         type = later.type
         volumes = later.volumes
+    }
+}
+
+/// Invalidation and the complete fallback SQL transaction share this barrier.
+private final class BangumiWorkRevision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var revision: UInt64 = 0
+    func snapshot() -> UInt64 { lock.withLock { revision } }
+    func invalidate() { lock.withLock { revision &+= 1 } }
+    func withCurrent<T>(_ expected: UInt64?, _ work: () throws -> T) throws -> T {
+        try lock.withLock {
+            if let expected, expected != revision { throw BangumiError(ignore: "Discarded retired synchronization write") }
+            return try work()
+        }
     }
 }
