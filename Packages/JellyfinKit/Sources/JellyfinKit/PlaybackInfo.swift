@@ -1,5 +1,6 @@
 import CoreModel
 import Foundation
+import OcPlayerCore
 import Get
 import JellyfinAPI
 
@@ -109,8 +110,19 @@ public struct PlaybackSessionContext: Hashable, Sendable {
 /// 多版本条目的选源规则，播放协商与浏览期媒体信息共用一份，
 /// 免得两边各写一遍后悄悄跑偏（详情页展示的文件必须就是开播会用的那份）。
 public enum MediaSourceSelection {
+    private static let sharedRules = OcpPlaybackPreparation()
+    public static func preferredIndex(count: Int, supportsDirectPlay: (Int) -> Bool, supportsDirectStream: (Int) -> Bool) -> Int? {
+        guard count > 0 else { return nil }
+        if let sharedRules {
+            return try? sharedRules.preferredSource((0..<count).map { index in
+                ["key": String(index), "id": String(index), "supportsDirectPlay": supportsDirectPlay(index), "supportsDirectStream": supportsDirectStream(index)]
+            })
+        }
+        return nativePreferredIndex(count: count, supportsDirectPlay: supportsDirectPlay, supportsDirectStream: supportsDirectStream)
+    }
+
     /// 能直连的优先 → 可直推的其次 → 第一条兜底。空列表返回 nil。
-    public static func preferredIndex(
+    static func nativePreferredIndex(
         count: Int,
         supportsDirectPlay: (Int) -> Bool,
         supportsDirectStream: (Int) -> Bool

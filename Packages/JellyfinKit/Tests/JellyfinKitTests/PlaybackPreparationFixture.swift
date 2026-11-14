@@ -1,0 +1,238 @@
+import CoreModel
+import Foundation
+@testable import JellyfinKit
+
+/// 一次 `itemsPage` 调用的入参快照（替身用来让用例断言调用形态）。
+struct PreparationItemsPageQuery: Sendable, Equatable {
+    var parentID: String?
+    var kinds: [MediaItem.Kind]?
+    var recursive: Bool
+    var startIndex: Int
+    var limit: Int
+    var sort: MediaItemsSort?
+    var watchState: MediaItemsWatchState?
+    var searchTerm: String?
+}
+
+/// `MediaServer` 的测试替身。
+///
+/// 只实现用例真正关心的那几条（用 `Result` 逐条注入成功 / 失败），其余走空实现。
+/// 存在的理由：`MediaServer` 有 28 条要求，用例往往只在意其中两三条，而首页三条
+/// rail 的**独立成败**恰恰需要能逐条注入失败。
+///
+/// 刻意**不加 `@MainActor`**：`MediaServer` 里有同步要求（`profile` /
+/// `authorizationHeader` / `imageURL` / `streamURL`），主 actor 隔离的成员满足不了
+/// 它们。可变配置项由用例单线程写入，`@unchecked Sendable` 是明确的取舍。
+final class PreparationFixtureServer: MediaServer, @unchecked Sendable {
+    let profile: ServerProfile
+
+    var authorizationHeader = "Stub Client=\"test\""
+    var playbackInfoHandler: (@MainActor (String) async throws -> PlaybackInfo)?
+    var streamHandler: (@Sendable (String, String?, String?) throws -> String)?
+    var membersHandler: (@MainActor () async throws -> MediaItemsPage)?
+
+
+    // 首页三条 rail + 媒体库：可逐条注入失败。
+    var userViewsResult: Result<[MediaLibrary], any Error> = .success([])
+    var resumeResult: Result<[MediaItem], any Error> = .success([])
+    var nextUpResult: Result<[MediaItem], any Error> = .success([])
+    var latestResult: Result<[MediaItem], any Error> = .success([])
+    /// 详情 / 季 / 集：可注入失败。nil = 用默认空结果。
+    var itemResult: Result<MediaItem, any Error>?
+    var seasonsResult: Result<[MediaItem], any Error> = .success([])
+    var episodesResult: Result<[MediaItem], any Error> = .success([])
+    /// 观测钩子：`item(_:)` **进入时**在主 actor 上回调一次。
+    ///
+    /// 存在的唯一理由是给「顺序」类断言一个观测点：详情取数发生在
+    /// `DetailViewModel.load()` 的中段，正好落在「背景图来源已解析」与
+    /// 「详情内容落地」之间。用它才能证明解析确实**早于**取数与上屏，
+    /// 而不是只证明「被调用过」（2026-11-03 review 指出旧断言名不副实）。
+    /// 默认 nil = 生产等价，零行为。
+    var onItemCall: (@MainActor () -> Void)?
+    /// 库页 / 合集成员查询：nil = 空页。用例据此注入成员列表。
+    var itemsPageResult: Result<MediaItemsPage, any Error>?
+    /// 按 `parentID` 分派的页（优先于 `itemsPageResult`）。
+    ///
+    /// 存在的理由：有用例必须区分「**列合集**」与「**取某个合集的成员**」两类请求
+    /// （库卡封面要往下钻一层），一律返回同一页就无法表达那种拓扑。
+    /// 键为 nil 的条目对应「不带 parentID」的查询。
+    var itemsPageByParent: [String?: MediaItemsPage] = [:]
+    /// 最后一次 `itemsPage` 的入参（用例据此断言 `recursive` / `parentID` 这类
+    /// **调用形态**——合集成员必须 `recursive: false`，这是本替身记它的唯一理由）。
+    private(set) var lastPreparationItemsPageQuery: PreparationItemsPageQuery?
+
+    /// 调用计数：用来断言「读缓存不该顺带打网络」。
+    ///
+    /// ⚠️ **必须加锁**。`loadHome` 用 `async let` 并发拉三条 rail，三个 `count()`
+    /// 会同时打进来；裸 `[String: Int]` 并发改写在实测中直接把测试宿主打成
+    /// `doesNotRecognizeSelector`（Dictionary 结构被写坏，SIGABRT），表现为
+    /// 「用例 0.000 秒失败 + xcodebuild 反复重启宿主」。
+    ///
+    /// 本类其余可变配置项仍是「用例单线程写入」的约定（`@unchecked Sendable` 的
+    /// 既有取舍）；只有这个计数器要跨并发任务，所以单独保护。
+    private let counterLock = NSLock()
+    private var _callCounts: [String: Int] = [:]
+    var callCounts: [String: Int] {
+        counterLock.lock(); defer { counterLock.unlock() }
+        return _callCounts
+    }
+    func callCount(_ name: String) -> Int {
+        counterLock.lock(); defer { counterLock.unlock() }
+        return _callCounts[name] ?? 0
+    }
+    private func count(_ name: String) {
+        counterLock.lock(); defer { counterLock.unlock() }
+        _callCounts[name, default: 0] += 1
+    }
+
+    init(profileID: String = "srv:user", kind: ServerKind = .jellyfin,
+         primaryImageTag: String? = nil) {
+        profile = ServerProfile(
+            id: profileID,
+            serverName: "stub",
+            baseURL: URL(string: "http://stub.local:8096")!,
+            userID: profileID.split(separator: ":").last.map(String.init) ?? profileID,
+            primaryImageTag: primaryImageTag,
+            kind: kind
+        )
+    }
+
+    // MARK: - 浏览
+
+    func userViews() async throws -> [MediaLibrary] { count("userViews"); return try userViewsResult.get() }
+    func resumeItems() async throws -> [MediaItem] { count("resumeItems"); return try resumeResult.get() }
+    func nextUp() async throws -> [MediaItem] { count("nextUp"); return try nextUpResult.get() }
+    func latestItems(limit: Int) async throws -> [MediaItem] { count("latestItems"); return try latestResult.get() }
+    /// 氛围池取材：可注入失败与条目（`nil` = 空数组，等价"服务器没给随机结果"）。
+    /// 池装载的用例要能区分「随机查询失败」「随机查询成功但没图」「回退到首页条目」
+    /// 三条路径，`Result` 是表达它们的最小形态。
+    var randomBackdropResult: Result<[MediaItem], any Error> = .success([])
+
+    func randomBackdropItems(limit: Int) async throws -> [MediaItem] {
+        count("randomBackdropItems")
+        return try randomBackdropResult.get()
+    }
+
+    func markPlayed(itemID: String) async throws -> MediaItem.PlayState {
+        MediaItem.PlayState(played: true, percentage: 1, positionSeconds: 0)
+    }
+
+    func markUnplayed(itemID: String) async throws -> MediaItem.PlayState {
+        MediaItem.PlayState(played: false, percentage: 0, positionSeconds: 0)
+    }
+
+    // MARK: - 详情
+
+    func item(_ id: String) async throws -> MediaItem {
+        count("item")
+        if let onItemCall { await MainActor.run { onItemCall() } }
+        if let itemResult { return try itemResult.get() }
+        return MediaItem(id: id, name: id, kind: .movie)
+    }
+
+    func chapters(itemID: String) async throws -> [JellyfinChapter] { [] }
+    func seasons(seriesID: String) async throws -> [MediaItem] {
+        count("seasons")
+        return try seasonsResult.get()
+    }
+    func episodes(seriesID: String, seasonID: String?) async throws -> [MediaItem] {
+        count("episodes")
+        return try episodesResult.get()
+    }
+    func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] { [] }
+    func similar(itemID: String, limit: Int) async throws -> [MediaItem] { [] }
+
+    func itemsPage(
+        parentID: String?,
+        kinds: [MediaItem.Kind]?,
+        recursive: Bool,
+        startIndex: Int,
+        limit: Int,
+        sort: MediaItemsSort?,
+        watchState: MediaItemsWatchState?,
+        searchTerm: String?
+    ) async throws -> MediaItemsPage {
+        count("itemsPage")
+        if let membersHandler { return try await membersHandler() }
+        lastPreparationItemsPageQuery = PreparationItemsPageQuery(
+            parentID: parentID, kinds: kinds, recursive: recursive, startIndex: startIndex,
+            limit: limit, sort: sort, watchState: watchState, searchTerm: searchTerm)
+        if let routed = itemsPageByParent[parentID] { return routed }
+        if let itemsPageResult { return try itemsPageResult.get() }
+        return MediaItemsPage(items: [], startIndex: startIndex, totalRecordCount: 0)
+    }
+
+    func items(parentID: String?, kinds: [MediaItem.Kind]?, recursive: Bool, limit: Int) async throws -> [MediaItem] { [] }
+
+    // MARK: - 当前用户
+
+    /// 头像 tag：默认「这个账号没有头像」——真实世界里多数账号确实没有，默认 nil
+    /// 也让所有既有用例保持「不发任何头像请求」的行为。
+    var userAvatarTagResult: Result<String?, any Error> = .success(nil)
+
+    func currentUserAvatarTag() async throws -> String? {
+        count("currentUserAvatarTag")
+        return try userAvatarTagResult.get()
+    }
+
+    /// 与真实实现同形（Jellyfin 的 `/UserImage`，见 `JellyfinServer.userImageURL`）：
+    /// `tag` 进 query —— 「换了头像 URL 就变 → 缓存自然失效」这条规则的事实依据。
+    func userImageURL(tag: String?) -> URL? {
+        var components = URLComponents(string: "http://stub.local:8096/UserImage")!
+        var query: [URLQueryItem] = [URLQueryItem(name: "userId", value: profile.userID)]
+        if let tag { query.append(URLQueryItem(name: "tag", value: tag)) }
+        components.queryItems = query
+        return components.url
+    }
+
+    // MARK: - 媒体资源
+
+    func imageURL(itemID: String, type: ItemImageType, maxWidth: Int?, tag: String?) throws -> URL {
+        // 与真实实现同形：`tag` 进 query（`MediaItem.imageTarget` 会断言它在 URL 里，
+        // 那条规则是「图换了 URL 就变 → 磁盘缓存自然失效」的事实依据）。
+        var components = URLComponents(string: "http://stub.local:8096/Items/\(itemID)/Images/\(type.rawValue)")!
+        var query: [URLQueryItem] = []
+        if let maxWidth { query.append(URLQueryItem(name: "maxWidth", value: String(maxWidth))) }
+        if let tag { query.append(URLQueryItem(name: "tag", value: tag)) }
+        components.queryItems = query.isEmpty ? nil : query
+        return components.url!
+    }
+
+    func streamURL(itemID: String, mediaSourceID: String?, playSessionID: String?) throws -> String {
+        if let streamHandler { return try streamHandler(itemID, mediaSourceID, playSessionID) }
+        return "http://stub.local:8096/Videos/\(itemID)/stream"
+    }
+    func playbackInfo(itemID: String) async throws -> PlaybackInfo {
+        count("playbackInfo")
+        if let playbackInfoHandler { return try await playbackInfoHandler(itemID) }
+        return PlaybackInfo(playSessionID: nil, mediaSources: [])
+    }
+
+    func mediaSegments(itemID: String) async throws -> [JellyfinMediaSegment] { [] }
+    /// 侧车字幕列表（`P2-33` 的接线级用例要注入）。
+    var externalSubtitlesResult: [ExternalSubtitle] = []
+
+    /// 单条字幕下载桩：默认直接成功。用例注入延迟 / 失败 / 计数。
+    ///
+    /// `@Sendable`：`P2-33` 的下载闭包是 `@Sendable`，这里要能被它捕获。
+    var downloadSubtitleHandler: @Sendable (ExternalSubtitle) async throws -> URL = {
+        URL(fileURLWithPath: "/tmp/stub-\($0.index).srt")
+    }
+
+    func externalSubtitles(itemID: String) async throws -> [ExternalSubtitle] {
+        count("externalSubtitles")
+        return externalSubtitlesResult
+    }
+
+    func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL {
+        count("downloadSubtitle")
+        return try await downloadSubtitleHandler(subtitle)
+    }
+    func mediaFileInfo(itemID: String) async throws -> MediaFileInfo? { nil }
+
+    // MARK: - 进度上报
+
+    func reportPlaybackStart(context: PlaybackSessionContext, positionSeconds: Double) async {}
+    func reportPlaybackProgress(context: PlaybackSessionContext, positionSeconds: Double, isPaused: Bool) async {}
+    func reportPlaybackStopped(context: PlaybackSessionContext, positionSeconds: Double) async {}
+}

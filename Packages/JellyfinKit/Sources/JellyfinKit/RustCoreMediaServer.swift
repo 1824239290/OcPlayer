@@ -48,11 +48,11 @@ public final class RustCoreMediaServer: MediaServer, @unchecked Sendable {
     }
 
     private func data<T: Decodable>(_ method: String, _ arguments: [String: Any] = [:], as type: T.Type = T.self) throws -> T {
-        try call(method, arguments).data.decode(type)
+        try call(method, arguments).decodeData(type)
     }
 
     private func dataAsync<T: Decodable>(_ method: String, _ arguments: [String: Any] = [:], as type: T.Type = T.self) async throws -> T {
-        try await responseAsync(method, arguments).data.decode(type)
+        try await responseAsync(method, arguments).decodeData(type)
     }
 
     private func resolveEndpoint() async {
@@ -227,9 +227,7 @@ public final class RustCoreMediaServer: MediaServer, @unchecked Sendable {
         return try await dataAsync("browse.episodes", args)
     }
     public func episodes(seriesID: String, startingAt startItemID: String, limit: Int) async throws -> [MediaItem] {
-        let all: [MediaItem] = try await dataAsync("browse.episodes", ["seriesId": seriesID, "limit": max(1, limit)])
-        guard let index = all.firstIndex(where: { $0.id == startItemID }) else { return [] }
-        return Array(all[index..<min(all.count, index + max(1, limit))])
+        try await dataAsync("browse.episodes", ["seriesId": seriesID, "startItemId": startItemID, "limit": max(1, limit)])
     }
     public func similar(itemID: String, limit: Int) async throws -> [MediaItem] {
         struct Payload: Decodable { let items: [MediaItem] }

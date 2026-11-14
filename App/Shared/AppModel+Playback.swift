@@ -58,6 +58,7 @@ extension AppModel {
     func cancelPlaybackOpen() {
         AppDiagnostics.logInfo("cancelPlaybackOpen 取消播放准备")
         try? playbackFlow?.invalidate()
+        if let client = playbackFlow?.client { _ = try? client.call("playbackPreparation.invalidate") }
         playbackOpenGeneration &+= 1
         playbackOpenTask?.cancel()
         playbackOpenTask = nil
@@ -83,100 +84,39 @@ extension AppModel {
     @MainActor
     func openPlayback(item: MediaItem, resumeSeconds: Double?) async {
         guard let server else { return }
-        finishReporting()   // 上一条的 Stopped（换片场景）
-
-        // 首页「最近添加」等入口可以直接包含 Series，但 Jellyfin 的 PlaybackInfo/stream
-        // 只接受可播放的叶子条目。沿用详情页的语义：优先「接下来看」，否则取
-        // 首个未看完的常规剧集；避免把 Series ID 直接送进 /Videos/{id}/stream。
-        // 合集（BoxSet）同理：它是容器，Id 送进 PlaybackInfo / stream 一律 400。
-        let playableItem: MediaItem
+        finishReporting()
+        let generation = playbackOpenGeneration
         do {
-            guard let resolved = try await resolvePlayableItem(for: item, server: server) else {
-                playbackPreparation = .failed(title: item.name,
-                                              error: Self.noPlayableContentMessage(for: item))
-                return
+            let outcome = try await PlaybackPreparationWorkflow.prepare(
+                item: item, resumeSeconds: resumeSeconds, server: server,
+                home: { [weak self] in (self?.home.nextUp ?? [], self?.home.resume ?? []) },
+                coreClient: playbackFlow?.client,
+                onResolved: { [weak self] title in
+                    guard let self, self.playbackOpenGeneration == generation else { return }
+                    if case .loading = self.playbackPreparation { self.playbackPreparation = .loading(title: title) }
+                },
+                onFallback: { selected, error in
+                    AppDiagnostics.logWarning("PlaybackInfo 失败，回退直连", fields: ["item": .string(selected.name), "error": .string(error)])
+                },
+                onReady: { [weak self] prepared in
+                    guard let self, self.playbackOpenGeneration == generation, !Task.isCancelled else { return }
+                    self.presentPlayback(title: prepared.title, uri: prepared.uri, authHeader: prepared.authHeader,
+                        resumeSeconds: prepared.resumeSeconds, item: prepared.item, sessionContext: prepared.context,
+                        alternates: prepared.alternates.map { .init(id: $0.id, label: $0.label, uri: $0.uri, authHeader: $0.authHeader, sessionContext: $0.context) })
+                })
+            guard !Task.isCancelled, playbackOpenGeneration == generation else { return }
+            switch outcome {
+            case .presented: break
+            case let .noContent(title, error): playbackPreparation = .failed(title: title, error: error)
+            case let .failed(title, error, phase, _):
+                playbackPreparation = .failed(title: title, error: error)
+                AppDiagnostics.logWarning(phase == "resolve" ? "播放剧集解析失败" : "播放信息获取失败", fields: ["item": .string(item.name), "error": .string(error)])
             }
-            guard !Task.isCancelled else { return }
-            playableItem = resolved
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-            playbackPreparation = .failed(title: item.name, error: "剧集加载失败：\(error)")
-            AppDiagnostics.logWarning("播放剧集解析失败", fields: [
-                "item": .string(item.name),
-                "error": .string("\(error)"),
-            ])
-            return
-        }
-
-        let effectiveResume = playableItem.id == item.id
-            ? resumeSeconds
-            : playableItem.playState?.positionSeconds
-        let title = playableItem.episodeLabel.map {
-            "\(playableItem.seriesName ?? playableItem.name) \($0)"
-        } ?? playableItem.name
-        // 解析出集标题后刷新 loading 文案（从剧名更新到「S1E7」之类）
-        if case .loading = playbackPreparation {
-            playbackPreparation = .loading(title: title)
-        }
-        do {
-            let info = try await server.playbackInfo(itemID: playableItem.id)
-            let source = info.preferredSource
-            let context = info.sessionContext(itemID: playableItem.id, selectedSource: source)
-            let uri = try server.streamURL(
-                itemID: playableItem.id,
-                mediaSourceID: source?.id,
-                playSessionID: info.playSessionID
-            )
-            guard !Task.isCancelled else { return }
-            // L1：PlaybackInfo 本来就返回多份 MediaSource，此前选完就丢。
-            // 这里把「除了首选之外的其余源」解析成可直接开播的备用项。
-            // 任一备用源解析失败只跳过它自己（老服务端可能对某些源不给 streamURL），
-            // 不能因为一条坏源就让整次播放失败。
-            let alternates = info.mediaSources
-                .filter { $0.id != source?.id }
-                .compactMap { candidate -> PlaybackAlternate? in
-                    guard let candidateURI = try? server.streamURL(
-                        itemID: playableItem.id,
-                        mediaSourceID: candidate.id,
-                        playSessionID: info.playSessionID
-                    ) else { return nil }
-                    return PlaybackAlternate(
-                        id: candidate.id,
-                        label: candidate.name ?? candidate.id,
-                        uri: candidateURI,
-                        authHeader: server.authorizationHeader,
-                        sessionContext: info.sessionContext(
-                            itemID: playableItem.id,
-                            selectedSource: candidate
-                        )
-                    )
-                }
-            presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                            resumeSeconds: effectiveResume, item: playableItem,
-                            sessionContext: context, alternates: alternates)
-        } catch {
-            // PlaybackInfo 不可用（老版本 / 端点被关）时退回原来的直连 URL。
-            if Task.isCancelled { return }
-            AppDiagnostics.logWarning("PlaybackInfo 失败，回退直连", fields: [
-                "item": .string(playableItem.name),
-                "error": .string("\(error)"),
-            ])
-            if let uri = try? server.streamURL(itemID: playableItem.id, mediaSourceID: nil, playSessionID: nil) {
-                presentPlayback(title: title, uri: uri, authHeader: server.authorizationHeader,
-                                resumeSeconds: effectiveResume, item: playableItem,
-                                sessionContext: PlaybackSessionContext(
-                                    itemID: playableItem.id,
-                                    durationSeconds: playableItem.runtimeSeconds
-                                ))
-            } else {
-                playbackPreparation = .failed(title: title, error: "播放信息获取失败：\(error)")
-                AppDiagnostics.logError("PlaybackInfo 失败且回退直连也失败", fields: [
-                    "title": .string(title),
-                    "error": .string("\(error)"),
-                ])
-            }
+        } catch is CancellationError { return }
+        catch {
+            guard !Task.isCancelled, playbackOpenGeneration == generation else { return }
+            playbackPreparation = .failed(title: item.name, error: "播放准备失败：\(error)")
+            AppDiagnostics.logWarning("Core 播放准备失败", fields: ["error": .string("\(error)")])
         }
     }
 
@@ -185,49 +125,8 @@ extension AppModel {
     /// （半集会从「接下来看」去重进「继续观看」，所以 resume 也是该集的落点。）
     /// 合集是**容器**：解析成里面第一个可播的成员，绝不把合集自身的 id 送去协商。
     func resolvePlayableItem(for item: MediaItem, server: any MediaServer) async throws -> MediaItem? {
-        if item.kind == .boxSet {
-            return try await resolvePlayableMember(ofCollection: item, server: server)
-        }
-        guard item.kind == .series else { return item }
-
-        if let next = home.nextUp.first(where: { $0.seriesID == item.id })
-            ?? home.resume.first(where: { $0.seriesID == item.id }) {
-            return next
-        }
-
-        let episodes = try await server.episodes(seriesID: item.id, seasonID: nil)
-        let regularEpisodes = episodes.filter { $0.seasonNumber != 0 }
-        return regularEpisodes.first(where: { !($0.playState?.played ?? false) })
-            ?? regularEpisodes.first
-    }
-
-    /// 合集 → 第一个可播成员。
-    ///
-    /// `recursive: false` **不能省**（服务端源码口径：`recursive=true` 会走
-    /// `DescendantOfId` 把链接条目的下一层一并递归出来，服务端单测
-    /// `DescendantOfId_ReachesEpisodesOfALinkedSeries` 断言了这一点），
-    /// `kinds` 也不能给（给合集 parentId 配 `includeItemTypes` 会被服务端把
-    /// `parentId` 置空、改成从用户根查，见 jellyfin#16454）。
-    /// 挑选规则与剧集那条一致：先取第一个没看过的叶子，其次第一个叶子；
-    /// 成员里若只有剧集，则回到剧集自己的解析规则（它可能已经有续播进度）。
-    private func resolvePlayableMember(
-        ofCollection item: MediaItem,
-        server: any MediaServer
-    ) async throws -> MediaItem? {
-        // 形态（`recursive: false` / 不传类型过滤 / 年份升序）与依据都收在
-        // `MediaServer.collectionMembers(of:)` —— 这里只挑第一个可播成员，取默认页大小。
-        let members = try await server.collectionMembers(of: item.id).items
-        let leaves = members.filter { $0.kind == .movie || $0.kind == .episode }
-        if let unwatched = leaves.first(where: { !($0.playState?.played ?? false) }) {
-            return unwatched
-        }
-        if let first = leaves.first {
-            return first
-        }
-        if let series = members.first(where: { $0.kind == .series }) {
-            return try await resolvePlayableItem(for: series, server: server)
-        }
-        return nil
+        try await PlaybackPreparationWorkflow.resolve(item: item, server: server,
+            home: { [weak self] in (self?.home.nextUp ?? [], self?.home.resume ?? []) }, coreClient: playbackFlow?.client)
     }
 
     /// 解析不出可播条目时的用户可见文案（按条目类型说清楚是哪种情况）。
