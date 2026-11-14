@@ -1,0 +1,265 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Pre-planning 1 / 155]
+[Planning deferred tasks]
+[1 / 5]
+[2 / 6] DiagnosticsKit
+[3 / 7] DiagnosticsKit
+[11 / 15] OcPlayerCore
+[12 / 16] OcPlayerCore
+[18 / 22] PlaybackKit
+[19 / 23] PlaybackKit
+[25 / 29] PlaybackKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit/Sources/DiagnosticsKit/DiagnosticLogger.swift:869:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 867 |     /// 它是**上界**（实际可能因按行对齐略少），用于 `Data(capacity:)` 足够。
+ 868 |     func exportByteCount(byteBudget: Int?) throws -> Int {
+ 869 |         try queue.sync {
+     |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 870 |             let files = existingLogFiles()
+ 871 |             guard let byteBudget else { return files.reduce(0) { $0 + $1.size } }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[27 / 32] DiagnosticsKit
+[28 / 33] DiagnosticsKit
+[32 / 38] OcPlayerCore
+[37 / 40] PlaybackKitTests-product
+[40 / 43] PlaybackKitTests-product
+[42 / 43] PlaybackKitTests-product
+Build complete! (4.92秒)
+Test Suite 'All tests' started at 2026-11-14 16:33:56.571.
+Test Suite 'PlaybackKitTests.xctest' started at 2026-11-14 16:33:56.572.
+Test Suite 'PlaybackEngineContractTests' started at 2026-11-14 16:33:56.572.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDebugStatsLineKeepsAStableColumnLayout]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDebugStatsLineKeepsAStableColumnLayout]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDescriptorIsReachableFromInstance]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDescriptorIsReachableFromInstance]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDurationMicrosecondsTruncates]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testDurationMicrosecondsTruncates]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testHasRenderedFirstFrameNeedsAnActualFrame]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testHasRenderedFirstFrameNeedsAnActualFrame]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testKernelDanmakuDefaultsAreSilentNoOps]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testKernelDanmakuDefaultsAreSilentNoOps]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testPlaybackSourceFromFileURLUsesPath]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineContractTests testPlaybackSourceFromFileURLUsesPath]' passed (0.000 seconds).
+Test Suite 'PlaybackEngineContractTests' passed at 2026-11-14 16:33:56.573.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'PlaybackEngineRegistryTests' started at 2026-11-14 16:33:56.573.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testAvailableFollowsRegistrationOrder]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testAvailableFollowsRegistrationOrder]' passed (0.002 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testClearSelectionReturnsToDefault]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testClearSelectionReturnsToDefault]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testDefaultsToFirstRegisteredWhenNothingSelected]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testDefaultsToFirstRegisteredWhenNothingSelected]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testExplicitSelectionWins]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testExplicitSelectionWins]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testMakeSelectedThrowsWhenNothingRegistered]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testMakeSelectedThrowsWhenNothingRegistered]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testReRegisteringSameIDReplacesInPlace]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testReRegisteringSameIDReplacesInPlace]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testStaleSelectionFallsBackInsteadOfFailing]' started.
+Test Case '-[PlaybackKitTests.PlaybackEngineRegistryTests testStaleSelectionFallsBackInsteadOfFailing]' passed (0.000 seconds).
+Test Suite 'PlaybackEngineRegistryTests' passed at 2026-11-14 16:33:56.578.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Suite 'PlaybackTrackWorkflowTests' started at 2026-11-14 16:33:56.578.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' passed (0.004 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testExternalDisplayNamesPublishObservationAfterCoreAcknowledgesAddition]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testExternalDisplayNamesPublishObservationAfterCoreAcknowledgesAddition]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' passed (0.270 seconds).
+Test Suite 'PlaybackTrackWorkflowTests' passed at 2026-11-14 16:33:56.856.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.277 (0.277) seconds
+Test Suite 'PlaybackWatchClockTests' started at 2026-11-14 16:33:56.856.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testDoubleSpeedCountsElapsedViewingTime]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testDoubleSpeedCountsElapsedViewingTime]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testFrozenAndSuspendedIntervalsAreExcluded]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testFrozenAndSuspendedIntervalsAreExcluded]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testInvalidSamplesAndClockGoingBackwardsAreDiscarded]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testInvalidSamplesAndClockGoingBackwardsAreDiscarded]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testPartialPlaybackCountsWithoutFinishing]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testPartialPlaybackCountsWithoutFinishing]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testPauseAndBufferDoNotEarnTime]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testPauseAndBufferDoNotEarnTime]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testRepeatedPositionsBatchSubFrameProgress]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testRepeatedPositionsBatchSubFrameProgress]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testSeekAndBackwardsJumpResetAnchor]' started.
+Test Case '-[PlaybackKitTests.PlaybackWatchClockTests testSeekAndBackwardsJumpResetAnchor]' passed (0.000 seconds).
+Test Suite 'PlaybackWatchClockTests' passed at 2026-11-14 16:33:56.857.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'PlayerStateFoldingTests' started at 2026-11-14 16:33:56.857.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testBufferingTogglesFoldIntoSessionStats]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testBufferingTogglesFoldIntoSessionStats]' passed (0.024 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDisplayPositionPublishesOnWholeSecondsOnly]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDisplayPositionPublishesOnWholeSecondsOnly]' passed (0.023 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDisplayTitleFallsBackToLanguageAndCodec]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDisplayTitleFallsBackToLanguageAndCodec]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDistinctErrorsAreCountedOnceEach]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testDistinctErrorsAreCountedOnceEach]' passed (0.067 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testErrorEventSetsErrorStateAndMessage]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testErrorEventSetsErrorStateAndMessage]' passed (0.007 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testErrorWithoutMessageFallsBackToCode]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testErrorWithoutMessageFallsBackToCode]' passed (0.006 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testFinishSessionIsSingleShot]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testFinishSessionIsSingleShot]' passed (0.008 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testIdenticalErrorStormCountsOnce]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testIdenticalErrorStormCountsOnce]' passed (0.100 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testLateDurationForcesProgressRecompute]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testLateDurationForcesProgressRecompute]' passed (0.013 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testMidStreamErrorStillFails]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testMidStreamErrorStillFails]' passed (0.014 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testNonStaleTailErrorStillFails]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testNonStaleTailErrorStillFails]' passed (0.016 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testNoteStallFeedsSessionStats]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testNoteStallFeedsSessionStats]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testOnlyLatestConsumerMutatesState]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testOnlyLatestConsumerMutatesState]' passed (0.099 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testReenterDuringMinVisibleDoesNotBlink]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testReenterDuringMinVisibleDoesNotBlink]' passed (0.654 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testRepeatedTailStaleIOErrorFoldsOnce]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testRepeatedTailStaleIOErrorFoldsOnce]' passed (0.141 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetCancelsPendingBufferingTimers]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetCancelsPendingBufferingTimers]' passed (2.531 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsErrorResidue]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsErrorResidue]' passed (0.010 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsMediaStateButNotSurface]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsMediaStateButNotSurface]' passed (0.010 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsSessionStats]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testResetClearsSessionStats]' passed (0.007 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSameLastErrorDoesNotRePublish]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSameLastErrorDoesNotRePublish]' passed (0.183 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSharedEventGenerationDoesNotLetOldConsumerAdoptNewSource]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSharedEventGenerationDoesNotLetOldConsumerAdoptNewSource]' passed (0.004 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testShortBufferingBlipNeverReachesUI]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testShortBufferingBlipNeverReachesUI]' passed (0.170 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleIOErrorOutsideTailWindowStillFails]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleIOErrorOutsideTailWindowStillFails]' passed (0.017 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleIOErrorPredicate]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleIOErrorPredicate]' passed (0.004 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleTailIOErrorDoesNotResurrectFailedSession]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStaleTailIOErrorDoesNotResurrectFailedSession]' passed (0.107 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateAndDurationFoldFromEvents]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateAndDurationFoldFromEvents]' passed (0.010 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateChangedErrorAfterFoldStaysStopped]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateChangedErrorAfterFoldStaysStopped]' passed (0.105 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateChangedErrorLandsInError]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testStateChangedErrorLandsInError]' passed (0.016 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSustainedBufferingShowsAfterDelayAndHoldsMinVisible]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testSustainedBufferingShowsAfterDelayAndHoldsMinVisible]' passed (2.018 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testTailStaleIOErrorFoldsToNaturalStop]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testTailStaleIOErrorFoldsToNaturalStop]' passed (0.017 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testTracksChangedRefreshesAudioAndSubtitleLists]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testTracksChangedRefreshesAudioAndSubtitleLists]' passed (0.010 seconds).
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testUnknownDurationStillFails]' started.
+Test Case '-[PlaybackKitTests.PlayerStateFoldingTests testUnknownDurationStillFails]' passed (0.010 seconds).
+Test Suite 'PlayerStateFoldingTests' passed at 2026-11-14 16:34:03.265.
+	 Executed 32 tests, with 0 failures (0 unexpected) in 6.400 (6.408) seconds
+Test Suite 'SeekCoalescerTests' started at 2026-11-14 16:34:03.265.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testBurstOfIdenticalLandingsCollapsesToTheFirst]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testBurstOfIdenticalLandingsCollapsesToTheFirst]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testClockGoingBackwardsForwardsInsteadOfSwallowing]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testClockGoingBackwardsForwardsInsteadOfSwallowing]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testCoalescedDuplicateNeverReachesTheEngine]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testCoalescedDuplicateNeverReachesTheEngine]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testContinuousDragDeliversEveryDistinctLanding]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testContinuousDragDeliversEveryDistinctLanding]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDefaultWindowIsThreeHundredMilliseconds]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDefaultWindowIsThreeHundredMilliseconds]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDifferentLandingsInsideWindowAreAllDelivered]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDifferentLandingsInsideWindowAreAllDelivered]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDistinctLandingsAreAllForwarded]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDistinctLandingsAreAllForwarded]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDraggingAwayAndBackToSameLandingIsForwarded]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDraggingAwayAndBackToSameLandingIsForwarded]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDuplicateLandingInsideWindowIsCoalesced]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testDuplicateLandingInsideWindowIsCoalesced]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testFiniteLandingOutsideMillisecondRangeDoesNotTrapOrChangeBaseline]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testFiniteLandingOutsideMillisecondRangeDoesNotTrapOrChangeBaseline]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testInvalidInputIsForwardedWithoutPollutingTheBaseline]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testInvalidInputIsForwardedWithoutPollutingTheBaseline]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testLandingIdentityIsQuantizedToMilliseconds]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testLandingIdentityIsQuantizedToMilliseconds]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testNonPositiveOrInvalidWindowDisablesCoalescing]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testNonPositiveOrInvalidWindowDisablesCoalescing]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testObservedDuplicatePairsCollapseToElevenEngineCalls]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testObservedDuplicatePairsCollapseToElevenEngineCalls]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testResetDropsTheBaseline]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testResetDropsTheBaseline]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testSameLandingAfterWindowIsForwarded]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testSameLandingAfterWindowIsForwarded]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testSustainedDuplicateStormIsThrottledNotSilenced]' started.
+Test Case '-[PlaybackKitTests.SeekCoalescerTests testSustainedDuplicateStormIsThrottledNotSilenced]' passed (0.000 seconds).
+Test Suite 'SeekCoalescerTests' passed at 2026-11-14 16:34:03.275.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.007 (0.010) seconds
+Test Suite 'SubtitleSelectionTests' started at 2026-11-14 16:34:03.275.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testAllExternalFallbackAppliesToFollowSourceToo]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testAllExternalFallbackAppliesToFollowSourceToo]' passed (0.002 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testConflictingLanguageAndTitleSignalsDegradeGracefully]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testConflictingLanguageAndTitleSignalsDegradeGracefully]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testDoesNotMisreadJapaneseTrack]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testDoesNotMisreadJapaneseTrack]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testEmbeddedTracksWithoutChineseRespectKernelDefaultOff]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testEmbeddedTracksWithoutChineseRespectKernelDefaultOff]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFallsBackToFirstTrackWhenNothingSelectedAndAllExternal]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFallsBackToFirstTrackWhenNothingSelectedAndAllExternal]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFollowSourceKeepsHandsOffWithEmbeddedTracks]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFollowSourceKeepsHandsOffWithEmbeddedTracks]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFollowSourceNeverIntervenes]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testFollowSourceNeverIntervenes]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testIgnoresNonSubtitleTracksWithChineseLanguage]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testIgnoresNonSubtitleTracksWithChineseLanguage]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsCurrentAmongEquivalentCandidates]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsCurrentAmongEquivalentCandidates]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsCurrentWhenAlreadyBest]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsCurrentWhenAlreadyBest]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsSourceDefaultWhenNoChineseExists]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testKeepsSourceDefaultWhenNoChineseExists]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testNoSubtitleTracksKeeps]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testNoSubtitleTracksKeeps]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testOffDisablesOnlyWhenSomethingIsSelected]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testOffDisablesOnlyWhenSomethingIsSelected]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testPrefersRequestedScript]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testPrefersRequestedScript]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesBilingualTrackTitles]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesBilingualTrackTitles]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesChineseFromTrackTitleOnly]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesChineseFromTrackTitleOnly]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesChineseLanguageTags]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesChineseLanguageTags]' passed (0.002 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesExternalSubtitleFromDisplayName]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesExternalSubtitleFromDisplayName]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesSimplifiedTokens]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testRecognizesSimplifiedTokens]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSardinianLanguageTagIsNotSimplifiedChinese]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSardinianLanguageTagIsNotSimplifiedChinese]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSelectsChineseOverSourceDefault]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSelectsChineseOverSourceDefault]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testShortScriptTokenCountsInTrackTitle]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testShortScriptTokenCountsInTrackTitle]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testShortScriptTokenInExternalDisplayNameIsIgnored]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testShortScriptTokenInExternalDisplayNameIsIgnored]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSwitchesWhenBetterCandidateArrivesLater]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testSwitchesWhenBetterCandidateArrivesLater]' passed (0.000 seconds).
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testUnmarkedChineseBeatsOppositeScript]' started.
+Test Case '-[PlaybackKitTests.SubtitleSelectionTests testUnmarkedChineseBeatsOppositeScript]' passed (0.000 seconds).
+Test Suite 'SubtitleSelectionTests' passed at 2026-11-14 16:34:03.295.
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.016 (0.020) seconds
+Test Suite 'PlaybackKitTests.xctest' passed at 2026-11-14 16:34:03.295.
+	 Executed 100 tests, with 0 failures (0 unexpected) in 6.707 (6.724) seconds
+Test Suite 'All tests' passed at 2026-11-14 16:34:03.295.
+	 Executed 100 tests, with 0 failures (0 unexpected) in 6.707 (6.724) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "播放事件契约" started.
+◇ Test "事件名保持稳定（脚本按这些字符串过滤日志）" started.
+◇ Test "decoder.changed 带毫秒位置：硬解掉软解那一刻能和进度对上" started.
+✔ Test "decoder.changed 带毫秒位置：硬解掉软解那一刻能和进度对上" passed after 0.001 seconds.
+✔ Test "事件名保持稳定（脚本按这些字符串过滤日志）" passed after 0.001 seconds.
+✔ Suite "播放事件契约" passed after 0.001 seconds.
+✔ Test run with 2 tests in 1 suite passed after 0.001 seconds.

@@ -1,0 +1,6 @@
+{
+  "path": "Docs/SHARED-DIAGNOSTIC-EXPORT.md",
+  "before": "ab57408c19cd238a9f67a695c4e6cb12991629fee517248312f2fe254519ba45",
+  "after": "b323d964b76943cea3daf307253a6404620ed7af93d07e654db278f3060f25ec",
+  "reason": "Clarify that strict file arguments belong to diag.exportFile; no code change"
+}

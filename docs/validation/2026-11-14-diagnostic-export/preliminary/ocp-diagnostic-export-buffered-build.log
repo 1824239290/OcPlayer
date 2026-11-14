@@ -1,0 +1,4 @@
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+   Compiling ocp-ffi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-ffi)
+    Finished `release` profile [optimized] target(s) in 8.52s
+/tmp/ocp-diagnostic-export-buffered-targeted/libocp_ffi.dylib

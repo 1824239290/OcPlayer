@@ -14,6 +14,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 mod danmaku_load;
+mod diagnostic_export;
 mod events;
 mod media;
 mod network;
@@ -399,6 +400,21 @@ impl Core {
             };
             let response = match result {
                 Ok(data) => ApiResponse::ok(data),
+                Err((code, retryable, message)) => {
+                    ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        if method == "diag.exportFile.capabilities" {
+            return serde_json::to_string(&ApiResponse::ok(json!({"schemaVersion":1,"output":"file","bodyByteBudget":8388608,"traceTailBytes":4194304}))).map_err(CoreError::InvalidJson);
+        }
+        if method == "diag.exportFile" {
+            let result = serde_json::from_value::<diagnostic_export::Input>(arguments)
+                .map_err(|error| (1002, false, error.to_string()))
+                .and_then(|input| diagnostic_export::export(input).map_err(|error| error.parts()));
+            let response = match result {
+                Ok(report) => ApiResponse::ok(serde_json::to_value(report)?),
                 Err((code, retryable, message)) => {
                     ApiResponse::error(code, retryable, message, Value::Null)
                 }

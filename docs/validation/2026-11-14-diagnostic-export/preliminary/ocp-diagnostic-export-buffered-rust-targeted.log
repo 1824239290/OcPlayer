@@ -1,0 +1,16 @@
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.32s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-23724eece6364d19)
+
+running 8 tests
+test diagnostic_export::tests::output_cannot_alias_input_directory ... ok
+test diagnostic_export::tests::output_is_exclusive_and_failed_unlimited_export_is_removed ... ok
+test diagnostic_export::tests::budget_reclaims_empty_latest_tail_and_preserves_archive_order ... ok
+test diagnostic_export::tests::utf8_repair_preserves_chunk_boundaries_and_invalid_sequences ... ok
+test diagnostic_export::tests::missing_logs_and_trace_produce_header_only_with_exact_report_size ... ok
+test diagnostic_export::tests::traces_keep_no_newline_suffix_and_negative_budgets_are_empty ... ok
+test diagnostic_export::tests::redaction_preserves_server_routes_and_native_placeholders ... ok
+test diagnostic_export::tests::unlimited_logs_join_before_decoding_and_ignore_lock_files ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.02s
+

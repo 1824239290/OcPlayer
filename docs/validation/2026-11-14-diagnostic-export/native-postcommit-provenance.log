@@ -1,0 +1,1 @@
+{"rust": 204, "independentRust": 204, "abi": 194, "nativeTotal": 1382, "app": {"executed": 1018, "passed": 999, "skipped": 19, "failures": 0}, "disabledJellyfin": {"executed": 288, "passed": 273, "skipped": 15, "failures": 0}, "runtimeSectionCount": 14}

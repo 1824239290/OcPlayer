@@ -1,0 +1,964 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Constructing description]
+[Pre-planning 1 / 1106]
+[Planning deferred tasks]
+[1 / 1]
+[1 / 77] CoreModel
+[9 / 31] OcPlayerCore
+[13 / 35] OcPlayerCore
+[26 / 40] JellyfinKit
+[34 / 49] JellyfinKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit/Sources/DiagnosticsKit/DiagnosticLogger.swift:869:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 867 |     /// 它是**上界**（实际可能因按行对齐略少），用于 `Data(capacity:)` 足够。
+ 868 |     func exportByteCount(byteBudget: Int?) throws -> Int {
+ 869 |         try queue.sync {
+     |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+ 870 |             let files = existingLogFiles()
+ 871 |             guard let byteBudget else { return files.reduce(0) { $0 + $1.size } }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[36 / 50] JellyfinKit
+[36 / 50] DiagnosticsKit
+[41 / 53] JellyfinKit
+[51 / 61] MetadataKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/Media/MediaRepository+Detail.swift:68:49: warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 66 |         var members: [MediaItem] = []
+ 67 |         var memberTotal: Int?
+ 68 |         if cachedItem.item.kind == .series, let store {
+    |                                                 `- warning: immutable value 'store' was never used; consider replacing with '_' or removing it [#NoUsage]
+ 69 |             seasons = (await read { try await $0.seasons(seriesID: itemID, tenant: tenant) }) ?? []
+ 70 |             if let seasonID = Self.defaultSeasonID(in: seasons) {
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbBatch.swift:134:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+132 |                                      enriched: 0, unmatched: 0, failed: 0, seasons: 0,
+133 |                                      wasCancelled: false)
+134 |         guard await client.isConfigured, !items.isEmpty else { return result }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+135 | 
+136 |         await onProgress(result.progress)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:54:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 52 |     /// 是否已配置 key（未配置时全部方法都是无操作，调用方不必自己判断）。
+ 53 |     public var isEnabled: Bool {
+ 54 |         get async { await client.isConfigured }
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 55 |     }
+ 56 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:64:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 62 |     /// 没建立对应关系、对应上了但数据没拉过、拉过但语言对不上。
+ 63 |     public func overlay(for item: MediaItem, tenant: TenantID) async -> TMDbOverlay? {
+ 64 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 65 |         let language = preferences.language
+ 66 |         guard let link = try? await store.tmdbLink(itemID: item.id, tenant: tenant) else { return nil }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:88:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 86 |     /// 剧集页拿它做两件事：切换季时更新简介、给分集卡片提供每集的标题与简介。
+ 87 |     public func seasonOverlay(seriesLink: TMDbLink, seasonNumber: Int) async -> TMDbOverlay? {
+ 88 |         guard await client.isConfigured else { return nil }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 89 |         guard case .tv(let tvID) = seriesLink.entityKey else { return nil }
+ 90 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:107:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+105 |             return await sharedFlow("season",seriesLink:seriesLink,seasonNumber:seasonNumber)?.didFetch ?? false
+106 |         }
+107 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+108 |         guard case .tv(let tvID) = seriesLink.entityKey else { return false }
+109 |         let key = TMDbEntityKey.season(tvID: tvID, number: seasonNumber)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:205:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+203 |             return await sharedFlow("collection",item:item,tenant:tenant,members:members)?.refresh ?? .failed
+204 |         }
+205 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+206 |         let language = preferences.language
+207 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:364:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+362 |             return await sharedFlow("refresh",item:item,tenant:tenant,seriesLink:seriesLink)?.refresh ?? .failed
+363 |         }
+364 |         guard await client.isConfigured else { return .noMatch }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+365 |         let language = preferences.language
+366 | 
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/TMDbEnricher.swift:421:15: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+419 |     @discardableResult
+420 |     public func fetchAndStore(key: TMDbEntityKey, language: String? = nil) async -> Bool {
+421 |         guard await client.isConfigured else { return false }
+    |               `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+422 |         let language = language ?? preferences.language
+423 |         if let rust {
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:163:37: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+161 |     do {
+162 |       var config: [String: Any] = [
+163 |         "mode": mode, "configured": await client.isConfigured,
+    |                                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+164 |         "members": try rust.object(members.map(RustTMDbMatcher.Item.init)),
+165 |         "cancelled": Task.isCancelled,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Sources/MetadataKit/TMDb/RustTMDbEnricher.swift:283:40: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+281 |         "batch.begin",
+282 |         [
+283 |           "batchID": id, "configured": await client.isConfigured,
+    |                                        `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+284 |           "items": rust.object(items.map(RustTMDbMatcher.Item.init)),
+285 |         ])
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[54 / 65] MetadataKit
+[57 / 62] MetadataKit-product
+[57 / 62] MetadataKitTests-product
+[66 / 71] MetadataKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:252:23: warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+250 |         let delay = Self.latency
+251 |         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+252 |             guard let self else { return }
+    |                       `- warning: capture of 'self' with non-Sendable type 'ConcurrencyProbeProtocol?' in a '@Sendable' closure [#SendableClosureCaptures]
+253 |             Self.counterLock.lock(); Self.inFlight -= 1; Self.counterLock.unlock()
+254 |             // 404 → 快速走完一条（`noMatch`），不触发季请求，用例更快。
+
+Swift.Optional:1:21: note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+1 | @frozen public enum Optional<Wrapped> : ~Copyable, ~Escapable where Wrapped : ~Copyable, Wrapped : ~Escapable {
+  |                     `- note: generic enum 'Optional' does not conform to the 'Sendable' protocol
+2 |     case none
+3 |     case some(Wrapped)
+
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbBatchConcurrencyTests.swift:216:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+214 |     nonisolated(unsafe) private static var peakValue = 0
+215 |     nonisolated(unsafe) private static var startedValue = 0
+216 |     nonisolated(unsafe) private static let counterLock = NSLock()
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'NSLock', consider removing it
+217 | 
+218 |     /// 桩被请求的总次数（判断「取消后还有没有继续派发」）。
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbEnricherTests.swift:418:9: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+416 |         }
+417 |         let key = TMDbEntityKey.season(tvID: 100, number: 1)
+418 |         try await enricher.fetchAndStore(key: key)
+    |         `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+419 |         let stored = try await store.tmdbPayload(key: key, language: "zh-CN")
+420 |         let cached = try XCTUnwrap(stored)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:65:25: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 63 |         let m = TMDbMatcher(language: "zh-CN") { _, _, _, _ in [] }
+ 64 |         for dirty in ["", " ", "0", "-5", "abc", "12.5", "\n"] {
+ 65 |             let value = await m.providerTmdbID(of: item(name: "x", tmdbID: dirty))
+    |                         `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit/Tests/MetadataKitTests/TMDbMatcherTests.swift:68:21: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 66 |             XCTAssertNil(value, "「\(dirty)」应被当作没有 id")
+ 67 |         }
+ 68 |         let clean = await m.providerTmdbID(of: item(name: "x", tmdbID: " 603 "))
+    |                     `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 69 |         XCTAssertEqual(clean, 603, "前后空白应被容忍")
+ 70 |     }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[68 / 71] MetadataKitTests-product
+[70 / 74] MetadataKitTests-product
+[72 / 74] MetadataKitTests-product
+Build complete! (7.00秒)
+Test Suite 'All tests' started at 2026-11-14 16:33:03.069.
+Test Suite 'MetadataKitTests.xctest' started at 2026-11-14 16:33:03.070.
+Test Suite 'EpisodeChunkTests' started at 2026-11-14 16:33:03.071.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testAccessibilityLabelMatchesRange]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testAccessibilityLabelMatchesRange]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBoundariesAndSingleEpisodeTailLabel]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBoundariesAndSingleEpisodeTailLabel]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBrowsedChunkWinsAndOutOfRangeBrowsedChunkIsIgnored]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testBrowsedChunkWinsAndOutOfRangeBrowsedChunkIsIgnored]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testChunksCoverEverySlotInOrder]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testChunksCoverEverySlotInOrder]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testCustomSizeAndNonPositiveSize]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testCustomSizeAndNonPositiveSize]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testDisplayedChunksFollowSortDirection]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testDisplayedChunksFollowSortDirection]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testEmptyTrackProducesNoChunks]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testEmptyTrackProducesNoChunks]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowSelectionClearsBrowsedChunk]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowSelectionClearsBrowsedChunk]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowsSelectionIncludingPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testFollowsSelectionIncludingPlaceholders]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testLabelBoundsAreOrderIndependent]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testLabelBoundsAreOrderIndependent]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testNoSelectionFallsBackToFirstDisplayedChunk]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testNoSelectionFallsBackToFirstDisplayedChunk]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testOneChunkAtOrBelowSize]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testOneChunkAtOrBelowSize]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPartlyUnnumberedChunkKeepsRealNumberBounds]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPartlyUnnumberedChunkKeepsRealNumberBounds]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPlaceholderNumbersCountTowardLabel]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testPlaceholderNumbersCountTowardLabel]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testRailSlotsRespectSortAndBounds]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testRailSlotsRespectSortAndBounds]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeChunkTests testUnnumberedTailFallsBackToTrackPositions]' started.
+Test Case '-[MetadataKitTests.EpisodeChunkTests testUnnumberedTailFallsBackToTrackPositions]' passed (0.000 seconds).
+Test Suite 'EpisodeChunkTests' passed at 2026-11-14 16:33:03.078.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
+Test Suite 'EpisodeSlotTests' started at 2026-11-14 16:33:03.078.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testDuplicateNumbersProduceOneSlotEach]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testDuplicateNumbersProduceOneSlotEach]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalSeasonFillsFromTheStart]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalSeasonFillsFromTheStart]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalTrustsTheSource]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEmptyLocalTrustsTheSource]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEntityOverlayHasNoCandidates]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEntityOverlayHasNoCandidates]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeAiringTodayCountsAsAired]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeAiringTodayCountsAsAired]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesMapAirDateStillAndRuntime]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesMapAirDateStillAndRuntime]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesRejectUnparseableAirDates]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testEpisodeCandidatesRejectUnparseableAirDates]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackRescuesAMismatchedPrimary]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackRescuesAMismatchedPrimary]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackUsedWhenPrimaryIsEmpty]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFallbackUsedWhenPrimaryIsEmpty]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsHolesInTheMiddleInPlace]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsHolesInTheMiddleInPlace]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsMissingTailWithAiredAndFutureLabels]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testFillsMissingTailWithAiredAndFutureLabels]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testKeepsLocalEpisodesUnknownToTheSource]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testKeepsLocalEpisodesUnknownToTheSource]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLocalWithoutEpisodeNumbersSuppressesPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLocalWithoutEpisodeNumbersSuppressesPlaceholders]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLongRunningSeriesIsBoundedByForwardWindow]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testLongRunningSeriesIsBoundedByForwardWindow]' passed (0.045 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testMismatchedNumberingSuppressesPlaceholders]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testMismatchedNumberingSuppressesPlaceholders]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNonPositiveNumbersAreDropped]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNonPositiveNumbersAreDropped]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNoSourceReturnsLocalUnchanged]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testNoSourceReturnsLocalUnchanged]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testOverlapMakesTheSourceTrusted]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testOverlapMakesTheSourceTrusted]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderCapIsEnforced]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderCapIsEnforced]' passed (0.044 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderDisplayTitleFallsBackToEpisodeNumber]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderDisplayTitleFallsBackToEpisodeNumber]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderIDCannotCollideWithLocalIDs]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPlaceholderIDCannotCollideWithLocalIDs]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPrimaryWinsOverFallback]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testPrimaryWinsOverFallback]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testShowPlaceholdersDefaultsToOn]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testShowPlaceholdersDefaultsToOn]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testSpecialsSeasonIsNeverFilled]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testSpecialsSeasonIsNeverFilled]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testUnknownAirDateIsNotInLibraryNotNotAired]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testUnknownAirDateIsNotInLibraryNotNotAired]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.EpisodeSlotTests testWindowIsAnchoredOnTheLocalSpan]' started.
+Test Case '-[MetadataKitTests.EpisodeSlotTests testWindowIsAnchoredOnTheLocalSpan]' passed (0.009 seconds).
+Test Suite 'EpisodeSlotTests' passed at 2026-11-14 16:33:03.193.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 0.113 (0.115) seconds
+Test Suite 'LocalProgressConflictTests' started at 2026-11-14 16:33:03.193.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testConfirmationKeepsOlderInflightRepliesProtectedButAllowsNewRemoteRewind]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testConfirmationKeepsOlderInflightRepliesProtectedButAllowsNewRemoteRewind]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testEmptyResumeKeepsOnlyUnconfirmedLocalPlayback]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testEmptyResumeKeepsOnlyUnconfirmedLocalPlayback]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testExplicitMarkUnplayedReleasesPendingProtection]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testExplicitMarkUnplayedReleasesPendingProtection]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNaturalCompletionAcceptsServerPlayedFlagAndClearedResumePosition]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNaturalCompletionAcceptsServerPlayedFlagAndClearedResumePosition]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNewLocalRewindReplacesPriorPendingPositionAndOtherTenantIsUnaffected]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testNewLocalRewindReplacesPriorPendingPositionAndOtherTenantIsUnaffected]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testPendingProgressSurvivesReopenAndMergesFreshMetadata]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testPendingProgressSurvivesReopenAndMergesFreshMetadata]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testReplyStartedBeforeLocalWriteCannotConfirmCoincidentallyMatchingPosition]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testReplyStartedBeforeLocalWriteCannotConfirmCoincidentallyMatchingPosition]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testRepositoryProtectsAllNetworkProjectionsInDiskAndMemoryModes]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testRepositoryProtectsAllNetworkProjectionsInDiskAndMemoryModes]' passed (0.022 seconds).
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testV3MigrationPreservesV2ItemsAndRails]' started.
+Test Case '-[MetadataKitTests.LocalProgressConflictTests testV3MigrationPreservesV2ItemsAndRails]' passed (0.021 seconds).
+Test Suite 'LocalProgressConflictTests' passed at 2026-11-14 16:33:03.285.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.091 (0.092) seconds
+Test Suite 'MediaRepositoryTests' started at 2026-11-14 16:33:03.285.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testCachedHomeReadsDiskWithoutNetwork]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testConcurrentDetailRefreshIsCoalesced]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testDetailRestoresFromDiskInNewRepository]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testEmptyRailResponseClearsStaleRail]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testLatePlayStateRepliesCannotPersistAfterShutdownOrCancellation]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMarkPlayedUsesServerStateAndWritesStore]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testMemoryOnlyRepositoryKeepsProtocolWithoutStore]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPagesPersistAndMergeAcrossInstances]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPartialRailFailureKeepsPreviousContentAndReportsFailure]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testPlaybackProgressUpdatesHomeDetailPagesAndStore]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testSearchTermsHaveSeparatePageCaches]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' started.
+Test Case '-[MetadataKitTests.MediaRepositoryTests testShutdownRejectsNewPlayStateRequests]' passed (0.001 seconds).
+Test Suite 'MediaRepositoryTests' passed at 2026-11-14 16:33:03.385.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.099 (0.100) seconds
+Test Suite 'PlaybackProgressPersistenceTests' started at 2026-11-14 16:33:03.385.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testDiskHomeAndPagesMergeProgressWithoutReplacingProjectionMetadata]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testDiskHomeAndPagesMergeProgressWithoutReplacingProjectionMetadata]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSeedsMissingItem]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSeedsMissingItem]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSurvivesShutdownWhileOldNetworkWritesStayBlocked]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testFinalProgressSurvivesShutdownWhileOldNetworkWritesStayBlocked]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testLargeProjectionUsesBatchesAndPreservesOrder]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testLargeProjectionUsesBatchesAndPreservesOrder]' passed (0.130 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testMarkPlayedAndUnplayedReachDiskProjectionsAfterMemoryEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testMarkPlayedAndUnplayedReachDiskProjectionsAfterMemoryEviction]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testProjectionKeepsItsMetadataAndFallsBackForMissingCanonicalItems]' started.
+Test Case '-[MetadataKitTests.PlaybackProgressPersistenceTests testProjectionKeepsItsMetadataAndFallsBackForMissingCanonicalItems]' passed (0.005 seconds).
+Test Suite 'PlaybackProgressPersistenceTests' passed at 2026-11-14 16:33:03.556.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.170 (0.171) seconds
+Test Suite 'PlaybackStateRecoveryTests' started at 2026-11-14 16:33:03.556.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testExplicitClearRemovesStateFallbackBeforeLaterPlayback]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testExplicitClearRemovesStateFallbackBeforeLaterPlayback]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' passed (0.032 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFailedEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' passed (0.034 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFallbackKeepsSnapshotMetadataAndLatestProgressFields]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFallbackKeepsSnapshotMetadataAndLatestProgressFields]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentPlayedAfterCanonicalEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentPlayedAfterCanonicalEviction]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentUnplayedAfterCanonicalEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesIndependentUnplayedAfterCanonicalEviction]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesPlayedWhenCanonicalItemExists]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesPlayedWhenCanonicalItemExists]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesUnplayedWhenCanonicalItemExists]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testFinalWritePreservesUnplayedWhenCanonicalItemExists]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testIndependentStateFallbackRemainsTenantScoped]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testIndependentStateFallbackRemainsTenantScoped]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesPlayedAfterLRUEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesPlayedAfterLRUEviction]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesUnplayedAfterLRUEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testMemoryFinalWritePreservesUnplayedAfterLRUEviction]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testRepositoryFinalWritePreservesPlayedAfterDiskEviction]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testRepositoryFinalWritePreservesPlayedAfterDiskEviction]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsMarkedStateInEveryMemoryProjection]' passed (0.035 seconds).
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' started.
+Test Case '-[MetadataKitTests.PlaybackStateRecoveryTests testSuccessfulEpisodeReplyKeepsUnplayedStateInEveryMemoryProjection]' passed (0.037 seconds).
+Test Suite 'PlaybackStateRecoveryTests' passed at 2026-11-14 16:33:03.741.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.184 (0.185) seconds
+Test Suite 'ProgressEvictionTests' started at 2026-11-14 16:33:03.741.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testConfirmedProgressAllowsEvictionButStillBlocksVeryLateReplies]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testConfirmedProgressAllowsEvictionButStillBlocksVeryLateReplies]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testEvictionCompactsConfirmedMetadataAndKeepsPendingMetadata]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testEvictionCompactsConfirmedMetadataAndKeepsPendingMetadata]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testOfflineRailsAndPagesUseIndependentProgressAfterEviction]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testOfflineRailsAndPagesUseIndependentProgressAfterEviction]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesAutomaticMetadataEvictionAndReopen]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesAutomaticMetadataEvictionAndReopen]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesReopenWhenMetadataLimitIsNotReached]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testPendingPositionSurvivesReopenWhenMetadataLimitIsNotReached]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.ProgressEvictionTests testV4MigrationPreservesPendingAndConfirmedV3Records]' started.
+Test Case '-[MetadataKitTests.ProgressEvictionTests testV4MigrationPreservesPendingAndConfirmedV3Records]' passed (0.020 seconds).
+Test Suite 'ProgressEvictionTests' passed at 2026-11-14 16:33:03.797.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.055 (0.056) seconds
+Test Suite 'ProgressOperationBoundaryTests' started at 2026-11-14 16:33:03.797.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testDirectAuthoritativeStateUsesTheSameBoundary]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testDirectAuthoritativeStateUsesTheSameBoundary]' passed (0.029 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitCacheClearDiscardsDiskAndMemoryProtection]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitCacheClearDiscardsDiskAndMemoryProtection]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitFenceIsTenantScopedAndSurvivesMetadataEviction]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testExplicitFenceIsTenantScopedAndSurvivesMetadataEviction]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightReplyCannotUndoUnplayedAndNewerReplyCanTakeOver]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightReplyCannotUndoUnplayedAndNewerReplyCanTakeOver]' passed (0.029 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightResponseCannotUndoExplicitPlayedMark]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testInflightResponseCannotUndoExplicitPlayedMark]' passed (0.027 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkBoundarySurvivesEvictionWhileOlderRequestIsInflight]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkBoundarySurvivesEvictionWhileOlderRequestIsInflight]' passed (0.030 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkPlayedWithoutOlderInflightResponsePreservesState]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testMarkPlayedWithoutOlderInflightResponsePreservesState]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderExplicitWriteCannotUndoNewerFinalPosition]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderExplicitWriteCannotUndoNewerFinalPosition]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderFinalWriteCannotUndoNewerExplicitMark]' started.
+Test Case '-[MetadataKitTests.ProgressOperationBoundaryTests testOlderFinalWriteCannotUndoNewerExplicitMark]' passed (0.005 seconds).
+Test Suite 'ProgressOperationBoundaryTests' passed at 2026-11-14 16:33:03.938.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.140 (0.140) seconds
+Test Suite 'QueuedPlaybackProgressTests' started at 2026-11-14 16:33:03.938.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewerCapturedSnapshotCanReplaceAnExplicitState]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewerCapturedSnapshotCanReplaceAnExplicitState]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionKeepsTheNewerPendingDiskPositionUntilConfirmed]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionKeepsTheNewerPendingDiskPositionUntilConfirmed]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionUsesDiskConfirmationWithoutFreezingLaterRemoteState]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testNewSessionUsesDiskConfirmationWithoutFreezingLaterRemoteState]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerExplicitStateInMemoryAndDisk]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerExplicitStateInMemoryAndDisk]' passed (0.015 seconds).
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerFinalPositionInMemoryAndDisk]' started.
+Test Case '-[MetadataKitTests.QueuedPlaybackProgressTests testOlderSnapshotKeepsNewerFinalPositionInMemoryAndDisk]' passed (0.006 seconds).
+Test Suite 'QueuedPlaybackProgressTests' passed at 2026-11-14 16:33:03.987.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.049 (0.049) seconds
+Test Suite 'RustCacheIntegrationTests' started at 2026-11-14 16:33:03.987.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testAllTypedCacheReadsRetainWideIntegersAndSkipMalformedPayloads]' passed (0.022 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testProductionCacheActivatesAndBothClientsReadTheSameDatabase]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' started.
+Test Case '-[MetadataKitTests.RustCacheIntegrationTests testReplacementSnapshotsTMDbExpiryAndAtomicRollbackAcrossClients]' passed (0.009 seconds).
+Test Suite 'RustCacheIntegrationTests' passed at 2026-11-14 16:33:04.031.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.044 (0.045) seconds
+Test Suite 'RustMediaRepositoryTests' started at 2026-11-14 16:33:04.032.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testCancelledWaiterAndInvalidationDoNotCancelOrRetireSharedRefresh]' passed (0.365 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testEveryMemoryBucketMatchesNativeLRUAcrossMutationAndWideIntegerCorpus]' passed (2.914 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testNativeAndCoreDatabaseMigrationRebuildAndFileAccountingMatch]' passed (0.024 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testPublicMemoryOnlyRepositoryHomeDetailPageAndProgressMatchIndependentNative]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testStructuredPageAndEpisodeKeysRetainNativeIdentity]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' started.
+Test Case '-[MetadataKitTests.RustMediaRepositoryTests testUnrecoverableDatabaseParentFailureIsReturnedByBothImplementations]' passed (0.004 seconds).
+Test Suite 'RustMediaRepositoryTests' passed at 2026-11-14 16:33:07.351.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 3.318 (3.319) seconds
+Test Suite 'RustProgressCompatibilityTests' started at 2026-11-14 16:33:07.351.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testRustCreatesDatabaseSwiftMigratesAndReadsIndependentProgress]' started.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testRustCreatesDatabaseSwiftMigratesAndReadsIndependentProgress]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testSwiftWritesRustReadsAndRustUpdatesCanonicalSwiftPayload]' started.
+Test Case '-[MetadataKitTests.RustProgressCompatibilityTests testSwiftWritesRustReadsAndRustUpdatesCanonicalSwiftPayload]' passed (0.010 seconds).
+Test Suite 'RustProgressCompatibilityTests' passed at 2026-11-14 16:33:07.365.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.014 (0.015) seconds
+Test Suite 'RustRepositoryCompositionTests' started at 2026-11-14 16:33:07.365.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testAllHomePartialFailureCombinationsMatchNativeWithoutExtraRequests]' passed (0.071 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testDiskPageReductionMatchesIndependentNativeAcrossGapsAndDuplicates]' passed (0.080 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryCompositionTests testSeriesMissingHintSpecialSeasonAndCollectionFallbackMatchNative]' passed (0.051 seconds).
+Test Suite 'RustRepositoryCompositionTests' passed at 2026-11-14 16:33:07.568.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.202 (0.202) seconds
+Test Suite 'RustRepositoryFlowTests' started at 2026-11-14 16:33:07.568.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testCompleteDiskAndMemoryOnlyReadsMatchNativeWithoutNetworkEffects]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testCompleteDiskAndMemoryOnlyReadsMatchNativeWithoutNetworkEffects]' passed (0.023 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testConcurrentDetailWaitersAndAuxiliaryFailureMatchNativeRequestCounts]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testConcurrentDetailWaitersAndAuxiliaryFailureMatchNativeRequestCounts]' passed (0.191 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testEveryPublicRefreshUsesRetainedFlowsAndRetiresPrimaryFailure]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testEveryPublicRefreshUsesRetainedFlowsAndRetiresPrimaryFailure]' passed (0.018 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPageIdentityMatchesNativeFullDescriptorAndSignedWindowCorpus]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPageIdentityMatchesNativeFullDescriptorAndSignedWindowCorpus]' passed (0.053 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPrefetchAndCollectionConveniencesKeepNativeNetworkAndProjectionBehavior]' started.
+Test Case '-[MetadataKitTests.RustRepositoryFlowTests testPrefetchAndCollectionConveniencesKeepNativeNetworkAndProjectionBehavior]' passed (0.008 seconds).
+Test Suite 'RustRepositoryFlowTests' passed at 2026-11-14 16:33:07.862.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.293 (0.294) seconds
+Test Suite 'RustRepositoryProgressTests' started at 2026-11-14 16:33:07.862.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testAllPublicProjectionsConfirmAndReplaceProgressLikeIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testAllPublicProjectionsConfirmAndReplaceProgressLikeIndependentNative]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testForeignDiskConfirmationAndOwnedPostShutdownFinalWriteMatchNative]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testForeignDiskConfirmationAndOwnedPostShutdownFinalWriteMatchNative]' passed (0.030 seconds).
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testRemoteConfirmationMatchesNativeAtSignedDateAndOneSecondBoundaries]' started.
+Test Case '-[MetadataKitTests.RustRepositoryProgressTests testRemoteConfirmationMatchesNativeAtSignedDateAndOneSecondBoundaries]' passed (0.070 seconds).
+Test Suite 'RustRepositoryProgressTests' passed at 2026-11-14 16:33:07.975.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.113 (0.114) seconds
+Test Suite 'RustTMDbEnrichmentTests' started at 2026-11-14 16:33:07.975.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testAiringAndFreshnessDecisionsMatchNativeAcrossCompleteDateCases]' passed (0.037 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testBatchAiringSeasonRefreshUnsupportedCountsAndResumeMatchNative]' passed (0.109 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCancellationInProgressStopsRefillAndDrainsFourEnteredWorkers]' passed (0.416 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCollectionResolutionBudgetManualBindingAndExactCacheIDsMatchNative]' passed (0.109 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testCompleteRefreshAuthorityFreshnessSearchAndFailureModelsMatchNative]' passed (0.081 seconds).
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbEnrichmentTests testSingleFlightLanguageIsolationFailureAndRetirementMatchNative]' passed (0.733 seconds).
+Test Suite 'RustTMDbEnrichmentTests' passed at 2026-11-14 16:33:09.460.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 1.484 (1.485) seconds
+Test Suite 'RustTMDbIntegrationTests' started at 2026-11-14 16:33:09.460.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' started.
+Test Case '-[MetadataKitTests.RustTMDbIntegrationTests testNativeMetadataFallbackEndpointAuthSeasonAndErrorParity]' passed (0.850 seconds).
+Test Suite 'RustTMDbIntegrationTests' passed at 2026-11-14 16:33:10.311.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.850 (0.851) seconds
+Test Suite 'RustTMDbMatcherTests' started at 2026-11-14 16:33:10.311.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testAllScoreTiersStableAlternativesAndExactIdentifiers]' passed (0.321 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testCompleteInjectedSearchFlowMatchesIndependentNative]' passed (0.044 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testProviderParentBoundaryAndDisabledSearch]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' started.
+Test Case '-[MetadataKitTests.RustTMDbMatcherTests testReferenceUnicodeNormalizationAndYearCorpus]' passed (1.102 seconds).
+Test Suite 'RustTMDbMatcherTests' passed at 2026-11-14 16:33:11.788.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 1.477 (1.477) seconds
+Test Suite 'RustTMDbWireTests' started at 2026-11-14 16:33:11.788.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testCompleteSharedWireModelsMatchNativeJSONObjectDecoding]' passed (0.101 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testMalformedEncodingAndObjectErrorsNeverBecomeSuccessfulEmptyModels]' passed (0.057 seconds).
+Test Case '-[MetadataKitTests.RustTMDbWireTests testSignedRequestRangesAndEpisodeSearchYearSuppression]' started.
+Test Case '-[MetadataKitTests.RustTMDbWireTests testSignedRequestRangesAndEpisodeSearchYearSuppression]' passed (0.056 seconds).
+Test Suite 'RustTMDbWireTests' passed at 2026-11-14 16:33:12.003.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.214 (0.215) seconds
+Test Suite 'TMDbBatchConcurrencyTests' started at 2026-11-14 16:33:12.003.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancellationStillWorks]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancellationStillWorks]' passed (0.095 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancelStopsFurtherDispatch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testCancelStopsFurtherDispatch]' passed (0.074 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testConcurrentRunKeepsResultCounts]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testConcurrentRunKeepsResultCounts]' passed (0.136 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testEnrichAllIssuesConcurrentRequests]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testEnrichAllIssuesConcurrentRequests]' passed (0.715 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testNonVideoKindsStillCounted]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testNonVideoKindsStillCounted]' passed (0.034 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testProcessedAggregatesContributionNotHardcoded]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testProcessedAggregatesContributionNotHardcoded]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testWorkerWindowNeverExceedsConcurrencyLimit]' started.
+Test Case '-[MetadataKitTests.TMDbBatchConcurrencyTests testWorkerWindowNeverExceedsConcurrencyLimit]' passed (0.042 seconds).
+Test Suite 'TMDbBatchConcurrencyTests' passed at 2026-11-14 16:33:13.115.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 1.111 (1.112) seconds
+Test Suite 'TMDbBatchTests' started at 2026-11-14 16:33:13.115.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchRefetchesStaleAiringSeasonButSkipsFinishedOne]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchRefetchesStaleAiringSeasonButSkipsFinishedOne]' passed (0.013 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchWithoutKeyIsNoOp]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testBatchWithoutKeyIsNoOp]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testCancellationKeepsWhatWasDone]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testCancellationKeepsWhatWasDone]' passed (0.073 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testEmptyListIsNoOp]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testEmptyListIsNoOp]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testEnrichesAllAndReportsProgress]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testEnrichesAllAndReportsProgress]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindFetchesImmediately]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindFetchesImmediately]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindSurvivesAutoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualBindSurvivesAutoMatch]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualSearch]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testManualSearch]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testMovieDoesNotFetchSeasons]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testMovieDoesNotFetchSeasons]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testNonVideoKindsAreSkippedButCounted]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testNonVideoKindsAreSkippedButCounted]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testOneFailureDoesNotStopTheRest]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testOneFailureDoesNotStopTheRest]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testSecondRunSkipsFreshItemsWithoutNetwork]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testSecondRunSkipsFreshItemsWithoutNetwork]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testSeriesAlsoFetchesItsSeasons]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testSeriesAlsoFetchesItsSeasons]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbBatchTests testUnbindClearsLink]' started.
+Test Case '-[MetadataKitTests.TMDbBatchTests testUnbindClearsLink]' passed (0.007 seconds).
+Test Suite 'TMDbBatchTests' passed at 2026-11-14 16:33:13.283.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.166 (0.167) seconds
+Test Suite 'TMDbClientTests' started at 2026-11-14 16:33:13.283.
+Test Case '-[MetadataKitTests.TMDbClientTests testCollectionDetailDecodesNameAndImages]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testCollectionDetailDecodesNameAndImages]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testImageSizePicksNearestLargerBucket]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testImageSizePicksNearestLargerBucket]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testImageURLUsesPlaceholderFreeCDN]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testImageURLUsesPlaceholderFreeCDN]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testLanguageFallbackIsPerField]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testLanguageFallbackIsPerField]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testMalformedJSONThrowsDecoding]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testMalformedJSONThrowsDecoding]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testMissingKeyThrowsNotConfigured]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testMissingKeyThrowsNotConfigured]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieDetailDecodesBelongsToCollection]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieDetailDecodesBelongsToCollection]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieDetailDecodesFullEntity]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieDetailDecodesFullEntity]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieWithoutCollectionDecodesToNil]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testMovieWithoutCollectionDecodesToNil]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testNoFallbackRequestWhenPrimaryIsComplete]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testNoFallbackRequestWhenPrimaryIsComplete]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testNotFoundSurfacesAsNotFound]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testNotFoundSurfacesAsNotFound]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testRateLimiterBoundsConcurrency]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testRateLimiterBoundsConcurrency]' passed (0.034 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testRateLimiterEnforcesMinimumInterval]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testRateLimiterEnforcesMinimumInterval]' passed (0.218 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testRetriesOnServerError]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testRetriesOnServerError]' passed (0.536 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testSearchResultsDecodeYearFromDate]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testSearchResultsDecodeYearFromDate]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testSeasonDecodesAllEpisodesInOneRequest]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testSeasonDecodesAllEpisodesInOneRequest]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testTVDetailDecodesSeasons]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testTVDetailDecodesSeasons]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testUnauthorizedAndRateLimitAreDistinguished]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testUnauthorizedAndRateLimitAreDistinguished]' passed (2.712 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testV3KeyUsesQueryParameter]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testV3KeyUsesQueryParameter]' passed (0.003 seconds).
+Test Case '-[MetadataKitTests.TMDbClientTests testV4TokenUsesBearerHeader]' started.
+Test Case '-[MetadataKitTests.TMDbClientTests testV4TokenUsesBearerHeader]' passed (0.002 seconds).
+Test Suite 'TMDbClientTests' passed at 2026-11-14 16:33:16.800.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 3.514 (3.517) seconds
+Test Suite 'TMDbCollectionTests' started at 2026-11-14 16:33:16.800.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionFallsThroughToLaterMember]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionFallsThroughToLaterMember]' passed (0.020 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionResolvesThroughMemberBelongsToCollection]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionResolvesThroughMemberBelongsToCollection]' passed (0.014 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionSkipsWhenFreshWithoutAnyRequest]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionSkipsWhenFreshWithoutAnyRequest]' passed (0.012 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutMemberIDsDoesNothing]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutMemberIDsDoesNothing]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutTMDbCounterpartIsNotLinked]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testCollectionWithoutTMDbCounterpartIsNotLinked]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testDirtyProviderIDsAreIgnored]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testDirtyProviderIDsAreIgnored]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testFreshCacheReportsSkipped]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testFreshCacheReportsSkipped]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testLookupFailureIsFailedNotNoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testLookupFailureIsFailedNotNoMatch]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testPartialFailureStillResolves]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testPartialFailureStillResolves]' passed (0.011 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSeriesMembersAreNotUsedForLookup]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSeriesMembersAreNotUsedForLookup]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSuccessfulLookupWithoutMembershipIsNoMatch]' started.
+Test Case '-[MetadataKitTests.TMDbCollectionTests testSuccessfulLookupWithoutMembershipIsNoMatch]' passed (0.006 seconds).
+Test Suite 'TMDbCollectionTests' passed at 2026-11-14 16:33:16.909.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.108 (0.109) seconds
+Test Suite 'TMDbEndpointSettingsTests' started at 2026-11-14 16:33:16.909.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseAppendsVersionSegmentWhenOnlyHostGiven]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseAppendsVersionSegmentWhenOnlyHostGiven]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseKeepsExplicitPath]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseKeepsExplicitPath]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseNormalizesCaseAndStripsQuery]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseNormalizesCaseAndStripsQuery]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseRejectsMalformedValues]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testAPIBaseRejectsMalformedValues]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testClientRequestsMirroredAPIBase]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testClientRequestsMirroredAPIBase]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testDefaultsToOfficialEndpoints]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testDefaultsToOfficialEndpoints]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testDisabledSwitchIgnoresStoredMirrors]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testDisabledSwitchIgnoresStoredMirrors]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testEnabledUsesMirrorsIndependently]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testEnabledUsesMirrorsIndependently]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseAppendsSizePrefixWhenOnlyHostGiven]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseAppendsSizePrefixWhenOnlyHostGiven]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseDropsPastedSizeSegment]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseDropsPastedSizeSegment]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseKeepsExplicitPath]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseKeepsExplicitPath]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseRejectsMalformedValues]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageBaseRejectsMalformedValues]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageURLUsesMirroredImageBase]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testImageURLUsesMirroredImageBase]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testInvalidValueFallsBackPerField]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testInvalidValueFallsBackPerField]' passed (0.002 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testKeyLiteralsAreStable]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testKeyLiteralsAreStable]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testTMDbImageHostJudgementFollowsEndpoints]' started.
+Test Case '-[MetadataKitTests.TMDbEndpointSettingsTests testTMDbImageHostJudgementFollowsEndpoints]' passed (0.000 seconds).
+Test Suite 'TMDbEndpointSettingsTests' passed at 2026-11-14 16:33:16.918.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.008 (0.009) seconds
+Test Suite 'TMDbEnricherTests' started at 2026-11-14 16:33:16.918.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAiringSeasonStoresRegularExpiry]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAiringSeasonStoresRegularExpiry]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeLinkIsNeverOverwritten]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeLinkIsNeverOverwritten]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeProviderIDReplacesSearchGuess]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testAuthoritativeProviderIDReplacesSearchGuess]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testConcurrentFetchesAreCoalesced]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testConcurrentFetchesAreCoalesced]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testDisabledWhenNoKey]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testDisabledWhenNoKey]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeTmdbIDIsNotTreatedAsAuthoritative]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeTmdbIDIsNotTreatedAsAuthoritative]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeUsesSeriesLinkAndFetchesSeasonOnce]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeUsesSeriesLinkAndFetchesSeasonOnce]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeWithoutSeriesLinkDoesNothing]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testEpisodeWithoutSeriesLinkDoesNothing]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFinishedSeasonWithLongCacheSkipsRefetch]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFinishedSeasonWithLongCacheSkipsRefetch]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFreshnessJudgement]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testFreshnessJudgement]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLanguageAffectsStoredData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLanguageAffectsStoredData]' passed (0.010 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLinkedCountAndClear]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testLinkedCountAndClear]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testNotFoundDoesNotStoreLink]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testNotFoundDoesNotStoreLink]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlayRefreshesExpiredData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlayRefreshesExpiredData]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlaySkipsAlreadyFreshData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testOverlaySkipsAlreadyFreshData]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testProviderIDPathSkipsSearchAndStores]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testProviderIDPathSkipsSearchAndStores]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathSkipsWhenNotConfident]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathSkipsWhenNotConfident]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathStoresWhenConfident]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSearchPathStoresWhenConfident]' passed (0.008 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonAiringDetection]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonAiringDetection]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonFinaleWithinGraceStillRefetches]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonFinaleWithinGraceStillRefetches]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayProvidesEpisodeData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayProvidesEpisodeData]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayRejectsNonTVLink]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonOverlayRejectsNonTVLink]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonRefreshSkipsFreshData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonRefreshSkipsFreshData]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonsAreStoredSeparately]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSeasonsAreStoredSeparately]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testStaleAiringSeasonWithLongCacheStillRefetches]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testStaleAiringSeasonWithLongCacheStillRefetches]' passed (0.007 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSuccessClearsPreviousFailure]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testSuccessClearsPreviousFailure]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testTransportFailureKeepsExistingData]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testTransportFailureKeepsExistingData]' passed (0.009 seconds).
+Test Case '-[MetadataKitTests.TMDbEnricherTests testUnauthorizedIsRecordedAsFailure]' started.
+Test Case '-[MetadataKitTests.TMDbEnricherTests testUnauthorizedIsRecordedAsFailure]' passed (0.007 seconds).
+Test Suite 'TMDbEnricherTests' passed at 2026-11-14 16:33:17.119.
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.198 (0.200) seconds
+Test Suite 'TMDbMatcherTests' started at 2026-11-14 16:33:17.119.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testDirtyProviderIDsAreIgnored]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testDirtyProviderIDsAreIgnored]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testDoesNotSearchOriginalWhenPrimarySucceeds]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testDoesNotSearchOriginalWhenPrimarySucceeds]' passed (0.001 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testEpisodeUsesSeriesLinkNotItsOwnTmdbID]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testEpisodeUsesSeriesLinkNotItsOwnTmdbID]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testEpisodeWithoutSeriesLinkDoesNotFallBackToSearch]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testEpisodeWithoutSeriesLinkDoesNotFallBackToSearch]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testExactTitleAndYearIsAutoApplied]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testExactTitleAndYearIsAutoApplied]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testExactTitleButWrongYearIsNotAutoApplied]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testExactTitleButWrongYearIsNotAutoApplied]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testFallsBackToOriginalTitleSearch]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testFallsBackToOriginalTitleSearch]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testMissingYearIsNotAutoApplied]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testMissingYearIsNotAutoApplied]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testOriginalTitleMatchCounts]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testOriginalTitleMatchCounts]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testPicksHighestScoringCandidateAndKeepsAlternatives]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testPicksHighestScoringCandidateAndKeepsAlternatives]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testProviderIDWinsWithFullConfidence]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testProviderIDWinsWithFullConfidence]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSearchDisabledSkipsNetwork]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSearchDisabledSkipsNetwork]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSearchUsesYearFromTitleWhenFieldMissing]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSearchUsesYearFromTitleWhenFieldMissing]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSeasonUsesSeriesLink]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSeasonUsesSeriesLink]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSeasonWithoutNumberGivesUp]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testSeasonWithoutNumberGivesUp]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testServerYearWinsOverTitleYear]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testServerYearWinsOverTitleYear]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationIgnoresPunctuationAndCase]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationIgnoresPunctuationAndCase]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationKeepsDistinguishingNumbers]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationKeepsDistinguishingNumbers]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationStripsSeasonSuffix]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTitleNormalizationStripsSeasonSuffix]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTVProviderIDMakesTVKey]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testTVProviderIDMakesTVKey]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testUnrelatedTitleScoresLow]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testUnrelatedTitleScoresLow]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testYearExtractionFromTitle]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testYearExtractionFromTitle]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbMatcherTests testYearOffByOneIsNotAutoApplied]' started.
+Test Case '-[MetadataKitTests.TMDbMatcherTests testYearOffByOneIsNotAutoApplied]' passed (0.000 seconds).
+Test Suite 'TMDbMatcherTests' passed at 2026-11-14 16:33:17.129.
+	 Executed 23 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'TMDbOverlayTests' started at 2026-11-14 16:33:17.129.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testBackdropFollowsSameRule]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testBackdropFollowsSameRule]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastIDsArePrefixed]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastIDsArePrefixed]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastMappingCarriesActorKind]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastMappingCarriesActorKind]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastProfilePathIsResolvableFromPersonID]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCastProfilePathIsResolvableFromPersonID]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCollectionKeyShape]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testCollectionKeyShape]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEmptyOverlayLeavesServerValuesUntouched]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEmptyOverlayLeavesServerValuesUntouched]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEmptyServerEpisodeNameUsesTMDb]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEmptyServerEpisodeNameUsesTMDb]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityKeyRejectsGarbage]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityKeyRejectsGarbage]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityKeyRoundTrips]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityKeyRoundTrips]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityOverlayHasNoEpisodes]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEntityOverlayHasNoEpisodes]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEpisodeLookupAndStillPath]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEpisodeLookupAndStillPath]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEpisodeOverviewFollowsPolicy]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testEpisodeOverviewFollowsPolicy]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testFallsBackToServerWhenTMDbHasNoImage]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testFallsBackToServerWhenTMDbHasNoImage]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testGenresAndRatingFollowSamePolicy]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testGenresAndRatingFollowSamePolicy]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testIdentifiesTMDbImages]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testIdentifiesTMDbImages]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testMissingTMDbEpisodeFallsBackToServerValue]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testMissingTMDbEpisodeFallsBackToServerValue]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testNotPreferTMDbOnlyFillsGaps]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testNotPreferTMDbOnlyFillsGaps]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPlaceholderEpisodeNameIsReplacedEvenWhenTMDbIsNotPreferred]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPlaceholderEpisodeNameIsReplacedEvenWhenTMDbIsNotPreferred]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPlaceholderNameDetection]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPlaceholderNameDetection]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterOnlyFillsMissingWhenDisabled]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterOnlyFillsMissingWhenDisabled]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterPrefersTMDbByDefault]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterPrefersTMDbByDefault]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterReplacesWhenPolicyAllows]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPosterReplacesWhenPolicyAllows]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPreferTMDbReplacesServerText]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testPreferTMDbReplacesServerText]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testRealServerEpisodeTitleIsKeptWhenNotPreferred]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testRealServerEpisodeTitleIsKeptWhenNotPreferred]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testSeasonKeyExposesParentTVID]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testSeasonKeyExposesParentTVID]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testServerCastIsLeftAlone]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testServerCastIsLeftAlone]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testTMDbEmptyStringFallsBackToServerValue]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testTMDbEmptyStringFallsBackToServerValue]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbOverlayTests testTMDbPlaceholderDoesNotReplaceRealServerTitle]' started.
+Test Case '-[MetadataKitTests.TMDbOverlayTests testTMDbPlaceholderDoesNotReplaceRealServerTitle]' passed (0.000 seconds).
+Test Suite 'TMDbOverlayTests' passed at 2026-11-14 16:33:17.134.
+	 Executed 28 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
+Test Suite 'TMDbStoreTests' started at 2026-11-14 16:33:17.134.
+Test Case '-[MetadataKitTests.TMDbStoreTests testAuthoritativeSourcesAreMarked]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testAuthoritativeSourcesAreMarked]' passed (0.000 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testClearKeepsEntitiesStillUsedByOtherTenant]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testClearKeepsEntitiesStillUsedByOtherTenant]' passed (0.006 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testClearRemovesLinksAndOrphanEntities]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testClearRemovesLinksAndOrphanEntities]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testEntitiesAreSharedAcrossTenants]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testEntitiesAreSharedAcrossTenants]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testEntityRoundTrips]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testEntityRoundTrips]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testEvictsExpiredEntities]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testEvictsExpiredEntities]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testExpiryIsRecordedAndDetectable]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testExpiryIsRecordedAndDetectable]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testLanguagesAreStoredSeparately]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testLanguagesAreStoredSeparately]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinkRoundTripsSourceAndConfidence]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinkRoundTripsSourceAndConfidence]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinksAreTenantScoped]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinksAreTenantScoped]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinkUpsertReplacesPrevious]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testLinkUpsertReplacesPrevious]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testMigrationPreservesExistingData]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testMigrationPreservesExistingData]' passed (0.018 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testMismatchedPayloadIsTreatedAsMiss]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testMismatchedPayloadIsTreatedAsMiss]' passed (0.005 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testMoviePayloadDoesNotSatisfyTVKey]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testMoviePayloadDoesNotSatisfyTVKey]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testRemoveLink]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testRemoveLink]' passed (0.004 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testReopeningIsIdempotent]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testReopeningIsIdempotent]' passed (0.021 seconds).
+Test Case '-[MetadataKitTests.TMDbStoreTests testSeasonRoundTrips]' started.
+Test Case '-[MetadataKitTests.TMDbStoreTests testSeasonRoundTrips]' passed (0.004 seconds).
+Test Suite 'TMDbStoreTests' passed at 2026-11-14 16:33:17.235.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.100 (0.102) seconds
+Test Suite 'MetadataKitTests.xctest' passed at 2026-11-14 16:33:17.235.
+	 Executed 303 tests, with 0 failures (0 unexpected) in 14.136 (14.165) seconds
+Test Suite 'All tests' passed at 2026-11-14 16:33:17.235.
+	 Executed 303 tests, with 0 failures (0 unexpected) in 14.136 (14.166) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite MetadataSnapshotTests started.
+◇ Suite MetadataDatabaseTests started.
+◇ Suite MetadataStoreTests started.
+◇ Test pageKeySeparatesSearchSortAndWatchState() started.
+◇ Test railRoundTripsSelfContainedSnapshot() started.
+◇ Test pageKeyIsOrderInsensitiveForKinds() started.
+◇ Suite PosterCandidatesTests started.
+◇ Test mediaFileInfoRoundTrips() started.
+◇ Test librariesRoundTripInOrder() started.
+◇ Test railSurvivesItemEviction() started.
+◇ Test clearAllWipesEveryTable() started.
+◇ Test evictionKeepsNewestAndReportsCount() started.
+◇ Test savingLibrariesReplacesPreviousSet() started.
+◇ Test corruptDatabaseIsRebuilt() started.
+◇ Test createsDatabaseAndSchema() started.
+◇ Test evictionIsNoOpUnderLimit() started.
+◇ Test pageRoundTripsWithTotalCount() started.
+◇ Test pageKeySeparatesWindows() started.
+◇ Test reopensExistingDatabase() started.
+◇ Test railOverwritesSameName() started.
+◇ Test updatePlayStateUpdatesPayloadButNotMetadataTimestamp() started.
+◇ Test tenantIgnoresBaseURL() started.
+◇ Test progressStalenessIsIndependentOfMetadata() started.
+◇ Test tenantIDDerivation() started.
+◇ Test unknownPayloadVersionReadsAsMiss() started.
+◇ Test decodesPayloadMissingNewFields() started.
+◇ Test tenantsAreIsolated() started.
+◇ Test unknownKindDecodesAsOther() started.
+◇ Test itemRoundTripsAllFields() started.
+◇ Test bulkReadReturnsOnlyExistingInRequestedOrder() started.
+◇ Test projectionColumnsMatchPayload() started.
+◇ Test limitIsRespected() started.
+◇ Test otherTenantsAreInvisible() started.
+◇ Test onlyMoviesAndSeriesWithAPosterQualify() started.
+◇ Test emptyStoreYieldsNothing() started.
+◇ Test orderIsDeterministicAcrossCalls() started.
+◇ Test scanWindowSkipsPosterlessItems() started.
+✔ Test pageKeyIsOrderInsensitiveForKinds() passed after 0.039 seconds.
+◇ Test candidatesCarryTitleAndYear() started.
+✔ Test librariesRoundTripInOrder() passed after 0.039 seconds.
+✔ Test savingLibrariesReplacesPreviousSet() passed after 0.039 seconds.
+✔ Test mediaFileInfoRoundTrips() passed after 0.054 seconds.
+✔ Test railRoundTripsSelfContainedSnapshot() passed after 0.063 seconds.
+✔ Test evictionKeepsNewestAndReportsCount() passed after 0.063 seconds.
+✔ Test pageKeySeparatesSearchSortAndWatchState() passed after 0.065 seconds.
+✔ Test railSurvivesItemEviction() passed after 0.065 seconds.
+✔ Test clearAllWipesEveryTable() passed after 0.065 seconds.
+✔ Test tenantIgnoresBaseURL() passed after 0.051 seconds.
+✔ Test progressStalenessIsIndependentOfMetadata() passed after 0.051 seconds.
+✔ Test tenantIDDerivation() passed after 0.051 seconds.
+✔ Test unknownPayloadVersionReadsAsMiss() passed after 0.051 seconds.
+✔ Test decodesPayloadMissingNewFields() passed after 0.051 seconds.
+✔ Test pageRoundTripsWithTotalCount() passed after 0.086 seconds.
+✔ Test unknownKindDecodesAsOther() passed after 0.051 seconds.
+✔ Test evictionIsNoOpUnderLimit() passed after 0.086 seconds.
+✔ Test pageKeySeparatesWindows() passed after 0.086 seconds.
+✔ Test railOverwritesSameName() passed after 0.086 seconds.
+✔ Test updatePlayStateUpdatesPayloadButNotMetadataTimestamp() passed after 0.051 seconds.
+✔ Test tenantsAreIsolated() passed after 0.051 seconds.
+✔ Test reopensExistingDatabase() passed after 0.086 seconds.
+✔ Test bulkReadReturnsOnlyExistingInRequestedOrder() passed after 0.051 seconds.
+✔ Test projectionColumnsMatchPayload() passed after 0.051 seconds.
+✔ Test corruptDatabaseIsRebuilt() passed after 0.086 seconds.
+✔ Test itemRoundTripsAllFields() passed after 0.051 seconds.
+✔ Suite MetadataStoreTests passed after 0.086 seconds.
+✔ Suite MetadataSnapshotTests passed after 0.087 seconds.
+✔ Test createsDatabaseAndSchema() passed after 0.091 seconds.
+✔ Suite MetadataDatabaseTests passed after 0.091 seconds.
+✔ Test otherTenantsAreInvisible() passed after 0.053 seconds.
+✔ Test onlyMoviesAndSeriesWithAPosterQualify() passed after 0.055 seconds.
+✔ Test emptyStoreYieldsNothing() passed after 0.059 seconds.
+✔ Test candidatesCarryTitleAndYear() passed after 0.060 seconds.
+✔ Test limitIsRespected() passed after 0.064 seconds.
+✔ Test orderIsDeterministicAcrossCalls() passed after 0.064 seconds.
+✔ Test scanWindowSkipsPosterlessItems() passed after 0.084 seconds.
+✔ Suite PosterCandidatesTests passed after 0.123 seconds.
+✔ Test run with 34 tests in 4 suites passed after 0.123 seconds.

@@ -35,6 +35,7 @@ python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&
 python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.log" 2>&1
 python3 tests/moviepilot_account_contract.py > "$output_dir/moviepilot-account-contract-tests.log" 2>&1
 python3 tests/moviepilot_flow_contract.py > "$output_dir/moviepilot-flow-contract-tests.log" 2>&1
+python3 tests/diagnostic_export_contract.py > "$output_dir/diagnostic-export-contract-tests.log" 2>&1
 python3 tests/media_projection_contract.py > "$output_dir/media-projection-contract-tests.log" 2>&1
 python3 tests/media_nullable_contract.py > "$output_dir/media-nullable-contract-tests.log" 2>&1
 python3 tests/media_login_contract.py > "$output_dir/media-login-contract-tests.log" 2>&1
@@ -53,7 +54,7 @@ python3 tests/media_repository_contract.py > "$output_dir/media-repository-contr
 python3 tests/repository_progress_contract.py > "$output_dir/repository-progress-contract-tests.log" 2>&1
 python3 tests/repository_composition_contract.py > "$output_dir/repository-composition-contract-tests.log" 2>&1
 python3 tests/repository_flow_contract.py > "$output_dir/repository-flow-contract-tests.log" 2>&1
-for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit; do
+for package in OcPlayerCore JellyfinKit MetadataKit MoviePilotKit BangumiKit PlaybackKit DanmakuKit DiagnosticsKit; do
   swift test --package-path "$apple_root/Packages/$package" --skip-update > "$output_dir/$package-tests.log" 2>&1
 done
 xcodebuild -project "$apple_root/OcPlayer.xcodeproj" -scheme OcPlayer-macOS \
