@@ -27,8 +27,8 @@ public sealed class WindowsPlayerSurface : IWindowsPlayerSurface
 
     public void Resize(OcpCoreClient core, uint width, uint height, double scale)
     {
-        (Width, Height, Scale) = (width, height, scale);
         core.ResizeSurface(width, height, scale);
+        (Width, Height, Scale) = (width, height, scale);
     }
 
     public void Detach(OcpCoreClient core) => core.DetachSurface();
