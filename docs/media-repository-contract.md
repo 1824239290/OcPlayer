@@ -77,6 +77,7 @@ observation, confirmation/revision barriers, all projection updates and shutdown
 state now run in Core. Home/detail/page reductions are specified in
 [media-repository-composition.md](media-repository-composition.md). Pagination,
 home deduplication/restoration, detail planning and progress composition now run
-in Core; effect sequencing and failure/fallback assembly remain host work. Neither cohort completes the repository or the
+in Core; complete effect sequencing, cache restoration and failure/fallback assembly
+now use [retained workflows](media-repository-flow.md). Neither cohort completes the repository or the
 full parity goal. Projection/database raw records are retained under
 `validation/2026-11-14-media-repository/`.

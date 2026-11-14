@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
 mod composition;
+mod flow;
 mod progress;
 
 // Swift String/Hashable uses canonical equivalence, recursively through keys.
@@ -86,6 +87,7 @@ pub struct Repository {
     flights: HashMap<String, u64>,
     next_ticket: u64,
     progress: progress::Session,
+    flows: flow::Flows,
 }
 impl Repository {
     fn configure(&mut self, limits: Limits) {
@@ -101,6 +103,9 @@ impl Repository {
         .collect();
     }
     pub fn call(&mut self, method: &str, args: &Value) -> Result<Value, String> {
+        if let Some(method) = method.strip_prefix("flow.") {
+            return flow::call(self, method, args);
+        }
         if let Some(method) = method.strip_prefix("compose.") {
             return composition::call(self, method, args);
         }
@@ -109,7 +114,7 @@ impl Repository {
         }
         if method == "open" {
             let limits: Limits = serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
-            if !self.flights.is_empty() {
+            if !self.flights.is_empty() || !self.flows.is_empty() {
                 return Err("cannot reopen an active repository".into());
             }
             self.configure(limits);

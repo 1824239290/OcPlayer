@@ -62,8 +62,9 @@ progress/concurrency/persistence suite is also exercised with Core activated.
 Complete raw records are in `validation/2026-11-14-repository-progress/`.
 
 Home/detail/page composition policy now runs in Core; see
-[media-repository-composition.md](media-repository-composition.md). Effect
-sequencing and failure/fallback assembly remain native migration work;
+[media-repository-composition.md](media-repository-composition.md). Complete effect
+sequencing and failure/fallback assembly now use
+[retained workflows](media-repository-flow.md);
 account/sync, playback preferences/recovery, transport fidelity, diagnostics,
 Apple release delivery and Windows adapters remain broader parity requirements.
 Windows runtime testing is explicitly deferred, not the adapter implementation.

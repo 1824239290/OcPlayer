@@ -55,3 +55,9 @@ sequencing, failure/fallback assembly and complete acceptance remain follow-up;
 account/sync, playback orchestration, native transport fidelity, configuration,
 release delivery and Windows adapter implementation remain broader goal work.
 Windows runtime testing is deferred by the user.
+
+The complete continuation stage is now implemented in
+[media-repository-flow.md](media-repository-flow.md). All ten cache/refresh flows,
+section failure/fallback assembly, prefetch and effect sequencing run in Core;
+Swift executes the yielded effects and retains platform task handles. Earlier
+remaining-work statements above describe the original composition-only cohort.

@@ -1,0 +1,8 @@
+test_detail_retry_canonical_season_fallback_and_cancel_retirement (__main__.RepositoryFlowContract.test_detail_retry_canonical_season_fallback_and_cancel_retirement) ... ok
+test_home_sequence_empty_success_cancelled_sections_and_preserved_previous_source (__main__.RepositoryFlowContract.test_home_sequence_empty_success_cancelled_sections_and_preserved_previous_source) ... ok
+test_page_persistence_receipts_and_intervening_final_progress (__main__.RepositoryFlowContract.test_page_persistence_receipts_and_intervening_final_progress) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.517s
+
+OK
