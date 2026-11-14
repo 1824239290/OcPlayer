@@ -416,12 +416,12 @@ private struct ConfigBackupSection: View {
     }
 
     private func exportConfig() {
-        let backup = ConfigBackupCoordinator.makeBackup(
-            tmdb: app.tmdb,
-            // 传**原始值**：未自定义时是 nil，不该把内置默认网关写进备份文件。
-            dandanplayGatewayURL: dandanplayStore.gatewayURLString
-        )
         do {
+            let backup = try ConfigBackupCoordinator.makeBackup(
+                tmdb: app.tmdb,
+                // 传**原始值**：未自定义时是 nil，不该把内置默认网关写进备份文件。
+                dandanplayGatewayURL: dandanplayStore.gatewayURLString
+            )
             exportDocument = try ConfigBackupDocument(backup: backup)
             isExporting = true
             statusNotice = nil
@@ -440,7 +440,7 @@ private struct ConfigBackupSection: View {
                 do {
                     let backup = try ConfigBackupCoordinator.readBackup(from: url)
                     pendingBackup = backup
-                    pendingSummary = ConfigBackupCoordinator.summary(of: backup)
+                    pendingSummary = try ConfigBackupCoordinator.summary(of: backup)
                     showImportConfirmation = true
                     statusNotice = nil
                 } catch {
@@ -456,15 +456,20 @@ private struct ConfigBackupSection: View {
 
     private func applyPendingBackup() {
         guard let backup = pendingBackup else { return }
-        ConfigBackupCoordinator.applyBackup(
-            backup,
-            tmdb: app.tmdb,
-            dandanplayStore: dandanplayStore
-        )
-        pendingBackup = nil
-        pendingSummary = nil
-        statusNotice = "配置已成功恢复并生效"
-        isError = false
+        do {
+            try ConfigBackupCoordinator.applyBackup(
+                backup,
+                tmdb: app.tmdb,
+                dandanplayStore: dandanplayStore
+            )
+            pendingBackup = nil
+            pendingSummary = nil
+            statusNotice = "配置已成功恢复并生效"
+            isError = false
+        } catch {
+            statusNotice = "恢复配置失败：\(error.localizedDescription)"
+            isError = true
+        }
     }
 
     private func confirmationMessage(for summary: BackupSummary) -> String {

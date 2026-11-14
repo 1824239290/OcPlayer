@@ -42,7 +42,7 @@ final class ConfigBackupTests: XCTestCase {
         original.setShowPlaceholders(false)
         original.setCacheDays(7)
 
-        let backup = ConfigBackupCoordinator.makeBackup(
+        let backup = try ConfigBackupCoordinator.makeBackup(
             tmdb: original,
             defaults: source,
             deviceName: "MacBook Test",
@@ -78,7 +78,7 @@ final class ConfigBackupTests: XCTestCase {
         let targetTMDb = TMDbCoordinator(defaults: target)
         XCTAssertFalse(targetTMDb.isConfigured, "前置条件：目标环境本来没配")
 
-        ConfigBackupCoordinator.applyBackup(decoded, tmdb: targetTMDb, defaults: target)
+        try ConfigBackupCoordinator.applyBackup(decoded, tmdb: targetTMDb, defaults: target)
 
         XCTAssertTrue(targetTMDb.isConfigured)
         XCTAssertEqual(targetTMDb.rawAPIKey, "test-tmdb-key-987654321")
@@ -93,7 +93,7 @@ final class ConfigBackupTests: XCTestCase {
     /// 「备份里没有凭据」不等于「用户想登出」。
     func testImportWithoutAPIKeyKeepsExistingKey() throws {
         let source = try makeDefaults("nokey-source")
-        let backup = ConfigBackupCoordinator.makeBackup(
+        let backup = try ConfigBackupCoordinator.makeBackup(
             tmdb: TMDbCoordinator(defaults: source), defaults: source)
         XCTAssertNil(backup.tmdb?.apiKey)
 
@@ -101,7 +101,7 @@ final class ConfigBackupTests: XCTestCase {
         let targetTMDb = TMDbCoordinator(defaults: target)
         targetTMDb.setAPIKey("existing-key")
 
-        ConfigBackupCoordinator.applyBackup(backup, tmdb: targetTMDb, defaults: target)
+        try ConfigBackupCoordinator.applyBackup(backup, tmdb: targetTMDb, defaults: target)
         XCTAssertEqual(targetTMDb.rawAPIKey, "existing-key")
     }
 
@@ -117,10 +117,10 @@ final class ConfigBackupTests: XCTestCase {
         source.set(64, forKey: SettingsKeys.httpReadAheadMiB)
         source.set(false, forKey: SettingsKeys.bangumiEnabled)
 
-        let backup = ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
+        let backup = try ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
 
         let target = try makeDefaults("playback-target")
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             backup, tmdb: TMDbCoordinator(defaults: target), defaults: target)
 
         XCTAssertEqual(target.bool(forKey: SettingsKeys.skipIntro), false)
@@ -145,7 +145,7 @@ final class ConfigBackupTests: XCTestCase {
             tmdb: TMDbBackupConfig(apiKey: "partial-key", language: "ja-JP")
         )
 
-        ConfigBackupCoordinator.applyBackup(partial, tmdb: targetTMDb, defaults: target)
+        try ConfigBackupCoordinator.applyBackup(partial, tmdb: targetTMDb, defaults: target)
 
         XCTAssertEqual(targetTMDb.rawAPIKey, "partial-key")
         XCTAssertEqual(targetTMDb.language, "ja-JP")
@@ -164,12 +164,12 @@ final class ConfigBackupTests: XCTestCase {
         source.set(Int(primary), forKey: SettingsKeys.subtitlePrimaryColor)
         source.set(Int(outline), forKey: SettingsKeys.subtitleOutlineColor)
 
-        let backup = ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
+        let backup = try ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
         XCTAssertEqual(backup.playback?.subtitlePrimaryColor, primary)
         XCTAssertEqual(backup.playback?.subtitleOutlineColor, outline)
 
         let target = try makeDefaults("color-target")
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             try ConfigBackupCoordinator.decode(ConfigBackupCoordinator.encode(backup)),
             tmdb: TMDbCoordinator(defaults: target),
             defaults: target
@@ -183,7 +183,7 @@ final class ConfigBackupTests: XCTestCase {
     func testUnsetSubtitleStyleStaysUnsetAfterImport() throws {
         let source = try makeDefaults("tristate-source")
         let tmdb = TMDbCoordinator(defaults: source)
-        let backup = ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
+        let backup = try ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
 
         XCTAssertNil(backup.playback?.subtitleAlignment, "没设过就该是 nil")
         XCTAssertNil(backup.playback?.subtitlePrimaryColor)
@@ -193,17 +193,17 @@ final class ConfigBackupTests: XCTestCase {
         // 目标设备自己设过加粗：导入一份「没设过」的备份不能把它冲掉。
         let target = try makeDefaults("tristate-target")
         target.set(true, forKey: SettingsKeys.subtitleBold)
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             backup, tmdb: TMDbCoordinator(defaults: target), defaults: target)
         XCTAssertEqual(target.bool(forKey: SettingsKeys.subtitleBold), true, "nil 不该覆盖既有设置")
 
         // 反过来：明确设过 false（「就是不加粗」）必须原样搬过去。
         source.set(false, forKey: SettingsKeys.subtitleBold)
-        let explicit = ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
+        let explicit = try ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
         XCTAssertEqual(explicit.playback?.subtitleBold, false, "明确关掉 ≠ 没设过")
 
         let explicitTarget = try makeDefaults("tristate-explicit")
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             explicit, tmdb: TMDbCoordinator(defaults: explicitTarget), defaults: explicitTarget)
         XCTAssertEqual(explicitTarget.object(forKey: SettingsKeys.subtitleBold) as? Bool, false)
     }
@@ -216,13 +216,13 @@ final class ConfigBackupTests: XCTestCase {
         source.set("zh-Hant", forKey: SettingsKeys.subtitleLanguagePreference)
         source.set("artCnnC4F16", forKey: SettingsKeys.lumaUpscaler)
 
-        let backup = ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
+        let backup = try ConfigBackupCoordinator.makeBackup(tmdb: tmdb, defaults: source)
         XCTAssertEqual(backup.playback?.subtitleLanguage, "zh-Hant")
         XCTAssertEqual(backup.playback?.lumaUpscaler, "artCnnC4F16")
 
         // 未设置时导出的是**可解析的**默认 rawValue。
         let fresh = try makeDefaults("enum-fresh")
-        let freshBackup = ConfigBackupCoordinator.makeBackup(
+        let freshBackup = try ConfigBackupCoordinator.makeBackup(
             tmdb: TMDbCoordinator(defaults: fresh), defaults: fresh)
         XCTAssertEqual(freshBackup.playback?.subtitleLanguage, "zh-Hans")
         XCTAssertEqual(freshBackup.playback?.lumaUpscaler, "off")
@@ -232,7 +232,7 @@ final class ConfigBackupTests: XCTestCase {
         var broken = backup
         broken.playback?.subtitleLanguage = "chi"
         broken.playback?.lumaUpscaler = "not-a-mode"
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             broken, tmdb: TMDbCoordinator(defaults: target), defaults: target)
         XCTAssertNil(target.string(forKey: SettingsKeys.subtitleLanguagePreference), "坏档位不写")
         XCTAssertNil(target.string(forKey: SettingsKeys.lumaUpscaler), "坏档位不写")
@@ -242,7 +242,7 @@ final class ConfigBackupTests: XCTestCase {
     /// 显示区域这里尤其容易写错（真实默认 0.75，不是 0.5）。
     func testDanmakuDefaultsMatchAppDefaults() throws {
         let fresh = try makeDefaults("danmaku-fresh")
-        let backup = ConfigBackupCoordinator.makeBackup(
+        let backup = try ConfigBackupCoordinator.makeBackup(
             tmdb: TMDbCoordinator(defaults: fresh), defaults: fresh)
 
         XCTAssertEqual(backup.danmaku?.displayArea, 0.75)
@@ -260,7 +260,7 @@ final class ConfigBackupTests: XCTestCase {
         let tmdb = TMDbCoordinator(defaults: source)
         var store = DandanplaySettingsStore(defaults: source)
 
-        let untouched = ConfigBackupCoordinator.makeBackup(
+        let untouched = try ConfigBackupCoordinator.makeBackup(
             tmdb: tmdb,
             dandanplayGatewayURL: store.gatewayURLString,
             defaults: source)
@@ -268,7 +268,7 @@ final class ConfigBackupTests: XCTestCase {
 
         let custom = try XCTUnwrap(URL(string: "https://my-gateway.example.com"))
         store.gatewayURL = custom
-        let customized = ConfigBackupCoordinator.makeBackup(
+        let customized = try ConfigBackupCoordinator.makeBackup(
             tmdb: tmdb,
             dandanplayGatewayURL: store.gatewayURLString,
             defaults: source)
@@ -279,7 +279,7 @@ final class ConfigBackupTests: XCTestCase {
         let target = try makeDefaults("gateway-target")
         var targetStore = DandanplaySettingsStore(defaults: target)
         targetStore.apiKey = "user-own-key"
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             customized,
             tmdb: TMDbCoordinator(defaults: target),
             dandanplayStore: targetStore,
@@ -304,13 +304,13 @@ final class ConfigBackupTests: XCTestCase {
         // 图片地址留空 → 导出成 nil（不是空串）
         let original = TMDbCoordinator(defaults: source)
 
-        let backup = ConfigBackupCoordinator.makeBackup(tmdb: original, defaults: source)
+        let backup = try ConfigBackupCoordinator.makeBackup(tmdb: original, defaults: source)
         XCTAssertEqual(backup.mirror?.bangumiEnabled, true)
         XCTAssertEqual(backup.mirror?.bangumiRootDomain, "bangumi.lat")
         XCTAssertEqual(backup.mirror?.tmdbEnabled, false)
         XCTAssertEqual(backup.mirror?.tmdbAPIBaseURL, "https://api.tmdb.org/3")
         XCTAssertNil(backup.mirror?.tmdbImageBaseURL)
-        XCTAssertTrue(ConfigBackupCoordinator.summary(of: backup).hasMirror)
+        XCTAssertTrue(try ConfigBackupCoordinator.summary(of: backup).hasMirror)
 
         let decoded = try ConfigBackupCoordinator.decode(ConfigBackupCoordinator.encode(backup))
         XCTAssertEqual(decoded.mirror, backup.mirror, "镜像模块要能原样往返")
@@ -318,7 +318,7 @@ final class ConfigBackupTests: XCTestCase {
         let target = try makeDefaults("mirror-target")
         target.set("https://stale.example/t/p", forKey: SettingsKeys.tmdbMirrorImageBaseURL)
         target.set(true, forKey: SettingsKeys.tmdbMirrorEnabled)
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             decoded, tmdb: TMDbCoordinator(defaults: target), defaults: target)
 
         XCTAssertEqual(target.bool(forKey: SettingsKeys.bangumiMirrorEnabled), true)
@@ -339,7 +339,7 @@ final class ConfigBackupTests: XCTestCase {
         let backup = AppConfigBackup(
             formatVersion: 1, exportedAt: Date(), appVersion: "0.2.1",
             general: GeneralBackupConfig())
-        ConfigBackupCoordinator.applyBackup(
+        try ConfigBackupCoordinator.applyBackup(
             backup, tmdb: TMDbCoordinator(defaults: target), defaults: target)
 
         XCTAssertEqual(target.bool(forKey: SettingsKeys.bangumiMirrorEnabled), true)
@@ -372,7 +372,7 @@ final class ConfigBackupTests: XCTestCase {
         XCTAssertEqual(partialBackup.mirror?.tmdbAPIBaseURL, "https://api.tmdb.org/3")
     }
 
-    func testInvalidJSONThrows() {
+    func testInvalidJSONThrows() throws {
         XCTAssertThrowsError(try ConfigBackupCoordinator.decode(Data())) { error in
             XCTAssertEqual(error as? ConfigBackupError, .emptyData)
         }
@@ -418,7 +418,7 @@ final class ConfigBackupTests: XCTestCase {
 
     // MARK: - 摘要与文档
 
-    func testBackupSummary() {
+    func testBackupSummary() throws {
         let backup = AppConfigBackup(
             formatVersion: 1,
             exportedAt: Date(),
@@ -428,7 +428,7 @@ final class ConfigBackupTests: XCTestCase {
             playback: PlaybackBackupConfig()
         )
 
-        let summary = ConfigBackupCoordinator.summary(of: backup)
+        let summary = try ConfigBackupCoordinator.summary(of: backup)
         XCTAssertTrue(summary.hasTMDb)
         XCTAssertEqual(summary.tmdbKeyTail, "••••1234", "只回显尾 4 位")
         XCTAssertEqual(summary.tmdbLanguage, "zh-CN")
@@ -442,9 +442,9 @@ final class ConfigBackupTests: XCTestCase {
     /// 没配 TMDB 的备份，摘要不能谎称有 Key。
     func testSummaryWithoutKey() throws {
         let source = try makeDefaults("summary-nokey")
-        let backup = ConfigBackupCoordinator.makeBackup(
+        let backup = try ConfigBackupCoordinator.makeBackup(
             tmdb: TMDbCoordinator(defaults: source), defaults: source)
-        let summary = ConfigBackupCoordinator.summary(of: backup)
+        let summary = try ConfigBackupCoordinator.summary(of: backup)
         XCTAssertFalse(summary.hasTMDb)
         XCTAssertNil(summary.tmdbKeyTail)
     }
@@ -474,7 +474,7 @@ final class ConfigBackupTests: XCTestCase {
             "同一份配置应产出逐字节相同的 JSON（sortedKeys 的意义）")
     }
 
-    func testSuggestedFileNameIsJSON() {
+    func testSuggestedFileNameIsJSON() throws {
         let name = ConfigBackupCoordinator.suggestedFileName()
         XCTAssertTrue(name.hasSuffix(".json"), "扩展名不对会让系统选择器按错误类型处理")
         XCTAssertTrue(name.hasPrefix("OcPlayer-配置备份-"))

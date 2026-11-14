@@ -1,6 +1,7 @@
 import DanmakuKit
 import Foundation
 import PlaybackKit
+import OcPlayerCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -45,6 +46,180 @@ enum ConfigBackupCoordinator {
     /// 当前格式版本。加字段不需要动它；**语义变了才 +1**（读的时候 `> 1` 拒绝）。
     nonisolated static let formatVersion = 1
 
+    nonisolated private static let sharedBackup = OcpSettingsBackup()
+    nonisolated static var isCoreBackupActive: Bool { sharedBackup != nil }
+
+    nonisolated private static func mapped<T>(_ operation: () throws -> T) throws -> T {
+        do { return try operation() }
+        catch let error as OcpSettingsBackup.Failure {
+            switch error.kind {
+            case "emptyData": throw ConfigBackupError.emptyData
+            case "unsupportedVersion": throw ConfigBackupError.unsupportedVersion(error.version ?? 0)
+            default: throw ConfigBackupError.invalidFormat(error.message)
+            }
+        }
+    }
+    static func makeBackup(tmdb: TMDbCoordinator, dandanplayGatewayURL: String? = nil,
+                           defaults: UserDefaults = .standard, deviceName: String? = nil,
+                           appVersion: String? = nil) throws -> AppConfigBackup {
+        guard let sharedBackup else {
+            return nativeMakeBackup(tmdb: tmdb, dandanplayGatewayURL: dandanplayGatewayURL,
+                                    defaults: defaults, deviceName: deviceName, appVersion: appVersion)
+        }
+        let formatter = ISO8601DateFormatter()
+        let projection = try mapped {
+            try sharedBackup.snapshot(preferences: preferenceFacts(in: defaults), tmdb: [
+                "apiKey": tmdb.rawAPIKey as Any, "language": tmdb.language,
+                "preferText": tmdb.preferText, "replaceImages": tmdb.replaceImages,
+                "showPlaceholders": tmdb.showPlaceholders, "cacheDays": tmdb.cacheDays,
+            ], exportedAt: formatter.string(from: Date()), appVersion: appVersion ?? AppVersion.currentShortVersion,
+               deviceName: deviceName ?? currentDeviceName(), dandanplayGatewayURL: dandanplayGatewayURL)
+        }
+        return try nativeDecode(projection.backupData)
+    }
+    nonisolated private static func decodeModel(_ data: Data) throws -> AppConfigBackup {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode(AppConfigBackup.self, from: data)
+    }
+    nonisolated static func encode(_ backup: AppConfigBackup) throws -> Data {
+        let native = try nativeEncode(backup)
+        guard let sharedBackup else { return native }
+        let projection = try mapped { try sharedBackup.prepare(native) }
+        return try nativeEncode(decodeModel(projection.backupData))
+    }
+    nonisolated static func decode(_ data: Data) throws -> AppConfigBackup {
+        guard let sharedBackup else { return try nativeDecode(data) }
+        let projection = try mapped { try sharedBackup.decode(data) }
+        return try nativeDecode(projection.backupData)
+    }
+    nonisolated static func summary(of backup: AppConfigBackup) throws -> BackupSummary {
+        guard let sharedBackup else { return nativeSummary(of: backup) }
+        let projection = try mapped { try sharedBackup.prepare(nativeEncode(backup)) }
+        let core = projection.summary
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateStyle = .medium; formatter.timeStyle = .short
+        return BackupSummary(hasTMDb: core.hasTMDb, tmdbKeyTail: core.tmdbKeyTail,
+            tmdbLanguage: core.tmdbLanguage, hasPlayback: core.hasPlayback,
+            hasDanmaku: core.hasDanmaku, hasGeneral: core.hasGeneral, hasMirror: core.hasMirror,
+            exportedAtFormatted: formatter.string(from: backup.exportedAt), deviceName: core.deviceName)
+    }
+    static func applyBackup(_ backup: AppConfigBackup, tmdb: TMDbCoordinator,
+                            dandanplayStore: DandanplaySettingsStore? = nil,
+                            defaults: UserDefaults = .standard) throws {
+        guard let sharedBackup else {
+            nativeApplyBackup(backup, tmdb: tmdb, dandanplayStore: dandanplayStore, defaults: defaults)
+            return
+        }
+        let projection = try mapped { try sharedBackup.prepare(nativeEncode(backup)) }
+        // Decode every effect before any preference or coordinator is changed.
+        let effects = try projection.effects.map { effect in
+            guard ["preferences", "tmdb", "dandanplay"].contains(effect.target),
+                  ["set", "remove"].contains(effect.operation),
+                  effect.target != "preferences" || preferenceKeys[effect.field] != nil else {
+                throw ConfigBackupError.invalidFormat("Unknown Core backup effect")
+            }
+            let value = try effect.value()
+            let valid: Bool
+            if effect.target == "tmdb" {
+                switch effect.field {
+                case "tmdb.apiKey", "tmdb.language": valid = value is String && effect.operation == "set"
+                case "tmdb.preferText", "tmdb.replaceImages", "tmdb.showPlaceholders": valid = value is Bool && effect.operation == "set"
+                case "tmdb.cacheDays": valid = value is NSNumber && effect.operation == "set"
+                default: valid = false
+                }
+            } else if effect.target == "dandanplay" {
+                valid = effect.field == "danmaku.dandanplayGatewayURL" && value is String && effect.operation == "set"
+            } else if effect.operation == "remove" {
+                valid = ["mirror.bangumiRootDomain", "mirror.tmdbAPIBaseURL", "mirror.tmdbImageBaseURL"].contains(effect.field)
+            } else {
+                let spec = preferenceSpecs.first { $0.field == effect.field }!
+                switch spec.read {
+                case .bool, .castBool: valid = value is Bool
+                case .string: valid = value is String
+                default: valid = value is NSNumber
+                }
+            }
+            guard valid else { throw ConfigBackupError.invalidFormat("Invalid Core backup effect value") }
+            return (effect, value)
+        }
+        for (effect, value) in effects {
+            switch effect.target {
+            case "tmdb":
+                switch effect.field {
+                case "tmdb.apiKey": tmdb.setAPIKey(value as! String)
+                case "tmdb.language": tmdb.setLanguage(value as! String)
+                case "tmdb.preferText": tmdb.setPreferText(value as! Bool)
+                case "tmdb.replaceImages": tmdb.setReplaceImages(value as! Bool)
+                case "tmdb.showPlaceholders": tmdb.setShowPlaceholders(value as! Bool)
+                case "tmdb.cacheDays": tmdb.setCacheDays((value as! NSNumber).intValue)
+                default: preconditionFailure("Invalid Core TMDB effect")
+                }
+            case "dandanplay":
+                if var store = dandanplayStore { store.gatewayURLString = value as? String }
+            default:
+                let key = preferenceKeys[effect.field]!
+                if effect.operation == "remove" { defaults.removeObject(forKey: key) }
+                else { defaults.set(value, forKey: key) }
+            }
+        }
+    }
+
+    private enum PreferenceRead { case bool, integer, double, string, castBool, castInt, castDouble }
+    private static let preferenceSpecs: [(field: String, key: String, read: PreferenceRead)] = [
+        ("playback.skipIntro", SettingsKeys.skipIntro, .bool),
+        ("playback.skipOutro", SettingsKeys.skipOutro, .bool),
+        ("playback.outroRetentionSeconds", SettingsKeys.outroRetentionSeconds, .integer),
+        ("playback.subtitleLanguage", SettingsKeys.subtitleLanguagePreference, .string),
+        ("playback.lumaUpscaler", SettingsKeys.lumaUpscaler, .string),
+        ("playback.subtitleStyleOverrides", SettingsKeys.subtitleStyleOverrides, .castBool),
+        ("playback.subtitleAlignment", SettingsKeys.subtitleAlignment, .castInt),
+        ("playback.subtitleMarginVertical", SettingsKeys.subtitleMarginVertical, .castInt),
+        ("playback.subtitlePrimaryColor", SettingsKeys.subtitlePrimaryColor, .integer),
+        ("playback.subtitleOutlineColor", SettingsKeys.subtitleOutlineColor, .integer),
+        ("playback.subtitleOutlineWidth", SettingsKeys.subtitleOutlineWidth, .castDouble),
+        ("playback.subtitleBold", SettingsKeys.subtitleBold, .castBool),
+        ("playback.httpReadAheadMiB", SettingsKeys.httpReadAheadMiB, .integer),
+        ("playback.httpBackBufferMiB", SettingsKeys.httpBackBufferMiB, .integer),
+        ("danmaku.danmakuEnabled", SettingsKeys.danmakuEnabled, .bool),
+        ("danmaku.opacity", SettingsKeys.danmakuOpacity, .double),
+        ("danmaku.displayArea", SettingsKeys.danmakuDisplayArea, .double),
+        ("danmaku.blockTop", SettingsKeys.danmakuBlockTop, .bool),
+        ("danmaku.blockBottom", SettingsKeys.danmakuBlockBottom, .bool),
+        ("danmaku.blockScroll", SettingsKeys.danmakuBlockScroll, .bool),
+        ("danmaku.fontSize", SettingsKeys.danmakuFontSize, .double),
+        ("danmaku.autoLoad", SettingsKeys.danmakuAutoLoad, .bool),
+        ("general.bangumiEnabled", SettingsKeys.bangumiEnabled, .bool),
+        ("general.moviepilotEnabled", SettingsKeys.moviepilotEnabled, .bool),
+        ("general.homeSections", SettingsKeys.homeSections, .string),
+        ("general.episodeSortAscending", SettingsKeys.episodeSortAscending, .bool),
+        ("mirror.bangumiEnabled", SettingsKeys.bangumiMirrorEnabled, .castBool),
+        ("mirror.bangumiRootDomain", SettingsKeys.bangumiMirrorRootDomain, .string),
+        ("mirror.tmdbEnabled", SettingsKeys.tmdbMirrorEnabled, .castBool),
+        ("mirror.tmdbAPIBaseURL", SettingsKeys.tmdbMirrorAPIBaseURL, .string),
+        ("mirror.tmdbImageBaseURL", SettingsKeys.tmdbMirrorImageBaseURL, .string),
+    ]
+    private static var preferenceKeys: [String: String] {
+        Dictionary(uniqueKeysWithValues: preferenceSpecs.map { ($0.field, $0.key) })
+    }
+    private static func preferenceFacts(in defaults: UserDefaults) -> [String: OcpSettingsBackup.Preference] {
+        Dictionary(uniqueKeysWithValues: preferenceSpecs.map { spec in
+            let raw = defaults.object(forKey: spec.key)
+            let value: Any?
+            switch spec.read {
+            case .bool: value = defaults.bool(forKey: spec.key)
+            case .integer: value = defaults.integer(forKey: spec.key)
+            case .double: value = defaults.double(forKey: spec.key)
+            case .string: value = defaults.string(forKey: spec.key)
+            case .castBool: value = raw as? Bool
+            case .castInt: value = raw as? Int
+            case .castDouble: value = raw as? Double
+            }
+            return (spec.field, .init(present: raw != nil, value: value))
+        })
+    }
+
     // MARK: - 导出
 
     /// 抽取当前配置生成备份包。
@@ -60,7 +235,7 @@ enum ConfigBackupCoordinator {
     ///   - defaults: 偏好域（测试注入独立 suite；生产传 `.standard`）。
     ///   - deviceName: 覆盖设备名（nil = 取系统设备名）。
     ///   - appVersion: 覆盖版本号（nil = `AppVersion.currentShortVersion`）。
-    static func makeBackup(
+    static func nativeMakeBackup(
         tmdb: TMDbCoordinator,
         dandanplayGatewayURL: String? = nil,
         defaults: UserDefaults = .standard,
@@ -145,7 +320,7 @@ enum ConfigBackupCoordinator {
     ///
     /// **只写文件里有的模块**：缺哪块就保持现状（老版本导出的文件、或用户只想搬
     /// 一部分时都不会被清空）。三态字段为 nil 时**不写**——「不设置」是用户的选择。
-    static func applyBackup(
+    static func nativeApplyBackup(
         _ backup: AppConfigBackup,
         tmdb: TMDbCoordinator,
         dandanplayStore: DandanplaySettingsStore? = nil,
@@ -259,14 +434,14 @@ enum ConfigBackupCoordinator {
     /// 时间用 `.iso8601`（秒精度）：跨设备 / 跨地区都不会歧义。
     /// 代价是 `exportedAt` 亚秒部分会丢——这不影响任何功能，但**测试不能拿整个
     /// 结构体做往返相等断言**（见 `ConfigBackupTests`）。
-    nonisolated static func encode(_ backup: AppConfigBackup) throws -> Data {
+    nonisolated static func nativeEncode(_ backup: AppConfigBackup) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(backup)
     }
 
-    nonisolated static func decode(_ data: Data) throws -> AppConfigBackup {
+    nonisolated static func nativeDecode(_ data: Data) throws -> AppConfigBackup {
         guard !data.isEmpty else { throw ConfigBackupError.emptyData }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -304,7 +479,7 @@ enum ConfigBackupCoordinator {
 
     // MARK: - 摘要
 
-    nonisolated static func summary(of backup: AppConfigBackup) -> BackupSummary {
+    nonisolated static func nativeSummary(of backup: AppConfigBackup) -> BackupSummary {
         let key = backup.tmdb?.apiKey ?? ""
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "zh_CN")
