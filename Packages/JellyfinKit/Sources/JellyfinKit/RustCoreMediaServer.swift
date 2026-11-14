@@ -97,7 +97,10 @@ public final class RustCoreMediaServer: MediaServer, @unchecked Sendable {
     }
 
     public func userViews() async throws -> [MediaLibrary] {
-        try await dataAsync("server.libraries")
+        let libraries: [RustLibrary] = try await dataAsync("server.libraries")
+        return libraries.map { MediaLibrary(id: $0.id ?? UUID().uuidString, name: $0.name ?? "",
+            collectionType: MediaLibrary.CollectionType($0.collectionType), primaryImageTag: $0.primaryImageTag) }
+            .filter { $0.collectionType != .unknown && $0.collectionType != .folders }
     }
 
     public func latestItems(limit: Int) async throws -> [MediaItem] {
@@ -430,6 +433,12 @@ public struct RustCoreMediaServerError: Error, LocalizedError, Sendable {
     init(response: OcpResponse) { self.init(message: response.message, code: response.code, retryable: response.retryable) }
 }
 
+private struct RustLibrary: Decodable {
+    let id: String?
+    let name: String?
+    let collectionType: String?
+    let primaryImageTag: String?
+}
 private struct RustItemsPage: Decodable { let items: [MediaItem]; let startIndex: Int; let totalRecordCount: Int? }
 private struct RustPlayedPage: Decodable { let items: [RustPlayedItem]; let startIndex: Int; let totalRecordCount: Int? }
 private struct RustPlayedItem: Decodable { let item: MediaItem; let lastPlayedAt: String? }
@@ -463,7 +472,7 @@ private struct RustMediaItemsEnvelope: Decodable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: RustCodingKey.self)
-        items = values.decodeFirst([RustMediaItem].self, keys: ["items", "Items"]) ?? []
+        items = try values.decodeFirstPresent([RustMediaItem].self, keys: ["items", "Items"]) ?? []
     }
 }
 
@@ -472,7 +481,7 @@ private struct RustMediaItem: Decodable {
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: RustCodingKey.self)
-        mediaSources = values.decodeFirst([RustMediaSource].self, keys: ["mediaSources", "MediaSources"])
+        mediaSources = try values.decodeFirstPresent([RustMediaSource].self, keys: ["mediaSources", "MediaSources"])
     }
 }
 
@@ -495,7 +504,7 @@ private struct RustMediaSource: Decodable {
         supportsDirectPlay = values.decodeFirst(Bool.self, keys: ["supportsDirectPlay", "SupportsDirectPlay"])
         supportsDirectStream = values.decodeFirst(Bool.self, keys: ["supportsDirectStream", "SupportsDirectStream"])
         runTimeTicks = values.decodeFirst(Int64.self, keys: ["runTimeTicks", "RunTimeTicks"])
-        mediaStreams = values.decodeFirst([RustMediaStream].self, keys: ["mediaStreams", "MediaStreams"])
+        mediaStreams = try values.decodeFirstPresent([RustMediaStream].self, keys: ["mediaStreams", "MediaStreams"])
     }
 }
 
@@ -578,6 +587,15 @@ private struct RustCodingKey: CodingKey {
 }
 
 private extension KeyedDecodingContainer where Key == RustCodingKey {
+    func decodeFirstPresent<T: Decodable>(_ type: T.Type, keys: [String]) throws -> T? {
+        for key in keys {
+            let codingKey = RustCodingKey(stringValue: key)
+            guard contains(codingKey) else { continue }
+            if let value = try decodeIfPresent(type, forKey: codingKey) { return value }
+        }
+        return nil
+    }
+
     func decodeFirst<T: Decodable>(_ type: T.Type, keys: [String]) -> T? {
         for key in keys {
             let codingKey = RustCodingKey(stringValue: key)
