@@ -1,0 +1,114 @@
+EEEEEEE
+======================================================================
+ERROR: test_account_begin_logout_commit_and_transparent_refresh_retire_correct_revisions (__main__.FlowContract.test_account_begin_logout_commit_and_transparent_refresh_retire_correct_revisions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 119, in test_account_begin_logout_commit_and_transparent_refresh_retire_correct_revisions
+    old = self.start()
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_concurrent_identifiers_and_directory_bound_are_retained (__main__.FlowContract.test_concurrent_identifiers_and_directory_bound_are_retained)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 135, in test_concurrent_identifiers_and_directory_bound_are_retained
+    steps = list(workers.map(lambda _: self.start(), range(64)))
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/_base.py", line 672, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/_base.py", line 312, in _result_or_cancel
+    return fut.result(timeout)
+           ~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/_base.py", line 447, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 135, in <lambda>
+    steps = list(workers.map(lambda _: self.start(), range(64)))
+                                       ~~~~~~~~~~^^
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_failed_refresh_is_terminal_even_when_raw_read_has_retry_budget (__main__.FlowContract.test_failed_refresh_is_terminal_even_when_raw_read_has_retry_budget)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 80, in test_failed_refresh_is_terminal_even_when_raw_read_has_retry_budget
+    step = self.start()
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_method_and_override_policy_authentication_replay_and_unauthorized_guard (__main__.FlowContract.test_method_and_override_policy_authentication_replay_and_unauthorized_guard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 50, in test_method_and_override_policy_authentication_replay_and_unauthorized_guard
+    step = self.start(method=method)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_named_transport_keeps_its_own_transient_retry_owner (__main__.FlowContract.test_named_transport_keeps_its_own_transient_retry_owner)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 93, in test_named_transport_keeps_its_own_transient_retry_owner
+    step = self.start(kind='named')
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_receipt_validation_and_cancellation_do_not_advance_other_flows (__main__.FlowContract.test_receipt_validation_and_cancellation_do_not_advance_other_flows)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 101, in test_receipt_validation_and_cancellation_do_not_advance_other_flows
+    step = self.start(revision=2**64-1)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+======================================================================
+ERROR: test_retry_backoff_sequence_and_one_auth_replay_per_attempt (__main__.FlowContract.test_retry_backoff_sequence_and_one_auth_replay_per_attempt)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 65, in test_retry_backoff_sequence_and_one_auth_replay_per_attempt
+    step = self.start()
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 41, in start
+    return self.success('moviepilotFlow.start', kind=kind, method=method,
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        authorized=authorized, revision=revision, **extra)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: FlowContract.success() got multiple values for argument 'method'
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.654s
+
+FAILED (errors=7)

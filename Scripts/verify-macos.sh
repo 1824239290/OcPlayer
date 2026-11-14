@@ -27,6 +27,7 @@ python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&
 python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&1
 python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.log" 2>&1
 python3 tests/moviepilot_account_contract.py > "$output_dir/moviepilot-account-contract-tests.log" 2>&1
+python3 tests/moviepilot_flow_contract.py > "$output_dir/moviepilot-flow-contract-tests.log" 2>&1
 python3 tests/media_login_contract.py > "$output_dir/media-login-contract-tests.log" 2>&1
 python3 tests/danmaku_contract.py > "$output_dir/danmaku-contract-tests.log" 2>&1
 python3 tests/danmaku_policy_contract.py > "$output_dir/danmaku-policy-contract-tests.log" 2>&1

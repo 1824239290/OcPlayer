@@ -11,6 +11,7 @@ use thiserror::Error;
 use url::Url;
 
 pub mod account;
+pub mod flow;
 mod stream;
 pub use stream::{SearchUpdate, StreamDecoder};
 

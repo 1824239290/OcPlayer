@@ -1,0 +1,376 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Constructing description]
+[Planning deferred tasks]
+[3 / 13] MoviePilotKit
+[5 / 15] MoviePilotKit
+[9 / 19] MoviePilotKit
+[10 / 20] MoviePilotKit
+[15 / 20] MoviePilotKitTests-product
+[24 / 29] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[26 / 29] MoviePilotKitTests-product
+[28 / 32] MoviePilotKitTests-product
+Build complete! (3.80秒)
+Test Suite 'All tests' started at 2026-11-14 10:03:55.902.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-14 10:03:55.902.
+Test Suite 'MPEnvelopeTests' started at 2026-11-14 10:03:55.902.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' passed (0.000 seconds).
+Test Suite 'MPEnvelopeTests' passed at 2026-11-14 10:03:55.906.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'MoviePilotAccountLifecycleTests' started at 2026-11-14 10:03:55.906.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:70: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertTrue failed - OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:74: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertEqual failed: ("0") is not equal to ("3") - The old login must not advance the replacement's generation
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:75: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertEqual failed: ("fixture") is not equal to ("new-account")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:76: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertEqual failed: ("Optional("fresh")") is not equal to ("Optional("user:new-account")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:78: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertEqual failed: ("false") is not equal to ("true")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:81: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin] : XCTAssertEqual failed: ("0") is not equal to ("4")
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin]' failed (0.221 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:70: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertTrue failed - OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:74: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertEqual failed: ("0") is not equal to ("2") - The old login must not advance the replacement's generation
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:75: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertEqual failed: ("fixture") is not equal to ("old-account")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:76: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertEqual failed: ("Optional("fresh")") is not equal to ("nil")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:78: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertEqual failed: ("false") is not equal to ("true")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift:81: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut] : XCTAssertEqual failed: ("0") is not equal to ("2")
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut]' failed (0.061 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testNativeLoginCommitCannotPublishAfterReplacementLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testNativeLoginCommitCannotPublishAfterReplacementLogin]' passed (0.065 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testNativeLoginCommitCannotPublishAfterSignOut]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testNativeLoginCommitCannotPublishAfterSignOut]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testRetainedAccountAdapterPreservesUnsignedGenerations]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.MoviePilotAccountLifecycleTests testRetainedAccountAdapterPreservesUnsignedGenerations] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testRetainedAccountAdapterPreservesUnsignedGenerations]' failed (0.001 seconds).
+Test Suite 'MoviePilotAccountLifecycleTests' failed at 2026-11-14 10:03:56.315.
+	 Executed 5 tests, with 13 failures (1 unexpected) in 0.409 (0.410) seconds
+Test Suite 'MoviePilotClientTests' started at 2026-11-14 10:03:56.315.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests test403WithoutTokenMessageStaysForbiddenWithoutRelogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests test403WithoutTokenMessageStaysForbiddenWithoutRelogin]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testAuthorized401TriggersSilentReloginAndReplay]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testAuthorized401TriggersSilentReloginAndReplay]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testEnvelopeErrorMessageExtractedInsteadOfRawJSON]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testEnvelopeErrorMessageExtractedInsteadOfRawJSON]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testExpiredToken403WithEnvelopeTriggersSilentReloginAndReplay]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testExpiredToken403WithEnvelopeTriggersSilentReloginAndReplay]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginSendsFormAndFetchesUser]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginSendsFormAndFetchesUser]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginWrongPasswordMapsToRequireLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testLoginWrongPasswordMapsToRequireLogin]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testNotConfiguredWithoutServer]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testNotConfiguredWithoutServer]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginFailureBroadcastsAndClearsToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginFailureBroadcastsAndClearsToken]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginNetworkErrorKeepsTokenAndThrowsNetwork]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginNetworkErrorKeepsTokenAndThrowsNetwork]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginRetryableNetworkErrorDoesNotReplayStaleToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginRetryableNetworkErrorDoesNotReplayStaleToken]' passed (3.239 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginTokenStill401TripsBreakerClearsAndBroadcasts]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testReloginTokenStill401TripsBreakerClearsAndBroadcasts]' passed (0.011 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testRetryable502RetriesAndSucceeds]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testRetryable502RetriesAndSucceeds]' passed (0.762 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testSignOutClearsSession]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testSignOutClearsSession]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenFailureClassificationContract]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenFailureClassificationContract]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenNeverAppearsInURL]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotClientTests testTokenNeverAppearsInURL]' passed (0.004 seconds).
+Test Suite 'MoviePilotClientTests' passed at 2026-11-14 10:04:00.361.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 4.044 (4.046) seconds
+Test Suite 'MoviePilotMediaRankingTests' started at 2026-11-14 10:04:00.361.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testAlreadySortedInputIsUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testAlreadySortedInputIsUnchanged]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testEmptyInputIsEmpty]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testEmptyInputIsEmpty]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testNonTMDBResultWithIdentifierRanksHigher]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testNonTMDBResultWithIdentifierRanksHigher]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testSortingDoesNotAlterMediaObjects]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testSortingDoesNotAlterMediaObjects]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTiesKeepServerOrder]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTiesKeepServerOrder]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTMDBSourceOutranksDoubanEvenWhenServerReturnsDoubanFirst]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotMediaRankingTests testTMDBSourceOutranksDoubanEvenWhenServerReturnsDoubanFirst]' passed (0.000 seconds).
+Test Suite 'MoviePilotMediaRankingTests' passed at 2026-11-14 10:04:00.364.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'MoviePilotModelsTests' started at 2026-11-14 10:04:00.364.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashDistinguishesTypes]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashDistinguishesTypes]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashIgnoresDictionaryOrder]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testStableHashIgnoresDictionaryOrder]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testSubscribeIDFallsBackToStableHash]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testSubscribeIDFallsBackToStableHash]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testTorrentAndDownloadTaskIDsAreStable]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotModelsTests testTorrentAndDownloadTaskIDsAreStable]' passed (0.000 seconds).
+Test Suite 'MoviePilotModelsTests' passed at 2026-11-14 10:04:00.365.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MoviePilotServiceTests' started at 2026-11-14 10:04:00.365.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadEchoesRawObjectsVerbatim]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadEchoesRawObjectsVerbatim]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadServerRefusalThrowsWithMessage]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddDownloadServerRefusalThrowsWithMessage]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddSubscribeSendsValidBody]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testAddSubscribeSendsValidBody]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDeleteAndRefreshSubscribes]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDeleteAndRefreshSubscribes]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadControlHitsRightPaths]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadControlHitsRightPaths]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadingTasksDecode]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testDownloadingTasksDecode]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotencyClassification]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotencyClassification]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentDeleteIsRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentDeleteIsRetried]' passed (0.748 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentPutIsRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testIdempotentPutIsRetried]' passed (0.836 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testNonIdempotentPostIsNotRetried]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testNonIdempotentPostIsNotRetried]' passed (0.008 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaDecodesTypedFields]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaDecodesTypedFields]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaHandlesAutoEnvelope]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSearchMediaHandlesAutoEnvelope]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSitesListDecodesThroughEnvelope]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSitesListDecodesThroughEnvelope]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchParsesAppendAndDone]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchParsesAppendAndDone]' passed (0.008 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchReloginsOn401AndRetries]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testStreamSearchReloginsOn401AndRetries]' passed (0.006 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSubscribesDecodesTypedFields]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testSubscribesDecodesTypedFields]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testUpdateSubscribeSendsValidBody]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotServiceTests testUpdateSubscribeSendsValidBody]' passed (0.002 seconds).
+Test Suite 'MoviePilotServiceTests' passed at 2026-11-14 10:04:02.010.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 1.642 (1.645) seconds
+Test Suite 'MoviePilotSessionRaceTests' started at 2026-11-14 10:04:02.010.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testDirectConfigurationChangeRejectsOldNotificationAndToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testDirectConfigurationChangeRejectsOldNotificationAndToken]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testFailedConfiguredLoginPreservesExistingCredentials]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testFailedConfiguredLoginPreservesExistingCredentials]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testLateOldToken401ReplaysAlreadyRefreshedToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testLateOldToken401ReplaysAlreadyRefreshedToken]' passed (0.005 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testNewerLoginWinsAgainstLateSuccessAndFailure]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testNewerLoginWinsAgainstLateSuccessAndFailure]' passed (0.006 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSignOutRejectsLateLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSignOutRejectsLateLogin]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSwitchCancelsOldRetryWithoutSendingOldToken]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSessionRaceTests testSwitchCancelsOldRetryWithoutSendingOldToken]' passed (0.004 seconds).
+Test Suite 'MoviePilotSessionRaceTests' passed at 2026-11-14 10:04:02.037.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.026 (0.027) seconds
+Test Suite 'MoviePilotStoreTests' started at 2026-11-14 10:04:02.037.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearedTokenIsNotResurrectedFromLegacyKeyWhileRemovalIsDeferred]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearedTokenIsNotResurrectedFromLegacyKeyWhileRemovalIsDeferred]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionDropsSessionPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionDropsSessionPassword]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionFromBackgroundThreadKeepsDefaultsWritesOnMain]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testClearSessionFromBackgroundThreadKeepsDefaultsWritesOnMain]' passed (0.004 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testConfiguredWithTokenButWithoutRememberedPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testConfiguredWithTokenButWithoutRememberedPassword]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialRestoreDeletesAbsentKeys]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialRestoreDeletesAbsentKeys]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialsLifecycle]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialsLifecycle]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialSnapshotRestoresFailedLoginState]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testCredentialSnapshotRestoresFailedLoginState]' passed (0.003 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testEnablingRememberPasswordPersistsSessionPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testEnablingRememberPasswordPersistsSessionPassword]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testExpiredTokenWithoutRememberedPasswordReadsAsLoggedOut]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testExpiredTokenWithoutRememberedPasswordReadsAsLoggedOut]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testIntegrationStateIsUnconfiguredWithoutUsableAddressAndUsername]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testIntegrationStateIsUnconfiguredWithoutUsableAddressAndUsername]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyPlaintextPasswordIsDeletedNotMigrated]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyPlaintextPasswordIsDeletedNotMigrated]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyTokenIsMigratedToCredentialFile]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testLegacyTokenIsMigratedToCredentialFile]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLAllowsHTTPForLAN]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLAllowsHTTPForLAN]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLRejectsNonOrigin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testNormalizedURLRejectsNonOrigin]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsNotPersistedByDefault]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsNotPersistedByDefault]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsPersistedWhenRememberPasswordIsOn]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordIsPersistedWhenRememberPasswordIsOn]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordKeepsWhitespace]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testPasswordKeepsWhitespace]' passed (0.001 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testSignOutReadsAsLoggedOutNotUnconfigured]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testSignOutReadsAsLoggedOutNotUnconfigured]' passed (0.002 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testTurningOffRememberPasswordDeletesStoredPassword]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotStoreTests testTurningOffRememberPasswordDeletesStoredPassword]' passed (0.002 seconds).
+Test Suite 'MoviePilotStoreTests' passed at 2026-11-14 10:04:02.072.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.034 (0.035) seconds
+Test Suite 'MoviePilotSubscribeFieldRulesTests' started at 2026-11-14 10:04:02.072.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testEmptyTextClearsPairedKeys]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testEmptyTextClearsPairedKeys]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testInvalidNumberClearsAndValidNumberWrites]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testInvalidNumberClearsAndValidNumberWrites]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testKeepRawValueFieldKeepsWhitespaceButClearsWhenBlank]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testKeepRawValueFieldKeepsWhitespaceButClearsWhenBlank]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testPairedKeysAreWrittenAndClearedTogether]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testPairedKeysAreWrittenAndClearedTogether]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testTextFieldTrimsValueAndClearsOnWhitespace]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotSubscribeFieldRulesTests testTextFieldTrimsValueAndClearsOnWhitespace]' passed (0.000 seconds).
+Test Suite 'MoviePilotSubscribeFieldRulesTests' passed at 2026-11-14 10:04:02.073.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'RustMoviePilotAuthenticationTests' started at 2026-11-14 10:04:02.073.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testConcurrentRawAndNamedExpiryShareOneTokenOnlyRelogin]' failed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testInitialLoginUsesCoreAndRetainsAuthenticatedCookieConnection]' failed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testLoginTokenIssuanceRetriesTransientGatewayAndSendsNoBearer]' failed (0.055 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testMalformedSilentLoginTripsFuseAndClearsExpiredToken]' failed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:29: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt] : failed - fixture request did not start: username=older
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testNewerCoreLoginWinsAndCancelsEarlierAttempt]' failed (1.825 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:67: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride] : XCTAssertTrue failed
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testProductionConfigurationLoadsCoreWithoutExplicitLibraryOverride]' failed (0.099 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawBinaryJSONAndFormResponsesPreserveBytesAndQuery]' failed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawHTTPErrorMappingAndExplicitNonIdempotencyNeverReplay]' failed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawRetryOwnerRetriesReadExactlyThreeTimesAndCreationOnce]' failed (0.057 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRawTimeoutRemainsTypedAndDoesNotRetryWhenDisabled]' failed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:84: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials] : XCTAssertTrue failed
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:84: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials] : XCTAssertTrue failed
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:84: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials] : XCTAssertTrue failed
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedLoginAndInvalidUserCannotReplaceCommittedCredentials]' failed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:249: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword] : Failed due to unwaited expectation 'Expect notification 'MoviePilotAPIClientAuthenticationRequired' from any object'.
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testRejectedSilentLoginClearsTokenNotifiesAndDoesNotReissuePassword]' failed (0.058 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:29: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared] : failed - fixture request did not start: username=slow
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotAuthenticationTests.swift:118: error: -[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared] : XCTAssertEqual failed: ("0") is not equal to ("1")
+Test Case '-[MoviePilotKitTests.RustMoviePilotAuthenticationTests testSignOutCancelsInitialCoreLoginAndKeepsTokenCleared]' failed (1.813 seconds).
+Test Suite 'RustMoviePilotAuthenticationTests' failed at 2026-11-14 10:04:06.385.
+	 Executed 13 tests, with 18 failures (11 unexpected) in 4.311 (4.312) seconds
+Test Suite 'RustMoviePilotIntegrationTests' started at 2026-11-14 10:04:06.385.
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:176: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes] : XCTAssertTrue failed
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:180: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes] : XCTAssertTrue failed
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellationAbortsNativeRequestBeforeServerFinishes]' failed (0.965 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:92: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive] : Asynchronous wait failed: Exceeded timeout of 0.5 seconds, with unfulfilled expectations: "stream started before cancellation".
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testCancellingOneConcurrentStreamKeepsTheOtherAlive]' failed (0.626 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:73: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest] : Asynchronous wait failed: Exceeded timeout of 0.5 seconds, with unfulfilled expectations: "first stream partial", "second stream partial".
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testConcurrentStreamsRouteEachPartialToItsOwnRequest]' failed (0.625 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testExpiredTokenReloginsAndEncodedDeleteRemainsOneSegment]' failed (0.095 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:109: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay] : XCTAssertTrue failed
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:111: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:112: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay] : XCTUnwrap failed: expected non-nil value of type "String"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testFailedCreationIsSentExactlyOnceWithoutSwiftReplay]' failed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRawPayloadUserFieldsAndMalformedList]' failed (0.059 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testRetainedCoreReusesConnectionAndAccountCookieAcrossCommands]' failed (0.056 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:149: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult] : XCTAssertTrue failed
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSignOutRejectsInFlightNativeResult]' failed (0.935 seconds).
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotIntegrationTests.swift:131: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace] : Asynchronous wait failed: Exceeded timeout of 0.45 seconds, with unfulfilled expectations: "partial while stream is live".
+/Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore/Sources/OcPlayerCore/OcpCoreClient.swift:150: error: -[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace] : failed: caught error: "OcpCoreError(message: "Rust Core library is unavailable; set OCP_CORE_LIBRARY_PATH or bundle libocp_ffi.dylib")"
+Test Case '-[MoviePilotKitTests.RustMoviePilotIntegrationTests testSSEPublishesBeforeCompletionAndHonorsReplace]' failed (0.565 seconds).
+Test Suite 'RustMoviePilotIntegrationTests' failed at 2026-11-14 10:04:10.373.
+	 Executed 9 tests, with 15 failures (6 unexpected) in 3.987 (3.988) seconds
+Test Suite 'MoviePilotKitTests.xctest' failed at 2026-11-14 10:04:10.374.
+	 Executed 109 tests, with 46 failures (18 unexpected) in 14.458 (14.471) seconds
+Test Suite 'All tests' failed at 2026-11-14 10:04:10.374.
+	 Executed 109 tests, with 46 failures (18 unexpected) in 14.458 (14.472) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "MPEnvelope.unwrapObjects" started.
+◇ Suite "JSONValue.init(any:)" started.
+◇ Test nested() started.
+◇ Test booleans() started.
+◇ Test empties() started.
+◇ Test bareArray() started.
+◇ Test envelope() started.
+◇ Test nonObjectElementsThrowInsteadOfBeingDropped() started.
+◇ Test numericVariants() started.
+◇ Test otherTypesUnchanged() started.
+◇ Test arrayWithoutEnvelopeKeys() started.
+◇ Test realisticDownloadTask() started.
+◇ Test emptyArraySucceeds() started.
+◇ Test realBooleansStayBooleans() started.
+◇ Test nonArrayPayloadThrowsTypedError() started.
+◇ Test numericZeroAndOne() started.
+◇ Test malformedJSONThrowsTypedError() started.
+◇ Test numericZeroAndOneStayNumbers() started.
+◇ Test booleansDoNotExposeIntValue() started.
+◇ Test numericZeroAndOneExposeIntValue() started.
+◇ Test otherNumbersStayNumbers() started.
+◇ Test realisticTorrentWithZeroSeedersKeepsField() started.
+✔ Test booleans() passed after 0.001 seconds.
+✔ Test bareArray() passed after 0.001 seconds.
+✔ Test envelope() passed after 0.001 seconds.
+✔ Test nested() passed after 0.001 seconds.
+✔ Test empties() passed after 0.001 seconds.
+✔ Test emptyArraySucceeds() passed after 0.001 seconds.
+✔ Test otherTypesUnchanged() passed after 0.001 seconds.
+✔ Test numericVariants() passed after 0.001 seconds.
+✔ Test arrayWithoutEnvelopeKeys() passed after 0.001 seconds.
+✔ Test realBooleansStayBooleans() passed after 0.001 seconds.
+✔ Test malformedJSONThrowsTypedError() passed after 0.001 seconds.
+✔ Test numericZeroAndOneExposeIntValue() passed after 0.001 seconds.
+✔ Test booleansDoNotExposeIntValue() passed after 0.001 seconds.
+✔ Test realisticTorrentWithZeroSeedersKeepsField() passed after 0.001 seconds.
+✔ Test numericZeroAndOneStayNumbers() passed after 0.001 seconds.
+✔ Test otherNumbersStayNumbers() passed after 0.001 seconds.
+✔ Test numericZeroAndOne() passed after 0.001 seconds.
+✔ Test realisticDownloadTask() passed after 0.001 seconds.
+✔ Suite "JSONValue.init(any:)" passed after 0.001 seconds.
+✔ Test nonArrayPayloadThrowsTypedError() passed after 0.001 seconds.
+✔ Test nonObjectElementsThrowInsteadOfBeingDropped() passed after 0.002 seconds.
+✔ Suite "MPEnvelope.unwrapObjects" passed after 0.003 seconds.
+✔ Test run with 20 tests in 2 suites passed after 0.003 seconds.
+Note: Some test targets reported failures:
+  - MoviePilotKitTests (XCTest)

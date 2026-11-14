@@ -1,0 +1,11 @@
+test_cancellation_stops_titles_and_does_not_poison_cache (__main__.IntroIdentityContract.test_cancellation_stops_titles_and_does_not_poison_cache) ... ok
+test_complete_ordered_search_failures_fallback_and_no_retries (__main__.IntroIdentityContract.test_complete_ordered_search_failures_fallback_and_no_retries) ... ok
+test_deferred_native_clock_commit_reads_the_same_store (__main__.IntroIdentityContract.test_deferred_native_clock_commit_reads_the_same_store) ... ok
+test_file_interop_cached_empty_and_write_through_failure (__main__.IntroIdentityContract.test_file_interop_cached_empty_and_write_through_failure) ... ok
+test_lookup_positive_cache_force_refresh_and_negative_ttl (__main__.IntroIdentityContract.test_lookup_positive_cache_force_refresh_and_negative_ttl) ... ok
+test_policy_key_titles_and_exact_expiry_direct_zero_io (__main__.IntroIdentityContract.test_policy_key_titles_and_exact_expiry_direct_zero_io) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.064s
+
+OK

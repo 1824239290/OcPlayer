@@ -50,6 +50,7 @@ struct State {
     bangumi_store: Option<ocp_store::BangumiStore>,
     bangumi_account: ocp_bangumi::account::Account,
     moviepilot_account: ocp_moviepilot::account::Account,
+    moviepilot_flow: ocp_moviepilot::flow::Directory,
     bangumi_sync: ocp_bangumi::sync::Directory,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
@@ -144,6 +145,7 @@ impl Core {
                 bangumi_store: None,
                 bangumi_account: Default::default(),
                 moviepilot_account: Default::default(),
+                moviepilot_flow: Default::default(),
                 bangumi_sync: Default::default(),
                 danmaku_cache: None,
                 intro_learning: None,
@@ -639,12 +641,37 @@ impl Core {
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
+            method if method.starts_with("moviepilotFlow.") => {
+                match state
+                    .moviepilot_flow
+                    .call(method.trim_start_matches("moviepilotFlow."), &arguments)
+                {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(ocp_moviepilot::flow::Error(code, message)) => {
+                        ApiResponse::error(code, false, message, Value::Null)
+                    }
+                }
+            }
             method if method.starts_with("moviepilotAccount.") => {
                 match state
                     .moviepilot_account
                     .call(method.trim_start_matches("moviepilotAccount."), &arguments)
                 {
-                    Ok(data) => ApiResponse::ok(data),
+                    Ok(data) => {
+                        if method == "moviepilotAccount.login.begin"
+                            || method == "moviepilotAccount.invalidate"
+                        {
+                            state.moviepilot_flow.invalidate();
+                        } else if data["accepted"] == true
+                            && (method == "moviepilotAccount.login.commit"
+                                || method == "moviepilotAccount.refresh.commit")
+                        {
+                            if let Some(revision) = arguments["revision"].as_u64() {
+                                state.moviepilot_flow.retain_revision(revision);
+                            }
+                        }
+                        ApiResponse::ok(data)
+                    }
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }

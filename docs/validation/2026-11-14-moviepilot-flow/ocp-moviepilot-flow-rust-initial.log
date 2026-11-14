@@ -1,0 +1,27 @@
+   Compiling ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.55s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_moviepilot-f15d585791438fc1)
+
+running 13 tests
+test account::tests::refresh_singleflight_fuse_and_late_release ... ok
+test flow::tests::bad_receipts_do_not_advance_and_configuration_change_retires ... ok
+test account::tests::transient_and_cancelled_failures_preserve_credentials ... ok
+test account::tests::login_commit_cannot_publish_after_logout_or_new_attempt ... ok
+test account::tests::overflow_and_invalid_receipts_leave_state_unchanged ... ok
+test tests::list_value_accepts_wrapped_and_direct_arrays ... ok
+test flow::tests::failed_refresh_cannot_restart_raw_request_and_replay_401_is_terminal ... ok
+test flow::tests::read_retries_and_backoff_are_bounded_but_creations_and_named_are_one_owner ... ok
+test tests::supports_both_envelope_shapes ... ok
+test tests::parses_sse_and_deduplicates_torrents ... ok
+test tests::joins_base_url ... ok
+test flow::tests::cancellation_directory_bound_and_identifier_exhaustion_preserve_other_flows ... ok
+test stream::tests::arbitrary_chunks_preserve_utf8_replace_and_final_items ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests ocp_moviepilot
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,7 @@
+{
+  "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift": "648b0c908e15d36ae187d0695d65ab2aaaba9a5ede4033292914bb304806f2c3",
+  "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotFlow.swift": "7a70179910f41442135156e9158cde09ad9bbb73f7afe36d39c25c488e49d76d",
+  "Packages/MoviePilotKit/Tests/MoviePilotKitTests/RustMoviePilotFlowTests.swift": "94e9042b3ef83f938931d2f7a070efc2a86f259bb60da3b877b81198c80479d8",
+  "Packages/MoviePilotKit/Tests/MoviePilotKitTests/Fixtures/native_server.py": "a080786bd9a87f7f422c347d5b779cd405af6dc757454df99c1e96ae379e4d0a",
+  "Docs/SHARED-MOVIEPILOT.md": "d08ddc0e96a9cc82964eeac3a491f424dc1b1d0fa51433d6f48bc317967a372b"
+}

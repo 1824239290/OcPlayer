@@ -52,12 +52,16 @@ as data so the caller can apply its existing authentication/error-envelope polic
 Transport timeout is code 1521, connect failure 1522 and other transport failure
 1523. Invalid arguments return 1002 before HTTP dispatch.
 
-This command executes exactly once. In macOS `requestData`, the existing outer
-retry/authentication loop remains the sole owner: idempotent reads retry up to
+This command executes exactly once. In macOS `requestData`, the retained
+[request flow](moviepilot-flow-contract.md) is the sole outer retry/auth owner:
+idempotent reads retry up to
 three times, explicit non-idempotent operations and ordinary POST/PATCH creations
 are sent once. The native adapter preserves JSON/form bytes and duplicate/null
 query items from its existing URLRequest construction, maps HTTP statuses back to
-the same MoviePilot errors, and propagates dispatched errors without Swift replay.
+the same MoviePilot errors, and propagates dispatched errors without an independent
+Swift retry coordinator. Named commands use the same auth flow with transient
+retry left to their existing transport. Login/current-user decoding preserves
+large integer identities directly from original ABI bytes.
 
 All exchanges use the account-scoped pool described in
 [network-contract.md](network-contract.md). Cancellation and configuration

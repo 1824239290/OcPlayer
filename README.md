@@ -27,6 +27,8 @@ response followed by the final snapshot on stderr.
 MoviePilot's macOS transport now includes first login, token-only silent refresh
 and byte-preserving low-level exchanges through Core. Login/refresh/logout policy
 is retained through [`docs/moviepilot-account-contract.md`](docs/moviepilot-account-contract.md).
+Complete raw/named retry and auth replay run through
+[`docs/moviepilot-flow-contract.md`](docs/moviepilot-flow-contract.md).
 Its wire/retry boundaries and platform credential effects are documented in
 [`docs/moviepilot-contract.md`](docs/moviepilot-contract.md).
 

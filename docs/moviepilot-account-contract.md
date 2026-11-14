@@ -76,7 +76,7 @@ or a replacement login in both Core and independent native modes. Existing real
 HTTP fixtures cover raw/named/late expiry sharing, cookie/connection retention,
 token retry, malformed/rejected refresh and notification counts.
 
-The outer raw-request retry/replay coordinator and named-command auth replay
-still run in the native actor; moving that sequence into retained request flows
-is a separate remaining parity requirement. Live deployments and release/slice
-acceptance are outside these local fixture checks.
+The outer raw-request retry/replay and named-command auth replay now run in
+[retained request flows](moviepilot-flow-contract.md). The account and request
+directories share lifecycle retirement in the composition root. Live deployments
+and release/slice acceptance remain outside these local fixture checks.

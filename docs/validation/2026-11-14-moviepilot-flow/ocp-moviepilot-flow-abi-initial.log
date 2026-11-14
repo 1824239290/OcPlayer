@@ -1,0 +1,19 @@
+E
+======================================================================
+ERROR: setUpClass (__main__.FlowContract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/moviepilot_flow_contract.py", line 12, in setUpClass
+    cls.ffi = ctypes.CDLL(os.environ['OCP_CORE_LIBRARY_PATH'])
+              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/ctypes/__init__.py", line 422, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/ctypes/__init__.py", line 464, in _load_library
+    return _dlopen(name, mode)
+OSError: dlopen(/tmp/ocp-moviepilot-flow/libocp_ffi.dylib, 0x0006): tried: '/tmp/ocp-moviepilot-flow/libocp_ffi.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/tmp/ocp-moviepilot-flow/libocp_ffi.dylib' (no such file), '/tmp/ocp-moviepilot-flow/libocp_ffi.dylib' (no such file)
+
+----------------------------------------------------------------------
+Ran 0 tests in 0.002s
+
+FAILED (errors=1)
