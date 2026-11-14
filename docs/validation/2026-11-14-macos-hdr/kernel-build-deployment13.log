@@ -1,0 +1,116 @@
+   Compiling objc2 v0.6.4
+   Compiling ring v0.17.14
+warning: trailing semicolon in macro used in expression position
+  --> third_party/wgpu-hal/build.rs:2:5
+   |
+ 2 | /     cfg_aliases::cfg_aliases! {
+ 3 | |         native: { not(target_arch = "wasm32") },
+ 4 | |         send_sync: { any(
+ 5 | |             not(target_arch = "wasm32"),
+...  |
+30 | |         supports_ptr_atomics: { target_has_atomic = "ptr" }
+31 | |     }
+   | |_____^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: for more information, see issue #79813 <https://github.com/rust-lang/rust/issues/79813>
+   = note: `#[warn(semicolon_in_expressions_from_non_local_macros)]` (part of `#[warn(future_incompatible)]`) on by default
+   = note: this warning originates in the macro `$crate::cfg_aliases` which comes from the expansion of the macro `cfg_aliases::cfg_aliases` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: trailing semicolon in macro used in expression position
+  --> third_party/wgpu-hal/build.rs:2:5
+   |
+ 2 | /     cfg_aliases::cfg_aliases! {
+ 3 | |         native: { not(target_arch = "wasm32") },
+ 4 | |         send_sync: { any(
+ 5 | |             not(target_arch = "wasm32"),
+...  |
+30 | |         supports_ptr_atomics: { target_has_atomic = "ptr" }
+31 | |     }
+   | |_____^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: for more information, see issue #79813 <https://github.com/rust-lang/rust/issues/79813>
+   = note: this warning originates in the macro `$crate::cfg_aliases` which comes from the expansion of the macro `cfg_aliases::cfg_aliases` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `wgpu-hal` (build script) generated 138 warnings (136 duplicates)
+   Compiling soundtouch-ffi v0.4.1
+   Compiling erika v0.3.6 (/Users/jumusu/Documents/project/OcPlayer/.local-build/hdr-core-build-20261114/KernelSource/crates/erika)
+   Compiling dispatch2 v0.3.1
+   Compiling block2 v0.6.2
+   Compiling objc2-core-audio-types v0.3.2
+   Compiling objc2-core-foundation v0.3.2
+   Compiling rustls v0.23.40
+   Compiling objc2-foundation v0.3.2
+   Compiling objc2-core-audio v0.3.2
+   Compiling rustls-webpki v0.103.13
+   Compiling soundtouch v0.5.4
+   Compiling tokio-rustls v0.26.5
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.12.28
+   Compiling objc2-metal v0.3.2
+   Compiling objc2-audio-toolbox v0.3.2
+   Compiling coreaudio-rs v0.14.2
+   Compiling objc2-core-graphics v0.3.2
+   Compiling objc2-core-video v0.3.2
+   Compiling objc2-quartz-core v0.3.2
+   Compiling raw-window-metal v1.1.0
+   Compiling wgpu-hal v29.0.3 (/Users/jumusu/Documents/project/OcPlayer/.local-build/hdr-core-build-20261114/KernelSource/third_party/wgpu-hal)
+   Compiling wgpu-core-deps-apple v29.0.3
+   Compiling wgpu-core v29.0.3
+   Compiling wgpu v29.0.3
+warning: variable does not need to be mutable
+    --> crates/erika/src/renderer/wgpu.rs:4398:17
+     |
+4398 |             let mut config = wgpu::SurfaceConfiguration {
+     |                 ----^^^^^^
+     |                 |
+     |                 help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> crates/erika/src/renderer/wgpu.rs:4417:17
+     |
+4417 |             let mut fallback_reason = selection.fallback_reason;
+     |                 ----^^^^^^^^^^^^^^^
+     |                 |
+     |                 help: remove this `mut`
+
+warning: unused variable: `recovery_attempt`
+    --> crates/erika/src/renderer/wgpu.rs:4513:13
+     |
+4513 |         for recovery_attempt in 0..2 {
+     |             ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_recovery_attempt`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variant `Rgb` is never constructed
+   --> crates/erika/src/renderer/wgpu.rs:396:5
+    |
+391 | enum UploadedVideoTextures {
+    |      --------------------- variant in this enum
+...
+396 |     Rgb {
+    |     ^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `sdr_format` is never read
+   --> crates/erika/src/renderer/wgpu.rs:515:5
+    |
+512 | struct AttachedSurface {
+    |        --------------- field in this struct
+...
+515 |     sdr_format: wgpu::TextureFormat,
+    |     ^^^^^^^^^^
+
+warning: function `attempted_candidate_prefix` is never used
+    --> crates/erika/src/renderer/wgpu.rs:1063:4
+     |
+1063 | fn attempted_candidate_prefix(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `erika` (lib) generated 6 warnings (run `cargo fix --lib -p erika` to apply 3 suggestions)
+   Compiling erika_capi v0.3.6 (/Users/jumusu/Documents/project/OcPlayer/.local-build/hdr-core-build-20261114/KernelSource/crates/erika_capi)
+    Finished `release` profile [optimized] target(s) in 1m 05s

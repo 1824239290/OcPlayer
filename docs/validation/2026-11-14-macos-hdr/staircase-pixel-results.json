@@ -1,0 +1,30 @@
+[
+  {
+    "capture" : "before-pq",
+    "distinctBands" : 2,
+    "rgbRedSamples" : [
+      133,
+      182,
+      182,
+      182,
+      182,
+      182,
+      182,
+      182
+    ]
+  },
+  {
+    "capture" : "after-pq-visible",
+    "distinctBands" : 8,
+    "rgbRedSamples" : [
+      80,
+      107,
+      132,
+      145,
+      155,
+      168,
+      176,
+      182
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "coreCommit": "fa75810e943862e5da63431a6a8bbb7d1cef8f04",
+  "nativeCommit": "888ccdd8a1098b4426166bb4b09b2f7dca3d8720",
+  "kernelBase": "e38a511561cb30ca57bd370b944d2e99b12737c7",
+  "kernelVersion": "v0.3.6+macos.hdr.dev",
+  "architecture": "arm64",
+  "patchSha256": "0ffca6d561d48dba7aab4eb0a21c6f3de4d2b0f1b021cc794d39da867f884316",
+  "kernelArchiveSha256": "7b8da844d4d13691ccef9a0ab77733d042b83699fcb468f446d7eca6e7efcce0",
+  "coreLibrarySha256": "f12adad259e2dcf3f67627fac236f8c0c7abf15c8c687da5e377235186c6472d",
+  "kernelDeploymentTarget": "13.0",
+  "buildScriptSha256": "f0f27e4d639edcbe066ad29c7c28a5ae434b935c347c2b70a37c348ae28d687d"
+}

@@ -1,0 +1,9 @@
+   Compiling erika v0.3.6 (/Users/jumusu/.codex/worktrees/macos-hdr-mapping/liberika/crates/erika)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.06s
+     Running unittests src/lib.rs (/Users/jumusu/Documents/project/OcPlayer/.local-build/hdr-fix-20261114/KernelTarget/debug/deps/erika-a03610e1f7f3aec0)
+
+running 1 test
+test renderer::metal::apple::tests::pq_layer_has_system_tone_mapping_metadata_and_clears_it_for_sdr ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 801 filtered out; finished in 0.07s
+

@@ -20,3 +20,11 @@ manifest. Its direct C references work when dynamic ABI symbols are stripped.
 Native application domain facades and UI are in the OcPlayer Apple checkout.
 The self-contained binding provides JSON commands, cancellation, events,
 snapshots, surface calls, and playback/Bangumi/danmaku bridge helpers.
+
+## Native macOS HDR presentation
+
+The Core-enabled native client uses liberika for video rendering. For the
+v0.3.6 macOS PQ clipping fix, use `Scripts/build-macos-hdr-fixed.sh` from the
+Core repository; it applies the versioned native patch in isolated source copies,
+embeds Core and verifies the application. See `docs/macos-hdr.md` for the
+source/build contract and the measured staircase regression evidence.
