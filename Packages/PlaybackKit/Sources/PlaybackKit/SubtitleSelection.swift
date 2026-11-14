@@ -1,4 +1,5 @@
 import Foundation
+import OcPlayerCore
 
 /// 用户在设置里选的字幕语言偏好。
 ///
@@ -55,7 +56,28 @@ public enum SubtitleTrackSelector {
     ///   - current: 当前选中的字幕轨 id（`nil` = 现在是关的）。
     ///   - displayNames: 轨道 id → App 层显示名（Jellyfin 侧车字幕的标题）。
     ///     内核不带这些元数据，菜单里靠它显示，选轨时也靠它判断语言。
+    private static let sharedSelector = OcpPlaybackTracks()
     public static func selection(
+        in tracks: [TrackInfo],
+        preference: SubtitleLanguagePreference,
+        current: Int64?,
+        displayNames: [Int64: String] = [:]
+    ) -> SubtitleSelection {
+        if let core = sharedSelector {
+            guard let selected = try? core.selection(
+                tracks: tracks.map { PlaybackTrackWorkflow.wire($0, displayName: displayNames[$0.id]) },
+                preference: preference.rawValue, current: current
+            ) else { return .keep }
+            switch selected.action {
+            case "disable": return .disable
+            case "select": return selected.id.map(SubtitleSelection.select) ?? .keep
+            default: return .keep
+            }
+        }
+        return nativeSelection(in: tracks, preference: preference, current: current, displayNames: displayNames)
+    }
+
+    static func nativeSelection(
         in tracks: [TrackInfo],
         preference: SubtitleLanguagePreference,
         current: Int64?,

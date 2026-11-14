@@ -349,7 +349,7 @@ final class SubtitlePreferenceTests: XCTestCase {
         XCTAssertEqual(engine.selectedIDs, [2], "外挂轨自己的语言未知时仍认已选的中文轨")
 
         // App 层记录的显示名（"简体"）参与判定后应切过去。
-        controller.externalSubtitleNames[3] = "简体"
+        try controller.trackWorkflow.registerName(id: 3, name: "简体")
         controller.state.refreshTracks(from: engine)
         try await waitUntil { engine.selectedIDs == [2, 3] }
         engine.settle()
@@ -409,10 +409,10 @@ final class SubtitlePreferenceTests: XCTestCase {
         controller.beginExternalSubtitleBatch()
         // 批次内先挂繁體、再挂简体：期间一次都不该下发。
         engine.appendTrack(subtitle(id: 2, source: .external))
-        controller.externalSubtitleNames[2] = "繁體"
+        try controller.trackWorkflow.registerName(id: 2, name: "繁體")
         controller.state.refreshTracks(from: engine)
         engine.appendTrack(subtitle(id: 3, source: .external))
-        controller.externalSubtitleNames[3] = "简体"
+        try controller.trackWorkflow.registerName(id: 3, name: "简体")
         controller.state.refreshTracks(from: engine)
         XCTAssertTrue(engine.selectedIDs.isEmpty, "批次期间不得逐条校正")
 

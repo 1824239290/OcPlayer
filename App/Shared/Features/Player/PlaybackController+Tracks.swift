@@ -4,6 +4,13 @@ import PlaybackKit
 import Foundation
 
 extension PlaybackController {
+    @discardableResult
+    func performTrackOperation(_ operation: PlaybackTrackWorkflow.Operation, engine: any PlaybackEngine) throws -> Bool {
+        try trackWorkflow.perform(operation, engine: engine,
+            didSelectSubtitle: { [weak self] id in try? self?.rustPlayback?.selectSubtitle(id.map(String.init)) },
+            didSelectAudio: { [weak self] id in try? self?.rustPlayback?.selectAudio(String(id)) })
+    }
+
     // MARK: - 轨道（音轨 / 字幕菜单用）
 
     /// 按轨道 id 取外挂字幕显示名；没有记录时回退到内核给的名字/语言。
@@ -218,8 +225,7 @@ extension PlaybackController {
 
     func selectAudio(_ track: TrackInfo) {
         guard let engine else { return }
-        try? engine.selectAudioTrack(track.id)
-        try? rustPlayback?.selectAudio(String(track.id))
+        try? performTrackOperation(.selectAudio(track.id), engine: engine)
         state.refreshTracks(from: engine)
     }
 
@@ -227,12 +233,10 @@ extension PlaybackController {
     func setSubtitle(_ track: TrackInfo?) {
         guard let engine else { return }
         do {
-            try engine.selectSubtitleTrack(track?.id)
-            try? rustPlayback?.selectSubtitle(track.map { String($0.id) })
+            try performTrackOperation(.selectSubtitle(track?.id), engine: engine)
             // 用户自己拨过 → 本片内不再自动改（见 `userChoseSubtitleForCurrentSource`）。
             // 只在**真的生效**之后置位：选轨失败（内核报错）时闸门不该跟着关，
             // 否则用户会卡在「自动校正也不再介入」的状态里。
-            userChoseSubtitleForCurrentSource = true
         } catch {
             setupError = "字幕选择失败：\(error)"
             playerLog.warning("手动选字幕失败 id=\(track?.id.description ?? "关闭") error=\(error)")
@@ -254,14 +258,12 @@ extension PlaybackController {
     func removeSubtitle(_ track: TrackInfo) {
         guard let engine, track.canRemove else { return }
         do {
-            try engine.removeSubtitleTrack(track.id)
+            try performTrackOperation(.removeSubtitle(track), engine: engine)
         } catch {
             setupError = "字幕删除失败：\(error)"
             playerLog.warning("删除字幕轨失败 id=\(track.id) error=\(error)")
             return
         }
-        externalSubtitleNames.removeValue(forKey: track.id)
-        if track.selected { userChoseSubtitleForCurrentSource = false }
         playerLog.info(
             "删除字幕轨 id=\(track.id) wasSelected=\(track.selected) "
                 + "title=\(track.displayTitle) source=\(track.source.rawValue)"
@@ -274,15 +276,8 @@ extension PlaybackController {
         guard let engine else { return }
         guard let localURL = copyImportedSubtitle(fileURL) else { return }
         do {
-            let id = try engine.addExternalSubtitle(localURL.path)
-            // 手动导入的轨道名用文件主名（去掉扩展名）。
             let baseName = fileURL.deletingPathExtension().lastPathComponent
-            externalSubtitleNames[id] = baseName
-            try engine.selectSubtitleTrack(id)
-            try? rustPlayback?.selectSubtitle(String(id))
-            // 用户自己挑的文件就是要看的那条：挡住后续的偏好校正。同样只在
-            // 加载 + 选中都成功之后才置位（坏文件不该连带关掉自动校正）。
-            userChoseSubtitleForCurrentSource = true
+            try performTrackOperation(.importSubtitle(path: localURL.path, name: baseName), engine: engine)
             state.refreshTracks(from: engine)
         } catch {
             setupError = "字幕加载失败：\(error)"
@@ -299,10 +294,7 @@ extension PlaybackController {
     ) -> Bool {
         do {
             return try withReadyEngine(for: source) { engine in
-                let id = try engine.addExternalSubtitle(fileURL.path)
-                if let name, !name.isEmpty {
-                    externalSubtitleNames[id] = name
-                }
+                try performTrackOperation(.attachSubtitle(path: fileURL.path, name: name), engine: engine)
                 state.refreshTracks(from: engine)
             }
         } catch {
@@ -336,53 +328,23 @@ extension PlaybackController {
         guard !isApplyingSubtitlePreference else { return }
         isApplyingSubtitlePreference = true
         defer { isApplyingSubtitlePreference = false }
-        guard !userChoseSubtitleForCurrentSource,
-              !isLoadingExternalSubtitleBatch,
-              let engine
-        else { return }
+        guard let engine else { return }
         let tracks = state.subtitleTracks
-        guard !tracks.isEmpty else { return }
         let current = tracks.first(where: { $0.selected })?.id
-        let action = SubtitleTrackSelector.selection(
-            in: tracks,
-            preference: PlaybackPreferences.subtitleLanguagePreference,
-            current: current,
-            displayNames: externalSubtitleNames
-        )
-        switch action {
-        case .keep:
-            return
-        case .disable:
-            do {
-                try engine.selectSubtitleTrack(nil)
-                try? rustPlayback?.selectSubtitle(nil)
-            } catch {
-                // 自动动作失败只进日志，不弹错误徽章：用户没要求过这次切换
-                // （对照 `applyDanmakuPrefs` 失败只 warning 的口径）。
-                playerLog.warning("按偏好关闭字幕失败 error=\(error)")
-                return
-            }
-            #if DEBUG
-            appliedSubtitlePreferenceCount += 1
-            #endif
-            playerLog.info("按偏好关闭字幕 tracks=\(tracks.count)")
-        case .select(let id):
-            do {
-                try engine.selectSubtitleTrack(id)
-                try? rustPlayback?.selectSubtitle(String(id))
-            } catch {
-                playerLog.warning("按偏好选字幕失败 id=\(id) error=\(error)")
-                return
-            }
-            #if DEBUG
-            appliedSubtitlePreferenceCount += 1
-            #endif
-            let picked = tracks.first { $0.id == id }
-            playerLog.info(
-                "按偏好自动选字幕 id=\(id) lang=\(picked?.language ?? "-") "
-                    + "title=\(picked?.title ?? "-") source=\(picked?.source.rawValue ?? "-")"
+        do {
+            let performed = try performTrackOperation(
+                .automatic(tracks: tracks, preference: PlaybackPreferences.subtitleLanguagePreference, current: current),
+                engine: engine
             )
+            guard performed else { return }
+        } catch {
+            playerLog.warning("按偏好选择字幕失败 error=\(error)")
+            return
         }
+        #if DEBUG
+        appliedSubtitlePreferenceCount += 1
+        #endif
+        playerLog.info("按偏好校正字幕 tracks=\(tracks.count)")
         state.refreshTracks(from: engine)
     }
 
@@ -395,7 +357,8 @@ extension PlaybackController {
         }
         let id = UUID()
         if let source { externalSubtitleBatch = (id, source) }
-        isLoadingExternalSubtitleBatch = true
+        do { try trackWorkflow.beginBatch(id: id.uuidString) }
+        catch { externalSubtitleBatch = nil; return nil }
         return id
     }
 
@@ -409,8 +372,10 @@ extension PlaybackController {
         if let batchID {
             guard externalSubtitleBatch?.id == batchID, externalSubtitleBatch?.source == source else { return false }
         } else if externalSubtitleBatch != nil { return false }
+        guard let currentBatch = trackWorkflow.batchID else { return false }
+        do { guard try trackWorkflow.endBatch(id: currentBatch) else { return false } }
+        catch { return false }
         externalSubtitleBatch = nil
-        isLoadingExternalSubtitleBatch = false
         return applySubtitlePreference(for: source)
     }
 

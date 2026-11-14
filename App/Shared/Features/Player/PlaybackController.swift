@@ -199,14 +199,15 @@ final class PlaybackController: DanmakuPlaybackHosting {
     var skipTimesHint: DanmakuKit.DanmakuIntroHint?
     /// 外挂字幕轨道 id → 显示名（Jellyfin 侧车字幕的标题）。内核不带名字，
     /// App 层在下载时记录；换源 / 拆引擎时清空（见 resetEngine）。
-    var externalSubtitleNames: [Int64: String] = [:]
+    @ObservationIgnored let trackWorkflow = PlaybackTrackWorkflow()
+    var externalSubtitleNames: [Int64: String] { trackWorkflow.externalNames }
     /// 用户在本片里手动拨过字幕（选轨 / 关字幕）。
     ///
     /// 自动选字幕只负责「打开时按偏好挑一条」；一旦用户自己动过，本片内不再自动
     /// 覆盖——轨道刷新是持续事件（外挂字幕一条条挂上来），不加这道闸就会出现
     /// 「用户切到日文字幕，两秒后被自动切回中文」。随 open / 拆引擎复位。
     /// 纯内部记账：不参与 UI，别让它的写入连带触发 HUD 重绘。
-    @ObservationIgnored var userChoseSubtitleForCurrentSource = false
+    var userChoseSubtitleForCurrentSource: Bool { trackWorkflow.manualChoice }
     /// 自动选字幕正在下发动作（只在这一段里挡住 `state.onTracksRefreshed` 的重入）。
     ///
     /// 方法末尾的 `refreshTracks` 会同步再触发回调，而内核选轨是异步生效的：同一次
@@ -217,7 +218,7 @@ final class PlaybackController: DanmakuPlaybackHosting {
     /// 侧车是一条条挂上来的、每条都会刷轨道列表：逐条校正会让「繁體先下完、简体后
     /// 下完」的片源在开播头几秒连续切换两次字幕轨（每次都是内核级轨切换，会停/重启
     /// 音频输出）。批次期间挂起校正，整批结束后统一做一次。
-    @ObservationIgnored var isLoadingExternalSubtitleBatch = false
+    var isLoadingExternalSubtitleBatch: Bool { trackWorkflow.isLoadingBatch }
     @ObservationIgnored var externalSubtitleBatch: (id: UUID, source: PlaybackSourceGeneration)?
     #if DEBUG
     /// 测试观察口：本代次按偏好下发选轨 / 关字幕的次数（幂等与「不重复下发」靠它验）。
@@ -1312,9 +1313,8 @@ final class PlaybackController: DanmakuPlaybackHosting {
         failedRequestID = nil
         danmakuTracks = []
         danmakuGlobalOffsetSeconds = 0
-        externalSubtitleNames = [:]
-        userChoseSubtitleForCurrentSource = false
-        isLoadingExternalSubtitleBatch = false
+        do { try trackWorkflow.reset() }
+        catch { playerLog.warning("轨道流程重置失败 error=\(error)") }
         externalSubtitleBatch = nil
         #if DEBUG
         appliedSubtitlePreferenceCount = 0
