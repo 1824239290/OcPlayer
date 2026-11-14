@@ -3,6 +3,7 @@
 pub mod engine;
 pub mod flow;
 pub mod report;
+pub mod tracks;
 
 use ocp_model::{PlaybackError, PlaybackSnapshot, PlaybackState};
 use serde::{Deserialize, Serialize};

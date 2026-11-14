@@ -1,0 +1,157 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild test-without-building -xctestrun /tmp/ocp-tracks-macos/DerivedData/Build/Products/OcPlayer-tracks-disabled.xctestrun -destination platform=macOS,arch=arm64 -parallel-testing-enabled NO "-only-testing:OcPlayerTests/SubtitlePreferenceTests" "-only-testing:OcPlayerTests/SubtitleRemovalTests"
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:Mac Catalyst, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:DriverKit, id:00008103-001A544E0A62001E, name:My Mac }
+{ platform:macOS, arch:arm64, variant:Designed for [iPad,iPhone], id:00008103-001A544E0A62001E, name:My Mac }
+2026-11-14 12:26:51.793419+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+2026-11-14 12:26:51.801336+0800 OcPlayer[80773:27341586] [App] 应用启动 fields={build="1",commit="dev",platform="macOS",version="0.3.0"}
+2026-11-14 12:26:51.854683+0800 OcPlayer[80773:27341642] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.854721+0800 OcPlayer[80773:27341642] [Application] Error registering app with intents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.857246+0800 OcPlayer[80773:27341644] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.857262+0800 OcPlayer[80773:27341644] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.859858+0800 OcPlayer[80773:27341643] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.859885+0800 OcPlayer[80773:27341643] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.862423+0800 OcPlayer[80773:27341643] [Connection] Will NOT re-try to establish the connection
+2026-11-14 12:26:51.862456+0800 OcPlayer[80773:27341644] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.862469+0800 OcPlayer[80773:27341644] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 12:26:51.898384+0800 OcPlayer[80773:27341586] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/dev.jumusu.OcPlayer.savedState
+2026-11-14 12:26:52.009436+0800 OcPlayer[80773:27341586] [App] 启动动画跳过 fields={reason="测试宿主"}
+Test Suite 'Selected tests' started at 2026-11-14 12:26:52.133.
+Test Suite 'OcPlayerTests.xctest' started at 2026-11-14 12:26:52.134.
+Test Suite 'SubtitlePreferenceTests' started at 2026-11-14 12:26:52.134.
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testDefaultPreferenceIsSimplifiedChinesePriority]' started.
+2026-11-14 12:26:52.137278+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testDefaultPreferenceIsSimplifiedChinesePriority]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testDoesNotReapplyWhenSelectionAlreadyMatches]' started.
+2026-11-14 12:26:52.140819+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.141071+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.141205+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.142949+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=2
+2026-11-14 12:26:52.201351+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testDoesNotReapplyWhenSelectionAlreadyMatches]' passed (0.064 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testExternalSubtitleBatchSwitchesAtMostOnce]' started.
+2026-11-14 12:26:52.205395+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.205705+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.205804+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.206870+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=3
+2026-11-14 12:26:52.212470+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testExternalSubtitleBatchSwitchesAtMostOnce]' passed (0.011 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testFailedSubtitleImportDoesNotDisableAutoSelection]' started.
+2026-11-14 12:26:52.219903+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.220162+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.220257+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.223874+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=2
+2026-11-14 12:26:52.228261+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testFailedSubtitleImportDoesNotDisableAutoSelection]' passed (0.015 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testFollowSourcePreferenceNeverIntervenes]' started.
+2026-11-14 12:26:52.238751+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.239465+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.239573+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.294271+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testFollowSourcePreferenceNeverIntervenes]' passed (0.066 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testKeepsSourceDefaultWhenNoChineseTrack]' started.
+2026-11-14 12:26:52.305995+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.306442+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.306595+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.361225+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testKeepsSourceDefaultWhenNoChineseTrack]' passed (0.066 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testLaterExternalChineseSubtitleIsPickedUp]' started.
+2026-11-14 12:26:52.373842+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.374603+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.374851+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.377635+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=2
+2026-11-14 12:26:52.413171+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=3
+2026-11-14 12:26:52.420747+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testLaterExternalChineseSubtitleIsPickedUp]' passed (0.059 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testOffPreferenceDisablesSubtitlesOnce]' started.
+2026-11-14 12:26:52.429081+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.430410+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.430623+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.433209+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=1
+2026-11-14 12:26:52.584199+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testOffPreferenceDisablesSubtitlesOnce]' passed (0.163 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testSameTurnRefreshDoesNotRecurseBeforeSelectionSettles]' started.
+2026-11-14 12:26:52.593336+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.593969+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.594168+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.597064+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=2
+2026-11-14 12:26:52.633950+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testSameTurnRefreshDoesNotRecurseBeforeSelectionSettles]' passed (0.048 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testStaleSubtitleBatchCannotEndNewBatchEvenForSameSource]' started.
+2026-11-14 12:26:52.640245+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testStaleSubtitleBatchCannotEndNewBatchEvenForSameSource]' passed (0.006 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testSwitchingSourceResetsUserChoiceGate]' started.
+2026-11-14 12:26:52.646032+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.646566+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.646731+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.649416+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testSwitchingSourceResetsUserChoiceGate]' passed (0.009 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testTrackRefreshSwitchesToChineseSubtitle]' started.
+2026-11-14 12:26:52.655972+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.656457+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.656617+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.659045+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=2
+2026-11-14 12:26:52.669814+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testTrackRefreshSwitchesToChineseSubtitle]' passed (0.019 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testUserDisablingSubtitlesIsRespected]' started.
+2026-11-14 12:26:52.675999+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.676472+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.676639+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.730377+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testUserDisablingSubtitlesIsRespected]' passed (0.060 seconds).
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testUserSelectionDisablesAutoSwitchingForThisSource]' started.
+2026-11-14 12:26:52.737441+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-fake name=SubtitleFake
+2026-11-14 12:26:52.738023+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-fake
+2026-11-14 12:26:52.738225+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-fake danmaku=overlay
+2026-11-14 12:26:52.793642+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitlePreferenceTests testUserSelectionDisablesAutoSwitchingForThisSource]' passed (0.063 seconds).
+Test Suite 'SubtitlePreferenceTests' passed at 2026-11-14 12:26:52.796.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.653 (0.662) seconds
+Test Suite 'SubtitleRemovalTests' started at 2026-11-14 12:26:52.797.
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testEmbeddedTrackIsNeverSentToEngine]' started.
+2026-11-14 12:26:52.803449+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-removal-fake name=SubtitleRemovalFake
+2026-11-14 12:26:52.804273+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-removal-fake
+2026-11-14 12:26:52.804539+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-removal-fake danmaku=overlay
+2026-11-14 12:26:52.806632+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testEmbeddedTrackIsNeverSentToEngine]' passed (0.010 seconds).
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovalFailureKeepsStateAndSurfacesError]' started.
+2026-11-14 12:26:52.815057+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-removal-fake name=SubtitleRemovalFake
+2026-11-14 12:26:52.815555+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-removal-fake
+2026-11-14 12:26:52.815723+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-removal-fake danmaku=overlay
+2026-11-14 12:26:52.816720+0800 OcPlayer[80773:27341586] [App] 删除字幕轨失败 id=10 error=RemovalRejected()
+2026-11-14 12:26:52.817034+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovalFailureKeepsStateAndSurfacesError]' passed (0.009 seconds).
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovingSelectedTrackReConvergesToPreference]' started.
+2026-11-14 12:26:52.821582+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-removal-fake name=SubtitleRemovalFake
+2026-11-14 12:26:52.821850+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-removal-fake
+2026-11-14 12:26:52.821926+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-removal-fake danmaku=overlay
+2026-11-14 12:26:52.822029+0800 OcPlayer[80773:27341586] [App] 删除字幕轨 id=10 wasSelected=true title=srt source=external
+2026-11-14 12:26:52.822087+0800 OcPlayer[80773:27341586] [App] 按偏好校正字幕 tracks=1
+2026-11-14 12:26:52.822233+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovingSelectedTrackReConvergesToPreference]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovingUnselectedTrackKeepsSelection]' started.
+2026-11-14 12:26:52.824513+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=subtitle-removal-fake name=SubtitleRemovalFake
+2026-11-14 12:26:52.824720+0800 OcPlayer[80773:27341586] [Playback] 内核实例化 id=subtitle-removal-fake
+2026-11-14 12:26:52.824787+0800 OcPlayer[80773:27341586] [Playback] PlaybackController prepareEngine 成功 kernel=subtitle-removal-fake danmaku=overlay
+2026-11-14 12:26:52.824835+0800 OcPlayer[80773:27341586] [App] 删除字幕轨 id=10 wasSelected=false title=srt source=external
+2026-11-14 12:26:52.824976+0800 OcPlayer[80773:27341586] [Playback] 内核注册 id=erika name=liberika
+Test Case '-[OcPlayerTests.SubtitleRemovalTests testRemovingUnselectedTrackKeepsSelection]' passed (0.002 seconds).
+Test Suite 'SubtitleRemovalTests' passed at 2026-11-14 12:26:52.825.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.026 (0.029) seconds
+Test Suite 'OcPlayerTests.xctest' passed at 2026-11-14 12:26:52.826.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.679 (0.692) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 12:26:52.826.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.679 (0.692) seconds
+2026-11-14 12:26:53.119 xcodebuild[80768:27341510] [MT] IDETestOperationsObserverDebug: 2.780 elapsed -- Testing started completed.
+2026-11-14 12:26:53.119 xcodebuild[80768:27341510] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-14 12:26:53.119 xcodebuild[80768:27341510] [MT] IDETestOperationsObserverDebug: 2.780 sec, +2.780 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/jumusu/Library/Developer/Xcode/DerivedData/OcPlayer-gmkmwnsmuxgjiratiylvafwifdsj/Logs/Test/Test-OcPlayer-macOS-2026.11.14_12-26-50-+0800.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

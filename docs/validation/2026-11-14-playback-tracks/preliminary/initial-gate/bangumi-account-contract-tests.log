@@ -1,0 +1,10 @@
+test_clock_boundary_session_and_profile_adoption (__main__.AccountContract.test_clock_boundary_session_and_profile_adoption) ... ok
+test_credential_commit_preserves_refresh_owner_but_oauth_retires_it (__main__.AccountContract.test_credential_commit_preserves_refresh_owner_but_oauth_retires_it) ... ok
+test_invalid_arguments_leave_state_unchanged_and_unsigned_values_remain_exact (__main__.AccountContract.test_invalid_arguments_leave_state_unchanged_and_unsigned_values_remain_exact) ... ok
+test_oauth_latest_exchange_wins_and_callback_is_single_use (__main__.AccountContract.test_oauth_latest_exchange_wins_and_callback_is_single_use) ... ok
+test_parallel_refresh_has_one_owner_and_old_release_cannot_touch_new_owner (__main__.AccountContract.test_parallel_refresh_has_one_owner_and_old_release_cannot_touch_new_owner) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.017s
+
+OK

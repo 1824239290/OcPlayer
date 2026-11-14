@@ -24,6 +24,10 @@ progress, and versioned configuration/diagnostic export. `replay` accepts one
 JSON command per line (`{"method":"...","arguments":{...}}`) and prints each
 response followed by the final snapshot on stderr.
 
+Playback track preference, manual selection, import/sidecar loading, removal and
+identified subtitle batches now use retained decoder effects; see
+[`docs/playback-tracks-contract.md`](docs/playback-tracks-contract.md).
+
 MoviePilot's macOS transport now includes first login, token-only silent refresh
 and byte-preserving low-level exchanges through Core. Login/refresh/logout policy
 is retained through [`docs/moviepilot-account-contract.md`](docs/moviepilot-account-contract.md).

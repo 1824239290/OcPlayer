@@ -1,0 +1,26 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[2 / 6] OcPlayerCore
+[3 / 7] OcPlayerCore
+[7 / 9] OcPlayerCore
+[10 / 11] PlaybackKitTests-product
+Build complete! (1.28秒)
+Test Suite 'Selected tests' started at 2026-11-14 12:13:02.854.
+Test Suite 'PlaybackKitTests.xctest' started at 2026-11-14 12:13:02.855.
+Test Suite 'PlaybackTrackWorkflowTests' started at 2026-11-14 12:13:02.855.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testBatchRunsOnlyAfterCurrentBatchEndsAndManualChoiceSuppressesPreference]' passed (0.004 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testImportTwoEffectsPreservesNameOnSelectionFailureAndRetiresWorkOnReset]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testNestedEngineRefreshDoesNotReenterOrCommitFailedAudioSelection]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectedRemovalUnlocksOnlyAfterPhysicalSuccess]' passed (0.001 seconds).
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' started.
+Test Case '-[PlaybackKitTests.PlaybackTrackWorkflowTests testSelectorMatchesIndependentNativePolicyAcrossUnicodeAndFieldTrustCorpus]' passed (0.271 seconds).
+Test Suite 'PlaybackTrackWorkflowTests' passed at 2026-11-14 12:13:03.134.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.279 (0.279) seconds
+Test Suite 'PlaybackKitTests.xctest' passed at 2026-11-14 12:13:03.134.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.279 (0.279) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 12:13:03.134.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.279 (0.280) seconds

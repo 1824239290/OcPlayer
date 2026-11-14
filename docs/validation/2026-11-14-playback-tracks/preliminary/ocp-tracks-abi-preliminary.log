@@ -1,0 +1,16 @@
+test_clock_boundary_session_and_profile_adoption (bangumi_account_contract.AccountContract.test_clock_boundary_session_and_profile_adoption) ... ok
+test_credential_commit_preserves_refresh_owner_but_oauth_retires_it (bangumi_account_contract.AccountContract.test_credential_commit_preserves_refresh_owner_but_oauth_retires_it) ... ok
+test_invalid_arguments_leave_state_unchanged_and_unsigned_values_remain_exact (bangumi_account_contract.AccountContract.test_invalid_arguments_leave_state_unchanged_and_unsigned_values_remain_exact) ... ok
+test_oauth_latest_exchange_wins_and_callback_is_single_use (bangumi_account_contract.AccountContract.test_oauth_latest_exchange_wins_and_callback_is_single_use) ... ok
+test_parallel_refresh_has_one_owner_and_old_release_cannot_touch_new_owner (bangumi_account_contract.AccountContract.test_parallel_refresh_has_one_owner_and_old_release_cannot_touch_new_owner) ... ok
+test_batches_reject_stale_end_and_suppress_only_automatic_work (__main__.TrackContract.test_batches_reject_stale_end_and_suppress_only_automatic_work) ... ok
+test_import_uses_unique_effect_receipts_and_records_name_before_selected_failure (__main__.TrackContract.test_import_uses_unique_effect_receipts_and_records_name_before_selected_failure) ... ok
+test_invalid_payloads_and_unremovable_tracks_leave_state_unchanged (__main__.TrackContract.test_invalid_payloads_and_unremovable_tracks_leave_state_unchanged) ... ok
+test_manual_and_removal_commit_only_after_engine_success (__main__.TrackContract.test_manual_and_removal_commit_only_after_engine_success) ... ok
+test_reset_retires_old_receipt_and_pending_refresh_does_not_replace_effect (__main__.TrackContract.test_reset_retires_old_receipt_and_pending_refresh_does_not_replace_effect) ... ok
+test_selection_field_trust_external_default_and_unknown_language (__main__.TrackContract.test_selection_field_trust_external_default_and_unknown_language) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.006s
+
+OK

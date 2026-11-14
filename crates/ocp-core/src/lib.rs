@@ -45,6 +45,7 @@ struct State {
     playback: PlaybackSnapshot,
     session: PlaybackSession,
     playback_flow: ocp_session::flow::PlaybackFlow,
+    playback_tracks: ocp_session::tracks::TrackFlow,
     engine_events: ocp_session::engine::EngineEvents,
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
@@ -142,6 +143,7 @@ impl Core {
                 playback: PlaybackSnapshot::default(),
                 session: PlaybackSession::new(2),
                 playback_flow: Default::default(),
+                playback_tracks: Default::default(),
                 engine_events: Default::default(),
                 store,
                 bangumi_store: None,
@@ -441,6 +443,21 @@ impl Core {
                 match call_playback_events(&mut state, method, &arguments) {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            method if method.starts_with("playbackTracks.") => {
+                match call_playback_tracks(&mut state, method, &arguments) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(
+                        if message.ends_with("retired") {
+                            1003
+                        } else {
+                            1002
+                        },
+                        false,
+                        message,
+                        Value::Null,
+                    ),
                 }
             }
             method if method.starts_with("playbackFlow.") => {
@@ -3399,5 +3416,74 @@ mod tests {
         .unwrap();
         assert_eq!(imported["data"]["config"]["locale"], "ja-JP");
         let _ = std::fs::remove_dir_all(directory);
+    }
+}
+
+fn call_playback_tracks(state: &mut State, method: &str, args: &Value) -> Result<Value, String> {
+    use ocp_session::tracks::{Preference, Track};
+    let decode = |key: &str| {
+        args.get(key)
+            .cloned()
+            .ok_or_else(|| format!("{key} is required"))
+    };
+    let batch_id = || {
+        args.get("batchId")
+            .and_then(Value::as_str)
+            .ok_or("batchId is required")
+    };
+    match method {
+        "playbackTracks.snapshot" => Ok(json!(state.playback_tracks.snapshot())),
+        "playbackTracks.reset" => Ok(json!(state.playback_tracks.reset())),
+        "playbackTracks.beginBatch" => Ok(json!(state
+            .playback_tracks
+            .begin_batch(batch_id()?.to_owned())?)),
+        "playbackTracks.endBatch" => Ok(json!(state.playback_tracks.end_batch(batch_id()?)?)),
+        "playbackTracks.registerName" => {
+            let id = args
+                .get("id")
+                .and_then(Value::as_i64)
+                .ok_or("id is required")?;
+            let name = args
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or("name is required")?;
+            Ok(json!(state.playback_tracks.register_name(id, name.into())))
+        }
+        "playbackTracks.selection" => {
+            let tracks: Vec<Track> =
+                serde_json::from_value(decode("tracks")?).map_err(|e| e.to_string())?;
+            ocp_session::tracks::validate_tracks(&tracks)?;
+            let preference: Preference =
+                serde_json::from_value(decode("preference")?).map_err(|e| e.to_string())?;
+            let current: Option<i64> =
+                serde_json::from_value(decode("current")?).map_err(|e| e.to_string())?;
+            Ok(json!(ocp_session::tracks::selection(
+                &tracks,
+                preference,
+                current,
+                &Default::default()
+            )))
+        }
+        "playbackTracks.begin" => {
+            let request = serde_json::from_value(decode("request")?).map_err(|e| e.to_string())?;
+            Ok(json!(state.playback_tracks.begin(request)?))
+        }
+        "playbackTracks.complete" => {
+            let id = args
+                .get("operationId")
+                .and_then(Value::as_u64)
+                .ok_or("operationId is required")?;
+            let success = args
+                .get("success")
+                .and_then(Value::as_bool)
+                .ok_or("success is required")?;
+            let track_id: Option<i64> =
+                serde_json::from_value(args.get("trackId").cloned().unwrap_or(Value::Null))
+                    .map_err(|e| e.to_string())?;
+            Ok(json!(state
+                .playback_tracks
+                .complete(id, success, track_id)?))
+        }
+        _ => Err(format!("unknown method: {method}")),
     }
 }

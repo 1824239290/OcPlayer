@@ -23,6 +23,7 @@ cmp tests/tmdb_enrichment_server.py "$apple_root/Packages/MetadataKit/Tests/Meta
 swift test --package-path bindings/apple/OcPlayerCore --scratch-path "$output_dir/AppleBindingBuild" > "$output_dir/apple-binding-tests.log" 2>&1
 python3 tests/bangumi_progress_contract.py > "$output_dir/bangumi-progress-contract-tests.log" 2>&1
 python3 tests/bangumi_auth_flow_contract.py > "$output_dir/bangumi-auth-flow-contract-tests.log" 2>&1
+python3 tests/playback_tracks_contract.py > "$output_dir/playback-tracks-contract-tests.log" 2>&1
 python3 tests/bangumi_sync_contract.py > "$output_dir/bangumi-sync-contract-tests.log" 2>&1
 python3 tests/bangumi_account_contract.py > "$output_dir/bangumi-account-contract-tests.log" 2>&1
 python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&1
