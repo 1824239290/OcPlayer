@@ -41,6 +41,9 @@ and [`docs/bangumi-sync-contract.md`](docs/bangumi-sync-contract.md).
 Subject loading, tri-state collection reconciliation, progress and rating
 mutations, batch readback and season completion now also use retained SQL/effect
 flows; see [`docs/bangumi-progress-contract.md`](docs/bangumi-progress-contract.md).
+The complete login/profile/logout/invalidation service sequences now also use
+retained effects with atomic credential and DB clear guards; see
+[`docs/bangumi-auth-flow-contract.md`](docs/bangumi-auth-flow-contract.md).
 
 Danmaku matching policy and mapping/comment/intro-hint persistence now run in
 Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,

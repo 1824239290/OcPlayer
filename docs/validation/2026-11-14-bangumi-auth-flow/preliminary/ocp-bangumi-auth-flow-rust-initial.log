@@ -1,0 +1,184 @@
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:322:10
+     |
+ 322 |         .unwrap()
+     |          ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:327:71
+     |
+ 327 |         let start = d.start(&json!({"operation":"exchange"}), &mut a).unwrap();
+     |                                                                       ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:340:14
+     |
+ 340 |             .unwrap();
+     |              ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:351:120
+     |
+ 351 |         let step=d.start(&json!({"operation":"invalidateSession","authenticated":true,"expectedGeneration":0}),&mut a).unwrap();
+     |                                                                                                                        ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:365:14
+     |
+ 365 |             .unwrap();
+     |              ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:385:69
+     |
+ 385 |         let old = d.start(&json!({"operation":"exchange"}), &mut a).unwrap();
+     |                                                                     ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:386:70
+     |
+ 386 |         let logout = d.start(&json!({"operation":"logout"}), &mut a).unwrap();
+     |                                                                      ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:387:61
+     |
+ 387 |         assert_eq!(d.cancel(&json!({"token":old["token"]})).unwrap(), false);
+     |                                                             ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+error[E0277]: `auth_flow::Error` doesn't implement `Debug`
+    --> crates/ocp-bangumi/src/auth_flow.rs:396:14
+     |
+ 396 |             .unwrap();
+     |              ^^^^^^ the trait `Debug` is not implemented for `auth_flow::Error`
+     |
+note: required by a bound in `Result::<T, E>::unwrap`
+    --> /opt/homebrew/Cellar/rust/1.99.1/lib/rustlib/src/rust/library/core/src/result.rs:1228:12
+     |
+1226 |     pub fn unwrap(self) -> T
+     |            ------ required by a bound in this associated function
+1227 |     where
+1228 |         E: fmt::Debug,
+     |            ^^^^^^^^^^ required by this bound in `Result::<T, E>::unwrap`
+help: consider annotating `auth_flow::Error` with `#[derive(Debug)]`
+     |
+  13 + #[derive(Debug)]
+  14 | pub struct Error(pub i32, pub String);
+     |
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `ocp-bangumi` (lib test) due to 9 previous errors
+warning: build failed, waiting for other jobs to finish...

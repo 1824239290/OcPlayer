@@ -47,12 +47,14 @@ Duplicate callbacks cannot submit a second token request.
 
 The native actor still performs credential encoding/persistence, clock reads,
 session construction/cancellation, task execution/watchdog sleeping, localized
-error mapping and notifications. The MainActor auth service still fetches and
-applies the profile and clears local UI/database state, using Core revision
-barriers. Complete shared account/profile effect flows, detailed subject/progress mutation chaining
-and broader live-account acceptance remain separate work. Collection/episode sync
-now runs in [retained Core flows](bangumi-sync-contract.md). This contract does not certify
-the complete Bangumi or macOS release scope.
+error mapping and notifications. The four MainActor account/profile service flows now use
+[retained account/profile effects](bangumi-auth-flow-contract.md), including
+profile commit and failure rollback, logout UI/credential/DB order, conditional
+passive invalidation and physical credential/DB clear guards. Native execution
+and persistence remain adapters. Subject/progress operations and collection/episode
+sync use [progress](bangumi-progress-contract.md) and
+[sync](bangumi-sync-contract.md) flows. Broader live-account and full macOS release
+acceptance remain open.
 
 Verification includes Rust state tests, five exported C ABI cases (with 64
 parallel claims), and real native/Core HTTP comparisons for logout during

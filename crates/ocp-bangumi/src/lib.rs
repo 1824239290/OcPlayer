@@ -1,6 +1,7 @@
 //! Bangumi API models, episode partitioning and collection progress policy.
 
 pub mod account;
+pub mod auth_flow;
 pub mod progress;
 pub mod sync;
 

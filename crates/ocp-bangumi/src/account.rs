@@ -20,6 +20,11 @@ struct Expected {
     generation: u64,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExpectedOperation {
+    operation_revision: u64,
+}
+#[derive(Deserialize)]
 struct OAuthState {
     state: String,
 }
@@ -75,6 +80,15 @@ fn decode<T: serde::de::DeserializeOwned>(args: &Value) -> Result<T, String> {
 }
 
 impl Account {
+    pub fn operation_revision(&self) -> u64 {
+        self.operation
+    }
+    pub fn identity_generation(&self) -> u64 {
+        self.identity
+    }
+    pub fn credential_generation(&self) -> u64 {
+        self.generation
+    }
     pub fn call(&mut self, method: &str, args: &Value) -> Result<Value, String> {
         Ok(match method {
             "snapshot" => json!({"generation":self.generation,"exchangeGeneration":self.exchange,
@@ -166,7 +180,13 @@ impl Account {
                     .get("generation")
                     .map(|_| decode::<Expected>(args))
                     .transpose()?;
-                if expected.is_some_and(|e| e.generation != self.generation) {
+                let operation = args
+                    .get("operationRevision")
+                    .map(|_| decode::<ExpectedOperation>(args))
+                    .transpose()?;
+                if expected.is_some_and(|e| e.generation != self.generation)
+                    || operation.is_some_and(|e| e.operation_revision != self.operation)
+                {
                     return Ok(json!({"accepted":false,"generation":self.generation}));
                 }
                 self.identity = self.identity.wrapping_add(1);
@@ -194,6 +214,30 @@ impl Account {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn conditional_clear_validates_operation_and_generation_before_mutation() {
+        let mut a = Account::default();
+        a.call("operation.begin", &json!({})).unwrap();
+        let before = a.call("snapshot", &json!({})).unwrap();
+        for operation in [Value::Null, json!(-1), json!(1.5), json!("1"), json!(true)] {
+            assert!(a
+                .call("invalidate", &json!({"operationRevision":operation}))
+                .is_err());
+            assert_eq!(a.call("snapshot", &json!({})).unwrap(), before);
+        }
+        for args in [
+            json!({"operationRevision":0}),
+            json!({"operationRevision":1,"generation":1}),
+        ] {
+            assert_eq!(a.call("invalidate", &args).unwrap()["accepted"], false);
+            assert_eq!(a.call("snapshot", &json!({})).unwrap(), before);
+        }
+        assert_eq!(
+            a.call("invalidate", &json!({"operationRevision":1,"generation":0}))
+                .unwrap()["accepted"],
+            true
+        );
+    }
     #[test]
     fn oauth_consumes_once_and_does_not_erase_next_state() {
         let mut a = Account::default();

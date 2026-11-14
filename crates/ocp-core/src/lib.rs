@@ -53,6 +53,7 @@ struct State {
     moviepilot_flow: ocp_moviepilot::flow::Directory,
     bangumi_sync: ocp_bangumi::sync::Directory,
     bangumi_progress: ocp_bangumi::progress::Directory,
+    bangumi_auth: ocp_bangumi::auth_flow::Directory,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
@@ -149,6 +150,7 @@ impl Core {
                 moviepilot_flow: Default::default(),
                 bangumi_sync: Default::default(),
                 bangumi_progress: Default::default(),
+                bangumi_auth: Default::default(),
                 danmaku_cache: None,
                 intro_learning: None,
                 intro_ids: None,
@@ -720,12 +722,53 @@ impl Core {
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
+            method if method.starts_with("bangumiAuthFlow.") => {
+                let before = state.bangumi_account.operation_revision();
+                let result = {
+                    let State {
+                        bangumi_auth,
+                        bangumi_account,
+                        ..
+                    } = &mut *state;
+                    match method.trim_start_matches("bangumiAuthFlow.") {
+                        "start" => bangumi_auth.start(&arguments, bangumi_account),
+                        "resume" => bangumi_auth.resume(&arguments, bangumi_account),
+                        "validate" => bangumi_auth.validate(&arguments, bangumi_account),
+                        "fail" => bangumi_auth.fail(&arguments, bangumi_account),
+                        "cancel" => bangumi_auth.cancel(&arguments),
+                        "stats" => Ok(bangumi_auth.stats()),
+                        _ => {
+                            return Ok(error_response(
+                                1001,
+                                false,
+                                "unknown Bangumi authentication flow method",
+                            ))
+                        }
+                    }
+                };
+                if before != state.bangumi_account.operation_revision() {
+                    state.bangumi_sync.invalidate();
+                    state.bangumi_progress.invalidate();
+                }
+                match result {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(error) => ApiResponse::error(error.0, false, error.1, Value::Null),
+                }
+            }
             method if method.starts_with("bangumiAccount.") => {
                 match state
                     .bangumi_account
                     .call(method.trim_start_matches("bangumiAccount."), &arguments)
                 {
                     Ok(data) => {
+                        {
+                            let State {
+                                bangumi_auth,
+                                bangumi_account,
+                                ..
+                            } = &mut *state;
+                            bangumi_auth.retain_account(bangumi_account);
+                        }
                         if method == "bangumiAccount.operation.begin"
                             || (data["accepted"] == true
                                 && (method == "bangumiAccount.invalidate"

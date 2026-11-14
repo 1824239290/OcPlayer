@@ -1,0 +1,3 @@
+mismatched exchange reply: {'ok': False, 'code': 1003, 'retryable': False, 'message': 'authentication flow retired', 'data': None}
+subsequent validate: {'ok': True, 'code': 0, 'retryable': False, 'message': '', 'data': True}
+directory: {'active': 1}

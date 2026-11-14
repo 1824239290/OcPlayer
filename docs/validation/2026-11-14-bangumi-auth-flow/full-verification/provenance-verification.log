@@ -1,0 +1,1 @@
+{"rust": 161, "independentRust": 161, "abi": 157, "nativeTotal": 1235, "app": {"executed": 1008, "passed": 989, "skipped": 19, "failures": 0}, "disabledBangumi": {"executed": 122, "passed": 98, "skipped": 24, "failures": 0}, "runtimeSectionCount": 14}

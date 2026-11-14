@@ -1,0 +1,156 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 245]
+[Planning deferred tasks]
+[8 / 38] BangumiKit_BangumiKitTests
+[8 / 38]
+[9 / 29] BangumiKit
+[11 / 31] BangumiKit
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Sources/BangumiKit/Client/Types.swift:391:5: warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DateFormatter', consider removing it
+389 |     /// 一次 body 会读 `aired` 7–8 次 → 单格约 **312 µs**、一屏 40 格约 12.5 ms。
+390 |     /// `DateFormatter.date(from:)` 线程安全（与同包 `BangumiCollectionTimestamp` 同款持有）。
+391 |     nonisolated(unsafe) private static let airDateParser: DateFormatter = {
+    |     `- warning: 'nonisolated(unsafe)' is unnecessary for a constant with 'Sendable' type 'DateFormatter', consider removing it
+392 |         let formatter = DateFormatter()
+393 |         formatter.dateFormat = "yyyy-MM-dd"
+[20 / 31] BangumiKitTests-product
+[29 / 40] BangumiKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift:60:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 58 |         let progress = try XCTUnwrap(db.progress), fixture = sample()
+ 59 |         let server = try ProgressServer(fixture: JSONEncoder().encode(fixture)); defer { server.stop() }
+ 60 |         let events = await ProgressEvents(), deps = await dependencies(db, server: server, events: events)
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 61 |         _ = try await progress.run(.init(operation: "ensureSubject", subjectId: 1, authoritativeCollection: true), dependencies: deps)
+ 62 |         try await seed(fixture, db: native)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift:80:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 78 |         let server = try ProgressServer(fixture: JSONEncoder().encode(fixture)); defer { server.stop() }
+ 79 |         try await seed(fixture, db: db)
+ 80 |         let events = await ProgressEvents()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 81 |         let deps = await dependencies(db, server: server, events: events, readFailure: true, watchingFailure: true)
+ 82 |         let result = try await progress.run(.init(operation: "updateEpisode", episodeId: 42, type: 2, batch: true, prepareWatching: true), dependencies: deps)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift:99:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 97 |         let server = try ProgressServer(fixture: JSONEncoder().encode(fixture)); defer { server.stop() }
+ 98 |         try await seed(fixture, db: db)
+ 99 |         let events = await ProgressEvents(), deps = await dependencies(db, server: server, events: events, readFailure: true)
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+100 |         _ = try await progress.run(.init(operation: "refreshAfterProgress", subjectId: Int.max), dependencies: deps)
+101 |         var subject = try await db.subject(id: Int.max)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift:119:26: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+117 |             try await seed(fixture, db: db)
+118 |             let server = try ProgressServer(fixture: JSONEncoder().encode(fixture)); defer { server.stop() }
+119 |             let events = await ProgressEvents(), gate = ProgressGate()
+    |                          `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+120 |             var deps = await dependencies(db, server: server, events: events)
+121 |             deps.episodeMutation = { _, _, _ in await gate.block() }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift:140:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+138 |         try await seed(fixture, db: db)
+139 |         let server = try ProgressServer(fixture: JSONEncoder().encode(fixture)); defer { server.stop() }
+140 |         let events = await ProgressEvents(), gate = ProgressGate()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+141 |         var deps = await dependencies(db, server: server, events: events)
+142 |         deps.subjectMutation = { _, _, _ in await gate.block() }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift:59:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 57 |         let native = try database(directory.appendingPathComponent("native"), shared: false)
+ 58 |         let sync = try XCTUnwrap(db.sync)
+ 59 |         let stamps = await Stamps()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 60 |         let deps = dependencies(db, server: server, client: try client(directory), stamps: stamps)
+ 61 |         let count: Int = try await sync.run(.init(operation: "allCollections", since: 1500, startedAt: 900,
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift:85:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 83 |         let server = try SyncServer(fixture: JSONEncoder().encode(fixture())); defer { server.stop() }
+ 84 |         let db = try database(directory), sync = try XCTUnwrap(db.sync)
+ 85 |         let stamps = await Stamps()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 86 |         let deps = dependencies(db, server: server, client: try client(directory), stamps: stamps, failPage: true)
+ 87 |         do {
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift:103:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+101 |         let db = try database(directory), sync = try XCTUnwrap(db.sync)
+102 |         try await db.saveSubject(fixture().subjects[0])
+103 |         let stamps = await Stamps()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+104 |         let deps = dependencies(db, server: server, client: try client(directory), stamps: stamps, slow: true)
+105 |         let task = Task { let value: Bool = try await sync.run(.init(operation: "episodes", authoritativeCollection: true, subjectId: 1), dependencies: deps); return value }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift:120:22: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+118 |         let db = try database(directory), sync = try XCTUnwrap(db.sync)
+119 |         try await db.saveSubjects(fixture().subjects)
+120 |         let stamps = await Stamps()
+    |                      `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+121 |         let deps = dependencies(db, server: server, client: try client(directory), stamps: stamps, slow: true)
+122 |         let task = Task { let value: Int = try await sync.run(.init(operation: "reconcile", maxConcurrent: 2), dependencies: deps); return value }
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+[33 / 39] BangumiKitTests-product
+error: SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift failed with a nonzero exit code. Command line:     cd /Users/jumusu/Documents/project/OcPlayer/Packages
+    builtin-SwiftPerFileCompile BangumiAuthLifecycleTests.swift
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift:28:68: error: failed to produce diagnostic for expression; please submit a bug report (https://swift.org/contributing/#reporting-bugs)
+ 26 |         let store = BangumiStore(defaults: UserDefaults(suiteName: "bangumi-auth-flow-\(UUID().uuidString)")!, credentialsDirectory: directory)
+ 27 |         let path = shared ? ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"] : nil
+ 28 |         let factory: (@Sendable (String?) -> URLSession)? = shared ? nil : { _ in URLSession(configuration: .ephemeral) }
+    |                                                                    `- error: failed to produce diagnostic for expression; please submit a bug report (https://swift.org/contributing/#reporting-bugs)
+ 29 |         let client = BangumiAPIClient(store: store, gateway: .init(baseURL: server.root, apiKey: "gateway", userAgent: "OcPlay/auth-test"),
+ 30 |             sessionFactory: factory, rustCoreLibraryPath: path)
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift:38:29: error: main actor-isolated property 'events' can not be mutated from a Sendable closure
+ 36 |                 let request = await state.nextProfileRequest()
+ 37 |                 let data = try await client.request(url: server.url(request), method: "GET", auth: .required)
+ 38 |                 await state.events.append("fetch")
+    |                             |- error: main actor-isolated property 'events' can not be mutated from a Sendable closure
+    |                             `- note: consider declaring an isolated method on 'MainActor' to perform the mutation
+ 39 |                 if let gate = await state.fetchGate { await gate.block() }
+ 40 |                 if await state.injectFailure { throw ProfileFailure() }
+    :
+224 |     let store: BangumiStore
+225 |     weak var lifecycle: BangumiAuthLifecycle?
+226 |     var events: [String] = [], commits = 0, requests = 0
+    |         `- note: mutation of this property is only permitted within the actor
+227 |     var fetchGate, commitGate, clearGate: AuthGate?
+228 |     var injectFailure = false
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift:38:17: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 36 |                 let request = await state.nextProfileRequest()
+ 37 |                 let data = try await client.request(url: server.url(request), method: "GET", auth: .required)
+ 38 |                 await state.events.append("fetch")
+    |                 `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+ 39 |                 if let gate = await state.fetchGate { await gate.block() }
+ 40 |                 if await state.injectFailure { throw ProfileFailure() }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift:175:36: error: global function 'XCTAssertEqual(_:_:_:file:line:)' requires that 'BangumiAuth' conform to 'Equatable'
+173 |             let before = fixture.store.auth
+174 |             let cleared = await fixture.client.clearCredentials(forOperation: old, nativeOperations: fixture.lifecycle.nativeOperations)
+175 |             XCTAssertNil(cleared); XCTAssertEqual(fixture.store.auth, before)
+    |                                    `- error: global function 'XCTAssertEqual(_:_:_:file:line:)' requires that 'BangumiAuth' conform to 'Equatable'
+176 |             XCTAssertEqual(fixture.store.auth?.accessToken, "token-second")
+177 |             let revision = fixture.db.captureWorkRevision(); fixture.db.invalidateWork()
+
+Swift.Optional:1:11: note: requirement from conditional conformance of 'BangumiAuth?' to 'Equatable'
+1 | extension Optional : Equatable where Wrapped : Equatable {
+  |           `- note: requirement from conditional conformance of 'BangumiAuth?' to 'Equatable'
+2 |     public static func == (lhs: Wrapped?, rhs: Wrapped?) -> Bool
+3 | }
+
+/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiKitTests.swift:981:51: warning: assuming you mean 'Optional<BangumiSubjectType>.none'; did you mean 'BangumiSubjectType.none' instead?
+ 979 |     /// 不带 filter（或 filter 为「全部」）时请求体不出现 filter 字段。
+ 980 |     @Test func searchRequestBodyOmitsFilterWhenNone() throws {
+ 981 |         for filter: BangumiSubjectType? in [nil, .none] {
+     |                                                  |`- warning: assuming you mean 'Optional<BangumiSubjectType>.none'; did you mean 'BangumiSubjectType.none' instead?
+     |                                                  |- note: explicitly specify 'Optional' to silence this warning
+     |                                                  `- note: use 'BangumiSubjectType.none' instead
+ 982 |             let body = BangumiSubjectService.searchRequestBody(keyword: "x", filter: filter)
+ 983 |             let data = try JSONEncoder().encode(body)
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+Failed frontend command:
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -c /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/DerivedSources/resource_bundle_accessor.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/DerivedSources/test_entry_point.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiAuthLifecycleTests.swift -primary-file /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiKitTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiMirrorSettingsTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/BangumiURLCacheTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/EpisodePartitionTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiIntegrationTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiProgressTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiStoreIntegrationTests.swift /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift -emit-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.d -emit-const-values-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.swiftconstvalues -emit-reference-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.swiftdeps -serialize-diagnostics-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.dia -emit-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.d -emit-const-values-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.swiftconstvalues -emit-reference-dependencies-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.swiftdeps -serialize-diagnostics-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.dia -target arm64-apple-macos14.0 -module-can-import-version Testing 2084 0 -module-can-import-version XCTest 25229 0 -disable-cross-import-overlay-search -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/AppKit.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreGraphics.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreImage.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/CoreTransferable.swiftoverlay -swift-module-cross-import Testing /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework/Modules/Testing.swiftcrossimport/Foundation.swiftoverlay -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libFoundationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#FoundationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libObservationMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#ObservationMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libPreviewsMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#PreviewsMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib\#/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/bin/swift-plugin-server\#SwiftUIMacros -load-resolved-plugin /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib\#\#TestingMacros -disable-implicit-swift-modules -Xcc -fno-implicit-modules -Xcc -fno-implicit-module-maps -explicit-swift-module-map-file /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests-dependencies-1.json -Xllvm -aarch64-use-tbi -enable-objc-interop -stack-check -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -I /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Products/Debug/PackageFrameworks -F /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -module-cache-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/SwiftExplicitPrecompiledModules -no-color-diagnostics -Xcc -fno-color-diagnostics -enable-testing -g -debug-info-format\=dwarf -dwarf-version\=4 -swift-version 6 -Onone -D SWIFT_PACKAGE -D DEBUG -D SWIFT_MODULE_RESOURCE_BUNDLE_AVAILABLE -D Xcode -serialize-debugging-options -enable-experimental-feature DebugDescriptionMacro -empty-abi-descriptor -validate-clang-modules-once -clang-build-session-file /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/ModuleCache.noindex/Session.modulevalidation -Xcc -working-directory -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages -enable-anonymous-context-mangled-names -file-compilation-dir /Users/jumusu/Documents/project/OcPlayer/Packages -Xcc -fmodule-map-file\=/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -Xcc -ivfsstatcache -Xcc /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/SDKStatCaches.noindex/macosx27.0-26A425-a0facfad118c1a7a18f0aad9463f65497231f6df4def33e022ae2eb8f782df1a.sdkstatcache -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Products/Debug/include -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/DerivedSources-normal/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/DerivedSources/arm64 -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -no-auto-bridging-header-chaining -module-name BangumiKitTests -package-name bangumikit -const-gather-protocols-file /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests_const_extract_protocols.json -disable-clang-spi -clang-target arm64-apple-macos27.0 -target-sdk-version 27.0 -target-sdk-name macosx27.0 -in-process-plugin-server-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/libSwiftInProcPluginServer.dylib -parse-as-library -o /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.o -o /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.o -debug-module-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out/Intermediates.noindex/BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.swiftmodule -index-unit-output-path /BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiAuthLifecycleTests.o -index-unit-output-path /BangumiKit.build/Debug/BangumiKitTests-p.build/Objects-normal/arm64/BangumiKitTests.o -index-store-path /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit/.build/out -index-system-modules
+error: Build failed
+error: fatalError
