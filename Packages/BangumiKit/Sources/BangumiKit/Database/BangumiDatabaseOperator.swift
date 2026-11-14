@@ -17,6 +17,7 @@ public actor BangumiDatabaseOperator {
     nonisolated let progress: RustBangumiProgress?
     private nonisolated let workRevision = BangumiWorkRevision()
     func captureSyncRevision() -> UInt64 { workRevision.snapshot() }
+    nonisolated func captureWorkRevision() -> UInt64 { workRevision.snapshot() }
     nonisolated func invalidateWork() { workRevision.invalidate(); sync?.invalidate() }
     nonisolated func isCurrentWorkRevision(_ revision: UInt64) -> Bool { workRevision.snapshot() == revision }
     var usesCoreStore: Bool { rust != nil }
@@ -505,13 +506,13 @@ public actor BangumiDatabaseOperator {
     }
 
     /// 清空账户相关数据（登出/换号时调用）。
-    public func clearAccountLocalState() throws {
-        workRevision.invalidate()
-        if let rust { try rust.write("clearAccountLocalState"); return }
-
-        return try database.write { db in
-            try db.execute(sql: "DELETE FROM subjects")
-            try db.execute(sql: "DELETE FROM episodes")
+    public func clearAccountLocalState(ifCurrentWorkRevision revision: UInt64? = nil) throws {
+        return try workRevision.withRetirement(revision) {
+            if let rust { try rust.write("clearAccountLocalState"); return }
+            return try database.write { db in
+                try db.execute(sql: "DELETE FROM subjects")
+                try db.execute(sql: "DELETE FROM episodes")
+            }
         }
     }
 
@@ -1225,6 +1226,13 @@ private final class BangumiWorkRevision: @unchecked Sendable {
     private var revision: UInt64 = 0
     func snapshot() -> UInt64 { lock.withLock { revision } }
     func invalidate() { lock.withLock { revision &+= 1 } }
+    func withRetirement<T>(_ expected: UInt64?, _ work: () throws -> T) throws -> T {
+        try lock.withLock {
+            if let expected, expected != revision { throw BangumiError(ignore: "Discarded retired account clear") }
+            revision &+= 1
+            return try work()
+        }
+    }
     func withCurrent<T>(_ expected: UInt64?, _ work: () throws -> T) throws -> T {
         try lock.withLock {
             if let expected, expected != revision { throw BangumiError(ignore: "Discarded retired synchronization write") }

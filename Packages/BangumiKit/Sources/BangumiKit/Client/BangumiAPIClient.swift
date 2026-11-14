@@ -176,6 +176,26 @@ public actor BangumiAPIClient {
     public func clearCredentials() -> UInt64 {
         invalidateCredentials()
     }
+    struct AuthExchangeReceipt: Encodable, Sendable { var generation, identity: UInt64 }
+    func exchangeForAuthLifecycle(code: String, state: String) async throws -> AuthExchangeReceipt {
+        let generation = try await exchangeForAccessToken(code: code, state: state)
+        return AuthExchangeReceipt(generation: generation, identity: account?.snapshot.identityGeneration ?? nativeIdentityGeneration)
+    }
+    func clearCredentials(forOperation revision: UInt64, ifCurrent expectedGeneration: UInt64? = nil,
+                          nativeOperations: BangumiAuthOperations) -> UInt64? {
+        if let account {
+            var args: [String: Any] = ["operationRevision": revision]
+            if let expectedGeneration { args["generation"] = expectedGeneration }
+            let transition: RustBangumiAccount.Transition = account.invariant("invalidate", args)
+            guard transition.accepted else { return nil }
+            applySharedTransition(transition, auth: nil)
+            return transition.generation
+        }
+        return nativeOperations.withCurrent(revision) {
+            guard expectedGeneration == nil || expectedGeneration == authGeneration else { return nil }
+            return invalidateCredentials()
+        } ?? nil
+    }
 
     public func clearCredentials(ifCurrent expectedGeneration: UInt64) -> UInt64? {
         if let account {

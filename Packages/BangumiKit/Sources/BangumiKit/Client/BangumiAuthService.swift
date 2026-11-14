@@ -1,104 +1,47 @@
 import Foundation
 
-/// 登录/登出编排（与 Bangumi-iOS 的 AuthService 同构）。
-///
-/// 用 operationRevision 做乐观锁：登录/登出是异步操作，过期结果一律作废，
-/// 避免「登出后旧登录响应把状态写回去」这类竞态。
+/// Account/profile orchestration delegates to the selected account Core.
 @MainActor
 public enum BangumiAuthService {
-    private static var nativeOperationRevision: UInt64 = 0
-    private static var account: RustBangumiAccount? { BangumiAPIClient.shared.account }
-    private static var operationRevision: UInt64 { account?.snapshot.operationRevision ?? nativeOperationRevision }
+    private static let lifecycle = BangumiAuthLifecycle(client: .shared, effects: .init(
+        retireWork: { BangumiContext.shared.database?.invalidateWork() },
+        fetchProfile: { try await fetchProfile() },
+        commitProfile: { BangumiContext.shared.setAuthenticated($0) },
+        clearProfile: { BangumiContext.shared.clearAuthState() },
+        clearDatabase: { revision in
+            guard revision == syncOperationRevision else { throw BangumiError(ignore: "Retired account database clear") }
+            guard let db = BangumiContext.shared.database else { return }
+            let workRevision = db.captureWorkRevision()
+            try await db.clearAccountLocalState(ifCurrentWorkRevision: workRevision)
+        },
+        authenticated: { BangumiContext.shared.isAuthenticated }))
 
-    static var syncOperationRevision: UInt64 { operationRevision }
+    static var syncOperationRevision: UInt64 { lifecycle.operationRevision }
 
-    /// 注入网关配置（启动时 + 网关设置变更时）。OAuth 授权、换 token、刷新都走网关，
-    /// 客户端不持有 `client_secret`。
+    /// OAuth and refresh use the configured gateway; secrets remain there.
     public static func configureGateway(_ configuration: BangumiGatewayConfiguration?) async {
         await BangumiAPIClient.shared.configureGateway(configuration)
     }
-
     public static func buildOAuthURL() async throws -> URL {
         try await BangumiAPIClient.shared.buildOAuthURL()
     }
-
-    /// 换 code 拿 token 并拉取 profile，成功后置为已登录。
     public static func exchangeForAccessToken(code: String, state: String) async throws {
-        let revision = beginOperation()
-        let credentialGeneration = try await BangumiAPIClient.shared.exchangeForAccessToken(code: code, state: state)
-        try ensureCurrentOperation(revision)
-        do {
-            _ = try await refreshProfile(revision: revision)
-        } catch {
-            if (try? ensureCurrentOperation(revision)) != nil {
-                _ = await BangumiAPIClient.shared.clearCredentials(ifCurrent: credentialGeneration)
-            }
-            throw error
-        }
+        try await lifecycle.exchange(code: code, state: state)
     }
-
-    /// 已登录状态下主动刷新 profile（启动恢复时用）。
     public static func refreshProfile() async throws -> BangumiProfile {
-        let revision = beginOperation()
-        return try await refreshProfile(revision: revision)
+        try await lifecycle.refreshProfile()
     }
-
-    public static func logout() async {
-        let revision = beginOperation()
-        BangumiContext.shared.clearAuthState()
-        _ = await BangumiAPIClient.shared.clearCredentials()
-        guard revision == operationRevision else { return }
-        let db = BangumiContext.shared.database
-        try? await db?.clearAccountLocalState()
-    }
-
-    /// 401 时被动失效会话（只清当前代次的凭证）。
+    public static func logout() async { await lifecycle.logout() }
     public static func invalidateSession(expectedCredentialGeneration: UInt64) async {
-        guard BangumiContext.shared.isAuthenticated else { return }
-        let observedRevision = operationRevision
-        guard
-            let clearedGeneration = await BangumiAPIClient.shared.clearCredentials(
-                ifCurrent: expectedCredentialGeneration)
-        else { return }
-        guard observedRevision == operationRevision else { return }
-        guard await BangumiAPIClient.shared.isCurrentCredentialGeneration(clearedGeneration) else {
-            return
-        }
-        guard observedRevision == operationRevision else { return }
-        _ = beginOperation()
-        BangumiContext.shared.clearAuthState()
+        await lifecycle.invalidateSession(expectedGeneration: expectedCredentialGeneration)
     }
-
-    private static func refreshProfile(revision: UInt64) async throws -> BangumiProfile {
-        let profile = try await fetchProfile()
-        try ensureCurrentOperation(revision)
-        // 通过 context 写入：store 持久化 + 内存存储属性同步（触发 UI 刷新）。
-        BangumiContext.shared.setAuthenticated(profile)
-        return profile
-    }
-
     private static func fetchProfile() async throws -> BangumiProfile {
-        let url = BangumiURL.next(path: "p1/me")
         let data = try await BangumiAPIClient.shared.request(
-            url: url, method: "GET", auth: .required)
+            url: BangumiURL.next(path: "p1/me"), method: "GET", auth: .required)
         guard let rawValue = String(data: data, encoding: .utf8) else {
             throw BangumiError(request: "profile data error")
         }
+        // Preserve the existing original-byte Codable/default profile behavior.
         return BangumiProfile(from: rawValue)
-    }
-
-    private static func ensureCurrentOperation(_ revision: UInt64) throws {
-        let current: Bool = account?.invariant("operation.current", ["generation": revision]) ?? (revision == operationRevision)
-        guard current else {
-            throw BangumiError(ignore: "Discarded stale authentication operation")
-        }
-    }
-
-    private static func beginOperation() -> UInt64 {
-        let revision: UInt64
-        if let account { revision = account.invariant("operation.begin") }
-        else { nativeOperationRevision &+= 1; revision = nativeOperationRevision }
-        BangumiContext.shared.database?.invalidateWork()
-        return revision
     }
 }
