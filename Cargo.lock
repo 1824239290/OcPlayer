@@ -712,6 +712,7 @@ name = "ocp-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "ocp-bangumi",
  "ocp-danmaku",
  "ocp-http",
@@ -727,6 +728,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "unicode-segmentation",
 ]
 
 [[package]]

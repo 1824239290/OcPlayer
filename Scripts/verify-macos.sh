@@ -35,6 +35,7 @@ python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&
 python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.log" 2>&1
 python3 tests/moviepilot_account_contract.py > "$output_dir/moviepilot-account-contract-tests.log" 2>&1
 python3 tests/moviepilot_flow_contract.py > "$output_dir/moviepilot-flow-contract-tests.log" 2>&1
+python3 tests/settings_backup_contract.py > "$output_dir/settings-backup-contract-tests.log" 2>&1
 python3 tests/diagnostic_export_contract.py > "$output_dir/diagnostic-export-contract-tests.log" 2>&1
 python3 tests/media_projection_contract.py > "$output_dir/media-projection-contract-tests.log" 2>&1
 python3 tests/media_nullable_contract.py > "$output_dir/media-nullable-contract-tests.log" 2>&1

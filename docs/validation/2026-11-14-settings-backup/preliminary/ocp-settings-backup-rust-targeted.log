@@ -1,0 +1,28 @@
+   Compiling serde_json v1.0.154
+   Compiling cookie_store v0.22.1
+   Compiling ocp-model v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-model)
+   Compiling ocp-store v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-store)
+   Compiling ocp-session v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-session)
+   Compiling reqwest v0.12.28
+   Compiling ocp-http v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-http)
+   Compiling ocp-moviepilot v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-moviepilot)
+   Compiling ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+   Compiling ocp-danmaku v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-danmaku)
+   Compiling ocp-tmdb v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-tmdb)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.26s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-680963fb283f0db7)
+
+running 8 tests
+test settings_backup::tests::native_integral_decimal_forms_keep_exact_digits ... ok
+test settings_backup::tests::restore_never_clears_empty_credentials_or_absent_style ... ok
+test settings_backup::tests::summary_masks_extended_graphemes_and_counts_key_presence ... ok
+test settings_backup::tests::duplicate_keys_are_first_wins_in_root_and_nested_objects ... ok
+test settings_backup::tests::legacy_mirror_and_null_modules_keep_restore_semantics ... ok
+test settings_backup::tests::only_file_decode_gates_newer_versions_after_schema_validation ... ok
+test settings_backup::tests::utf16_utf32_bom_and_unmarked_encodings_match_utf8 ... ok
+test settings_backup::tests::foundation_iso_date_forms_preserve_normalization_and_trailing_text ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.02s
+

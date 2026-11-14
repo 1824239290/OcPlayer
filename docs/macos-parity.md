@@ -22,7 +22,7 @@ Reference Apple checkout during this migration:
 | Danmaku | Match/search/comments, hashes, filename/episode/alias matching, multi-source/cache/manual selection, cancellation, intro hints, overlay behavior | All four production gateway HTTP paths now run through Core with raw response and header fidelity. The macOS client uses the complete native automatic/manual/cache/intro flow, replacing the incomplete Rust shortcut. Native DanmakuKit 232 and direct C ABI 4 cases pass. Core now owns filename/canonical/episode/special parsing, Unicode comparable titles, candidate identity scoring and batch selection; differential and C ABI strategy fixtures cover these policies. Core also owns mapping/comment/saved-intro persistence, TTL, LRU and revision barriers with native file compatibility. Core now also owns intro detection, cross-episode learning persistence/consensus, manual-seek decisions and community/sibling interval aggregation. AniSkip/AnimeSkip/TheIntroDB request and response policies plus all four intro-provider HTTP transports now run in Core. AniList ordered identity resolution, negative-cache policy and native-compatible ID persistence also run in Core. Automatic/manual resolver scheduling, cache branches, payload conversion and intro precedence now run in a resumable Core flow. Manual-seek confirmation, event recording, consensus promotion and source-protected cross-episode propagation now run in one shared cache/learning Core operation. The standalone data loader now executes that same complete flow, including cache/ID stores, provider reads and production payload conversion. Broader end-to-end acceptance remains. |
 | Bangumi | Public/authorized API, mirrors, OAuth refresh/generation safety, collections, episodes/progress, search/calendar, sync and persistence | Native BangumiAPIClient now dispatches all public, authorized and gateway OAuth requests through Core; complete raw responses, p1 routes, PATCH mutations, pagination, generation cancellation and single-flight refresh are covered by real Rust/Swift and C ABI fixtures. All BangumiDatabaseOperator entry points now dispatch to shared SQLite, merge, progress-window and sync-target policy; complete chapter sync uses one transactional replacement. Credential generations, OAuth state consumption, refresh claims/timeout classification, expiration/session-reuse policy and login/profile/logout revision barriers now run in retained Core account state. Native persistence/task/session/notification effects remain adapters. Collection pagination, complete episode replacement, sliding concurrent reconciliation and full incremental collection/episode refresh now run in retained Core flows. SQL receipts and directory retirement share the database Core state lock; native timestamp adoption uses account-operation barriers. Subject loading, tri-state collection reconciliation, full chapter loading, single/batch progress and rating/type writes, watching preparation and season completion now use retained SQL/effect flows. Failed watching/batch reads preserve explicit intent and optimistic progress; completion requires nonempty all-watched mains plus confirmed remote doing. Native effect/notification barriers and locked fallback SQL revisions reject stale work. The complete authorization/profile/logout/passive-invalidation service sequences now use retained account effects with operation/identity barriers, exact-generation rollback and atomic physical credential/DB clear guards. Retired identity receipts release immediately; redundant invalidation at the observer bound returns safely while explicit account operations remain available. Broader live-account, configuration/transport and full platform acceptance remain open. |
 | MoviePilot | Login, silent relogin, raw media/torrent fields, SSE progress, downloads and subscriptions, cancellation/session retirement | All native HTTP paths dispatch through Core, including first/token-only login and raw byte-preserving exchanges. Retained account policy now owns login/refresh receipts, generations, single-flight/fuse and retirement decisions, including post-commit race guards. Physical credentials/revisions, tasks and notifications remain effects. Real C ABI/native fixtures cover cookies, concurrent expiry, rejection, mutation routes, raw fields and non-replay. Complete raw/named retry/auth replay now runs in retained request flows with account/configuration retirement, method idempotence and retry/jitter policy. Typed login/current-user replies preserve large integer IDs and optional native user fields. Broader account and live deployment acceptance remains. |
-| Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. File-backed aggregate diagnostic export now preserves archive budgets/order, trace tails/redaction and the native sink queue boundary, with complete-byte comparisons and disabled-mode coverage. Full native settings mapping remains. |
+| Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. File-backed aggregate diagnostic export now preserves archive budgets/order, trace tails/redaction and the native sink queue boundary, with complete-byte comparisons and disabled-mode coverage. The complete current format-v1 backup now uses Core snapshot/schema/summary/restore policy with native getter, codec and store adapters; broader settings ownership remains subject to the full-goal audit. |
 | Apple delivery | Reproducible library + adapter + embedded/signed app; clean-checkout build; macOS native regression | Host dylib and app embedding/signing verified. XCFramework script exists but all slices are not yet verified. Standalone Apple binding is now delivered in `bindings/apple/OcPlayerCore`, with source-equivalence and native-library package checks; release acceptance remains. Complete macOS AppTests and explicit Core activation tests now pass; the inherited macOS-only skips are recorded in raw output. |
 | Windows | Stable DLL/C# binding and equivalent business API with native adapter | Binding exists; native adapter remains unfinished. Runtime testing can wait per user instruction. |
 
@@ -1149,3 +1149,49 @@ Aggregate diagnostic export is closed for the covered native behavior. Native
 settings mapping, remaining SDK schema/transport and public ownership coverage,
 Apple release/framework slices and Windows adapter implementation remain active.
 Windows runtime testing remains deferred. The complete goal stays active.
+
+## Verified run: 2026-11-14 — native settings backup policy
+
+Core's additive `settings.backup.*` API now owns format-v1 backup schema,
+preference snapshot defaults/options, Unicode-masked summary and ordered restore
+plan. All 38 module fields are mapped: 31 native preference getter/cast facts,
+six TMDB coordinator values and one raw customized gateway. The existing Core
+configuration and JSON diagnostic aliases remain unchanged. Native model/Date
+codecs, sorted/pretty output, locale/device facts, security-scoped file access,
+confirmation/file panels and preference/coordinator effects remain adapters. See
+[settings-backup-contract.md](settings-backup-contract.md) and
+[the complete report](validation/2026-11-14-settings-backup/README.md).
+
+Eight app cases explicitly require Core activation and compare full snapshots,
+encoded files, restored preference domains, summaries and localized errors with
+the retained original native implementation. All 18 existing backup tests pass.
+Coverage includes missing versus explicit false/default, Foundation coercions,
+nullable subtitle style, exact Int64/UInt32 values and integral floating/exponent
+forms, first duplicate keys, ignored unknown fields, legacy mirror switches,
+complete mirror clearing, empty credentials/gateway/home sections, UTF-16/UTF-32,
+covered native ISO date forms and extended-grapheme key masking. The host validates
+all effects before writes and preserves native effect order. No server/session
+credential or Dandanplay API Key is collected/overwritten; the existing TMDB Key
+backup exception remains.
+
+Rust workspace and independent locked/offline source copy pass 212 each. Public
+C ABI passes 203 in 31 suites; exported and native Core SDK pass 35. Eight native
+packages pass 1387. AppTests execute 1026: 1007 pass, 19 platform skips, zero
+failures. Disabled JellyfinKit executes 288: 273 pass, 15 Core-only skips. Disabled
+app flows, diagnostics and configuration execute 59: 58 pass, one Core-only skip.
+All 74 Core source, 790 native and 67 gate inputs verify unchanged, along with the
+three recorded SDK entity files/commit. Strict deep signature and 14 runtime
+sections match; bundled controls/natural EOF exit zero with no rendering/audio
+failures. The earlier diagnostic stress fixture retains exact output/hash.
+
+Initial compilation and adapter failures are retained. Native probes established
+integer/duplicate/date/encoding behavior; the enabled comparison caught encoding
+that accidentally reused import's future-version gate. The typed model codec was
+separated from file import, preserving native future-version encoding/summary.
+Final acceptance uses a dedicated real DerivedData directory and complete gate.
+
+The current native backup's settings/export/import compatibility gap is closed
+for the covered behavior. Remaining broad SDK schema/transport and public ownership
+coverage, Apple release/framework slices, Windows adapter implementation and the
+whole native-settings ownership audit stay active. Windows runtime testing remains
+deferred. The full goal remains active pending requirement-by-requirement proof.

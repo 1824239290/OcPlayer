@@ -1,0 +1,2064 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project OcPlayer.xcodeproj -scheme OcPlayer-macOS -configuration Debug -destination platform=macOS,arch=arm64 -derivedDataPath /tmp/ocp-diagnostic-export-macos/DerivedData -disableAutomaticPackageResolution -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO "-only-testing:OcPlayerTests/ConfigBackupTests" test
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  PlaybackKit: /Users/jumusu/Documents/project/OcPlayer/Packages/PlaybackKit @ local
+  JellyfinAPI: https://github.com/jellyfin/jellyfin-sdk-swift @ 3.3.0
+  MoviePilotKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit @ local
+  JellyfinKit: /Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit @ local
+  Get: https://github.com/kean/Get @ 2.2.1
+  CoreModel: /Users/jumusu/Documents/project/OcPlayer/Packages/CoreModel @ local
+  AppDesignKit: /Users/jumusu/Documents/project/OcPlayer/Packages/AppDesignKit @ local
+  ErikaKit: /Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit @ local
+  MetadataKit: /Users/jumusu/Documents/project/OcPlayer/Packages/MetadataKit @ local
+  swift-atomics: https://github.com/apple/swift-atomics.git @ 1.3.1
+  swift-nio: https://github.com/apple/swift-nio.git @ 2.105.0
+  BangumiKit: /Users/jumusu/Documents/project/OcPlayer/Packages/BangumiKit @ local
+  DanmakuRenderKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuRenderKit @ local
+  swift-nio-transport-services: https://github.com/apple/swift-nio-transport-services.git @ 1.28.0
+  GRDB: https://github.com/groue/GRDB.swift @ 7.12.0
+  OcPlayerCore: /Users/jumusu/Documents/project/OcPlayer/Packages/OcPlayerCore @ local
+  DanmakuKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DanmakuKit @ local
+  swift-system: https://github.com/apple/swift-system.git @ 1.8.1
+  DiagnosticsKit: /Users/jumusu/Documents/project/OcPlayer/Packages/DiagnosticsKit @ local
+  swift-collections: https://github.com/apple/swift-collections.git @ 1.7.5
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (67 targets)
+    Target 'OcPlayerTests' in project 'OcPlayer'
+        ➜ Explicit dependency on target 'OcPlayer-macOS' in project 'OcPlayer'
+    Target 'OcPlayer-macOS' in project 'OcPlayer'
+        ➜ Explicit dependency on target 'BangumiKit-product' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'MetadataKit-product' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'MoviePilotKit-product' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'ErikaKit-product' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'DanmakuKit-product' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DanmakuRenderKit-product' in project 'DanmakuRenderKit'
+        ➜ Explicit dependency on target 'AppDesignKit-product' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'AppDesignKit-product' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'AppDesignKit' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'AppDesignKit' in project 'AppDesignKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+    Target 'DanmakuRenderKit-product' in project 'DanmakuRenderKit'
+        ➜ Explicit dependency on target 'DanmakuRenderKit' in project 'DanmakuRenderKit'
+    Target 'DanmakuRenderKit' in project 'DanmakuRenderKit' (no dependencies)
+    Target 'DanmakuKit-product' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DanmakuKit' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'DanmakuKit' in project 'DanmakuKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'ErikaKit-product' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'ErikaKit' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CErika' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+    Target 'ErikaKit' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'CErika' in project 'ErikaKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'PlaybackKit-product' in project 'PlaybackKit'
+    Target 'CErika' in project 'ErikaKit' (no dependencies)
+    Target 'MoviePilotKit-product' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'MoviePilotKit' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'MoviePilotKit' in project 'MoviePilotKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'PlaybackKit-product' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'PlaybackKit' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'PlaybackKit' in project 'PlaybackKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'MetadataKit-product' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'MetadataKit' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'MetadataKit' in project 'MetadataKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'JellyfinKit-product' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinKit' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'JellyfinKit' in project 'JellyfinKit'
+        ➜ Explicit dependency on target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'JellyfinAPI-product' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'JellyfinAPI' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+    Target 'JellyfinAPI' in project 'JellyfinAPI'
+        ➜ Explicit dependency on target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+    Target 'NIOTransportServices-product' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIOTransportServices' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTransportServices' in project 'swift-nio-transport-services'
+        ➜ Explicit dependency on target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTLS-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOTLS' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOTLS' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationCompat-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOFoundationEssentialsCompat' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOCore-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIO-product' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIO' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'swift-nio_NIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOPosix' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'swift-nio_NIOPosix' in project 'swift-nio' (no dependencies)
+    Target 'CNIOPosix' in project 'swift-nio' (no dependencies)
+    Target 'NIOEmbedded' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'NIOCore' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+        ➜ Explicit dependency on target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIOBase64' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOOpenBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOFreeBSD' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIODarwin' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOLinux' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWindows' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOWASI' in project 'swift-nio'
+        ➜ Explicit dependency on target '_NIODataStructures' in project 'swift-nio'
+        ➜ Explicit dependency on target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'Atomics-product' in project 'swift-atomics'
+    Target 'Atomics-product' in project 'swift-atomics'
+        ➜ Explicit dependency on target 'Atomics' in project 'swift-atomics'
+        ➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+    Target 'Atomics' in project 'swift-atomics'
+        ➜ Explicit dependency on target '_AtomicsShims' in project 'swift-atomics'
+    Target '_AtomicsShims' in project 'swift-atomics' (no dependencies)
+    Target 'DequeModule-product' in project 'swift-collections'
+        ➜ Explicit dependency on target 'DequeModule' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+        ➜ Explicit dependency on target 'SpanPreview' in project 'swift-collections'
+    Target 'DequeModule' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+        ➜ Explicit dependency on target 'SpanPreview' in project 'swift-collections'
+    Target 'SpanPreview' in project 'swift-collections'
+        ➜ Explicit dependency on target 'InternalCollectionsUtilities' in project 'swift-collections'
+    Target 'InternalCollectionsUtilities' in project 'swift-collections' (no dependencies)
+    Target '_NIODataStructures' in project 'swift-nio' (no dependencies)
+    Target 'CNIOWASI' in project 'swift-nio' (no dependencies)
+    Target 'CNIOWindows' in project 'swift-nio' (no dependencies)
+    Target 'CNIOLinux' in project 'swift-nio' (no dependencies)
+    Target 'CNIODarwin' in project 'swift-nio' (no dependencies)
+    Target 'CNIOFreeBSD' in project 'swift-nio' (no dependencies)
+    Target 'CNIOOpenBSD' in project 'swift-nio' (no dependencies)
+    Target '_NIOBase64' in project 'swift-nio' (no dependencies)
+    Target 'NIOConcurrencyHelpers' in project 'swift-nio'
+        ➜ Explicit dependency on target 'CNIOAtomics' in project 'swift-nio'
+    Target 'CNIOAtomics' in project 'swift-nio' (no dependencies)
+    Target 'Get-product' in project 'Get'
+        ➜ Explicit dependency on target 'Get' in project 'Get'
+    Target 'Get' in project 'Get' (no dependencies)
+    Target 'CoreModel-product' in project 'CoreModel'
+        ➜ Explicit dependency on target 'CoreModel' in project 'CoreModel'
+    Target 'CoreModel' in project 'CoreModel' (no dependencies)
+    Target 'BangumiKit-product' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'BangumiKit' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'BangumiKit' in project 'BangumiKit'
+        ➜ Explicit dependency on target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'OcPlayerCore-product' in project 'OcPlayerCore'
+    Target 'OcPlayerCore-product' in project 'OcPlayerCore'
+        ➜ Explicit dependency on target 'OcPlayerCore' in project 'OcPlayerCore'
+    Target 'OcPlayerCore' in project 'OcPlayerCore' (no dependencies)
+    Target 'DiagnosticsKit-product' in project 'DiagnosticsKit'
+        ➜ Explicit dependency on target 'DiagnosticsKit' in project 'DiagnosticsKit'
+    Target 'DiagnosticsKit' in project 'DiagnosticsKit' (no dependencies)
+    Target 'GRDB-product' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB_GRDB' in project 'GRDB'
+    Target 'GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDB_GRDB' in project 'GRDB'
+        ➜ Explicit dependency on target 'GRDBSQLite' in project 'GRDB'
+    Target 'GRDBSQLite' in project 'GRDB' (no dependencies)
+    Target 'GRDB_GRDB' in project 'GRDB' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: 20638f254ab435457b1e1941820017ba
+Build description path: /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/XCBuildData/20638f254ab435457b1e1941820017ba.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk /tmp/ocp-diagnostic-export-macos/DerivedData/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+    cd /Users/jumusu/Documents/project/OcPlayer/OcPlayer.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -o /tmp/ocp-diagnostic-export-macos/DerivedData/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache
+
+ProcessInfoPlistFile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/GRDB_GRDB.bundle/Contents/Info.plist /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GRDB.build/Debug/GRDB_GRDB-b.build/empty-GRDB_GRDB.plist (in target 'GRDB_GRDB' from project 'GRDB')
+    cd /tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/GRDB.swift
+    builtin-infoPlistUtility /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GRDB.build/Debug/GRDB_GRDB-b.build/empty-GRDB_GRDB.plist -producttype com.apple.product-type.bundle -expandbuildsettings -platform macosx -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/GRDB_GRDB.bundle/Contents/Info.plist
+
+ProcessInfoPlistFile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/swift-nio_NIOPosix.bundle/Contents/Info.plist /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/swift-nio.build/Debug/swift-nio_NIOPosix-b.build/empty-swift-nio_NIOPosix.plist (in target 'swift-nio_NIOPosix' from project 'swift-nio')
+    cd /tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio
+    builtin-infoPlistUtility /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/swift-nio.build/Debug/swift-nio_NIOPosix-b.build/empty-swift-nio_NIOPosix.plist -producttype com.apple.product-type.bundle -expandbuildsettings -platform macosx -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/swift-nio_NIOPosix.bundle/Contents/Info.plist
+
+SwiftDriver OcPlayerTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayerTests -Onone @/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocp-diagnostic-export-macos/DerivedData/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -sdk-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-generated-files.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-own-target-headers.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer normal (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -F/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -F/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer-ExecutorLinkFileList-normal-arm64.txt /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer
+
+ExtractAppIntentsMetadata (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name OcPlayer --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk --xcode-version 27A9275 --platform-family macOS --deployment-target 26.0 --bundle-identifier dev.jumusu.OcPlayer --output /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer --dependency-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer_dependency_info.dat --stringsdata-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftFileList --metadata-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer.DependencyMetadataFileList --static-metadata-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/OcPlayer.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/Objects-normal/arm64/OcPlayer.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-11-14 17:28:06.601 appintentsmetadataprocessor[51903:27789148] Starting appintentsmetadataprocessor export
+2026-11-14 17:28:06.608 appintentsmetadataprocessor[51903:27789148] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+CopySwiftLibs /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Library/SystemExtensions --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ProcessInfoPlistFile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Info.plist /Users/jumusu/Documents/project/OcPlayer/Config/Info.plist (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-infoPlistUtility /Users/jumusu/Documents/project/OcPlayer/Config/Info.plist -producttype com.apple.product-type.application -genpkginfo /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PkgInfo -expandbuildsettings -platform macosx -additionalcontentfile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-macOS.build/assetcatalog_generated_info.plist -scanforprivacyfile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Resources/GRDB_GRDB.bundle -scanforprivacyfile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Resources/swift-nio_NIOPosix.bundle -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/Info.plist
+removing value "audio" for "UIBackgroundModes" - not supported on macOS
+
+ProcessInfoPlistFile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Info.plist /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/empty-OcPlayerTests.plist (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-infoPlistUtility /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/empty-OcPlayerTests.plist -producttype com.apple.product-type.bundle.unit-test -expandbuildsettings -platform macosx -scanforprivacyfile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Resources/GRDB_GRDB.bundle -scanforprivacyfile /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Resources/swift-nio_NIOPosix.bundle -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Info.plist
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ OcPlayerTests (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftCompile normal arm64 (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    
+
+SwiftCompile normal arm64 Compiling\ AmbiencePoolTests.swift,\ AnimeTitleParserGoldenTests.swift,\ AppBackgroundPlaybackTests.swift,\ AppModelAvatarTests.swift,\ AppModelLifecycleTests.swift,\ AppPlaybackContinuationTests.swift,\ AppPlaybackHistoryTests.swift,\ AppUpdateCheckerTests.swift,\ AppVersionTests.swift,\ BackdropCarouselTriggerTests.swift,\ BackdropSourceLatchTests.swift,\ BangumiMatcherTests.swift,\ BangumiTitleAliasProviderTests.swift,\ CalendarSearchFilterTests.swift,\ CardImageTargetTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AnimeTitleParserGoldenTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppBackgroundPlaybackTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppModelAvatarTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppModelLifecycleTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackContinuationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppUpdateCheckerTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/AppVersionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/BackdropCarouselTriggerTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/BackdropSourceLatchTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/BangumiMatcherTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/BangumiTitleAliasProviderTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/CalendarSearchFilterTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/CardImageTargetTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AmbiencePoolTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AnimeTitleParserGoldenTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AnimeTitleParserGoldenTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppBackgroundPlaybackTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppBackgroundPlaybackTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppModelAvatarTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppModelAvatarTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppModelLifecycleTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppModelLifecycleTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackContinuationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppPlaybackContinuationTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppPlaybackHistoryTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppUpdateCheckerTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppUpdateCheckerTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/AppVersionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile AppVersionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/BackdropCarouselTriggerTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile BackdropCarouselTriggerTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/BackdropSourceLatchTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile BackdropSourceLatchTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/BangumiMatcherTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile BangumiMatcherTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/BangumiTitleAliasProviderTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile BangumiTitleAliasProviderTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/CalendarSearchFilterTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile CalendarSearchFilterTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/CardImageTargetTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile CardImageTargetTests.swift
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift:32:22: warning: main actor-isolated static property 'calls' can not be mutated from a nonisolated context
+ 23 |     @MainActor
+ 24 |     private enum WarmRecorder {
+ 25 |         static var calls: [(url: URL, authHeader: String?)] = []
+    |                    `- note: mutation of this static property is only permitted within the actor
+ 26 |     }
+ 27 | 
+    :
+ 30 |     override func setUp() {
+ 31 |         super.setUp()
+ 32 |         WarmRecorder.calls = []
+    |                      `- warning: main actor-isolated static property 'calls' can not be mutated from a nonisolated context
+ 33 |         // 生产走 `ImagePipeline`（会真发请求、`stub.local` 的 DNS 还可能拖住用例），
+ 34 |         // 用例里换成"记录调用、立刻返回"。
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift:35:29: warning: main actor-isolated static property 'warm' can not be mutated from a nonisolated context
+ 33 |         // 生产走 `ImagePipeline`（会真发请求、`stub.local` 的 DNS 还可能拖住用例），
+ 34 |         // 用例里换成"记录调用、立刻返回"。
+ 35 |         AmbienceImageWarmup.warm = { url, authHeader, _, _ in
+    |                             `- warning: main actor-isolated static property 'warm' can not be mutated from a nonisolated context
+ 36 |             WarmRecorder.calls.append((url, authHeader))
+ 37 |         }
+
+OcPlayer.AmbienceImageWarmup.warm:2:32: note: mutation of this static property is only permitted within the actor
+1 | enum AmbienceImageWarmup {
+2 | @MainActor internal static var warm: @MainActor @Sendable (URL, String?, String?, Int) async -> Void}
+  |                                `- note: mutation of this static property is only permitted within the actor
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift:41:29: warning: main actor-isolated static property 'warm' can not be mutated from a nonisolated context
+ 39 | 
+ 40 |     override func tearDown() {
+ 41 |         AmbienceImageWarmup.warm = { url, authHeader, cacheScope, maxPixelSize in
+    |                             `- warning: main actor-isolated static property 'warm' can not be mutated from a nonisolated context
+ 42 |             _ = try? await ImagePipeline.shared.load(
+ 43 |                 url, authHeader: authHeader, cacheScope: cacheScope, maxPixelSize: maxPixelSize
+
+OcPlayer.AmbienceImageWarmup.warm:2:32: note: mutation of this static property is only permitted within the actor
+1 | enum AmbienceImageWarmup {
+2 | @MainActor internal static var warm: @MainActor @Sendable (URL, String?, String?, Int) async -> Void}
+  |                                `- note: mutation of this static property is only permitted within the actor
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AmbiencePoolTests.swift:46:22: warning: main actor-isolated static property 'calls' can not be mutated from a nonisolated context
+ 23 |     @MainActor
+ 24 |     private enum WarmRecorder {
+ 25 |         static var calls: [(url: URL, authHeader: String?)] = []
+    |                    `- note: mutation of this static property is only permitted within the actor
+ 26 |     }
+ 27 | 
+    :
+ 44 |             )
+ 45 |         }
+ 46 |         WarmRecorder.calls = []
+    |                      `- warning: main actor-isolated static property 'calls' can not be mutated from a nonisolated context
+ 47 |         super.tearDown()
+ 48 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift:12:9: warning: main actor-isolated property 'directory' can not be mutated from a nonisolated context
+  7 | @MainActor
+  8 | final class AppPlaybackHistoryTests: XCTestCase {
+  9 |     private var directory: URL!
+    |                 `- note: mutation of this property is only permitted within the actor
+ 10 |     private var store: AppPlaybackHistoryStore!
+ 11 |     override func setUp() {
+ 12 |         directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    |         `- warning: main actor-isolated property 'directory' can not be mutated from a nonisolated context
+ 13 |         store = AppPlaybackHistoryStore(directory: directory)
+ 14 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift:13:9: warning: main actor-isolated property 'store' can not be mutated from a nonisolated context
+  8 | final class AppPlaybackHistoryTests: XCTestCase {
+  9 |     private var directory: URL!
+ 10 |     private var store: AppPlaybackHistoryStore!
+    |                 `- note: mutation of this property is only permitted within the actor
+ 11 |     override func setUp() {
+ 12 |         directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+ 13 |         store = AppPlaybackHistoryStore(directory: directory)
+    |         `- warning: main actor-isolated property 'store' can not be mutated from a nonisolated context
+ 14 |     }
+ 15 |     override func tearDown() {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift:13:52: warning: main actor-isolated property 'directory' can not be referenced from a nonisolated context
+  7 | @MainActor
+  8 | final class AppPlaybackHistoryTests: XCTestCase {
+  9 |     private var directory: URL!
+    |                 `- note: property declared here
+ 10 |     private var store: AppPlaybackHistoryStore!
+ 11 |     override func setUp() {
+ 12 |         directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+ 13 |         store = AppPlaybackHistoryStore(directory: directory)
+    |                                                    `- warning: main actor-isolated property 'directory' can not be referenced from a nonisolated context
+ 14 |     }
+ 15 |     override func tearDown() {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/AppPlaybackHistoryTests.swift:16:49: warning: main actor-isolated property 'directory' can not be referenced from a nonisolated context
+  7 | @MainActor
+  8 | final class AppPlaybackHistoryTests: XCTestCase {
+  9 |     private var directory: URL!
+    |                 `- note: property declared here
+ 10 |     private var store: AppPlaybackHistoryStore!
+ 11 |     override func setUp() {
+    :
+ 14 |     }
+ 15 |     override func tearDown() {
+ 16 |         try? FileManager.default.removeItem(at: directory)
+    |                                                 `- warning: main actor-isolated property 'directory' can not be referenced from a nonisolated context
+ 17 |     }
+ 18 |     private var item: MediaItem {
+SwiftCompile normal arm64 Compiling\ NowPlayingRepublishTests.swift,\ OverlayDanmakuCellRenderTests.swift,\ PlaybackControllerOpenTests.swift,\ PlaybackDisplayMetricsTests.swift,\ PlaybackEngineSelectionTests.swift,\ PlaybackOpenErrorTests.swift,\ PlaybackOpenFailureWiringTests.swift,\ PlaybackProgressSessionTests.swift,\ PlaybackReportingCoordinatorTests.swift,\ PlaybackSourceFailoverTests.swift,\ PlayerChromeMetricsTests.swift,\ PlayerHUDGatesTests.swift,\ PlayerHUDVisibilityTransitionTests.swift,\ PlayerKeyboardTests.swift,\ PlayerPanGestureModelTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/NowPlayingRepublishTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/OverlayDanmakuCellRenderTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackDisplayMetricsTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenErrorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackProgressSessionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackReportingCoordinatorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackSourceFailoverTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerChromeMetricsTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerHUDGatesTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerHUDVisibilityTransitionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerKeyboardTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerPanGestureModelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+/Users/jumusu/Documents/project/OcPlayer/AppTests/NowPlayingRepublishTests.swift:210:13: warning: variable 'clock' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+208 |     /// 心跳救不了它 —— 暂停后进度 tick 停了，`publish()` 根本不会再被调用。
+209 |     func testPausedSmallSeekWritesImmediately() {
+210 |         var clock = 100.0
+    |             `- warning: variable 'clock' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+211 |         let (center, writes) = makeCenter(clock: { clock })
+212 |         // 先发布一个「暂停在 90 s」的状态。
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:118:28: warning: main actor-isolated class property 'openWatchdogTimeout' can not be mutated from a nonisolated context
+116 | 
+117 |     override func tearDown() {
+118 |         PlaybackController.openWatchdogTimeout = savedWatchdog
+    |                            `- warning: main actor-isolated class property 'openWatchdogTimeout' can not be mutated from a nonisolated context
+119 |         PlaybackEngineRegistry.resetForTesting()
+120 |         // 别把开发机上真实的用户选择洗掉。
+
+OcPlayer.PlaybackController.openWatchdogTimeout:2:31: note: mutation of this class property is only permitted within the actor
+1 | class PlaybackController {
+2 | @MainActor internal class var openWatchdogTimeout: Duration}
+  |                               `- note: mutation of this class property is only permitted within the actor
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:118:50: warning: main actor-isolated property 'savedWatchdog' can not be referenced from a nonisolated context
+ 90 | 
+ 91 |     private var savedSelection: String?
+ 92 |     private var savedWatchdog: Duration = .seconds(60)
+    |                 `- note: property declared here
+ 93 | 
+ 94 |     override func setUp() async throws {
+    :
+116 | 
+117 |     override func tearDown() {
+118 |         PlaybackController.openWatchdogTimeout = savedWatchdog
+    |                                                  `- warning: main actor-isolated property 'savedWatchdog' can not be referenced from a nonisolated context
+119 |         PlaybackEngineRegistry.resetForTesting()
+120 |         // 别把开发机上真实的用户选择洗掉。
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:119:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+117 |     override func tearDown() {
+118 |         PlaybackController.openWatchdogTimeout = savedWatchdog
+119 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+120 |         // 别把开发机上真实的用户选择洗掉。
+121 |         if let savedSelection {
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:121:16: warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+ 89 |     }
+ 90 | 
+ 91 |     private var savedSelection: String?
+    |                 `- note: property declared here
+ 92 |     private var savedWatchdog: Duration = .seconds(60)
+ 93 | 
+    :
+119 |         PlaybackEngineRegistry.resetForTesting()
+120 |         // 别把开发机上真实的用户选择洗掉。
+121 |         if let savedSelection {
+    |                `- warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+122 |             PlaybackEngineRegistry.select(savedSelection)
+123 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:122:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+120 |         // 别把开发机上真实的用户选择洗掉。
+121 |         if let savedSelection {
+122 |             PlaybackEngineRegistry.select(savedSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+123 |         } else {
+124 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:124:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+122 |             PlaybackEngineRegistry.select(savedSelection)
+123 |         } else {
+124 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+125 |         }
+126 |         PlaybackEngineAssembly.registerAll()
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift:126:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+124 |             PlaybackEngineRegistry.clearSelection()
+125 |         }
+126 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+127 |         super.tearDown()
+128 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:14:9: warning: main actor-isolated property 'savedSelection' can not be mutated from a nonisolated context
+  8 | final class PlaybackEngineSelectionTests: XCTestCase {
+  9 | 
+ 10 |     private var savedSelection: String?
+    |                 `- note: mutation of this property is only permitted within the actor
+ 11 | 
+ 12 |     override func setUp() {
+ 13 |         super.setUp()
+ 14 |         savedSelection = PlaybackEngineRegistry.storedSelectionID
+    |         `- warning: main actor-isolated property 'savedSelection' can not be mutated from a nonisolated context
+ 15 |         PlaybackEngineRegistry.resetForTesting()
+ 16 |         PlaybackEngineRegistry.clearSelection()
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:14:49: warning: main actor-isolated static property 'storedSelectionID' can not be referenced from a nonisolated context
+ 12 |     override func setUp() {
+ 13 |         super.setUp()
+ 14 |         savedSelection = PlaybackEngineRegistry.storedSelectionID
+    |                                                 `- warning: main actor-isolated static property 'storedSelectionID' can not be referenced from a nonisolated context
+ 15 |         PlaybackEngineRegistry.resetForTesting()
+ 16 |         PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.storedSelectionID:2:30: note: static property declared here
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static var storedSelectionID: String? { get }}
+  |                              `- note: static property declared here
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:15:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 13 |         super.setUp()
+ 14 |         savedSelection = PlaybackEngineRegistry.storedSelectionID
+ 15 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 16 |         PlaybackEngineRegistry.clearSelection()
+ 17 |     }
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:16:32: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 14 |         savedSelection = PlaybackEngineRegistry.storedSelectionID
+ 15 |         PlaybackEngineRegistry.resetForTesting()
+ 16 |         PlaybackEngineRegistry.clearSelection()
+    |                                `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 17 |     }
+ 18 | 
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:20:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 18 | 
+ 19 |     override func tearDown() {
+ 20 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 21 |         // 别把开发机上真实的用户选择洗掉。
+ 22 |         if let savedSelection {
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:22:16: warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+  8 | final class PlaybackEngineSelectionTests: XCTestCase {
+  9 | 
+ 10 |     private var savedSelection: String?
+    |                 `- note: property declared here
+ 11 | 
+ 12 |     override func setUp() {
+    :
+ 20 |         PlaybackEngineRegistry.resetForTesting()
+ 21 |         // 别把开发机上真实的用户选择洗掉。
+ 22 |         if let savedSelection {
+    |                `- warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+ 23 |             PlaybackEngineRegistry.select(savedSelection)
+ 24 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:23:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 21 |         // 别把开发机上真实的用户选择洗掉。
+ 22 |         if let savedSelection {
+ 23 |             PlaybackEngineRegistry.select(savedSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 24 |         } else {
+ 25 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:25:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 23 |             PlaybackEngineRegistry.select(savedSelection)
+ 24 |         } else {
+ 25 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 26 |         }
+ 27 |         PlaybackEngineAssembly.registerAll()
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift:27:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 25 |             PlaybackEngineRegistry.clearSelection()
+ 26 |         }
+ 27 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 28 |         super.tearDown()
+ 29 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:111:28: warning: main actor-isolated class property 'openWatchdogTimeout' can not be mutated from a nonisolated context
+109 | 
+110 |     override func tearDown() {
+111 |         PlaybackController.openWatchdogTimeout = PlaybackController.openWatchdogDefault
+    |                            `- warning: main actor-isolated class property 'openWatchdogTimeout' can not be mutated from a nonisolated context
+112 |         PlaybackEngineRegistry.resetForTesting()
+113 |         if let savedSelection {
+
+OcPlayer.PlaybackController.openWatchdogTimeout:2:31: note: mutation of this class property is only permitted within the actor
+1 | class PlaybackController {
+2 | @MainActor internal class var openWatchdogTimeout: Duration}
+  |                               `- note: mutation of this class property is only permitted within the actor
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:112:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+110 |     override func tearDown() {
+111 |         PlaybackController.openWatchdogTimeout = PlaybackController.openWatchdogDefault
+112 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+113 |         if let savedSelection {
+114 |             PlaybackEngineRegistry.select(savedSelection)
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:113:16: warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+ 94 |     // MARK: - 夹具
+ 95 | 
+ 96 |     private var savedSelection: String?
+    |                 `- note: property declared here
+ 97 | 
+ 98 |     override func setUp() async throws {
+    :
+111 |         PlaybackController.openWatchdogTimeout = PlaybackController.openWatchdogDefault
+112 |         PlaybackEngineRegistry.resetForTesting()
+113 |         if let savedSelection {
+    |                `- warning: main actor-isolated property 'savedSelection' can not be referenced from a nonisolated context
+114 |             PlaybackEngineRegistry.select(savedSelection)
+115 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:114:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+112 |         PlaybackEngineRegistry.resetForTesting()
+113 |         if let savedSelection {
+114 |             PlaybackEngineRegistry.select(savedSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+115 |         } else {
+116 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/NowPlayingRepublishTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile NowPlayingRepublishTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/OverlayDanmakuCellRenderTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile OverlayDanmakuCellRenderTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackControllerOpenTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackControllerOpenTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackDisplayMetricsTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackDisplayMetricsTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackEngineSelectionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackEngineSelectionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenErrorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackOpenErrorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackOpenFailureWiringTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackProgressSessionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackProgressSessionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackReportingCoordinatorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackReportingCoordinatorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackSourceFailoverTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlaybackSourceFailoverTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerChromeMetricsTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerChromeMetricsTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerHUDGatesTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerHUDGatesTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerHUDVisibilityTransitionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerHUDVisibilityTransitionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerKeyboardTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerKeyboardTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerPanGestureModelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerPanGestureModelTests.swift
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:116:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+114 |             PlaybackEngineRegistry.select(savedSelection)
+115 |         } else {
+116 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+117 |         }
+118 |         PlaybackEngineAssembly.registerAll()
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/PlaybackOpenFailureWiringTests.swift:118:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+116 |             PlaybackEngineRegistry.clearSelection()
+117 |         }
+118 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+119 |         super.tearDown()
+120 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+SwiftCompile normal arm64 Compiling\ SkipPreferenceTests.swift,\ StaleContentNoticeTests.swift,\ StoppedProgressRegressionTests.swift,\ StubMediaServer.swift,\ SubtitleAppearancePreferenceTests.swift,\ SubtitlePreferenceTests.swift,\ SubtitleRemovalTests.swift,\ TMDbBatchCancelRaceTests.swift,\ TMDbCoordinatorTests.swift,\ TorrentFilterTests.swift,\ TorrentRevealWindowTests.swift,\ UpscalerPreferenceTests.swift,\ ViewingProfileAvatarTests.swift,\ VolumeQuantizationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/StaleContentNoticeTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/StoppedProgressRegressionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/StubMediaServer.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbBatchCancelRaceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbCoordinatorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/TorrentFilterTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/TorrentRevealWindowTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/UpscalerPreferenceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ViewingProfileAvatarTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/VolumeQuantizationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:21:13: warning: main actor-isolated property 'savedSkipIntro' can not be mutated from a nonisolated context
+ 11 | final class SkipPreferenceTests: XCTestCase {
+ 12 | 
+ 13 |     private var savedSkipIntro: Bool?
+    |                 `- note: mutation of this property is only permitted within the actor
+ 14 |     private var savedSkipOutro: Bool?
+ 15 |     private var savedRetention: Int?
+    :
+ 19 |         let defaults = UserDefaults.standard
+ 20 |         if defaults.object(forKey: SettingsKeys.skipIntro) != nil {
+ 21 |             savedSkipIntro = defaults.bool(forKey: SettingsKeys.skipIntro)
+    |             `- warning: main actor-isolated property 'savedSkipIntro' can not be mutated from a nonisolated context
+ 22 |         }
+ 23 |         if defaults.object(forKey: SettingsKeys.skipOutro) != nil {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:24:13: warning: main actor-isolated property 'savedSkipOutro' can not be mutated from a nonisolated context
+ 12 | 
+ 13 |     private var savedSkipIntro: Bool?
+ 14 |     private var savedSkipOutro: Bool?
+    |                 `- note: mutation of this property is only permitted within the actor
+ 15 |     private var savedRetention: Int?
+ 16 | 
+    :
+ 22 |         }
+ 23 |         if defaults.object(forKey: SettingsKeys.skipOutro) != nil {
+ 24 |             savedSkipOutro = defaults.bool(forKey: SettingsKeys.skipOutro)
+    |             `- warning: main actor-isolated property 'savedSkipOutro' can not be mutated from a nonisolated context
+ 25 |         }
+ 26 |         if defaults.object(forKey: SettingsKeys.outroRetentionSeconds) != nil {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:27:13: warning: main actor-isolated property 'savedRetention' can not be mutated from a nonisolated context
+ 13 |     private var savedSkipIntro: Bool?
+ 14 |     private var savedSkipOutro: Bool?
+ 15 |     private var savedRetention: Int?
+    |                 `- note: mutation of this property is only permitted within the actor
+ 16 | 
+ 17 |     override func setUp() {
+    :
+ 25 |         }
+ 26 |         if defaults.object(forKey: SettingsKeys.outroRetentionSeconds) != nil {
+ 27 |             savedRetention = defaults.integer(forKey: SettingsKeys.outroRetentionSeconds)
+    |             `- warning: main actor-isolated property 'savedRetention' can not be mutated from a nonisolated context
+ 28 |         }
+ 29 |         defaults.removeObject(forKey: SettingsKeys.skipIntro)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:37:16: warning: main actor-isolated property 'savedSkipIntro' can not be referenced from a nonisolated context
+ 11 | final class SkipPreferenceTests: XCTestCase {
+ 12 | 
+ 13 |     private var savedSkipIntro: Bool?
+    |                 `- note: property declared here
+ 14 |     private var savedSkipOutro: Bool?
+ 15 |     private var savedRetention: Int?
+    :
+ 35 |         let defaults = UserDefaults.standard
+ 36 |         // 还原真实域：键从未写过就清掉，别把测试值留给宿主 App。
+ 37 |         if let savedSkipIntro {
+    |                `- warning: main actor-isolated property 'savedSkipIntro' can not be referenced from a nonisolated context
+ 38 |             defaults.set(savedSkipIntro, forKey: SettingsKeys.skipIntro)
+ 39 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:42:16: warning: main actor-isolated property 'savedSkipOutro' can not be referenced from a nonisolated context
+ 12 | 
+ 13 |     private var savedSkipIntro: Bool?
+ 14 |     private var savedSkipOutro: Bool?
+    |                 `- note: property declared here
+ 15 |     private var savedRetention: Int?
+ 16 | 
+    :
+ 40 |             defaults.removeObject(forKey: SettingsKeys.skipIntro)
+ 41 |         }
+ 42 |         if let savedSkipOutro {
+    |                `- warning: main actor-isolated property 'savedSkipOutro' can not be referenced from a nonisolated context
+ 43 |             defaults.set(savedSkipOutro, forKey: SettingsKeys.skipOutro)
+ 44 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift:47:16: warning: main actor-isolated property 'savedRetention' can not be referenced from a nonisolated context
+ 13 |     private var savedSkipIntro: Bool?
+ 14 |     private var savedSkipOutro: Bool?
+ 15 |     private var savedRetention: Int?
+    |                 `- note: property declared here
+ 16 | 
+ 17 |     override func setUp() {
+    :
+ 45 |             defaults.removeObject(forKey: SettingsKeys.skipOutro)
+ 46 |         }
+ 47 |         if let savedRetention {
+    |                `- warning: main actor-isolated property 'savedRetention' can not be referenced from a nonisolated context
+ 48 |             defaults.set(savedRetention, forKey: SettingsKeys.outroRetentionSeconds)
+ 49 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift:29:25: warning: main actor-isolated static property 'keys' can not be referenced from a nonisolated context
+ 12 | final class SubtitleAppearancePreferenceTests: XCTestCase {
+ 13 | 
+ 14 |     private static let keys = [
+    |                        `- note: static property declared here
+ 15 |         SettingsKeys.subtitleAlignment,
+ 16 |         SettingsKeys.subtitleMarginVertical,
+    :
+ 27 |         super.setUp()
+ 28 |         let defaults = UserDefaults.standard
+ 29 |         for key in Self.keys {
+    |                         `- warning: main actor-isolated static property 'keys' can not be referenced from a nonisolated context
+ 30 |             if let value = defaults.object(forKey: key) { saved[key] = value }
+ 31 |             defaults.removeObject(forKey: key)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift:30:59: warning: main actor-isolated property 'saved' can not be mutated from a nonisolated context
+ 22 |     ]
+ 23 | 
+ 24 |     private var saved: [String: Any] = [:]
+    |                 `- note: mutation of this property is only permitted within the actor
+ 25 | 
+ 26 |     override func setUp() {
+    :
+ 28 |         let defaults = UserDefaults.standard
+ 29 |         for key in Self.keys {
+ 30 |             if let value = defaults.object(forKey: key) { saved[key] = value }
+    |                                                           `- warning: main actor-isolated property 'saved' can not be mutated from a nonisolated context
+ 31 |             defaults.removeObject(forKey: key)
+ 32 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift:37:25: warning: main actor-isolated static property 'keys' can not be referenced from a nonisolated context
+ 12 | final class SubtitleAppearancePreferenceTests: XCTestCase {
+ 13 | 
+ 14 |     private static let keys = [
+    |                        `- note: static property declared here
+ 15 |         SettingsKeys.subtitleAlignment,
+ 16 |         SettingsKeys.subtitleMarginVertical,
+    :
+ 35 |     override func tearDown() {
+ 36 |         let defaults = UserDefaults.standard
+ 37 |         for key in Self.keys {
+    |                         `- warning: main actor-isolated static property 'keys' can not be referenced from a nonisolated context
+ 38 |             if let value = saved[key] {
+ 39 |                 defaults.set(value, forKey: key)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift:38:28: warning: main actor-isolated property 'saved' can not be referenced from a nonisolated context
+ 22 |     ]
+ 23 | 
+ 24 |     private var saved: [String: Any] = [:]
+    |                 `- note: property declared here
+ 25 | 
+ 26 |     override func setUp() {
+    :
+ 36 |         let defaults = UserDefaults.standard
+ 37 |         for key in Self.keys {
+ 38 |             if let value = saved[key] {
+    |                            `- warning: main actor-isolated property 'saved' can not be referenced from a nonisolated context
+ 39 |                 defaults.set(value, forKey: key)
+ 40 |             } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:150:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+148 | 
+149 |     override func tearDown() {
+150 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+151 |         if let savedEngineSelection {
+152 |             PlaybackEngineRegistry.select(savedEngineSelection)
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:151:16: warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+136 | 
+137 |     private var savedLanguage: String?
+138 |     private var savedEngineSelection: String?
+    |                 `- note: property declared here
+139 | 
+140 |     override func setUp() async throws {
+    :
+149 |     override func tearDown() {
+150 |         PlaybackEngineRegistry.resetForTesting()
+151 |         if let savedEngineSelection {
+    |                `- warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+152 |             PlaybackEngineRegistry.select(savedEngineSelection)
+153 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:152:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+150 |         PlaybackEngineRegistry.resetForTesting()
+151 |         if let savedEngineSelection {
+152 |             PlaybackEngineRegistry.select(savedEngineSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+153 |         } else {
+154 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:154:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+152 |             PlaybackEngineRegistry.select(savedEngineSelection)
+153 |         } else {
+154 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+155 |         }
+156 |         if let savedLanguage {
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:156:16: warning: main actor-isolated property 'savedLanguage' can not be referenced from a nonisolated context
+135 |     }
+136 | 
+137 |     private var savedLanguage: String?
+    |                 `- note: property declared here
+138 |     private var savedEngineSelection: String?
+139 | 
+    :
+154 |             PlaybackEngineRegistry.clearSelection()
+155 |         }
+156 |         if let savedLanguage {
+    |                `- warning: main actor-isolated property 'savedLanguage' can not be referenced from a nonisolated context
+157 |             UserDefaults.standard.set(savedLanguage, forKey: SettingsKeys.subtitleLanguagePreference)
+158 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift:161:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+159 |             UserDefaults.standard.removeObject(forKey: SettingsKeys.subtitleLanguagePreference)
+160 |         }
+161 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+162 |         super.tearDown()
+163 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:129:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+127 | 
+128 |     override func tearDown() {
+129 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+130 |         if let savedEngineSelection {
+131 |             PlaybackEngineRegistry.select(savedEngineSelection)
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:130:16: warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+115 | 
+116 |     private var savedLanguage: String?
+117 |     private var savedEngineSelection: String?
+    |                 `- note: property declared here
+118 | 
+119 |     override func setUp() async throws {
+    :
+128 |     override func tearDown() {
+129 |         PlaybackEngineRegistry.resetForTesting()
+130 |         if let savedEngineSelection {
+    |                `- warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+131 |             PlaybackEngineRegistry.select(savedEngineSelection)
+132 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:131:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+129 |         PlaybackEngineRegistry.resetForTesting()
+130 |         if let savedEngineSelection {
+131 |             PlaybackEngineRegistry.select(savedEngineSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+132 |         } else {
+133 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:133:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+131 |             PlaybackEngineRegistry.select(savedEngineSelection)
+132 |         } else {
+133 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+134 |         }
+135 |         if let savedLanguage {
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:135:16: warning: main actor-isolated property 'savedLanguage' can not be referenced from a nonisolated context
+114 |     }
+115 | 
+116 |     private var savedLanguage: String?
+    |                 `- note: property declared here
+117 |     private var savedEngineSelection: String?
+118 | 
+    :
+133 |             PlaybackEngineRegistry.clearSelection()
+134 |         }
+135 |         if let savedLanguage {
+    |                `- warning: main actor-isolated property 'savedLanguage' can not be referenced from a nonisolated context
+136 |             UserDefaults.standard.set(savedLanguage, forKey: SettingsKeys.subtitleLanguagePreference)
+137 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift:140:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+138 |             UserDefaults.standard.removeObject(forKey: SettingsKeys.subtitleLanguagePreference)
+139 |         }
+140 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+141 |         super.tearDown()
+142 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbCoordinatorTests.swift:232:13: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+230 |         let counter = BatchEnumerateCounter()
+231 |         coordinator.startBatch(tenant: TenantID(rawValue: "srv:user")) {
+232 |             await counter.bump()
+    |             `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+233 |             return []
+234 |         }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbCoordinatorTests.swift:240:30: warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+238 |         XCTAssertNil(coordinator.batchProgress)
+239 |         // `await` 不能写在 XCTAssert 的 autoclosure 里，先取出来。
+240 |         let enumerateCalls = await counter.value
+    |                              `- warning: no 'async' operations occur within 'await' expression [#UnnecessaryEffectMarker]
+241 |         XCTAssertEqual(enumerateCalls, 0, "不该去枚举库")
+242 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/UpscalerPreferenceTests.swift:18:9: warning: main actor-isolated property 'saved' can not be mutated from a nonisolated context
+11 | final class UpscalerPreferenceTests: XCTestCase {
+12 | 
+13 |     private var saved: String?
+   |                 `- note: mutation of this property is only permitted within the actor
+14 | 
+15 |     override func setUp() {
+16 |         super.setUp()
+17 |         let defaults = UserDefaults.standard
+18 |         saved = defaults.string(forKey: SettingsKeys.lumaUpscaler)
+   |         `- warning: main actor-isolated property 'saved' can not be mutated from a nonisolated context
+19 |         defaults.removeObject(forKey: SettingsKeys.lumaUpscaler)
+20 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/UpscalerPreferenceTests.swift:24:16: warning: main actor-isolated property 'saved' can not be referenced from a nonisolated context
+11 | final class UpscalerPreferenceTests: XCTestCase {
+12 | 
+13 |     private var saved: String?
+   |                 `- note: property declared here
+14 | 
+15 |     override func setUp() {
+   :
+22 |     override func tearDown() {
+23 |         let defaults = UserDefaults.standard
+24 |         if let saved {
+   |                `- warning: main actor-isolated property 'saved' can not be referenced from a nonisolated context
+25 |             defaults.set(saved, forKey: SettingsKeys.lumaUpscaler)
+26 |         } else {
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SkipPreferenceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SkipPreferenceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/StaleContentNoticeTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile StaleContentNoticeTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/StoppedProgressRegressionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile StoppedProgressRegressionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/StubMediaServer.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile StubMediaServer.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleAppearancePreferenceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SubtitleAppearancePreferenceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitlePreferenceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SubtitlePreferenceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SubtitleRemovalTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SubtitleRemovalTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbBatchCancelRaceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile TMDbBatchCancelRaceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/TMDbCoordinatorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile TMDbCoordinatorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/TorrentFilterTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile TorrentFilterTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/TorrentRevealWindowTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile TorrentRevealWindowTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/UpscalerPreferenceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile UpscalerPreferenceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ViewingProfileAvatarTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ViewingProfileAvatarTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/VolumeQuantizationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile VolumeQuantizationTests.swift
+
+SwiftCompile normal arm64 Compiling\ DetailExternalLinksTests.swift,\ DetailLayoutStyleTests.swift,\ DetailLoadCancellationTests.swift,\ DetailPageWheelGestureTests.swift,\ DetailPrefetchTests.swift,\ DetailScrollFlipTests.swift,\ DetailSnapshotTTLTests.swift,\ DiagnosticsExportTests.swift,\ DiagnosticsSettingsTests.swift,\ DirectLinkInputTests.swift,\ DownloadsPollingPolicyTests.swift,\ EpisodePlaceholderTests.swift,\ ExternalSubtitleConcurrencyTests.swift,\ HoldFastForwardTests.swift,\ HomeLayoutTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailExternalLinksTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailLayoutStyleTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailLoadCancellationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailPageWheelGestureTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailPrefetchTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailScrollFlipTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailSnapshotTTLTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DiagnosticsExportTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DiagnosticsSettingsTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DirectLinkInputTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DownloadsPollingPolicyTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/EpisodePlaceholderTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ExternalSubtitleConcurrencyTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HoldFastForwardTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailExternalLinksTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailExternalLinksTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailLayoutStyleTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailLayoutStyleTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailLoadCancellationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailLoadCancellationTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailPageWheelGestureTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailPageWheelGestureTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailPrefetchTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailPrefetchTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailScrollFlipTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailScrollFlipTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailSnapshotTTLTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailSnapshotTTLTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DiagnosticsExportTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DiagnosticsExportTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DiagnosticsSettingsTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DiagnosticsSettingsTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DirectLinkInputTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DirectLinkInputTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DownloadsPollingPolicyTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DownloadsPollingPolicyTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/EpisodePlaceholderTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile EpisodePlaceholderTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ExternalSubtitleConcurrencyTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ExternalSubtitleConcurrencyTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HoldFastForwardTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HoldFastForwardTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HomeLayoutTests.swift
+
+SwiftCompile normal arm64 Compiling\ ChapterSkippingEvaluatorTests.swift,\ CollectionDetailTests.swift,\ CollectionPlaybackTests.swift,\ ConfigBackupTests.swift,\ CoreDiagnosticsExportParityTests.swift,\ DanmakuAliasBudgetTests.swift,\ DanmakuKernelFontSizeTests.swift,\ DanmakuOverlaySpawnCostTests.swift,\ DanmakuOverlayTimelinePointerTests.swift,\ DanmakuPlaybackContextTests.swift,\ DanmakuSeekDetectorTests.swift,\ DanmakuSpawnPlannerTests.swift,\ DetailBackdropArtworkTests.swift,\ DetailBackdropLockTests.swift,\ DetailEpisodeChunkTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ChapterSkippingEvaluatorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/CollectionDetailTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/CollectionPlaybackTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ConfigBackupTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/CoreDiagnosticsExportParityTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuAliasBudgetTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuKernelFontSizeTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuOverlaySpawnCostTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuOverlayTimelinePointerTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuPlaybackContextTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuSeekDetectorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuSpawnPlannerTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropArtworkTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropLockTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailEpisodeChunkTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ChapterSkippingEvaluatorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ChapterSkippingEvaluatorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/CollectionDetailTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile CollectionDetailTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/CollectionPlaybackTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile CollectionPlaybackTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ConfigBackupTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ConfigBackupTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/CoreDiagnosticsExportParityTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile CoreDiagnosticsExportParityTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuAliasBudgetTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuAliasBudgetTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuKernelFontSizeTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuKernelFontSizeTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuOverlaySpawnCostTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuOverlaySpawnCostTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuOverlayTimelinePointerTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuOverlayTimelinePointerTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuPlaybackContextTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuPlaybackContextTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuSeekDetectorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuSeekDetectorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DanmakuSpawnPlannerTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DanmakuSpawnPlannerTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropArtworkTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailBackdropArtworkTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropLockTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailBackdropLockTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/DetailEpisodeChunkTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile DetailEpisodeChunkTests.swift
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/ChapterSkippingEvaluatorTests.swift:200:13: warning: variable 'session' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+198 | 
+199 |     func testNoneMarkedStillGetsEndCreditsFallbackWithin90s() {
+200 |         var session = ChapterSession()
+    |             `- warning: variable 'session' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+201 |         let prompt = session.prompt(at: 1150, duration: 1200, isPlaying: true)
+202 |         XCTAssertEqual(prompt?.kind, .credits)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/ChapterSkippingEvaluatorTests.swift:213:13: warning: variable 'session' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+211 | 
+212 |     func testEndCreditsFallbackRequiresLastMinute30() {
+213 |         var session = ChapterSession()
+    |             `- warning: variable 'session' was never mutated; consider changing to 'let' constant [#VariableNeverMutated]
+214 |         // 还剩 110s > 90s → 不弹。
+215 |         XCTAssertNil(session.prompt(at: 1090, duration: 1200, isPlaying: true))
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropArtworkTests.swift:30:16: warning: 'cached' mutated after capture by sendable closure
+ 18 |     func testEntryCapturesPixelsOnceAndSurvivesPoolChangeAndEviction() {
+ 19 |         let pixels = image()
+ 20 |         var cached: PlatformImage? = pixels
+    |             `- note: variable defined here
+ 21 |         var reads = 0
+ 22 |         let artwork = DetailBackdropArtwork(cachedImage: { url, auth, _, size in
+    |                                                          `- note: variable captured by sendable closure
+ 23 |             reads += 1
+ 24 |             XCTAssertEqual(url, self.home.url)
+ 25 |             XCTAssertEqual(auth, self.home.authHeader)
+ 26 |             XCTAssertEqual(size, DetailAmbienceImage.decodePixels)
+ 27 |             return cached
+    |                    `- note: capturing use
+ 28 |         })
+ 29 |         artwork.captureEntry(target: home)
+ 30 |         cached = nil
+    |                `- warning: 'cached' mutated after capture by sendable closure
+ 31 |         artwork.captureEntry(target: detail)
+ 32 |         XCTAssertEqual(reads, 1)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/DetailBackdropArtworkTests.swift:41:16: warning: 'cached' mutated after capture by sendable closure
+ 36 | 
+ 37 |     func testMissingEntryDoesNotFollowLaterPoolWarmup() {
+ 38 |         var cached: PlatformImage?
+    |             `- note: variable defined here
+ 39 |         let artwork = DetailBackdropArtwork(cachedImage: { _, _, _, _ in cached })
+    |                                                          |               `- note: capturing use
+    |                                                          `- note: variable captured by sendable closure
+ 40 |         artwork.captureEntry(target: home)
+ 41 |         cached = image()
+    |                `- warning: 'cached' mutated after capture by sendable closure
+ 42 |         artwork.captureEntry(target: detail)
+ 43 |         XCTAssertNil(artwork.entry)
+
+[#VariableNeverMutated]: <https://docs.swift.org/compiler/documentation/diagnostics/variable-never-mutated>
+SwiftCompile normal arm64 Compiling\ PlayerVideoColorLabelTests.swift,\ PreparationDismissDeadlineTests.swift,\ QueuedPlaybackProgressTests.swift,\ QuickConnectOptInTests.swift,\ ReleaseSessionRegressionTests.swift,\ RouteAmbienceCoverageTests.swift,\ RustCoreActivationTests.swift,\ SectionAvatarIconTests.swift,\ SectionBrandIconTests.swift,\ ServerAddressStatusTests.swift,\ ServerEndpointWiringTests.swift,\ SettingsDefaultValueTests.swift,\ SettingsHubGroupingTests.swift,\ SettingsLayoutTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerVideoColorLabelTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/PreparationDismissDeadlineTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/QueuedPlaybackProgressTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/QuickConnectOptInTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ReleaseSessionRegressionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/RouteAmbienceCoverageTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/RustCoreActivationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SectionAvatarIconTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SectionBrandIconTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ServerAddressStatusTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ServerEndpointWiringTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsDefaultValueTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsHubGroupingTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsLayoutTests.swift:319:22: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+317 | 
+318 |         let image = try snapshot(page, size: canvas, scheme: .dark)
+319 |         let bitmap = try SettingsBitmap(image: image, scale: scale)
+    |                      `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+320 |         let spreads = bitmap.iconColumnChannelSpreads(
+321 |             contentLeading: contentLeading, baseOverride: 128)
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsLayoutTests.swift:368:22: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+366 | 
+367 |         let image = try snapshot(page, size: canvas, scheme: .dark)
+368 |         let bitmap = try SettingsBitmap(image: image, scale: scale)
+    |                      `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+369 | 
+370 |         XCTAssertNil(
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsLayoutTests.swift:414:16: warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+412 |             add(attachment)
+413 |         }
+414 |         return try SettingsBitmap(image: image, scale: scale)
+    |                `- warning: no calls to throwing functions occur within 'try' expression [#UnnecessaryEffectMarker]
+415 |     }
+416 | 
+
+[#UnnecessaryEffectMarker]: <https://docs.swift.org/compiler/documentation/diagnostics/unnecessary-effect-marker>
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PlayerVideoColorLabelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PlayerVideoColorLabelTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/PreparationDismissDeadlineTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile PreparationDismissDeadlineTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/QueuedPlaybackProgressTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile QueuedPlaybackProgressTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/QuickConnectOptInTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile QuickConnectOptInTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ReleaseSessionRegressionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ReleaseSessionRegressionTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/RouteAmbienceCoverageTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile RouteAmbienceCoverageTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/RustCoreActivationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile RustCoreActivationTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SectionAvatarIconTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SectionAvatarIconTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SectionBrandIconTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SectionBrandIconTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ServerAddressStatusTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ServerAddressStatusTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ServerEndpointWiringTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ServerEndpointWiringTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsDefaultValueTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SettingsDefaultValueTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsHubGroupingTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SettingsHubGroupingTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/SettingsLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile SettingsLayoutTests.swift
+
+SwiftCompile normal arm64 Compiling\ HomePresentationTests.swift,\ HomeRailDedupeTests.swift,\ HomeRailLoadingTests.swift,\ HomeSectionPreferenceTests.swift,\ ImageServerScopeTests.swift,\ KernelDiagnosticsSnapshotTests.swift,\ KernelLoggingTests.swift,\ LaunchPresenterTests.swift,\ LaunchRouteTests.swift,\ LaunchTimelineTests.swift,\ LibraryGridLayoutTests.swift,\ LibrarySortTests.swift,\ LoginWallCatalogLoaderTests.swift,\ LoginWallOffMainTests.swift,\ LoginWallPosterResolutionTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HomePresentationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeRailDedupeTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeRailLoadingTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeSectionPreferenceTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/ImageServerScopeTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/KernelLoggingTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchPresenterTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchRouteTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchTimelineTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LibraryGridLayoutTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LibrarySortTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallCatalogLoaderTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallOffMainTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallPosterResolutionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift:81:32: warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 79 | 
+ 80 |     override func tearDown() {
+ 81 |         PlaybackEngineRegistry.resetForTesting()
+    |                                `- warning: call to main actor-isolated static method 'resetForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 82 |         if let savedEngineSelection {
+ 83 |             PlaybackEngineRegistry.select(savedEngineSelection)
+
+PlaybackKit.PlaybackEngineRegistry.resetForTesting:2:31: note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func resetForTesting()}
+  |                               `- note: calls to static method 'resetForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift:82:16: warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+ 69 |     }
+ 70 | 
+ 71 |     private var savedEngineSelection: String?
+    |                 `- note: property declared here
+ 72 | 
+ 73 |     override func setUp() async throws {
+    :
+ 80 |     override func tearDown() {
+ 81 |         PlaybackEngineRegistry.resetForTesting()
+ 82 |         if let savedEngineSelection {
+    |                `- warning: main actor-isolated property 'savedEngineSelection' can not be referenced from a nonisolated context
+ 83 |             PlaybackEngineRegistry.select(savedEngineSelection)
+ 84 |         } else {
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift:83:36: warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 81 |         PlaybackEngineRegistry.resetForTesting()
+ 82 |         if let savedEngineSelection {
+ 83 |             PlaybackEngineRegistry.select(savedEngineSelection)
+    |                                    `- warning: call to main actor-isolated static method 'select' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 84 |         } else {
+ 85 |             PlaybackEngineRegistry.clearSelection()
+
+PlaybackKit.PlaybackEngineRegistry.select:2:31: note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func select(_ id: String)}
+  |                               `- note: calls to static method 'select' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift:85:36: warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 83 |             PlaybackEngineRegistry.select(savedEngineSelection)
+ 84 |         } else {
+ 85 |             PlaybackEngineRegistry.clearSelection()
+    |                                    `- warning: call to main actor-isolated static method 'clearSelection()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 86 |         }
+ 87 |         PlaybackEngineAssembly.registerAll()
+
+PlaybackKit.PlaybackEngineRegistry.clearSelection:2:31: note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineRegistry {
+2 | @MainActor public static func clearSelection()}
+  |                               `- note: calls to static method 'clearSelection()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift:87:32: warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 85 |             PlaybackEngineRegistry.clearSelection()
+ 86 |         }
+ 87 |         PlaybackEngineAssembly.registerAll()
+    |                                `- warning: call to main actor-isolated static method 'registerAll()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 88 |         super.tearDown()
+ 89 |     }
+
+OcPlayer.PlaybackEngineAssembly.registerAll:2:33: note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+1 | enum PlaybackEngineAssembly {
+2 | @MainActor internal static func registerAll()}
+  |                                 `- note: calls to static method 'registerAll()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelLoggingTests.swift:157:22: warning: expression implicitly coerced from 'String??' to 'Any?'
+155 |         let switches = KernelTraceSwitches.switches(
+156 |             verbose: true, directory: URL(fileURLWithPath: "/tmp/logs"))
+157 |         XCTAssertNil(switches["ERIKA_FFMPEG_DEBUG"], "逐帧 NAL 日志 1500+ 行/秒")
+    |                      |       |- note: provide a default value to avoid this warning
+    |                      |       |- note: force-unwrap the value to avoid this warning
+    |                      |       `- note: explicitly cast to 'Any?' with 'as Any?' to silence this warning
+    |                      `- warning: expression implicitly coerced from 'String??' to 'Any?'
+158 |         XCTAssertNil(switches["ERIKA_SUBTITLE_DIAG"], "逐帧字幕几何 ~100 行/秒且无文件 sink")
+159 |     }
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/KernelLoggingTests.swift:158:22: warning: expression implicitly coerced from 'String??' to 'Any?'
+156 |             verbose: true, directory: URL(fileURLWithPath: "/tmp/logs"))
+157 |         XCTAssertNil(switches["ERIKA_FFMPEG_DEBUG"], "逐帧 NAL 日志 1500+ 行/秒")
+158 |         XCTAssertNil(switches["ERIKA_SUBTITLE_DIAG"], "逐帧字幕几何 ~100 行/秒且无文件 sink")
+    |                      |       |- note: provide a default value to avoid this warning
+    |                      |       |- note: force-unwrap the value to avoid this warning
+    |                      |       `- note: explicitly cast to 'Any?' with 'as Any?' to silence this warning
+    |                      `- warning: expression implicitly coerced from 'String??' to 'Any?'
+159 |     }
+160 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchPresenterTests.swift:20:25: warning: call to main actor-isolated static method 'resetPlaybackGateForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 18 |         super.setUp()
+ 19 |         // 静态「已播」标记跨用例存活，必须每个用例前复位。
+ 20 |         LaunchPresenter.resetPlaybackGateForTesting()
+    |                         `- warning: call to main actor-isolated static method 'resetPlaybackGateForTesting()' in a synchronous nonisolated context [#ActorIsolatedCall]
+ 21 |     }
+ 22 | 
+
+OcPlayer.LaunchPresenter.resetPlaybackGateForTesting:2:33: note: calls to static method 'resetPlaybackGateForTesting()' from outside of its actor context are implicitly asynchronous
+1 | class LaunchPresenter {
+2 | @MainActor internal static func resetPlaybackGateForTesting()}
+  |                                 `- note: calls to static method 'resetPlaybackGateForTesting()' from outside of its actor context are implicitly asynchronous
+3 | 
+
+/Users/jumusu/Documents/project/OcPlayer/AppTests/LibraryGridLayoutTests.swift:483:24: warning: value 's' was defined but never used; consider replacing with boolean test [#NoUsage]
+481 |         for y in artwork.upperBound..<windowEnd {
+482 |             if inkCoverage(inRow: y) > 0.001 {
+483 |                 if let s = start {
+    |                        `- warning: value 's' was defined but never used; consider replacing with boolean test [#NoUsage]
+484 |                     if y - lastInk > gapTolerance {
+485 |                         flush()
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HomePresentationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HomePresentationTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeRailDedupeTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HomeRailDedupeTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeRailLoadingTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HomeRailLoadingTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/HomeSectionPreferenceTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile HomeSectionPreferenceTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/ImageServerScopeTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile ImageServerScopeTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/KernelDiagnosticsSnapshotTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile KernelDiagnosticsSnapshotTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/KernelLoggingTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile KernelLoggingTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchPresenterTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LaunchPresenterTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchRouteTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LaunchRouteTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LaunchTimelineTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LaunchTimelineTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LibraryGridLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LibraryGridLayoutTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LibrarySortTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LibrarySortTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallCatalogLoaderTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LoginWallCatalogLoaderTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallOffMainTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LoginWallOffMainTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/LoginWallPosterResolutionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile LoginWallPosterResolutionTests.swift
+
+SwiftCompile normal arm64 Compiling\ MediaInfoLabelTests.swift,\ MetadataCacheIntegrationTests.swift,\ MetadataCoordinatorTests.swift,\ MetadataSessionConsistencyTests.swift,\ MetaPartsShapeTests.swift,\ MirrorSettingsTests.swift,\ MockURLProtocol.swift,\ MoviePilotMediaCardLayoutTests.swift,\ MoviePilotSubscribeIndexTests.swift,\ MoviePilotSubscriptionLoaderTests.swift,\ MoviePilotTorrentListLazinessTests.swift,\ MyBroadcastTimelineTests.swift,\ MyDashboardModelTests.swift,\ MyViewingStatisticsTests.swift,\ MyViewingSummaryLayoutTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MediaInfoLabelTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataCacheIntegrationTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataCoordinatorTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataSessionConsistencyTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MetaPartsShapeTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MirrorSettingsTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MockURLProtocol.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotMediaCardLayoutTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotSubscribeIndexTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotSubscriptionLoaderTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotTorrentListLazinessTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MyBroadcastTimelineTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MyDashboardModelTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MyViewingStatisticsTests.swift /Users/jumusu/Documents/project/OcPlayer/AppTests/MyViewingSummaryLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MediaInfoLabelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MediaInfoLabelTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataCacheIntegrationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MetadataCacheIntegrationTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataCoordinatorTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MetadataCoordinatorTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MetadataSessionConsistencyTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MetadataSessionConsistencyTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MetaPartsShapeTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MetaPartsShapeTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MirrorSettingsTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MirrorSettingsTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MockURLProtocol.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MockURLProtocol.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotMediaCardLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MoviePilotMediaCardLayoutTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotSubscribeIndexTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MoviePilotSubscribeIndexTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotSubscriptionLoaderTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MoviePilotSubscriptionLoaderTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MoviePilotTorrentListLazinessTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MoviePilotTorrentListLazinessTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MyBroadcastTimelineTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MyBroadcastTimelineTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MyDashboardModelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MyDashboardModelTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MyViewingStatisticsTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MyViewingStatisticsTests.swift
+
+SwiftCompile normal arm64 /Users/jumusu/Documents/project/OcPlayer/AppTests/MyViewingSummaryLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-SwiftPerFileCompile MyViewingSummaryLayoutTests.swift
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for OcPlayerTests (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriver\ Compilation\ Requirements OcPlayerTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayerTests -Onone @/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocp-diagnostic-export-macos/DerivedData/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -sdk-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-generated-files.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-own-target-headers.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling DetailExternalLinksTests.swift, DetailLayoutStyleTests.swift, DetailLoadCancellationTests.swift, DetailPageWheelGestureTests.swift, DetailPrefetchTests.swift, DetailScrollFlipTests.swift, DetailSnapshotTTLTests.swift, DiagnosticsExportTests.swift, DiagnosticsSettingsTests.swift, DirectLinkInputTests.swift, DownloadsPollingPolicyTests.swift, EpisodePlaceholderTests.swift, ExternalSubtitleConcurrencyTests.swift, HoldFastForwardTests.swift, HomeLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+Copy /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftsourceinfo (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftsourceinfo /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/Project/arm64-apple-macos.swiftsourceinfo
+
+Copy /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/arm64-apple-macos.swiftmodule /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/arm64-apple-macos.swiftmodule
+
+Copy /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/arm64-apple-macos.abi.json /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.abi.json (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.abi.json /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayerTests.swiftmodule/arm64-apple-macos.abi.json
+
+SwiftDriverJobDiscovery normal arm64 Compiling AmbiencePoolTests.swift, AnimeTitleParserGoldenTests.swift, AppBackgroundPlaybackTests.swift, AppModelAvatarTests.swift, AppModelLifecycleTests.swift, AppPlaybackContinuationTests.swift, AppPlaybackHistoryTests.swift, AppUpdateCheckerTests.swift, AppVersionTests.swift, BackdropCarouselTriggerTests.swift, BackdropSourceLatchTests.swift, BangumiMatcherTests.swift, BangumiTitleAliasProviderTests.swift, CalendarSearchFilterTests.swift, CardImageTargetTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SkipPreferenceTests.swift, StaleContentNoticeTests.swift, StoppedProgressRegressionTests.swift, StubMediaServer.swift, SubtitleAppearancePreferenceTests.swift, SubtitlePreferenceTests.swift, SubtitleRemovalTests.swift, TMDbBatchCancelRaceTests.swift, TMDbCoordinatorTests.swift, TorrentFilterTests.swift, TorrentRevealWindowTests.swift, UpscalerPreferenceTests.swift, ViewingProfileAvatarTests.swift, VolumeQuantizationTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling PlayerVideoColorLabelTests.swift, PreparationDismissDeadlineTests.swift, QueuedPlaybackProgressTests.swift, QuickConnectOptInTests.swift, ReleaseSessionRegressionTests.swift, RouteAmbienceCoverageTests.swift, RustCoreActivationTests.swift, SectionAvatarIconTests.swift, SectionBrandIconTests.swift, ServerAddressStatusTests.swift, ServerEndpointWiringTests.swift, SettingsDefaultValueTests.swift, SettingsHubGroupingTests.swift, SettingsLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomePresentationTests.swift, HomeRailDedupeTests.swift, HomeRailLoadingTests.swift, HomeSectionPreferenceTests.swift, ImageServerScopeTests.swift, KernelDiagnosticsSnapshotTests.swift, KernelLoggingTests.swift, LaunchPresenterTests.swift, LaunchRouteTests.swift, LaunchTimelineTests.swift, LibraryGridLayoutTests.swift, LibrarySortTests.swift, LoginWallCatalogLoaderTests.swift, LoginWallOffMainTests.swift, LoginWallPosterResolutionTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling NowPlayingRepublishTests.swift, OverlayDanmakuCellRenderTests.swift, PlaybackControllerOpenTests.swift, PlaybackDisplayMetricsTests.swift, PlaybackEngineSelectionTests.swift, PlaybackOpenErrorTests.swift, PlaybackOpenFailureWiringTests.swift, PlaybackProgressSessionTests.swift, PlaybackReportingCoordinatorTests.swift, PlaybackSourceFailoverTests.swift, PlayerChromeMetricsTests.swift, PlayerHUDGatesTests.swift, PlayerHUDVisibilityTransitionTests.swift, PlayerKeyboardTests.swift, PlayerPanGestureModelTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ChapterSkippingEvaluatorTests.swift, CollectionDetailTests.swift, CollectionPlaybackTests.swift, ConfigBackupTests.swift, CoreDiagnosticsExportParityTests.swift, DanmakuAliasBudgetTests.swift, DanmakuKernelFontSizeTests.swift, DanmakuOverlaySpawnCostTests.swift, DanmakuOverlayTimelinePointerTests.swift, DanmakuPlaybackContextTests.swift, DanmakuSeekDetectorTests.swift, DanmakuSpawnPlannerTests.swift, DetailBackdropArtworkTests.swift, DetailBackdropLockTests.swift, DetailEpisodeChunkTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriverJobDiscovery normal arm64 Compiling MediaInfoLabelTests.swift, MetadataCacheIntegrationTests.swift, MetadataCoordinatorTests.swift, MetadataSessionConsistencyTests.swift, MetaPartsShapeTests.swift, MirrorSettingsTests.swift, MockURLProtocol.swift, MoviePilotMediaCardLayoutTests.swift, MoviePilotSubscribeIndexTests.swift, MoviePilotSubscriptionLoaderTests.swift, MoviePilotTorrentListLazinessTests.swift, MyBroadcastTimelineTests.swift, MyDashboardModelTests.swift, MyViewingStatisticsTests.swift, MyViewingSummaryLayoutTests.swift (in target 'OcPlayerTests' from project 'OcPlayer')
+
+SwiftDriver\ Compilation OcPlayerTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name OcPlayerTests -Onone @/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.SwiftFileList -DDEBUG -DOCPLAYER_SELFTEST -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CErika.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOPosix.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOWASI.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include/module.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOLinux.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIODarwin.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOFreeBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOOpenBSD.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps/CNIOAtomics.modulemap -Xcc -fmodule-map-file\=/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include/module.modulemap -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -target arm64-apple-macos26.0 -g -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /tmp/ocp-diagnostic-export-macos/DerivedData/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -F /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -F /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/SDKStatCaches.noindex/macosx27.0-26A425-7231f6df4def33e022ae2eb8f782df1a.sdkstatcache -output-file-map /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex -sdk-module-cache-path /tmp/ocp-diagnostic-export-macos/DerivedData/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /tmp/ocp-diagnostic-export-macos/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -emit-const-values -const-gather-protocols-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-generated-files.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-own-target-headers.hmap -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayer-75531478d1d5302e92f9c2ebfa7b032b-VFS/all-product-headers.yaml -Xcc -iquote -Xcc /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests-project-headers.hmap -Xcc -I/Users/jumusu/Documents/project/OcPlayer/Packages/ErikaKit/Sources/CErika/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOPosix/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWASI/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOWindows/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOLinux/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIODarwin/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOFreeBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOOpenBSD/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-nio/Sources/CNIOAtomics/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/SourcePackages/checkouts/swift-atomics/Sources/_AtomicsShims/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/include -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources/arm64 -Xcc -I/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/DerivedSources -emit-objc-header -emit-objc-header-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests-Swift.h -working-directory /Users/jumusu/Documents/project/OcPlayer -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/MacOS/OcPlayerTests normal (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-macos26.0 -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk -O0 -Xlinker -no_warn_duplicate_libraries -L/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -L/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib -F/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/EagerLinkingTBDs/Debug -F/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -F/tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug -iframework /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks -filelist /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.LinkFileList -Xlinker -rpath -Xlinker @loader_path -Xlinker -rpath -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/PackageFrameworks -Xlinker -rpath -Xlinker @loader_path/../Frameworks -Xlinker -rpath -Xlinker @executable_path/../Frameworks -bundle_loader /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer -Xlinker -object_path_lto -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.swiftmodule -framework Metal -framework QuartzCore -framework CoreVideo -framework CoreMedia -framework CoreGraphics -framework CoreText -framework VideoToolbox -framework AudioToolbox -framework CoreAudio -framework AVFoundation -framework IOSurface -lc++ -lz -lbz2 -liconv -framework AppKit -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/MacOS/OcPlayer.debug.dylib -o /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/MacOS/OcPlayerTests
+
+ExtractAppIntentsMetadata (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name OcPlayerTests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk --xcode-version 27A9275 --platform-family macOS --deployment-target 26.0 --bundle-identifier dev.jumusu.OcPlayerTests --output /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Resources --target-triple arm64-apple-macos26.0 --binary-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/MacOS/OcPlayerTests --dependency-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests_dependency_info.dat --stringsdata-file /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.SwiftFileList --metadata-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests.DependencyMetadataFileList --static-metadata-file-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/OcPlayerTests.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/Objects-normal/arm64/OcPlayerTests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --no-app-shortcuts-localization
+2026-11-14 17:28:10.868 appintentsmetadataprocessor[51915:27789336] Starting appintentsmetadataprocessor export
+2026-11-14 17:28:10.870 appintentsmetadataprocessor[51915:27789336] warning: Metadata extraction skipped, no AppIntents.framework dependency found
+
+CopySwiftLibs /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest (in target 'OcPlayerTests' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/MacOS/OcPlayerTests --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Frameworks --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/PlugIns --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Library/SystemExtensions --scan-folder /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Extensions --platform macosx --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app/Contents/PlugIns/OcPlayerTests.xctest/Contents/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/OcPlayer.build/Debug/OcPlayerTests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+Validate /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-validationUtility /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app -no-validate-extension -infoplist-subpath Contents/Info.plist
+
+RegisterWithLaunchServices /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app (in target 'OcPlayer-macOS' from project 'OcPlayer')
+    cd /Users/jumusu/Documents/project/OcPlayer
+    builtin-lsregisterurl --record-path /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/XCBuildData/registered-launchservices.txt -- /System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister -f -R -trusted /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Products/Debug/OcPlayer.app
+
+PruneExplicitPrecompiledModules /tmp/ocp-diagnostic-export-macos/DerivedData/SDKExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules
+
+PruneExplicitPrecompiledModules /tmp/ocp-diagnostic-export-macos/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules
+
+note: Disabling hardened runtime with ad-hoc codesigning. (in target 'OcPlayer-macOS' from project 'OcPlayer')
+2026-11-14 17:28:12.444766+0800 OcPlayer[51917:27789399] [Playback] 内核注册 id=erika name=liberika
+2026-11-14 17:28:12.459959+0800 OcPlayer[51917:27789399] [App] 应用启动 fields={build="1",commit="dev",platform="macOS",version="0.3.0"}
+2026-11-14 17:28:12.510164+0800 OcPlayer[51917:27789442] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.510202+0800 OcPlayer[51917:27789442] [Application] Error registering app with intents framework: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.512733+0800 OcPlayer[51917:27789438] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.512753+0800 OcPlayer[51917:27789438] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.515237+0800 OcPlayer[51917:27789439] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.515251+0800 OcPlayer[51917:27789439] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.517719+0800 OcPlayer[51917:27789442] [Connection] Will NOT re-try to establish the connection
+2026-11-14 17:28:12.517753+0800 OcPlayer[51917:27789438] [Connection] Unable to get synchronousRemoteObjectProxy, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.517767+0800 OcPlayer[51917:27789438] [Connection] Unable to re-register with Process Instance Registry, error: Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={NSDebugDescription=connection to service named com.apple.linkd.autoShortcut}
+2026-11-14 17:28:12.557854+0800 OcPlayer[51917:27789399] ApplePersistenceIgnoreState: Existing state will not be touched. New state will be written to /var/folders/07/f4r9g1zd0jbg1c2sh6b4vsg80000gn/T/dev.jumusu.OcPlayer.savedState
+2026-11-14 17:28:12.659609+0800 OcPlayer[51917:27789399] [App] 启动动画跳过 fields={reason="测试宿主"}
+Test Suite 'Selected tests' started at 2026-11-14 17:28:12.793.
+Test Suite 'OcPlayerTests.xctest' started at 2026-11-14 17:28:12.793.
+Test Suite 'ConfigBackupTests' started at 2026-11-14 17:28:12.793.
+Test Case '-[OcPlayerTests.ConfigBackupTests testBackupSummary]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testBackupSummary]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testConfigBackupDocumentCarriesJSON]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testConfigBackupDocumentCarriesJSON]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testDandanplayGatewayOnlyExportedWhenCustomized]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testDandanplayGatewayOnlyExportedWhenCustomized]' passed (0.017 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testDanmakuDefaultsMatchAppDefaults]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testDanmakuDefaultsMatchAppDefaults]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testEnumPreferencesUseRawValues]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testEnumPreferencesUseRawValues]' passed (0.014 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportMirrorConfig]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportMirrorConfig]' passed (0.019 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportPlaybackAndGeneralPreferences]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportPlaybackAndGeneralPreferences]' passed (0.012 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportTMDbConfig]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testExportAndImportTMDbConfig]' passed (0.017 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testImportWithoutAPIKeyKeepsExistingKey]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testImportWithoutAPIKeyKeepsExistingKey]' passed (0.011 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testInvalidJSONThrows]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testInvalidJSONThrows]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testMirrorSectionToleratesLegacyAndPartialJSON]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testMirrorSectionToleratesLegacyAndPartialJSON]' passed (0.004 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testOldBackupWithoutMirrorLeavesMirrorSettingsUntouched]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testOldBackupWithoutMirrorLeavesMirrorSettingsUntouched]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testPartialBackupPreservesUntouchedSettings]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testPartialBackupPreservesUntouchedSettings]' passed (0.005 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testReadMissingFileReportsFriendlyMessage]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testReadMissingFileReportsFriendlyMessage]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testSubtitleColorsSurviveRoundTripAsIntegers]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testSubtitleColorsSurviveRoundTripAsIntegers]' passed (0.017 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testSuggestedFileNameIsJSON]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testSuggestedFileNameIsJSON]' passed (0.003 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testSummaryWithoutKey]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testSummaryWithoutKey]' passed (0.007 seconds).
+Test Case '-[OcPlayerTests.ConfigBackupTests testUnsetSubtitleStyleStaysUnsetAfterImport]' started.
+Test Case '-[OcPlayerTests.ConfigBackupTests testUnsetSubtitleStyleStaysUnsetAfterImport]' passed (0.020 seconds).
+Test Suite 'ConfigBackupTests' passed at 2026-11-14 17:28:12.968.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.170 (0.175) seconds
+Test Suite 'OcPlayerTests.xctest' passed at 2026-11-14 17:28:12.968.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.170 (0.175) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 17:28:12.968.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.170 (0.175) seconds
+2026-11-14 17:28:13.280 xcodebuild[51691:27787952] [MT] IDETestOperationsObserverDebug: 2.310 elapsed -- Testing started completed.
+2026-11-14 17:28:13.280 xcodebuild[51691:27787952] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-14 17:28:13.280 xcodebuild[51691:27787952] [MT] IDETestOperationsObserverDebug: 2.310 sec, +2.310 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/ocp-diagnostic-export-macos/DerivedData/Logs/Test/Test-OcPlayer-macOS-2026.11.14_17-28-01-+0800.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

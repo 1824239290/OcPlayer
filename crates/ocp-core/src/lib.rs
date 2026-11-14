@@ -19,6 +19,7 @@ mod events;
 mod media;
 mod network;
 mod probe;
+mod settings_backup;
 
 #[derive(Debug, Error)]
 pub enum CoreError {
@@ -402,6 +403,24 @@ impl Core {
                 Ok(data) => ApiResponse::ok(data),
                 Err((code, retryable, message)) => {
                     ApiResponse::error(code, retryable, message, Value::Null)
+                }
+            };
+            return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
+        }
+        if [
+            "settings.backup.capabilities",
+            "settings.backup.snapshot",
+            "settings.backup.decode",
+            "settings.backup.prepare",
+            "settings.backup.restore",
+            "settings.backup.summary",
+        ]
+        .contains(&method)
+        {
+            let response = match settings_backup::call(method, arguments) {
+                Ok(data) => ApiResponse::ok(data),
+                Err((code, retryable, message, data)) => {
+                    ApiResponse::error(code, retryable, message, data)
                 }
             };
             return serde_json::to_string(&response).map_err(CoreError::InvalidJson);
