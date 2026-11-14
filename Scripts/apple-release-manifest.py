@@ -25,6 +25,12 @@ def sha(path):
 repo, output = (Path(value).resolve() for value in sys.argv[1:])
 framework = output / "OcPlayerCore.xcframework"
 info = plistlib.loads((framework / "Info.plist").read_bytes())
+# Xcode can serialize dictionary and slice arrays in different orders. Preserve
+# the same values in a canonical representation before recording artifact bytes.
+info["AvailableLibraries"].sort(key=lambda item: item["LibraryIdentifier"])
+for item in info["AvailableLibraries"]:
+    item["SupportedArchitectures"].sort()
+(framework / "Info.plist").write_bytes(plistlib.dumps(info, fmt=plistlib.FMT_XML, sort_keys=True))
 expected = {
     ("macos", ""): ["arm64", "x86_64"],
     ("ios", ""): ["arm64"],
