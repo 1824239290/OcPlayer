@@ -4,9 +4,7 @@ import XCTest
 
 final class OcpDiagnosticExportTests: XCTestCase {
     private func exporter() throws -> OcpDiagnosticExport {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"] else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH to exercise diagnostic export")
-        }
+        let path = try OcpTestLibrary.path()
         return try XCTUnwrap(OcpDiagnosticExport(libraryPath: path))
     }
     private func fixture() throws -> URL {

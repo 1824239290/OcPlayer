@@ -4,7 +4,7 @@ import XCTest
 
 final class OcpSettingsBackupTests: XCTestCase {
     private func core() throws -> OcpSettingsBackup {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"] else { throw XCTSkip("Set OCP_CORE_LIBRARY_PATH for settings backup") }
+        let path = try OcpTestLibrary.path()
         return try XCTUnwrap(OcpSettingsBackup(libraryPath: path))
     }
     private func bytes(_ extra: String = "", version: Int = 1) -> Data {

@@ -30,9 +30,7 @@ final class OcpResponseTests: XCTestCase {
     }
 
     func testPublicSyncAndAsyncCallsKeepExactPayloadAfterClientRetirement() async throws {
-        guard let path = ProcessInfo.processInfo.environment["OCP_CORE_LIBRARY_PATH"] else {
-            throw XCTSkip("Set OCP_CORE_LIBRARY_PATH for typed wire responses")
-        }
+        let path = try OcpTestLibrary.path()
         let process = Process(), pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = ["-u", try XCTUnwrap(Bundle.module.url(forResource: "tmdb_wire_server", withExtension: "py", subdirectory: "Fixtures")).path]
