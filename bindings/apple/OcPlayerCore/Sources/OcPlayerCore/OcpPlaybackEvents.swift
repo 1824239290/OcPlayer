@@ -27,18 +27,18 @@ public final class OcpPlaybackEvents: @unchecked Sendable {
             self.client = try client ?? OcpCoreClient(libraryPath: libraryPath)
             let response = try self.client.call("playbackEvents.begin")
             guard response.ok else { return nil }
-            snapshot = try response.data.decode(Snapshot.self)
+            snapshot = try response.decodeData(Snapshot.self)
         } catch { return nil }
     }
     public func reset() throws {
         let response = try client.call("playbackEvents.begin")
         guard response.ok else { throw OcpCoreError(message: response.message) }
-        snapshot = try response.data.decode(Snapshot.self)
+        snapshot = try response.decodeData(Snapshot.self)
     }
     public func apply(_ event: [String: Any]) throws -> Decision {
         let response = try client.call("playbackEvents.apply", arguments: ["generation": snapshot.generation, "event": event])
         guard response.ok else { throw OcpCoreError(message: response.message) }
-        let decision = try response.data.decode(Decision.self)
+        let decision = try response.decodeData(Decision.self)
         // A stale adapter must retain its old generation; it cannot adopt the
         // new engine merely by receiving a snapshot from a rejected event.
         if decision.accepted { snapshot = decision.snapshot }

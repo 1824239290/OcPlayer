@@ -1,0 +1,321 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_bangumi-b7d5f6f8c9c3ffe4)
+
+running 22 tests
+test account::tests::retired_refresh_cannot_commit_or_release_a_new_owner ... ok
+test auth_flow::tests::newer_login_retires_prior_flow_and_logout_ignores_database_failure ... ok
+test auth_flow::tests::login_failure_clears_only_its_generation_and_keeps_original_failure ... ok
+test account::tests::exact_unsigned_generations_and_validation_are_atomic ... ok
+test account::tests::session_access_and_profile_revision_policy ... ok
+test auth_flow::tests::passive_invalidation_requires_current_cleared_generation_before_new_operation ... ok
+test auth_flow::tests::stale_profile_and_bad_acknowledgements_cannot_advance ... ok
+test auth_flow::tests::token_exhaustion_and_invalid_start_do_not_advance_the_account ... ok
+test progress::tests::completion_only_promotes_nonempty_all_watched_mains_and_remote_doing ... ok
+test progress::tests::invalid_receipt_and_input_preserve_pending_state ... ok
+test progress::tests::watching_keeps_unknown_doing_and_completed_while_advancing_explicit_unwatched_states ... ok
+test progress::tests::batch_reconcile_failure_preserves_first_notification_and_stops_without_membership_notification ... ok
+test account::tests::refresh_preserves_identity_while_logout_and_oauth_retire_it ... ok
+test account::tests::oauth_consumes_once_and_does_not_erase_next_state ... ok
+test tests::maps_bangumi_numeric_subject_type_wire_values ... ok
+test account::tests::conditional_clear_validates_operation_and_generation_before_mutation ... ok
+test sync::tests::full_sync_uses_start_time_overlap_and_stamp_before_reconcile ... ok
+test sync::tests::episode_empty_tail_still_replaces_the_full_accumulated_set ... ok
+test sync::tests::collection_pages_require_actual_writes_and_single_use_receipts ... ok
+test sync::tests::batch_slides_one_slot_and_cancels_descendants ... ok
+test tests::partitions_and_counts ... ok
+test tests::client_preserves_api_base_path ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (/tmp/ocplayer-target/debug/deps/ocp_cli-174895138921f737)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-19a0ffd2a926d0a6)
+
+running 21 tests
+test events::tests::coalescing_preserves_control_order_and_separates_search_requests ... ok
+test events::tests::overflow_prefers_controls_and_retains_latest_errors ... ok
+test tests::creates_core_and_emits_ready_event ... ok
+test tests::event_sequence_is_monotonic ... ok
+test tests::invalid_transitions_and_values_return_error_envelopes ... ok
+test network::tests::retired_login_cannot_repopulate_cookie_cache ... ok
+test network::tests::owned_executor_runs_and_destroys_inside_async_host ... ok
+test tests::ping_is_json_response ... ok
+test tests::endpoint_contract_rejects_bad_arguments_without_changing_policy ... ok
+test tests::network_commands_validate_before_requesting ... ok
+test tests::playback_commands_update_state_and_snapshot ... ok
+test tests::bangumi_rejects_invalid_pagination_and_types_before_network ... ok
+test tests::prepared_cancellation_prevents_dispatch_and_releases_request_id ... ok
+test tests::playback_argument_errors_do_not_mutate_session_and_ready_can_pause ... ok
+test tests::playback_settings_survive_timeline_and_lifecycle_updates ... ok
+test tests::diagnostics_and_config_commands_are_versioned_and_redacted ... ok
+test tests::shared_cache_survives_locale_settings_and_reports_validation_errors ... ok
+test tests::persists_progress_when_data_directory_is_configured ... ok
+test tests::cancellation_drops_in_flight_future ... ok
+test events::tests::bytes_are_bounded_and_oversized_update_preserves_last_usable_projection ... ok
+test tests::unattended_render_and_position_updates_remain_bounded_and_observable ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_danmaku-43678e904200ba49)
+
+running 21 tests
+test flow::tests::gateway_error_policy_keeps_parameter_failures_eligible_for_fallback ... ok
+test identity::tests::cache_boundaries_direct_and_empty_clues ... ok
+test identity::tests::lookup_missing_media_preserves_caller_but_bad_fields_fail ... ok
+test identity::tests::matching_prefers_exact_and_retains_first_contained ... ok
+test identity::tests::titles_order_key_scope_and_whitespace ... ok
+test providers::tests::first_opening_and_first_segment_are_authoritative ... ok
+test providers::tests::request_prefix_repeated_types_and_strings ... ok
+test providers::tests::season_precedence_and_next_timestamp_even_equal ... ok
+test providers::tests::strict_full_response_decode_and_nil_tolerance ... ok
+test tests::canonical_name_removes_ambiguous_bare_file_number ... ok
+test tests::decodes_gateway_camel_case_and_wire_type_field ... ok
+test tests::filters_and_sorts_comments ... ok
+test tests::hashes_only_the_first_sixteen_mebibytes ... ok
+test flow::tests::data_delivery_reuses_cache_and_resolves_intro_without_player_effects ... ok
+test flow::tests::cancellation_and_stale_revision_stop_before_next_effect ... ok
+test flow::tests::manual_data_delivery_forces_detection_and_preserves_empty_outcome ... ok
+test flow::tests::budget_starts_after_fingerprint_and_only_cuts_pending_work ... ok
+test flow::tests::manual_injects_before_sources_and_uses_native_anime_bit_segment ... ok
+test flow::tests::step_and_invalid_reply_leave_continuation_intact ... ok
+test tests::parses_common_names ... ok
+test flow::tests::waterfall_keeps_eight_requests_and_finishes_without_false_budget_cut ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_ffi-940ce6ec3be9a17b)
+
+running 5 tests
+test tests::last_error_is_isolated_per_thread ... ok
+test tests::ffi_reports_invalid_json_without_panicking ... ok
+test tests::ffi_ping_and_free ... ok
+test tests::ffi_event_polling ... ok
+test tests::concurrent_calls_on_one_handle_are_serialized_safely ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_http-cb870d719ed11a4d)
+
+running 4 tests
+test tests::classifies_statuses ... ok
+test tests::parses_retry_after_seconds_only_for_rate_limits ... ok
+test tests::rate_limit_only_policy_keeps_http_errors_final_without_changing_other_domains ... ok
+test tests::retries_reads_but_never_replays_creation_requests ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_jellyfin-35ae50e2e453040a)
+
+running 12 tests
+test tests::authentication_requires_credentials_but_ignores_unrelated_field_types ... ok
+test tests::decodes_server_wire_casing_and_nested_user_data ... ok
+test tests::decodes_library_and_played_history_wire_models ... ok
+test tests::playback_source_preserves_stream_metadata_and_first_video_range ... ok
+test tests::quick_connect_requires_true_and_nonempty_secret ... ok
+test tests::serializes_swift_domain_casing_and_play_state ... ok
+test tests::preserves_server_base_path_when_building_endpoint ... ok
+test tests::builds_auth_free_urls ... ok
+test endpoint::tests::invalidation_and_profile_sync_reject_in_flight_results ... ok
+test endpoint::tests::normalized_duplicates_and_bad_input_are_handled_before_mutation ... ok
+test endpoint::tests::unreachable_cooldown_pinning_and_stale_failures ... ok
+test endpoint::tests::selection_stickiness_identity_and_soft_cache ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_model-d689192fefa8ec64)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_moviepilot-6884c43ffae1a196)
+
+running 13 tests
+test account::tests::login_commit_cannot_publish_after_logout_or_new_attempt ... ok
+test account::tests::refresh_singleflight_fuse_and_late_release ... ok
+test account::tests::transient_and_cancelled_failures_preserve_credentials ... ok
+test flow::tests::bad_receipts_do_not_advance_and_configuration_change_retires ... ok
+test flow::tests::read_retries_and_backoff_are_bounded_but_creations_and_named_are_one_owner ... ok
+test flow::tests::failed_refresh_cannot_restart_raw_request_and_replay_401_is_terminal ... ok
+test tests::list_value_accepts_wrapped_and_direct_arrays ... ok
+test tests::supports_both_envelope_shapes ... ok
+test account::tests::overflow_and_invalid_receipts_leave_state_unchanged ... ok
+test tests::parses_sse_and_deduplicates_torrents ... ok
+test tests::joins_base_url ... ok
+test flow::tests::cancellation_directory_bound_and_identifier_exhaustion_preserve_other_flows ... ok
+test stream::tests::arbitrary_chunks_preserve_utf8_replace_and_final_items ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_session-43f19c7ac61dff9b)
+
+running 34 tests
+test engine::tests::new_source_rejects_previous_generation_and_resets_failure_history ... ok
+test engine::tests::only_tail_read_eio_is_folded ... ok
+test engine::tests::foreground_requires_intent_and_current_state_before_rebuilding ... ok
+test engine::tests::nil_and_empty_messages_share_the_native_deduplication_key ... ok
+test engine::tests::stale_tail_pair_folds_once_and_real_error_is_preserved ... ok
+test flow::tests::cancellation_or_new_play_invalidates_queued_adoption ... ok
+test flow::tests::all_candidates_exhausted_explains_chain_but_single_source_keeps_original_error ... ok
+test flow::tests::chain_preserves_identity_history_and_limits_across_replacements ... ok
+test flow::tests::classifier_preserves_native_priority_and_capabilities ... ok
+test flow::tests::recovery_stops_for_auth_cancel_missing_item_and_missing_context ... ok
+test preparation::tests::collection_series_reads_home_then_uses_new_item_position_and_exact_title ... ok
+test preparation::tests::continuation_invalid_and_retired_results_cannot_consume_new_work ... ok
+test preparation::tests::wrong_receipts_and_responses_are_nonconsuming_and_invalidation_retires_ready ... ok
+test preparation::tests::full_source_order_skips_only_bad_alternate_and_preserves_identity ... ok
+test preparation::tests::empty_result_and_same_id_resume_match_native_fallback ... ok
+test recovery::tests::background_rebuild_trusts_loaded_position_including_zero ... ok
+test preparation::tests::info_and_primary_failures_use_direct_fallback_and_original_failure ... ok
+test preparation::tests::continuation_uses_bounded_server_window_and_first_current_anchor ... ok
+test recovery::tests::manual_retry_preserves_threshold_fallback_and_loading_guard ... ok
+test recovery::tests::invalid_recovery_positions_are_rejected ... ok
+test preparation::tests::episodes_filter_specials_and_choose_first_unwatched_without_reordering ... ok
+test report::tests::pause_reports_once_then_resuming_restores_periodic_reporting ... ok
+test report::tests::terminal_requires_clean_stopped_and_known_duration ... ok
+test tests::engine_unknown_duration_preserves_timeline_and_clears_previous_clamp ... ok
+test tests::failed_candidate_advances_and_generation_changes ... ok
+test tracks::tests::external_fallback_and_off_are_preserved ... ok
+test preparation::tests::bounds_and_exhaustion_fail_before_mutation_and_explicit_cleanup_works ... ok
+test tracks::tests::import_commits_name_before_selection_and_failure_keeps_gate_open ... ok
+test tracks::tests::reentrant_refresh_cannot_replace_pending_effect ... ok
+test tracks::tests::removal_unlocks_manual_only_after_success_and_selected_removal ... ok
+test tracks::tests::reset_and_batches_retire_old_work_without_consuming_current ... ok
+test tracks::tests::track_ids_are_scoped_to_kind ... ok
+test preparation::tests::continuation_noop_and_unanchored_windows_do_not_leave_leases ... ok
+test tracks::tests::scoring_respects_field_trust_and_ties ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_store-781ea1a2ab68f74c)
+
+running 32 tests
+test bangumi::tests::failed_full_episode_replacement_rolls_back_metadata_progress_and_sync_time ... ok
+test bangumi::tests::sync_targets_use_complete_snapshot_and_deduplicate_overlapping_candidates ... ok
+test bangumi::tests::fractional_batch_includes_selected_episode_and_local_derived_count_is_monotonic ... ok
+test cache::tests::malformed_payload_and_future_versions_are_misses_and_do_not_break_updates ... ok
+test cache::tests::batch_failure_rolls_back_items_rail_and_progress_confirmation ... ok
+test database::tests::unrecoverable_parent_failure_is_returned_and_sizes_cover_sidecars ... ok
+test repository::composition::tests::home_restore_and_detail_decisions_keep_native_boundaries ... ok
+test repository::composition::tests::composition_observes_progress_and_rejects_overflow_without_mutation ... ok
+test repository::flow::tests::cached_flows_preserve_nil_memory_hits_and_full_row_age ... ok
+test repository::composition::tests::page_recovery_keeps_contiguity_duplicate_rules_and_signed_counts ... ok
+test repository::flow::tests::cached_series_effects_and_empty_episode_list_keep_native_schema ... ok
+test repository::flow::tests::page_rechecks_progress_after_persist_and_receipts_do_not_replay ... ok
+test repository::flow::tests::home_partial_effects_and_all_failure_source_match_native ... ok
+test repository::flow::tests::series_retry_fallback_and_collection_nil_total_are_retained ... ok
+test repository::progress::tests::confirmation_and_finished_resume_boundaries_match_native_observation ... ok
+test database::tests::corrupt_database_and_sidecars_rebuild_once ... ok
+test repository::progress::tests::resume_reinserts_missing_pending_items_using_current_metadata_and_record_order ... ok
+test repository::progress::tests::newer_disk_confirmation_is_adopted_without_reopening_protection_and_preflight_is_atomic ... ok
+test repository::tests::canonical_string_identity_matches_native_without_normalizing_payloads ... ok
+test repository::progress::tests::revisions_survive_invalidation_reject_older_final_and_accept_owned_final_after_shutdown ... ok
+test repository::tests::complete_freshness_boundaries_and_invalid_receipts_leave_entries_intact ... ok
+test repository::tests::refresh_ownership_retirement_and_invalidation_match_native ... ok
+test repository::tests::complete_lru_touch_delete_all_and_minimum_limits ... ok
+test repository::tests::structured_keys_and_wide_nested_payloads_are_retained ... ok
+test repository::progress::tests::apply_updates_every_projection_first_duplicate_and_preserves_original_unicode_payload ... ok
+test database::tests::misplaced_directory_is_rebuilt_and_unrelated_files_survive ... ok
+test database::tests::new_cache_has_native_ledger_wal_and_journal_limit ... ok
+test database::tests::failed_migration_discards_partial_cache_but_valid_cache_is_preserved ... ok
+test tests::migration_names_and_progress_are_persistent ... ok
+test tests::library_rail_page_and_tmdb_cache_round_trip_with_tenant_scope ... ok
+test bangumi::tests::pruning_more_than_one_parameter_batch_preserves_all_retained_ids ... ok
+test cache::tests::large_item_and_snapshot_reads_chunk_parameters_and_preserve_requested_order ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_tmdb-a77ac7c1addecda0)
+
+running 18 tests
+test enrichment::tests::airing_refresh_window_is_independent_from_expiration_and_grace_is_strict ... ok
+test enrichment::tests::batches_classify_unsupported_pre_cancelled_and_series_season_counts ... ok
+test enrichment::tests::batches_refill_after_progress_and_cancel_without_abandoning_active_workers ... ok
+test enrichment::tests::single_flight_is_scoped_by_key_language_and_preserves_completion_order_failures ... ok
+test enrichment::tests::malformed_replies_duplicate_steps_and_batch_contributions_leave_state_intact ... ok
+test enrichment::tests::refresh_uses_fresh_cache_before_authoritative_rematching ... ok
+test enrichment::tests::seasons_use_parent_tv_and_stop_between_fetches_after_cancellation ... ok
+test tests::builds_image_url ... ok
+test enrichment::tests::low_confidence_and_unconfigured_paths_never_yield_writes ... ok
+test matcher::tests::native_title_rules_preserve_non_width_compatibility_and_marks ... ok
+test matcher::tests::numeric_graphemes_and_containment_keep_native_character_boundaries ... ok
+test matcher::tests::identity_and_score_do_not_infer_authority_or_scoring_year ... ok
+test wire::tests::native_integer_fields_accept_booleans_and_truncate_without_narrowing ... ok
+test wire::tests::native_encodings_keep_exact_ids_and_bom_policy ... ok
+test enrichment::tests::refresh_upgrades_search_links_but_preserves_manual_links_and_failure_cache ... ok
+test enrichment::tests::collections_keep_three_member_budget_order_and_response_failure_distinction ... ok
+test tests::normalizes_and_matches ... ok
+test tests::requires_year_and_exactness_for_automatic_confidence ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests ocp_bangumi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_danmaku
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_http
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_jellyfin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_model
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_moviepilot
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_session
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_store
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_tmdb
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

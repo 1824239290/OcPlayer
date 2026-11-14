@@ -1,0 +1,10 @@
+test_cache_nil_memory_and_disk_effect_sequences_preserve_full_row_age (__main__.RepositoryFlowContract.test_cache_nil_memory_and_disk_effect_sequences_preserve_full_row_age) ... ok
+test_detail_retry_canonical_season_fallback_and_cancel_retirement (__main__.RepositoryFlowContract.test_detail_retry_canonical_season_fallback_and_cancel_retirement) ... ok
+test_home_sequence_empty_success_cancelled_sections_and_preserved_previous_source (__main__.RepositoryFlowContract.test_home_sequence_empty_success_cancelled_sections_and_preserved_previous_source) ... ok
+test_page_persistence_receipts_and_intervening_final_progress (__main__.RepositoryFlowContract.test_page_persistence_receipts_and_intervening_final_progress) ... ok
+test_prefetch_memory_short_circuit_and_collection_descriptor_keep_native_plan (__main__.RepositoryFlowContract.test_prefetch_memory_short_circuit_and_collection_descriptor_keep_native_plan) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 2.535s
+
+OK

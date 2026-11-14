@@ -93,4 +93,44 @@ class PreparationContract(unittest.TestCase):
         for sources,index in [([],None),([dict(key='a',id='a')],0),([dict(key='a',id='a',supportsDirectStream=True),dict(key='b',id='b',supportsDirectPlay=True)],1)]:
             self.assertEqual(self.success('preferredSource',sources=sources)['index'],index)
 
+    def test_continuation_window_and_ready_receipts_preserve_server_order(self):
+        current=self.item('current','episode',seriesId='series',seasonNumber=1)
+        window=self.start(current,mode='next');self.assertEqual(window['effect'],'episodeWindow');self.assertEqual(window['arguments']['limit'],6)
+        self.assertEqual(window['arguments']['startItemId'],'current')
+        bad=self.call('resume',token=window['token'],sequence=window['sequence'],response=[{'key':'bad'}]);self.assertEqual(bad['code'],1002)
+        ready=self.resume(window,[self.item('before','episode'),current,self.item('special','episode',seasonNumber=0),self.item('next','episode',played=True,seasonNumber=9223372036854775807)])
+        self.assertEqual(ready['effect'],'ready');self.assertEqual(ready['arguments']['itemKey'],'next')
+        self.success('validate',token=ready['token'],sequence=ready['sequence'])
+        self.assertTrue(self.resume(ready)['done']);self.assertEqual(self.success('stats')['active'],0)
+    def test_continuation_noops_missing_anchor_and_old_cancellation(self):
+        for item in [self.item(),self.item('current','episode'),self.item('special','episode',seriesId='series',seasonNumber=0)]:
+            self.assertTrue(self.start(item,mode='next')['done']);self.assertEqual(self.success('stats')['active'],0)
+        current=self.item('current','episode',seriesId='series')
+        for response in [[],[self.item('missing','episode')],[current]]:
+            self.assertTrue(self.resume(self.start(current,mode='next'),response)['done'])
+        old=self.start(current,mode='next');self.success('invalidate');fresh=self.start(current,mode='next')
+        self.assertEqual(self.call('resume',token=old['token'],sequence=old['sequence'],response=[])['code'],1003)
+        self.success('cancel',token=old['token']);self.success('validate',token=fresh['token'],sequence=fresh['sequence'])
+        self.success('invalidate')
+        for index in range(128):self.start(self.item(str(index)),mode='resolve')
+        self.assertTrue(self.start(self.item('noop'),mode='next')['done']);self.assertEqual(self.success('stats')['active'],128)
+    def test_recovery_plan_matrix_and_invalid_argument_types(self):
+        def call(args):
+            pointer=self.ffi.ocp_call(self.core,b'playbackFlow.recoveryPlan',json.dumps(args).encode())
+            try:return json.loads(ctypes.string_at(pointer))
+            finally:self.ffi.ocp_string_free(pointer)
+        import itertools
+        for mode,loading,playback,request,item,loaded,current,fallback in itertools.product(['manual','background'],[False,True],[False,True],[False,True],[False,True],[False,True],[None,0,1.25,29.999999,30,120.5],[None,80.5]):
+            args=dict(mode=mode,loading=loading,hasPlayback=playback,hasRequest=request,hasMediaItem=item,hasLoadedSource=loaded,currentPositionSeconds=current,requestResumeSeconds=fallback)
+            if mode=='manual':
+                action='none' if loading else 'reprepare' if item else 'retryLast'
+                resume=(current if current is not None and current>=30 else fallback) if action=='reprepare' else None
+            else:
+                action='none' if not(playback and request) else 'reprepare' if item else 'reopen'
+                resume=(current if loaded else fallback) if action!='none' else None
+            response=call(args);self.assertTrue(response['ok']);self.assertEqual(response['data'],dict(action=action,resumeSeconds=resume))
+        valid_args = dict(args)
+        for changes in [dict(mode='wrong'),dict(loading='true'),dict(currentPositionSeconds='1'),dict(unknown=1)]:
+            args = dict(valid_args, **changes);self.assertEqual(call(args)['code'],1002)
+
 if __name__=='__main__':unittest.main(verbosity=2)

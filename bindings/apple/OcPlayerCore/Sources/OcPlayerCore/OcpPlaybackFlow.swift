@@ -50,17 +50,31 @@ public final class OcpPlaybackFlow: @unchecked Sendable {
                                 "mode": mode, "ticks": ticks, "reportedPause": reportedPause,
                                 "everyTicks": everyTicks], as: ReportDecision.self)
     }
+    public struct RecoveryPlan: Decodable, Sendable {
+        public let action: String
+        public let resumeSeconds: Double?
+    }
+    public func recoveryPlan(mode: String, loading: Bool, hasPlayback: Bool, hasRequest: Bool,
+                             hasMediaItem: Bool, hasLoadedSource: Bool,
+                             currentPositionSeconds: Double?, requestResumeSeconds: Double?) throws -> RecoveryPlan {
+        let response = try client.call("playbackFlow.recoveryPlan", arguments: [
+            "mode":mode, "loading":loading, "hasPlayback":hasPlayback, "hasRequest":hasRequest,
+            "hasMediaItem":hasMediaItem, "hasLoadedSource":hasLoadedSource,
+            "currentPositionSeconds":currentPositionSeconds as Any, "requestResumeSeconds":requestResumeSeconds as Any])
+        guard response.ok else { throw OcpCoreError(message: response.message) }
+        return try response.decodeData(RecoveryPlan.self)
+    }
     public func foregroundAction(intentToResume: Bool, state: String?, hasSetupError: Bool) throws -> String {
         struct Result: Decodable { let action: String }
         let response = try client.call("playbackEvents.foreground", arguments: ["intentToResume": intentToResume, "state": state as Any, "hasSetupError": hasSetupError])
         guard response.ok else { throw OcpCoreError(message: response.message) }
-        return try response.data.decode(Result.self).action
+        return try response.decodeData(Result.self).action
     }
     public func staleTailIO(message: String?, positionSeconds: Double, durationSeconds: Double) throws -> Bool {
         struct Result: Decodable { let matches: Bool }
         let response = try client.call("playbackEvents.staleTailIO", arguments: ["message": message as Any, "positionSeconds": positionSeconds, "durationSeconds": durationSeconds])
         guard response.ok else { throw OcpCoreError(message: response.message) }
-        return try response.data.decode(Result.self).matches
+        return try response.decodeData(Result.self).matches
     }
     private struct Adoption: Decodable { let accepted: Bool; let snapshot: Snapshot }
     public let client: OcpCoreClient
@@ -72,7 +86,7 @@ public final class OcpPlaybackFlow: @unchecked Sendable {
             self.client = try client ?? OcpCoreClient(libraryPath: libraryPath)
             let response = try self.client.call("playbackFlow.snapshot")
             guard response.ok else { return nil }
-            snapshot = try response.data.decode(Snapshot.self)
+            snapshot = try response.decodeData(Snapshot.self)
         } catch { return nil }
     }
     public func begin(requestID: String, sourceID: String?, alternates: [[String: Any]]) throws {
@@ -94,6 +108,6 @@ public final class OcpPlaybackFlow: @unchecked Sendable {
     private func call<T: Decodable>(_ suffix: String, _ args: [String: Any] = [:], as type: T.Type) throws -> T {
         let response = try client.call("playbackFlow." + suffix, arguments: args)
         guard response.ok else { throw OcpCoreError(message: response.message) }
-        return try response.data.decode(type)
+        return try response.decodeData(type)
     }
 }

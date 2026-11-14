@@ -1004,3 +1004,35 @@ natural EOF exit zero with zero render/audio failures. Broad decoder/media and
 recovery acceptance, remaining endpoint/transport fidelity, settings/diagnostics,
 Apple release delivery and Windows adapter implementation remain active; Windows
 runtime testing remains deferred. The full project goal remains active.
+
+
+## Retained continuation and retry/rebuild intent — 2026-11-14
+
+Core owns the six-item server continuation window, current-item anchoring and
+special skipping under exact preparation leases. Full native successor metadata
+and App identity guards remain intact. Retry/rebuild plans preserve manual 30s
+resume threshold, loaded-source background position including zero and local
+same-request reopen. A manual media retry obtains a fresh source/session/request
+through complete preparation. All direct typed SDK envelope decoding now reads
+original bytes; initializer and engine-event paths preserve UInt64 generation.
+
+[The report](validation/2026-11-14-playback-continuation/README.md) passes Rust 182
+and an independent locked/offline 71-file copy, C ABI 175 in 27 suites, exported
+SDK 26 and native packages 1265. AppTests execute 1013: 994 passed and 19 platform
+skips. Disabled JellyfinKit executes 272: 257 passed and 15 Core-only skips;
+disabled continuation/collection/source-failover AppTests execute 23: 22 passed
+and one Core-only skip. ABI and App independently check a 768-case recovery table;
+both real HTTP server flavors verify bounded continuation and complete metadata.
+
+After initial gate success, remaining direct SDK wire decoders were corrected
+and the whole gate rerun under final frozen code. All final 71 Core, 775 native
+and 57 gate/binding hashes verify; original inputs and logs remain preserved.
+Deep strict signature and all 14 runtime sections pass. Bundled controls and
+natural EOF exit zero with no render/audio failures. Broad decoder/media and
+recovery, remaining transport/endpoint and binding ownership/argument coverage,
+settings/diagnostics, Apple release and Windows adapter delivery remain active.
+Windows runtime testing remains deferred; the full goal remains active.
+A final read-only A/B probe confirms MediaStreams [] succeeds while null fails
+for both server flavors, despite the native Emby optional-array model. Nullable
+source/data mapping remains an explicit open parity defect; the probe and output
+are retained in the report and guide the next change.

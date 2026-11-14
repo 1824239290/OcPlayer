@@ -7,6 +7,8 @@ public final class OcpPlaybackPreparation: @unchecked Sendable {
         public let itemId: String?
         public let itemKey: String?
         public let seriesId: String?
+        public let startItemId: String?
+        public let limit: Int?
         public let recursive: Bool?
         public let role: String?
         public let sourceKey: String?

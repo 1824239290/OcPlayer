@@ -8,7 +8,7 @@ diagnostics, home snapshots and native object construction.
 
 ## Receipts and lifetime
 
-`start` accepts `mode` (`resolve` or `open`), an `item` projection and nullable
+`start` accepts `mode` (`resolve`, `open` or `next`), an `item` projection and nullable
 `resumeSeconds`. Each returned step carries a non-reused unsigned `token`, a
 monotonic unsigned `sequence`, nullable `effect` and its `arguments`, `done` and
 nullable `result`. `resume` acknowledges an exact token/sequence with `response`;
@@ -70,3 +70,5 @@ Real HTTP fixtures exercise both protocols, full metadata/source context, HDR,
 resume, alternate ordering, authentication, episode endpoint and continuation.
 URI parameter names are compared case-insensitively; source/session values and
 absence of URL API keys remain strict. Built-in URI casing is preserved.
+
+Next-episode windows and retry/rebuild intent are documented in the playback continuation contract.

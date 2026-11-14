@@ -63,6 +63,7 @@ pub fn preferred_source(sources: &[Source]) -> Option<usize> {
 pub enum Mode {
     Resolve,
     Open,
+    Next,
 }
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -86,6 +87,7 @@ enum Stage {
     Home,
     Members,
     Episodes,
+    Window,
     Resolved,
     Info,
     Primary,
@@ -144,6 +146,22 @@ impl Flow {
         }
     }
     fn resolve(&mut self) -> Result<Step, String> {
+        if matches!(self.mode, Mode::Next) {
+            if self.item.kind != "episode"
+                || self.item.series_id.is_none()
+                || self.item.season_number == Some(0)
+            {
+                return Ok(self.empty());
+            }
+            return self.effect(
+                Stage::Window,
+                "episodeWindow",
+                json!({
+                    "itemKey":self.item.key,"seriesId":self.item.series_id,
+                    "startItemId":self.item.id,"limit":6
+                }),
+            );
+        }
         match self.item.kind.as_str() {
             "boxSet" => self.effect(
                 Stage::Members,
@@ -166,7 +184,7 @@ impl Flow {
         }
     }
     fn resolved(&mut self) -> Result<Step, String> {
-        if matches!(self.mode, Mode::Resolve) {
+        if matches!(self.mode, Mode::Resolve | Mode::Next) {
             return self.effect(
                 Stage::Ready,
                 "ready",
@@ -237,6 +255,21 @@ impl Flow {
                     "episodes",
                     json!({"seriesId":self.item.id,"seasonId":null}),
                 )
+            }
+            Stage::Window => {
+                let items: Vec<Item> =
+                    serde_json::from_value(response).map_err(|e| e.to_string())?;
+                validate_items(&items)?;
+                if let Some(index) = items.iter().position(|item| item.id == self.item.id) {
+                    if let Some(next) = items[index + 1..]
+                        .iter()
+                        .find(|item| item.season_number != Some(0))
+                    {
+                        self.item = next.clone();
+                        return self.resolved();
+                    }
+                }
+                Ok(self.empty())
             }
             Stage::Members | Stage::Episodes => {
                 let items: Vec<Item> =
@@ -337,7 +370,7 @@ impl Flow {
             Stage::Alternate=>self.next_alternate(),
             Stage::Fallback=>Ok(self.done(json!({"status":"failed","phase":"playback","title":self.item.title(),
                 "error":format!("播放信息获取失败：{}",self.original_failure.as_deref().unwrap_or(&message))}))),
-            Stage::Home|Stage::Members|Stage::Episodes=>Ok(self.done(json!({"status":"failed","phase":"resolve","title":self.original.name,"error":format!("剧集加载失败：{message}")}))),
+            Stage::Home|Stage::Members|Stage::Episodes|Stage::Window=>Ok(self.done(json!({"status":"failed","phase":"resolve","title":self.original.name,"error":format!("剧集加载失败：{message}")}))),
             _=>Ok(self.done(json!({"status":"failed","phase":"presentation","title":self.item.title(),"error":message}))),
         }
     }
@@ -379,9 +412,6 @@ impl Directory {
         if !request.item.valid() || request.resume_seconds.is_some_and(|v| !v.is_finite()) {
             return Err("invalid item or resume position".into());
         }
-        if self.flows.len() >= 128 {
-            return Err("too many playback preparation flows".into());
-        }
         let token = self
             .next_token
             .checked_add(1)
@@ -404,8 +434,13 @@ impl Directory {
             original_failure: None,
         };
         let step = flow.resolve()?;
+        if !step.done && self.flows.len() >= 128 {
+            return Err("too many playback preparation flows".into());
+        }
         self.next_token = token;
-        self.flows.insert(token, flow);
+        if !step.done {
+            self.flows.insert(token, flow);
+        }
         Ok(step)
     }
     pub fn validate(&self, token: u64, sequence: u64) -> Result<(), String> {
@@ -475,6 +510,103 @@ mod tests {
     fn value(i: Item) -> Value {
         json!({"key":i.key,"id":i.id,"kind":i.kind,"name":i.name,"seriesId":i.series_id,"seriesName":i.series_name,"seasonNumber":i.season_number,"episodeNumber":i.episode_number,"played":i.played,"positionSeconds":i.position_seconds})
     }
+    #[test]
+    fn continuation_uses_bounded_server_window_and_first_current_anchor() {
+        let mut d = Directory::default();
+        let mut current = item("current", "episode");
+        current.series_id = Some("series".into());
+        current.season_number = Some(1);
+        let step = start(&mut d, current, Mode::Next);
+        assert_eq!(step.effect, Some("episodeWindow"));
+        assert_eq!(step.arguments["limit"], 6);
+        assert_eq!(step.arguments["startItemId"], "current");
+        let mut special = item("special", "episode");
+        special.season_number = Some(0);
+        let mut next = item("next", "episode");
+        next.played = true;
+        next.season_number = Some(2);
+        next.episode_number = Some(i64::MAX);
+        let ready = resume(
+            &mut d,
+            &step,
+            json!([
+                value(item("before", "episode")),
+                value(item("current", "episode")),
+                value(special),
+                value(next)
+            ]),
+        );
+        assert_eq!(ready.effect, Some("ready"));
+        assert_eq!(ready.arguments["itemKey"], "next");
+        d.validate(ready.token, ready.sequence).unwrap();
+        assert!(resume(&mut d, &ready, json!(true)).done);
+        assert_eq!(d.active(), 0);
+    }
+    #[test]
+    fn continuation_noop_and_unanchored_windows_do_not_leave_leases() {
+        for (kind, series, season) in [
+            ("movie", Some("series"), Some(1)),
+            ("episode", None, Some(1)),
+            ("episode", Some("series"), Some(0)),
+        ] {
+            let mut d = Directory::default();
+            let mut current = item("current", kind);
+            current.series_id = series.map(str::to_owned);
+            current.season_number = season;
+            assert!(start(&mut d, current, Mode::Next).done);
+            assert_eq!(d.active(), 0);
+        }
+        let mut saturated = Directory::default();
+        for index in 0..128 {
+            start(
+                &mut saturated,
+                item(&format!("active-{index}"), "movie"),
+                Mode::Resolve,
+            );
+        }
+        assert!(start(&mut saturated, item("noop", "movie"), Mode::Next).done);
+        assert_eq!(saturated.active(), 128);
+        for window in [
+            json!([]),
+            json!([value(item("missing", "episode"))]),
+            json!([value(item("current", "episode"))]),
+        ] {
+            let mut d = Directory::default();
+            let mut current = item("current", "episode");
+            current.series_id = Some("series".into());
+            let step = start(&mut d, current, Mode::Next);
+            assert!(resume(&mut d, &step, window).done);
+            assert_eq!(d.active(), 0);
+        }
+    }
+    #[test]
+    fn continuation_invalid_and_retired_results_cannot_consume_new_work() {
+        let mut d = Directory::default();
+        let mut current = item("current", "episode");
+        current.series_id = Some("series".into());
+        let step = start(&mut d, current.clone(), Mode::Next);
+        assert!(d
+            .resume(step.token, step.sequence, json!([{"key":"bad"}]))
+            .is_err());
+        d.validate(step.token, step.sequence).unwrap();
+        let failed = d
+            .fail(
+                step.token,
+                step.sequence,
+                "original window failure".into(),
+                false,
+            )
+            .unwrap();
+        assert!(failed.done);
+        assert_eq!(failed.result["phase"], "resolve");
+        let old = start(&mut d, current.clone(), Mode::Next);
+        d.invalidate();
+        let fresh = start(&mut d, current, Mode::Next);
+        assert!(d.resume(old.token, old.sequence, json!([])).is_err());
+        assert!(!d.cancel(old.token));
+        d.validate(fresh.token, fresh.sequence).unwrap();
+    }
+
     #[test]
     fn full_source_order_skips_only_bad_alternate_and_preserves_identity() {
         let mut d = Directory::default();

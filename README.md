@@ -24,6 +24,9 @@ progress, and versioned configuration/diagnostic export. `replay` accepts one
 JSON command per line (`{"method":"...","arguments":{...}}`) and prints each
 response followed by the final snapshot on stderr.
 
+Next-episode windows and manual retry/background rebuild intent now run in Core;
+see [`docs/playback-continuation-contract.md`](docs/playback-continuation-contract.md).
+
 Playback leaf resolution, primary/alternate source negotiation, resume/title and
 direct fallback now use retained preparation leases; see
 [`docs/playback-preparation-contract.md`](docs/playback-preparation-contract.md).

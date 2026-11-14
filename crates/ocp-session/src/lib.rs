@@ -3,6 +3,7 @@
 pub mod engine;
 pub mod flow;
 pub mod preparation;
+pub mod recovery;
 pub mod report;
 pub mod tracks;
 

@@ -111,7 +111,7 @@ public final class OcpDanmakuLoader: @unchecked Sendable {
                 as: UTF8.self))
         guard response.ok else { throw OcpCoreError(message: response.message) }
         struct Payload: Decodable { let payloadJSON: String }
-        let payload = try response.data.decode(Payload.self)
+        let payload = try response.decodeData(Payload.self)
         return try JSONDecoder().decode(OcpDanmakuLoadResult.self, from: Data(payload.payloadJSON.utf8))
     }
 }

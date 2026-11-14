@@ -1749,6 +1749,11 @@ fn call_playback_flow(state: &mut State, method: &str, args: &Value) -> Result<V
             .ok_or_else(|| "playbackRequestId is required".to_owned())
     };
     match method {
+        "playbackFlow.recoveryPlan" => {
+            let request = serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
+            let plan = ocp_session::recovery::plan(request)?;
+            serde_json::to_value(plan).map_err(|e| e.to_string())
+        }
         "playbackFlow.reportStep" => {
             use ocp_session::report::{Mode, Snapshot};
             let snapshot: Snapshot = serde_json::from_value(

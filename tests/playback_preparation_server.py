@@ -26,6 +26,8 @@ class Handler(BaseHTTPRequestHandler):
     items=[{'Id':'second','Name':'second','Type':'Episode','ParentIndexNumber':2,'IndexNumber':1},{'Id':'unknown','Name':'unknown','Type':'Episode','IndexNumber':1},{'Id':'maximum','Name':'maximum','Type':'Episode','ParentIndexNumber':2147483647,'IndexNumber':9},{'Id':'special','Name':'special','Type':'Episode','ParentIndexNumber':0,'IndexNumber':4},{'Id':'first','Name':'first','Type':'Episode','ParentIndexNumber':1,'IndexNumber':3}]
    self.reply({'Items':items,'TotalRecordCount':len(items)});return
   if path.endswith('/Episodes'):
+   if 'startItemId' in parse_qs(urlsplit(self.path).query):
+    self.reply({'Items':[{'Id':'episode','Name':'当前集','Type':'Episode','SeriesId':'series','ParentIndexNumber':1,'IndexNumber':2},{'Id':'special','Name':'特典','Type':'Episode','ParentIndexNumber':0,'IndexNumber':1},{'Id':'next','Name':'下一集','Type':'Episode','SeriesId':'series','SeriesName':'完整剧名','ParentIndexNumber':2,'IndexNumber':3,'Overview':'下一集完整简介','UserData':{'Key':'next','Played':True,'PlaybackPositionTicks':805000000}}]});return
    self.reply({'Items':[{'Id':'episode','Name':'本集','Type':'Episode','SeriesId':'series','SeriesName':'完整剧名','ParentIndexNumber':1,'IndexNumber':2,'RunTimeTicks':72000000000,'Overview':'原始完整简介','UserData':{'Key':'episode','Played':False,'PlaybackPositionTicks':12500000}}],'TotalRecordCount':1});return
   self.reply({},404)
  def do_POST(self):
