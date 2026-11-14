@@ -12,9 +12,14 @@ public sealed class DemoViewModel : INotifyPropertyChanged
     private string _sort = "推荐顺序";
     private string _watchState = "全部状态";
     private bool _darkTheme = true;
+    public List<string> HomeSections { get; } = ["继续观看", "最近添加", "媒体库", "接下来看"];
+    public HashSet<string> HiddenSections { get; } = [];
+    public Dictionary<string, object> Preferences { get; } = [];
+    public HashSet<string> Watched { get; } = [];
+    public int SelectedEpisode { get; set; } = 1;
     public string Route { get; set; } = "home";
     public string LibraryName { get; set; } = "全部媒体库";
-    public DemoMedia SelectedMedia { get; set; } = DemoCatalog.Movies[0];
+    public DemoMedia SelectedMedia { get; set; } = DemoCatalog.All[4];
     public bool BangumiEnabled { get; set; } = true;
     public bool MoviePilotEnabled { get; set; } = true;
     public string Query { get => _query; set => Set(ref _query, value); }
@@ -29,9 +34,9 @@ public sealed class DemoViewModel : INotifyPropertyChanged
         {
             var catalog = LibraryName switch
             {
-                "电视剧" => DemoCatalog.ResumeItems.Concat(DemoCatalog.LatestItems.Skip(1)),
-                "电影" => DemoCatalog.Movies.Concat(DemoCatalog.LatestItems.Take(1)),
-                _ => DemoCatalog.ResumeItems.Concat(DemoCatalog.LatestItems).Concat(DemoCatalog.Movies)
+                "电视剧" => DemoCatalog.All.Where(x => x.Kind == "series"),
+                "电影" => DemoCatalog.All.Where(x => x.Kind == "movie"),
+                _ => DemoCatalog.All
             };
             var items = catalog.Where(m =>
                 (string.IsNullOrWhiteSpace(Query) || m.Title.Contains(Query, StringComparison.OrdinalIgnoreCase)

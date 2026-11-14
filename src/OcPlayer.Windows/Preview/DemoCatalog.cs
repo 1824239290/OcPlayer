@@ -2,33 +2,31 @@ namespace OcPlayer.Windows.Preview;
 
 public sealed record DemoMedia(string Id, string Title, string OriginalTitle, string Year,
     string Category, string Artwork, string Description, double Progress = 0,
-    string? EpisodeLabel = null, int? RemainingMinutes = null)
+    string? EpisodeLabel = null, int? RemainingMinutes = null, string Kind = "movie", string StillArtwork = "",
+    string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null)
 {
     public string PosterPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", Artwork);
     public string Subtitle => $"{Year}  ·  {Category}";
-    public string StillPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", Id switch
+    public string Backdrop => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", BackdropArtwork.Length > 0 ? BackdropArtwork : Artwork);
+    public string DetailBackdrop => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", DetailArtwork.Length > 0 ? DetailArtwork : BackdropArtwork);
+    public string LogoPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", LogoArtwork);
+    public string StillPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", StillArtwork.Length > 0 ? StillArtwork : Id switch
     {
         "interstellar" => "interstellar-backdrop.jpg", "dune" => "dune-still.jpg", _ => Artwork
     });
 }
 
+public sealed record DemoPerson(string Name, string Role, string Artwork);
+
+public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true);
+
 public static class DemoCatalog
 {
-    // Artwork-only crops from the user's macOS reference. Cards and chrome remain native WinUI controls.
-    public static IReadOnlyList<DemoMedia> ResumeItems { get; } =
-    [
-        new("fanren", "凡人修仙传 · 慕兰之战 24", "凡人修仙传", "2026", "动画", "fanren.jpg",
-            "凡人修仙传。", 1, "S1E200", 19),
-        new("kurumi", "FX 战士久留美 · 我不要被强制平仓啊……", "FX 战士久留美", "2026", "动画", "kurumi.jpg",
-            "FX 战士久留美。", 1, "S1E7", 23)
-    ];
-    public static IReadOnlyList<DemoMedia> LatestItems { get; } =
-    [
-        new("after-rain", "水饺皇后", "水饺皇后", "2025", "剧情", "after-the-rain.jpg", "水饺皇后。"),
-        new("ice-castle", "冰之城墙", "冰之城墙", "2026", "剧情", "ice-castle.jpg", "冰之城墙。"),
-        new("ranma", "乱马 1/2", "乱马 1/2", "2024", "动作", "ranma.jpg", "乱马 1/2。"),
-        new("student-council", "学生会也有洞！", "学生会也有洞！", "2026", "动画", "student-council.jpg", "学生会也有洞！")
-    ];
+    public static IReadOnlyList<DemoMedia> All { get; } = System.Text.Json.JsonSerializer.Deserialize<DemoMedia[]>(
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "catalog.json")))!;
+    public static IReadOnlyList<DemoMedia> ResumeItems { get; } = All.Where(x => x.Progress > 0).Reverse().ToArray();
+    public static IReadOnlyList<DemoMedia> LatestItems { get; } = All.Take(7).ToArray();
+    public static IReadOnlyList<DemoMedia> NextItems { get; } = new[] { "我的朋友很少", "阿松", "药屋少女的呢喃", "冰之城墙" }.Select(title => All.First(x => x.Title == title) with { EpisodeLabel = "S1E1", RemainingMinutes = 24 }).ToArray();
     public static IReadOnlyList<DemoMedia> Movies { get; } =
     [
         new("interstellar", "星际穿越", "INTERSTELLAR", "2014", "科幻 / 冒险", "interstellar.jpg",

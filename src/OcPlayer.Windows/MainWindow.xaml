@@ -25,9 +25,12 @@
         </Grid.RowDefinitions>
         <Image x:Name="Ambience" Grid.RowSpan="2" Stretch="UniformToFill" Opacity="1" IsHitTestVisible="False" />
         <Border x:Name="AmbienceTint" Grid.RowSpan="2" Background="#20535357" IsHitTestVisible="False" />
-        <Grid x:Name="TitleBar" Background="Transparent" Margin="18,0,148,0" ColumnSpacing="14">
+        <Border x:Name="DetailTitleTint" Visibility="Collapsed" IsHitTestVisible="False">
+            <Border.Background><LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#EB191C1A" Offset="0"/><GradientStop Color="#AA191C1A" Offset="0.37"/><GradientStop Color="#00191C1A" Offset="0.78"/></LinearGradientBrush></Border.Background>
+        </Border>
+        <Grid x:Name="TitleBar" Background="Transparent" Margin="18,0,148,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-            <Border Background="#45505050" CornerRadius="18" VerticalAlignment="Center" Padding="6,3">
+            <Border x:Name="NavGroup" Background="#45505050" CornerRadius="18" VerticalAlignment="Center" Padding="6,3">
                 <StackPanel Orientation="Horizontal" Spacing="0">
                     <Button x:Name="HomeButton" Tag="home" Click="Section_Click" Style="{StaticResource ChromeButtonStyle}" ToolTipService.ToolTip="首页" AutomationProperties.Name="首页">
                         <Border CornerRadius="9" Width="18" Height="18"><Image x:Name="Avatar" Stretch="UniformToFill" /></Border>
@@ -40,9 +43,13 @@
                     </Button>
                 </StackPanel>
             </Border>
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                <Button x:Name="BackButton" Content="‹" Click="Back_Click" Style="{StaticResource RoundChromeButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="返回" />
+                <StackPanel VerticalAlignment="Center" Spacing="1">
                 <TextBlock x:Name="PageTitle" Text="首页" FontSize="14" FontWeight="SemiBold" />
-                <TextBlock Text="演示账号 · Jellyfin 12.1.0" FontSize="11" Opacity="0.65" />
+                <TextBlock x:Name="AccountLabel" Text="jumusu · Jellyfin 12.1.0" FontSize="11" Opacity="0.65" />
+                </StackPanel>
+                <Button x:Name="SortButton" Content="⇅" Click="Sort_Click" Style="{StaticResource RoundChromeButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="排序与观看状态筛选" />
             </StackPanel>
             <StackPanel x:Name="HeaderActions" Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <Button Style="{StaticResource RoundChromeButtonStyle}" ToolTipService.ToolTip="打开媒体" AutomationProperties.Name="打开媒体">
@@ -57,7 +64,7 @@
                 </Button>
                 <Grid Width="320">
                     <TextBox x:Name="GlobalSearch" PlaceholderText="搜索全部媒体库" Padding="32,6,12,6"
-                             CornerRadius="20" KeyDown="GlobalSearch_KeyDown" Background="#45505050" BorderThickness="0" />
+                             CornerRadius="20" KeyDown="GlobalSearch_KeyDown" TextChanged="GlobalSearch_TextChanged" Background="#45505050" BorderThickness="0" />
                     <FontIcon Glyph="&#xE721;" FontSize="13" HorizontalAlignment="Left" VerticalAlignment="Center"
                               Margin="12,0,0,0" Opacity="0.6" IsHitTestVisible="False" />
                 </Grid>
@@ -65,7 +72,7 @@
         </Grid>
         <Grid Grid.Row="1">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <InfoBar x:Name="Notice" IsOpen="False" IsClosable="True" Severity="Informational" Margin="36,6,36,0" />
+            <InfoBar x:Name="Notice" IsOpen="False" Visibility="Collapsed" IsClosable="True" Severity="Informational" Margin="36,6,36,0" />
             <Grid x:Name="PageHost" Grid.Row="1" />
         </Grid>
     </Grid>

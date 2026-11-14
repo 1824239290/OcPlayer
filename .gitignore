@@ -45,3 +45,6 @@ Thumbs.db
 coverage/
 *.coverage
 *.userprefs
+
+# Local full-resolution UI references and validation captures
+reports/

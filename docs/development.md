@@ -49,9 +49,9 @@ WinUI 应用通过 `OcPlayer.CoreAdapter` 的 P/Invoke 调用 `ocp_ffi.dll`，�
 （`src/OcPlayer.Windows/bin/<Platform>/<Configuration>/net10.0-windows10.0.26100.0/`）或
 `native/OcPlayerCore/`；仓库不提交任何原生二进制。
 
-当前默认启动离线前端 Demo，不创建 Core 实例，因此不依赖 `ocp_ffi.dll`。首页使用 macOS
-参考截图的图像 fixture，播放器使用静态画面与模拟时钟。真实 Core 接入与视频渲染仍需单独实现，
-不会因为放入 DLL 就自动启用。UI 对齐范围与具体差异见 [`UI-PARITY.md`](UI-PARITY.md)。
+当前默认启动离线前端 Demo，不创建 Core 实例，因此不依赖 `ocp_ffi.dll`。首页及详情使用 macOS
+实机截图/图片缓存的离线 fixture，播放器使用静态画面与模拟时钟。真实 Core 接入与视频渲染仍需单独实现，
+不会因为放入 DLL 就自动启用。UI 对齐范围与具体差异见 [`UI-PARITY.md`](UI-PARITY.md)，实机验证见 [`DEMO-VALIDATION.md`](DEMO-VALIDATION.md)。
 
 ## 验证边界
 

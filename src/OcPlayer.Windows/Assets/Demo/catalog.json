@@ -1,0 +1,1032 @@
+[
+  {
+    "Id": "mac-0",
+    "Title": "JOJO的奇妙冒险",
+    "OriginalTitle": "JOJO的奇妙冒险",
+    "Year": "2012",
+    "Category": "动画 / 动作冒险 / Sci-Fi & Fantasy",
+    "Artwork": "mac-0-thumb.jpg",
+    "Description": "乔斯达家族的数代人都有一个相同的绰号“JOJO”，他们在不同的时代与各种拥有超自然力量的反派战斗不休。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-home-latest-0.jpg",
+    "BackdropArtwork": "mac-0-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-0-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-1",
+    "Title": "水饺皇后",
+    "OriginalTitle": "水饺皇后",
+    "Year": "2025",
+    "Category": "剧情",
+    "Artwork": "mac-1-thumb.jpg",
+    "Description": "上世纪七十年代，青岛姑娘臧健和（马丽 饰）带着两个女儿被迫流落他乡。为了维持生计抚养女儿，臧姑娘白天洗碗，晚上擦车。无依无靠的她独自一人扛下重重压力，为冲破命运的束缚，臧健和决定卖水饺谋生。从无人问津到门庭若市，身边嘴硬心软的红姐（惠英红 饰）、华哥（朱亚文 饰）、糖水伯（袁富华 饰）都给予了她不少力量。坚持不懈的她把水饺生意越做越大，人生之路也越走越宽……  　　影片根据真人真事改编。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "movie",
+    "StillArtwork": "mac-home-latest-1.jpg",
+    "BackdropArtwork": "mac-1-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 7181.978,
+    "Episodes": [],
+    "DetailArtwork": "mac-1-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-2",
+    "Title": "冰之城墙",
+    "OriginalTitle": "冰之城墙",
+    "Year": "2026",
+    "Category": "剧情 / 动画",
+    "Artwork": "mac-2-primary.jpg",
+    "Description": "冰川小雪不擅长与人接触，与他人之间竖起了一堵城墙。尽管在高中里不与人扯上关系独自度过，却和不知为何不停逼近的雨宫凑相遇了……孤高的女子小雪，学校里的人气之人美姬，毫无距离感男子凑，有着悠哉温柔氛围的阳太。有些问题的四人的，令人着急的青春混线故事！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-home-latest-2.jpg",
+    "BackdropArtwork": "mac-2-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [
+      {
+        "Number": 15,
+        "Title": "第 15 集",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-2-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-3",
+    "Title": "乱马1/2",
+    "OriginalTitle": "乱马1/2",
+    "Year": "2024",
+    "Category": "动作 / 动画 / 喜剧",
+    "Artwork": "mac-3-primary.jpg",
+    "Description": "早乙女乱马和天道道场的天道茜在父母安排下订下婚约，但是乱马有个非常特别的烦恼，他在中国受训时，不小心掉进了咒泉乡的诅咒之泉，从此之后，他的身体出现了古怪特性，只要碰到冷水就会变成女生，再碰到热水才会变回男生。超搞笑动作浪漫喜剧就此拉开序幕，且看乱马、小茜和其他性格鲜明的独特角色打打闹闹，笑料大放送！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-home-latest-3.jpg",
+    "BackdropArtwork": "mac-3-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-3-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-4",
+    "Title": "学生会也有洞！",
+    "OriginalTitle": "生徒会にも穴はある!",
+    "Year": "2026",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-4-primary.jpg",
+    "Description": "这里是位于城镇边缘的升学名校——私立藤成学园。高中部一年级的水之江梅屡获文学奖项，国文成绩拔尖，理科成绩却惨烈到危及升级。为了避免留级、提高平时综合表现评定（内申点），他决定加入学生会成为干部。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-4-thumb.jpg",
+    "BackdropArtwork": "mac-4-backdrop.jpg",
+    "LogoArtwork": "mac-4-logo.png",
+    "DurationSeconds": 1420,
+    "Episodes": [
+      {
+        "Number": 1,
+        "Title": "《臭小鬼也是有洞的吧…》《会长被梅同学给领走了》",
+        "Artwork": "mac-student-episode-1.jpg",
+        "Available": true
+      },
+      {
+        "Number": 2,
+        "Title": "《救世主绽》《七大不可思议和夜晚的工作》《驹絽现身！！》",
+        "Artwork": "mac-student-episode-2.jpg",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "《太好了呢》《泳池大扫除的泳装回！》",
+        "Artwork": "mac-student-episode-3.jpg",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "《驹絽与意见箱》《照井学姐的秘密♪》《小光希与轻音部》《在体育仓库幽会！！》",
+        "Artwork": "mac-student-episode-4.jpg",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "《学生会集训！！》《梅与绽绽大作战！！》《因伞而聚的雨和梅》",
+        "Artwork": "mac-student-episode-5.jpg",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "《梅与老师》《驹絽的世界》《搞砸了》",
+        "Artwork": "mac-student-episode-6.jpg",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-4-detail.jpg",
+    "Cast": [
+      {
+        "Name": "坂田将吾",
+        "Role": "Mizunoe Ume (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "白石晴香",
+        "Role": "Hisako Kotobuki (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "富田美忧",
+        "Role": "Komaro Michinoku (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "河野日和",
+        "Role": "Tan Otori (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "石上静香",
+        "Role": "Arisu Terui (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "内山夕实",
+        "Role": "Satomi Hiratsuka (voice)",
+        "Artwork": ""
+      }
+    ]
+  },
+  {
+    "Id": "mac-5",
+    "Title": "药屋少女的呢喃",
+    "OriginalTitle": "药屋少女的呢喃",
+    "Year": "2023",
+    "Category": "动画 / 剧情 / 悬疑",
+    "Artwork": "mac-5-primary.jpg",
+    "Description": "“可否为我配制一帖春药？”猫猫的眼眸瞬间浮现出惊讶与好奇的色彩。位处大陆中央的某个大国，有位姑娘置身于皇帝宫阙之中。姑娘名唤猫猫，原在烟花巷担任药师，眼下则在后宫做下女。这个绝对称不上美女的姑娘很懂分寸，只是静待期满离宫。她有自信，皇帝绝对不会“宠幸”她。其间，猫猫得知皇子皆年幼早夭的事，并听闻连尚在人世的皇子皇女也身染重病，她开始调查他们的病因。广获赞誉的酣畅淋漓推理之作，众所期盼的第一集终于出版。以中世东方为舞台，“试毒”少女将一一解决宫中发生的悬疑案件！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-5-thumb.jpg",
+    "BackdropArtwork": "mac-5-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1380,
+    "Episodes": [
+      {
+        "Number": 51,
+        "Title": "如果没有面包",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 55,
+        "Title": "打赌",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-5-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-6",
+    "Title": "FX战士久留美",
+    "OriginalTitle": "FX战士久留美",
+    "Year": "2026",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-6-primary.jpg",
+    "Description": "女大学生久留美为了拯救在雷曼兄弟事件中将家中 2000 万圆赔光的妈妈，发誓要藉由 FX 发大财！ 这是一段描述踏入 FX 深坑的女大学生们，有点危险（！？）的赚钱故事！",
+    "Progress": 1,
+    "EpisodeLabel": "S1E7",
+    "RemainingMinutes": 23,
+    "Kind": "series",
+    "StillArtwork": "mac-6-resume.jpg",
+    "BackdropArtwork": "mac-6-backdrop.jpg",
+    "LogoArtwork": "mac-6-logo.png",
+    "DurationSeconds": 0,
+    "Episodes": [
+      {
+        "Number": 1,
+        "Title": "第 1 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 2,
+        "Title": "有杠杆就没问题♪",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "一定得止损吗……？",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "没有未实现损失最棒了～♥",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "做多？做空？选哪边？",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "留意经济指标！",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 7,
+        "Title": "我不要被强制平仓啊……",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-6-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-7",
+    "Title": "凡人修仙传",
+    "OriginalTitle": "凡人修仙传",
+    "Year": "2020",
+    "Category": "动画 / 动作冒险 / Sci-Fi & Fantasy",
+    "Artwork": "mac-7-primary.jpg",
+    "Description": "平凡少年韩立出生贫困，为了让家人过上更好的生活，自愿前去七玄门参加入门考核，最终被墨大夫收入门下。墨大夫一开始对韩立悉心培养、传授医术，让韩立对他非常感激，但随着一同入门的弟子张铁失踪，韩立才发现了墨大夫的真面目。墨大夫试图夺舍韩立，最终却被韩立反杀。通过墨大夫的遗书韩立得知了一个全新世界：修仙界的存在。在帮助七玄门抵御外敌之后，韩立离开了七玄门，前去墨大夫的家中寻找暖阳宝玉解毒，并帮助墨家人打败了敌人。通过墨大夫之女墨彩环的口中得知太南小会地址，韩立为追寻修仙人的足迹决定前往太南小会，拜别家人后，韩立来到太南谷，结识了一众修仙人士，正式展开了自己的修仙之旅。",
+    "Progress": 12,
+    "EpisodeLabel": "S1E200",
+    "RemainingMinutes": 16,
+    "Kind": "series",
+    "StillArtwork": "mac-7-resume.jpg",
+    "BackdropArtwork": "mac-7-backdrop.jpg",
+    "LogoArtwork": "mac-7-logo.png",
+    "DurationSeconds": 1200,
+    "Episodes": [
+      {
+        "Number": 177,
+        "Title": "第 177 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 178,
+        "Title": "第 178 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 179,
+        "Title": "第 179 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 180,
+        "Title": "慕兰之战04",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 181,
+        "Title": "慕兰之战05",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 182,
+        "Title": "慕兰之战06",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 183,
+        "Title": "慕兰之战07",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 184,
+        "Title": "慕兰之战08",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 185,
+        "Title": "慕兰之战09",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 186,
+        "Title": "慕兰之战10",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 187,
+        "Title": "慕兰之战11",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 188,
+        "Title": "慕兰之战12",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-7-detail.jpg",
+    "Cast": [
+      {
+        "Name": "钱文青",
+        "Role": "Han Li (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "宋伊人",
+        "Role": "Han Yun Zhi (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "李诗萌",
+        "Role": "Nangong Wan (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "徐佳琦",
+        "Role": "Dong Xuaner (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "杨默",
+        "Role": "墨居仁 (配音)",
+        "Artwork": ""
+      },
+      {
+        "Name": "谷江山",
+        "Role": "万小山 (配音)",
+        "Artwork": ""
+      },
+      {
+        "Name": "乔诗语",
+        "Role": "墨彩环 (配音)",
+        "Artwork": ""
+      },
+      {
+        "Name": "张福正",
+        "Role": "张铁 (配音)",
+        "Artwork": ""
+      }
+    ]
+  },
+  {
+    "Id": "mac-8",
+    "Title": "我的朋友很少",
+    "OriginalTitle": "我的朋友很少",
+    "Year": "2011",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-8-primary.jpg",
+    "Description": "由于混血的外貌和金色的头发，个性其实十分善良的少年羽濑川小鹰 成为了众人孤立的对象，这让他十分的苦恼。同样的，脸色难看个性孤僻的少女三日月夜空 也只能在课后和自己幻想中的朋友有说有笑。这样两个孤独的人相遇了，一个专门为了交朋友而成立的社团“邻人社”应运而生。 没想到，社团一经成立，居然招来了诸多个性奇怪的美少女——喜欢玩美少女游戏的美少女柏崎星奈，外表是妹子实则是爷们的楠辛村，超级高智商少女志熊理科，中二病重度患者羽濑川小鸠 等等。这些没有朋友的家伙们聚在一起，居然也在不知不觉中交到了许多的朋友呢。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-8-thumb.jpg",
+    "BackdropArtwork": "mac-8-backdrop.jpg",
+    "LogoArtwork": "mac-8-logo.png",
+    "DurationSeconds": 1440,
+    "Episodes": [
+      {
+        "Number": 0,
+        "Title": "我的朋友很少 - S01E00 - 第 0 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 1,
+        "Title": "我们交不到朋友(’・ω・`)",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 2,
+        "Title": "电脑世界里没有神(゜Д゜)",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "市民泳池没有攻略关键(;’ Д`)",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "後辈们毫不客气Σ(゜口゜;",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "这次是SAGA的硬战ヽ(`Д´)ノ",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "KTV包厢的客人很少(つд⊂)",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 7,
+        "Title": "手机的来电讯息很少_|￣|○",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 8,
+        "Title": "学校泳装没有戏分\\(^o^)/",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 9,
+        "Title": "理事长的回忆很感伤(-＿-)",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 10,
+        "Title": "集训时大家都不睡ヽ(゜∀゜)ノ",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 11,
+        "Title": "女生穿上浴衣超可爱(゜∀゜)",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-8-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-9",
+    "Title": "阿松",
+    "OriginalTitle": "おそ松さん",
+    "Year": "2015",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-9-primary.jpg",
+    "Description": "故事围绕着松野家的六胞胎进行，描述他们的日常生活，作品中的角色会因为短篇的需要而有各式各样的身份。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-9-thumb.jpg",
+    "BackdropArtwork": "mac-9-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1500,
+    "Episodes": [
+      {
+        "Number": 2,
+        "Title": "就职吧",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "趣事集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "自立吧",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "空松事变",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "生日聚会啾",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 7,
+        "Title": "椴松和5个恶魔",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 8,
+        "Title": "冷静的小松",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 9,
+        "Title": "豆丁太和关东煮",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 10,
+        "Title": "嫌味豆丁太的出租女友",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 11,
+        "Title": "黑暗圣诞老人",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 12,
+        "Title": "年末特别篇",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 13,
+        "Title": "电视连续剧 实松先生",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-9-detail.jpg",
+    "Cast": [
+      {
+        "Name": "樱井孝宏",
+        "Role": "Osomatsu Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "福山润",
+        "Role": "Ichimatsu Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "远藤绫",
+        "Role": "Totoko (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "中村悠一",
+        "Role": "Karamatsu Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "井上和彦",
+        "Role": "Matsuzou Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "入野自由",
+        "Role": "Todomatsu Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "神谷浩史",
+        "Role": "Choromatsu Matsuno (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "国立幸",
+        "Role": "Chibita (voice)",
+        "Artwork": ""
+      }
+    ]
+  },
+  {
+    "Id": "mac-10",
+    "Title": "无职转生～在异世界认真地活下去～",
+    "OriginalTitle": "无职转生～在异世界认真地活下去～",
+    "Year": "2021",
+    "Category": "Action & Adventure / Animation / Sci-Fi & Fantasy",
+    "Artwork": "mac-10-primary.jpg",
+    "Description": "When a 34-year-old underachiever gets run over by a truck, his story doesn't end there. Reincarnated in a new world as an infant, Rudy will seize every opportunity to live the life he's always wanted. Armed with new friends, some freshly acquired magical abilities, and the courage to do the things he's always dreamed of, he's embarking on an epic adventure—with all of his past experience intact!",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-10-thumb.jpg",
+    "BackdropArtwork": "mac-10-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-10-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-11",
+    "Title": "躲在超市后门抽烟的两人",
+    "OriginalTitle": "躲在超市后门抽烟的两人",
+    "Year": "2026",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-11-primary.jpg",
+    "Description": "每天过着社畜生活的上班族佐佐木，唯一的慰藉就是常去超市的收银员山田。某天疲惫不堪的他再次前往超市寻求治愈，却发现山田刚好不在。郁闷的他试图通过抽烟缓解压力，却怎么也找不到吸烟区，还被路人投以嫌弃的目光。就在这时，一位穿着奇特的田山女士把他带到了超市后面一起抽烟。从此，他便经常跑来和田山一起吞云吐雾、谈天说地。然而这位田山女士的真实身份竟然是……",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-11-backdrop.jpg",
+    "BackdropArtwork": "mac-11-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 0,
+    "Episodes": [
+      {
+        "Number": 7,
+        "Title": "超市后门与夏日的结束",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 8,
+        "Title": "在超市后门找到的二人",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 9,
+        "Title": "第 9 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 10,
+        "Title": "在超市后门发光的二人",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 12,
+        "Title": "在超市后门延续的二人",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-11-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-12",
+    "Title": "败犬女主太多了！",
+    "OriginalTitle": "败犬女主太多了！",
+    "Year": "2024",
+    "Category": "剧情 / 动画 / 喜剧",
+    "Artwork": "mac-12-primary.jpg",
+    "Description": "平常担任班上背景人物的我——温水和彦，偶然目击人气女同学八奈见杏菜被男生甩掉的失恋现场。「他明明说过要娶我当新娘，这不过分吗？」「那是多久前的事了？」「大概四、五岁吧。」「那不算数吧？」以此为契机，田径队的烧盐柠檬、文艺社的小鞠知花等洋溢着败北感的女生接连登场？「温水，女生可以分成两大类。如果不是青梅竹马，就是狐狸精。」「原来如此，真豪爽的分类法。」……但愿这些因为败北而闪耀的少女们都能幸福。被败北女角——败女所环绕的谜样青春，在此揭幕！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-12-backdrop.jpg",
+    "BackdropArtwork": "mac-12-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [
+      {
+        "Number": 1,
+        "Title": "专业青梅竹马·八奈见杏菜的败相",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 2,
+        "Title": "为你献上注定的败北",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "在战斗开始前就输了",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "当你凝视败犬女主，败犬女主也凝视着你",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "朝云千早令人困惑",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "只有那些从未被拒绝过的人，才有资格向败犬女主扔石头",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 7,
+        "Title": "幸福结局的另一侧",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 8,
+        "Title": "有问题要找人商量",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 9,
+        "Title": "把老师当成天花板上的污渍之类的，你们继续",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 10,
+        "Title": "说再见还太早了",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 11,
+        "Title": "来讨论责任归属吧",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 12,
+        "Title": "也许我只是最终话里在女主角旁边出现的路人角色吗？",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-12-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-13",
+    "Title": "猫与龙",
+    "OriginalTitle": "猫与龙",
+    "Year": "2026",
+    "Category": "动画 / Sci-Fi & Fantasy",
+    "Artwork": "mac-13-primary.jpg",
+    "Description": "在幽深的森林深处，生活着一只会喷火的龙与一群能使用魔法的猫咪。这只龙在出生前就失去了亲生父母，被一只偶然相遇的母猫抚养长大。在猫咪们看来，它是一只会飞翔、会喷火，「有点特别的猫」，但它们还是将它视为家人接纳进族群里。龙似乎想报答母猫的养育之恩，因此总是陪伴在森林的猫咪们身旁，默默守护着它们。而猫咪们则称呼它为「翅膀大叔」，十分仰慕且依赖着龙。另一方面，人类则怀着敬畏之心，奉它为「猫龙」……",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-13-backdrop.jpg",
+    "BackdropArtwork": "mac-13-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 0,
+    "Episodes": [
+      {
+        "Number": 1,
+        "Title": "猫与龙",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 2,
+        "Title": "母猫与少女",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 3,
+        "Title": "小猫们与翅膀叔叔",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 4,
+        "Title": "第 4 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 5,
+        "Title": "第 5 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 6,
+        "Title": "第 6 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 7,
+        "Title": "第 7 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 8,
+        "Title": "第 8 集",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 9,
+        "Title": "白猫与懒散少女",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 10,
+        "Title": "恶魔、龙与母亲节",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 11,
+        "Title": "最后的安息之地",
+        "Artwork": "",
+        "Available": true
+      },
+      {
+        "Number": 12,
+        "Title": "猫与王都的祭典",
+        "Artwork": "",
+        "Available": true
+      }
+    ],
+    "DetailArtwork": "mac-13-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-14",
+    "Title": "来玩游戏吧",
+    "OriginalTitle": "来玩游戏吧",
+    "Year": "2018",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-14-primary.jpg",
+    "Description": "生在日本长在日本、完全不会说英语的金发美少女·奥莉薇，性格认真、知性洋溢、完全不会说英语的短发眼镜娘·香纯，以及虽然性格开朗却无法成为现充的下双马尾少女·华子，三名初中女生创造出来的是“游戏研究会”！？超级可爱有趣、令人捧腹绝倒的JC女生喜剧现在开幕！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-14-backdrop.jpg",
+    "BackdropArtwork": "mac-14-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-14-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-15",
+    "Title": "这个美术社大有问题！",
+    "OriginalTitle": "这个美术社大有问题！",
+    "Year": "2016",
+    "Category": "剧情 / 动画 / 喜剧",
+    "Artwork": "mac-15-primary.jpg",
+    "Description": "存在于平凡无奇的普通学校“月杜中学”的普通美术部。那里有着虽有绘画才能却只为了描绘理想的“二次元新娘”而燃起使命的内卷昴同学，以及对无可救药的内卷同学感到在意的宇佐美瑞希同学。以及，对两人似乎关注又似乎没有关注、总在睡觉的部长，和总带着不可思议气息的神秘部员可蕾特同学。这样稍微有些遗憾的人们所集中的美术部，今天也在发生着什么问题——。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-15-backdrop.jpg",
+    "BackdropArtwork": "mac-15-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-15-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-16",
+    "Title": "碧蓝之海",
+    "OriginalTitle": "碧蓝之海",
+    "Year": "2018",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-16-primary.jpg",
+    "Description": "北原伊织升入大学后，开始寄住在伊豆的叔父所经营的潜水用具店“Grand Blue”。传入耳中的波涛声、炽烈照射的太阳、开始一起生活的可爱表姐妹……青春的大学生活！\n\n这样的伊织所面临的却是——除了野球拳以外的猜拳一概不知的强壮男人们！！\n\n刚一入学就被大学潜水社团“Peek a Boo”所盯上了的伊织，在会长时·田信治和三年级学生·寿龙次郎的怂恿下，不知不觉已经身为社团的一员加入了他们的愚蠢喧嚣中。在大学中认识的虽然长得帅但性格却很遗憾的宅男——今村耕平也加入其中，他们的青春向着越来越奇怪的方向转进。\n\n明明在寄住的地方有着可爱的表姐妹——古手川姐妹，但自己却被妹妹千纱当成垃圾看待，而姐姐奈奈华又是重度妹控，根本无法成为对象。\n\n在可爱的全裸笨蛋们的包围之下，伊织的大学生活究竟会变得如何……。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-16-backdrop.jpg",
+    "BackdropArtwork": "mac-16-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-16-detail.jpg",
+    "Cast": []
+  },
+  {
+    "Id": "mac-17",
+    "Title": "约会大作战",
+    "OriginalTitle": "デート・ア・ライブ",
+    "Year": "2013",
+    "Category": "动画 / Sci-Fi & Fantasy / 喜剧 / 动作冒险",
+    "Artwork": "mac-17-primary.jpg",
+    "Description": "四月十日，春假在昨天结束，今天早上就是所谓的返校日。被可爱的妹妹吵醒后，五河士道原本以为今天也会如同往常般度过平凡的一天。然而伴随着一阵突如其来的冲击波，街道就这样消失得无影无踪。在宛如陨石撞击而变成环形山的街道一隅，一名身穿盔甲手持大剑的神秘少女正站在坑洞的正中央。“你也是来杀我的吧？”摧毁世界的灾难、充满谜团的怪物、被世界否定的少女。 阻止这一切的方法只有两种——歼灭或对话。身穿司令官服的妹妹五河琴里对士道说：“所以你必须与精灵〈约会〉，并且让对方迷恋上你！”这名少女的真正身份是精灵，是会给世界带来毁灭性灾难的存在，她的再次出现，将会给地球带来毁灭性的未来！然而主人公士道却有方法阻止世界毁灭，这个唯一能够阻止世界毁灭的方法就是——要与她约会！",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-17-thumb.jpg",
+    "BackdropArtwork": "mac-17-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-17-detail.jpg",
+    "Cast": [
+      {
+        "Name": "岛崎信长",
+        "Role": "Shido Itsuka (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "井上麻里奈",
+        "Role": "Tohka Yatogami (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "富㭴美铃",
+        "Role": "Origami Tobiichi (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "竹达彩奈",
+        "Role": "Kotori Itsuka (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "野水伊织",
+        "Role": "Yoshino (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "真田麻美",
+        "Role": "Kurumi Tokisaki (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "内田真礼",
+        "Role": "Kaguya Yamai (voice)",
+        "Artwork": ""
+      },
+      {
+        "Name": "布莱德库特·莎拉·惠美",
+        "Role": "Kuzuru Yamai (voice)",
+        "Artwork": ""
+      }
+    ]
+  },
+  {
+    "Id": "mac-18",
+    "Title": "摇曳露营△",
+    "OriginalTitle": "摇曳露营△",
+    "Year": "2018",
+    "Category": "动画 / 喜剧",
+    "Artwork": "mac-18-primary.jpg",
+    "Description": "这是，某个冬日的故事。从静冈搬家到山梨的女高中生·抚子，为了观赏“在千圆纸币上都有图案的富士山”而骑着自行车来到本栖湖，但不巧天气是阴天。没能看到富士山，十分疲倦的抚子当场进入了梦乡。当她醒来的时候，时间已是深夜。在这初来乍到的地方，连回去的路都不知道。拯救了不安而害怕的抚子的是，一位爱好露营的女孩子·凛。为了让寒冷的身体取暖而点燃篝火的两人。噼啪噼啪的柴火爆音，沁入湖畔的静寂之中。围着篝火，一边啜着咖喱面一边对话的抚子和凛。终于，两人期盼已久的瞬间到来。“看到了……富士山……”抚子与凛，从这两人的相遇开始的户外系Girls Story。",
+    "Progress": 0,
+    "EpisodeLabel": null,
+    "RemainingMinutes": null,
+    "Kind": "series",
+    "StillArtwork": "mac-18-thumb.jpg",
+    "BackdropArtwork": "mac-18-backdrop.jpg",
+    "LogoArtwork": "",
+    "DurationSeconds": 1440,
+    "Episodes": [],
+    "DetailArtwork": "mac-18-detail.jpg",
+    "Cast": []
+  }
+]

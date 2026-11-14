@@ -9,6 +9,7 @@
     <UseWinUI>true</UseWinUI>
     <!-- 默认构建 unpackaged 版本用于开发和故障排查；打包时用 -p:WindowsPackageType=MSIX。 -->
     <WindowsPackageType>None</WindowsPackageType>
+    <OcpNativeDirectory Condition="'$(OcpNativeDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\native\OcPlayerCore\$(Platform)\</OcpNativeDirectory>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -17,6 +18,9 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Assets\Demo\*.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Demo\*.*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup Condition="Exists('$(OcpNativeDirectory)ocp_ffi.dll')">
+    <Content Include="$(OcpNativeDirectory)ocp_ffi.dll" Link="ocp_ffi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

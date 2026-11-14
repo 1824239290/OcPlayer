@@ -16,6 +16,9 @@ public sealed partial class MainWindow : Window
     private readonly DemoViewModel _model = new();
     private readonly DemoPages _pages;
     private PlayerWindow? _player;
+    private string _detailOrigin = "home";
+    private bool _navigating;
+    private readonly Dictionary<string, UIElement> _cachedPages = [];
 
     public MainWindow()
     {
@@ -24,34 +27,50 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
-        AppWindow.Resize(new SizeInt32(1130, 700));
-        Ambience.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "ambience.jpg")));
+        AppWindow.ResizeClient(new SizeInt32(1130, 670));
+        Ambience.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "mac-ambience.jpg")));
         Avatar.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg")));
-        _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, Notify);
+        _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme);
         Closed += (_, _) => _player?.Close();
-        Navigate("home");
+        var route = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--demo-route="))?.Split('=', 2)[1] ?? "home";
+        Navigate(route);
         Root.ActualThemeChanged += (_, _) => SetCaptionTheme();
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
-        Root.SizeChanged += (_, _) => HeaderActions.Visibility = Root.ActualWidth < 820 ? Visibility.Collapsed : Visibility.Visible;
+        Root.SizeChanged += (_, _) => UpdateTitleBarRegions();
         SetCaptionTheme();
     }
 
     private void Navigate(string route)
     {
+        var previous = _model.Route;
+        if (PageHost.Children.Count > 0 && previous == "library") _cachedPages["library"] = PageHost.Children[0];
+        _navigating = true;
         _model.Route = route;
-        var section = route is "library" or "detail" ? "home" : route;
+        var section = route.StartsWith("settings") ? "settings" : route is "library" or "detail" or "detail-info" ? "home" : route;
         foreach (var button in new[] { HomeButton, ViewingButton, SettingsButton })
         {
             var selected = (string)button.Tag == section;
             button.Opacity = selected ? 1 : .55;
             button.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
-        PageTitle.Text = route switch { "home" => "首页", "library" => _model.LibraryName, "detail" => _model.SelectedMedia.Title, "viewing" => "观影空间", _ => "设置" };
+        BackButton.Visibility = route is "library" or "detail" or "detail-info" || route.StartsWith("settings:") ? Visibility.Visible : Visibility.Collapsed;
+        SortButton.Visibility = route == "library" ? Visibility.Visible : Visibility.Collapsed;
+        HeaderActions.Visibility = route is "home" or "library" ? Visibility.Visible : Visibility.Collapsed;
+        NavGroup.Visibility = route is "home" or "settings" or "viewing" ? Visibility.Visible : Visibility.Collapsed;
+        AccountLabel.Visibility = route == "home" ? Visibility.Visible : Visibility.Collapsed;
+        Ambience.Visibility = Visibility.Visible;
+        Ambience.Source = new BitmapImage(new Uri(route is "detail" or "detail-info" ? _model.SelectedMedia.DetailBackdrop : Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "mac-ambience.jpg")));
+        AmbienceTint.Visibility = route is "detail" or "detail-info" ? Visibility.Collapsed : Visibility.Visible;
+        DetailTitleTint.Visibility = route is "detail" or "detail-info" ? Visibility.Visible : Visibility.Collapsed;
+        GlobalSearch.PlaceholderText = route == "library" ? "搜索本库" : "搜索全部媒体库";
+        PageTitle.Text = route.StartsWith("settings:") ? route[9..] : route switch { "home" => "首页", "library" => _model.LibraryName, "detail" or "detail-info" => _model.SelectedMedia.Title, "viewing" => "观影空间", _ => "设置" };
         PageHost.Children.Clear();
-        PageHost.Children.Add(route switch { "library" => _pages.Library(), "detail" => _pages.Detail(),
+        PageHost.Children.Add(route == "library" && previous is "detail" or "detail-info" && _cachedPages.TryGetValue("library",out var library) ? library : route.StartsWith("settings:") ? _pages.SettingsSubpage(route[9..]) : route switch { "library" => _pages.Library(), "detail" => _pages.Detail(), "detail-info" => _pages.DetailInformation(),
             "viewing" => _pages.Viewing(), "settings" => _pages.Settings(), _ => _pages.Home() });
+        _navigating = false;
+        DispatcherQueue.TryEnqueue(UpdateTitleBarRegions);
     }
-    private void OpenDetail(DemoMedia media) { _model.SelectedMedia = media; Navigate("detail"); }
+    private void OpenDetail(DemoMedia media) { _detailOrigin = _model.Route; _model.SelectedMedia = media; _model.SelectedEpisode = 1; Navigate("detail"); }
     private void Play(DemoMedia media)
     {
         if (_player is null)
@@ -69,13 +88,13 @@ public sealed partial class MainWindow : Window
     }
     private void SetCaptionTheme()
     {
-        Root.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(255, 117, 117, 117) : global::Windows.UI.Color.FromArgb(255, 228, 225, 221));
-        AmbienceTint.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(25, 80, 81, 85) : global::Windows.UI.Color.FromArgb(185, 245, 242, 236));
+        Root.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(255, 32, 34, 33) : global::Windows.UI.Color.FromArgb(255, 228, 225, 221));
+        AmbienceTint.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(10, 0, 0, 0) : global::Windows.UI.Color.FromArgb(185, 245, 242, 236));
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
     }
-    private void Notify(string message) { Notice.Message = message; Notice.IsOpen = true; }
+    private void Notify(string message) { Notice.Visibility = Visibility.Visible; Notice.Message = message; Notice.IsOpen = true; }
     private void Section_Click(object sender, RoutedEventArgs e) => Navigate((string)((Button)sender).Tag);
     private void GlobalSearch_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs args)
     {
@@ -94,8 +113,31 @@ public sealed partial class MainWindow : Window
             var point = element.TransformToVisual(Root).TransformPoint(new global::Windows.Foundation.Point());
             return new RectInt32((int)(point.X * scale), (int)(point.Y * scale), (int)(element.ActualWidth * scale), (int)(element.ActualHeight * scale));
         }
-        var regions = new[] { Bounds(HomeButton), Bounds(ViewingButton), Bounds(SettingsButton), Bounds(HeaderActions) };
+        var regions = new FrameworkElement[] { HomeButton, ViewingButton, SettingsButton, BackButton, SortButton, HeaderActions }.Where(x => x.Visibility == Visibility.Visible && x.ActualWidth > 0).Select(Bounds).ToArray();
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, regions);
+    }
+    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route is "detail" or "detail-info" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : "home");
+    private void GlobalSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_navigating || _model.Route != "library") return;
+        _model.Query = GlobalSearch.Text;
+        PageHost.Children.Clear(); PageHost.Children.Add(_pages.Library());
+    }
+    private void Sort_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new MenuFlyout();
+        foreach (var value in new[] { "推荐顺序", "名称", "年份" })
+        {
+            var item = new ToggleMenuFlyoutItem { Text = value == "推荐顺序" ? "最近添加" : value, IsChecked = _model.Sort == value };
+            item.Click += (_, _) => { _model.Sort = value; Navigate("library"); }; menu.Items.Add(item);
+        }
+        menu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var value in new[] { "全部状态", "继续观看", "未观看" })
+        {
+            var item = new ToggleMenuFlyoutItem { Text = value, IsChecked = _model.WatchState == value };
+            item.Click += (_, _) => { _model.WatchState = value; Navigate("library"); }; menu.Items.Add(item);
+        }
+        menu.ShowAt(SortButton);
     }
     private async void OpenFile_Click(object sender, RoutedEventArgs e)
     {

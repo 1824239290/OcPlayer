@@ -39,7 +39,7 @@ internal static class DemoUi
     public static StackPanel Row(double spacing = 12) => new() { Orientation = Orientation.Horizontal, Spacing = spacing };
     public static Border Panel(UIElement child, Thickness? padding = null)
     {
-        var border = new Border { Child = child, Padding = padding ?? new Thickness(24), CornerRadius = new CornerRadius(14), BorderThickness = new Thickness(1) };
+        var border = new Border { Child = child, Padding = padding ?? new Thickness(24), CornerRadius = new CornerRadius(16), BorderThickness = new Thickness(1) };
         border.Background = Resource("CardBackgroundFillColorDefaultBrush");
         border.BorderBrush = Resource("CardStrokeColorDefaultBrush");
         return border;
@@ -48,17 +48,12 @@ internal static class DemoUi
     {
         var grid = new Grid { Height = height };
         grid.Children.Add(Image(media.PosterPath));
-        if (media.Progress > 0)
-        {
-            grid.Children.Add(new ProgressBar { Value = media.Progress, Maximum = 100, Height = 3,
-                VerticalAlignment = VerticalAlignment.Bottom, Foreground = Accent });
-        }
         return new Border { CornerRadius = new CornerRadius(10), Child = grid };
     }
     public static Button MediaCard(DemoMedia media, Action<DemoMedia> open, double width = 174)
     {
         var stack = Stack(8);
-        stack.Children.Add(Poster(media));
+        stack.Children.Add(Poster(media, width * 1.5));
         var title = Text(media.Title, 15, true);
         title.TextTrimming = TextTrimming.CharacterEllipsis;
         title.MaxLines = 1;
@@ -89,9 +84,10 @@ internal static class DemoUi
                 Background = new SolidColorBrush(Colors.LightGray), CornerRadius = new CornerRadius(1.5) });
             stack.Children.Add(progress);
         }
-        var title = Text(media.Title, 13, true); title.MaxLines = 1; title.TextTrimming = TextTrimming.CharacterEllipsis;
+        var displayTitle = media.Title == "凡人修仙传" ? "凡人修仙传 · 慕兰之战 24" : media.Title == "FX战士久留美" ? "FX 战士久留美 · 我不要被强制平仓啊……" : media.Title;
+        var title = Text(displayTitle, 13, true); title.MaxLines = 1; title.TextTrimming = TextTrimming.CharacterEllipsis;
         stack.Children.Add(title);
-        var subtitle = Muted(resume ? $"{media.EpisodeLabel} · 还剩 {media.RemainingMinutes} 分钟" : media.Subtitle, 12);
+        var subtitle = Muted(resume ? $"{media.EpisodeLabel} · 还剩 {media.RemainingMinutes} 分钟" : $"{media.Year} · {media.Category.Split(" / ")[0]}", 12);
         subtitle.Opacity = .75; stack.Children.Add(subtitle);
         var menu = new MenuFlyout();
         var watch = new MenuFlyoutItem { Text = resume ? "继续观看" : "播放" }; watch.Click += (_, _) => play(media); menu.Items.Add(watch);
