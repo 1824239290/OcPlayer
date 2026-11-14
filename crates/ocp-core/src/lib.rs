@@ -49,6 +49,7 @@ struct State {
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
     bangumi_account: ocp_bangumi::account::Account,
+    moviepilot_account: ocp_moviepilot::account::Account,
     bangumi_sync: ocp_bangumi::sync::Directory,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
@@ -142,6 +143,7 @@ impl Core {
                 store,
                 bangumi_store: None,
                 bangumi_account: Default::default(),
+                moviepilot_account: Default::default(),
                 bangumi_sync: Default::default(),
                 danmaku_cache: None,
                 intro_learning: None,
@@ -633,6 +635,15 @@ impl Core {
                     _ => Err(format!("unknown Bangumi sync method: {method}")),
                 };
                 match result {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            method if method.starts_with("moviepilotAccount.") => {
+                match state
+                    .moviepilot_account
+                    .call(method.trim_start_matches("moviepilotAccount."), &arguments)
+                {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }

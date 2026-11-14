@@ -1,0 +1,6 @@
+{
+  "Packages/MoviePilotKit/Sources/MoviePilotKit/MoviePilotAPIClient.swift": "542efdcdb8ce2dfdc6bca627de885d82c9ba9c6f81d8e3fcd6947d5626bfb55f",
+  "Packages/MoviePilotKit/Sources/MoviePilotKit/RustMoviePilotAccount.swift": "15065956e709e0459e4571b3915fc449c355f7d1b44895f64b945967f5e292c8",
+  "Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotAccountLifecycleTests.swift": "4d0c8645e1b1adb50a3b24503da20c40815168b60ad3e953b788556044f8a459",
+  "Docs/SHARED-MOVIEPILOT.md": "d52975bea5b98e2431116285be08b7ef035dc97aeb7c5178544e023bebd8e069"
+}

@@ -10,6 +10,7 @@ use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
+pub mod account;
 mod stream;
 pub use stream::{SearchUpdate, StreamDecoder};
 

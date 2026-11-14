@@ -3,9 +3,11 @@
 The shared client handles MoviePilot's ordinary API, login token issuance,
 current-user validation, torrent SSE, downloads and subscriptions. The macOS
 MoviePilot actor dispatches all these HTTP paths through its retained Core when
-enabled. Keychain/filesystem credential storage, atomic platform credential
-commit, configuration revisions, refresh single-flight and native notifications
-remain owned by the platform actor. Injected URLSession protocols and disabled
+enabled. The retained [account policy](moviepilot-account-contract.md) owns
+authentication generations, login/refresh receipts, single-flight coordination
+and the refresh fuse. Physical credential storage, atomic platform commits and
+configuration revisions, tasks and native notifications remain effects.
+Injected URLSession protocols and disabled
 Core configurations retain the existing native implementation.
 
 ## Login
@@ -22,14 +24,15 @@ than publishing an authenticated session. The result is
 `{"accessToken":"...","user":{...}}`. With `validateUser:false`, only the token
 is issued and `user` is null, matching silent refresh's original request sequence.
 Malformed token JSON is code 1514; HTTP 400 is code 2000, auth failure is 1503 and
-non-token permission failure is 1504. The native actor keeps its existing refresh
+non-token permission failure is 1504. The account owner keeps the existing refresh
 fuse: rejected or malformed refresh clears the expired token and asks for login;
 concurrent expiry waits for the same refresh, while a late old-token rejection
 replays the already refreshed token.
 
 A successful login publishes its jar only under the issued token and current
 session-cache generation. The native actor checks its configuration revision
-before committing credentials; a newer login, sign-out or session invalidation
+before committing credentials and Core revalidates the receipt after the commit
+handoff; a newer login, sign-out or session invalidation
 cancels earlier in-flight Rust work. Failed initial login preserves previously
 committed credentials. Successful commit retains the new authenticated pool.
 

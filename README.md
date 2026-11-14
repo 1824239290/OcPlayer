@@ -25,8 +25,9 @@ JSON command per line (`{"method":"...","arguments":{...}}`) and prints each
 response followed by the final snapshot on stderr.
 
 MoviePilot's macOS transport now includes first login, token-only silent refresh
-and byte-preserving low-level exchanges through Core. Its wire/retry boundaries
-and native credential lifecycle are documented in
+and byte-preserving low-level exchanges through Core. Login/refresh/logout policy
+is retained through [`docs/moviepilot-account-contract.md`](docs/moviepilot-account-contract.md).
+Its wire/retry boundaries and platform credential effects are documented in
 [`docs/moviepilot-contract.md`](docs/moviepilot-contract.md).
 
 Bangumi credential, OAuth and refresh generations now run in retained Core

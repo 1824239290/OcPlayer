@@ -1,0 +1,99 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Using on-disk description]
+[2 / 13] MoviePilotKitTests-product
+[4 / 15] MoviePilotKitTests-product
+/Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/Tests/MoviePilotKitTests/MoviePilotSessionRaceTests.swift:202:67: warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+200 | }
+201 | 
+202 | private final class AsyncRaceURLProtocol: URLProtocol, @unchecked Sendable {
+    |                     |                                             `- warning: 'AsyncRaceURLProtocol' inherits an unavailable 'Sendable' conformance; conforming here risks data races [#UnavailableSendableConformance]
+    |                     `- note: 'AsyncRaceURLProtocol' inherits unavailable conformance to protocol 'Sendable' from superclass here
+203 |     nonisolated(unsafe) static var handler: (@Sendable (URLRequest) async -> (HTTPURLResponse, Data))?
+204 |     private var pending: Task<Void, Never>?
+
+[#UnavailableSendableConformance]: <https://docs.swift.org/compiler/documentation/diagnostics/unavailable-sendable-conformance>
+[10 / 14] MoviePilotKitTests-product
+Build complete! (1.24秒)
+error: Process '/Applications/Xcode.app/Contents/Developer/usr/bin/xctest /Users/jumusu/Documents/project/OcPlayer/Packages/MoviePilotKit/.build/out/Products/Debug/MoviePilotKitTests.xctest' exited with unexpected signal code 5
+Test Suite 'All tests' started at 2026-11-14 09:42:38.365.
+Test Suite 'MoviePilotKitTests.xctest' started at 2026-11-14 09:42:38.365.
+Test Suite 'MPEnvelopeTests' started at 2026-11-14 09:42:38.366.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testBareArrayIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeIsUnwrapped]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithNullDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testEnvelopeWithObjectPayload]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testLeadingWhitespaceBeforeArrayIsHandled]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testMalformedInputIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithoutSuccessKeyIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testObjectWithSuccessButNoDataIsReturnedUnchanged]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testScalarDataPayloadDoesNotCrash]' passed (0.000 seconds).
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' started.
+Test Case '-[MoviePilotKitTests.MPEnvelopeTests testShallowCheckIsBehaviourallyIdenticalToTheReferenceImplementation]' passed (0.000 seconds).
+Test Suite 'MPEnvelopeTests' passed at 2026-11-14 09:42:38.369.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'MoviePilotAccountLifecycleTests' started at 2026-11-14 09:42:38.369.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterReplacementLogin]' passed (0.080 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut]' started.
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testCoreLoginCommitCannotPublishAfterSignOut]' passed (0.060 seconds).
+Test Case '-[MoviePilotKitTests.MoviePilotAccountLifecycleTests testNativeLoginCommitCannotPublishAfterReplacementLogin]' started.
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+◇ Suite "JSONValue.init(any:)" started.
+◇ Suite "MPEnvelope.unwrapObjects" started.
+◇ Test numericZeroAndOneExposeIntValue() started.
+◇ Test realBooleansStayBooleans() started.
+◇ Test realisticTorrentWithZeroSeedersKeepsField() started.
+◇ Test otherTypesUnchanged() started.
+◇ Test numericZeroAndOneStayNumbers() started.
+◇ Test otherNumbersStayNumbers() started.
+◇ Test emptyArraySucceeds() started.
+◇ Test booleansDoNotExposeIntValue() started.
+◇ Test nonObjectElementsThrowInsteadOfBeingDropped() started.
+◇ Test nested() started.
+◇ Test booleans() started.
+◇ Test arrayWithoutEnvelopeKeys() started.
+◇ Test bareArray() started.
+◇ Test malformedJSONThrowsTypedError() started.
+◇ Test nonArrayPayloadThrowsTypedError() started.
+◇ Test envelope() started.
+◇ Test numericZeroAndOne() started.
+◇ Test realisticDownloadTask() started.
+◇ Test empties() started.
+◇ Test numericVariants() started.
+✔ Test otherNumbersStayNumbers() passed after 0.001 seconds.
+✔ Test realBooleansStayBooleans() passed after 0.001 seconds.
+✔ Test numericZeroAndOneExposeIntValue() passed after 0.001 seconds.
+✔ Test booleansDoNotExposeIntValue() passed after 0.001 seconds.
+✔ Test realisticTorrentWithZeroSeedersKeepsField() passed after 0.001 seconds.
+✔ Test emptyArraySucceeds() passed after 0.001 seconds.
+✔ Test booleans() passed after 0.001 seconds.
+✔ Test arrayWithoutEnvelopeKeys() passed after 0.001 seconds.
+✔ Test numericZeroAndOneStayNumbers() passed after 0.001 seconds.
+✔ Test malformedJSONThrowsTypedError() passed after 0.001 seconds.
+✔ Test empties() passed after 0.001 seconds.
+✔ Test bareArray() passed after 0.001 seconds.
+✔ Test numericZeroAndOne() passed after 0.001 seconds.
+✔ Test envelope() passed after 0.001 seconds.
+✔ Test realisticDownloadTask() passed after 0.001 seconds.
+✔ Test otherTypesUnchanged() passed after 0.001 seconds.
+✔ Test nested() passed after 0.001 seconds.
+✔ Test numericVariants() passed after 0.001 seconds.
+✔ Suite "JSONValue.init(any:)" passed after 0.001 seconds.
+✔ Test nonArrayPayloadThrowsTypedError() passed after 0.001 seconds.
+✔ Test nonObjectElementsThrowInsteadOfBeingDropped() passed after 0.002 seconds.
+✔ Suite "MPEnvelope.unwrapObjects" passed after 0.003 seconds.
+✔ Test run with 20 tests in 2 suites passed after 0.003 seconds.
+Note: Some test targets reported failures:
+  - MoviePilotKitTests (XCTest)
