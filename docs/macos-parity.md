@@ -1032,7 +1032,39 @@ natural EOF exit zero with no render/audio failures. Broad decoder/media and
 recovery, remaining transport/endpoint and binding ownership/argument coverage,
 settings/diagnostics, Apple release and Windows adapter delivery remain active.
 Windows runtime testing remains deferred; the full goal remains active.
-A final read-only A/B probe confirms MediaStreams [] succeeds while null fails
-for both server flavors, despite the native Emby optional-array model. Nullable
-source/data mapping remains an explicit open parity defect; the probe and output
-are retained in the report and guide the next change.
+The continuation report retained a read-only probe where MediaStreams []
+succeeded while null failed for both flavors. The subsequent media-nullability
+change closes that specific defect; the original probe remains historical
+failure evidence, and broader media-schema parity remains in scope.
+
+## 2026-11-14 media nullability and projection parity
+
+The [media nullability contract](media-nullability-contract.md) and
+[complete validation report](validation/2026-11-14-media-nullability/README.md)
+cover missing/null list/source/stream/chapter containers, stable missing item
+identity, nullable user data, partial cast and full native item image/season
+projection. MAL no longer reads TVDB. Similar uses typed media normalization.
+Libraries retain native filtering, case handling and missing identity behavior.
+Emby segments use chapter markers and native legacy user detail paths; detail
+requests explicitly include People and the native detail field set. The fixture
+now rejects modern Emby detail routes and missing People, closing a permissive
+fixture blind spot rather than merely matching payloads.
+
+Final locked Rust and independent offline copy both pass 188 tests, public C ABI
+passes 179 in 28 suites, exported Apple SDK passes 26, and native packages pass
+1273 (JellyfinKit 280 includes eight new native/Core HTTP cases). AppTests execute
+1013: 994 pass, 19 platform skips, zero failures. Disabled JellyfinKit executes
+280: 265 pass, 15 Core-only skips. Disabled app preparation/continuation/failover
+executes 23: 22 pass, one Core-only skip. All 71 Core, 778 native and 59 gate
+inputs verify unchanged; original targeted failures and the intentionally
+stopped preliminary gate are preserved. Deep strict signature, 14 matching
+runtime sections, bundled controls and natural EOF pass with zero process,
+rendering or audio failures.
+
+The previous continuation report's null-stream probe remains historical failure
+evidence; that specific defect is closed. Broader media-schema and transport
+coverage still needs auditing, including explicit selected subtitle-source
+isolation in the Core facade (the current native mock tests exercise native
+servers). Full public argument/ownership coverage, settings/aggregate diagnostics,
+Apple release and all framework slices, and Windows adapter implementation remain
+active. Windows runtime testing remains deferred; the complete goal remains active.

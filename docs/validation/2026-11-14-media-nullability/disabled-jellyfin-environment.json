@@ -1,0 +1,16 @@
+{
+  "command": [
+    "env",
+    "-u",
+    "OCP_CORE_LIBRARY_PATH",
+    "OCP_CORE_ENABLED=0",
+    "swift",
+    "test",
+    "--package-path",
+    "Packages/JellyfinKit",
+    "--skip-update"
+  ],
+  "workingDirectory": "/Users/jumusu/Documents/project/OcPlayer",
+  "coreEnabled": false,
+  "libraryOverrideRemoved": true
+}

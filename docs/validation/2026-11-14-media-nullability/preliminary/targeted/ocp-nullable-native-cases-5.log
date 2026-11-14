@@ -1,0 +1,35 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 24 / 47]
+[3 / 7] JellyfinKitTests-product
+[4 / 7] JellyfinKitTests-product
+[6 / 9] JellyfinKitTests-product
+[13 / 15] JellyfinKitTests-product
+[15 / 15] JellyfinKitTests-product
+Build complete! (2.29秒)
+Test Suite 'Selected tests' started at 2026-11-14 14:56:53.394.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 14:56:53.395.
+Test Suite 'MediaNullableHTTPTests' started at 2026-11-14 14:56:53.395.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' passed (0.428 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' passed (2.266 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' passed (0.558 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' passed (0.950 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' passed (1.408 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' passed (3.134 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' passed (0.283 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' passed (1.967 seconds).
+Test Suite 'MediaNullableHTTPTests' passed at 2026-11-14 14:57:04.389.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 10.993 (10.994) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 14:57:04.390.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 10.993 (10.994) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 14:57:04.390.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 10.993 (10.995) seconds

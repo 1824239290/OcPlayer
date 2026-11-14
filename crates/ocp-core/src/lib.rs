@@ -2125,11 +2125,11 @@ fn run_server_command(
                     let id = required_str(&arguments, "itemId")?;
                     let value = client
                         .raw_get(
-                            &format!("Items/{id}"),
+                            &client.item_detail_path(id),
                             vec![("fields", "Chapters".into())],
                         )
                         .await?;
-                    Ok(json!({ "chapters": value.get("Chapters").cloned().unwrap_or_else(|| json!([])) }))
+                    Ok(json!({ "chapters": nullable_response_array(&value, "Chapters")? }))
                 }
                 "browse.seasons" => {
                     let series_id = required_str(&arguments, "seriesId")?;
@@ -2153,16 +2153,8 @@ fn run_server_command(
                 }
                 "browse.similar" => {
                     let id = required_str(&arguments, "itemId")?;
-                    let value = client
-                        .raw_get(
-                            &format!("Items/{id}/Similar"),
-                            vec![
-                                ("limit", arguments.get("limit").and_then(Value::as_i64).unwrap_or(12).clamp(1, 100).to_string()),
-                                ("fields", ocp_jellyfin::MEDIA_LIST_FIELDS.into()),
-                            ],
-                        )
-                        .await?;
-                    Ok(json!({ "items": value.get("Items").cloned().unwrap_or_else(|| json!([])) }))
+                    let limit = arguments.get("limit").and_then(Value::as_i64).unwrap_or(12).clamp(1,100) as i32;
+                    Ok(json!({"items":client.similar_items(id,limit).await?}))
                 }
                 "playback.info" => {
                     let id = required_str(&arguments, "itemId")?;
@@ -2170,13 +2162,17 @@ fn run_server_command(
                 }
                 "media.segments" => {
                     let id = required_str(&arguments, "itemId")?;
+                    if matches!(client.profile.kind, ocp_jellyfin::ServerKind::Emby) {
+                        let detail = client.raw_get(&client.item_detail_path(id), vec![("fields", "Chapters".into())]).await?;
+                        return Ok(json!({"items": emby_media_segments(id, detail)?}));
+                    }
                     let value = client
                         .raw_get(
                             &format!("MediaSegments/{id}"),
                             vec![("includeSegmentTypes", "Intro,Outro".into())],
                         )
                         .await?;
-                    Ok(json!({ "items": value.get("Items").cloned().unwrap_or_else(|| json!([])) }))
+                    Ok(json!({ "items": nullable_response_items(&value)? }))
                 }
                 "media.subtitles" => {
                     let id = required_str(&arguments, "itemId")?;
@@ -2184,14 +2180,16 @@ fn run_server_command(
                     if let Some(source_id) = arguments.get("mediaSourceId").and_then(Value::as_str) {
                         params.push(("mediaSourceId", source_id.to_owned()));
                     }
-                    let value = client.raw_get("Items", params).await?;
+                    let mut value = client.raw_get("Items", params).await?;
+                    value["Items"] = json!(nullable_response_items(&value)?);
                     Ok(value)
                 }
                 "media.fileInfo" => {
                     let id = required_str(&arguments, "itemId")?;
-                    let value = client
+                    let mut value = client
                         .raw_get("Items", vec![("ids", id.to_owned()), ("fields", "MediaSources".into())])
                         .await?;
+                    value["Items"] = json!(nullable_response_items(&value)?);
                     Ok(value)
                 }
                 "server.avatarTag" => {
@@ -2739,6 +2737,77 @@ fn positive_id_arg(arguments: &Value, key: &str) -> Result<i64, CommandError> {
         .and_then(Value::as_i64)
         .filter(|value| *value > 0)
         .ok_or_else(|| CommandError::invalid(format!("{key} must be positive")))
+}
+
+// Emby exposes intro/credits markers in Chapters rather than Jellyfin's plugin endpoint.
+fn emby_media_segments(id: &str, detail: Value) -> Result<Vec<Value>, CommandError> {
+    #[derive(serde::Deserialize)]
+    struct Chapter {
+        #[serde(rename = "StartPositionTicks")]
+        start: Option<i64>,
+        #[serde(rename = "MarkerType")]
+        marker: Option<Value>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Detail {
+        #[serde(rename = "Chapters")]
+        chapters: Option<Vec<Chapter>>,
+        #[serde(rename = "RunTimeTicks")]
+        runtime: Option<i64>,
+    }
+    let detail: Detail = serde_json::from_value(detail)
+        .map_err(|error| CommandError(1514, false, error.to_string()))?;
+    let mut starts = Vec::new();
+    let (mut intro, mut end, mut credits) = (None, None, None);
+    for chapter in detail.chapters.unwrap_or_default() {
+        let Some(ticks) = chapter.start else { continue };
+        starts.push(ticks);
+        let marker = chapter.marker.unwrap_or(Value::Null);
+        let name = marker.as_str().map(str::to_ascii_lowercase);
+        match (marker.as_i64(), name.as_deref()) {
+            (Some(1), _) | (_, Some("introstart")) => {
+                intro.get_or_insert(ticks);
+            }
+            (Some(2), _) | (_, Some("introend")) => {
+                end.get_or_insert(ticks);
+            }
+            (Some(3), _) | (_, Some("creditsstart")) => {
+                credits.get_or_insert(ticks);
+            }
+            _ => {}
+        }
+    }
+    if let Some(start) = intro {
+        if end.is_none() {
+            end = starts.into_iter().filter(|ticks| *ticks > start).min();
+        }
+    }
+    let mut segments = Vec::new();
+    if let (Some(start), Some(end)) = (intro, end) {
+        if end > start {
+            segments.push(json!({"Id":format!("emby-intro-{id}"),"ItemId":id,"Type":"Intro","StartTicks":start,"EndTicks":end}));
+        }
+    }
+    if let (Some(start), Some(end)) = (credits, detail.runtime) {
+        if end > start {
+            segments.push(json!({"Id":format!("emby-credits-{id}"),"ItemId":id,"Type":"Outro","StartTicks":start,"EndTicks":end}));
+        }
+    }
+    Ok(segments)
+}
+
+// Raw media endpoints share the native nullable query-result envelope.
+// Only absent/null Items default to empty; a malformed non-null container is a decode error.
+fn nullable_response_items(value: &Value) -> Result<Vec<Value>, CommandError> {
+    nullable_response_array(value, "Items")
+}
+fn nullable_response_array(value: &Value, key: &str) -> Result<Vec<Value>, CommandError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| CommandError(1514, false, "expected media query-result object".into()))?;
+    serde_json::from_value::<Option<Vec<Value>>>(object.get(key).cloned().unwrap_or(Value::Null))
+        .map(|items| items.unwrap_or_default())
+        .map_err(|error| CommandError(1514, false, error.to_string()))
 }
 
 struct CommandError(i32, bool, String);

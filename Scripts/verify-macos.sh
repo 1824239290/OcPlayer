@@ -15,6 +15,7 @@ Scripts/build-apple-dylib.sh "$output_dir" > "$output_dir/rust-build.log" 2>&1
 export OCP_CORE_LIBRARY_PATH="$output_dir/libocp_ffi.dylib"
 export OCP_CORE_ENABLED=1
 Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-equivalence.log" 2>&1
+cmp tests/media_nullable_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/media_nullable_server.py" > "$output_dir/media-nullable-fixture-equivalence.log" 2>&1
 cmp tests/playback_preparation_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/playback_preparation_server.py" > "$output_dir/playback-preparation-fixture-equivalence.log" 2>&1
 cmp tests/intro_provider_server.py "$apple_root/Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py" > "$output_dir/intro-provider-fixture-equivalence.log" 2>&1
 cmp tests/standalone_danmaku_server.py "$apple_root/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py" > "$output_dir/standalone-fixture-equivalence.log" 2>&1
@@ -33,6 +34,7 @@ python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&
 python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.log" 2>&1
 python3 tests/moviepilot_account_contract.py > "$output_dir/moviepilot-account-contract-tests.log" 2>&1
 python3 tests/moviepilot_flow_contract.py > "$output_dir/moviepilot-flow-contract-tests.log" 2>&1
+python3 tests/media_nullable_contract.py > "$output_dir/media-nullable-contract-tests.log" 2>&1
 python3 tests/media_login_contract.py > "$output_dir/media-login-contract-tests.log" 2>&1
 python3 tests/danmaku_contract.py > "$output_dir/danmaku-contract-tests.log" 2>&1
 python3 tests/danmaku_policy_contract.py > "$output_dir/danmaku-policy-contract-tests.log" 2>&1

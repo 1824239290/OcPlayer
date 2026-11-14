@@ -1,0 +1,9 @@
+test_canonical_item_and_similar_keep_images_identity_season_and_providers (__main__.MediaNullableContract.test_canonical_item_and_similar_keep_images_identity_season_and_providers) ... ok
+test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) ... ok
+test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) ... ok
+test_wrong_nonnull_types_are_decode_failures_and_not_empty_success (__main__.MediaNullableContract.test_wrong_nonnull_types_are_decode_failures_and_not_empty_success) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.393s
+
+OK

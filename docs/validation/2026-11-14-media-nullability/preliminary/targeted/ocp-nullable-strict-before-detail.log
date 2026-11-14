@@ -1,0 +1,111 @@
+test_canonical_item_and_similar_keep_images_identity_season_and_providers (__main__.MediaNullableContract.test_canonical_item_and_similar_keep_images_identity_season_and_providers) ... FAIL
+test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) ... 
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='jellyfin', case='containers_null', command='browse.chapters') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_missing', command='browse.chapters') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_missing', command='media.segments') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_null', command='browse.chapters') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_null', command='media.segments') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_empty', command='browse.chapters') ... FAIL
+  test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_empty', command='media.segments') ... FAIL
+test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) ... ok
+test_wrong_nonnull_types_are_decode_failures_and_not_empty_success (__main__.MediaNullableContract.test_wrong_nonnull_types_are_decode_failures_and_not_empty_success) ... FAIL
+
+======================================================================
+FAIL: test_canonical_item_and_similar_keep_images_identity_season_and_providers (__main__.MediaNullableContract.test_canonical_item_and_similar_keep_images_identity_season_and_providers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 57, in test_canonical_item_and_similar_keep_images_identity_season_and_providers
+    item = self.success('browse.detail', **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2000, 'retryable': False, 'message': 'HTTP: InvalidRequest: HTTP 400 Bad Request', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='jellyfin', case='containers_null', command='browse.chapters')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 51, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    self.assertEqual(items, [], result)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: None != [] : {'chapters': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_missing', command='browse.chapters')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_missing', command='media.segments')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_null', command='browse.chapters')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_null', command='media.segments')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_empty', command='browse.chapters')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) (kind='emby', case='containers_empty', command='media.segments')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 49, in test_missing_null_empty_query_containers_are_empty_across_endpoints
+    result = self.success(command, profile=self.profile(case, kind), **args)
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/network_contract.py", line 130, in success
+    self.assertTrue(result['ok'], result)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : {'ok': False, 'code': 2004, 'retryable': False, 'message': 'HTTP: NotFound: HTTP 404 Not Found', 'data': None}
+
+======================================================================
+FAIL: test_wrong_nonnull_types_are_decode_failures_and_not_empty_success (__main__.MediaNullableContract.test_wrong_nonnull_types_are_decode_failures_and_not_empty_success)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 88, in test_wrong_nonnull_types_are_decode_failures_and_not_empty_success
+    self.assertFalse(result['ok'], result)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false : {'ok': True, 'code': 0, 'retryable': False, 'message': '', 'data': {'chapters': 1}}
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.321s
+
+FAILED (failures=9)

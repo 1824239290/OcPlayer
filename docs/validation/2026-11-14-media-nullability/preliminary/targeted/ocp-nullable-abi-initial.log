@@ -1,0 +1,127 @@
+test_canonical_item_and_similar_keep_images_identity_season_and_providers (__main__.MediaNullableContract.test_canonical_item_and_similar_keep_images_identity_season_and_providers) ... ERROR
+test_missing_null_empty_query_containers_are_empty_across_endpoints (__main__.MediaNullableContract.test_missing_null_empty_query_containers_are_empty_across_endpoints) ... ok
+test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) ... 
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='null_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='no_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='empty_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='null_sources') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='missing_sources') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='null_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='no_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='empty_streams') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='null_sources') ... ERROR
+  test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='missing_sources') ... ERROR
+test_wrong_nonnull_types_are_decode_failures_and_not_empty_success (__main__.MediaNullableContract.test_wrong_nonnull_types_are_decode_failures_and_not_empty_success) ... ERROR
+
+======================================================================
+ERROR: test_canonical_item_and_similar_keep_images_identity_season_and_providers (__main__.MediaNullableContract.test_canonical_item_and_similar_keep_images_identity_season_and_providers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 70, in test_canonical_item_and_similar_keep_images_identity_season_and_providers
+    self.assertFalse(item['playState']['played']); self.assertEqual(item['playState']['resumeSeconds'], 0)
+                                                                    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'resumeSeconds'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='null_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='no_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='empty_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='null_sources')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='jellyfin', case='missing_sources')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='null_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='no_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='empty_streams')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='null_sources')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_nullable_playback_sources_and_streams_keep_context (__main__.MediaNullableContract.test_nullable_playback_sources_and_streams_keep_context) (kind='emby', case='missing_sources')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 33, in test_nullable_playback_sources_and_streams_keep_context
+    self.assertEqual(info['playSessionID'], 'session')
+                     ~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'playSessionID'
+
+======================================================================
+ERROR: test_wrong_nonnull_types_are_decode_failures_and_not_empty_success (__main__.MediaNullableContract.test_wrong_nonnull_types_are_decode_failures_and_not_empty_success)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/Backup/软件/OcPlayer-Core/tests/media_nullable_contract.py", line 81, in test_wrong_nonnull_types_are_decode_failures_and_not_empty_success
+    self.assertEqual(result['error']['code'], 1514, result)
+                     ~~~~~~^^^^^^^^^
+KeyError: 'error'
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.452s
+
+FAILED (errors=12)

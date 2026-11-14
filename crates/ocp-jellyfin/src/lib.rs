@@ -8,6 +8,45 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn null_string_map<'de, D>(deserializer: D) -> Result<serde_json::Value, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Option::<std::collections::BTreeMap<String, String>>::deserialize(deserializer)?;
+    Ok(values
+        .map(|m| {
+            serde_json::Value::Object(
+                m.into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                    .collect(),
+            )
+        })
+        .unwrap_or(serde_json::Value::Null))
+}
+fn null_string_array<'de, D>(deserializer: D) -> Result<serde_json::Value, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Option::<Vec<String>>::deserialize(deserializer)?;
+    Ok(values
+        .map(|v| serde_json::Value::Array(v.into_iter().map(serde_json::Value::String).collect()))
+        .unwrap_or(serde_json::Value::Null))
+}
+#[derive(Deserialize)]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
+struct ItemResult<T> {
+    #[serde(rename = "Items", default, deserialize_with = "null_default")]
+    items: Vec<T>,
+}
+
 pub mod endpoint;
 
 pub const MEDIA_LIST_FIELDS: &str =
@@ -107,7 +146,7 @@ pub struct ServerProfile {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", from = "WireMediaItem")]
 pub struct MediaItem {
     #[serde(alias = "Id")]
     pub id: String,
@@ -143,9 +182,13 @@ pub struct MediaItem {
     pub run_time_ticks: Option<i64>,
     #[serde(alias = "ChildCount")]
     pub child_count: Option<i32>,
-    #[serde(alias = "ImageTags", default)]
+    #[serde(alias = "ImageTags", default, deserialize_with = "null_string_map")]
     pub image_tags: serde_json::Value,
-    #[serde(alias = "BackdropImageTags", default)]
+    #[serde(
+        alias = "BackdropImageTags",
+        default,
+        deserialize_with = "null_string_array"
+    )]
     pub backdrop_image_tags: serde_json::Value,
     #[serde(alias = "ParentThumbItemId")]
     pub parent_thumb_item_id: Option<String>,
@@ -159,13 +202,206 @@ pub struct MediaItem {
     pub primary_image_aspect_ratio: Option<f64>,
     #[serde(alias = "People", default)]
     pub cast: Vec<Person>,
-    #[serde(alias = "ProviderIds")]
-    #[serde(default)]
+    #[serde(alias = "ProviderIds", default, deserialize_with = "null_string_map")]
     pub provider_ids: serde_json::Value,
     #[serde(default, alias = "UserData")]
     user_data: Option<WirePlayState>,
     #[serde(default, rename = "playState")]
     pub play_state: PlayState,
+    #[serde(alias = "AlbumPrimaryImageTag")]
+    pub album_primary_image_tag: Option<String>,
+    #[serde(alias = "SeriesPrimaryImageTag")]
+    pub series_primary_image_tag: Option<String>,
+    #[serde(alias = "ParentLogoImageTag")]
+    pub parent_logo_image_tag: Option<String>,
+    #[serde(alias = "ParentLogoItemId")]
+    pub parent_logo_item_id: Option<String>,
+    #[serde(alias = "SeriesThumbImageTag")]
+    pub series_thumb_image_tag: Option<String>,
+    #[serde(alias = "ParentPrimaryImageItemId")]
+    pub parent_primary_image_item_id: Option<String>,
+    #[serde(alias = "ParentPrimaryImageTag")]
+    pub parent_primary_image_tag: Option<String>,
+    #[serde(
+        alias = "ParentBackdropImageTags",
+        default,
+        deserialize_with = "null_string_array"
+    )]
+    pub parent_backdrop_image_tags: serde_json::Value,
+    has_play_state: bool,
+    name_was_missing: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct WireMediaItem {
+    #[serde(alias = "Id")]
+    pub id: Option<String>,
+    #[serde(alias = "Name")]
+    pub name: Option<String>,
+    #[serde(rename = "Type", alias = "type")]
+    pub kind: Option<String>,
+    #[serde(alias = "Overview")]
+    pub overview: Option<String>,
+    #[serde(alias = "OriginalTitle")]
+    pub original_title: Option<String>,
+    #[serde(alias = "ProductionYear")]
+    pub production_year: Option<i32>,
+    #[serde(alias = "Genres", default, deserialize_with = "null_default")]
+    pub genres: Vec<String>,
+    #[serde(alias = "CommunityRating")]
+    pub community_rating: Option<f64>,
+    #[serde(alias = "OfficialRating")]
+    pub official_rating: Option<String>,
+    #[serde(alias = "SeriesId")]
+    pub series_id: Option<String>,
+    #[serde(alias = "SeriesName")]
+    pub series_name: Option<String>,
+    #[serde(alias = "SeasonId")]
+    pub season_id: Option<String>,
+    #[serde(alias = "SeasonName")]
+    pub season_name: Option<String>,
+    #[serde(alias = "ParentIndexNumber")]
+    pub season_number: Option<i32>,
+    #[serde(alias = "IndexNumber")]
+    pub index_number: Option<i32>,
+    #[serde(alias = "RunTimeTicks")]
+    pub run_time_ticks: Option<i64>,
+    #[serde(alias = "ChildCount")]
+    pub child_count: Option<i32>,
+    #[serde(alias = "ImageTags", default, deserialize_with = "null_string_map")]
+    pub image_tags: serde_json::Value,
+    #[serde(
+        alias = "BackdropImageTags",
+        default,
+        deserialize_with = "null_string_array"
+    )]
+    pub backdrop_image_tags: serde_json::Value,
+    #[serde(alias = "ParentThumbItemId")]
+    pub parent_thumb_item_id: Option<String>,
+    #[serde(alias = "ParentThumbImageTag")]
+    pub parent_thumb_image_tag: Option<String>,
+    #[serde(alias = "ParentBackdropItemId")]
+    pub parent_backdrop_item_id: Option<String>,
+    #[serde(alias = "ParentBackdropImageTag")]
+    pub parent_backdrop_image_tag: Option<String>,
+    #[serde(alias = "PrimaryImageAspectRatio")]
+    pub primary_image_aspect_ratio: Option<f64>,
+    #[serde(alias = "People", default, deserialize_with = "null_default")]
+    pub cast: Vec<WirePerson>,
+    #[serde(alias = "ProviderIds", default, deserialize_with = "null_string_map")]
+    pub provider_ids: serde_json::Value,
+    #[serde(default, alias = "UserData")]
+    user_data: Option<WirePlayState>,
+    #[serde(default, rename = "playState")]
+    pub play_state: Option<PlayState>,
+    #[serde(alias = "AlbumPrimaryImageTag")]
+    pub album_primary_image_tag: Option<String>,
+    #[serde(alias = "SeriesPrimaryImageTag")]
+    pub series_primary_image_tag: Option<String>,
+    #[serde(alias = "ParentLogoImageTag")]
+    pub parent_logo_image_tag: Option<String>,
+    #[serde(alias = "ParentLogoItemId")]
+    pub parent_logo_item_id: Option<String>,
+    #[serde(alias = "SeriesThumbImageTag")]
+    pub series_thumb_image_tag: Option<String>,
+    #[serde(alias = "ParentPrimaryImageItemId")]
+    pub parent_primary_image_item_id: Option<String>,
+    #[serde(alias = "ParentPrimaryImageTag")]
+    pub parent_primary_image_tag: Option<String>,
+    #[serde(
+        alias = "ParentBackdropImageTags",
+        default,
+        deserialize_with = "null_string_array"
+    )]
+    pub parent_backdrop_image_tags: serde_json::Value,
+}
+
+impl From<WireMediaItem> for MediaItem {
+    fn from(wire: WireMediaItem) -> Self {
+        let id = wire
+            .id
+            .unwrap_or_else(|| missing_item_id(wire.name.as_deref(), wire.kind.as_deref()));
+        let name_was_missing = wire.name.is_none();
+        let has_play_state = wire.user_data.is_some() || wire.play_state.is_some();
+        Self {
+            id,
+            name: wire.name.unwrap_or_else(|| "未命名".into()),
+            kind: wire.kind.unwrap_or_default(),
+            name_was_missing,
+            has_play_state,
+            cast: wire
+                .cast
+                .into_iter()
+                .filter_map(|person| {
+                    Some(Person {
+                        id: person.id?,
+                        name: person.name?,
+                        role: person.role,
+                        kind: person.kind.unwrap_or_else(|| "Actor".into()),
+                    })
+                })
+                .collect(),
+            play_state: wire.play_state.unwrap_or_default(),
+            overview: wire.overview,
+            original_title: wire.original_title,
+            production_year: wire.production_year,
+            genres: wire.genres,
+            community_rating: wire.community_rating,
+            official_rating: wire.official_rating,
+            series_id: wire.series_id,
+            series_name: wire.series_name,
+            season_id: wire.season_id,
+            season_name: wire.season_name,
+            season_number: wire.season_number,
+            index_number: wire.index_number,
+            run_time_ticks: wire.run_time_ticks,
+            child_count: wire.child_count,
+            image_tags: wire.image_tags,
+            backdrop_image_tags: wire.backdrop_image_tags,
+            parent_thumb_item_id: wire.parent_thumb_item_id,
+            parent_thumb_image_tag: wire.parent_thumb_image_tag,
+            parent_backdrop_item_id: wire.parent_backdrop_item_id,
+            parent_backdrop_image_tag: wire.parent_backdrop_image_tag,
+            primary_image_aspect_ratio: wire.primary_image_aspect_ratio,
+            provider_ids: wire.provider_ids,
+            user_data: wire.user_data,
+            album_primary_image_tag: wire.album_primary_image_tag,
+            series_primary_image_tag: wire.series_primary_image_tag,
+            parent_logo_image_tag: wire.parent_logo_image_tag,
+            parent_logo_item_id: wire.parent_logo_item_id,
+            series_thumb_image_tag: wire.series_thumb_image_tag,
+            parent_primary_image_item_id: wire.parent_primary_image_item_id,
+            parent_primary_image_tag: wire.parent_primary_image_tag,
+            parent_backdrop_image_tags: wire.parent_backdrop_image_tags,
+        }
+    }
+}
+fn missing_item_id(name: Option<&str>, kind: Option<&str>) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in format!(
+        "part:{}kind:{}",
+        name.unwrap_or("unnamed"),
+        kind.unwrap_or("")
+    )
+    .bytes()
+    {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("missing-{hash:016x}")
+}
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct WirePerson {
+    #[serde(alias = "Id")]
+    id: Option<String>,
+    #[serde(alias = "Name")]
+    name: Option<String>,
+    #[serde(alias = "Role")]
+    role: Option<String>,
+    #[serde(alias = "Type")]
+    kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -185,9 +421,9 @@ pub struct Person {
 #[serde(rename_all = "PascalCase")]
 struct WirePlayState {
     #[serde(default)]
-    playback_position_ticks: i64,
+    playback_position_ticks: Option<i64>,
     #[serde(default)]
-    played: bool,
+    played: Option<bool>,
     #[serde(default)]
     played_percentage: Option<f64>,
     #[serde(default)]
@@ -210,8 +446,9 @@ impl MediaItem {
         self.user_data
             .as_ref()
             .map_or_else(PlayState::default, |data| PlayState {
-                position_seconds: data.playback_position_ticks as f64 / 10_000_000.0,
-                played: data.played,
+                position_seconds: data.playback_position_ticks.unwrap_or_default() as f64
+                    / 10_000_000.0,
+                played: data.played.unwrap_or_default(),
                 percentage: data.played_percentage.unwrap_or_default() / 100.0,
                 unplayed_count: data.unplayed_item_count,
                 last_played_at: data.last_played_date.clone(),
@@ -231,12 +468,12 @@ pub struct MediaItemsPage {
 #[serde(rename_all = "camelCase")]
 pub struct MediaLibrary {
     #[serde(alias = "Id")]
-    pub id: String,
+    pub id: Option<String>,
     #[serde(alias = "Name")]
-    pub name: String,
+    pub name: Option<String>,
     #[serde(alias = "CollectionType")]
     pub collection_type: Option<String>,
-    #[serde(default, alias = "ImageTags")]
+    #[serde(default, alias = "ImageTags", deserialize_with = "null_string_map")]
     pub image_tags: serde_json::Value,
 }
 
@@ -248,8 +485,14 @@ impl Serialize for MediaLibrary {
         use serde::ser::SerializeStruct;
         let mut value = serializer.serialize_struct("MediaLibrary", 4)?;
         value.serialize_field("id", &self.id)?;
-        value.serialize_field("name", &self.name)?;
-        value.serialize_field("collectionType", &self.collection_type)?;
+        value.serialize_field("name", &self.name.as_deref().unwrap_or(""))?;
+        value.serialize_field(
+            "collectionType",
+            &self
+                .collection_type
+                .as_ref()
+                .map(|kind| kind.to_lowercase()),
+        )?;
         value.serialize_field("primaryImageTag", &image_tag(&self.image_tags, "Primary"))?;
         value.end()
     }
@@ -277,32 +520,92 @@ impl Serialize for MediaItem {
         value.serialize_field("officialRating", &self.official_rating)?;
         value.serialize_field("seriesID", &self.series_id)?;
         value.serialize_field("seriesName", &self.series_name)?;
-        value.serialize_field("seasonID", &self.season_id)?;
-        value.serialize_field("seasonName", &self.season_name)?;
-        value.serialize_field("seasonNumber", &self.season_number)?;
-        value.serialize_field("episodeNumber", &self.index_number)?;
+        let is_season = self.kind == "Season" || self.kind == "season";
+        let season_id = if is_season {
+            Some(&self.id)
+        } else {
+            self.season_id.as_ref()
+        };
+        let season_name = if is_season {
+            (!self.name_was_missing).then_some(&self.name)
+        } else {
+            self.season_name.as_ref()
+        };
+        value.serialize_field("seasonID", &season_id)?;
+        value.serialize_field("seasonName", &season_name)?;
+        value.serialize_field(
+            "seasonNumber",
+            &if is_season {
+                self.index_number
+            } else {
+                self.season_number
+            },
+        )?;
+        value.serialize_field(
+            "episodeNumber",
+            &if is_season { None } else { self.index_number },
+        )?;
         let play_state = if self.user_data.is_some() {
             self.normalized_play_state()
         } else {
             self.play_state.clone()
         };
-        value.serialize_field("playState", &play_state)?;
+        value.serialize_field("playState", &self.has_play_state.then_some(play_state))?;
         value.serialize_field("cast", &self.cast)?;
         value.serialize_field("childCount", &self.child_count)?;
-        value.serialize_field("primaryImageTag", &image_tag(&self.image_tags, "Primary"))?;
+        let own_primary = image_tag(&self.image_tags, "Primary");
+        let primary = if swift_kind(&self.kind) == "episode" {
+            own_primary
+        } else {
+            own_primary
+                .or_else(|| self.album_primary_image_tag.clone())
+                .or_else(|| self.series_primary_image_tag.clone())
+        };
+        value.serialize_field("primaryImageTag", &primary)?;
         value.serialize_field("primaryImageAspectRatio", &self.primary_image_aspect_ratio)?;
         value.serialize_field("thumbImageTag", &image_tag(&self.image_tags, "Thumb"))?;
-        value.serialize_field("backdropImageTag", &image_tag(&self.image_tags, "Backdrop"))?;
+        value.serialize_field("backdropImageTag", &first_tag(&self.backdrop_image_tags))?;
         value.serialize_field("parentThumbItemID", &self.parent_thumb_item_id)?;
         value.serialize_field("parentThumbImageTag", &self.parent_thumb_image_tag)?;
         value.serialize_field("parentBackdropItemID", &self.parent_backdrop_item_id)?;
-        value.serialize_field("parentBackdropImageTag", &self.parent_backdrop_image_tag)?;
+        value.serialize_field(
+            "parentBackdropImageTag",
+            &first_tag(&self.parent_backdrop_image_tags)
+                .or_else(|| self.parent_backdrop_image_tag.clone()),
+        )?;
+        value.serialize_field(
+            "logoImageTag",
+            &image_tag(&self.image_tags, "Logo").or_else(|| self.parent_logo_image_tag.clone()),
+        )?;
+        value.serialize_field("parentLogoItemID", &self.parent_logo_item_id)?;
+        value.serialize_field("seriesThumbImageTag", &self.series_thumb_image_tag)?;
+        value.serialize_field(
+            "parentPrimaryImageItemID",
+            &self.parent_primary_image_item_id,
+        )?;
+        value.serialize_field("parentPrimaryImageTag", &self.parent_primary_image_tag)?;
+        value.serialize_field("seriesPrimaryImageTag", &self.series_primary_image_tag)?;
         let provider = &self.provider_ids;
-        value.serialize_field("tmdbID", &provider_string(provider, "Tmdb"))?;
-        value.serialize_field("malID", &provider_string(provider, "Tvdb"))?;
-        value.serialize_field("anilistID", &provider_string(provider, "AniList"))?;
+        value.serialize_field(
+            "tmdbID",
+            &provider_string(provider, "Tmdb").or_else(|| provider_string(provider, "tmdb")),
+        )?;
+        value.serialize_field(
+            "malID",
+            &provider_string(provider, "Mal")
+                .or_else(|| provider_string(provider, "MyAnimeList"))
+                .or_else(|| provider_string(provider, "mal")),
+        )?;
+        value.serialize_field(
+            "anilistID",
+            &provider_string(provider, "AniList").or_else(|| provider_string(provider, "anilist")),
+        )?;
         value.end()
     }
+}
+
+fn first_tag(value: &serde_json::Value) -> Option<String> {
+    value.as_array()?.first()?.as_str().map(str::to_owned)
 }
 
 fn image_tag(value: &serde_json::Value, key: &str) -> Option<String> {
@@ -381,7 +684,7 @@ pub struct PlaybackSource {
     pub run_time_ticks: Option<i64>,
     #[serde(alias = "VideoRangeType")]
     pub video_range_type: Option<String>,
-    #[serde(default, alias = "MediaStreams")]
+    #[serde(default, alias = "MediaStreams", deserialize_with = "null_default")]
     pub media_streams: Vec<MediaStream>,
 }
 
@@ -1068,21 +1371,11 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
         .await
     }
     pub async fn user_views(&self) -> Result<Vec<MediaItem>, JellyfinError> {
-        #[derive(Deserialize)]
-        struct Response {
-            #[serde(rename = "Items")]
-            items: Vec<MediaItem>,
-        }
-        let response: Response = self.get("UserViews", vec![]).await?;
+        let response: ItemResult<MediaItem> = self.get("UserViews", vec![]).await?;
         Ok(response.items)
     }
 
     pub async fn libraries(&self) -> Result<Vec<MediaLibrary>, JellyfinError> {
-        #[derive(Deserialize)]
-        struct Response {
-            #[serde(rename = "Items")]
-            items: Vec<MediaLibrary>,
-        }
         let path = match self.profile.kind {
             ServerKind::Jellyfin => "UserViews".to_string(),
             ServerKind::Emby => format!(
@@ -1090,7 +1383,10 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
                 self.profile.user_id.as_deref().unwrap_or_default()
             ),
         };
-        Ok(self.get::<Response>(&path, vec![]).await?.items)
+        Ok(self
+            .get::<ItemResult<MediaLibrary>>(&path, vec![])
+            .await?
+            .items)
     }
 
     async fn item_list(
@@ -1098,12 +1394,21 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
         path: &str,
         params: Vec<(&str, String)>,
     ) -> Result<Vec<MediaItem>, JellyfinError> {
-        #[derive(Deserialize)]
-        struct Response {
-            #[serde(rename = "Items")]
-            items: Vec<MediaItem>,
-        }
-        Ok(self.get::<Response>(path, params).await?.items)
+        Ok(self.get::<ItemResult<MediaItem>>(path, params).await?.items)
+    }
+    pub async fn similar_items(
+        &self,
+        id: &str,
+        limit: i32,
+    ) -> Result<Vec<MediaItem>, JellyfinError> {
+        self.item_list(
+            &format!("Items/{id}/Similar"),
+            vec![
+                ("limit", limit.clamp(1, 100).to_string()),
+                ("fields", MEDIA_LIST_FIELDS.into()),
+            ],
+        )
+        .await
     }
 
     pub async fn resume_items(&self, limit: i32) -> Result<Vec<MediaItem>, JellyfinError> {
@@ -1193,9 +1498,9 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
     ) -> Result<PlayedItemsPage, JellyfinError> {
         #[derive(Deserialize)]
         struct Response {
-            #[serde(rename = "Items")]
+            #[serde(rename = "Items", default, deserialize_with = "null_default")]
             items: Vec<MediaItem>,
-            #[serde(rename = "StartIndex")]
+            #[serde(rename = "StartIndex", default, deserialize_with = "null_default")]
             start_index: i32,
             #[serde(rename = "TotalRecordCount")]
             total: Option<i32>,
@@ -1273,10 +1578,22 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
             .await?;
         Ok(PlayState::default())
     }
+    pub fn item_detail_path(&self, id: &str) -> String {
+        match self.profile.kind {
+            ServerKind::Jellyfin => format!("Items/{id}"),
+            ServerKind::Emby => format!(
+                "Users/{}/Items/{id}",
+                self.profile.user_id.as_deref().unwrap_or_default()
+            ),
+        }
+    }
     pub async fn item(&self, id: &str) -> Result<MediaItem, JellyfinError> {
         self.get(
-            &format!("Items/{id}"),
-            vec![("fields", MEDIA_LIST_FIELDS.into())],
+            &self.item_detail_path(id),
+            vec![(
+                "fields",
+                "People,Genres,Overview,Chapters,PrimaryImageAspectRatio".into(),
+            )],
         )
         .await
     }
@@ -1303,7 +1620,7 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
     ) -> Result<MediaItemsPage, JellyfinError> {
         #[derive(Deserialize)]
         struct Response {
-            #[serde(rename = "Items", default)]
+            #[serde(rename = "Items", default, deserialize_with = "null_default")]
             items: Vec<MediaItem>,
             #[serde(rename = "TotalRecordCount")]
             total: Option<i32>,
@@ -1375,7 +1692,7 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
     pub async fn playback_info(&self, id: &str) -> Result<PlaybackInfo, JellyfinError> {
         #[derive(Deserialize)]
         struct Response {
-            #[serde(rename = "MediaSources")]
+            #[serde(rename = "MediaSources", default, deserialize_with = "null_default")]
             media_sources: Vec<PlaybackSource>,
             #[serde(rename = "PlaySessionId")]
             play_session_id: Option<String>,
@@ -1482,6 +1799,137 @@ pub fn classify_http_error(error: &JellyfinError) -> ErrorCategory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn nullable_item_identity_and_state_follow_native_defaults() {
+        let missing:MediaItem=serde_json::from_value(serde_json::json!({"Id":null,"Name":null,"Type":"Movie","Genres":null,"People":null,"UserData":null})).unwrap();
+        assert_eq!(missing.id, missing_item_id(None, Some("Movie")));
+        assert_eq!(missing.name, "未命名");
+        let wire = serde_json::to_value(&missing).unwrap();
+        assert!(wire["playState"].is_null());
+        assert_eq!(wire["genres"], serde_json::json!([]));
+        let partial:MediaItem=serde_json::from_value(serde_json::json!({"Id":"","Name":"","Type":null,"UserData":{"Played":null,"PlaybackPositionTicks":null,"PlayedPercentage":null}})).unwrap();
+        assert_eq!(partial.id, "");
+        assert_eq!(partial.name, "");
+        let wire = serde_json::to_value(partial).unwrap();
+        assert_eq!(wire["kind"], "other");
+        assert_eq!(wire["playState"]["positionSeconds"], 0.0);
+        assert_eq!(wire["playState"]["played"], false);
+    }
+    #[test]
+    fn nullable_people_filter_partial_entries_and_default_actor_kind() {
+        let item:MediaItem=serde_json::from_value(serde_json::json!({"Id":"item","Name":"片","Type":"Movie","People":[{"Id":null,"Name":"skip"},{"Id":"skip","Name":null},{"Id":"actor","Name":"演员","Type":null,"Role":"角色"}]})).unwrap();
+        assert_eq!(item.cast.len(), 1);
+        assert_eq!(item.cast[0].id, "actor");
+        assert_eq!(item.cast[0].kind, "Actor");
+        assert_eq!(item.cast[0].role.as_deref(), Some("角色"));
+    }
+    #[test]
+    fn hierarchy_images_and_season_identity_preserve_native_rules() {
+        for kind in ["Movie", "Episode", "Season"] {
+            let item:MediaItem=serde_json::from_value(serde_json::json!({"Id":"item","Name":"片","Type":kind,"IndexNumber":3,"ParentIndexNumber":99,"SeasonId":"parent","SeasonName":"parent-name","ImageTags":{},"AlbumPrimaryImageTag":"album","SeriesPrimaryImageTag":"series","BackdropImageTags":["backdrop"],"ParentLogoImageTag":"logo","ParentLogoItemId":"parent-logo","ParentBackdropImageTags":["parent-backdrop"]})).unwrap();
+            let wire = serde_json::to_value(item).unwrap();
+            assert_eq!(wire["backdropImageTag"], "backdrop");
+            assert_eq!(wire["logoImageTag"], "logo");
+            assert_eq!(wire["parentLogoItemID"], "parent-logo");
+            assert_eq!(wire["parentBackdropImageTag"], "parent-backdrop");
+            if kind == "Episode" {
+                assert!(wire["primaryImageTag"].is_null());
+            } else {
+                assert_eq!(wire["primaryImageTag"], "album");
+            }
+            if kind == "Season" {
+                assert_eq!(wire["seasonID"], "item");
+                assert_eq!(wire["seasonName"], "片");
+                assert_eq!(wire["seasonNumber"], 3);
+                assert!(wire["episodeNumber"].is_null());
+            }
+        }
+    }
+    #[test]
+    fn provider_aliases_do_not_confuse_tvdb_with_mal() {
+        for (provider, mal) in [
+            (
+                serde_json::json!({"Tmdb":"1","Mal":"2","AniList":"3","Tvdb":"wrong"}),
+                Some("2"),
+            ),
+            (
+                serde_json::json!({"tmdb":"1","MyAnimeList":"2","anilist":"3"}),
+                Some("2"),
+            ),
+            (
+                serde_json::json!({"tmdb":"1","mal":"2","anilist":"3"}),
+                Some("2"),
+            ),
+            (
+                serde_json::json!({"Tmdb":"1","Tvdb":"wrong","AniList":"3"}),
+                None,
+            ),
+        ] {
+            let item: MediaItem = serde_json::from_value(
+                serde_json::json!({"Id":"item","Name":"片","Type":"Movie","ProviderIds":provider}),
+            )
+            .unwrap();
+            let wire = serde_json::to_value(item).unwrap();
+            assert_eq!(wire["tmdbID"], "1");
+            assert_eq!(wire["anilistID"], "3");
+            assert_eq!(wire["malID"].as_str(), mal);
+        }
+    }
+    #[test]
+    fn nullable_containers_keep_nonnull_type_validation() {
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({"Items":null}),
+            serde_json::json!({"Items":[]}),
+        ] {
+            assert!(serde_json::from_value::<ItemResult<MediaItem>>(value)
+                .unwrap()
+                .items
+                .is_empty());
+        }
+        assert!(
+            serde_json::from_value::<ItemResult<MediaItem>>(serde_json::json!({"Items":1}))
+                .is_err()
+        );
+        for (field, value) in [
+            ("Genres", serde_json::json!(1)),
+            ("People", serde_json::json!("bad")),
+            ("ImageTags", serde_json::json!({"Primary":1})),
+            ("BackdropImageTags", serde_json::json!([1])),
+            ("ProviderIds", serde_json::json!({"Tmdb":1})),
+        ] {
+            let mut item = serde_json::json!({"Id":"item","Name":"片","Type":"Movie"});
+            item[field] = value;
+            assert!(
+                serde_json::from_value::<MediaItem>(item).is_err(),
+                "{field}"
+            );
+        }
+    }
+    #[test]
+    fn null_streams_and_library_fields_preserve_valid_source_data() {
+        for source in [
+            serde_json::json!({"Id":"source","Size":i64::MAX,"MediaStreams":null}),
+            serde_json::json!({"Id":"source","Size":i64::MAX}),
+        ] {
+            let source: PlaybackSource = serde_json::from_value(source).unwrap();
+            assert!(source.media_streams.is_empty());
+            assert_eq!(source.size, Some(i64::MAX));
+        }
+        assert!(
+            serde_json::from_value::<PlaybackSource>(serde_json::json!({"MediaStreams":1}))
+                .is_err()
+        );
+        let library: MediaLibrary = serde_json::from_value(
+            serde_json::json!({"Id":null,"Name":null,"CollectionType":"BoxSets","ImageTags":null}),
+        )
+        .unwrap();
+        let wire = serde_json::to_value(library).unwrap();
+        assert!(wire["id"].is_null());
+        assert_eq!(wire["name"], "");
+        assert_eq!(wire["collectionType"], "boxsets");
+    }
+
     #[test]
     fn playback_source_preserves_stream_metadata_and_first_video_range() {
         let source: PlaybackSource = serde_json::from_value(serde_json::json!({

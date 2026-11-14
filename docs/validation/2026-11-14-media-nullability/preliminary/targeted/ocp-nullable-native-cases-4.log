@@ -1,0 +1,39 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 4 / 47]
+[3 / 12]
+[4 / 12] JellyfinKit
+[5 / 13] JellyfinKit
+[10 / 16] JellyfinKit
+[13 / 16] JellyfinKitTests-product
+[15 / 18] JellyfinKitTests-product
+[22 / 24] JellyfinKitTests-product
+[24 / 24] JellyfinKitTests-product
+Build complete! (4.36秒)
+Test Suite 'Selected tests' started at 2026-11-14 14:52:08.844.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 14:52:08.844.
+Test Suite 'MediaNullableHTTPTests' started at 2026-11-14 14:52:08.844.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' passed (2.282 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' passed (0.550 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' passed (0.941 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' passed (1.416 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaNullableHTTPTests.swift:138: error: -[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative] : failed - Unexpected segments success
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' failed (3.900 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' passed (0.275 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' passed (1.975 seconds).
+Test Suite 'MediaNullableHTTPTests' failed at 2026-11-14 14:52:20.185.
+	 Executed 7 tests, with 1 failure (0 unexpected) in 11.340 (11.341) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 14:52:20.185.
+	 Executed 7 tests, with 1 failure (0 unexpected) in 11.340 (11.341) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 14:52:20.185.
+	 Executed 7 tests, with 1 failure (0 unexpected) in 11.340 (11.342) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)
