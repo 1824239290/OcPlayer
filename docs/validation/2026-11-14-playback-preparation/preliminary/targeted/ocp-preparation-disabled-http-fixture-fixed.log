@@ -1,0 +1,27 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 45 / 47]
+[3 / 10] CNIOPosix
+[7 / 16] JellyfinKitTests-product
+[9 / 18] JellyfinKitTests-product
+[14 / 16] JellyfinKitTests-product
+[16 / 16] JellyfinKitTests-product
+Build complete! (2.41秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:28:51.997.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:28:51.998.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:28:51.998.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' passed (0.155 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyEpisodeEndpointSortingAndContinuationWindow]' passed (0.140 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' passed (0.142 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' started.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinEpisodeEndpointSortingAndContinuationWindow]' passed (0.143 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' passed at 2026-11-14 13:28:52.578.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.579 (0.580) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 13:28:52.578.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.579 (0.580) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 13:28:52.579.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.579 (0.581) seconds

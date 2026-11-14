@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/tmp/ocp-preparation-check.py", line 94, in <module>
+    assert summary['disabledAppPreparationTests'] == dict(executed=18,passed=17,skipped=1,failures=0)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

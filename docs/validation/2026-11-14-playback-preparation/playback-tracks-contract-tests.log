@@ -1,0 +1,12 @@
+test_batches_reject_stale_end_and_suppress_only_automatic_work (__main__.TrackContract.test_batches_reject_stale_end_and_suppress_only_automatic_work) ... ok
+test_import_uses_unique_effect_receipts_and_records_name_before_selected_failure (__main__.TrackContract.test_import_uses_unique_effect_receipts_and_records_name_before_selected_failure) ... ok
+test_invalid_payloads_and_unremovable_tracks_leave_state_unchanged (__main__.TrackContract.test_invalid_payloads_and_unremovable_tracks_leave_state_unchanged) ... ok
+test_manual_and_removal_commit_only_after_engine_success (__main__.TrackContract.test_manual_and_removal_commit_only_after_engine_success) ... ok
+test_reset_retires_old_receipt_and_pending_refresh_does_not_replace_effect (__main__.TrackContract.test_reset_retires_old_receipt_and_pending_refresh_does_not_replace_effect) ... ok
+test_same_numeric_id_in_different_track_kinds_is_valid (__main__.TrackContract.test_same_numeric_id_in_different_track_kinds_is_valid) ... ok
+test_selection_field_trust_external_default_and_unknown_language (__main__.TrackContract.test_selection_field_trust_external_default_and_unknown_language) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.006s
+
+OK

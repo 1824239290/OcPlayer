@@ -1,0 +1,100 @@
+   Compiling ocp-session v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-session)
+   Compiling ocp-jellyfin v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-jellyfin)
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.28s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-19a0ffd2a926d0a6)
+
+running 21 tests
+test events::tests::coalescing_preserves_control_order_and_separates_search_requests ... ok
+test tests::creates_core_and_emits_ready_event ... ok
+test network::tests::owned_executor_runs_and_destroys_inside_async_host ... ok
+test network::tests::retired_login_cannot_repopulate_cookie_cache ... ok
+test events::tests::overflow_prefers_controls_and_retains_latest_errors ... ok
+test tests::event_sequence_is_monotonic ... ok
+test tests::invalid_transitions_and_values_return_error_envelopes ... ok
+test tests::ping_is_json_response ... ok
+test tests::network_commands_validate_before_requesting ... ok
+test tests::bangumi_rejects_invalid_pagination_and_types_before_network ... ok
+test tests::playback_argument_errors_do_not_mutate_session_and_ready_can_pause ... ok
+test tests::endpoint_contract_rejects_bad_arguments_without_changing_policy ... ok
+test tests::prepared_cancellation_prevents_dispatch_and_releases_request_id ... ok
+test tests::playback_commands_update_state_and_snapshot ... ok
+test tests::playback_settings_survive_timeline_and_lifecycle_updates ... ok
+test tests::shared_cache_survives_locale_settings_and_reports_validation_errors ... ok
+test tests::diagnostics_and_config_commands_are_versioned_and_redacted ... ok
+test tests::persists_progress_when_data_directory_is_configured ... ok
+test tests::cancellation_drops_in_flight_future ... ok
+test events::tests::bytes_are_bounded_and_oversized_update_preserves_last_usable_projection ... ok
+test tests::unattended_render_and_position_updates_remain_bounded_and_observable ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_jellyfin-35ae50e2e453040a)
+
+running 11 tests
+test tests::authentication_requires_credentials_but_ignores_unrelated_field_types ... ok
+test tests::decodes_library_and_played_history_wire_models ... ok
+test tests::decodes_server_wire_casing_and_nested_user_data ... ok
+test tests::preserves_server_base_path_when_building_endpoint ... ok
+test tests::builds_auth_free_urls ... ok
+test endpoint::tests::invalidation_and_profile_sync_reject_in_flight_results ... ok
+test endpoint::tests::unreachable_cooldown_pinning_and_stale_failures ... ok
+test tests::quick_connect_requires_true_and_nonempty_secret ... ok
+test endpoint::tests::normalized_duplicates_and_bad_input_are_handled_before_mutation ... ok
+test tests::serializes_swift_domain_casing_and_play_state ... ok
+test endpoint::tests::selection_stickiness_identity_and_soft_cache ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_session-43f19c7ac61dff9b)
+
+running 28 tests
+test engine::tests::nil_and_empty_messages_share_the_native_deduplication_key ... ok
+test engine::tests::new_source_rejects_previous_generation_and_resets_failure_history ... ok
+test engine::tests::foreground_requires_intent_and_current_state_before_rebuilding ... ok
+test engine::tests::only_tail_read_eio_is_folded ... ok
+test engine::tests::stale_tail_pair_folds_once_and_real_error_is_preserved ... ok
+test flow::tests::all_candidates_exhausted_explains_chain_but_single_source_keeps_original_error ... ok
+test flow::tests::cancellation_or_new_play_invalidates_queued_adoption ... ok
+test flow::tests::chain_preserves_identity_history_and_limits_across_replacements ... ok
+test flow::tests::classifier_preserves_native_priority_and_capabilities ... ok
+test flow::tests::recovery_stops_for_auth_cancel_missing_item_and_missing_context ... ok
+test preparation::tests::collection_series_reads_home_then_uses_new_item_position_and_exact_title ... ok
+test preparation::tests::empty_result_and_same_id_resume_match_native_fallback ... ok
+test preparation::tests::episodes_filter_specials_and_choose_first_unwatched_without_reordering ... ok
+test report::tests::pause_reports_once_then_resuming_restores_periodic_reporting ... ok
+test preparation::tests::wrong_receipts_and_responses_are_nonconsuming_and_invalidation_retires_ready ... ok
+test preparation::tests::full_source_order_skips_only_bad_alternate_and_preserves_identity ... ok
+test preparation::tests::info_and_primary_failures_use_direct_fallback_and_original_failure ... ok
+test report::tests::terminal_requires_clean_stopped_and_known_duration ... ok
+test tests::engine_unknown_duration_preserves_timeline_and_clears_previous_clamp ... ok
+test tests::failed_candidate_advances_and_generation_changes ... ok
+test tracks::tests::external_fallback_and_off_are_preserved ... ok
+test tracks::tests::import_commits_name_before_selection_and_failure_keeps_gate_open ... ok
+test tracks::tests::reentrant_refresh_cannot_replace_pending_effect ... ok
+test tracks::tests::removal_unlocks_manual_only_after_success_and_selected_removal ... ok
+test tracks::tests::reset_and_batches_retire_old_work_without_consuming_current ... ok
+test tracks::tests::track_ids_are_scoped_to_kind ... ok
+test preparation::tests::bounds_and_exhaustion_fail_before_mutation_and_explicit_cleanup_works ... ok
+test tracks::tests::scoring_respects_field_trust_and_ties ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests ocp_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_jellyfin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests ocp_session
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

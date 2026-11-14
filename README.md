@@ -24,6 +24,10 @@ progress, and versioned configuration/diagnostic export. `replay` accepts one
 JSON command per line (`{"method":"...","arguments":{...}}`) and prints each
 response followed by the final snapshot on stderr.
 
+Playback leaf resolution, primary/alternate source negotiation, resume/title and
+direct fallback now use retained preparation leases; see
+[`docs/playback-preparation-contract.md`](docs/playback-preparation-contract.md).
+
 Playback track preference, manual selection, import/sidecar loading, removal and
 identified subtitle batches now use retained decoder effects; see
 [`docs/playback-tracks-contract.md`](docs/playback-tracks-contract.md).

@@ -15,6 +15,7 @@ Scripts/build-apple-dylib.sh "$output_dir" > "$output_dir/rust-build.log" 2>&1
 export OCP_CORE_LIBRARY_PATH="$output_dir/libocp_ffi.dylib"
 export OCP_CORE_ENABLED=1
 Scripts/check-apple-binding.sh "$apple_root" > "$output_dir/apple-binding-equivalence.log" 2>&1
+cmp tests/playback_preparation_server.py "$apple_root/Packages/JellyfinKit/Tests/JellyfinKitTests/Fixtures/playback_preparation_server.py" > "$output_dir/playback-preparation-fixture-equivalence.log" 2>&1
 cmp tests/intro_provider_server.py "$apple_root/Packages/DanmakuKit/Tests/DanmakuKitTests/Fixtures/intro_provider_server.py" > "$output_dir/intro-provider-fixture-equivalence.log" 2>&1
 cmp tests/standalone_danmaku_server.py "$apple_root/Packages/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/standalone_danmaku_server.py" > "$output_dir/standalone-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_wire_server.py bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTests/Fixtures/tmdb_wire_server.py > "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
@@ -24,6 +25,7 @@ swift test --package-path bindings/apple/OcPlayerCore --scratch-path "$output_di
 python3 tests/bangumi_progress_contract.py > "$output_dir/bangumi-progress-contract-tests.log" 2>&1
 python3 tests/bangumi_auth_flow_contract.py > "$output_dir/bangumi-auth-flow-contract-tests.log" 2>&1
 python3 tests/playback_tracks_contract.py > "$output_dir/playback-tracks-contract-tests.log" 2>&1
+python3 tests/playback_preparation_contract.py > "$output_dir/playback-preparation-contract-tests.log" 2>&1
 python3 tests/bangumi_sync_contract.py > "$output_dir/bangumi-sync-contract-tests.log" 2>&1
 python3 tests/bangumi_account_contract.py > "$output_dir/bangumi-account-contract-tests.log" 2>&1
 python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&1

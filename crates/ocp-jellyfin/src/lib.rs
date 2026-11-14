@@ -406,7 +406,13 @@ impl Serialize for PlaybackSource {
             "runTimeSeconds",
             &self.run_time_ticks.map(|ticks| ticks as f64 / 10_000_000.0),
         )?;
-        value.serialize_field("videoRangeType", &self.video_range_type)?;
+        let video_range_type = self
+            .media_streams
+            .iter()
+            .find(|stream| stream.kind.as_deref() == Some("Video"))
+            .and_then(|stream| stream.video_range_type.as_ref())
+            .or(self.video_range_type.as_ref());
+        value.serialize_field("videoRangeType", &video_range_type)?;
         value.serialize_field("mediaStreams", &self.media_streams)?;
         value.end()
     }
@@ -415,14 +421,25 @@ impl Serialize for PlaybackSource {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaStream {
+    #[serde(alias = "Index")]
     pub index: Option<i32>,
     #[serde(rename = "Type", alias = "type")]
     pub kind: Option<String>,
+    #[serde(alias = "Language")]
     pub language: Option<String>,
+    #[serde(alias = "DisplayTitle")]
     pub display_title: Option<String>,
+    #[serde(alias = "Codec")]
     pub codec: Option<String>,
+    #[serde(alias = "IsForced")]
     pub is_forced: Option<bool>,
+    #[serde(alias = "IsDefault")]
     pub is_default: Option<bool>,
+    #[serde(alias = "VideoRangeType")]
+    pub video_range_type: Option<String>,
+    // Preserve server stream metadata that native file-info adapters consume.
+    #[serde(flatten)]
+    pub fields: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1298,6 +1315,63 @@ impl<T: ocp_http::HttpTransport> MediaServerClient<T> {
             total_record_count: response.total,
         })
     }
+    /// Native episode endpoints cross season containers; continuation windows
+    /// preserve server order while complete lists use the native season/episode sort.
+    pub async fn episodes(
+        &self,
+        series_id: &str,
+        season_id: Option<&str>,
+        start_item_id: Option<&str>,
+        start_index: Option<i32>,
+        limit: Option<i32>,
+    ) -> Result<Vec<MediaItem>, JellyfinError> {
+        #[derive(Deserialize)]
+        struct Response {
+            #[serde(rename = "Items")]
+            items: Option<Vec<MediaItem>>,
+        }
+        let mut query = vec![
+            ("enableImages", "true".to_owned()),
+            ("enableImageTypes", "Primary,Thumb,Logo".to_owned()),
+            ("enableUserData", "true".to_owned()),
+            ("sortBy", "IndexNumber".to_owned()),
+        ];
+        if let Some(user_id) = &self.profile.user_id {
+            query.push(("userId", user_id.clone()));
+        }
+        if let Some(season_id) = season_id {
+            query.push(("seasonId", season_id.to_owned()));
+        }
+        if let Some(start) = start_item_id {
+            query.push(("startItemId", start.to_owned()));
+        }
+        if let Some(start) = start_index {
+            query.push(("startIndex", start.max(0).to_string()));
+        }
+        if let Some(limit) = limit {
+            query.push(("limit", limit.max(1).to_string()));
+        }
+        let response: Response = self
+            .get(&format!("Shows/{series_id}/Episodes"), query)
+            .await?;
+        let mut items = response.items.unwrap_or_default();
+        if start_item_id.is_none() {
+            items.sort_by(|a, b| {
+                (
+                    a.season_number.map(i64::from).unwrap_or(i64::MAX),
+                    a.index_number.map(i64::from).unwrap_or(i64::MAX),
+                    &a.id,
+                )
+                    .cmp(&(
+                        b.season_number.map(i64::from).unwrap_or(i64::MAX),
+                        b.index_number.map(i64::from).unwrap_or(i64::MAX),
+                        &b.id,
+                    ))
+            });
+        }
+        Ok(items)
+    }
+
     pub async fn playback_info(&self, id: &str) -> Result<PlaybackInfo, JellyfinError> {
         #[derive(Deserialize)]
         struct Response {
@@ -1408,6 +1482,35 @@ pub fn classify_http_error(error: &JellyfinError) -> ErrorCategory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn playback_source_preserves_stream_metadata_and_first_video_range() {
+        let source: PlaybackSource = serde_json::from_value(serde_json::json!({
+            "Id":"source", "VideoRangeType":"SDR", "Size":i64::MAX,
+            "MediaStreams":[
+                {"Type":"Audio","VideoRangeType":"wrong","Channels":8},
+                {"Type":"Video","VideoRangeType":"DOVIWithHDR10","Codec":"hevc",
+                 "Width":3840,"AverageFrameRate":23.976,"IsDefault":true,"Index":2},
+                {"Type":"Video","VideoRangeType":"HDR10"}
+            ]
+        }))
+        .unwrap();
+        let wire = serde_json::to_value(&source).unwrap();
+        assert_eq!(wire["videoRangeType"], "DOVIWithHDR10");
+        assert_eq!(wire["size"], i64::MAX);
+        assert_eq!(wire["mediaStreams"][0]["Channels"], 8);
+        assert_eq!(wire["mediaStreams"][1]["Width"], 3840);
+        assert_eq!(wire["mediaStreams"][1]["AverageFrameRate"], 23.976);
+        assert_eq!(wire["mediaStreams"][1]["codec"], "hevc");
+        assert_eq!(wire["mediaStreams"][1]["index"], 2);
+        assert_eq!(wire["mediaStreams"][1]["isDefault"], true);
+        let fallback: PlaybackSource =
+            serde_json::from_value(serde_json::json!({"VideoRangeType":"HDR10"})).unwrap();
+        assert_eq!(
+            serde_json::to_value(fallback).unwrap()["videoRangeType"],
+            "HDR10"
+        );
+    }
+
     #[test]
     fn authentication_requires_credentials_but_ignores_unrelated_field_types() {
         let result = LoginResult::parse(serde_json::json!({"AccessToken":"t", "User":{"Id":"u", "Name":5,"PrimaryImageTag":[],"Policy":false}})).unwrap();

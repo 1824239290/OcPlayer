@@ -1,0 +1,32 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 45 / 47]
+[1 / 5]
+[2 / 6] JellyfinKit
+[3 / 7] JellyfinKit
+[7 / 10] JellyfinKit
+[10 / 11] JellyfinKitTests-product
+[12 / 12] JellyfinKitTests-product
+Build complete! (3.03秒)
+Test Suite 'Selected tests' started at 2026-11-14 13:13:43.132.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 13:13:43.133.
+Test Suite 'PlaybackPreparationHTTPTests' started at 2026-11-14 13:13:43.133.
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("HDR10")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testEmbyCompletePreparationOverRealHTTP]' failed (0.790 seconds).
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:42: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("HDR10")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("direct")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/PlaybackPreparationHTTPTests.swift:46: error: -[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("native-session")")
+Test Case '-[JellyfinKitTests.PlaybackPreparationHTTPTests testJellyfinCompletePreparationOverRealHTTP]' failed (0.150 seconds).
+Test Suite 'PlaybackPreparationHTTPTests' failed at 2026-11-14 13:13:44.073.
+	 Executed 2 tests, with 6 failures (0 unexpected) in 0.940 (0.940) seconds
+Test Suite 'JellyfinKitTests.xctest' failed at 2026-11-14 13:13:44.073.
+	 Executed 2 tests, with 6 failures (0 unexpected) in 0.940 (0.940) seconds
+Test Suite 'Selected tests' failed at 2026-11-14 13:13:44.073.
+	 Executed 2 tests, with 6 failures (0 unexpected) in 0.940 (0.941) seconds
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)

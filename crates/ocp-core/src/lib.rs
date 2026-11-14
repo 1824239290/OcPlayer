@@ -46,6 +46,7 @@ struct State {
     session: PlaybackSession,
     playback_flow: ocp_session::flow::PlaybackFlow,
     playback_tracks: ocp_session::tracks::TrackFlow,
+    playback_preparation: ocp_session::preparation::Directory,
     engine_events: ocp_session::engine::EngineEvents,
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
@@ -144,6 +145,7 @@ impl Core {
                 session: PlaybackSession::new(2),
                 playback_flow: Default::default(),
                 playback_tracks: Default::default(),
+                playback_preparation: Default::default(),
                 engine_events: Default::default(),
                 store,
                 bangumi_store: None,
@@ -443,6 +445,21 @@ impl Core {
                 match call_playback_events(&mut state, method, &arguments) {
                     Ok(data) => ApiResponse::ok(data),
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
+            method if method.starts_with("playbackPreparation.") => {
+                match call_playback_preparation(&mut state, method, &arguments) {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(
+                        if message.ends_with("retired") {
+                            1003
+                        } else {
+                            1002
+                        },
+                        false,
+                        message,
+                        Value::Null,
+                    ),
                 }
             }
             method if method.starts_with("playbackTracks.") => {
@@ -2123,16 +2140,11 @@ fn run_server_command(
                 }
                 "browse.episodes" => {
                     let series_id = required_str(&arguments, "seriesId")?;
-                    let parent_id = arguments.get("seasonId").and_then(Value::as_str).unwrap_or(series_id);
-                    let query = ocp_jellyfin::ItemsQuery {
-                        parent_id: Some(parent_id.to_owned()),
-                        kinds: Some(vec!["episode".into()]),
-                        recursive: false,
-                        start_index: arguments.get("startIndex").and_then(Value::as_i64).unwrap_or(0).max(0) as i32,
-                        limit: arguments.get("limit").and_then(Value::as_i64).unwrap_or(500).clamp(1, 500) as i32,
-                        ..Default::default()
-                    };
-                    Ok(encode_value(client.items_page_filtered(&query).await?.items)? )
+                    let season_id = arguments.get("seasonId").and_then(Value::as_str);
+                    let start_item_id = arguments.get("startItemId").and_then(Value::as_str);
+                    let start_index = arguments.get("startIndex").and_then(Value::as_i64).map(|v|v.clamp(0,i32::MAX as i64) as i32);
+                    let limit = arguments.get("limit").and_then(Value::as_i64).map(|v|v.clamp(1,i32::MAX as i64) as i32);
+                    Ok(encode_value(client.episodes(series_id,season_id,start_item_id,start_index,limit).await?)?)
                 }
                 "browse.similar" => {
                     let id = required_str(&arguments, "itemId")?;
@@ -3483,6 +3495,72 @@ fn call_playback_tracks(state: &mut State, method: &str, args: &Value) -> Result
             Ok(json!(state
                 .playback_tracks
                 .complete(id, success, track_id)?))
+        }
+        _ => Err(format!("unknown method: {method}")),
+    }
+}
+
+fn call_playback_preparation(
+    state: &mut State,
+    method: &str,
+    args: &Value,
+) -> Result<Value, String> {
+    let token = || {
+        args.get("token")
+            .and_then(Value::as_u64)
+            .ok_or("token is required")
+    };
+    let sequence = || {
+        args.get("sequence")
+            .and_then(Value::as_u64)
+            .ok_or("sequence is required")
+    };
+    match method {
+        "playbackPreparation.start" => {
+            let request = serde_json::from_value(args.clone()).map_err(|e| e.to_string())?;
+            Ok(json!(state.playback_preparation.start(request)?))
+        }
+        "playbackPreparation.resume" => Ok(json!(state.playback_preparation.resume(
+            token()?,
+            sequence()?,
+            args.get("response")
+                .cloned()
+                .ok_or("response is required")?
+        )?)),
+        "playbackPreparation.fail" => {
+            let message = args
+                .get("message")
+                .and_then(Value::as_str)
+                .ok_or("message is required")?;
+            let cancelled = args
+                .get("cancelled")
+                .and_then(Value::as_bool)
+                .ok_or("cancelled is required")?;
+            Ok(json!(state.playback_preparation.fail(
+                token()?,
+                sequence()?,
+                message.into(),
+                cancelled
+            )?))
+        }
+        "playbackPreparation.validate" => {
+            state.playback_preparation.validate(token()?, sequence()?)?;
+            Ok(json!({"valid":true}))
+        }
+        "playbackPreparation.cancel" => {
+            Ok(json!({"cancelled":state.playback_preparation.cancel(token()?)}))
+        }
+        "playbackPreparation.invalidate" => {
+            state.playback_preparation.invalidate();
+            Ok(json!({"active":0}))
+        }
+        "playbackPreparation.stats" => Ok(json!({"active":state.playback_preparation.active()})),
+        "playbackPreparation.preferredSource" => {
+            let sources: Vec<ocp_session::preparation::Source> =
+                serde_json::from_value(args.get("sources").cloned().ok_or("sources is required")?)
+                    .map_err(|e| e.to_string())?;
+            ocp_session::preparation::validate_sources(&sources)?;
+            Ok(json!({"index":ocp_session::preparation::preferred_source(&sources)}))
         }
         _ => Err(format!("unknown method: {method}")),
     }
