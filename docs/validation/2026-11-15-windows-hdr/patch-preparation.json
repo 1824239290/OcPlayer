@@ -1,0 +1,22 @@
+{
+  "kernelBase": "d9334c6f8dcc87d4131d056ef4692f643b231c6c",
+  "patchSha256": "7977251830F397281C9983154B32A2FB6AEC95689BD5A7616E9CDEF4F15E54A6",
+  "scriptSyntaxValid": true,
+  "patchAppliedToCleanBase": true,
+  "changedFiles": [
+    {
+      "path": "crates/erika/Cargo.toml",
+      "matchesAfterLineEndingNormalization": true
+    },
+    {
+      "path": "crates/erika/src/renderer/d3d11.rs",
+      "matchesAfterLineEndingNormalization": true
+    },
+    {
+      "path": "examples/windows_native_demo/src/main.rs",
+      "matchesAfterLineEndingNormalization": true
+    }
+  ],
+  "appleRendererAndSharedPipelineUnchanged": true,
+  "reviewedBinarySha256": "AE6913CB882992C0FFCE9CB9AFFFF9847CEE7C30B1C3FF03A81AF4ED5BCAF46F"
+}

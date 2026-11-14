@@ -1,0 +1,4 @@
+{"activeBackend":"d3d11va","codec":"hevc","event":"video_decoder_changed","fallbackCount":0,"lineSizes":null,"pixelFormat":null,"previousBackend":null,"reason":null,"requestedBackend":"d3d11va","stage":"open"}
+{"event":"d3d11_display_luminance","hdrActive":false,"hdrPeakKnown":false,"hdrPeakNits":1000.0,"mapping":"sdr_bt2446a_hdr_bt2390_max_rgb","reportedFullFrameNits":270.0,"reportedMaxNits":270.0,"sdrPolicy":"standard_100_nit_reference","sdrWhiteKnown":false,"sdrWhiteNits":100.0}
+{"bitsPerColor":10,"colorSpace":0,"displayName":"\\\\.\\DISPLAY1","event":"d3d11_display_output","hdrActive":false,"reportedFullFrameNits":270.0,"reportedMaxNits":270.0}
+{"event":"d3d11_video_color","fullRange":0,"lumaCoefficients":[0.26269999146461487,0.6779999732971191,0.059300001710653305,0.0],"nits":[1000.0,100.0,203.0,100.0],"sourceTransfer":3,"targetTransfer":1,"toneMap":4}
