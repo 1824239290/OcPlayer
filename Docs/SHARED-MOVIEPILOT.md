@@ -26,6 +26,16 @@ Existing Core authentication fixtures verify real HTTP concurrency, raw/named
 expiry sharing, cookies, malformed/rejected refresh and notifications.
 
 The account ABI is documented in OcPlayer-Core's
-`docs/moviepilot-account-contract.md`. The native outer raw-request retry/auth
-loop and named-command replay still remain for the next retained-flow migration;
-this change does not complete all MoviePilot/project acceptance requirements.
+`docs/moviepilot-account-contract.md`. The selected actor's outer raw-request
+retry/auth loop and named-command replay now run in `moviepilotFlow.*`, documented
+in `docs/moviepilot-flow-contract.md`. Core owns method idempotence, retry budgets,
+backoff/jitter bounds, token reuse vs shared refresh, single auth replay and
+failure termination. The actor retains bytes/errors, sampling/sleep and
+transport/account effects. Account begin/logout and configuration commits retire
+pending flows; transparent refresh preserves them at its unchanged revision.
+
+`RustMoviePilotFlowTests` verifies real HTTP counts, post-refresh retry budget,
+named transport-only retry, refresh failure preserving the token without outer
+retry and logout during pending backoff. Typed login/current-user decoding also
+preserves integer identities above 2^53. Broader live-account, playback/transport,
+settings and release acceptance remains.

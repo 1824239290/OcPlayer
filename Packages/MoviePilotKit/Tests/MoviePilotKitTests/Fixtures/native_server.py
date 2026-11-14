@@ -49,7 +49,11 @@ class Handler(BaseHTTPRequestHandler):
             if token == 'user:cookie' and 'Login=issued' not in self.headers.get('Cookie', ''):
                 return self.respond({'message': 'login cookie missing'}, 401)
             name = token.removeprefix('user:') if token.startswith('user:') else 'native'
-            return self.respond({'name': name, 'is_superuser': True, 'is_active': True}, headers={'Set-Cookie': 'MoviePilot=fixture; Path=/'})
+            user = {'name': name, 'is_superuser': True, 'is_active': True}
+            if name == 'large-id':
+                user['id'] = 9007199254741007
+                user.update(email='native@example.invalid', avatar='/avatars/large.png', is_superuser=False, is_active=False)
+            return self.respond(user, headers={'Set-Cookie': 'MoviePilot=fixture; Path=/'})
         if '/raw/' in path:
             query = parse_qs(urlsplit(self.path).query)
             if path.endswith('/slow'):
@@ -68,6 +72,9 @@ class Handler(BaseHTTPRequestHandler):
             if path.endswith('/flaky'):
                 seen = sum(r['path'] == self.path for r in self.requests)
                 status = 503 if seen < 3 else 200
+            if path.endswith('/auth-flaky'):
+                seen = sum(r['path'] == self.path and r['authorization'] == 'Bearer fresh' for r in self.requests)
+                status = 503 if seen < 3 else 200
             return self.respond({'success': status < 400, 'message': query.get('message', ['wire message'])[0], 'data': {'zero': 0, 'flag': False}}, status)
         if path.endswith('/media/search'):
             title = parse_qs(urlsplit(self.path).query).get('title', [''])[0]
@@ -77,6 +84,10 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(2)
             if title == 'malformed':
                 return self.respond({'success': True, 'data': [True]})
+            if title == 'named-flaky':
+                seen = sum(r['path'] == self.path and r['authorization'] == 'Bearer fresh' for r in self.requests)
+                if seen < 3:
+                    return self.respond({'message': 'gateway busy'}, 503)
             return self.respond({'success': True, 'data': [{'title': title, 'tmdb_id': 1, 'enabled': False, 'unknown_field': {'zero': 0}}]})
         if path.endswith('/search/title/stream'):
             if 'MoviePilot=fixture' not in self.headers.get('Cookie', ''):
@@ -116,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(1.2)
             if user == 'reject':
                 return self.respond({'detail': 'wrong password'}, 400)
+            if user == 'offline':
+                return self.respond({'message': 'login gateway busy'}, 503)
             if user == 'retry':
                 count = sum(r.get('body') == raw.decode() for r in self.requests)
                 if count < 3:

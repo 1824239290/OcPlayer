@@ -166,6 +166,7 @@ public actor MoviePilotAPIClient {
     private var rustCore: OcpCoreClient?
     private var rustAccount: RustMoviePilotAccount?
     var usesCoreTransport: Bool { rustCore != nil }
+    var activeCoreRequestFlows: UInt64 { rustCore.map { RustMoviePilotFlow($0).activeCount } ?? 0 }
     private var rustRequests: Set<String> = []
     private var rustEventHandlers: [String: (RequestContext, @Sendable (OcpEvent) -> Void)] = [:]
     private var rustEventPoller: Task<Void, Never>?
@@ -195,8 +196,8 @@ public actor MoviePilotAPIClient {
         store: MoviePilotStore = .shared,
         sessionConfiguration: URLSessionConfiguration = .default,
         rustCoreLibraryPath: String? = nil,
-        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) },
-        credentialCommit: (@Sendable (String, String, String, String, UInt64) async -> Bool)? = nil
+        credentialCommit: (@Sendable (String, String, String, String, UInt64) async -> Bool)? = nil,
+        retrySleep: @escaping @Sendable (UInt64) async throws -> Void = { try await Task.sleep(nanoseconds: $0) }
     ) {
         self.store = store
         self.rustCoreLibraryPath = rustCoreLibraryPath
@@ -352,11 +353,8 @@ public actor MoviePilotAPIClient {
     @discardableResult
     public func currentUser() async throws -> MPUser {
         if let response = try await rustCoreCall("moviepilot.currentUser") {
-            let object = try response.data.decode([String: JSONValue].self)
-            guard let user = object["user"] else {
-                throw MoviePilotError.generic("Rust Core 返回的当前用户为空")
-            }
-            return try Self.decoder.decode(MPUser.self, from: user.encodedData())
+            struct UserResponse: Decodable { var user: RustUser }
+            return try response.decodeData(UserResponse.self).user.value
         }
         let data = MPEnvelope.unwrap(
             try await requestData(MPRequest(path: "/api/v1/user/current")))
@@ -370,25 +368,16 @@ public actor MoviePilotAPIClient {
     ) async throws -> OcpResponse? {
         guard let core = try loadRustCore() else { return nil }
         let context = try context()
-        guard var token = store.accessToken, !token.isEmpty else { throw MoviePilotError.requireLogin }
-        for attempt in 0...1 {
-            try check(context)
+        guard let token = store.accessToken, !token.isEmpty else { throw MoviePilotError.requireLogin }
+        return try await runCoreFlow(core, kind: "named", method: method, path: "", idempotent: nil,
+                                     authorized: true, token: token, context: context) { token in
             var merged = arguments
             merged["baseURL"] = context.baseURL.absoluteString
             merged["accessToken"] = token
             let response = try await dispatchRust(core, method: method, arguments: merged, context: context, onEvent: onEvent)
             if response.ok { return response }
-            if response.code == 1503, attempt == 0 {
-                if let latest = store.accessToken, latest != token {
-                    token = latest
-                } else {
-                    token = try await silentRelogin(context: context)
-                }
-                continue
-            }
             throw rustError(response)
         }
-        throw MoviePilotError.requireLogin
     }
 
     private func loadRustCore() throws -> OcpCoreClient? {
@@ -465,16 +454,25 @@ public actor MoviePilotAPIClient {
             "username": username, "password": password, "validateUser": validateUser,
         ], context: context)
         guard response.ok else { throw rustError(response) }
-        let fields = try response.data.decode([String: JSONValue].self)
-        guard case .string(let token) = fields["accessToken"], !token.isEmpty else {
+        struct LoginResponse: Decodable { var accessToken: String; var user: RustUser? }
+        let fields: LoginResponse
+        do { fields = try response.decodeData(LoginResponse.self) }
+        catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
+        guard !fields.accessToken.isEmpty else {
             throw MoviePilotError.generic("服务器返回了空 token")
         }
-        let user: MPUser?
-        if validateUser, let object = fields["user"] {
-            do { user = try Self.decoder.decode(MPUser.self, from: object.encodedData()) }
-            catch { throw MoviePilotError.generic("登录成功但用户信息解析失败：\(error)") }
-        } else { user = nil }
-        return (token, user)
+        return (fields.accessToken, validateUser ? fields.user?.value : nil)
+    }
+
+    private struct RustUser: Decodable {
+        var id: Int?
+        var name: String
+        var email, avatar: String?
+        var is_superuser, is_active: Bool?
+        var value: MPUser {
+            MPUser(id: id, name: name, email: email, avatar: avatar,
+                   isSuperuser: is_superuser, isActive: is_active)
+        }
     }
 
     private struct RustExchange: Decodable { let status: Int; let bodyBase64: String }
@@ -695,6 +693,12 @@ public actor MoviePilotAPIClient {
 
     /// 发送请求（支持 401 静默重登与 502/503/504/超时等 isRetryable 错误指数退避重试）。
     private func send(_ request: MPRequest, token: String?, context: RequestContext) async throws -> Data {
+        if let core = rustCore {
+            return try await runCoreFlow(core, kind: "raw", method: request.method, path: request.path,
+                idempotent: request.idempotentOverride, authorized: request.authorized, token: token, context: context) { token in
+                try await self.sendOnce(request, token: token, context: context)
+            }
+        }
         var currentToken = token
         var lastError: Error?
 
@@ -751,6 +755,70 @@ public actor MoviePilotAPIClient {
             throw lastError
         }
         throw MoviePilotError.generic("请求失败")
+    }
+
+    /// Run yielded effects on this actor; Core alone chooses retry/auth sequencing.
+    private func runCoreFlow<Result: Sendable>(
+        _ core: OcpCoreClient, kind: String, method: String, path: String, idempotent: Bool?,
+        authorized: Bool, token: String?, context: RequestContext,
+        dispatch: (String?) async throws -> Result
+    ) async throws -> Result {
+        try check(context)
+        let flow = RustMoviePilotFlow(core)
+        var step: RustMoviePilotFlow.Step = try flow.call("start", [
+            "kind": kind, "method": method, "idempotent": idempotent.map { $0 as Any } ?? NSNull(),
+            "revision": context.revision, "authorized": authorized,
+        ])
+        let flowToken = step.token
+        defer { flow.cancel(flowToken) }
+        var currentToken = token
+        var result: Result?
+        var failure: Error?
+        while true {
+            try check(context)
+            if step.done {
+                if step.success == true, let result { return result }
+                throw failure ?? MoviePilotError.generic("Core 请求流程未返回结果")
+            }
+            guard let effect = step.effect else { throw MoviePilotError.generic("Core 请求流程缺少操作") }
+            switch effect.kind {
+            case "send":
+                let outcome: String
+                do { result = try await dispatch(currentToken); outcome = "success" }
+                catch { failure = error; outcome = Self.flowOutcome(error) }
+                try check(context)
+                step = try flow.resume(step, revision: store.configurationRevision, outcome: outcome)
+            case "latestToken":
+                let latest = store.accessToken
+                let changed = latest != nil && latest != currentToken
+                if changed { currentToken = latest }
+                step = try flow.resume(step, revision: store.configurationRevision, outcome: "ready", tokenChanged: changed)
+            case "refresh":
+                let outcome: String
+                do { currentToken = try await silentRelogin(context: context); outcome = "success" }
+                catch { failure = error; outcome = Self.flowOutcome(error) }
+                try check(context)
+                step = try flow.resume(step, revision: store.configurationRevision, outcome: outcome)
+            case "sleep":
+                guard let minimum = effect.minimumSeconds, let maximumDelay = effect.maximumSeconds,
+                      minimum > 0, maximumDelay >= minimum,
+                      let attempt = effect.attempt, let maximum = effect.maxAttempts else {
+                    throw MoviePilotError.generic("Core 重试操作缺少参数")
+                }
+                let delay = UInt64(Double.random(in: minimum...maximumDelay) * 1_000_000_000)
+                try await retrySleep(delay)
+                try check(context)
+                MoviePilotNetworkLog.logger.warning("重试 \(method) \(path) (尝试 \(attempt + 1)/\(maximum))")
+                step = try flow.resume(step, revision: store.configurationRevision, outcome: "ready")
+            default: throw MoviePilotError.generic("Core 请求操作无效")
+            }
+        }
+    }
+
+    private static func flowOutcome(_ error: Error) -> String {
+        guard let error = error as? MoviePilotError else { return "fatal" }
+        if case .requireLogin = error { return "unauthorized" }
+        return error.isRetryable ? "retryable" : "fatal"
     }
 
     /// 单次发送。4xx/5xx 一律映射成 `MoviePilotError` 抛出（401 → requireLogin）。
