@@ -48,6 +48,7 @@ struct State {
     engine_events: ocp_session::engine::EngineEvents,
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
+    bangumi_account: ocp_bangumi::account::Account,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
@@ -139,6 +140,7 @@ impl Core {
                 engine_events: Default::default(),
                 store,
                 bangumi_store: None,
+                bangumi_account: Default::default(),
                 danmaku_cache: None,
                 intro_learning: None,
                 intro_ids: None,
@@ -588,6 +590,15 @@ impl Core {
                         ApiResponse::error(1002, false, message, Value::Null)
                     }
                     Err(error) => ApiResponse::error(1402, false, error.to_string(), Value::Null),
+                }
+            }
+            method if method.starts_with("bangumiAccount.") => {
+                match state
+                    .bangumi_account
+                    .call(method.trim_start_matches("bangumiAccount."), &arguments)
+                {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
             method if method.starts_with("bangumiStore.") => {

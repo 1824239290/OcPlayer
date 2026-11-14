@@ -1,0 +1,24 @@
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+error[E0609]: no field `present` on type `Session`
+   --> crates/ocp-bangumi/src/account.rs:110:29
+    |
+110 |                     session.present
+    |                             ^^^^^^^ unknown field
+    |
+help: one of the expressions' fields has a field of the same name
+    |
+110 |                     session.access.present
+    |                             +++++++
+
+error[E0609]: no field `expired` on type `Session`
+   --> crates/ocp-bangumi/src/account.rs:111:37
+    |
+111 |                         && !session.expired
+    |                                     ^^^^^^^ unknown field
+    |
+    = note: available fields are: `access`, `session_generation`
+
+For more information about this error, try `rustc --explain E0609`.
+error: could not compile `ocp-bangumi` (lib) due to 2 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `ocp-bangumi` (lib test) due to 2 previous errors

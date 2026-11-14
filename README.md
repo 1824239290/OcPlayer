@@ -29,6 +29,11 @@ and byte-preserving low-level exchanges through Core. Its wire/retry boundaries
 and native credential lifecycle are documented in
 [`docs/moviepilot-contract.md`](docs/moviepilot-contract.md).
 
+Bangumi credential, OAuth and refresh generations now run in retained Core
+account state, together with refresh ownership, expiration/session reuse and
+profile-operation revision barriers. Native credential storage and effects remain
+adapters; see [`docs/bangumi-account-contract.md`](docs/bangumi-account-contract.md).
+
 Danmaku matching policy and mapping/comment/intro-hint persistence now run in
 Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,
 bounded LRU memory and revision guards are documented in

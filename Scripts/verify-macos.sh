@@ -21,6 +21,7 @@ cmp tests/tmdb_wire_server.py bindings/apple/OcPlayerCore/Tests/OcPlayerCoreTest
 cmp tests/tmdb_wire_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_wire_server.py" >> "$output_dir/tmdb-wire-fixture-equivalence.log" 2>&1
 cmp tests/tmdb_enrichment_server.py "$apple_root/Packages/MetadataKit/Tests/MetadataKitTests/Fixtures/tmdb_enrichment_server.py" > "$output_dir/tmdb-enrichment-fixture-equivalence.log" 2>&1
 swift test --package-path bindings/apple/OcPlayerCore --scratch-path "$output_dir/AppleBindingBuild" > "$output_dir/apple-binding-tests.log" 2>&1
+python3 tests/bangumi_account_contract.py > "$output_dir/bangumi-account-contract-tests.log" 2>&1
 python3 tests/bangumi_contract.py > "$output_dir/bangumi-contract-tests.log" 2>&1
 python3 tests/network_contract.py > "$output_dir/network-contract-tests.log" 2>&1
 python3 tests/moviepilot_contract.py > "$output_dir/moviepilot-contract-tests.log" 2>&1

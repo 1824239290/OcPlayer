@@ -1,0 +1,11 @@
+test_decode_unicode_duplicates_bad_bytes_and_whole_array (__main__.IntroProviderContract.test_decode_unicode_duplicates_bad_bytes_and_whole_array) ... ok
+test_invalid_requests_never_issue_io (__main__.IntroProviderContract.test_invalid_requests_never_issue_io) ... ok
+test_native_status_semantics_and_no_http_retries (__main__.IntroProviderContract.test_native_status_semantics_and_no_http_retries) ... ok
+test_raw_status_binary_and_anilist_pool (__main__.IntroProviderContract.test_raw_status_binary_and_anilist_pool) ... ok
+test_timeout_and_cancel_interrupt_once (__main__.IntroProviderContract.test_timeout_and_cancel_interrupt_once) ... ok
+test_typed_requests_intervals_and_full_int64_variables (__main__.IntroProviderContract.test_typed_requests_intervals_and_full_int64_variables) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 3.098s
+
+OK

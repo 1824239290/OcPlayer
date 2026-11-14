@@ -1,0 +1,9 @@
+test_bad_origin_route_and_timeout_rejected_before_io (__main__.DanmakuContract.test_bad_origin_route_and_timeout_rejected_before_io) ... ok
+test_errors_and_binary_never_replay (__main__.DanmakuContract.test_errors_and_binary_never_replay) ... ok
+test_routes_raw_fields_headers_pool_and_queries (__main__.DanmakuContract.test_routes_raw_fields_headers_pool_and_queries) ... ok
+test_timeout_and_cancellation_interrupt_live_requests (__main__.DanmakuContract.test_timeout_and_cancellation_interrupt_live_requests) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 2.093s
+
+OK

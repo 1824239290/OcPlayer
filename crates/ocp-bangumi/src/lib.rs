@@ -1,5 +1,7 @@
 //! Bangumi API models, episode partitioning and collection progress policy.
 
+pub mod account;
+
 use ocp_http::HttpClient;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION},
