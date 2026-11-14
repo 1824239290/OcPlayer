@@ -49,6 +49,7 @@ struct State {
     store: Option<ocp_store::Store>,
     bangumi_store: Option<ocp_store::BangumiStore>,
     bangumi_account: ocp_bangumi::account::Account,
+    bangumi_sync: ocp_bangumi::sync::Directory,
     danmaku_cache: Option<ocp_danmaku::cache::DanmakuCache>,
     intro_learning: Option<ocp_danmaku::intro::LearningStore>,
     intro_ids: Option<Arc<Mutex<ocp_danmaku::identity::IDStore>>>,
@@ -141,6 +142,7 @@ impl Core {
                 store,
                 bangumi_store: None,
                 bangumi_account: Default::default(),
+                bangumi_sync: Default::default(),
                 danmaku_cache: None,
                 intro_learning: None,
                 intro_ids: None,
@@ -592,16 +594,72 @@ impl Core {
                     Err(error) => ApiResponse::error(1402, false, error.to_string(), Value::Null),
                 }
             }
+            method if method.starts_with("bangumiSync.") => {
+                let result = match method.trim_start_matches("bangumiSync.") {
+                    "start" => state.bangumi_sync.start(&arguments),
+                    "resume" => state.bangumi_sync.resume(&arguments),
+                    "batchComplete" => state.bangumi_sync.complete(&arguments),
+                    "cancel" => state.bangumi_sync.cancel(&arguments),
+                    "stats" => Ok(state.bangumi_sync.stats()),
+                    "invalidate" => {
+                        state.bangumi_sync.invalidate();
+                        Ok(state.bangumi_sync.stats())
+                    }
+                    "apply" => {
+                        let (write, payload) = match state.bangumi_sync.mutation(&arguments) {
+                            Ok(effect) => effect,
+                            Err(message) => return Ok(error_response(1002, false, message)),
+                        };
+                        if state.bangumi_store.is_none() {
+                            state.bangumi_store = match open_bangumi_store(&state.config) {
+                                Ok(store) => store,
+                                Err(error) => {
+                                    return Ok(error_response(1402, false, error.to_string()))
+                                }
+                            };
+                        }
+                        let Some(store) = state.bangumi_store.as_ref() else {
+                            return Ok(error_response(
+                                1401,
+                                false,
+                                "Bangumi persistence is not configured",
+                            ));
+                        };
+                        if let Err(error) = store.call(write, &payload) {
+                            return Ok(error_response(1402, false, error.to_string()));
+                        }
+                        state.bangumi_sync.applied(&arguments)
+                    }
+                    _ => Err(format!("unknown Bangumi sync method: {method}")),
+                };
+                match result {
+                    Ok(data) => ApiResponse::ok(data),
+                    Err(message) => ApiResponse::error(1002, false, message, Value::Null),
+                }
+            }
             method if method.starts_with("bangumiAccount.") => {
                 match state
                     .bangumi_account
                     .call(method.trim_start_matches("bangumiAccount."), &arguments)
                 {
-                    Ok(data) => ApiResponse::ok(data),
+                    Ok(data) => {
+                        if method == "bangumiAccount.operation.begin"
+                            || (data["accepted"] == true
+                                && (method == "bangumiAccount.invalidate"
+                                    || (method == "bangumiAccount.commit"
+                                        && data["cancelRefresh"] == true)))
+                        {
+                            state.bangumi_sync.invalidate();
+                        }
+                        ApiResponse::ok(data)
+                    }
                     Err(message) => ApiResponse::error(1002, false, message, Value::Null),
                 }
             }
             method if method.starts_with("bangumiStore.") => {
+                if method == "bangumiStore.clearAccountLocalState" {
+                    state.bangumi_sync.invalidate();
+                }
                 if state.bangumi_store.is_none() {
                     state.bangumi_store = match open_bangumi_store(&state.config) {
                         Ok(store) => store,
@@ -761,6 +819,7 @@ impl Core {
                         && config.data_directory != state.config.data_directory)
                 {
                     state.bangumi_store = None;
+                    state.bangumi_sync.invalidate();
                 }
                 if config.data_directory != state.config.data_directory
                     || config.media_database_path != state.config.media_database_path
@@ -1067,6 +1126,7 @@ impl Core {
                         && config.data_directory != state.config.data_directory)
                 {
                     state.bangumi_store = None;
+                    state.bangumi_sync.invalidate();
                 }
                 if config.data_directory != state.config.data_directory
                     || config.media_database_path != state.config.media_database_path

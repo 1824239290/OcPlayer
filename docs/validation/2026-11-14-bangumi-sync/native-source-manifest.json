@@ -1,0 +1,49 @@
+{
+  "sourceRoot": "/Users/jumusu/Documents/project/OcPlayer",
+  "files": [
+    {
+      "path": "Docs/SHARED-BANGUMI.md",
+      "sha256": "9dedde00e9cd42046c0e54814ea6aae7846e4b5b2938e0f315ac5a58e125b8be"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAPIClient.swift",
+      "sha256": "8c292aff573c3e3267c0241cb20bac62996886abcea1d41ca5c03275ebcfd329"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiAuthService.swift",
+      "sha256": "d60f0f25aa09e54c9f858df795ec2a3c8ceff3a0ccb3d6978d4542fc55215577"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/BangumiContext.swift",
+      "sha256": "347b70afc24854459a43fb40cdd4f0d1794bd8e83adb999c28eec1028ee7f022"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiAccount.swift",
+      "sha256": "04e0559a2e03ed09ce9529f0e9259a0460aec22fe4a2514359f981970811c43d"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Database/BangumiDatabaseOperator.swift",
+      "sha256": "347c39b7f9abe413c2c2fdd4a6a5a4a9f6657f3d268d1ca66d9f71c8312b095b"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Database/RustBangumiStore.swift",
+      "sha256": "c6568f3ba0c3ecae73c9a76d309ac98cc01422b86bcd4ae8bfc531abb15ec79e"
+    },
+    {
+      "path": "Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiIntegrationTests.swift",
+      "sha256": "36dc6109cac8818219aa199aad5347f27543d164ffdf968a2f7df94131324528"
+    },
+    {
+      "path": "Packages/BangumiKit/Sources/BangumiKit/Client/RustBangumiSync.swift",
+      "sha256": "e9171c102cf97247ef4474fe5955394d944dea8e60cc036ed56068a17092cdd8"
+    },
+    {
+      "path": "Packages/BangumiKit/Tests/BangumiKitTests/Fixtures/bangumi_sync_server.py",
+      "sha256": "be5233a2b00249ac6cb00bedbf2abb86171ab221c3cb964668a41afe33461203"
+    },
+    {
+      "path": "Packages/BangumiKit/Tests/BangumiKitTests/RustBangumiSyncTests.swift",
+      "sha256": "58eedb4babd3f05df569c3664afd84b6e8b70dfd46dcfb2fecd009b22eff2580"
+    }
+  ]
+}

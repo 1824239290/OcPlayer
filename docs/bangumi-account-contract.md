@@ -15,7 +15,8 @@ credential owner.
 
 | Command | Input and result |
 | --- | --- |
-| `snapshot` | Current credential, exchange, refresh and profile-operation counters; refresh activity |
+| `snapshot` | Current credential, exchange, refresh, identity and profile-operation counters; refresh activity |
+| `identity.current` | Identity `generation`; whether the same account scope remains current across token refresh |
 | `current` | Exact unsigned `generation`; whether this credential generation is current |
 | `oauth.prepare` | Nonempty `state`, maximum 4096 UTF-8 bytes; replaces the pending state |
 | `oauth.consume` | `state`; consumes before any network await, returns `accepted` and exchange `generation` |
@@ -48,8 +49,9 @@ The native actor still performs credential encoding/persistence, clock reads,
 session construction/cancellation, task execution/watchdog sleeping, localized
 error mapping and notifications. The MainActor auth service still fetches and
 applies the profile and clears local UI/database state, using Core revision
-barriers. Collection scheduling, complete shared account/profile effect flows
-and broader sync acceptance remain separate work. This contract does not certify
+barriers. Complete shared account/profile effect flows, detailed subject/progress mutation chaining
+and broader live-account acceptance remain separate work. Collection/episode sync
+now runs in [retained Core flows](bangumi-sync-contract.md). This contract does not certify
 the complete Bangumi or macOS release scope.
 
 Verification includes Rust state tests, five exported C ABI cases (with 64

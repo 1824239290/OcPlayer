@@ -11,6 +11,7 @@ pub struct Account {
     active_refresh: Option<(u64, u64)>,
     pending_state: Option<String>,
     operation: u64,
+    identity: u64,
 }
 
 #[derive(Deserialize)]
@@ -78,7 +79,8 @@ impl Account {
         Ok(match method {
             "snapshot" => json!({"generation":self.generation,"exchangeGeneration":self.exchange,
                 "refreshGeneration":self.refresh,"refreshActive":self.active_refresh.is_some(),
-                "operationRevision":self.operation}),
+                "operationRevision":self.operation,"identityGeneration":self.identity}),
+            "identity.current" => json!(decode::<Expected>(args)?.generation == self.identity),
             "current" => json!(decode::<Expected>(args)?.generation == self.generation),
             "oauth.prepare" => {
                 let state = decode::<OAuthState>(args)?.state;
@@ -150,6 +152,7 @@ impl Account {
                 }
                 let cancel_refresh = matches!(commit.kind, CommitKind::OAuth);
                 if cancel_refresh {
+                    self.identity = self.identity.wrapping_add(1);
                     self.exchange = self.exchange.wrapping_add(1);
                     self.retire_refresh();
                 }
@@ -166,6 +169,7 @@ impl Account {
                 if expected.is_some_and(|e| e.generation != self.generation) {
                     return Ok(json!({"accepted":false,"generation":self.generation}));
                 }
+                self.identity = self.identity.wrapping_add(1);
                 self.generation = self.generation.wrapping_add(1);
                 self.exchange = self.exchange.wrapping_add(1);
                 self.retire_refresh();
@@ -278,6 +282,37 @@ mod tests {
             0
         );
     }
+    #[test]
+    fn refresh_preserves_identity_while_logout_and_oauth_retire_it() {
+        let mut a = Account::default();
+        a.call("refresh.claim", &json!({})).unwrap();
+        a.call("commit", &json!({"kind":"refresh","generation":0}))
+            .unwrap();
+        assert_eq!(
+            a.call("identity.current", &json!({"generation":0}))
+                .unwrap(),
+            true
+        );
+        assert_eq!(a.call("current", &json!({"generation":0})).unwrap(), false);
+        a.call("invalidate", &json!({})).unwrap();
+        assert_eq!(
+            a.call("identity.current", &json!({"generation":0}))
+                .unwrap(),
+            false
+        );
+        a.call("oauth.prepare", &json!({"state":"next"})).unwrap();
+        let exchange = a.call("oauth.consume", &json!({"state":"next"})).unwrap();
+        a.call(
+            "commit",
+            &json!({"kind":"oauth","generation":exchange["generation"]}),
+        )
+        .unwrap();
+        assert_eq!(
+            a.call("snapshot", &json!({})).unwrap()["identityGeneration"],
+            2
+        );
+    }
+
     #[test]
     fn session_access_and_profile_revision_policy() {
         let mut a = Account::default();

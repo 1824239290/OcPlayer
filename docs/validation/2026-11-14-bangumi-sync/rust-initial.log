@@ -1,0 +1,25 @@
+   Compiling ocp-bangumi v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-bangumi)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.36s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_bangumi-6c00450bbe6298cf)
+
+running 11 tests
+test account::tests::exact_unsigned_generations_and_validation_are_atomic ... ok
+test account::tests::session_access_and_profile_revision_policy ... ok
+test sync::tests::full_sync_uses_start_time_overlap_and_stamp_before_reconcile ... ok
+test account::tests::retired_refresh_cannot_commit_or_release_a_new_owner ... ok
+test sync::tests::episode_empty_tail_still_replaces_the_full_accumulated_set ... ok
+test sync::tests::collection_pages_require_actual_writes_and_single_use_receipts ... ok
+test account::tests::oauth_consumes_once_and_does_not_erase_next_state ... ok
+test tests::maps_bangumi_numeric_subject_type_wire_values ... ok
+test sync::tests::batch_slides_one_slot_and_cancels_descendants ... ok
+test tests::partitions_and_counts ... ok
+test tests::client_preserves_api_base_path ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests ocp_bangumi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

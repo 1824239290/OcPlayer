@@ -31,8 +31,10 @@ and native credential lifecycle are documented in
 
 Bangumi credential, OAuth and refresh generations now run in retained Core
 account state, together with refresh ownership, expiration/session reuse and
-profile-operation revision barriers. Native credential storage and effects remain
-adapters; see [`docs/bangumi-account-contract.md`](docs/bangumi-account-contract.md).
+profile-operation revision barriers. Collection/episode synchronization now uses
+retained flows and transactional SQL receipts. Native credential storage and
+effects remain adapters; see [`docs/bangumi-account-contract.md`](docs/bangumi-account-contract.md)
+and [`docs/bangumi-sync-contract.md`](docs/bangumi-sync-contract.md).
 
 Danmaku matching policy and mapping/comment/intro-hint persistence now run in
 Core. The shared cache reads and writes OcPlayer's existing JSON files; TTL,

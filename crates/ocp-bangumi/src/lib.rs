@@ -1,6 +1,7 @@
 //! Bangumi API models, episode partitioning and collection progress policy.
 
 pub mod account;
+pub mod sync;
 
 use ocp_http::HttpClient;
 use reqwest::{
