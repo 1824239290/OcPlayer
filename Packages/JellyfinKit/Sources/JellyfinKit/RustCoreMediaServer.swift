@@ -316,80 +316,17 @@ public final class RustCoreMediaServer: MediaServer, @unchecked Sendable {
     public func externalSubtitles(itemID: String, mediaSourceID: String?) async throws -> [ExternalSubtitle] {
         var args: [String: Any] = ["itemId": itemID]
         if let mediaSourceID { args["mediaSourceId"] = mediaSourceID }
-        let payload: RustMediaItemsEnvelope = try await dataAsync("media.subtitles", args)
-        let sources = payload.items.first?.mediaSources ?? []
-        let source = mediaSourceID.flatMap { id in sources.first { $0.id == id } }
-            ?? sources.first(where: { $0.supportsDirectPlay == true || $0.supportsDirectStream == true })
-            ?? sources.first
-        return (source?.mediaStreams ?? []).compactMap { stream in
-            guard stream.type?.lowercased() == "subtitle",
-                  stream.isExternal == true,
-                  let index = stream.index,
-                  let codec = stream.codec?.lowercased(),
-                  ExternalSubtitle.fileExtension(forCodec: codec) != nil
-            else { return nil }
-            return ExternalSubtitle(
-                itemID: itemID,
-                mediaSourceID: source?.id,
-                namespace: ExternalSubtitle.namespace(profile: profile),
-                index: index,
-                title: stream.title ?? stream.displayTitle,
-                language: stream.language,
-                codec: codec)
+        let payload: RustSubtitlePayload = try await dataAsync("media.subtitles", args)
+        return payload.subtitles.map { subtitle in
+            ExternalSubtitle(itemID: itemID, mediaSourceID: subtitle.mediaSourceID,
+                namespace: ExternalSubtitle.namespace(profile: profile), index: subtitle.index,
+                title: subtitle.title, language: subtitle.language, codec: subtitle.codec)
         }
     }
     public func downloadSubtitle(_ subtitle: ExternalSubtitle) async throws -> URL { try await fallback.downloadSubtitle(subtitle) }
     public func mediaFileInfo(itemID: String) async throws -> MediaFileInfo? {
-        let payload: RustMediaItemsEnvelope = try await dataAsync("media.fileInfo", ["itemId": itemID])
-        let sources = payload.items.first?.mediaSources ?? []
-        guard let source = sources.first(where: { $0.supportsDirectPlay == true || $0.supportsDirectStream == true }) ?? sources.first
-        else { return nil }
-        let streams = source.mediaStreams ?? []
-        let video = streams.first { $0.type?.lowercased() == "video" }.map { stream in
-            MediaFileInfo.VideoTrack(
-                codec: stream.codec,
-                width: stream.width,
-                height: stream.height,
-                bitrate: stream.bitRate,
-                frameRate: stream.averageFrameRate ?? stream.realFrameRate,
-                bitDepth: stream.bitDepth,
-                colorPrimaries: stream.colorPrimaries,
-                colorTransfer: stream.colorTransfer,
-                colorSpace: stream.colorSpace,
-                colorRange: stream.colorRange,
-                videoRangeType: stream.videoRangeType,
-                profile: stream.profile,
-                isInterlaced: stream.isInterlaced == true)
-        }
-        let audio = streams.filter { $0.type?.lowercased() == "audio" }.map { stream in
-            MediaFileInfo.AudioTrack(
-                codec: stream.codec,
-                channels: stream.channels,
-                channelLayout: stream.channelLayout,
-                sampleRate: stream.sampleRate,
-                bitrate: stream.bitRate,
-                language: stream.language,
-                title: stream.title ?? stream.displayTitle,
-                isDefault: stream.isDefault == true)
-        }
-        let subtitles = streams.filter { $0.type?.lowercased() == "subtitle" }.map { stream in
-            MediaFileInfo.SubtitleTrack(
-                codec: stream.codec,
-                language: stream.language,
-                title: stream.title ?? stream.displayTitle,
-                isDefault: stream.isDefault == true,
-                isForced: stream.isForced == true,
-                isExternal: stream.isExternal == true)
-        }
-        return MediaFileInfo(
-            video: video,
-            audioTracks: audio,
-            subtitleTracks: subtitles,
-            container: source.container,
-            sizeBytes: source.size,
-            durationSeconds: source.runTimeTicks.map { Double($0) / 10_000_000 },
-            fileName: MediaFileInfo.fileName(fromPath: source.path),
-            sourceCount: sources.count)
+        let payload: RustFileInfoPayload = try await dataAsync("media.fileInfo", ["itemId": itemID])
+        return payload.fileInfo
     }
     public func playbackInfo(itemID: String) async throws -> PlaybackInfo {
         let payload: RustPlaybackInfo = try await dataAsync("playback.info", ["itemId": itemID])
@@ -467,102 +404,22 @@ private struct RustPlaybackSource: Decodable {
     let videoRangeType: String?
 }
 
-private struct RustMediaItemsEnvelope: Decodable {
-    let items: [RustMediaItem]
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: RustCodingKey.self)
-        items = try values.decodeFirstPresent([RustMediaItem].self, keys: ["items", "Items"]) ?? []
-    }
+private struct RustSubtitlePayload: Decodable {
+    let subtitles: [RustExternalSubtitle]
 }
-
-private struct RustMediaItem: Decodable {
-    let mediaSources: [RustMediaSource]?
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: RustCodingKey.self)
-        mediaSources = try values.decodeFirstPresent([RustMediaSource].self, keys: ["mediaSources", "MediaSources"])
-    }
-}
-
-private struct RustMediaSource: Decodable {
-    let id: String?
-    let path: String?
-    let container: String?
-    let size: Int?
-    let supportsDirectPlay: Bool?
-    let supportsDirectStream: Bool?
-    let runTimeTicks: Int64?
-    let mediaStreams: [RustMediaStream]?
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: RustCodingKey.self)
-        id = values.decodeFirst(String.self, keys: ["id", "Id"])
-        path = values.decodeFirst(String.self, keys: ["path", "Path"])
-        container = values.decodeFirst(String.self, keys: ["container", "Container"])
-        size = values.decodeFirst(Int.self, keys: ["size", "Size"])
-        supportsDirectPlay = values.decodeFirst(Bool.self, keys: ["supportsDirectPlay", "SupportsDirectPlay"])
-        supportsDirectStream = values.decodeFirst(Bool.self, keys: ["supportsDirectStream", "SupportsDirectStream"])
-        runTimeTicks = values.decodeFirst(Int64.self, keys: ["runTimeTicks", "RunTimeTicks"])
-        mediaStreams = try values.decodeFirstPresent([RustMediaStream].self, keys: ["mediaStreams", "MediaStreams"])
-    }
-}
-
-private struct RustMediaStream: Decodable {
-    let index: Int?
-    let type: String?
-    let codec: String?
-    let language: String?
+private struct RustExternalSubtitle: Decodable {
+    let mediaSourceID: String?
+    let index: Int
+    let codec: String
     let title: String?
-    let displayTitle: String?
-    let isExternal: Bool?
-    let isDefault: Bool?
-    let isForced: Bool?
-    let width: Int?
-    let height: Int?
-    let bitRate: Int?
-    let averageFrameRate: Double?
-    let realFrameRate: Double?
-    let bitDepth: Int?
-    let colorPrimaries: String?
-    let colorTransfer: String?
-    let colorSpace: String?
-    let colorRange: String?
-    let videoRangeType: String?
-    let profile: String?
-    let isInterlaced: Bool?
-    let channels: Int?
-    let channelLayout: String?
-    let sampleRate: Int?
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: RustCodingKey.self)
-        index = values.decodeFirst(Int.self, keys: ["index", "Index"])
-        type = values.decodeFirst(String.self, keys: ["type", "Type"])
-        codec = values.decodeFirst(String.self, keys: ["codec", "Codec"])
-        language = values.decodeFirst(String.self, keys: ["language", "Language"])
-        title = values.decodeFirst(String.self, keys: ["title", "Title"])
-        displayTitle = values.decodeFirst(String.self, keys: ["displayTitle", "DisplayTitle"])
-        isExternal = values.decodeFirst(Bool.self, keys: ["isExternal", "IsExternal"])
-        isDefault = values.decodeFirst(Bool.self, keys: ["isDefault", "IsDefault"])
-        isForced = values.decodeFirst(Bool.self, keys: ["isForced", "IsForced"])
-        width = values.decodeFirst(Int.self, keys: ["width", "Width"])
-        height = values.decodeFirst(Int.self, keys: ["height", "Height"])
-        bitRate = values.decodeFirst(Int.self, keys: ["bitRate", "BitRate"])
-        averageFrameRate = values.decodeLossyDouble(keys: ["averageFrameRate", "AverageFrameRate"])
-        realFrameRate = values.decodeLossyDouble(keys: ["realFrameRate", "RealFrameRate"])
-        bitDepth = values.decodeFirst(Int.self, keys: ["bitDepth", "BitDepth"])
-        colorPrimaries = values.decodeFirst(String.self, keys: ["colorPrimaries", "ColorPrimaries"])
-        colorTransfer = values.decodeFirst(String.self, keys: ["colorTransfer", "ColorTransfer"])
-        colorSpace = values.decodeFirst(String.self, keys: ["colorSpace", "ColorSpace"])
-        colorRange = values.decodeFirst(String.self, keys: ["colorRange", "ColorRange"])
-        videoRangeType = values.decodeFirst(String.self, keys: ["videoRangeType", "VideoRangeType"])
-        profile = values.decodeFirst(String.self, keys: ["profile", "Profile"])
-        isInterlaced = values.decodeFirst(Bool.self, keys: ["isInterlaced", "IsInterlaced"])
-        channels = values.decodeFirst(Int.self, keys: ["channels", "Channels"])
-        channelLayout = values.decodeFirst(String.self, keys: ["channelLayout", "ChannelLayout"])
-        sampleRate = values.decodeFirst(Int.self, keys: ["sampleRate", "SampleRate"])
+    let language: String?
+    private enum CodingKeys: String, CodingKey {
+        case mediaSourceID = "mediaSourceId"
+        case index, codec, title, language
     }
+}
+private struct RustFileInfoPayload: Decodable {
+    let fileInfo: MediaFileInfo?
 }
 
 private struct RustOptionalURLPayload: Decodable {
@@ -587,15 +444,6 @@ private struct RustCodingKey: CodingKey {
 }
 
 private extension KeyedDecodingContainer where Key == RustCodingKey {
-    func decodeFirstPresent<T: Decodable>(_ type: T.Type, keys: [String]) throws -> T? {
-        for key in keys {
-            let codingKey = RustCodingKey(stringValue: key)
-            guard contains(codingKey) else { continue }
-            if let value = try decodeIfPresent(type, forKey: codingKey) { return value }
-        }
-        return nil
-    }
-
     func decodeFirst<T: Decodable>(_ type: T.Type, keys: [String]) -> T? {
         for key in keys {
             let codingKey = RustCodingKey(stringValue: key)
@@ -605,9 +453,5 @@ private extension KeyedDecodingContainer where Key == RustCodingKey {
         return nil
     }
 
-    func decodeLossyDouble(keys: [String]) -> Double? {
-        if let value = decodeFirst(Double.self, keys: keys) { return value }
-        guard let text = decodeFirst(String.self, keys: keys) else { return nil }
-        return Double(text)
-    }
+
 }
