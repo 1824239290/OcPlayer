@@ -15,6 +15,7 @@ use thiserror::Error;
 
 mod danmaku_load;
 mod events;
+mod media;
 mod network;
 mod probe;
 
@@ -2176,13 +2177,14 @@ fn run_server_command(
                 }
                 "media.subtitles" => {
                     let id = required_str(&arguments, "itemId")?;
-                    let mut params = vec![("ids", id.to_owned()), ("fields", "MediaSources".into())];
-                    if let Some(source_id) = arguments.get("mediaSourceId").and_then(Value::as_str) {
-                        params.push(("mediaSourceId", source_id.to_owned()));
-                    }
-                    let mut value = client.raw_get("Items", params).await?;
+                    let selected = match arguments.get("mediaSourceId") {
+                        None | Some(Value::Null) => None,
+                        Some(Value::String(value)) => Some(value.as_str()),
+                        _ => return Err(CommandError::invalid("mediaSourceId must be a string or null")),
+                    };
+                    let mut value = client.raw_get("Items", vec![("ids", id.to_owned()), ("fields", "MediaSources".into())]).await?;
                     value["Items"] = json!(nullable_response_items(&value)?);
-                    Ok(value)
+                    media::enrich(value, &client.profile.kind, id, selected)
                 }
                 "media.fileInfo" => {
                     let id = required_str(&arguments, "itemId")?;
@@ -2190,7 +2192,7 @@ fn run_server_command(
                         .raw_get("Items", vec![("ids", id.to_owned()), ("fields", "MediaSources".into())])
                         .await?;
                     value["Items"] = json!(nullable_response_items(&value)?);
-                    Ok(value)
+                    media::enrich(value, &client.profile.kind, id, None)
                 }
                 "server.avatarTag" => {
                     let user = client.current_user().await?;

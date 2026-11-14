@@ -1,0 +1,16 @@
+   Compiling ocp-core v0.1.0 (/Volumes/Backup/软件/OcPlayer-Core/crates/ocp-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.48s
+     Running unittests src/lib.rs (/tmp/ocplayer-target/debug/deps/ocp_core-19a0ffd2a926d0a6)
+
+running 8 tests
+test media::tests::frame_rate_validity_has_strict_boundaries_and_real_fallback ... ok
+test media::tests::file_basename_retains_native_slash_rules ... ok
+test media::tests::scalar_types_fail_before_source_selection ... ok
+test media::tests::nullable_sources_and_streams_keep_absence_and_exact_size ... ok
+test media::tests::subtitle_filters_keep_only_indexed_external_text_tracks ... ok
+test media::tests::file_track_titles_do_not_use_external_subtitle_display_fallback ... ok
+test media::tests::jellyfin_enums_are_validated_and_emby_unknowns_are_retained ... ok
+test media::tests::source_priority_and_explicit_missing_identity_remain_distinct ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.01s
+

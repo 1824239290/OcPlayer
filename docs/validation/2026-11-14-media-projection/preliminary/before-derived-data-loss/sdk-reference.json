@@ -1,0 +1,9 @@
+{
+  "checkout": "/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/.build/checkouts/jellyfin-sdk-swift",
+  "commit": "8ce10a167ad0b4145b2bc005acf8bebcfe6ebe46",
+  "files": {
+    "Sources/Entities/MediaStream.swift": "475f79801d34d0c28fbdaf5ec016c440e3899bc191b471eb2f8879912718f07e",
+    "Sources/Entities/MediaStreamType.swift": "8f94bea68d791442f19382a7e3e7fe15d0cd39919216dae2beedbf1edbddb1cd",
+    "Sources/Entities/VideoRangeType.swift": "a1cb3c006432bd621fc951fea99ce8837c84a7d243e29d61ccf75e17924f9e37"
+  }
+}

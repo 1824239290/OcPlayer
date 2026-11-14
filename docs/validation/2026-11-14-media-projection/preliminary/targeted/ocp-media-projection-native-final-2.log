@@ -1,0 +1,54 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Provisioning 24 / 47]
+[1 / 4] DequeModule
+[2 / 6] JellyfinKitTests-product
+[4 / 8] JellyfinKitTests-product
+[9 / 11] JellyfinKitTests-product
+[11 / 11] JellyfinKitTests-product
+Build complete! (2.52秒)
+Test Suite 'Selected tests' started at 2026-11-14 15:36:49.547.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 15:36:49.547.
+Test Suite 'MediaNullableHTTPTests' started at 2026-11-14 15:36:49.547.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testEmbyChapterMarkersAndFallbackRetainNativeSegments]' passed (0.459 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testFullAndNullableItemsRetainNativeMappingAcrossBothServers]' passed (2.304 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testLibraryFilteringCaseAndMissingIdentityMatchNative]' passed (0.567 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testMissingNullAndEmptyListContainersAcrossBothServers]' passed (0.960 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullablePlaybackSourcesAndStreamsPreserveSessionContext]' passed (1.410 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testNullableRawMediaContainersAndMalformedArraysMatchNative]' passed (3.138 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testPreparationWithNullStreamsRetainsNegotiatedSourceAndSession]' passed (0.279 seconds).
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' started.
+Test Case '-[JellyfinKitTests.MediaNullableHTTPTests testWrongNonNullTypesFailInsteadOfBecomingEmptyLists]' passed (2.262 seconds).
+Test Suite 'MediaNullableHTTPTests' passed at 2026-11-14 15:37:00.928.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 11.379 (11.381) seconds
+Test Suite 'MediaProjectionHTTPTests' started at 2026-11-14 15:37:00.928.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' passed (0.287 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testExplicitSelectedSubtitleSourceNeverFallsBack]' passed (0.313 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testFrameRateUsesNativeValidRangeAndRealRateFallback]' passed (1.704 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers]' passed (1.954 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession]' passed (0.287 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testMissingSourceIDsAndNullMetadataPreserveNativeDefaults]' passed (1.771 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback]' passed (1.150 seconds).
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' started.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior]' passed (1.437 seconds).
+Test Suite 'MediaProjectionHTTPTests' passed at 2026-11-14 15:37:09.832.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 8.903 (8.904) seconds
+Test Suite 'JellyfinKitTests.xctest' passed at 2026-11-14 15:37:09.832.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 20.282 (20.285) seconds
+Test Suite 'Selected tests' passed at 2026-11-14 15:37:09.832.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 20.282 (20.286) seconds

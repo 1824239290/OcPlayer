@@ -1068,3 +1068,38 @@ isolation in the Core facade (the current native mock tests exercise native
 servers). Full public argument/ownership coverage, settings/aggregate diagnostics,
 Apple release and all framework slices, and Windows adapter implementation remain
 active. Windows runtime testing remains deferred; the complete goal remains active.
+
+## 2026-11-14 Core file/subtitle metadata projection
+
+The [media projection contract](media-projection-contract.md) and
+[complete validation report](validation/2026-11-14-media-projection/README.md)
+move source priority/isolation, file metadata and external subtitle projection
+into Core. The native adapter consumes canonical results and retains namespace,
+identity, cache/download and other physical effects. Existing raw query result
+and plugin properties remain in replies. Explicit missing source IDs no longer
+fall back; direct-play priority precedes direct-stream priority. File track titles
+and external subtitle DisplayTitle fallback retain their distinct native rules.
+Jellyfin Float32 rounding/representability and Emby Double frame-rate bounds,
+full HDR/track/file fields, exact Int64 size, nullable defaults and flavor enum
+handling pass native/Core HTTP comparison. Selected source IDs are chosen locally,
+never forwarded as server filters; metadata requests never create playback sessions.
+
+Final Rust and independent locked/offline copy both pass 196 tests. Public C ABI
+passes 185 in 29 suites, exported Apple SDK passes 26, native packages pass 1281
+(JellyfinKit 288), and AppTests execute 1013: 994 pass, 19 platform skips, zero
+failures. Disabled JellyfinKit executes 288: 273 pass, 15 Core-only skips. Disabled
+app preparation/continuation/failover executes 23: 22 pass, one Core-only skip.
+All 72 Core, 781 native and 61 gate inputs and three recorded SDK entity files
+verify unchanged. Original target failures include the safe 79-assertion baseline,
+four Float32 projection differences and nonzero-underflow rejection. The first
+complete gate passed tests but lost its older reused DerivedData target before
+embedding; its logs are retained. Final acceptance uses a dedicated non-symlink
+DerivedData directory and a complete rerun. Deep strict signature, 14 matching
+runtime sections, bundled controls and natural EOF pass with zero process,
+rendering or audio failures.
+
+The previous selected subtitle-source isolation and metadata projection gaps are
+closed for the covered behavior. Broader unused SDK schema/transport and public
+argument/ownership coverage, native settings mapping and aggregate diagnostics
+export, Apple release/framework slices, and Windows adapter implementation remain
+active. Windows runtime testing remains deferred; the complete goal stays active.

@@ -1,0 +1,6 @@
+{
+  "orphanedFixturePID": 22978,
+  "originalParentPID": 1,
+  "reason": "early test-only bounds crash",
+  "action": "SIGTERM after verifying fixture identity"
+}

@@ -1,0 +1,23 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[3 / 12] JellyfinKitTests-product
+[5 / 14] JellyfinKitTests-product
+[11 / 13] JellyfinKitTests-product
+[13 / 14] JellyfinKit-product
+Build complete! (2.53秒)
+error: Process '/Applications/Xcode.app/Contents/Developer/usr/bin/xctest -XCTest JellyfinKitTests.MediaProjectionHTTPTests/testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size,JellyfinKitTests.MediaProjectionHTTPTests/testExplicitSelectedSubtitleSourceNeverFallsBack,JellyfinKitTests.MediaProjectionHTTPTests/testFrameRateUsesNativeValidRangeAndRealRateFallback,JellyfinKitTests.MediaProjectionHTTPTests/testMalformedNonNullSourceAndTrackScalarsFailAcrossBothServers,JellyfinKitTests.MediaProjectionHTTPTests/testMetadataRequestsDoNotFilterSelectedSourceOrCreatePlaybackSession,JellyfinKitTests.MediaProjectionHTTPTests/testMissingSourceIDsAndNullMetadataPreserveNativeDefaults,JellyfinKitTests.MediaProjectionHTTPTests/testPreferredSourceOrdersDirectPlayBeforeDirectStreamAndFirstFallback,JellyfinKitTests.MediaProjectionHTTPTests/testUnknownStreamAndRangeValuesRetainFlavorSpecificNativeBehavior /Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/.build/out/Products/Debug/JellyfinKitTests.xctest' exited with unexpected signal code 5
+Test Suite 'Selected tests' started at 2026-11-14 15:27:17.588.
+Test Suite 'JellyfinKitTests.xctest' started at 2026-11-14 15:27:17.589.
+Test Suite 'MediaProjectionHTTPTests' started at 2026-11-14 15:27:17.589.
+Test Case '-[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size]' started.
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:66: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("169 bytes") is not equal to ("1211 bytes")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:67: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(9223372036854775807)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:67: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(7200.25)")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:68: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("Optional("stream.mkv")") is not equal to ("Optional("剧名 第1集.mkv")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:69: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("DOVIWithHDR10")")
+/Users/jumusu/Documents/project/OcPlayer/Packages/JellyfinKit/Tests/JellyfinKitTests/MediaProjectionHTTPTests.swift:69: error: -[JellyfinKitTests.MediaProjectionHTTPTests testCompleteMediaFileInfoRetainsAllTracksAndExactInt64Size] : XCTAssertEqual failed: ("0") is not equal to ("2")
+Swift/ContiguousArrayBuffer.swift:692: Fatal error: Index out of range
+Note: Some test targets reported failures:
+  - JellyfinKitTests (XCTest)
