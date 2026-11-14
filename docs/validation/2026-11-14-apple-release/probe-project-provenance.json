@@ -1,0 +1,7 @@
+{
+  "sourceProjectSHA256": "d45008ba0aeee9da25c5756abe6a145f1b338f452c7fc3fbf908a2382fe88b0a",
+  "probeProjectSHA256": "cac155be49ea08c3ce8185a52f4a95d016ef3a1bc57d03dfe63facb1fd73ff69",
+  "onlyConfigurationChange": "OcPlayer-macOS Release: SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) OCPLAYER_SELFTEST",
+  "sourceUntouched": true,
+  "project": "/Users/jumusu/Documents/project/OcPlayer/.OcPlayerReleaseProbe.xcodeproj"
+}

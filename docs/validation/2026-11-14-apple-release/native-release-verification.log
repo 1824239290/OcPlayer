@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/tmp/ocp-apple-delivery/verify-native-release.py", line 45, in <module>
+    run([str(app/'Contents/MacOS/OcPlayer')],name+'-process.log',env,60)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/ocp-apple-delivery/verify-native-release.py", line 9, in run
+    r=subprocess.run(args,cwd=core,stdout=log,stderr=subprocess.STDOUT,env=env,timeout=timeout)
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 671, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 1395, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 2431, in _communicate
+    self.wait(timeout=_deadline_remaining(endtime))
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 1445, in wait
+    return self._wait(timeout=timeout)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 2310, in _wait
+    if self._wait_pidfd(timeout) or self._wait_kqueue(timeout):
+                                    ~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/subprocess.py", line 2286, in _wait_kqueue
+    raise TimeoutExpired(self.args, timeout)
+subprocess.TimeoutExpired: Command '['/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app/Contents/MacOS/OcPlayer']' timed out after 60 seconds

@@ -1,0 +1,221 @@
+Building for production...
+[Pre-planning 1 / 126]
+[Planning 1 / 126]
+[Planning deferred tasks]
+[Starting]
+[19 / 59] OcPlayerCore_OcPlayerCoreTests
+[21 / 59]
+[39 / 60] OcPlayerCore
+[49 / 96]
+[50 / 96]
+[52 / 96]
+[55 / 96]
+[58 / 96]
+[59 / 96]
+[60 / 96]
+[63 / 96]
+[64 / 96]
+[65 / 96]
+[66 / 96]
+[67 / 96]
+[69 / 96]
+[72 / 96]
+[73 / 96]
+[74 / 96]
+[75 / 96]
+[76 / 96] OcPlayerCore
+[87 / 97] OcPlayerCore-product
+[87 / 97] OcPlayerCoreTests-product
+[97 / 133]
+[102 / 133]
+[106 / 133]
+[110 / 133]
+[111 / 133]
+[112 / 133]
+[114 / 133]
+[115 / 133]
+[117 / 133]
+[118 / 133]
+[119 / 133]
+[120 / 133]
+[121 / 133]
+[122 / 133]
+[123 / 133]
+[124 / 133] OcPlayerCoreTests-product
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:249:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+247 |         let path = try OcpTestLibrary.path()
+248 |         let client = try OcpCoreClient(libraryPath: path)
+249 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+250 |         try client.call("playback.play")
+251 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:250:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+248 |         let client = try OcpCoreClient(libraryPath: path)
+249 |         try client.call("playback.open", arguments: ["source": "movie.mp4"])
+250 |         try client.call("playback.play")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+251 |         client.attachSurface(nativeHandle: 1, width: 1920, height: 1080, scale: 2, kind: 0)
+252 |         for frame in 0..<7200 {
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:255:28: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+253 |             client.renderTick(timeSeconds: Double(frame) / 60)
+254 |             if frame.isMultiple(of: 60) {
+255 |                 try client.call("playback.position", arguments: ["positionSeconds": Double(frame) / 60])
+    |                            `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |             }
+257 |         }
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:258:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+256 |             }
+257 |         }
+258 |         try client.call("playback.pause")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+259 |         let diagnostics = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+260 |         XCTAssertEqual(diagnostics.core.eventQueueDepth, 7)
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:281:24: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+279 |         // A host that never polls controls must still have a fixed upper bound.
+280 |         for position in 0..<1000 {
+281 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+    |                        `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+282 |         }
+283 |         try client.call("playback.stop")
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpCoreClientTests.swift:283:20: warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+281 |             try client.call("playback.seek", arguments: ["positionSeconds": position])
+282 |         }
+283 |         try client.call("playback.stop")
+    |                    `- warning: result of call to 'call(_:arguments:)' is unused [#NoUsage]
+284 |         let overflow = try client.diagnosticsSnapshot().decode(Diagnostics.self)
+285 |         XCTAssertEqual(overflow.core.eventQueue.depth, overflow.core.eventQueue.capacity)
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:22:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+20 |         XCTAssertThrowsError(try flow.complete(operationID: firstID, success: false))
+21 |         XCTAssertEqual(flow.snapshot.pendingOperationId, secondID)
+22 |         try flow.complete(operationID: secondID, success: true)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+23 |         XCTAssertTrue(flow.snapshot.manualChoice)
+24 |         try flow.reset()
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:27:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+25 |         let audio = try flow.begin(["operation": "selectAudio", "id": Int64.min])
+26 |         XCTAssertEqual(audio.effect?.id, .min)
+27 |         try flow.complete(operationID: XCTUnwrap(audio.operationId), success: true)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+28 |         XCTAssertFalse(flow.snapshot.manualChoice)
+29 |     }
+
+/Volumes/Backup/软件/OcPlayer-Core/artifacts/apple-2026-11-14/Package/Tests/OcPlayerCoreTests/OcpPlaybackTracksTests.swift:38:18: warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+36 |         XCTAssertThrowsError(try flow.complete(operationID: XCTUnwrap(new.operationId), success: true))
+37 |         XCTAssertEqual(flow.snapshot.pendingOperationId, new.operationId)
+38 |         try flow.complete(operationID: XCTUnwrap(new.operationId), success: true, trackID: .min)
+   |                  `- warning: result of call to 'complete(operationID:success:trackID:)' is unused [#NoUsage]
+39 |         XCTAssertTrue(flow.snapshot.externalNames.isEmpty)
+40 |         XCTAssertNil(flow.snapshot.pendingOperationId)
+
+[#NoUsage]: <https://docs.swift.org/compiler/documentation/diagnostics/no-usage>
+[129 / 133] OcPlayerCoreTests-product
+[131 / 133] OcPlayerCoreTests-product
+Build complete! (28.04秒)
+Test Suite 'All tests' started at 2026-11-14 18:33:56.244.
+Test Suite 'OcPlayerCoreTests.xctest' started at 2026-11-14 18:33:56.246.
+Test Suite 'OcpCoreClientTests' started at 2026-11-14 18:33:56.246.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineEventFoldingUpdatesSessionEndAndPreservesPreferences]' passed (0.006 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testEngineRejectsOldGenerationsAndInvalidCommandsWithoutMutation]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testExplicitMissingLibraryDoesNotLoadAnotherCandidate]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testFoundationDefaultsPermitCoreButInjectedProtocolsDoNot]' passed (0.005 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testJSONValueCanDecodeIntoHostTypes]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testMalformedFlowArgumentsDoNotModifyActiveRequestOrHistory]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testNativeEventTelemetryCoalescesAndStaleEventsProduceNoNotifications]' passed (0.239 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackPreferencesSurvivePositionPauseAndTrackClearing]' passed (0.014 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testPlaybackSessionMirrorsLifecycleWhenLibraryIsConfigured]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testReportPolicyPreservesPauseHeartbeatAndOnlyCleanNaturalEnd]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRequestChainSurvivesEngineSessionReplacementAndRejectsLateAdoption]' passed (0.004 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustCoreSmokeWhenLibraryIsConfigured]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testRustEventBackpressurePreservesControlsAndLatestPosition]' passed (0.221 seconds).
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' started.
+Test Case '-[OcPlayerCoreTests.OcpCoreClientTests testSharedForegroundIntentAndErrorDecisionTable]' passed (0.001 seconds).
+Test Suite 'OcpCoreClientTests' passed at 2026-11-14 18:33:56.747.
+	 Executed 14 tests, with 0 failures (0 unexpected) in 0.498 (0.501) seconds
+Test Suite 'OcpDanmakuLoaderTests' started at 2026-11-14 18:33:56.747.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderCancellationStopsLiveFetchAndClosesFlow]' passed (0.228 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderReusesNativeCacheAndManualSelectionForcesIntroResolution]' passed (0.217 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' started.
+Test Case '-[OcPlayerCoreTests.OcpDanmakuLoaderTests testPublicLoaderSelectsOneCandidateAndPreservesExactIDsAndIntro]' passed (0.164 seconds).
+Test Suite 'OcpDanmakuLoaderTests' passed at 2026-11-14 18:33:57.356.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.609 (0.609) seconds
+Test Suite 'OcpDiagnosticExportTests' started at 2026-11-14 18:33:57.356.
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testBudgetKeepsCompleteNewestLines]' started.
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testBudgetKeepsCompleteNewestLines]' passed (0.005 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testExistingOutputAndNonFileURLsAreRejected]' started.
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testExistingOutputAndNonFileURLsAreRejected]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testFileReportAndNullableUnlimitedBudget]' started.
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testFileReportAndNullableUnlimitedBudget]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testNegativeBudgetAndTraceSuffixRedaction]' started.
+Test Case '-[OcPlayerCoreTests.OcpDiagnosticExportTests testNegativeBudgetAndTraceSuffixRedaction]' passed (0.004 seconds).
+Test Suite 'OcpDiagnosticExportTests' passed at 2026-11-14 18:33:57.370.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
+Test Suite 'OcpPlaybackPreparationTests' started at 2026-11-14 18:33:57.370.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testOriginalWireDecodingRetainsUnsignedTokensAndPreferredSourceOrder]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testOriginalWireDecodingRetainsUnsignedTokensAndPreferredSourceOrder]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testRecoveryChainGenerationDecodesFromOriginalWireBytes]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testRecoveryChainGenerationDecodesFromOriginalWireBytes]' passed (0.000 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedContinuationWindowAndNoopRelease]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedContinuationWindowAndNoopRelease]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedEffectsKeepReadyLeaseUntilAcknowledgementAndRejectOldWork]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedEffectsKeepReadyLeaseUntilAcknowledgementAndRejectOldWork]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedRecoveryPlansSeparateManualRetryAndBackgroundPosition]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackPreparationTests testTypedRecoveryPlansSeparateManualRetryAndBackgroundPosition]' passed (0.001 seconds).
+Test Suite 'OcpPlaybackPreparationTests' passed at 2026-11-14 18:33:57.374.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'OcpPlaybackTracksTests' started at 2026-11-14 18:33:57.374.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackTracksTests testResetAndMalformedReceiptsDoNotConsumeNewEffect]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackTracksTests testResetAndMalformedReceiptsDoNotConsumeNewEffect]' passed (0.001 seconds).
+Test Case '-[OcPlayerCoreTests.OcpPlaybackTracksTests testTypedTrackEffectsKeepSignedRangesAndDistinctImportReceipts]' started.
+Test Case '-[OcPlayerCoreTests.OcpPlaybackTracksTests testTypedTrackEffectsKeepSignedRangesAndDistinctImportReceipts]' passed (0.001 seconds).
+Test Suite 'OcpPlaybackTracksTests' passed at 2026-11-14 18:33:57.376.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'OcpResponseTests' started at 2026-11-14 18:33:57.376.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testPublicSyncAndAsyncCallsKeepExactPayloadAfterClientRetirement]' started.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testPublicSyncAndAsyncCallsKeepExactPayloadAfterClientRetirement]' passed (0.166 seconds).
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testTypedDataPreservesNestedIntegerRangesNullsAndFloatingFields]' started.
+Test Case '-[OcPlayerCoreTests.OcpResponseTests testTypedDataPreservesNestedIntegerRangesNullsAndFloatingFields]' passed (0.001 seconds).
+Test Suite 'OcpResponseTests' passed at 2026-11-14 18:33:57.544.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.168 (0.168) seconds
+Test Suite 'OcpSettingsBackupTests' started at 2026-11-14 18:33:57.544.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testEffectNumbersKeepExactInt64AndSummaryUsesGraphemes]' started.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testEffectNumbersKeepExactInt64AndSummaryUsesGraphemes]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testLegacyMirrorAndNullableRestoreOperations]' started.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testLegacyMirrorAndNullableRestoreOperations]' passed (0.002 seconds).
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testNativeVersionAndEmptyErrorsRemainTyped]' started.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testNativeVersionAndEmptyErrorsRemainTyped]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testSnapshotDefaultsAndPresentFalseAreDistinct]' started.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testSnapshotDefaultsAndPresentFalseAreDistinct]' passed (0.003 seconds).
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testUtf16AndFirstDuplicateKeysDecodeWithoutPrecisionLoss]' started.
+Test Case '-[OcPlayerCoreTests.OcpSettingsBackupTests testUtf16AndFirstDuplicateKeysDecodeWithoutPrecisionLoss]' passed (0.001 seconds).
+Test Suite 'OcpSettingsBackupTests' passed at 2026-11-14 18:33:57.556.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.011 (0.012) seconds
+Test Suite 'OcPlayerCoreTests.xctest' passed at 2026-11-14 18:33:57.556.
+	 Executed 35 tests, with 0 failures (0 unexpected) in 1.304 (1.311) seconds
+Test Suite 'All tests' passed at 2026-11-14 18:33:57.556.
+	 Executed 35 tests, with 0 failures (0 unexpected) in 1.304 (1.312) seconds
+◇ Test run started.
+↳ Testing Library Version: 2084
+↳ Target Platform: arm64e-apple-macos14.0
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.

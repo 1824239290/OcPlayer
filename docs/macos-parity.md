@@ -23,7 +23,7 @@ Reference Apple checkout during this migration:
 | Bangumi | Public/authorized API, mirrors, OAuth refresh/generation safety, collections, episodes/progress, search/calendar, sync and persistence | Native BangumiAPIClient now dispatches all public, authorized and gateway OAuth requests through Core; complete raw responses, p1 routes, PATCH mutations, pagination, generation cancellation and single-flight refresh are covered by real Rust/Swift and C ABI fixtures. All BangumiDatabaseOperator entry points now dispatch to shared SQLite, merge, progress-window and sync-target policy; complete chapter sync uses one transactional replacement. Credential generations, OAuth state consumption, refresh claims/timeout classification, expiration/session-reuse policy and login/profile/logout revision barriers now run in retained Core account state. Native persistence/task/session/notification effects remain adapters. Collection pagination, complete episode replacement, sliding concurrent reconciliation and full incremental collection/episode refresh now run in retained Core flows. SQL receipts and directory retirement share the database Core state lock; native timestamp adoption uses account-operation barriers. Subject loading, tri-state collection reconciliation, full chapter loading, single/batch progress and rating/type writes, watching preparation and season completion now use retained SQL/effect flows. Failed watching/batch reads preserve explicit intent and optimistic progress; completion requires nonempty all-watched mains plus confirmed remote doing. Native effect/notification barriers and locked fallback SQL revisions reject stale work. The complete authorization/profile/logout/passive-invalidation service sequences now use retained account effects with operation/identity barriers, exact-generation rollback and atomic physical credential/DB clear guards. Retired identity receipts release immediately; redundant invalidation at the observer bound returns safely while explicit account operations remain available. Broader live-account, configuration/transport and full platform acceptance remain open. |
 | MoviePilot | Login, silent relogin, raw media/torrent fields, SSE progress, downloads and subscriptions, cancellation/session retirement | All native HTTP paths dispatch through Core, including first/token-only login and raw byte-preserving exchanges. Retained account policy now owns login/refresh receipts, generations, single-flight/fuse and retirement decisions, including post-commit race guards. Physical credentials/revisions, tasks and notifications remain effects. Real C ABI/native fixtures cover cookies, concurrent expiry, rejection, mutation routes, raw fields and non-replay. Complete raw/named retry/auth replay now runs in retained request flows with account/configuration retirement, method idempotence and retry/jitter policy. Typed login/current-user replies preserve large integer IDs and optional native user fields. Broader account and live deployment acceptance remains. |
 | Configuration / diagnostics | Existing settings/export/import compatibility, redaction, bounded events, actionable errors and native diagnostics | Core schema/diagnostic commands and redaction tests pass. Bounded event count/bytes and lifetime coalescing/drop counters are available in diagnostics. File-backed aggregate diagnostic export now preserves archive budgets/order, trace tails/redaction and the native sink queue boundary, with complete-byte comparisons and disabled-mode coverage. The complete current format-v1 backup now uses Core snapshot/schema/summary/restore policy with native getter, codec and store adapters; broader settings ownership remains subject to the full-goal audit. |
-| Apple delivery | Reproducible library + adapter + embedded/signed app; clean-checkout build; macOS native regression | Host dylib and app embedding/signing verified. XCFramework script exists but all slices are not yet verified. Standalone Apple binding is now delivered in `bindings/apple/OcPlayerCore`, with source-equivalence and native-library package checks; release acceptance remains. Complete macOS AppTests and explicit Core activation tests now pass; the inherited macOS-only skips are recorded in raw output. |
+| Apple delivery | Reproducible library + adapter + embedded/signed app; clean-checkout build; macOS native regression | Verified from clean locked offline source: all five architectures in three XCFramework slices, twelve ABI exports per architecture, direct static Swift linkage and universal macOS dylib. All 33 delivery files match independent builds byte-for-byte. Release static contracts pass 35; all five SDK/architecture links and both stripped macOS probes pass. The ordinary universal Release app ZIP omits selftest code and passes strict deep signature verification after extraction. A separately instrumented optimized Release passes actual controls/EOF with zero render/audio failures and matching runtime bytes in both architectures. Prior complete macOS regression remains 1026 (1007 passed, 19 platform skips). See the Apple release report; this delivery item is closed. |
 | Windows | Stable DLL/C# binding and equivalent business API with native adapter | Binding exists; native adapter remains unfinished. Runtime testing can wait per user instruction. |
 
 ## Verified run: 2026-11-13
@@ -1195,3 +1195,30 @@ for the covered behavior. Remaining broad SDK schema/transport and public owners
 coverage, Apple release/framework slices, Windows adapter implementation and the
 whole native-settings ownership audit stay active. Windows runtime testing remains
 deferred. The full goal remains active pending requirement-by-requirement proof.
+
+## Apple release delivery verification
+
+See [validation/2026-11-14-apple-release/README.md](validation/2026-11-14-apple-release/README.md).
+Core source `e705d2e`, native adapter `69207ad`: complete static package, universal
+dylib and ordinary universal Release app ZIP are retained in
+`artifacts/apple-2026-11-14/`. An independent clean clone in a path containing a
+space and the original clean checkout build offline with separate target caches;
+all 143 inputs and all 33 delivery files match. Three slices contain five
+architectures, each with all twelve C exports. Release static Swift contracts
+pass 35 without a dynamic path, with five native SDK links and stripped arm64/
+Intel macOS executable probes. Both dynamic binding copies also pass 35.
+
+The ordinary production executable omits the existing selftest entry. A temporary
+project adds only the documented Release selftest condition for optimized native
+controls/EOF verification, then is preserved in the report and removed from the
+source checkout. Both playback processes exit zero, with no render/audio failure;
+the unsigned and embedded libraries match twelve runtime sections per architecture.
+The final ordinary Release is restored from the original untouched project,
+archived and extracted with byte-identical executable and strict deep ad-hoc
+signature acceptance. The 687 native build inputs remain unchanged.
+
+These are new delivery/optimized playback checks. The complete earlier behavioral
+regression (Rust 212, ABI 203, native packages 1387, AppTests 1026) is retained in
+the settings-backup report; it is not relabeled as a new 1026-case release run.
+Windows execution remains deferred. The next full-goal work is the finite public
+command/ownership, platform transport and Windows adapter audit.

@@ -1,0 +1,1 @@
+Scripts/verify-apple-release.sh: line 16: 62727 Trace/BPT trap: 5       env -u OCP_CORE_LIBRARY_PATH OCP_CORE_ENABLED=1 arch "-$architecture" "$destination/release-probe" > "$destination/probe-result.json" 2> "$destination/probe-runtime.log"

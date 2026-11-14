@@ -1,0 +1,23 @@
+info: profile set to minimal
+info: default host tuple is aarch64-apple-darwin
+info: syncing channel updates for 1.99.1-aarch64-apple-darwin
+info: latest update on 2026-10-15 for version 1.99.1 (58cf8f9c3 2026-10-13)
+info: downloading 7 components
+info: default toolchain set to 1.99.1-aarch64-apple-darwin
+
+  1.99.1-aarch64-apple-darwin installed - rustc 1.99.1 (58cf8f9c3 2026-10-13)
+
+
+Rust is installed now. Great!
+
+To get started you need Cargo's bin directory 
+(/tmp/ocp-apple-delivery/toolchain/cargo/bin) in your PATH
+environment variable. This has not been done automatically.
+
+To configure your current shell, you need to source
+the corresponding env file under /tmp/ocp-apple-delivery/toolchain/cargo.
+
+Consider running the right command for your shell (note the leading DOT):
+. "/tmp/ocp-apple-delivery/toolchain/cargo/env"           # For 
+sh/ash/dash/pdksh/zsh
+source "/tmp/ocp-apple-delivery/toolchain/cargo/env.tcsh" # For tcsh

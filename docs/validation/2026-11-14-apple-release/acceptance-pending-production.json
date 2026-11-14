@@ -1,0 +1,103 @@
+{
+  "staticRelease": {
+    "staticSwiftTests": 35,
+    "skips": 0,
+    "platformArchitectureLinks": 5,
+    "macOSReleaseProbes": [
+      {
+        "architecture": "arm64",
+        "staticOnly": true,
+        "abiVersion": 1,
+        "ping": true,
+        "events": true,
+        "playback": true,
+        "settingsBackup": true,
+        "diagnostics": true
+      },
+      {
+        "architecture": "x86_64",
+        "staticOnly": true,
+        "abiVersion": 1,
+        "ping": true,
+        "events": true,
+        "playback": true,
+        "settingsBackup": true,
+        "diagnostics": true
+      }
+    ],
+    "deliveryHashesVerified": 33
+  },
+  "reproducibility": {
+    "identicalDeliveryFiles": 33,
+    "identicalSourceInputs": 143,
+    "sourceCommit": "e705d2e77b62d799301a7b5e13320f3906926054",
+    "allSlicesByteIdentical": true,
+    "cleanOfflineBuild": true
+  },
+  "optimizedNativePlayback": {
+    "configuration": "Release + OCPLAYER_SELFTEST",
+    "deepStrictAdHocSignature": true,
+    "runtimeSections": {
+      "x86_64": {
+        "__TEXT/__text": "21947f1bf525286051a236ab056c87147b7a505472e22fe194298a1c80e9e4b0",
+        "__TEXT/__stubs": "ffc4b19db53f0fc9518344e21623c28816a415c1833285cd034b7fadd4e5d753",
+        "__TEXT/__gcc_except_tab": "85608837b4dba22e01afb61652630742560e75652f9b33fd7f9be12c68d5f062",
+        "__TEXT/__const": "e07da777e2e5a9e1c9fd3f623a4377987e6575a979ca015c9a6c072b7ea1e0e9",
+        "__TEXT/__cstring": "1d8b44d54b6f22c1d436fa8531cecdbfbac294ccd91094605a3952ec43b1b1e3",
+        "__TEXT/__unwind_info": "91141681e7d8953f0a5cca66a9c4c067afba0c018304e3fda739ddd43ea3bff3",
+        "__TEXT/__eh_frame": "37a789fa4e04726b0735b0f0287b1a998fb266b8107f16ef18b7bffeba0d134d",
+        "__DATA_CONST/__const": "ea0a17822c186e228286d90553d90f3c14e1abe72cbc063c1ebb88646aa56653",
+        "__DATA_CONST/__got": "9018c01fe4b70c26a53625582ce12b939c698d94cd128592417990c9a2100ded",
+        "__DATA/__data": "5c51bedbce3ccc5d2e1cb558db784fed83939bf3de9ee93a21af12228e95f3c0",
+        "__DATA/__thread_vars": "f1c447cd17220a414f7448f70f8fcae934038d5f023ce3b147eaf2acfc14a268",
+        "__DATA/__thread_data": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+      },
+      "arm64": {
+        "__TEXT/__text": "0d3367c131556f8259ce4cf50d46edf9572ccea01764f385fcd40496fb62bc96",
+        "__TEXT/__stubs": "3357a37bb6871a9469174af2461ef3ccb151cb7716f5f00185f2dd44b2608931",
+        "__TEXT/__gcc_except_tab": "540dbcd3c1500d0336127c310cd4d0bade171ebcee3eea5e12bc0382d0b31696",
+        "__TEXT/__cstring": "8e7fc6482ea201056851f3765060aa56de0dbb7f8df9a06e7fe3d5146fcd58cb",
+        "__TEXT/__const": "0b679226c6a074db684811440f8ecfcc53588aa92906e25c2d9a1166b603893c",
+        "__TEXT/__unwind_info": "1dd963478e8f9420d8e18f011d4275113369c4afbf5453940392c379870f4330",
+        "__TEXT/__eh_frame": "8431aea2fcb861a7bfb096ffd1ac875826cebae3f933bebf9a03a36ff37e8e88",
+        "__DATA_CONST/__const": "56fba8389d7242397cd83cded7bbdc85d62a4af21090ba2dfd0adf186ddab879",
+        "__DATA_CONST/__got": "c5e7313808ce04f56c940fdb9f8fe5421aec660b5ac2afeb780cbd90f352cc65",
+        "__DATA/__data": "38a10ae09b8f4db95229b0bafd69fdc109c8f990e7fb56df4b87af98b8dcb655",
+        "__DATA/__thread_vars": "e00a1a5261426f16ac3de4df7729f7fabab239b949e89e0b84ced8b81a052b88",
+        "__DATA/__thread_data": "9ae65cf32e8d10cfc6d077df31c5a82287d7ea9108a1e39d4f10a82ea393d883"
+      }
+    },
+    "playback": [
+      {
+        "name": "playback",
+        "seconds": 10,
+        "controls": true,
+        "fileSHA256": "8e929749d03a676ef52834fca668b62b06c94facda36959a53c2806ae7373bd2",
+        "exitStatus": 0,
+        "renderFailures": 0,
+        "audioFailures": 0
+      },
+      {
+        "name": "eof",
+        "seconds": 8,
+        "controls": false,
+        "fileSHA256": "f29dd8ab6f8c61245d61855b4193293537a40fd0ced376b2738c367cb1bbc1f5",
+        "exitStatus": 0,
+        "renderFailures": 0,
+        "audioFailures": 0
+      }
+    ],
+    "app": "/tmp/ocp-apple-delivery/NativeRelease/Build/Products/Release/OcPlayer.app",
+    "library": "/tmp/ocp-apple-delivery/universal-macos/libocp_ffi.dylib"
+  },
+  "baselineRegressionReport": "docs/validation/2026-11-14-settings-backup/README.md",
+  "baselineRust": 212,
+  "baselineABI": 203,
+  "baselineNativePackages": 1387,
+  "baselineApp": {
+    "executed": 1026,
+    "passed": 1007,
+    "skipped": 19,
+    "failures": 0
+  }
+}
