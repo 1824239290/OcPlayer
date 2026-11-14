@@ -1,5 +1,7 @@
 import DiagnosticsKit
 import Foundation
+import OcPlayerCore
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -11,37 +13,61 @@ enum DiagnosticsExport {
 
     /// 日志正文进导出包的上限。
     ///
-    /// 保留上限是 50 MB（`DiagnosticBackend.maxTotalBytes`），而导出会把内容同时
+    /// 保留上限是 50 MB（`DiagnosticBackend.maxTotalBytes`），旧原生导出会把内容同时
     /// 持有三份（`Data` + 解码后的 `String` + 拼接结果）——实测 48.4 MB 日志对应
     /// **112 MiB 峰值 RSS**（2.44×）。iOS 上是现实的 jetsam 风险（本 App 真实峰值
     /// RSS 到过 435 MB），而「导出诊断包附到 issue」这条工作流又必须可用。
     ///
-    /// 8 MiB 按每条 ~1 KB ≈ **8000 条**，远超任何一个 issue 需要贴的量；实测把尖峰
+    /// 8 MiB 按每条 ~1 KB ≈ **8000 条**，远超任何一个 issue 需要贴的量；原生实现实测把尖峰
     /// 压到 **32 MiB**。排障看的本来就是"崩前那一段"，所以只保留**最新**的记录。
     static let bodyByteBudget = 8 * 1024 * 1024
+
+    private static let sharedExporter = OcpDiagnosticExport()
+    static var isCoreExportActive: Bool { sharedExporter != nil }
+    static func makeData(
+        directory: URL = AppDiagnostics.fileURL.deletingLastPathComponent(),
+        traceTailBytes: Int = DiagnosticsExport.traceTailBytes,
+        bodyByteBudget: Int? = DiagnosticsExport.bodyByteBudget
+    ) throws -> Data {
+        try makeData(logger: AppDiagnostics.logger, headerLines: headerLines(bodyByteBudget: bodyByteBudget),
+                     directory: directory, traceTailBytes: traceTailBytes, bodyByteBudget: bodyByteBudget)
+    }
+    static func makeData(logger: DiagnosticLogger, headerLines: [String], directory: URL,
+                         traceTailBytes: Int, bodyByteBudget: Int?) throws -> Data {
+        if let sharedExporter {
+            let output = FileManager.default.temporaryDirectory.appendingPathComponent("ocplayer-diagnostic-export-\(UUID().uuidString).txt")
+            defer { try? FileManager.default.removeItem(at: output) }
+            let report = try logger.withSynchronizedExportDirectory { logDirectory in
+                try sharedExporter.export(logDirectory: logDirectory, to: output, headerLines: headerLines,
+                    bodyByteBudget: bodyByteBudget,
+                    traces: KernelTraceSwitches.traceFileNames.map { .init(url: directory.appendingPathComponent($0), name: $0, maxBytes: traceTailBytes) },
+                    username: NSUserName())
+            }
+            let sink = Logger(subsystem: "OcPlayer", category: "DiagnosticExport")
+            for name in report.skippedLogFiles { sink.info("导出跳过不可读的日志文件 file=\(name, privacy: .public)") }
+            return try Data(contentsOf: output)
+        }
+        return Data(try nativeText(logger: logger, headerLines: headerLines, directory: directory,
+                                  traceTailBytes: traceTailBytes, bodyByteBudget: bodyByteBudget).utf8)
+    }
+    static func nativeText(logger: DiagnosticLogger, headerLines: [String], directory: URL,
+                           traceTailBytes: Int, bodyByteBudget: Int?) throws -> String {
+        var text = try logger.exportText(headerLines: headerLines, bodyByteBudget: bodyByteBudget)
+        for name in KernelTraceSwitches.traceFileNames {
+            guard let trace = readTraceTail(at: directory.appendingPathComponent(name), maxBytes: traceTailBytes), !trace.text.isEmpty else { continue }
+            text += "\n\n# 内核 trace：\(name)" + (trace.truncated ? "（只保留尾部 \(traceTailBytes / 1024 / 1024) MiB，已截断）" : "")
+                + "\n" + DiagnosticSanitizer.redact(trace.text)
+        }
+        return text
+    }
 
     static func makeText(
         directory: URL = AppDiagnostics.fileURL.deletingLastPathComponent(),
         traceTailBytes: Int = DiagnosticsExport.traceTailBytes,
         bodyByteBudget: Int? = DiagnosticsExport.bodyByteBudget
     ) throws -> String {
-        // 正文有界：只留最新的那一段（`nil` 时行为退回「导出全部」，供测试/排障用）。
-        var text = try AppDiagnostics.logger.exportText(
-            headerLines: headerLines(bodyByteBudget: bodyByteBudget),
-            bodyByteBudget: bodyByteBudget)
-        // 详细档的内核 trace（HTTP 逐请求 / demux 读失败）是独立文件，附在后面：
-        // 「一个文件说明一切」比让用户分别找两个 jsonl 靠谱。
-        // trace 由内核**直接写盘**、不经 App 日志管线，所以这里显式过一遍脱敏：
-        // 逐请求记录里带完整 URI，用户直连的带签名 query 的 URL 会原样落进去。
-        for name in KernelTraceSwitches.traceFileNames {
-            let url = directory.appendingPathComponent(name)
-            guard let trace = readTraceTail(at: url, maxBytes: traceTailBytes),
-                  !trace.text.isEmpty else { continue }
-            text += "\n\n# 内核 trace：\(name)"
-                + (trace.truncated ? "（只保留尾部 \(traceTailBytes / 1024 / 1024) MiB，已截断）" : "")
-                + "\n" + DiagnosticSanitizer.redact(trace.text)
-        }
-        return text
+        String(decoding: try makeData(directory: directory, traceTailBytes: traceTailBytes,
+                                      bodyByteBudget: bodyByteBudget), as: UTF8.self)
     }
 
     /// 单个内核 trace 进导出包的上限。

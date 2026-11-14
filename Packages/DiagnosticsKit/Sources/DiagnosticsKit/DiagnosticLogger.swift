@@ -325,6 +325,15 @@ public final class DiagnosticLogger: @unchecked Sendable {
         return backend.flush(timeout: timeout)
     }
 
+    /// Export effects execute while queued writes are synchronized and excluded,
+    /// retaining the same snapshot boundary as native exportData/exportText.
+    /// Executes a file export after flushing the sink, holding its serial queue.
+    /// The operation must not call this logger again while that queue is held.
+    public func withSynchronizedExportDirectory<T>(_ operation: (URL) throws -> T) throws -> T {
+        emitPendingSuppressionSummaries()
+        return try backend.withSynchronizedExportDirectory(operation)
+    }
+
     /// Export all retained archives followed by the current JSONL file.
     public func exportData() throws -> Data {
         emitPendingSuppressionSummaries()
@@ -829,6 +838,13 @@ private final class DiagnosticBackend: @unchecked Sendable {
             let files = existingLogFiles()   // 已按 (modified, name) 升序 = 旧 → 新
             guard let byteBudget else { return try concatenated(files, capacity: nil) }
             return try boundedTail(of: files, budget: max(0, byteBudget))
+        }
+    }
+
+    func withSynchronizedExportDirectory<T>(_ operation: (URL) throws -> T) throws -> T {
+        try queue.sync {
+            try handle?.synchronize()
+            return try operation(directory)
         }
     }
 
