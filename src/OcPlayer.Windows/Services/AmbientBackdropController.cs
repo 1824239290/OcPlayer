@@ -36,7 +36,7 @@ internal sealed class AmbientBackdropController : IDisposable
         _view.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
         if (changedSession)
         {
-            _poolLoad?.Cancel(); _poolLoad?.Dispose();
+            _poolLoad?.Cancel(); _poolLoad?.Dispose(); _poolLoad = null;
             _displayLoad?.Cancel(); _displayLoad?.Dispose(); _displayLoad = null;
             _timer.Stop(); _pool = []; _index = 0; ++_generation;
             _view.Hide(true);

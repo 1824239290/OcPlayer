@@ -9,7 +9,9 @@
     <ProjectReference Include="..\..\src\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\MediaServer.cs" Link="MediaServer.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\CoreRuntime.cs" Link="CoreRuntime.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\AmbientBackdropController.cs" Link="AmbientBackdropController.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Preview\DemoCatalog.cs" Link="DemoCatalog.cs" />
+    <Content Include="..\..\src\OcPlayer.Windows\Assets\Demo\catalog.json" Link="Assets\Demo\catalog.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="$(OcpNativeDirectory)*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

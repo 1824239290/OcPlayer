@@ -155,24 +155,64 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     {
         var detail = await Request("browse.detail", new { itemId = media.Id }, token);
         var projected = Project(detail);
+        var entry = projected;
+        if (entry.Kind is "episode" or "season")
+        {
+            var seriesId = entry.SeriesId ?? media.SeriesId;
+            if (string.IsNullOrEmpty(seriesId)) throw new InvalidOperationException("服务器未返回此条目所属的剧集，无法加载剧集详情。");
+            seasonId ??= entry.Kind == "season" ? entry.Id : entry.SeasonId ?? media.SeasonId;
+            projected = Project(await Request("browse.detail", new { itemId = seriesId }, token));
+        }
         if (projected.Kind == "series")
         {
-            var seasons = await Request("browse.seasons", new { seriesId = media.Id, limit = 500 }, token);
-            var choices = seasons.EnumerateArray().Select(item => new DemoSeason(String(item, "id"), String(item, "name"))).ToArray();
+            var seasons = await Request("browse.seasons", new { seriesId = projected.Id, limit = 500 }, token);
+            var choices = seasons.EnumerateArray().Select(item => new DemoSeason(String(item, "id"), String(item, "name"),
+                item.TryGetProperty("seasonNumber", out var number) && number.ValueKind == JsonValueKind.Number ? number.GetInt32() : null)).ToArray();
+            if (seasonId is null && entry.Kind == "episode")
+                seasonId = choices.FirstOrDefault(x => x.Number == (entry.SeasonNumber ?? media.SeasonNumber))?.Id;
             seasonId ??= choices.FirstOrDefault()?.Id;
-            var episodes = await Request("browse.episodes", new { seriesId = media.Id, seasonId, limit = 500 }, token);
-            projected = projected with { Seasons = choices, SelectedSeasonId = seasonId, Episodes = episodes.EnumerateArray().Select(item =>
-                new DemoEpisode((int)Number(item, "episodeNumber"), String(item, "name"),
-                    Image(String(item, "id"), "Primary", NullableString(item, "primaryImageTag")),
-                    MediaId: String(item, "id"), SeasonNumber: (int)Number(item, "seasonNumber"))).ToArray() };
+            var episodes = await Request("browse.episodes", new { seriesId = projected.Id, seasonId, limit = 500 }, token);
+            var items = episodes.EnumerateArray().Select(item =>
+            {
+                var episode = Project(item);
+                return new DemoEpisode(episode.EpisodeNumber ?? 0, episode.Title, episode.Artwork,
+                    MediaId: episode.Id, SeasonNumber: episode.SeasonNumber ?? 1,
+                    Progress: episode.Progress, DurationSeconds: episode.DurationSeconds, Played: episode.Played);
+            }).OrderBy(x => x.Number).ToArray();
+            // Match the server identity first: episode numbers can repeat across seasons.
+            var selected = entry.Kind == "episode" ? items.FirstOrDefault(x => x.MediaId == entry.Id) : null;
+            if (entry.Kind == "episode" && selected is null)
+                throw new InvalidOperationException("此集不在服务器返回的季中，请刷新后重试。");
+            if (selected is not null && entry.Kind == "episode")
+            {
+                var index = Array.IndexOf(items, selected);
+                selected = selected with { Progress = entry.Progress, Played = entry.Played,
+                    DurationSeconds = entry.DurationSeconds > 0 ? entry.DurationSeconds : selected.DurationSeconds };
+                items[index] = selected;
+            }
+            selected ??= items.FirstOrDefault();
+            projected = projected with { Seasons = choices, SelectedSeasonId = seasonId, Episodes = items,
+                SeasonNumber = choices.FirstOrDefault(x => x.Id == seasonId)?.Number,
+                DurationSeconds = selected is { DurationSeconds: > 0 } ? selected.DurationSeconds : projected.DurationSeconds,
+                EpisodeNumber = selected?.Number, EpisodeLabel = selected is null ? null : $"S{selected.SeasonNumber}E{selected.Number}" };
         }
         return projected;
+    }
+
+    public async Task<DemoEpisode> SetEpisodeWatched(DemoEpisode episode, bool watched, CancellationToken token)
+    {
+        if (!episode.Available || string.IsNullOrEmpty(episode.MediaId))
+            throw new InvalidOperationException("此集尚未入库，无法更新观看状态。");
+        await Request(watched ? "server.markPlayed" : "server.markUnplayed", new { itemId = episode.MediaId }, token);
+        return episode with { Progress = watched ? 100 : 0, Played = watched };
     }
 
     public async Task<PlaybackSource> Resolve(DemoMedia media, int episode, CancellationToken token)
     {
         var id = media.Kind == "series" ? media.Episodes?.FirstOrDefault(x => x.Number == episode)?.MediaId : media.Id;
         if (string.IsNullOrEmpty(id)) throw new InvalidOperationException("没有可播放的分集。");
+        // Resume belongs to the selected episode, never to the series or another season.
+        var playbackMedia = media.Kind == "series" ? Project(await Request("browse.detail", new { itemId = id }, token)) : media;
         var info = await Request("playback.info", new { itemId = id }, token);
         var sources = info.GetProperty("mediaSources");
         if (sources.GetArrayLength() == 0) throw new InvalidOperationException("服务器没有返回可播放的片源。");
@@ -180,7 +220,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         var sourceId = NullableString(source, "id"); var sessionId = NullableString(info, "playSessionId");
         var url = await Request("server.streamURL", new { itemId = id, mediaSourceId = sourceId, playSessionId = sessionId }, token);
         return new PlaybackSource(id, media.Title, url.GetProperty("url").GetString()!, Profile.Id + ":" + Profile.UserId,
-            media.DurationSeconds * media.Progress / 100,
+            playbackMedia.Progress >= 100 ? 0 : playbackMedia.DurationSeconds * playbackMedia.Progress / 100,
             Report: new PlaybackReport(JsonSerializer.SerializeToElement(Profile, JsonOptions), id, sourceId, sessionId));
     }
 
@@ -188,17 +228,24 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     {
         var id = String(item, "id"); var kind = String(item, "kind");
         var progress = item.TryGetProperty("playState", out var play) && play.ValueKind == JsonValueKind.Object ? Number(play, "percentage") * 100 : 0;
-        if (play.ValueKind == JsonValueKind.Object && play.TryGetProperty("played", out var played) && played.ValueKind == JsonValueKind.True) progress = 100;
+        var isPlayed = play.ValueKind == JsonValueKind.Object && play.TryGetProperty("played", out var played) && played.ValueKind == JsonValueKind.True;
+        if (isPlayed) progress = 100;
         var duration = Number(item, "runtimeSeconds");
         var artwork = Image(id, "Primary", NullableString(item, "primaryImageTag"));
         var backdrop = Image(id, "Backdrop", NullableString(item, "backdropImageTag"));
+        var logoOwner = NullableString(item, "parentLogoItemID");
+        var logo = Image(string.IsNullOrWhiteSpace(logoOwner) ? id : logoOwner, "Logo", NullableString(item, "logoImageTag"));
         var episode = Number(item, "episodeNumber"); var season = Number(item, "seasonNumber");
         return new DemoMedia(id, String(item, "name"), String(item, "originalTitle"), item.TryGetProperty("year", out var year) ? year.ToString() : "",
             item.TryGetProperty("genres", out var genres) && genres.ValueKind == JsonValueKind.Array ? string.Join(" / ", genres.EnumerateArray().Select(x => x.GetString())) : "",
             artwork, String(item, "overview"), progress, episode > 0 ? $"S{season}E{episode}" : null,
             duration > 0 ? (int)Math.Ceiling(duration * (1 - progress / 100) / 60) : null, kind,
             StillArtwork: Image(id, "Thumb", NullableString(item, "thumbImageTag")), BackdropArtwork: backdrop,
-            DurationSeconds: duration, DetailArtwork: backdrop);
+            LogoArtwork: logo, DurationSeconds: duration, DetailArtwork: backdrop,
+            SeriesId: NullableString(item, "seriesID"), SeasonId: NullableString(item, "seasonID"),
+            SeasonNumber: item.TryGetProperty("seasonNumber", out var seasonNumber) && seasonNumber.ValueKind == JsonValueKind.Number ? seasonNumber.GetInt32() : null,
+            EpisodeNumber: item.TryGetProperty("episodeNumber", out var episodeNumber) && episodeNumber.ValueKind == JsonValueKind.Number ? episodeNumber.GetInt32() : null,
+            Played: isPlayed);
     }
 
     private string Image(string id, string type, string? tag)

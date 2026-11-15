@@ -4,6 +4,7 @@ param(
     [switch]$Demo,
     [switch]$NavigationPreview,
     [switch]$HeaderActionsPreview,
+    [switch]$DetailControlsPreview,
     [string]$BuildDirectory,
     [string]$Open,
     [string]$DataDirectory
@@ -42,6 +43,7 @@ $launch.Environment['OCP_DATA_DIRECTORY'] = $DataDirectory
 if ($Demo) { $launch.ArgumentList.Add('--demo-route=home') }
 if ($NavigationPreview) { $launch.ArgumentList.Add('--nav-preview') }
 if ($HeaderActionsPreview) { $launch.ArgumentList.Add('--header-actions-preview') }
+if ($DetailControlsPreview) { $launch.ArgumentList.Add('--detail-controls-preview') }
 if ($Open) { $launch.ArgumentList.Add("--open=$Open") }
 $launchedApp = [Diagnostics.Process]::Start($launch)
 Write-Output "Started OcPlayer (PID $($launchedApp.Id))."

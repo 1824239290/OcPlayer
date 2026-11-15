@@ -55,7 +55,7 @@ public sealed partial class MainWindow : Window
             UpdateTitleBarRegions();
             await LoadNavigationAvatar();
         };
-        _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched);
+        _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched, SetEpisodeWatched);
         Closed += (_, _) =>
         {
             _load?.Cancel(); _connection?.Cancel(); _player?.Close();
@@ -100,6 +100,15 @@ public sealed partial class MainWindow : Window
     private void Navigate(string route)
     {
         if (_closing) return;
+        if (route.StartsWith("genre:"))
+        {
+            _model.Category = route[6..]; _model.Query = ""; _model.WatchState = "全部状态";
+            _model.LibraryId = null; _model.LibraryName = _model.Category;
+            _cachedPages.Remove("library");
+            Navigate("library");
+            if (!App.DemoMode) LoadLibrary();
+            return;
+        }
         if (route.StartsWith("season:")) { LoadSeason(route[7..]); return; }
         if (route != _model.Route) { _load?.Cancel(); ++_loadGeneration; }
         if (route is "settings:服务器管理" or "settings:连接服务器") { ConnectServer(); return; }
@@ -148,11 +157,10 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { Notify("无法加载详情：" + ex.Message); return; }
         }
         if (media.Progress >= 100) _model.Watched.Add(media.Id);
-        _model.SelectedMedia = media; _model.SelectedEpisode = media.Episodes?.FirstOrDefault()?.Number ?? 1; Navigate("detail");
+        _model.SelectedMedia = media; _model.SelectedEpisode = media.InitialEpisodeNumber; Navigate("detail");
     }
-    private async void ToggleWatched(DemoMedia media)
+    private async void ToggleWatched(DemoMedia media, bool watched)
     {
-        var watched = !_model.Watched.Contains(media.Id);
         var (token, generation) = BeginLoad();
         try
         {
@@ -164,15 +172,48 @@ public sealed partial class MainWindow : Window
                     played = watched, completed = watched }));
             if (_closing || generation != _loadGeneration) return;
             if (watched) _model.Watched.Add(media.Id); else _model.Watched.Remove(media.Id);
-            if (_model.SelectedMedia.Id == media.Id) { _model.SelectedMedia = media with { Progress = watched ? 100 : 0 }; Navigate(_model.Route); }
+            if (_model.SelectedMedia.Id == media.Id)
+            {
+                _model.SelectedMedia = media with { Progress = watched ? 100 : 0, Played = watched,
+                    Episodes = media.Episodes?.Select(x => x with { Progress = watched ? 100 : 0, Played = watched }).ToArray() };
+                Navigate(_model.Route);
+            }
             App.Core?.RefreshProgress();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { Notify("无法更新观看状态：" + ex.Message); }
+        catch (Exception ex)
+        {
+            if (!_closing && generation == _loadGeneration && _model.SelectedMedia.Id == media.Id) Navigate(_model.Route);
+            Notify("无法更新观看状态：" + ex.Message);
+        }
     }
+    private async void SetEpisodeWatched(DemoMedia media, DemoEpisode episode, bool watched)
+    {
+        if (App.Core?.Server is not { } server) return;
+        var (token, generation) = BeginLoad();
+        try
+        {
+            var updated = await server.SetEpisodeWatched(episode, watched, token);
+            if (_closing || generation != _loadGeneration) return;
+            if (_model.SelectedMedia.Id == media.Id && _model.SelectedMedia.SelectedSeasonId == media.SelectedSeasonId)
+            {
+                _model.SelectedMedia = _model.SelectedMedia with { Episodes = _model.SelectedMedia.Episodes?.Select(x =>
+                    x.MediaId == episode.MediaId ? updated : x).ToArray() };
+                Navigate(_model.Route);
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            if (!_closing && generation == _loadGeneration && _model.SelectedMedia.Id == media.Id) Navigate(_model.Route);
+            Notify("无法更新此集的观看状态：" + ex.Message);
+        }
+    }
+
     private async void Play(DemoMedia media)
     {
         if (!App.DemoMode && App.Core is null) { Notify(App.CoreError ?? "播放核心不可用。"); return; }
+        var episodeNumber = _model.SelectedEpisode;
         PlaybackSource? source = null;
         if (!App.DemoMode && media.SourceUri is null && App.Core?.Server is { } server)
         {
@@ -180,20 +221,52 @@ public sealed partial class MainWindow : Window
             try
             {
                 if (media.Kind == "series" && media.Episodes is null) media = await server.Detail(media, token);
-                source = await server.Resolve(media, _model.SelectedEpisode, token);
+                source = await server.Resolve(media, episodeNumber, token);
                 if (generation != _loadGeneration) return;
             }
             catch (OperationCanceledException) { return; }
             catch (Exception ex) { Notify("无法获取播放地址：" + ex.Message); return; }
         }
         else if (!App.DemoMode && media.SourceUri is null) { Notify("此条目没有可播放的片源。"); return; }
+        if (media.Kind == "series" && media.Episodes?.FirstOrDefault(x => x.Number == episodeNumber) is { } selected)
+        {
+            var label = $"S{selected.SeasonNumber}E{selected.Number}";
+            media = media with { EpisodeLabel = label, EpisodeNumber = selected.Number,
+                Progress = App.DemoMode && media.EpisodeLabel == label ? media.Progress : selected.Progress,
+                DurationSeconds = selected.DurationSeconds > 0 ? selected.DurationSeconds : media.DurationSeconds };
+        }
         if (_player is null)
         {
             _player = new PlayerWindow(media, source);
-            _player.Closed += (_, _) => { _player = null; App.Core?.RefreshProgress(); Navigate(_model.Route); };
+            _player.Closed += (_, _) => { _player = null; RefreshAfterPlayback(); };
         }
         else _player.SetMedia(media, source);
         _player.Activate();
+    }
+
+    private async void RefreshAfterPlayback()
+    {
+        if (_closing) return;
+        App.Core?.RefreshProgress();
+        var route = _model.Route;
+        Navigate(route);
+        if (App.DemoMode || route is not ("detail" or "detail-info") || _model.SelectedMedia.SourceUri is not null
+            || App.Core is not { Server: { } server } core) return;
+        var media = _model.SelectedMedia;
+        var (token, generation) = BeginLoad();
+        try
+        {
+            await core.FinishReports();
+            var refreshed = await server.Detail(media, token, media.SelectedSeasonId);
+            if (generation != _loadGeneration || _closing) return;
+            var selectedNumber = _model.SelectedEpisode;
+            _model.SelectedMedia = refreshed;
+            _model.SelectedEpisode = refreshed.Episodes?.Any(x => x.Number == selectedNumber) == true
+                ? selectedNumber : refreshed.InitialEpisodeNumber;
+            Navigate(route);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Notify("无法刷新观看状态：" + ex.Message); }
     }
     private void SetTheme(bool dark)
     {
@@ -364,7 +437,7 @@ public sealed partial class MainWindow : Window
         {
             var media = await server.Detail(_model.SelectedMedia, token, seasonId);
             if (generation != _loadGeneration) return;
-            _model.SelectedMedia = media; _model.SelectedEpisode = media.Episodes?.FirstOrDefault()?.Number ?? 1; Navigate(_model.Route);
+            _model.SelectedMedia = media; _model.SelectedEpisode = media.InitialEpisodeNumber; Navigate(_model.Route);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Notify("加载分季失败：" + ex.Message); }

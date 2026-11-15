@@ -24,6 +24,7 @@ internal static class Program
             using (var core = new OcpCoreClient(config))
             {
                 Assert(core.Ping().Ok, "real Core DLL loads");
+                VerifyBackdropLifecycle();
                 VerifyServer(core, hwnd, args[0] == "--server-only" ? null : args[0], data);
                 if (args[0] == "--server-only")
                 {
@@ -82,6 +83,30 @@ internal static class Program
         finally { DestroyWindow(hwnd); }
     }
 
+    private static void VerifyBackdropLifecycle()
+    {
+        var view = new OcPlayer.Windows.Controls.AmbientBackdropView();
+        var model = new OcPlayer.Windows.ViewModels.DemoViewModel();
+        var controller = new AmbientBackdropController(view, model);
+        controller.Update();
+        // Leaving/entering Demo changes the session through the same branch as
+        // connecting, replacing or disconnecting a server, without credentials.
+        for (var i = 0; i < 3; i++)
+        {
+            model.DemoMode = true; controller.Update();
+            Assert(view.CurrentSource is not null, "new session loads its ambient background");
+            model.DemoMode = false; controller.Update();
+            Assert(view.CurrentSource is null, "ending a session cancels and clears its background");
+        }
+        controller.Update(true);
+        model.DemoMode = true; controller.Update();
+        model.Route = "detail"; controller.Update();
+        model.Route = "home"; controller.Update();
+        Assert(view.CurrentSource is not null, "detail navigation retains a usable session background");
+        controller.Dispose(); controller.Dispose(); controller.Update();
+        Assert(view.Disposed, "background cleanup tolerates repeated disposal and late updates");
+    }
+
     private static void VerifyServer(OcpCoreClient core, IntPtr hwnd, string? media, string data)
     {
         // Exercise the Windows projection against a local wire fixture through
@@ -91,6 +116,15 @@ internal static class Program
         using var shutdown = new CancellationTokenSource();
         var requests = new List<string>();
         var randomQueries = new List<string>();
+        var watchedRequests = new List<(string Method, string Path)>();
+        object Episode(string id, int number, int season, bool omitSeasonId = false, bool played = false) => new
+        {
+            Id = id, Name = "Episode " + number, Type = "Episode", SeriesId = "series",
+            SeasonId = omitSeasonId ? null : "season-" + season, IndexNumber = number, ParentIndexNumber = season,
+            RunTimeTicks = 1200000000L, ImageTags = new { Primary = "episode-image" },
+            ParentLogoItemId = "series", ParentLogoImageTag = "series-logo",
+            UserData = new { PlaybackPositionTicks = id == "ep2" ? 300000000L : 0L, PlayedPercentage = id == "ep2" ? 25d : 0d, Played = played }
+        };
         var worker = Task.Run(async () =>
         {
             while (!shutdown.IsCancellationRequested)
@@ -101,6 +135,7 @@ internal static class Program
                 using var stream = client.GetStream();
                 using var reader = new StreamReader(stream, Encoding.ASCII, false, 1024, true);
                 var line = await reader.ReadLineAsync();
+                var method = line!.Split(' ')[0];
                 var target = line!.Split(' ')[1]; var requestPath = target.Split('?')[0];
                 var mode = requestPath.StartsWith("/emby/") ? "emby" : requestPath.StartsWith("/denied/") ? "denied" : requestPath.StartsWith("/partial/") ? "partial" : requestPath.StartsWith("/slow/") ? "slow" : "";
                 var path = mode.Length == 0 ? requestPath : requestPath[(mode.Length + 1)..];
@@ -110,6 +145,7 @@ internal static class Program
                 var requestBody = "";
                 if (length > 0) { var bodyChars = new char[length]; await reader.ReadBlockAsync(bodyChars); requestBody = new string(bodyChars); }
                 lock (requests) requests.Add(requestPath);
+                if (path.Contains("/PlayedItems/")) lock (watchedRequests) watchedRequests.Add((method, requestPath));
                 if (target.Contains("sortBy=Random")) lock (randomQueries) randomQueries.Add(target);
                 if (mode == "slow") await Task.Delay(500);
                 var status = requestBody.Contains("wrong") ? 401 : mode == "denied" && path.EndsWith("Views") || mode == "partial" && path.EndsWith("NextUp") ? 403 : 200;
@@ -117,9 +153,17 @@ internal static class Program
                     : path.EndsWith("AuthenticateByName") ? new { AccessToken = "local-fixture-token", User = new { Id = "fixture-user", Name = "fixture" } }
                     : mode == "emby" && path.EndsWith("Items/Latest") ? new[] { new { Id = "movie", Name = "Fixture movie", Type = "Movie" } }
                     : path.EndsWith("Views") ? new { Items = new[] { new { Id = "library", Name = "Movies", CollectionType = "movies" } } }
-                    : path == "/Items/series" ? new { Id = "series", Name = "Fixture series", Type = "Series" }
+                    : path == "/Items/series" ? new { Id = "series", Name = "Fixture series", OriginalTitle = "Original series title", Type = "Series", Overview = "Series synopsis", Genres = new[] { "Animation" }, ImageTags = new { Logo = "series-logo" }, BackdropImageTags = new[] { "series-backdrop" } }
+                    : path.EndsWith("Items/Resume") ? new { Items = new[] { Episode("ep2", 1, 2) } }
+                    : path.EndsWith("NextUp") ? new { Items = new[] { Episode("ep2-next", 7, 2, omitSeasonId: true) } }
+                    : path == "/Items/ep1" ? Episode("ep1", 1, 1)
+                    : path == "/Items/ep2" ? Episode("ep2", 1, 2)
+                    : path == "/Items/ep2-next" ? Episode("ep2-next", 7, 2, omitSeasonId: true)
+                    : path == "/Items/ep2-played" ? Episode("ep2-played", 9, 2, played: true)
                     : target.Contains("includeItemTypes=Season") ? new { Items = new[] { new { Id = "season-1", Name = "Season 1", Type = "Season", IndexNumber = 1 }, new { Id = "season-2", Name = "Season 2", Type = "Season", IndexNumber = 2 } } }
-                    : path == "/Shows/series/Episodes" ? new { Items = new[] { new { Id = target.Contains("seasonId=season-2") ? "ep2" : "ep1", Name = "Episode 1", Type = "Episode", IndexNumber = 1, ParentIndexNumber = target.Contains("seasonId=season-2") ? 2 : 1 } } }
+                    : path == "/Shows/series/Episodes" ? new { Items = target.Contains("seasonId=season-empty") ? Array.Empty<object>()
+                        : target.Contains("seasonId=season-2") ? new[] { Episode("ep2-next", 7, 2), Episode("ep2", 1, 2), Episode("ep2-played", 9, 2, played: true) }
+                        : new[] { Episode("ep1", 1, 1) } }
                     : path.EndsWith("PlaybackInfo") ? new { MediaSources = new[] { new { Id = "source", Container = "mp4", SupportsDirectPlay = true } }, PlaySessionId = "session" }
                     : target.Contains("sortBy=Random") ? new { Items = new object[] {
                         new { Id = "ambient", Name = "Backdrop film", Type = "Movie", BackdropImageTags = new[] { "backdrop-tag" } },
@@ -196,7 +240,62 @@ internal static class Program
             var items = server.Browse("library", "Fixture", "名称", "未观看", default).GetAwaiter().GetResult();
             Assert(profile.UserId == "fixture-user" && server.Libraries.Count == 1 && items.Length == 1 && items[0].DurationSeconds == 120, "login, home and library use Core HTTP and model projection");
             var series = server.Detail(items[0] with { Id = "series", Kind = "series" }, default, "season-2").GetAwaiter().GetResult();
-            Assert(series.Seasons?.Length == 2 && series.Episodes?.Single().MediaId == "ep2" && series.SelectedSeasonId == "season-2", "season selection retains the correct server episode identity");
+            Assert(series.Seasons?.Length == 2 && series.Episodes?.First().MediaId == "ep2" && series.SelectedSeasonId == "season-2", "season selection retains the correct server episode identity");
+            Assert(new Uri(series.LogoArtwork).AbsolutePath == "/Items/series/Images/Logo"
+                && series.LogoArtwork.Contains("series-logo") && series.LogoArtwork.Contains("api_key=local-fixture-token")
+                && series.Title == "Fixture series" && series.OriginalTitle == "Original series title",
+                "series detail projects its authenticated Logo separately from localized and original titles");
+            Assert(new Uri(server.Resume.Single().LogoArtwork).AbsolutePath == "/Items/series/Images/Logo",
+                "inherited Logo requests use the parent image owner rather than the episode ID");
+            Assert(items[0].LogoArtwork.Length == 0, "media without a Logo retains the text title fallback");
+            var resume = server.Detail(server.Resume.Single(), default).GetAwaiter().GetResult();
+            Assert(resume.Id == "series" && resume.Title == "Fixture series" && resume.Description == "Series synopsis" && resume.DetailBackdrop.Contains("series-backdrop"),
+                "resume episode opens its series metadata and backdrop");
+            Assert(resume.SelectedSeasonId == "season-2" && resume.InitialEpisodeNumber == 1 && resume.Episodes?.First().MediaId == "ep2",
+                "resume selects its own season when episode numbers repeat");
+            var next = server.Detail(server.NextUp.Single(), default).GetAwaiter().GetResult();
+            Assert(next.Id == "series" && next.SelectedSeasonId == "season-2" && next.InitialEpisodeNumber == 7 && next.EpisodeLabel == "S2E7",
+                "next up uses the season number when season ID is absent and selects the exact episode");
+            Assert(next.Episodes?.Select(x => x.Number).SequenceEqual(new[] { 1, 7, 9 }) == true,
+                "sparse server episodes remain sorted without fabricated missing episodes");
+            Assert(next.Episodes?.First(x => x.Number == 1).WatchStatus == "观看中"
+                && next.Episodes.First(x => x.Number == 7).WatchStatus == "未观看"
+                && next.Episodes.First(x => x.Number == 9).IsPlayed,
+                "server playback progress and played flag provide distinct episode watching states");
+            Assert(!next.SelectedIsPlayed(1) && !next.SelectedIsPlayed(7) && next.SelectedIsPlayed(9)
+                && !(next with { Progress = 100, Played = true }).SelectedIsPlayed(1),
+                "watched toggle follows the selected Jellyfin episode Played flag independently of series state");
+            using (var fullProgress = JsonDocument.Parse("""{"id":"ep-full","kind":"episode","playState":{"percentage":1,"played":false}}"""))
+                Assert(!server.Project(fullProgress.RootElement).IsPlayed,
+                    "100 percent progress cannot override Jellyfin Played=false for watched status");
+            Assert(next.PlaybackProgress(1) == 25 && next.PlaybackProgress(7) == 0 && next.PlaybackProgress(9) == 100,
+                "detail playback button uses the selected episode progress for resume, unplayed and completed episodes");
+            Assert((items[0] with { Progress = double.NaN }).PlaybackProgress(1) == 0
+                && (items[0] with { Progress = 125 }).PlaybackProgress(1) == 100,
+                "invalid playback percentages cannot overflow the button fill");
+            var targetEpisode = next.Episodes!.First(x => x.Number == 7);
+            var markedEpisode = server.SetEpisodeWatched(targetEpisode, true, default).GetAwaiter().GetResult();
+            var unmarkedEpisode = server.SetEpisodeWatched(markedEpisode, false, default).GetAwaiter().GetResult();
+            Assert(markedEpisode.IsPlayed && unmarkedEpisode.WatchStatus == "未观看" && markedEpisode.MediaId == targetEpisode.MediaId,
+                "an episode can be marked watched and restored to unwatched without changing its identity");
+            Assert(watchedRequests.SequenceEqual(new[] { ("POST", "/Users/fixture-user/PlayedItems/ep2-next"), ("DELETE", "/Users/fixture-user/PlayedItems/ep2-next") }),
+                "episode watching actions target only that episode using the Core server commands");
+            var resumedSource = server.Resolve(resume, 1, default).GetAwaiter().GetResult();
+            var nextSource = server.Resolve(resume, 7, default).GetAwaiter().GetResult();
+            Assert(resumedSource.Id == "ep2" && resumedSource.ResumeSeconds == 30 && nextSource.Id == "ep2-next" && nextSource.ResumeSeconds == 0,
+                "changing selected episode resolves its own identity and progress");
+            Assert(resume.PlaybackPositionSeconds(1) == resumedSource.ResumeSeconds && resume.PlaybackButtonLabel(1) == "继续 00:00:30"
+                && resume.PlaybackButtonLabel(7) == "播放" && resume.PlaybackButtonLabel(9) == "播放",
+                "button resume time matches the playback source and clears when selecting unplayed or completed episodes");
+            Assert((items[0] with { Progress = 50, DurationSeconds = 7344 }).PlaybackButtonLabel(1) == "继续 01:01:12",
+                "resume time includes hours for long media");
+            var replay = server.Resolve(resume, 9, default).GetAwaiter().GetResult();
+            Assert(replay.Id == "ep2-played" && replay.ResumeSeconds == 0, "completed episodes replay from the beginning");
+            var firstSeason = server.Detail(resume, default, "season-1").GetAwaiter().GetResult();
+            Assert(firstSeason.SelectedSeasonId == "season-1" && firstSeason.Episodes?.Single().MediaId == "ep1" && firstSeason.InitialEpisodeNumber == 1,
+                "changing seasons resets selection to an episode in the new season");
+            var emptySeason = server.Detail(resume, default, "season-empty").GetAwaiter().GetResult();
+            Assert(emptySeason.Episodes?.Length == 0 && emptySeason.EpisodeLabel is null, "empty seasons do not retain the previous episode");
             var source = server.Resolve(items[0], 1, default).GetAwaiter().GetResult();
             Assert(source.TenantId.EndsWith(":fixture-user") && source.Uri.Contains("source"), "playback URL and tenant come from Core server contract");
             if (media is not null) using (var session = new PlaybackSession(core))

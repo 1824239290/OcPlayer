@@ -107,24 +107,28 @@
         "Number": 1,
         "Title": "《臭小鬼也是有洞的吧…》《会长被梅同学给领走了》",
         "Artwork": "mac-student-episode-1.jpg",
+        "Progress": 100,
         "Available": true
       },
       {
         "Number": 2,
         "Title": "《救世主绽》《七大不可思议和夜晚的工作》《驹絽现身！！》",
         "Artwork": "mac-student-episode-2.jpg",
+        "Progress": 100,
         "Available": true
       },
       {
         "Number": 3,
         "Title": "《太好了呢》《泳池大扫除的泳装回！》",
         "Artwork": "mac-student-episode-3.jpg",
+        "Progress": 100,
         "Available": true
       },
       {
         "Number": 4,
         "Title": "《驹絽与意见箱》《照井学姐的秘密♪》《小光希与轻音部》《在体育仓库幽会！！》",
         "Artwork": "mac-student-episode-4.jpg",
+        "Progress": 35,
         "Available": true
       },
       {

@@ -4,8 +4,50 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
     string Category, string Artwork, string Description, double Progress = 0,
     string? EpisodeLabel = null, int? RemainingMinutes = null, string Kind = "movie", string StillArtwork = "",
     string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null,
-    string? SourceUri = null, DemoSeason[]? Seasons = null, string? SelectedSeasonId = null)
+    string? SourceUri = null, DemoSeason[]? Seasons = null, string? SelectedSeasonId = null,
+    string? SeriesId = null, string? SeasonId = null, int? SeasonNumber = null, int? EpisodeNumber = null, bool? Played = null)
 {
+    public bool IsPlayed => Played ?? Progress >= 100;
+
+    public bool SelectedIsPlayed(int selectedNumber) => Kind == "series"
+        ? Episodes?.FirstOrDefault(x => x.Available && x.Number == selectedNumber)?.IsPlayed == true
+        : IsPlayed;
+
+    public double PlaybackProgress(int selectedNumber, bool demoMode = false)
+    {
+        var episode = Kind == "series" ? Episodes?.FirstOrDefault(x => x.Number == selectedNumber) : null;
+        var progress = episode is null ? Progress : episode.Available ? episode.Progress : 0;
+        if (demoMode && episode is { Available: true } && EpisodeLabel == $"S{episode.SeasonNumber}E{episode.Number}") progress = Progress;
+        return double.IsFinite(progress) ? Math.Clamp(progress, 0, 100) : 0;
+    }
+
+    public double PlaybackPositionSeconds(int selectedNumber, bool demoMode = false)
+    {
+        var progress = PlaybackProgress(selectedNumber, demoMode);
+        if (progress is <= 0 or >= 100) return 0;
+        var episode = Kind == "series" ? Episodes?.FirstOrDefault(x => x.Number == selectedNumber) : null;
+        var duration = episode is { DurationSeconds: > 0 } ? episode.DurationSeconds : DurationSeconds;
+        return double.IsFinite(duration) && duration > 0 ? duration * progress / 100 : 0;
+    }
+
+    public string PlaybackButtonLabel(int selectedNumber, bool demoMode = false)
+    {
+        if (PlaybackProgress(selectedNumber, demoMode) is <= 0 or >= 100) return "播放";
+        var seconds = Math.Floor(PlaybackPositionSeconds(selectedNumber, demoMode));
+        return $"继续 {Math.Floor(seconds / 3600):00}:{Math.Floor(seconds / 60) % 60:00}:{seconds % 60:00}";
+    }
+
+    public int InitialEpisodeNumber
+    {
+        get
+        {
+            var number = EpisodeNumber;
+            if (number is null && EpisodeLabel is { } label && label.LastIndexOf('E') is var separator && separator >= 0
+                && int.TryParse(label[(separator + 1)..], out var parsed)) number = parsed;
+            return Episodes?.FirstOrDefault(x => x.Available && x.Number == number)?.Number
+                ?? Episodes?.FirstOrDefault(x => x.Available)?.Number ?? 1;
+        }
+    }
     public static string AssetPath(string value) => value.Length == 0 || Uri.IsWellFormedUriString(value, UriKind.Absolute) || Path.IsPathRooted(value)
         ? value : Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", value);
     public string PosterPath => AssetPath(Artwork);
@@ -21,8 +63,13 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
 
 public sealed record DemoPerson(string Name, string Role, string Artwork);
 
-public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true, string? MediaId = null, int SeasonNumber = 1);
-public sealed record DemoSeason(string Id, string Title);
+public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true, string? MediaId = null, int SeasonNumber = 1,
+    double Progress = 0, double DurationSeconds = 0, bool? Played = null)
+{
+    public bool IsPlayed => Played ?? Progress >= 100;
+    public string WatchStatus => !Available ? "未入库" : IsPlayed ? "已观看" : Progress > 0 ? "观看中" : "未观看";
+}
+public sealed record DemoSeason(string Id, string Title, int? Number = null);
 
 public static class DemoCatalog
 {

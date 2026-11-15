@@ -23,7 +23,7 @@ internal sealed class HorizontalMediaRail : Grid
     private double _targetOffset;
     private int _scrollCorrelationId = -1;
 
-    public HorizontalMediaRail(UIElement content, string title)
+    public HorizontalMediaRail(UIElement content, string title, double arrowBottomMargin = 44)
     {
         Background = new SolidColorBrush(Colors.Transparent);
         _scroll = new ScrollView
@@ -38,8 +38,8 @@ internal sealed class HorizontalMediaRail : Grid
             IgnoredInputKinds = ScrollingInputKinds.MouseWheel
         };
         Children.Add(_scroll);
-        _previous = CreateArrow("\uE76B", $"{title}，向前翻页", HorizontalAlignment.Left, -1);
-        _next = CreateArrow("\uE76C", $"{title}，向后翻页", HorizontalAlignment.Right, 1);
+        _previous = CreateArrow("\uE76B", $"{title}，向前翻页", HorizontalAlignment.Left, -1, arrowBottomMargin);
+        _next = CreateArrow("\uE76C", $"{title}，向后翻页", HorizontalAlignment.Right, 1, arrowBottomMargin);
         Children.Add(_previous);
         Children.Add(_next);
 
@@ -74,7 +74,16 @@ internal sealed class HorizontalMediaRail : Grid
         UpdateArrows();
     }
 
-    private Button CreateArrow(string glyph, string label, HorizontalAlignment alignment, int direction)
+    public void Reveal(FrameworkElement item)
+    {
+        if (item.ActualWidth <= 0 || _scroll.ViewportWidth <= 0) return;
+        var left = item.TransformToVisual(_scroll).TransformPoint(new global::Windows.Foundation.Point()).X;
+        var right = left + item.ActualWidth;
+        if (left < 0) ScrollBy(left, ScrollingAnimationMode.Disabled);
+        else if (right > _scroll.ViewportWidth) ScrollBy(right - _scroll.ViewportWidth, ScrollingAnimationMode.Disabled);
+    }
+
+    private Button CreateArrow(string glyph, string label, HorizontalAlignment alignment, int direction, double bottomMargin)
     {
         var button = new Button
         {
@@ -88,7 +97,7 @@ internal sealed class HorizontalMediaRail : Grid
             BorderThickness = new Thickness(0),
             HorizontalAlignment = alignment,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(12, 0, 12, 44)
+            Margin = new Thickness(12, 0, 12, bottomMargin)
         };
         button.Resources["ButtonBackgroundPointerOver"] = ArrowBackground("SolidBackgroundFillColorSecondaryBrush");
         button.Resources["ButtonBackgroundPressed"] = ArrowBackground("SolidBackgroundFillColorTertiaryBrush");
