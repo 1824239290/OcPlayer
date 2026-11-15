@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using OcPlayer.Windows.Features;
+using OcPlayer.Windows.Controls;
 using OcPlayer.Windows.Preview;
 using OcPlayer.Windows.ViewModels;
 using OcPlayer.Windows.Services;
@@ -20,6 +21,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly DemoViewModel _model = new();
     private readonly DemoPages _pages;
+    private readonly PageLayout _pageLayout = new();
     private PlayerWindow? _player;
     private string _detailOrigin = "home";
     private string? _detailPageMediaId;
@@ -60,7 +62,7 @@ public sealed partial class MainWindow : Window
             UpdateTitleBarRegions();
             await LoadNavigationAvatar();
         };
-        _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched, SetEpisodeWatched);
+        _pages = new DemoPages(_model, _pageLayout, Navigate, OpenDetail, Play, SetTheme, ToggleWatched, SetEpisodeWatched);
         Closed += (_, _) =>
         {
             _load?.Cancel(); _connection?.Cancel(); _player?.Close();
@@ -369,6 +371,8 @@ public sealed partial class MainWindow : Window
         // and reserve the real caption width across DPI and presenter changes.
         var titleBar = AppWindow.TitleBar;
         if (titleBar.Height > 0) TitleBarRow.Height = new GridLength(titleBar.Height / scale);
+        _pageLayout.HeaderHeight = TitleBarRow.Height.Value;
+        HeaderShade.Height = _pageLayout.HeaderHeight + 64;
         // Match one native caption button: full title-bar height, no inset or
         // rounded hover surface. RightInset covers the three caption buttons.
         BackButton.Width = titleBar.RightInset > 0 ? titleBar.RightInset / (3 * scale) : 46;

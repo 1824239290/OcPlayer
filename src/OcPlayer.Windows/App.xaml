@@ -7,6 +7,27 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Dark">
+                    <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#B8000000" Offset="0" />
+                        <GradientStop Color="#8C000000" Offset="0.4" />
+                        <GradientStop Color="#30000000" Offset="0.75" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#CCFFFFFF" Offset="0" />
+                        <GradientStop Color="#A6FFFFFF" Offset="0.4" />
+                        <GradientStop Color="#40FFFFFF" Offset="0.75" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="OcHeaderScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
             <SolidColorBrush x:Key="OcAccentBrush" Color="#ECA66B" />
             <SolidColorBrush x:Key="OcMutedBrush" Color="#A9A9B3" />
         </ResourceDictionary>

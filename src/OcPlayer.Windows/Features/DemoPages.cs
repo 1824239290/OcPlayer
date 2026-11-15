@@ -12,7 +12,7 @@ using static OcPlayer.Windows.Controls.DemoUi;
 
 namespace OcPlayer.Windows.Features;
 
-internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Action<DemoMedia> open,
+internal sealed class DemoPages(DemoViewModel model, PageLayout pageLayout, Action<string> navigate, Action<DemoMedia> open,
     Action<DemoMedia> play, Action<bool> themeChanged, Action<DemoMedia, bool>? markWatched = null,
     Action<DemoMedia, DemoEpisode, bool>? markEpisodeWatched = null)
 {
@@ -23,10 +23,10 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         {
             if (title == "继续观看") page.Children.Add(StillSection(title, model.ResumeItems, true));
             else if (title == "最近添加") page.Children.Add(StillSection(title, model.LatestItems, false));
-            else if (title == "接下来看") page.Children.Add(StillSection(title, model.NextItems, true));
+            else if (title == "接下来看") page.Children.Add(StillSection(title, model.NextItems, true, showProgress: false));
             else page.Children.Add(Libraries());
         }
-        var scroll = Scroll(page); scroll.Padding = new Thickness(52, 20, 0, 36); return scroll;
+        return pageLayout.Scroll(page, new Thickness(52, 20, 0, 36));
     }
     private UIElement Libraries()
     {
@@ -50,8 +50,9 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
 
     public UIElement Library()
     {
-        var layout = new Grid { Padding = new Thickness(52, 8, 52, 24) };
+        var layout = new Grid();
         var grid = new GridView { SelectionMode = ListViewSelectionMode.None, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        pageLayout.ApplyInset(grid, Control.PaddingProperty, new Thickness(52, 8, 52, 24));
         var empty = Muted("没有匹配的作品"); empty.HorizontalAlignment=HorizontalAlignment.Center;empty.VerticalAlignment=VerticalAlignment.Center;
         layout.Children.Add(grid); layout.Children.Add(empty);
         var items=model.FilteredMovies.ToArray();foreach(var media in items)grid.Items.Add(MediaCard(media,open,178));
@@ -64,6 +65,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var layout=new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         DetailPageWheelNavigation.Attach(layout, () => navigate("detail-info"));
         var body=new Grid{Margin=new Thickness(52,12,40,20),RowSpacing=20};
+        pageLayout.ApplyInset(body, FrameworkElement.MarginProperty, new Thickness(52,12,40,20));
         body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var content=Stack(18);content.Width=410;content.HorizontalAlignment=HorizontalAlignment.Left;
         if(media.LogoArtwork.Length>0){var logo=Image(media.LogoPath,Stretch.Uniform);logo.Width=230;logo.Height=108;logo.HorizontalAlignment=HorizontalAlignment.Left;content.Children.Add(logo);}else content.Children.Add(Text(media.Title,32,true));
@@ -129,7 +131,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         }
         actions.Children.Add(watched);
         content.Children.Add(actions);
-        var contentScroll=Scroll(content);contentScroll.Padding=new Thickness(0);body.Children.Add(contentScroll);
+        var contentScroll=Scroll(content, new Thickness(0));body.Children.Add(contentScroll);
         var lower=Stack(16);Grid.SetRow(lower,1);
         if(media.Kind=="series")
         {
@@ -166,7 +168,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         if (model.DemoMode) foreach(var (heading,fields) in new[]{("视频",new[]{"分辨率          1920 × 1080 · 16:9","编码              H264 · High","码率              1.7 Mbps","帧率              23.976 fps","动态范围      SDR","位深              8 bit"}),("音频",new[]{"音轨              日语 · AAC · stereo (2ch) · 48 kHz"}),("文件",new[]{"容器              MP4","大小              364.8 MB",$"时长              {(int)(media.DurationSeconds/60)} 分钟"})}){var block=Stack(10);block.Children.Add(Text(heading,13,true));foreach(var field in fields)block.Children.Add(Muted(field,12));page.Children.Add(Panel(block,new Thickness(18)));}
         else page.Children.Add(Muted(media.DurationSeconds > 0 ? $"时长              {(int)(media.DurationSeconds/60)} 分钟" : "播放后可在播放器查看实际音轨与字幕。"));
         page.Children.Add(Text("类似推荐",16,true));var similar=Row(16);foreach(var item in model.Catalog.Where(x=>x.Id!=media.Id).Take(8))similar.Children.Add(MediaCard(item,open,150));page.Children.Add(new HorizontalMediaRail(similar, "类似推荐"));
-        var scroll=Scroll(page);scroll.Padding=new Thickness(52,20,52,48);
+        var scroll=pageLayout.Scroll(page, new Thickness(52,20,52,48));
         var layout = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
         layout.Children.Add(scroll);
         DetailPageWheelNavigation.Attach(layout, () => navigate("detail"), scroll);
@@ -180,7 +182,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
             local.Children.Add(Text("观看记录", 20, true));
             foreach (var media in model.Catalog) local.Children.Add(ViewingRow(media));
             if (model.Catalog.Count == 0) local.Children.Add(Muted("打开本地文件或直连链接后，观看记录会显示在这里。"));
-            return Scroll(local);
+            return pageLayout.Scroll(local);
         }
         var page=Stack(26);page.MaxWidth=1000;page.HorizontalAlignment=HorizontalAlignment.Center;
         var profile=Row(14);var avatar=Image(Path.Combine(AppContext.BaseDirectory,"Assets","Demo","avatar.jpg"));avatar.Width=44;avatar.Height=44;profile.Children.Add(new Border{Child=avatar,CornerRadius=new CornerRadius(22)});var identity=Stack(4);identity.Children.Add(Text("橘木苏",20,true));identity.Children.Add(Muted("jumusu · Jellyfin 12.1.0 · 片单与追更",11));profile.Children.Add(identity);page.Children.Add(profile);
@@ -199,14 +201,14 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var counts=Row(16);if(model.BangumiEnabled)counts.Children.Add(Panel(Text("看过动画     421",16,true)));if(model.MoviePilotEnabled)counts.Children.Add(Panel(Text("资源订阅     6",16,true)));page.Children.Add(counts);
         var resume=Stack(14);resume.Children.Add(Text("继续观看",14,true));foreach(var media in DemoCatalog.ResumeItems)resume.Children.Add(ViewingRow(media));page.Children.Add(Panel(resume));
         if(model.MoviePilotEnabled){var downloads=Row(22);var subscriptions=Stack(14);subscriptions.Width=440;subscriptions.Children.Add(Text("订阅追更",14,true));subscriptions.Children.Add(Muted("6 部订阅                                        已知缺 52 集",11));foreach(var media in DemoCatalog.ResumeItems)subscriptions.Children.Add(ViewingRow(media));downloads.Children.Add(Panel(subscriptions));var tasks=Stack(12);tasks.Children.Add(Text("下载任务",14,true));tasks.Children.Add(Text("乱马½                                    0%",12));tasks.Children.Add(Muted("downloading · 0 B/s",11));downloads.Children.Add(Panel(tasks));page.Children.Add(Horizontal(downloads));}
-        return Scroll(page);
+        return pageLayout.Scroll(page);
     }
     private UIElement ViewingRow(DemoMedia media)
     {
         var row=Row(12);var poster=Image(media.PosterPath);poster.Width=46;poster.Height=64;row.Children.Add(poster);var labels=Stack(5);labels.Children.Add(Text(media.OriginalTitle,13,true));labels.Children.Add(Muted(media.EpisodeLabel??media.Subtitle,11));labels.Children.Add(new ProgressBar{Value=media.Progress,Width=120,Height=2});row.Children.Add(labels);var button=Button("",()=>open(media));button.Content=row;button.Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent);button.BorderThickness=new Thickness(0);return button;
     }
-    public UIElement Settings()=>new DemoSettings(model,navigate,themeChanged).Hub();
-    public UIElement SettingsSubpage(string name)=>new DemoSettings(model,navigate,themeChanged).Subpage(name);
+    public UIElement Settings()=>new DemoSettings(model,pageLayout,navigate,themeChanged).Hub();
+    public UIElement SettingsSubpage(string name)=>new DemoSettings(model,pageLayout,navigate,themeChanged).Subpage(name);
 
     private UIElement CreateEpisodePicker(DemoMedia media, bool expanded, Action? changed = null)
     {
@@ -267,11 +269,11 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var cards = Row(18); foreach (var media in items) cards.Children.Add(MediaCard(media, open));
         section.Children.Add(Horizontal(cards)); return section;
     }
-    private UIElement StillSection(string title, IEnumerable<DemoMedia> items, bool resume)
+    private UIElement StillSection(string title, IEnumerable<DemoMedia> items, bool resume, bool showProgress = true)
     {
         var section = Stack(28); section.Children.Add(Text(title, 14, true));
         var cards = Row(22);
-        foreach (var media in items) cards.Children.Add(StillCard(media, open, play, resume));
+        foreach (var media in items) cards.Children.Add(StillCard(media, open, play, resume, showProgress));
         section.Children.Add(new HorizontalMediaRail(cards, title)); return section;
     }
     private Border Integration(string title, string subtitle, string description, string action)

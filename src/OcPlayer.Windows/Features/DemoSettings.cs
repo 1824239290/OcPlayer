@@ -1,12 +1,13 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using OcPlayer.Windows.Controls;
 using OcPlayer.Windows.ViewModels;
 using static OcPlayer.Windows.Controls.DemoUi;
 
 namespace OcPlayer.Windows.Features;
 
-internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate, Action<bool> themeChanged)
+internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, Action<string> navigate, Action<bool> themeChanged)
 {
     public static readonly (string Title, string[] Pages)[] Groups =
     [ ("服务", ["媒体服务器", "Bangumi", "MoviePilot", "TMDB 元数据补全", "网络"]),
@@ -30,7 +31,7 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
         }
         var footer = Muted("TMDB\nThis product uses the TMDB API but is not endorsed or certified by TMDB.",11);
         footer.TextAlignment = TextAlignment.Center; page.Children.Add(footer);
-        var scroll=Scroll(page); scroll.Padding=new Thickness(24,16,24,32); scroll.SizeChanged+=(_,_)=>page.Width=Math.Min(680,Math.Max(0,scroll.ActualWidth-48)); return scroll;
+        var scroll=pageLayout.Scroll(page, new Thickness(24,16,24,32)); scroll.SizeChanged+=(_,_)=>page.Width=Math.Min(680,Math.Max(0,scroll.ActualWidth-48)); return scroll;
     }
     public UIElement Subpage(string name)
     {
@@ -90,7 +91,7 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
             default:
                 Group(name,Note("离线演示：此操作不会修改 macOS 配置或连接真实服务。"),Button("返回",()=>navigate("settings")));break;
         }
-        var scroll=Scroll(page);scroll.Padding=new Thickness(24,16,24,32);scroll.SizeChanged+=(_,_)=>page.Width=Math.Min(680,Math.Max(0,scroll.ActualWidth-48)); return scroll;
+        var scroll=pageLayout.Scroll(page, new Thickness(24,16,24,32));scroll.SizeChanged+=(_,_)=>page.Width=Math.Min(680,Math.Max(0,scroll.ActualWidth-48)); return scroll;
     }
     private UIElement RuntimeSubpage(string name)
     {
@@ -126,7 +127,7 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
             page.Children.Add(SettingsLine("数据目录", Text(App.Core?.DataDirectory ?? "不可用")));
         }
         else page.Children.Add(Note("此项设置将在后续版本开放。"));
-        var scroll = Scroll(page); scroll.Padding = new Thickness(24,16,24,32); scroll.SizeChanged += (_, _) => page.Width = Math.Min(680, Math.Max(0, scroll.ActualWidth - 48)); return scroll;
+        var scroll = pageLayout.Scroll(page, new Thickness(24,16,24,32)); scroll.SizeChanged += (_, _) => page.Width = Math.Min(680, Math.Max(0, scroll.ActualWidth - 48)); return scroll;
     }
     void Move(string title,int delta){var index=model.HomeSections.IndexOf(title);var dest=Math.Clamp(index+delta,0,model.HomeSections.Count-1);model.HomeSections.RemoveAt(index);model.HomeSections.Insert(dest,title);navigate("settings:首页栏目");}
     UIElement Link(string title,string route)=>SettingsLine(title,Text("›"),()=>navigate("settings:"+route));

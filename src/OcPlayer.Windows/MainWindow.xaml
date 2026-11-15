@@ -25,6 +25,10 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <controls:AmbientBackdropView x:Name="Ambience" Grid.RowSpan="2" Visibility="Collapsed" />
+        <!-- The viewport fills the window; the title bar floats above scrolling content. -->
+        <Grid x:Name="PageHost" Grid.RowSpan="2" />
+        <Border x:Name="HeaderShade" Grid.RowSpan="2" Height="112" VerticalAlignment="Top"
+                Background="{ThemeResource OcHeaderScrimBrush}" IsHitTestVisible="False" />
         <Grid x:Name="TitleBar" Background="Transparent" Margin="18,0,148,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel x:Name="NavGroup" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
@@ -92,10 +96,6 @@
                 </AutoSuggestBox>
             </StackPanel>
         </Grid>
-        <Grid Grid.Row="1">
-            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-            <InfoBar x:Name="Notice" IsOpen="False" Visibility="Collapsed" IsClosable="True" Severity="Informational" Margin="36,6,36,0" />
-            <Grid x:Name="PageHost" Grid.Row="1" />
-        </Grid>
+        <InfoBar x:Name="Notice" Grid.Row="1" VerticalAlignment="Top" IsOpen="False" Visibility="Collapsed" IsClosable="True" Severity="Informational" Margin="36,6,36,0" />
     </Grid>
 </Window>

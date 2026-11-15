@@ -65,7 +65,7 @@ internal static class DemoUi
         button.Click += (_, _) => open(media);
         return button;
     }
-    public static UIElement StillCard(DemoMedia media, Action<DemoMedia> open, Action<DemoMedia> play, bool resume)
+    public static UIElement StillCard(DemoMedia media, Action<DemoMedia> open, Action<DemoMedia> play, bool resume, bool showProgress = true)
     {
         var width = resume ? 328d : 230d;
         var stack = Stack(7);
@@ -77,7 +77,7 @@ internal static class DemoUi
         AutomationProperties.SetName(artwork, $"{media.Title}，查看详情");
         artwork.Click += (_, _) => open(media);
         stack.Children.Add(artwork);
-        if (resume)
+        if (resume && showProgress)
         {
             var progress = new Grid { Height = 3, Width = width };
             progress.Children.Add(new Border { Height = 3, Width = Math.Max(4, width * media.Progress / 100), HorizontalAlignment = HorizontalAlignment.Left,
@@ -95,6 +95,11 @@ internal static class DemoUi
         stack.Width = width;
         return stack;
     }
-    public static ScrollViewer Scroll(UIElement content) => new() { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, Padding = new Thickness(36, 24, 36, 32) };
+    public static ScrollViewer Scroll(UIElement content, Thickness? padding = null) => new()
+    {
+        Content = new Grid { Children = { content }, Padding = padding ?? new Thickness(36, 24, 36, 32) },
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        Padding = new Thickness(0)
+    };
 }
