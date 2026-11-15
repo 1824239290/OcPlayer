@@ -2,6 +2,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using OcPlayer.Windows.Controls;
 using OcPlayer.Windows.Preview;
 using OcPlayer.Windows.ViewModels;
 using Windows.UI;
@@ -45,7 +46,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
             var card = Stack(7); card.Children.Add(button); card.Children.Add(Text(name, 13, true)); card.Children.Add(Muted(name, 12));
             libraries.Children.Add(card);
         }
-        librarySection.Children.Add(Horizontal(libraries)); return librarySection;
+        librarySection.Children.Add(new HorizontalMediaRail(libraries, "媒体库")); return librarySection;
     }
 
     public UIElement Library()
@@ -201,7 +202,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var section = Stack(28); section.Children.Add(Text(title, 14, true));
         var cards = Row(22);
         foreach (var media in items) cards.Children.Add(StillCard(media, open, play, resume));
-        section.Children.Add(Horizontal(cards)); return section;
+        section.Children.Add(new HorizontalMediaRail(cards, title)); return section;
     }
     private Border Integration(string title, string subtitle, string description, string action)
     {
