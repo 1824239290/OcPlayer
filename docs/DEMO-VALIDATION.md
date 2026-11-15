@@ -36,7 +36,7 @@ OcPlayer.Windows.exe "--demo-route=settings:播放" --demo-capture=C:\Temp\playb
 
 ## 当前差异
 
-Windows 系统窗口按钮、字体、图标与 macOS 不同；浏览背景仍为预处理的低频图片，卡片为 WinUI 半透明表面，未实现 Liquid Glass 的实时采样和折射。观影统计图形细节、播放器菜单的嵌套内容和集成登录/管理对话框与原版仍有差异；集成操作以离线示例承载。播放器为静态画面与模拟时钟，未连接真实解码和服务器请求。
+Windows 系统窗口按钮、字体、图标与 macOS 不同；浏览背景已改为常开的整窗随机背景池，详情页使用同像素的清晰/模糊图组与可扩张遮罩。卡片仍为 WinUI 半透明表面，未实现 Liquid Glass 的实时采样和折射。观影统计图形细节、播放器菜单的嵌套内容和集成登录/管理对话框与原版仍有差异；集成操作以离线示例承载。显式 Demo 播放器为静态画面与模拟时钟，默认模式的真实 Core/Erika 播放验证见 `core-integration.md`。
 
 原工作区的 Core Adapter 改动已保留；同步前的主窗口 Core 启动/表面实验完整保存在 `preserve local core integration before demo sync 2026-11-15` Git stash，默认 Demo 不创建 Core 或绑定视频表面。
 

@@ -26,6 +26,9 @@ public sealed partial class MainWindow : Window
     private bool _closing, _exitReady;
     private ContentDialog? _serverDialog;
     private CancellationTokenSource? _connection;
+    private readonly AmbientBackdropController _ambient;
+    private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
+    private bool _active = true;
 
     public MainWindow()
     {
@@ -35,10 +38,17 @@ public sealed partial class MainWindow : Window
         SetTitleBar(TitleBar);
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
         AppWindow.ResizeClient(new SizeInt32(1130, 670));
-        Ambience.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "mac-ambience.jpg")));
+        _ambient = new AmbientBackdropController(Ambience, _model);
+        Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged += AnimationsEnabledChanged;
         Avatar.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg")));
         _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched);
-        Closed += (_, _) => { _load?.Cancel(); _connection?.Cancel(); _player?.Close(); };
+        Closed += (_, _) =>
+        {
+            _load?.Cancel(); _connection?.Cancel(); _player?.Close();
+            if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged -= AnimationsEnabledChanged;
+            _ambient.Dispose();
+        };
         AppWindow.Closing += async (_, args) =>
         {
             if (_exitReady) return;
@@ -92,11 +102,8 @@ public sealed partial class MainWindow : Window
         HeaderActions.Visibility = route is "home" or "library" ? Visibility.Visible : Visibility.Collapsed;
         NavGroup.Visibility = route is "home" or "settings" or "viewing" ? Visibility.Visible : Visibility.Collapsed;
         ServerButton.Visibility = route == "home" ? Visibility.Visible : Visibility.Collapsed;
-        Ambience.Visibility = Visibility.Visible;
-        var background = route is "detail" or "detail-info" ? _model.SelectedMedia.DetailBackdrop : Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "mac-ambience.jpg");
-        Ambience.Source = string.IsNullOrEmpty(background) ? null : new BitmapImage(new Uri(background));
-        AmbienceTint.Visibility = route is "detail" or "detail-info" ? Visibility.Collapsed : Visibility.Visible;
-        DetailTitleTint.Visibility = route is "detail" or "detail-info" ? Visibility.Visible : Visibility.Collapsed;
+        _ambient.Update();
+        UpdateAmbientActivity();
         GlobalSearch.PlaceholderText = route == "library" ? "搜索本库" : "搜索全部媒体库";
         PageTitle.Text = route.StartsWith("settings:") ? route[9..] : route switch { "home" => "首页", "library" => _model.LibraryName, "detail" or "detail-info" => _model.SelectedMedia.Title, "viewing" => "观影空间", _ => "设置" };
         PageHost.Children.Clear();
@@ -167,16 +174,19 @@ public sealed partial class MainWindow : Window
     private void SetTheme(bool dark)
     {
         Root.RequestedTheme = dark ? ElementTheme.Dark : ElementTheme.Light;
+        SetCaptionTheme();
         DispatcherQueue.TryEnqueue(() => Navigate(_model.Route));
     }
     private void SetCaptionTheme()
     {
-        Root.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(255, 32, 34, 33) : global::Windows.UI.Color.FromArgb(255, 228, 225, 221));
-        AmbienceTint.Background = new SolidColorBrush(_model.DarkTheme ? global::Windows.UI.Color.FromArgb(10, 0, 0, 0) : global::Windows.UI.Color.FromArgb(185, 245, 242, 236));
+        Root.Background = new SolidColorBrush(Controls.AmbientBackdropView.PageColor(_model.DarkTheme));
+        Ambience.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
     }
+    private void UpdateAmbientActivity() => _ambient.SetActivity(_active && !_closing, _uiSettings.AnimationsEnabled);
+    private void AnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args) => DispatcherQueue.TryEnqueue(UpdateAmbientActivity);
     private void Notify(string message) { if (_closing) return; Notice.Visibility = Visibility.Visible; Notice.Message = message; Notice.IsOpen = true; }
     private void MainNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
@@ -266,7 +276,7 @@ public sealed partial class MainWindow : Window
     {
         if (App.Core?.Server is not { } server) return;
         var (token, generation) = BeginLoad();
-        try { await server.Refresh(token); if (generation != _loadGeneration) return; _model.ServerItems = server.Latest; _cachedPages.Clear(); UpdateServerLabel(); Navigate(_model.Route); if (server.HomeWarning is { } warning) Notify(warning); }
+        try { await server.Refresh(token); if (generation != _loadGeneration) return; _model.ServerItems = server.Latest; _cachedPages.Clear(); UpdateServerLabel(); Navigate(_model.Route); _ambient.Update(true); if (server.HomeWarning is { } warning) Notify(warning); }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Notify("刷新失败：" + ex.Message); }
     }

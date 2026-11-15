@@ -128,6 +128,29 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         return (watchState == "继续观看" ? items.Where(x => x.Progress > 0 && x.Progress < 100) : items).ToArray();
     }
 
+    public async Task<DemoMedia[]> RandomBackdrops(CancellationToken token)
+    {
+        var page = await Request("browse.library", new { startIndex = 0, limit = 24, recursive = true,
+            kinds = new[] { "movie", "series" }, sort = new { field = "random", ascending = true }, watchState = "all" }, token);
+        return page.GetProperty("items").EnumerateArray().Select(Project).Where(x => x.BackdropArtwork.Length > 0).ToArray();
+    }
+
+    internal static string AmbientImage(string source)
+        => ResizeImage(source, 800);
+
+    internal static string DetailImage(string source)
+        => ResizeImage(source, 1600);
+
+    private static string ResizeImage(string source, int width)
+    {
+        if (!Uri.TryCreate(source, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https")) return source;
+        var builder = new UriBuilder(uri);
+        var query = builder.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Where(x => !x.Split('=', 2)[0].Equals("maxWidth", StringComparison.OrdinalIgnoreCase));
+        builder.Query = string.Join("&", query.Append("maxWidth=" + width));
+        return builder.Uri.AbsoluteUri;
+    }
+
     public async Task<DemoMedia> Detail(DemoMedia media, CancellationToken token, string? seasonId = null)
     {
         var detail = await Request("browse.detail", new { itemId = media.Id }, token);

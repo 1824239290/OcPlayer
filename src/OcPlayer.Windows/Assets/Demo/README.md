@@ -14,7 +14,9 @@ They remain temporary preview assets, not application branding.
 `mac-*` assets and `catalog.json` are offline fixtures extracted from the local
 macOS app image/metadata cache on 2026-11-15. The home stills and student-council
 episode stills are artwork-only crops from the current native app screenshots.
-`mac-*-detail.jpg` adds a progressively blurred backdrop for the detail layout.
+`mac-*-detail.jpg` is the older progressively blurred detail fixture. The current
+window background uses raw `mac-*-backdrop.jpg` assets and blurs them at runtime;
+the detail's sharp and blurred layers share the same decoded image.
 Original artwork and full screenshots remain local under the ignored reports
 directory. No account credentials or server item identifiers are included in
 this catalog. See `docs/DEMO-VALIDATION.md` for the remaining UI differences.

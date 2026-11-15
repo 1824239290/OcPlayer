@@ -10,6 +10,7 @@
 | Windows SDK | 10.0.26100 | 由 `TargetFramework` 中的平台版本决定 |
 | 最低支持系统 | Windows 10 1809（10.0.17763） | `TargetPlatformMinVersion` |
 | Windows App SDK | 2.6.5 | NuGet 包 `Microsoft.WindowsAppSDK` |
+| Win2D | 1.4.0 | 背景层的高斯模糊与饱和度效果；`Microsoft.Graphics.Win2D` |
 | Visual Studio | 2026（可选） | 需要 .NET 桌面开发和 Windows App SDK 工作负载 |
 
 上表是本文件的唯一版本依据：`.csproj` 的 `TargetFramework`、`TargetPlatformMinVersion` 和

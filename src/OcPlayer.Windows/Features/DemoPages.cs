@@ -63,11 +63,6 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var media=model.SelectedMedia;
         var layout=new Grid();
         layout.PointerWheelChanged += (_,args) => { if(args.GetCurrentPoint(layout).Properties.MouseWheelDelta < 0) { navigate("detail-info"); args.Handled=true; } };
-        var gradient=new LinearGradientBrush {StartPoint=new global::Windows.Foundation.Point(0,.5),EndPoint=new global::Windows.Foundation.Point(1,.5)};
-        gradient.GradientStops.Add(new GradientStop{Color=Color.FromArgb(235,25,28,26),Offset=0});
-        gradient.GradientStops.Add(new GradientStop{Color=Color.FromArgb(170,25,28,26),Offset=.37});
-        gradient.GradientStops.Add(new GradientStop{Color=Color.FromArgb(0,25,28,26),Offset=.78});
-        layout.Children.Add(new Border{Background=gradient,IsHitTestVisible=false});
         var body=new Grid{Margin=new Thickness(52,12,40,20),RowSpacing=20};
         body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var content=Stack(18);content.Width=410;content.HorizontalAlignment=HorizontalAlignment.Left;

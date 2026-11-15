@@ -1,7 +1,8 @@
 <Window
     x:Class="OcPlayer.Windows.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:OcPlayer.Windows.Controls">
     <Grid x:Name="Root" RequestedTheme="Dark" Background="#757575">
         <Grid.Resources>
             <Style x:Key="ChromeButtonStyle" TargetType="Button">
@@ -23,11 +24,7 @@
             <RowDefinition Height="52" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <Image x:Name="Ambience" Grid.RowSpan="2" Stretch="UniformToFill" Opacity="1" IsHitTestVisible="False" />
-        <Border x:Name="AmbienceTint" Grid.RowSpan="2" Background="#20535357" IsHitTestVisible="False" />
-        <Border x:Name="DetailTitleTint" Visibility="Collapsed" IsHitTestVisible="False">
-            <Border.Background><LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#EB191C1A" Offset="0"/><GradientStop Color="#AA191C1A" Offset="0.37"/><GradientStop Color="#00191C1A" Offset="0.78"/></LinearGradientBrush></Border.Background>
-        </Border>
+        <controls:AmbientBackdropView x:Name="Ambience" Grid.RowSpan="2" Visibility="Collapsed" />
         <Grid x:Name="TitleBar" Background="Transparent" Margin="18,0,148,0" ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <StackPanel x:Name="NavGroup" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">

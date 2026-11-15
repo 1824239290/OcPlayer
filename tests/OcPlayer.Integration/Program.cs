@@ -13,7 +13,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        if (args.Length != 2) throw new ArgumentException("Pass a local media file and a new verification directory.");
+        if (args.Length != 2) throw new ArgumentException("Pass a local media file (or --server-only) and a new verification directory.");
         var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
         var data = Path.Combine(output, "data"); Directory.CreateDirectory(data);
         var config = JsonSerializer.Serialize(new { dataDirectory = data, locale = "zh-CN" });
@@ -24,7 +24,12 @@ internal static class Program
             using (var core = new OcpCoreClient(config))
             {
                 Assert(core.Ping().Ok, "real Core DLL loads");
-                VerifyServer(core, hwnd, args[0], data);
+                VerifyServer(core, hwnd, args[0] == "--server-only" ? null : args[0], data);
+                if (args[0] == "--server-only")
+                {
+                    File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"Passed {_assertions} server integration assertions."); return 0;
+                }
                 using var session = new PlaybackSession(core);
                 string? error = null; session.Failed += value => error = value;
                 session.Attach((ulong)hwnd.ToInt64(), 640, 360, 1);
@@ -77,7 +82,7 @@ internal static class Program
         finally { DestroyWindow(hwnd); }
     }
 
-    private static void VerifyServer(OcpCoreClient core, IntPtr hwnd, string media, string data)
+    private static void VerifyServer(OcpCoreClient core, IntPtr hwnd, string? media, string data)
     {
         // Exercise the Windows projection against a local wire fixture through
         // the real Rust HTTP client. No credentials or remote server are used.
@@ -85,6 +90,7 @@ internal static class Program
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
         using var shutdown = new CancellationTokenSource();
         var requests = new List<string>();
+        var randomQueries = new List<string>();
         var worker = Task.Run(async () =>
         {
             while (!shutdown.IsCancellationRequested)
@@ -104,6 +110,7 @@ internal static class Program
                 var requestBody = "";
                 if (length > 0) { var bodyChars = new char[length]; await reader.ReadBlockAsync(bodyChars); requestBody = new string(bodyChars); }
                 lock (requests) requests.Add(requestPath);
+                if (target.Contains("sortBy=Random")) lock (randomQueries) randomQueries.Add(target);
                 if (mode == "slow") await Task.Delay(500);
                 var status = requestBody.Contains("wrong") ? 401 : mode == "denied" && path.EndsWith("Views") || mode == "partial" && path.EndsWith("NextUp") ? 403 : 200;
                 object body = path == "/System/Info/Public" ? new { Id = "fixture-server", ServerName = "Fixture server", ProductName = mode == "emby" ? "Emby" : "Jellyfin", Version = "10.11" }
@@ -114,6 +121,10 @@ internal static class Program
                     : target.Contains("includeItemTypes=Season") ? new { Items = new[] { new { Id = "season-1", Name = "Season 1", Type = "Season", IndexNumber = 1 }, new { Id = "season-2", Name = "Season 2", Type = "Season", IndexNumber = 2 } } }
                     : path == "/Shows/series/Episodes" ? new { Items = new[] { new { Id = target.Contains("seasonId=season-2") ? "ep2" : "ep1", Name = "Episode 1", Type = "Episode", IndexNumber = 1, ParentIndexNumber = target.Contains("seasonId=season-2") ? 2 : 1 } } }
                     : path.EndsWith("PlaybackInfo") ? new { MediaSources = new[] { new { Id = "source", Container = "mp4", SupportsDirectPlay = true } }, PlaySessionId = "session" }
+                    : target.Contains("sortBy=Random") ? new { Items = new object[] {
+                        new { Id = "ambient", Name = "Backdrop film", Type = "Movie", BackdropImageTags = new[] { "backdrop-tag" } },
+                        new { Id = "no-backdrop", Name = "Poster only", Type = "Movie", ImageTags = new { Primary = "poster-tag" } }
+                    }, TotalRecordCount = 2 }
                     : new { Items = new[] { new { Id = "movie", Name = "Fixture movie", Type = "Movie", RunTimeTicks = 1200000000L, Genres = new[] { "Test" }, ImageTags = new { Primary = "image-tag" }, UserData = new { PlaybackPositionTicks = 100000000L, PlayedPercentage = 8.3, Played = false } } }, TotalRecordCount = 1 };
                 var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body));
                 try
@@ -137,6 +148,15 @@ internal static class Program
             var profile = server.Profile;
             Assert(profile.ServerName == "Fixture server" && profile.UserName == "fixture" && profile.ServerVersion == "10.11", "connection verifies home and captures server/account identity");
             Assert(server.Latest.First().Artwork.Contains("api_key=local-fixture-token"), "server artwork carries authentication for WinUI BitmapImage");
+            var backdrops = server.RandomBackdrops(default).GetAwaiter().GetResult();
+            Assert(backdrops.Length == 1 && backdrops[0].Id == "ambient" && randomQueries.Any(x => x.Contains("limit=24") && x.Contains("recursive=true")),
+                "ambient pool uses Core random library query and excludes entries without backdrops");
+            var ambientUrl = MediaServer.AmbientImage(backdrops[0].BackdropArtwork);
+            Assert(ambientUrl.Contains("maxWidth=800") && !ambientUrl.Contains("1280") && ambientUrl.Contains("api_key=local-fixture-token") && ambientUrl.Contains("backdrop-tag"),
+                "ambient request downsizes the image while preserving image tag and authentication");
+            Assert(MediaServer.AmbientImage("D:\\fixture\\backdrop.jpg") == "D:\\fixture\\backdrop.jpg", "local ambient fixtures retain their file path");
+            var detailUrl = MediaServer.DetailImage(backdrops[0].BackdropArtwork);
+            Assert(detailUrl.Contains("maxWidth=1600") && detailUrl.Contains("api_key=local-fixture-token"), "detail requests one larger image shared by sharp and blurred layers");
             try { MediaServer.Connect(core, $"127.0.0.1:{port}", "jellyfin", "wrong", "wrong", default).GetAwaiter().GetResult(); throw new InvalidOperationException("Bad credentials were accepted"); }
             catch (ServerConnectionException ex) { Assert(ex.Message.Contains("账号验证失败"), "HTTP 401 produces a retryable form error in Chinese"); }
             try { MediaServer.Connect(core, $"127.0.0.1:{port}/denied", "jellyfin", "fixture", "fixture", default).GetAwaiter().GetResult(); throw new InvalidOperationException("Unreadable library was activated"); }
@@ -179,7 +199,7 @@ internal static class Program
             Assert(series.Seasons?.Length == 2 && series.Episodes?.Single().MediaId == "ep2" && series.SelectedSeasonId == "season-2", "season selection retains the correct server episode identity");
             var source = server.Resolve(items[0], 1, default).GetAwaiter().GetResult();
             Assert(source.TenantId.EndsWith(":fixture-user") && source.Uri.Contains("source"), "playback URL and tenant come from Core server contract");
-            using (var session = new PlaybackSession(core))
+            if (media is not null) using (var session = new PlaybackSession(core))
             {
                 string? error = null; session.Failed += message => error = message;
                 session.Attach((ulong)hwnd.ToInt64(), 640, 360, 1);
