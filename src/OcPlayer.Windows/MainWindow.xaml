@@ -38,18 +38,19 @@
                             <Thickness x:Key="TopNavigationViewTopNavGridMargin">0</Thickness>
                             <Thickness x:Key="NavigationViewBorderThickness">0</Thickness>
                             <Thickness x:Key="TopNavigationViewContentGridBorderThickness">0</Thickness>
-                            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
                             <SolidColorBrush x:Key="NavigationViewItemSeparatorForeground" Color="Transparent" />
                             <StaticResource x:Key="TopNavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
                             <StaticResource x:Key="TopNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
                         </NavigationView.Resources>
                         <NavigationView.MenuItems>
                             <NavigationViewItem x:Name="HomeNavigationItem" Tag="home" Width="40" ToolTipService.ToolTip="首页" AutomationProperties.Name="首页">
-                                <NavigationViewItem.Resources>
-                                    <!-- The native presenter already has 4 DIP on each side. -->
-                                    <Thickness x:Key="TopNavigationViewItemContentOnlyContentPresenterMargin">7,0</Thickness>
-                                </NavigationViewItem.Resources>
-                                <PersonPicture x:Name="Avatar" Width="18" Height="18" IsHitTestVisible="False" />
+                                <NavigationViewItem.Icon>
+                                    <!-- Keep the native 16 DIP icon slot and its indicator layout;
+                                         render the circular avatar at the established 18 DIP size. -->
+                                    <ImageIcon x:Name="Avatar" Width="16" Height="16" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                                        <ImageIcon.RenderTransform><ScaleTransform ScaleX="1.125" ScaleY="1.125" /></ImageIcon.RenderTransform>
+                                    </ImageIcon>
+                                </NavigationViewItem.Icon>
                             </NavigationViewItem>
                             <NavigationViewItem x:Name="ViewingNavigationItem" Tag="viewing" Width="40" ToolTipService.ToolTip="观影" AutomationProperties.Name="观影">
                                 <NavigationViewItem.Icon><SymbolIcon Symbol="Video" /></NavigationViewItem.Icon>
@@ -61,7 +62,8 @@
                     </NavigationView>
             </StackPanel>
             <Button x:Name="BackButton" Click="Back_Click" Style="{StaticResource NavigationBackButtonNormalStyle}"
-                    Visibility="Collapsed" VerticalAlignment="Center" ToolTipService.ToolTip="返回上一页" AutomationProperties.Name="返回上一页" />
+                    Width="46" Height="48" Margin="0" CornerRadius="0" HorizontalAlignment="Left"
+                    Visibility="Collapsed" VerticalAlignment="Stretch" ToolTipService.ToolTip="返回上一页" AutomationProperties.Name="返回上一页" />
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                 <StackPanel VerticalAlignment="Center" Spacing="1">
                 <TextBlock x:Name="PageTitle" Text="首页" FontSize="14" FontWeight="SemiBold" TextLineBounds="Tight" VerticalAlignment="Center" />
@@ -81,7 +83,7 @@
                     </MenuFlyout></SplitButton.Flyout>
                     <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE8E5;" FontSize="16" /><TextBlock Text="打开文件" /></StackPanel>
                 </SplitButton>
-                <Button x:Name="RefreshButton" Click="Refresh_Click" ToolTipService.ToolTip="刷新" AutomationProperties.Name="刷新">
+                <Button x:Name="RefreshButton" VerticalAlignment="Stretch" Click="Refresh_Click" ToolTipService.ToolTip="刷新" AutomationProperties.Name="刷新">
                     <FontIcon Glyph="&#xE72C;" FontSize="16" />
                 </Button>
                 <AutoSuggestBox x:Name="GlobalSearch" Width="320" PlaceholderText="搜索全部媒体库"

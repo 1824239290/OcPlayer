@@ -70,6 +70,8 @@ UI 对齐范围见 [`UI-PARITY.md`](UI-PARITY.md)，本次真实播放验证见 
 
 媒体库、详情和设置子页的左上角返回按钮使用 WinUI 的 `NavigationBackButtonNormalStyle`，
 沿用系统的返回箭头动画、主题颜色和交互状态；点击仍通过共用的导航逻辑返回上级页面。
+返回按钮去掉样式默认的外边距和圆角，悬停区域贴齐窗口左侧并占满标题栏高度；
+宽度按右侧三个原生窗口按钮的总宽度除以三计算，并随 DPI、窗口状态和标题栏指标更新。
 页面标题使用 `TextLineBounds="Tight"` 去除字形上下的额外行框留白，与原生返回箭头垂直居中对齐。
 
 主窗口使用原生 `TitleBarHeightOption.Tall`，标题栏内容高度跟随系统返回的 `Height`，使

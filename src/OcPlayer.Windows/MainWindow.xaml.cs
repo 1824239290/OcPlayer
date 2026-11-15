@@ -32,7 +32,7 @@ public sealed partial class MainWindow : Window
     private readonly AmbientBackdropController _ambient;
     private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _active = true;
-    private readonly BitmapImage _avatarColor = new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg"))) { DecodePixelWidth = 54 };
+    private readonly BitmapImage _avatarColor = new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"))) { DecodePixelWidth = 54 };
     private WriteableBitmap? _avatarGray;
 
     public MainWindow()
@@ -48,7 +48,7 @@ public sealed partial class MainWindow : Window
         _ambient = new AmbientBackdropController(Ambience, _model);
         Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged += AnimationsEnabledChanged;
-        Avatar.ProfilePicture = _avatarColor;
+        Avatar.Source = _avatarColor;
         Root.Loaded += async (_, _) =>
         {
             if (Root.XamlRoot is { } xamlRoot) xamlRoot.Changed += (_, _) => UpdateTitleBarRegions();
@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window
         Navigate(route);
         Root.ActualThemeChanged += (_, _) => SetCaptionTheme();
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
+        BackButton.SizeChanged += (_, _) => UpdateTitleBarRegions();
         MainNavigation.SizeChanged += (_, _) => UpdateTitleBarRegions();
         Root.SizeChanged += (_, _) => UpdateTitleBarRegions();
         AppWindow.Changed += (_, args) =>
@@ -289,22 +290,22 @@ public sealed partial class MainWindow : Window
     {
         if (!_navigating && args.SelectedItem is NavigationViewItem { Tag: string route }) Navigate(route);
     }
-    private void UpdateNavigationAvatar() => Avatar.ProfilePicture = MainNavigation.SelectedItem is NavigationViewItem { Tag: "home" }
+    private void UpdateNavigationAvatar() => Avatar.Source = MainNavigation.SelectedItem is NavigationViewItem { Tag: "home" }
         ? _avatarColor : (ImageSource?)_avatarGray ?? _avatarColor;
 
     private async Task LoadNavigationAvatar()
     {
         try
         {
-            using var file = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg"));
+            using var file = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"));
             using var stream = file.AsRandomAccessStream();
             var decoder = await BitmapDecoder.CreateAsync(stream);
-            // Decode a small, aspect-preserving image once. PersonPicture uses
-            // UniformToFill and an ellipse, matching macOS's 18pt circular avatar.
+            // The icon asset already contains the centered circular crop and
+            // transparent edges, matching macOS's 18pt avatar in an icon-only item.
             var scale = 54d / Math.Min(decoder.PixelWidth, decoder.PixelHeight);
             var width = (uint)Math.Max(1, Math.Round(decoder.PixelWidth * scale));
             var height = (uint)Math.Max(1, Math.Round(decoder.PixelHeight * scale));
-            var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight,
+            var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
                 new BitmapTransform { ScaledWidth = width, ScaledHeight = height, InterpolationMode = BitmapInterpolationMode.Fant },
                 ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.ColorManageToSRgb)).DetachPixelData();
             for (var i = 0; i < pixels.Length; i += 4)
@@ -337,7 +338,12 @@ public sealed partial class MainWindow : Window
         // and reserve the real caption width across DPI and presenter changes.
         var titleBar = AppWindow.TitleBar;
         if (titleBar.Height > 0) TitleBarRow.Height = new GridLength(titleBar.Height / scale);
-        TitleBar.Margin = new Thickness(18 + titleBar.LeftInset / scale, 0, 10 + titleBar.RightInset / scale, 0);
+        // Match one native caption button: full title-bar height, no inset or
+        // rounded hover surface. RightInset covers the three caption buttons.
+        BackButton.Width = titleBar.RightInset > 0 ? titleBar.RightInset / (3 * scale) : 46;
+        BackButton.Height = TitleBarRow.Height.Value;
+        TitleBar.Margin = new Thickness((BackButton.Visibility == Visibility.Visible ? 0 : 18) + titleBar.LeftInset / scale,
+            0, 10 + titleBar.RightInset / scale, 0);
         RectInt32 Bounds(FrameworkElement element)
         {
             var point = element.TransformToVisual(Root).TransformPoint(new global::Windows.Foundation.Point());
