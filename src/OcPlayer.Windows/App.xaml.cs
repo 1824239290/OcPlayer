@@ -23,6 +23,15 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (Environment.GetCommandLineArgs().Contains("--header-actions-preview"))
+        {
+            _window = new Features.HeaderActionsPreviewWindow();
+#if DEBUG
+            Preview.DemoCapture.Attach(_window);
+#endif
+            _window.Activate();
+            return;
+        }
         if (Environment.GetCommandLineArgs().Contains("--nav-preview"))
         {
             _window = new Features.NavigationPreviewWindow();

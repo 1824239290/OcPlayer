@@ -4,6 +4,7 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using OcPlayer.Windows.Features;
 using OcPlayer.Windows.Preview;
 using OcPlayer.Windows.ViewModels;
@@ -39,6 +40,8 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         Title = App.DemoMode ? "OcPlayer · WinUI Demo" : "OcPlayer";
         ExtendsContentIntoTitleBar = true;
+        if (AppWindowTitleBar.IsCustomizationSupported())
+            AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         SetTitleBar(TitleBar);
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
         AppWindow.ResizeClient(new SizeInt32(1130, 670));
@@ -46,7 +49,12 @@ public sealed partial class MainWindow : Window
         Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged += AnimationsEnabledChanged;
         Avatar.ProfilePicture = _avatarColor;
-        Root.Loaded += async (_, _) => await LoadNavigationAvatar();
+        Root.Loaded += async (_, _) =>
+        {
+            if (Root.XamlRoot is { } xamlRoot) xamlRoot.Changed += (_, _) => UpdateTitleBarRegions();
+            UpdateTitleBarRegions();
+            await LoadNavigationAvatar();
+        };
         _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched);
         Closed += (_, _) =>
         {
@@ -68,6 +76,11 @@ public sealed partial class MainWindow : Window
         TitleBar.SizeChanged += (_, _) => UpdateTitleBarRegions();
         MainNavigation.SizeChanged += (_, _) => UpdateTitleBarRegions();
         Root.SizeChanged += (_, _) => UpdateTitleBarRegions();
+        AppWindow.Changed += (_, args) =>
+        {
+            if (args.DidSizeChange || args.DidPresenterChange)
+                DispatcherQueue.TryEnqueue(UpdateTitleBarRegions);
+        };
         SetCaptionTheme();
         if (!App.DemoMode)
         {
@@ -229,19 +242,24 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception) { /* Keep the color picture if an optional grayscale decode is unavailable. */ }
     }
-    private void GlobalSearch_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs args)
+    private void GlobalSearch_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        if (args.Key != global::Windows.System.VirtualKey.Enter) return;
-        _model.Query = GlobalSearch.Text;
+        _model.Query = args.QueryText;
         _model.LibraryName = "全部媒体库";
         _model.LibraryId = null;
         Navigate("library");
-        args.Handled = true;
     }
     private void Refresh_Click(object sender, RoutedEventArgs e) { if (App.Core?.Server is not null) LoadHome(); else { App.Core?.RefreshProgress(); Navigate(_model.Route); } if (App.DemoMode) Notify("示例片库已刷新。当前是离线前端演示。"); }
     private void UpdateTitleBarRegions()
     {
-        var scale = Root.XamlRoot?.RasterizationScale ?? 1;
+        if (_closing || Root.XamlRoot is not { } xamlRoot) return;
+        var scale = xamlRoot.RasterizationScale;
+        // AppWindow metrics are physical pixels; XAML layout uses logical pixels.
+        // Keep content and native caption buttons on the same vertical center,
+        // and reserve the real caption width across DPI and presenter changes.
+        var titleBar = AppWindow.TitleBar;
+        if (titleBar.Height > 0) TitleBarRow.Height = new GridLength(titleBar.Height / scale);
+        TitleBar.Margin = new Thickness(18 + titleBar.LeftInset / scale, 0, 10 + titleBar.RightInset / scale, 0);
         RectInt32 Bounds(FrameworkElement element)
         {
             var point = element.TransformToVisual(Root).TransformPoint(new global::Windows.Foundation.Point());
@@ -251,7 +269,7 @@ public sealed partial class MainWindow : Window
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, regions);
     }
     private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route is "detail" or "detail-info" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : "home");
-    private void GlobalSearch_TextChanged(object sender, TextChangedEventArgs e)
+    private void GlobalSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs e)
     {
         if (_navigating || _model.Route != "library") return;
         _model.Query = GlobalSearch.Text;
@@ -274,7 +292,9 @@ public sealed partial class MainWindow : Window
         }
         menu.ShowAt(SortButton);
     }
-    private async void OpenFile_Click(object sender, RoutedEventArgs e)
+    private async void OpenFile_Click(object sender, RoutedEventArgs e) => await OpenLocalFile();
+    private async void OpenFileButton_Click(SplitButton sender, SplitButtonClickEventArgs args) => await OpenLocalFile();
+    private async Task OpenLocalFile()
     {
         var picker = new global::Windows.Storage.Pickers.FileOpenPicker();
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));

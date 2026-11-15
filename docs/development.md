@@ -58,6 +58,30 @@ UI Demo 使用 `--demo-route=home` 显式启动，保留 macOS 参考 fixture、
 只检查 UI 编译时可以设置 `-p:OcpDemoOnly=true`。
 UI 对齐范围见 [`UI-PARITY.md`](UI-PARITY.md)，本次真实播放验证见 [`core-integration.md`](core-integration.md)。
 
+### 首页控件样式预览
+
+`--header-actions-preview` 打开独立的 WinUI 原生控件对比窗口，提供六组打开媒体、刷新和
+`AutoSuggestBox` 搜索组合。可切换深浅色，试用菜单、建议列表和搜索提交；操作只更新预览
+状态，不连接服务器或打开实际文件。圆角组只设置 `CornerRadius`，所有组沿用系统控件模板。
+
+首页已采用 E 组：`SplitButton` 左侧直接打开系统文件选择器，右侧菜单保留本地文件、直连
+链接和媒体服务器入口；刷新使用默认 `Button`，搜索使用默认 `AutoSuggestBox`。回车或
+搜索图标提交全库搜索，媒体库页输入或清空文字仍更新当前列表。
+
+主窗口使用原生 `TitleBarHeightOption.Tall`，标题栏内容高度跟随系统返回的 `Height`，使
+搜索框和窗口按钮共享垂直中心。左右安全区使用 `LeftInset` / `RightInset`，按 XAML 的
+缩放比例转换，并在窗口大小、最大化状态和 DPI 改变后更新。
+
+可单独输出预览构建，保留已运行的应用：
+
+```powershell
+dotnet build src/OcPlayer.Windows/OcPlayer.Windows.csproj -c Debug -p:Platform=x64 -p:OcpDemoOnly=true -o artifacts/header-actions-preview-build
+./Scripts/start-windows.ps1 -HeaderActionsPreview -BuildDirectory artifacts/header-actions-preview-build
+```
+
+直接启动 exe 时加 `--preview-theme=light` 可默认显示浅色。之前的导航预览仍用 `--nav-preview`
+或启动脚本的 `-NavigationPreview`。
+
 ## 验证边界
 
 命令行构建覆盖还原、编译和 XAML 生成。真正的播放验证需要带 GPU 和硬件解码器的 Windows 桌面，
