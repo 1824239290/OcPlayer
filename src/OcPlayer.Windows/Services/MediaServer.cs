@@ -10,7 +10,15 @@ internal sealed record ServerProfile(string Id, string Kind, string BaseUrl, str
     public string DisplayName => string.IsNullOrWhiteSpace(ServerName) ? new Uri(BaseUrl).Authority : ServerName;
     public string DisplayKind => Kind == "emby" ? "Emby" : "Jellyfin";
 }
-internal sealed record MediaLibrary(string Id, string Name, string Artwork);
+internal sealed record MediaLibrary(string Id, string Name, string Artwork, string CollectionType = "", string[]? CoverPosters = null)
+{
+    public string DisplayType => CollectionType.ToLowerInvariant() switch
+    {
+        "movies" => "电影", "tvshows" => "剧集", "music" => "音乐", "musicvideos" => "MV",
+        "homevideos" => "家庭视频", "boxsets" => "合集", "books" => "书籍", "photos" => "照片",
+        "playlists" => "播放列表", "livetv" => "直播电视", _ => "混合内容"
+    };
+}
 internal sealed class ServerConnectionException(string message) : InvalidOperationException(message);
 
 internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
@@ -106,16 +114,60 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         var libraries = home.GetProperty("libraries").EnumerateArray().Select(library =>
         {
             var id = String(library, "id");
-            return new MediaLibrary(id, String(library, "name"), Image(id, "Primary", NullableString(library, "primaryImageTag")));
+            return new MediaLibrary(id, String(library, "name"), Image(id, "Primary", NullableString(library, "primaryImageTag")), String(library, "collectionType"));
         }).ToArray();
         DemoMedia[] Section(string key) => home.GetProperty(key) is { ValueKind: JsonValueKind.Array } items ? items.EnumerateArray().Select(Project).ToArray() : [];
         var latest = Section("latest");
         var resume = Section("resume");
         var next = Section("nextUp");
+        // Match macOS: only supplement libraries without their own Primary image.
+        // Keep lookup bounded to two libraries, twelve entries and four collections.
+        using var coverSlots = new SemaphoreSlim(2);
+        libraries = await Task.WhenAll(libraries.Select(async library =>
+        {
+            if (library.Artwork.Length > 0) return library;
+            await coverSlots.WaitAsync(token);
+            try { return library with { CoverPosters = await LibraryCoverPosters(library, token) }; }
+            catch (ServerConnectionException) { return library; } // Optional artwork retries on the next refresh.
+            finally { coverSlots.Release(); }
+        }));
         token.ThrowIfCancellationRequested();
         Libraries.Clear(); Latest.Clear(); Resume.Clear(); NextUp.Clear();
         Libraries.AddRange(libraries); Latest.AddRange(latest); Resume.AddRange(resume); NextUp.AddRange(next);
         HomeWarning = failures.Length > 0 ? "部分首页栏目加载失败（" + string.Join("、", failures.Select(x => x.Name switch { "resume" => "继续观看", "latest" => "最近添加", "nextUp" => "接下来看", _ => x.Name })) + "），可点击刷新重试。" : null;
+    }
+
+    private async Task<string[]> LibraryCoverPosters(MediaLibrary library, CancellationToken token)
+    {
+        async Task<JsonElement[]> Items(string parentId, int limit, bool recursive)
+        {
+            var page = await Request("browse.library", new { parentId, startIndex = 0, limit, recursive,
+                sort = new { field = "name", ascending = true } }, token);
+            return page.GetProperty("items").EnumerateArray().ToArray();
+        }
+        string[] Posters(IEnumerable<JsonElement> items) => items
+            .Select(item => Image(String(item, "id"), "Primary", NullableString(item, "primaryImageTag")))
+            .Where(url => url.Length > 0).Select(url => ResizeImage(url, 720)).Take(4).ToArray();
+
+        var top = await Items(library.Id, 12, true);
+        if (!library.CollectionType.Equals("boxsets", StringComparison.OrdinalIgnoreCase)) return Posters(top);
+
+        // Collections often have no image themselves. Take turns across their
+        // members so the collage represents several collections, as on macOS.
+        var collections = new List<string[]>();
+        foreach (var collection in top.Where(item => String(item, "kind") == "boxSet").Take(4))
+        {
+            try { collections.Add(Posters((await Items(String(collection, "id"), 4, false)).Take(4))); }
+            catch (ServerConnectionException) { /* Still use the other collections' posters. */ }
+        }
+        var posters = new List<string>();
+        for (var index = 0; index < 4 && posters.Count < 4; index++)
+            foreach (var collection in collections.Where(x => x.Length > index))
+            {
+                posters.Add(collection[index]);
+                if (posters.Count == 4) break;
+            }
+        return posters.ToArray();
     }
 
     public async Task<DemoMedia[]> Browse(string? libraryId, string query, string sort, string watchState, CancellationToken token)

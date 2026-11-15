@@ -117,6 +117,9 @@ internal static class Program
         var requests = new List<string>();
         var randomQueries = new List<string>();
         var watchedRequests = new List<(string Method, string Path)>();
+        var coverQueries = new List<string>();
+        var failCoverMembers = false;
+        object CoverMovie(string id) => new { Id = id, Name = id, Type = "Movie", ImageTags = new { Primary = id + "-poster" } };
         object Episode(string id, int number, int season, bool omitSeasonId = false, bool played = false) => new
         {
             Id = id, Name = "Episode " + number, Type = "Episode", SeriesId = "series",
@@ -137,7 +140,7 @@ internal static class Program
                 var line = await reader.ReadLineAsync();
                 var method = line!.Split(' ')[0];
                 var target = line!.Split(' ')[1]; var requestPath = target.Split('?')[0];
-                var mode = requestPath.StartsWith("/emby/") ? "emby" : requestPath.StartsWith("/denied/") ? "denied" : requestPath.StartsWith("/partial/") ? "partial" : requestPath.StartsWith("/slow/") ? "slow" : "";
+                var mode = requestPath.StartsWith("/covers/") ? "covers" : requestPath.StartsWith("/emby/") ? "emby" : requestPath.StartsWith("/denied/") ? "denied" : requestPath.StartsWith("/partial/") ? "partial" : requestPath.StartsWith("/slow/") ? "slow" : "";
                 var path = mode.Length == 0 ? requestPath : requestPath[(mode.Length + 1)..];
                 var length = 0;
                 while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
@@ -147,12 +150,27 @@ internal static class Program
                 lock (requests) requests.Add(requestPath);
                 if (path.Contains("/PlayedItems/")) lock (watchedRequests) watchedRequests.Add((method, requestPath));
                 if (target.Contains("sortBy=Random")) lock (randomQueries) randomQueries.Add(target);
+                if (mode == "covers" && target.Contains("parentId=")) lock (coverQueries) coverQueries.Add(target);
                 if (mode == "slow") await Task.Delay(500);
                 var status = requestBody.Contains("wrong") ? 401 : mode == "denied" && path.EndsWith("Views") || mode == "partial" && path.EndsWith("NextUp") ? 403 : 200;
+                if (mode == "covers" && failCoverMembers && target.Contains("parentId=box-a")) status = 503;
                 object body = path == "/System/Info/Public" ? new { Id = "fixture-server", ServerName = "Fixture server", ProductName = mode == "emby" ? "Emby" : "Jellyfin", Version = "10.11" }
                     : path.EndsWith("AuthenticateByName") ? new { AccessToken = "local-fixture-token", User = new { Id = "fixture-user", Name = "fixture" } }
                     : mode == "emby" && path.EndsWith("Items/Latest") ? new[] { new { Id = "movie", Name = "Fixture movie", Type = "Movie" } }
+                    : mode == "covers" && path.EndsWith("Views") ? new { Items = new object[] {
+                        new { Id = "own-cover", Name = "Own cover", CollectionType = "movies", ImageTags = new { Primary = "library-cover" } },
+                        new { Id = "collections", Name = "Custom collections name", CollectionType = "BoxSets" },
+                        new { Id = "poster-library", Name = "TV", CollectionType = "tvshows" },
+                        new { Id = "empty-library", Name = "Empty", CollectionType = "movies" }
+                    } }
                     : path.EndsWith("Views") ? new { Items = new[] { new { Id = "library", Name = "Movies", CollectionType = "movies" } } }
+                    : mode == "covers" && target.Contains("parentId=collections") ? new { Items = new[] {
+                        new { Id = "box-a", Name = "A", Type = "BoxSet" }, new { Id = "box-b", Name = "B", Type = "BoxSet" }
+                    } }
+                    : mode == "covers" && target.Contains("parentId=box-a") ? new { Items = new[] { CoverMovie("a1"), CoverMovie("a2"), CoverMovie("a3"), CoverMovie("a4") } }
+                    : mode == "covers" && target.Contains("parentId=box-b") ? new { Items = new[] { CoverMovie("b1"), CoverMovie("b2") } }
+                    : mode == "covers" && target.Contains("parentId=poster-library") ? new { Items = new object[] { CoverMovie("tv1"), new { Id = "no-image", Name = "No image", Type = "Series" }, CoverMovie("tv2") } }
+                    : mode == "covers" && target.Contains("parentId=empty-library") ? new { Items = Array.Empty<object>() }
                     : path == "/Items/series" ? new { Id = "series", Name = "Fixture series", OriginalTitle = "Original series title", Type = "Series", Overview = "Series synopsis", Genres = new[] { "Animation" }, ImageTags = new { Logo = "series-logo" }, BackdropImageTags = new[] { "series-backdrop" } }
                     : path.EndsWith("Items/Resume") ? new { Items = new[] { Episode("ep2", 1, 2) } }
                     : path.EndsWith("NextUp") ? new { Items = new[] { Episode("ep2-next", 7, 2, omitSeasonId: true) } }
@@ -192,6 +210,29 @@ internal static class Program
             var profile = server.Profile;
             Assert(profile.ServerName == "Fixture server" && profile.UserName == "fixture" && profile.ServerVersion == "10.11", "connection verifies home and captures server/account identity");
             Assert(server.Latest.First().Artwork.Contains("api_key=local-fixture-token"), "server artwork carries authentication for WinUI BitmapImage");
+            var covers = MediaServer.Connect(core, $"127.0.0.1:{port}/covers", "emby", "fixture", "fixture", default).GetAwaiter().GetResult();
+            var ownCover = covers.Libraries.Single(x => x.Id == "own-cover");
+            Assert(new Uri(ownCover.Artwork).AbsolutePath == "/covers/Items/own-cover/Images/Primary"
+                && ownCover.Artwork.Contains("library-cover") && ownCover.CoverPosters is null
+                && !coverQueries.Any(x => x.Contains("parentId=own-cover")), "a library's own cover wins without any content lookup");
+            var collectionCover = covers.Libraries.Single(x => x.Id == "collections");
+            Assert(collectionCover.DisplayType == "合集" && collectionCover.Artwork.Length == 0
+                && collectionCover.CoverPosters!.Select(x => new Uri(x).AbsolutePath).SequenceEqual(new[] {
+                    "/covers/Items/a1/Images/Primary", "/covers/Items/b1/Images/Primary", "/covers/Items/a2/Images/Primary", "/covers/Items/b2/Images/Primary" }),
+                "collections without their own images use member posters in macOS round-robin order");
+            Assert(collectionCover.CoverPosters!.All(x => x.Contains("maxWidth=720") && x.Contains("api_key=local-fixture-token") && x.Contains("-poster"))
+                && coverQueries.Any(x => x.Contains("parentId=collections") && x.Contains("limit=12") && x.Contains("recursive=true"))
+                && coverQueries.Any(x => x.Contains("parentId=box-a") && x.Contains("limit=4") && x.Contains("recursive=false")),
+                "cover lookup is bounded and keeps image tags, authentication and the reverse proxy path");
+            Assert(covers.Libraries.Single(x => x.Id == "poster-library").CoverPosters!.Length == 2
+                && covers.Libraries.Single(x => x.Id == "empty-library").CoverPosters!.Length == 0,
+                "ordinary libraries use available posters and empty libraries keep an icon placeholder");
+            failCoverMembers = true;
+            covers.Refresh(default).GetAwaiter().GetResult();
+            Assert(covers.Libraries.Single(x => x.Id == "collections").CoverPosters!.Length == 2, "a failed collection member lookup still uses other collections' posters");
+            failCoverMembers = false;
+            covers.Refresh(default).GetAwaiter().GetResult();
+            Assert(covers.Libraries.Single(x => x.Id == "collections").CoverPosters!.Length == 4, "refresh retries failed cover lookups");
             var backdrops = server.RandomBackdrops(default).GetAwaiter().GetResult();
             Assert(backdrops.Length == 1 && backdrops[0].Id == "ambient" && randomQueries.Any(x => x.Contains("limit=24") && x.Contains("recursive=true")),
                 "ambient pool uses Core random library query and excludes entries without backdrops");

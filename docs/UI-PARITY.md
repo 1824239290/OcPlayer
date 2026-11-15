@@ -10,6 +10,7 @@ Windows 前端以 macOS OcPlayer 的现有界面为准。保留页面结构、�
 - 左上角按用户选择改用 WinUI 3 `NavigationView` 顶部模式，不显示底部选中横线或外层药丸框。三个入口各 40 DIP，总宽 120 DIP，取消默认自定义内容区域的 48 DIP 留位。头像按 macOS `AppShellChrome.swift` 的 `SectionAvatarIcon` 显示为 18 DIP 圆形、等比填满：首页选中保留原色，其余分区灰化；观影与设置用图标亮暗区分选中态，悬停及键盘焦点保留系统反馈。
 - 内容顺序：继续观看 → 最近添加 → 媒体库 → 接下来看；留白及横向卡片按参考比例实现。
 - 继续观看使用 328×184.5 DIP 横图；最近添加使用 230×129.375 DIP 横图。标题、S/E、剩余时长和细进度标记在图下。
+- 媒体库卡按 macOS `LibraryCard` 显示库自身的 Primary 封面，不叠加库名或压暗遮罩；下方显示名称和库类型。库没有封面时最多使用四张内容海报：一张铺满、两张并排、三张上二下一、四张 2×2，各格等比裁切且不留缝。合集库从最多四个合集的成员中轮转取海报，仍无图时显示占位图标。
 - Home fixture 的图片仅裁取用户参考截图中的媒体图像及头像，界面本身由原生 WinUI 控件构成。所有浏览页面共用会话级背景轮播；背景实现以 GitHub macOS `888ccdd` 的 `BACKGROUND-ARCHITECTURE.md` 与 `AMBIENCE.md` 为准。
 - 显式 Demo 模式保留静态画面与模拟时钟。默认模式已接入共享 Core 与 Erika Windows 原生播放，见 [组合说明](core-integration.md)。
 - 已基于 2026-11-15 的实机截图补齐媒体库、详情首屏、观影模块、设置总览与十个子页，以及播放器 HUD。完整验证、素材来源和尚存差异见 [`DEMO-VALIDATION.md`](DEMO-VALIDATION.md)，这些页面仍不代表完整功能验收。

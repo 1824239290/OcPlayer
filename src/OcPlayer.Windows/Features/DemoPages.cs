@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using OcPlayer.Windows.Controls;
 using OcPlayer.Windows.Preview;
+using OcPlayer.Windows.Services;
 using OcPlayer.Windows.ViewModels;
 using Windows.UI;
 using static OcPlayer.Windows.Controls.DemoUi;
@@ -32,21 +33,17 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var librarySection = Stack(26);
         librarySection.Children.Add(Text("媒体库", 14, true));
         var libraries = Row(22);
-        var entries = model.DemoMode ? new[] { ("电视剧", DemoCatalog.All[4].Backdrop, (string?)null), ("电影", DemoCatalog.All[1].Backdrop, (string?)null), ("合集", "", (string?)null) }
-            : App.Core?.Server is { } server ? server.Libraries.Select(x => (x.Name, x.Artwork, (string?)x.Id)).ToArray() : new[] { ("本地媒体", "", (string?)null) };
-        foreach (var (name, artwork, id) in entries)
+        var entries = model.DemoMode ? new[] {
+            new MediaLibrary("", "电视剧", DemoCatalog.All[4].Backdrop, "tvshows"),
+            new MediaLibrary("", "电影", DemoCatalog.All[1].Backdrop, "movies"),
+            new MediaLibrary("", "合集", "", "boxsets", DemoCatalog.All.Take(4).Select(x => x.PosterPath).ToArray()) }
+            : App.Core?.Server is { } server ? server.Libraries.ToArray() : new[] { new MediaLibrary("", "本地媒体", "") };
+        foreach (var library in entries)
         {
-            var content = new Grid { Width = 328, Height = 184.5, Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255)) };
-            if (artwork.Length > 0) content.Children.Add(Image(artwork));
-            content.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(75, 0, 0, 0)) });
-            var title = Text(name, 30, true); title.HorizontalAlignment = HorizontalAlignment.Center;
-            title.VerticalAlignment = VerticalAlignment.Center; title.Foreground = new SolidColorBrush(Colors.White);
-            content.Children.Add(title);
-            var button = new Button { Content = new Border { Child = content, CornerRadius = new CornerRadius(10) }, Padding = new Thickness(0),
-                Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0) };
-            button.Click += (_, _) => { model.Query = ""; model.Category = "全部"; model.LibraryName = name; model.LibraryId = id; navigate("library"); };
-            var card = Stack(7); card.Children.Add(button); card.Children.Add(Text(name, 13, true)); card.Children.Add(Muted(name, 12));
-            libraries.Children.Add(card);
+            libraries.Children.Add(new LibraryCard(library, () => {
+                model.Query = ""; model.Category = "全部"; model.LibraryName = library.Name;
+                model.LibraryId = string.IsNullOrEmpty(library.Id) ? null : library.Id; navigate("library");
+            }));
         }
         librarySection.Children.Add(new HorizontalMediaRail(libraries, "媒体库")); return librarySection;
     }
