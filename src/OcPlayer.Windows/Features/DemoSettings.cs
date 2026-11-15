@@ -21,6 +21,7 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
             foreach (var title in group.Pages)
             {
                 var value = title switch { "媒体服务器" => "jumusu", "Bangumi" => model.BangumiEnabled ? "橘木苏（镜像）" : "已停用", "MoviePilot" => model.MoviePilotEnabled ? "已登录" : "已停用", "TMDB 元数据补全" => "已启用（镜像）", "网络" => "默认 UA", "播放" => "liberika", "弹幕" => "自动加载", "首页栏目" => $"显示 {model.HomeSections.Count-model.HiddenSections.Count} 栏", "关于" => "v0.3.0 · Demo", _ => "" };
+                if (!model.DemoMode) value = title switch { "媒体服务器" => App.Core?.Server?.Profile.Kind ?? "未连接", "Bangumi" or "MoviePilot" or "TMDB 元数据补全" => "未配置", "网络" => "默认", "播放" => "Erika · D3D11 / WASAPI", "弹幕" => "本地文件", "关于" => $"Core {App.Core?.Version}", _ => "" };
                 var row = SettingsLine(title, Text(value, 13), () => navigate("settings:"+title), true);
                 rows.Children.Add(row);
                 if (title != group.Pages[^1]) rows.Children.Add(Divider());
@@ -33,6 +34,7 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
     }
     public UIElement Subpage(string name)
     {
+        if (name == "媒体服务器" || !model.DemoMode && name != "首页栏目") return RuntimeSubpage(name);
         var page=Stack(28); page.Width=680; page.MaxWidth=680; page.HorizontalAlignment=HorizontalAlignment.Center;
         void Group(string heading, params UIElement[] rows)
         {
@@ -89,6 +91,42 @@ internal sealed class DemoSettings(DemoViewModel model, Action<string> navigate,
                 Group(name,Note("离线演示：此操作不会修改 macOS 配置或连接真实服务。"),Button("返回",()=>navigate("settings")));break;
         }
         var scroll=Scroll(page);scroll.Padding=new Thickness(24,16,24,32);scroll.SizeChanged+=(_,_)=>page.Width=Math.Min(680,Math.Max(0,scroll.ActualWidth-48)); return scroll;
+    }
+    private UIElement RuntimeSubpage(string name)
+    {
+        var page = Stack(18); page.Width = 680; page.MaxWidth = 680; page.HorizontalAlignment = HorizontalAlignment.Center;
+        if (name == "媒体服务器")
+        {
+            var profile = model.DemoMode ? null : App.Core?.Server?.Profile;
+            page.Children.Add(SettingsLine("当前服务器", Text(profile?.DisplayName ?? "未连接")));
+            if (profile is not null) page.Children.Add(SettingsLine("类型", Text(profile.DisplayKind + " " + profile.ServerVersion)));
+            if (profile is not null) page.Children.Add(SettingsLine("地址", Text(profile.BaseUrl)));
+            if (profile is not null) page.Children.Add(SettingsLine("账号", Text(profile.UserName ?? profile.UserId ?? "")));
+            page.Children.Add(Link(profile is null ? "连接服务器…" : "连接其它服务器…", "连接服务器"));
+            if (profile is not null) page.Children.Add(Link("断开连接", "退出确认"));
+            page.Children.Add(Note("登录成功后自动连接这台服务器。登录令牌保存在 Windows 凭据保险箱中。"));
+            if (model.DemoMode) page.Children.Add(Note("连接成功后会切换到真实媒体库，可以直接测试浏览和播放。"));
+        }
+        else if (name == "关于")
+        {
+            page.Children.Add(SettingsLine("OcPlayer", Text("Windows")));
+            page.Children.Add(SettingsLine("共享核心", Text(App.Core?.Version ?? "不可用")));
+            page.Children.Add(SettingsLine("播放内核", Text("Erika · Windows HDR 修复版本")));
+        }
+        else if (name == "播放")
+        {
+            page.Children.Add(SettingsLine("播放内核", Text("Erika · D3D11 / WASAPI")));
+            page.Children.Add(Note("在播放器里调整音量、倍速、音轨和字幕。观看进度会自动保存，下次打开时继续播放。"));
+            page.Children.Add(Toggle("深色外观", model.DarkTheme, v => { model.DarkTheme = v; themeChanged(v); }));
+        }
+        else if (name == "弹幕") page.Children.Add(Note("在播放器的弹幕菜单里加载本地 XML 或 JSON 弹幕文件。"));
+        else if (name == "维护")
+        {
+            page.Children.Add(SettingsLine("观看进度", Text("自动保存")));
+            page.Children.Add(SettingsLine("数据目录", Text(App.Core?.DataDirectory ?? "不可用")));
+        }
+        else page.Children.Add(Note("此项设置将在后续版本开放。"));
+        var scroll = Scroll(page); scroll.Padding = new Thickness(24,16,24,32); scroll.SizeChanged += (_, _) => page.Width = Math.Min(680, Math.Max(0, scroll.ActualWidth - 48)); return scroll;
     }
     void Move(string title,int delta){var index=model.HomeSections.IndexOf(title);var dest=Math.Clamp(index+delta,0,model.HomeSections.Count-1);model.HomeSections.RemoveAt(index);model.HomeSections.Insert(dest,title);navigate("settings:首页栏目");}
     UIElement Link(string title,string route)=>SettingsLine(title,Text("›"),()=>navigate("settings:"+route));

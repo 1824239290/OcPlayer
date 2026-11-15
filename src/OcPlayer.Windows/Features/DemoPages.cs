@@ -10,16 +10,16 @@ using static OcPlayer.Windows.Controls.DemoUi;
 namespace OcPlayer.Windows.Features;
 
 internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Action<DemoMedia> open,
-    Action<DemoMedia> play, Action<bool> themeChanged)
+    Action<DemoMedia> play, Action<bool> themeChanged, Action<DemoMedia>? markWatched = null)
 {
     public UIElement Home()
     {
         var page = Stack(48);
         foreach (var title in model.HomeSections.Where(x => !model.HiddenSections.Contains(x)))
         {
-            if (title == "继续观看") page.Children.Add(StillSection(title, DemoCatalog.ResumeItems, true));
-            else if (title == "最近添加") page.Children.Add(StillSection(title, DemoCatalog.LatestItems, false));
-            else if (title == "接下来看") page.Children.Add(StillSection(title, DemoCatalog.NextItems, true));
+            if (title == "继续观看") page.Children.Add(StillSection(title, model.ResumeItems, true));
+            else if (title == "最近添加") page.Children.Add(StillSection(title, model.LatestItems, false));
+            else if (title == "接下来看") page.Children.Add(StillSection(title, model.NextItems, true));
             else page.Children.Add(Libraries());
         }
         var scroll = Scroll(page); scroll.Padding = new Thickness(52, 20, 0, 36); return scroll;
@@ -29,7 +29,9 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var librarySection = Stack(26);
         librarySection.Children.Add(Text("媒体库", 14, true));
         var libraries = Row(22);
-        foreach (var (name, artwork) in new[] { ("电视剧", DemoCatalog.All[4].Backdrop), ("电影", DemoCatalog.All[1].Backdrop), ("合集", "") })
+        var entries = model.DemoMode ? new[] { ("电视剧", DemoCatalog.All[4].Backdrop, (string?)null), ("电影", DemoCatalog.All[1].Backdrop, (string?)null), ("合集", "", (string?)null) }
+            : App.Core?.Server is { } server ? server.Libraries.Select(x => (x.Name, x.Artwork, (string?)x.Id)).ToArray() : new[] { ("本地媒体", "", (string?)null) };
+        foreach (var (name, artwork, id) in entries)
         {
             var content = new Grid { Width = 328, Height = 184.5, Background = new SolidColorBrush(Color.FromArgb(25, 255, 255, 255)) };
             if (artwork.Length > 0) content.Children.Add(Image(artwork));
@@ -39,7 +41,7 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
             content.Children.Add(title);
             var button = new Button { Content = new Border { Child = content, CornerRadius = new CornerRadius(10) }, Padding = new Thickness(0),
                 Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0) };
-            button.Click += (_, _) => { model.Query = ""; model.Category = "全部"; model.LibraryName = name; navigate("library"); };
+            button.Click += (_, _) => { model.Query = ""; model.Category = "全部"; model.LibraryName = name; model.LibraryId = id; navigate("library"); };
             var card = Stack(7); card.Children.Add(button); card.Children.Add(Text(name, 13, true)); card.Children.Add(Muted(name, 12));
             libraries.Children.Add(card);
         }
@@ -75,22 +77,23 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var tags=Row(6);foreach(var genre in media.Category.Split(" / "))tags.Children.Add(Panel(Text(genre,11,true),new Thickness(12,5,12,5)));content.Children.Add(tags);
         var description=Text(media.Description,14);description.MaxLines=3;description.TextTrimming=TextTrimming.CharacterEllipsis;description.LineHeight=26;description.Margin=new Thickness(0,14,0,10);content.Children.Add(description);
         var actions=Row(10);var playButton=Button(media.Progress>0?"继续观看":"播放",()=>play(media),false);playButton.Width=228;playButton.CornerRadius=new CornerRadius(24);actions.Children.Add(playButton);
-        var watched=Button(model.Watched.Contains(media.Id)?"✓":"○",()=>{if(!model.Watched.Add(media.Id))model.Watched.Remove(media.Id);navigate("detail");});watched.CornerRadius=new CornerRadius(24);actions.Children.Add(watched);content.Children.Add(actions);
+        var watched=Button(model.Watched.Contains(media.Id)?"✓":"○",()=>{if(!model.DemoMode&&markWatched is not null){markWatched(media);return;}if(!model.Watched.Add(media.Id))model.Watched.Remove(media.Id);navigate("detail");});watched.CornerRadius=new CornerRadius(24);actions.Children.Add(watched);content.Children.Add(actions);
         var contentScroll=Scroll(content);contentScroll.Padding=new Thickness(0);body.Children.Add(contentScroll);
         var lower=Stack(16);Grid.SetRow(lower,1);
         if(media.Kind=="series")
         {
-            var numbers=Row(6);numbers.Children.Add(Text("第 1 季",13,true));
+            var numbers=Row(6);numbers.Children.Add(SeasonSelector(media));
             var episodes=media.Episodes??[];var selected=episodes.FirstOrDefault(x=>x.Number==model.SelectedEpisode)??episodes.FirstOrDefault();
-            for(var n=1;n<=Math.Max(12,episodes.Length);n++)
+            var episodeCount = model.DemoMode ? Math.Max(12,episodes.Length) : episodes.Length == 0 ? 0 : episodes.Max(x => x.Number);
+            for(var n=1;n<=episodeCount;n++)
             {
                 var number=n;var available=episodes.Any(x=>x.Number==n);var button=Button(n.ToString(),()=>{model.SelectedEpisode=number;navigate("detail");});button.Padding=new Thickness(9,6,9,6);button.MinWidth=30;button.IsEnabled=available;button.Opacity=available?1:.3;if(selected?.Number==n)button.Background=new SolidColorBrush(Color.FromArgb(200,225,225,220));numbers.Children.Add(button);
             }
             lower.Children.Add(Horizontal(numbers));
-            var cards=Row(14);foreach(var episode in Enumerable.Range(1, Math.Max(12, episodes.Length)).Select(n => episodes.FirstOrDefault(x => x.Number == n) ?? new DemoEpisode(n,"未入库","",false)))
+            var cards=Row(14);foreach(var episode in Enumerable.Range(1, episodeCount).Select(n => episodes.FirstOrDefault(x => x.Number == n) ?? new DemoEpisode(n,"未入库","",false)))
             {
                 var card=Stack(7);card.Width=160;var frame=new Grid{Height=90};
-                if(episode.Artwork.Length>0)frame.Children.Add(Image(Path.Combine(AppContext.BaseDirectory,"Assets","Demo",episode.Artwork)));
+                if(episode.Artwork.Length>0)frame.Children.Add(Image(DemoMedia.AssetPath(episode.Artwork)));
                 else frame.Background=new SolidColorBrush(Color.FromArgb(35,255,255,255));
                 var caption=Text($"第 {episode.Number} 话 {episode.Title}",11);caption.MaxLines=1;caption.TextTrimming=TextTrimming.CharacterEllipsis;
                 var button=Button("",()=>{model.SelectedEpisode=episode.Number;navigate("detail");});button.Content=new Border{Child=frame,CornerRadius=new CornerRadius(10)};button.Padding=new Thickness(0);button.BorderThickness=new Thickness(selected==episode?2:0);button.IsEnabled=episode.Available;card.Children.Add(button);card.Children.Add(caption);cards.Children.Add(card);
@@ -106,10 +109,10 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         var synopsis=Text(media.Id==DemoCatalog.All[4].Id?"为了避免留级，水之江梅加入了聚集着一众怪咖的学生会。他战战兢兢地开始上手工作，却立刻被周围性格过于鲜明的同僚们耍得团团转。":media.Description,13);synopsis.MaxLines=3;page.Children.Add(synopsis);
         if(media.Kind=="series")
         {
-            page.Children.Add(Text("第 1 季",14,true));var episodes=Row(16);
+            page.Children.Add(SeasonSelector(media));var episodes=Row(16);
             foreach(var episode in media.Episodes??[])
             {
-                var content=Stack(7);content.Width=210;var image=new Grid{Height=118};if(episode.Artwork.Length>0)image.Children.Add(Image(Path.Combine(AppContext.BaseDirectory,"Assets","Demo",episode.Artwork)));else image.Background=new SolidColorBrush(Color.FromArgb(35,255,255,255));
+                var content=Stack(7);content.Width=210;var image=new Grid{Height=118};if(episode.Artwork.Length>0)image.Children.Add(Image(DemoMedia.AssetPath(episode.Artwork)));else image.Background=new SolidColorBrush(Color.FromArgb(35,255,255,255));
                 var button=Button("",()=>{model.SelectedEpisode=episode.Number;navigate("detail-info");});button.Content=new Border{Child=image,CornerRadius=new CornerRadius(10)};button.Padding=new Thickness(0);button.BorderThickness=new Thickness(model.SelectedEpisode==episode.Number?2:0);
                 button.DoubleTapped+=(_,_)=>play(media with{EpisodeLabel=$"S1E{episode.Number}"});content.Children.Add(button);content.Children.Add(Text($"S1E{episode.Number}",12,true));var caption=Text(episode.Title,11,true);caption.MaxLines=2;caption.TextTrimming=TextTrimming.CharacterEllipsis;content.Children.Add(caption);episodes.Children.Add(content);
             }
@@ -128,12 +131,21 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
             foreach(var person in media.Cast){var tile=Stack(6);tile.Width=110;var portrait=new Grid{Width=100,Height=100,Background=new SolidColorBrush(Color.FromArgb(30,255,255,255))};if(person.Artwork.Length>0)portrait.Children.Add(Image(Path.Combine(AppContext.BaseDirectory,"Assets","Demo",person.Artwork)));tile.Children.Add(new Border{Child=portrait,CornerRadius=new CornerRadius(50)});tile.Children.Add(Text(person.Name,12,true));var role=Muted(person.Role,10);role.MaxLines=2;tile.Children.Add(role);cast.Children.Add(tile);}page.Children.Add(Horizontal(cast));
         }
         page.Children.Add(Text("媒体信息",16,true));
-        foreach(var (heading,fields) in new[]{("视频",new[]{"分辨率          1920 × 1080 · 16:9","编码              H264 · High","码率              1.7 Mbps","帧率              23.976 fps","动态范围      SDR","位深              8 bit"}),("音频",new[]{"音轨              日语 · AAC · stereo (2ch) · 48 kHz"}),("文件",new[]{"容器              MP4","大小              364.8 MB",$"时长              {(int)(media.DurationSeconds/60)} 分钟"})}){var block=Stack(10);block.Children.Add(Text(heading,13,true));foreach(var field in fields)block.Children.Add(Muted(field,12));page.Children.Add(Panel(block,new Thickness(18)));}
-        page.Children.Add(Text("类似推荐",16,true));var similar=Row(16);foreach(var item in DemoCatalog.All.Where(x=>x.Id!=media.Id).Take(8))similar.Children.Add(MediaCard(item,open,150));page.Children.Add(Horizontal(similar));
+        if (model.DemoMode) foreach(var (heading,fields) in new[]{("视频",new[]{"分辨率          1920 × 1080 · 16:9","编码              H264 · High","码率              1.7 Mbps","帧率              23.976 fps","动态范围      SDR","位深              8 bit"}),("音频",new[]{"音轨              日语 · AAC · stereo (2ch) · 48 kHz"}),("文件",new[]{"容器              MP4","大小              364.8 MB",$"时长              {(int)(media.DurationSeconds/60)} 分钟"})}){var block=Stack(10);block.Children.Add(Text(heading,13,true));foreach(var field in fields)block.Children.Add(Muted(field,12));page.Children.Add(Panel(block,new Thickness(18)));}
+        else page.Children.Add(Muted(media.DurationSeconds > 0 ? $"时长              {(int)(media.DurationSeconds/60)} 分钟" : "播放后可在播放器查看实际音轨与字幕。"));
+        page.Children.Add(Text("类似推荐",16,true));var similar=Row(16);foreach(var item in model.Catalog.Where(x=>x.Id!=media.Id).Take(8))similar.Children.Add(MediaCard(item,open,150));page.Children.Add(Horizontal(similar));
         var scroll=Scroll(page);scroll.Padding=new Thickness(52,20,52,48);scroll.PointerWheelChanged+=(_,args)=>{if(scroll.VerticalOffset<=0&&args.GetCurrentPoint(scroll).Properties.MouseWheelDelta>0){navigate("detail");args.Handled=true;}};return scroll;
     }
     public UIElement Viewing()
     {
+        if (!model.DemoMode)
+        {
+            var local = Stack(26); local.Margin = new Thickness(52,20,52,32);
+            local.Children.Add(Text("观看记录", 20, true));
+            foreach (var media in model.Catalog) local.Children.Add(ViewingRow(media));
+            if (model.Catalog.Count == 0) local.Children.Add(Muted("打开本地文件或直连链接后，观看记录会显示在这里。"));
+            return Scroll(local);
+        }
         var page=Stack(26);page.MaxWidth=1000;page.HorizontalAlignment=HorizontalAlignment.Center;
         var profile=Row(14);var avatar=Image(Path.Combine(AppContext.BaseDirectory,"Assets","Demo","avatar.jpg"));avatar.Width=44;avatar.Height=44;profile.Children.Add(new Border{Child=avatar,CornerRadius=new CornerRadius(22)});var identity=Stack(4);identity.Children.Add(Text("橘木苏",20,true));identity.Children.Add(Muted("jumusu · Jellyfin 12.1.0 · 片单与追更",11));profile.Children.Add(identity);page.Children.Add(profile);
         if(model.BangumiEnabled)
@@ -159,6 +171,14 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
     }
     public UIElement Settings()=>new DemoSettings(model,navigate,themeChanged).Hub();
     public UIElement SettingsSubpage(string name)=>new DemoSettings(model,navigate,themeChanged).Subpage(name);
+
+    private UIElement SeasonSelector(DemoMedia media)
+    {
+        if (model.DemoMode || media.Seasons is not { Length: > 0 } seasons) return Text("第 1 季", 13, true);
+        var combo = new ComboBox { ItemsSource = seasons, DisplayMemberPath = "Title", SelectedItem = seasons.FirstOrDefault(x => x.Id == media.SelectedSeasonId), MinWidth = 110 };
+        combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is DemoSeason selected && selected.Id != media.SelectedSeasonId) navigate("season:" + selected.Id); };
+        return combo;
+    }
 
     private static Grid Header(string title)
     {

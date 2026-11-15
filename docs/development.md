@@ -21,12 +21,14 @@
 纯命令行即可完成还原、编译和 unpackaged 运行，不强制安装 Visual Studio：
 
 ```powershell
-dotnet restore OcPlayer.sln
+./Scripts/build-windows.ps1 -KernelRoot 'D:\path\to\hdr-fixed-Erika' -LibClangPath 'D:\path\to\llvm\bin'
 dotnet build OcPlayer.sln -c Debug -p:Platform=x64
-dotnet run --project src/OcPlayer.Windows/OcPlayer.Windows.csproj -p:Platform=x64
 ```
 
-ARM64 构建把 `-p:Platform=x64` 换成 `-p:Platform=ARM64`。打包走 MSIX 时使用 Visual Studio 2026
+Core 仓库默认位于同级 `../OcPlayer-Core`；可用 `-CoreRoot` 或 MSBuild 的 `OcpCoreRoot` 指定。
+已有原生 DLL 时，脚本加 `-SkipNative` 可只构建前端。运行 exe 的命令见 [组合说明](core-integration.md)。
+
+ARM64 构建把 `-p:Platform=x64` 换成 `-p:Platform=ARM64`，并准备对应 Rust 目标、C++ 工具链和 Erika ARM64 原生依赖；尚未完成 ARM64 实机验证。打包走 MSIX 时使用 Visual Studio 2026
 的打包目标或 `msbuild /t:Publish`，这条路径不在本文件的命令行范围内。
 
 ### 未打包（unpackaged）运行的前置条件
@@ -47,11 +49,13 @@ ARM64 构建把 `-p:Platform=x64` 换成 `-p:Platform=ARM64`。打包走 MSIX �
 WinUI 应用通过 `OcPlayer.CoreAdapter` 的 P/Invoke 调用 `ocp_ffi.dll`，契约见
 [`ffi-contract.md`](ffi-contract.md)。开发时需要把匹配的 DLL 放到应用输出目录旁边
 （`src/OcPlayer.Windows/bin/<Platform>/<Configuration>/net10.0-windows10.0.26100.0/`）或
-`native/OcPlayerCore/`；仓库不提交任何原生二进制。
+`native/OcPlayerCore/<Platform>/`；构建脚本生成并复制 DLL，仓库不提交任何原生二进制。
 
-当前默认启动离线前端 Demo，不创建 Core 实例，因此不依赖 `ocp_ffi.dll`。首页及详情使用 macOS
-实机截图/图片缓存的离线 fixture，播放器使用静态画面与模拟时钟。真实 Core 接入与视频渲染仍需单独实现，
-不会因为放入 DLL 就自动启用。UI 对齐范围与具体差异见 [`UI-PARITY.md`](UI-PARITY.md)，实机验证见 [`DEMO-VALIDATION.md`](DEMO-VALIDATION.md)。
+当前默认创建 Core 实例，同时加载 `ocp_ffi.dll` 和 `erika_capi.dll`。共享业务 SDK 直接引用
+Core 仓库的 `bindings/windows/OcPlayerCore` 源码，Windows 自身的适配层负责原生解码与 Core 协调。
+UI Demo 使用 `--demo-route=home` 显式启动，保留 macOS 参考 fixture、静态画面和模拟时钟。
+只检查 UI 编译时可以设置 `-p:OcpDemoOnly=true`。
+UI 对齐范围见 [`UI-PARITY.md`](UI-PARITY.md)，本次真实播放验证见 [`core-integration.md`](core-integration.md)。
 
 ## 验证边界
 

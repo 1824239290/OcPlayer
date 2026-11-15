@@ -4,7 +4,7 @@ using OcPlayer.Windows.Preview;
 
 namespace OcPlayer.Windows.ViewModels;
 
-// Preview-only presentation state. Production clients can replace the catalog without changing card views.
+// Shared presentation state for the explicit preview and the Core-backed catalogs.
 public sealed class DemoViewModel : INotifyPropertyChanged
 {
     private string _query = "";
@@ -16,12 +16,19 @@ public sealed class DemoViewModel : INotifyPropertyChanged
     public HashSet<string> HiddenSections { get; } = [];
     public Dictionary<string, object> Preferences { get; } = [];
     public HashSet<string> Watched { get; } = [];
+    public bool DemoMode => App.DemoMode;
+    public IReadOnlyList<DemoMedia>? ServerItems { get; set; }
+    public string? LibraryId { get; set; }
+    public IReadOnlyList<DemoMedia> Catalog => DemoMode ? DemoCatalog.All : ServerItems ?? (IReadOnlyList<DemoMedia>?)App.Core?.LocalMedia ?? Array.Empty<DemoMedia>();
+    public IEnumerable<DemoMedia> ResumeItems => DemoMode ? DemoCatalog.ResumeItems : App.Core?.Server?.Resume ?? Catalog.Where(x => x.Progress > 0 && x.Progress < 100);
+    public IEnumerable<DemoMedia> LatestItems => DemoMode ? DemoCatalog.LatestItems : App.Core?.Server?.Latest ?? Catalog.Take(24);
+    public IEnumerable<DemoMedia> NextItems => DemoMode ? DemoCatalog.NextItems : App.Core?.Server?.NextUp ?? (IEnumerable<DemoMedia>)Array.Empty<DemoMedia>();
     public int SelectedEpisode { get; set; } = 1;
     public string Route { get; set; } = "home";
     public string LibraryName { get; set; } = "全部媒体库";
     public DemoMedia SelectedMedia { get; set; } = DemoCatalog.All[4];
-    public bool BangumiEnabled { get; set; } = true;
-    public bool MoviePilotEnabled { get; set; } = true;
+    public bool BangumiEnabled { get; set; } = App.DemoMode;
+    public bool MoviePilotEnabled { get; set; } = App.DemoMode;
     public string Query { get => _query; set => Set(ref _query, value); }
     public string Category { get => _category; set => Set(ref _category, value); }
     public string Sort { get => _sort; set => Set(ref _sort, value); }
@@ -34,9 +41,9 @@ public sealed class DemoViewModel : INotifyPropertyChanged
         {
             var catalog = LibraryName switch
             {
-                "电视剧" => DemoCatalog.All.Where(x => x.Kind == "series"),
-                "电影" => DemoCatalog.All.Where(x => x.Kind == "movie"),
-                _ => DemoCatalog.All
+                "电视剧" => Catalog.Where(x => x.Kind == "series"),
+                "电影" => Catalog.Where(x => x.Kind == "movie"),
+                _ => Catalog
             };
             var items = catalog.Where(m =>
                 (string.IsNullOrWhiteSpace(Query) || m.Title.Contains(Query, StringComparison.OrdinalIgnoreCase)

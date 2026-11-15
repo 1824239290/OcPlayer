@@ -22,6 +22,7 @@ BundleArtifacts/
 
 # Native playback artifacts (download/build locally; do not commit)
 native/vendor/
+native/OcPlayerCore/*/
 liberika/build/
 *.dll
 *.lib

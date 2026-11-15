@@ -9,6 +9,7 @@
    </Style>
   </Grid.Resources>
   <Image x:Name="Backdrop" Stretch="UniformToFill"/>
+  <SwapChainPanel x:Name="VideoPanel" Visibility="Collapsed"/>
   <Grid x:Name="PlayerTitleBar" Height="48" VerticalAlignment="Top" Background="Transparent" Margin="0,0,150,0"/>
   <Grid x:Name="Hud">
    <Border IsHitTestVisible="False"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#40000000" Offset="0"/><GradientStop Color="#00000000" Offset="0.5"/><GradientStop Color="#80000000" Offset="1"/></LinearGradientBrush></Border.Background></Border>
@@ -41,5 +42,6 @@
     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="PositionLabel" FontSize="11" Foreground="#DDFFFFFF"/><TextBlock x:Name="DurationLabel" FontSize="11" Grid.Column="1" Foreground="#DDFFFFFF"/></Grid>
    </StackPanel>
   </Grid>
+  <InfoBar x:Name="PlaybackError" IsOpen="False" Severity="Error" IsClosable="True" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24,64,24,0" MaxWidth="850"/>
  </Grid>
 </Window>

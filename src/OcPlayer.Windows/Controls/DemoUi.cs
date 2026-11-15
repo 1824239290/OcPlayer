@@ -33,7 +33,7 @@ internal static class DemoUi
     }
     public static Image Image(string path, Stretch stretch = Stretch.UniformToFill) => new()
     {
-        Source = new BitmapImage(new Uri(path)), Stretch = stretch
+        Source = string.IsNullOrEmpty(path) ? null : new BitmapImage(new Uri(path)), Stretch = stretch
     };
     public static StackPanel Stack(double spacing = 12) => new() { Spacing = spacing };
     public static StackPanel Row(double spacing = 12) => new() { Orientation = Orientation.Horizontal, Spacing = spacing };
@@ -46,7 +46,7 @@ internal static class DemoUi
     }
     public static Border Poster(DemoMedia media, double height = 238)
     {
-        var grid = new Grid { Height = height };
+        var grid = new Grid { Height = height, Background = new SolidColorBrush(Color.FromArgb(25,128,128,128)) };
         grid.Children.Add(Image(media.PosterPath));
         return new Border { CornerRadius = new CornerRadius(10), Child = grid };
     }

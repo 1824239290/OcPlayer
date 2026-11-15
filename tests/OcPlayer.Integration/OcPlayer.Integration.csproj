@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\MediaServer.cs" Link="MediaServer.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\CoreRuntime.cs" Link="CoreRuntime.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Preview\DemoCatalog.cs" Link="DemoCatalog.cs" />
+    <Content Include="$(OcpNativeDirectory)*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -3,14 +3,17 @@ namespace OcPlayer.Windows.Preview;
 public sealed record DemoMedia(string Id, string Title, string OriginalTitle, string Year,
     string Category, string Artwork, string Description, double Progress = 0,
     string? EpisodeLabel = null, int? RemainingMinutes = null, string Kind = "movie", string StillArtwork = "",
-    string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null)
+    string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null,
+    string? SourceUri = null, DemoSeason[]? Seasons = null, string? SelectedSeasonId = null)
 {
-    public string PosterPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", Artwork);
+    public static string AssetPath(string value) => value.Length == 0 || Uri.IsWellFormedUriString(value, UriKind.Absolute) || Path.IsPathRooted(value)
+        ? value : Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", value);
+    public string PosterPath => AssetPath(Artwork);
     public string Subtitle => $"{Year}  ·  {Category}";
-    public string Backdrop => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", BackdropArtwork.Length > 0 ? BackdropArtwork : Artwork);
-    public string DetailBackdrop => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", DetailArtwork.Length > 0 ? DetailArtwork : BackdropArtwork);
-    public string LogoPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", LogoArtwork);
-    public string StillPath => Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", StillArtwork.Length > 0 ? StillArtwork : Id switch
+    public string Backdrop => AssetPath(BackdropArtwork.Length > 0 ? BackdropArtwork : Artwork);
+    public string DetailBackdrop => AssetPath(DetailArtwork.Length > 0 ? DetailArtwork : BackdropArtwork.Length > 0 ? BackdropArtwork : Artwork);
+    public string LogoPath => AssetPath(LogoArtwork);
+    public string StillPath => AssetPath(StillArtwork.Length > 0 ? StillArtwork : Id switch
     {
         "interstellar" => "interstellar-backdrop.jpg", "dune" => "dune-still.jpg", _ => Artwork
     });
@@ -18,7 +21,8 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
 
 public sealed record DemoPerson(string Name, string Role, string Artwork);
 
-public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true);
+public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true, string? MediaId = null, int SeasonNumber = 1);
+public sealed record DemoSeason(string Id, string Title);
 
 public static class DemoCatalog
 {

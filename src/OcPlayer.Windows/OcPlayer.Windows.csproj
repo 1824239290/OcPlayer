@@ -9,7 +9,6 @@
     <UseWinUI>true</UseWinUI>
     <!-- 默认构建 unpackaged 版本用于开发和故障排查；打包时用 -p:WindowsPackageType=MSIX。 -->
     <WindowsPackageType>None</WindowsPackageType>
-    <OcpNativeDirectory Condition="'$(OcpNativeDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\native\OcPlayerCore\$(Platform)\</OcpNativeDirectory>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -23,4 +22,11 @@
   <ItemGroup Condition="Exists('$(OcpNativeDirectory)ocp_ffi.dll')">
     <Content Include="$(OcpNativeDirectory)ocp_ffi.dll" Link="ocp_ffi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup Condition="Exists('$(OcpNativeDirectory)erika_capi.dll')">
+    <Content Include="$(OcpNativeDirectory)erika_capi.dll" Link="erika_capi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckNativeRuntime" BeforeTargets="PrepareForBuild" Condition="'$(OcpDemoOnly)' != 'true'">
+    <Error Condition="!Exists('$(OcpNativeDirectory)ocp_ffi.dll') or !Exists('$(OcpNativeDirectory)erika_capi.dll')"
+           Text="Native runtime missing. Run Scripts/build-windows.ps1 with -KernelRoot pointing to the HDR-fixed Erika source, or use -p:OcpDemoOnly=true for UI-only builds." />
+  </Target>
 </Project>
