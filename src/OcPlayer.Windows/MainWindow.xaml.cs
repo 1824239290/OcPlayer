@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml.Media;
@@ -114,7 +115,7 @@ public sealed partial class MainWindow : Window
             && (route is "detail" or "detail-info") && route != _model.Route && !changedDetail) return;
         if (route.StartsWith("genre:"))
         {
-            _model.Category = route[6..]; _model.Query = ""; _model.WatchState = "全部状态";
+            _model.Category = route[6..]; _model.Query = "";
             _model.LibraryId = null; _model.LibraryName = _model.Category;
             _cachedPages.Remove("library");
             Navigate("library");
@@ -146,6 +147,12 @@ public sealed partial class MainWindow : Window
         UpdateNavigationAvatar();
         BackButton.Visibility = route is "library" or "detail" or "detail-info" || route.StartsWith("settings:") ? Visibility.Visible : Visibility.Collapsed;
         SortButton.Visibility = route == "library" ? Visibility.Visible : Visibility.Collapsed;
+        if (route == "library")
+        {
+            var sort = _model.LibrarySort;
+            var direction = sort.Field == "random" ? "" : sort.Ascending ? "，升序" : "，降序";
+            AutomationProperties.SetHelpText(SortButton, $"{LibrarySort.Label(sort.Field)}{direction}，{LibrarySort.WatchLabel(sort.WatchState)}");
+        }
         HeaderActions.Visibility = route is "home" or "library" ? Visibility.Visible : Visibility.Collapsed;
         NavGroup.Visibility = route is "home" or "settings" or "viewing" ? Visibility.Visible : Visibility.Collapsed;
         // When the focused back button disappears, keep focus on the selected section.
@@ -395,21 +402,44 @@ public sealed partial class MainWindow : Window
         if (App.Core?.Server is not null) { LoadLibrary(); return; }
         PageHost.Children.Clear(); PageHost.Children.Add(_pages.Library());
     }
-    private void Sort_Click(object sender, RoutedEventArgs e)
+    private void SortMenu_Opening(object sender, object e)
     {
-        var menu = new MenuFlyout();
-        foreach (var value in new[] { "推荐顺序", "名称", "年份" })
+        var menu = (MenuFlyout)sender;
+        menu.Items.Clear();
+        var settings = _model.LibrarySort;
+        foreach (var field in LibrarySort.Options(_model.LibraryCollectionType))
         {
-            var item = new ToggleMenuFlyoutItem { Text = value == "推荐顺序" ? "最近添加" : value, IsChecked = _model.Sort == value };
-            item.Click += (_, _) => { _model.Sort = value; Navigate("library"); }; menu.Items.Add(item);
+            var glyph = field switch { "name" => "\uE8D2", "dateAdded" => "\uE81C", "year" => "\uE787",
+                "rating" => "\uE734", "runtime" => "\uE916", _ => "\uE8B1" };
+            AddChoice(LibrarySort.Label(field), glyph, "LibrarySortField", settings.Field == field,
+                () => settings with { Field = field, Ascending = field == "name" });
+        }
+        if (settings.Field != "random")
+        {
+            menu.Items.Add(new MenuFlyoutSeparator());
+            AddChoice("升序", "\uE74A", "LibrarySortDirection", settings.Ascending, () => settings with { Ascending = true });
+            AddChoice("降序", "\uE74B", "LibrarySortDirection", !settings.Ascending, () => settings with { Ascending = false });
         }
         menu.Items.Add(new MenuFlyoutSeparator());
-        foreach (var value in new[] { "全部状态", "继续观看", "未观看" })
+        foreach (var state in new[] { "all", "watched", "unwatched" })
         {
-            var item = new ToggleMenuFlyoutItem { Text = value, IsChecked = _model.WatchState == value };
-            item.Click += (_, _) => { _model.WatchState = value; Navigate("library"); }; menu.Items.Add(item);
+            var glyph = state switch { "watched" => "\uE930", "unwatched" => "\uEA3A", _ => "\uE80A" };
+            AddChoice(LibrarySort.WatchLabel(state), glyph, "LibraryWatchState", settings.WatchState == state,
+                () => settings with { WatchState = state });
         }
-        menu.ShowAt(SortButton);
+
+        void AddChoice(string label, string glyph, string group, bool selected, Func<LibrarySortSettings> change)
+        {
+            var item = new RadioMenuFlyoutItem { Text = label, Icon = new FontIcon { Glyph = glyph }, GroupName = group, IsChecked = selected };
+            item.Click += (_, _) =>
+            {
+                if (selected) return;
+                try { _model.LibrarySort = change(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Notify("无法保存媒体库排序：" + ex.Message); }
+                Navigate("library");
+            };
+            menu.Items.Add(item);
+        }
     }
     private async void OpenFile_Click(object sender, RoutedEventArgs e) => await OpenLocalFile();
     private async void OpenFileButton_Click(SplitButton sender, SplitButtonClickEventArgs args) => await OpenLocalFile();
@@ -463,7 +493,7 @@ public sealed partial class MainWindow : Window
         try
         {
             await Task.Delay(300, token);
-            var items = await server.Browse(_model.LibraryId, _model.Query, _model.Sort, _model.WatchState, token);
+            var items = await server.Browse(_model.LibraryId, _model.Query, _model.LibrarySort, token);
             if (generation != _loadGeneration || _model.Route != "library") return;
             _model.ServerItems = items; PageHost.Children.Clear(); PageHost.Children.Add(_pages.Library());
         }

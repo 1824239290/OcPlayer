@@ -5,7 +5,8 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
     string? EpisodeLabel = null, int? RemainingMinutes = null, string Kind = "movie", string StillArtwork = "",
     string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null,
     string? SourceUri = null, DemoSeason[]? Seasons = null, string? SelectedSeasonId = null,
-    string? SeriesId = null, string? SeasonId = null, int? SeasonNumber = null, int? EpisodeNumber = null, bool? Played = null)
+    string? SeriesId = null, string? SeasonId = null, int? SeasonNumber = null, int? EpisodeNumber = null, bool? Played = null,
+    double? CommunityRating = null)
 {
     public bool IsPlayed => Played ?? Progress >= 100;
 

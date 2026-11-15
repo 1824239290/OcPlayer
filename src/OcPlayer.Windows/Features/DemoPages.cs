@@ -51,11 +51,12 @@ internal sealed class DemoPages(DemoViewModel model, PageLayout pageLayout, Acti
     public UIElement Library()
     {
         var layout = new Grid();
-        var grid = new GridView { SelectionMode = ListViewSelectionMode.None, HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        pageLayout.ApplyInset(grid, Control.PaddingProperty, new Thickness(52, 8, 52, 24));
+        var items = model.FilteredMovies.ToArray();
+        var grid = new MediaLibraryGrid(items, open);
+        // Container padding supplies half the gap at the edges of the poster grid.
+        pageLayout.ApplyInset(grid, Control.PaddingProperty, new Thickness(40, 8, 40, 24));
         var empty = Muted("没有匹配的作品"); empty.HorizontalAlignment=HorizontalAlignment.Center;empty.VerticalAlignment=VerticalAlignment.Center;
         layout.Children.Add(grid); layout.Children.Add(empty);
-        var items=model.FilteredMovies.ToArray();foreach(var media in items)grid.Items.Add(MediaCard(media,open,178));
         empty.Visibility=items.Length==0?Visibility.Visible:Visibility.Collapsed;
         return layout;
     }

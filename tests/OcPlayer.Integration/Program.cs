@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using OcPlayer.CoreAdapter;
 using OcPlayer.Windows.Services;
+using OcPlayer.Windows.Preview;
 
 internal static class Program
 {
@@ -16,6 +17,7 @@ internal static class Program
         if (args.Length != 2) throw new ArgumentException("Pass a local media file (or --server-only) and a new verification directory.");
         var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
         var data = Path.Combine(output, "data"); Directory.CreateDirectory(data);
+        VerifyLibrarySort(data);
         var config = JsonSerializer.Serialize(new { dataDirectory = data, locale = "zh-CN" });
         var hwnd = CreateWindowEx(0, "STATIC", "OcPlayer integration test", 0x80000000, 0, 0, 640, 360, 0, 0, 0, 0);
         if (hwnd == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -107,6 +109,36 @@ internal static class Program
         Assert(view.Disposed, "background cleanup tolerates repeated disposal and late updates");
     }
 
+    private static void VerifyLibrarySort(string data)
+    {
+        Assert(!LibrarySort.Options("tvshows").Contains("runtime") && LibrarySort.Options("movies").Contains("runtime")
+            && LibrarySort.Options("boxsets").Contains("rating") && !LibrarySort.Options("music").Contains("year"),
+            "sort options follow macOS library semantics");
+        var preferencesPath = Path.Combine(data, "library-sort-test.json");
+        var preferences = new LibrarySortPreferences(preferencesPath);
+        preferences.Set("server:tv", new LibrarySortSettings("year", false, "unwatched"));
+        preferences.Set("server:movies", new LibrarySortSettings("runtime", true, "watched"));
+        var restored = new LibrarySortPreferences(preferencesPath);
+        Assert(restored.Get("server:tv", "tvshows") == new LibrarySortSettings("year", false, "unwatched")
+            && restored.Get("server:movies", "movies") == new LibrarySortSettings("runtime", true, "watched"),
+            "each library restores its independent field, direction and watch state after restart");
+        Assert(restored.Get("new-library", "movies") == new LibrarySortSettings()
+            && restored.Get("server:movies", "tvshows").Field == "name",
+            "new libraries start with name ascending and incompatible saved fields fall back");
+        File.WriteAllText(preferencesPath, "{invalid");
+        Assert(new LibrarySortPreferences(preferencesPath).Get("server:tv", "tvshows") == new LibrarySortSettings(),
+            "damaged preferences cannot prevent browsing a library");
+        DemoMedia Media(string id, string title, string year, double progress, bool played) =>
+            new(id, title, title, year, "Test", "", "", progress, Played: played);
+        var items = new[] { Media("b", "Beta", "2024", 100, false), Media("a", "Alpha", "2024", 100, true), Media("c", "Gamma", "2020", 30, false) };
+        Assert(LibrarySort.Apply(items, new LibrarySortSettings("year", false)).Select(x => x.Id).SequenceEqual(new[] { "a", "b", "c" })
+            && LibrarySort.Apply(items, new LibrarySortSettings("year", true)).Select(x => x.Id).SequenceEqual(new[] { "c", "a", "b" }),
+            "local year direction changes while equal years retain name ascending order");
+        Assert(LibrarySort.Apply(items, new LibrarySortSettings(WatchState: "unwatched")).Select(x => x.Id).SequenceEqual(new[] { "b", "c" })
+            && LibrarySort.Apply(items, new LibrarySortSettings(WatchState: "watched")).Single().Id == "a",
+            "watch filtering follows Played rather than progress, including unfinished and unmarked full-progress items");
+    }
+
     private static void VerifyServer(OcpCoreClient core, IntPtr hwnd, string? media, string data)
     {
         // Exercise the Windows projection against a local wire fixture through
@@ -118,6 +150,7 @@ internal static class Program
         var randomQueries = new List<string>();
         var watchedRequests = new List<(string Method, string Path)>();
         var coverQueries = new List<string>();
+        var libraryQueries = new List<string>();
         var failCoverMembers = false;
         object CoverMovie(string id) => new { Id = id, Name = id, Type = "Movie", ImageTags = new { Primary = id + "-poster" } };
         object Episode(string id, int number, int season, bool omitSeasonId = false, bool played = false) => new
@@ -148,6 +181,7 @@ internal static class Program
                 var requestBody = "";
                 if (length > 0) { var bodyChars = new char[length]; await reader.ReadBlockAsync(bodyChars); requestBody = new string(bodyChars); }
                 lock (requests) requests.Add(requestPath);
+                if (target.Contains("parentId=library")) lock (libraryQueries) libraryQueries.Add(Uri.UnescapeDataString(target));
                 if (path.Contains("/PlayedItems/")) lock (watchedRequests) watchedRequests.Add((method, requestPath));
                 if (target.Contains("sortBy=Random")) lock (randomQueries) randomQueries.Add(target);
                 if (mode == "covers" && target.Contains("parentId=")) lock (coverQueries) coverQueries.Add(target);
@@ -278,8 +312,19 @@ internal static class Program
                 try { vault.Remove(vault.Retrieve(resource, "active-server")); } catch (COMException) { }
                 Environment.SetEnvironmentVariable("OCP_DATA_DIRECTORY", savedDirectory);
             }
-            var items = server.Browse("library", "Fixture", "名称", "未观看", default).GetAwaiter().GetResult();
+            var items = server.Browse("library", "Fixture", new LibrarySortSettings(WatchState: "unwatched"), default).GetAwaiter().GetResult();
             Assert(profile.UserId == "fixture-user" && server.Libraries.Count == 1 && items.Length == 1 && items[0].DurationSeconds == 120, "login, home and library use Core HTTP and model projection");
+            Assert(libraryQueries.Last().Contains("sortBy=SortName") && libraryQueries.Last().Contains("sortOrder=Ascending")
+                && libraryQueries.Last().Contains("filters=IsUnplayed"), "name ordering and unwatched filter reach the server");
+            foreach (var (field, wire) in new[] { ("dateAdded", "DateCreated"), ("year", "ProductionYear"), ("rating", "CommunityRating"), ("runtime", "Runtime") })
+            {
+                server.Browse("library", "", new LibrarySortSettings(field, false, "watched"), default).GetAwaiter().GetResult();
+                Assert(libraryQueries.Last().Contains($"sortBy={wire},SortName")
+                    && libraryQueries.Last().Contains("sortOrder=Descending,Ascending") && libraryQueries.Last().Contains("filters=IsPlayed"),
+                    $"{field} uses server descending order with a stable name tie break and watched filtering");
+            }
+            server.Browse("library", "", new LibrarySortSettings("random", false), default).GetAwaiter().GetResult();
+            Assert(libraryQueries.Last().Contains("sortBy=Random") && !libraryQueries.Last().Contains("filters="), "random sorting reaches the server without a watch filter");
             var series = server.Detail(items[0] with { Id = "series", Kind = "series" }, default, "season-2").GetAwaiter().GetResult();
             Assert(series.Seasons?.Length == 2 && series.Episodes?.First().MediaId == "ep2" && series.SelectedSeasonId == "season-2", "season selection retains the correct server episode identity");
             Assert(new Uri(series.LogoArtwork).AbsolutePath == "/Items/series/Images/Logo"

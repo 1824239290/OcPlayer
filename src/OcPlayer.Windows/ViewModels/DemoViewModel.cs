@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using OcPlayer.Windows.Preview;
+using OcPlayer.Windows.Services;
 
 namespace OcPlayer.Windows.ViewModels;
 
@@ -9,8 +10,10 @@ public sealed class DemoViewModel : INotifyPropertyChanged
 {
     private string _query = "";
     private string _category = "全部";
-    private string _sort = "推荐顺序";
-    private string _watchState = "全部状态";
+    private readonly LibrarySortPreferences _librarySort = new(Path.Combine(
+        Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"),
+        "library-sort.json"));
     private bool _darkTheme = true;
     public List<string> HomeSections { get; } = ["继续观看", "最近添加", "媒体库", "接下来看"];
     public HashSet<string> HiddenSections { get; } = [];
@@ -31,8 +34,16 @@ public sealed class DemoViewModel : INotifyPropertyChanged
     public bool MoviePilotEnabled { get; set; } = App.DemoMode;
     public string Query { get => _query; set => Set(ref _query, value); }
     public string Category { get => _category; set => Set(ref _category, value); }
-    public string Sort { get => _sort; set => Set(ref _sort, value); }
-    public string WatchState { get => _watchState; set => Set(ref _watchState, value); }
+    public string LibraryCollectionType => DemoMode ? LibraryName switch
+    {
+        "电视剧" => "tvshows", "电影" => "movies", "合集" => "boxsets", _ => ""
+    } : App.Core?.Server?.Libraries.FirstOrDefault(x => x.Id == LibraryId)?.CollectionType ?? "";
+    private string LibrarySortKey => $"{(DemoMode ? "demo" : App.Core?.Server?.Profile.Id ?? "local")}:{LibraryId ?? LibraryName}:{Category}";
+    public LibrarySortSettings LibrarySort
+    {
+        get => _librarySort.Get(LibrarySortKey, LibraryCollectionType);
+        set { _librarySort.Set(LibrarySortKey, value); PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LibrarySort))); }
+    }
     public bool DarkTheme { get => _darkTheme; set => Set(ref _darkTheme, value); }
 
     public IEnumerable<DemoMedia> FilteredMovies
@@ -48,9 +59,8 @@ public sealed class DemoViewModel : INotifyPropertyChanged
             var items = catalog.Where(m =>
                 (string.IsNullOrWhiteSpace(Query) || m.Title.Contains(Query, StringComparison.OrdinalIgnoreCase)
                     || m.OriginalTitle.Contains(Query, StringComparison.OrdinalIgnoreCase))
-                && (Category == "全部" || m.Category.Contains(Category))
-                && (WatchState == "全部状态" || (WatchState == "继续观看" ? m.Progress > 0 : m.Progress == 0)));
-            return Sort switch { "名称" => items.OrderBy(m => m.Title), "年份" => items.OrderByDescending(m => m.Year), _ => items };
+                && (Category == "全部" || m.Category.Contains(Category)));
+            return !DemoMode && App.Core?.Server is not null ? items : Services.LibrarySort.Apply(items, LibrarySort);
         }
     }
 

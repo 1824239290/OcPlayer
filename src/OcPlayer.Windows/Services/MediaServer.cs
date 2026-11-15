@@ -170,14 +170,13 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         return posters.ToArray();
     }
 
-    public async Task<DemoMedia[]> Browse(string? libraryId, string query, string sort, string watchState, CancellationToken token)
+    public async Task<DemoMedia[]> Browse(string? libraryId, string query, LibrarySortSettings settings, CancellationToken token)
     {
         var page = await Request("browse.library", new { parentId = libraryId, searchTerm = query,
             startIndex = 0, limit = 500, recursive = true, kinds = new[] { "movie", "series" },
-            sort = new { field = sort == "名称" ? "name" : sort == "年份" ? "year" : "dateAdded", ascending = sort == "名称" },
-            watchState = watchState == "未观看" ? "unwatched" : "all" }, token);
-        var items = page.GetProperty("items").EnumerateArray().Select(Project);
-        return (watchState == "继续观看" ? items.Where(x => x.Progress > 0 && x.Progress < 100) : items).ToArray();
+            sort = new { field = settings.Field, ascending = settings.Ascending },
+            watchState = settings.WatchState }, token);
+        return page.GetProperty("items").EnumerateArray().Select(Project).ToArray();
     }
 
     public async Task<DemoMedia[]> RandomBackdrops(CancellationToken token)
@@ -297,7 +296,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
             SeriesId: NullableString(item, "seriesID"), SeasonId: NullableString(item, "seasonID"),
             SeasonNumber: item.TryGetProperty("seasonNumber", out var seasonNumber) && seasonNumber.ValueKind == JsonValueKind.Number ? seasonNumber.GetInt32() : null,
             EpisodeNumber: item.TryGetProperty("episodeNumber", out var episodeNumber) && episodeNumber.ValueKind == JsonValueKind.Number ? episodeNumber.GetInt32() : null,
-            Played: isPlayed);
+            Played: isPlayed, CommunityRating: item.TryGetProperty("communityRating", out var rating) && rating.ValueKind == JsonValueKind.Number ? rating.GetDouble() : null);
     }
 
     private string Image(string id, string type, string? tag)
