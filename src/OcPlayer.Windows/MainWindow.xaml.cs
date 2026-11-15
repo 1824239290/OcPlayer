@@ -105,6 +105,7 @@ public sealed partial class MainWindow : Window
         if (route is "settings:服务器管理" or "settings:连接服务器") { ConnectServer(); return; }
         if (!App.DemoMode && route == "settings:退出确认") { DisconnectServer(); return; }
         var previous = _model.Route;
+        var restoreNavigationFocus = BackButton.FocusState != FocusState.Unfocused;
         if (PageHost.Children.Count > 0 && previous == "library") _cachedPages["library"] = PageHost.Children[0];
         _navigating = true;
         _model.Route = route;
@@ -120,6 +121,10 @@ public sealed partial class MainWindow : Window
         SortButton.Visibility = route == "library" ? Visibility.Visible : Visibility.Collapsed;
         HeaderActions.Visibility = route is "home" or "library" ? Visibility.Visible : Visibility.Collapsed;
         NavGroup.Visibility = route is "home" or "settings" or "viewing" ? Visibility.Visible : Visibility.Collapsed;
+        // When the focused back button disappears, keep focus on the selected section.
+        // SelectionFollowsFocus would otherwise select the first (home) item on return.
+        if (restoreNavigationFocus && NavGroup.Visibility == Visibility.Visible && MainNavigation.SelectedItem is Control navigationItem)
+            navigationItem.Focus(FocusState.Programmatic);
         ServerButton.Visibility = route == "home" ? Visibility.Visible : Visibility.Collapsed;
         _ambient.Update();
         UpdateAmbientActivity();

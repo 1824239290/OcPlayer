@@ -68,6 +68,10 @@ UI 对齐范围见 [`UI-PARITY.md`](UI-PARITY.md)，本次真实播放验证见 
 链接和媒体服务器入口；刷新使用默认 `Button`，搜索使用默认 `AutoSuggestBox`。回车或
 搜索图标提交全库搜索，媒体库页输入或清空文字仍更新当前列表。
 
+媒体库、详情和设置子页的左上角返回按钮使用 WinUI 的 `NavigationBackButtonNormalStyle`，
+沿用系统的返回箭头动画、主题颜色和交互状态；点击仍通过共用的导航逻辑返回上级页面。
+页面标题使用 `TextLineBounds="Tight"` 去除字形上下的额外行框留白，与原生返回箭头垂直居中对齐。
+
 主窗口使用原生 `TitleBarHeightOption.Tall`，标题栏内容高度跟随系统返回的 `Height`，使
 搜索框和窗口按钮共享垂直中心。左右安全区使用 `LeftInset` / `RightInset`，按 XAML 的
 缩放比例转换，并在窗口大小、最大化状态和 DPI 改变后更新。
