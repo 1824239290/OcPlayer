@@ -61,8 +61,8 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
     public UIElement Detail()
     {
         var media=model.SelectedMedia;
-        var layout=new Grid();
-        layout.PointerWheelChanged += (_,args) => { var wheel = args.GetCurrentPoint(layout).Properties; if(!wheel.IsHorizontalMouseWheel && wheel.MouseWheelDelta < 0) { navigate("detail-info"); args.Handled=true; } };
+        var layout=new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        DetailPageWheelNavigation.Attach(layout, () => navigate("detail-info"));
         var body=new Grid{Margin=new Thickness(52,12,40,20),RowSpacing=20};
         body.RowDefinitions.Add(new RowDefinition{Height=new GridLength(1,GridUnitType.Star)});body.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
         var content=Stack(18);content.Width=410;content.HorizontalAlignment=HorizontalAlignment.Left;
@@ -166,7 +166,11 @@ internal sealed class DemoPages(DemoViewModel model, Action<string> navigate, Ac
         if (model.DemoMode) foreach(var (heading,fields) in new[]{("视频",new[]{"分辨率          1920 × 1080 · 16:9","编码              H264 · High","码率              1.7 Mbps","帧率              23.976 fps","动态范围      SDR","位深              8 bit"}),("音频",new[]{"音轨              日语 · AAC · stereo (2ch) · 48 kHz"}),("文件",new[]{"容器              MP4","大小              364.8 MB",$"时长              {(int)(media.DurationSeconds/60)} 分钟"})}){var block=Stack(10);block.Children.Add(Text(heading,13,true));foreach(var field in fields)block.Children.Add(Muted(field,12));page.Children.Add(Panel(block,new Thickness(18)));}
         else page.Children.Add(Muted(media.DurationSeconds > 0 ? $"时长              {(int)(media.DurationSeconds/60)} 分钟" : "播放后可在播放器查看实际音轨与字幕。"));
         page.Children.Add(Text("类似推荐",16,true));var similar=Row(16);foreach(var item in model.Catalog.Where(x=>x.Id!=media.Id).Take(8))similar.Children.Add(MediaCard(item,open,150));page.Children.Add(new HorizontalMediaRail(similar, "类似推荐"));
-        var scroll=Scroll(page);scroll.Padding=new Thickness(52,20,52,48);scroll.PointerWheelChanged+=(_,args)=>{var wheel=args.GetCurrentPoint(scroll).Properties;if(scroll.VerticalOffset<=0&&!wheel.IsHorizontalMouseWheel&&wheel.MouseWheelDelta>0){navigate("detail");args.Handled=true;}};return scroll;
+        var scroll=Scroll(page);scroll.Padding=new Thickness(52,20,52,48);
+        var layout = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
+        layout.Children.Add(scroll);
+        DetailPageWheelNavigation.Attach(layout, () => navigate("detail"), scroll);
+        return layout;
     }
     public UIElement Viewing()
     {

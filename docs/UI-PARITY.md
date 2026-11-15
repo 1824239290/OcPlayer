@@ -14,6 +14,8 @@ Windows 前端以 macOS OcPlayer 的现有界面为准。保留页面结构、�
 - Home fixture 的图片仅裁取用户参考截图中的媒体图像及头像，界面本身由原生 WinUI 控件构成。所有浏览页面共用会话级背景轮播；背景实现以 GitHub macOS `888ccdd` 的 `BACKGROUND-ARCHITECTURE.md` 与 `AMBIENCE.md` 为准。
 - 显式 Demo 模式保留静态画面与模拟时钟。默认模式已接入共享 Core 与 Erika Windows 原生播放，见 [组合说明](core-integration.md)。
 - 已基于 2026-11-15 的实机截图补齐媒体库、详情首屏、观影模块、设置总览与十个子页，以及播放器 HUD。完整验证、素材来源和尚存差异见 [`DEMO-VALIDATION.md`](DEMO-VALIDATION.md)，这些页面仍不代表完整功能验收。
+- 浏览页面的转场对照 macOS `888ccdd` 的 `AppDesignKit/Motion.swift`、`AppShell.swift` 与 `DetailPagePager`：首页、观影、设置之间使用 0.2 秒交叉淡变；进入及返回媒体库、详情、设置子页使用 0.45 秒退场、0.05 秒恢复前置拍、0.45 秒入场。详情两屏使用 0.45 秒前景淡出、0.55 秒模糊遮罩扩张/收回、延迟至 0.6 秒的 0.4 秒前景淡入；固定背景全程保留。系统关闭动画时立即切换。
+- 详情第二屏保留原生纵向滚动，滚到顶部后继续向上滚动返回首屏；左上角返回也先回首屏，再返回来源页。滚轮处理观察 `ScrollViewer` 已处理的事件，忽略横向滚轮及 Shift 横向滚动；平滑滚动按 120 毫秒间隔识别新手势，翻页动画期间屏蔽重复翻页。
 
 ## 需要明确的差异
 

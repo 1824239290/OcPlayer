@@ -22,6 +22,9 @@ public sealed partial class MainWindow : Window
     private readonly DemoPages _pages;
     private PlayerWindow? _player;
     private string _detailOrigin = "home";
+    private string? _detailPageMediaId;
+    private int _detailPageEpisode;
+    private readonly Dictionary<string, (UIElement Page, int Episode)> _cachedDetailPages = [];
     private bool _navigating;
     private readonly Dictionary<string, UIElement> _cachedPages = [];
     private CancellationTokenSource? _load;
@@ -30,6 +33,7 @@ public sealed partial class MainWindow : Window
     private ContentDialog? _serverDialog;
     private CancellationTokenSource? _connection;
     private readonly AmbientBackdropController _ambient;
+    private readonly PageTransitionController _transitions;
     private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _active = true;
     private readonly BitmapImage _avatarColor = new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar-nav.png"))) { DecodePixelWidth = 54 };
@@ -46,6 +50,7 @@ public sealed partial class MainWindow : Window
         if (MicaController.IsSupported()) SystemBackdrop = new MicaBackdrop();
         AppWindow.ResizeClient(new SizeInt32(1130, 670));
         _ambient = new AmbientBackdropController(Ambience, _model);
+        _transitions = new PageTransitionController(PageHost);
         Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged += AnimationsEnabledChanged;
         Avatar.Source = _avatarColor;
@@ -61,6 +66,7 @@ public sealed partial class MainWindow : Window
             _load?.Cancel(); _connection?.Cancel(); _player?.Close();
             if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged -= AnimationsEnabledChanged;
             _ambient.Dispose();
+            _transitions.Dispose();
         };
         AppWindow.Closing += async (_, args) =>
         {
@@ -101,6 +107,9 @@ public sealed partial class MainWindow : Window
     private void Navigate(string route)
     {
         if (_closing) return;
+        var changedDetail = _detailPageMediaId != _model.SelectedMedia.Id;
+        if (_transitions.IsTransitioning && (_model.Route is "detail" or "detail-info")
+            && (route is "detail" or "detail-info") && route != _model.Route && !changedDetail) return;
         if (route.StartsWith("genre:"))
         {
             _model.Category = route[6..]; _model.Query = ""; _model.WatchState = "全部状态";
@@ -116,7 +125,13 @@ public sealed partial class MainWindow : Window
         if (!App.DemoMode && route == "settings:退出确认") { DisconnectServer(); return; }
         var previous = _model.Route;
         var restoreNavigationFocus = BackButton.FocusState != FocusState.Unfocused;
-        if (PageHost.Children.Count > 0 && previous == "library") _cachedPages["library"] = PageHost.Children[0];
+        if (_transitions.Content is { } current)
+        {
+            if (previous == "library") _cachedPages["library"] = current;
+            if (!changedDetail && previous != route && (previous is "detail" or "detail-info")) _cachedDetailPages[previous] = (current, _detailPageEpisode);
+        }
+        if (changedDetail || previous == route && (route is "detail" or "detail-info")) ClearDetailPages();
+        _detailPageMediaId = _model.SelectedMedia.Id;
         _navigating = true;
         _model.Route = route;
         var section = route.StartsWith("settings") ? "settings" : route is "library" or "detail" or "detail-info" ? "home" : route;
@@ -140,16 +155,23 @@ public sealed partial class MainWindow : Window
         UpdateAmbientActivity();
         GlobalSearch.PlaceholderText = route == "library" ? "搜索本库" : "搜索全部媒体库";
         PageTitle.Text = route.StartsWith("settings:") ? route[9..] : route switch { "home" => "首页", "library" => _model.LibraryName, "detail" or "detail-info" => _model.SelectedMedia.Title, "viewing" => "观影空间", _ => "设置" };
-        PageHost.Children.Clear();
-        PageHost.Children.Add(route == "library" && previous is "detail" or "detail-info" && _cachedPages.TryGetValue("library",out var library) ? library : route.StartsWith("settings:") ? _pages.SettingsSubpage(route[9..]) : route switch { "library" => _pages.Library(), "detail" => _pages.Detail(), "detail-info" => _pages.DetailInformation(),
-            "viewing" => _pages.Viewing(), "settings" => _pages.Settings(), _ => _pages.Home() });
+        var detailFlip = !changedDetail && previous != route && (previous is "detail" or "detail-info") && (route is "detail" or "detail-info");
+        var page = route == "library" && previous is "detail" or "detail-info" && _cachedPages.TryGetValue("library",out var library) ? library
+            : detailFlip && _cachedDetailPages.TryGetValue(route, out var detailPage) && detailPage.Episode == _model.SelectedEpisode ? detailPage.Page
+            : route.StartsWith("settings:") ? _pages.SettingsSubpage(route[9..]) : route switch { "library" => _pages.Library(), "detail" => _pages.Detail(), "detail-info" => _pages.DetailInformation(),
+                "viewing" => _pages.Viewing(), "settings" => _pages.Settings(), _ => _pages.Home() };
+        var transition = previous == route ? PageTransitionKind.None : detailFlip ? PageTransitionKind.DetailFlip
+            : (previous is "home" or "viewing" or "settings") && (route is "home" or "viewing" or "settings") ? PageTransitionKind.Section
+            : PageTransitionKind.Route;
+        _transitions.Show(page, transition);
+        _detailPageEpisode = _model.SelectedEpisode;
         _navigating = false;
         DispatcherQueue.TryEnqueue(UpdateTitleBarRegions);
         if (!App.DemoMode && route == "library" && previous != "detail" && previous != "detail-info") LoadLibrary();
     }
     private async void OpenDetail(DemoMedia media)
     {
-        _detailOrigin = _model.Route;
+        if (_model.Route is not ("detail" or "detail-info")) _detailOrigin = _model.Route;
         if (!App.DemoMode && media.SourceUri is null && App.Core?.Server is { } server)
         {
             var (token, generation) = BeginLoad();
@@ -158,7 +180,12 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { Notify("无法加载详情：" + ex.Message); return; }
         }
         if (media.Progress >= 100) _model.Watched.Add(media.Id);
+        ClearDetailPages();
         _model.SelectedMedia = media; _model.SelectedEpisode = media.InitialEpisodeNumber; Navigate("detail");
+    }
+    private void ClearDetailPages()
+    {
+        _cachedDetailPages.Clear();
     }
     private async void ToggleWatched(DemoMedia media, bool watched)
     {
@@ -283,7 +310,11 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
     }
-    private void UpdateAmbientActivity() => _ambient.SetActivity(_active && !_closing, _uiSettings.AnimationsEnabled);
+    private void UpdateAmbientActivity()
+    {
+        _ambient.SetActivity(_active && !_closing, _uiSettings.AnimationsEnabled);
+        _transitions.SetAnimationsEnabled(_uiSettings.AnimationsEnabled);
+    }
     private void AnimationsEnabledChanged(global::Windows.UI.ViewManagement.UISettings sender, object args) => DispatcherQueue.TryEnqueue(UpdateAmbientActivity);
     private void Notify(string message) { if (_closing) return; Notice.Visibility = Visibility.Visible; Notice.Message = message; Notice.IsOpen = true; }
     private void MainNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -352,7 +383,7 @@ public sealed partial class MainWindow : Window
         var regions = new FrameworkElement[] { NavGroup, BackButton, SortButton, ServerButton, HeaderActions }.Where(x => x.Visibility == Visibility.Visible && x.ActualWidth > 0).Select(Bounds).ToArray();
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, regions);
     }
-    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route is "detail" or "detail-info" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : "home");
+    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route == "detail-info" ? "detail" : _model.Route == "detail" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : "home");
     private void GlobalSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs e)
     {
         if (_navigating || _model.Route != "library") return;

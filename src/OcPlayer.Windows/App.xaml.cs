@@ -23,6 +23,15 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if DEBUG
+        var verification = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--demo-verify-transitions="));
+        if (verification is not null)
+        {
+            _window = new Preview.PageTransitionVerification(verification.Split('=', 2)[1]);
+            _window.Activate();
+            return;
+        }
+#endif
         if (Environment.GetCommandLineArgs().Contains("--detail-controls-preview"))
         {
             _window = new Features.DetailControlsPreviewWindow();

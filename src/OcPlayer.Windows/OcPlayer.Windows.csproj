@@ -20,6 +20,9 @@
   <ItemGroup>
     <Content Include="Assets\Demo\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <Compile Include="..\..\tests\OcPlayer.Ui\PageTransitionVerification.cs" Link="Preview\PageTransitionVerification.cs" />
+  </ItemGroup>
   <ItemGroup Condition="Exists('$(OcpNativeDirectory)ocp_ffi.dll')">
     <Content Include="$(OcpNativeDirectory)ocp_ffi.dll" Link="ocp_ffi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

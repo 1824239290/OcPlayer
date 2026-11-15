@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
+using OcPlayer.Windows.Services;
 using Windows.Foundation;
 using Windows.UI;
 
@@ -34,6 +35,7 @@ public sealed class AmbientBackdropView : Grid, IDisposable
         public void Clear()
         {
             Root.StopAnimation("Opacity"); Root.Opacity = 0;
+            Expanded.StopAnimation("Opacity"); Expanded.Opacity = 0;
             foreach (var visual in Visuals) visual.Brush = null;
             foreach (var brush in Brushes) brush.Dispose();
             Brushes.Clear(); BlurSource = null; Effect = null; Mask = null; VeilColor = null; Key = null;
@@ -123,8 +125,7 @@ public sealed class AmbientBackdropView : Grid, IDisposable
             ? Gradient(scene, new Vector2(1, 0), (0, Alpha(tint, _dark ? .58 : .62)), (.36f, Alpha(tint, .30)), (.66f, Alpha(tint, .06)), (1, Alpha(tint, 0)))
             : Gradient(scene, new Vector2(0, 1), (0, Alpha(tint, _dark ? .10 : .25)), (.12f, Alpha(tint, _dark ? .48 : .66)), (.85f, Alpha(PageColor(_dark), .88)), (1, PageColor(_dark))));
         Replace(scene, scene.Bottom, scene.Detail ? Gradient(scene, new Vector2(0, 1), (0, Alpha(tint, 0)), (.70f, Alpha(tint, 0)), (1, Alpha(tint, .42))) : null);
-        var expanded = scene.Detail && _expanded;
-        var expandedTint = _compositor.CreateColorBrush(Alpha(tint, expanded ? _dark ? .30 : .34 : 0));
+        var expandedTint = _compositor.CreateColorBrush(Alpha(tint, _dark ? .30 : .34));
         scene.Brushes.Add(expandedTint); Replace(scene, scene.Expanded, expandedTint);
         // A separate masked veil follows the blurred region, matching DetailPageArt.
         if (scene.Detail && scene.Mask is not null)
@@ -149,6 +150,17 @@ public sealed class AmbientBackdropView : Grid, IDisposable
     private void UpdateMask(Scene scene, bool animate)
     {
         if (scene.Mask is null) return;
+        var expanded = _expanded ? 1f : 0f;
+        scene.Expanded.StopAnimation("Opacity");
+        if (animate)
+        {
+            var tint = _compositor.CreateScalarKeyFrameAnimation();
+            tint.Duration = PageMotion.DetailMask;
+            tint.DelayTime = PageMotion.DetailMaskDelay(_expanded);
+            tint.InsertKeyFrame(1, expanded, MaskEasing());
+            scene.Expanded.StartAnimation("Opacity", tint);
+        }
+        else scene.Expanded.Opacity = expanded;
         var solid = _container.Size.X * (_expanded ? 1.75f : .34f);
         var start = new Vector2(solid, 0);
         var end = new Vector2(solid + _container.Size.X * .34f, 0);
@@ -164,9 +176,14 @@ public sealed class AmbientBackdropView : Grid, IDisposable
     private void AnimatePoint(CompositionObject target, string property, Vector2 value)
     {
         var animation = _compositor.CreateVector2KeyFrameAnimation();
-        animation.Duration = TimeSpan.FromSeconds(.35); animation.InsertKeyFrame(1, value);
+        animation.Duration = PageMotion.DetailMask;
+        animation.DelayTime = PageMotion.DetailMaskDelay(_expanded);
+        animation.InsertKeyFrame(1, value, MaskEasing());
         target.StartAnimation(property, animation);
     }
+
+    private CompositionEasingFunction MaskEasing() =>
+        _compositor.CreateCubicBezierEasingFunction(new Vector2(.42f, 0), new Vector2(.58f, 1));
 
     private static string Key(string source, bool detail) => (detail ? "1920:" : "512:") + source;
 
