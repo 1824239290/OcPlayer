@@ -10,6 +10,8 @@ using OcPlayer.Windows.ViewModels;
 using OcPlayer.Windows.Services;
 using OcPlayer.CoreAdapter;
 using Windows.Graphics;
+using Windows.Graphics.Imaging;
+using System.Runtime.InteropServices.WindowsRuntime;
 
 namespace OcPlayer.Windows;
 
@@ -29,6 +31,8 @@ public sealed partial class MainWindow : Window
     private readonly AmbientBackdropController _ambient;
     private readonly global::Windows.UI.ViewManagement.UISettings _uiSettings = new();
     private bool _active = true;
+    private readonly BitmapImage _avatarColor = new(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg"))) { DecodePixelWidth = 54 };
+    private WriteableBitmap? _avatarGray;
 
     public MainWindow()
     {
@@ -41,7 +45,8 @@ public sealed partial class MainWindow : Window
         _ambient = new AmbientBackdropController(Ambience, _model);
         Activated += (_, args) => { _active = args.WindowActivationState != WindowActivationState.Deactivated; UpdateAmbientActivity(); };
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041)) _uiSettings.AnimationsEnabledChanged += AnimationsEnabledChanged;
-        Avatar.Source = new BitmapImage(new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg")));
+        Avatar.ProfilePicture = _avatarColor;
+        Root.Loaded += async (_, _) => await LoadNavigationAvatar();
         _pages = new DemoPages(_model, Navigate, OpenDetail, Play, SetTheme, ToggleWatched);
         Closed += (_, _) =>
         {
@@ -97,6 +102,7 @@ public sealed partial class MainWindow : Window
             "settings" => SettingsNavigationItem,
             _ => HomeNavigationItem
         };
+        UpdateNavigationAvatar();
         BackButton.Visibility = route is "library" or "detail" or "detail-info" || route.StartsWith("settings:") ? Visibility.Visible : Visibility.Collapsed;
         SortButton.Visibility = route == "library" ? Visibility.Visible : Visibility.Collapsed;
         HeaderActions.Visibility = route is "home" or "library" ? Visibility.Visible : Visibility.Collapsed;
@@ -191,6 +197,37 @@ public sealed partial class MainWindow : Window
     private void MainNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (!_navigating && args.SelectedItem is NavigationViewItem { Tag: string route }) Navigate(route);
+    }
+    private void UpdateNavigationAvatar() => Avatar.ProfilePicture = MainNavigation.SelectedItem is NavigationViewItem { Tag: "home" }
+        ? _avatarColor : (ImageSource?)_avatarGray ?? _avatarColor;
+
+    private async Task LoadNavigationAvatar()
+    {
+        try
+        {
+            using var file = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Demo", "avatar.jpg"));
+            using var stream = file.AsRandomAccessStream();
+            var decoder = await BitmapDecoder.CreateAsync(stream);
+            // Decode a small, aspect-preserving image once. PersonPicture uses
+            // UniformToFill and an ellipse, matching macOS's 18pt circular avatar.
+            var scale = 54d / Math.Min(decoder.PixelWidth, decoder.PixelHeight);
+            var width = (uint)Math.Max(1, Math.Round(decoder.PixelWidth * scale));
+            var height = (uint)Math.Max(1, Math.Round(decoder.PixelHeight * scale));
+            var pixels = (await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight,
+                new BitmapTransform { ScaledWidth = width, ScaledHeight = height, InterpolationMode = BitmapInterpolationMode.Fant },
+                ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.ColorManageToSRgb)).DetachPixelData();
+            for (var i = 0; i < pixels.Length; i += 4)
+            {
+                var luminance = (byte)((pixels[i + 2] * 77 + pixels[i + 1] * 150 + pixels[i] * 29 + 128) >> 8);
+                pixels[i] = pixels[i + 1] = pixels[i + 2] = luminance;
+            }
+            if (_closing) return;
+            _avatarGray = new WriteableBitmap((int)width, (int)height);
+            using var buffer = _avatarGray.PixelBuffer.AsStream();
+            buffer.Write(pixels); _avatarGray.Invalidate();
+            UpdateNavigationAvatar();
+        }
+        catch (Exception) { /* Keep the color picture if an optional grayscale decode is unavailable. */ }
     }
     private void GlobalSearch_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs args)
     {

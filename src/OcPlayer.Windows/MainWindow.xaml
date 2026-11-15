@@ -36,10 +36,20 @@
                             <!-- The default top pane reserves 48 DIP for custom content even when empty. -->
                             <x:Double x:Key="TopNavigationViewPaneCustomContentMinWidth">0</x:Double>
                             <Thickness x:Key="TopNavigationViewTopNavGridMargin">0</Thickness>
+                            <Thickness x:Key="NavigationViewBorderThickness">0</Thickness>
+                            <Thickness x:Key="TopNavigationViewContentGridBorderThickness">0</Thickness>
+                            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
+                            <SolidColorBrush x:Key="NavigationViewItemSeparatorForeground" Color="Transparent" />
+                            <StaticResource x:Key="TopNavigationViewItemForeground" ResourceKey="TextFillColorSecondaryBrush" />
+                            <StaticResource x:Key="TopNavigationViewItemForegroundPointerOver" ResourceKey="TextFillColorSecondaryBrush" />
                         </NavigationView.Resources>
                         <NavigationView.MenuItems>
                             <NavigationViewItem x:Name="HomeNavigationItem" Tag="home" Width="40" ToolTipService.ToolTip="首页" AutomationProperties.Name="首页">
-                                <NavigationViewItem.Icon><ImageIcon x:Name="Avatar" /></NavigationViewItem.Icon>
+                                <NavigationViewItem.Resources>
+                                    <!-- The native presenter already has 4 DIP on each side. -->
+                                    <Thickness x:Key="TopNavigationViewItemContentOnlyContentPresenterMargin">7,0</Thickness>
+                                </NavigationViewItem.Resources>
+                                <PersonPicture x:Name="Avatar" Width="18" Height="18" IsHitTestVisible="False" />
                             </NavigationViewItem>
                             <NavigationViewItem x:Name="ViewingNavigationItem" Tag="viewing" Width="40" ToolTipService.ToolTip="观影" AutomationProperties.Name="观影">
                                 <NavigationViewItem.Icon><SymbolIcon Symbol="Video" /></NavigationViewItem.Icon>
