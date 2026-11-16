@@ -84,6 +84,7 @@ pub struct DanmakuCache {
     directory: PathBuf,
     ttl: f64,
     capacity: usize,
+    disk_capacity: Option<u64>,
     revisions: HashMap<String, u64>,
     mapping: Option<HashMap<String, EpisodeMatch>>,
     hints: Option<HashMap<String, IntroHint>>,
@@ -158,20 +159,78 @@ impl DanmakuCache {
             })
             .transpose()?
             .unwrap_or(2);
+        // Opt-in policy: Apple clients retain their existing disk behavior.
+        let disk_capacity = args
+            .get("commentsDiskCapacityBytes")
+            .map(|v| {
+                v.as_u64()
+                    .ok_or_else(|| invalid("commentsDiskCapacityBytes must be non-negative"))
+            })
+            .transpose()?;
         // As with FileManager, a temporary unavailable directory leaves the
         // memory cache usable; later writes may recover without replacing data.
         let _ = fs::create_dir_all(&directory);
-        Ok(Self {
+        let mut cache = Self {
             directory,
             ttl,
             capacity,
+            disk_capacity,
             revisions: HashMap::new(),
             mapping: None,
             hints: None,
             comments: HashMap::new(),
             order: VecDeque::new(),
             write_failures: 0,
-        })
+        };
+        if cache.disk_capacity.is_some() {
+            cache.prune_comments()?;
+        }
+        Ok(cache)
+    }
+    fn comment_files(&self) -> Result<Vec<(i64, PathBuf, u64, std::time::SystemTime)>, CacheError> {
+        let mut files = Vec::new();
+        let entries = match fs::read_dir(&self.directory) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(files),
+            Err(e) => return Err(e.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let Some(id) = name
+                .strip_prefix("comments-")
+                .and_then(|v| v.strip_suffix(".json"))
+                .and_then(|v| v.parse::<i64>().ok())
+            else {
+                continue;
+            };
+            let metadata = entry.metadata()?;
+            files.push((id, entry.path(), metadata.len(), metadata.modified()?));
+        }
+        Ok(files)
+    }
+    fn prune_comments(&mut self) -> Result<u64, CacheError> {
+        let Some(capacity) = self.disk_capacity else {
+            return Ok(0);
+        };
+        let mut files = self.comment_files()?;
+        files.sort_by_key(|file| file.3);
+        let mut bytes = files.iter().map(|file| file.2).sum::<u64>();
+        let mut removed = 0;
+        for (id, path, size, _) in files {
+            if bytes <= capacity {
+                break;
+            }
+            fs::remove_file(path)?;
+            self.forget(id);
+            bytes = bytes.saturating_sub(size);
+            removed += 1;
+        }
+        Ok(removed)
     }
     fn load_mapping(&mut self) -> Option<HashMap<String, EpisodeMatch>> {
         if let Some(mapping) = &self.mapping {
@@ -362,6 +421,9 @@ impl DanmakuCache {
                 };
                 let saved = self.save(&format!("comments-{id}.json"), &entry);
                 self.remember(id, entry);
+                if self.prune_comments().is_err() {
+                    self.write_failures = self.write_failures.saturating_add(1);
+                }
                 json!(saved)
             }
             "introHint" => json!(self.intro_hint(id(args, "episodeID")?)),
@@ -374,6 +436,16 @@ impl DanmakuCache {
                 json!(self.set_intro_hint(episode_id, hint))
             }
             "memoryCount" => json!(self.comments.len()),
+            "clearComments" => {
+                for (id, path, _, _) in self.comment_files()? {
+                    fs::remove_file(path)?;
+                    self.forget(id);
+                }
+                self.comments.clear();
+                self.order.clear();
+                json!(true)
+            }
+            "pruneComments" => json!(self.prune_comments()?),
             "stats" => {
                 json!({"commentsMemoryCount":self.comments.len(),"commentsMemoryCapacity":self.capacity,"writeFailures":self.write_failures})
             }
@@ -418,4 +490,96 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8]) -> std::io::Result<()> {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+#[cfg(test)]
+mod disk_policy_tests {
+    use super::*;
+    struct Directory(PathBuf);
+    impl Directory {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "ocp-danmaku-disk-policy-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for Directory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    fn comments(cache: &mut DanmakuCache, id: i64) {
+        cache
+            .call(
+                "setComments",
+                &json!({"episodeID":id,"payloadJSON":[{"p":"0,1,16777215","m":"test comment"}]}),
+            )
+            .unwrap();
+    }
+    #[test]
+    fn disk_capacity_is_opt_in_and_evicts_oldest_comments() {
+        let directory = Directory::new();
+        let mut cache = DanmakuCache::open(&json!({"directory":directory.0})).unwrap();
+        comments(&mut cache, 1);
+        comments(&mut cache, 2);
+        assert_eq!(cache.comment_files().unwrap().len(), 2);
+        let first = directory.0.join("comments-1.json");
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&first)
+            .unwrap()
+            .set_modified(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap();
+        let size = fs::metadata(&first).unwrap().len();
+        let mut bounded = DanmakuCache::open(
+            &json!({"directory":directory.0,"commentsDiskCapacityBytes":size+10}),
+        )
+        .unwrap();
+        assert!(!first.exists());
+        assert!(directory.0.join("comments-2.json").exists());
+        comments(&mut bounded, 3);
+        assert_eq!(bounded.comment_files().unwrap().len(), 1);
+        assert_eq!(bounded.comments.len(), 1);
+    }
+    #[test]
+    fn clearing_comments_preserves_matches_hints_and_other_files() {
+        let directory = Directory::new();
+        let mut cache = DanmakuCache::open(&json!({"directory":directory.0})).unwrap();
+        cache
+            .call(
+                "setEpisodeMatch",
+                &json!({"mediaID":"media","payloadJSON":{"episodeID":1,"shiftSeconds":3}}),
+            )
+            .unwrap();
+        cache.call("setIntroHint", &json!({"episodeID":1,"payloadJSON":{"endSeconds":90,"evidenceCount":1,"source":"danmaku"}})).unwrap();
+        comments(&mut cache, 1);
+        fs::write(directory.0.join("comments-note.json"), b"preserve").unwrap();
+        cache.call("clearComments", &json!({})).unwrap();
+        assert!(cache.comments.is_empty());
+        assert!(cache.comment_files().unwrap().is_empty());
+        assert!(cache.load_mapping().unwrap().contains_key("media"));
+        assert!(cache.intro_hint(1).is_some());
+        assert!(directory.0.join("mapping.json").exists());
+        assert!(directory.0.join("intro-hints.json").exists());
+        assert!(directory.0.join("comments-note.json").exists());
+    }
+    #[test]
+    fn zero_capacity_disables_disk_and_memory_comment_reuse() {
+        let directory = Directory::new();
+        let mut cache =
+            DanmakuCache::open(&json!({"directory":directory.0,"commentsDiskCapacityBytes":0}))
+                .unwrap();
+        comments(&mut cache, 1);
+        assert!(cache.comment_files().unwrap().is_empty());
+        assert!(cache.comments.is_empty());
+        assert!(DanmakuCache::open(
+            &json!({"directory":directory.0,"commentsDiskCapacityBytes":-1})
+        )
+        .is_err());
+    }
 }

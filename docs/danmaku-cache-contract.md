@@ -68,3 +68,22 @@ verify bidirectional files, corrupted/legacy mappings and UInt64.max barriers.
 Existing DanmakuKit cache/load tests also run with shared cache enabled.
 Shared resolver scheduling and intro detection/learning/provider policies remain
 separate, unfinished migration work.
+
+## Optional disk policy and comment-only clearing (Windows, 2026-11-17)
+
+`danmakuCache.open` accepts optional `commentsDiskCapacityBytes` (non-negative
+integer). When supplied, opening and saving comments evicts oldest comment files
+until their total size fits this budget, including the corresponding memory
+entries. Zero disables comment reuse on disk and in memory. Omitting this field
+preserves the existing behavior, including for current Apple clients.
+
+`danmakuCache.clearComments` removes only numeric `comments-<episodeID>.json`
+files and the in-memory comment entries. It preserves `mapping.json`,
+`intro-hints.json`, revision claims and other durable data. Hosts must cancel and
+drain in-flight loads before invoking it so completed requests cannot repopulate
+the cleared cache. I/O failures are returned, rather than reported as success.
+
+`danmakuCache.pruneComments` explicitly reapplies the configured disk budget and
+returns the number of removed files. It is a no-op without a configured budget.
+These additions use the existing JSON ABI; no Swift or macOS source changes are
+required.
