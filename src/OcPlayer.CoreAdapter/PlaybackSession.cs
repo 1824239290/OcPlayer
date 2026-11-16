@@ -3,8 +3,12 @@ using System.Text.Json;
 namespace OcPlayer.CoreAdapter;
 
 public sealed record PlaybackSource(string Id, string Title, string Uri, string TenantId = "local",
-    double ResumeSeconds = 0, IReadOnlyDictionary<string, string>? HttpHeaders = null, PlaybackReport? Report = null);
+    double ResumeSeconds = 0, IReadOnlyDictionary<string, string>? HttpHeaders = null, PlaybackReport? Report = null,
+    PlaybackMetadata? Metadata = null);
 public sealed record PlaybackReport(JsonElement Profile, string ItemId, string? MediaSourceId, string? PlaySessionId);
+public sealed record PlaybackMetadata(string? FileName, long? FileSize, double? DurationSeconds,
+    string? AnimeTitle, string? OriginalTitle, int? EpisodeNumber, int? SeasonNumber,
+    long? TmdbId = null, long? SeriesTmdbId = null, bool IsMovie = false);
 
 /// Coordinates Core policy/persistence with actual native decoder feedback.
 /// Commands and render ticks are serialized by the window's UI dispatcher.
@@ -14,22 +18,44 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
     private PlaybackSource? _source;
     private bool _ready, _attached, _ended, _failed, _disposed;
     private double _resume, _lastSave;
+    private DateTime _openStarted;
+    private double _openedRenderedFrames;
     public double PositionSeconds { get; private set; }
     public double DurationSeconds { get; private set; }
     public bool Playing { get; private set; }
     public bool Ready => _ready;
     public JsonElement Stats { get; private set; }
     public JsonElement Tracks { get; private set; }
+    public int PlaybackState { get; private set; }
+    public bool Buffering { get; private set; }
+    public bool HasSurface { get; private set; }
+    public uint VideoWidth { get; private set; }
+    public uint VideoHeight { get; private set; }
+    public int VideoPrimaries { get; private set; }
+    public int VideoTransfer { get; private set; }
+    public int DolbyVisionProfile { get; private set; }
+    public JsonElement DecoderInfo { get; private set; }
+    public JsonElement AudioOutputInfo { get; private set; }
+    public double SubtitleScale { get; private set; } = 1;
     public Task ReportingCompleted { get; private set; } = Task.CompletedTask;
     public string? ReportingError { get; private set; }
     public event Action<string>? Failed;
+    public event Action<PlaybackFailure>? Failure;
+    public event Action? Ended;
+    public event Action<uint, uint>? VideoDimensionsChanged;
+    public bool HasEnded => _ended;
+    public bool HasFirstFrame { get; private set; }
+    public int TracksRevision { get; private set; }
+    public long HttpReadAheadBytes { get; set; } = 2 * 1024 * 1024;
+    public long HttpBackBufferBytes { get; set; } = 16 * 1024 * 1024;
+    public string UserAgent { get; set; } = "";
 
     public void Attach(ulong hwnd, uint width, uint height, double scale)
     {
         _presenter.Attach(hwnd, width, height, scale);
         try { core.AttachSurface(hwnd, width, height, scale); }
         catch { _presenter.Detach(); throw; }
-        _attached = true;
+        _attached = HasSurface = true;
     }
 
     public void Resize(uint width, uint height, double scale)
@@ -44,19 +70,31 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
     {
         if (_source is not null) Stop();
         _source = source;
+        _openStarted = DateTime.UtcNow;
+        HasFirstFrame = false;
+        var counters = _presenter.Invoke("getPresenterStats");
+        _openedRenderedFrames = counters.TryGetProperty("renderedVideoFrames", out var rendered) ? rendered.GetDouble() : 0;
         _ready = _ended = _failed = false;
         Playing = false;
         PositionSeconds = DurationSeconds = _lastSave = 0;
         Tracks = default;
+        PlaybackState = 1; Buffering = false;
+        VideoWidth = VideoHeight = 0; VideoPrimaries = VideoTransfer = DolbyVisionProfile = 0;
+        DecoderInfo = AudioOutputInfo = Stats = default;
         _resume = source.ResumeSeconds;
         var saved = Require(core.Call("progress.get", new { tenantId = source.TenantId, itemId = source.Id }));
-        if (saved.GetProperty("progress") is { ValueKind: JsonValueKind.Object } progress &&
+        if (_resume <= 0 && saved.GetProperty("progress") is { ValueKind: JsonValueKind.Object } progress &&
             !progress.GetProperty("completed").GetBoolean())
             _resume = progress.GetProperty("positionSeconds").GetDouble();
         Require(core.Call("playback.open", new { source = source.Uri }));
         try
         {
-            _presenter.Invoke("open", new { uri = source.Uri, httpHeaders = source.HttpHeaders ?? new Dictionary<string, string>() });
+            // A presenter is reused across episodes. Neither tracks nor a manual time correction may leak into the next one.
+            ClearDanmaku();
+            SetDanmakuOffset(0);
+            var headers = source.HttpHeaders is null ? new Dictionary<string, string>() : new Dictionary<string, string>(source.HttpHeaders);
+            if (!string.IsNullOrWhiteSpace(UserAgent)) headers["User-Agent"] = UserAgent;
+            _presenter.Invoke("open", new { uri = source.Uri, httpHeaders = headers, httpReadAheadBytes = HttpReadAheadBytes, httpBackBufferBytes = HttpBackBufferBytes });
             // Opening is asynchronous. Play is requested only after native Ready.
         }
         catch (Exception ex) { ReportFailure(ex.Message); throw; }
@@ -65,9 +103,16 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
     public void Tick(double seconds)
     {
         if (_disposed || !_attached || _source is null || _failed) return;
+        if (!_ready && DateTime.UtcNow - _openStarted >= TimeSpan.FromSeconds(60))
+        {
+            try { _presenter.Invoke("stop"); } catch { }
+            ReportFailure("打开片源超时（超过 60 秒），请检查网络后重试。");
+            return;
+        }
         try
         {
             Stats = _presenter.RenderTick(seconds);
+            if (Stats.TryGetProperty("renderedVideoFrames", out var frames) && frames.TryGetDouble(out var count) && count > 0 && count != _openedRenderedFrames) HasFirstFrame = true;
             core.RenderTick(seconds);
             while (_presenter.PollEvent() is { } value) HandleEvent(value);
             if (_ready && !_ended && seconds - _lastSave >= 5)
@@ -85,11 +130,13 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         {
             case 1:
                 var state = value.GetProperty("state").GetInt32();
+                PlaybackState = state;
                 if (state == 2 && !_ready)
                 {
                     _ready = true;
                     Require(core.Call("playback.ready", new { durationSeconds = DurationSeconds > 0 ? (double?)DurationSeconds : null }));
                     Tracks = _presenter.Invoke("tracks");
+                    TracksRevision++;
                     if (_resume > 0) Seek(_resume);
                     SetPlaying(true);
                     QueueReport("report.start");
@@ -102,6 +149,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
                     Require(core.Call("playback.ended"));
                     SaveProgress();
                     QueueReport("report.stopped");
+                    Ended?.Invoke();
                 }
                 break;
             case 2:
@@ -115,9 +163,32 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
             case 4:
             case 10:
                 Tracks = _presenter.Invoke("tracks");
+                TracksRevision++;
+                break;
+            case 5:
+                Buffering = value.GetProperty("buffering").GetBoolean();
+                break;
+            case 6:
+                var video = value.GetProperty("video");
+                VideoWidth = video.GetProperty("width").GetUInt32();
+                VideoHeight = video.GetProperty("height").GetUInt32();
+                VideoPrimaries = video.GetProperty("primaries").GetInt32();
+                VideoTransfer = video.GetProperty("transfer").GetInt32();
+                if (video.TryGetProperty("dolbyVisionProfile", out var profile) && profile.ValueKind == JsonValueKind.Number && profile.TryGetInt32(out var dv) && dv > 0) DolbyVisionProfile = dv;
+                VideoDimensionsChanged?.Invoke(VideoWidth, VideoHeight);
+                break;
+            case 7: HasSurface = true; break;
+            case 8: HasSurface = false; break;
+            case 11:
+                DecoderInfo = value.TryGetProperty("decoder", out var decoder) ? decoder.Clone() : default;
+                if (DecoderInfo.ValueKind == JsonValueKind.Object && DecoderInfo.TryGetProperty("dolbyVisionProfile", out var dovi) && dovi.ValueKind == JsonValueKind.Number && dovi.TryGetInt32(out var decodedProfile) && decodedProfile > 0)
+                    DolbyVisionProfile = decodedProfile;
+                break;
+            case 12:
+                AudioOutputInfo = value.TryGetProperty("audio", out var audio) ? audio.Clone() : default;
                 break;
             case 9:
-                ReportFailure(value.TryGetProperty("message", out var message) ? message.GetString() ?? "播放失败" : "播放失败");
+                ReportFailure(value.TryGetProperty("error", out var error) ? error.GetString() ?? "播放失败" : value.TryGetProperty("message", out var message) ? message.GetString() ?? "播放失败" : "播放失败");
                 break;
         }
     }
@@ -134,7 +205,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
     public void Seek(double seconds)
     {
         if (!_ready || !double.IsFinite(seconds)) return;
-        seconds = Math.Clamp(seconds, 0, DurationSeconds > 0 ? DurationSeconds : double.MaxValue);
+        seconds = Math.Clamp(seconds, 0, DurationSeconds > 0 ? Math.Max(0, DurationSeconds - .5) : double.MaxValue);
         _presenter.Invoke("seek", new { positionMicros = checked((ulong)(seconds * 1_000_000)) });
         Require(core.Call("playback.seek", new { positionSeconds = seconds }));
         PositionSeconds = seconds;
@@ -158,11 +229,49 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         _presenter.Invoke(subtitle ? "selectSubtitleTrack" : "selectAudioTrack", new { trackId = id });
         Require(core.Call(subtitle ? "playback.selectSubtitle" : "playback.selectAudio", new { trackId = id < 0 ? null : id.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
         Tracks = _presenter.Invoke("tracks");
+        TracksRevision++;
     }
 
-    public void LoadSubtitle(string uri) => _presenter.Invoke("addExternalSubtitle", new { uri });
+    public long LoadSubtitle(string uri)
+    {
+        var id = _presenter.Invoke("addExternalSubtitle", new { uri }).GetInt64();
+        Tracks = _presenter.Invoke("tracks");
+        TracksRevision++;
+        Require(core.Call("playback.selectSubtitle", new { trackId = id.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+        return id;
+    }
+    public void RemoveSubtitle(long id)
+    {
+        _presenter.Invoke("removeSubtitleTrack", new { trackId = id });
+        Tracks = _presenter.Invoke("tracks");
+        TracksRevision++;
+        var selected = Tracks.EnumerateArray().FirstOrDefault(track => track.GetProperty("kind").GetInt32() == 2
+            && track.GetProperty("selected").GetBoolean());
+        Require(core.Call("playback.selectSubtitle", new { trackId = selected.ValueKind == JsonValueKind.Object
+            ? selected.GetProperty("id").GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture) : null }));
+    }
+    public void SetUpscaler(int mode) => _presenter.Invoke("setUpscaler", new { mode });
+    public void SetSubtitleStyle(ErikaPresenter.SubtitleStyle style) => _presenter.SetSubtitleStyle(style);
+    public void SetSubtitleScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale is < .5 or > 3) throw new ArgumentOutOfRangeException(nameof(scale));
+        _presenter.Invoke("setSubtitleScale", new { scale });
+        SubtitleScale = scale;
+    }
+    public byte[] CaptureFrameRgba(uint width, uint height) => _presenter.CaptureFrameRgba(width, height);
+    public JsonElement GetOutputStatus() => _presenter.Invoke("getOutputStatus");
+    public JsonElement GetResourceStatus() => _presenter.Invoke("getResourceStatus");
     public void LoadDanmaku(string uri) => _presenter.Invoke("loadDanmakuFile", new { uri });
     public void SetDanmaku(bool enabled) => _presenter.Invoke("setDanmakuEnabled", new { enabled });
+    public void ConfigureDanmaku(object configuration) => _presenter.Invoke("setDanmakuConfig", configuration);
+    public void ClearDanmaku() => _presenter.Invoke("clearDanmaku");
+    public void LoadDanmakuJson(string json) => _presenter.Invoke("loadDanmakuJson", new { json });
+    public JsonElement DanmakuTracks => _presenter.Invoke("danmakuTracks");
+    public void SetDanmakuOffset(double seconds)
+    {
+        if (!double.IsFinite(seconds)) throw new ArgumentOutOfRangeException(nameof(seconds));
+        _presenter.Invoke("setDanmakuGlobalOffset", new { offsetMicros = checked((long)(seconds * 1_000_000)) });
+    }
 
     public void SaveProgress()
     {
@@ -184,6 +293,7 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         Require(core.Call("playback.stop"));
         _source = null;
         _ready = Playing = false;
+        PlaybackState = 5; Buffering = false;
         while (_presenter.PollEvent() is not null) { }
     }
 
@@ -192,8 +302,12 @@ public sealed class PlaybackSession(OcpCoreClient core) : IDisposable
         if (_failed) return;
         _failed = true;
         Playing = false;
-        _ = core.Call("playback.failed", new { category = "decode", message, retryable = false });
+        PlaybackState = 7;
+        Buffering = false;
+        var failure = PlaybackFailure.Classify(message);
+        _ = core.Call("playback.failed", new { category = failure.Category switch { "auth" => "unauthorized", "server" => "network", _ => failure.Category }, message, retryable = failure.Retryable, stopsAutomaticRecovery = !failure.CanTryAlternateSource });
         Failed?.Invoke(message);
+        Failure?.Invoke(failure);
     }
 
     private void QueueReport(string method)

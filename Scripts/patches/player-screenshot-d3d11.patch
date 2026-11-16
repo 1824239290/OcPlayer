@@ -1,0 +1,621 @@
+diff --git a/crates/erika/src/renderer/d3d11.rs b/crates/erika/src/renderer/d3d11.rs
+index 2111757..60d75f9 100644
+--- a/crates/erika/src/renderer/d3d11.rs
++++ b/crates/erika/src/renderer/d3d11.rs
+@@ -20,12 +20,13 @@ use ::windows::Win32::Graphics::Direct3D11::{
+     D3D11_BIND_CONSTANT_BUFFER, D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE,
+     D3D11_BLEND_DESC, D3D11_BLEND_INV_SRC_ALPHA, D3D11_BLEND_ONE, D3D11_BLEND_OP_ADD,
+     D3D11_BLEND_SRC_ALPHA, D3D11_BOX, D3D11_BUFFER_DESC, D3D11_COLOR_WRITE_ENABLE_ALL,
+-    D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_INPUT_ELEMENT_DESC, D3D11_INPUT_PER_VERTEX_DATA,
++    D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_INPUT_ELEMENT_DESC,
++    D3D11_INPUT_PER_VERTEX_DATA, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE,
+     D3D11_RENDER_TARGET_BLEND_DESC, D3D11_SAMPLER_DESC, D3D11_SDK_VERSION,
+     D3D11_SHADER_RESOURCE_VIEW_DESC, D3D11_SHADER_RESOURCE_VIEW_DESC_0, D3D11_SUBRESOURCE_DATA,
+     D3D11_TEX2D_ARRAY_SRV, D3D11_TEX2D_SRV, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT,
+-    D3D11_VIEWPORT, D3D11CreateDevice, ID3D11BlendState, ID3D11Buffer, ID3D11Device,
+-    ID3D11DeviceContext, ID3D11InputLayout, ID3D11Multithread, ID3D11PixelShader,
++    D3D11_USAGE_STAGING, D3D11_VIEWPORT, D3D11CreateDevice, ID3D11BlendState, ID3D11Buffer,
++    ID3D11Device, ID3D11DeviceContext, ID3D11InputLayout, ID3D11Multithread, ID3D11PixelShader,
+     ID3D11RenderTargetView, ID3D11Resource, ID3D11SamplerState, ID3D11ShaderResourceView,
+     ID3D11Texture2D, ID3D11VertexShader,
+ };
+@@ -50,8 +51,8 @@ use ::windows::core::{IUnknown, Interface, PCSTR};
+ 
+ use crate::core::{
+     ColorPrimaries, LumaUpscalerBackendStatus, PlatformSurface, PlayerError, PlayerVideoFrame,
+-    RenderFrameContext, RendererBackend, RendererRuntimeStats, Result, SurfaceMetrics,
+-    TransferFunction, WgpuSurfaceKind,
++    RenderFrameContext, RendererBackend, RendererFrameCapture, RendererRuntimeStats, Result,
++    SurfaceMetrics, TransferFunction, WgpuSurfaceKind,
+ };
+ use crate::danmaku::{
+     DanmakuAtlasUpdate, DanmakuGlyphAtlas, DanmakuGlyphInstance, DanmakuRenderPlan,
+@@ -802,6 +803,8 @@ struct ImportedVideoFrame {
+     tex_rect: D3d11TexRect,
+     _array_index: u32,
+     frame_token: u64,
++    source_color: SourceColorState,
++    texture_format: D3d11VideoTextureFormat,
+     constants: VideoUniforms,
+ }
+ 
+@@ -1389,6 +1392,8 @@ impl D3d11Renderer {
+             ),
+             _array_index: array_index,
+             frame_token,
++            source_color,
++            texture_format,
+             constants: constants_for_frame(source_color, texture_format, target_color)
+                 .packed_alpha_right(self.video_alpha_mode.has_alpha()),
+         });
+@@ -1430,6 +1435,7 @@ impl D3d11Renderer {
+     fn prepare_overlay_draws(
+         &mut self,
+         frame: Option<&OverlayFrame>,
++        target: TargetColorState,
+     ) -> Result<Vec<D3d11OverlayDraw>> {
+         let Some(frame) = frame else {
+             return Ok(Vec::new());
+@@ -1446,7 +1452,6 @@ impl D3d11Renderer {
+             as u64;
+         let viewport_w = frame.viewport.width;
+         let viewport_h = frame.viewport.height;
+-        let target = self.overlay_target_color();
+         let mut draws = Vec::new();
+ 
+         for plane in &frame.subtitle_planes {
+@@ -1758,7 +1763,8 @@ impl D3d11Renderer {
+         }
+         self.ensure_default_device()?;
+         self.ensure_surface_ready()?;
+-        let overlay_draws = self.prepare_overlay_draws(context.overlay)?;
++        let overlay_draws =
++            self.prepare_overlay_draws(context.overlay, self.overlay_target_color())?;
+         let danmaku_draws = self.prepare_danmaku_draws(context.danmaku)?;
+         let (video_width, video_height, frame_token, native_luma) = {
+             let video = self.current_video.as_ref().expect("video checked");
+@@ -1848,7 +1854,13 @@ impl D3d11Renderer {
+                 ],
+             );
+         }
+-        state.draw_video(video, upscaled_luma.as_ref(), scene_rtv, target_rect)?;
++        state.draw_video(
++            video,
++            video.constants,
++            upscaled_luma.as_ref(),
++            scene_rtv,
++            target_rect,
++        )?;
+         if !overlay_draws.is_empty() {
+             // Subtitle coordinates are produced in the video-frame viewport.
+             // Composite them through the same aspect-fit viewport as the video
+@@ -2119,6 +2131,8 @@ impl RendererBackend for D3d11Renderer {
+             tex_rect: D3d11TexRect::FULL,
+             _array_index: 0,
+             frame_token,
++            source_color: source,
++            texture_format,
+             constants: constants_for_frame(source, texture_format, target)
+                 .packed_alpha_right(self.video_alpha_mode.has_alpha()),
+         });
+@@ -2142,6 +2156,142 @@ impl RendererBackend for D3d11Renderer {
+         self.render_video(context)
+     }
+ 
++    fn capture_current_frame(
++        &mut self,
++        context: RenderFrameContext<'_>,
++        width: u32,
++        height: u32,
++    ) -> Result<Option<RendererFrameCapture>> {
++        if width == 0 || height == 0 {
++            return Err(PlayerError::Renderer(
++                "d3d11: capture size must be non-zero".to_string(),
++            ));
++        }
++        let row_bytes = (width as usize).checked_mul(4).ok_or_else(|| {
++            PlayerError::Renderer("d3d11: capture row size overflowed".to_string())
++        })?;
++        let byte_count = row_bytes.checked_mul(height as usize).ok_or_else(|| {
++            PlayerError::Renderer("d3d11: capture buffer size overflowed".to_string())
++        })?;
++        if self.current_video.is_none() {
++            return Ok(None);
++        }
++        self.ensure_default_device()?;
++        // A PNG has its own SDR output contract, independent of the HDR monitor
++        // and swapchain. Rebuild both video and subtitle uniforms for this target.
++        let target_color = TargetColorState::sdr(ColorPrimaries::Bt709);
++        let overlays = self.prepare_overlay_draws(context.overlay, target_color)?;
++        let video = self.current_video.as_ref().expect("current frame checked");
++        let constants = constants_for_frame(video.source_color, video.texture_format, target_color)
++            .packed_alpha_right(self.video_alpha_mode.has_alpha());
++        let state = self.state.as_ref().expect("device ensured");
++        let desc = D3D11_TEXTURE2D_DESC {
++            Width: width,
++            Height: height,
++            MipLevels: 1,
++            ArraySize: 1,
++            Format: DXGI_FORMAT_R8G8B8A8_UNORM,
++            SampleDesc: DXGI_SAMPLE_DESC {
++                Count: 1,
++                Quality: 0,
++            },
++            Usage: D3D11_USAGE_DEFAULT,
++            BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
++            ..Default::default()
++        };
++        let mut texture = None;
++        let mut render_target = None;
++        unsafe {
++            state
++                .device
++                .CreateTexture2D(&desc, None, Some(&mut texture))
++                .map_err(|error| d3d_error("CreateTexture2D(capture)", error))?;
++            state
++                .device
++                .CreateRenderTargetView(texture.as_ref().unwrap(), None, Some(&mut render_target))
++                .map_err(|error| d3d_error("CreateRenderTargetView(capture)", error))?;
++        }
++        let texture = texture.expect("capture texture created");
++        let render_target = render_target.expect("capture render target created");
++        unsafe {
++            state
++                .context
++                .ClearRenderTargetView(&render_target, &[0.0, 0.0, 0.0, 1.0]);
++        }
++        let video_rect = aspect_fit_rect(
++            self.video_alpha_mode.logical_width(video.width),
++            video.height,
++            width,
++            height,
++        );
++        state.draw_video(video, constants, None, &render_target, video_rect)?;
++        // The presenter rebuilt the subtitle overlay at capture resolution.
++        // Its viewport is the entire image, including any aspect-fit bars.
++        state.draw_overlays(
++            &overlays,
++            &render_target,
++            D3d11DrawRect {
++                x: 0.0,
++                y: 0.0,
++                width: width as f32,
++                height: height as f32,
++            },
++        )?;
++        // Intentionally do not composite context.danmaku or present the swapchain.
++        unsafe {
++            state.context.OMSetRenderTargets(None, None);
++        }
++        let mut staging = None;
++        let staging_desc = D3D11_TEXTURE2D_DESC {
++            Usage: D3D11_USAGE_STAGING,
++            BindFlags: 0,
++            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
++            ..desc
++        };
++        unsafe {
++            state
++                .device
++                .CreateTexture2D(&staging_desc, None, Some(&mut staging))
++                .map_err(|error| d3d_error("CreateTexture2D(capture readback)", error))?;
++        }
++        let staging = staging.expect("capture staging texture created");
++        let mut rgba = vec![0_u8; byte_count];
++        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
++        unsafe {
++            state.context.CopyResource(&staging, &texture);
++            state
++                .context
++                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
++                .map_err(|error| d3d_error("Map(capture readback)", error))?;
++        }
++        // Mapped textures have driver-aligned rows; copy only visible RGBA bytes.
++        let valid_mapping = !mapped.pData.is_null() && mapped.RowPitch as usize >= row_bytes;
++        if valid_mapping {
++            for (row, destination) in rgba.chunks_exact_mut(row_bytes).enumerate() {
++                unsafe {
++                    ptr::copy_nonoverlapping(
++                        (mapped.pData as *const u8).add(row * mapped.RowPitch as usize),
++                        destination.as_mut_ptr(),
++                        row_bytes,
++                    );
++                }
++            }
++        }
++        unsafe {
++            state.context.Unmap(&staging, 0);
++        }
++        if !valid_mapping {
++            return Err(PlayerError::Renderer(
++                "d3d11: invalid capture readback row pitch".to_string(),
++            ));
++        }
++        Ok(Some(RendererFrameCapture {
++            width,
++            height,
++            rgba,
++        }))
++    }
++
+     fn runtime_stats(&self) -> RendererRuntimeStats {
+         RendererRuntimeStats {
+             surface_width: self.stats.surface_width,
+@@ -2332,6 +2482,7 @@ impl D3d11DeviceState {
+     fn draw_video(
+         &self,
+         video: &ImportedVideoFrame,
++        video_constants: VideoUniforms,
+         upscaled_luma: Option<&ID3D11ShaderResourceView>,
+         render_target: &ID3D11RenderTargetView,
+         target: D3d11DrawRect,
+@@ -2347,7 +2498,7 @@ impl D3d11DeviceState {
+         let stride = mem::size_of::<VideoVertex>() as u32;
+         let offset = 0u32;
+         let vertices = video_vertices(D3d11TexRect::FULL);
+-        let mut common = video.constants;
++        let mut common = video_constants;
+         if upscaled_luma.is_some() {
+             common = common.packed_d2s_luma_input();
+         }
+@@ -3504,6 +3655,153 @@ fn d3d_error(operation: &'static str, error: ::windows::core::Error) -> PlayerEr
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn d3d11_capture_rgba_composites_subtitles_without_changing_hdr_playback() {
++        use crate::core::TrackKind;
++        use crate::ffmpeg::{DecoderOutputFrame, Demuxer, StreamSelection};
++        use crate::renderer::frame::VideoFramePayload;
++        use ::windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_WARP;
++
++        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
++            .join("testdata/playback/playback-fixture.mkv");
++        let mut demuxer = Demuxer::open_path(fixture).unwrap();
++        let video_id = demuxer
++            .probe()
++            .tracks
++            .iter()
++            .find(|track| track.kind == TrackKind::Video)
++            .unwrap()
++            .id as i32;
++        let mut decoder = demuxer.open_decoder(video_id).unwrap();
++        demuxer
++            .set_stream_selection(StreamSelection::only([video_id]))
++            .unwrap();
++        let frame = loop {
++            let packet = demuxer
++                .read_packet()
++                .unwrap()
++                .expect("fixture video packet");
++            decoder.send_packet(&packet).unwrap();
++            if let DecoderOutputFrame::Frame(frame) = decoder.receive_frame().unwrap() {
++                break frame;
++            }
++        };
++        let mut device = None;
++        let mut context = None;
++        unsafe {
++            D3D11CreateDevice(
++                None,
++                D3D_DRIVER_TYPE_WARP,
++                HMODULE::default(),
++                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
++                Some(&[D3D_FEATURE_LEVEL_11_0]),
++                D3D11_SDK_VERSION,
++                Some(&mut device),
++                None,
++                Some(&mut context),
++            )
++            .unwrap();
++        }
++        let mut renderer = D3d11Renderer::new().unwrap();
++        renderer
++            .set_device(device.unwrap(), context.unwrap())
++            .unwrap();
++        renderer
++            .upload_player_frame(&PlayerVideoFrame {
++                frame: VideoFramePayload::from_decoded(frame).unwrap(),
++                decode_backend: decoder.backend(),
++                pts: None,
++                media_time: Duration::ZERO,
++                late_by: None,
++                generation: 1,
++            })
++            .unwrap();
++        // Model retained HDR playback without needing an on-screen window. The
++        // capture must neither require nor replace these swapchain resources.
++        let video = renderer.current_video.as_mut().unwrap();
++        video.source_color = SourceColorState::new(ColorPrimaries::Bt2020, TransferFunction::Pq);
++        video.constants = constants_for_frame(
++            video.source_color,
++            video.texture_format,
++            TargetColorState::hdr10(ColorPrimaries::Bt2020),
++        );
++        let playback_constants = video.constants;
++        renderer.surface = Some(AttachedSurface {
++            hwnd: HWND::default(),
++            composition: true,
++            metrics: SurfaceMetrics::new(1920, 1080, 1.0),
++            output_mode: D3d11OutputMode::Hdr10,
++            swapchain: None,
++            render_target: None,
++            linear_render_target: None,
++            linear_shader_resource: None,
++        });
++        let overlay = OverlayFrame {
++            pts: Duration::ZERO,
++            viewport: crate::overlay::OverlayViewport::new(65, 49),
++            subtitle_planes: vec![crate::subtitle::SubtitleBitmapPlane::new(
++                0,
++                0,
++                16,
++                8,
++                [255, 0, 0, 255].repeat(16 * 8),
++            )],
++            subtitle_alpha_planes: vec![],
++            subtitle_changed: true,
++        };
++        let capture = renderer
++            .capture_current_frame(
++                RenderFrameContext::new(Duration::ZERO, 1)
++                    .overlay(Some(&overlay))
++                    .output_size(65, 49),
++                65,
++                49,
++            )
++            .unwrap()
++            .expect("retained D3D11 frame captured");
++        assert_eq!(
++            (capture.width, capture.height, capture.rgba.len()),
++            (65, 49, 65 * 49 * 4)
++        );
++        // Red (not BGRA), at full SDR brightness, including rows with driver padding.
++        for y in 1..7 {
++            let offset = (y * 65 + 1) * 4;
++            assert_eq!(&capture.rgba[offset..offset + 4], &[255, 0, 0, 255]);
++        }
++        assert!(capture.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
++        assert_eq!(
++            renderer.current_video.as_ref().unwrap().constants,
++            playback_constants
++        );
++        let surface = renderer.surface.as_ref().unwrap();
++        assert_eq!(surface.output_mode, D3d11OutputMode::Hdr10);
++        assert_eq!(surface.metrics.physical_size(), (1920, 1080));
++        assert!(surface.swapchain.is_none());
++        assert_eq!(renderer.stats.rendered_frames, 0);
++        assert_eq!(renderer.stats.danmaku_passes, 0);
++    }
++
++    #[test]
++    fn d3d11_capture_rejects_empty_size_and_reports_missing_frame() {
++        let mut renderer = D3d11Renderer::new().unwrap();
++        assert!(
++            renderer
++                .capture_current_frame(RenderFrameContext::new(Duration::ZERO, 0), 0, 5)
++                .is_err()
++        );
++        assert!(
++            renderer
++                .capture_current_frame(RenderFrameContext::new(Duration::ZERO, 0), 5, 0)
++                .is_err()
++        );
++        assert!(
++            renderer
++                .capture_current_frame(RenderFrameContext::new(Duration::ZERO, 0), 5, 5)
++                .unwrap()
++                .is_none()
++        );
++    }
++
+     fn assert_close(actual: f32, expected: f32) {
+         assert!(
+             (actual - expected).abs() < 0.0001,
+diff --git a/crates/erika/src/core.rs b/crates/erika/src/core.rs
+index 5993cb7..0167ae1 100644
+--- a/crates/erika/src/core.rs
++++ b/crates/erika/src/core.rs
+@@ -2035,7 +2035,16 @@ fn run_playback_worker(
+                     &mut audio_output_backpressure,
+                 );
+             }
++        }
+ 
++        // Subtitle selection/import is editable while the media clock is
++        // parked. Keep the bounded subtitle pump active without waking A/V.
++        if !frame_output_quiesced
++            && matches!(
++                engine.state(),
++                PlaybackRunState::Playing | PlaybackRunState::Paused
++            )
++        {
+             match engine.tick_subtitle() {
+                 Ok(Some(frame)) => emit_subtitle_frame_from_worker(
+                     &inner,
+diff --git a/crates/erika/src/playback.rs b/crates/erika/src/playback.rs
+index db5fdb7..a4dd95f 100644
+--- a/crates/erika/src/playback.rs
++++ b/crates/erika/src/playback.rs
+@@ -4466,7 +4466,22 @@ impl VideoPlaybackEngine {
+         }
+         let media_time = self.media_time_at(now());
+         let frame = self.session.select_subtitle_track(track_id, media_time)?;
+-        self.reset_streams_at_with_decoder_flush(media_time, true, false, now)?;
++        if self.state == PlaybackRunState::Paused && self.session.subtitle_decoder.is_none() {
++            // External subtitles have their own demuxer. Disabling them or
++            // selecting one while paused must not seek the video to the next
++            // frame, drain audio, or move the frozen playback position.
++            self.pending_subtitle = None;
++            if let Some(external) = self
++                .session
++                .external_subtitles
++                .iter_mut()
++                .find(|external| Some(external.track().id) == track_id)
++            {
++                external.seek(media_time)?;
++            }
++        } else {
++            self.reset_streams_at_with_decoder_flush(media_time, true, false, now)?;
++        }
+         Ok(frame.map(|frame| TimedSubtitleFrame {
+             frame,
+             pts: Some(media_time),
+@@ -5092,7 +5107,10 @@ impl VideoPlaybackEngine {
+     }
+ 
+     pub fn tick_subtitle(&mut self) -> Result<Option<TimedSubtitleFrame>> {
+-        if self.state != PlaybackRunState::Playing {
++        if !matches!(
++            self.state,
++            PlaybackRunState::Playing | PlaybackRunState::Paused
++        ) {
+             return Ok(None);
+         }
+         let media_time = self.media_time();
+@@ -7019,6 +7037,47 @@ mod tests {
+         let _ = fs::remove_file(path);
+     }
+ 
++    #[test]
++    fn paused_external_subtitle_import_and_reselection_keep_video_and_clock_frozen() {
++        let path = std::env::temp_dir().join(format!(
++            "erika-paused-external-subtitle-{}.srt",
++            std::process::id()
++        ));
++        fs::write(&path, "1\n00:00:00,000 --> 00:00:08,000\nPaused subtitle\n").unwrap();
++        let mut engine = playback_fixture_engine();
++        let position = Duration::from_secs(2);
++        engine.clock.reset(position, false, Instant::now());
++        let demux_generation = engine.session.demuxer.generation;
++        let (track, _) = engine
++            .add_external_subtitle(SubtitleTrackConfig::external(
++                1_000_009,
++                path.to_string_lossy(),
++            ))
++            .unwrap();
++        let frame = engine
++            .tick_subtitle()
++            .unwrap()
++            .expect("imported subtitle while paused");
++        assert_eq!(frame.frame.text[0].display_text(), "Paused subtitle");
++        assert_eq!(frame.media_time, position);
++        engine.select_subtitle_track(None).unwrap();
++        assert!(engine.tick_subtitle().unwrap().is_none());
++        engine.select_subtitle_track(Some(track.id)).unwrap();
++        let restored = engine
++            .tick_subtitle()
++            .unwrap()
++            .expect("reselected subtitle while paused");
++        assert_eq!(restored.frame.text[0].display_text(), "Paused subtitle");
++        assert_eq!(restored.media_time, position);
++        assert_eq!(engine.state(), PlaybackRunState::Paused);
++        assert_eq!(engine.media_time(), position);
++        assert_eq!(engine.session.demuxer.generation, demux_generation);
++        assert!(!engine.paused_seek_frame_pending);
++        assert!(engine.tick().unwrap().is_none());
++        drop(engine);
++        let _ = fs::remove_file(path);
++    }
++
+     #[test]
+     fn external_subtitle_inspection_covers_query_uris_and_extensionless_uris() {
+         assert!(external_subtitle_needs_charset_inspection("/tmp/movie.srt"));
+diff --git a/crates/erika/src/presenter.rs b/crates/erika/src/presenter.rs
+index 916caf2..2ef040d 100644
+--- a/crates/erika/src/presenter.rs
++++ b/crates/erika/src/presenter.rs
+@@ -1330,6 +1330,10 @@ impl PresenterRuntime {
+     }
+ 
+     pub fn select_subtitle_track(&mut self, track_id: Option<i64>) -> Result<()> {
++        let overlay_viewport = self
++            .current_overlay
++            .as_ref()
++            .map(|overlay| overlay.viewport);
+         let quiesced = self.quiesce_frame_output("select_subtitle_track")?;
+         let result = self.player.select_subtitle_track(track_id);
+         let rate_result = self.commit_pending_playback_rate_now();
+@@ -1339,6 +1343,12 @@ impl PresenterRuntime {
+             self.current_media_time,
+             TransitionFramePolicy::PreserveTrackSwitchFrame,
+         );
++        // Paused external-subtitle changes retain the video and do not produce
++        // a new frame to restore the subtitle viewport. Keep it ready for the
++        // subtitle pump and immediate font-scale updates.
++        if let Some(viewport) = overlay_viewport {
++            self.current_overlay = Some(self.overlay.render(self.current_media_time, viewport));
++        }
+         let transition =
+             self.finish_frame_output_transition("select_subtitle_track", quiesced, true);
+         result.and(rate_result).and(transition)
+@@ -2929,6 +2939,7 @@ impl PresenterRuntime {
+     }
+ 
+     fn pump_subtitles(&mut self) {
++        let mut changed = false;
+         loop {
+             match self.subtitle_frames.try_recv() {
+                 Ok(frame) => {
+@@ -2949,11 +2960,18 @@ impl PresenterRuntime {
+                     }
+                     self.stats.decoded_subtitle_frames += 1;
+                     self.subtitles.push(frame);
++                    changed = true;
+                 }
+                 Err(crossbeam_channel::TryRecvError::Empty) => break,
+                 Err(crossbeam_channel::TryRecvError::Disconnected) => break,
+             }
+         }
++        if changed {
++            // A paused clock does not trigger sync_media_time_from_player's
++            // overlay rebuild, but imported/selected/cleared subtitles still
++            // have to update the retained video on the next render tick.
++            self.refresh_current_overlay();
++        }
+     }
+ 
+     fn pump_audio(&mut self) {
+@@ -4207,6 +4225,42 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+         }
+     }
+ 
++    #[test]
++    #[cfg(any(target_os = "windows", feature = "wgpu"))]
++    fn subtitle_pump_refreshes_and_clears_overlay_with_a_frozen_clock() {
++        let mut presenter = PresenterRuntime::new(PresenterConfig::default()).unwrap();
++        let (sender, receiver) = crossbeam_channel::unbounded();
++        presenter.subtitle_frames = receiver;
++        presenter.current_media_time = Duration::from_secs(1);
++        presenter.current_overlay = Some(empty_overlay());
++        let mut frame = subtitle_frame(Duration::ZERO, Some(Duration::from_secs(5)));
++        frame.generation = presenter.player.playback_generation();
++        sender.send(frame).unwrap();
++        presenter.pump_subtitles();
++        assert_eq!(
++            presenter
++                .current_overlay
++                .as_ref()
++                .unwrap()
++                .subtitle_planes
++                .len(),
++            1
++        );
++        assert_eq!(presenter.current_media_time, Duration::from_secs(1));
++        sender
++            .send(PlayerSubtitleFrame {
++                frame: DecodedSubtitleFrame::new(2, Some(Duration::from_secs(1)), None),
++                pts: Some(Duration::from_secs(1)),
++                media_time: Duration::from_secs(1),
++                late_by: None,
++                generation: presenter.player.playback_generation(),
++            })
++            .unwrap();
++        presenter.pump_subtitles();
++        assert!(presenter.current_overlay.as_ref().unwrap().is_empty());
++        assert_eq!(presenter.current_media_time, Duration::from_secs(1));
++    }
++
+     fn danmaku_item(id: u64, time: f64, text: &str) -> DanmakuItem {
+         DanmakuItem {
+             id,

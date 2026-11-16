@@ -1,0 +1,386 @@
+diff --git a/crates/erika/src/core.rs b/crates/erika/src/core.rs
+index 0167ae1..5f86edf 100644
+--- a/crates/erika/src/core.rs
++++ b/crates/erika/src/core.rs
+@@ -168,6 +168,7 @@ pub struct MediaRequest {
+     /// `ERIKA_HTTP_READAHEAD_BYTES` env override, then uses the 2 MiB engine
+     /// default (see `HttpRangeSource::DEFAULT_READ_AHEAD_BYTES`).
+     pub http_read_ahead_bytes: Option<u64>,
++    pub http_back_buffer_bytes: Option<u64>,
+ }
+ 
+ /// Hand-written so that credentials carried by custom headers (`Authorization`,
+@@ -198,9 +199,15 @@ impl MediaRequest {
+             source_hint: MediaSourceHint::Auto,
+             http_headers: Vec::new(),
+             http_read_ahead_bytes: None,
++            http_back_buffer_bytes: None,
+         }
+     }
+ 
++    pub fn map_http_back_buffer_bytes(mut self, bytes: Option<u64>) -> Self {
++        self.http_back_buffer_bytes = bytes.filter(|bytes| *bytes > 0).map(|bytes| bytes.min(128 * 1024 * 1024));
++        self
++    }
++
+     pub fn with_http_headers(mut self, http_headers: Vec<(String, String)>) -> Self {
+         self.http_headers = http_headers;
+         self
+@@ -391,6 +398,7 @@ impl VideoFrameImportFailure {
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct VideoDecoderEvent {
++    pub dolby_vision_profile: Option<u8>,
+     pub stage: String,
+     pub requested_backend: DecoderBackend,
+     pub previous_backend: Option<DecoderBackend>,
+@@ -406,6 +414,7 @@ impl VideoDecoderEvent {
+     pub fn structured_message(&self) -> String {
+         serde_json::json!({
+             "event": "video_decoder_changed",
++            "dolbyVisionProfile": self.dolby_vision_profile,
+             "stage": self.stage.as_str(),
+             "requestedBackend": self.requested_backend.as_str(),
+             "previousBackend": self.previous_backend.map(DecoderBackend::as_str),
+@@ -4311,6 +4320,7 @@ mod tests {
+             source_hint: MediaSourceHint::LocalFile,
+             http_headers: Vec::new(),
+             http_read_ahead_bytes: None,
++            http_back_buffer_bytes: None,
+         };
+         let mut engine = VideoPlaybackEngine::open(
+             &request,
+diff --git a/crates/erika/src/playback.rs b/crates/erika/src/playback.rs
+index a4dd95f..4f4b5b5 100644
+--- a/crates/erika/src/playback.rs
++++ b/crates/erika/src/playback.rs
+@@ -841,12 +841,13 @@ impl PlaybackSession {
+         decoder_resources: PlaybackDecoderResources,
+     ) -> Result<Self> {
+         let queue_limits = PlaybackQueueLimits::for_request(request);
+-        let source = source_from_uri_with_options(
++        let mut source = source_from_uri_with_options(
+             &request.uri,
+             request.source_hint,
+             request.http_headers.clone(),
+             request.http_read_ahead_bytes,
+         )?;
++        source.set_http_back_buffer_bytes(request.http_back_buffer_bytes.unwrap_or(16 * 1024 * 1024));
+         let mut demuxer = Demuxer::open_source(source)?;
+         let mut probe = demuxer.probe().clone();
+         let subtitle_fonts = probe.subtitle_fonts.clone();
+@@ -890,6 +891,7 @@ impl PlaybackSession {
+                 match open_video_decoder(parameters, decoder_config, &decoder_resources) {
+                     Ok(decoder) => {
+                         let event = VideoDecoderEvent {
++                            dolby_vision_profile: parameters.dolby_vision_profile(),
+                             stage: video_decoder_open_stage(decoder_config).to_string(),
+                             requested_backend: requested_config.backend,
+                             previous_backend: None,
+@@ -932,6 +934,7 @@ impl PlaybackSession {
+                                         .to_string(),
+                                     );
+                                     let event = VideoDecoderEvent {
++                            dolby_vision_profile: parameters.dolby_vision_profile(),
+                                         stage: "open_surface_to_bytebuffer".to_string(),
+                                         requested_backend: decoder_config.backend,
+                                         previous_backend: Some(decoder_config.backend),
+@@ -980,6 +983,7 @@ impl PlaybackSession {
+                                         .to_string(),
+                                     );
+                                     let event = VideoDecoderEvent {
++                            dolby_vision_profile: parameters.dolby_vision_profile(),
+                                         stage: "open_bytebuffer_to_software".to_string(),
+                                         requested_backend: decoder_config.backend,
+                                         previous_backend: Some(decoder_config.backend),
+@@ -1057,6 +1061,7 @@ impl PlaybackSession {
+                                 "open"
+                             };
+                             let event = VideoDecoderEvent {
++                            dolby_vision_profile: parameters.dolby_vision_profile(),
+                                 stage: stage.to_string(),
+                                 requested_backend: decoder_config.backend,
+                                 previous_backend: Some(decoder_config.backend),
+@@ -1872,6 +1877,7 @@ impl PlaybackSession {
+                 self.clear_video_decoder_unavailable();
+                 self.mediacodec_surface_disabled = route == MediaCodecSeekRoute::ByteBuffer;
+                 let event = VideoDecoderEvent {
++                            dolby_vision_profile: None,
+                     stage: match route {
+                         MediaCodecSeekRoute::Surface => "seek_reopen_surface",
+                         MediaCodecSeekRoute::ByteBuffer => "seek_reopen_bytebuffer",
+@@ -2007,6 +2013,7 @@ impl PlaybackSession {
+                 self.info.video_decode_backend = Some(DecoderBackend::AvCodec);
+                 self.clear_video_decoder_unavailable();
+                 let event = VideoDecoderEvent {
++                            dolby_vision_profile: None,
+                     stage: "seek_reopen_avcodec_surface".to_string(),
+                     requested_backend: DecoderBackend::AvCodec,
+                     previous_backend: Some(DecoderBackend::AvCodec),
+@@ -2889,6 +2896,7 @@ impl PlaybackSession {
+                     .to_string(),
+                 );
+                 let event = VideoDecoderEvent {
++                            dolby_vision_profile: None,
+                     stage: transition_stage,
+                     requested_backend: DecoderBackend::MediaCodec,
+                     previous_backend: Some(DecoderBackend::MediaCodec),
+@@ -3005,6 +3013,7 @@ impl PlaybackSession {
+         self.info.video_decode_backend = Some(DecoderBackend::Software);
+         self.clear_video_decoder_unavailable();
+         let event = VideoDecoderEvent {
++                            dolby_vision_profile: None,
+             stage: stage.to_string(),
+             requested_backend: previous_backend,
+             previous_backend: Some(previous_backend),
+@@ -6015,6 +6024,7 @@ mod tests {
+             source_hint: MediaSourceHint::LocalFile,
+             http_headers: Vec::new(),
+             http_read_ahead_bytes: None,
++            http_back_buffer_bytes: None,
+         };
+         let config = PlaybackSessionConfig {
+             video_decode: VideoDecodePreference::Software,
+@@ -7605,6 +7615,7 @@ mod tests {
+             source_hint: MediaSourceHint::LocalFile,
+             http_headers: Vec::new(),
+             http_read_ahead_bytes: None,
++            http_back_buffer_bytes: None,
+         };
+         let config = PlaybackSessionConfig {
+             video_decode: VideoDecodePreference::Software,
+diff --git a/crates/erika/src/source.rs b/crates/erika/src/source.rs
+index b28807e..0c0461d 100644
+--- a/crates/erika/src/source.rs
++++ b/crates/erika/src/source.rs
+@@ -1,6 +1,7 @@
+ #[cfg(target_os = "android")]
+ use std::collections::HashMap;
+ use std::env;
++use std::collections::VecDeque;
+ use std::fs::File;
+ use std::io::{Read, Seek, SeekFrom};
+ #[cfg(target_os = "android")]
+@@ -46,6 +47,7 @@ impl ByteRange {
+ }
+ 
+ pub trait MediaSource: Send {
++    fn set_http_back_buffer_bytes(&mut self, _bytes: u64) {}
+     fn uri(&self) -> &str;
+     fn len(&mut self) -> Result<Option<u64>>;
+     fn read_range(&mut self, range: ByteRange) -> Result<Vec<u8>>;
+@@ -343,6 +345,8 @@ pub struct HttpRangeSource {
+     cache_start: u64,
+     cache_bytes: Vec<u8>,
+     read_ahead_bytes: u64,
++    back_buffer_bytes: u64,
++    back_cache: VecDeque<(u64, Vec<u8>)>,
+     prefetch: Option<PendingHttpFetch>,
+ }
+ 
+@@ -390,10 +394,28 @@ impl HttpRangeSource {
+             read_ahead_bytes: read_ahead
+                 .filter(|bytes| *bytes > 0)
+                 .unwrap_or_else(http_read_ahead_bytes),
++            back_buffer_bytes: 16 * 1024 * 1024,
++            back_cache: VecDeque::new(),
+             prefetch: None,
+         }
+     }
+ 
++    fn remember_cache(&mut self) {
++        if self.cache_bytes.is_empty() { return; }
++        let mut bytes = self.cache_bytes.clone();
++        let mut start = self.cache_start;
++        if bytes.len() as u64 > self.back_buffer_bytes {
++            let trim = bytes.len() - self.back_buffer_bytes as usize;
++            bytes.drain(..trim); start += trim as u64;
++        }
++        self.back_cache.push_back((start, bytes));
++        let mut total: u64 = self.back_cache.iter().map(|(_, bytes)| bytes.len() as u64).sum();
++        while total > self.back_buffer_bytes {
++            if let Some((_, bytes)) = self.back_cache.pop_front() { total -= bytes.len() as u64; }
++            else { break; }
++        }
++    }
++
+     fn cache_end(&self) -> u64 {
+         self.cache_start
+             .saturating_add(self.cache_bytes.len() as u64)
+@@ -403,6 +425,12 @@ impl HttpRangeSource {
+         let length = range.length?;
+         let end = range.start.checked_add(length)?;
+         if range.start < self.cache_start || end > self.cache_end() {
++            for (start, bytes) in self.back_cache.iter().rev() {
++                if range.start >= *start && end <= start.saturating_add(bytes.len() as u64) {
++                    let offset = (range.start - start) as usize;
++                    return Some(bytes[offset..offset + length as usize].to_vec());
++                }
++            }
+             return None;
+         }
+         let start_index = usize::try_from(range.start - self.cache_start).ok()?;
+@@ -923,6 +951,7 @@ impl std::fmt::Debug for HttpRangeSource {
+ }
+ 
+ impl MediaSource for HttpRangeSource {
++    fn set_http_back_buffer_bytes(&mut self, bytes: u64) { self.back_buffer_bytes = bytes.min(128 * 1024 * 1024); }
+     fn uri(&self) -> &str {
+         &self.uri
+     }
+@@ -1063,6 +1092,8 @@ impl MediaSource for HttpRangeSource {
+                 if range_contains(prefetch_range, suffix_range) {
+                     let mut cache_bytes = prefix;
+                     cache_bytes.extend_from_slice(&prefetch_bytes);
++                    self.remember_cache();
++
+                     self.cache_start = range.start;
+                     self.cache_bytes = cache_bytes;
+                     self.maybe_start_prefetch(range);
+@@ -1082,6 +1113,8 @@ impl MediaSource for HttpRangeSource {
+             })?;
+             let mut cache_bytes = prefix;
+             cache_bytes.extend_from_slice(&suffix);
++            self.remember_cache();
++
+             self.cache_start = range.start;
+             self.cache_bytes = cache_bytes;
+             self.maybe_start_prefetch(range);
+@@ -1094,6 +1127,8 @@ impl MediaSource for HttpRangeSource {
+         }
+         let fetched = match self.take_prefetch(range) {
+             Some(Ok((start, bytes))) => {
++                self.remember_cache();
++
+                 self.cache_start = start;
+                 self.cache_bytes = bytes;
+                 if let Some(bytes) = self.cached_slice(range) {
+@@ -1127,6 +1162,9 @@ impl MediaSource for HttpRangeSource {
+             return Ok(fetched);
+         }
+ 
++        self.remember_cache();
++
++
+         self.cache_start = range.start;
+         self.cache_bytes = fetched;
+         self.maybe_start_prefetch(range);
+@@ -1510,6 +1548,24 @@ mod tests {
+         ));
+     }
+ 
++    #[test]
++    fn http_back_buffer_retains_and_bounds_previous_ranges() {
++        let mut source = HttpRangeSource::new("http://127.0.0.1/video");
++        source.set_http_back_buffer_bytes(4);
++        source.cache_start = 0;
++        source.cache_bytes = vec![10, 11, 12, 13];
++        source.remember_cache();
++        source.cache_start = 4;
++        source.cache_bytes = vec![14, 15, 16, 17];
++        assert_eq!(source.cached_slice(ByteRange { start: 1, length: Some(2) }), Some(vec![11, 12]));
++        source.remember_cache();
++        source.cache_start = 8;
++        source.cache_bytes = vec![18, 19, 20, 21];
++        assert_eq!(source.cached_slice(ByteRange { start: 1, length: Some(2) }), None);
++        assert_eq!(source.cached_slice(ByteRange { start: 5, length: Some(2) }), Some(vec![15, 16]));
++        assert!(source.back_cache.iter().map(|(_, b)| b.len()).sum::<usize>() <= 4);
++    }
++
+     #[test]
+     fn http_default_read_ahead_is_streaming_sized() {
+         assert_eq!(HttpRangeSource::DEFAULT_READ_AHEAD_BYTES, 2 * 1024 * 1024);
+diff --git a/crates/erika_capi/src/lib.rs b/crates/erika_capi/src/lib.rs
+index 7a79d4a..2f8a1d2 100644
+--- a/crates/erika_capi/src/lib.rs
++++ b/crates/erika_capi/src/lib.rs
+@@ -106,7 +106,8 @@ pub struct ErikaHttpHeader {
+ 
+ /// Extended open parameters mirroring the C header's `ErikaOpenOptions`.
+ /// `http_read_ahead_bytes` of 0 uses the environment override when set,
+-/// otherwise the 2 MiB default.
++/// otherwise the 2 MiB default. `reserved[0]` carries an optional HTTP
++/// backward-cache limit (0 = 16 MiB); the remaining two slots stay zero.
+ #[repr(C)]
+ #[derive(Debug, Clone, Copy)]
+ pub struct ErikaOpenOptions {
+@@ -846,7 +847,8 @@ pub unsafe extern "C" fn erika_open_with_options(
+         };
+         let request = MediaRequest::new(uri)
+             .with_http_headers(headers)
+-            .map_http_read_ahead_bytes(http_read_ahead_bytes);
++            .map_http_read_ahead_bytes(http_read_ahead_bytes)
++            .map_http_back_buffer_bytes(if options.is_null() { None } else { let bytes = unsafe { (*options).reserved[0] }; (bytes > 0).then_some(bytes) });
+         let status = status_from_player_result(handle.player.open(request));
+         capi_trace(format!(
+             "fn=erika_open.done handle={handle:p} status={status:?}"
+@@ -1845,7 +1847,8 @@ pub unsafe extern "C" fn erika_presenter_open_with_options(
+         };
+         let request = MediaRequest::new(uri)
+             .with_http_headers(headers)
+-            .map_http_read_ahead_bytes(http_read_ahead_bytes);
++            .map_http_read_ahead_bytes(http_read_ahead_bytes)
++            .map_http_back_buffer_bytes(if options.is_null() { None } else { let bytes = unsafe { (*options).reserved[0] }; (bytes > 0).then_some(bytes) });
+         let status = status_from_player_result(handle.presenter.open(request));
+         retain_presenter_events_from_latest_open(handle);
+         capi_trace(format!(
+@@ -3977,8 +3980,8 @@ fn open_options_raw(headers: *const ErikaHttpHeader, header_count: usize) -> Eri
+ 
+ /// Validates an `ErikaOpenOptions` at the ABI boundary. A NULL options pointer
+ /// means "defaults" (no headers, default read-ahead). `http_read_ahead_bytes`
+-/// of 0 also means default; reserved fields must stay zero for forward
+-/// compatibility.
++/// of 0 also means default. `reserved[0]` is the HTTP backward-cache limit;
++/// the remaining reserved fields must stay zero.
+ fn c_open_options(
+     options: *const ErikaOpenOptions,
+ ) -> Result<(Vec<(String, String)>, Option<u64>), ErikaStatus> {
+@@ -3986,7 +3989,8 @@ fn c_open_options(
+         return Ok((Vec::new(), None));
+     }
+     let options = unsafe { &*options };
+-    for field in options.reserved {
++    // reserved[0] is the backward-compatible HTTP back-buffer byte limit.
++    for field in options.reserved[1..].iter().copied() {
+         if field != 0 {
+             set_last_error("ErikaOpenOptions.reserved must be zero");
+             return Err(ErikaStatus::PlayerError);
+@@ -4545,6 +4549,7 @@ mod tests {
+     #[test]
+     fn c_event_exposes_video_decoder_transition_message() {
+         let event = event_to_c(PlayerEvent::VideoDecoderChanged(erika::VideoDecoderEvent {
++            dolby_vision_profile: Some(5),
+             stage: "renderer_import".to_string(),
+             requested_backend: erika::ffmpeg::DecoderBackend::MediaCodec,
+             previous_backend: Some(erika::ffmpeg::DecoderBackend::MediaCodec),
+@@ -4563,6 +4568,8 @@ mod tests {
+             .to_string_lossy()
+             .into_owned();
+         assert!(message.contains("renderer_import"));
++        let parsed: serde_json::Value = serde_json::from_str(&message).unwrap();
++        assert_eq!(parsed["dolbyVisionProfile"], serde_json::json!(5));
+         assert!(message.contains("software"));
+         unsafe { erika_string_free(raw_message) };
+     }
+@@ -4867,7 +4874,7 @@ mod tests {
+             headers: std::ptr::null(),
+             header_count: 0,
+             http_read_ahead_bytes: 0,
+-            reserved: [1, 0, 0],
++            reserved: [0, 1, 0],
+         };
+         assert_eq!(c_open_options(&options), Err(ErikaStatus::PlayerError));
+         assert!(
+diff --git a/crates/erika_capi/src/presenter_json.rs b/crates/erika_capi/src/presenter_json.rs
+index 611e7fa..7a114e7 100644
+--- a/crates/erika_capi/src/presenter_json.rs
++++ b/crates/erika_capi/src/presenter_json.rs
+@@ -94,7 +94,7 @@ unsafe fn invoke(
+                 headers: headers.headers.as_ptr(),
+                 header_count: headers.headers.len(),
+                 http_read_ahead_bytes: optional_read_ahead_bytes(args)?,
+-                reserved: [0; 3],
++                reserved: [args.get("httpBackBufferBytes").and_then(Value::as_u64).unwrap_or(0), 0, 0],
+             };
+             call_status(unsafe {
+                 erika_presenter_open_with_options(handle, uri.as_ptr(), &options)

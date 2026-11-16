@@ -11,6 +11,12 @@ internal sealed class CoreRuntime : IDisposable
     public string DataDirectory { get; }
     public List<DemoMedia> LocalMedia { get; } = [];
     public MediaServer? Server { get; private set; }
+    public ViewingIntegrations Integrations { get; }
+    public ViewingHistory ViewingHistory { get; }
+    public DanmakuService Danmaku { get; }
+    public TmdbService Tmdb { get; }
+    public ServerProfiles Servers { get; }
+    public event Action? SessionExpired;
     private readonly string _recentPath;
     private readonly string _credentialResource;
     private readonly List<Task> _reports = [];
@@ -20,11 +26,16 @@ internal sealed class CoreRuntime : IDisposable
         DataDirectory = Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows");
         Directory.CreateDirectory(DataDirectory);
+        ViewingHistory = new ViewingHistory(DataDirectory);
         _recentPath = Path.Combine(DataDirectory, "recent-media.json");
         Client = new OcpCoreClient(JsonSerializer.Serialize(new { dataDirectory = DataDirectory, locale = "zh-CN" }));
+        Integrations = new ViewingIntegrations(Client, credentialResource);
+        Tmdb = new TmdbService(Client, DataDirectory, credentialResource);
+        Servers = new ServerProfiles(DataDirectory, credentialResource);
         try
         {
             PlaybackSession.Require(Client.Ping());
+            Danmaku = new DanmakuService(Client, DataDirectory, new DanmakuSettings(credentialResource), bangumiBase: () => Integrations.Domains.Api);
             using var snapshot = Client.Snapshot();
             Version = snapshot.RootElement.GetProperty("coreVersion").GetString()!;
             if (File.Exists(_recentPath))
@@ -35,10 +46,7 @@ internal sealed class CoreRuntime : IDisposable
             RefreshProgress();
             try
             {
-                var credential = new global::Windows.Security.Credentials.PasswordVault().Retrieve(_credentialResource, "active-server");
-                credential.RetrievePassword();
-                var profile = JsonSerializer.Deserialize<ServerProfile>(credential.Password, MediaServer.JsonOptions);
-                if (profile is not null) Server = new MediaServer(Client, profile);
+                if (Servers.Startup() is { } profile) AttachServer(new MediaServer(Client, profile));
             }
             catch (System.Runtime.InteropServices.COMException) { }
             catch (JsonException) { /* Ignore an obsolete saved server profile; local playback remains available. */ }
@@ -76,23 +84,33 @@ internal sealed class CoreRuntime : IDisposable
 
     public void DrainEvents()
     {
-        while (Client.TryPollEvent(out _)) { }
+        while (Client.TryPollEvent(out var entry)) if (entry is not null)
+        { Integrations.ReceiveCoreEvent(entry.Kind, entry.Data); AppDiagnostics.Write("debug", "Core event: " + entry.Kind); }
     }
 
     public void SetServer(MediaServer server)
     {
-        var vault = new global::Windows.Security.Credentials.PasswordVault();
-        // Add replaces the matching resource/username credential. Do not remove
-        // the previous credential first: a failed save must preserve that session.
-        vault.Add(new global::Windows.Security.Credentials.PasswordCredential(_credentialResource, "active-server", JsonSerializer.Serialize(server.Profile, MediaServer.JsonOptions)));
-        Server = server;
+        Servers.Save(server.Profile, true);
+        AttachServer(server);
+    }
+
+    private void AttachServer(MediaServer server)
+    {
+        if (Server is { } previous) { previous.AuthenticationExpired -= ExpireSession; previous.ProfileChanged -= SaveProfile; }
+        Server = server; server.AuthenticationExpired += ExpireSession; server.ProfileChanged += SaveProfile;
+        if (server.HomeUpdatedAt is null) server.RestoreHome();
+    }
+    private void SaveProfile(ServerProfile profile) => Servers.Save(profile);
+    private void ExpireSession(MediaServer server)
+    {
+        if (!ReferenceEquals(server, Server)) return;
+        Servers.Invalidate(server.Profile.Id); DisconnectServer(); SessionExpired?.Invoke();
     }
 
     public void DisconnectServer()
     {
-        var vault = new global::Windows.Security.Credentials.PasswordVault();
-        try { vault.Remove(vault.Retrieve(_credentialResource, "active-server")); }
-        catch (System.Runtime.InteropServices.COMException) { }
+        if (Server is { } server) { server.AuthenticationExpired -= ExpireSession; server.ProfileChanged -= SaveProfile; }
+        Servers.Deactivate();
         Server = null;
     }
 

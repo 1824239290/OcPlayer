@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using OcPlayer.Windows.Controls;
 using OcPlayer.Windows.ViewModels;
+using OcPlayer.Windows.Services;
 using static OcPlayer.Windows.Controls.DemoUi;
 
 namespace OcPlayer.Windows.Features;
@@ -22,7 +23,12 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
             foreach (var title in group.Pages)
             {
                 var value = title switch { "媒体服务器" => "jumusu", "Bangumi" => model.BangumiEnabled ? "橘木苏（镜像）" : "已停用", "MoviePilot" => model.MoviePilotEnabled ? "已登录" : "已停用", "TMDB 元数据补全" => "已启用（镜像）", "网络" => "默认 UA", "播放" => "liberika", "弹幕" => "自动加载", "首页栏目" => $"显示 {model.HomeSections.Count-model.HiddenSections.Count} 栏", "关于" => "v0.3.0 · Demo", _ => "" };
-                if (!model.DemoMode) value = title switch { "媒体服务器" => App.Core?.Server?.Profile.Kind ?? "未连接", "Bangumi" or "MoviePilot" or "TMDB 元数据补全" => "未配置", "网络" => "默认", "播放" => "Erika · D3D11 / WASAPI", "弹幕" => "本地文件", "关于" => $"Core {App.Core?.Version}", _ => "" };
+                if (!model.DemoMode) value = title switch { "媒体服务器" => App.Core?.Server?.Profile.Kind ?? "未连接", "Bangumi" or "MoviePilot" => "未配置", "TMDB 元数据补全" => App.Core?.Tmdb.Settings.Current.Configured == true ? "已配置" : "未配置", "网络" => RuntimeSettings.Current.UserAgent.Length == 0 ? "默认 UA" : "自定义 UA", "播放" => "Erika " + KernelVersion.Read(), "弹幕" => App.Core?.Danmaku.Settings.Current.AutoLoad == true ? "自动匹配" : "手动加载", "首页栏目" => $"显示 {model.HomeSections.Count-model.HiddenSections.Count} 栏", "关于" => AppReleaseService.DisplayVersion, _ => "" };
+                if (!model.DemoMode && title is "Bangumi" or "MoviePilot")
+                {
+                    var account = title == "Bangumi" ? App.Core?.Integrations.Bangumi : App.Core?.Integrations.MoviePilot;
+                    value = account is null ? "未连接" : account.Enabled ? account.DisplayName : "已停用";
+                }
                 var row = SettingsLine(title, Text(value, 13), () => navigate("settings:"+title), true);
                 rows.Children.Add(row);
                 if (title != group.Pages[^1]) rows.Children.Add(Divider());
@@ -77,7 +83,7 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
                     var tools=Row(4);
                     tools.Children.Add(Button("⌃",()=>Move(title,-1)));tools.Children.Add(Button("⌄",()=>Move(title,1)));
                     var toggle=new ToggleSwitch{IsOn=!model.HiddenSections.Contains(title),OnContent="",OffContent="",MinWidth=0};
-                    toggle.Toggled+=(_,_)=>{if(toggle.IsOn)model.HiddenSections.Remove(title);else model.HiddenSections.Add(title);};tools.Children.Add(toggle);
+                    toggle.Toggled+=(_,_)=>{if(toggle.IsOn)model.HiddenSections.Remove(title);else model.HiddenSections.Add(title);model.SaveHomeSections();};tools.Children.Add(toggle);
                     list.Children.Add(SettingsLine(title,tools)); if(title!=model.HomeSections[^1])list.Children.Add(Divider());
                 }
                 page.Children.Add(Panel(list,new Thickness(16,5,16,5))); page.Children.Add(Note("上下按钮调整顺序；开关只控制首页是否显示。关闭栏目会保留设置，随时可以再打开。")); break;
@@ -96,7 +102,9 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
     private UIElement RuntimeSubpage(string name)
     {
         var page = Stack(18); page.Width = 680; page.MaxWidth = 680; page.HorizontalAlignment = HorizontalAlignment.Center;
-        if (name == "媒体服务器")
+        if (name is "播放" or "网络" or "TMDB 元数据补全" or "维护" or "关于" or "开源许可证")
+            new RuntimeSettingsPages(model, navigate, themeChanged).Build(name, page);
+        else if (name == "媒体服务器")
         {
             var profile = model.DemoMode ? null : App.Core?.Server?.Profile;
             page.Children.Add(SettingsLine("当前服务器", Text(profile?.DisplayName ?? "未连接")));
@@ -104,6 +112,13 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
             if (profile is not null) page.Children.Add(SettingsLine("地址", Text(profile.BaseUrl)));
             if (profile is not null) page.Children.Add(SettingsLine("账号", Text(profile.UserName ?? profile.UserId ?? "")));
             page.Children.Add(Link(profile is null ? "连接服务器…" : "连接其它服务器…", "连接服务器"));
+            page.Children.Add(Link("管理服务器…", "服务器管理"));
+            if (App.Core is { } runtime)
+            {
+                var options = new[] { (Id: (string?)null, Label: "上次使用的服务器") }.Concat(runtime.Servers.Items.Select(x => (Id: (string?)x.Id, Label: x.Name + " · " + x.Kind))).ToArray();
+                var startup = new ComboBox { Header = "启动时默认服务器", ItemsSource = options.Select(x => x.Label).ToArray(), SelectedIndex = Math.Max(0, Array.FindIndex(options, x => x.Id == runtime.Servers.DefaultId)) };
+                startup.SelectionChanged += (_, _) => { if (startup.SelectedIndex >= 0) runtime.Servers.SetDefault(options[startup.SelectedIndex].Id); }; page.Children.Add(startup);
+            }
             if (profile is not null) page.Children.Add(Link("断开连接", "退出确认"));
             page.Children.Add(Note("登录成功后自动连接这台服务器。登录令牌保存在 Windows 凭据保险箱中。"));
             if (model.DemoMode) page.Children.Add(Note("连接成功后会切换到真实媒体库，可以直接测试浏览和播放。"));
@@ -120,7 +135,19 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
             page.Children.Add(Note("在播放器里调整音量、倍速、音轨和字幕。观看进度会自动保存，下次打开时继续播放。"));
             page.Children.Add(Toggle("深色外观", model.DarkTheme, v => { model.DarkTheme = v; themeChanged(v); }));
         }
-        else if (name == "弹幕") page.Children.Add(Note("在播放器的弹幕菜单里加载本地 XML 或 JSON 弹幕文件。"));
+        else if (name is "弹幕" or "弹幕网关" && App.Core is { } core)
+        {
+            var editor = new DanmakuSettingsEditor(core.Danmaku.Settings.Current);
+            page.Children.Add(editor.Content);
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Text = core.Danmaku.Settings.LoadWarning ?? "" };
+            page.Children.Add(Button("保存弹幕设置", () =>
+            {
+                try { core.Danmaku.Settings.Save(editor.Read()); status.Text = "弹幕设置已保存。"; }
+                catch (Exception ex) { status.Text = ex.Message; }
+            }));
+            page.Children.Add(status);
+            page.Children.Add(Note("播放时会自动匹配；未命中可在弹幕菜单中搜索作品并选择剧集，也可以导入本地 XML / JSON。"));
+        }
         else if (name == "维护")
         {
             page.Children.Add(SettingsLine("观看进度", Text("自动保存")));
@@ -129,7 +156,7 @@ internal sealed class DemoSettings(DemoViewModel model, PageLayout pageLayout, A
         else page.Children.Add(Note("此项设置将在后续版本开放。"));
         var scroll = pageLayout.Scroll(page, new Thickness(24,16,24,32)); scroll.SizeChanged += (_, _) => page.Width = Math.Min(680, Math.Max(0, scroll.ActualWidth - 48)); return scroll;
     }
-    void Move(string title,int delta){var index=model.HomeSections.IndexOf(title);var dest=Math.Clamp(index+delta,0,model.HomeSections.Count-1);model.HomeSections.RemoveAt(index);model.HomeSections.Insert(dest,title);navigate("settings:首页栏目");}
+    void Move(string title,int delta){var index=model.HomeSections.IndexOf(title);var dest=Math.Clamp(index+delta,0,model.HomeSections.Count-1);model.HomeSections.RemoveAt(index);model.HomeSections.Insert(dest,title);model.SaveHomeSections();navigate("settings:首页栏目");}
     UIElement Link(string title,string route)=>SettingsLine(title,Text("›"),()=>navigate("settings:"+route));
     UIElement Edit(string title,string initial,bool secret=false)
     {

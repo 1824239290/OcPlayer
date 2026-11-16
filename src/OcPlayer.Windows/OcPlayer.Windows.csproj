@@ -21,7 +21,16 @@
     <Content Include="Assets\Demo\*.*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <Compile Include="..\..\tests\OcPlayer.Ui\ServerConnectionVerification.cs" Link="Preview\ServerConnectionVerification.cs" />
+    <Compile Include="..\..\tests\Fixtures\DanmakuFixture.cs" Link="Preview\DanmakuFixture.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\DanmakuVerificationWindow.cs" Link="Preview\DanmakuVerificationWindow.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\PageTransitionVerification.cs" Link="Preview\PageTransitionVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\PlayerOverlayVerification.cs" Link="Preview\PlayerOverlayVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\BrowsingParityVerification.cs" Link="Preview\BrowsingParityVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\PlayerMenuVerification.cs" Link="Preview\PlayerMenuVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\ViewingPageVerification.cs" Link="Preview\ViewingPageVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\BangumiPagesVerification.cs" Link="Preview\BangumiPagesVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\NativePlayerVerification.cs" Link="Preview\NativePlayerVerification.cs" />
   </ItemGroup>
   <ItemGroup Condition="Exists('$(OcpNativeDirectory)ocp_ffi.dll')">
     <Content Include="$(OcpNativeDirectory)ocp_ffi.dll" Link="ocp_ffi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -29,8 +38,11 @@
   <ItemGroup Condition="Exists('$(OcpNativeDirectory)erika_capi.dll')">
     <Content Include="$(OcpNativeDirectory)erika_capi.dll" Link="erika_capi.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup Condition="Exists('$(OcpNativeDirectory)build-receipt.json')">
+    <Content Include="$(OcpNativeDirectory)build-receipt.json" Link="build-receipt.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
   <Target Name="CheckNativeRuntime" BeforeTargets="PrepareForBuild" Condition="'$(OcpDemoOnly)' != 'true'">
     <Error Condition="!Exists('$(OcpNativeDirectory)ocp_ffi.dll') or !Exists('$(OcpNativeDirectory)erika_capi.dll')"
-           Text="Native runtime missing. Run Scripts/build-windows.ps1 with -KernelRoot pointing to the HDR-fixed Erika source, or use -p:OcpDemoOnly=true for UI-only builds." />
+           Text="Native runtime missing. Prepare liberika with Scripts/prepare-kernel.ps1, then run Scripts/build-windows.ps1 with -KernelRoot, or use -p:OcpDemoOnly=true for UI-only builds." />
   </Target>
 </Project>

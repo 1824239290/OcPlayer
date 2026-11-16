@@ -51,7 +51,7 @@ internal sealed class MediaLibraryGrid : GridView
                         </ToolTip>
                     </ToolTipService.ToolTip>
                     <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                        <Image Source="{Binding PosterPath}" Stretch="UniformToFill" />
+                        <Image Tag="{Binding PosterPath}" Stretch="UniformToFill" />
                     </Border>
                     <TextBlock Grid.Row="1" Text="{Binding Title}" Margin="0,10,0,0"
                                FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap"
@@ -66,14 +66,38 @@ internal sealed class MediaLibraryGrid : GridView
         ScrollViewer.SetHorizontalScrollBarVisibility(this, ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(this, ScrollBarVisibility.Auto);
         ItemClick += (_, args) => open((DemoMedia)args.ClickedItem);
-        ContainerContentChanging += (_, args) =>
-        {
-            if (!args.InRecycleQueue && args.Item is DemoMedia item)
-                AutomationProperties.SetName(args.ItemContainer, $"{item.Title}，{item.Subtitle}，查看详情");
-        };
+        ContainerContentChanging += PopulateImage;
         Loaded += (_, _) => UpdateItemSize();
         SizeChanged += (_, _) => UpdateItemSize();
         RegisterPropertyChangedCallback(PaddingProperty, (_, _) => UpdateItemSize());
+    }
+    private void PopulateImage(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue || args.Item is not DemoMedia item) return;
+        AutomationProperties.SetName(args.ItemContainer, $"{item.Title}，{item.Subtitle}，查看详情");
+        if (args.Phase == 0) { args.RegisterUpdateCallback(1, PopulateImage); return; }
+        var image = FindImage(args.ItemContainer); if (image is null) return;
+        image.Source = null; var identity = new object(); image.Tag = identity;
+        _ = Load();
+        async Task Load()
+        {
+            try
+            {
+                var source = item;
+                if (item.Kind == "boxSet" && !App.DemoMode && App.Core is { Server: { } server } core)
+                    source = await core.Tmdb.Enrich(item, server.Profile.Id, CancellationToken.None);
+                var path = await Services.ImageDiskCache.Resolve(source.PosterPath);
+                if (ReferenceEquals(image.Tag, identity) && path.Length > 0) image.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(path));
+            }
+            catch (Exception) { if (ReferenceEquals(image.Tag, identity) && item.PosterPath.Length > 0) image.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(item.PosterPath)); }
+        }
+    }
+    private static Image? FindImage(DependencyObject parent)
+    {
+        if (parent is Image image) return image;
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            if (FindImage(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i)) is { } child) return child;
+        return null;
     }
 
     private void UpdateItemSize()

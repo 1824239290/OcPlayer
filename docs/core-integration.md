@@ -15,24 +15,37 @@ D:/OcPlayer-Core/
 D:/OcPlayer-Windows/
 ```
 
-准备具有 Windows LGPL 原生依赖的 Erika 源码。当前已验证输入由 Core 的版本化脚本生成：
+内核版本固定在 `Config/Kernel.version.json`：官方 `AimesSoft/liberika` 的 **v0.3.7**，
+提交 `a4f829999fe8df0c35561fe1bdf0f5ad0df0c3a5`。准备 Windows LGPL 原生依赖：
 
 ```powershell
-D:\OcPlayer-Core\Scripts\build-windows-hdr-fixed.ps1 `
-  -KernelRoot 'D:\path\to\Erika' `
-  -OutputDirectory 'D:\path\to\new-prepared-output' -PrepareOnly
+.\Scripts\prepare-kernel.ps1 `
+  -KernelCargoHome 'D:\path\to\cargo-cache' `
+  -NativeArchiveCache 'D:\path\to\native-archive-cache'
 
 .\Scripts\build-windows.ps1 `
-  -KernelRoot 'D:\path\to\new-prepared-output\KernelSource' `
-  -LibClangPath 'D:\path\to\llvm\bin'
+  -KernelRoot '.\artifacts\liberika-v0.3.7' `
+  -LibClangPath 'D:\path\to\llvm\bin' -Configuration Release
 ```
 
-该准备脚本使用 Core 中固定的 Erika 提交与 Windows HDR 补丁。Windows 构建脚本使用
+准备需要 Visual Studio C++ 工具、Git Bash 或 MSYS2、GNU make、nasm、CMake，以及可运行
+`venv` 的 Python；meson/ninja 可由上游 xtask 自动安装。`-NativeArchiveCache` 可省略。
+准备脚本拉取固定提交并应用本仓库的 `liberika-v0.3.7-windows.patch`，再使用上游 xtask
+构建 FFmpeg 8.1.2（包含 dav1d）、libass 0.17.5 和字体依赖。Windows 构建脚本使用
 `--locked`，生成独立的 `artifacts/core-target`、`artifacts/kernel-target`，将两枚 DLL
 放入 `native/OcPlayerCore/x64`，然后编译前端。`-CoreRoot`、`-Configuration Release`、
 `-KernelCargoHome` 和 `-Offline` 可按环境指定；`-SkipNative` 复用已生成 DLL。
+`-SkipManaged` 只构建原生部分，便于在更新正在运行的界面之前验证新 DLL。
+上游更名后 DLL 名和 C ABI 函数前缀仍是 `erika_capi` / `erika_*`。
 Debug Rust 构建保持未优化，但关闭原生调试符号，避免本机 MSVC C7 调试记录对 ring 编译命令的拒绝；
 C# Debug 符号正常生成。原生依赖本身的编译警告保留在构建日志中。
+
+Windows 构建脚本检查固定提交与版本化补丁，在 receipt 中记录仓库、tag、提交、编译特性、
+补丁和 DLL 的 SHA256。补丁保留 D3D11 的 SDR 截图、暂停时字幕导入/切换和同步删除字幕。
+旧的网络回退缓冲、HDR/Dolby Vision 接口已由上游实现，不再应用 0.1.7 的旧补丁。
+内置回退字体、ArtCNN R8F64 与 libass 一起编译；WinUI 使用原生 D3D11 渲染。
+许可证页由实际源码版本和当前平台的依赖自动生成。
+原 0.1.7 补齐记录保留在 [补齐收尾报告](parity-completion-2026-11-16.md)。
 
 运行已生成的应用（脚本自动定位本机 .NET，包括安装在用户目录里的 SDK）：
 
@@ -63,6 +76,7 @@ Core SDK 的 `OCP_CORE_LIBRARY_PATH` 可覆盖 Core DLL；MSBuild 的 `OcpNative
 - 本地文件 / HTTP(S) 链接打开真实播放器，支持暂停、前后跳转、拖动时间轴、音量、静音、倍速和全屏。
 - `SwapChainPanel` 绑定原生 DirectComposition swap chain，尺寸和 DPI 变化传给 Core 与原生渲染器。
 - 实际媒体时长、解码时钟与轨道列表反馈到 UI / Core；播放器菜单可切换真实音轨、关闭字幕、加载外挂字幕和本地弹幕。
+- 弹幕已接通自动匹配、手动搜索选集、持久化纠正与缓存、远程文件指纹、外观设置和时间偏移，使用 Erika 原生渲染。实现及验证见 [DANMAKU-INTEGRATION.md](DANMAKU-INTEGRATION.md)。
 - 每五秒、暂停和停止时通过 Core 保存进度；重开片源或重启 Core 可恢复。失败的打开操作不会被记为已播放完成。
 - 点击顶部“连接服务器”、打开媒体菜单或设置中的媒体服务器入口，登录 Jellyfin / Emby；令牌由 Windows PasswordVault 保存，重启自动恢复所选服务器。
 - 连接表单支持 IP / 域名 / 端口和反向代理路径，省略协议时使用 HTTP。手动选择 Jellyfin / Emby，登录并验证媒体库后才切换会话；错误保留表单供重试，45 秒超时，可取消。
@@ -97,6 +111,7 @@ dotnet run --project tests/OcPlayer.Integration/OcPlayer.Integration.csproj `
 实机点击标题栏的账号区域已确认可以打开连接表单，地址、类型、用户名、密码和按钮均正常显示。
 
 这次验证覆盖本机 x64 和本地 HTTP fixture。尚未验证真实 Jellyfin / Emby 账号、所有服务器版本、
-ARM64、完整影片稳定性和所有 HDR / Dolby Vision 输出组合。Bangumi、MoviePilot、TMDB、在线弹幕匹配、
-配置备份 / 诊断导出及完整观看统计等页面仍待逐项接入；离线 Demo 继续保留这些页面供 UI 对齐。
+ARM64、完整影片稳定性和所有 HDR / Dolby Vision 输出组合。Bangumi、MoviePilot 与观影统计的后续接入、
+验证及剩余边界见 [VIEWING-INTEGRATIONS.md](VIEWING-INTEGRATIONS.md)。TMDB 设置、
+配置备份 / 诊断导出等页面仍待逐项接入；离线 Demo 继续保留这些页面供 UI 对齐。
 媒体库本次最多读取 500 个条目，增量分页属于后续工作。原生构建未经发行签名或 MSIX 打包验收。

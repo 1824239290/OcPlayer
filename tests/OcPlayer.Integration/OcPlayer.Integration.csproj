@@ -8,8 +8,30 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\MediaServer.cs" Link="MediaServer.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackChapters.cs" Link="PlaybackChapters.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackPreferences.cs" Link="PlaybackPreferences.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackSkipMarks.cs" Link="PlaybackSkipMarks.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ServerSubtitleService.cs" Link="ServerSubtitleService.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\LibrarySort.cs" Link="LibrarySort.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\CoreRuntime.cs" Link="CoreRuntime.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\BrowserCache.cs" Link="BrowserCache.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ServerProfiles.cs" Link="ServerProfiles.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\RuntimeSettings.cs" Link="RuntimeSettings.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\SettingsBackup.cs" Link="SettingsBackup.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\AppReleaseService.cs" Link="AppReleaseService.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ImageDiskCache.cs" Link="ImageDiskCache.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\AppDiagnostics.cs" Link="AppDiagnostics.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\TmdbService.cs" Link="TmdbService.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\IntegrationPersistence.cs" Link="IntegrationPersistence.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\MoviePilotPolicies.cs" Link="MoviePilotPolicies.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ViewingAnalytics.cs" Link="ViewingAnalytics.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\Danmaku*.cs" Link="%(Filename)%(Extension)" />
+    <Compile Include="..\Fixtures\DanmakuFixture.cs" Link="DanmakuFixture.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ViewingIntegrations.cs" Link="ViewingIntegrations.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\BangumiOAuth.cs" Link="BangumiOAuth.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\BangumiOAuthBrowser.cs" Link="BangumiOAuthBrowser.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\ViewingHistory.cs" Link="ViewingHistory.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\BroadcastTimeline.cs" Link="BroadcastTimeline.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\AmbientBackdropController.cs" Link="AmbientBackdropController.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Preview\DemoCatalog.cs" Link="DemoCatalog.cs" />
     <Content Include="..\..\src\OcPlayer.Windows\Assets\Demo\catalog.json" Link="Assets\Demo\catalog.json" CopyToOutputDirectory="PreserveNewest" />

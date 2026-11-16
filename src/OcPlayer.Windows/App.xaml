@@ -9,6 +9,10 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="#580E1016" />
+                    <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="#2EFFFFFF" />
+                    <SolidColorBrush x:Key="BangumiWatchedBorderBrush" Color="#55FFFFFF" />
                     <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#B8000000" Offset="0" />
                         <GradientStop Color="#8C000000" Offset="0.4" />
@@ -17,6 +21,10 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="#AAFFFFFF" />
+                    <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="#20000000" />
+                    <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="#10000000" />
+                    <SolidColorBrush x:Key="BangumiWatchedBorderBrush" Color="#38000000" />
                     <LinearGradientBrush x:Key="OcHeaderScrimBrush" StartPoint="0,0" EndPoint="0,1">
                         <GradientStop Color="#CCFFFFFF" Offset="0" />
                         <GradientStop Color="#A6FFFFFF" Offset="0.4" />
@@ -25,11 +33,104 @@
                     </LinearGradientBrush>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="DashboardCardBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="DashboardCardBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="BangumiWatchedBackgroundBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+                    <SolidColorBrush x:Key="BangumiWatchedBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="OcHeaderScrimBrush" Color="{ThemeResource SystemColorWindowColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <SolidColorBrush x:Key="OcAccentBrush" Color="#ECA66B" />
+            <Style x:Key="BangumiSegmentButtonStyle" TargetType="ToggleButton">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="8,10" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="BangumiProfileTabStyle" TargetType="ToggleButton" BasedOn="{StaticResource BangumiSegmentButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="8,3" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="FontSize" Value="10" />
+                <Setter Property="FontWeight" Value="Normal" />
+            </Style>
+            <Style x:Key="DashboardCardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource DashboardCardBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource DashboardCardBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="14" />
+            </Style>
+            <Style x:Key="DashboardMutedTextStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardProgressFillStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardTrendLineStyle" TargetType="Polyline">
+                <Setter Property="Stroke" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardTrendEndpointStyle" TargetType="Ellipse">
+                <Setter Property="Stroke" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardActionButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="6,4" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardRowButtonStyle" TargetType="Button" BasedOn="{StaticResource DashboardActionButtonStyle}">
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Padding" Value="8" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardHeatmapButtonStyle" TargetType="Button" BasedOn="{StaticResource DashboardActionButtonStyle}">
+                <Setter Property="BorderBrush" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="DashboardCountButtonStyle" TargetType="Button" BasedOn="{StaticResource DashboardRowButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource DashboardCardBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource DashboardCardBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="14" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
             <SolidColorBrush x:Key="OcMutedBrush" Color="#A9A9B3" />
+            <Style x:Key="BangumiInlineActionButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Padding" Value="6,4" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="BangumiInlineChapterButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="56" />
+                <Setter Property="Height" Value="52" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="6,4" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            </Style>
+            <Style x:Key="BangumiInlineWatchedChapterButtonStyle" TargetType="Button" BasedOn="{StaticResource BangumiInlineChapterButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource BangumiWatchedBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource BangumiWatchedBorderBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

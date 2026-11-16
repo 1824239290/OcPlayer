@@ -7,7 +7,8 @@ param(
     [string]$LibClangPath = $env:LIBCLANG_PATH,
     [string]$KernelCargoHome = $env:CARGO_HOME,
     [switch]$Offline,
-    [switch]$SkipNative
+    [switch]$SkipNative,
+    [switch]$SkipManaged
 )
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -18,8 +19,22 @@ function Invoke-Checked([string]$Executable, [string[]]$Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$Executable failed ($LASTEXITCODE)." }
 }
 if (!$SkipNative) {
-    if (!$KernelRoot) { throw 'Pass -KernelRoot for the HDR-fixed Erika checkout (see docs/core-integration.md).' }
+    if (!$KernelRoot) { throw 'Pass -KernelRoot for liberika v0.3.7 prepared with Scripts/prepare-kernel.ps1 (see docs/core-integration.md).' }
     $kernelSource = (Resolve-Path -LiteralPath $KernelRoot).Path
+    $pin = Get-Content -LiteralPath (Join-Path $workspace 'Config\Kernel.version.json') -Raw | ConvertFrom-Json
+    $kernelCommit = (& git -C $kernelSource rev-parse HEAD).Trim()
+    if ($kernelCommit -ne $pin.commit) { throw "Expected liberika $($pin.tag) at $($pin.commit). Run Scripts/prepare-kernel.ps1." }
+    $kernelPatch = Join-Path $PSScriptRoot 'patches\liberika-v0.3.7-windows.patch'
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & git -C $kernelSource apply --reverse --check $kernelPatch 2>$null
+        $kernelPatchApplied = $LASTEXITCODE -eq 0
+    } finally { $ErrorActionPreference = $savedErrorActionPreference }
+    if (!$kernelPatchApplied) {
+        Invoke-Checked git @('-C', $kernelSource, 'apply', '--check', $kernelPatch)
+        Invoke-Checked git @('-C', $kernelSource, 'apply', $kernelPatch)
+    }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     $installation = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if (!$installation) { throw 'Visual Studio C++ Build Tools are required.' }
@@ -49,7 +64,7 @@ if (!$SkipNative) {
     $savedCargoHome = $env:CARGO_HOME
     try {
         if ($KernelCargoHome) { $env:CARGO_HOME = (Resolve-Path -LiteralPath $KernelCargoHome).Path }
-        Invoke-Checked cargo (@('build', '--manifest-path', "$kernelSource\Cargo.toml", '--target-dir', $kernelTarget, '-p', 'erika_capi', '--no-default-features', '--features', 'libass') + $cargoOptions)
+        Invoke-Checked cargo (@('build', '--manifest-path', "$kernelSource\Cargo.toml", '--target-dir', $kernelTarget, '-p', 'erika_capi', '--no-default-features', '--features', 'libass,embedded-fallback-font,artcnn-r8f64') + $cargoOptions)
     } finally { $env:CARGO_HOME = $savedCargoHome }
     New-Item -ItemType Directory -Force -Path $nativeOutput | Out-Null
     Copy-Item -LiteralPath "$coreTarget\$target\$profile\ocp_ffi.dll" -Destination $nativeOutput
@@ -57,10 +72,27 @@ if (!$SkipNative) {
     [ordered]@{
         coreCommit = (& git -C $coreSource rev-parse HEAD).Trim()
         kernelRoot = $kernelSource
+        kernelRepository = $pin.repository
+        kernelTag = $pin.tag
+        kernelCommit = $kernelCommit
+        kernelFeatures = @('libass','embedded-fallback-font','artcnn-r8f64')
+        kernelVersion = ([regex]::Match([IO.File]::ReadAllText((Join-Path $kernelSource 'Cargo.toml')), '(?ms)^\[workspace\.package\].*?^version\s*=\s*"([^"]+)"')).Groups[1].Value
         target = $target
         configuration = $Configuration
         coreSha256 = (Get-FileHash -LiteralPath "$nativeOutput\ocp_ffi.dll").Hash
         erikaSha256 = (Get-FileHash -LiteralPath "$nativeOutput\erika_capi.dll").Hash
+        kernelPatches = @([ordered]@{
+            path = 'Scripts/patches/liberika-v0.3.7-windows.patch'
+            sha256 = (Get-FileHash -LiteralPath $kernelPatch).Hash
+        })
     } | ConvertTo-Json | Set-Content -LiteralPath "$nativeOutput\build-receipt.json" -Encoding utf8
+    $metadataPath = Join-Path $workspace 'artifacts\core-license-metadata.json'
+    $metadata = & cargo metadata --locked --manifest-path "$coreSource\Cargo.toml" --format-version 1 --filter-platform $target
+    if ($LASTEXITCODE -ne 0) { throw 'Core dependency metadata failed.' }
+    [IO.File]::WriteAllText($metadataPath, ($metadata -join "`n"))
+    $nugetRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget\packages' }
+    & (Join-Path $PSScriptRoot 'generate-license-catalog.ps1') -Metadata $metadataPath -Kernel $kernelSource -Nuget $nugetRoot -Output "$workspace\src\OcPlayer.Windows\Services\OpenSourceCatalog.Generated.cs"
 }
-Invoke-Checked dotnet @('build', "$workspace\OcPlayer.sln", '-c', $Configuration, "-p:Platform=$Platform", "-p:OcpCoreRoot=$coreSource\", "-p:OcpNativeDirectory=$nativeOutput\")
+if (!$SkipManaged) {
+    Invoke-Checked dotnet @('build', "$workspace\OcPlayer.sln", '-c', $Configuration, "-p:Platform=$Platform", "-p:OcpCoreRoot=$coreSource\", "-p:OcpNativeDirectory=$nativeOutput\")
+}

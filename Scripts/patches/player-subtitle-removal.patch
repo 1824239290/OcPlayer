@@ -1,0 +1,68 @@
+diff --git a/crates/erika/src/core.rs b/crates/erika/src/core.rs
+index 5f86edf..3b90d07 100644
+--- a/crates/erika/src/core.rs
++++ b/crates/erika/src/core.rs
+@@ -994,7 +994,10 @@ enum PlaybackCommand {
+         config: SubtitleTrackConfig,
+         reply: Sender<std::result::Result<SubtitleTrackConfig, String>>,
+     },
+-    RemoveSubtitleTrack(i64),
++    RemoveSubtitleTrack {
++        track_id: i64,
++        reply: Sender<std::result::Result<(), String>>,
++    },
+     SelectAudioTrack(Option<i64>),
+     SelectSubtitleTrack(Option<i64>),
+     SetFrameOutputQuiesced {
+@@ -1488,7 +1491,16 @@ impl Player {
+ 
+     pub fn remove_subtitle_track(&self, track_id: i64) -> Result<()> {
+         self.ensure_not_closed()?;
+-        self.send_playback_command(PlaybackCommand::RemoveSubtitleTrack(track_id))
++        let (reply, response) = bounded(1);
++        self.send_playback_command(PlaybackCommand::RemoveSubtitleTrack { track_id, reply })?;
++        response
++            .recv()
++            .map_err(|_| {
++                PlayerError::Playback(
++                    "playback worker stopped before removing the subtitle".to_string(),
++                )
++            })?
++            .map_err(PlayerError::Playback)
+     }
+ 
+     pub fn select_audio_track(&self, track_id: Option<i64>) -> Result<()> {
+@@ -2751,7 +2763,7 @@ fn handle_playback_command(
+                 }
+             }
+         }
+-        PlaybackCommand::RemoveSubtitleTrack(track_id) => {
++        PlaybackCommand::RemoveSubtitleTrack { track_id, reply } => {
+             match engine.remove_subtitle_track(track_id) {
+                 Ok(Some(frame)) => {
+                     *playback_generation = playback_generation.saturating_add(1).max(1);
+@@ -2767,12 +2779,19 @@ fn handle_playback_command(
+                         },
+                     );
+                     sync_track_state_from_worker(inner, engine);
++                    let _ = reply.send(Ok(()));
++                }
++                Ok(None) => {
++                    let _ = reply.send(Ok(()));
++                }
++                Err(error) => {
++                    let message = error.to_string();
++                    emit_from_worker(
++                        inner,
++                        PlayerEvent::Error(PlayerError::Playback(message.clone())),
++                    );
++                    let _ = reply.send(Err(message));
+                 }
+-                Ok(None) => {}
+-                Err(error) => emit_from_worker(
+-                    inner,
+-                    PlayerEvent::Error(PlayerError::Playback(error.to_string())),
+-                ),
+             }
+         }
+         PlaybackCommand::SelectAudioTrack(track_id) => match engine.select_audio_track(track_id) {

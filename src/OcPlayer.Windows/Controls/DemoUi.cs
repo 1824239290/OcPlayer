@@ -31,10 +31,22 @@ internal static class DemoUi
         button.Click += (_, _) => action();
         return button;
     }
-    public static Image Image(string path, Stretch stretch = Stretch.UniformToFill) => new()
+    public static Image Image(string path, Stretch stretch = Stretch.UniformToFill)
     {
-        Source = string.IsNullOrEmpty(path) ? null : new BitmapImage(new Uri(path)), Stretch = stretch
-    };
+        var image = new Image { Stretch = stretch };
+        if (string.IsNullOrEmpty(path)) return image;
+        if (!Uri.TryCreate(path, UriKind.Absolute, out var uri)) return image;
+        if (uri.Scheme is not ("http" or "https")) { image.Source = new BitmapImage(uri); return image; }
+        CancellationTokenSource? load = null;
+        image.Loaded += async (_, _) =>
+        {
+            load?.Cancel(); load?.Dispose(); load = new CancellationTokenSource(); var token = load.Token;
+            try { var cached = await Services.ImageDiskCache.Resolve(path, token); if (!token.IsCancellationRequested) image.Source = new BitmapImage(new Uri(cached)); }
+            catch (OperationCanceledException) { }
+            catch (Exception) { if (!token.IsCancellationRequested) image.Source = new BitmapImage(uri); }
+        };
+        image.Unloaded += (_, _) => load?.Cancel(); return image;
+    }
     public static StackPanel Stack(double spacing = 12) => new() { Spacing = spacing };
     public static StackPanel Row(double spacing = 12) => new() { Orientation = Orientation.Horizontal, Spacing = spacing };
     public static Border Panel(UIElement child, Thickness? padding = null)
@@ -84,10 +96,12 @@ internal static class DemoUi
                 Background = new SolidColorBrush(Colors.LightGray), CornerRadius = new CornerRadius(1.5) });
             stack.Children.Add(progress);
         }
-        var displayTitle = media.Title == "凡人修仙传" ? "凡人修仙传 · 慕兰之战 24" : media.Title == "FX战士久留美" ? "FX 战士久留美 · 我不要被强制平仓啊……" : media.Title;
+        var displayTitle = media.Kind == "episode" && !string.IsNullOrWhiteSpace(media.SeriesTitle) ? media.SeriesTitle + " · " + media.Title : media.Title;
         var title = Text(displayTitle, 13, true); title.MaxLines = 1; title.TextTrimming = TextTrimming.CharacterEllipsis;
         stack.Children.Add(title);
-        var subtitle = Muted(resume ? $"{media.EpisodeLabel} · 还剩 {media.RemainingMinutes} 分钟" : $"{media.Year} · {media.Category.Split(" / ")[0]}", 12);
+        var remaining = media.RemainingMinutes is > 0 and var minutes ? "还剩 " + (minutes >= 60 ? $"{minutes / 60}小时{minutes % 60}分" : $"{minutes}分") : null;
+        var subtitle = Muted(resume ? string.Join(" · ", new[] { media.EpisodeLabel, remaining }.Where(x => !string.IsNullOrWhiteSpace(x))) is { Length: > 0 } summary ? summary : media.SeriesTitle ?? media.Category
+            : string.Join(" · ", new[] { media.Year, media.Category.Split(" / ")[0] }.Where(x => !string.IsNullOrEmpty(x))), 12);
         subtitle.Opacity = .75; stack.Children.Add(subtitle);
         var menu = new MenuFlyout();
         var watch = new MenuFlyoutItem { Text = resume ? "继续观看" : "播放" }; watch.Click += (_, _) => play(media); menu.Items.Add(watch);

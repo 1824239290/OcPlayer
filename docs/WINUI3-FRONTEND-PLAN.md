@@ -24,7 +24,7 @@
 
 | 参考部分 | 当前实现 | Windows 对应 |
 | --- | --- | --- |
-| AppShell / AppShellChrome | 无侧栏，顶栏分区为首页、观影、设置；播放器在页面导航之外呈现 | 顶部 NavigationView + Frame；播放器独立 Window |
+| AppShell / AppShellChrome | 无侧栏，顶栏分区为首页、观影、设置；播放器在页面导航之外呈现 | 顶部 NavigationView + Frame；播放器覆盖主窗口 |
 | HomeView / HomeSection | 继续观看、接下来看、最近添加、媒体库四类栏目，可排序及隐藏；支持局部失败与缓存内容 | 横向内容栏，按栏目呈现加载/失败；保留栏目配置 |
 | UnifiedSearch | 默认搜索媒体库；用户主动选择 Bangumi 或 MoviePilot 才查询对应来源 | AutoSuggestBox + 来源菜单；不默认同时请求三个服务 |
 | LibraryView | 海报网格、库内搜索、排序、观看状态筛选、分页 | 虚拟化 GridView；固定工具栏；增量加载 |
@@ -51,7 +51,7 @@
 
 ### 播放器窗口
 
-第一版使用单个独立 PlayerWindow，播放时主窗口可保留用于浏览。新播放请求复用播放器窗口，由 Core 的请求及会话流程控制切换。
+播放器已改为主窗口内的 PlayerView 覆盖层，与 macOS 一致。播放时隐藏浏览界面并保留页面状态，退出后恢复；新播放请求复用当前覆盖层，由 Core 的请求及会话流程控制切换。
 
 - 普通、全屏及置顶模式；CompactOverlay 小窗作为后续阶段。
 - 退出全屏恢复原窗口位置/大小；跨显示器移动时重新计算 DPI 与输出能力。

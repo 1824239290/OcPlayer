@@ -5,8 +5,10 @@ using OcPlayer.Windows.Preview;
 namespace OcPlayer.Windows.Services;
 
 internal sealed record ServerProfile(string Id, string Kind, string BaseUrl, string? UserId = null, string? Token = null,
-    string? ServerName = null, string? ServerVersion = null, string? UserName = null)
+    string? ServerName = null, string? ServerVersion = null, string? UserName = null, string? ResolvedServerId = null,
+    string[]? Addresses = null, string? PinnedAddress = null, string? UserAgent = null)
 {
+    public string[] AllAddresses => (Addresses ?? []).Append(BaseUrl).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     public string DisplayName => string.IsNullOrWhiteSpace(ServerName) ? new Uri(BaseUrl).Authority : ServerName;
     public string DisplayKind => Kind == "emby" ? "Emby" : "Jellyfin";
 }
@@ -19,17 +21,88 @@ internal sealed record MediaLibrary(string Id, string Name, string Artwork, stri
         "playlists" => "播放列表", "livetv" => "直播电视", _ => "混合内容"
     };
 }
-internal sealed class ServerConnectionException(string message) : InvalidOperationException(message);
+internal class ServerConnectionException(string message) : InvalidOperationException(message);
+internal sealed class ServerAuthenticationException(string message) : ServerConnectionException(message);
+internal sealed record EndpointStatus(string Address, long? LatencyMs, string? Error = null);
 
 internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
 {
     internal static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
-    public ServerProfile Profile { get; } = profile;
+    public ServerProfile Profile { get; private set; } = profile;
+    public event Action<MediaServer>? AuthenticationExpired;
+    public event Action<ServerProfile>? ProfileChanged;
+    private BrowserCache _cache => new(Profile);
+    public DateTimeOffset? HomeUpdatedAt { get; private set; }
+    public string? UserAvatarUrl { get; private set; }
+    private DateTimeOffset _lastEndpointCheck;
+    private readonly SemaphoreSlim _endpointLock = new(1);
     public List<MediaLibrary> Libraries { get; } = [];
     public List<DemoMedia> Latest { get; } = [];
     public List<DemoMedia> Resume { get; } = [];
     public List<DemoMedia> NextUp { get; } = [];
     public string? HomeWarning { get; private set; }
+
+    public static async Task<ServerProfile> Probe(OcpCoreClient client, string address, string kind, CancellationToken token)
+    {
+        address = NormalizeAddress(address);
+        var candidate = new ServerProfile(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address))), kind, address,
+            UserAgent: RuntimeSettings.Current.EffectiveUserAgent);
+        var info = Require(await client.CallJSONAsync("server.probe", JsonSerializer.Serialize(new { profile = candidate }, JsonOptions), token), token);
+        var product = NullableString(info, "productName") ?? "";
+        return candidate with { Kind = product.Contains("Emby", StringComparison.OrdinalIgnoreCase) ? "emby" : product.Contains("Jellyfin", StringComparison.OrdinalIgnoreCase) ? "jellyfin" : kind,
+            ServerName = NullableString(info, "serverName"), ServerVersion = NullableString(info, "version"), ResolvedServerId = NullableString(info, "id") };
+    }
+    public async Task<EndpointStatus[]> CheckEndpoints(CancellationToken token)
+    {
+        return await Task.WhenAll(Profile.AllAddresses.Select(async address =>
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(8));
+                var found = await Probe(core, address, Profile.Kind, timeout.Token);
+                if (Profile.ResolvedServerId is { Length: > 0 } id && found.ResolvedServerId != id)
+                    return new EndpointStatus(address, null, "地址属于另一台服务器");
+                return new EndpointStatus(address, watch.ElapsedMilliseconds);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested) { return new EndpointStatus(address, null, "超时"); }
+            catch (ServerConnectionException ex) { return new EndpointStatus(address, null, ex.Message); }
+        }));
+    }
+    public async Task SelectEndpoint(CancellationToken token, string? exclude = null)
+    {
+        await _endpointLock.WaitAsync(token);
+        try
+        {
+            if (Profile.PinnedAddress is { } pinned) { UpdateProfile(Profile with { BaseUrl = pinned }); return; }
+            var best = (await CheckEndpoints(token)).Where(x => x.Address != exclude && x.LatencyMs is not null).OrderBy(x => x.LatencyMs).FirstOrDefault();
+            _lastEndpointCheck = DateTimeOffset.UtcNow;
+            if (best is not null) UpdateProfile(Profile with { Addresses = Profile.AllAddresses, BaseUrl = best.Address });
+        }
+        finally { _endpointLock.Release(); }
+    }
+    public void UpdateProfile(ServerProfile value) { Profile = value; ProfileChanged?.Invoke(value); }
+    public async Task RefreshAvatar(CancellationToken token)
+    {
+        var info = await Request("server.avatarTag", token: token);
+        var tag = NullableString(info, "tag");
+        if (tag is null) { UserAvatarUrl = null; return; }
+        var result = await Request("server.userImageURL", new { tag }, token);
+        var url = NullableString(result, "url");
+        UserAvatarUrl = url is null ? null : url + (url.Contains('?') ? "&" : "?") + "api_key=" + Uri.EscapeDataString(Profile.Token ?? "");
+    }
+    public bool RestoreHome()
+    {
+        if (_cache.Read<HomeSnapshot>("home") is not { } cached) return false;
+        ApplyHome(cached.Value); HomeUpdatedAt = cached.SavedAt; HomeWarning = $"正在显示缓存内容 · 更新于 {cached.SavedAt.LocalDateTime:g}"; return true;
+    }
+    private sealed record HomeSnapshot(MediaLibrary[] Libraries, DemoMedia[] Latest, DemoMedia[] Resume, DemoMedia[] NextUp);
+    private void ApplyHome(HomeSnapshot value)
+    {
+        Libraries.Clear(); Libraries.AddRange(value.Libraries); Latest.Clear(); Latest.AddRange(value.Latest);
+        Resume.Clear(); Resume.AddRange(value.Resume); NextUp.Clear(); NextUp.AddRange(value.NextUp);
+    }
+    public void HomeRefreshFailed(string error) => HomeWarning = error + (HomeUpdatedAt is { } time ? $" · 显示缓存内容，更新于 {time.LocalDateTime:g}" : "");
 
     public static string NormalizeAddress(string address)
     {
@@ -47,8 +120,14 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         CancellationToken token, Action<string>? status = null)
     {
         address = NormalizeAddress(address);
+        status?.Invoke("正在检测服务器…");
+        ServerProfile detected;
+        try { detected = await Probe(core, address, kind, token); }
+        catch (ServerConnectionException)
+        { detected = new ServerProfile("", kind, address); status?.Invoke("公共探测不可用，尝试按所选类型验证账号…"); }
         status?.Invoke("正在验证账号…");
-        var profile = await Login(core, address, kind, username, password, token);
+        var profile = await Login(core, address, detected.Kind, username, password, token);
+        profile = profile with { ServerName = detected.ServerName, ServerVersion = detected.ServerVersion, ResolvedServerId = detected.ResolvedServerId };
         var server = new MediaServer(core, profile);
         status?.Invoke("正在读取媒体库…");
         // browse.home returns success even when individual endpoints fail.
@@ -58,12 +137,12 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         try
         {
             var info = await server.Request("server.probe", token: token);
-            profile = profile with { ServerName = NullableString(info, "serverName"), ServerVersion = NullableString(info, "version") };
+            profile = profile with { ServerName = NullableString(info, "serverName"), ServerVersion = NullableString(info, "version"), ResolvedServerId = NullableString(info, "id") };
         }
         catch (ServerConnectionException) { /* Some proxies deny the public info endpoint; the authenticated library is already verified. */ }
         token.ThrowIfCancellationRequested();
         // Copy the verified catalog without a second network load.
-        return new MediaServer(core, profile) { HomeWarning = server.HomeWarning }.CopyCatalog(server);
+        return new MediaServer(core, profile) { HomeWarning = server.HomeWarning, HomeUpdatedAt = server.HomeUpdatedAt, UserAvatarUrl = server.UserAvatarUrl }.CopyCatalog(server);
     }
 
     private MediaServer CopyCatalog(MediaServer source)
@@ -80,14 +159,30 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         var profile = new ServerProfile(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(address))), kind, address);
         var arguments = JsonSerializer.Serialize(new { profile, username, password }, JsonOptions);
         var data = Require(await core.CallJSONAsync("server.login", arguments, token), token);
-        return profile with { Token = data.GetProperty("token").GetString(), UserId = data.GetProperty("userId").GetString(), UserName = NullableString(data, "userName") ?? username };
+        var userId = data.GetProperty("userId").GetString();
+        return profile with { Id = profile.Id + ":" + userId, Token = data.GetProperty("token").GetString(), UserId = userId, UserName = NullableString(data, "userName") ?? username };
     }
 
     public async Task<JsonElement> Request(string method, object? arguments = null, CancellationToken token = default)
     {
+        if (Profile.PinnedAddress is null && Profile.AllAddresses.Length > 1 && DateTimeOffset.UtcNow - _lastEndpointCheck > TimeSpan.FromMinutes(1))
+            await SelectEndpoint(token);
         var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(arguments ?? new { }, JsonOptions))!.AsObject();
-        node["profile"] = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(Profile, JsonOptions));
-        return Require(await core.CallJSONAsync(method, node.ToJsonString(), token), token);
+        node["profile"] = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(Profile with { UserAgent = RuntimeSettings.Current.EffectiveUserAgent }, JsonOptions));
+        var response = await core.CallJSONAsync(method, node.ToJsonString(), token);
+        if (!response.Ok && response.Code is 1521 or 1522 or 1523 && Profile.PinnedAddress is null && Profile.AllAddresses.Length > 1
+            && (method.StartsWith("browse.") || method is "playback.info" or "media.fileInfo" or "server.avatarTag"))
+        {
+            var failed = Profile.BaseUrl;
+            await SelectEndpoint(token, failed);
+            if (Profile.BaseUrl != failed)
+            {
+                node["profile"] = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(Profile with { UserAgent = RuntimeSettings.Current.EffectiveUserAgent }, JsonOptions));
+                response = await core.CallJSONAsync(method, node.ToJsonString(), token);
+            }
+        }
+        if (!response.Ok && response.Code == 2001 && !string.IsNullOrEmpty(Profile.Token)) AuthenticationExpired?.Invoke(this);
+        return Require(response, token);
     }
 
     private static JsonElement Require(OcpResponse response, CancellationToken token)
@@ -102,6 +197,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
             2004 or 1514 => "服务器地址没有返回有效的媒体服务，请检查地址和反向代理路径。",
             _ => "服务器请求失败：" + response.Message
         };
+        if (response.Code is 2001 or 2003) throw new ServerAuthenticationException(message);
         throw new ServerConnectionException(message);
     }
 
@@ -109,7 +205,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     {
         var home = await Request("browse.home", token: token);
         var failures = home.TryGetProperty("failures", out var failed) && failed.ValueKind == JsonValueKind.Object ? failed.EnumerateObject().ToArray() : [];
-        if (failed.ValueKind == JsonValueKind.Object && failed.TryGetProperty("libraries", out var libraryFailure))
+        if (failed.ValueKind == JsonValueKind.Object && failed.TryGetProperty("libraries", out var libraryFailure) && Libraries.Count == 0)
             throw new ServerConnectionException("无法读取媒体库，请检查账号权限或重新登录。" + libraryFailure);
         var libraries = home.GetProperty("libraries").EnumerateArray().Select(library =>
         {
@@ -132,8 +228,15 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
             finally { coverSlots.Release(); }
         }));
         token.ThrowIfCancellationRequested();
-        Libraries.Clear(); Latest.Clear(); Resume.Clear(); NextUp.Clear();
-        Libraries.AddRange(libraries); Latest.AddRange(latest); Resume.AddRange(resume); NextUp.AddRange(next);
+        bool Failed(string key) => failures.Any(x => x.Name == key);
+        if (!Failed("libraries")) { Libraries.Clear(); Libraries.AddRange(libraries); }
+        if (!Failed("latest")) { Latest.Clear(); Latest.AddRange(latest); }
+        if (!Failed("resume")) { Resume.Clear(); Resume.AddRange(resume); }
+        if (!Failed("nextUp")) { NextUp.Clear(); NextUp.AddRange(next); }
+        NextUp.RemoveAll(x => Resume.Any(y => y.Id == x.Id));
+        HomeUpdatedAt = DateTimeOffset.UtcNow;
+        _cache.Save("home", new HomeSnapshot(Libraries.ToArray(), Latest.ToArray(), Resume.ToArray(), NextUp.ToArray()));
+        try { await RefreshAvatar(token); } catch (ServerConnectionException) { }
         HomeWarning = failures.Length > 0 ? "部分首页栏目加载失败（" + string.Join("、", failures.Select(x => x.Name switch { "resume" => "继续观看", "latest" => "最近添加", "nextUp" => "接下来看", _ => x.Name })) + "），可点击刷新重试。" : null;
     }
 
@@ -172,11 +275,23 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
 
     public async Task<DemoMedia[]> Browse(string? libraryId, string query, LibrarySortSettings settings, CancellationToken token)
     {
+        return (await BrowsePage(libraryId, query, settings, 0, token)).Items;
+    }
+    private static string BrowseKey(string? libraryId, string query, LibrarySortSettings settings) => "browse:" + JsonSerializer.Serialize(new { libraryId, query, settings });
+    public (BrowserPage Value, DateTimeOffset SavedAt)? CachedBrowse(string? libraryId, string query, LibrarySortSettings settings) => _cache.Read<BrowserPage>(BrowseKey(libraryId, query, settings));
+    public void CacheBrowse(string? libraryId, string query, LibrarySortSettings settings, BrowserPage page) => _cache.Save(BrowseKey(libraryId, query, settings), page);
+    public async Task<BrowserPage> BrowsePage(string? libraryId, string query, LibrarySortSettings settings, int start, CancellationToken token, bool collection = false)
+    {
+        const int limit = 60;
+        var type = Libraries.FirstOrDefault(x => x.Id == libraryId)?.CollectionType;
+        string[] kinds = collection ? [] : type switch { "movies" => ["movie"], "tvshows" => ["series"], _ => libraryId is null ? ["movie", "series"] : [] };
         var page = await Request("browse.library", new { parentId = libraryId, searchTerm = query,
-            startIndex = 0, limit = 500, recursive = true, kinds = new[] { "movie", "series" },
+            startIndex = start, limit, recursive = !collection, kinds,
             sort = new { field = settings.Field, ascending = settings.Ascending },
             watchState = settings.WatchState }, token);
-        return page.GetProperty("items").EnumerateArray().Select(Project).ToArray();
+        var items = page.GetProperty("items").EnumerateArray().Select(Project).ToArray();
+        int? total = page.TryGetProperty("totalRecordCount", out var count) && count.ValueKind == JsonValueKind.Number ? count.GetInt32() : null;
+        return new BrowserPage(items, start, total, items.Length > 0 && (total is { } n ? start + items.Length < n : items.Length == limit));
     }
 
     public async Task<DemoMedia[]> RandomBackdrops(CancellationToken token)
@@ -202,7 +317,21 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         return builder.Uri.AbsoluteUri;
     }
 
+    public DemoMedia? CachedDetail(DemoMedia media, string? seasonId = null) => _cache.Read<DemoMedia>("detail:" + media.Id + ":" + seasonId)?.Value;
     public async Task<DemoMedia> Detail(DemoMedia media, CancellationToken token, string? seasonId = null)
+    {
+        var key = "detail:" + media.Id + ":" + seasonId;
+        try
+        {
+            var value = await FetchDetail(media, token, seasonId); _cache.Save(key, value); return value;
+        }
+        catch (ServerConnectionException ex) when (ex is not ServerAuthenticationException)
+        {
+            if (_cache.Read<DemoMedia>(key) is { } cached) return cached.Value with { DetailWarning = $"更新失败：{ex.Message} · 显示 {cached.SavedAt.LocalDateTime:g} 的缓存" };
+            throw;
+        }
+    }
+    private async Task<DemoMedia> FetchDetail(DemoMedia media, CancellationToken token, string? seasonId)
     {
         var detail = await Request("browse.detail", new { itemId = media.Id }, token);
         var projected = Project(detail);
@@ -218,17 +347,29 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         {
             var seasons = await Request("browse.seasons", new { seriesId = projected.Id, limit = 500 }, token);
             var choices = seasons.EnumerateArray().Select(item => new DemoSeason(String(item, "id"), String(item, "name"),
-                item.TryGetProperty("seasonNumber", out var number) && number.ValueKind == JsonValueKind.Number ? number.GetInt32() : null)).ToArray();
+                item.TryGetProperty("seasonNumber", out var number) && number.ValueKind == JsonValueKind.Number ? number.GetInt32() : null,
+                String(item, "overview"), Project(item).IsPlayed,
+                item.TryGetProperty("playState", out var state) && state.ValueKind == JsonValueKind.Object && state.TryGetProperty("unplayedCount", out var unplayed) && unplayed.ValueKind == JsonValueKind.Number ? unplayed.GetInt32() : null)).ToArray();
             if (seasonId is null && entry.Kind == "episode")
                 seasonId = choices.FirstOrDefault(x => x.Number == (entry.SeasonNumber ?? media.SeasonNumber))?.Id;
-            seasonId ??= choices.FirstOrDefault()?.Id;
-            var episodes = await Request("browse.episodes", new { seriesId = projected.Id, seasonId, limit = 500 }, token);
-            var items = episodes.EnumerateArray().Select(item =>
+            var preferred = Resume.Concat(NextUp).FirstOrDefault(x => x.SeriesId == projected.Id && (seasonId is null || x.SeasonId == seasonId));
+            seasonId ??= preferred?.SeasonId ?? choices.FirstOrDefault(x => x.Number == preferred?.SeasonNumber)?.Id;
+            seasonId ??= choices.Where(x => x.Number != 0).FirstOrDefault(x => !x.Played && x.UnplayedCount != 0)?.Id
+                ?? choices.FirstOrDefault(x => x.Number != 0)?.Id ?? choices.FirstOrDefault()?.Id;
+            var rawEpisodes = new List<JsonElement>();
+            while (true)
+            {
+                var batch = await Request("browse.episodes", new { seriesId = projected.Id, seasonId, startIndex = rawEpisodes.Count, limit = 500 }, token);
+                var batchItems = batch.EnumerateArray().ToArray();
+                if (batchItems.Length == 0 || batchItems.All(x => rawEpisodes.Any(y => String(x, "id") == String(y, "id")))) break;
+                rawEpisodes.AddRange(batchItems); if (batchItems.Length < 500) break;
+            }
+            var items = rawEpisodes.Select(item =>
             {
                 var episode = Project(item);
-                return new DemoEpisode(episode.EpisodeNumber ?? 0, episode.Title, episode.Artwork,
+                return new DemoEpisode(episode.EpisodeNumber ?? 0, episode.Title, episode.StillArtwork.Length > 0 ? episode.StillArtwork : episode.Artwork,
                     MediaId: episode.Id, SeasonNumber: episode.SeasonNumber ?? 1,
-                    Progress: episode.Progress, DurationSeconds: episode.DurationSeconds, Played: episode.Played);
+                    Progress: episode.Progress, DurationSeconds: episode.DurationSeconds, Played: episode.Played, Overview: episode.Description);
             }).OrderBy(x => x.Number).ToArray();
             // Match the server identity first: episode numbers can repeat across seasons.
             var selected = entry.Kind == "episode" ? items.FirstOrDefault(x => x.MediaId == entry.Id) : null;
@@ -241,12 +382,25 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
                     DurationSeconds = entry.DurationSeconds > 0 ? entry.DurationSeconds : selected.DurationSeconds };
                 items[index] = selected;
             }
-            selected ??= items.FirstOrDefault();
+            selected ??= items.FirstOrDefault(x => x.MediaId == preferred?.Id) ?? items.FirstOrDefault(x => x.Progress is > 0 and < 100)
+                ?? items.FirstOrDefault(x => !x.IsPlayed) ?? items.FirstOrDefault();
             projected = projected with { Seasons = choices, SelectedSeasonId = seasonId, Episodes = items,
                 SeasonNumber = choices.FirstOrDefault(x => x.Id == seasonId)?.Number,
                 DurationSeconds = selected is { DurationSeconds: > 0 } ? selected.DurationSeconds : projected.DurationSeconds,
-                EpisodeNumber = selected?.Number, EpisodeLabel = selected is null ? null : $"S{selected.SeasonNumber}E{selected.Number}" };
+                EpisodeNumber = selected?.Number, EpisodeLabel = selected is null ? null : $"S{selected.SeasonNumber}E{selected.Number}",
+                SeasonOverview = choices.FirstOrDefault(x => x.Id == seasonId)?.Overview };
         }
+        if (projected.Kind == "boxSet")
+        {
+            var members = await BrowsePage(projected.Id, "", new LibrarySortSettings(), 0, token, collection: true);
+            projected = projected with { Members = members.Items, MemberCount = members.TotalCount };
+        }
+        else try
+        {
+            var similar = await Request("browse.similar", new { itemId = projected.Id, limit = 12 }, token);
+            projected = projected with { Similar = similar.GetProperty("items").EnumerateArray().Select(Project).ToArray() };
+        }
+        catch (ServerConnectionException ex) when (ex is not ServerAuthenticationException) { projected = projected with { DetailWarning = "类似推荐加载失败，可刷新重试。" }; }
         return projected;
     }
 
@@ -258,21 +412,64 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         return episode with { Progress = watched ? 100 : 0, Played = watched };
     }
 
-    public async Task<PlaybackSource> Resolve(DemoMedia media, int episode, CancellationToken token)
+    public async Task<PlaybackSource> Resolve(DemoMedia media, int episode, CancellationToken token, int attempt = 0)
     {
         var id = media.Kind == "series" ? media.Episodes?.FirstOrDefault(x => x.Number == episode)?.MediaId : media.Id;
         if (string.IsNullOrEmpty(id)) throw new InvalidOperationException("没有可播放的分集。");
         // Resume belongs to the selected episode, never to the series or another season.
         var playbackMedia = media.Kind == "series" ? Project(await Request("browse.detail", new { itemId = id }, token)) : media;
-        var info = await Request("playback.info", new { itemId = id }, token);
-        var sources = info.GetProperty("mediaSources");
-        if (sources.GetArrayLength() == 0) throw new InvalidOperationException("服务器没有返回可播放的片源。");
-        var source = sources[0];
+        var series = media.Kind == "series" ? media : null;
+        if (series is null && playbackMedia.Kind == "episode" && !string.IsNullOrEmpty(playbackMedia.SeriesId))
+        {
+            try { series = Project(await Request("browse.detail", new { itemId = playbackMedia.SeriesId }, token)); }
+            catch (InvalidOperationException) { /* Optional series identity must not prevent playback. */ }
+        }
+        JsonElement info;
+        try { info = await Request("playback.info", new { itemId = id }, token); }
+        catch (ServerConnectionException ex) when (ex is not ServerAuthenticationException)
+        { info = JsonSerializer.SerializeToElement(new { mediaSources = new[] { new { id = (string?)null } }, playSessionId = (string?)null }); }
+        var sources = info.GetProperty("mediaSources").EnumerateArray().OrderByDescending(x =>
+            x.TryGetProperty("supportsDirectPlay", out var direct) && direct.ValueKind == JsonValueKind.True ? 2 :
+            x.TryGetProperty("supportsDirectStream", out var stream) && stream.ValueKind == JsonValueKind.True ? 1 : 0).ToArray();
+        if (sources.Length == 0) sources = [JsonSerializer.SerializeToElement(new { id = (string?)null })];
+        if (attempt >= sources.Length) throw new InvalidOperationException("已尝试全部可用媒体源，请检查网络或重试。");
+        var source = sources[attempt];
         var sourceId = NullableString(source, "id"); var sessionId = NullableString(info, "playSessionId");
         var url = await Request("server.streamURL", new { itemId = id, mediaSourceId = sourceId, playSessionId = sessionId }, token);
         return new PlaybackSource(id, media.Title, url.GetProperty("url").GetString()!, Profile.Id + ":" + Profile.UserId,
             playbackMedia.Progress >= 100 ? 0 : playbackMedia.DurationSeconds * playbackMedia.Progress / 100,
-            Report: new PlaybackReport(JsonSerializer.SerializeToElement(Profile, JsonOptions), id, sourceId, sessionId));
+            HttpHeaders: new Dictionary<string, string> { ["User-Agent"] = RuntimeSettings.Current.EffectiveUserAgent },
+            Report: new PlaybackReport(JsonSerializer.SerializeToElement(Profile, JsonOptions), id, sourceId, sessionId),
+            Metadata: new PlaybackMetadata(NullableString(source, "path") ?? NullableString(source, "name") ?? playbackMedia.Title,
+                source.TryGetProperty("size", out var size) && size.TryGetInt64Safe(out var bytes) ? bytes : null,
+                Number(source, "runTimeSeconds") > 0 ? Number(source, "runTimeSeconds") : playbackMedia.DurationSeconds,
+                playbackMedia.SeriesTitle ?? series?.Title ?? playbackMedia.Title, series?.OriginalTitle ?? playbackMedia.OriginalTitle,
+                playbackMedia.EpisodeNumber, playbackMedia.SeasonNumber, playbackMedia.Kind == "movie" ? playbackMedia.TmdbId : null,
+                series?.TmdbId, playbackMedia.Kind == "movie"));
+    }
+
+    public async Task<(DemoMedia Media, int Episode)?> NextEpisode(DemoMedia media, int episode, CancellationToken token)
+    {
+        if (media.Kind != "series" || media.SeasonNumber == 0) return null;
+        if (media.Episodes?.Where(x => x.Available && x.SeasonNumber != 0 && x.Number > episode).OrderBy(x => x.Number).FirstOrDefault() is { } next)
+            return (media, next.Number);
+        var currentSeason = media.SeasonNumber ?? media.Seasons?.FirstOrDefault(x => x.Id == media.SelectedSeasonId)?.Number ?? 1;
+        foreach (var season in (media.Seasons ?? []).Where(x => x.Number > currentSeason).OrderBy(x => x.Number))
+        {
+            var detail = await Detail(media, token, season.Id);
+            if (detail.Episodes?.Where(x => x.Available && x.SeasonNumber != 0).OrderBy(x => x.Number).FirstOrDefault() is { } first) return (detail, first.Number);
+        }
+        return null;
+    }
+
+    // Episode Primary/Thumb images are stills. Portrait cards use the series Primary poster.
+    public async Task<string> Poster(DemoMedia media, CancellationToken token)
+    {
+        if (media.Kind is not ("episode" or "season")) return media.Artwork;
+        if (media.SeriesId is not { Length: > 0 } seriesId) return "";
+        var cached = CachedDetail(media);
+        if (cached is { Kind: "series", Artwork.Length: > 0 }) return cached.Artwork;
+        return Project(await Request("browse.detail", new { itemId = seriesId }, token)).Artwork;
     }
 
     public DemoMedia Project(JsonElement item)
@@ -296,7 +493,12 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
             SeriesId: NullableString(item, "seriesID"), SeasonId: NullableString(item, "seasonID"),
             SeasonNumber: item.TryGetProperty("seasonNumber", out var seasonNumber) && seasonNumber.ValueKind == JsonValueKind.Number ? seasonNumber.GetInt32() : null,
             EpisodeNumber: item.TryGetProperty("episodeNumber", out var episodeNumber) && episodeNumber.ValueKind == JsonValueKind.Number ? episodeNumber.GetInt32() : null,
-            Played: isPlayed, CommunityRating: item.TryGetProperty("communityRating", out var rating) && rating.ValueKind == JsonValueKind.Number ? rating.GetDouble() : null);
+            Played: isPlayed, CommunityRating: item.TryGetProperty("communityRating", out var rating) && rating.ValueKind == JsonValueKind.Number ? rating.GetDouble() : null,
+            SeriesTitle: NullableString(item, "seriesName"),
+            TmdbId: long.TryParse(NullableString(item, "tmdbID"), out var tmdb) ? tmdb : null,
+            OfficialRating: NullableString(item, "officialRating"),
+            Cast: item.TryGetProperty("cast", out var cast) && cast.ValueKind == JsonValueKind.Array ? cast.EnumerateArray().Select(person =>
+                new DemoPerson(String(person, "name"), NullableString(person, "role") ?? String(person, "kind"), Image(String(person, "id"), "Primary", ""))).ToArray() : []);
     }
 
     private string Image(string id, string type, string? tag)

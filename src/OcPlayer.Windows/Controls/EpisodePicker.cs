@@ -48,13 +48,16 @@ internal sealed class EpisodePicker : StackPanel
         foreach (var episode in episodes)
         {
             var label = Text(episode.Number.ToString(), 13);
+            label.TextWrapping = TextWrapping.NoWrap;
+            label.TextAlignment = TextAlignment.Center;
+            label.HorizontalAlignment = HorizontalAlignment.Center;
             label.VerticalAlignment = VerticalAlignment.Center;
             if (episode.IsPlayed) label.Foreground = Resource("TextFillColorSecondaryBrush");
             var numberWidth = Math.Max(32, episode.Number.ToString().Length * 8 + 20);
             var numberContent = new Grid { MinWidth = numberWidth, Height = SelectorHeight };
             numberContent.Children.Add(new Border
             {
-                Child = label, Padding = new Thickness(9, 6, 9, 6), CornerRadius = new CornerRadius(6),
+                Child = label, Padding = new Thickness(6, 0, 6, 0), CornerRadius = new CornerRadius(6),
                 Background = Resource("CardBackgroundFillColorDefaultBrush"),
                 BorderBrush = Resource("CardStrokeColorDefaultBrush"), BorderThickness = new Thickness(1)
             });
@@ -118,7 +121,7 @@ internal sealed class EpisodePicker : StackPanel
                 Foreground = Resource(episode.IsPlayed ? "TextFillColorSecondaryBrush" : "TextFillColorPrimaryBrush")
             };
             AutomationProperties.SetName(card, $"第 {episode.Number} 集，{episode.Title}，{episode.WatchStatus}");
-            ToolTipService.SetToolTip(card, $"第 {episode.Number} 集 · {episode.Title} · {episode.WatchStatus}");
+            ToolTipService.SetToolTip(card, $"第 {episode.Number} 集 · {episode.Title} · {episode.WatchStatus}\n{episode.Overview}");
             card.DoubleTapped += (_, args) => { if (episode.Available) { Choose(episode); play(episode); args.Handled = true; } };
             _cards.Items.Add(card);
 
@@ -167,6 +170,10 @@ internal sealed class EpisodePicker : StackPanel
     {
         if (_numbers.SelectedItem is ListViewItem number) _numberRail.Reveal(number);
         if (_cards.SelectedItem is ListViewItem card) _cardRail.Reveal(card);
+    }
+    public void DetachSeasonSelector(UIElement selector)
+    {
+        if (selector is FrameworkElement { Parent: Panel parent }) parent.Children.Remove(selector);
     }
 
     private static ProgressBar Progress(double value, double width) => new()

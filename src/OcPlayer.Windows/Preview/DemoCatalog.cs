@@ -6,7 +6,9 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
     string BackdropArtwork = "", string LogoArtwork = "", double DurationSeconds = 10140, DemoEpisode[]? Episodes = null, string DetailArtwork = "", DemoPerson[]? Cast = null,
     string? SourceUri = null, DemoSeason[]? Seasons = null, string? SelectedSeasonId = null,
     string? SeriesId = null, string? SeasonId = null, int? SeasonNumber = null, int? EpisodeNumber = null, bool? Played = null,
-    double? CommunityRating = null)
+    double? CommunityRating = null, string? SeriesTitle = null, long? TmdbId = null,
+    string? OfficialRating = null, DemoMedia[]? Similar = null, DemoMedia[]? Members = null, int? MemberCount = null,
+    string? DetailWarning = null, string? SeasonOverview = null)
 {
     public bool IsPlayed => Played ?? Progress >= 100;
 
@@ -65,12 +67,12 @@ public sealed record DemoMedia(string Id, string Title, string OriginalTitle, st
 public sealed record DemoPerson(string Name, string Role, string Artwork);
 
 public sealed record DemoEpisode(int Number, string Title, string Artwork, bool Available = true, string? MediaId = null, int SeasonNumber = 1,
-    double Progress = 0, double DurationSeconds = 0, bool? Played = null)
+    double Progress = 0, double DurationSeconds = 0, bool? Played = null, string Overview = "", string? AirDate = null)
 {
     public bool IsPlayed => Played ?? Progress >= 100;
-    public string WatchStatus => !Available ? "未入库" : IsPlayed ? "已观看" : Progress > 0 ? "观看中" : "未观看";
+    public string WatchStatus => !Available ? DateTime.TryParse(AirDate, out var date) && date.Date > DateTime.Today ? "未播出 · " + date.ToString("yyyy-MM-dd") : "未入库" + (string.IsNullOrEmpty(AirDate) ? "" : " · " + AirDate) : IsPlayed ? "已观看" : Progress > 0 ? "观看中" : "未观看";
 }
-public sealed record DemoSeason(string Id, string Title, int? Number = null);
+public sealed record DemoSeason(string Id, string Title, int? Number = null, string Overview = "", bool Played = false, int? UnplayedCount = null);
 
 public static class DemoCatalog
 {

@@ -53,6 +53,15 @@ public sealed class ErikaPresenter : IDisposable
         return ReadResponse(Native.Tick(_handle, seconds));
     }
 
+    public byte[] CaptureFrameRgba(uint width, uint height)
+    {
+        CheckThread();
+        if (width == 0 || height == 0) throw new ArgumentOutOfRangeException(nameof(width), "还没有可截取的视频画面。");
+        var pixels = new byte[checked((int)((ulong)width * height * 4))];
+        Check(Native.CaptureFrame(_handle, width, height, pixels, (nuint)pixels.Length));
+        return pixels;
+    }
+
     public JsonElement? PollEvent()
     {
         CheckThread();
@@ -61,6 +70,24 @@ public sealed class ErikaPresenter : IDisposable
     }
 
     public void Detach() { CheckThread(); Check(Native.Detach(_handle)); }
+    public void SetSubtitleStyle(SubtitleStyle style) { CheckThread(); Check(Native.SubtitleStyle(_handle, style)); }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SubtitleStyle
+    {
+        public IntPtr FontFamily, FontFilePath;
+        public uint PrimaryColorRgba, OutlineColorRgba;
+        public double FontSize, OutlineWidth;
+        [MarshalAs(UnmanagedType.I1)] public bool Bold;
+        [MarshalAs(UnmanagedType.I1)] public bool Italic;
+        [MarshalAs(UnmanagedType.I1)] public bool Underline;
+        [MarshalAs(UnmanagedType.I1)] public bool StrikeOut;
+        public double Spacing, ScaleXPercent, ScaleYPercent;
+        public int BorderStyle;
+        public double ShadowDepth, Blur;
+        public int Alignment, MarginLeft, MarginRight, MarginVertical;
+        public uint OverrideMask;
+    }
 
     public void Dispose()
     {
@@ -125,6 +152,8 @@ public sealed class ErikaPresenter : IDisposable
     private static class Native
     {
         private const string Library = "erika_capi";
+        [DllImport(Library, EntryPoint = "erika_presenter_set_subtitle_style", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int SubtitleStyle(PresenterHandle handle, ErikaPresenter.SubtitleStyle style);
         [DllImport(Library, EntryPoint = "erika_presenter_create_with_config", CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr Create(PresenterConfig config);
         [DllImport(Library, EntryPoint = "erika_presenter_destroy", CallingConvention = CallingConvention.Cdecl)]
@@ -141,6 +170,8 @@ public sealed class ErikaPresenter : IDisposable
         internal static extern IntPtr Invoke(PresenterHandle handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string method, [MarshalAs(UnmanagedType.LPUTF8Str)] string arguments);
         [DllImport(Library, EntryPoint = "erika_presenter_render_tick_json", CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr Tick(PresenterHandle handle, double seconds);
+        [DllImport(Library, EntryPoint = "erika_presenter_capture_frame_rgba", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int CaptureFrame(PresenterHandle handle, uint width, uint height, [Out] byte[] rgba, nuint capacity);
         [DllImport(Library, EntryPoint = "erika_presenter_poll_event_json", CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr PollEvent(PresenterHandle handle);
         [DllImport(Library, EntryPoint = "erika_string_free", CallingConvention = CallingConvention.Cdecl)]

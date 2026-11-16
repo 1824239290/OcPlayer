@@ -7,17 +7,23 @@ using OcPlayer.CoreAdapter;
 using OcPlayer.Windows.Services;
 using OcPlayer.Windows.Preview;
 
-internal static class Program
+internal static partial class Program
 {
     private static int _assertions;
     private static readonly List<object> Evidence = [];
     [STAThread]
     private static int Main(string[] args)
     {
-        if (args.Length != 2) throw new ArgumentException("Pass a local media file (or --server-only) and a new verification directory.");
+        if (args.Length is < 2 or > 3 || args.Length == 3 && args[2] != "--danmaku-only")
+            throw new ArgumentException("Pass a local media file (or --server-only), a new verification directory, and optionally --danmaku-only.");
+        var danmakuOnly = args.Length == 3;
+        var oauthBrowser = args[0] == "--oauth-browser-only";
+        var oauthOnly = oauthBrowser || args[0] == "--oauth-only";
         var output = Path.GetFullPath(args[1]); Directory.CreateDirectory(output);
         var data = Path.Combine(output, "data"); Directory.CreateDirectory(data);
-        VerifyLibrarySort(data);
+        Environment.SetEnvironmentVariable("OCP_DATA_DIRECTORY", data);
+        if (!danmakuOnly && !oauthOnly) VerifyLibrarySort(data);
+        if (!danmakuOnly && !oauthOnly) VerifyPlayerParity(data);
         var config = JsonSerializer.Serialize(new { dataDirectory = data, locale = "zh-CN" });
         var hwnd = CreateWindowEx(0, "STATIC", "OcPlayer integration test", 0x80000000, 0, 0, 640, 360, 0, 0, 0, 0);
         if (hwnd == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
@@ -26,8 +32,31 @@ internal static class Program
             using (var core = new OcpCoreClient(config))
             {
                 Assert(core.Ping().Ok, "real Core DLL loads");
-                VerifyBackdropLifecycle();
-                VerifyServer(core, hwnd, args[0] == "--server-only" ? null : args[0], data);
+                if (oauthOnly)
+                {
+                    VerifyBangumiOAuth(core).GetAwaiter().GetResult();
+                    if (oauthBrowser) VerifyBangumiBrowserRoundTrip(core).GetAwaiter().GetResult();
+                    File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"Passed {_assertions} Bangumi OAuth integration assertions."); return 0;
+                }
+                if (args[0] == "--browser-only")
+                {
+                    VerifyBrowsingParity(core, data).GetAwaiter().GetResult();
+                    File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
+                    Console.WriteLine($"Passed {_assertions} browser integration assertions."); return 0;
+                }
+                VerifyDanmaku(core, data).GetAwaiter().GetResult();
+                if (!danmakuOnly)
+                {
+                    VerifyViewing(core, data).GetAwaiter().GetResult();
+                    VerifyIntegrationParity(core, data).GetAwaiter().GetResult();
+                    VerifySettingsParity(core, data).GetAwaiter().GetResult();
+                    VerifyBrowsingParity(core, data).GetAwaiter().GetResult();
+                    VerifyBangumiOAuth(core).GetAwaiter().GetResult();
+                    VerifyBackdropLifecycle();
+                    VerifyServer(core, hwnd, args[0] == "--server-only" ? null : args[0], data);
+                    VerifyServerPlayerMenus(core, data).GetAwaiter().GetResult();
+                }
                 if (args[0] == "--server-only")
                 {
                     File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
@@ -38,13 +67,29 @@ internal static class Program
                 session.Attach((ulong)hwnd.ToInt64(), 640, 360, 1);
                 Marshal.Release(session.GetSwapChain());
                 session.Open(new PlaybackSource("unicode-local", "Unicode local media", Path.GetFullPath(args[0])));
-                Pump(session, core, () => session.Ready && Frames(session, "renderedVideoFrames") > 5, () => error);
+                // A paused/retained frame can be presented repeatedly. Wait
+                // for independent video decoding and audio output before the
+                // menu checks freeze playback at that early frame.
+                Pump(session, core, () => session.Ready && Frames(session, "renderedVideoFrames") > 5
+                    && Frames(session, "decodedVideoFrames") > 5 && Frames(session, "pushedAudioFrames") > 0, () => error);
                 Assert(session.DurationSeconds > 60, "duration comes from actual media");
                 Assert(Frames(session, "decodedVideoFrames") > 5 && Frames(session, "pushedAudioFrames") > 0, "native video and audio are decoded");
+                if (!danmakuOnly) VerifyPlayerMenuNative(session, core, data);
+                if (!danmakuOnly) VerifySubtitleRemoval(session, core, data);
+                VerifyDanmakuRenderer(session);
                 session.SetPlaying(false);
                 var paused = session.PositionSeconds;
                 PumpFor(session, core, .5);
                 Assert(!session.Playing && Math.Abs(session.PositionSeconds - paused) < 1, "pause freezes the decoder clock");
+                var capturePosition = session.PositionSeconds;
+                var capture = session.CaptureFrameRgba(65, 49);
+                Assert(capture.Length == 65 * 49 * 4 && capture.Where((_, index) => index % 4 == 3).All(value => value == 255),
+                    "shipping capture ABI returns opaque RGBA at an odd image size");
+                Assert(capture.Where((_, index) => index % 4 < 3).Any(value => value > 30),
+                    "shipping D3D11 screenshot contains visible video pixels");
+                Assert(!session.Playing && Math.Abs(session.PositionSeconds - capturePosition) < .000001,
+                    "capturing the retained frame preserves the paused media clock");
+                File.WriteAllBytes(Path.Combine(output, "captured-frame-65x49.rgba"), capture);
                 session.Seek(40); session.SetRate(1.5); session.SetVolume(.33);
                 session.SetPlaying(true);
                 Pump(session, core, () => session.PositionSeconds > 41, () => error);
@@ -61,6 +106,7 @@ internal static class Program
                 Evidence.Add(new { stage = "playback", session.PositionSeconds, session.DurationSeconds, session.Stats, session.Tracks });
                 session.Stop();
                 session.Open(new PlaybackSource("unicode-local", "Unicode local media", Path.GetFullPath(args[0])));
+                Assert(session.DanmakuTracks.GetArrayLength() == 0, "opening a new source clears the previous danmaku track");
                 Pump(session, core, () => session.Ready && session.PositionSeconds >= 40, () => error);
                 Assert(session.PositionSeconds >= 40, "reopening restores Core progress");
             }
@@ -78,7 +124,7 @@ internal static class Program
                 var missing = PlaybackSession.Require(core.Call("progress.get", new { tenantId = "local", itemId = "missing" })).GetProperty("progress");
                 Assert(missing.ValueKind == JsonValueKind.Null, "failed opening is never recorded as completed playback");
             }
-            File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, suite = danmakuOnly ? "danmaku" : "all", assertions = _assertions, evidence = Evidence }, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine($"Passed {_assertions} integration assertions."); return 0;
         }
         catch (Exception ex) { File.WriteAllText(Path.Combine(output, "failure.txt"), ex.ToString()); Console.Error.WriteLine(ex); return 1; }
@@ -205,7 +251,7 @@ internal static class Program
                     : mode == "covers" && target.Contains("parentId=box-b") ? new { Items = new[] { CoverMovie("b1"), CoverMovie("b2") } }
                     : mode == "covers" && target.Contains("parentId=poster-library") ? new { Items = new object[] { CoverMovie("tv1"), new { Id = "no-image", Name = "No image", Type = "Series" }, CoverMovie("tv2") } }
                     : mode == "covers" && target.Contains("parentId=empty-library") ? new { Items = Array.Empty<object>() }
-                    : path == "/Items/series" ? new { Id = "series", Name = "Fixture series", OriginalTitle = "Original series title", Type = "Series", Overview = "Series synopsis", Genres = new[] { "Animation" }, ImageTags = new { Logo = "series-logo" }, BackdropImageTags = new[] { "series-backdrop" } }
+                    : path == "/Items/series" ? new { Id = "series", Name = "Fixture series", OriginalTitle = "Original series title", Type = "Series", Overview = "Series synopsis", Genres = new[] { "Animation" }, ProviderIds = new { Tmdb = "123" }, ImageTags = new { Logo = "series-logo" }, BackdropImageTags = new[] { "series-backdrop" } }
                     : path.EndsWith("Items/Resume") ? new { Items = new[] { Episode("ep2", 1, 2) } }
                     : path.EndsWith("NextUp") ? new { Items = new[] { Episode("ep2-next", 7, 2, omitSeasonId: true) } }
                     : path == "/Items/ep1" ? Episode("ep1", 1, 1)
@@ -216,7 +262,7 @@ internal static class Program
                     : path == "/Shows/series/Episodes" ? new { Items = target.Contains("seasonId=season-empty") ? Array.Empty<object>()
                         : target.Contains("seasonId=season-2") ? new[] { Episode("ep2-next", 7, 2), Episode("ep2", 1, 2), Episode("ep2-played", 9, 2, played: true) }
                         : new[] { Episode("ep1", 1, 1) } }
-                    : path.EndsWith("PlaybackInfo") ? new { MediaSources = new[] { new { Id = "source", Container = "mp4", SupportsDirectPlay = true } }, PlaySessionId = "session" }
+                    : path.EndsWith("PlaybackInfo") ? new { MediaSources = new[] { new { Id = "source", Path = "/shows/S02E01.mp4", Size = 10000, RunTimeTicks = 1200000000L, Container = "mp4", SupportsDirectPlay = true } }, PlaySessionId = "session" }
                     : target.Contains("sortBy=Random") ? new { Items = new object[] {
                         new { Id = "ambient", Name = "Backdrop film", Type = "Movie", BackdropImageTags = new[] { "backdrop-tag" } },
                         new { Id = "no-backdrop", Name = "Poster only", Type = "Movie", ImageTags = new { Primary = "poster-tag" } }
@@ -367,6 +413,8 @@ internal static class Program
             Assert(watchedRequests.SequenceEqual(new[] { ("POST", "/Users/fixture-user/PlayedItems/ep2-next"), ("DELETE", "/Users/fixture-user/PlayedItems/ep2-next") }),
                 "episode watching actions target only that episode using the Core server commands");
             var resumedSource = server.Resolve(resume, 1, default).GetAwaiter().GetResult();
+            Assert(resumedSource.Metadata is { SeriesTmdbId: 123, EpisodeNumber: 1, SeasonNumber: 2, FileSize: 10000, DurationSeconds: 120 },
+                "server playback carries source size, duration, season, episode and series TMDB identity into danmaku matching");
             var nextSource = server.Resolve(resume, 7, default).GetAwaiter().GetResult();
             Assert(resumedSource.Id == "ep2" && resumedSource.ResumeSeconds == 30 && nextSource.Id == "ep2-next" && nextSource.ResumeSeconds == 0,
                 "changing selected episode resolves its own identity and progress");
@@ -405,7 +453,7 @@ internal static class Program
         var watch = Stopwatch.StartNew();
         while (!done())
         {
-            if (watch.Elapsed.TotalSeconds > 30) throw new TimeoutException("Native playback did not reach the expected state.");
+            if (watch.Elapsed.TotalSeconds > 30) throw new TimeoutException("Native playback did not reach the expected state. Stats: " + session.Stats);
             session.Tick(Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency);
             if (error() is { } message) throw new InvalidOperationException(message);
             while (core.TryPollEvent(out _)) { }
