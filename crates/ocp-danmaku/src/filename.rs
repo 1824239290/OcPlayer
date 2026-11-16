@@ -15,7 +15,30 @@ fn stem(raw: &str) -> String {
         .next_back()
         .unwrap_or(&normalized);
     file.rsplit_once('.')
-        .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty())
+        // Callers also pass extensionless release names and series titles.
+        // Treating any dotted suffix as an extension loses "Series.S01E01".
+        .filter(|(stem, extension)| {
+            !stem.is_empty()
+                && matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "mkv"
+                        | "mp4"
+                        | "avi"
+                        | "mov"
+                        | "wmv"
+                        | "webm"
+                        | "ts"
+                        | "m2ts"
+                        | "flv"
+                        | "m4v"
+                        | "mpg"
+                        | "mpeg"
+                        | "rmvb"
+                        | "rm"
+                        | "vob"
+                        | "iso"
+                )
+        })
         .map(|(s, _)| s)
         .unwrap_or(file)
         .to_owned()
@@ -107,7 +130,9 @@ pub fn parse_filename(raw: &str) -> ParsedAnimeInfo {
                 continue;
             }
             if let Some(n) = parse_chinese_number(&c[1]) {
-                if index < 3
+                // Season/resolution/year exclusions apply to bare numbers only;
+                // explicit E01 / 第1集 is a real episode even in season 1.
+                if index == 2
                     && (matches!(n, 720 | 1080 | 2160)
                         || (1970..=2050).contains(&n)
                         || Some(n) == season_number)
@@ -198,6 +223,36 @@ pub fn parse_filename(raw: &str) -> ParsedAnimeInfo {
         episode_number,
         season_number,
         is_final,
+    }
+}
+
+#[cfg(test)]
+mod filename_regressions {
+    use super::parse_filename;
+
+    #[test]
+    fn explicit_episode_is_not_filtered_as_season_or_resolution() {
+        for (name, episode, season) in [
+            ("葬送的芙莉莲.S01E01.mkv", 1, 1),
+            ("Series.S02E02", 2, 2),
+            ("番剧 第2季 第2集.mp4", 2, 2),
+            ("Series S01E1080", 1080, 1),
+        ] {
+            let parsed = parse_filename(name);
+            assert_eq!(parsed.episode_number, Some(episode), "{name}");
+            assert_eq!(parsed.season_number, Some(season), "{name}");
+        }
+        assert_eq!(parse_filename("Series Season 2 1080p").episode_number, None);
+    }
+
+    #[test]
+    fn extensionless_dotted_names_keep_episode_and_title() {
+        let name = parse_filename("葬送的芙莉莲.S01E01");
+        assert_eq!(name.episode_number, Some(1));
+        assert_eq!(name.season_number, Some(1));
+        assert_eq!(name.title, "葬送的芙莉莲");
+        assert_eq!(parse_filename("Dr. Stone").title, "Dr Stone");
+        assert_eq!(parse_filename("Show.E12.MKV").episode_number, Some(12));
     }
 }
 

@@ -444,7 +444,7 @@ impl BangumiClient {
         collection_type: i32,
         batch: bool,
     ) -> Result<(), BangumiError> {
-        if episode_id <= 0 || !(0..=2).contains(&collection_type) {
+        if episode_id <= 0 || !(0..=3).contains(&collection_type) {
             return Err(BangumiError::Request(
                 "invalid episode collection arguments".into(),
             ));
