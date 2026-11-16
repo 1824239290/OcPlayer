@@ -79,6 +79,12 @@ public partial class App : Application
             _window.Activate();
             return;
         }
+        var moviePilotVerification = launchArguments.FirstOrDefault(x => x.StartsWith("--verify-moviepilot="));
+        if (moviePilotVerification is not null)
+        {
+            _window = new Preview.MoviePilotPageVerification(moviePilotVerification.Split('=', 2)[1]);
+            _window.Activate(); return;
+        }
         var viewingVerification = Environment.GetCommandLineArgs().FirstOrDefault(x => x.StartsWith("--verify-viewing="));
         if (viewingVerification is not null)
         {

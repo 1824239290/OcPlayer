@@ -10,7 +10,8 @@ internal sealed partial class IntegrationPages
 {
     private static void Submit(TextBox text, Page page, Func<Task> action) => text.KeyDown += async (_, e) => { if (e.Key == global::Windows.System.VirtualKey.Enter) { e.Handled = true; await page.Run(action); } };
     private static void Browse(string url) { if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https") System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); }
-    private void Reconnect(Page page) => page.Body.Children.Add(page.Action("重新登录 MoviePilot", async () =>
+    private void Reconnect(Page page) => page.Body.Children.Add(page.Action("重新登录 MoviePilot", () => ReconnectMoviePilot(page)));
+    private async Task ReconnectMoviePilot(Page page)
     {
         var account = Service.MoviePilot; var fields = Stack(10); var address = new TextBox { Header = "服务器地址", Text = account?.BaseUrl ?? "" }; var username = new TextBox { Header = "用户名", Text = account?.UserName ?? "" }; var password = new PasswordBox { Header = "密码" }; var remember = new ToggleSwitch { Header = "记住密码（令牌过期后免重输）", IsOn = account?.RememberPassword == true }; var error = Muted("");
         foreach (var item in new UIElement[] { address, username, password, remember, error }) fields.Children.Add(item);
@@ -19,7 +20,7 @@ internal sealed partial class IntegrationPages
         dialog.PrimaryButtonClick += async (_, e) => { var deferral = e.GetDeferral(); e.Cancel = true; dialog.IsPrimaryButtonEnabled = false; try { await Service.ConnectMoviePilot(address.Text, username.Text, password.Password, page.Token, remember.IsOn); e.Cancel = false; } catch (Exception ex) { error.Text = ex.Message; } finally { dialog.IsPrimaryButtonEnabled = true; deferral.Complete(); } };
         using var registration = page.Token.Register(() => page.Body.DispatcherQueue.TryEnqueue(dialog.Hide));
         if (await dialog.ShowAsync() == ContentDialogResult.Primary) page.Status.Text = "登录成功，请重试刚才的操作。";
-    }));
+    }
     public UIElement Settings(bool bangumi)
     {
         var page = new Page(); var name = bangumi ? "Bangumi" : "MoviePilot"; var key = bangumi ? "bangumi" : "moviepilot";

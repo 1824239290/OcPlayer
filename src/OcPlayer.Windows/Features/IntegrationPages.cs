@@ -16,8 +16,9 @@ internal sealed partial class IntegrationPages(PageLayout layout, Action<string>
     public FrameworkElement? HeaderTrailing { get; private set; }
     public string? HeaderTitle { get; private set; }
     public string? HeaderSubtitle { get; private set; }
+    public string? HeaderBackdrop { get; private set; }
     public event Action? HeaderChanged;
-    private void ClearHeader() { HeaderLeading = HeaderTrailing = null; HeaderTitle = HeaderSubtitle = null; }
+    private void ClearHeader() { HeaderLeading = HeaderTrailing = null; HeaderTitle = HeaderSubtitle = HeaderBackdrop = null; }
     // Every page owns cancellation. Leaving a page prevents stale results and cancels Core requests.
     private sealed class Page
     {
@@ -69,12 +70,12 @@ internal sealed partial class IntegrationPages(PageLayout layout, Action<string>
         for (DependencyObject? node = element; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node)) if (node is UIElement { Visibility: Visibility.Collapsed }) return false;
         return true;
     }
-    private UIElement Show(Page page, Func<Task>? load = null)
+    private UIElement Show(Page page, Func<Task>? load = null, Thickness? padding = null)
     {
         if (double.IsPositiveInfinity(page.Body.MaxWidth)) page.Body.MaxWidth = 1000;
         page.Body.HorizontalAlignment = HorizontalAlignment.Stretch;
         page.Body.Children.Add(page.Status);
-        var scroll = layout.Scroll(page.Body, new Thickness(40, 16, 40, 36));
+        var scroll = layout.Scroll(page.Body, padding ?? new Thickness(40, 16, 40, 36));
         var loaded = false;
         scroll.Loaded += async (_, _) => { if (loaded) return; loaded = true; if (load is not null) await page.Run(load); };
         scroll.Unloaded += (_, _) => page.Lifetime.Cancel();

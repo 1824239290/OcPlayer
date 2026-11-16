@@ -29,6 +29,7 @@
     <Compile Include="..\..\tests\OcPlayer.Ui\BrowsingParityVerification.cs" Link="Preview\BrowsingParityVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\PlayerMenuVerification.cs" Link="Preview\PlayerMenuVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\ViewingPageVerification.cs" Link="Preview\ViewingPageVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\MoviePilotPageVerification.cs" Link="Preview\MoviePilotPageVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\BangumiPagesVerification.cs" Link="Preview\BangumiPagesVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\NativePlayerVerification.cs" Link="Preview\NativePlayerVerification.cs" />
   </ItemGroup>

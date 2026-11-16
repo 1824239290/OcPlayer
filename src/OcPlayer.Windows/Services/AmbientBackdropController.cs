@@ -16,6 +16,7 @@ internal sealed class AmbientBackdropController : IDisposable
     private MediaServer? _server;
     private bool _demo, _hasSession, _loadingPool, _active = true, _animations = true, _rotating, _disposed;
     private string _detailSource = "";
+    private string _resourceRoute = "", _resourceSource = "";
     private string[] _pool = [];
     private int _index, _generation;
 
@@ -25,15 +26,18 @@ internal sealed class AmbientBackdropController : IDisposable
         _timer.Tick += Rotate;
     }
 
-    public void Update(bool retryEmptyPool = false)
+    public void Update(bool retryEmptyPool = false, string? resourceArtwork = null)
     {
         if (_disposed) return;
         var server = _model.DemoMode ? null : App.Core?.Server;
         var changedSession = !_hasSession || !ReferenceEquals(server, _server) || _demo != _model.DemoMode;
-        var detail = _model.Route is "detail" or "detail-info";
-        var source = detail && _model.SelectedMedia.BackdropArtwork.Length > 0
+        var resource = _model.Route.StartsWith("viewing:resources");
+        if (!resource || _resourceRoute != _model.Route) { _resourceRoute = resource ? _model.Route : ""; _resourceSource = resourceArtwork ?? ""; }
+        else if (resourceArtwork is not null) _resourceSource = resourceArtwork;
+        var detail = _model.Route is "detail" or "detail-info" || resource;
+        var source = resource ? _resourceSource : detail && _model.SelectedMedia.BackdropArtwork.Length > 0
             ? MediaServer.DetailImage(DemoMedia.AssetPath(_model.SelectedMedia.BackdropArtwork)) : "";
-        _view.SetStyle(_model.DarkTheme, _model.Route == "detail-info");
+        _view.SetStyle(_model.DarkTheme, _model.Route == "detail-info" || resource);
         if (changedSession)
         {
             _poolLoad?.Cancel(); _poolLoad?.Dispose(); _poolLoad = null;

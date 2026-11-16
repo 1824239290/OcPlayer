@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private Control? _focusBeforePlayback;
     private AppWindowPresenter? _presenterBeforePlayback;
     private string _detailOrigin = "home";
+    private readonly Dictionary<string, string> _moviePilotOrigins = [];
     private string? _detailPageMediaId;
     private int _detailPageEpisode;
     private readonly Dictionary<string, (UIElement Page, int Episode)> _cachedDetailPages = [];
@@ -152,6 +153,7 @@ public sealed partial class MainWindow : Window
         if (changedDetail || previous == route && (route is "detail" or "detail-info")) ClearDetailPages();
         _detailPageMediaId = _model.SelectedMedia.Id;
         _navigating = true;
+        if (previous != route && (route.StartsWith("viewing:resources") || route == "viewing:downloads") && _moviePilotOrigins.GetValueOrDefault(previous) != route) _moviePilotOrigins[route] = previous;
         _model.Route = route;
         var section = route.StartsWith("settings") ? "settings" : route.StartsWith("viewing") ? "viewing" : route is "library" or "detail" or "detail-info" ? "home" : route;
         MainNavigation.SelectedItem = section switch
@@ -485,6 +487,7 @@ public sealed partial class MainWindow : Window
         IntegrationSubtitle.Text = show ? _integrationPages.HeaderSubtitle ?? "" : "";
         IntegrationSubtitle.Visibility = IntegrationSubtitle.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         if (show && _integrationPages.HeaderTitle is { } title) PageTitle.Text = title;
+        _ambient.Update(resourceArtwork: show ? _integrationPages.HeaderBackdrop : null);
         DispatcherQueue.TryEnqueue(UpdateTitleBarRegions);
     }
     private void ViewingMenu_Opening(object sender, object e)
@@ -527,7 +530,7 @@ public sealed partial class MainWindow : Window
         var regions = new FrameworkElement[] { NavGroup, BackButton, SortButton, ServerButton, HeaderActions, ViewingActions, IntegrationHeaderLeading, IntegrationHeaderTrailing }.Where(x => x.Visibility == Visibility.Visible && x.ActualWidth > 0).Select(Bounds).ToArray();
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(NonClientRegionKind.Passthrough, regions);
     }
-    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route == "detail-info" ? "detail" : _model.Route == "detail" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : _model.Route.StartsWith("viewing:") ? "viewing" : "home");
+    private void Back_Click(object sender, RoutedEventArgs e) => Navigate(_model.Route == "detail-info" ? "detail" : _model.Route == "detail" ? _detailOrigin : _model.Route.StartsWith("settings:") ? "settings" : _model.Route.StartsWith("viewing:resources") || _model.Route == "viewing:downloads" ? _moviePilotOrigins.GetValueOrDefault(_model.Route, "viewing:moviepilot") : _model.Route.StartsWith("viewing:") ? "viewing" : "home");
     private void GlobalSearch_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs e)
     {
         if (_navigating || _model.Route is not ("library" or "home") || _searchSource != "library" || e.Reason != AutoSuggestionBoxTextChangeReason.UserInput) return;

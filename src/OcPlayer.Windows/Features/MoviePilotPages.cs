@@ -10,57 +10,64 @@ namespace OcPlayer.Windows.Features;
 internal sealed partial class IntegrationPages
 {
     public static string ResourceRoute(JsonElement media) => "viewing:resources:media=" + Uri.EscapeDataString(media.GetRawText());
-    private UIElement MoviePilotCard(JsonElement item, bool subscription, params UIElement[] actions)
-    {
-        var details = Stack(5); details.Children.Add(Muted($"{Json.Text(item, "year")} · {Json.First(item, "type", "media_type")} · 评分 {Json.Number(item, "vote_average", Json.Number(item, "rating")):0.0} · {Json.First(item, "media_source", "source").ToUpperInvariant()} · {MoviePilotPolicies.Identity(item)}"));
-        if (subscription)
-        {
-            var total = Json.Number(item, "total_episode"); var missing = Json.Number(item, "lack_episode"); var downloaded = Math.Max(0, total - missing);
-            details.Children.Add(Muted($"{MoviePilotPolicies.State(item)} · 第 {Json.Number(item, "season", 1):0} 季 · 已下载 {downloaded:0} / 总 {total:0} · 缺 {missing:0} 集"));
-            details.Children.Add(new ProgressBar { Maximum = Math.Max(1, total), Value = downloaded });
-        }
-        return Item(item, new UIElement[] { details }.Concat(actions).ToArray());
-    }
     private UIElement MoviePilot(string query)
     {
-        var page = new Page(); if (Gate(page, false)) return Show(page); var list = Stack(12);
-        var search = new TextBox { Header = "MoviePilot", Text = query, PlaceholderText = "搜索媒体并订阅" };
-        var category = new ComboBox { Header = "订阅分类", ItemsSource = new[] { "全部", "电影", "剧集" }, SelectedIndex = 0 }; var count = Muted(""); JsonElement[] subscriptions = [];
+        var page = new Page(); page.Body.MaxWidth = 10000; page.Body.Spacing = 22; HeaderTitle = "MoviePilot 资源管理";
+        if (Gate(page, false)) return Show(page); var list = Stack(14);
+        var search = new AutoSuggestBox { Text = query, Width = 280, Height = 32, PlaceholderText = "搜索电影、电视剧、番剧…", QueryIcon = new SymbolIcon(Symbol.Find) };
+        HeaderTrailing = search; MpName(search, "搜索 MoviePilot 媒体");
+        var category = new SelectorBar { Height = 28, MinHeight = 0 };
+        foreach (var label in new[] { "全部", "电影", "剧集" }) category.Items.Add(new SelectorBarItem
+        {
+            Text = label, Height = 28, MinHeight = 0, FontSize = 12,
+            Padding = new Thickness(12, 3, 12, 3), VerticalContentAlignment = VerticalAlignment.Center
+        });
+        category.SelectedItem = category.Items[0]; MpName(category, "MoviePilot 订阅分类");
+        var count = DashboardMuted(""); var controls = new Grid { ColumnSpacing = 16 }; controls.ColumnDefinitions.Add(new ColumnDefinition()); controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var categories = Row(8); var categoryLabel = DashboardLabel("分类", 12, true); categoryLabel.VerticalAlignment = VerticalAlignment.Center; categories.Children.Add(categoryLabel); categories.Children.Add(category); controls.Children.Add(categories); Grid.SetColumn(count, 1); count.VerticalAlignment = VerticalAlignment.Center; controls.Children.Add(count);
+        JsonElement[] subscriptions = []; var searchingMode = query.Length > 0; var searchGeneration = 0;
         void RenderSubscriptions()
         {
-            list.Children.Clear(); var movies = subscriptions.Count(MoviePilotPolicies.IsMovie);
-            count.Text = $"全部 {subscriptions.Length} · 电影 {movies} · 剧集 {subscriptions.Length - movies} · 追更中 {subscriptions.Count(x => Json.Text(x, "state") == "R")}";
-            foreach (var item in subscriptions.Where(x => category.SelectedIndex == 0 || MoviePilotPolicies.IsMovie(x) == (category.SelectedIndex == 1)))
-            {
-                var id = (long)Json.Number(item, "id");
-                list.Children.Add(MoviePilotCard(item, true,
-                    Button("找资源", () => navigate(ResourceRoute(item))), page.Action("编辑订阅", () => EditSubscription(page, item, true)),
-                    page.Action("在 MoviePilot 刷新", async () => { await Service.Mp("subscription.refresh", null, page.Token); await Load(); }),
-                    page.Action("删除订阅", async () => { if (await Confirm(page, "删除订阅", Json.Title(item))) { await Service.Mp("subscription.delete", new { id }, page.Token); await Load(); } })));
-            }
-            if (list.Children.Count == 0) list.Children.Add(Muted("此分类暂无订阅"));
+            if (searchingMode) return; list.Children.Clear(); controls.Visibility = Visibility.Visible; var movies = subscriptions.Count(MoviePilotPolicies.IsMovie);
+            category.Items[0].Text = $"全部 ({subscriptions.Length})"; category.Items[1].Text = $"电影 ({movies})"; category.Items[2].Text = $"剧集 ({subscriptions.Length - movies})";
+            count.Text = $"● {subscriptions.Count(x => MoviePilotPolicies.State(x) == "追更中")} 部追更中";
+            var selected = category.Items.IndexOf(category.SelectedItem); var cards = subscriptions.Where(x => selected <= 0 || MoviePilotPolicies.IsMovie(x) == (selected == 1)).Select(item => MpSubscriptionCard(page, item, Load)).ToArray();
+            list.Children.Add(cards.Length == 0 ? MpEmpty("此分类暂无订阅，可在上方搜索媒体或添加订阅。", "\uE8B2") : MpSubscriptionGrid(cards));
         }
         async Task Load() { subscriptions = Json.Items(await Service.Mp("subscription.list", null, page.Token)); RenderSubscriptions(); }
         async Task Search()
         {
-            if (string.IsNullOrWhiteSpace(search.Text)) { await Load(); return; }
+            searchingMode = !string.IsNullOrWhiteSpace(search.Text); if (!searchingMode) { await Load(); return; }
+            var generation = ++searchGeneration;
             var items = Json.Items(await Service.Mp("mediaSearch", new { title = search.Text.Trim() }, page.Token));
-            subscriptions = Json.Items(await Service.Mp("subscription.list", null, page.Token)); list.Children.Clear();
+            if (generation != searchGeneration || page.Token.IsCancellationRequested) return;
+            subscriptions = Json.Items(await Service.Mp("subscription.list", null, page.Token));
+            if (generation != searchGeneration || page.Token.IsCancellationRequested) return;
+            list.Children.Clear(); controls.Visibility = Visibility.Collapsed;
+            list.Children.Add(MpSectionHeading("媒体结果", items.Length.ToString()));
             foreach (var item in items)
             {
                 var subscribed = MoviePilotPolicies.Subscribed(item, subscriptions);
-                var edit = page.Action(subscribed ? "已订阅" : "订阅…", () => EditSubscription(page, item, false)); edit.IsEnabled = !subscribed;
-                var quick = page.Action("快捷加入订阅", async () => { await Service.Mp("subscription.add", new { subscription = MoviePilotPolicies.NewSubscription(item) }, page.Token); await Search(); }); quick.IsEnabled = !subscribed;
-                list.Children.Add(MoviePilotCard(item, false, edit, quick, Button("找资源", () => navigate(ResourceRoute(item)))));
+                var menu = new MenuFlyout(); MpMenuAction(menu, page, "快捷加入订阅", "\uE710", async () => { await Service.Mp("subscription.add", new { subscription = MoviePilotPolicies.NewSubscription(item) }, page.Token); await Search(); });
+                MpMenuAction(menu, page, "配置规则并订阅…", "\uE713", () => EditSubscription(page, item, false));
+                var subscribe = MpMenu(subscribed ? "\uE73E" : "\uE710", subscribed ? "已订阅" : "订阅", "MoviePilot 订阅操作 " + Json.Title(item), menu); subscribe.IsEnabled = !subscribed;
+                var actions = Row(8); actions.Children.Add(subscribe); actions.Children.Add(MpCompact(Button("", () => navigate(ResourceRoute(item))), "\uE721", "查资源", "MoviePilot 查资源 " + Json.Title(item)));
+                list.Children.Add(MpMediaCard(item, false, actions));
             }
-            if (items.Length == 0) list.Children.Add(Muted("没有找到媒体")); count.Text = $"找到 {items.Length} 条媒体";
+            if (items.Length == 0) list.Children.Add(MpEmpty("没有找到媒体，试试其他关键词。", "\uE721"));
         }
-        category.SelectionChanged += (_, _) => RenderSubscriptions(); Submit(search, page, Search);
-        var toolbar = Row(8); toolbar.Children.Add(page.Action("订阅列表", Load)); toolbar.Children.Add(page.Action("新建订阅", () => EditSubscription(page, default, false)));
-        toolbar.Children.Add(Button("下载管理", () => navigate("viewing:downloads"))); toolbar.Children.Add(page.Action("刷新追更", async () => { await Service.Mp("subscription.refresh", null, page.Token); await Load(); }));
-        toolbar.Children.Add(page.Action("全站追更检索", async () => { await Service.Mp("subscription.search", null, page.Token); await Load(); }));
-        page.Body.Children.Add(toolbar); page.Body.Children.Add(category); page.Body.Children.Add(count); page.Body.Children.Add(search); page.Body.Children.Add(page.Action("搜索媒体", Search)); page.Body.Children.Add(list); Reconnect(page);
-        return Show(page, query.Length == 0 ? Load : Search);
+        category.SelectionChanged += (_, _) => RenderSubscriptions(); search.QuerySubmitted += async (_, _) => await page.Run(Search);
+        search.TextChanged += (_, _) => { if (search.Text.Length == 0 && searchingMode) { ++searchGeneration; searchingMode = false; RenderSubscriptions(); } };
+        var toolbar = Row(6); HeaderLeading = toolbar;
+        toolbar.Children.Add(MpCompact(page.Action("", () => EditSubscription(page, default, false)), "\uE710", "", "添加 MoviePilot 订阅"));
+        toolbar.Children.Add(MpCompact(Button("", () => navigate("viewing:downloads")), "\uE896", "", "MoviePilot 下载管理"));
+        var more = new MenuFlyout(); MpMenuAction(more, page, "刷新订阅列表", "\uE72C", Load);
+        MpMenuAction(more, page, "向服务器请求刷新", "\uE895", async () => { await Service.Mp("subscription.refresh", null, page.Token); await Load(); });
+        MpMenuAction(more, page, "执行全站追更检索", "\uE721", async () => { await Service.Mp("subscription.search", null, page.Token); await Load(); });
+        more.Items.Add(new MenuFlyoutSeparator()); MpMenuAction(more, page, "重新登录 MoviePilot", "\uE77B", () => ReconnectMoviePilot(page));
+        toolbar.Children.Add(MpMenu("\uE712", "", "MoviePilot 更多操作", more));
+        page.Body.Children.Add(controls); page.Body.Children.Add(list);
+        return Show(page, query.Length == 0 ? Load : Search, new Thickness(52, 16, 52, 48));
     }
     private async Task EditSubscription(Page page, JsonElement item, bool editing)
     {

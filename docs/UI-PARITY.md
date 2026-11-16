@@ -38,6 +38,11 @@ Windows 前端以 macOS OcPlayer 的现有界面为准。保留页面结构、�
 
 Windows 默认 D3D11 renderer 已补上 SDR RGBA8 离屏截图，独立计算截图色彩参数，保留 HDR 播放交换链与输出模式。同时修复暂停时导入/重选字幕不刷新，以及关闭外挂字幕推进冻结画面的问题。2026-11-16 的 19 项 D3D11 测试、2 项暂停字幕回归及完整 216 项集成断言全部通过；真实 4K 视频验证了字幕导入、150% 字号、关闭、重选，以及截图像素和冻结时钟。补丁和复现命令见 [development.md](development.md#播放器菜单与原生截图)。系统分享目标的实际发送未执行。
 
+## MoviePilot 页面布局对齐（2026-11-17）
+
+MoviePilot 订阅网格、媒体搜索卡片及资源搜索页已按用户的四张截图和 macOS 源码对齐。
+WinUI 原生控件、布局尺寸、背景与验证记录见 [MoviePilot 布局对齐](moviepilot-layout-parity-2026-11-17.md)。
+
 ## 需要明确的差异
 
 1. macOS Liquid Glass 的系统材质及 SF Symbols 无法直接用于 Windows。当前使用半透明表面与相近 Fluent 图标；实时内容采样、折射和 macOS 一致的材质运动尚未实现。

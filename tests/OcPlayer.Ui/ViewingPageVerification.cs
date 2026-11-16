@@ -191,7 +191,7 @@ internal sealed partial class ViewingPageVerification : Window
                     if (messages.Any(x => x.Contains("请求失败") || x.Contains("无法识别") || x.Contains("正在加载"))) throw new InvalidOperationException(route + ": " + string.Join(" | ", messages));
                     var combos = Descendants(root).OfType<ComboBox>().ToArray();
                     if (route == "viewing:calendar" && !combos.Any(x => x.Header?.ToString() == "星期" && x.Items.Count == 9)) throw new Exception("Calendar weekday filters are incomplete");
-                    if (route == "viewing:resources:测试" && !combos.Any(x => x.Header?.ToString() == "排序" && x.Items.Count == 5)) throw new Exception("Resource sort options are incomplete");
+                    if (route == "viewing:resources:测试" && !combos.Any(x => AutomationProperties.GetName(x) == "MoviePilot 资源排序" && x.Items.Count == 5)) throw new Exception("Resource sort options are incomplete");
                     assertions.Add(route + " loads without errors");
                     await Capture(route.Replace(':', '-'));
                     if (route == "viewing")

@@ -151,6 +151,15 @@ internal static partial class Program
         model.Route = "detail"; controller.Update();
         model.Route = "home"; controller.Update();
         Assert(view.CurrentSource is not null, "detail navigation retains a usable session background");
+        var sessionSource = view.CurrentSource;
+        model.Route = "viewing:resources:media=one"; controller.Update(resourceArtwork: "https://example.invalid/poster-one.jpg");
+        Assert(view.CurrentSource == "https://example.invalid/poster-one.jpg", "MoviePilot resources use the selected media poster as a fixed backdrop");
+        controller.Update();
+        Assert(view.CurrentSource == "https://example.invalid/poster-one.jpg", "ordinary resource-page updates retain the selected backdrop");
+        model.Route = "viewing:resources:media=two"; controller.Update(resourceArtwork: "https://example.invalid/poster-two.jpg");
+        Assert(view.CurrentSource == "https://example.invalid/poster-two.jpg", "changing resource media replaces the fixed backdrop");
+        model.Route = "viewing:moviepilot"; controller.Update();
+        Assert(view.CurrentSource == sessionSource, "leaving MoviePilot resources restores the existing ambient session pool");
         controller.Dispose(); controller.Dispose(); controller.Update();
         Assert(view.Disposed, "background cleanup tolerates repeated disposal and late updates");
     }
