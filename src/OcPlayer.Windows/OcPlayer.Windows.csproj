@@ -25,6 +25,7 @@
     <Compile Include="..\..\tests\Fixtures\DanmakuFixture.cs" Link="Preview\DanmakuFixture.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\DanmakuVerificationWindow.cs" Link="Preview\DanmakuVerificationWindow.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\PageTransitionVerification.cs" Link="Preview\PageTransitionVerification.cs" />
+    <Compile Include="..\..\tests\OcPlayer.Ui\DetailTransitionVerification.cs" Link="Preview\DetailTransitionVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\PlayerOverlayVerification.cs" Link="Preview\PlayerOverlayVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\BrowsingParityVerification.cs" Link="Preview\BrowsingParityVerification.cs" />
     <Compile Include="..\..\tests\OcPlayer.Ui\PlayerMenuVerification.cs" Link="Preview\PlayerMenuVerification.cs" />

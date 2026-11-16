@@ -94,12 +94,16 @@ public sealed class AmbientBackdropView : Grid, IDisposable
     {
         if (_disposed) return;
         var changedPage = _expanded != expanded;
+        var changedTheme = _dark != dark;
+        if (!changedPage && !changedTheme) return;
         _dark = dark; _expanded = expanded;
         foreach (var scene in _scenes)
         {
             if (scene.Key is null) continue;
-            StyleScene(scene);
-            if (scene.Detail) UpdateMask(scene, changedPage && _animations);
+            if (changedTheme) StyleScene(scene);
+            // Header/data refreshes can apply the same style during a flip.
+            // Only a page change should replace the running mask animation.
+            if (scene.Detail && changedPage) UpdateMask(scene, _animations);
         }
     }
 

@@ -105,6 +105,7 @@ public sealed partial class MainWindow : Window
 #if DEBUG
         AttachPlayerVerification();
         AttachBrowsingVerification();
+        AttachDetailTransitionVerification();
 #endif
         if (!App.DemoMode)
         {
