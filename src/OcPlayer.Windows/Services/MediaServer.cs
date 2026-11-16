@@ -32,6 +32,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     public event Action<MediaServer>? AuthenticationExpired;
     public event Action<ServerProfile>? ProfileChanged;
     private BrowserCache _cache => new(Profile);
+    public long CacheRevision => _cache.Revision;
     public DateTimeOffset? HomeUpdatedAt { get; private set; }
     public string? UserAvatarUrl { get; private set; }
     private DateTimeOffset _lastEndpointCheck;
@@ -203,6 +204,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
 
     public async Task Refresh(CancellationToken token)
     {
+        var cacheRevision = CacheRevision;
         var home = await Request("browse.home", token: token);
         var failures = home.TryGetProperty("failures", out var failed) && failed.ValueKind == JsonValueKind.Object ? failed.EnumerateObject().ToArray() : [];
         if (failed.ValueKind == JsonValueKind.Object && failed.TryGetProperty("libraries", out var libraryFailure) && Libraries.Count == 0)
@@ -235,7 +237,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
         if (!Failed("nextUp")) { NextUp.Clear(); NextUp.AddRange(next); }
         NextUp.RemoveAll(x => Resume.Any(y => y.Id == x.Id));
         HomeUpdatedAt = DateTimeOffset.UtcNow;
-        _cache.Save("home", new HomeSnapshot(Libraries.ToArray(), Latest.ToArray(), Resume.ToArray(), NextUp.ToArray()));
+        _cache.Save("home", new HomeSnapshot(Libraries.ToArray(), Latest.ToArray(), Resume.ToArray(), NextUp.ToArray()), cacheRevision);
         try { await RefreshAvatar(token); } catch (ServerConnectionException) { }
         HomeWarning = failures.Length > 0 ? "部分首页栏目加载失败（" + string.Join("、", failures.Select(x => x.Name switch { "resume" => "继续观看", "latest" => "最近添加", "nextUp" => "接下来看", _ => x.Name })) + "），可点击刷新重试。" : null;
     }
@@ -279,7 +281,7 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     }
     private static string BrowseKey(string? libraryId, string query, LibrarySortSettings settings) => "browse:" + JsonSerializer.Serialize(new { libraryId, query, settings });
     public (BrowserPage Value, DateTimeOffset SavedAt)? CachedBrowse(string? libraryId, string query, LibrarySortSettings settings) => _cache.Read<BrowserPage>(BrowseKey(libraryId, query, settings));
-    public void CacheBrowse(string? libraryId, string query, LibrarySortSettings settings, BrowserPage page) => _cache.Save(BrowseKey(libraryId, query, settings), page);
+    public void CacheBrowse(string? libraryId, string query, LibrarySortSettings settings, BrowserPage page, long? revision = null) => _cache.Save(BrowseKey(libraryId, query, settings), page, revision);
     public async Task<BrowserPage> BrowsePage(string? libraryId, string query, LibrarySortSettings settings, int start, CancellationToken token, bool collection = false)
     {
         const int limit = 60;
@@ -321,9 +323,10 @@ internal sealed class MediaServer(OcpCoreClient core, ServerProfile profile)
     public async Task<DemoMedia> Detail(DemoMedia media, CancellationToken token, string? seasonId = null)
     {
         var key = "detail:" + media.Id + ":" + seasonId;
+        var cacheRevision = CacheRevision;
         try
         {
-            var value = await FetchDetail(media, token, seasonId); _cache.Save(key, value); return value;
+            var value = await FetchDetail(media, token, seasonId); _cache.Save(key, value, cacheRevision); return value;
         }
         catch (ServerConnectionException ex) when (ex is not ServerAuthenticationException)
         {

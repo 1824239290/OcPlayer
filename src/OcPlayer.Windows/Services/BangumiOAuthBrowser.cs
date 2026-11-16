@@ -82,7 +82,8 @@ internal static class BangumiOAuthBrowser
         var runtime = runtimeDirectory is null ? null : Path.Combine(runtimeDirectory, "dotnet.exe");
         // Developer installs may only expose .NET via DOTNET_ROOT. The protocol
         // process is launched by the shell and does not inherit that environment.
-        if (runtime is not null && File.Exists(runtime) && File.Exists(assembly) && !runtime.Contains('"'))
+        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "coreclr.dll"))
+            && runtime is not null && File.Exists(runtime) && File.Exists(assembly) && !runtime.Contains('"'))
             return $"\"{runtime}\" \"{assembly}\" {CallbackArgument} \"%1\"";
         if (Path.GetFileName(executable).Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
             return $"\"{executable}\" \"{assembly}\" {CallbackArgument} \"%1\"";

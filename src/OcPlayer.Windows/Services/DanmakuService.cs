@@ -33,6 +33,13 @@ internal sealed class DanmakuService
     private readonly Func<string, CancellationToken, Task<string[]>>? _aliasProvider;
     private readonly bool _introProvidersEnabled;
     private static long _revision;
+    public const long CapacityBytes = 256L * 1024 * 1024;
+    private readonly string _directory;
+    private readonly object _loadsGate = new();
+    private sealed class PendingLoad(CancellationTokenSource cancellation) { public CancellationTokenSource Cancellation = cancellation; public Task<DanmakuPayload> Task = null!; }
+    private readonly List<PendingLoad> _loads = [];
+    private bool _clearing;
+    public long UsedBytes => CacheFiles.UsedBytes(_directory, x => x.Name.StartsWith("comments-", StringComparison.Ordinal) && x.Extension == ".json");
     public DanmakuSettings Settings { get; }
 
     public DanmakuService(OcpCoreClient core, string directory, DanmakuSettings settings, Func<string>? bangumiBase = null,
@@ -40,7 +47,10 @@ internal sealed class DanmakuService
     {
         _core = core; Settings = settings;
         _bangumiBase = bangumiBase ?? (() => "https://api.bgm.tv/"); _aliasProvider = aliasProvider; _introProvidersEnabled = introProvidersEnabled;
-        PlaybackSession.Require(core.Call("danmakuCache.open", new { directory = Path.GetFullPath(Path.Combine(directory, "Danmaku")) }));
+        _directory = Path.GetFullPath(Path.Combine(directory, "Danmaku"));
+        AppPaths.RejectReparsePoints(_directory, directory);
+        CacheFiles.Prune(_directory, long.MaxValue, _ => false); // Remove abandoned native temporary writes only.
+        PlaybackSession.Require(core.Call("danmakuCache.open", new { directory = _directory, commentsDiskCapacityBytes = CapacityBytes }));
     }
 
     public DanmakuContext Context(DemoMedia media, PlaybackSource source)
@@ -107,7 +117,40 @@ internal sealed class DanmakuService
     }
     private static string Hash(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
-    public async Task<DanmakuPayload> Load(DanmakuContext context, bool force, DanmakuEpisode? manual, CancellationToken token)
+    public Task<DanmakuPayload> Load(DanmakuContext context, bool force, DanmakuEpisode? manual, CancellationToken token)
+    {
+        lock (_loadsGate)
+        {
+            if (_clearing) return Task.FromException<DanmakuPayload>(new InvalidOperationException("正在清理弹幕缓存，请稍后重试。"));
+            var pending = new PendingLoad(CancellationTokenSource.CreateLinkedTokenSource(token));
+            _loads.Add(pending); pending.Task = Run(); return pending.Task;
+            async Task<DanmakuPayload> Run()
+            {
+                try { return await LoadCore(context, force, manual, pending.Cancellation.Token); }
+                finally { lock (_loadsGate) _loads.Remove(pending); pending.Cancellation.Dispose(); }
+            }
+        }
+    }
+
+    public async Task ClearComments()
+    {
+        PendingLoad[] pending;
+        lock (_loadsGate)
+        {
+            if (_clearing) throw new InvalidOperationException("弹幕缓存正在清理。");
+            _clearing = true; pending = _loads.ToArray();
+            foreach (var load in pending) load.Cancellation.Cancel();
+        }
+        try
+        {
+            try { await Task.WhenAll(pending.Select(x => x.Task)); } catch (Exception) { /* Drain cancelled requests before deleting their results. */ }
+            AppPaths.RejectReparsePoints(_directory, Path.GetDirectoryName(_directory)!);
+            PlaybackSession.Require(_core.Call("danmakuCache.clearComments"));
+        }
+        finally { lock (_loadsGate) _clearing = false; }
+    }
+
+    private async Task<DanmakuPayload> LoadCore(DanmakuContext context, bool force, DanmakuEpisode? manual, CancellationToken token)
     {
         var preferences = Settings.Current.Validated();
         var key = Hash(preferences.EffectiveUrl) + ":" + context.CacheKey;

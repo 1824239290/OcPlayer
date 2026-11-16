@@ -25,10 +25,11 @@ internal sealed partial class RuntimeSettingsPages
     {
         if (App.Core is not { } core) { page.Children.Add(Note("共享核心尚未就绪。")); return; }
         Heading(page, "缓存");
-        var images = Note(""); var metadata = Note(""); page.Children.Add(images); page.Children.Add(metadata);
+        var images = Note(""); var metadata = Note(""); var otherCaches = Note(""); page.Children.Add(images); page.Children.Add(metadata); page.Children.Add(otherCaches);
         void RefreshCache()
         {
             images.Text = $"图片缓存：{Bytes(ImageDiskCache.UsedBytes)} / {Bytes(ImageDiskCache.CapacityBytes)}";
+            otherCaches.Text = $"浏览缓存：{Bytes(BrowserCache.UsedBytes)} / {Bytes(BrowserCache.CapacityBytes)}\n字幕缓存：{Bytes(ServerSubtitleService.UsedBytes)} / {Bytes(ServerSubtitleService.CapacityBytes)}\n弹幕缓存：{Bytes(core.Danmaku.UsedBytes)} / {Bytes(DanmakuService.CapacityBytes)}\nTMDB 缓存：{Bytes(core.Tmdb.UsedBytes)} / {Bytes(TmdbService.CapacityBytes)}";
             try { var result = PlaybackSession.Require(core.Client.Call("metadataDatabase.size", new { directory = core.DataDirectory })); metadata.Text = "媒体元数据缓存：" + Bytes(result.GetInt64()); }
             catch (Exception ex) { metadata.Text = "媒体元数据缓存不可用：" + ex.Message; }
         }
@@ -36,8 +37,11 @@ internal sealed partial class RuntimeSettingsPages
         page.Children.Add(AsyncAction("清空图片缓存", async () => { if (!await Confirm(page, "清空图片缓存？", "已下载的海报和背景缓存将删除，需要时会重新下载。")) return;
             await ImageDiskCache.Clear(); RefreshCache(); _status.Text = "图片缓存已清空。"; }));
         page.Children.Add(AsyncAction("清空媒体元数据缓存", async () => { if (!await Confirm(page, "清空当前服务器的元数据缓存？", "将清除当前服务器的浏览缓存和本地进度副本，后续从服务器重新获取。其它服务器不受影响。")) return;
-            if (core.Server is not { } server) throw new InvalidOperationException("当前未连接媒体服务器。");
-            PlaybackSession.Require(core.Client.Call("cache.clear", new { tenantId = server.Profile.Id })); RefreshCache(); _status.Text = "当前服务器的媒体元数据缓存已清空。"; }));
+            core.ClearServerMetadata(); RefreshCache(); _status.Text = "当前服务器的媒体元数据缓存已清空。"; }));
+        page.Children.Add(AsyncAction("清空字幕缓存", async () => { if (!await Confirm(page, "清空字幕缓存？", "已下载的服务器字幕将删除，需要时会重新下载。")) return;
+            ServerSubtitleService.Clear(); RefreshCache(); _status.Text = "字幕缓存已清空。"; }));
+        page.Children.Add(AsyncAction("清空弹幕缓存", async () => { if (!await Confirm(page, "清空弹幕缓存？", "已下载的弹幕将删除；手动匹配、片头标记和偏好会保留。")) return;
+            await core.Danmaku.ClearComments(); RefreshCache(); _status.Text = "弹幕缓存已清空。"; }));
         Heading(page, "配置备份与多端同步");
         page.Children.Add(Note("JSON 包含 TMDB 凭据、播放/字幕、弹幕、常规与镜像偏好；不会包含服务器账号密码或登录令牌。请妥善保管导出的配置。"));
         page.Children.Add(AsyncAction("导出配置文件…", async () =>

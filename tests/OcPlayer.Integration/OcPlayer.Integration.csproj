@@ -7,6 +7,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\AppPaths.cs" Link="AppPaths.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\AppDataMigration.cs" Link="AppDataMigration.cs" />
+    <Compile Include="..\..\src\OcPlayer.Windows\Services\CacheFiles.cs" Link="CacheFiles.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\MediaServer.cs" Link="MediaServer.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackChapters.cs" Link="PlaybackChapters.cs" />
     <Compile Include="..\..\src\OcPlayer.Windows\Services\PlaybackPreferences.cs" Link="PlaybackPreferences.cs" />

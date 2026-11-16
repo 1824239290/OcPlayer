@@ -52,6 +52,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         InitializeBrowserParity();
         Title = App.DemoMode ? "OcPlayer · WinUI Demo" : "OcPlayer";
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Branding", "OcPlayer.ico"));
         ExtendsContentIntoTitleBar = true;
         if (AppWindowTitleBar.IsCustomizationSupported())
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
@@ -650,6 +651,7 @@ public sealed partial class MainWindow : Window
         if (App.Core?.Server is not { } server) return;
         if (append && (_model.LibraryLoading || !_model.LibraryHasMore)) return;
         var libraryId = _model.LibraryId; var query = _model.Query; var sort = _model.LibrarySort;
+        var cacheRevision = server.CacheRevision;
         var key = server.Profile.Id + ":" + libraryId + ":" + query + ":" + sort;
         if (append && key != _libraryQueryKey) return;
         var (token, generation) = BeginLoad();
@@ -673,7 +675,7 @@ public sealed partial class MainWindow : Window
             _model.ServerItems = (append ? (_model.ServerItems ?? []).Concat(page.Items) : page.Items).DistinctBy(x => x.Id).ToArray();
             _model.LibraryNextIndex = page.NextIndex; _model.LibraryHasMore = page.HasMore; _model.LibraryTotalCount = page.TotalCount;
             _model.LibraryCacheNotice = null;
-            server.CacheBrowse(libraryId, query, sort, new BrowserPage(_model.ServerItems.ToArray(), 0, page.TotalCount, page.HasMore));
+            server.CacheBrowse(libraryId, query, sort, new BrowserPage(_model.ServerItems.ToArray(), 0, page.TotalCount, page.HasMore), cacheRevision);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (generation == _loadGeneration) _model.LibraryError = "加载失败：" + ex.Message; }

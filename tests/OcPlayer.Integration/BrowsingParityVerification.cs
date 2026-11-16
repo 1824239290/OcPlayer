@@ -31,8 +31,8 @@ internal static partial class Program
         Assert(!fixture.Queries.Last(x => x.Contains("parentId=boxes")).Contains("includeItemTypes="), "collection library does not discard other kinds");
         server.CacheBrowse("movies", "alias", new(), new(all.ToArray(), 0, 611, false));
         Assert(server.CachedBrowse("movies", "alias", new())?.Value.Items.Length == 611, "all accumulated pages survive catalog restoration");
-        var caches = Directory.GetFiles(Path.Combine(data, "browser-cache"), "*.json");
-        Assert(caches.All(path => !File.ReadAllText(path).Contains("cache-secret")), "browser cache never persists token-bearing image URLs");
+        var caches = Directory.GetFiles(Path.Combine(data, "browser-cache"), "*.json", SearchOption.AllDirectories);
+        Assert(caches.Length > 0 && caches.All(path => !File.ReadAllText(path).Contains("cache-secret")), "browser cache never persists token-bearing image URLs");
         Assert(restored.Latest.All(x => x.Artwork.Contains("api_key=cache-secret")), "cached artwork regains current in-memory authentication");
         var otherUser = new MediaServer(core, profile with { UserId = "other" });
         Assert(!otherUser.RestoreHome(), "cache identities isolate users on the same server");

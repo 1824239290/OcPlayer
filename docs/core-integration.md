@@ -53,9 +53,10 @@ Windows 构建脚本检查固定提交与版本化补丁，在 receipt 中记录
 ./Scripts/start-windows.ps1
 ```
 
-开发启动脚本使用工作区里的 `artifacts/app-data` 保存数据库与本地观看进度，
-避免开发进程无法写入用户目录时不能加载 Core；可传 `-DataDirectory 'D:\path\to\data'`。
-直接运行 exe 时仍默认使用 `%LOCALAPPDATA%/OcPlayer/Windows`。
+开发启动脚本与直接运行 EXE 均默认使用 `%LOCALAPPDATA%/OcPlayer/Windows`，
+首次通过新脚本启动会导入旧 `artifacts/app-data` 的持久数据并保留原目录。
+可传 `-DataDirectory 'D:\path\to\data'` 指定独立目录。迁移、运行库与 MSI
+验收见 [发行说明](release-windows.md)。
 
 也可以运行 exe：
 
@@ -114,4 +115,4 @@ dotnet run --project tests/OcPlayer.Integration/OcPlayer.Integration.csproj `
 ARM64、完整影片稳定性和所有 HDR / Dolby Vision 输出组合。Bangumi、MoviePilot 与观影统计的后续接入、
 验证及剩余边界见 [VIEWING-INTEGRATIONS.md](VIEWING-INTEGRATIONS.md)。TMDB 设置、
 配置备份 / 诊断导出等页面仍待逐项接入；离线 Demo 继续保留这些页面供 UI 对齐。
-媒体库本次最多读取 500 个条目，增量分页属于后续工作。原生构建未经发行签名或 MSIX 打包验收。
+本段为早期接入验证记录；后续分页与 MSI、自包含运行库的现状见 [发行说明](release-windows.md)。发行签名需提供代码签名证书。

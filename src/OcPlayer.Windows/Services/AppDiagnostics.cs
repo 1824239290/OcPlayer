@@ -7,8 +7,7 @@ internal sealed record DiagnosticRecord(DateTimeOffset Time, string Level, strin
 internal static class AppDiagnostics
 {
     private static readonly object Gate = new();
-    public static string DirectoryPath => Path.Combine(Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"), "Logs");
+    public static string DirectoryPath => Path.Combine(AppPaths.DataDirectory, "Logs");
     public static string FilePath => Path.Combine(DirectoryPath, "diagnostics.jsonl");
     public static string[] NativeTracePaths => new[] { "erika-playback.log", "erika-capi.log", "erika-danmaku.log" }.Select(x => Path.Combine(DirectoryPath, x)).ToArray();
     public static long NativeTraceBytes => NativeTracePaths.Where(File.Exists).Sum(x => new FileInfo(x).Length);

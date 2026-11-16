@@ -19,11 +19,47 @@ public partial class App : Application
 
     internal static void LeaveDemo() => DemoMode = false;
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        UnhandledException += (_, args) =>
+        {
+            AppDiagnostics.Write("error", args.Exception.ToString());
+            Console.Error.WriteLine(args.Exception.ToString());
+        };
+        InitializeComponent();
+    }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         var launchArguments = Environment.GetCommandLineArgs();
+        var migration = launchArguments.FirstOrDefault(x => x.StartsWith(AppDataMigration.Argument, StringComparison.Ordinal));
+        if (migration is not null)
+        {
+            try { AppDataMigration.Import(migration[AppDataMigration.Argument.Length..], AppPaths.DataDirectory); }
+            catch (Exception ex) { Console.Error.WriteLine(ex.Message); Environment.ExitCode = 1; }
+            Exit(); return;
+        }
+        var runtimeProbe = launchArguments.FirstOrDefault(x => x.StartsWith("--verify-runtime=", StringComparison.Ordinal));
+        if (runtimeProbe is not null)
+        {
+            var output = runtimeProbe.Split('=', 2)[1];
+            try
+            {
+                using var runtime = new CoreRuntime("OcPlayer.RuntimeProbe." + Guid.NewGuid().ToString("N"));
+                using var presenter = new OcPlayer.CoreAdapter.ErikaPresenter();
+                Core = runtime;
+                var probeWindow = new MainWindow();
+                probeWindow.Close();
+                Core = null;
+                var modules = System.Diagnostics.Process.GetCurrentProcess().Modules.Cast<System.Diagnostics.ProcessModule>()
+                    .Where(x => new[] { "Microsoft.UI.Xaml.dll", "coreclr.dll", "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll" }.Contains(x.ModuleName, StringComparer.OrdinalIgnoreCase))
+                    .ToDictionary(x => x.ModuleName, x => x.FileName);
+                File.WriteAllText(output, System.Text.Json.JsonSerializer.Serialize(new { passed = true, version = AppReleaseService.Version,
+                    coreVersion = runtime.Version, kernelVersion = KernelVersion.Read(), modules, dataDirectory = runtime.DataDirectory }));
+            }
+            catch (Exception ex) { File.WriteAllText(output, System.Text.Json.JsonSerializer.Serialize(new { passed = false, error = ex.ToString() })); Environment.ExitCode = 1; }
+            Exit(); return;
+        }
         if (launchArguments.Contains(BangumiOAuthBrowser.RegisterArgument))
         {
             try { BangumiOAuthBrowser.RegisterProtocol(); }

@@ -62,6 +62,8 @@ internal sealed record TmdbBatchProgress(int Completed, int Total, string Curren
 
 internal sealed class TmdbService
 {
+    public const long CapacityBytes = 64L * 1024 * 1024;
+    public long UsedBytes => CacheFiles.UsedBytes(_directory, CacheFiles.HashedJson);
     private sealed record Cached(string Key, DateTimeOffset FetchedAt, JsonElement Data);
     private readonly OcpCoreClient _core;
     private readonly string _directory;
@@ -81,6 +83,7 @@ internal sealed class TmdbService
     public TmdbService(OcpCoreClient core, string directory, string credentialResource = "OcPlayer.Windows")
     {
         _core = core; _directory = Path.Combine(directory, "Tmdb"); Directory.CreateDirectory(_directory); Settings = new(credentialResource);
+        CacheFiles.Prune(_directory, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30));
         foreach (var path in Directory.EnumerateFiles(_directory, "*.json"))
         {
             try
@@ -137,7 +140,10 @@ internal sealed class TmdbService
                 catch (InvalidOperationException) { /* Optional English fallback must not discard primary metadata. */ }
             }
         }
-        cached = new(cacheKey, DateTimeOffset.UtcNow, data); _cache[cacheKey] = cached; Write(Hash(cacheKey) + ".json", cached); return data;
+        cached = new(cacheKey, DateTimeOffset.UtcNow, data); _cache[cacheKey] = cached; var name = Hash(cacheKey) + ".json"; Write(name, cached);
+        CacheFiles.Prune(_directory, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30), Path.Combine(_directory, name));
+        foreach (var old in _cache.Keys.Where(x => !File.Exists(Path.Combine(_directory, Hash(x) + ".json"))).ToArray()) _cache.Remove(old);
+        return data;
     }
     public async Task<JsonElement?> Season(long seriesId, int number, CancellationToken token)
     {

@@ -8,8 +8,7 @@ namespace OcPlayer.Windows.ViewModels;
 // Shared presentation state for the explicit preview and the Core-backed catalogs.
 public sealed class DemoViewModel : INotifyPropertyChanged
 {
-    private readonly string _layoutPath = Path.Combine(Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"), "browser-preferences.json");
+    private readonly string _layoutPath = Path.Combine(AppPaths.DataDirectory, "browser-preferences.json");
     public DemoViewModel()
     {
         try
@@ -45,10 +44,7 @@ public sealed class DemoViewModel : INotifyPropertyChanged
     public string? PendingSeasonId { get; set; }
     private string _query = "";
     private string _category = "全部";
-    private readonly LibrarySortPreferences _librarySort = new(Path.Combine(
-        Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"),
-        "library-sort.json"));
+    private readonly LibrarySortPreferences _librarySort = new(Path.Combine(AppPaths.DataDirectory, "library-sort.json"));
     private bool _darkTheme = true;
     public List<string> HomeSections { get; } = ["继续观看", "最近添加", "媒体库", "接下来看"];
     public HashSet<string> HiddenSections { get; } = [];

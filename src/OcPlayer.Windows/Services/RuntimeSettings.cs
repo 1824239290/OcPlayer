@@ -31,8 +31,7 @@ internal sealed record RuntimePreferences(
 
 internal static class RuntimeSettings
 {
-    private static string PathName => Path.Combine(Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"), "runtime-settings.json");
+    private static string PathName => Path.Combine(AppPaths.DataDirectory, "runtime-settings.json");
     public static RuntimePreferences Current { get; private set; } = Read();
     public static event Action<RuntimePreferences>? Changed;
     public static string? LoadWarning { get; private set; }

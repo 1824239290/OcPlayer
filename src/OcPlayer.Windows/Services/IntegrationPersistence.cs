@@ -44,8 +44,9 @@ internal sealed partial class ViewingIntegrations
     private readonly ConcurrentDictionary<string, Action<JsonElement>> _searchObservers = new();
     private void InitializePreferences()
     {
-        var root = Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows");
+        var root = AppPaths.DataDirectory;
         _store = Path.Combine(root, "Integrations", Hash(_resource)); Directory.CreateDirectory(_store);
+        CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30));
         try { if (File.Exists(Path.Combine(_store, "preferences.json"))) _preferences = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(Path.Combine(_store, "preferences.json"))) ?? []; }
         catch (Exception ex) when (ex is IOException or JsonException) { }
         // Enabled is a user preference, independent from an account temporarily invalidated
@@ -148,7 +149,11 @@ internal sealed partial class ViewingIntegrations
         try { var path = SnapshotPath(key); return File.Exists(path) ? JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone() : null; }
         catch (Exception ex) when (ex is IOException or JsonException) { return null; }
     }
-    public void SaveSnapshot(string key, JsonElement value) => AtomicWrite(SnapshotPath(key), value.GetRawText());
+    public void SaveSnapshot(string key, JsonElement value)
+    {
+        var path = SnapshotPath(key); AtomicWrite(path, value.GetRawText());
+        CacheFiles.Prune(Path.Combine(_store, "Bangumi"), 64L * 1024 * 1024, CacheFiles.HashedJson, TimeSpan.FromDays(30), path);
+    }
     public void ClearSnapshot(string key) { var path = SnapshotPath(key); if (File.Exists(path)) File.Delete(path); }
     public async Task<JsonElement> CachedBgm(string method, object? args, string key, CancellationToken token)
     { var value = await Bgm(method, args, token); SaveSnapshot(key, value); return value; }

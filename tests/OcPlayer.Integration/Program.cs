@@ -25,6 +25,20 @@ internal static partial class Program
         if (!danmakuOnly && !oauthOnly) VerifyLibrarySort(data);
         if (!danmakuOnly && !oauthOnly) VerifyPlayerParity(data);
         var config = JsonSerializer.Serialize(new { dataDirectory = data, locale = "zh-CN" });
+        if (args[0] == "--storage-only")
+        {
+            try
+            {
+                using var storageCore = new OcpCoreClient(config);
+                VerifyStorage(storageCore, data).GetAwaiter().GetResult();
+                VerifySettingsParity(storageCore, data).GetAwaiter().GetResult();
+                VerifyBrowsingParity(storageCore, data).GetAwaiter().GetResult();
+                VerifyServerPlayerMenus(storageCore, data).GetAwaiter().GetResult();
+                File.WriteAllText(Path.Combine(output, "results.json"), JsonSerializer.Serialize(new { passed = true, suite = "storage", assertions = _assertions }, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine($"Passed {_assertions} storage integration assertions."); return 0;
+            }
+            catch (Exception ex) { File.WriteAllText(Path.Combine(output, "failure.txt"), ex.ToString()); Console.Error.WriteLine(ex); return 1; }
+        }
         var hwnd = CreateWindowEx(0, "STATIC", "OcPlayer integration test", 0x80000000, 0, 0, 640, 360, 0, 0, 0, 0);
         if (hwnd == IntPtr.Zero) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         try

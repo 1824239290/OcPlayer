@@ -5,9 +5,10 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>OcPlayer.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Branding\OcPlayer.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <UseWinUI>true</UseWinUI>
-    <!-- 默认构建 unpackaged 版本用于开发和故障排查；打包时用 -p:WindowsPackageType=MSIX。 -->
+    <!-- MSI releases publish an unpackaged, fully self-contained application. -->
     <WindowsPackageType>None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -16,9 +17,12 @@
     <ProjectReference Include="..\OcPlayer.CoreAdapter\OcPlayer.CoreAdapter.csproj" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Assets\Demo\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Demo\*.*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Branding\*.ico;Assets\Branding\*.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">
     <Compile Include="..\..\tests\OcPlayer.Ui\ServerConnectionVerification.cs" Link="Preview\ServerConnectionVerification.cs" />
@@ -46,5 +50,15 @@
   <Target Name="CheckNativeRuntime" BeforeTargets="PrepareForBuild" Condition="'$(OcpDemoOnly)' != 'true'">
     <Error Condition="!Exists('$(OcpNativeDirectory)ocp_ffi.dll') or !Exists('$(OcpNativeDirectory)erika_capi.dll')"
            Text="Native runtime missing. Prepare liberika with Scripts/prepare-kernel.ps1, then run Scripts/build-windows.ps1 with -KernelRoot, or use -p:OcpDemoOnly=true for UI-only builds." />
+  </Target>
+  <Target Name="IncludeWinUiPublishResources" AfterTargets="Publish">
+    <!-- WinUI's build output is not included by the .NET publish file resolver.
+         The DLL-only output initializes Application but fails loading a Window. -->
+    <Error Condition="!Exists('$(OutDir)$(AssemblyName).pri')" Text="WinUI application PRI is missing; publish cannot produce a runnable application." />
+    <ItemGroup>
+      <_WinUiPublishResource Include="$(OutDir)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUiPublishResource)" DestinationFiles="@(_WinUiPublishResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(OutDir)$(AssemblyName).pri" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

@@ -91,6 +91,7 @@ if (!$SkipNative) {
     if ($LASTEXITCODE -ne 0) { throw 'Core dependency metadata failed.' }
     [IO.File]::WriteAllText($metadataPath, ($metadata -join "`n"))
     $nugetRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget\packages' }
+    Invoke-Checked dotnet @('restore', "$workspace\src\OcPlayer.Windows\OcPlayer.Windows.csproj", "-p:Platform=$Platform", "-p:OcpCoreRoot=$coreSource\")
     & (Join-Path $PSScriptRoot 'generate-license-catalog.ps1') -Metadata $metadataPath -Kernel $kernelSource -Nuget $nugetRoot -Output "$workspace\src\OcPlayer.Windows\Services\OpenSourceCatalog.Generated.cs"
 }
 if (!$SkipManaged) {

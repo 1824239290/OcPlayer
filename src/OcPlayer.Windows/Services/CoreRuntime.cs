@@ -23,9 +23,10 @@ internal sealed class CoreRuntime : IDisposable
     public CoreRuntime(string credentialResource = "OcPlayer.Windows")
     {
         _credentialResource = credentialResource;
-        DataDirectory = Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ??
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows");
+        DataDirectory = AppPaths.DataDirectory;
         Directory.CreateDirectory(DataDirectory);
+        // Existing caches are bounded on startup as well as after new writes.
+        ImageDiskCache.Maintain(); BrowserCache.Maintain(); ServerSubtitleService.Maintain();
         ViewingHistory = new ViewingHistory(DataDirectory);
         _recentPath = Path.Combine(DataDirectory, "recent-media.json");
         Client = new OcpCoreClient(JsonSerializer.Serialize(new { dataDirectory = DataDirectory, locale = "zh-CN" }));
@@ -86,6 +87,20 @@ internal sealed class CoreRuntime : IDisposable
     {
         while (Client.TryPollEvent(out var entry)) if (entry is not null)
         { Integrations.ReceiveCoreEvent(entry.Kind, entry.Data); AppDiagnostics.Write("debug", "Core event: " + entry.Kind); }
+    }
+
+    public void ClearServerMetadata()
+    {
+        if (Server is not { } server) throw new InvalidOperationException("当前未连接媒体服务器。");
+        ClearServerMetadata(Client, server.Profile);
+    }
+    internal static void ClearServerMetadata(OcpCoreClient client, ServerProfile profile)
+    {
+        BrowserCache.ClearServer(profile.Id);
+        // Current playback tenants include the account ID. Also remove the
+        // earlier server-only layout so migrated data cannot reappear.
+        foreach (var tenant in new[] { profile.Id, profile.Id + ":" + profile.UserId })
+            PlaybackSession.Require(client.Call("cache.clear", new { tenantId = tenant }));
     }
 
     public void SetServer(MediaServer server)

@@ -25,6 +25,21 @@ foreach ($package in ($reachable | ForEach-Object { $packages[$_] } | Sort-Objec
 }
 Add-Entry 'Windows 界面' 'Microsoft.WindowsAppSDK' '2.6.5' 'Microsoft Windows App SDK license' 'WinUI 3、窗口与系统集成' 'https://github.com/microsoft/WindowsAppSDK' 'https://github.com/microsoft/WindowsAppSDK/blob/main/LICENSE' ((Get-Content (Join-Path $Nuget 'microsoft.windowsappsdk/2.6.5/license.txt') -Raw)+"`n`n"+(Get-Content (Join-Path $Nuget 'microsoft.windowsappsdk/2.6.5/NOTICE.txt') -Raw))
 Add-Entry 'Windows 界面' 'Microsoft.Graphics.Win2D' '1.4.0' 'MIT（上游源码）；NuGet 声明 Microsoft EULA' 'Direct2D 图形。NuGet 的旧 EULA URL 已重定向至无关页面；此处随包保留官方源仓库的 MIT 文本。' 'https://github.com/microsoft/Win2D' 'https://github.com/microsoft/Win2D/blob/master/LICENSE.txt' (Get-Content (Join-Path $PSScriptRoot '../licenses/ThirdParty/Win2D.txt') -Raw)
+Add-Entry 'Windows 运行库' 'Microsoft Visual C++ Runtime' 'release Microsoft.VC143.CRT' 'Microsoft Visual Studio REDIST terms' '原生 Core、Erika 和 WinUI 的 app-local C/C++ 运行库。具体文件版本记录在发行 release.json。' 'https://visualstudio.microsoft.com/license-terms/' 'https://learn.microsoft.com/visualstudio/releases/2022/redistribution' (Get-Content (Join-Path $PSScriptRoot '../licenses/ThirdParty/VisualCppRuntime.txt') -Raw)
+$windowsAssets = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../src/OcPlayer.Windows/obj/project.assets.json') -Raw | ConvertFrom-Json
+foreach ($identity in $windowsAssets.libraries.PSObject.Properties.Name | Where-Object { $_ -match '^Microsoft\.Data\.Sqlite(?:\.Core)?/|^SQLite/|^SQLitePCLRaw\.' }) {
+    $parts = $identity.Split('/'); $name = $parts[0]; $version = $parts[1]
+    $folder = Join-Path $Nuget ($name.ToLowerInvariant() + '/' + $version)
+    [xml]$nuspec = Get-Content -LiteralPath (Join-Path $folder ($name.ToLowerInvariant() + '.nuspec')) -Raw
+    $packageMetadata = $nuspec.package.metadata; $license = $packageMetadata.license.InnerText
+    if ($packageMetadata.license.type -eq 'file') { $text = Get-Content -LiteralPath (Join-Path $folder $license) -Raw; $license = 'Public Domain' }
+    elseif ($license -eq 'Apache-2.0') { $text = Get-Content -LiteralPath (Join-Path $Kernel 'packaging/LICENSE.Apache-2.0') -Raw }
+    elseif ($license -eq 'MIT') {
+        $text = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../licenses/ThirdParty/DotNet-MIT.txt') -Raw
+    } else { throw "Missing migration dependency license for $identity ($license)" }
+    $url = if ($packageMetadata.projectUrl) { [string]$packageMetadata.projectUrl } else { 'https://www.nuget.org/packages/' + $name }
+    Add-Entry 'Windows 数据迁移' $name $version $license '旧数据目录的 SQLite 一致性快照；读取 WAL，保留原数据库。' $url $url $text
+}
 $kernelVersion = ([regex]::Match([IO.File]::ReadAllText((Join-Path $Kernel 'Cargo.toml')), '(?ms)^\[workspace\.package\].*?^version\s*=\s*"([^"]+)"')).Groups[1].Value
 if (!$kernelVersion) { throw 'Kernel workspace version is missing.' }
 Add-Entry '播放内核与原生依赖' 'liberika' $kernelVersion 'MPL-2.0' 'FFmpeg 解码、WASAPI 音频、D3D11 视频与字幕/弹幕' 'https://github.com/AimesSoft/liberika' 'https://github.com/AimesSoft/liberika/blob/main/LICENSE' (Get-Content (Join-Path $Kernel 'LICENSE') -Raw)

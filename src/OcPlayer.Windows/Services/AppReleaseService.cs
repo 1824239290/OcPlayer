@@ -15,7 +15,7 @@ internal static class AppReleaseService
         ?? typeof(AppReleaseService).Assembly.GetName().Version?.ToString() ?? "0.0.0";
     public static string Build => typeof(AppReleaseService).Assembly.GetName().Version?.ToString() ?? "未知";
     public static string DisplayVersion => $"v{Version} · Build {Build}";
-    private static string StatePath => Path.Combine(Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows"), "ignored-release.txt");
+    private static string StatePath => Path.Combine(AppPaths.DataDirectory, "ignored-release.txt");
     public static string? IgnoredVersion { get { try { return File.Exists(StatePath) ? File.ReadAllText(StatePath).Trim() : null; } catch (IOException) { return null; } } }
     public static AppRelease? Latest { get; private set; }
     public static void Ignore(string version) { Directory.CreateDirectory(Path.GetDirectoryName(StatePath)!); File.WriteAllText(StatePath, version); }

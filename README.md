@@ -28,7 +28,7 @@ Jellyfin / Emby 的登录、首页、媒体库搜索、详情、分季分集、�
 - **本地数据**：SQLite + `Microsoft.Data.Sqlite`，保存服务器配置、播放历史、设置和缓存索引
 - **日志与诊断**：`Microsoft.Extensions.Logging`，提供可导出的诊断包
 - **测试**：xUnit + FluentAssertions；核心领域逻辑和跨平台协议层优先覆盖
-- **打包**：MSIX 为主，保留 unpackaged 构建用于开发和故障排查
+- **打包**：按用户安装的 MSI，内置 .NET、Windows App SDK 和 Visual C++ 运行库；保留 unpackaged 构建用于开发和故障排查。构建、数据迁移与验收见 [`docs/release-windows.md`](docs/release-windows.md)
 
 详细设计见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 

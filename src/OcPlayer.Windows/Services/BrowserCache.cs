@@ -8,34 +8,60 @@ namespace OcPlayer.Windows.Services;
 // Cache only catalog metadata. Credentials and signed image parameters are never persisted.
 internal sealed class BrowserCache(ServerProfile profile)
 {
+    public const long CapacityBytes = 128L * 1024 * 1024;
+    public static string DirectoryPath => Path.Combine(AppPaths.DataDirectory, "browser-cache");
+    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private string ServerDirectory => Path.Combine(DirectoryPath, Hash(profile.Id));
+    public long Revision { get { var state = CacheFiles.For(ServerDirectory); lock (state.Gate) return state.Generation; } }
+    public static long UsedBytes => CacheFiles.UsedBytes(DirectoryPath, CacheFiles.HashedJson);
     private string FileName(string key)
     {
-        var root = Environment.GetEnvironmentVariable("OCP_DATA_DIRECTORY") ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OcPlayer", "Windows");
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(profile.Id + ":" + profile.UserId + ":" + key)));
-        return Path.Combine(root, "browser-cache", hash + ".json");
+        return Path.Combine(ServerDirectory, Hash(profile.UserId ?? ""), Hash(key) + ".json");
     }
     public (T Value, DateTimeOffset SavedAt)? Read<T>(string key) where T : class
     {
         try
         {
-            var node = JsonNode.Parse(File.ReadAllText(FileName(key)))!;
+            var path = FileName(key); AppPaths.RejectReparsePoints(path, DirectoryPath);
+            var node = JsonNode.Parse(File.ReadAllText(path))!;
             var saved = node["savedAt"]!.GetValue<DateTimeOffset>();
             var value = Transform(node["value"], true)?.Deserialize<T>(MediaServer.JsonOptions);
             return value is null ? null : (value, saved);
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or InvalidOperationException) { return null; }
     }
-    public void Save<T>(string key, T value)
+    public void Save<T>(string key, T value, long? revision = null)
     {
         try
         {
-            var path = FileName(key); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var envelope = new JsonObject { ["savedAt"] = DateTimeOffset.UtcNow, ["value"] = Transform(JsonSerializer.SerializeToNode(value, MediaServer.JsonOptions), false) };
-            var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            File.WriteAllText(temp, envelope.ToJsonString()); File.Move(temp, path, true);
+            var state = CacheFiles.For(ServerDirectory);
+            lock (state.Gate)
+            {
+                if (revision is not null && revision != state.Generation) return;
+                var path = FileName(key); AppPaths.RejectReparsePoints(path, DirectoryPath); Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                var envelope = new JsonObject { ["savedAt"] = DateTimeOffset.UtcNow, ["value"] = Transform(JsonSerializer.SerializeToNode(value, MediaServer.JsonOptions), false) };
+                var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try { File.WriteAllText(temp, envelope.ToJsonString()); File.Move(temp, path, true); }
+                finally { if (File.Exists(temp)) File.Delete(temp); }
+                CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30), path);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { System.Diagnostics.Debug.WriteLine(ex.Message); }
+    }
+    public static void ClearServer(string serverId)
+    {
+        var directory = Path.Combine(DirectoryPath, Hash(serverId)); var state = CacheFiles.For(directory);
+        lock (state.Gate) { state.Generation++; CacheFiles.Clear(directory, CacheFiles.HashedJson); }
+    }
+    public static void Maintain()
+    {
+        // Old flat cache files cannot be attributed to a server/account. They are
+        // disposable and are invalidated once by the new scoped layout.
+        AppPaths.RejectReparsePoints(DirectoryPath, AppPaths.DataDirectory);
+        if (Directory.Exists(DirectoryPath))
+            foreach (var file in new DirectoryInfo(DirectoryPath).EnumerateFiles("*.json"))
+                if ((file.Attributes & FileAttributes.ReparsePoint) == 0) file.Delete();
+        CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFiles.HashedJson, TimeSpan.FromDays(30));
     }
     private JsonNode? Transform(JsonNode? value, bool restore)
     {

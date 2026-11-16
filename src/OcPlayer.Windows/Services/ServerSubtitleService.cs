@@ -12,6 +12,16 @@ internal sealed class ServerSubtitleException(string message) : InvalidOperation
 internal sealed class ServerSubtitleService
 {
     internal const int MaximumBytes = 32 * 1024 * 1024;
+    public const long CapacityBytes = 128L * 1024 * 1024;
+    public static string DirectoryPath => Path.Combine(AppPaths.DataDirectory, "SubtitleCache");
+    private static bool CacheFile(FileInfo file) => file.Extension is ".srt" or ".ass" or ".ssa" or ".vtt";
+    public static long UsedBytes => CacheFiles.UsedBytes(DirectoryPath, CacheFile);
+    public static void Maintain() => CacheFiles.Prune(DirectoryPath, CapacityBytes, CacheFile, TimeSpan.FromDays(30));
+    public static void Clear()
+    {
+        var state = CacheFiles.For(DirectoryPath);
+        lock (state.Gate) { state.Generation++; CacheFiles.Clear(DirectoryPath, CacheFile); }
+    }
     private static readonly HttpClient Client = new(new HttpClientHandler
     {
         AllowAutoRedirect = false,
@@ -80,6 +90,8 @@ internal sealed class ServerSubtitleService
 
     public async Task<string> DownloadAsync(ServerSubtitle subtitle, CancellationToken token)
     {
+        var state = CacheFiles.For(_cacheDirectory); long generation;
+        lock (state.Gate) generation = state.Generation;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
         budget.CancelAfter(TimeSpan.FromSeconds(30));
         string? temporary = null;
@@ -88,6 +100,7 @@ internal sealed class ServerSubtitleService
             if (subtitle.Key.Length != 64 || subtitle.Key.Any(character => !Uri.IsHexDigit(character))
                 || subtitle.Extension is not ("srt" or "ass" or "ssa" or "vtt"))
                 throw new ServerSubtitleException("服务器字幕缓存标识无效。");
+            AppPaths.RejectReparsePoints(_cacheDirectory, Path.GetDirectoryName(_cacheDirectory)!);
             Directory.CreateDirectory(_cacheDirectory);
             var destination = Path.Combine(_cacheDirectory, subtitle.Key + "." + subtitle.Extension);
             var address = subtitle.DownloadUri;
@@ -128,8 +141,12 @@ internal sealed class ServerSubtitleService
                 }
                 if (total == 0) throw new ServerSubtitleException("服务器返回了空字幕文件。");
                 budget.Token.ThrowIfCancellationRequested();
-                File.Move(temporary, destination, true);
-                temporary = null;
+                lock (state.Gate)
+                {
+                    if (generation != state.Generation) throw new ServerSubtitleException("字幕缓存已清空，请重新加载字幕。");
+                    File.Move(temporary, destination, true); temporary = null;
+                    CacheFiles.Prune(_cacheDirectory, CapacityBytes, CacheFile, TimeSpan.FromDays(30), destination);
+                }
                 return destination;
             }
             throw new ServerSubtitleException("服务器字幕下载跳转次数过多。");

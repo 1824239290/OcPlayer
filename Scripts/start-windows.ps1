@@ -13,7 +13,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $workspaceDirectory = Split-Path -Parent $PSScriptRoot
-if (-not $DataDirectory) { $DataDirectory = Join-Path $workspaceDirectory 'artifacts\app-data' }
+$useDefaultDataDirectory = [string]::IsNullOrWhiteSpace($DataDirectory)
+if ($useDefaultDataDirectory) { $DataDirectory = Join-Path $env:LOCALAPPDATA 'OcPlayer\Windows' }
 $DataDirectory = [IO.Path]::GetFullPath($DataDirectory)
 [IO.Directory]::CreateDirectory($DataDirectory) | Out-Null
 if (-not $BuildDirectory) { $BuildDirectory = Join-Path $workspaceDirectory "src\OcPlayer.Windows\bin\$Platform\$Configuration\net10.0-windows10.0.26100.0" }
@@ -86,6 +87,17 @@ $launch.WorkingDirectory = $workspaceDirectory
 $launch.EnvironmentVariables['DOTNET_ROOT'] = $runtimeDirectory
 $launch.EnvironmentVariables["DOTNET_ROOT_$($Platform.ToUpperInvariant())"] = $runtimeDirectory
 $launch.EnvironmentVariables['OCP_DATA_DIRECTORY'] = $DataDirectory
+# Import the former development store before the application reads preferences.
+# The importer snapshots SQLite WAL and never overwrites existing user data.
+$legacyDataDirectory = Join-Path $workspaceDirectory 'artifacts\app-data'
+if ($useDefaultDataDirectory -and (Test-Path -LiteralPath $legacyDataDirectory)) {
+    $launch.Arguments = '--migrate-data="' + $legacyDataDirectory + '"'
+    $migrationProcess = [Diagnostics.Process]::Start($launch)
+    try {
+        if (-not $migrationProcess.WaitForExit(60000)) { throw 'Data migration timed out; the old data has been preserved.' }
+        if ($migrationProcess.ExitCode -ne 0) { throw 'Data migration failed; the old data has been preserved. Close older OcPlayer instances and retry.' }
+    } finally { $migrationProcess.Dispose() }
+}
 $launch.Arguments = '--register-bangumi-protocol'
 $registration = [Diagnostics.Process]::Start($launch)
 try {
