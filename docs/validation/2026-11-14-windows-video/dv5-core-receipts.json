@@ -1,0 +1,646 @@
+[
+  {
+    "method": "danmaku.parseFilename",
+    "arguments": {
+      "fileName": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "episode_number": 28,
+        "is_final": false,
+        "raw_name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+        "season_number": 1,
+        "title": "花开锦绣] The Road to Splendor 2026 DV 5 1 Atmos 2Audios-CMCTV"
+      }
+    }
+  },
+  {
+    "method": "playback.open",
+    "arguments": {
+      "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": null,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "ready",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.ready",
+    "arguments": {
+      "durationSeconds": 2769.237
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "ready",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.play",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 0.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 7.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 7.96,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 0.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 7.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 7.96,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 1384.64
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1384.64,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 1392.6
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1392.6,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 1384.64
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1384.64,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 1392.6
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1392.6,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 2761.24
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2761.24,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 2769.16
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 2761.24
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2761.24,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 2769.16
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.pause",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "paused",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.selectAudio",
+    "arguments": {
+      "trackId": "1"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "1",
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "paused",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.selectAudio",
+    "arguments": {
+      "trackId": "2"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "2",
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "paused",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.play",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "2",
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 2769.16,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.save",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+      "positionSeconds": 2769.16,
+      "durationSeconds": 2769.237,
+      "played": false,
+      "recordedAt": 1794665834.0707443,
+      "completed": false
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 2769.237,
+          "item": {
+            "id": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "kind": "other",
+            "name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "playState": {
+              "percentage": 0.9999721945070067,
+              "played": false,
+              "positionSeconds": 2769.16
+            },
+            "runtimeSeconds": 2769.237
+          },
+          "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "played": false,
+          "positionSeconds": 2769.16,
+          "recordedAt": 1794665834.0707443,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.get",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 2769.237,
+          "item": {
+            "id": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "kind": "other",
+            "name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "playState": {
+              "percentage": 0.9999721945070067,
+              "played": false,
+              "positionSeconds": 2769.16
+            },
+            "runtimeSeconds": 2769.237
+          },
+          "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "played": false,
+          "positionSeconds": 2769.16,
+          "recordedAt": 1794665834.0707443,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.stop",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "2",
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "stopped",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.get",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 2769.237,
+          "item": {
+            "id": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "kind": "other",
+            "name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "playState": {
+              "percentage": 0.9999721945070067,
+              "played": false,
+              "positionSeconds": 2769.16
+            },
+            "runtimeSeconds": 2769.237
+          },
+          "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "played": false,
+          "positionSeconds": 2769.16,
+          "recordedAt": 1794665834.0707443,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  }
+]

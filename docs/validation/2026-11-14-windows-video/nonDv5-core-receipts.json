@@ -1,0 +1,620 @@
+[
+  {
+    "method": "danmaku.parseFilename",
+    "arguments": {
+      "fileName": "凡人修仙传 - S01E200 - 第 200 集.mp4"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "episode_number": 200,
+        "is_final": false,
+        "raw_name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+        "season_number": 1,
+        "title": "凡人修仙传"
+      }
+    }
+  },
+  {
+    "method": "playback.open",
+    "arguments": {
+      "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": null,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "ready",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.ready",
+    "arguments": {
+      "durationSeconds": 1156.010667
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "ready",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.play",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 0.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 7.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 7.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 0.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 7.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 7.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 578.04
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 578.04,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 586.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 586.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 578.04
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 578.04,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 586.0
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 586.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 1148.04
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1148.04,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 1155.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1155.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.seek",
+    "arguments": {
+      "positionSeconds": 1148.04
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1148.04,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.position",
+    "arguments": {
+      "positionSeconds": 1155.96
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1155.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.pause",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": null,
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1155.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "paused",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.selectAudio",
+    "arguments": {
+      "trackId": "1"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "1",
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1155.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "paused",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.play",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "1",
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 1155.96,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "playing",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.save",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+      "positionSeconds": 1155.96,
+      "durationSeconds": 1156.010667,
+      "played": false,
+      "recordedAt": 1794665757.9128475,
+      "completed": false
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 1156.010667,
+          "item": {
+            "id": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "kind": "other",
+            "name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "playState": {
+              "percentage": 0.999956170819659,
+              "played": false,
+              "positionSeconds": 1155.96
+            },
+            "runtimeSeconds": 1156.010667
+          },
+          "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "played": false,
+          "positionSeconds": 1155.96,
+          "recordedAt": 1794665757.9128475,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.get",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 1156.010667,
+          "item": {
+            "id": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "kind": "other",
+            "name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "playState": {
+              "percentage": 0.999956170819659,
+              "played": false,
+              "positionSeconds": 1155.96
+            },
+            "runtimeSeconds": 1156.010667
+          },
+          "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "played": false,
+          "positionSeconds": 1155.96,
+          "recordedAt": 1794665757.9128475,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  },
+  {
+    "method": "playback.stop",
+    "arguments": {},
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "playback": {
+          "audioTrack": "1",
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "stopped",
+          "subtitleTrack": null,
+          "volume": 1.0
+        }
+      }
+    }
+  },
+  {
+    "method": "progress.get",
+    "arguments": {
+      "tenantId": "local-video-test",
+      "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4"
+    },
+    "response": {
+      "ok": true,
+      "code": 0,
+      "retryable": false,
+      "message": "",
+      "data": {
+        "progress": {
+          "completed": false,
+          "confirmedAt": null,
+          "durationSeconds": 1156.010667,
+          "item": {
+            "id": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "kind": "other",
+            "name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "playState": {
+              "percentage": 0.999956170819659,
+              "played": false,
+              "positionSeconds": 1155.96
+            },
+            "runtimeSeconds": 1156.010667
+          },
+          "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "played": false,
+          "positionSeconds": 1155.96,
+          "recordedAt": 1794665757.9128475,
+          "tenantId": "local-video-test"
+        }
+      }
+    }
+  }
+]

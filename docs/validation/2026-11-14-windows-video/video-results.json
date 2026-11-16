@@ -1,0 +1,1359 @@
+{
+  "date": "2026-11-14",
+  "displayAcceptance": {
+    "status": "failed",
+    "monitorHdrSupport": "unsupported, as reported by the user",
+    "observedProblem": "Old example enabled HDR10 without SDR tone mapping, causing overexposure",
+    "throughputMeasurementsRemainValid": true,
+    "previousNormalPictureClaimRetracted": true
+  },
+  "timezone": "Asia/Hong_Kong",
+  "baseCommit": "fa75810e943862e5da63431a6a8bbb7d1cef8f04",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "gpu": [
+    {
+      "Name": "GameViewer Virtual Display Adapter",
+      "DriverVersion": "15.6.5.199"
+    },
+    {
+      "Name": "Radeon RX 470 Series",
+      "DriverVersion": "31.0.12027.9001"
+    }
+  ],
+  "scope": "Independent native Erika playback and FFmpeg decoding; separate Core JSON policy checks. No OcPlayer-Core/native player integration.",
+  "profiles": {
+    "CoreDLL": "debug/dev",
+    "nativeDemo": "existing debug executable",
+    "probe": "MSVC /O2 /MD /std:c11 /utf-8 /NODEFAULTLIB:LIBCMT"
+  },
+  "erikaSourceCheckout": {
+    "commit": "d9334c6f8dcc87d4131d056ef4692f643b231c6c",
+    "alreadyDirty": true,
+    "modifiedByThisTask": false,
+    "binaryCorrespondenceToCurrentSourceUnverified": true
+  },
+  "files": {
+    "CoreDLL": {
+      "path": "D:\\OcPlayer-Core\\target\\debug\\ocp_ffi.dll",
+      "sizeBytes": 24004096,
+      "modifiedAtUTC": "2026-11-14T13:16:37.749889+00:00",
+      "sha256": "da76837da70a31974d14de8ec154562e192e3d5442001b673f15eff03d1580a0"
+    },
+    "probeSource": {
+      "path": "D:\\OcPlayer-Core\\tests\\windows-video\\native_media_probe.c",
+      "sizeBytes": 9280,
+      "modifiedAtUTC": "2026-11-14T14:06:58.136931+00:00",
+      "sha256": "5c920a978bdafcbb4f85fbeace96cf8817b721d0958eea8edf0c989788ae20b6"
+    },
+    "runnerSource": {
+      "path": "D:\\OcPlayer-Core\\tests\\windows-video\\run_sample.py",
+      "sizeBytes": 7289,
+      "modifiedAtUTC": "2026-11-14T14:13:48.165315+00:00",
+      "sha256": "118f5ca2632104d8edc83d62df34db4eb6d43a627ee072d807263805a9fdaf25"
+    },
+    "probeExecutable": {
+      "path": "D:\\OcPlayer-Core\\artifacts\\windows-video-test\\native_media_probe.exe",
+      "sizeBytes": 16593920,
+      "modifiedAtUTC": "2026-11-14T14:07:35.002724+00:00",
+      "sha256": "1d48e300e421e71530a38924d4060346c5577e466093557aa70ebd0ccd6d2304"
+    },
+    "nativeDemo": {
+      "path": "D:\\DevCache\\cargo-target\\erika-dolby\\x86_64-pc-windows-msvc\\debug\\windows_native_demo.exe",
+      "sizeBytes": 59159552,
+      "modifiedAtUTC": "2026-09-04T08:48:14.809278+00:00",
+      "sha256": "93b0b6fd81cb8f1d4d01b8fc18299f3d52e9226a9b82b135c15bfc182ea06861"
+    },
+    "dv5": {
+      "path": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+      "sizeBytes": 1068127232,
+      "modifiedAtUTC": "2026-09-04T08:07:18.221194+00:00",
+      "sha256": "943be27e1cd3af5e4613f33bc452443386a403339f6eb4a52deac515575b5ceb"
+    },
+    "nonDv5": {
+      "path": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+      "sizeBytes": 1279965839,
+      "modifiedAtUTC": "2026-11-14T06:20:13.475148+00:00",
+      "sha256": "5ec72c777fbed8df88563359512a5a54f3de2fa6abdbfce1720f094c0cb02739"
+    }
+  },
+  "samples": {
+    "dv5": {
+      "media": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+      "durationSeconds": 2769.237,
+      "streams": [
+        {
+          "index": 0,
+          "type": "video",
+          "codec": "hevc",
+          "language": "",
+          "width": 3840,
+          "height": 1606,
+          "sampleRate": 0,
+          "channels": 0,
+          "fps": 25.0,
+          "pixelFormat": "yuv420p10le",
+          "primaries": "unknown",
+          "transfer": "unknown",
+          "dolbyVision": {
+            "profile": 5,
+            "level": 6,
+            "rpu": 1,
+            "enhancementLayer": 0,
+            "baseLayer": 1,
+            "compatibilityID": 0
+          }
+        },
+        {
+          "index": 1,
+          "type": "audio",
+          "codec": "eac3",
+          "language": "chi",
+          "width": 0,
+          "height": 0,
+          "sampleRate": 48000,
+          "channels": 6,
+          "fps": 0.0
+        },
+        {
+          "index": 2,
+          "type": "audio",
+          "codec": "aac",
+          "language": "chi",
+          "width": 0,
+          "height": 0,
+          "sampleRate": 48000,
+          "channels": 2,
+          "fps": 0.0
+        }
+      ],
+      "samples": [
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 0.0,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 200,
+              "doviMetadataFrames": 200,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.96
+            },
+            {
+              "stream": 1,
+              "frames": 250,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.968
+            },
+            {
+              "stream": 2,
+              "frames": 376,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.999
+            }
+          ],
+          "elapsedSeconds": 1.519365,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "start-software"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 0.0,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 200,
+              "doviRpuFrames": 200,
+              "doviMetadataFrames": 200,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.96
+            },
+            {
+              "stream": 1,
+              "frames": 250,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.968
+            },
+            {
+              "stream": 2,
+              "frames": 376,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.999
+            }
+          ],
+          "elapsedSeconds": 1.340167,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "start-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 1384.619,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 200,
+              "doviRpuFrames": 200,
+              "doviMetadataFrames": 200,
+              "errors": 0,
+              "firstPTS": 1384.64,
+              "lastPTS": 1392.6
+            },
+            {
+              "stream": 1,
+              "frames": 250,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1384.64,
+              "lastPTS": 1392.608
+            },
+            {
+              "stream": 2,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1384.639,
+              "lastPTS": 1392.617
+            }
+          ],
+          "elapsedSeconds": 1.658788,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "middle-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 1384.619,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 200,
+              "doviMetadataFrames": 200,
+              "errors": 0,
+              "firstPTS": 1384.64,
+              "lastPTS": 1392.6
+            },
+            {
+              "stream": 1,
+              "frames": 250,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1384.64,
+              "lastPTS": 1392.608
+            },
+            {
+              "stream": 2,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1384.639,
+              "lastPTS": 1392.617
+            }
+          ],
+          "elapsedSeconds": 1.706266,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "middle-software"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 2761.237,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 199,
+              "hardwareFrames": 199,
+              "doviRpuFrames": 199,
+              "doviMetadataFrames": 199,
+              "errors": 0,
+              "firstPTS": 2761.24,
+              "lastPTS": 2769.16
+            },
+            {
+              "stream": 1,
+              "frames": 249,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 2761.248,
+              "lastPTS": 2769.184
+            },
+            {
+              "stream": 2,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 2761.237,
+              "lastPTS": 2769.215
+            }
+          ],
+          "elapsedSeconds": 1.861401,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "end-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 2769.237,
+          "startSeconds": 2761.237,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "",
+              "width": 3840,
+              "height": 1606,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "unknown",
+              "transfer": "unknown",
+              "dolbyVision": {
+                "profile": 5,
+                "level": 6,
+                "rpu": 1,
+                "enhancementLayer": 0,
+                "baseLayer": 1,
+                "compatibilityID": 0
+              }
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "eac3",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 6,
+              "fps": 0.0
+            },
+            {
+              "index": 2,
+              "type": "audio",
+              "codec": "aac",
+              "language": "chi",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 199,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 199,
+              "doviMetadataFrames": 199,
+              "errors": 0,
+              "firstPTS": 2761.24,
+              "lastPTS": 2769.16
+            },
+            {
+              "stream": 1,
+              "frames": 249,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 2761.248,
+              "lastPTS": 2769.184
+            },
+            {
+              "stream": 2,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 2761.237,
+              "lastPTS": 2769.215
+            }
+          ],
+          "elapsedSeconds": 2.509215,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "end-software"
+        }
+      ],
+      "core": {
+        "commandsPassed": 24,
+        "filename": {
+          "episode_number": 28,
+          "is_final": false,
+          "raw_name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "season_number": 1,
+          "title": "花开锦绣] The Road to Splendor 2026 DV 5 1 Atmos 2Audios-CMCTV"
+        },
+        "progress": {
+          "progress": {
+            "completed": false,
+            "confirmedAt": null,
+            "durationSeconds": 2769.237,
+            "item": {
+              "id": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+              "kind": "other",
+              "name": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+              "playState": {
+                "percentage": 0.9999721945070067,
+                "played": false,
+                "positionSeconds": 2769.16
+              },
+              "runtimeSeconds": 2769.237
+            },
+            "itemId": "[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+            "played": false,
+            "positionSeconds": 2769.16,
+            "recordedAt": 1794665834.0707443,
+            "tenantId": "local-video-test"
+          }
+        },
+        "finalSnapshot": {
+          "audioTrack": "2",
+          "durationSeconds": 2769.237,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\[花开锦绣].The.Road.to.Splendor.S01E28.2026.2160p.WEB-DL.H265.DV.DDP.5.1.Atmos.2Audios-CMCTV.mkv",
+          "state": "stopped",
+          "subtitleTrack": null,
+          "volume": 1.0
+        },
+        "scope": "Core policy exercised after independent decoding; no integrated native/Core player"
+      }
+    },
+    "nonDv5": {
+      "media": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+      "durationSeconds": 1156.010667,
+      "streams": [
+        {
+          "index": 0,
+          "type": "video",
+          "codec": "hevc",
+          "language": "und",
+          "width": 3840,
+          "height": 2160,
+          "sampleRate": 0,
+          "channels": 0,
+          "fps": 25.0,
+          "pixelFormat": "yuv420p10le",
+          "primaries": "bt2020",
+          "transfer": "smpte2084"
+        },
+        {
+          "index": 1,
+          "type": "audio",
+          "codec": "aac",
+          "language": "und",
+          "width": 0,
+          "height": 0,
+          "sampleRate": 48000,
+          "channels": 2,
+          "fps": 0.0
+        }
+      ],
+      "samples": [
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 0.0,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.96
+            },
+            {
+              "stream": 1,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.978667
+            }
+          ],
+          "elapsedSeconds": 2.53945,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "start-software"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 0.0,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 200,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.96
+            },
+            {
+              "stream": 1,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 0.0,
+              "lastPTS": 7.978667
+            }
+          ],
+          "elapsedSeconds": 1.747417,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "start-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 578.005,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 200,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 578.04,
+              "lastPTS": 586.0
+            },
+            {
+              "stream": 1,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 578.026667,
+              "lastPTS": 586.005333
+            }
+          ],
+          "elapsedSeconds": 2.175532,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "middle-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 578.005,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 200,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 578.04,
+              "lastPTS": 586.0
+            },
+            {
+              "stream": 1,
+              "frames": 375,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 578.026667,
+              "lastPTS": 586.005333
+            }
+          ],
+          "elapsedSeconds": 3.182481,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "middle-software"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 1148.011,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": true,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 199,
+              "hardwareFrames": 199,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1148.04,
+              "lastPTS": 1155.96
+            },
+            {
+              "stream": 1,
+              "frames": 374,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1148.032,
+              "lastPTS": 1155.989333
+            }
+          ],
+          "elapsedSeconds": 2.296653,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "end-hardware"
+        },
+        {
+          "ffmpeg": "v0.1.7+dolby.2",
+          "durationSeconds": 1156.010667,
+          "startSeconds": 1148.011,
+          "sampleSeconds": 8.0,
+          "hardwareRequested": false,
+          "streams": [
+            {
+              "index": 0,
+              "type": "video",
+              "codec": "hevc",
+              "language": "und",
+              "width": 3840,
+              "height": 2160,
+              "sampleRate": 0,
+              "channels": 0,
+              "fps": 25.0,
+              "pixelFormat": "yuv420p10le",
+              "primaries": "bt2020",
+              "transfer": "smpte2084"
+            },
+            {
+              "index": 1,
+              "type": "audio",
+              "codec": "aac",
+              "language": "und",
+              "width": 0,
+              "height": 0,
+              "sampleRate": 48000,
+              "channels": 2,
+              "fps": 0.0
+            }
+          ],
+          "decode": [
+            {
+              "stream": 0,
+              "frames": 199,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1148.04,
+              "lastPTS": 1155.96
+            },
+            {
+              "stream": 1,
+              "frames": 374,
+              "hardwareFrames": 0,
+              "doviRpuFrames": 0,
+              "doviMetadataFrames": 0,
+              "errors": 0,
+              "firstPTS": 1148.032,
+              "lastPTS": 1155.989333
+            }
+          ],
+          "elapsedSeconds": 3.099476,
+          "errors": 0,
+          "emptyStreams": 0,
+          "label": "end-software"
+        }
+      ],
+      "core": {
+        "commandsPassed": 23,
+        "filename": {
+          "episode_number": 200,
+          "is_final": false,
+          "raw_name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "season_number": 1,
+          "title": "凡人修仙传"
+        },
+        "progress": {
+          "progress": {
+            "completed": false,
+            "confirmedAt": null,
+            "durationSeconds": 1156.010667,
+            "item": {
+              "id": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+              "kind": "other",
+              "name": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+              "playState": {
+                "percentage": 0.999956170819659,
+                "played": false,
+                "positionSeconds": 1155.96
+              },
+              "runtimeSeconds": 1156.010667
+            },
+            "itemId": "凡人修仙传 - S01E200 - 第 200 集.mp4",
+            "played": false,
+            "positionSeconds": 1155.96,
+            "recordedAt": 1794665757.9128475,
+            "tenantId": "local-video-test"
+          }
+        },
+        "finalSnapshot": {
+          "audioTrack": "1",
+          "durationSeconds": 1156.010667,
+          "error": null,
+          "muted": false,
+          "positionSeconds": 0.0,
+          "rate": 1.0,
+          "source": "D:\\凡人修仙传 - S01E200 - 第 200 集.mp4",
+          "state": "stopped",
+          "subtitleTrack": null,
+          "volume": 1.0
+        },
+        "scope": "Core policy exercised after independent decoding; no integrated native/Core player"
+      }
+    }
+  },
+  "playback": {
+    "dv5": {
+      "final": {
+        "elapsed": 180.023,
+        "ticks": 2225,
+        "tick_fps": 12.36,
+        "decoded": 202,
+        "rendered_video": 2215,
+        "rendered_total": 2227,
+        "hw": 0,
+        "zero": 0,
+        "direct": 0,
+        "shared": 0,
+        "cpu": 0,
+        "hdr10_active": 1,
+        "hdr_source": 202,
+        "hdr10_output": 202,
+        "sdr_tonemap": 0,
+        "hdr_meta_updates": 202,
+        "hdr_meta_failures": 0,
+        "hdr_output_failures": 0,
+        "import_failures": 0,
+        "render_failures": 0,
+        "audio_underflow": 1967077,
+        "danmaku_passes": 0,
+        "danmaku_draw_items": 0,
+        "atlas_uploads": 0,
+        "atlas_reuses": 0,
+        "tick_ms_avg": 64.376,
+        "tick_ms_p95": 694.304,
+        "tick_ms_max": 890.444,
+        "render_ms_avg": 0.316,
+        "render_ms_p95": 0.414,
+        "render_ms_max": 2.821,
+        "pump_ms_avg": 64.058,
+        "pump_ms_p95": 693.929,
+        "video_pump_ms_p95": 693.16,
+        "danmaku_plan_ms_p95": 0.016,
+        "gpu_ms_p95": 0.0
+      },
+      "firstMinute": {
+        "elapsed_s": 59.857,
+        "ticks": 92,
+        "tick_fps": 1.537,
+        "decoded": 82,
+        "rendered_video": 82,
+        "rendered_total": 94,
+        "hw": 0,
+        "zero": 0,
+        "direct": 0,
+        "shared": 0,
+        "cpu": 0,
+        "hdr10_active": 1,
+        "hdr_source": 82,
+        "hdr10_output": 82,
+        "sdr_tonemap": 0,
+        "hdr_meta_updates": 82,
+        "hdr_meta_failures": 0,
+        "hdr_output_failures": 0,
+        "import_failures": 0,
+        "render_failures": 0,
+        "audio_underflow": 801082,
+        "danmaku_passes": 0,
+        "danmaku_draw_items": 0,
+        "atlas_uploads": 0,
+        "atlas_reuses": 0,
+        "tick_ms_avg": 633.655,
+        "tick_ms_p95": 791.65,
+        "render_ms_avg": 0.413,
+        "render_ms_p95": 0.637
+      },
+      "decoderEvents": [
+        {
+          "activeBackend": "software",
+          "codec": "hevc",
+          "event": "video_decoder_changed",
+          "fallbackCount": 0,
+          "lineSizes": null,
+          "pixelFormat": null,
+          "previousBackend": null,
+          "reason": "dolby vision profile 5 requires software decode for RPU mapping",
+          "requestedBackend": "d3d11va",
+          "stage": "open"
+        }
+      ],
+      "seekCompletions": [],
+      "renderedVideoCountsRepeatPresentations": true,
+      "audioUnderflowUnit": "audio output frames, not events",
+      "rawLogSHA256": {
+        "native-stdout.log": "664bfee2b1f8d98ddf9a772a7faff7d971814b45b4acb069f814e3b35723d2b2",
+        "native-stderr.log": "c63dcd8162cd648180b779fb9cb3c4b1db8fff7eddf6c449399134add8427322",
+        "native-metrics.jsonl": "e9cbe151a2204cb0b1b7c2630d6bfcd1d6eabb2dc142351c15c91cddb288bbfe"
+      }
+    },
+    "nonDv5": {
+      "final": {
+        "elapsed": 180.031,
+        "ticks": 10447,
+        "tick_fps": 58.03,
+        "decoded": 4464,
+        "rendered_video": 10444,
+        "rendered_total": 10449,
+        "hw": 4464,
+        "zero": 4464,
+        "direct": 4464,
+        "shared": 0,
+        "cpu": 0,
+        "hdr10_active": 1,
+        "hdr_source": 4464,
+        "hdr10_output": 4464,
+        "sdr_tonemap": 0,
+        "hdr_meta_updates": 4464,
+        "hdr_meta_failures": 0,
+        "hdr_output_failures": 0,
+        "import_failures": 0,
+        "render_failures": 0,
+        "audio_underflow": 0,
+        "danmaku_passes": 0,
+        "danmaku_draw_items": 0,
+        "atlas_uploads": 0,
+        "atlas_reuses": 0,
+        "tick_ms_avg": 0.475,
+        "tick_ms_p95": 0.555,
+        "tick_ms_max": 307.978,
+        "render_ms_avg": 0.323,
+        "render_ms_p95": 0.404,
+        "render_ms_max": 118.415,
+        "pump_ms_avg": 0.15,
+        "pump_ms_p95": 0.185,
+        "video_pump_ms_p95": 0.103,
+        "danmaku_plan_ms_p95": 0.012,
+        "gpu_ms_p95": 0.0
+      },
+      "firstMinute": {
+        "elapsed_s": 59.764,
+        "ticks": 3482,
+        "tick_fps": 58.263,
+        "decoded": 1458,
+        "rendered_video": 3479,
+        "rendered_total": 3484,
+        "hw": 1458,
+        "zero": 1458,
+        "direct": 1458,
+        "shared": 0,
+        "cpu": 0,
+        "hdr10_active": 1,
+        "hdr_source": 1458,
+        "hdr10_output": 1458,
+        "sdr_tonemap": 0,
+        "hdr_meta_updates": 1458,
+        "hdr_meta_failures": 0,
+        "hdr_output_failures": 0,
+        "import_failures": 0,
+        "render_failures": 0,
+        "audio_underflow": 0,
+        "danmaku_passes": 0,
+        "danmaku_draw_items": 0,
+        "atlas_uploads": 0,
+        "atlas_reuses": 0,
+        "tick_ms_avg": 0.599,
+        "tick_ms_p95": 0.574,
+        "render_ms_avg": 0.378,
+        "render_ms_p95": 0.423
+      },
+      "decoderEvents": [
+        {
+          "activeBackend": "d3d11va",
+          "codec": "hevc",
+          "event": "video_decoder_changed",
+          "fallbackCount": 0,
+          "lineSizes": null,
+          "pixelFormat": null,
+          "previousBackend": null,
+          "reason": null,
+          "requestedBackend": "d3d11va",
+          "stage": "open"
+        }
+      ],
+      "seekCompletions": [
+        {
+          "elapsedMs": 209.1623,
+          "event": "video_seek_preroll",
+          "firstOutputPtsSeconds": 61.24,
+          "reason": "target_reached",
+          "stage": "complete",
+          "targetSeconds": 61.2047796,
+          "totalDroppedFrames": 31
+        },
+        {
+          "elapsedMs": 482.1337,
+          "event": "video_seek_preroll",
+          "firstOutputPtsSeconds": 67.48,
+          "reason": "target_reached",
+          "stage": "complete",
+          "targetSeconds": 67.4668167,
+          "totalDroppedFrames": 62
+        }
+      ],
+      "renderedVideoCountsRepeatPresentations": true,
+      "audioUnderflowUnit": "audio output frames, not events",
+      "rawLogSHA256": {
+        "native-stdout.log": "dd30984bf3792a835e222ce0d362d521050092294cf61bce1c7f86bbf333d168",
+        "native-stderr.log": "b61460d3aa9693888fc522bd8f5c5b001e4ddff69348af22208c85aba7518a79",
+        "native-metrics.jsonl": "149482ea3e78578491cf04648f1e7ec88ba47e09bb5fe3748e5153cd18699dec"
+      }
+    }
+  }
+}
