@@ -88,9 +88,14 @@ The Apple client uses the same core facade for migrated browsing, reporting,
 and playback state when `OCP_CORE_ENABLED=1` (or the matching UserDefaults
 flag) is set; native decoding/rendering remains the platform adapter. The
 checked-in `Scripts/build-apple-xcframework.sh` produces the release artifact
-once the Apple Rust targets are installed. Windows remains a separate adapter
-that consumes this ABI and is intentionally deferred until its native player
-surface is available.
+once the Apple Rust targets are installed. Windows has a C# SDK and a surface
+lifecycle interface consuming the same ABI; its complete native player remains
+implementation work. Windows x64 Core/SDK verification is documented in
+[`bindings/windows/README.md`](bindings/windows/README.md):
+
+```powershell
+.\Scripts\verify-windows.ps1 -Python python
+```
 
 
 macOS integration checks (requires the OcPlayer Apple source checkout):

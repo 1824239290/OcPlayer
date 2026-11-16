@@ -58,7 +58,12 @@ class DiagnosticExportContract(unittest.TestCase):
         output=self.root/'export.txt';output.write_bytes(b'original')
         reply=self.call('diag.exportFile',**self.arguments());self.assertFalse(reply['ok']);self.assertEqual(output.read_bytes(),b'original')
     def test_alias_and_failed_unlimited_read_clean_up_only_new_destination(self):
-        alias=self.root/'alias';alias.symlink_to(self.logs,target_is_directory=True)
+        alias=self.root/'alias'
+        if os.name=='nt':
+            # Junctions exercise the directory-alias guard without symlink privileges.
+            import _winapi
+            _winapi.CreateJunction(str(self.logs),str(alias))
+        else:alias.symlink_to(self.logs,target_is_directory=True)
         reply=self.call('diag.exportFile',**self.arguments(outputPath=str(alias/'diagnostics-export.jsonl')));self.assertEqual(reply['code'],1002)
         (self.logs/'diagnostics-bad.jsonl').mkdir()
         reply=self.call('diag.exportFile',**self.arguments(bodyByteBudget=None));self.assertEqual(reply['code'],1502);self.assertFalse((self.root/'export.txt').exists())

@@ -75,11 +75,11 @@ def dispatch(source):
 
 def inventory():
  main='crates/ocp-core/src/lib.rs'; rows={}
- for method in dispatch((ROOT/main).read_text()):
+ for method in dispatch((ROOT/main).read_text(encoding='utf-8')):
   if '.' in method or method=='ping':rows[method]=main
  for prefix,paths in DELEGATES.items():
   for path in paths:
-   text=production((ROOT/path).read_text())
+   text=production((ROOT/path).read_text(encoding='utf-8'))
    sections = {
     'introIdentity.': ('pub fn policy(', 'pub struct IDStore'),
     'introIDs.': ('    pub fn call(', None),
@@ -93,7 +93,7 @@ def inventory():
    names=dispatch(text)
    # Batch commands in this file dispatch on the same suffix parameter.
    if prefix=='tmdbEnrichment.batch.':
-    text=production((ROOT/path).read_text());start=text.index('fn batch(')
+    text=production((ROOT/path).read_text(encoding='utf-8'));start=text.index('fn batch(')
     names=dispatch(text[start:])
    for name in names:rows[prefix+name]=path
  for method in ['settings.backup.capabilities','settings.backup.snapshot','settings.backup.decode','settings.backup.prepare','settings.backup.restore','settings.backup.summary','diag.exportFile','diag.exportFile.capabilities','introIDs.resolve','endpoint.probe','moviepilot.clearSessions']:

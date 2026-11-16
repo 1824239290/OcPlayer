@@ -43,8 +43,10 @@ compile/link and local macOS checks.
 
 Windows consumes the same header and DLL exports through
 `bindings/windows/OcPlayerCore.cs`. The Windows native player surface and complete adapter remain implementation
-work. Windows runtime verification is deferred by the user; the shared API and
-C# binding are available for that adapter.
+work. Windows x64 Core DLL and C# SDK runtime verification is now available through
+`Scripts/verify-windows.ps1`; see the [Windows SDK guide](../bindings/windows/README.md)
+and [2026-11-14 Windows results](validation/2026-11-14-windows/README.md).
+Native decoder/render/audio and complete Windows player acceptance remain separate.
 
 For a built macOS application, run:
 

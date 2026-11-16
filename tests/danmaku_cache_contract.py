@@ -53,7 +53,7 @@ class CacheContract(unittest.TestCase):
         self.assertEqual(path.read_bytes(),b'not-json')
         path.write_text('{"old":42}')
         self.assertTrue(self.write_match())
-        self.assertEqual(json.loads(path.read_text())['old']['episodeID'],42)
+        self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['old']['episodeID'],42)
     def test_comments_reference_dates_lru_and_boundary_expiry(self):
         core=self.open(ttl=1,capacity=2)
         for id in [1,2]:self.write_comments(id,100,core,text=str(id))
@@ -63,7 +63,7 @@ class CacheContract(unittest.TestCase):
         self.assertIsNone(self.value('comments',core,episodeID=2,now=100.5))
         self.assertEqual(self.value('comments',core,episodeID=1,now=101),self.comments('1'))
         self.assertIsNone(self.value('comments',core,episodeID=1,now=101.0001))
-        self.assertEqual(json.loads((self.folder/'comments-3.json').read_text())['fetchedAt'],100)
+        self.assertEqual(json.loads((self.folder/'comments-3.json').read_text(encoding='utf-8'))['fetchedAt'],100)
         self.assertEqual(self.value('memoryCount',core),1)
     def test_expired_memory_rereads_fresh_disk_and_purge_clears_every_layer(self):
         reader=self.open(ttl=1);writer=self.open(ttl=1)

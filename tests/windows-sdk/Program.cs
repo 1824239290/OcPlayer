@@ -18,6 +18,15 @@ static class Fixture
     [DllImport(Name, CallingConvention = CallingConvention.Cdecl)] public static extern void fixture_release();
     [DllImport(Name, CallingConvention = CallingConvention.Cdecl)] public static extern void fixture_reset_release();
 }
+static class WindowsNative
+{
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern IntPtr CreateWindowEx(uint exStyle, string className, string title, uint style,
+        int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyWindow(IntPtr window);
+}
 static class Contracts
 {
     static int checks;
@@ -156,7 +165,48 @@ static class Contracts
         Check(core.Call("diag.exportFile.capabilities").Ok,"File diagnostics unavailable");
         core.AttachSurface(1,1280,720,1.5);core.ResizeSurface(640,360,2);core.RenderTick(1);core.DetachSurface();
         using var snapshot=core.Snapshot();var typed=snapshot.Deserialize<OcpSnapshot>()!;Check(typed.Ready && typed.AbiVersion==1 && !typed.SurfaceAttached,"Typed snapshot schema mismatch");
-        passed.Add("real macOS Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle");
+        passed.Add("real Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle");
+        Check(core.Call("playback.open",new{source="fixture://video",durationSeconds=100}).Ok,"Playback open failed");
+        Check(core.Call("playback.play").Ok,"Playback play failed");
+        Check(core.Call("playback.seek",new{positionSeconds=30}).Ok,"Playback seek failed");
+        Check(core.Call("playback.setRate",new{rate=1.5}).Ok,"Playback rate failed");
+        Check(core.Call("playback.setVolume",new{volume=0.4}).Ok,"Playback volume failed");
+        Check(core.Call("playback.selectSubtitle",new{trackId="subtitle-1"}).Ok,"Subtitle selection failed");
+        Check(core.Call("playback.pause").Ok,"Playback pause failed");
+        using(var playback=core.Snapshot("playback"))
+        {
+            var state=playback.RootElement;
+            Check(state.GetProperty("state").GetString()=="paused" && state.GetProperty("positionSeconds").GetDouble()==30,"Playback state/timeline mismatch");
+            Check(state.GetProperty("rate").GetDouble()==1.5 && state.GetProperty("volume").GetDouble()==0.4
+                && state.GetProperty("subtitleTrack").GetString()=="subtitle-1","Playback preferences lost during lifecycle updates");
+        }
+        var invalid=core.Call("playback.seek",new{positionSeconds=-1});
+        Check(!invalid.Ok && invalid.Code==1002 && !invalid.Retryable,"Invalid seek was accepted");
+        Check(core.Call("playback.ended").Ok,"Natural-end projection failed");
+        using(var ended=core.Snapshot("playback"))Check(ended.RootElement.GetProperty("state").GetString()=="ended","Natural-end state lost");
+        passed.Add("real Core playback lifecycle, retained settings and validation");
+        if(OperatingSystem.IsWindows())
+        {
+            var window=WindowsNative.CreateWindowEx(0,"STATIC","OcPlayer Core contract",0x80000000,0,0,640,360,
+                IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero);
+            Check(window!=IntPtr.Zero,$"Hidden HWND creation failed: {Marshal.GetLastWin32Error()}");
+            try
+            {
+                var surface=new WindowsPlayerSurface(unchecked((ulong)window.ToInt64()),640,360,1.5);
+                surface.Attach(core);
+                using(var attached=core.Snapshot())Check(attached.RootElement.GetProperty("surfaceAttached").GetBoolean(),"HWND not attached");
+                surface.Resize(core,1280,720,2);
+                core.RenderTick(0.5);
+                surface.Detach(core);
+                using(var detached=core.Snapshot())Check(!detached.RootElement.GetProperty("surfaceAttached").GetBoolean(),"HWND not detached");
+                var events=new List<OcpEvent>();while(core.TryPollEvent(out var entry))events.Add(entry!);
+                Check(events.Any(e=>e.Kind=="surface.attached" && e.Data.GetProperty("nativeHandle").GetUInt64()==surface.NativeHandle),"HWND changed across ABI");
+                Check(events.Any(e=>e.Kind=="surface.resized" && e.Data.GetProperty("width").GetUInt32()==1280),"Surface resize event missing");
+                Check(events.Zip(events.Skip(1)).All(pair=>pair.First.Sequence<pair.Second.Sequence),"Event order changed");
+            }
+            finally {Check(WindowsNative.DestroyWindow(window),"Hidden HWND destruction failed");}
+            passed.Add("Windows hidden HWND adapter lifecycle and ordered Core events (metadata only)");
+        }
     }
     public static async Task Main(string[] args)
     {
@@ -164,6 +214,9 @@ static class Contracts
         if(args[0]=="mock")await Mock();
         else if(args[0]=="real")await Real(args[1]);
         else if(args[0]=="missing") {Throws<EntryPointNotFoundException>(()=>new OcpCore());passed.Add("missing ABI exports rejected before creating Core");}
-        Console.WriteLine(JsonSerializer.Serialize(new {checks,contracts=passed.Count,passed,windowsRuntimeTested=false}));
+        Console.WriteLine(JsonSerializer.Serialize(new {mode=args[0],checks,contracts=passed.Count,passed,
+            windowsRuntimeTested=OperatingSystem.IsWindows(),
+            operatingSystem=RuntimeInformation.OSDescription,
+            architecture=RuntimeInformation.ProcessArchitecture.ToString()}));
     }
 }

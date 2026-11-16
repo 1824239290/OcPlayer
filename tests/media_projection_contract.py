@@ -1,5 +1,6 @@
 """Canonical file/subtitle projections and raw compatibility through the C ABI."""
 import subprocess
+import sys
 import unittest
 import json
 import struct
@@ -16,7 +17,7 @@ class MediaProjectionContract(unittest.TestCase):
 
     def setUp(self):
         fixture.AccountContract.setUp(self)
-        self.server = subprocess.Popen(['/usr/bin/python3','-u',str(Path(__file__).with_name('media_projection_server.py'))],
+        self.server = subprocess.Popen([sys.executable,'-u',str(Path(__file__).with_name('media_projection_server.py'))],
             stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
         self.port = int(self.server.stdout.readline())
 

@@ -1,0 +1,692 @@
+{
+  "date": "2026-11-14",
+  "timezone": "Asia/Hong_Kong",
+  "baseCommit": "fa75810e943862e5da63431a6a8bbb7d1cef8f04",
+  "uncommittedTestToolingChanges": true,
+  "productionRustAndCSharpSdkUnchanged": true,
+  "platform": "Windows-11-10.0.26300-SP0",
+  "architecture": "AMD64",
+  "rustProfile": "debug/dev",
+  "csharpConfiguration": "Release",
+  "toolchain": {
+    "rustc": [
+      "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+      "binary: rustc",
+      "commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67",
+      "commit-date: 2026-10-13",
+      "host: x86_64-pc-windows-msvc",
+      "release: 1.99.1",
+      "LLVM version: 23.1.1"
+    ],
+    "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+    "dotnet": "10.0.404",
+    "python": "3.12.14",
+    "msvc": "14.44.35207"
+  },
+  "rust": {
+    "passed": 212,
+    "failed": 0,
+    "ignored": 0
+  },
+  "sdkFixture": {
+    "mode": "mock",
+    "checks": 55,
+    "contracts": 10,
+    "passed": [
+      "raw/typed JSON and exact UTF-8/integer projections",
+      "independently owned response/event/snapshot data",
+      "parser/error/input failures still free every native string",
+      "every entry rejects use after disposal",
+      "SafeHandle defers destruction during blocking native calls",
+      "native cancellation remains concurrent with network work",
+      "Dispose cancels and retains in-flight asynchronous work",
+      "duplicate/pre-cancelled/resolved request ownership",
+      "un-disposed Core is finalized safely",
+      "repeated cross-thread dispose/native-call races"
+    ],
+    "windowsRuntimeTested": true,
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64"
+  },
+  "sdkMissingExport": {
+    "mode": "missing",
+    "checks": 1,
+    "contracts": 1,
+    "passed": [
+      "missing ABI exports rejected before creating Core"
+    ],
+    "windowsRuntimeTested": true,
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64"
+  },
+  "sdkReal": {
+    "mode": "real",
+    "checks": 31,
+    "contracts": 3,
+    "passed": [
+      "real Core: business API, exact integers, cancellation, reused IDs, events and surface lifecycle",
+      "real Core playback lifecycle, retained settings and validation",
+      "Windows hidden HWND adapter lifecycle and ordered Core events (metadata only)"
+    ],
+    "windowsRuntimeTested": true,
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64"
+  },
+  "abi": {
+    "executed": 218,
+    "passed": 216,
+    "failures": 0,
+    "errors": 0,
+    "skipped": [
+      {
+        "test": "test_all_codings_decode_as_native_and_keep_raw_headers (transport_fidelity_contract.TransportFidelity.test_all_codings_decode_as_native_and_keep_raw_headers)",
+        "reason": "requires an independent Apple URLSession probe; Core transport tests still run"
+      },
+      {
+        "test": "test_native_rejected_encoding_chains_fail_without_replay (transport_fidelity_contract.TransportFidelity.test_native_rejected_encoding_chains_fail_without_replay)",
+        "reason": "requires an independent Apple URLSession probe; Core transport tests still run"
+      }
+    ]
+  },
+  "cli": {
+    "responses": 5,
+    "passed": 5,
+    "failed": 0
+  },
+  "sourceInputs": [
+    {
+      "path": "bindings/windows/OcPlayerCore.cs",
+      "sha256": "d8fc2be4eb9b6b9731607dc599f5609a04bd502ae5f9bb0dc507177292209aa0"
+    },
+    {
+      "path": "bindings/windows/OcPlayerCore/OcpCoreClient.cs",
+      "sha256": "e6d40fc8feaec3934dff226c1c339f0ccc9ada6d7dd55a0df7a1cd28d5b9902b"
+    },
+    {
+      "path": "bindings/windows/OcPlayerCore/OcPlayerCore.csproj",
+      "sha256": "c5240f58fbb0305fdfc3e4752c52c45810cb984d7a51a7be3ec375455ba7485e"
+    },
+    {
+      "path": "bindings/windows/OcPlayerCore/OcpModels.cs",
+      "sha256": "e57eae63949c23eaf8a8d7f7ea7d8fcee531d7fbb51cd034a96ced3c44a3febe"
+    },
+    {
+      "path": "bindings/windows/OcPlayerCore/WindowsSurface.cs",
+      "sha256": "597872a6b0eb7ee265348da6bfc5fa4f2b7aa55b0e5d1f935d7b4174e4b049d9"
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "8581312b39578b38234c2b92b326365784f341a667acac1b4db2351d46171012"
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "ea0019ade636331e6ea0cc9fb86c1661b9991ac12652cd588c26830884e7760a"
+    },
+    {
+      "path": "cbindgen.toml",
+      "sha256": "e0a97320c784cdb927cd91926204fae1763494912221e4f7f7af0ac2d5c5cf9d"
+    },
+    {
+      "path": "crates/ocp-bangumi/Cargo.toml",
+      "sha256": "3e2da2e753c4ac5e2bba4e4799926c0785ddc94b41f288b8c0567a7a0f94fc50"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/account.rs",
+      "sha256": "2439817fcbc2ecb46486b59f7d36f6c43d2dfc1ecb7775dd816405256c8779d2"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/auth_flow.rs",
+      "sha256": "b1162a37bdf8406d968cf72165d0193be10bb3adab97289a757b7d542d9a5d08"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/lib.rs",
+      "sha256": "28f1353536de43a68b30a96ff1fc16bde5cc9386705851845c328f1ce35eeea1"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/progress.rs",
+      "sha256": "d5cb266634e2475ee95fb2b837328d6d1ef4067ab6e8f3bcb3bd8931c674e316"
+    },
+    {
+      "path": "crates/ocp-bangumi/src/sync.rs",
+      "sha256": "41a664709a190fdf57b6debdf99c70a0342f81e1bf34dd0bc167131d9318b2af"
+    },
+    {
+      "path": "crates/ocp-cli/Cargo.toml",
+      "sha256": "a33a4f831635082a75b5303f66cd7ee1cebbb4e5ea2b1964a79fb5ae19845c3b"
+    },
+    {
+      "path": "crates/ocp-cli/src/main.rs",
+      "sha256": "7564bc065ef7503dd1bb2df4275522e7d43aac5d9c117ff3f89ae1a3b1491964"
+    },
+    {
+      "path": "crates/ocp-core/Cargo.toml",
+      "sha256": "cc84d485adb1dd85e683dea838ca63a4bcc41df37c2de89e681c878516072697"
+    },
+    {
+      "path": "crates/ocp-core/src/danmaku_load.rs",
+      "sha256": "577125f160185c79e806111c9fa1831dcc4cb486f498b6f7188f1e76b95eacca"
+    },
+    {
+      "path": "crates/ocp-core/src/diagnostic_export.rs",
+      "sha256": "f9beafa12974d0688e9b2df53fdfb44f9391297ceb828f17f8d9bf6c413ad659"
+    },
+    {
+      "path": "crates/ocp-core/src/events.rs",
+      "sha256": "25e31de8b0ab169f7f1697a336e49018100e32c786128248b70be1b2746f9bca"
+    },
+    {
+      "path": "crates/ocp-core/src/lib.rs",
+      "sha256": "ff945c3a18e990ef1150e04fa1fcf5c2e21b2016191a9dab8243ae58309401f3"
+    },
+    {
+      "path": "crates/ocp-core/src/media.rs",
+      "sha256": "bede1979d96aa825f3b41061e1b0f801e3f07059c3e863e7b0bef02bec209cc0"
+    },
+    {
+      "path": "crates/ocp-core/src/network.rs",
+      "sha256": "89462ce1d3d069f6a4511e2a2befb31b253e98635a428f8e2a2ac2730ffb9f59"
+    },
+    {
+      "path": "crates/ocp-core/src/preferences.rs",
+      "sha256": "871ea1bfd31236187a33e07d2048e72ad6f4997c522580b09c08a0a93646a6a1"
+    },
+    {
+      "path": "crates/ocp-core/src/probe.rs",
+      "sha256": "dcd88eea4ff65d19a6c344af9cbc226f1898f96a3db67ca9175d1c3a379e0fb2"
+    },
+    {
+      "path": "crates/ocp-core/src/settings_backup.rs",
+      "sha256": "75ac0ddd4a621c57ab353fa3493350ea5aafdb7b21f663f0ea7e91f6af10e34d"
+    },
+    {
+      "path": "crates/ocp-danmaku/Cargo.toml",
+      "sha256": "214c953e845fba9abfc93d88451ebc616dc4d2e6981bb7848acd1665540a9f64"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/cache.rs",
+      "sha256": "a2cc70a7be499c935fff687b7d22156eb85348bab68d5789b3cfb331ebc25bcc"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/filename.rs",
+      "sha256": "3a2ee7541740eca57124a704050d0535e8aad4c2e6b6546eb3c102c7a6c4ad89"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/flow.rs",
+      "sha256": "592469aeb7aad143ef235f17383f3be6770b618151428629a166cd1fb84ba8a9"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/identity.rs",
+      "sha256": "17f24ef45091aa60a5eed07e3817e229da5003084ce4d97010901fa31b127768"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/intro_unicode.rs",
+      "sha256": "296acc9c832b2b44fbd4a590b637e452eb7e78193ea559099d44b858c70d3ee2"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/intro.rs",
+      "sha256": "695ff72964df0862ec86fbeb1df4af988dcaef1731b5ac065a338f7fb4260afc"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/lib.rs",
+      "sha256": "e5f1181c25aa195dc9779a239d52f95e1a3a08ac5eb34b140b99aa0e93d85a34"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/load_wire.rs",
+      "sha256": "0899dc743de6f6dc3a78728fab9b83ddceec8c8a63c0cb9618a6d4f0b033b681"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/policy.rs",
+      "sha256": "215a969e9dcf517fd744370a11269fafec814caf7c553fe731648bb610e27c3d"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/providers.rs",
+      "sha256": "8600f153ee5dde173c7c47c48c3db9581131b9a5c724bf446ba54d9f049f7e72"
+    },
+    {
+      "path": "crates/ocp-danmaku/src/render.rs",
+      "sha256": "f50b6ef0c9be48c88b7b6ca63b4bf272acdfb35530e97e5b72f5d4def8c7f9c5"
+    },
+    {
+      "path": "crates/ocp-ffi/Cargo.toml",
+      "sha256": "0ecd98926e094828699f24496ca944403ca3afadd35e1b8838c3f87590702fba"
+    },
+    {
+      "path": "crates/ocp-ffi/src/lib.rs",
+      "sha256": "87213e57037e4da758708cc5c0337720a6ac6f842bdc2848ba31f730908edce4"
+    },
+    {
+      "path": "crates/ocp-http/Cargo.toml",
+      "sha256": "e0aa3202317c74b8409edb899bdae9396d2182ac0dbaf03c7fb5baa282c79397"
+    },
+    {
+      "path": "crates/ocp-http/src/lib.rs",
+      "sha256": "b00206b68e793327621f514093b4bdc3d962482cf8fae3942268c2f0e53fdb9b"
+    },
+    {
+      "path": "crates/ocp-jellyfin/Cargo.toml",
+      "sha256": "56136af657e4d948f02d711b57185024334579e6edb1cc9f4801d1913e7ba74e"
+    },
+    {
+      "path": "crates/ocp-jellyfin/src/endpoint.rs",
+      "sha256": "330f536078e0a8ce2c4fbb83c21802e4d1f3abfa71aa46e21b882cc5057508cd"
+    },
+    {
+      "path": "crates/ocp-jellyfin/src/lib.rs",
+      "sha256": "a751cc785ec863e89e185dde11851a2541874072eadb85257496aa1786d69998"
+    },
+    {
+      "path": "crates/ocp-model/Cargo.toml",
+      "sha256": "b6248e37766ec08217dd933d825808ebae6f9b315ba5b38699d600c730fd63d0"
+    },
+    {
+      "path": "crates/ocp-model/src/lib.rs",
+      "sha256": "d228f9c67b2945b9e2ddf6c2ec3cfb0b60a78bfd6730ccb0aed975521ee8f8ea"
+    },
+    {
+      "path": "crates/ocp-moviepilot/Cargo.toml",
+      "sha256": "6d0a1554dbea1b1975065eeb073b3b9ab70edbaef882e21590bca75eaedd7b8a"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/account.rs",
+      "sha256": "d84e5c4a83454f6e316daf3926ebfe257460b40ede10c65476656d77a319f935"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/flow.rs",
+      "sha256": "e2e31ad605a069254d7eea94595cec5607238c73867b75b8fb2e8f6e89a13a49"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/lib.rs",
+      "sha256": "40aa4fb7867b59af7c783c184ec4f16aafe2a156a52e07a9dbe87f055b88362c"
+    },
+    {
+      "path": "crates/ocp-moviepilot/src/stream.rs",
+      "sha256": "d1fa1af0ea1082425ba13c4f278a6d89ff88f5172a96a084a22bd46a0af57832"
+    },
+    {
+      "path": "crates/ocp-session/Cargo.toml",
+      "sha256": "d47ee7e0c1f50d6f1d1cc685ac5d0920b0e70a3911746ae5bc14a6dc757b00ce"
+    },
+    {
+      "path": "crates/ocp-session/src/engine.rs",
+      "sha256": "b4bb36f416841fdc82ad376d7cb027f5b96ff91d37256a8852c278d36ce1103e"
+    },
+    {
+      "path": "crates/ocp-session/src/flow.rs",
+      "sha256": "e9d0c327130196e664fa8cd0733880cc5d24e39b23014dadf5d2b65909749700"
+    },
+    {
+      "path": "crates/ocp-session/src/lib.rs",
+      "sha256": "21725d904d192f7d922e4c5f11c16f67a43753a9fbd95819f7123d3f83dea66f"
+    },
+    {
+      "path": "crates/ocp-session/src/preparation.rs",
+      "sha256": "1a6f4c07b132e611943ac21cbec69da149ee9c9fa44428a6dcb63619e1580968"
+    },
+    {
+      "path": "crates/ocp-session/src/recovery.rs",
+      "sha256": "4dfcc1eb22e7cef6c9d6a14df5e3e090218e94ed5b4e8c8525d7a614be6214be"
+    },
+    {
+      "path": "crates/ocp-session/src/report.rs",
+      "sha256": "8da8b6dafddd48d1fd0950b0f9a1311bd31de59f217e99372d9315dd9f75d32a"
+    },
+    {
+      "path": "crates/ocp-session/src/tracks.rs",
+      "sha256": "16f144e8e6d922379e25262bb70066b7436138a7bacc1992072c805ad7851dbd"
+    },
+    {
+      "path": "crates/ocp-store/Cargo.toml",
+      "sha256": "42d6f208fd4f1f3ec020ea0a77f8ca6e9b830c2f4e90fe1ef352430d98a9f57b"
+    },
+    {
+      "path": "crates/ocp-store/src/bangumi.rs",
+      "sha256": "676f17a86ea56c3cd7dc4789192bb1fe0f9622b0ed55219cafe1b68bace4f527"
+    },
+    {
+      "path": "crates/ocp-store/src/cache.rs",
+      "sha256": "eff94791e12702a623d402ae2a818bcdd1aaef69b05c6fbfffdf5a5b584cdcdf"
+    },
+    {
+      "path": "crates/ocp-store/src/database.rs",
+      "sha256": "26def39d13f5ac49570f664935e0d13a23192a5cac3708a9e8f7a8f42d2be58a"
+    },
+    {
+      "path": "crates/ocp-store/src/lib.rs",
+      "sha256": "9ba8fbc173dd8b62d1287d169dfdb9d24d7babbb2b8fda1864c875f5fa05872c"
+    },
+    {
+      "path": "crates/ocp-store/src/repository.rs",
+      "sha256": "ad6869cff84fce8e51bf296bc1059b1204b2f24f8aa8fb7be9e081292ee933d3"
+    },
+    {
+      "path": "crates/ocp-store/src/repository/composition.rs",
+      "sha256": "e4c06c31ceec58ac35acc4aac56b486bff38371e95cad8e18b3e0dcd8e70edac"
+    },
+    {
+      "path": "crates/ocp-store/src/repository/flow.rs",
+      "sha256": "2ea1f94713438243c57477fe66e26ed978993e7e03040d926c2e119b4c1e81f8"
+    },
+    {
+      "path": "crates/ocp-store/src/repository/flow/cached.rs",
+      "sha256": "5e4ab5f832636647553afcdcac3eda60fba8247ce9e10ebb23b91c8c01baf6fe"
+    },
+    {
+      "path": "crates/ocp-store/src/repository/progress.rs",
+      "sha256": "05988d647d6ab57cd19716739ca5970e2123e654b124441777fbdc97fe6510e1"
+    },
+    {
+      "path": "crates/ocp-tmdb/Cargo.toml",
+      "sha256": "110838b086a5f565692a9739aa3e45c1cb68dfe435c414cb5071cfe89b2602cd"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/enrichment.rs",
+      "sha256": "30eac0a5c7f12578ce1941f60be1e49068c11a82028db5d7615e9c04fcccf81b"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/lib.rs",
+      "sha256": "a261bc66523532d30c4db7c52becebcfc8e22ddf5870ac2cd9f3fd8e0857256c"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/matcher_unicode.rs",
+      "sha256": "9cd9510519c85d294d0b810d458eb61f7098a1ca3c0d362ae063aed7d9242abd"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/matcher.rs",
+      "sha256": "f8cb918ea1b52e01bed1070e0c2e73085b48e197c6fb203c5be055be6875878d"
+    },
+    {
+      "path": "crates/ocp-tmdb/src/wire.rs",
+      "sha256": "d80b1f3d9a66d3dd43b21ad97c70194516fb8b78dc8ad18cba5bc703520ca62a"
+    },
+    {
+      "path": "include/ocplayer_core.h",
+      "sha256": "6a1ec583e269a4764f533fe68da661973f1ae803c46af919b3fe46f4b71f6bf2"
+    },
+    {
+      "path": "schema/bangumi_v1.sql",
+      "sha256": "fd7381c1dfd920afeb6f33ac12943541da9b4f09010d30f537bc400f1f86b452"
+    },
+    {
+      "path": "schema/media_v1.sql",
+      "sha256": "461ab4b73994906a8af8536d0aadf0775c2ed219be7d36fd20a99430abc581b8"
+    },
+    {
+      "path": "schema/media_v2.sql",
+      "sha256": "dc7ea7eab0f77d6ae4a5c050fb2ab72354fd44eb4db91abbab10b2d5fda73141"
+    },
+    {
+      "path": "schema/media_v3.sql",
+      "sha256": "06967511717d429f629abf7589a431bbcd334df6b7c1a6f7a781deaa920d3e28"
+    },
+    {
+      "path": "schema/media_v4.sql",
+      "sha256": "08f577dbcba7626a33e082e6c184aa6c4fc50f20382bb2ac4777539bc1c8eedc"
+    },
+    {
+      "path": "Scripts/apple-release-manifest.py",
+      "sha256": "40df0bc8ac4a5095568747fcbd4d65c345c0e0845d55d62a9c22b8decef1bfd1"
+    },
+    {
+      "path": "Scripts/audit-core-surface.py",
+      "sha256": "27b579545e0ea6b97d7dad191a5c1fa7eb00a1ffd7290f30794aa189504d0bb4"
+    },
+    {
+      "path": "Scripts/build-apple-dylib.sh",
+      "sha256": "0435bf44021a1d651628164df3b8c7691d81a16035ca622f4ad822d99a56fffb"
+    },
+    {
+      "path": "Scripts/build-apple-xcframework.sh",
+      "sha256": "1f002d4669d4b3ef6a57f11646b00954359f9be954d1fa8c1a17aa3e93cf9f7f"
+    },
+    {
+      "path": "Scripts/check-apple-binding.sh",
+      "sha256": "5143e1ddae7ef9754d54a4ec2ef2f6b666931d4566404a6e6efe386e2630e492"
+    },
+    {
+      "path": "Scripts/embed-macos-core.sh",
+      "sha256": "7af51efbab7ecf07b8a0ea47a9a921366d55b321ba65f74015b15090629a372e"
+    },
+    {
+      "path": "Scripts/generate-swift-intro-unicode.swift",
+      "sha256": "bd3829a3fc13c40c6f60a084fd77fa03d5ac44ebc108fc2af37e76f076d70821"
+    },
+    {
+      "path": "Scripts/generate-swift-tmdb-unicode.swift",
+      "sha256": "d159b54e16a576d6734e8d936ba63c2061154439e487a762cd20c6f5ccea41ef"
+    },
+    {
+      "path": "Scripts/verify-apple-release.sh",
+      "sha256": "10a45d1328d48a99e82c05b246055ccd6fbe2dda52dc001eefe93f94dd774ddb"
+    },
+    {
+      "path": "Scripts/verify-macos.sh",
+      "sha256": "5b2d4c61d8a89af8626695e7bc3e8dafa2c9c7822f77514293cb22400257afb9"
+    },
+    {
+      "path": "Scripts/verify-windows.ps1",
+      "sha256": "92ce9d1101eb9cd7ffe1dfb182714509c6b8a9d0e6e8d0ae857835d4a3e2c40e"
+    },
+    {
+      "path": "tests/apple_release_probe.swift",
+      "sha256": "583a77ad2972d34760bae96a3ce9c4edeb451f3b6c7e93a67ad85fb4eb5cb563"
+    },
+    {
+      "path": "tests/bangumi_account_contract.py",
+      "sha256": "03a22e18604649598babc8a53cb49e29dbb457edfba7235184d11140cdd662e1"
+    },
+    {
+      "path": "tests/bangumi_auth_flow_contract.py",
+      "sha256": "7f976bee7bf5b3b532dcd02707e9b26c841cf632db767bfcc9faadae87701082"
+    },
+    {
+      "path": "tests/bangumi_contract.py",
+      "sha256": "947314e73ad7373d66f8406db0ea228163ca1734037b251a124e95b734cd6021"
+    },
+    {
+      "path": "tests/bangumi_progress_contract.py",
+      "sha256": "b60fd60d7c9d42984dcf54b12b5db626cefbe1815b43b6e2feca65fad4602c60"
+    },
+    {
+      "path": "tests/bangumi_sync_contract.py",
+      "sha256": "d4adb4a051a67c51725238d4488a761a11fd9e22122b23eaa4a72881bacf5f8c"
+    },
+    {
+      "path": "tests/danmaku_cache_contract.py",
+      "sha256": "c9f94f28e5b5b46d938ffbb3e974748ad38d7c7e454f6d17150dfeb5b4a3c295"
+    },
+    {
+      "path": "tests/danmaku_contract.py",
+      "sha256": "ca144347ae02f2f9344f41a306cc0d1f9019eb7647fddd65117a0ccae86f87d8"
+    },
+    {
+      "path": "tests/danmaku_flow_contract.py",
+      "sha256": "7119a60cc85b7aa5e2940b5dc637d8ed9585469b3cd26f5bb3304fcf399c21f7"
+    },
+    {
+      "path": "tests/danmaku_policy_contract.py",
+      "sha256": "19f92fb679aa8462c6fbee73fd79da034960bb0df0929aeef872ff60a31ebd76"
+    },
+    {
+      "path": "tests/danmaku_server.py",
+      "sha256": "773f4b6c4ba2c3bdf9783db066c92079c4c481dc067512de2a5cd90dec3a9519"
+    },
+    {
+      "path": "tests/diagnostic_export_contract.py",
+      "sha256": "1b1e2dfa00d886471d7b965f2552f4e02646afb10b9399c83c1d96bb05b9d0d3"
+    },
+    {
+      "path": "tests/fixtures/apple_boundary_echo.c",
+      "sha256": "c10718dfae168bdeb99ddbd719fb1fee22dfa51a3af1e3c32755a2462f67fd56"
+    },
+    {
+      "path": "tests/fixtures/media_login_server.py",
+      "sha256": "b7d164f43ef7b9b9d2138bd55193a3e634b70d6b8f1cc9551b17ffe1e166da81"
+    },
+    {
+      "path": "tests/fixtures/native_http_probe.swift",
+      "sha256": "f7035c856da28b90213a55a49be32e1a0b2ad25de70724e2f47ad8ece5f38a88"
+    },
+    {
+      "path": "tests/intro_contract.py",
+      "sha256": "907921da1a7e51798630dc4f0b8eb2e299ccff5421608da463d3579d2a02c2bb"
+    },
+    {
+      "path": "tests/intro_identity_contract.py",
+      "sha256": "e941e405e33087f3fe4dd69485fc06ab01675501e8657e626c2fbaed5fc25a42"
+    },
+    {
+      "path": "tests/intro_provider_contract.py",
+      "sha256": "a7419bf93ea64648bff123eabae22f3d200cc2f10ac6ec6766f80656d41e4a44"
+    },
+    {
+      "path": "tests/intro_provider_server.py",
+      "sha256": "b2443fa9c7d23d373ceb221ec192a44222bc7ba7799c164016670f68d6dfd2a2"
+    },
+    {
+      "path": "tests/media_login_contract.py",
+      "sha256": "7d070309960cc8512dfe76b632c336be69b6e48b6b0732caccece41bd6f49011"
+    },
+    {
+      "path": "tests/media_nullable_contract.py",
+      "sha256": "6906f369f0057acc75547660b397a0c986de77bfee222958d3ca12a378bd8860"
+    },
+    {
+      "path": "tests/media_nullable_server.py",
+      "sha256": "9dcf3b430aa9e888d7c87f7f50be251e2a05d4caf25474e071e11936238aa18e"
+    },
+    {
+      "path": "tests/media_projection_contract.py",
+      "sha256": "d1e8bd56b6ee107243e7d5e06a2db343173bce5c8f132f5aea86739d9851b7af"
+    },
+    {
+      "path": "tests/media_projection_server.py",
+      "sha256": "4c172e62e6a0788fd13208860993c6454d7c1f6033d24c47406d80fe11fac17b"
+    },
+    {
+      "path": "tests/media_repository_contract.py",
+      "sha256": "4f317b43602c582d4f6a58a7d75d17b7990c5f632cb256e331a52bb12f771f38"
+    },
+    {
+      "path": "tests/moviepilot_account_contract.py",
+      "sha256": "3220ceb42f1fabee0c5e4c4aa761ccb21b8a657c4bd420da233b2f761da1789e"
+    },
+    {
+      "path": "tests/moviepilot_contract.py",
+      "sha256": "715306300854af02de04decec6489af2c905d12c4e802756299709d9ec1d1da3"
+    },
+    {
+      "path": "tests/moviepilot_flow_contract.py",
+      "sha256": "39d8ae4a032775592e78606c3750ff33fbf6b232d9ecd50291b9ec9bc5a6675a"
+    },
+    {
+      "path": "tests/network_contract.py",
+      "sha256": "189c80d26680103444cb3be868d3dd3ff2d008ca1a8432eb92e385e5e2e35357"
+    },
+    {
+      "path": "tests/playback_preparation_contract.py",
+      "sha256": "ed4f8b67487bbc5355da69a91fa84c41d703d6cdf1159a10ba3f24b15887e49a"
+    },
+    {
+      "path": "tests/playback_preparation_server.py",
+      "sha256": "bea9358064b6d036acca723c6619b9a7f91eed6103d167559ce5a870efa41685"
+    },
+    {
+      "path": "tests/playback_tracks_contract.py",
+      "sha256": "7715d3e6c0b74a79b1cf780ef5dff8b9531daeea78fd0402258e4c1135432954"
+    },
+    {
+      "path": "tests/public_command_contract.py",
+      "sha256": "bd41bf687208a06fa94637e0487ec3c99ac7fd456b3e6fd5a71702dcefc6b272"
+    },
+    {
+      "path": "tests/repository_composition_contract.py",
+      "sha256": "c4d199fda86b71abaafc85076600b6bbe38d266efe8196cde0e065eea53559ed"
+    },
+    {
+      "path": "tests/repository_flow_contract.py",
+      "sha256": "ffc6bdcfb82a89359ebaa6eba6a29812e77ebb3dd01e4ad83298b35d7a89e557"
+    },
+    {
+      "path": "tests/repository_progress_contract.py",
+      "sha256": "8ead04ffe32bf470b7f983919ce57399dd781dc96fe696190d19ccb7d7c4d369"
+    },
+    {
+      "path": "tests/settings_backup_contract.py",
+      "sha256": "93571e5440f2edeaa92635beefd0176dcf01a54c1d8a7f61b954d57dadb18765"
+    },
+    {
+      "path": "tests/standalone_danmaku_contract.py",
+      "sha256": "eb23ad5d6080aa62f2333c7e875688c9da54caabecb13a5da28a859dbd7f5d14"
+    },
+    {
+      "path": "tests/standalone_danmaku_server.py",
+      "sha256": "a9369dc30f90ed0fe395fcd3a8bb120a8372f20542a90bc57141b4bfb9389d90"
+    },
+    {
+      "path": "tests/tmdb_enrichment_contract.py",
+      "sha256": "c34fa24c3da8dd92e9b5a47106e4127dc43341e259bf3094d744b95508f7c0b3"
+    },
+    {
+      "path": "tests/tmdb_enrichment_server.py",
+      "sha256": "8df1e400c534028eec9dd512485a9601652705f0559466254690e0491c65c8a3"
+    },
+    {
+      "path": "tests/tmdb_matcher_contract.py",
+      "sha256": "160b9a7b67bee71dc6bf5ec3abece9c131162fd13d93f0a917997bc45095745b"
+    },
+    {
+      "path": "tests/tmdb_wire_contract.py",
+      "sha256": "2e166ca70a6df637a03939d3228dc68076f32f44676719900d68080f4a8a63d6"
+    },
+    {
+      "path": "tests/tmdb_wire_server.py",
+      "sha256": "0a51a248101afd0162788ff77a548bdeead9713451fd69a700dc86611b134b3d"
+    },
+    {
+      "path": "tests/transport_fidelity_contract.py",
+      "sha256": "e4d50eabd52a5bb34e9b15b4c908f92f4ccd1269a9bed23ad7369cb88bcad014"
+    },
+    {
+      "path": "tests/windows-sdk/native_fixture.c",
+      "sha256": "47188b2b665440d99c6c44354265bbc155ed302116b7935d33f819355b033378"
+    },
+    {
+      "path": "tests/windows-sdk/Program.cs",
+      "sha256": "70a2b5b947f6861738e53b6c5f14ed8d39afa0293305b6f78b3f5a141ce47143"
+    },
+    {
+      "path": "tests/windows-sdk/run_contracts.py",
+      "sha256": "7c2b4322b408aa06d021b04cd4e0aef483825f33e6282be8b31f08d17a27a180"
+    },
+    {
+      "path": "tests/windows-sdk/WindowsSdkContracts.csproj",
+      "sha256": "e8594ee2004aa892d89135bebc9f990c9ea1a46231910e218d50ca7b04131111"
+    }
+  ],
+  "binaries": [
+    {
+      "path": "target/debug/ocp_ffi.dll",
+      "sha256": "da76837da70a31974d14de8ec154562e192e3d5442001b673f15eff03d1580a0"
+    },
+    {
+      "path": "target/debug/ocp-cli.exe",
+      "sha256": "dc26aabc966a64cf9811f6338b1f2856c3673aeadefc8bdfc0ff0dc26e4705b5"
+    },
+    {
+      "path": "artifacts/windows-verification/native/ocp_fixture.dll",
+      "sha256": "0e51c2cae784fa41ee5e4a6e107bebba3fcf78db2866ef1f01dc4b74bf2de8b2"
+    },
+    {
+      "path": "artifacts/windows-verification/native/ocp_missing.dll",
+      "sha256": "551a53311d39fe303e0c4e040199a4b78856fabd6f9df3fc234d7df61eb01034"
+    },
+    {
+      "path": "artifacts/windows-verification/dotnet/bin/OcPlayerCore/release/OcPlayerCore.dll",
+      "sha256": "d7433a7bba873303ebd4e01f71da2e9335c20603dd212a064fc824d19a0a7a28"
+    },
+    {
+      "path": "artifacts/windows-verification/dotnet/bin/WindowsSdkContracts/release/WindowsSdkContracts.dll",
+      "sha256": "3fdea69dddfa6288fd1364b9370f0a3064b074317e288730265cd58186691941"
+    }
+  ]
+}

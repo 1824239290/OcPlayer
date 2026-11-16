@@ -1,5 +1,5 @@
 """Complete preparation effects and non-consuming/stale receipts through C ABI."""
-import ctypes,json,unittest,subprocess
+import ctypes,json,unittest,subprocess,sys
 from pathlib import Path
 import bangumi_account_contract as fixture
 
@@ -69,7 +69,7 @@ class PreparationContract(unittest.TestCase):
             self.assertEqual(self.call('start',**args)['code'],1002)
         self.assertEqual(self.success('stats')['active'],0)
     def test_native_episode_endpoint_full_sort_window_order_and_parameters(self):
-        process=subprocess.Popen(['/usr/bin/python3','-u',str(Path(__file__).with_name('playback_preparation_server.py'))],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+        process=subprocess.Popen([sys.executable,'-u',str(Path(__file__).with_name('playback_preparation_server.py'))],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
         try:
             port=int(process.stdout.readline());base='http://127.0.0.1:'+str(port)+'/emby'
             for kind in ['jellyfin','emby']:

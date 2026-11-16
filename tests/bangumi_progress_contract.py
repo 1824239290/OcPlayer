@@ -1,12 +1,16 @@
 """Subject/progress effects composed with the real SQL store through the C ABI."""
 import unittest
-import uuid
+import tempfile
+from pathlib import Path
 import bangumi_sync_contract as fixture
 
 
 class ProgressContract(unittest.TestCase):
     setUpClass = classmethod(fixture.SyncContract.setUpClass.__func__)
-    setUp = fixture.SyncContract.setUp
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='ocp-progress-contract-')
+        self.addCleanup(self.temp.cleanup)
+        fixture.SyncContract.setUp(self)
     tearDown = fixture.SyncContract.tearDown
     call = fixture.SyncContract.call
     success = fixture.SyncContract.success
@@ -187,7 +191,7 @@ class ProgressContract(unittest.TestCase):
             step = self.resume(self.start('updateRating', subjectId=1, rate=5))
             # A changed DB path is needed; an unchanged path deliberately preserves work.
             if method in ('settings.set', 'config.import'):
-                args = {'config': {'bangumiDatabasePath': f'/tmp/ocp-progress-contract-{uuid.uuid4()}.sqlite'}}
+                args = {'config': {'bangumiDatabasePath': str(Path(self.temp.name) / f'{method}.sqlite')}}
             self.success(method, **args)
             self.assertEqual(self.call('bangumiProgress.apply', token=step['token'], sequence=step['sequence'], now=1)['code'], 1002)
             new = self.start('ensureWatching', subjectId=1)

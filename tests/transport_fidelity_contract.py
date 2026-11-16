@@ -57,6 +57,20 @@ class TransportFidelity(unittest.TestCase):
   finally:self.ffi.ocp_string_free(p)
  def success(self,method,**args):
   reply=self.call(method,**args);self.assertTrue(reply['ok'],reply);return reply['data']
+ def test_all_codings_decode_and_keep_raw_headers(self):
+  sizes={'gzip':len(gzip.compress(BODY)),'deflate':len(zlib.compress(BODY)),'br':len(BROTLI),
+         'multi':len(gzip.compress(BODY[:20]))+len(gzip.compress(BODY[20:]))}
+  for coding in sizes:
+   with self.subTest(coding=coding):
+    core=self.success('bangumi.request',url=self.base+'/'+coding)
+    self.assertEqual(core['status'],200)
+    self.assertEqual(core['body'].encode(),BODY[:20] if coding=='multi' else BODY)
+    self.assertEqual(core['headers']['content-encoding'],'gzip' if coding=='multi' else coding)
+    self.assertEqual(int(core['headers']['content-length']),sizes[coding])
+ def test_rejected_encoding_chain_is_not_replayed(self):
+  self.assertFalse(self.call('bangumi.request',url=self.base+'/stacked')['ok'])
+  self.assertEqual(self.server.paths.count('/stacked'),1)
+ @unittest.skipIf(os.name=='nt' and not os.environ.get('OCP_NATIVE_HTTP_PROBE_PATH'), 'requires an independent Apple URLSession probe; Core transport tests still run')
  def test_all_codings_decode_as_native_and_keep_raw_headers(self):
   probe=os.environ['OCP_NATIVE_HTTP_PROBE_PATH']
   for coding in ['gzip','deflate','br','multi']:
@@ -69,6 +83,7 @@ class TransportFidelity(unittest.TestCase):
     self.assertEqual(core['body'].encode(),BODY[:20] if coding=='multi' else BODY)
     self.assertEqual(core['headers']['content-encoding'],native['encoding'])
     self.assertEqual(core['headers']['content-length'],native['length'])
+ @unittest.skipIf(os.name=='nt' and not os.environ.get('OCP_NATIVE_HTTP_PROBE_PATH'), 'requires an independent Apple URLSession probe; Core transport tests still run')
  def test_native_rejected_encoding_chains_fail_without_replay(self):
   url=self.base+'/stacked'
   native=json.loads(subprocess.check_output([os.environ['OCP_NATIVE_HTTP_PROBE_PATH'],url],text=True))

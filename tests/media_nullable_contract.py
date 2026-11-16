@@ -1,5 +1,6 @@
 """Real HTTP nullable media DTOs exercised through the public Core C ABI."""
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 import bangumi_account_contract as fixture
@@ -13,7 +14,7 @@ class MediaNullableContract(unittest.TestCase):
 
     def setUp(self):
         fixture.AccountContract.setUp(self)
-        self.server = subprocess.Popen(['/usr/bin/python3', '-u', str(Path(__file__).with_name('media_nullable_server.py'))],
+        self.server = subprocess.Popen([sys.executable, '-u', str(Path(__file__).with_name('media_nullable_server.py'))],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
         self.port = int(self.server.stdout.readline())
 
