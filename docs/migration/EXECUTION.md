@@ -138,3 +138,16 @@ Core-enabled job 已完成并失败。真实公共 Swift SDK 的 41 个测试、
 用例改为订阅真实 `Changed` 更新，捕获同一次通知的秒数和状态，在 10 秒失败预算内等待，再断言仍在加载、秒数至少为 1、状态包含相同秒数，并保留完成后停止忙碌的断言。生产计时、超时和 UI 行为均不改；没有删除断言或把失败改成 warning。
 
 修改后本机 124 条存储断言通过，三次独立服务器运行均通过 351 条断言，证据在 `artifacts/verification/ci-fixes-windows-integration.log` 和对应 `ci-fixes-windows-*-*` 目录。云端这轮 MSI 和 ABI/SDK 步骤因前序失败未执行，仍须由后续完整候选重新验证。
+
+### 首轮授权修复的实库结果
+
+`7381c1b` 的完整 CI 已结束，Core-enabled job 这次走过了原来的 Danmaku 阻塞，直到最后嵌入阶段才因上述 lipo 参数顺序失败：
+
+- 公共 Swift SDK：41 个测试通过，无跳过。
+- DanmakuKit：276 个 XCTest 通过，无跳过；原文件名/canonical 差分 corpus 及新增四个固定预期用例均通过，原 33 次解析断言失败已经消除。
+- DiagnosticsKit：97 个测试通过；此前未执行的阶段这次已取得实测结果。
+- Core-enabled macOS AppTests：执行 1027 个 XCTest，19 个既有平台条件用例跳过，0 失败。`CoreRuntimePreferenceParityTests` 的实际实库/每轮 29 次调用断言、两个 `RustCoreActivationTests` 均明确通过；不把跳过项计为通过。
+- Rust workspace、执行到的 Python 领域合同及传输合同通过，其中独立 Apple URLSession probe 的 9 个传输测试通过。
+- 嵌入失败后末尾公共命令清单检查未执行；整体 Core-enabled job 仍是失败，不能以业务用例通过代替完整门禁。
+
+完整分阶段证据在 `artifacts/verification/ci-fixes-apple-core`，run 元数据在 `ci-fixes-github-results.json`。后续候选只继续修正架构校验与 Windows 测试同步，不改变已经通过的 Rust 业务代码、公共 Swift SDK 或 Apple Swift 修复 blob；普通 macOS/iOS AppTests、Core 嵌入、末尾清单与 Windows 完整构建/打包仍全部重跑。
